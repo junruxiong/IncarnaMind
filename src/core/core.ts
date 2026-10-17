@@ -7,6 +7,7 @@ import { isCitationStyleId } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
+import { holdsOnlyItsTitle } from "../shared/madeMind";
 import { bibliographyShown } from "../shared/mindBibliography";
 import {
   chosenCitationStyle,
@@ -27,7 +28,6 @@ import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
-import { topLevelBlocks } from "./answers/blocks";
 import { createChecks } from "./answers/checks";
 import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -154,7 +154,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf, plainText, readBlocks, textStart, theirChangesReading } from "./mindText";
+import { firstLineOf, readBlocks, textStart, theirChangesReading } from "./mindText";
 import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -1237,12 +1237,7 @@ export function createCore(adapters: CoreAdapters): Core {
         const emptied = content.edit(change.mindId, (blocks) => {
           resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
           if (change.revised) restoreRevised(blocks, change.request);
-          // A Mind the assistant made starts with its title (#908), which isn't the User's words.
-          return topLevelBlocks(blocks).every(
-            (block, index) =>
-              (block.nodeName === "paragraph" && block.length === 0) ||
-              (index === 0 && block.nodeName === "heading" && plainText(block) === title),
-          );
+          return holdsOnlyItsTitle(blocks, title);
         });
         if (change.created && emptied) removeMind(change.mindId);
       }

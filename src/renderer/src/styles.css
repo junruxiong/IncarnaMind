@@ -1234,7 +1234,6 @@
     }
   }
 
-  /* The count while writing, at the page's bottom left: quiet status text, 12/20 (#908). */
   .mind-count {
     display: flex;
     align-items: center;
@@ -1268,7 +1267,6 @@
     color: var(--color-danger);
   }
 
-  /* The page's ⋯ button, at its top right, where it stays while the text scrolls (#908). */
   .mind-menu-slot {
     position: absolute;
     top: 16px;
@@ -1323,11 +1321,7 @@
       color: var(--color-ink);
     }
   }
-  /*
-   * The page's foot (#908): the count while writing at the left, the check
-   * badge (#909) at the right, 16px in, over the text, which fades out over
-   * 56px above them so no line runs under either.
-   */
+  /* Over the text, which fades out above them so no line runs under the count or the badge. */
   .mind-foot-slot {
     position: absolute;
     right: 0;

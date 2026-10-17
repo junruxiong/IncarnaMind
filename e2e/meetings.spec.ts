@@ -189,12 +189,15 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await shot(window, "meeting-bar-en");
 
   // Notes written below scroll under the bar, which stays in view at the top.
-  await window.getByTestId("mind-editor").click();
+  const notesText = window.getByTestId("mind-editor");
+  await notesText.click();
   for (let line = 0; line < 30; line++) await window.keyboard.press("Enter");
   await window.keyboard.type("Rebates stay as they are until January.");
-  await expect(
-    window.getByTestId("mind-editor").locator(":scope > *").first(),
-  ).not.toBeInViewport();
+  await window.locator(".mind-scroller").evaluate((scroller) => {
+    scroller.scrollTop = scroller.scrollHeight;
+  });
+  await expect(notesText.locator(":scope > *").first()).not.toBeInViewport();
+  await expect(notesText.locator(":scope > *").last()).toBeInViewport();
   await expect(bar).toBeInViewport();
   await shot(window, "meeting-bar-scrolled-en");
 

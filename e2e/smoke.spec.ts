@@ -281,7 +281,7 @@ test("first run fits a small window; the not-ready notice and a long first line 
 
   await newMind(window);
   await enterContent(window);
-  const long = "Reading notes on spring and neap tides, harbour tables and the Moon's pull";
+  const long = "Reading notes on spring and neap tides, harbour tables and the pull of the Moon";
   await window.keyboard.type(long);
   // Long, the first line wraps instead of being cut off.
   const line = window.getByTestId("mind-editor").locator("p").first();

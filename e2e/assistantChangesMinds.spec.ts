@@ -4,6 +4,7 @@ import type { Editor } from "@tiptap/core";
 import {
   askInAssistant,
   assistantAnswers,
+  clickEndOf,
   createDataFolder,
   dismissChatSetup,
   enterContent,
@@ -289,13 +290,15 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
   await expect(made).toHaveCount(1);
 
   // Its text starts with its title, not a change to accept (#908). The User writes a line of
-  // their own in it, under the changes: from the first change, then the end.
+  // their own in it, under the changes: from its title, down into the changes, then the end.
   await pointAndClick(window, made);
   await expect(frontMindName(window)).toHaveText("Fieldwork plan with a summary");
   await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
   const editor = window.getByTestId("mind-editor");
-  await expect(editor.locator(":scope > h1")).toHaveText("Fieldwork plan with a summary");
-  await pointAndClick(window, editor.locator(":scope > *").nth(1));
+  const title = editor.locator(":scope > h1");
+  await expect(title).toHaveText("Fieldwork plan with a summary");
+  await clickEndOf(window, title);
+  await window.keyboard.press("ArrowDown");
   await expect(editor).toBeFocused();
   // The cursor is in the first change once its bar shows.
   await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");
