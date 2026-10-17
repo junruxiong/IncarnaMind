@@ -420,7 +420,7 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   });
   await expect(steps).not.toContainText("准备好了。");
   await pointAndClick(window, steps.getByTestId("first-open-choose-model"));
-  await expect(window.getByTestId("model-setup")).toContainText("选择回答所用的模型");
+  await expect(window.getByTestId("model-setup")).toContainText("选择你的 AI");
   await useLocalChatModel(window);
   await expect(steps).toContainText("准备好了。");
   await expect(window.getByTestId("model-setup")).toHaveCount(0);
@@ -633,7 +633,7 @@ test("finishing the steps with no model asks for one in the card, never says You
   await pointAndClick(window, steps.getByTestId("first-open-choose-model"));
   const setup = window.getByTestId("model-setup");
   await expect(window.getByTestId("assistant")).toBeVisible();
-  await expect(setup).toContainText("Your Questions are answered with the one you pick.");
+  await expect(setup.getByRole("heading", { level: 2 })).toHaveText("Choose your AI");
   await useLocalChatModel(window);
   await expect(steps).toContainText("You're set up.");
   await expect(steps.getByTestId("first-open-next").first()).toBeVisible();
@@ -655,6 +655,9 @@ test("by keyboard alone: Choose a model takes the focus into the setup, and a sa
   // The ChatGPT plan comes first where this computer can keep its sign-in; then the key.
   const plan = setup.getByTestId("setup-chatgpt");
   if (await plan.evaluate((button) => button === document.activeElement)) {
+    await window.keyboard.press("Tab");
+    // What goes to ChatGPT, behind Details, comes between the two.
+    await expect(setup.getByTestId("setup-chatgpt-sends-details")).toBeFocused();
     await window.keyboard.press("Tab");
   }
   await expect(setup.getByTestId("setup-key")).toBeFocused();

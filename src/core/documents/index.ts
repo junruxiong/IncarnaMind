@@ -1844,6 +1844,31 @@ export function createDocuments(options: DocumentsOptions) {
     searchableCount,
 
     /**
+     * The live Documents with Passages to search (of all of them, or only of these) that
+     * joined after `since` (ISO 8601, UTC): added then, or, with `folderId`, filed into that
+     * Folder then. `joinedAt` says when.
+     */
+    searchableJoinedAfter(
+      documentIds: readonly string[] | undefined,
+      since: string,
+      folderId: string | null,
+    ): { id: string; joinedAt: string }[] {
+      const { where, params } = searchable(documentIds);
+      return db
+        .all<{ id: string; joined_at: string }>(
+          `SELECT id, joined_at FROM (
+             SELECT d.id, MAX(d.created_at, COALESCE((
+               SELECT COALESCE(a.filed_at, a.created_at) FROM document_groups a
+               WHERE a.document_id = d.id AND a.group_id = ? AND a.deleted_at IS NULL
+             ), d.created_at)) AS joined_at
+             FROM documents d WHERE ${where}
+           ) WHERE joined_at > ?`,
+          [folderId, ...params, since],
+        )
+        .map((row) => ({ id: row.id, joinedAt: row.joined_at }));
+    },
+
+    /**
      * How many live Documents have Passages to search (of all of them, or only
      * of these), and the names of the `limit` most recently added, newest
      * first, each with its title when its name doesn't hold it.

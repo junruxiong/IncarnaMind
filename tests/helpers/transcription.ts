@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { vi } from "vitest";
 import type {
+  ChatModelFactory,
   Core,
   Logger,
   Meeting,
@@ -99,6 +100,7 @@ export async function transcribingCore(
   {
     engine = {},
     model,
+    createChatModel,
     loads,
     log,
     capture: captureOptions,
@@ -107,6 +109,8 @@ export async function transcribingCore(
     /** What the fake capture does, e.g. the computer's sound denied. */
     capture?: FakeCaptureOptions;
     model?: Parameters<typeof scriptedModels>[0];
+    /** Real chat models instead of a scripted one, for a live test. */
+    createChatModel?: ChatModelFactory;
     /** The engine starts once this resolves, as a model loading slowly does. */
     loads?: Promise<void>;
     log?: Logger;
@@ -125,6 +129,7 @@ export async function transcribingCore(
     transcriptionModelSource: NO_TRANSCRIPTION_FILES,
     now: clock.now,
     ...(models && { createChatModel: models.createChatModel }),
+    ...(createChatModel && { createChatModel }),
     ...(log && { log }),
   });
   await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });

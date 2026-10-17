@@ -1,13 +1,16 @@
 import { useMemo } from "react";
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
+import { useAskedChanges } from "../../askedChanges";
 import { type ChangedMind, changedMinds } from "../../changedMinds";
+import { changeFact, leftText } from "../../changeFacts";
 import { askInAssistant } from "../../conversations";
 import { useT } from "../../i18n";
 import { resolveAllChanges, showChanges, useWaitingChanges, type Waiting } from "../../mindChanges";
 import type { Translate } from "../../objects";
 import { useAppStore } from "../../store";
 import { MindLineIcon, PencilLineIcon } from "../lineIcons";
+import { AskedChangesCard } from "./AskedChangesCard";
 
 /** The names of Minds seen in a card, for a row whose Mind has since been removed. */
 const seenNames = new Map<string, string>();
@@ -15,39 +18,7 @@ const seenNames = new Map<string, string>();
 /** What an Answer did in one Mind, from its calls: the same counts the Mind's own line shows. */
 function factText(t: Translate, row: ChangedMind, name: string, waiting: Waiting) {
   if (waiting === "gone") return t("mindChanges.one.removed", { mind: name });
-  const count = row.wrote + row.changed;
-  if (row.tables > 0) return tablesFact(t, row, name);
-  if (row.created) {
-    if (count === 0) return t("mindChanges.one.created.none", { mind: name });
-    return count === 1
-      ? t("mindChanges.created.one", { mind: name })
-      : t("mindChanges.created", { mind: name, count });
-  }
-  if (count === 0) return t("mindChanges.one.edited", { mind: name });
-  if (row.changed === 0) {
-    return count === 1
-      ? t("mindChanges.wrote.one", { mind: name })
-      : t("mindChanges.wrote", { mind: name, count });
-  }
-  return count === 1
-    ? t("mindChanges.changed.one", { mind: name })
-    : t("mindChanges.changed", { mind: name, count });
-}
-
-function tablesFact(t: Translate, row: ChangedMind, name: string) {
-  const counted = (count: number, what: "tables" | "paragraphs" | "places") =>
-    count === 1 ? t(`mindChanges.count.${what}.one`) : t(`mindChanges.count.${what}`, { count });
-  const tables = counted(row.tables, "tables");
-  const count = row.wrote + row.changed;
-  if (count === 0) {
-    return row.created
-      ? t("mindChanges.created.tables", { mind: name, tables })
-      : t("mindChanges.tables", { mind: name, tables });
-  }
-  const paragraphs = counted(count, "paragraphs");
-  if (row.created) return t("mindChanges.created.wrote.tables", { mind: name, paragraphs, tables });
-  if (row.changed === 0) return t("mindChanges.wrote.tables", { mind: name, paragraphs, tables });
-  return t("mindChanges.changed.tables", { mind: name, places: counted(count, "places"), tables });
+  return changeFact(t, row, name);
 }
 
 /** What of its tables was kept as text, after its count; null when nothing was. */
@@ -65,13 +36,6 @@ function keptText(t: Translate, row: ChangedMind): string | null {
         : []),
   ];
   return notes.length > 0 ? notes.join(" ") : null;
-}
-
-/** How many of what it did still wait, while that is known and there was something. */
-function leftText(t: Translate, row: ChangedMind, waiting: Waiting): string | null {
-  if (typeof waiting !== "number" || row.wrote + row.changed + row.tables === 0) return null;
-  if (waiting === 0) return t("mindChanges.left.none");
-  return waiting === 1 ? t("mindChanges.left.one") : t("mindChanges.left", { count: waiting });
 }
 
 /**
@@ -96,6 +60,7 @@ export function MindChangesCard({
   const rows = useMemo(() => changedMinds(answer), [answer]);
   const waiting = useWaitingChanges(rows);
   const minds = useAppStore((state) => state.minds);
+  const asked = useAskedChanges((state) => state.outcomes[answer.id]);
   if (rows.length === 0) return null;
 
   const nameOf = (row: ChangedMind) => {
@@ -104,6 +69,17 @@ export function MindChangesCard({
     if (mind) seenNames.set(row.mindId, name);
     return name;
   };
+  if (asked) {
+    return (
+      <AskedChangesCard
+        answerId={answer.id}
+        rows={rows}
+        outcomes={asked}
+        waiting={waiting}
+        nameOf={nameOf}
+      />
+    );
+  }
   const counted = (index: number) => {
     const count = waiting[index];
     return typeof count === "number" ? count : 0;

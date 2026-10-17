@@ -140,5 +140,5 @@ export function shortcutLabel(id: CommandId): string {
 export function menuKeysLabel(command: Command): string | null {
   if (command.shortcut?.macOnly && !isMac) return null;
   const keys = command.shortcut?.keys ?? command.rowKeys;
-  return keys ? keysLabel(keysOn(keys, isMac), isMac) : null;
+  return keys ? keysLabel(keysOn(keys, isMac), isMac) : (command.globalKeys?.() ?? null);
 }

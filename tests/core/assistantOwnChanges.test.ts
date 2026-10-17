@@ -145,7 +145,9 @@ describe("The assistant revises its own changes still waiting", { timeout: 30_00
     expect(revised).toMatchObject({ mindId: made?.mindId, revised: true, proposals: 2 });
     expect(pendingProposals(page.blocks)).toHaveLength(revised?.proposals ?? -1);
     expect(waitingFrom(page, made?.request ?? "")).toBe(0);
-    expect(lastResult(model)).toMatch(/^Revised your own waiting text in “Tide notes”/);
+    expect(lastResult(model)).toMatch(
+      /^Revised your own text in “Tide notes”.*applies in the Mind at once/,
+    );
     expect(second.steps?.unbackedClaims).toBeUndefined();
   });
 
