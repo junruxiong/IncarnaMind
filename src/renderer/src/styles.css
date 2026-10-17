@@ -109,6 +109,8 @@
   --text-heading--line-height: 30px;
   --text-body: 17px;
   --text-body--line-height: 28px;
+  --text-note: 15px;
+  --text-note--line-height: 24px;
   --text-question: 16px;
   --text-question--line-height: 28px;
   --text-ui: 14px;
@@ -2666,8 +2668,8 @@
       border-bottom: 1px solid var(--color-rule);
       vertical-align: top;
       text-align: start;
-      font-size: 15px;
-      line-height: 24px;
+      font-size: var(--text-note);
+      line-height: var(--text-note--line-height);
     }
     :where(th) {
       background: var(--color-frame);
@@ -4152,9 +4154,9 @@
   }
   .footnote-text {
     outline: none;
-    font-family: var(--font-serif);
-    font-size: 15px;
-    line-height: 24px;
+    font-family: var(--writing-font, var(--font-system));
+    font-size: var(--text-note);
+    line-height: var(--text-note--line-height);
     color: var(--color-ink);
     white-space: pre-wrap;
     overflow-wrap: break-word;
@@ -4262,12 +4264,12 @@
   }
   .footnote-area-number {
     justify-self: end;
-    height: 24px;
+    height: var(--text-note--line-height);
     padding: 0 4px;
     border-radius: 4px;
     font-family: var(--font-sans);
     font-size: var(--text-meta);
-    line-height: 24px;
+    line-height: var(--text-note--line-height);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     color: var(--color-ink-secondary);
@@ -4284,9 +4286,9 @@
     gap: 6px;
     min-width: 0;
     padding: 0 4px;
-    font-family: var(--font-serif);
-    font-size: 15px;
-    line-height: 24px;
+    font-family: var(--writing-font, var(--font-system));
+    font-size: var(--text-note);
+    line-height: var(--text-note--line-height);
     color: var(--color-ink-meta);
   }
   .footnote-area-check {
@@ -4659,7 +4661,7 @@
   /*
    * The Mind's References (#289), after its last Block: a quiet label over a 1px rule, the
    * style picker and Copy and Export beside it, then each cited Document once, in the
-   * style, in the serif a size below the writing's. A thin record shows its Document's name
+   * style, in the writing's font a size below it. A thin record shows its Document's name
    * in meta grey with "Needs details", which opens its "Cite as" panel beside it.
    */
   .references {
@@ -4732,9 +4734,9 @@
     margin: 12px 0 0;
     padding: 0;
     list-style: none;
-    font-family: var(--font-serif);
-    font-size: 15px;
-    line-height: 24px;
+    font-family: var(--writing-font, var(--font-system));
+    font-size: var(--text-note);
+    line-height: var(--text-note--line-height);
     color: var(--color-ink);
     overflow-wrap: break-word;
     transition: opacity 120ms ease;
