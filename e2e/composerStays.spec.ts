@@ -11,6 +11,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  nameMind,
   newMind,
   pointAndClick,
   pointAt,
@@ -62,12 +63,11 @@ async function start(width: number, height: number, language: "en" | "zh-CN" = "
   return { app, window };
 }
 
-/** A Mind with a title and one Note, typed as a person does. */
+/** A Mind, named, and one Note typed as a person does. */
 async function writeMind(window: Page, title: string, note: string): Promise<Locator> {
   await newMind(window);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
-  await window.keyboard.type(title);
   await enterContent(window);
+  await nameMind(window, title);
   await window.keyboard.type(note);
   const editor = window.getByTestId("mind-editor");
   await expect(editor.locator("p")).toHaveText([note]);

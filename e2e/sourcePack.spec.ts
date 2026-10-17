@@ -20,6 +20,7 @@ import {
   exportFromMenu,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   openOptions,
   pointAndClick,
@@ -124,7 +125,7 @@ test("Export options › Source pack writes a cover list and a page for each cit
     [...FILES, PDF].map((file) => join(library, file)),
   );
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides 潮汐");
+  await nameMind(window, "Tides 潮汐");
 
   // The Mind keeps both Answers, with their Citations.
   await addToNote(window, await askInAssistant(window, QUESTION));
@@ -209,7 +210,7 @@ test("a Mind with no Citations says so in the sheet and on Export, and in Chines
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await pointAndClick(window, window.getByTestId("mind-editor"));
   await window.keyboard.type("Spring tides come twice a month.");
   await useOutputLocation(window, out);

@@ -4,7 +4,11 @@ import {
   createDataFolder,
   dismissChatSetup,
   dragTabTo,
+  enterContent,
+  frontMind,
+  frontMindName,
   launchApp,
+  nameMind,
   newMind as newMindFromMenu,
   removeDataFolder,
   setWindowSize,
@@ -47,7 +51,7 @@ async function newMind(window: Page, title: string): Promise<void> {
   const count = await tabsOf(window).count();
   await window.getByTestId("new-tab").click();
   await expect(tabsOf(window)).toHaveCount(count + 1);
-  await window.getByTestId("mind-title").fill(title);
+  await nameMind(window, title);
   await expect(activeTab(window).getByTestId("tab-title")).toHaveText(title);
 }
 
@@ -115,8 +119,8 @@ test("tabs close, reopen, move and switch by mouse and keyboard; a deleted Mind'
     const count = await tabsOf(window).count();
     await window.keyboard.press("ControlOrMeta+t");
     await expect(tabsOf(window)).toHaveCount(count + 1);
-    await window.getByTestId("mind-title").fill(title);
-    await window.getByTestId("mind-title").blur();
+    await nameMind(window, title);
+    await frontMind(window).getByTestId("mind-editor").blur();
   }
   await expect(titlesOf(window)).toHaveText(["Alpha", "Beta", "Gamma"]);
 
@@ -181,10 +185,11 @@ test("tabs close, reopen, move and switch by mouse and keyboard; a deleted Mind'
   await app.close();
 });
 
-test("a Mind's tab is renamed in place: a double-click or F2, Enter saves, Esc and a blank name change nothing", async () => {
+test("a Mind's tab is renamed in place: a double-click or F2, Enter saves, Esc changes nothing, and a blank name goes back to the first line", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window, "Alpha notes");
+  await window.keyboard.type("Tide tables");
   const tab = tabsOf(window).first();
   await tab.getByTestId("tab-title").dblclick();
   const field = tab.getByTestId("tab-rename");
@@ -201,10 +206,13 @@ test("a Mind's tab is renamed in place: a double-click or F2, Enter saves, Esc a
   await field.press("Escape");
   await expect(titlesOf(window)).toHaveText(["Alpha, revised"]);
   await expect(tab).toBeFocused();
+  // Blank, the typed name goes and the first line names the Mind again; its text is as it was.
   await window.keyboard.press("F2");
+  await expect(field).toHaveAttribute("placeholder", "Alpha, revised");
   await field.fill("   ");
   await field.press("Enter");
-  await expect(titlesOf(window)).toHaveText(["Alpha, revised"]);
+  await expect(titlesOf(window)).toHaveText(["Tide tables"]);
+  await expect(window.getByTestId("mind-editor")).toHaveText("Tide tables");
   await app.close();
 });
 
@@ -254,7 +262,7 @@ test("open tabs, their order and the shown one come back after a restart", async
   await expect(titlesOf(window)).toHaveText(["Beta", "Alpha", "Gamma"]);
   await expect(activeTab(window)).toContainText("Beta");
   await expect(window.getByTestId("mind-pane")).toHaveAttribute("data-mind-id", `${betaId}`);
-  await expect(window.getByTestId("mind-title")).toHaveValue("Beta");
+  await expect(frontMindName(window)).toHaveText("Beta");
   await second.app.close();
 });
 
@@ -323,12 +331,12 @@ test("the shown tab joins the Mind below with no edge under it, and long titles 
   await app.close();
 });
 
-test("a new Mind's title has the focus, so typing names it instead of making more Minds", async () => {
+test("a new Mind's first line has the focus, so typing names it instead of making more Minds", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const minds = window.getByTestId("mind-list-item");
 
-  // Clicked, the "+" menu's New Mind keeps no focus: a space typed next is part of the title.
+  // Clicked, the "+" menu's New Mind keeps no focus: a space typed next is part of the first line.
   for (const testId of ["plus-menu", "plus-new-mind"]) {
     const button = await boxOf(window.getByTestId(testId));
     await window.mouse.move(button.x + button.width / 2, button.y + button.height / 2, {
@@ -337,18 +345,16 @@ test("a new Mind's title has the focus, so typing names it instead of making mor
     await window.mouse.down();
     await window.mouse.up();
   }
-  const title = window.getByTestId("mind-title");
-  await expect(title).toBeFocused();
+  const editor = frontMind(window).getByTestId("mind-editor");
+  await expect(editor).toBeFocused();
   await window.keyboard.type("Hello world");
   await expect(minds).toHaveCount(1);
-  await expect(title).toHaveValue("Hello world");
+  await expect(editor).toHaveText("Hello world");
   await expect(titlesOf(window)).toHaveText(["Hello world"]);
 
-  // Enter moves on into the Mind's text; the tab strip's "+" does the same as New Mind.
-  await window.keyboard.press("Enter");
-  await expect(window.getByTestId("mind-editor")).toBeFocused();
+  // The tab strip's "+" does the same as New Mind.
   await window.getByTestId("new-tab").click();
-  await expect(title).toBeFocused();
+  await expect(frontMind(window).getByTestId("mind-editor")).toBeFocused();
   await window.keyboard.type("Second one");
   await expect(minds).toHaveCount(2);
   await expect(titlesOf(window)).toHaveText(["Hello world", "Second one"]);
@@ -362,7 +368,7 @@ test("tabs are 220px while there is room, the shown one keeps 132px as they shri
   await setWindowSize(app, window, WINDOW_SIZE.width, 660);
   for (const name of ["Alpha notes", "Beta research", "Gamma draft"]) {
     await newMindFromMenu(window);
-    await expect(window.getByTestId("mind-title")).toBeFocused();
+    await enterContent(window);
     await window.keyboard.type(name);
   }
   // Short titles show in full: the tabs take their 220px, not their text's width.
@@ -419,7 +425,7 @@ test("the application menu makes a new Mind, opens Settings, and closes, reopens
 
   await chooseMenuItem(app, "New Mind");
   await expect(window.getByTestId("mind-list-item")).toHaveCount(1);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
+  await enterContent(window);
   await chooseMenuItem(app, "Settings…");
   await expect(window.getByTestId("settings")).toBeVisible();
   await window.keyboard.press("Escape");
@@ -452,7 +458,7 @@ test("a Mind is renamed in place from its sidebar row, and Not in a Folder folds
   await dismissChatSetup(window);
   for (const name of ["Alpha notes", "Beta research"]) {
     await newMindFromMenu(window);
-    await expect(window.getByTestId("mind-title")).toBeFocused();
+    await enterContent(window);
     await window.keyboard.type(name);
   }
   const rows = window.getByTestId("mind-list-item");

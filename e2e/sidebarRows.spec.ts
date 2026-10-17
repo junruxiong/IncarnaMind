@@ -12,6 +12,7 @@ import {
   newMind,
   pointAt,
   removeDataFolder,
+  renameInTab,
   setLanguage,
   setSidebarWidth,
   setWindowSize,
@@ -186,8 +187,7 @@ for (const language of ["en", "zh-CN"] as const) {
       for (const [index, width] of [DEFAULT, NARROWEST].entries()) {
         await setSidebarWidth(window, width);
         const name = `${renamed} ${index + 1}`;
-        await window.getByTestId("mind-title").fill(name);
-        await window.getByTestId("mind-title").press("Enter");
+        await renameInTab(window, name);
         await expect(undo).toBeVisible();
         const [messageBox, undoBox, sidebarBox] = await Promise.all([
           boxOf(message),

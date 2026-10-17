@@ -208,11 +208,11 @@ describe("exporting a Mind", () => {
       createHash("sha256")
         .update(await exported("markdown"))
         .digest("hex"),
-    ).toBe("a4c7d2f0c6856d0ed5a4df3984ab53e8b1bd89057a4cef980a14629bb86685fa");
+    ).toBe("6af5396e9bda856838e28958169641a1d21a98d04e5ec9d02a7e5375bb0c8f74");
     // The .docx's compressed bytes depend on zlib's build, so they are checked against this
     // Node's deflate, and the rest is pinned (see `zipFingerprint`).
     expect(zipFingerprint(await exported("docx"))).toBe(
-      "9d3657aa6be50fa1e81d4b805ffab8d6976bf6648899b05d0307c44a194745be",
+      "6a5db33f9993e45e655fb7aa840e136279ac02117a6e9cde73338b08466f80a5",
     );
   });
 
@@ -221,19 +221,19 @@ describe("exporting a Mind", () => {
       "the sample, with its Question",
       "sample",
       { includeQuestions: true },
-      "90dedfa1ef94e2f23d93b35494788229aa348426f03557101123d83ba4bd98f5",
+      "3753007f9f9eabf272117b41067bdd6708cfb17a2bae63e7d07b3ba17ba529b0",
     ],
     [
       "the sample, in Chinese, on A4",
       "sample",
       { language: "zh-CN" },
-      "7e0bbfccefa4e63d9be0ffb226798ad4cd766d60757725ff639d5d1b6fcbfc4f",
+      "d89a258688b8dbbb130669a52526768680538aa43c6b8e61390055f299a9bac2",
     ],
     [
       "quotes, rules, links, marks, breaks, tables, images and Locations",
       "rest",
       {},
-      "407655edf9fc643d253e7ec404d663cec5aaf0867e57b45195d0eaf51cc939cb",
+      "86a0b1422bc404bb4a8d796c8ba495d60aca2d3257be3ae11f070052360e3fa0",
     ],
   ] as const)(
     "the bytes of a .docx export don't change either: %s",
@@ -263,8 +263,6 @@ describe("exporting a Mind", () => {
 
     expect(decode(exported)).toBe(
       [
-        "# Tides",
-        "",
         "# Spring tides",
         "",
         "**Neap** tides are *weaker*, at \\$0.",
@@ -347,9 +345,10 @@ describe("exporting a Mind", () => {
       'PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"',
     );
 
+    // The name is the file's Title property, and the page starts with the text, with no title line (#908).
+    expect(part(files, "docProps/core.xml")).toContain("<dc:title>Tides</dc:title>");
     // Questions are left out by default; the Note switched out of Question context is in.
     expect(paragraphsOf(document)).toEqual([
-      { style: "Title", text: "Tides" },
       { style: "Heading1", text: "Spring tides" },
       { text: "Neap tides are weaker, at $0." },
       { text: "Kept out of Questions, still exported." },
@@ -431,8 +430,6 @@ describe("exporting a Mind", () => {
     const markdown = decode(await core.exportMind(mind.id, { format: "markdown" }));
     expect(markdown).toBe(
       [
-        "# Tides",
-        "",
         "Spring tides are ==strongest== at **==new moon==**.",
         "",
         "In code, a \\== b; ==\\= b==",
@@ -442,7 +439,6 @@ describe("exporting a Mind", () => {
 
     const { document } = docxParts(await core.exportMind(mind.id, { format: "docx" }));
     expect(paragraphsOf(document)).toEqual([
-      { style: "Title", text: "Tides" },
       { text: "Spring tides are strongest at new moon." },
       { text: "In code, a == b; = b" },
     ]);
@@ -718,8 +714,6 @@ describe("exporting a Mind", () => {
     const markdown = await core.exportMind(mind.id, { format: "markdown" });
     expect(decode(markdown)).toBe(
       [
-        "# Tides",
-        "",
         "| Tide | When | Range |",
         "| :--- | --- | ---: |",
         "| Spring | At new and full moon[^1] | **Largest** |",
@@ -772,7 +766,7 @@ describe("exporting a Mind", () => {
       "2": "Tides, p. 2 [unverified]",
     });
     expect(zipFingerprint(exported.data)).toBe(
-      "9f853f696b6ffc80860f8e88f99d34cb8f7ed63efef368c53f7ff5efcc39c2e6",
+      "088a3a76cc8283ce7a9a3c60e8d2bf313311821ec8cb460c9619fb922bf5cde4",
     );
   });
 
@@ -791,8 +785,6 @@ describe("exporting a Mind", () => {
 
     expect(decode(await core.exportMind(mind.id, { format: "markdown" }))).toBe(
       [
-        "# Tides",
-        "",
         "**问题：** 大潮什么时候出现？",
         "",
         "新月时[^1]。",
@@ -897,7 +889,6 @@ describe("exporting a Mind", () => {
 
     const { document } = docxParts(await core.exportMind(mind.id, { format: "docx" }));
     expect(paragraphsOf(document)).toEqual([
-      { style: "Title", text: "Tides" },
       { style: "Math", text: "$$\\undefinedmacro{x}$$" },
       { text: "Linked $\\href{https://example.com}{x}$, and fine ." },
     ]);

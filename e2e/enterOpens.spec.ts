@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   removeDataFolder,
   setWindowSize,
@@ -145,9 +146,9 @@ for (const language of ["en", "zh-CN"] as const) {
       await addDocuments(window, [join(sources, "Tides.txt")]);
       await createFolder(window, "Ocean");
       await newMind(window);
-      await window.getByTestId("mind-title").fill("Shortlist");
+      await nameMind(window, "Shortlist");
       await newMind(window);
-      await window.getByTestId("mind-title").fill("Notes");
+      await nameMind(window, "Notes");
       await setLanguage(window, language);
 
       // Enter opens a Mind that isn't open, and starts no rename.
