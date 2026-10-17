@@ -647,6 +647,16 @@ const PROSE_START =
 const LABEL_REFERENCE =
   /(?:(?<![A-Za-z])(?:[Pp]aragraphs?|[Pp]ara|[Ss]ections?|[Nn]otes?|[Pp]ages?|[Pp]art|[Cc]lause|[Aa]rticle)|第|[条款项章节页])$/;
 
+const COUNT_LABEL =
+  /(?:(?<![A-Za-z])(?:head ?count|employees?|staff|FTEs?|people)|人数|员工|人员|职工)$/i;
+
+function namesCount(prepared: Prepared, at: number): boolean {
+  const { s } = prepared;
+  const lead = s.slice(s.lastIndexOf("\n", at - 1) + 1, at);
+  const label = /^[^\d(\p{Sc}]*/u.exec(lead)?.[0] ?? "";
+  return [label, lead].some((words) => COUNT_LABEL.test(words.slice(-100).replace(/[\s|]+$/, "")));
+}
+
 function rowOf(prepared: Prepared, from: number, to: number): "table" | "statement" | null {
   const { s, tabbed } = prepared;
   const start = s.lastIndexOf("\n", from - 1) + 1;
@@ -1544,9 +1554,11 @@ function readAround(
   // "（+2.1pct）": a sign written inside brackets makes them an aside, not an accounting negative.
   if (bracket !== null && s[close] === ")" && !signed) {
     const outer = draft.currencies.length === 0 ? currencyBefore(bracket) : null;
+    const count = draft.unit.kind === "plain" && namesCount(prepared, bracket);
     const reference =
-      REFERENCE_BEFORE.test(s.slice(Math.max(floor, bracket - 24), bracket)) ||
-      LABEL_REFERENCE.test(s.slice(floor, bracket).trimEnd());
+      !count &&
+      (REFERENCE_BEFORE.test(s.slice(Math.max(floor, bracket - 24), bracket)) ||
+        LABEL_REFERENCE.test(s.slice(floor, bracket).trimEnd()));
     // "section 1159(10)", "s.12(3)": a sub-reference, never an amount.
     const glued =
       !outer &&
@@ -1571,26 +1583,38 @@ function readAround(
       }
       ledger = ledger || takeLedger();
     };
-    const question = () => {
-      draft.signUnsure = true;
+    const enclose = () => {
       draft.from = bracket;
       right = close + 1;
     };
+    const question = () => {
+      draft.signUnsure = true;
+      enclose();
+    };
+    const currencySigned = outer !== null || currency !== null;
     if (bare && found.formatted) {
-      // "(1,250)" and "($1,250)" are accounting negatives.
-      negate();
+      // "(1,250)" and "($1,250)" are accounting negatives, unless they count people.
+      if (count) enclose();
+      else negate();
     } else if (bare && whole) {
       // "(2)" is a list's or a note's; "(250)" may be negative or an aside, and is a minus in a row of accounts.
       if (reference) return null;
       const marked = draft.currencies.length > 0 || outer !== null;
       const small = found.number.digits.length <= 2;
       if (small && !(marked && row)) return null;
-      if (row && (marked || settled.accounts)) negate();
+      if (count) enclose();
+      else if (row && (marked || settled.accounts)) negate();
       else question();
     } else if (draft.unit.kind === "percent" && draft.scaleWord === null) {
       question();
-    } else if (row === "table" && (draft.unit.kind === "plain" || draft.unit.kind === "currency")) {
-      // "(US$170 million)" after an amount in another currency restates it; in a cell of its own it is a minus.
+    } else if (count) {
+      enclose();
+    } else if (
+      row === "table"
+        ? draft.unit.kind === "plain" || draft.unit.kind === "currency"
+        : row === "statement" && currencySigned
+    ) {
+      // "(US$170 million)" after an amount in another currency restates it; in a cell of its own, or beside a statement's label ("Impairment (£1.2m)"), it is a minus.
       const codes = outer?.codes ?? draft.currencies;
       const before = codes.length > 0 ? amountBefore(s, outer?.from ?? bracket, settled) : null;
       if (!before?.length || before.some((code) => codes.includes(code))) negate();
