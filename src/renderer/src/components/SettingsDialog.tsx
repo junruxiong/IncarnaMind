@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
-import { files } from "../core";
+import { core, files } from "../core";
 import { useT } from "../i18n";
 import { offeredSettingsPages, type SettingsPage, settingsPageLabels } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
@@ -315,14 +315,24 @@ function AboutSettings() {
     <section data-testid="about-settings">
       <h4 className={sectionTitleClass}>{t("settings.about.title")}</h4>
       <p className={sectionNoteClass}>{t("settings.about.body")}</p>
-      <a
-        href={REPOSITORY_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="text-ui text-accent underline-offset-2 hover:text-accent-strong hover:underline"
-      >
-        {t("settings.about.repository")}
-      </a>
+      <div className="flex flex-col items-start gap-1">
+        <a
+          href={REPOSITORY_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-ui text-accent underline-offset-2 hover:text-accent-strong hover:underline"
+        >
+          {t("settings.about.repository")}
+        </a>
+        <button
+          type="button"
+          data-testid="about-citation-licences"
+          onClick={() => core.openCitationStyleLicences().catch(useAppStore.getState().reportError)}
+          className="text-ui text-accent underline-offset-2 hover:text-accent-strong hover:underline"
+        >
+          {t("settings.about.citationLicences")}
+        </button>
+      </div>
     </section>
   );
 }

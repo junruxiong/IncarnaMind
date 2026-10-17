@@ -60,9 +60,14 @@ import type { Language } from "../../language";
 import { plainText } from "../../mindText";
 import { insertBlocks } from "../../noteAdding";
 import {
+  citationsDropped,
+  type OwnApplied,
   type OwnWaiting,
+  ownAppliedIn,
+  ownAppliedTexts,
   ownAsked,
   ownWaitingTexts,
+  replaceApplied,
   replaceOwn,
   waitingIn,
 } from "../../proposals/ownWaiting";
@@ -102,8 +107,8 @@ export interface MindsForTools {
   ): { text: string; origins: readonly ThirdPartySource[] };
   /** Saves a Checkpoint of the Mind as it is, before the AI changes it (#113). */
   checkpoint(mindId: string): void;
-  /** Makes a Mind, in the Folder `folderId` or in none. */
-  create(title: string, folderId: string | null): ChangeableMind;
+  /** Makes a Mind, in the Folder `folderId` or in none; `headed`, its text starts with its title (`makeMind`). */
+  create(title: string, folderId: string | null, headed: boolean): ChangeableMind;
   /** The name of a Folder, or null when there is none by that id. */
   folderName(folderId: string): string | null;
   /** Says where a call is writing a Mind's new Blocks as they come (#202); `place` null once it has stopped. */
@@ -449,7 +454,14 @@ function stretchOf(
       // A start the model got wrong falls back to the paragraph the User named by its place.
       const paragraph = paragraphNamed(all, part) ?? paragraphAt(all, asked);
       if (!paragraph) {
-        return { why: `there is no heading or paragraph “${part}” in it`, kind: "no-heading" };
+        const count = countText(nameKey(part));
+        const short = count.words < MIN_FIRST_WORDS && count.cjk < MIN_FIRST_CJK;
+        return {
+          why: short
+            ? `there is no heading “${part}” in it, and to name a paragraph, give more of its first words: at least ${MIN_FIRST_WORDS} words or ${MIN_FIRST_CJK} Chinese characters`
+            : `there is no heading or paragraph “${part}” in it`,
+          kind: "no-heading",
+        };
       }
       chosen = [paragraph];
     }
@@ -597,7 +609,7 @@ const WAITING =
   "They wait in the Mind for the User to accept or reject them; until then nothing of the User's text has changed.";
 // The window that asked applies what the User asked for (#880), so the reply mustn't say it waits.
 const APPLIES =
-  "As the User asked for this, it applies in the Mind at once, with Undo: say what changed, not that anything waits.";
+  "As the User asked for this, it applies in the Mind at once, with Undo. IncarnaMind lists what changed under your reply: don't describe it, nor say that anything waits.";
 
 const held = (name: string) =>
   `The User asked for this, but it would take out most of their own text in “${name}”, so it waits there for them to apply or discard; nothing of their text has changed yet. Say that it waits for them, not that it changed.`;
@@ -670,6 +682,13 @@ const citedIn = ({ cited, unrecorded }: { cited: number; unrecorded: number }) =
   ...(unrecorded > 0 && { unrecorded }),
 });
 
+const droppedSaid = (dropped: number) =>
+  dropped > 0
+    ? [
+        `${dropped === 1 ? "1 Citation" : `${dropped} Citations`} would be removed with the words they belong to; the User sees that on the change: say so.`,
+      ]
+    : [];
+
 interface Written {
   notFound: number;
   unrecorded: number;
@@ -717,6 +736,29 @@ const textKey = (text: string) =>
 const COPY_WORDS = 8;
 const COPY_CJK = 30;
 const COPY_RUN = 2;
+
+// Its words, and the pairs of Chinese characters in it: a summary rewritten longer keeps most of them.
+const tokensOf = (text: string): Set<string> => {
+  const key = textKey(text);
+  const words = key.match(/[\p{L}\p{N}]+/gu) ?? [];
+  return new Set(
+    words.flatMap((word) =>
+      /\p{Script=Han}/u.test(word)
+        ? [...word].slice(1).map((char, index) => `${word[index]}${char}`)
+        : [word],
+    ),
+  );
+};
+const REPEATS = 0.6;
+
+function repeats(earlier: string, next: string): boolean {
+  const before = tokensOf(earlier);
+  if (before.size === 0) return false;
+  const after = tokensOf(next);
+  let shared = 0;
+  for (const token of before) if (after.has(token)) shared++;
+  return shared / before.size >= REPEATS;
+}
 
 function longEnough(text: string): boolean {
   const count = countText(text);
@@ -922,6 +964,41 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     return null;
   };
 
+  // Asked to change text, a new version of the assistant's own goes in its place, not beside it (#1061).
+  const besideIn = (writer: Writer, blocks: readonly NodeJSON[]): string | null => {
+    if (requested?.change !== "edit") return null;
+    const there = minds.read(writer.mind.id, (note) => ownAppliedTexts(note)).filter(longEnough);
+    // A longer version is often split into paragraphs: the words of all of them count.
+    const text = blocks
+      .filter((block) => block.type !== "heading")
+      .map(nodeText)
+      .join(" ");
+    return there.find((each) => repeats(each, text)) ?? null;
+  };
+
+  interface Repeat {
+    text: string;
+    kind: "waiting" | "applied";
+  }
+
+  const repeatIn = (writer: Writer, blocks: readonly NodeJSON[]): Repeat | null => {
+    if (writer.made) return null;
+    const copy = copyIn(writer, blocks);
+    if (copy !== null) return { text: copy, kind: "waiting" };
+    const beside = besideIn(writer, blocks);
+    return beside === null ? null : { text: beside, kind: "applied" };
+  };
+
+  const repeatRefusal = (mind: ChangeableMind, repeat: Repeat) => {
+    const shown = repeat.text.length > 80 ? `${repeat.text.slice(0, 80)}…` : repeat.text;
+    return new Refusal(
+      { kind: repeat.kind === "waiting" ? "copy" : "new-version", mindId: mind.id, text: shown },
+      repeat.kind === "waiting"
+        ? `Nothing was added to “${mind.name}”: “${shown}” is there already, as your own text still waiting. Revise it with edit_mind, naming its heading in part and giving its whole new text as content, instead of adding a second copy.`
+        : `Nothing was added to “${mind.name}”: it is a new version of your own text there, “${shown}”. Change that text in place with edit_mind, naming its first words in part and giving its whole new text as content, instead of adding it again beside it.`,
+    );
+  };
+
   /** Takes back what a writer wrote: the call ended up meaning another Mind, or another place. */
   const withdraw = (writer: Writer): void => {
     if (writer.written === 0) return;
@@ -938,7 +1015,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
    */
   const streams = new Map<
     string,
-    { writer: Writer | null; created: boolean; breaks: number; copy: string | null }
+    { writer: Writer | null; created: boolean; breaks: number; copy: Repeat | null }
   >();
   /**
    * Calls already made: input the engine still hands over after the call ran
@@ -990,7 +1067,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       0,
       firstUnrecorded < 0 ? -1 : Math.min(firstUnrecorded, blocks.length - 1),
     );
-    stream.copy = writer.made ? null : copyIn(writer, ready);
+    stream.copy = repeatIn(writer, ready);
     if (stream.copy !== null) {
       withdraw(writer);
       minds.writing(writer.mind.id, null);
@@ -1028,14 +1105,11 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     }
     if (unmade) return null;
     writer ??= writerFor(mind, after, made);
-    const copy = stream?.copy ?? (made ? null : copyIn(writer, blocks));
+    const copy = stream?.copy ?? repeatIn(writer, blocks);
     if (copy !== null) {
       withdraw(writer);
       minds.writing(writer.mind.id, null);
-      throw new Refusal(
-        { kind: "copy", mindId: mind.id, text: copy },
-        `Nothing was added to “${mind.name}”: “${copy}” is there already, as your own text still waiting. Revise it with edit_mind, naming its heading in part and giving its whole new text as content, instead of adding a second copy.`,
-      );
+      throw repeatRefusal(mind, copy);
     }
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
@@ -1143,23 +1217,32 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   };
 
   /**
-   * `edit_mind` with new text: it takes the place of the assistant's own
-   * changes still waiting over the stretch (`own`), cited as an Answer is.
+   * `edit_mind` with new text: it takes the place of the assistant's own text over the
+   * stretch, cited as an Answer is: its changes still waiting (`own`), revised in place, or
+   * its text already in the Mind (`applied`), proposed to be replaced (#1061).
    */
-  const reviseWith = (
+  const writeOver = (
     toolCallId: string,
     mind: ChangeableMind,
-    own: OwnWaiting,
+    over: OwnWaiting | OwnApplied,
     markdown: string,
-  ): Written & { change: MindChange } => {
+  ): Written & { change: MindChange; dropped: number } => {
     const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } =
       options.blocksOf(markdown);
     if (blocks.some(unmadeTable)) throw noTable(mind);
+    const dropped = minds.read(mind.id, (note) => citationsDropped(note, over, blocks));
     const request = randomUUID();
     minds.checkpoint(mind.id);
     const ids = minds.edit(mind.id, (note) => {
-      const asked = requestedIn(mind.id, false) !== null && ownAsked(note, own);
-      const written = replaceOwn(note, own, blocks.map(createElement), request);
+      const asked =
+        over.kind === "own"
+          ? requestedIn(mind.id, false) !== null && ownAsked(note, over)
+          : requested?.change === "edit" && requestedIn(mind.id, false) !== null;
+      const revised = blocks.map(createElement);
+      const written =
+        over.kind === "own"
+          ? replaceOwn(note, over, revised, request)
+          : replaceApplied(note, over, revised, request);
       const doc = note.doc;
       if (!written || !doc) return written;
       setOrigins(doc, written, options.origin);
@@ -1178,7 +1261,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         `That text of “${mind.name}” changed while it was being read. Nothing was changed.`,
       );
     }
-    const revision = (): MindChange => ({ ...changeIn(mind.id, request, false), revised: true });
+    const revision = (): MindChange => ({
+      ...changeIn(mind.id, request, false),
+      ...(over.kind === "own" && { revised: true }),
+    });
     const change: MindChange = {
       ...revision(),
       ...citedIn({ cited, unrecorded: 0 }),
@@ -1188,7 +1274,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if (unrecorded > 0) {
       unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision });
     }
-    return { change, notFound, unrecorded, searchTalk };
+    return { change, notFound, unrecorded, searchTalk, dropped };
   };
 
   const unmadeSaid = (name: string) =>
@@ -1209,7 +1295,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const edit: Tool = {
     name: MIND_TOOLS.edit,
     description:
-      "Change text that is already in a Mind, as the User asks: shorten, lengthen, rewrite, restructure, correct, translate or reword it, or remove part of it. Say what to change in instruction, and the text is rewritten for you, its Citations kept. To change one paragraph and leave the others as they are, name its first words in part. The rewrite reads only that text: it can't search the Documents or cite anything new, so new facts from the Documents, a table of them too, go in with add_to_mind, cited. Text you proposed that still waits ([waiting change, adds: …]) is revised in place; for it you may give its whole new text as content instead, cited as add_to_mind's, e.g. to add more from the Documents. It arrives in the Mind as changes the User accepts or rejects.",
+      "Change text that is already in a Mind, as the User asks: shorten, lengthen, rewrite, restructure, correct, translate or reword it, or remove part of it. Say what to change in instruction, and the text is rewritten for you, its Citations kept. To change one paragraph and leave the others as they are, name its first words in part. The rewrite reads only that text: it can't search the Documents or cite anything new, so new facts from the Documents, a table of them too, go in with add_to_mind, cited. Text you proposed that still waits ([waiting change, adds: …]) is revised in place. For your own text, still waiting or in the Mind as you wrote it (an Answer added with Add to note), you may give its whole new text as content instead, cited as add_to_mind's, e.g. to make it longer with more from the Documents: it replaces that text, never adding a second copy. It arrives in the Mind as changes the User accepts or rejects, or applies at once when they asked for it: the result says which.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1227,7 +1313,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         content: {
           ...contentProperty,
           description:
-            "Only for text you proposed that still waits: its whole new text, in Markdown, from the section's heading on (it replaces the heading too), with markers like [^1] for Citations recorded with cite. Give it instead of instruction.",
+            "Only for your own text, still waiting or in the Mind as you wrote it: its whole new text, in Markdown, from the section's heading on (it replaces the heading too), with markers like [^1] for Citations recorded with cite. Give it instead of instruction.",
         },
       },
       additionalProperties: false,
@@ -1263,18 +1349,26 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         throw refuseWaiting(mind, { count: waiting.count, mixed: waiting.kind === "mixed" });
       }
       if (markdown !== null) {
-        if (waiting.kind !== "own") {
+        const over =
+          waiting.kind === "own"
+            ? waiting
+            : minds.read(mind.id, (blocks) => ownAppliedIn(blocks, stretch.from, stretch.to));
+        if (!over) {
           throw new Refusal(
             { kind: "content-not-own", mindId: mind.id },
-            `Nothing was changed in “${mind.name}”: content only replaces your own changes still waiting there. To change the User's text, give instruction instead.`,
+            `Nothing was changed in “${mind.name}”: content only replaces your own text there, still waiting or as you wrote it. To change the User's text, give instruction instead.`,
           );
         }
         const before = minds.read(mind.id, (blocks) => stretchText(blocks, stretch));
-        const revised = reviseWith(toolCallId, mind, waiting, markdown);
+        const written = writeOver(toolCallId, mind, over, markdown);
+        const went = ` (${lengths(before, markdown)})`;
         return [
-          revisedText(mind, revised.change, ` (${lengths(before, markdown)})`),
-          ...tableNotes(revised.change),
-          ...writtenNotes(revised),
+          over.kind === "own"
+            ? revisedText(mind, written.change, went)
+            : `Proposed your new text in place of your own in “${mind.name}”${went}. ${outcomeOf(mind, written.change.request)}`,
+          ...tableNotes(written.change),
+          ...writtenNotes(written),
+          ...droppedSaid(written.dropped),
         ].join(" ");
       }
       // Only a request for an edit rewrites the User's text at once; one to write waits there (#880).
@@ -1331,11 +1425,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           : `Proposed ${changes(result.proposals)} in “${mind.name}”${went}. ${outcomeOf(mind, result.request)}`,
         ...tableNotes(change, result.unmatchedMarkers),
         ...(reason ? [`Why, as the rewrite says: ${reason}`] : []),
-        ...(result.droppedCitations > 0
-          ? [
-              `${result.droppedCitations === 1 ? "1 Citation" : `${result.droppedCitations} Citations`} would be removed with the words they belong to; the User sees that on the change: say so.`,
-            ]
-          : []),
+        ...droppedSaid(result.droppedCitations),
         ...(result.outOfDate > 0
           ? [
               `${result.outOfDate === 1 ? "1 change is" : `${result.outOfDate} changes are`} already out of date: the User changed that text meanwhile.`,
@@ -1348,7 +1438,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const add: Tool = {
     name: MIND_TOOLS.add,
     description:
-      "Add new text to a Mind: a section, a paragraph, a list or a table you write from the Documents or this conversation. Cite it as an Answer: call cite first and put its markers in content, in each table cell as in a paragraph. It arrives in the Mind as changes the User accepts or rejects. To change text already there, your own waiting changes included, use edit_mind.",
+      "Add new text to a Mind: a section, a paragraph, a list or a table you write from the Documents or this conversation. Cite it as an Answer: call cite first and put its markers in content, in each table cell as in a paragraph. It arrives in the Mind as changes the User accepts or rejects, or applies at once when they asked for it: the result says which. To change text already there, your own included, use edit_mind: never add a longer version of it beside it.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1396,10 +1486,14 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     },
   };
 
+  // A model that began with a heading of its own keeps that one alone.
+  const make = (title: string, content: string): ChangeableMind =>
+    minds.create(title, options.folderId, !/^\s*#{1,6}\s/.test(content));
+
   const create: Tool = {
     name: MIND_TOOLS.create,
     description:
-      "Make a new Mind (a note) when the User asks for a new note, page or document, e.g. to summarise Documents or this conversation into one. Write its content as you would an Answer, with Citation markers from cite; leave content out for an empty Mind. It opens beside the User's Mind, its text as changes to accept or reject.",
+      "Make a new Mind (a note) when the User asks for a new note, page or document, e.g. to summarise Documents or this conversation into one. Write its content as you would an Answer, with Citation markers from cite; leave content out for an empty Mind. It opens beside the User's Mind, its text as changes to accept or reject, or applied at once when they asked for it: the result says which.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1421,7 +1515,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       streamContent(toolCallId, input, (fields) => {
         const title = fields.get("title");
         if (!title?.done || title.value.trim() === "") return null;
-        const mind = minds.create(title.value.trim(), options.folderId);
+        // Its first paragraph is whole by now, so whether the model began with a heading is known.
+        const mind = make(title.value.trim(), fields.get("content")?.value ?? "");
         return { writer: writerFor(mind, null, true), created: true };
       });
     },
@@ -1430,7 +1525,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const markdown = optional(input.content);
       // Made already, as its content came in.
       const streamed = streams.get(toolCallId)?.writer?.mind;
-      const mind = streamed ?? minds.create(title, options.folderId);
+      const mind = streamed ?? make(title, markdown ?? "");
       const folder = options.folderId === null ? null : minds.folderName(options.folderId);
       const made = `Made the Mind “${mind.name}”${folder ? ` in the Folder “${folder}”` : ""}, open beside the User's Mind`;
       if (markdown === null) {

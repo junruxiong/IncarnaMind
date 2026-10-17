@@ -42,7 +42,7 @@ const SENDS_EN = {
   ],
 };
 const SENDS_ZH = {
-  lead: "会把你的问题和文档内容发送给 OpenAI。· 详情",
+  lead: "会把你的问题和文档内容发送给 OpenAI。 · 详情",
   after: "保存密钥后就开始打标签。",
   items: [
     "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",

@@ -113,7 +113,9 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   await setWindowSize(app, window, 1440, 900);
 
   const pane = window.getByTestId("mind-pane");
-  await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
+  await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+    "Draft: credit committee paper",
+  );
   await expect(pane.getByTestId("first-open-steps")).toContainText("Welcome to IncarnaMind");
   await expect(window.getByTestId("mind-list-item").getByTestId("example-chip")).toHaveText(
     "Example",
@@ -209,7 +211,9 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   const ways = window.getByTestId("example-add-items");
   await expect(ways.getByRole("menuitem")).toHaveText(["Add files…", "Link a folder…"]);
   await expect(ways.getByRole("menuitem").first()).toBeFocused();
-  await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
+  await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+    "Draft: credit committee paper",
+  );
   await expect(window.getByTestId("chat-setup")).toHaveCount(0);
   await window.keyboard.press("Escape");
   await expect(addOwn).toBeFocused();
@@ -378,7 +382,9 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   const files = step(window, "files");
   await expect(files).toHaveAttribute("data-state", "open");
   await expect(files.getByRole("button")).toHaveText(["Add files…", "Link a folder…"]);
-  await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
+  await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+    "Draft: credit committee paper",
+  );
   await expect(window.getByTestId("chat-setup")).toBeHidden();
 
   await setLanguage(window, "zh-CN");
@@ -451,9 +457,12 @@ test("in Chinese, the ready Question is the Chinese example's, answered with no 
   const { app, window } = await launchApp(dataDir, { examples: true });
   await setWindowSize(app, window, 1100, 720);
   await setLanguage(window, "zh-CN");
-  await expect(window.getByTestId("mind-title")).toHaveValue("授信委员会报告（草稿）", {
-    timeout: 30_000,
-  });
+  await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+    "授信委员会报告（草稿）",
+    {
+      timeout: 30_000,
+    },
+  );
   const checks = window.getByTestId("mind-pane").getByTestId("margin-check");
   await expect(checks).toHaveCount(2);
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 30_000 });

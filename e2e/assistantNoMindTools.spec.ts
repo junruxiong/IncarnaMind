@@ -8,6 +8,7 @@ import {
   dragBy,
   enterContent,
   launchApp,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -48,9 +49,8 @@ async function start(
   await setLanguage(window, language);
   await setWindowSize(app, window, size.width, size.height);
   await newMind(window);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
-  await window.keyboard.type(title);
   await enterContent(window);
+  await nameMind(window, title);
   await window.keyboard.type(text);
   await expect(window.getByTestId("mind-editor").locator("p")).toHaveText([text]);
   return { app, window, editor: window.getByTestId("mind-editor") };

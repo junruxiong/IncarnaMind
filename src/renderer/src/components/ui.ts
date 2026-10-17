@@ -188,9 +188,12 @@ export const segmentClass =
 
 // Menus ----------------------------------------------------------------------
 
+/** A popover menu's element, but its width: a picker that needs more room sets its own. */
+export const menuFrameClass =
+  "inset-auto m-0 max-h-[60vh] overflow-y-auto rounded-lg border-0 bg-sheet p-1 text-ui font-normal text-ink shadow-popover";
+
 /** A popover menu's element. */
-export const menuClass =
-  "inset-auto m-0 max-h-[60vh] w-max max-w-72 min-w-48 overflow-y-auto rounded-lg border-0 bg-sheet p-1 text-ui font-normal text-ink shadow-popover";
+export const menuClass = `${menuFrameClass} w-max max-w-72 min-w-48`;
 
 /** A menu's small heading. */
 export const menuTitleClass = "px-2 pt-1.5 pb-1 text-label font-semibold text-ink-meta";

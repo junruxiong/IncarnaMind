@@ -11,10 +11,11 @@
 - **Citations are there**: in the reply, or, for text written into a Mind, in that Mind.
 - **Every Document is covered**: asked about all the Documents in scope, each is cited, or named in a sentence saying it wasn't covered.
 - **Only what was asked changes**: asked about one paragraph, the others read as they did once the Answer's changes are accepted.
+- **Changed in place**: asked to make the summary in the Mind longer, it changes that summary rather than adding a second version beside it.
 
 ## The requests
 
-`cases.ts`: 42 requests in seven groups. The owner's four turns (2026-10-15). Only the paragraph asked about. Questions about the Documents. Text asked for in a Mind. The User's own text changed. Follow-ups after a write. Several Documents. No Mind in focus. Questions that only sound like requests. Each is asked from a Mind of its own, after the requests it follows, in one conversation.
+`cases.ts`: 44 requests in seven groups. The owner's four turns (2026-10-15). Only the paragraph asked about. Questions about the Documents. Text asked for in a Mind. The User's own text changed. Follow-ups after a write, and after an Answer put into the Mind with Add to note. Several Documents. No Mind in focus. Questions that only sound like requests. Each is asked from a Mind of its own, after the requests it follows, in one conversation.
 
 The Documents:
 

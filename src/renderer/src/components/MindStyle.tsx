@@ -59,11 +59,9 @@ const PRESET_FACES: Record<FontPreset, string> = {
 export function MindStyleHost() {
   const t = useT();
   const open = useMindStylePanel((state) => state.open);
+  const picking = useMindStylePanel((state) => state.fonts);
   const menu = usePopoverMenu({ focus: "checked" });
   const fallback = useRef<HTMLButtonElement>(null);
-  const [picking, setPicking] = useState<{ mindId: string; anchor: HTMLButtonElement } | null>(
-    null,
-  );
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -73,9 +71,7 @@ export function MindStyleHost() {
     }
   }, [open, menu.buttonProps.ref, menu.menuProps.ref]);
 
-  const [spacing, setSpacing] = useState<{ mindId: string; anchor: HTMLButtonElement } | null>(
-    null,
-  );
+  const spacing = useMindStylePanel((state) => state.spacing);
   // Each opens beside the button that asked for Style once the menu is gone, as the menu would close under it.
   const besideAnchor = (show: (shown: { mindId: string; anchor: HTMLButtonElement }) => void) => {
     if (!open) return;
@@ -83,7 +79,8 @@ export function MindStyleHost() {
     menu.close();
     if (anchor) requestAnimationFrame(() => show({ mindId: open.mindId, anchor }));
   };
-  const pickFont = () => besideAnchor(setPicking);
+  const pickFont = () =>
+    besideAnchor(({ mindId, anchor }) => useMindStylePanel.getState().pickFont(mindId, anchor));
 
   return (
     <>
@@ -103,9 +100,10 @@ export function MindStyleHost() {
         onToggle={(event) => {
           menu.menuProps.onToggle(event);
           if (event.newState === "closed") {
-            const anchor = useMindStylePanel.getState().open?.anchor;
+            const { open: closed, fonts } = useMindStylePanel.getState();
             useMindStylePanel.getState().close();
-            if (anchor?.isConnected) anchor.focus();
+            // Closed for Other fonts…, the list takes the focus, whichever of them comes first.
+            if (!fonts && closed?.anchor?.isConnected) closed.anchor.focus();
           }
         }}
       >
@@ -114,7 +112,11 @@ export function MindStyleHost() {
             mindId={open.mindId}
             close={menu.close}
             onOtherFonts={pickFont}
-            onCustomLineSpacing={() => besideAnchor(setSpacing)}
+            onCustomLineSpacing={() =>
+              besideAnchor(({ mindId, anchor }) =>
+                useMindStylePanel.getState().typeSpacing(mindId, anchor),
+              )
+            }
           />
         )}
       </div>
@@ -122,18 +124,26 @@ export function MindStyleHost() {
         <CustomLineSpacing
           mindId={spacing.mindId}
           anchor={spacing.anchor}
-          onClose={() => setSpacing(null)}
+          onClose={() => useMindStylePanel.getState().closeSpacing()}
         />
       )}
       {picking && (
         <FontPicker
           mindId={picking.mindId}
           anchor={picking.anchor}
-          onClose={() => setPicking(null)}
+          onClose={() => useMindStylePanel.getState().closeFonts()}
         />
       )}
     </>
   );
+}
+
+/** What Style is set to, as a menu shows it beside Style: the font, and the size unless it is the default. */
+export function useStyleValue(mindId: string): string {
+  const t = useT();
+  const { font, size } = useMindStyle(mindId);
+  const name = typeof font === "string" ? t(PRESET_LABELS[font]) : font.family;
+  return size === "default" ? name : `${name} · ${t(SIZE_LABELS[size])}`;
 }
 
 /**

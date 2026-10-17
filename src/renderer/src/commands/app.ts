@@ -47,6 +47,7 @@ import {
   mindCommands,
   tagCommands,
 } from "./objects";
+import { pageCommands } from "./page";
 import { paletteCommands } from "./palette";
 import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
@@ -139,6 +140,7 @@ const appCommands: readonly Command[] = [
   ...exportCommands,
   ...taskCommands,
   ...wordLookCommands,
+  ...pageCommands,
   ...styleCommands,
   {
     ...fromMenu("settings.open"),

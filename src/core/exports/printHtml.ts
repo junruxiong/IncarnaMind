@@ -51,7 +51,6 @@ export const webLink: LinkTest = (href): href is string =>
   typeof href === "string" && /^https?:/i.test(href);
 
 export function renderPrintHtml(
-  title: string,
   blocks: readonly Block[],
   labels: PrintLabels,
   {
@@ -71,10 +70,7 @@ export function renderPrintHtml(
     citations,
     isLink,
   );
-  const parts: string[] = [];
-  if (title) parts.push(`<h1 class="mind-title">${escapeHtml(title)}</h1>`);
-  parts.push(writer.blocks(blocks));
-  return { body: parts.join(""), notes };
+  return { body: writer.blocks(blocks), notes };
 }
 
 /** A style's formatted runs: italics, bold, small capitals, underlining, raised text and links. */

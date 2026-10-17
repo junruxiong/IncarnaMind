@@ -53,7 +53,7 @@ import {
 import { type Piece, Review, type ReviewChoices, trackBlocks, trackInline } from "./wordReview";
 
 export interface DocxOptions {
-  /** The Mind's title, as the document's title. Empty: none. */
+  /** The Mind's name, as the file's Title property (`dc:title`); the page has no title line. Empty: none. */
   title: string;
   labels: ExportLabels;
   /** The language Word checks the text in, e.g. "en-US". */
@@ -130,12 +130,11 @@ export function renderDocx(
     : null;
   review?.mark(piecesOf(blocks));
   const writer = new DocxWriter(options.labels, paper.width - 2 * MARGIN, target, review);
-  const title = options.title ? paragraph({ style: "Title" }, run(options.title)) : "";
   const body = writer.body(blocks);
 
   const document =
     `${XML_DECLARATION}<w:document xmlns:w="${NS.w}" xmlns:r="${NS.r}" xmlns:wp="${NS.wp}" xmlns:a="${NS.a}" xmlns:pic="${NS.pic}" xmlns:m="${NS.m}"><w:body>` +
-    `${title}${body}` +
+    body +
     `<w:sectPr><w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>` +
     "</w:body></w:document>";
 

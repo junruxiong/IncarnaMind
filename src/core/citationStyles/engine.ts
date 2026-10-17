@@ -5,7 +5,7 @@
  */
 import type { Worker } from "node:worker_threads";
 import type { FormatJob } from "./format";
-import type { WorkerRequest, WorkerResponse } from "./protocol";
+import type { EngineStyle, WorkerRequest, WorkerResponse } from "./protocol";
 import startCitationWorker from "./styleWorker?nodeWorker";
 import type { EngineOutput, StyleDescription } from "./wasm";
 
@@ -15,8 +15,8 @@ export interface Formatted {
 }
 
 export interface CitationStyleEngine {
-  /** Formats with a shipped style (its file in the styles folder). */
-  format(styleFile: string, job: FormatJob): Promise<Formatted>;
+  /** Formats with a style of the pack. */
+  format(style: EngineStyle, job: FormatJob): Promise<Formatted>;
   /** Stops it; requests not yet answered fail. */
   close(): void;
 }
@@ -34,7 +34,7 @@ export class CitationFormatError extends Error {
 
 /**
  * The engine on its own thread, started on the first request and again after a crash, with
- * the engine, styles and locales read from `folder` (resources/citation-styles).
+ * the engine and the pack of styles and locales read from `folder` (resources/citation-styles).
  */
 export function createWorkerEngine(folder: string): CitationStyleEngine {
   let worker: Worker | undefined;
@@ -76,13 +76,13 @@ export function createWorkerEngine(folder: string): CitationStyleEngine {
   };
 
   return {
-    format(styleFile, job) {
+    format(style, job) {
       if (closed) return Promise.reject(new CitationFormatError("The core is closed.", false));
       const id = nextId++;
       return new Promise<Formatted>((resolve, reject) => {
         pending.set(id, { resolve, reject });
         worker ??= start();
-        worker.postMessage({ id, style: { file: styleFile }, job } satisfies WorkerRequest);
+        worker.postMessage({ id, style, job } satisfies WorkerRequest);
       });
     },
     close() {

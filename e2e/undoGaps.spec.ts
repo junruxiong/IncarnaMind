@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   editFolderInLibrary,
+  frontMindName,
   launchApp,
   linkedFolderRow,
   linkFolderFromSidebar,
@@ -16,6 +17,7 @@ import {
   openLinkedFolderMenu,
   pointAndClick,
   removeDataFolder,
+  renameInTab,
   setLanguage,
   setWindowSize,
   showSourceLocations,
@@ -215,8 +217,7 @@ test("a Mind made, then written in, goes to Recently deleted with its text, and 
   const { window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Ferries");
-  await window.getByTestId("mind-title").press("Enter");
+  await renameInTab(window, "Ferries");
   const editor = window.getByTestId("mind-editor");
   await pointAndClick(window, editor);
   await window.keyboard.type("Ferries run at noon");
@@ -232,7 +233,7 @@ test("a Mind made, then written in, goes to Recently deleted with its text, and 
   await redo(window);
   await redo(window);
   await expect.poll(() => mindIds(window)).toHaveLength(1);
-  await expect(window.getByTestId("mind-title")).toHaveValue("Ferries");
+  await expect(frontMindName(window)).toHaveText("Ferries");
   await expect(window.getByTestId("mind-editor")).toContainText("Ferries run at noon");
 });
 

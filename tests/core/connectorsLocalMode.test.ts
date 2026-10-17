@@ -127,7 +127,7 @@ describe("A Connector on another computer in Local mode", { timeout: 30_000 }, (
     await core.setLocalOnly(true);
     const added = await core.addConnector({ name: "Wiki", url: far.url });
 
-    await expect(core.signInToConnector(added.id)).rejects.toThrow(/isn't on this computer/);
+    await expect(core.signInToConnector(added.id)).rejects.toThrow(/Connector paused/);
 
     expect(far.asked).toEqual([]);
     expect(fake.requests).toEqual([]);

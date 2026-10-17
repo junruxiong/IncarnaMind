@@ -16,6 +16,7 @@ import {
   launchApp,
   type MindChild,
   mindNode,
+  nameMind,
   newMind,
   openOptions,
   pointAndClick,
@@ -81,6 +82,8 @@ async function openOffline(app: ElectronApplication, path: string): Promise<Page
       width: 1100,
       height: 760,
       useContentSize: true,
+      // macOS keeps a window no taller than the screen otherwise, and CI's Mac has a small one.
+      enableLargerThanScreen: true,
       webPreferences: { session: offline, sandbox: true, contextIsolation: true },
     });
     await window.loadFile(file);
@@ -125,7 +128,7 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   const mindId = await window.getByTestId("mind-pane").getAttribute("data-mind-id");
   if (!mindId) throw new Error("No Mind is open.");
   await writeFile(
@@ -334,7 +337,7 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
     join(library, "Tide Gauges.pdf"),
   ]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Gauges");
+  await nameMind(window, "Gauges");
   await addToNote(
     window,
     await askInAssistant(

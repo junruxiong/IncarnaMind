@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   enterContent,
+  frontMindName,
   launchApp,
   newMind,
   pointAndClick,
@@ -74,13 +75,10 @@ test("a word only inside a Mind is found, and so is a Chinese word, and Enter op
   // Nothing is named so: names come first, and there are none.
   await expect(group(window, "minds")).toHaveCount(0);
 
-  // Opened from the other Mind: Enter shows this one, its title in the front tab.
+  // Opened from the other Mind: Enter shows this one, its name in the front tab.
   await window.keyboard.press("Enter");
   await expect(palette(window)).toBeHidden();
-  await expect(window.getByTestId("mind-title").locator("visible=true")).toHaveAttribute(
-    "placeholder",
-    "Supplier review",
-  );
+  await expect(frontMindName(window)).toHaveText("Supplier review");
   await expect.poll(() => focusInNote(window)).toBe(true);
   // The cursor is in the line the words were found in.
   await expect
@@ -223,7 +221,7 @@ test("an action run from ⌘K is taken back with Undo", async () => {
   const picker = window.getByTestId("citation-style-picker");
   await expect(picker.getByTestId("citation-style-search")).toBeFocused();
   await window.keyboard.type("ieee");
-  await expect(picker.getByTestId("citation-style-option").first()).toHaveText("IEEE");
+  await expect(picker.getByTestId("citation-style-option-label").first()).toHaveText("IEEE");
   await window.keyboard.press("Enter");
   await expect(picker).toBeHidden();
   await expect(window.getByTestId("undo-message")).toContainText("IEEE");
@@ -234,7 +232,7 @@ test("an action run from ⌘K is taken back with Undo", async () => {
   await window.keyboard.press("Enter");
   const current = window.locator('[data-testid="citation-style-option"][data-current="true"]');
   await expect(current).toHaveCount(1);
-  await expect(current).not.toHaveText("IEEE");
+  await expect(current.getByTestId("citation-style-option-label")).not.toHaveText("IEEE");
 });
 
 /** Where the caret is: the text of the node it is in, and its offset there. */

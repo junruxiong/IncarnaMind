@@ -18,8 +18,8 @@ import {
  */
 
 const SENTENCE = {
-  en: "A Mind is a page where you write, and ask your Documents with every quote checked.",
-  "zh-CN": "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。",
+  en: "A Mind: write here and ask your Documents, every quote checked.",
+  "zh-CN": "Mind：在这里写作、向文档提问，每条引文都会核对。",
 } as const;
 const TOOLTIP = {
   en: "New Mind: a page to write in and ask your Documents",
@@ -54,8 +54,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await dismissChatSetup(window);
     await setLanguage(window, language);
     await newMind(window);
-    await expect(window.getByTestId("mind-title")).toBeFocused();
-    await window.keyboard.type("Notes");
     await enterContent(window);
     const hint = window.getByTestId("end-hint");
     await expect(hint).toContainText(SENTENCE[language]);
@@ -63,8 +61,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(hint).toHaveCount(0);
 
     await newMind(window);
-    await expect(window.getByTestId("mind-title")).toBeFocused();
-    await window.keyboard.type("Second");
     await enterContent(window);
     await expect(hint).toHaveAttribute("data-place", "empty");
     await expect(hint).not.toContainText(SENTENCE[language]);
