@@ -1312,7 +1312,7 @@ export const en = {
   "status.skipped.other": "Skipped {count} files",
   "webPages.add.title": "Add web pages",
   "webPages.add.note": "Paste an address, or several, one per line.",
-  "webPages.add.fetch": "Each page is fetched once from this computer and kept as a Document.",
+  "webPages.add.fetch": "Fetched once from this computer, kept as a Document.",
   "webPages.add.fetch.details":
     "The article's pictures come with it, and may come from the site's image servers. Nothing else on the page is loaded.",
   "webPages.add.fetch.details.keepLook":
