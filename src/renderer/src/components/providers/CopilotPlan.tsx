@@ -254,7 +254,6 @@ function Notice({
             {t("copilot.notice.sends")}
           </DetailsLine>
         </li>
-        <li>{t("copilot.notice.off")}</li>
       </ul>
       <div className="flex flex-wrap items-center gap-2">
         <button
