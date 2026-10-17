@@ -4,14 +4,18 @@ import type { AudioSource, Meeting, MeetingSourceState } from "../../../core/api
 import type { MessageKey } from "../../../shared/i18n";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
+import { files } from "../core";
 import { useT } from "../i18n";
+import { helpKeysLabel, useMeetingHelp } from "../meetingHelp";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
+import { useAppStore } from "../store";
 import { hideTranscript, showTranscript, useDocumentTab } from "../transcripts";
 import { CaptureDetailsToggle } from "./CaptureDetails";
 import {
   BookmarkLineIcon,
   DocumentLineIcon,
+  FloatLineIcon,
   PauseLineIcon,
   ResumeLineIcon,
   StopLineIcon,
@@ -115,9 +119,35 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
         <BookmarkLineIcon className="size-3.5" />
         {t("meetings.mark")}
       </button>
+      <CallHelpToggle />
       <TranscriptToggle meeting={meeting} />
       <CaptureDetailsToggle meeting={meeting} />
     </div>
+  );
+}
+
+/** Call help (通话助手): shows or hides the floating panel for this Meeting, as ⌘K and its shortcut do. */
+function CallHelpToggle() {
+  const t = useT();
+  const shown = useMeetingHelp((state) => state.panel.shown);
+  const keys = useAppStore((state) => helpKeysLabel("panel", state.settings));
+  const title = shown
+    ? t("meetings.callHelp.hide")
+    : keys
+      ? t("meetings.callHelp.showKeys", { keys })
+      : t("meetings.callHelp.show");
+  return (
+    <button
+      type="button"
+      data-testid="meeting-call-help"
+      aria-pressed={shown}
+      title={title}
+      onClick={() => files.showMeetingPanel(!shown)}
+      className="meeting-button"
+    >
+      <FloatLineIcon className="size-3.5" />
+      {t("meetings.callHelp")}
+    </button>
   );
 }
 

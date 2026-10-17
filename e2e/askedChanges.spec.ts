@@ -7,7 +7,9 @@ import {
   createDataFolder,
   dismissChatSetup,
   enterContent,
+  frontMindName,
   launchApp,
+  nameMind,
   newMind,
   openSteps,
   pointAndClick,
@@ -218,8 +220,7 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
   await useLocalChatModel(window);
   await setWindowSize(app, window, 1100, 860);
   await newMind(window);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
-  await window.keyboard.type("Harbour notes");
+  await nameMind(window, "Harbour notes");
   await enterContent(window);
   await window.keyboard.type(NOTES[0] ?? "");
   await window.keyboard.press("Enter");
@@ -273,11 +274,10 @@ function changeRequestOf(window: Page): Promise<string | null> {
   });
 }
 
-/** A new Mind, its title and its Notes typed as a person types them. */
+/** A new Mind, named, and its Notes typed as a person types them. */
 async function writeMind(window: Page, title: string, notes: readonly string[]): Promise<void> {
   await newMind(window);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
-  await window.keyboard.type(title);
+  await nameMind(window, title);
   await enterContent(window);
   for (const [index, note] of notes.entries()) {
     if (index > 0) await window.keyboard.press("Enter");
@@ -322,7 +322,7 @@ test("asked to write in a Mind not in view, the assistant opens it in a tab besi
   );
   await expect(tabs.filter({ hasText: "Q3 review" })).toHaveCount(1);
   await expect(tabs.filter({ hasText: "Project plan" })).toHaveCount(1);
-  await expect(window.getByTestId("mind-title")).toHaveValue("Project plan");
+  await expect(frontMindName(window)).toHaveText("Project plan");
   const editor = window.getByTestId("mind-editor");
   await expect(editor.locator(":scope > p")).toHaveText([
     "Hire a designer.",

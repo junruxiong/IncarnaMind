@@ -497,7 +497,6 @@ describe("exporting a Mind in its citation style", () => {
     const files = unzip(exported.data);
     const paragraphs = paragraphsOf(part(files, "word/document.xml"));
     expect(paragraphs.map((each) => each.text)).toEqual([
-      "Thesis",
       "Losses loom larger than gains (Kahneman & Tversky, 1979, p. 265; 钱学森 et al., 1990, p. 5) [unverified]. Systems are open (钱学森 et al., 1990).",
       "References",
       expect.stringMatching(/^Kahneman, D., & Tversky, A\. \(1979\)\. Prospect theory/),
@@ -518,20 +517,20 @@ describe("exporting a Mind in its citation style", () => {
     const document = part(unzip(exported.data), "word/document.xml");
     const paragraphs = paragraphsOf(document);
     // Each work with a page is cited on its own, its page raised after its number.
-    expect(paragraphs[1]?.text).toBe(
+    expect(paragraphs[0]?.text).toBe(
       "Losses loom larger than gains[1]265[2]5 [unverified]. Systems are open[2].",
     );
     expect(document).toContain('<w:vertAlign w:val="superscript"/>');
-    expect(paragraphs[2]?.text).toBe("参考文献");
-    expect(paragraphs[3]?.text).toMatch(/^\[1\]\tKAHNEMAN D, TVERSKY A\. Prospect theory/);
-    expect(paragraphs[4]?.text).toMatch(/^\[2\]\t钱学森, 于景元, 戴汝为\. 一个科学新领域/);
+    expect(paragraphs[1]?.text).toBe("参考文献");
+    expect(paragraphs[2]?.text).toMatch(/^\[1\]\tKAHNEMAN D, TVERSKY A\. Prospect theory/);
+    expect(paragraphs[3]?.text).toMatch(/^\[2\]\t钱学森, 于景元, 戴汝为\. 一个科学新领域/);
   });
 
   test("Chicago notes to Word: each cluster a footnote in the style, and the Bibliography", async () => {
     const { core, mind } = await written("chicago-notes");
     const exported = await core.exportMind(mind.id, { format: "docx" });
     const files = unzip(exported.data);
-    expect(paragraphsOf(part(files, "word/document.xml"))[1]?.text).toBe(
+    expect(paragraphsOf(part(files, "word/document.xml"))[0]?.text).toBe(
       "Losses loom larger than gains[1]. Systems are open[2].",
     );
     const notes = Object.values(footnotesOf(part(files, "word/footnotes.xml")));
@@ -594,7 +593,6 @@ describe("exporting a Mind in its citation style", () => {
     await core.setMindCitationStyle(mind.id, "numbered");
     const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
     expect(paragraphsOf(part(files, "word/document.xml")).map((each) => each.text)).toEqual([
-      "Thesis",
       "Losses loom larger than gains[1][2]. Systems are open[3].",
     ]);
     expect(Object.values(footnotesOf(part(files, "word/footnotes.xml")))).toEqual([
@@ -610,7 +608,6 @@ describe("exporting a Mind in its citation style", () => {
     await client.settled();
     const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
     expect(paragraphsOf(part(files, "word/document.xml")).map((each) => each.text)).toEqual([
-      "Thesis",
       "Nothing cited here.",
     ]);
   });
@@ -647,7 +644,7 @@ describe("the User's footnotes beside a citation style", () => {
   test("in a style that cites in the text, only the User's footnotes are footnotes, right after the word", async () => {
     const { core, mind } = await written("apa");
     const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
-    expect(paragraphsOf(part(files, "word/document.xml"))[1]?.text).toBe(
+    expect(paragraphsOf(part(files, "word/document.xml"))[0]?.text).toBe(
       "Losses loom larger (Kahneman & Tversky, 1979, p. 265) than gains[1]. Systems are open (钱学森 et al., 1990)[2].",
     );
     // A Citation inside a footnote is written into its text as its source, as in Numbered.
@@ -660,7 +657,7 @@ describe("the User's footnotes beside a citation style", () => {
   test("in a note style, the style's notes and the User's are numbered together, in order", async () => {
     const { core, mind } = await written("chicago-notes");
     const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
-    expect(paragraphsOf(part(files, "word/document.xml"))[1]?.text).toBe(
+    expect(paragraphsOf(part(files, "word/document.xml"))[0]?.text).toBe(
       "Losses loom larger[1] than gains[2]. Systems are open[3][4].",
     );
     const notes = Object.values(footnotesOf(part(files, "word/footnotes.xml")));

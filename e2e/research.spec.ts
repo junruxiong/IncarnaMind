@@ -11,9 +11,11 @@ import {
   clickNotification,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
   forceQuit,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   notificationsShown,
   ollamaListing,
@@ -249,7 +251,7 @@ test("Research… plans in the tray: the steps edited in place, the sources, whe
   });
   await expect(ask.getByTestId("approval-card")).toContainText(`${folderNameOf(TOPIC)} (new)`);
   await expect(ask.getByTestId("approval-third-party")).toHaveText(
-    "This Task read web pages, so it asks you first.",
+    "Asks first: this Task read web pages.",
   );
   await expect(ask.getByTestId("approval-always-allow")).toHaveCount(0);
   await expect(progress.getByTestId("task-progress-waiting")).toHaveText(
@@ -535,8 +537,8 @@ test("at the monthly cap a Research pauses and lists what it has still to do; Re
 
   // Force-quit halfway: at the next start it goes on by itself.
   await window.keyboard.press("ControlOrMeta+t");
-  await expect(window.getByTestId("mind-title").last()).toBeFocused();
-  await window.keyboard.type("Notes");
+  await enterContent(window);
+  await nameMind(window, "Notes");
   await forceQuit(app);
   const again = await launchApp(dataDir, { fakeChat: true, home });
   await setWindowSize(again.app, again.window, 1600, 900);

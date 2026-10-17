@@ -250,7 +250,7 @@ export function createExports(deps: ExportsDependencies) {
       format,
       options,
       mindId: mind.id,
-      title: mind.title,
+      title: mindName(mind),
       readOptions,
       word,
       blocks,
@@ -343,10 +343,9 @@ export function createExports(deps: ExportsDependencies) {
     cards: ReadonlyMap<Footnote, CitationCard>,
     pictures: readonly SharePicture[] = [],
   ) => {
-    const { title, language, preview } = prepared;
+    const { language, preview } = prepared;
     return new TextEncoder().encode(
       renderSharePage({
-        title,
         blocks: await withPictures(blocks, language, deps),
         labels: exportLabels(language),
         language,
@@ -518,7 +517,7 @@ export function createExports(deps: ExportsDependencies) {
       let data: Uint8Array;
       let commented: readonly FailedSentence[] = [];
       if (format === "markdown") {
-        data = new TextEncoder().encode(renderMarkdown(title, blocks, labels));
+        data = new TextEncoder().encode(renderMarkdown("", blocks, labels));
       } else if (format === "docx") {
         ({ data, commented } = renderDocx(await withPictures(blocks, language, deps), {
           title,
@@ -532,7 +531,7 @@ export function createExports(deps: ExportsDependencies) {
       } else if (format === "html" || format === "share-page") {
         const drawn = await withPictures(blocks, language, deps);
         data = new TextEncoder().encode(
-          renderHtml(title, drawn, labels, {
+          renderHtml(drawn, labels, {
             language,
             name: preview.fileName.slice(0, -".html".length),
             font: prepared.font,
@@ -541,7 +540,7 @@ export function createExports(deps: ExportsDependencies) {
       } else {
         // Charts as Word has them: the picture, drawn at twice its size, else the table of values.
         const drawn = await withPictures(blocks, language, deps);
-        const { body, notes } = renderPrintHtml(title, drawn, labels);
+        const { body, notes } = renderPrintHtml(drawn, labels);
         const printed = await (deps.printer as Printer).print({
           language,
           paper: deps.paper(),

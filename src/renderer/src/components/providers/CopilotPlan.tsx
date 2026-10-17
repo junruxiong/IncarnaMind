@@ -23,6 +23,7 @@ import { core } from "../../core";
 import { useT } from "../../i18n";
 import { useSettingsTarget } from "../../settingsTarget";
 import { useAppStore } from "../../store";
+import { DetailsLine } from "../DetailsLine";
 import { ChevronDownLineIcon, ChevronRightLineIcon, CopyLineIcon } from "../lineIcons";
 import { ProblemMark } from "../ProblemLine";
 import { buttonStyle, rowButtonsClass, rowTextClass, rowTitleClass, ruledRowClass } from "../ui";
@@ -248,7 +249,11 @@ function Notice({
           {t("copilot.notice.usage")}
         </li>
         {experimental && <li>{t("copilot.notice.experimental")}</li>}
-        <li>{t("copilot.notice.sends")}</li>
+        <li>
+          <DetailsLine testId="copilot-notice-sends" details={t("copilot.notice.sends.details")}>
+            {t("copilot.notice.sends")}
+          </DetailsLine>
+        </li>
         <li>{t("copilot.notice.off")}</li>
       </ul>
       <div className="flex flex-wrap items-center gap-2">

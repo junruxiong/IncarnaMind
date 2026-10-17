@@ -606,20 +606,27 @@ function useStatuses(): Status[] {
   if (!capturing && tagging) {
     const text = service
       ? saysWhatIsSent
-        ? (counts.tagging === 1
-            ? t("status.taggingSends.one", { service })
-            : t("status.taggingSends.other", { count: counts.tagging, service })) + whatIsSent
+        ? counts.tagging === 1
+          ? t("status.taggingSends.one", { service })
+          : t("status.taggingSends.other", { count: counts.tagging, service })
         : counts.tagging === 1
           ? t("status.taggingWith.one", { service })
           : t("status.taggingWith.other", { count: counts.tagging, service })
       : counts.tagging === 1
         ? t("status.tagging.one")
         : t("status.tagging.other", { count: counts.tagging });
+    const short = service && saysWhatIsSent ? text + whatIsSent : text;
+    const full =
+      service && saysWhatIsSent
+        ? (counts.tagging === 1
+            ? t("status.taggingSends.full.one", { service })
+            : t("status.taggingSends.full.other", { count: counts.tagging, service })) + whatIsSent
+        : text;
     statuses.push({
       testId: "tagging-status",
       tone: "progress",
-      short: text,
-      full: text,
+      short,
+      full,
       wraps: true,
       action: stop,
     });
@@ -643,20 +650,27 @@ function useStatuses(): Status[] {
     if (pending) {
       const text = service
         ? saysWhatIsSent
-          ? (pending === 1
-              ? t("library.progressSends.one", { service })
-              : t("library.progressSends.other", { count: pending, service })) + whatIsSent
+          ? pending === 1
+            ? t("library.progressSends.one", { service })
+            : t("library.progressSends.other", { count: pending, service })
           : pending === 1
             ? t("library.progressWith.one", { service })
             : t("library.progressWith.other", { count: pending, service })
         : pending === 1
           ? t("library.progress.one")
           : t("library.progress.other", { count: pending });
+      const short = service && saysWhatIsSent ? text + whatIsSent : text;
+      const full =
+        service && saysWhatIsSent
+          ? (pending === 1
+              ? t("library.progressSends.full.one", { service })
+              : t("library.progressSends.full.other", { count: pending, service })) + whatIsSent
+          : text;
       statuses.push({
         testId: "organization-progress",
         tone: "progress",
-        short: text,
-        full: text,
+        short,
+        full,
         wraps: true,
         action: stop,
       });

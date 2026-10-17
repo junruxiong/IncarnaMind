@@ -8,7 +8,7 @@ import { answerEnded, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { createSourceFolder, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
-import { heading, note, shownWithChanges, writeMind } from "../helpers/minds";
+import { heading, note, readMind, shownWithChanges, writeMind } from "../helpers/minds";
 import {
   type ModelCall,
   type ScriptedReply,
@@ -205,6 +205,36 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
       "+ Tides",
       "+ Spring tides come at new and full moon ⟨found⟩.",
     ]);
+  });
+
+  // protects=a Mind the assistant makes starts with its title as a Heading 1, written with the Mind and not a change to accept, and a draft that begins with a heading of its own gets no second one (#908, the owner's résumé summary); fails_when=the title is missing, waits as a change, or shows twice; no_claim=how a real model titles a page.
+  test("a new note starts with its title as a heading, once, whatever the level of a heading the model began with", async () => {
+    const pages = [
+      { title: "Tide notes", content: "Spring tides come at new moon." },
+      { title: "张瑜简历总结", content: "# 张瑜简历总结\n\n教育背景。" },
+      { title: "工作经历", content: "## 工作经历\n\n2019 年至今。" },
+    ];
+    const model = scriptedModel(({ results }): ScriptedReply => {
+      const page = pages[results.filter((result) => result.tool === "create_mind").length];
+      return page ? { calls: [{ tool: "create_mind", input: page }] } : { text: "Made both." };
+    });
+    const { core, mind } = await setUp(model);
+    const answer = await ask(core, { text: "Make two notes", mindId: mind.id });
+
+    const [tides, resume, work] = changesIn(answer);
+    expect(tides).toMatchObject({ created: true, proposals: 1 });
+    const tidesPage = readMind(await connectToMind(core, tides?.mindId ?? ""));
+    expect(tidesPage.firstChild?.toJSON()).toEqual({
+      type: "heading",
+      attrs: expect.objectContaining({ level: 1 }),
+      content: [{ type: "text", text: "Tide notes" }],
+    });
+    const resumeClient = await connectToMind(core, resume?.mindId ?? "");
+    expect(shownWithChanges(resumeClient)).toEqual(["+ 张瑜简历总结", "+ 教育背景。"]);
+    expect(readMind(resumeClient).firstChild?.attrs.level).toBe(1);
+    // A heading of any level the model began with is its title: no second one above it.
+    const workClient = await connectToMind(core, work?.mindId ?? "");
+    expect(shownWithChanges(workClient)).toEqual(["+ 工作经历", "+ 2019 年至今。"]);
   });
 
   // protects=a Mind the User names that doesn't exist, or no Mind at all, changes nothing and the model is told why; fails_when=another Mind is changed, or the call says it worked; no_claim=how the model words it.

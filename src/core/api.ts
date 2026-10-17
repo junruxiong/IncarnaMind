@@ -84,6 +84,8 @@ export const DEFAULT_MIND_KIND: MindKind = "mind";
 
 export interface CreateMindInput {
   title?: string;
+  /** Its text starts with its title as a Heading 1, as a Mind made with its name does (#908). */
+  headed?: boolean;
   /** Defaults to `"mind"`. */
   kind?: MindKind;
   /** The Folder to make it in; none, or null: Not in a Folder. */
@@ -1858,7 +1860,7 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
-  /** Settings › Meetings › "Show the floating panel": it appears while a Meeting records. */
+  /** Settings › Meetings › "Show the call help panel": it appears while a Meeting records. */
   meetingPanel: boolean;
   /** Settings › Meetings › "Keep the panel out of my screen share", where the system honours it. */
   meetingPanelHidden: boolean;

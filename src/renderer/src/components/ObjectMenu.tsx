@@ -1,4 +1,5 @@
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import type { CommandId } from "../../../shared/commands";
 import { menuKeysLabel } from "../commands/keymap";
 import { buildMenu, type MenuItem } from "../commands/menus";
 import {
@@ -130,6 +131,12 @@ export function ObjectMenu({
   here,
   className = rowActionButtonClass,
   tabIndex,
+  testId,
+  align,
+  without,
+  more,
+  aside,
+  foot,
 }: {
   target: ObjectRef;
   /** What the button and the menu are called: "More for Board minutes". */
@@ -138,11 +145,23 @@ export function ObjectMenu({
   here?: CommandContext["here"];
   className?: string;
   tabIndex?: number;
+  /** In place of the kind's own, for a second button on the same object: `${testId}-menu`. */
+  testId?: string;
+  align?: "start" | "end";
+  /** The kind's commands this menu offers its own way, in `more`. */
+  without?: readonly CommandId[];
+  /** Items after the kind's own, with a rule between; `close` closes the menu. */
+  more?: (close: () => void) => ReactNode;
+  /** Beside the menu while it is open, outside it: the submenus of items in `more`. */
+  aside?: (close: () => void) => ReactNode;
+  /** Below everything, after a rule, and kept in view while the menu scrolls. */
+  foot?: ReactNode;
 }) {
   const t = useT();
-  const menu = usePopoverMenu();
+  // The first item, though a switch at its foot is checked.
+  const menu = usePopoverMenu({ focus: "first", ...(align && { align }) });
   const { buttonProps } = useObjectMenu(target);
-  const prefix = TEST_ID_PREFIX[target.kind];
+  const prefix = testId ?? TEST_ID_PREFIX[target.kind];
   const button = menu.buttonProps.ref;
   // Selected, the menu is for the whole selection; else for this one alone.
   const held = useSelection((state) => (state.keys.has(keyOf(target)) ? state : null));
@@ -157,13 +176,13 @@ export function ObjectMenu({
     surface,
     here: { ...tagsHere(target, button.current, chosen), ...here },
   };
-  const selectionEntries = menu.open ? buildMenu(target.kind, forSelection) : [];
+  const selectionEntries = menu.open ? buildMenu(target.kind, forSelection, without) : [];
   // Kinds mixed in the selection that share no command: the menu is this row's own.
   const alone = menu.open && forSelection.selection.length > 0 && selectionEntries.length === 0;
   const ctx: CommandContext = alone
     ? { ...forSelection, selection: [], here: { ...tagsHere(target, button.current, []), ...here } }
     : forSelection;
-  const entries = alone ? buildMenu(target.kind, ctx) : selectionEntries;
+  const entries = alone ? buildMenu(target.kind, ctx, without) : selectionEntries;
 
   const run = (item: MenuItem) => {
     if (item.enabled !== true) return;
@@ -224,7 +243,21 @@ export function ObjectMenu({
             </button>
           );
         })}
+        {menu.open && more && (
+          <>
+            <div className={menuRuleClass} />
+            {more(menu.close)}
+          </>
+        )}
+        {menu.open && foot && (
+          // A long menu scrolls; its foot stays in view, covering the menu's bottom padding.
+          <div className="sticky -bottom-1 -mb-1 bg-sheet pb-1">
+            <div className={menuRuleClass} />
+            {foot}
+          </div>
+        )}
       </div>
+      {menu.open && aside?.(menu.close)}
     </>
   );
 }
