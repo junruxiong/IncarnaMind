@@ -467,6 +467,7 @@ describe("Get started's Add your Documents", () => {
       linkedFolderId,
       answerId: "a",
       more: [],
+      ready: null,
     }) satisfies CoreEvents["examples.changed"];
   const ticked = () => useAppStore.getState().settings?.device.gettingStarted.indexed;
 
@@ -482,6 +483,7 @@ describe("Get started's Add your Documents", () => {
             citationChecked: false,
             indexed: false,
             askedOwn: false,
+            askedReady: false,
           },
         },
       } as unknown as NonNullable<ReturnType<typeof useAppStore.getState>["settings"]>,
@@ -777,6 +779,7 @@ describe("making a Folder", () => {
 
 describe("loading keeps a list the core pushed after reading it", () => {
   beforeEach(() => {
+    method("getSettings").mockResolvedValue({ device: { gettingStarted: { askedOwn: false } } });
     method("getExamples").mockResolvedValue({
       group: "credit",
       available: false,
