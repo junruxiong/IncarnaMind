@@ -2218,8 +2218,7 @@ export const zhCN = {
     "匿名事件，只在开启时发送：用了哪些功能、在哪里卡住了，并带上这次安装的随机 ID。绝不包括你的文档或文档名、问题、回答，以及你输入的任何内容。",
   "privacy.traffic.usage-data.toggle": "发送匿名使用数据",
   "privacy.usageData.tester": "测试版默认开启，这是你加入内测时同意的。你可以随时关闭。",
-  "privacy.usageData.localMode":
-    "保持关闭：已开启“所有内容都留在这台电脑上”（在“设置 → 搜索”中）。",
+  "privacy.usageData.localMode": "已关闭：已开启“所有内容都留在这台电脑上” · 设置 › 搜索",
   "privacy.usageData.details": "所有事件和字段",
   "privacy.usageData.resetId": "重置安装 ID",
   "privacy.usageData.resetDone": "已重置：之后的事件会带上新的 ID。",

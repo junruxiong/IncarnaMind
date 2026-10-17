@@ -2330,7 +2330,7 @@ export const en = {
   "privacy.usageData.tester":
     "On unless you turn it off in this test version, as agreed when you joined as a tester.",
   "privacy.usageData.localMode":
-    "Off: “Keep everything on this computer” is on, in Settings → Search.",
+    "Off while “Keep everything on this computer” is on · Settings › Search",
   "privacy.usageData.details": "Every event and field",
   "privacy.usageData.resetId": "Reset install ID",
   "privacy.usageData.resetDone": "Reset: events from now on carry a new ID.",
