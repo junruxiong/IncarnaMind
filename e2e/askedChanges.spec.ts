@@ -204,6 +204,7 @@ test("an Answer written again replaces what it applied with what it writes now, 
     "· on top of the earlier version, which stays",
   );
   await expect(paragraphs.first()).toHaveText(`${SPRING} It says more. It says more.`);
+  await screenshot(window, "asked-on-top-en");
 });
 
 const NOTES = [
