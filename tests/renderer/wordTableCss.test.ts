@@ -2,7 +2,8 @@ import { describe, expect, onTestFinished, test } from "vitest";
 import * as Y from "yjs";
 import { MIND_WORD_LOOK_FIELD, type WordLook } from "../../src/core";
 import { wordLookCss } from "../../src/renderer/src/editor/wordLookCss";
-import { wordTableCss } from "../../src/renderer/src/editor/wordTableCss";
+import { pageWidth } from "../../src/renderer/src/editor/wordLookZoom";
+import { widestTable, wordTableCss } from "../../src/renderer/src/editor/wordTableCss";
 import { wordLookOf } from "../../src/shared/wordLook";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { paragraph, run, wordFile } from "../helpers/word";
@@ -51,16 +52,41 @@ describe("a Word table's stylesheet", () => {
     const resume = await importedLook(resumeFile());
     const lined = keyOf(resume.tables, (table) => !!table.borders);
     const widths = rulesFor(wordTableCss(SCOPE, resume), lined).flatMap((rule) => {
-      const width = /col:nth-child\(\d\) \{ width: calc\(var\(--word-pt\) \* ([\d.]+)\)/.exec(rule);
+      const width = /col:nth-child\(\d\) \{ width: ([\d.]+)%/.exec(rule);
       return width ? [Number(width[1])] : [];
     });
-    expect(widths).toEqual([100, 381.9]);
+    expect(widths.map((each) => Math.round(each * 100) / 100)).toEqual([20.75, 79.25]);
 
     const contract = await importedLook(contractFile());
     const definitions = keyOf(contract.tables, (table) => !!table.borders);
     expect(rulesFor(wordTableCss(SCOPE, contract), definitions).join("\n")).toContain(
       `width: calc(var(--word-pt) * ${contract.width})`,
     );
+  });
+
+  test("a table hangs into the left margin by its cell margin, its frame with it, and the page fits how far it reaches (#1035)", () => {
+    const table = { columns: [100, 434], margins: { left: 5.4, right: 5.4 } };
+    const look: WordLook = {
+      version: 5,
+      body: 9,
+      width: 523.3,
+      defaultTab: null,
+      tablesHang: true,
+      paragraphs: {},
+      runs: {},
+      tables: { t1: table, t2: { ...table, indent: 20 } },
+      cells: {},
+    };
+    const css = wordTableCss(SCOPE, look).join("\n");
+    expect(css).toContain(
+      `${SCOPE} .tableWrapper:has(> table[data-word-look="t1"]) { margin-left: calc(-1 * calc(var(--word-pt) * 3) + calc(var(--word-pt) * -5.4)); }`,
+    );
+    expect(css).toMatch(
+      /table\[data-word-look="t2"\] \{[^}]*margin-left: calc\(var\(--word-pt\) \* 14\.6\)/,
+    );
+    expect(widestTable(look)).toBeCloseTo(548.6, 5);
+    expect(pageWidth(look)).toBeCloseTo(548.6, 5);
+    expect(widestTable({ ...look, tablesHang: undefined })).toBe(554);
   });
 
   test("cells draw their shading, alignment, padding and own sides; a side set to none hides the table's line", () => {
