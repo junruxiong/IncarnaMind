@@ -6,8 +6,10 @@ import type * as Y from "yjs";
 import type { MessageKey } from "../../../shared/i18n";
 import {
   countBasisOf,
+  countShownOf,
   observeWordCountSettings,
   setCountBasis,
+  setCountShown,
   setWordTarget,
   wordTargetOf,
 } from "../../../shared/mindWordCount";
@@ -55,7 +57,7 @@ const BASIS_NAMES: Record<CountBasis, MessageKey> = {
  * changed; null until the Mind's first count is done, so a long Mind never
  * shows "0 words" while it is counted.
  */
-function useCounts(editor: Editor): MindCount | null {
+export function useCounts(editor: Editor): MindCount | null {
   const [counts, setCounts] = useState<MindCount | null>(null);
 
   useEffect(() => {
@@ -120,9 +122,13 @@ function useCounts(editor: Editor): MindCount | null {
   return counts;
 }
 
-/** The Mind's target and what its count shows, kept up to date as they change here or elsewhere. */
-function useCountSettings(doc: Y.Doc) {
-  const read = () => ({ target: wordTargetOf(doc), basis: countBasisOf(doc) });
+/** The Mind's target, what its count shows and whether it shows, kept up to date as they change here or elsewhere. */
+export function useCountSettings(doc: Y.Doc) {
+  const read = () => ({
+    target: wordTargetOf(doc),
+    basis: countBasisOf(doc),
+    shown: countShownOf(doc),
+  });
   const [settings, setSettings] = useState(read);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `read` only reads `doc`.
   useEffect(() => {
@@ -133,21 +139,14 @@ function useCountSettings(doc: Y.Doc) {
 }
 
 /**
- * The quiet count under the Mind's title: words for English and characters for
- * Chinese (what the hover says), the selection's count of the whole while text
- * is selected, and the progress to the Mind's target if it has one. Its menu
- * chooses what is counted (words, or characters with or without spaces) and
- * sets the target. Both are remembered for the Mind (`mindWordCount`).
+ * The count while writing, at the page's bottom left when the User turned it
+ * on: words for English and characters for Chinese (what the hover says), the
+ * selection's count of the whole while text is selected, and the progress to
+ * the Mind's target if it has one. Its menu chooses what is counted (words, or
+ * characters with or without spaces) and sets the target. All of it is
+ * remembered for the Mind (`mindWordCount`).
  */
-export function WordCount({
-  editor,
-  doc,
-  quiet = false,
-}: {
-  editor: Editor;
-  doc: Y.Doc;
-  quiet?: boolean;
-}) {
+export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
   const t = useT();
   const language = useLanguage();
   const counts = useCounts(editor);
@@ -156,9 +155,7 @@ export function WordCount({
   const [draft, setDraft] = useState("");
   const [invalid, setInvalid] = useState(false);
 
-  if (!counts || quiet) {
-    return <div className="mind-count" data-testid="mind-count" />;
-  }
+  if (!counts) return null;
 
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
   const counted = countedUnit(counts.total, basis, language === "zh-CN");
@@ -311,6 +308,63 @@ export function WordCount({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The counts at the foot of a Mind's ⋯ menu: "812 words · 8,071 characters"
+ * (字数 812 · 字符数 8,071), of the whole while text is selected, and the
+ * switch that shows the count while writing.
+ */
+export function MindCounts({
+  editor,
+  doc,
+  switchable,
+}: {
+  editor: Editor;
+  doc: Y.Doc;
+  /** False for a read-only Mind, which can't remember the switch. */
+  switchable: boolean;
+}) {
+  const t = useT();
+  const language = useLanguage();
+  const counts = useCounts(editor);
+  const { shown } = useCountSettings(doc);
+  const format = (value: number) => new Intl.NumberFormat(language).format(value);
+  const part = (basis: "words" | "characters") => {
+    if (!counts) return "";
+    const count = countFor(counts.total, basis);
+    if (counts.selection) {
+      return t(`page.count.selected.${basis}`, {
+        selected: format(countFor(counts.selection, basis)),
+        count: format(count),
+      });
+    }
+    return t(count === 1 ? `page.count.${basis}.one` : `page.count.${basis}`, {
+      count: format(count),
+    });
+  };
+  return (
+    <div className="page-menu-foot">
+      {counts && (
+        <p className="page-menu-counts tabular-nums" data-testid="page-counts">
+          {`${part("words")} · ${part("characters")}`}
+        </p>
+      )}
+      {switchable && (
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          aria-checked={shown}
+          data-testid="page-count-shown"
+          className="page-menu-switch"
+          onClick={() => setCountShown(doc, !shown)}
+        >
+          <span className="flex-1">{t("page.countShown")}</span>
+          <span className="switch" data-on={shown || undefined} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }

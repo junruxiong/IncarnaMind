@@ -7,6 +7,7 @@ import {
   fontsDrawing,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -90,13 +91,15 @@ for (const { language, width } of [
     await setWindowSize(app, window, width, WINDOW_HEIGHT);
     await newMind(window);
     const editor = window.getByTestId("mind-editor");
-    const title = window.getByTestId("mind-title");
+    const title = editor.locator("h1");
     await editor.click();
+    await window.keyboard.type("# Tides");
+    await window.keyboard.press("Enter");
     await window.keyboard.type("Spring tides come at new moon");
     await window.keyboard.press("Enter");
     await window.keyboard.type("大潮在新月和满月时出现。");
     const paragraph = editor.locator("p").first();
-    const line = '[data-testid="mind-editor"] p:nth-child(2)';
+    const line = '[data-testid="mind-editor"] p:nth-of-type(2)';
 
     // By default the Mind is in the system's font, 16 on 26.
     const standard = await typeOf(paragraph);
@@ -137,7 +140,7 @@ for (const { language, width } of [
     );
     await expect(tiles[0] as Locator).toHaveAttribute("aria-checked", "true");
 
-    // Serif: the Mind and its title change at once, 17 on 28, and Chinese takes a serif face too.
+    // Serif: the Mind and its heading change at once, 17 on 28, and Chinese takes a serif face too.
     await pointAndClick(window, tiles[1] as Locator);
     await expect.poll(() => typeOf(paragraph)).toMatchObject({ size: 17, leading: 28 });
     expect((await typeOf(paragraph)).family).toMatch(startsWithFamily("Source Serif 4"));
@@ -156,7 +159,7 @@ for (const { language, width } of [
       .poll(async () => (await typeOf(paragraph)).family)
       .toMatch(startsWithFamily("Source Serif 4"));
 
-    // Text size: Large grows the text, the headings and the title together, and Undo shrinks it.
+    // Text size: Large grows the text and its headings together, and Undo shrinks it.
     const panelAgain = await openStyle(window);
     const body = await typeOf(paragraph);
     const heading = await typeOf(title);
@@ -257,9 +260,11 @@ for (const { language, width } of [
     await newMind(window);
     const editor = window.getByTestId("mind-editor");
     await editor.click();
+    await window.keyboard.type("# Tides");
+    await window.keyboard.press("Enter");
     await window.keyboard.type("Spring tides come at new moon");
     const paragraph = editor.locator("p").first();
-    const title = window.getByTestId("mind-title");
+    const title = editor.locator("h1");
     const standard = await typeOf(paragraph);
     const mindId = (await (await coreOf(window)).evaluate((core) => core.listMinds()))[0]?.id ?? "";
 
@@ -289,7 +294,7 @@ for (const { language, width } of [
     const type = async () => typeOf(window.getByTestId("mind-editor").locator("p").first());
     const write = async (name: string) => {
       await newMind(window);
-      await window.getByTestId("mind-title").fill(name);
+      await nameMind(window, name);
       await window.getByTestId("mind-editor").click();
       await window.keyboard.type(`${name} writes about the tides`);
       await expect(window.getByTestId("mind-editor").locator("p").first()).toContainText(name);

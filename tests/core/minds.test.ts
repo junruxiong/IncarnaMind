@@ -11,6 +11,7 @@ import {
   tickingClock,
 } from "../helpers/core";
 import { appendParagraph, connectToMind } from "../helpers/mindClient";
+import { readMind } from "../helpers/minds";
 
 const titles = (minds: Mind[]) => minds.map((mind) => mind.title);
 
@@ -50,6 +51,24 @@ describe("Minds", () => {
 
     expect(mind.title).toBe("");
     expect(await core.listMinds()).toEqual([mind]);
+  });
+
+  test("a Mind made with its name, headed, starts with it as a Heading 1 and an empty line under it (#908)", async () => {
+    const core = startCore(await createTempDataFolder());
+
+    const mind = await core.createMind({ title: "Fieldwork plan", headed: true });
+    const plain = await core.createMind({ title: "Plain" });
+
+    const headed = await connectToMind(core, mind.id);
+    expect(readMind(headed).toJSON().content).toEqual([
+      expect.objectContaining({
+        type: "heading",
+        attrs: expect.objectContaining({ level: 1 }),
+        content: [{ type: "text", text: "Fieldwork plan" }],
+      }),
+      expect.objectContaining({ type: "paragraph" }),
+    ]);
+    expect(readMind(await connectToMind(core, plain.id)).textContent).toBe("");
   });
 
   test("every Mind gets its own id", async () => {

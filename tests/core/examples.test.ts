@@ -87,9 +87,10 @@ describe("the example Mind", { timeout: 30_000 }, () => {
       ]);
     });
 
-    // Its blocks: a Note, the draft, the Question (scoped to the examples' folder), its Answer, an empty line.
+    // Its blocks: its title (#908), a Note, the draft, the Question (scoped to the examples' folder), its Answer, an empty line.
     const doc = await exampleMind(core, mindId);
     expect(doc.content.content.map((block) => block.type.name)).toEqual([
+      "heading",
       "paragraph",
       "heading",
       "paragraph",
@@ -99,7 +100,8 @@ describe("the example Mind", { timeout: 30_000 }, () => {
       ANSWER_BLOCK,
       "paragraph",
     ]);
-    expect(doc.child(5).textContent).toBe("Is Northwind inside its leverage covenant?");
+    expect(doc.child(0).textContent).toBe("Draft: credit committee paper");
+    expect(doc.child(6).textContent).toBe("Is Northwind inside its leverage covenant?");
 
     // Once both Documents are read, both Citations are checked: found, on the pages they quote.
     await vi.waitFor(
@@ -361,7 +363,8 @@ describe("the example Mind follows the interface language (#709)", { timeout: 60
       EXAMPLE_SETS.credit["zh-CN"].quotes[0]?.quote.slice(0, 6) ?? "",
     );
     const doc = await exampleMind(core, made.mindId as string);
-    expect(doc.child(5).textContent).toBe(EXAMPLE_SETS.credit["zh-CN"].question);
+    expect(doc.child(0).textContent).toBe(EXAMPLE_SETS.credit["zh-CN"].title);
+    expect(doc.child(6).textContent).toBe(EXAMPLE_SETS.credit["zh-CN"].question);
     expect(checksOf(doc)).toEqual([
       {
         text: "第三季度毛利率降至 36.8%，主要拖累来自线上业务。",
@@ -388,6 +391,21 @@ describe("the example Mind follows the interface language (#709)", { timeout: 60
     });
     await foundIn(core, made.mindId as string, "Net debt to EBITDA");
     await expect(access(join(dataDir, "示例文档"))).rejects.toThrow();
+  });
+
+  // protects=an example made before it had a heading of its title (#908) still counts as untouched and follows the language; fails_when=it stays in the old language; no_claim=none beyond protects.
+  test("an example made before its title heading still follows the language", async () => {
+    const { core } = await startWithExamples("en");
+    const made = await core.createExamples();
+    const client = await connectToMind(core, made.mindId as string);
+    client.blocks.delete(0, 1);
+    await client.settled();
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    await vi.waitFor(async () => {
+      expect((await core.listMinds()).map((mind) => mind.title)).toEqual([
+        EXAMPLE_SETS.credit["zh-CN"].title,
+      ]);
+    });
   });
 
   // protects=an example the User wrote in or changed keeps its language and its Documents; fails_when=it is replaced and their words are lost; no_claim=none beyond protects.
