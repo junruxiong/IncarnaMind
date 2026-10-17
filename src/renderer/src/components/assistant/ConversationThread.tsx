@@ -8,7 +8,6 @@ import { readMindHandle } from "../../commands/handles";
 import { composerScope, NO_MIND, useComposer } from "../../composer";
 import {
   conversationLabel,
-  stopWriting,
   useAnswerOnItsWay,
   useConversations,
   useOpenConversation,
@@ -244,18 +243,16 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
               nextScope.filter((chip) => !chip.deleted),
             )}
           />
-          {stopWanted ? (
+          <WritingLine
             // Stopped before it started: it says so at once, and stops as it starts.
-            <WritingLine
-              status={
+            status={
+              stopWanted ? (
                 <span data-testid="answer-stopped" className="assistant-answer-status">
                   {t("answer.status.stopped")}
                 </span>
-              }
-            />
-          ) : (
-            <WritingLine onStop={stopWriting} />
-          )}
+              ) : undefined
+            }
+          />
         </div>
       )}
       {picking && (

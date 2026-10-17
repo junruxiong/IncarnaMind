@@ -124,7 +124,7 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   );
   const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "streaming");
-  await expect(answer.getByTestId("answer-stop")).toBeVisible();
+  await expect(window.getByTestId("composer-stop")).toBeVisible();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
   await expect(answer.getByTestId("answer-steps")).toHaveText("Searched All Documents · 1 source");
