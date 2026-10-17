@@ -23,8 +23,9 @@ export const zhCN = {
   "library.organize.explain": "为这里的每个文档建议文件夹和标签，由你接受或更改。",
   "library.organize.needsModel": "“整理”需要 AI 模型",
   "library.organize.use": "使用 {company}",
-  "library.organize.sends":
-    "每个文档的名称和开头的文字（扫描件则是前几页的图片），以及文件夹和标签的名称与描述，会发送给 {company}",
+  "library.organize.sends": "会把文档名称和摘录发送给 {company}。",
+  "library.organize.sends.details":
+    "每个文档的名称和开头的文字（扫描件则是前几页的图片），以及文件夹和标签的名称与描述，会发送给 {company}。",
   "library.organize.dismiss": "以后再说",
   "library.organize.setUp": "在这台电脑上设置模型",
   "library.organize.done.one": "已为 1 个文档建议文件夹",
@@ -94,8 +95,11 @@ export const zhCN = {
   "library.progress.other": "正在整理 {count} 个文档…",
   "library.progressWith.one": "正在用 {service} 整理 1 个文档…",
   "library.progressWith.other": "正在用 {service} 整理 {count} 个文档…",
-  "library.progressSends.one": "正在用 {service} 整理 1 个文档：会发送它的名称、目录和简短摘录",
-  "library.progressSends.other":
+  "library.progressSends.one": "正在用 {service} 整理 1 个文档 · 会发送它的名称和摘录",
+  "library.progressSends.other": "正在用 {service} 整理 {count} 个文档 · 会发送名称和摘录",
+  "library.progressSends.full.one":
+    "正在用 {service} 整理 1 个文档：会发送它的名称、目录和简短摘录",
+  "library.progressSends.full.other":
     "正在用 {service} 整理 {count} 个文档：会发送每个文档的名称、目录和简短摘录",
   "library.waiting": "{count} 个文档暂时无法整理：缺少文字、模型或权限。展开详情查看。",
   "library.count": "{count} 个文档",
@@ -649,8 +653,7 @@ export const zhCN = {
   "checks.waiting.one": "有 1 句含待处理的修订，未核对",
   "checks.waiting": "有 {count} 句含待处理的修订，未核对",
   "checks.acceptAndCheck": "全部接受并核对",
-  "checks.problem.local-mode":
-    "已开启“所有内容都留在这台电脑上”，而这个模型不在这台电脑上，所以没有核对。",
+  "checks.problem.local-mode": "未核对：已开启“所有内容都留在这台电脑上”。",
   "checks.problem.chooseModel": "选择模型",
   "checks.tryAgain": "重试",
   "checks.problem.failed": "无法核对：{message}",
@@ -716,10 +719,8 @@ export const zhCN = {
   "verify.noDocuments.all": "没有可核对的文档：请先添加文档",
   "verify.problem.error": "无法核对：{message}",
   "verify.tryAgain": "重试",
-  "references.ask":
-    "在 Crossref 中查询列表里的 {count} 条参考文献，必要时再在 OpenAlex 或 arXiv 中查询，只发送每条参考文献的原文。",
-  "references.ask.one":
-    "在 Crossref 中查询列表里的这条参考文献，必要时再在 OpenAlex 或 arXiv 中查询，只发送这条参考文献的原文。",
+  "references.ask": "会把 {count} 条参考文献的原文发送给 Crossref、OpenAlex 或 arXiv。",
+  "references.ask.one": "会把这条参考文献的原文发送给 Crossref、OpenAlex 或 arXiv。",
   "references.check": "核对参考文献",
   "references.checking": "正在核对参考文献：{done}/{total}…",
   "references.checked": "已核对 {count} 条参考文献",
@@ -758,8 +759,7 @@ export const zhCN = {
   "references.difference.year.cited": "年份：这里是 {cited}，{service} 记录为 {found}",
   "references.difference.title": "{service} 记录的标题：{found}",
   "references.difference.authors": "{service} 记录的作者：{found}",
-  "references.localMode": "已开启“所有内容都留在这台电脑上”，无法查询这 {count} 条参考文献。",
-  "references.localMode.one": "已开启“所有内容都留在这台电脑上”，无法查询这条参考文献。",
+  "references.localMode": "无法查询参考文献：已开启“所有内容都留在这台电脑上”。",
   "references.localMode.turnOff": "关闭",
   "references.problem": "无法核对参考文献：{message}",
   "consent.flow.checks": "查找出处与核对文档",
@@ -776,7 +776,7 @@ export const zhCN = {
   "edit.problem.changed": "AI 处理期间，这段文字被改过了。请重新选中后再试。",
   "edit.problem.has-proposals": "选中的文字里有待处理的修订，请先接受或拒绝。",
   "edit.problem.too-long": "选中的文字太长，模型无法一次处理。请少选一些。",
-  "edit.problem.local-mode": "已开启“所有内容都留在这台电脑上”，用 AI 编辑只能使用本机上的模型。",
+  "edit.problem.local-mode": "未能编辑：已开启“所有内容都留在这台电脑上”。",
   "edit.problem.chooseModel": "选择模型",
   "edit.problem.failed": "用 AI 编辑未能完成：{message}",
   "edit.problem.retry": "重试",
@@ -1244,8 +1244,11 @@ export const zhCN = {
   "status.tagging.other": "正在为 {count} 个文档打标签…",
   "status.taggingWith.one": "正在用 {service} 给 1 个文档打标签…",
   "status.taggingWith.other": "正在用 {service} 给 {count} 个文档打标签…",
-  "status.taggingSends.one": "正在用 {service} 给 1 个文档打标签：会发送它的名称、目录和简短摘录",
-  "status.taggingSends.other":
+  "status.taggingSends.one": "正在用 {service} 给 1 个文档打标签 · 会发送它的名称和摘录",
+  "status.taggingSends.other": "正在用 {service} 给 {count} 个文档打标签 · 会发送名称和摘录",
+  "status.taggingSends.full.one":
+    "正在用 {service} 给 1 个文档打标签：会发送它的名称、目录和简短摘录",
+  "status.taggingSends.full.other":
     "正在用 {service} 给 {count} 个文档打标签：会发送每个文档的名称、目录和简短摘录",
   "status.sendsScans": "（扫描件会发送页面图片）",
   "status.taggingWaiting": "打标签需要 AI 模型",
@@ -1276,10 +1279,11 @@ export const zhCN = {
   "status.skipped.one": "已跳过 1 个文件",
   "status.skipped.other": "已跳过 {count} 个文件",
   "webPages.add.title": "添加网页",
-  "webPages.add.note":
-    "粘贴网址，多个网址每行一个。每个网页连同正文中的图片从这台电脑抓取一次，图片可能来自网站的图片服务器；网页保存为文档，引文可以核对。网页上的其他内容一概不加载。",
-  "webPages.add.note.keepLook":
-    "粘贴网址，多个网址每行一个。每个网页连同正文中的图片从这台电脑抓取一次，图片可能来自网站的图片服务器；网页保存为文档，引文可以核对。",
+  "webPages.add.note": "粘贴网址，多个网址每行一个。",
+  "webPages.add.fetch": "每个网页从这台电脑抓取一次，保存为文档。",
+  "webPages.add.fetch.details":
+    "正文中的图片会一并抓取，可能来自网站的图片服务器。网页上的其他内容一概不加载。",
+  "webPages.add.fetch.details.keepLook": "正文中的图片会一并抓取，可能来自网站的图片服务器。",
   "webPages.add.label": "网址",
   "webPages.add.invalid": "不是网址：{line}",
   "webPages.add.cancel": "取消",
@@ -1355,10 +1359,9 @@ export const zhCN = {
     "搜索模型还能找到措辞与问题不同的段落，代价是读取更慢；内置模型需要下载 135 MB。",
   "embeddingProviders.form.offHint":
     "文档读取完成后即可按关键词搜索，最佳结果排在前面，无需下载任何模型。",
-  "embeddingProviders.form.localOnly":
-    "“所有内容都留在这台电脑上”已开启，只能选择在这台电脑上运行的模型。",
+  "embeddingProviders.form.localOnly": "云端模型不可用：已开启“所有内容都留在这台电脑上”。",
   "embeddingProviders.form.localOnlyServer":
-    "“所有内容都留在这台电脑上”已开启，而此服务器不在这台电脑上：请使用 localhost 或 127.0.0.1 上的服务器，或在上方关闭“所有内容都留在这台电脑上”。",
+    "请使用本机上的服务器：已开启“所有内容都留在这台电脑上”。",
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small：约 135 MB，只需下载一次，在这台电脑上运行，支持中文和英文。",
   "embeddingProviders.form.ollamaUrl": "Ollama 地址（可选）",
@@ -1390,7 +1393,7 @@ export const zhCN = {
   "embeddingProviders.localOnly.cloudChat":
     "你的 AI 模型在 {service}，因此开启期间不会发送问题。想提问，请在“AI 模型”中选择本地模型。",
   "embeddingProviders.rebuild.title": "正在为搜索读取文档：{done} / {total} 个",
-  "embeddingProviders.rebuild.localMode": "为了让所有内容留在这台电脑上，搜索现在使用内置模型。",
+  "embeddingProviders.rebuild.localMode": "搜索改用内置模型：已开启“所有内容都留在这台电脑上”。",
   "embeddingProviders.rebuild.note": "每个文档读取完之前，搜索按关键词查找它的段落。",
   "embeddingProviders.error.notice": "搜索暂时无法使用 {provider}。{reason}",
 
@@ -1410,12 +1413,11 @@ export const zhCN = {
   "rerank.settings.failed": "排序模型下载失败：{reason}。",
   "rerank.settings.loadFailed": "重排序模型无法在这台电脑上启动。",
   "rerank.settings.retry": "重试",
-  "rerank.settings.paused": "已暂停：开启“所有内容都留在这台电脑上”时，搜索结果留在这台电脑上。",
+  "rerank.settings.paused": "已暂停：已开启“所有内容都留在这台电脑上”。",
   "rerank.settings.keyMissing":
     "这台设备上读取不到 {service} 的密钥，因此不会调整搜索结果的顺序。请重新输入密钥。",
   "rerank.settings.setUp": "设置…",
-  "rerank.settings.localOnly":
-    "“所有内容都留在这台电脑上”已开启：Cohere 和 Voyage AI 会收到搜索结果，所以只能选择内置模型。",
+  "rerank.settings.localOnly": "云端模型不可用：已开启“所有内容都留在这台电脑上”。",
   "rerank.settings.change": "更改",
   "rerank.settings.remove": "关闭",
   "rerank.kind.built-in": "在这台电脑上（内置模型）",
@@ -1577,7 +1579,7 @@ export const zhCN = {
   "tagging.organize.ask": "第一次整理前，“整理”会先在资料库里问你用哪个模型。",
   "tagging.organize.with": "“整理”使用 {model}，这是你在资料库里选的。",
   "tagging.organize.same": "“整理”也使用这个模型。",
-  "tagging.localMode": "已开启“所有内容都留在这台电脑上”，只用本机的模型给文档打标签。",
+  "tagging.localMode": "云端模型不能打标签：已开启“所有内容都留在这台电脑上”。",
   "tagging.plan":
     "使用你的 ChatGPT 订阅，每次只处理一个文档，不会占满你聊天要用的额度。达到订阅的用量上限时，会等额度恢复后再继续。",
   "tagging.plan.local": "想把订阅留给聊天，可以改用本机模型打标签。",
@@ -1597,7 +1599,7 @@ export const zhCN = {
   "tagging.stoppedIn": "已停止用 AI 给{places}的文档打标签。",
   "status.taggingPaused": "等待 ChatGPT 订阅额度恢复",
   "status.taggingPaused.full": "ChatGPT 订阅的用量已达上限，打标签会等额度恢复后自动继续。",
-  "jev.form.sends": "Jev 为文档打标签时，会收到用于打标签的文档文字。",
+  "jev.form.sends": "会把文档内容发送给 Jev 用于打标签。",
 
   "settings.title": "设置",
   "settings.pages.models": "模型",
@@ -1779,8 +1781,7 @@ export const zhCN = {
   "providers.test.rate-limit": "服务正在限制此密钥的请求，请稍后再试。",
   "providers.test.network": "无法连接到服务器。请检查地址和网络连接。",
   "providers.test.provider": "服务返回了错误。",
-  "providers.test.local-mode":
-    "没有发送任何内容：已开启“所有内容都留在这台电脑上”，而此模型不在这台电脑上。",
+  "providers.test.local-mode": "未发送：已开启“所有内容都留在这台电脑上”。",
   "providers.test.consent-declined": "没有发送任何内容，因为你选择不向此服务发送数据。",
   "providers.test.too-long": "这个模型的上下文窗口太小，连很短的请求都放不下。",
   "providers.test.cost-cap": "未发送任何内容：已达到本月花费上限。可在“设置 → 通用”中更改。",
@@ -1821,10 +1822,9 @@ export const zhCN = {
     "此设备上没有保存 {service} 的 API 密钥。请在设置中添加后再提问。",
   "providers.readiness.consent-declined":
     "你选择了不向 {service} 发送数据，因此无法提问。请选择其他服务或本地模型，或在设置中允许发送。",
-  "providers.readiness.local-mode":
-    "已开启“所有内容都留在这台电脑上”，因此不会向 {service} 发送问题。",
+  "providers.readiness.local-mode": "未发送给 {service}：已开启“所有内容都留在这台电脑上”。",
   "providers.readiness.setUp": "去设置",
-  "localMode.refused": "已开启“所有内容都留在这台电脑上”，这个问题没有发送给 {service}",
+  "localMode.refused": "未发送给 {service}：已开启“所有内容都留在这台电脑上”",
   "localMode.useLocal": "改用本地模型",
   "localMode.turnOff": "允许使用云端模型",
   "localMode.turnedOff": "已关闭“所有内容都留在这台电脑上”",
@@ -1869,7 +1869,7 @@ export const zhCN = {
   "chatgpt.signOut": "退出登录",
   "chatgpt.anotherAccount": "使用其他账号",
   "chatgpt.signInAgain": "重新登录",
-  "chatgpt.details": "详细信息",
+  "chatgpt.details": "详情",
   "chatgpt.use": "用于提问",
   "chatgpt.inUse": "正在使用 ChatGPT 订阅",
   "chatgpt.manageUsage": "管理用量",
@@ -1904,7 +1904,8 @@ export const zhCN = {
   "copilot.notice.title": "使用你的 Copilot 订阅",
   "copilot.notice.usage": "回答会计入你的 Copilot 订阅用量限额。",
   "copilot.notice.experimental": "这是实验性的登录方式：GitHub 可能会拒绝或阻止它。",
-  "copilot.notice.sends":
+  "copilot.notice.sends": "会把你的问题和文档内容发送给 GitHub。",
+  "copilot.notice.sends.details":
     "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你的账号发送给 GitHub。",
   "copilot.notice.off": "在这里登录之前不会启用，你也可以随时在“设置 → 模型”中退出登录。",
   "copilot.cancel": "取消",
@@ -1969,7 +1970,7 @@ export const zhCN = {
   "claudePlan.failed": "未能登录 Claude",
   "claudePlan.failure.timedOut": "Claude 登录未在时限内完成，未保存任何内容",
   "claudePlan.failure.secretStorage": "无法安全保存 Claude 登录：没有可用的密钥环",
-  "claudePlan.details": "详细信息",
+  "claudePlan.details": "详情",
   "claudePlan.signedIn": "已登录：{account}",
   "claudePlan.account.unknown": "你的 Claude 账号",
   "claudePlan.signOut": "退出登录",
@@ -2092,9 +2093,9 @@ export const zhCN = {
   "reference.addIdentifier": "填写 DOI 或 arXiv 网址后，可用“查询”补全其余信息。",
   "reference.lookUp": "查询",
   "reference.lookingUp": "正在查询…",
-  "reference.lookUp.doi": "按 DOI 从 Crossref 补全空白字段。只发送 DOI。",
-  "reference.lookUp.arxiv": "按 arXiv 编号从 arXiv 补全空白字段。只发送编号。",
-  "reference.lookUp.localMode": "开启“所有内容都留在这台电脑上”时无法查询",
+  "reference.lookUp.doi": "从 Crossref 补全空白字段。只发送 DOI。",
+  "reference.lookUp.arxiv": "从 arXiv 补全空白字段。只发送 arXiv 编号。",
+  "reference.lookUp.localMode": "无法查询：已开启“所有内容都留在这台电脑上”",
   "reference.lookUp.filled": "已从 {service} 补全 {count} 个字段",
   "reference.lookUp.filled.one": "已从 {service} 补全 1 个字段",
   "reference.lookUp.nothing": "{service} 没有可补充的信息",
@@ -2162,7 +2163,7 @@ export const zhCN = {
   "privacy.intro":
     "IncarnaMind 不收集任何使用数据。本页列出它从这台电脑发出的所有内容，你可以在这里更改。",
   "privacy.flows.intro":
-    "以下数据流会把你的内容发送到这台电脑以外的服务。选择服务时，IncarnaMind 会说明要发送的内容，选择即表示允许；未经允许的数据流不会发送任何内容，开启“所有内容都留在这台电脑上”时，一律不会发送。服务允许选择时，IncarnaMind 会要求它不要保存你的请求。",
+    "以下数据流会把你的内容发送到这台电脑以外。选择服务即表示允许；没有允许的服务不会收到任何内容，开启“所有内容都留在这台电脑上”时一律不会发送。服务提供该选项时，IncarnaMind 会要求它不要保存你的请求。",
   "privacy.flows.service": "发送到 {service}",
   "privacy.flows.local": "留在这台电脑上",
   "privacy.flows.sends": "发送：",
@@ -2226,8 +2227,7 @@ export const zhCN = {
     "匿名事件，只在开启时发送：用了哪些功能、在哪里卡住了，并带上这次安装的随机 ID。绝不包括你的文档或文档名、问题、回答，以及你输入的任何内容。",
   "privacy.traffic.usage-data.toggle": "发送匿名使用数据",
   "privacy.usageData.tester": "测试版默认开启，这是你加入内测时同意的。你可以随时关闭。",
-  "privacy.usageData.localMode":
-    "开启“所有内容都留在这台电脑上”（在“设置 → 搜索”中）时，此项保持关闭。",
+  "privacy.usageData.localMode": "已关闭：已开启“所有内容都留在这台电脑上” · 设置 › 搜索",
   "privacy.usageData.details": "所有事件和字段",
   "privacy.usageData.resetId": "重置安装 ID",
   "privacy.usageData.resetDone": "已重置：之后的事件会带上新的 ID。",
@@ -2378,8 +2378,7 @@ export const zhCN = {
   "answer.error.network": "无法连接 {service}，请检查网络连接",
   "answer.error.provider": "{service} 出错了",
   "answer.error.consent-declined": "没有发送任何内容：你选择了不向这个服务发送数据",
-  "answer.error.local-mode":
-    "已停止：已开启“所有内容都留在这台电脑上”，而 {model} 不在这台电脑上运行",
+  "answer.error.local-mode": "已停止：已开启“所有内容都留在这台电脑上”",
   "answer.error.useLocal": "改用本地模型",
   "answer.error.ollama-not-running": "Ollama 没有在这台电脑上运行",
   "answer.error.too-long":
@@ -2539,7 +2538,7 @@ export const zhCN = {
   "research.plan.webOff": "联网搜索已关闭",
   "research.plan.webOff.action": "开启",
   "research.plan.webUnavailable": "{model} 不能联网搜索",
-  "research.plan.localMode": "已开启“所有内容都留在这台电脑上”：不会联网搜索",
+  "research.plan.localMode": "不会联网搜索：已开启“所有内容都留在这台电脑上”",
   "task.notify.needsYou": "{task}需要你处理",
   "task.notify.finished": "{task}已完成",
   "task.notify.failed": "{task}未能完成",
@@ -2832,8 +2831,7 @@ export const zhCN = {
   "suggestions.settings.today": "今天：建议 {shown} 次，接受 {accepted} 次",
   "suggestions.settings.paused.no-model": "已暂停：先在“模型”中设置 AI 模型。",
   "suggestions.settings.paused.consent": "已暂停：需要你允许向 {service} 发送正在写的内容。",
-  "suggestions.settings.paused.local-mode":
-    "开启“所有内容都留在这台电脑上”时已暂停：你的 AI 模型不在这台电脑上运行。",
+  "suggestions.settings.paused.local-mode": "已暂停：已开启“所有内容都留在这台电脑上”。",
   "suggestions.settings.allow": "允许…",
   "scripts.card.title": "{skill} 想运行 {script}",
   "scripts.card.skill": "技能",
@@ -3304,10 +3302,8 @@ export const zhCN = {
   "error.provider.ollamaCantOpen": "无法从这里打开 Ollama。请到 ollama.com 下载。",
   "error.provider.ollamaCloud":
     "{model} 在 ollama.com 上运行，不在这台电脑上。选择一个本地模型，或到模型菜单中选择。",
-  "error.provider.rerankLocalMode":
-    "“所有内容都留在这台电脑上”已开启：搜索结果不会发送给重排序服务。请先在设置中关闭“所有内容都留在这台电脑上”。",
-  "error.provider.embeddingLocalMode":
-    "“所有内容都留在这台电脑上”已开启：文档搜索的所有内容都留在这台电脑上。要使用云端嵌入模型，请先在设置中关闭“所有内容都留在这台电脑上”。",
+  "error.provider.rerankLocalMode": "云端模型不可用：已开启“所有内容都留在这台电脑上”。",
+  "error.provider.embeddingLocalMode": "云端模型不可用：已开启“所有内容都留在这台电脑上”。",
   "error.provider.embeddingsOff": "向量搜索需要嵌入，而嵌入已关闭：请在“设置 → 搜索”中开启。",
   "error.secrets.plainText":
     "当前没有运行任何密钥环，API 密钥会以明文形式保存。请启动 GNOME Keyring 或 KWallet，或在设置中允许以明文保存。",
@@ -3319,8 +3315,7 @@ export const zhCN = {
   "error.connector.nameTooLong": "连接器名称不能超过 {max} 个字符。",
   "error.connector.nameTaken": "已有名为“{name}”的连接器。",
   "error.connector.off": "先开启这个连接器。",
-  "error.connector.localMode":
-    "“所有内容都留在这台电脑上”已开启，而这个连接器不在这台电脑上，所以不会使用。",
+  "error.connector.localMode": "连接器已暂停：已开启“所有内容都留在这台电脑上”。",
   "error.connector.urlMissing": "输入服务器 URL。",
   "error.connector.urlTooLong": "URL 太长。",
   "error.connector.urlInvalid": "“{url}”不是有效的 URL。",
@@ -3405,13 +3400,13 @@ export const zhCN = {
     "“{name}”是内置技能的名称，内置技能的文件无法替换。在 SKILL.md 中换一个名字，或将内置技能复制为你自己的技能。",
   "error.approval.riskNotAccepted": "总是运行技能脚本之前，先确认风险提示。",
   "error.mindStyle.invalid": "无法使用这个字体和字号。",
-  "error.privacy.usageDataLocalMode": "开启“所有内容都留在这台电脑上”后，使用数据保持关闭。",
+  "error.privacy.usageDataLocalMode": "使用数据保持关闭：已开启“所有内容都留在这台电脑上”。",
   "error.check.claimTooLong": "这条说法太长，无法核对：最多 {max} 个字符。",
-  "error.check.localMode": "已开启“所有内容都留在这台电脑上”，而这个模型不在这台电脑上。",
+  "error.check.localMode": "未核对：已开启“所有内容都留在这台电脑上”。",
   "error.check.declined": "你已拒绝向这个模型的服务发送这条说法，因此没有发送任何内容。",
   "error.tagging.noModel": "先选择分类模型。",
   "error.tagging.place": "选择要用 AI 打标签的位置：一个文件夹，或“不在文件夹中”。",
-  "error.tagging.cloudPaused": "开启“所有内容都留在这台电脑上”时，云端分类会暂停。",
+  "error.tagging.cloudPaused": "云端打标签已暂停：已开启“所有内容都留在这台电脑上”。",
   "error.tagging.jevNotSetUp": "尚未设置 Jev。",
   "error.tagging.jevKeyUnreadable": "无法在这台设备上读取 Jev 密钥。",
   "error.tagging.startOllama": "启动 Ollama 后，才能使用本地自动分类。",
@@ -3526,8 +3521,7 @@ export const zhCN = {
     "只因为你输入了搜索词才查询。社区连接器没有经过审核，连接前先看看它能做什么。",
   "connectors.registry.searching": "正在搜索 MCP 注册表…",
   "connectors.registry.none": "MCP 注册表里没有与“{query}”匹配的连接器。",
-  "connectors.registry.failed.local-mode":
-    "已开启“所有内容都留在这台电脑上”，因此不搜索 MCP 注册表。",
+  "connectors.registry.failed.local-mode": "未搜索 MCP 注册表：已开启“所有内容都留在这台电脑上”。",
   "connectors.registry.failed.declined":
     "你选择了不把搜索内容发送给 MCP 注册表。可以在“隐私”里更改。",
   "connectors.registry.failed.unreachable": "无法连接 MCP 注册表。请检查网络后重试。",
@@ -3699,20 +3693,19 @@ export const zhCN = {
   "approvals.card.alwaysAllowHint":
     "以后运行 {tool} 时不再询问。你可以在“设置”的“批准”中恢复默认。",
   "approvals.card.deny": "拒绝",
-  "approvals.thirdParty.read.imported": "这条回答读过含有导入文字的 Mind，所以会先问你。",
-  "approvals.thirdParty.read.webPage": "这条回答读过网页，所以会先问你。",
-  "approvals.thirdParty.read.checkedDocument": "这条回答读过正在核对的文档，所以会先问你。",
-  "approvals.thirdParty.task.imported": "这个任务读过含有导入文字的 Mind，所以会先问你。",
-  "approvals.thirdParty.task.webPage": "这个任务读过网页，所以会先问你。",
-  "approvals.thirdParty.task.checkedDocument": "这个任务读过正在核对的文档，所以会先问你。",
-  "approvals.thirdParty.mind.imported": "这个 Mind 里有导入的文字，所以会先问你。",
-  "approvals.thirdParty.mind.webPage": "这个 Mind 里有来自网页的文字，所以会先问你。",
-  "approvals.thirdParty.mind.checkedDocument":
-    "这个 Mind 里有正在核对的文档中的文字，所以会先问你。",
-  "approvals.thirdParty.conversation.imported": "这个对话里有导入的文字，所以会先问你。",
-  "approvals.thirdParty.conversation.webPage": "这个对话里有来自网页的文字，所以会先问你。",
+  "approvals.thirdParty.read.imported": "会先问你：这条回答读过含有导入文字的 Mind。",
+  "approvals.thirdParty.read.webPage": "会先问你：这条回答读过网页。",
+  "approvals.thirdParty.read.checkedDocument": "会先问你：这条回答读过正在核对的文档。",
+  "approvals.thirdParty.task.imported": "会先问你：这个任务读过含有导入文字的 Mind。",
+  "approvals.thirdParty.task.webPage": "会先问你：这个任务读过网页。",
+  "approvals.thirdParty.task.checkedDocument": "会先问你：这个任务读过正在核对的文档。",
+  "approvals.thirdParty.mind.imported": "会先问你：这个 Mind 里有导入的文字。",
+  "approvals.thirdParty.mind.webPage": "会先问你：这个 Mind 里有来自网页的文字。",
+  "approvals.thirdParty.mind.checkedDocument": "会先问你：这个 Mind 里有正在核对的文档中的文字。",
+  "approvals.thirdParty.conversation.imported": "会先问你：这个对话里有导入的文字。",
+  "approvals.thirdParty.conversation.webPage": "会先问你：这个对话里有来自网页的文字。",
   "approvals.thirdParty.conversation.checkedDocument":
-    "这个对话里有正在核对的文档中的文字，所以会先问你。",
+    "会先问你：这个对话里有正在核对的文档中的文字。",
   "approvals.call.waiting": "等待你的批准：{connector}：{tool}",
   "approvals.call.denied": "未允许：{connector}：{tool}",
   "approvals.call.allowed": "经你批准，已调用 {connector}：{tool}",
@@ -3735,7 +3728,7 @@ export const zhCN = {
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.
   "editor.hint.empty": "开始写作，或{ask}",
   "editor.hint.empty.ask": "按 {shortcut} 提问…",
-  "editor.hint.first": "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。{ask}",
+  "editor.hint.first": "Mind：在这里写作、向文档提问，每条引文都会核对。{ask}",
   "editor.hint.first.ask": "按 {shortcut} 提问。",
   "tabs.new.about": "新建 Mind：写作并就文档提问的页面（{shortcut}）",
   "editor.hint.afterAnswer": "继续写作，或{ask}",
@@ -3771,9 +3764,9 @@ export const zhCN = {
   "examples.banner.label": "关于这个示例",
   "examples.banner.title": "这是一个示例 Mind。",
   "examples.banner.body":
-    "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。这份草稿已对照它的两份文档核对过，其中有一个数字写错了：点它旁边的红色标记，看看业绩报告怎么说。",
+    "Mind：在这里写作、向文档提问，每条引文都会核对。这份草稿已对照它的两份文档核对过，其中有一个数字写错了：点它旁边的红色标记，看看业绩报告怎么说。",
   "examples.banner.body.tea":
-    "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。你可以像在普通文档里一样在这里写作，并就你的文档提问；回答中的每个说法都链接到出处所在的页面。点击勾号查看引文，绿色表示找到了这段引文。",
+    "Mind：在这里写作、向文档提问，每条引文都会核对。你可以像在普通文档里一样在这里写作，并就你的文档提问；回答中的每个说法都链接到出处所在的页面。点击勾号查看引文，绿色表示找到了这段引文。",
   "examples.banner.addOwn": "添加你的文档",
   "examples.banner.remove": "移除示例",
   "examples.banner.more": "换一个和你工作更相关的示例：",
@@ -3818,14 +3811,10 @@ export const zhCN = {
   "meetings.start.copied": "已复制",
   "meetings.start.noticeText":
     "我正在用 IncarnaMind 录制本次会议来做笔记，录音只保存在我的电脑上。",
-  "meetings.start.kept.mac": "音频只保存在这台 Mac 上，最多一天后删除。",
-  "meetings.start.kept.other": "音频只保存在这台电脑上，最多一天后删除。",
   "meetings.start.dismiss": "不录制，保留为笔记（Esc）",
   "meetings.notice.title": "录制之前",
   "meetings.notice.both": "IncarnaMind 会录制你的麦克风和电脑声音，也就是会议中其他人的声音。",
   "meetings.notice.microphone": "IncarnaMind 会录制你的麦克风。",
-  "meetings.notice.kept.mac": "音频只保存在这台 Mac 上，最多一天后删除。",
-  "meetings.notice.kept.other": "音频只保存在这台电脑上，最多一天后删除。",
   "meetings.notice.tell": "在很多地方，未告知他人就录音是违法的。开始之前，先告诉所有人你在录制。",
   "meetings.notice.cancel": "取消",
   "meetings.bar.label": "会议录制",
@@ -3894,6 +3883,7 @@ export const zhCN = {
   "meetings.duration.minutes": "{count} 分钟",
   "meetings.duration.hours": "{hours} 小时 {minutes} 分钟",
   "meetings.audio.recorded": "已录制 {time}",
+  "meetings.audio.kept": "音频只保存在这台电脑上，最多一天后删除。",
   "meetings.audio.keptUntil": "音频保存在这台电脑上，{time} 删除",
   "meetings.audio.keptWhile": "音频保存在这台电脑上，会议结束一天后删除",
   "meetings.audio.delete": "立即删除音频",
@@ -3939,8 +3929,6 @@ export const zhCN = {
   "meetings.settings.what": "录制内容",
   "meetings.settings.whatBoth": "你的麦克风和其他人（电脑声音）。",
   "meetings.settings.whatMe": "只录制你的麦克风。",
-  "meetings.settings.kept.mac": "音频只保存在这台 Mac 上，每次会议结束后最多一天删除。",
-  "meetings.settings.kept.other": "音频只保存在这台电脑上，每次会议结束后最多一天删除。",
 
   "sources.title": "查找资料",
   "sources.intro":
@@ -3959,7 +3947,7 @@ export const zhCN = {
   "sources.count.one": "1 个结果",
   "sources.count": "{count} 个结果",
   "sources.none": "没有找到结果。换个关键词或更早的年份试试。",
-  "sources.localMode": "开启“所有内容都留在这台电脑上”时无法查找资料",
+  "sources.localMode": "无法查找资料：已开启“所有内容都留在这台电脑上”",
   "sources.problem.declined": "未搜索 {provider}：你没有允许",
   "sources.problem.unreachable": "无法连接 {provider}",
   "sources.problem.rate-limited": "{provider} 要求降低请求频率，或今天的免费搜索次数已用完",
@@ -3996,7 +3984,7 @@ export const zhCN = {
   "sources.added.download-failed": "无法下载开放获取副本，已添加引用信息",
   "sources.failed.declined": "未允许下载",
   "sources.failed.not-found": "重新搜索后才能添加",
-  "sources.failed.local-mode": "开启“所有内容都留在这台电脑上”时无法添加",
+  "sources.failed.local-mode": "未添加：已开启“所有内容都留在这台电脑上”",
   "sources.failed.rate-limited": "该服务要求降低请求频率，稍后再试",
   "sources.failed.needs-key": "需要你自己的密钥：在上方添加后重试",
   "sources.failed.key-rejected": "密钥未被接受：在上方更换后重试",
@@ -4058,7 +4046,7 @@ export const zhCN = {
   "web.settings.supported": "{model} 通过 {provider} 联网搜索。",
   "web.settings.unsupported":
     "{provider} 没有自带的联网搜索，用 {model} 提问时不会联网。Claude、OpenAI 和 ChatGPT 的模型可以。",
-  "web.settings.localMode": "“所有内容都留在这台电脑上”开启时不可用。",
+  "web.settings.localMode": "不可用：已开启“所有内容都留在这台电脑上”。",
   "meetings.command.pause": "暂停录制",
   "meetings.command.resume": "继续录制",
   "meetings.command.stop": "停止录制",
@@ -4413,8 +4401,7 @@ export const zhCN = {
   "mindChanges.unlinked.one": "· 表格中有 1 处出处无法关联，已作为文字显示",
   "mindChanges.extraCells": "· 多出的 {count} 个单元格已作为文字保留",
   "mindChanges.extraCells.one": "· 多出的 1 个单元格已作为文字保留",
-  "mindCall.failed.localMode":
-    "无法修改“{mind}”：已开启“所有内容都留在这台电脑上”，而这个模型不在这台电脑上",
+  "mindCall.failed.localMode": "无法修改“{mind}”：已开启“所有内容都留在这台电脑上”",
   "mindCall.failed.notReady": "无法修改“{mind}”：现在无法使用这个模型",
   "mindCall.failed.model": "无法修改“{mind}”：模型出错",
   "mindChanges.waiting": "“{mind}”中有 {count} 处修订待确认。先接受或拒绝它们？",
@@ -4474,7 +4461,7 @@ export const zhCN = {
     "这个智能体已不再连接 IncarnaMind。在 IncarnaMind 的“设置 → 智能体”中重新连接它。",
   "agents.problem.off": "IncarnaMind 已关闭智能体连接。在“设置 → 智能体”中开启。",
   "agents.problem.local-mode":
-    "IncarnaMind 开启了“所有内容都留在这台电脑上”，已连接的智能体暂停使用：智能体会把读到的内容发送给它自己的 AI 模型。要继续使用，在 IncarnaMind 的“设置 → 搜索”中关闭此项。",
+    "智能体已暂停：IncarnaMind 已开启“所有内容都留在这台电脑上”。要继续使用，请在“设置 → 搜索”中关闭。",
   "agents.problem.consent":
     "这个智能体已无权读取你的文档。在 IncarnaMind 的“设置 → 隐私”中重新允许它。",
   "agents.problem.no-folders":
@@ -4501,8 +4488,7 @@ export const zhCN = {
   "agents.settings.switch.off": "已关闭：任何智能体都无法读取你的文档。",
   "agents.settings.switch.on":
     "已开启：IncarnaMind 打开时，下面每个智能体都可以读取你为它选择的文件夹。",
-  "agents.settings.paused":
-    "开启“所有内容都留在这台电脑上”时暂停使用，因为智能体会把读到的内容发送给它自己的 AI 模型。",
+  "agents.settings.paused": "智能体已暂停：已开启“所有内容都留在这台电脑上”。",
   "agents.settings.paused.open": "搜索设置",
   "agents.settings.connected": "已连接的智能体",
   "agents.settings.connect": "连接智能体",

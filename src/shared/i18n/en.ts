@@ -27,8 +27,9 @@ export const en = {
     "Suggests a Folder and Tags for each Document here. You accept or change each one.",
   "library.organize.needsModel": "Organize needs an AI model",
   "library.organize.use": "Use {company}",
-  "library.organize.sends":
-    "Each Document's name and the start of its text (for a scan, images of its first pages), and your Folders' and Tags' names and descriptions, go to {company}",
+  "library.organize.sends": "Sends document names and excerpts to {company}.",
+  "library.organize.sends.details":
+    "Each Document's name and the start of its text (for a scan, images of its first pages), and your Folders' and Tags' names and descriptions, go to {company}.",
   "library.organize.dismiss": "Not now",
   "library.organize.setUp": "Set up a model on this computer",
   "library.organize.done.one": "Organize suggested a Folder for 1 Document",
@@ -102,9 +103,12 @@ export const en = {
   "library.progress.other": "Organizing {count} Documents…",
   "library.progressWith.one": "Organizing 1 Document with {service}…",
   "library.progressWith.other": "Organizing {count} Documents with {service}…",
-  "library.progressSends.one":
-    "Organizing 1 Document with {service}: its name, outline and short excerpts are sent",
+  "library.progressSends.one": "Organizing 1 Document with {service} · sends its name and excerpts",
   "library.progressSends.other":
+    "Organizing {count} Documents with {service} · sends names and excerpts",
+  "library.progressSends.full.one":
+    "Organizing 1 Document with {service}: its name, outline and short excerpts are sent",
+  "library.progressSends.full.other":
     "Organizing {count} Documents with {service}: each one's name, outline and short excerpts are sent",
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
@@ -673,8 +677,7 @@ export const en = {
   "checks.waiting.one": "1 sentence with changes waiting wasn't checked",
   "checks.waiting": "{count} sentences with changes waiting weren't checked",
   "checks.acceptAndCheck": "Accept all and check",
-  "checks.problem.local-mode":
-    "“Keep everything on this computer” is on, and the model isn't on this computer, so nothing was checked.",
+  "checks.problem.local-mode": "Not checked: “Keep everything on this computer” is on.",
   "checks.problem.chooseModel": "Choose a model",
   "checks.tryAgain": "Try again",
   "checks.problem.failed": "Couldn't check: {message}",
@@ -744,10 +747,8 @@ export const en = {
   "verify.noDocuments.all": "Nothing to check against: add Documents first",
   "verify.problem.error": "Couldn't check: {message}",
   "verify.tryAgain": "Try again",
-  "references.ask":
-    "Looks up the list's {count} references in Crossref, then OpenAlex or arXiv if needed, sending only each reference as written.",
-  "references.ask.one":
-    "Looks up the list's reference in Crossref, then OpenAlex or arXiv if needed, sending only the reference as written.",
+  "references.ask": "Sends {count} references, as written, to Crossref, OpenAlex or arXiv.",
+  "references.ask.one": "Sends the reference, as written, to Crossref, OpenAlex or arXiv.",
   "references.check": "Check references",
   "references.checking": "Checking {done} of {total} references…",
   "references.checked": "Checked {count} references",
@@ -786,10 +787,7 @@ export const en = {
   "references.difference.year.cited": "Year: {cited} here, {found} in {service}",
   "references.difference.title": "Title in {service}: {found}",
   "references.difference.authors": "Authors in {service}: {found}",
-  "references.localMode":
-    "The {count} references can't be looked up while “Keep everything on this computer” is on.",
-  "references.localMode.one":
-    "The reference can't be looked up while “Keep everything on this computer” is on.",
+  "references.localMode": "Can't look up references: “Keep everything on this computer” is on.",
   "references.localMode.turnOff": "Turn it off",
   "references.problem": "The references couldn't be checked: {message}",
   "consent.flow.checks": "Find support and Verify",
@@ -808,8 +806,7 @@ export const en = {
   "edit.problem.has-proposals":
     "The selection holds changes that are waiting: accept or reject them first.",
   "edit.problem.too-long": "That is more text than the model can take at once: select less.",
-  "edit.problem.local-mode":
-    "“Keep everything on this computer” is on, so Edit with AI uses only a model on this computer.",
+  "edit.problem.local-mode": "Couldn't edit: “Keep everything on this computer” is on.",
   "edit.problem.chooseModel": "Choose a model",
   "edit.problem.failed": "Edit with AI didn't work: {message}",
   "edit.problem.retry": "Try again",
@@ -1301,9 +1298,12 @@ export const en = {
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWith.one": "Tagging 1 Document with {service}…",
   "status.taggingWith.other": "Tagging {count} Documents with {service}…",
-  "status.taggingSends.one":
-    "Tagging 1 Document with {service}: its name, outline and short excerpts are sent",
+  "status.taggingSends.one": "Tagging 1 Document with {service} · sends its name and excerpts",
   "status.taggingSends.other":
+    "Tagging {count} Documents with {service} · sends names and excerpts",
+  "status.taggingSends.full.one":
+    "Tagging 1 Document with {service}: its name, outline and short excerpts are sent",
+  "status.taggingSends.full.other":
     "Tagging {count} Documents with {service}: each one's name, outline and short excerpts are sent",
   "status.sendsScans": " (page images for scans)",
   "status.taggingWaiting": "No AI model for Tags",
@@ -1336,10 +1336,12 @@ export const en = {
   "status.skipped.one": "Skipped 1 file",
   "status.skipped.other": "Skipped {count} files",
   "webPages.add.title": "Add web pages",
-  "webPages.add.note":
-    "Paste an address, or several, one per line. Each page is fetched once, from this computer, with the article's pictures, which may come from the site's image servers, and kept as a Document whose quotes can be checked. Nothing else on the page is loaded.",
-  "webPages.add.note.keepLook":
-    "Paste an address, or several, one per line. Each page is fetched once, from this computer, with the article's pictures, which may come from the site's image servers, and kept as a Document whose quotes can be checked.",
+  "webPages.add.note": "Paste an address, or several, one per line.",
+  "webPages.add.fetch": "Fetched once from this computer, kept as a Document.",
+  "webPages.add.fetch.details":
+    "The article's pictures come with it, and may come from the site's image servers. Nothing else on the page is loaded.",
+  "webPages.add.fetch.details.keepLook":
+    "The article's pictures come with it, and may come from the site's image servers.",
   "webPages.add.label": "Addresses",
   "webPages.add.invalid": "Not a web address: {line}",
   "webPages.add.cancel": "Cancel",
@@ -1420,9 +1422,9 @@ export const en = {
   "embeddingProviders.form.offHint":
     "Documents are searched by their words, best matches first, as soon as they are read. Nothing is downloaded.",
   "embeddingProviders.form.localOnly":
-    "“Keep everything on this computer” is on, so only models on this computer can be chosen.",
+    "Cloud models unavailable: “Keep everything on this computer” is on.",
   "embeddingProviders.form.localOnlyServer":
-    "“Keep everything on this computer” is on, and this server isn’t on this computer: use one at localhost or 127.0.0.1, or turn off “Keep everything on this computer” above.",
+    "Use a server on this computer: “Keep everything on this computer” is on.",
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
   "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
@@ -1456,7 +1458,7 @@ export const en = {
     "Your AI model is on {service}, so Questions aren't sent while this is on: choose a local model under AI model to ask them.",
   "embeddingProviders.rebuild.title": "Reading Documents for search: {done} of {total}",
   "embeddingProviders.rebuild.localMode":
-    "To keep everything on this computer, search now uses the built-in model.",
+    "Search uses the built-in model: “Keep everything on this computer” is on.",
   "embeddingProviders.rebuild.note":
     "Search finds passages by their words until each Document is done.",
   "embeddingProviders.error.notice": "Search can't use {provider}. {reason}",
@@ -1480,13 +1482,12 @@ export const en = {
   "rerank.settings.loadFailed":
     "The model that orders search results couldn't start on this computer.",
   "rerank.settings.retry": "Try again",
-  "rerank.settings.paused":
-    "Paused while “Keep everything on this computer” is on: search results stay on this computer.",
+  "rerank.settings.paused": "Paused: “Keep everything on this computer” is on.",
   "rerank.settings.keyMissing":
     "No key for {service} can be read on this device, so results aren't reordered. Enter the key again.",
   "rerank.settings.setUp": "Set up…",
   "rerank.settings.localOnly":
-    "“Keep everything on this computer” is on: Cohere and Voyage AI would receive search matches, so only the built-in model can be chosen.",
+    "Cloud models unavailable: “Keep everything on this computer” is on.",
   "rerank.settings.change": "Change",
   "rerank.settings.remove": "Turn off",
   "rerank.kind.built-in": "On this computer (built-in model)",
@@ -1654,8 +1655,7 @@ export const en = {
   "tagging.organize.ask": "Organize asks in the Library before it first uses a model.",
   "tagging.organize.with": "Organize uses {model}, as you chose in the Library.",
   "tagging.organize.same": "Organize uses this model too.",
-  "tagging.localMode":
-    "“Keep everything on this computer” is on, so only models on this computer tag your Documents.",
+  "tagging.localMode": "Cloud models can't tag: “Keep everything on this computer” is on.",
   "tagging.plan":
     "Uses your ChatGPT plan, one Document at a time, so it doesn't use up what you chat with. If the plan's limit is reached, tagging waits for it to reset.",
   "tagging.plan.local": "To keep your plan for chatting, tag on this computer instead.",
@@ -1679,7 +1679,7 @@ export const en = {
   "status.taggingPaused": "Tagging waits for your ChatGPT plan",
   "status.taggingPaused.full":
     "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
-  "jev.form.sends": "Document text for Tags goes to Jev when it tags your Documents.",
+  "jev.form.sends": "Sends Document text to Jev for tagging.",
 
   "settings.title": "Settings",
   "settings.pages.models": "Models",
@@ -1864,8 +1864,7 @@ export const en = {
   "providers.test.rate-limit": "The provider is limiting requests for this key. Try again shortly.",
   "providers.test.network": "Couldn't reach the server. Check its URL and your connection.",
   "providers.test.provider": "The provider returned an error.",
-  "providers.test.local-mode":
-    "Nothing was sent: “Keep everything on this computer” is on, and this model isn't on this computer.",
+  "providers.test.local-mode": "Not sent: “Keep everything on this computer” is on.",
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
   "providers.test.too-long": "The model's context window is too small for even a short request.",
@@ -1912,10 +1911,9 @@ export const en = {
   "providers.readiness.consent-declined":
     "You chose not to send data to {service}, so Questions are off. Choose another provider or a local model, or allow it in Settings.",
   "providers.readiness.local-mode":
-    "“Keep everything on this computer” is on, so Questions aren't sent to {service}.",
+    "Not sent to {service}: “Keep everything on this computer” is on.",
   "providers.readiness.setUp": "Set up",
-  "localMode.refused":
-    "“Keep everything on this computer” is on, so this Question wasn't sent to {service}",
+  "localMode.refused": "Not sent to {service}: “Keep everything on this computer” is on",
   "localMode.useLocal": "Use a local model",
   "localMode.turnOff": "Allow cloud models",
   "localMode.turnedOff": "Turned off “Keep everything on this computer”",
@@ -2000,7 +1998,8 @@ export const en = {
   "copilot.notice.usage": "Answers count toward your Copilot plan's usage limits.",
   "copilot.notice.experimental":
     "This way of signing in is experimental: GitHub may refuse or block it.",
-  "copilot.notice.sends":
+  "copilot.notice.sends": "Sends your questions and document text to GitHub.",
+  "copilot.notice.sends.details":
     "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to GitHub under your account.",
   "copilot.notice.off":
     "It stays off until you sign in here, and you can sign out any time in Settings › Models.",
@@ -2198,10 +2197,9 @@ export const en = {
   "reference.addIdentifier": "Add its DOI or arXiv address, and Look up can fill in the rest.",
   "reference.lookUp": "Look up",
   "reference.lookingUp": "Looking up…",
-  "reference.lookUp.doi": "Fills the empty fields from Crossref, by the DOI. Only the DOI is sent.",
-  "reference.lookUp.arxiv":
-    "Fills the empty fields from arXiv, by the arXiv ID. Only the ID is sent.",
-  "reference.lookUp.localMode": "Look up is off while “Keep everything on this computer” is on",
+  "reference.lookUp.doi": "Fills empty fields from Crossref. Sends only the DOI.",
+  "reference.lookUp.arxiv": "Fills empty fields from arXiv. Sends only the arXiv ID.",
+  "reference.lookUp.localMode": "Look up is off: “Keep everything on this computer” is on",
   "reference.lookUp.filled": "Filled {count} fields from {service}",
   "reference.lookUp.filled.one": "Filled 1 field from {service}",
   "reference.lookUp.nothing": "{service} had nothing to add",
@@ -2273,7 +2271,7 @@ export const en = {
   "privacy.intro":
     "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
   "privacy.flows.intro":
-    "These send your content to a service outside this computer. Choosing a service, where IncarnaMind says what goes to it, allows these; nothing is sent on one you haven't allowed, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
+    "These send your content outside this computer. Choosing a service allows them; nothing goes to one you haven't allowed, or at all while “Keep everything on this computer” is on. Where a provider offers it, IncarnaMind asks it not to store your requests.",
   "privacy.flows.service": "to {service}",
   "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
@@ -2339,7 +2337,7 @@ export const en = {
   "privacy.usageData.tester":
     "On unless you turn it off in this test version, as agreed when you joined as a tester.",
   "privacy.usageData.localMode":
-    "Off while “Keep everything on this computer” is on, in Settings → Search.",
+    "Off while “Keep everything on this computer” is on · Settings › Search",
   "privacy.usageData.details": "Every event and field",
   "privacy.usageData.resetId": "Reset install ID",
   "privacy.usageData.resetDone": "Reset: events from now on carry a new ID.",
@@ -2493,8 +2491,7 @@ export const en = {
   "answer.error.network": "Couldn't reach {service}. Check your internet connection",
   "answer.error.provider": "{service} ran into a problem",
   "answer.error.consent-declined": "Nothing was sent: you chose not to send data to this service",
-  "answer.error.local-mode":
-    "Stopped: “Keep everything on this computer” was turned on, and {model} isn't on this computer",
+  "answer.error.local-mode": "Stopped: “Keep everything on this computer” is on",
   "answer.error.useLocal": "Use a local model",
   "answer.error.ollama-not-running": "Ollama isn't running on this computer",
   "answer.error.too-long":
@@ -2654,7 +2651,7 @@ export const en = {
   "research.plan.webOff": "Web search is off",
   "research.plan.webOff.action": "Turn on",
   "research.plan.webUnavailable": "{model} can't search the web",
-  "research.plan.localMode": "“Keep everything on this computer” is on: nothing goes to the web",
+  "research.plan.localMode": "No web search: “Keep everything on this computer” is on",
   "task.notify.needsYou": "{task} needs you",
   "task.notify.finished": "{task} finished",
   "task.notify.failed": "{task} couldn't finish",
@@ -2961,8 +2958,7 @@ export const en = {
   "suggestions.settings.paused.no-model": "Paused until an AI model is set up, in Models.",
   "suggestions.settings.paused.consent":
     "Paused until you allow sending your writing to {service}.",
-  "suggestions.settings.paused.local-mode":
-    "Paused while “Keep everything on this computer” is on: your AI model isn't on this computer.",
+  "suggestions.settings.paused.local-mode": "Paused: “Keep everything on this computer” is on.",
   "suggestions.settings.allow": "Allow…",
   "scripts.card.title": "{skill} wants to run {script}",
   "scripts.card.skill": "Skill",
@@ -3455,9 +3451,9 @@ export const en = {
   "error.provider.ollamaCloud":
     "{model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.",
   "error.provider.rerankLocalMode":
-    "“Keep everything on this computer” is on: search results aren't sent to a reranking service. Turn it off in Settings first.",
+    "Cloud models unavailable: “Keep everything on this computer” is on.",
   "error.provider.embeddingLocalMode":
-    "“Keep everything on this computer” is on: Document search keeps everything on this computer. Turn it off in Settings to use a cloud embedding provider.",
+    "Cloud models unavailable: “Keep everything on this computer” is on.",
   "error.provider.embeddingsOff": "Search by meaning is off: turn it on in Settings → Search.",
   "error.secrets.plainText":
     "No keyring is running, so API keys would be stored in plain text. Start GNOME Keyring or KWallet, or accept plain-text storage in Settings.",
@@ -3469,8 +3465,7 @@ export const en = {
   "error.connector.nameTooLong": "A Connector's name can't be longer than {max} characters.",
   "error.connector.nameTaken": "A Connector named “{name}” already exists.",
   "error.connector.off": "Turn the Connector on first.",
-  "error.connector.localMode":
-    "“Keep everything on this computer” is on, and this Connector isn't on this computer, so it isn't used.",
+  "error.connector.localMode": "Connector paused: “Keep everything on this computer” is on.",
   "error.connector.urlMissing": "Enter the server's URL.",
   "error.connector.urlTooLong": "That URL is too long.",
   "error.connector.urlInvalid": "“{url}” isn't a valid URL.",
@@ -3568,16 +3563,14 @@ export const en = {
     "Confirm the risk warning before always running a Skill's scripts.",
   "error.mindStyle.invalid": "That isn't a font and a text size IncarnaMind has.",
   "error.privacy.usageDataLocalMode":
-    "Usage data stays off while “Keep everything on this computer” is on.",
+    "Usage data stays off: “Keep everything on this computer” is on.",
   "error.check.claimTooLong": "The claim is too long to check: at most {max} characters.",
-  "error.check.localMode":
-    "“Keep everything on this computer” is on, and the model isn't on this computer.",
+  "error.check.localMode": "Not checked: “Keep everything on this computer” is on.",
   "error.check.declined":
     "You declined sending the claim to the model's service, so nothing was sent.",
   "error.tagging.noModel": "Choose a classification model.",
   "error.tagging.place": "Choose where to tag with AI: a Folder, or Not in a Folder.",
-  "error.tagging.cloudPaused":
-    "Cloud classification is paused while “Keep everything on this computer” is on.",
+  "error.tagging.cloudPaused": "Cloud tagging paused: “Keep everything on this computer” is on.",
   "error.tagging.jevNotSetUp": "Jev isn't set up.",
   "error.tagging.jevKeyUnreadable": "The Jev key can't be read on this device.",
   "error.tagging.startOllama": "Start Ollama to use automatic local classification.",
@@ -3697,7 +3690,7 @@ export const en = {
   "connectors.registry.searching": "Searching the MCP Registry…",
   "connectors.registry.none": "Nothing in the MCP Registry matches “{query}”.",
   "connectors.registry.failed.local-mode":
-    "“Keep everything on this computer” is on, so the MCP Registry isn't searched.",
+    "MCP Registry not searched: “Keep everything on this computer” is on.",
   "connectors.registry.failed.declined":
     "You chose not to send your search to the MCP Registry. You can change that in Privacy.",
   "connectors.registry.failed.unreachable":
@@ -3883,27 +3876,21 @@ export const en = {
   "approvals.card.alwaysAllowHint":
     "Run {tool} from now on without asking. You can reset it in Settings, under Approvals.",
   "approvals.card.deny": "Deny",
-  "approvals.thirdParty.read.imported":
-    "This Answer read a Mind with imported text, so it asks you first.",
-  "approvals.thirdParty.read.webPage": "This Answer read a web page, so it asks you first.",
-  "approvals.thirdParty.read.checkedDocument":
-    "This Answer read the document being checked, so it asks you first.",
-  "approvals.thirdParty.task.imported":
-    "This Task read a Mind with imported text, so it asks you first.",
-  "approvals.thirdParty.task.webPage": "This Task read web pages, so it asks you first.",
-  "approvals.thirdParty.task.checkedDocument":
-    "This Task read the document being checked, so it asks you first.",
-  "approvals.thirdParty.mind.imported": "This Mind contains imported text, so it asks you first.",
-  "approvals.thirdParty.mind.webPage":
-    "This Mind contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.read.imported": "Asks first: this Answer read a Mind with imported text.",
+  "approvals.thirdParty.read.webPage": "Asks first: this Answer read a web page.",
+  "approvals.thirdParty.read.checkedDocument": "Asks first: this Answer read the checked document.",
+  "approvals.thirdParty.task.imported": "Asks first: this Task read a Mind with imported text.",
+  "approvals.thirdParty.task.webPage": "Asks first: this Task read web pages.",
+  "approvals.thirdParty.task.checkedDocument": "Asks first: this Task read the checked document.",
+  "approvals.thirdParty.mind.imported": "Asks first: this Mind has imported text.",
+  "approvals.thirdParty.mind.webPage": "Asks first: this Mind has text from a web page.",
   "approvals.thirdParty.mind.checkedDocument":
-    "This Mind contains text from the document being checked, so it asks you first.",
-  "approvals.thirdParty.conversation.imported":
-    "This conversation contains imported text, so it asks you first.",
+    "Asks first: this Mind has text from the checked document.",
+  "approvals.thirdParty.conversation.imported": "Asks first: this conversation has imported text.",
   "approvals.thirdParty.conversation.webPage":
-    "This conversation contains text from a web page, so it asks you first.",
+    "Asks first: this conversation has text from a web page.",
   "approvals.thirdParty.conversation.checkedDocument":
-    "This conversation contains text from the document being checked, so it asks you first.",
+    "Asks first: this conversation has text from the checked document.",
   "approvals.call.waiting": "Waiting for your approval: {connector}: {tool}",
   "approvals.call.denied": "Not allowed: {connector}: {tool}",
   "approvals.call.allowed": "Asked {connector} with your approval: {tool}",
@@ -3928,8 +3915,7 @@ export const en = {
   // Onboarding: the example Mind, the "Get started" checklist and the three steps.
   "editor.hint.empty": "Start writing, or {ask}",
   "editor.hint.empty.ask": "press {shortcut} to ask a Question…",
-  "editor.hint.first":
-    "A Mind is a page where you write, and ask your Documents with every quote checked. {ask}",
+  "editor.hint.first": "A Mind: write here and ask your Documents, every quote checked. {ask}",
   "editor.hint.first.ask": "Press {shortcut} to ask.",
   "tabs.new.about": "New Mind: a page to write in and ask your Documents ({shortcut})",
   "editor.hint.afterAnswer": "Keep writing, or {ask}",
@@ -3967,9 +3953,9 @@ export const en = {
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
-    "A Mind is a page where you write, and ask your Documents with every quote checked. This draft was checked against its two Documents, and one figure is wrong: click the red mark beside it to see what the results say.",
+    "A Mind: write here and ask your Documents, every quote checked. This draft was checked against its two Documents, and one figure is wrong: click the red mark beside it to see what the results say.",
   "examples.banner.body.tea":
-    "A Mind is a page where you write, and ask your Documents with every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
+    "A Mind: write here and ask your Documents, every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents",
   "examples.banner.remove": "Remove the examples",
   "examples.banner.more": "Try an example closer to your work:",
@@ -4016,15 +4002,11 @@ export const en = {
   "meetings.start.copied": "Copied",
   "meetings.start.noticeText":
     "I’m recording this meeting with IncarnaMind to take notes. The recording stays on my computer.",
-  "meetings.start.kept.mac": "Audio stays on this Mac and is deleted within a day.",
-  "meetings.start.kept.other": "Audio stays on this computer and is deleted within a day.",
   "meetings.start.dismiss": "Don’t record; keep this as a note (Esc)",
   "meetings.notice.title": "Before you record",
   "meetings.notice.both":
     "IncarnaMind records your microphone and the computer’s sound, which carries everyone else in the meeting.",
   "meetings.notice.microphone": "IncarnaMind records your microphone.",
-  "meetings.notice.kept.mac": "The audio stays on this Mac and is deleted within a day.",
-  "meetings.notice.kept.other": "The audio stays on this computer and is deleted within a day.",
   "meetings.notice.tell":
     "In many places it’s against the law to record people without telling them. Tell everyone you’re recording before you start.",
   "meetings.notice.cancel": "Cancel",
@@ -4100,8 +4082,9 @@ export const en = {
   "meetings.duration.minutes": "{count} min",
   "meetings.duration.hours": "{hours} h {minutes} min",
   "meetings.audio.recorded": "Recorded {time}",
-  "meetings.audio.keptUntil": "Audio kept on this computer until {time}",
-  "meetings.audio.keptWhile": "Audio kept on this computer until a day after the meeting",
+  "meetings.audio.kept": "Audio stays on this computer, deleted within a day.",
+  "meetings.audio.keptUntil": "Audio stays on this computer until {time}",
+  "meetings.audio.keptWhile": "Audio stays on this computer until a day after the meeting",
   "meetings.audio.delete": "Delete audio now",
   "meetings.audio.confirm":
     "Delete this meeting’s audio? It can’t be brought back. Your notes stay.",
@@ -4149,10 +4132,6 @@ export const en = {
   "meetings.settings.what": "What is recorded",
   "meetings.settings.whatBoth": "Your microphone and the other people (the computer’s sound).",
   "meetings.settings.whatMe": "Only your microphone.",
-  "meetings.settings.kept.mac":
-    "Audio stays on this Mac and is deleted a day after each meeting at the latest.",
-  "meetings.settings.kept.other":
-    "Audio stays on this computer and is deleted a day after each meeting at the latest.",
 
   "sources.title": "Find sources",
   "sources.intro":
@@ -4171,7 +4150,7 @@ export const en = {
   "sources.count.one": "1 result",
   "sources.count": "{count} results",
   "sources.none": "Nothing found. Try other words, or an earlier year.",
-  "sources.localMode": "Find sources is off while “Keep everything on this computer” is on",
+  "sources.localMode": "Find sources is off: “Keep everything on this computer” is on",
   "sources.problem.declined": "{provider} wasn't searched: you didn't allow it",
   "sources.problem.unreachable": "Couldn't reach {provider}",
   "sources.problem.rate-limited":
@@ -4209,8 +4188,7 @@ export const en = {
   "sources.added.download-failed": "Couldn't download the open copy, so its reference was added",
   "sources.failed.declined": "Downloading it isn't allowed",
   "sources.failed.not-found": "Search again to add it",
-  "sources.failed.local-mode":
-    "Nothing can be added while “Keep everything on this computer” is on",
+  "sources.failed.local-mode": "Not added: “Keep everything on this computer” is on",
   "sources.failed.rate-limited": "The service asked to slow down: try again later",
   "sources.failed.needs-key": "It needs your own key: add it above, then try again",
   "sources.failed.key-rejected": "Your key wasn't accepted: change it above, then try again",
@@ -4275,7 +4253,7 @@ export const en = {
   "web.settings.supported": "{model} searches the web through {provider}.",
   "web.settings.unsupported":
     "{provider} has no web search of its own, so Questions asked with {model} don't search the web. Claude, OpenAI and ChatGPT models do.",
-  "web.settings.localMode": "Off while “Keep everything on this computer” is on.",
+  "web.settings.localMode": "Unavailable: “Keep everything on this computer” is on.",
   "meetings.command.pause": "Pause recording",
   "meetings.command.resume": "Resume recording",
   "meetings.command.stop": "Stop recording",
@@ -4641,8 +4619,7 @@ export const en = {
   "mindChanges.unlinked.one": "· 1 source in the table couldn't be linked, so it's shown as text",
   "mindChanges.extraCells": "· {count} extra cells were kept as text",
   "mindChanges.extraCells.one": "· 1 extra cell was kept as text",
-  "mindCall.failed.localMode":
-    "Couldn't change “{mind}”: “Keep everything on this computer” is on, and the model isn't on this computer",
+  "mindCall.failed.localMode": "Couldn't change “{mind}”: “Keep everything on this computer” is on",
   "mindCall.failed.notReady": "Couldn't change “{mind}”: the model can't be used now",
   "mindCall.failed.model": "Couldn't change “{mind}”: the model failed",
   "mindChanges.waiting": "{count} changes are waiting in “{mind}”. Accept or reject them first?",
@@ -4711,7 +4688,7 @@ export const en = {
   "agents.problem.off":
     "Connecting agents is turned off in IncarnaMind. Turn it on in Settings → Agents.",
   "agents.problem.local-mode":
-    "Connected agents are paused while IncarnaMind keeps everything on this computer, because an agent sends what it reads to its own AI model. To go on, turn off “Keep everything on this computer” in IncarnaMind, in Settings → Search.",
+    "Agents are paused: “Keep everything on this computer” is on in IncarnaMind. Turn it off in Settings → Search to go on.",
   "agents.problem.consent":
     "This agent isn’t allowed to read your Documents any more. Allow it again in IncarnaMind, in Settings → Privacy.",
   "agents.problem.no-folders":
@@ -4740,8 +4717,7 @@ export const en = {
   "agents.settings.switch.off": "Off: no agent can reach your Documents.",
   "agents.settings.switch.on":
     "On: while IncarnaMind is open, each agent below can read the folders you gave it.",
-  "agents.settings.paused":
-    "Paused while “Keep everything on this computer” is on, because an agent sends what it reads to its own AI model.",
+  "agents.settings.paused": "Agents paused: “Keep everything on this computer” is on.",
   "agents.settings.paused.open": "Search settings",
   "agents.settings.connected": "Connected agents",
   "agents.settings.connect": "Connect an agent",

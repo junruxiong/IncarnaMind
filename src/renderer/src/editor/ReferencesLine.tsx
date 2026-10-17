@@ -208,9 +208,7 @@ export function ReferencesLine({ editor, mindId }: { editor: Editor; mindId: str
           onClick: () => void turnOffLocalMode(),
         }}
       >
-        {t(count === 1 ? "references.localMode.one" : "references.localMode", {
-          count: format(count),
-        })}
+        {t("references.localMode")}
       </ProblemLine>
     );
   }

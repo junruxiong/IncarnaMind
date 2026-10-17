@@ -130,7 +130,7 @@ test("a verified document's references are looked up, and the invented one is fl
 
   const line = window.getByTestId("references-line");
   await expect(line.getByTestId("references-sends")).toHaveText(
-    "Looks up the list's 4 references in Crossref, then OpenAlex or arXiv if needed, sending only each reference as written.",
+    "Sends 4 references, as written, to Crossref, OpenAlex or arXiv.",
   );
   await screenshot(window, "references-start-en");
   await pointAndClick(window, line.getByTestId("references-check"));
@@ -182,13 +182,13 @@ test("in Chinese and a narrow window, and in local mode, where it says why and o
   });
 
   const local = window.getByTestId("references-local-mode");
-  await expect(local).toContainText("无法查询这 4 条参考文献");
+  await expect(local).toContainText("无法查询参考文献：已开启“所有内容都留在这台电脑上”");
   await screenshot(window, "references-local-zh");
   await pointAndClick(window, local.getByTestId("references-local-mode-off"));
 
   const line = window.getByTestId("references-line");
   await expect(line.getByTestId("references-sends")).toHaveText(
-    "在 Crossref 中查询列表里的 4 条参考文献，必要时再在 OpenAlex 或 arXiv 中查询，只发送每条参考文献的原文。",
+    "会把 4 条参考文献的原文发送给 Crossref、OpenAlex 或 arXiv。",
   );
   await pointAndClick(window, line.getByTestId("references-check"));
   await expect(line.getByTestId("references-done")).toHaveText(

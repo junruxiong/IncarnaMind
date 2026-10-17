@@ -239,7 +239,7 @@ test("first run asks for no model; the first own Question waits while the setup 
     "Plus 或 Pro（中国大陆不可用）· 无需密钥",
   );
   await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(
-    "会把你的问题和文档内容发送给 OpenAI。· 详情",
+    "会把你的问题和文档内容发送给 OpenAI。 · 详情",
   );
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({

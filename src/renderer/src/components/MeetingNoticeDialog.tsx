@@ -1,4 +1,3 @@
-import { isMacOS } from "@tiptap/core";
 import { useGap, useT } from "../i18n";
 import { useMeetings } from "../meetings";
 import {
@@ -26,7 +25,7 @@ export function MeetingNoticeDialog() {
   const recording = t(
     waiting?.systemAudio === false ? "meetings.notice.microphone" : "meetings.notice.both",
   );
-  const kept = t(isMacOS() ? "meetings.notice.kept.mac" : "meetings.notice.kept.other");
+  const kept = t("meetings.audio.kept");
 
   return (
     <dialog
