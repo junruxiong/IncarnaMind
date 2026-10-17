@@ -200,6 +200,36 @@ function whenHeld(editor: Editor, request: string): Promise<boolean> {
   });
 }
 
+/**
+ * Once the editor's copy has all the core had written when it replied: on a busy machine the
+ * reply can arrive before the edit's last update, which would come in after the edit stopped
+ * taking them, as no part of its Undo step and not accepted with it. False if the editor closed.
+ */
+function whenWritten(edit: Applying, stateVector: Uint8Array): Promise<boolean> {
+  const wanted = Y.decodeStateVector(stateVector);
+  const has = () => {
+    const local = Y.decodeStateVector(Y.encodeStateVector(edit.doc));
+    return [...wanted].every(([client, clock]) => (local.get(client) ?? 0) >= clock);
+  };
+  return new Promise((resolve) => {
+    if (edit.editor.isDestroyed || has()) {
+      resolve(!edit.editor.isDestroyed);
+      return;
+    }
+    const done = (written: boolean) => {
+      edit.doc.off("afterTransaction", check);
+      edit.editor.off("destroy", closed);
+      resolve(written);
+    };
+    const check = () => {
+      if (has()) done(true);
+    };
+    const closed = () => done(false);
+    edit.doc.on("afterTransaction", check);
+    edit.editor.on("destroy", closed);
+  });
+}
+
 /** Where each of the request's changes will be once accepted, and what it takes out, read before accepting. */
 function changesOf(state: EditorState, request: string): AppliedChange[] {
   const binding = ySyncPluginKey.getState(state)?.binding;
@@ -417,7 +447,8 @@ export async function finishApplying(
     return null;
   }
   edit.request ??= result.request;
-  const there = await whenHeld(edit.editor, result.request);
+  const there =
+    (await whenWritten(edit, result.stateVector)) && (await whenHeld(edit.editor, result.request));
   edit.stopTaking();
   if (!there || edit.editor.isDestroyed) {
     drawApplying(edit.editor, result.request, false);
