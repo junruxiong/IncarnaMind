@@ -1,7 +1,7 @@
 /**
  * Verify (#97), the window's side. "Verify a document…" (the + menu, ⌘K)
  * takes a PDF, whose Mind opens with the PDF beside it and has its claims
- * found. The line under the Mind's title then checks them (editor/VerifyLine).
+ * found. The check badge's card then checks them (editor/VerifyLine).
  * One run goes at a time: asking again while one runs shows its Mind.
  */
 

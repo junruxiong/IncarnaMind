@@ -544,6 +544,44 @@ export async function closeSettings(window: Page): Promise<void> {
   await expect(settings).toBeHidden();
 }
 
+/** Settings → Meetings → Record meetings, by its switch; `whileOpen` runs before Settings closes. */
+export async function turnOnMeetings(window: Page, whileOpen?: () => Promise<void>): Promise<void> {
+  const settings = await openSettings(window, "meetings");
+  const recording = settings.getByTestId("meetings-enabled");
+  await recording.hover();
+  await recording.click();
+  await expect(recording).toBeChecked();
+  await whileOpen?.();
+  await closeSettings(window);
+}
+
+/** The + menu's "Record a meeting": a new Mind with the start block. */
+export async function recordMeeting(window: Page): Promise<Locator> {
+  const plus = window.getByTestId("plus-menu");
+  await plus.hover();
+  await plus.click();
+  await window.getByRole("menuitem", { name: "Record a meeting" }).click();
+  const start = window.getByTestId("meeting-start");
+  await expect(start).toBeVisible();
+  return start;
+}
+
+/** Starts recording from the start block; the first time, through the one-time notice. */
+export async function startRecording(window: Page, start: Locator, { notice = false } = {}) {
+  const record = start.getByTestId("meeting-start-record");
+  await record.hover();
+  await record.click();
+  if (notice) {
+    const dialog = window.getByTestId("meeting-notice");
+    await expect(dialog).toBeVisible();
+    await dialog.getByTestId("meeting-notice-start").click();
+    await expect(dialog).toBeHidden();
+  }
+  const bar = window.getByTestId("meeting-bar");
+  await expect(bar).toHaveAttribute("data-status", "recording");
+  return bar;
+}
+
 /** Opens Settings from the sidebar, on its Privacy page. */
 export async function openPrivacySettings(window: Page): Promise<Locator> {
   await openSettings(window, "privacy");
@@ -1299,6 +1337,41 @@ export async function pointAndClick(
   } finally {
     for (const key of modifiers.toReversed()) await window.keyboard.up(key);
   }
+}
+
+/**
+ * A Mind's check badge card (#909): open already, as a question opens it,
+ * or opened as a person opens it: from the badge, or from ⌘K while no badge shows.
+ */
+export async function checkCard(window: Page, scope: Page | Locator = window): Promise<Locator> {
+  const card = window.getByTestId("check-card");
+  if (!(await card.isVisible())) {
+    const badge = scope.getByTestId("check-badge-open").first();
+    if (await badge.isVisible()) {
+      // "Checking 2 of 2 · Stop" shrinks to the counts as a check ends: aim once it has.
+      await expect(scope.getByTestId("badge-stop")).toHaveCount(0);
+      await motionSettled(window);
+      // The counts are worked out a moment after a change, and the badge can narrow under the pointer: aim again.
+      await expect(async () => {
+        if (!(await card.isVisible())) await pointAndClick(window, badge);
+        await expect(card).toBeVisible({ timeout: 1000 });
+      }).toPass();
+    } else {
+      const chinese = (await window.evaluate(() => document.documentElement.lang)) === "zh-CN";
+      const command = chinese ? "句子和引用" : "Sentences and Citations";
+      await window.keyboard.press("ControlOrMeta+k");
+      await expect(window.getByTestId("palette-search")).toBeFocused();
+      await window.keyboard.type(command);
+      await pointAndClick(
+        window,
+        window.getByTestId("palette-item").filter({ hasText: command }).first(),
+      );
+    }
+  }
+  await expect(card).toBeVisible();
+  // It grows from the badge: a click while it moves could land on the page behind.
+  await motionSettled(window);
+  return card;
 }
 
 /**

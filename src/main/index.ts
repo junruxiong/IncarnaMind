@@ -4,6 +4,7 @@ import {
   app,
   BrowserWindow,
   dialog,
+  globalShortcut,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   powerMonitor,
@@ -28,6 +29,7 @@ import { serveFileActions } from "./files";
 import { handle } from "./ipc";
 import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
+import { isPanelWindow, serveMeetingPanel } from "./meetings/panel";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } from "./platform";
@@ -94,8 +96,15 @@ async function testTaskKinds(): Promise<TaskKind[]> {
 
 let core: Core | undefined;
 
-/** The app's windows: not the hidden one that records a Meeting's audio. */
-const appWindows = () => BrowserWindow.getAllWindows().filter((window) => !isCaptureWindow(window));
+/** The app's windows: not the hidden one that records a Meeting's audio, nor the floating panel. */
+const appWindows = () =>
+  BrowserWindow.getAllWindows().filter(
+    (window) => !isCaptureWindow(window) && !isPanelWindow(window),
+  );
+
+/** The windows that hear the core's events: the app's, and the floating panel during a call. */
+const listeningWindows = () =>
+  BrowserWindow.getAllWindows().filter((window) => !isCaptureWindow(window));
 
 function isFromOurRenderer(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   const url = event.senderFrame?.url ?? "";
@@ -123,7 +132,7 @@ function exposeCore(core: Core): void {
       );
       return;
     }
-    for (const window of appWindows()) {
+    for (const window of listeningWindows()) {
       if (!window.isDestroyed()) window.webContents.send(EVENT_CHANNEL, name, payload);
     }
     if (name === "agents.citationShown") {
@@ -272,6 +281,13 @@ app.whenReady().then(async () => {
     logger,
   });
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
+  serveMeetingPanel(core, {
+    rendererUrl,
+    appWindows,
+    trusted: isFromOurRenderer,
+    log: logger,
+    testHooks,
+  });
   installMenuInLanguage(core);
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
   if (!testHooks) startAutoUpdates(core);
@@ -297,5 +313,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
   core?.close();
 });
