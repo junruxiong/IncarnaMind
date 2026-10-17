@@ -209,7 +209,8 @@ async function expectInsideCardAndWindow(window: Page, card: Locator, target: Lo
   if (!box || !cardBox) throw new Error("The card and its control aren't laid out.");
   expect(cardBox.y).toBeGreaterThanOrEqual(0);
   expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(page.height);
-  expect(box.y).toBeGreaterThanOrEqual(cardBox.y);
+  // A scroll lands on whole pixels, so a control can sit half a pixel past the edge.
+  expect(box.y).toBeGreaterThanOrEqual(cardBox.y - 0.5);
   expect(box.y + box.height).toBeLessThanOrEqual(cardBox.y + cardBox.height + 0.5);
   expect(box.x).toBeGreaterThanOrEqual(cardBox.x);
   expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 0.5);
