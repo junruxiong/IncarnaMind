@@ -16,6 +16,7 @@ import { FileWriteDialog } from "./components/FileWriteDialog";
 import { HistoryView } from "./components/history/HistoryView";
 import { InfoPanel } from "./components/InfoPanel";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
+import { MindStyleHost } from "./components/MindStyle";
 import { Peek } from "./components/Peek";
 import { ProblemMark } from "./components/ProblemLine";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
@@ -292,6 +293,7 @@ function Workspace() {
         <WordImportDialog />
         <ChatGptWelcomeDialog />
         <CitationStylePickerHost />
+        <MindStyleHost />
         {/* Open after the dialog that triggered the request, so they show on top of it. */}
         <ConsentDialog />
         <MeetingNoticeDialog />
