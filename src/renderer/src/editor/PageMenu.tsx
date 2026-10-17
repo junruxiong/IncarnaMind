@@ -126,17 +126,20 @@ export function PageMenu({
         }
         foot={<MindCounts editor={editor} doc={doc} switchable={!readOnly} />}
       />
-      <MoveToPicker
-        anchor={moving}
-        name={name}
-        current={mind?.folderId ?? null}
-        onChoose={(folderId) => {
-          if (folderId !== mind?.folderId) {
-            void useAppStore.getState().moveToFolder({ mindIds: [mindId] }, folderId);
-          }
-        }}
-        onClose={() => setMoving(null)}
-      />
+      {/* Mounted only while open: closed, it would sit in the page beside the sidebar row's. */}
+      {moving && (
+        <MoveToPicker
+          anchor={moving}
+          name={name}
+          current={mind?.folderId ?? null}
+          onChoose={(folderId) => {
+            if (folderId !== mind?.folderId) {
+              void useAppStore.getState().moveToFolder({ mindIds: [mindId] }, folderId);
+            }
+          }}
+          onClose={() => setMoving(null)}
+        />
+      )}
     </span>
   );
 }

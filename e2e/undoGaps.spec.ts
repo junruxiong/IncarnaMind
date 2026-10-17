@@ -8,17 +8,16 @@ import {
   createDataFolder,
   dismissChatSetup,
   editFolderInLibrary,
-  enterContent,
   frontMindName,
   launchApp,
   linkedFolderRow,
   linkFolderFromSidebar,
   motionSettled,
-  nameMind,
   newMind,
   openLinkedFolderMenu,
   pointAndClick,
   removeDataFolder,
+  renameInTab,
   setLanguage,
   setWindowSize,
   showSourceLocations,
@@ -218,8 +217,7 @@ test("a Mind made, then written in, goes to Recently deleted with its text, and 
   const { window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
-  await nameMind(window, "Ferries");
-  await enterContent(window);
+  await renameInTab(window, "Ferries");
   const editor = window.getByTestId("mind-editor");
   await pointAndClick(window, editor);
   await window.keyboard.type("Ferries run at noon");
