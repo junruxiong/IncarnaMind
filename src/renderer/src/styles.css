@@ -195,6 +195,13 @@
   initial-value: 0px;
 }
 
+/* The space a Block keeps above it, which a paragraph's own space before adds to (src/shared/paragraphFormat.ts). Each Block's own. */
+@property --block-gap {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 @layer base {
   html,
   body,
@@ -2193,23 +2200,33 @@
     /* Blocks are 16px apart; headings get 16px more above, Questions 4px, Answers 8px. */
     > * {
       margin-block: 0;
+      margin-top: var(--block-gap);
     }
     > * + * {
-      margin-top: 16px;
+      --block-gap: 16px;
     }
     > * + :is(h1, h2, h3, h4, h5, h6) {
-      margin-top: 32px;
+      --block-gap: 32px;
     }
     > * + :where(.node-question) {
-      margin-top: 24px;
+      --block-gap: 24px;
     }
     > * + :where(.node-answer),
     > :where(.node-answer) + * {
-      margin-top: 24px;
+      --block-gap: 24px;
     }
     /* A Question is one line right above its Answer. */
     > :where(.node-question) + :where(.node-answer) {
-      margin-top: 6px;
+      --block-gap: 6px;
+    }
+    /* A paragraph's own space after is all the space below it. */
+    > [data-space-after] + * {
+      --block-gap: 0px;
+    }
+
+    :where(sup, sub):not([data-type]) {
+      font-size: 0.66em;
+      line-height: 0;
     }
 
     /*
