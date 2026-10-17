@@ -55,6 +55,7 @@ import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
 import { selectionCommands } from "./selection";
 import { settingsPageCommands } from "./settings";
+import { styleCommands } from "./style";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { taggingCommands } from "./tagging";
@@ -137,6 +138,7 @@ const appCommands: readonly Command[] = [
   ...exportCommands,
   ...taskCommands,
   ...wordLookCommands,
+  ...styleCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
