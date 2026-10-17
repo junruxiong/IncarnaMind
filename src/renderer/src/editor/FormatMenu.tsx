@@ -97,14 +97,12 @@ function Glyph({ d, children }: { d?: string; children?: ReactNode }) {
 const isComposing = (event: KeyboardEvent) =>
   event.nativeEvent.isComposing || event.key === "Process";
 
-/** The items of a menu the arrows go through, in order. */
 const itemsOf = (menu: HTMLElement | null) =>
   Array.from(
     menu?.querySelectorAll<HTMLElement>(':scope [role^="menuitem"]:not([aria-disabled="true"])') ??
       [],
   );
 
-/** Up and down (and left and right in a row) through a menu's items; Esc and ← close a submenu. */
 function useMenuKeys(onClose: (refocus: boolean) => void, submenu: boolean) {
   const menu = useRef<HTMLDivElement>(null);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -449,7 +447,6 @@ export function FormatMenu({
   );
 }
 
-/** A command's keys as this system writes them; undefined for one with none. */
 function keysOf(id: CommandId): string | undefined {
   const keys = commands.get(id)?.shortcut?.keys;
   return keys ? keysHere(keys) : undefined;

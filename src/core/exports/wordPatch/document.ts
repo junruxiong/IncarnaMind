@@ -120,7 +120,6 @@ interface Reference {
 const formatOf = (node: NodeJSON): ParagraphFormat =>
   readParagraphFormat(node.attrs?.[PARAGRAPH_FORMAT_ATTRIBUTE]);
 
-/** Writes what the format changed from `before`, the format the paragraph's own properties said. */
 function writeFormat(properties: Properties, now: ParagraphFormat, before: ParagraphFormat): void {
   const changes = formatChanges(now, before);
   for (const [name, attributes] of [

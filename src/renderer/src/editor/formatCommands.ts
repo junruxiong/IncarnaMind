@@ -26,7 +26,6 @@ import { asOwnUndoStep } from "./selectionCommands";
 export type Align = "left" | "center" | "right" | "justify";
 export const ALIGNS: readonly Align[] = ["left", "center", "right", "justify"];
 
-/** Single, 1.15, 1.5 and Double, as Google Docs and Word offer them. */
 export const LINE_SPACINGS = [1, 1.15, 1.5, 2] as const;
 
 /** Word's: an indent goes to the next half inch, the default tab stop. */
