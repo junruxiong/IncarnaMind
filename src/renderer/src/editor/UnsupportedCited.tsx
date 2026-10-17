@@ -31,10 +31,10 @@ export function UnsupportedCited({
     <>
       {why?.part ? (
         <p data-testid="claim-part" className="claim-card-says">
-          {t(
-            cited.length === 1 ? "claim.unsupported.part.one" : "claim.unsupported.part.other",
-            { number: numbers, part: why.part },
-          )}
+          {t(cited.length === 1 ? "claim.unsupported.part.one" : "claim.unsupported.part.other", {
+            number: numbers,
+            part: why.part,
+          })}
         </p>
       ) : why?.reason ? (
         <p data-testid="claim-why" className="claim-card-says">
@@ -79,7 +79,11 @@ export function UnsupportedCited({
                       onClick: () => {
                         openCited(
                           { ...attributes, documentId },
-                          { check: attributes.check, withQuote: quoteSaysSo(attributes.check), number },
+                          {
+                            check: attributes.check,
+                            withQuote: quoteSaysSo(attributes.check),
+                            number,
+                          },
                         );
                         onOpen();
                       },
