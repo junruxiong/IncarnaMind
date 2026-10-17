@@ -4,8 +4,10 @@
  * card's "Check all" and "Check again" check only what changed. When the
  * model is to name the claims, it does that first, with Stop, and the card
  * then asks with their number and, billed per token, the estimate (#973); a
- * run that only checks again asks so when it is large. While it runs, the
- * badge counts the claims checked, with Stop.
+ * run that only checks again asks so when it is large, and, for the
+ * Documents added since (#993), whatever their number. Plans and models on
+ * this computer run without asking. While it runs, the badge counts the
+ * claims checked, with Stop.
  */
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
@@ -38,6 +40,8 @@ interface Asking {
   inFolder: boolean;
   /** Null for a plan or a model on this computer, or when `estimateRun` failed. */
   estimate: EstimateLine | null;
+  /** `estimateRun` failed: the ask says the cost couldn't be estimated. */
+  unestimated: boolean;
 }
 
 /** A run that only checks again asks first, with the estimate, when it checks this many or more. */
@@ -119,7 +123,7 @@ export async function startMindCheck(
   mode: CheckMindMode,
   { allDocuments = false }: { allDocuments?: boolean } = {},
 ): Promise<void> {
-  const { openMind, minds } = useAppStore.getState();
+  const { openMind } = useAppStore.getState();
   await openMind(mindId);
   if (useChecks.getState().running[mindId]) return;
   const plan = await core.planMindCheck(mindId, mode, allDocuments);
@@ -128,26 +132,32 @@ export async function startMindCheck(
     setCheckProblem(mindId, plan.kind === "nothing" ? { kind: "no-claims" } : plan);
     return;
   }
-  if (!plan.findsClaims && plan.sentences < ASK_FROM)
+  if (mode !== "added" && !plan.findsClaims && plan.sentences < ASK_FROM)
     return checkMind(mindId, mode, { allDocuments });
   dismissMindCheck(mindId);
   dismissCheckProblem(mindId);
   const count = plan.findsClaims ? await findClaims(mindId, mode, allDocuments) : plan.sentences;
   if (count === null) return;
-  const estimate = await core
+  const estimated = await core
     .estimateRun({ items: count, each: "check", ...(plan.model && { model: plan.model }) })
-    .then((result) => estimateLine(result, translateNow, languageNow()))
     .catch((error: unknown) => {
       console.warn(`Couldn't estimate checking Mind ${mindId}; it asks without one.`, error);
       return null;
     });
-  if (estimate === null && !plan.findsClaims) return checkMind(mindId, mode, { allDocuments });
-  const inFolder =
-    !allDocuments && (minds.find((each) => each.id === mindId)?.folderId ?? null) !== null;
+  if (estimated && estimated.billing !== "per-token" && !plan.findsClaims)
+    return checkMind(mindId, mode, { allDocuments });
+  const estimate = estimated ? estimateLine(estimated, translateNow, languageNow()) : null;
   useMindCheck.setState((state) => ({
     asking: {
       ...state.asking,
-      [mindId]: { mode, allDocuments, count, inFolder, estimate },
+      [mindId]: {
+        mode,
+        allDocuments,
+        count,
+        inFolder: plan.inFolder,
+        estimate,
+        unestimated: estimated === null,
+      },
     },
   }));
 }

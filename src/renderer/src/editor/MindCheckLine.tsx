@@ -61,13 +61,17 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
   const where = asking.inFolder ? "folder" : "all";
   const count = new Intl.NumberFormat(language).format(asking.count);
   const one = asking.count === 1;
+  const unestimated = t("mindCheck.ask.unestimated");
   return (
     <AskBlock
       testId="mind-check-ask"
       question={t(one ? `mindCheck.ask.claims.${where}.one` : `mindCheck.ask.claims.${where}`, {
         count,
       })}
-      estimate={asking.estimate}
+      estimate={
+        asking.estimate ??
+        (asking.unestimated ? { parts: [unestimated], title: unestimated } : null)
+      }
       check={{
         label: t("mindCheck.check"),
         testId: "mind-check-check",

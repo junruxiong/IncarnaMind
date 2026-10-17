@@ -544,6 +544,44 @@ export async function closeSettings(window: Page): Promise<void> {
   await expect(settings).toBeHidden();
 }
 
+/** Settings → Meetings → Record meetings, by its switch; `whileOpen` runs before Settings closes. */
+export async function turnOnMeetings(window: Page, whileOpen?: () => Promise<void>): Promise<void> {
+  const settings = await openSettings(window, "meetings");
+  const recording = settings.getByTestId("meetings-enabled");
+  await recording.hover();
+  await recording.click();
+  await expect(recording).toBeChecked();
+  await whileOpen?.();
+  await closeSettings(window);
+}
+
+/** The + menu's "Record a meeting": a new Mind with the start block. */
+export async function recordMeeting(window: Page): Promise<Locator> {
+  const plus = window.getByTestId("plus-menu");
+  await plus.hover();
+  await plus.click();
+  await window.getByRole("menuitem", { name: "Record a meeting" }).click();
+  const start = window.getByTestId("meeting-start");
+  await expect(start).toBeVisible();
+  return start;
+}
+
+/** Starts recording from the start block; the first time, through the one-time notice. */
+export async function startRecording(window: Page, start: Locator, { notice = false } = {}) {
+  const record = start.getByTestId("meeting-start-record");
+  await record.hover();
+  await record.click();
+  if (notice) {
+    const dialog = window.getByTestId("meeting-notice");
+    await expect(dialog).toBeVisible();
+    await dialog.getByTestId("meeting-notice-start").click();
+    await expect(dialog).toBeHidden();
+  }
+  const bar = window.getByTestId("meeting-bar");
+  await expect(bar).toHaveAttribute("data-status", "recording");
+  return bar;
+}
+
 /** Opens Settings from the sidebar, on its Privacy page. */
 export async function openPrivacySettings(window: Page): Promise<Locator> {
   await openSettings(window, "privacy");

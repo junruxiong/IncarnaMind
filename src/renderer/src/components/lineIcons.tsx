@@ -532,3 +532,32 @@ export function FloatLineIcon(props: IconProps) {
     </LineIcon>
   );
 }
+
+/** Kept out of the User's screen share: an eye struck through. */
+export function EyeOffLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M3.5 3.5l17 17" />
+      <path d="M10.6 6.1A9.9 9.9 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3.2 3.7M6.6 6.6C4.3 8.1 3 12 3 12s4 6 9 6a9 9 0 0 0 4.2-1" />
+    </LineIcon>
+  );
+}
+
+/** Collapse a floating panel: a dash, as a window's minimise button. */
+export function MinusLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M6 12h12" />
+    </LineIcon>
+  );
+}
+
+/** Something to fix: a triangle with an exclamation mark. */
+export function WarningLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M12 4.5 20.5 19h-17z" />
+      <path d="M12 10v4M12 16.75v.01" />
+    </LineIcon>
+  );
+}
