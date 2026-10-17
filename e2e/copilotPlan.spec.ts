@@ -84,7 +84,7 @@ test("first run: Use my Copilot plan says what it costs and sends before anythin
 
   const row = card.getByTestId("way-copilot");
   await expect(row).toContainText("Use my Copilot plan");
-  await expect(row).toContainText("Pro, Pro+, Business or Enterprise · Sign in with GitHub");
+  await expect(row).toContainText("Pro, Pro+ or Business");
   await expect(row).toContainText("Experimental");
   await expect(row).toHaveAttribute("aria-expanded", "false");
   await pointAndClick(window, row);

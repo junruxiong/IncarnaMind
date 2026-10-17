@@ -10,6 +10,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { relativePositionToAbsolutePosition, ySyncPluginKey } from "@tiptap/y-tiptap";
 import type { Language } from "../../../core/language";
 import type { MessageKey, MessageParams } from "../../../shared/i18n";
+import { type ChangeCounts, changeFact } from "../changeFacts";
 import { SPARK_PATH } from "../components/iconPaths";
 import { fromDocument, proposalsIn } from "./proposalReview";
 import { blockAt } from "./writingPlace";
@@ -50,12 +51,26 @@ export type AppliedLine = (
       /** Null at the Mind's end. */
       blockId: string | null;
       places: number;
+      /** What the assistant was asked for, as its Answer counts it (#880): "Wrote 3 paragraphs". */
+      facts?: ChangeCounts;
       reason: string | null;
       changes: readonly AppliedChange[];
       kept: KeptLine | null;
     }
-  | { kind: "review"; blockId: string | null; changes: readonly AppliedChange[] }
-  | { kind: "held"; blockId: string | null; request: string }
+  | {
+      kind: "review";
+      blockId: string | null;
+      changes: readonly AppliedChange[];
+      byAssistant?: true;
+      undo?: { available(): boolean; mind: string };
+    }
+  | {
+      kind: "held";
+      blockId: string | null;
+      request: string;
+      /** Asked of the assistant: all of its requests in the Mind, held as they would rewrite most of the User's text. */
+      asked?: { mindId: string; requests: readonly string[]; facts: ChangeCounts };
+    }
 ) & {
   /** The language it was last drawn in, once that changed. */
   language?: Language;
@@ -161,7 +176,8 @@ export function placeOfChange(
     relativePositionToAbsolutePosition(binding.doc, binding.type, relative, binding.mapping);
   const from = at(change.from);
   const inside = at(change.to);
-  const to = inside === null || change.block !== "added" ? inside : inside + 1;
+  const end = inside === null ? null : state.doc.resolve(inside);
+  const to = change.block !== "added" ? inside : end && end.depth > 0 ? end.after(1) : null;
   return from === null || to === null || to < from ? null : { from, to };
 }
 
@@ -172,7 +188,11 @@ function mainLine(line: AppliedLine, options: Options): HTMLElement {
   if (line.kind === "applied") {
     const what = text(
       "min-w-0",
-      line.places === 1 ? t("edit.applied.one") : t("edit.applied", { count: line.places }),
+      line.facts
+        ? changeFact(t, line.facts, null)
+        : line.places === 1
+          ? t("edit.applied.one")
+          : t("edit.applied", { count: line.places }),
       "applied-count",
     );
     const parts: (Node | string)[] = [
@@ -189,22 +209,33 @@ function mainLine(line: AppliedLine, options: Options): HTMLElement {
   }
   if (line.kind === "review") {
     const count = line.changes.length;
+    const undo = button("undo-all", t("edit.review.undoAll"));
+    if (line.undo && !line.undo.available()) {
+      undo.setAttribute("aria-disabled", "true");
+      undo.title = t("mindChanges.undo.changedSince", { mind: line.undo.mind });
+    }
     return lineElement("applied-line", "applied-line", [
       sparkle(),
       text(
         "min-w-0",
-        count === 1 ? t("edit.review.one") : t("edit.review", { count }),
+        line.byAssistant
+          ? count === 1
+            ? t("edit.review.assistant.one")
+            : t("edit.review.assistant", { count })
+          : count === 1
+            ? t("edit.review.one")
+            : t("edit.review", { count }),
         "applied-count",
       ),
       dot(),
-      button("undo-all", t("edit.review.undoAll")),
+      undo,
       dot(),
       button("done", t("edit.review.done")),
     ]);
   }
   return lineElement("applied-line", "applied-line", [
     sparkle(),
-    text("min-w-0", t("edit.held"), "applied-count"),
+    text("min-w-0", t(line.asked ? "edit.held.own" : "edit.held"), "applied-count"),
     dot(),
     button("apply", t("edit.held.apply")),
     dot(),
@@ -274,11 +305,12 @@ function decorations(state: EditorState, line: AppliedLine, options: Options): D
   if (at !== null) {
     const count =
       line.kind === "applied" ? line.places : line.kind === "review" ? line.changes.length : 0;
+    const canUndo = line.kind !== "review" || !line.undo || line.undo.available();
     marks.push(
       Decoration.widget(at, () => mainLine(line, options), {
         ...shared,
         // Drawn again in the interface language once it changes.
-        key: `applied:${line.kind}:${count}:${line.blockId}:${options.translate("edit.applied.undo")}`,
+        key: `applied:${line.kind}:${count}:${line.blockId}:${canUndo}:${options.translate("edit.applied.undo")}`,
       }),
     );
   }
@@ -321,7 +353,9 @@ export const AppliedEditLine = Extension.create<Options>({
               shown !== null &&
               (shown.kind === "held"
                 ? (shown !== value.line || tr.docChanged) &&
-                  waitingOf(state.doc, shown.request) === 0
+                  (shown.asked?.requests ?? [shown.request]).every(
+                    (request) => waitingOf(state.doc, request) === 0,
+                  )
                 : shown.kind === "review" && shown.changes.length === 0);
             const line = gone ? null : shown;
             if (!line) return { line: null, marks: DecorationSet.empty };
