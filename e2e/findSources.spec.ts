@@ -256,7 +256,7 @@ test("in Chinese at the narrowest window, Find sources from + fits and speaks Ch
     await panel.getByTestId("find-sources-query").fill("base editing");
     await panel.getByTestId("find-sources-query").press("Enter");
     await expect(panel.getByTestId("find-sources-local-mode")).toHaveText(
-      "开启“所有内容都留在这台电脑上”时无法查找资料 · 隐私设置",
+      "无法查找资料：已开启“所有内容都留在这台电脑上” · 隐私设置",
     );
     expect(services.requests).toHaveLength(sent);
     await expect(window.getByTestId("consent-dialog")).toBeHidden();

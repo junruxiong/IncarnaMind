@@ -93,13 +93,18 @@ test("first run: Use my Copilot plan says what it costs and sends before anythin
   await expect(notice.getByRole("listitem")).toHaveText([
     "Answers count toward your Copilot plan's usage limits.",
     "This way of signing in is experimental: GitHub may refuse or block it.",
-    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to GitHub under your account.",
+    "Sends your questions and document text to GitHub. · Details",
     "It stays off until you sign in here, and you can sign out any time in Settings › Models.",
   ]);
   // The experimental way starts on the safe choice.
   await expect(notice.getByTestId("copilot-cancel")).toBeFocused();
   expect(github.requests).toEqual([]);
   await screenshot(card, "setup-copilot-notice");
+
+  await notice.getByTestId("copilot-notice-sends-details").click();
+  await expect(notice.getByTestId("copilot-notice-sends-list")).toHaveText(
+    "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to GitHub under your account.",
+  );
 
   await pointAndClick(window, notice.getByTestId("copilot-sign-in"));
   const waiting = card.getByTestId("copilot-waiting");

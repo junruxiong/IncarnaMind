@@ -334,7 +334,7 @@ test("in Chinese: the row is first under Other ways too and a model on this comp
     const sends = notice.getByTestId("claude-plan-sends");
     await expect(usage).toHaveText("回答会计入你 Claude 订阅的用量限额。");
     await expect(usage).toHaveCSS("font-weight", "600");
-    await expect(sends.locator("p")).toHaveText("会把你的问题和文档内容发送给 Anthropic。· 详情");
+    await expect(sends.locator("p")).toHaveText("会把你的问题和文档内容发送给 Anthropic。 · 详情");
     await expect(row.getByTestId("claude-plan-sign-in")).toHaveText("用 Claude 账号登录");
     await expectInside(card, [usage, sends]);
     await row.getByTestId("claude-plan-sign-in").click();
