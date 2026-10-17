@@ -468,6 +468,7 @@ export const en = {
   "wordCount.target.invalid": "Enter a number, like 8,000 or 3万.",
   "wordCount.progress": "{percent}% of the target",
   "editor.placeholder": "Type / for headings, tables, code and math",
+  "editor.title": "Title",
   "editor.slash.label": "Insert",
   "editor.slash.empty": "No matches",
   "editor.slash.text": "Text",

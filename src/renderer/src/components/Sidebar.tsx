@@ -184,7 +184,7 @@ function PlusMenu() {
           type="button"
           role="menuitem"
           data-testid="plus-new-mind"
-          onClick={choose(() => void createMind())}
+          onClick={choose(() => void createMind({ titled: true }))}
           className={`${menuItemClass} pl-2`}
         >
           <MindLineIcon className="size-4 shrink-0 text-ink-meta" />

@@ -2690,8 +2690,9 @@
       opacity: 0.45;
     }
 
-    /* The hint on the empty line being written in. An empty Mind's has its own (.end-hint). */
-    &.ProseMirror-focused > p.is-empty:not(.is-editor-empty)::before {
+    /* The hint on the empty line being written in, and "Title" on a new Mind's first line (#1088). An empty Mind's line has its own (.end-hint). */
+    &.ProseMirror-focused > p.is-empty:not(.is-editor-empty)::before,
+    &.ProseMirror-focused > h1.is-empty:first-child::before {
       content: attr(data-placeholder);
       float: left;
       height: 0;

@@ -125,7 +125,7 @@ export function NoTabOpen() {
       <p className="max-w-sm text-ui text-ink-secondary">{t("mind.noneOpen.body")}</p>
       <button
         type="button"
-        onClick={() => void createMind()}
+        onClick={() => void createMind({ titled: true })}
         className={`mt-3 ${buttonStyle("primary")}`}
       >
         <PlusLineIcon className="size-4" />

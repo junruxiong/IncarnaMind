@@ -77,7 +77,7 @@ export const tabCommands: readonly Command[] = [
     palette: false,
     group: "main",
     reversible: true,
-    run: () => store().createMind(),
+    run: () => store().createMind({ titled: true }),
   },
   {
     ...fromMenu("tab.close"),

@@ -46,7 +46,13 @@ import { CopyCitations } from "../editor/copyCitations";
 import { DocumentChipView } from "../editor/DocumentChipView";
 import { useDefaultStyleNotice } from "../editor/defaultStyleNotice";
 import { DocumentChipKeys } from "../editor/documentChipKeys";
-import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
+import {
+  EndHint,
+  type HintPlace,
+  type HintText,
+  isEmptyMind,
+  isTitleLine,
+} from "../editor/EndHint";
 import { selectionForEdit } from "../editor/editSelection";
 import { FindBar } from "../editor/FindBar";
 import { FootnoteArea } from "../editor/FootnoteArea";
@@ -83,6 +89,7 @@ import { compareSlashItem, noteSlashItems, skillSlashItems } from "../editor/sla
 import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
+import { TitleLine } from "../editor/titleLine";
 import { SmartTypography } from "../editor/typography";
 import { useVerification } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
@@ -267,8 +274,8 @@ function MindEditorView({
    * Answers, its menus) has had it. Otherwise an Answer goes at the end of the Mind.
    */
   const cursorInMind = useRef(false);
-  const placeholder = useRef("");
-  placeholder.current = t("editor.placeholder");
+  const placeholder = useRef({ body: "", title: "" });
+  placeholder.current = { body: t("editor.placeholder"), title: t("editor.title") };
   // A Meeting's empty Mind waits for the agenda (as in Granola), with no Question to ask yet.
   const isMeeting = useMeetingOf(mindId) !== undefined;
   // The example Mind invites a Question of one's own at its end.
@@ -344,13 +351,15 @@ function MindEditorView({
         BlockOrigins.configure({ doc }),
         Placeholder.configure({
           // An empty Mind's line and the line after an Answer have their hint drawn over them (EndHint).
-          placeholder: ({ editor: current, pos }) => {
+          placeholder: ({ editor: current, node, pos }) => {
+            if (pos === 0 && isTitleLine(node)) return placeholder.current.title;
             if (isEmptyMind(current.state.doc)) return "";
             const before = current.state.doc.resolve(pos).nodeBefore;
-            return before?.type.name === ANSWER_BLOCK ? "" : placeholder.current;
+            return before?.type.name === ANSWER_BLOCK ? "" : placeholder.current.body;
           },
         }),
         Focus.configure({ className: "has-focus", mode: "shallowest" }),
+        TitleLine,
         SmartTypography,
         SlashMenu.configure({
           items: (place) => {

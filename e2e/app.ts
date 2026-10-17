@@ -376,8 +376,13 @@ export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.
  * "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind
  * in no Folder. Returns once its first line has the cursor: keys a test
  * presses a millisecond apart can outrun the editor while frames are busy.
+ * That line starts as an empty title (#1088); unless `title`, Backspace makes
+ * it body text, as for someone who writes without one.
  */
-export async function newMind(window: Page): Promise<void> {
+export async function newMind(
+  window: Page,
+  { title = false }: { title?: boolean } = {},
+): Promise<void> {
   const before = await (await coreOf(window)).evaluate(async (core) =>
     (await core.listMinds()).map((mind) => mind.id),
   );
@@ -396,6 +401,11 @@ export async function newMind(window: Page): Promise<void> {
       return id !== null && !before.includes(id);
     })
     .toBe(true);
+  if (title) return;
+  const first = frontMind(window).locator(".mind-editor > :first-child");
+  await expect(first).toHaveJSProperty("tagName", "H1");
+  await window.keyboard.press("Backspace");
+  await expect(first).toHaveJSProperty("tagName", "P");
 }
 
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */

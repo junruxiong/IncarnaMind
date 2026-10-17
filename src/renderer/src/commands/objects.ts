@@ -330,7 +330,7 @@ export const folderCommands: readonly Command[] = [
     group: "main",
     appliesTo: ["folder"],
     reversible: true,
-    run: (ctx) => store().createMind({ folderId: idsOf(ctx, "folder")[0] ?? null }),
+    run: (ctx) => store().createMind({ titled: true, folderId: idsOf(ctx, "folder")[0] ?? null }),
   },
   {
     id: "folder.ask",
