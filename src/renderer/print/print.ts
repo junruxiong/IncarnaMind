@@ -405,6 +405,7 @@ async function print(printed: PrintDocument): Promise<number> {
   const paper = PAPER[printed.paper];
   document.documentElement.lang = printed.language;
   document.title = printed.title;
+  if (printed.fontFamily) document.body.style.fontFamily = printed.fontFamily;
   const page = document.createElement("style");
   const room = paper.height - SAFETY_PX - 2 * paper.margin - (printed.footer ? FOOTER_PX : 0);
   page.textContent = `@page { size: ${paper.css}; margin: 0 }

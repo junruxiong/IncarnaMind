@@ -4597,8 +4597,9 @@ export const en = {
   "mindCall.failed.tooLong": "Couldn't change “{mind}”: that's too much text to change at once",
   "mindCall.failed.changed": "Couldn't change “{mind}”: its text changed while it was being read",
   "mindCall.failed.copy": "Didn't add to “{mind}”: “{text}” is there already, waiting",
+  "mindCall.failed.newVersion": "Didn't add a second version of “{text}” to “{mind}”",
   "mindCall.failed.contentNotOwn":
-    "Couldn't change “{mind}”: only the assistant's own waiting text can be written anew",
+    "Couldn't change “{mind}”: only text the assistant wrote can be written anew",
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
   "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
   "mindChanges.unlinked":
