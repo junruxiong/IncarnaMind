@@ -208,10 +208,11 @@ const LEAD_IN =
 const EXPLAINING =
   /^(?:(?:since|as|because)\s+)?you\s+(?:didn['’]t|did not)\s+(?:say|specify|mention)\s+which\b[^.!?]*?(?:,\s*|\bso\s+)(?:so\s+)?i\b|^(?:由于|因为)?你(?:没有|没)(?:说明|指定|说|提到)[^。！？]*?哪[^。！？]*?[，,]\s*(?:所以|因此|于是)?我/iu;
 const CLOSING_NOTE =
-  /^(?:(?:note|notes|please note|n\.b\.|let me know|feel free)\b|(?:i\s+)?hope (?:this|that|it) helps\b|注[：:]|备注|说明[：:]|希望(?:这|以上|对你))/iu;
-// "If you want to renew, write to the landlord…" and "如需开具发票，请扫描…" end real content; only a closing that asks the User to tell the model something is framing.
+  /^(?:(?:note|notes|please note|n\.b\.|feel free)\b|(?:i\s+)?hope (?:this|that|it) helps\b|注[：:]|备注|说明[：:]|希望(?:这|以上|对你))/iu;
+// Only the assistant offering more or asking the User, whatever it holds: a drafted letter ends
+// "If you don't pay by Friday, I'll start proceedings." or "如需开具发票，请扫描…" itself. When in doubt, keep.
 const OFFER =
-  /^(?:if you\b[^.!?]*?\b(?:tell me|let me know|ask me|i can|i['’]ll|i could)\b|(?:如果你|要是你|如需|如果需要|如有)[^。！？]*?(?:告诉我|跟我说|我可以|我会|我再|我来))/iu;
+  /^(?:(?:please\s+|just\s+)?(?:let me know|tell me)\b|would you like\b|if you['’]d like\b|if you want me to\b|(?:do you\s+)?want me to\b|需要的话|如果需要我|要不要我|请?告诉我|如有需要[，,]\s*我可以)/iu;
 /** A figure or a bracketed unit, "(GBP m)": framing that says something about the content stays. */
 const SAYS_SOMETHING =
   /\d|[(（][^)）]+[)）]|\b(?:figures?|currency|units?|thousands?|millions?|billions?|[A-Z]{3})\b|[%％万亿元]/u;
@@ -221,8 +222,9 @@ const CONTENT_BLOCKS = new Set(["table", "bulletList", "orderedList", "heading",
  * An Answer's content without its framing, for Add to note: the model's
  * lead-in before the content ("Here is a draft:", "以下是…：", or how it went
  * about the request, "你没有说明是哪一份合同，所以我…") and its closing
- * note after it ("Note: …", "注：…"), when they hold no Citation, figure or bracketed unit and the
- * Answer has more than the one paragraph. What the User selected is added as it
+ * note after it ("Note: …", "注：…"), when they hold no Citation, figure or bracketed unit, and
+ * its offer or question to the User after it ("Tell me if you meant the 2019 lease.") when it
+ * holds no Citation, and the Answer has more than the one paragraph. What the User selected is added as it
  * is: this is for a whole Answer.
  */
 export function withoutFraming(blocks: readonly NodeJSON[]): NodeJSON[] {
@@ -241,12 +243,12 @@ export function withoutFraming(blocks: readonly NodeJSON[]): NodeJSON[] {
     kept = kept.slice(1);
   }
   const last = kept.at(-1);
+  const closing = last ? textOf(last).trim() : "";
   if (
     last?.type === "paragraph" &&
     kept.length > 1 &&
     !holdsCitation(last) &&
-    !SAYS_SOMETHING.test(textOf(last)) &&
-    (CLOSING_NOTE.test(textOf(last).trim()) || OFFER.test(textOf(last).trim()))
+    (OFFER.test(closing) || (!SAYS_SOMETHING.test(closing) && CLOSING_NOTE.test(closing)))
   ) {
     kept = kept.slice(0, -1);
   }
