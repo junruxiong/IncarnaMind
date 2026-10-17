@@ -635,6 +635,42 @@ test("the original is also a Document: an Answer beside the Mind cites its claus
   await app.close();
 });
 
+test("asked “这份简历讲了什么？” and “What is this résumé about?” beside an imported résumé, an Answer cites the original (#1036)", async () => {
+  const path = join(files, "ZW-2026.docx");
+  await writeFile(
+    path,
+    wordFile({
+      body: [
+        paragraph("张伟", { style: "Title" }),
+        paragraph("工作经历", { style: "Heading1" }),
+        paragraph("2019 年至今在北京一家物流公司担任数据分析师，负责运输成本模型和周报。"),
+        paragraph("教育背景", { style: "Heading1" }),
+        paragraph("2015 年至 2019 年就读于武汉大学统计学专业，获学士学位。"),
+      ].join(""),
+    }),
+  );
+  const { app, window } = await launchApp(dataDir, { home, fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 860);
+  await interceptOpenDialog(app, path);
+  const dialog = await importWordFromMenu(window);
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+  await expectReadyDocuments(window, 1);
+
+  for (const question of ["这份简历讲了什么？", "What is this résumé about?"]) {
+    const answer = await askInAssistant(window, question);
+    await expect(answer.getByTestId("citation-chip")).toHaveAttribute(
+      "aria-label",
+      /ZW-2026.*Quote found/,
+    );
+    await expect(answer.getByTestId("answer-steps")).not.toContainText("no sources");
+  }
+  await screenshot(window, "working-copy-cited");
+  await app.close();
+});
+
 test("an original the Library can't take is said at the top of the page, and Add to Library takes it once it can", async () => {
   test.skip(process.platform === "win32" || process.getuid?.() === 0, "needs file permissions");
   const path = join(files, "Supply agreement.docx");

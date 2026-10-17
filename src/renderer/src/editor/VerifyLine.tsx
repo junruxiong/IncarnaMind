@@ -18,7 +18,7 @@ import {
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
-import { type EstimateLine, estimateLine, joinMeta, runStopParts } from "../cost";
+import { type EstimateLine, estimateLine, runStopParts } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { enter } from "../motion";
 import { useAppStore } from "../store";
@@ -281,9 +281,7 @@ export function VerifyCard({
           {t(inFolder ? "verify.ask.folder" : "verify.ask.all")}
         </p>
         {estimate && (
-          <p data-testid="verify-estimate" title={estimate.title}>
-            {joinMeta(estimate.parts)}
-          </p>
+          <MetaLine data-testid="verify-estimate" parts={estimate.parts} title={estimate.title} />
         )}
         <div className="check-card-ask-actions">
           <button

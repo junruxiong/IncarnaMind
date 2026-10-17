@@ -11,6 +11,7 @@ import {
   documentIdOf,
   enterContent,
   launchApp,
+  leaveFirstOpen,
   leaveText,
   nameMind,
   newMind,
@@ -404,6 +405,7 @@ test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back wi
 
 test("Remove the examples: made again by ⌘Z, removed again by ⇧⌘Z", async () => {
   const { window } = await launchApp(dataDir, { examples: true });
+  await leaveFirstOpen(window);
   await expect(window.getByTestId("example-banner")).toBeVisible();
   const exampleMind = () => read(window, async (core) => (await core.getExamples()).mindId);
   await pointAndClick(window, window.getByTestId("example-remove"));

@@ -181,6 +181,7 @@ export interface AppState extends LayoutSlice {
   examples: Examples | null;
   otherExamples: Examples[];
   ownAnswerArrived: boolean;
+  askedOwnAtLaunch: boolean;
   usageNotice: "auto" | "kept" | "answered";
   /**
    * The privacy choices on this device: the first run asks about usage data
@@ -253,6 +254,8 @@ export interface AppState extends LayoutSlice {
   startMindFrom(bridge: LibraryBridge): Promise<Undoable | undefined>;
   /** Opens the first-run example Mind, making the examples again if they were removed. */
   openExamples(): Promise<void>;
+  /** Makes the first-run example again and opens it, with Undo. */
+  showExamples(): Promise<void>;
   /** Opens another example in a new tab, making it first if it isn't there; the Mind in view stays. */
   openExample(group: ExampleGroup): Promise<void>;
   removeExamples(): Promise<void>;
@@ -721,6 +724,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     examples: null,
     otherExamples: [],
     ownAnswerArrived: false,
+    askedOwnAtLaunch: false,
     usageNotice: "auto",
     privacy: null,
     questionToStart: null,
@@ -791,6 +795,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           documents,
           examples,
           otherExamples: otherExamples.filter(isMade),
+          askedOwnAtLaunch: settings.device.gettingStarted.askedOwn,
           status: { kind: "ready" },
         });
         await get().refreshLibrary();
@@ -1011,6 +1016,19 @@ export const useAppStore = create<AppState>()((set, get) => {
         if (examples.mindId) get().openMind(examples.mindId);
       }),
 
+    showExamples: () =>
+      attempt(async () => {
+        await get().openExamples();
+        push({
+          message: t("undo.examplesShown"),
+          name: t("undo.name.showExamples"),
+          undo: () => core.removeExamples(),
+          redo: async () => {
+            await core.createExamples();
+          },
+        });
+      }),
+
     openExample: (group) =>
       attempt(async () => {
         const made = await core.createExamples(group);
@@ -1025,8 +1043,11 @@ export const useAppStore = create<AppState>()((set, get) => {
         const groups = madeExamples(get()).map((each) =>
           each.group === "tea" ? undefined : each.group,
         );
+        // The first open can't go on without its example: removing them ends it, Undo resumes it.
+        const hidden = get().settings?.device.gettingStarted.hidden ?? false;
         const remove = async () => {
           for (const group of groups) await core.removeExamples(group);
+          get().updateGettingStarted({ hidden: true });
         };
         await remove();
         push({
@@ -1034,6 +1055,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           name: t("undo.name.removeExamples"),
           undo: async () => {
             for (const group of groups) await core.createExamples(group);
+            get().updateGettingStarted({ hidden });
           },
           redo: remove,
         });

@@ -194,7 +194,7 @@ test("the divider in the gap before the card is grabbed with the mouse and moved
   await app.close();
 });
 
-test("the + menu in the sidebar header offers New Mind, Import a Word file…, Compare Documents…, Verify a document…, New Folder, Add Documents…, Add a web page…, Find sources… and Link a folder…, by mouse and by keyboard", async () => {
+test("the + menu in the sidebar header offers New Mind, Import a Word file…, Compare Documents…, Verify a document…, New Folder, From starter folders…, Add Documents…, Add a web page…, Find sources… and Link a folder…, by mouse and by keyboard", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const plus = window.getByTestId("plus-menu");
@@ -208,7 +208,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, C
   await expect(plus).toHaveAccessibleName("New or add");
   await expect(plus).toHaveAttribute("aria-haspopup", "menu");
 
-  // Opened by the mouse, its nine actions are menu items, and the first has the focus.
+  // Opened by the mouse, its ten actions are menu items, and the first has the focus.
   await window.mouse.move(button.x - 40, button.y + 14);
   await window.mouse.move(button.x + 14, button.y + 14, { steps: 6 });
   await window.mouse.down();
@@ -221,6 +221,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, C
     /Compare Documents…/,
     /Verify a document…/,
     /New Folder/,
+    /From starter folders…/,
     /Add Documents…/,
     /Add a web page…/,
     /Find sources…/,
@@ -234,7 +235,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, C
   await window.keyboard.press("ArrowDown");
   await expect(items.nth(1)).toBeFocused();
   await window.keyboard.press("End");
-  await expect(items.nth(8)).toBeFocused();
+  await expect(items.nth(9)).toBeFocused();
   await window.keyboard.press("ArrowDown");
   await expect(items.first()).toBeFocused();
   await window.keyboard.press("Escape");
@@ -259,7 +260,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, C
   await plus.focus();
   await window.keyboard.press("Enter");
   await expect(items.first()).toBeFocused();
-  for (let step = 0; step < 5; step++) await window.keyboard.press("ArrowDown");
+  for (let step = 0; step < 6; step++) await window.keyboard.press("ArrowDown");
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("document-list-item")).toHaveCount(1);
 
@@ -270,7 +271,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, C
   await plus.focus();
   await window.keyboard.press("Enter");
   await expect(items.first()).toBeFocused();
-  const dialog = await previewLink(app, window, folder, items.nth(8));
+  const dialog = await previewLink(app, window, folder, items.nth(9));
   await confirmLink(dialog);
   await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Library")).toHaveCount(1);
@@ -293,6 +294,7 @@ test("the + menu and the shell speak Chinese too", async () => {
     /对比文档…/,
     /核对文档…/,
     /新建文件夹/,
+    /从预设文件夹新建…/,
     /添加文档…/,
     /添加网页…/,
     /查找资料…/,

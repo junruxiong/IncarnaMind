@@ -28,7 +28,7 @@ import { useRunModel } from "./ModelChip";
 import { UncoveredLine } from "./UncoveredLine";
 import { COUNT_IDLE_MS } from "./WordCount";
 
-export const NO_HEALTH: Health = {
+const NO_HEALTH: Health = {
   found: [],
   notFound: [],
   unsupported: [],

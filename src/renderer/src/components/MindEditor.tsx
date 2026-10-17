@@ -95,12 +95,13 @@ import { type OpenedCopy, openMindCopy } from "../mindCopies";
 import { isWritingIn } from "../mindStatus";
 import { useMindTools } from "../mindTools";
 import { onMindWriting, writingPlaceOf } from "../mindWriting";
+import { firstOpenOf } from "../nudges";
 import { holdShownPage } from "../shownPages";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { CompareSheet } from "./CompareSheet";
-import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
+import { StartGuide, useIsExample } from "./GettingStarted";
 import { CheckLineIcon, MineLineIcon, SearchLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
@@ -630,7 +631,8 @@ function MindEditorView({
   const findShown = useMindTools((state) => state.findMindId === mindId);
   const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
   const firstOpen = useFirstOpen();
-  const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
+  const stepsUnderWay = useAppStore((state) => firstOpenOf(state.settings?.device.gettingStarted));
+  const guide = stepsUnderWay && empty && !isExample && !readOnly;
   const verification = useVerification(doc);
   const countShown = useCountSettings(doc).shown;
   const frame = useRef<HTMLDivElement>(null);
@@ -661,18 +663,21 @@ function MindEditorView({
           slots.menu,
         )}
       {/* The quiet first open shows the example's text alone (#856). */}
-      {!(firstOpen && isExample) && (
-        <>
-          {slots.count &&
-            countShown &&
-            createPortal(<WordCount editor={editor} doc={doc} />, slots.count)}
-          {slots.badge &&
-            createPortal(
-              <CheckBadge editor={editor} doc={doc} mindId={mindId} verification={verification} />,
-              slots.badge,
-            )}
-        </>
-      )}
+      {slots.count &&
+        countShown &&
+        !(firstOpen && isExample) &&
+        createPortal(<WordCount editor={editor} doc={doc} />, slots.count)}
+      {slots.badge &&
+        createPortal(
+          <CheckBadge
+            editor={editor}
+            doc={doc}
+            mindId={mindId}
+            verification={verification}
+            quiet={firstOpen && isExample}
+          />,
+          slots.badge,
+        )}
       {readOnly && <MindNotice kind="read-only" />}
       <div
         ref={frame}
