@@ -15,9 +15,15 @@ const row = (counts: Partial<ChangeCounts>): ChangeCounts => ({
   ...counts,
 });
 
-describe("What an Answer did in a Mind, in words (#880)", () => {
+describe("What an Answer did in a Mind, in words (#880), counted by paragraph (#1028)", () => {
   test.each([
-    [row({ changed: 12 }), "Changed 12 places in “Q3”", "Changed 12 places", "已修改 12 处"],
+    [
+      row({ changed: 12 }),
+      "Changed 12 paragraphs in “Q3”",
+      "Changed 12 paragraphs",
+      "修改了 12 个段落",
+    ],
+    [row({ changed: 1 }), "Changed 1 paragraph in “Q3”", "Changed 1 paragraph", "修改了 1 个段落"],
     [row({ wrote: 1 }), "Wrote 1 paragraph in “Q3”", "Wrote 1 paragraph", "写入了 1 个段落"],
     [
       row({ created: true, wrote: 3 }),
@@ -27,9 +33,9 @@ describe("What an Answer did in a Mind, in words (#880)", () => {
     ],
     [
       row({ changed: 4, tables: 1 }),
-      "Changed 4 places and added a table in “Q3”",
-      "Changed 4 places and added a table",
-      "已修改 4 处，添加了 1 个表格",
+      "Changed 4 paragraphs and added a table in “Q3”",
+      "Changed 4 paragraphs and added a table",
+      "修改了 4 个段落，添加了 1 个表格",
     ],
     [row({ tables: 2 }), "Added 2 tables to “Q3”", "Added 2 tables", "添加了 2 个表格"],
   ] as const)(

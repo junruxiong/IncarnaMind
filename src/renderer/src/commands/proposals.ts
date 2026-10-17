@@ -4,10 +4,17 @@ import { translate } from "../../../shared/i18n";
 import { actOnAppliedEdit, restoreChange, reviewedChangeAt } from "../appliedEdits";
 import { useComposer } from "../composer";
 import { holdsAiText } from "../editor/aiText";
-import { type AppliedAction, type AppliedLine, appliedLineIn } from "../editor/appliedEditLine";
+import {
+  type AppliedAction,
+  type AppliedLine,
+  appliedLineIn,
+  appliedOriginalAt,
+  toggleAppliedOriginal,
+} from "../editor/appliedEditLine";
 import { selectionForEdit } from "../editor/editSelection";
 import { noteHolding } from "../editor/noteKeymap";
 import { pendingAtSelection, pendingIn } from "../editor/proposalReview";
+import { proposalOriginalAt, toggleProposalOriginal } from "../editor/proposalRewrites";
 import {
   regenerateChange,
   requestEdit,
@@ -39,6 +46,15 @@ function noteOnProposal(ctx: CommandContext): Editor | null {
 function noteOnReviewedChange(ctx: CommandContext): Editor | null {
   const editor = ctx.focus?.kind === "block" ? noteHolding(ctx.focus.id) : null;
   return editor && !editor.isDestroyed && reviewedChangeAt(editor.state) !== null ? editor : null;
+}
+
+function originalAt() {
+  const editor = noteHandle.current?.editor;
+  if (!editor || editor.isDestroyed) return null;
+  const applied = appliedOriginalAt(editor.state);
+  if (applied) return { editor, ...applied, toggle: toggleAppliedOriginal };
+  const waiting = proposalOriginalAt(editor.state);
+  return waiting && { editor, ...waiting, toggle: toggleProposalOriginal };
 }
 
 function resolveAt(ctx: CommandContext, outcome: "accept" | "reject"): void {
@@ -177,6 +193,19 @@ export const proposalCommands: readonly Command[] = [
       const editor = noteOnReviewedChange(ctx);
       const index = editor ? reviewedChangeAt(editor.state) : null;
       if (editor && index !== null) restoreChange(editor, index);
+    },
+  },
+  {
+    // A paragraph or section written anew: its "Was: …" or "Show original" line, from ⌘K.
+    id: "change.original",
+    label: (_ctx, t) => t(originalAt()?.shown ? "change.hideOriginal" : "change.showOriginal"),
+    group: "main",
+    // It shows or hides the old text; nothing in the Mind changes.
+    reversible: true,
+    when: () => originalAt() !== null,
+    run() {
+      const found = originalAt();
+      found?.toggle(found.editor, found.key);
     },
   },
   {

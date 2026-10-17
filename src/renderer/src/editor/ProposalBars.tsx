@@ -14,7 +14,12 @@ import { PencilLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
-import { appliedLineIn, isAppliedAction, redrawAppliedLine } from "./appliedEditLine";
+import {
+  appliedLineIn,
+  isAppliedAction,
+  redrawAppliedLine,
+  toggleAppliedOriginal,
+} from "./appliedEditLine";
 import { type BarRoom, roomForBar } from "./barRoom";
 import {
   changeReason,
@@ -27,6 +32,7 @@ import {
   sourcesRemoved,
   theirChange,
 } from "./proposalReview";
+import { redrawProposalRewrites, toggleProposalOriginal } from "./proposalRewrites";
 
 /** How long the bar stays once the pointer leaves its change, so it can reach the bar. */
 const LEAVE_MS = 300;
@@ -70,7 +76,7 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
     const buttonOf = (event: Event) =>
       event.target instanceof Element
         ? event.target.closest<HTMLElement>(
-            "[data-proposal-regenerate], [data-proposal-reject], [data-applied-action]",
+            "[data-proposal-regenerate], [data-proposal-reject], [data-applied-action], [data-change-original]",
           )
         : null;
     // The text keeps the focus and its selection.
@@ -81,6 +87,12 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       const button = buttonOf(event);
       if (!button || repeated(event)) return;
       event.preventDefault();
+      const original = button.dataset.changeOriginal;
+      if (original) {
+        if (original.startsWith("applied:")) toggleAppliedOriginal(editor, original);
+        else toggleProposalOriginal(editor, original);
+        return;
+      }
       const applied = button.dataset.appliedAction;
       if (applied && isAppliedAction(applied)) {
         actOnAppliedEdit(editor, applied);
@@ -106,9 +118,12 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       dom.removeEventListener("click", click);
     };
   }, [editor, mindId]);
-  // The applied edit's lines are drawn outside React: again once the language changes.
+  // The applied edit's lines and the "Was: …" lines are drawn outside React: again once the language changes.
   const language = useLanguage();
-  useEffect(() => redrawAppliedLine(editor, language), [editor, language]);
+  useEffect(() => {
+    redrawAppliedLine(editor, language);
+    redrawProposalRewrites(editor);
+  }, [editor, language]);
   return (
     <>
       <ProposalsBar editor={editor} mindId={mindId} />

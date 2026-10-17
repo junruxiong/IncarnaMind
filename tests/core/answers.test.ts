@@ -630,7 +630,7 @@ describe("Stopping and regenerating", () => {
     });
     await answerEnded(core, answerId);
     expect(shownWithChanges(reader).slice(1, 2)).toEqual([
-      "[-Generated text. My own words-]{+Written again+}.",
+      "[-Generated text. My own words.-]{+Written again.+}",
     ]);
     expect(pendingProposals(reader.blocks)).toHaveLength(1);
 
@@ -640,7 +640,7 @@ describe("Stopping and regenerating", () => {
     await core.regenerateAnswer({ mindId: mind.id, answerId });
     await answerEnded(core, answerId);
     expect(shownWithChanges(reader).slice(1, 2)).toEqual([
-      "[-Generated text. My own words-]{+Once more+}.",
+      "[-Generated text. My own words.-]{+Once more.+}",
     ]);
 
     // Accepting them all makes it the model's Answer again: the next Regenerate replaces it in place.

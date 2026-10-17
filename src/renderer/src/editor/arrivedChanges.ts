@@ -34,6 +34,7 @@ import {
   placeOnAccept,
   positionOf,
   proposalsIn,
+  rewrittenParagraphOf,
 } from "./proposalReview";
 
 const isProposalMark = (name: string) =>
@@ -58,7 +59,14 @@ export function asItWas(node: ProseMirrorNode): ProseMirrorNode {
 type Planned =
   | { kind: "added"; blockId: string }
   | { kind: "removed"; removed: Fragment; before: string | null }
-  | { kind: "words"; from: BlockPlace; to: BlockPlace; removed: Fragment };
+  | {
+      kind: "words";
+      from: BlockPlace;
+      to: BlockPlace;
+      removed: Fragment;
+      /** The paragraph it writes anew, by Block id. */
+      paragraph: string | null;
+    };
 
 const idOf = (node: ProseMirrorNode | null | undefined): string | null => {
   const id: unknown = node?.attrs[BLOCK_ID_ATTRIBUTE];
@@ -135,7 +143,15 @@ export function planChanges(state: EditorState, requests: ReadonlySet<string>): 
       const fromPlace = from && placeOnAccept(doc, from);
       const toPlace = to && placeOnAccept(doc, to);
       return fromPlace && toPlace
-        ? [{ kind: "words", from: fromPlace, to: toPlace, removed: Fragment.from(removed) }]
+        ? [
+            {
+              kind: "words",
+              from: fromPlace,
+              to: toPlace,
+              removed: Fragment.from(removed),
+              paragraph: rewrittenParagraphOf(doc, proposal),
+            },
+          ]
         : [];
     });
 }
@@ -178,7 +194,15 @@ export function anchorChanges(state: EditorState, planned: readonly Planned[]): 
     const from = positionOf(doc, change.from);
     const to = positionOf(doc, change.to);
     if (from === null || to === null) return [];
-    return [{ from: relative(from), to: relative(to), removed: change.removed, block: null }];
+    return [
+      {
+        from: relative(from),
+        to: relative(to),
+        removed: change.removed,
+        block: null,
+        ...(change.paragraph && { paragraph: change.paragraph }),
+      },
+    ];
   });
 }
 

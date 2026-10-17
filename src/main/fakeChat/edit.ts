@@ -9,7 +9,8 @@
  * paragraph's mark, as a model restructuring a whole Mind does (#703). One
  * that asks for a table (表格) adds a Markdown table after the passage, a
  * row for each paragraph, its markers in the cells, and a last row whose
- * source is a name in brackets no Citation has (#961). The
+ * source is a name in brackets no Citation has (#961). "Rewrite the
+ * section" (重写这一节) writes its heading and each paragraph anew (#1028). The
  * new text streams in word by word, slowly when the instruction says
  * "slowly", then a line saying why (#202).
  */
@@ -28,6 +29,23 @@ function restructured(passage: string): string {
   const last = paragraphs.findLastIndex((paragraph) => paragraph.startsWith("#"));
   if (last <= 0) return paragraphs.join("\n\n");
   return [...paragraphs.slice(last), ...paragraphs.slice(0, last)].join("\n\n");
+}
+
+function rewrittenSection(passage: string): string {
+  const chinese = /\p{Script=Han}/u.test(passage);
+  let paragraphs = 0;
+  return passage
+    .split(/\n\n+/)
+    .map((paragraph) => {
+      if (paragraph.startsWith("#")) {
+        return `${paragraph.match(/^#+ /)?.[0] ?? "## "}${chinese ? "核心优势" : "Key strengths"}`;
+      }
+      paragraphs++;
+      return chinese
+        ? `十年咨询与审计项目经验，第 ${paragraphs} 条。`
+        : `Ten years of consulting and audit work, point ${paragraphs}.`;
+    })
+    .join("\n\n");
 }
 
 /** A row for each paragraph but headings: its first two words, then the rest. */
@@ -107,6 +125,7 @@ function editedText(action: string, passage: string, asked: string): string {
         return passage.split(replace[1]).join(replace[2]);
       if (/drop the citations|去掉引用/i.test(asked)) return passage.replace(/\s*\[\d+\]/g, "");
       if (/restructure|重新组织/i.test(asked)) return restructured(passage);
+      if (/rewrite the section|重写这一节/i.test(asked)) return rewrittenSection(passage);
       if (/\btable\b|表格/i.test(asked)) return withTable(passage);
       if (SHORTEN.test(asked)) return passage.replace(FILLER, "");
       return `${passage} (edited)`;
