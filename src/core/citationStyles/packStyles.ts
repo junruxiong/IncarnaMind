@@ -4,7 +4,7 @@
  * of a Chinese style, `formatJob`). The pack's chunks are kept as `PackFiles` keeps them.
  */
 import { join } from "node:path";
-import { type PackIndex, PackFiles, type PackStyle, readPackIndex } from "./pack";
+import { PackFiles, type PackIndex, type PackStyle, readPackIndex } from "./pack";
 import type { EngineStyle } from "./protocol";
 import { StyleError } from "./wasm";
 
@@ -35,16 +35,13 @@ export function createPackStyles(folder: string) {
       const { index, byId, files } = pack();
       const entry = byId.get(style.packId);
       if (!entry?.at) throw new StyleError(`The style pack has no style ${style.packId}.`, null);
-      const codes = [...new Set([style.locale, entry.locale, ...ALWAYS])].flatMap((code) => {
+      const codes = [...new Set([...ALWAYS, entry.locale, style.locale])].flatMap((code) => {
         const slot = code ? index.locales[code] : undefined;
         return slot ? [slot] : [];
       });
       return { text: files.text(entry.at), locales: codes.map((slot) => files.text(slot)) };
     },
 
-    /** How many chunks have been decompressed. */
     decompressions: () => pack().files.decompressions,
   };
 }
-
-export type PackStyles = ReturnType<typeof createPackStyles>;

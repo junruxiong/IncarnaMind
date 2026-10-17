@@ -3,11 +3,18 @@
  * style button, the export dialog, a Mind's ⋯ menu, or ⌘K's "Citation style…". The picker
  * itself is `CitationStylePickerHost`, mounted once in the window.
  */
+import { useEffect } from "react";
 import { create } from "zustand";
 import type { MindCitationStyle } from "../../core/api";
-import { CITATION_STYLES, type CitationStyleId } from "../../shared/citationStyles";
+import {
+  type CitationStyleId,
+  commonCitationStyle,
+  type StyleCatalogue,
+  type StyleSummary,
+} from "../../shared/citationStyles";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { core } from "./core";
+import { useT } from "./i18n";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
 
@@ -34,13 +41,74 @@ export const useCitationStylePicker = create<PickerState>()((set, get) => ({
   close: () => set({ open: null }),
 }));
 
+interface CatalogueState {
+  /** Every style of the pack but the common ones, once asked for; null before. */
+  catalogue: StyleCatalogue | null;
+  byId: ReadonlyMap<CitationStyleId, StyleSummary>;
+  loading: boolean;
+  /** Reads the pack's list the first time it is needed: the picker opens, or a Mind is in one. */
+  load(): void;
+}
+
+export const useStyleCatalogue = create<CatalogueState>()((set, get) => ({
+  catalogue: null,
+  byId: new Map(),
+  loading: false,
+  load() {
+    if (get().catalogue || get().loading) return;
+    set({ loading: true });
+    core.listCitationStyles().then(
+      (catalogue) =>
+        set({
+          catalogue,
+          byId: new Map(catalogue.styles.map((style) => [style.id, style])),
+          loading: false,
+        }),
+      (error: unknown) => {
+        set({ loading: false });
+        useAppStore.getState().reportError(error);
+      },
+    );
+  },
+}));
+
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** A style's name in the interface language. */
-export const styleLabel = (style: CitationStyleId, t: Translate) => {
-  const found = CITATION_STYLES.find((each) => each.id === style);
-  return found ? t(found.label) : style;
-};
+function labelOf(
+  style: CitationStyleId,
+  t: Translate,
+  known: StyleSummary | undefined,
+  loaded: boolean,
+  unavailable: boolean,
+): string {
+  const common = commonCitationStyle(style);
+  if (common) return t(common.label);
+  if (known) return known.title;
+  return unavailable || loaded ? t("citationStyle.unavailable", { style }) : style;
+}
+
+/**
+ * A style's name in the interface language: a common style's own, a pack style's title, or, for
+ * a style this version doesn't have (`unavailable`, or not in the pack's list), that it isn't.
+ */
+export function styleLabel(style: CitationStyleId, t: Translate, unavailable = false): string {
+  const { catalogue, byId } = useStyleCatalogue.getState();
+  return labelOf(style, t, byId.get(style), catalogue !== null, unavailable);
+}
+
+/** `styleLabel`, following the pack's list, which it asks for when `style` is one of its own. */
+export function useStyleLabel(style: CitationStyleId | null | undefined, unavailable = false) {
+  const t = useT();
+  const needed = style !== null && style !== undefined && !commonCitationStyle(style);
+  const known = useStyleCatalogue((state) => (style ? state.byId.get(style) : undefined));
+  const loaded = useStyleCatalogue((state) => state.catalogue !== null);
+  useEffect(() => {
+    if (needed) useStyleCatalogue.getState().load();
+  }, [needed]);
+  return style === null || style === undefined
+    ? null
+    : labelOf(style, t, known, loaded, unavailable);
+}
 
 /**
  * Chooses a Mind's citation style, at once, which new Minds in its Folder then start in, and

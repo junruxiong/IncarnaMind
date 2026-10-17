@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isRecentStyles } from "../shared/citationStyles";
 import {
   type ChatModelChoice,
   type DeviceSettings,
@@ -134,6 +135,7 @@ const userScope: Scope<UserSettings> = {
     monthlyCap: null,
     webSearch: false,
     keepWebPageLook: false,
+    recentCitationStyles: [],
   },
   validators: {
     language: isLanguagePreference,
@@ -147,6 +149,7 @@ const userScope: Scope<UserSettings> = {
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
     webSearch: isBoolean,
     keepWebPageLook: isBoolean,
+    recentCitationStyles: isRecentStyles,
   },
 };
 

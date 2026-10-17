@@ -4452,7 +4452,7 @@
     }
   }
   .references-style {
-    max-width: 100%;
+    max-width: min(100%, 280px);
     font-weight: 600;
   }
   .references-default {

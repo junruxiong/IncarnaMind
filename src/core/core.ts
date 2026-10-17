@@ -1,9 +1,9 @@
 import { mkdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
-import { isCitationStyleId } from "../shared/citationStyles";
+import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
@@ -1507,7 +1507,7 @@ export function createCore(adapters: CoreAdapters): Core {
     folder: adapters.paths.citationStyles,
     document: liveDocument,
   });
-  const mindCitationStyle = (mindId: string): MindCitationStyle => {
+  const mindStyleAndText = (mindId: string) => {
     const { folderId } = minds.get(mindId);
     const { chineseText, cited } = content.read(mindId, (blocks) => {
       const versions: CitedVersions = new Map();
@@ -1519,12 +1519,14 @@ export function createCore(adapters: CoreAdapters): Core {
     });
     const citesWorks = cited.some((id) => isCitableWork(liveDocument(id)?.reference ?? null));
     const context = { language: settings.get().language, chineseText, citesWorks };
-    return content.readSettings(mindId, (mindSettings) => ({
+    const style: MindCitationStyle = content.readSettings(mindId, (mindSettings) => ({
       style: citationStyleIn(mindSettings, context),
       chosen: chosenCitationStyle(mindSettings) !== null,
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
+    return { style, textLanguage: chineseText ? ("zh-CN" as const) : ("en" as const) };
   };
+  const mindCitationStyle = (mindId: string): MindCitationStyle => mindStyleAndText(mindId).style;
   /** Sends a Mind to Recently deleted; its tabs close. */
   const removeMind = (mindId: unknown) => {
     const at = now();
@@ -1683,7 +1685,10 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     folderName: (folderId) =>
       library.folders().find((folder) => folder.id === folderId)?.name ?? null,
-    citationStyle: (mindId) => mindCitationStyle(mindId).style,
+    citationStyle: (mindId) => {
+      const { style, textLanguage } = mindStyleAndText(mindId);
+      return { style: citationStyles.resolve(style.style, textLanguage), textLanguage };
+    },
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     citedPage: (citation) => citedPages.image(citation),
@@ -3597,6 +3602,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const mind = writableMind(mindId);
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
+      // Undo passes the Folder's style back; what it puts back isn't a style the User chose.
+      if (style !== null && folderDefault === undefined) {
+        const recent = withRecentStyle(settings.get().user.recentCitationStyles, style);
+        settings.update({ user: { recentCitationStyles: recent } });
+        settingsChanged();
+      }
       // The style chosen is the one new Minds in its Folder start in, as a document app keeps
       // the last template used; Undo puts back the one before.
       const { folderId } = minds.get(mind.id);
@@ -3605,6 +3616,14 @@ export function createCore(adapters: CoreAdapters): Core {
         else if (style !== null) library.setCitationStyle(folderId, style);
       }
       return mindCitationStyle(mind.id);
+    },
+    listCitationStyles: async () => citationStyles.list(),
+    openCitationStyleLicences: async () => {
+      if (!adapters.shell)
+        throw new Error("This copy of IncarnaMind can't open files in other apps.");
+      const path = join(adapters.paths.tempDir ?? tmpdir(), "IncarnaMind citation styles.txt");
+      await writeFile(path, citationStyles.notice());
+      await adapters.shell.openPath(path);
     },
     getOutputSettings: async () => outputs.settings(),
     setOutputLocation: (path) => outputs.setLocation(path),
