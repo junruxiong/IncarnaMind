@@ -100,7 +100,9 @@ test("first run: the row is first under Other ways, says the usage limits first 
     const sends = notice.getByTestId("claude-plan-sends");
     await expect(usage).toHaveText(USAGE);
     await expect(usage).toHaveCSS("font-weight", "600");
-    await expect(sends).toHaveText("Sends your questions and document text to Anthropic.");
+    await expect(sends.locator("p")).toHaveText(
+      "Sends your questions and document text to Anthropic. · Details",
+    );
     await expect(sends).toHaveCSS("font-weight", "400");
     const [usageBox, sendsBox] = await Promise.all([usage.boundingBox(), sends.boundingBox()]);
     expect(usageBox?.y ?? 0).toBeLessThan(sendsBox?.y ?? 0);
@@ -110,6 +112,19 @@ test("first run: the row is first under Other ways, says the usage limits first 
     await expect(notice.getByTestId("claude-plan-cancel")).toBeFocused();
     expect(await urlsOpened(app)).toHaveLength(0);
     await expectInside(card, [usage, sends]);
+
+    const details = sends.getByTestId("claude-plan-sends-details");
+    await details.focus();
+    await window.keyboard.press("Space");
+    await expect(details).toHaveAttribute("aria-expanded", "true");
+    await expect(sends.getByRole("listitem")).toHaveCount(5);
+    await expect(sends).toContainText("each sentence you check");
+    expect(await urlsOpened(app)).toHaveLength(0);
+    expect(fake.tokenRequests).toHaveLength(0);
+    await window.keyboard.press("Enter");
+    await expect(details).toHaveAttribute("aria-expanded", "false");
+    await expect(sends.getByRole("listitem")).toHaveCount(0);
+    await expect(details).toBeFocused();
 
     await notice.getByTestId("claude-plan-cancel").click();
     await expect(notice).toBeHidden();
@@ -312,14 +327,14 @@ test("in Chinese: the row is first under Other ways too and a model on this comp
 
     const row = card.getByTestId("way-claude");
     await expect(row).toContainText("使用我的 Claude 订阅");
-    await expect(row).toContainText("Pro、Max 或 Team");
+    await expect(row).toContainText("Pro、Max 或 Team（中国大陆不可用）");
     await row.getByTestId("way-claude-open").click();
     const notice = row.getByTestId("claude-plan-notice");
     const usage = notice.getByTestId("claude-plan-usage");
     const sends = notice.getByTestId("claude-plan-sends");
     await expect(usage).toHaveText("回答会计入你 Claude 订阅的用量限额。");
     await expect(usage).toHaveCSS("font-weight", "600");
-    await expect(sends).toHaveText("会把你的问题和文档内容发送给 Anthropic。");
+    await expect(sends.locator("p")).toHaveText("会把你的问题和文档内容发送给 Anthropic。· 详情");
     await expect(row.getByTestId("claude-plan-sign-in")).toHaveText("用 Claude 账号登录");
     await expectInside(card, [usage, sends]);
     await row.getByTestId("claude-plan-sign-in").click();

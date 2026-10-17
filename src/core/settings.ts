@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isHelpKeys } from "../shared/meetingHelp";
 import { DEFAULT_MIND_STYLE, isMindStyle } from "../shared/mindStyle";
 import {
   type ChatModelChoice,
@@ -198,6 +199,9 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingsEnabled: false,
     meetingSystemAudio: true,
     meetingNoticeAccepted: false,
+    meetingPanel: true,
+    meetingPanelHidden: true,
+    meetingHelpKeys: {},
     motion: "system",
   },
   validators: {
@@ -212,6 +216,9 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingsEnabled: isBoolean,
     meetingSystemAudio: isBoolean,
     meetingNoticeAccepted: isBoolean,
+    meetingPanel: isBoolean,
+    meetingPanelHidden: isBoolean,
+    meetingHelpKeys: isHelpKeys,
     motion: (value): value is MotionPreference =>
       MOTION_PREFERENCES.some((preference) => preference === value),
   },
