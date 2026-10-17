@@ -102,8 +102,8 @@ export interface MindsForTools {
   ): { text: string; origins: readonly ThirdPartySource[] };
   /** Saves a Checkpoint of the Mind as it is, before the AI changes it (#113). */
   checkpoint(mindId: string): void;
-  /** Makes a Mind, in the Folder `folderId` or in none. */
-  create(title: string, folderId: string | null): ChangeableMind;
+  /** Makes a Mind, in the Folder `folderId` or in none; `headed`, its text starts with its title (`makeMind`). */
+  create(title: string, folderId: string | null, headed: boolean): ChangeableMind;
   /** The name of a Folder, or null when there is none by that id. */
   folderName(folderId: string): string | null;
   /** Says where a call is writing a Mind's new Blocks as they come (#202); `place` null once it has stopped. */
@@ -1396,19 +1396,9 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     },
   };
 
-  // A page has no title field (#908), so a new Mind's text starts with its title, unless the model began with a
-  // heading of its own. It is written with the Mind, not as a change to accept: the changes the model hears of are its own.
-  const make = (title: string, content: string): ChangeableMind => {
-    const mind = minds.create(title, options.folderId);
-    if (!/^\s*#\s/.test(content)) {
-      minds.edit(mind.id, (note) =>
-        insertBlocks(note, [
-          { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: mind.name }] },
-        ]),
-      );
-    }
-    return mind;
-  };
+  // A model that began with a heading of its own keeps that one alone.
+  const make = (title: string, content: string): ChangeableMind =>
+    minds.create(title, options.folderId, !/^\s*#{1,6}\s/.test(content));
 
   const create: Tool = {
     name: MIND_TOOLS.create,

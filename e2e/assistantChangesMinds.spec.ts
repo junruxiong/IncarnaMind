@@ -4,7 +4,6 @@ import type { Editor } from "@tiptap/core";
 import {
   askInAssistant,
   assistantAnswers,
-  clickEndOf,
   createDataFolder,
   dismissChatSetup,
   enterContent,
@@ -188,7 +187,7 @@ test("one Mind changed: the card says what was changed and how much of it waits,
   await expect(window.getByTestId("proposals-count")).toHaveText("来自助手的 2 处修订");
 });
 
-test("“Create a new note called Fieldwork plan” makes an empty Mind at once, with the cursor in its text and no Answer", async () => {
+test("“Create a new note called Fieldwork plan” makes a Mind at once, its title its first line and the cursor under it, with no Answer", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -207,8 +206,12 @@ test("“Create a new note called Fieldwork plan” makes an empty Mind at once,
   await expect(frontMindName(window)).toHaveText("Fieldwork plan");
   const editor = window.getByTestId("mind-editor");
   await expect(editor).toBeFocused();
+  await expect(editor.locator(":scope > h1")).toHaveText("Fieldwork plan");
   await window.keyboard.type("First visit: the roastery.");
-  await expect(editor.locator("p")).toHaveText(["First visit: the roastery."]);
+  await expect(editor.locator(":scope > *")).toHaveText([
+    "Fieldwork plan",
+    "First visit: the roastery.",
+  ]);
   await expect(answers).toHaveCount(before);
   await expect(window.getByTestId("composer-input")).toHaveValue("");
   await screenshot(window, "empty-note-by-name");
@@ -289,16 +292,15 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
   const made = window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan with a summary" });
   await expect(made).toHaveCount(1);
 
-  // Its text starts with its title, not a change to accept (#908). The User writes a line of
-  // their own in it, under the changes: from its title, down into the changes, then the end.
+  // The scripted draft begins with a heading of its own, so no title goes above it (#908).
+  // The User writes a line of their own in it, under the changes: from its start, then the end.
   await pointAndClick(window, made);
   await expect(frontMindName(window)).toHaveText("Fieldwork plan with a summary");
   await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
   const editor = window.getByTestId("mind-editor");
-  const title = editor.locator(":scope > h1");
-  await expect(title).toHaveText("Fieldwork plan with a summary");
-  await clickEndOf(window, title);
-  await window.keyboard.press("ArrowDown");
+  await expect(editor.locator(":scope > h1")).toHaveCount(0);
+  await editor.focus();
+  await window.keyboard.press(process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home");
   await expect(editor).toBeFocused();
   // The cursor is in the first change once its bar shows.
   await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");

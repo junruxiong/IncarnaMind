@@ -56,7 +56,6 @@ import {
   type ConversationAskResult,
   type CoreApi,
   type CoreEventSource,
-  type CreateMindInput,
   DEFAULT_MIND_KIND,
   type Document,
   type DocumentStatus,
@@ -159,6 +158,7 @@ import { createMindContent } from "./mindContent";
 import { createMindIndex } from "./mindIndex";
 import {
   createMinds,
+  type NewMind,
   parseCreateMindInput,
   parseFolderChoice,
   parseIds,
@@ -1232,8 +1232,8 @@ export function createCore(adapters: CoreAdapters): Core {
       checkpoint: (mindId) => {
         checkpoints.save(mindId, "accept");
       },
-      create: (title, folderId) => {
-        const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId });
+      create: (title, folderId, headed) => {
+        const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }, { headed });
         return { id: mind.id, name: mindName(mind) || title };
       },
       folderName: (folderId) =>
@@ -1568,9 +1568,22 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Find support and Check against Documents (#96): check Runs that can only search and cite.
   /** A new Mind, in the citation style last chosen for a Mind in its Folder, as its own choice (#289). */
-  const makeMind = (input: Required<CreateMindInput>): Mind => {
+  /**
+   * With `headed`, the Mind's text starts with its title as a Heading 1 and an
+   * empty line under it: a page has no title field (#908), and a Mind made with
+   * its name reads as it did with one.
+   */
+  const makeMind = (input: NewMind, { headed = false } = {}): Mind => {
     if (input.folderId !== null) library.folder(input.folderId);
     const mind = minds.create(input);
+    if (headed && mind.title !== "") {
+      content.edit(mind.id, (note) =>
+        insertBlocks(note, [
+          { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: mind.title }] },
+          { type: "paragraph" },
+        ]),
+      );
+    }
     const style = input.folderId === null ? null : library.citationStyle(input.folderId);
     if (style !== null) {
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
@@ -2791,7 +2804,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
-    createMind: async (input) => makeMind(parseCreateMindInput(input)),
+    createMind: async (input) =>
+      makeMind(parseCreateMindInput(input), { headed: isRecord(input) && input.headed === true }),
     checkWordFile: async (path, folderId) => wordImports.check(path, folderId),
     importWordFile: async (input) => wordImports.import(input),
     addWordOriginal: async (mindId, path) => {
