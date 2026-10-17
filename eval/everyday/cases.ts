@@ -25,6 +25,8 @@ export interface EverydayCase {
   inExample?: true;
   /** Asked first, in the same conversation, and not checked. */
   before?: readonly string[];
+  /** The last of `before` is put into the Mind with Add to note, as a whole Answer, before the request. */
+  addToNote?: true;
   request: string;
   expected: Expected;
   /** Hard enough to ask Claude Sonnet 5.5 as well (INCARNAMIND_EVAL_EVERYDAY=hard). */
@@ -348,6 +350,27 @@ export const CASES: readonly EverydayCase[] = [
     request: "长一点",
     expected: WRITE,
   },
+  // After Add to note, the summary in the Mind is what changes (#1061).
+  {
+    id: "added-longer",
+    language: "en",
+    library: "papers",
+    mind: READING_GROUP,
+    before: ["Summarise the tutorial paper in a short paragraph"],
+    addToNote: true,
+    request: "Make the summary longer.",
+    expected: { ...EDIT, inPlace: true },
+  },
+  {
+    id: "added-longer-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: READING_GROUP,
+    before: ["用一小段话总结一下这篇教程论文"],
+    addToNote: true,
+    request: "把摘要写长一点。",
+    expected: { ...EDIT, inPlace: true },
+  },
   {
     id: "follow-shorter",
     language: "en",
@@ -466,7 +489,6 @@ export const CASES: readonly EverydayCase[] = [
     request: "Explain the second paragraph of my notes",
     expected: NOTHING,
   },
-  // After the example's Answer, written in advance: the Answer is about the Question asked.
   {
     id: "example-own",
     language: "en",

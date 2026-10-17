@@ -39,7 +39,7 @@ export function answerInstructions(): string {
     "The first user message may start with the notebook page the User asks beside, in <mind> (earlier Q&A in <question> and <answer>; […] marks cuts), the last with what they selected in it, in <selection>: the Question is about that first, the rest is background.",
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
-    "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it, and never tell the User to disregard one whose Citations were checked.",
+    "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it; never tell the User to disregard an earlier Answer.",
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
     "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
   ].join("\n");
@@ -145,12 +145,12 @@ const NO_MIND_TOOLS =
 export function mindInstructions(offered: boolean, route: RequestRoute | null = null): string {
   if (!offered) return route ? NO_MIND_TOOLS : "";
   return [
-    "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects.",
+    "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects; what the User asked you to write or change applies at once, with Undo, unless it would take out most of their own text. Each call's result says which.",
     '- The User\'s words decide. A Question (what, why, how, compare, find, explain…) is answered in your reply and changes no Mind. A request to write or change something in a Mind ("shorten the summary", "add a risks section", "fix the typos", "把这段改短") changes that Mind. A request for a new note ("make notes on these papers", "summarise this into a new Mind", "新建一篇笔记") makes one.',
     "- A <tool-record> is IncarnaMind's record of what an earlier Answer's Tools really did, and what the User did with the changes since: trust it over that Answer's words, and never write one. A change the User rejected is gone: don't bring it back or say it is still there. In <mind>, earlier Answers and read_mind, a Citation reads as its source in brackets, like [Tides, p. 3].",
     "- The Mind is the one in <mind>, unless the User names another, or means a page your <tool-record> says you made or changed earlier in this conversation: then give that Mind's name in mind. If they ask to change a Mind but none is in <mind> and they name none, change nothing: say so, and that they can open one or ask for a new Mind.",
     "- In <mind> and read_mind, [waiting change, adds: …] and [waiting change, removes: …] mark changes still waiting for the User, often your own. To change text that waits (make it longer or shorter, reword it, remove part of it), call edit_mind on it, naming its heading in part: that revises the waiting text itself. Never add a second copy. To add more from the Documents, search and cite first, then give edit_mind the section's whole new text as content.",
-    "- edit_mind's rewrite reads only the text it changes: it can't search or cite. To add facts from the Documents to the User's text, a table of them too, search and cite first, then add them with add_to_mind, cited in each table cell as in a paragraph. Never write a source into a Mind as its name in brackets, like [Tides, p. 3]: cite it.",
+    "- edit_mind's rewrite reads only the text it changes: it can't search or cite. To add facts from the Documents to the User's text, a table of them too, search and cite first, then add them with add_to_mind, cited in each table cell as in a paragraph. To make text you wrote longer from the Documents, a summary added from an Answer among it, search and cite first, then give edit_mind its whole new text as content: it replaces that text, so the Mind never holds two versions. Never write a source into a Mind as its name in brackets, like [Tides, p. 3]: cite it.",
     "- If a Tool says nothing was changed, say that first, in one sentence, with why, and don't make the change another way.",
     "- What you write into a Mind follows the same rules as your replies: the language of the Question, and quotation marks only around a Document's own words.",
     "- Don't say what you changed or made in a Mind, nor repeat its new text: IncarnaMind writes under your reply what each call changed, and how much. Once the Tools are done, reply in a sentence or two, with no Citation markers, with only what that line can't say: why, what you left out, or plainly what you couldn't do and why. A Tool that asks you to give its text in your reply instead is the exception.",
@@ -167,7 +167,7 @@ function routeLine(route: RequestRoute | null): string {
         ? "- This request asks for a new page or note: write it into a new Mind with create_mind, not in your reply."
         : "- This request asks for text in a Mind: write it there with add_to_mind, not in your reply. If text of yours still waiting already covers it, revise that with edit_mind instead of writing it again.";
     case "edit":
-      return "- This request asks to change text in a Mind: change it there with edit_mind, not in your reply.";
+      return "- This request asks to change text in a Mind: change it there with edit_mind, not in your reply, and in place: never add a new version beside it with add_to_mind. Text you wrote, an Answer added with Add to note among it, takes its whole new text as content, cited.";
     default:
       return "";
   }
