@@ -98,9 +98,11 @@ function answerAround(
  * it is part of the footnote: the marker shows where it points and its
  * check's icon instead of a number. Hovering or focusing it (or its mark in
  * the margin) shows its card: the check in words, the quote, and Open; Esc
- * closes it. Clicking it opens the cited page and keeps the card; when the
- * quote wasn't found, the card offers ways on: open the page anyway, remove
- * the Citation, or regenerate the Answer.
+ * closes it. Clicking it opens the cited page and keeps the card; where the
+ * window shows one group, the page would cover the Mind, so the click keeps
+ * the card alone and its Open brings the page (#963). When the quote wasn't
+ * found, the card offers ways on: open the page anyway, remove the Citation,
+ * or regenerate the Answer.
  */
 export function CitationView({
   node,
@@ -187,6 +189,7 @@ export function CitationView({
   const openCited = (withQuote: boolean, keep = false) => {
     const documentId = state.documentId ?? attributes.documentId;
     if (!documentId) return;
+    recordUsage({ event: "citation_opened", fields: { check: state.check } });
     openCitedPlace(
       { ...attributes, documentId },
       { check: state.check, withQuote, number, label: where, from: place?.groupId, keep },
@@ -195,11 +198,9 @@ export function CitationView({
 
   const onClick = () => {
     setPinned(true);
-    const place = placeOf();
-    if (mindId && place !== null && groupsMerged()) pinCitation(mindId, place);
     // Step 1 of the first open's steps, and step 3 of the steps in an empty Mind.
     useAppStore.getState().updateGettingStarted({ citationChecked: true });
-    recordUsage({ event: "citation_opened", fields: { check: state.check } });
+    if (groupsMerged()) return;
     if (quoteSaysSo(state.check)) openCited(true);
     // A deleted Document: the viewer shows the stored quote with "Document removed".
     else if (state.reason === "document-removed") openCited(true);
@@ -207,11 +208,16 @@ export function CitationView({
   };
 
   /** What the card's Open does: the cited place, the quote washed where the check found it. */
-  const openFromCard = () => {
-    openCited(quoteSaysSo(state.check), true);
+  const openFromCard = (withQuote = quoteSaysSo(state.check)) => {
+    openCited(withQuote, true);
     dismiss();
-    // The focus stays in the Mind, unless the window shows one group and the Document came to the front.
-    if (!groupsMerged()) editor.view.focus();
+    if (!groupsMerged()) {
+      editor.view.focus();
+      return;
+    }
+    // The Document came to the front of a one-group window: the card is open again when the Mind comes back.
+    const place = placeOf();
+    if (mindId && place !== null) pinCitation(mindId, place);
   };
   const openFromCardRef = useRef(openFromCard);
   openFromCardRef.current = openFromCard;
@@ -359,11 +365,7 @@ export function CitationView({
               state={state}
               attributes={shown}
               badgeText={badgeText}
-              onOpen={(withQuote) => {
-                openCited(withQuote, true);
-                dismiss();
-                if (!groupsMerged()) editor.view.focus();
-              }}
+              onOpen={openFromCard}
               onRemove={
                 editor.isEditable
                   ? () => {
@@ -633,16 +635,15 @@ function CitationCard({
             )}
           </>
         ) : (
-          !removed && (
-            <button
-              type="button"
-              data-testid="citation-open"
-              className="citation-card-action citation-card-action--primary"
-              onClick={() => onOpen(quoteSaysSo(state.check))}
-            >
-              {t(`citation.open.${opens}`)}
-            </button>
-          )
+          <button
+            type="button"
+            data-testid="citation-open"
+            className="citation-card-action citation-card-action--primary"
+            // A deleted Document's view shows the quote it kept.
+            onClick={() => onOpen(removed || quoteSaysSo(state.check))}
+          >
+            {t(removed ? "citation.open.removed" : `citation.open.${opens}`)}
+          </button>
         )}
         <ObjectMenu
           target={menu.target}

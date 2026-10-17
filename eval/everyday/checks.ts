@@ -15,6 +15,8 @@
  * - **Changed in place**: asked to make text in the Mind longer, it changes
  *   that text, not adding a second version beside it, nor leaving it as it
  *   was (#1061).
+ * - **The Question asked is the Answer's subject**: asked after the example's
+ *   Answer, nothing in the reply is about an earlier Answer or the example.
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
@@ -32,6 +34,8 @@ export interface Expected {
   only?: number;
   /** It asks to change text already in the Mind: adding a new version beside it fails. */
   inPlace?: true;
+  /** It is asked after the example's Answer, and its reply says nothing of an earlier Answer or the example. */
+  noEarlier?: boolean;
 }
 
 export interface RequestOutcome {
@@ -60,9 +64,21 @@ export type RequestFailure =
   | { kind: "outside"; blocks: number[] }
   | { kind: "beside" }
   | { kind: "untouched" }
-  | { kind: "as-text"; sources: string[] };
+  | { kind: "as-text"; sources: string[] }
+  | { kind: "earlier"; said: string };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+
+const EARLIER = new RegExp(
+  [
+    String.raw`\b(?:earlier|previous|first|last|prior) (?:answer|response|reply)\b`,
+    String.raw`\b(?:disregard|ignore) (?:my|the|that|this) (?:earlier|previous|first|last|prior|answer|response|reply|figure|limit)`,
+    String.raw`Northwind|facilities agreement|leverage (?:limit|covenant)|\b3\.[15]x\b|\b3\.[15] times`,
+    "(?:之前|先前|前面|上一个|上一次|第一个)的?(?:回答|回复|答案)|(?:请|应)?(?:忽略|无视)(?:我|之前|先前|上一)",
+    "贷款协议|杠杆率",
+  ].join("|"),
+  "i",
+);
 
 const NOT_COVERED =
   /\b(?:couldn't|could not|can't|cannot|didn't|did not|wasn't|weren't|isn't|aren't|not|no|unable|left out|missing|skipped)\b|没有|未能|未|无法|不能|缺少|略去/i;
@@ -126,6 +142,8 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   if (outcome.sourcesAsText && outcome.sourcesAsText.length > 0) {
     failures.push({ kind: "as-text", sources: [...outcome.sourcesAsText] });
   }
+  const said = expected.noEarlier ? answer.text.match(EARLIER)?.[0] : undefined;
+  if (said) failures.push({ kind: "earlier", said });
   return failures;
 }
 
@@ -148,5 +166,7 @@ export function failureLine(failure: RequestFailure): string {
       return "left the text it was asked to change as it was";
     case "as-text":
       return `wrote sources into a Mind as text: ${failure.sources.map((source) => `“${source}”`).join(", ")}`;
+    case "earlier":
+      return `talks about an earlier Answer or the example: “${failure.said}”`;
   }
 }

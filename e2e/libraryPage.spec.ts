@@ -348,8 +348,9 @@ test("search finds the words inside Documents too, in every section: the line th
       "4471",
     ]);
 
-    // A click opens it at the words.
+    // A click opens it at the words, once the rows are the search's: before, it lands on another.
     await search.fill("ledger");
+    await expect(rowsOf(library)).toHaveCount(english.length);
     await pointAndClick(window, invoice.getByTestId("library-document-name"));
     const viewer = window.getByTestId("viewer");
     await expect(viewer).toBeVisible();

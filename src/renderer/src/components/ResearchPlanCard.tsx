@@ -431,7 +431,6 @@ function PlanProblem({
         testId="research-plan-not-ready"
         className="research-plan-problem"
         setUpLabel={t("question.setUp")}
-        refused
       />
     );
   }

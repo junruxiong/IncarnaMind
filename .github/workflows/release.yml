@@ -9,6 +9,8 @@ on:
     tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
 
 permissions:
+  # SignPath reads the Windows job and downloads its artifacts with this workflow's token.
+  actions: read
   contents: write
 
 env:
@@ -129,12 +131,163 @@ jobs:
           # $signing is unquoted on purpose: it holds zero or two arguments.
           npx electron-builder --mac --arm64 --x64 --publish never $signing
 
-      # Windows is unsigned in v1 (SmartScreen warns, see the README); Linux needs no signing.
+      # With the SIGNPATH_API_TOKEN secret, SignPath signs IncarnaMind.exe, then the installer
+      # built from it (docs/releasing.md, Windows signing). Without it, the installer is unsigned
+      # (SmartScreen warns, see the README) and the job still succeeds. Linux needs no signing.
+      - name: Check the Windows signing settings
+        id: signpath
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+        run: |
+          if [ -z "$SIGNPATH_API_TOKEN" ]; then
+            echo "::warning title=Unsigned Windows build::No SIGNPATH_API_TOKEN secret, so the Windows app and installer are unsigned."
+            exit 0
+          fi
+          missing=""
+          for name in SIGNPATH_ORGANIZATION_ID SIGNPATH_PROJECT_SLUG SIGNPATH_SIGNING_POLICY_SLUG; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error title=Windows signing isn't set up::There's a SIGNPATH_API_TOKEN secret, but these repository variables are missing:$missing. See Windows signing in docs/releasing.md."
+            exit 1
+          fi
+          version="$(node -p 'require("./package.json").version')"
+          {
+            echo "sign=true"
+            echo "version=$version"
+            # electron-builder writes IncarnaMind.exe's product version as four numbers: 1.2.3.0.
+            echo "windows-version=${version%%-*}.0"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Package and publish (Windows)
         if: runner.os == 'Windows'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --x64 --publish never
+
+      # The app as the unsigned build ships it: electron-builder writes its update settings
+      # (resources/app-update.yml) only when it builds the installer too, never with --dir.
+      - name: Upload the Windows app for signing
+        id: unsigned-app
+        if: steps.signpath.outputs.sign == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-app-unsigned
+          path: dist/win-unpacked/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+          # A re-run of the job uploads it again.
+          overwrite: true
+
+      # Each signing request waits for an approver in SignPath, for up to two hours.
+      - name: Sign the Windows app (SignPath)
+        if: steps.signpath.outputs.sign == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: windows-app
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          parameters: |
+            windowsVersion: ${{ toJSON(steps.signpath.outputs.windows-version) }}
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: ${{ runner.temp }}/signed-app
+
+      - name: Package the Windows installer again, from the signed app
+        if: steps.signpath.outputs.sign == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf dist/win-unpacked
+          mv "$RUNNER_TEMP/signed-app" dist/win-unpacked
+          if [ ! -f dist/win-unpacked/resources/app-update.yml ]; then
+            echo "::error title=The signed app can't update itself::It has no resources/app-update.yml."
+            exit 1
+          fi
+          npx electron-builder --win --x64 --prepackaged dist/win-unpacked --publish never
+
+      - name: Upload the Windows installer for signing
+        id: unsigned-installer
+        if: steps.signpath.outputs.sign == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-installer-unsigned
+          path: dist/IncarnaMind-${{ steps.signpath.outputs.version }}-win-x64.exe
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+      - name: Sign the Windows installer (SignPath)
+        if: steps.signpath.outputs.sign == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: windows-installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          parameters: |
+            version: ${{ toJSON(steps.signpath.outputs.version) }}
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: ${{ runner.temp }}/signed-installer
+
+      - name: Use the signed Windows installer
+        if: steps.signpath.outputs.sign == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.signpath.outputs.version }}
+        run: |
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/signedInstaller.ts \
+            "$RUNNER_TEMP/signed-installer/IncarnaMind-$VERSION-win-x64.exe" dist
+
+      # SignPath's test certificate is self-signed, so Windows doesn't trust its root: that one
+      # error passes, with a warning, for a self-signed certificate only. The summary lists the
+      # signer, which win.signtoolOptions.publisherName takes once the real certificate signs.
+      - name: Check the Windows signatures
+        if: steps.signpath.outputs.sign == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.signpath.outputs.version }}
+        run: |
+          # CERT_E_UNTRUSTEDROOT (0x800B0109), in the runner's language.
+          $untrustedRoot = [System.ComponentModel.Win32Exception]::new(-2146762487).Message
+          $failed = $false
+          "| File | Signature | Signer |`n| --- | --- | --- |" >> $env:GITHUB_STEP_SUMMARY
+          foreach ($file in "dist/win-unpacked/IncarnaMind.exe", "dist/IncarnaMind-$($env:VERSION)-win-x64.exe") {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file
+            $signer = $signature.SignerCertificate
+            $bad = $true
+            if (-not $signer) {
+              $result = "not signed"
+            } elseif (-not $signature.TimeStamperCertificate) {
+              $result = "signed without a timestamp"
+            } elseif ($signature.Status -eq "Valid") {
+              $result = "valid"
+              $bad = $false
+            } elseif ($signer.Subject -eq $signer.Issuer -and $signature.StatusMessage -eq $untrustedRoot) {
+              $result = "signed with a self-signed certificate, which Windows doesn't trust"
+              $bad = $false
+              echo "::warning title=Test signature::$file is $result."
+            } else {
+              $result = "invalid: $($signature.StatusMessage)"
+            }
+            if ($bad) {
+              echo "::error title=Windows signing failed::$file is $result."
+              $failed = $true
+            }
+            "| $file | $result | $($signer.Subject) |" >> $env:GITHUB_STEP_SUMMARY
+          }
+          if ($failed) { exit 1 }
 
       - name: Package and publish (Linux)
         if: runner.os == 'Linux'
