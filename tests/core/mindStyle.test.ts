@@ -6,6 +6,7 @@ import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { checkWellFormed, part, unzip } from "../helpers/docx";
 import { connectToMind } from "../helpers/mindClient";
 import { heading, writeMind } from "../helpers/minds";
+import { fakePrinter } from "../helpers/printer";
 
 const SERIF_LARGE: MindStyle = { font: "serif", size: "large" };
 
@@ -149,6 +150,66 @@ describe("what exports keep of a Mind's font", () => {
     expect(await docDefaults(awkward.id)).toContain(
       'w:ascii="Fonts &amp; &quot;Co&quot; &lt;1&gt;"',
     );
+  });
+
+  test("Word's footnotes name no face of their own, so they are in the Mind's font", async () => {
+    const { core } = await setUp();
+    const mind = await core.createMind({ title: "Tides" });
+    const client = await connectToMind(core, mind.id);
+    writeMind(client, [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Neap tides are weak" },
+          { type: "footnote", attrs: { id: "fn-1" }, content: [{ type: "text", text: "Twice." }] },
+        ],
+      },
+    ]);
+    await core.setMindStyle(mind.id, { font: "mono", size: "large" });
+
+    const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
+    expect(part(files, "word/footnotes.xml")).toContain("Twice.");
+    expect(part(files, "word/footnotes.xml")).not.toContain("<w:rFonts");
+    const styles = part(files, "word/styles.xml");
+    const footnoteText = /<w:style [^>]*w:styleId="FootnoteText">[\s\S]*?<\/w:style>/.exec(styles);
+    expect(footnoteText?.[0]).toBeDefined();
+    expect(footnoteText?.[0]).not.toContain("<w:rFonts");
+    expect(styles).toContain('<w:rFonts w:ascii="JetBrains Mono"');
+  });
+
+  test("a PDF is set in the Mind's font, footnotes included, and the default leaves the print page's own", async () => {
+    const { printed, printer } = fakePrinter();
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir, { now: manualClock().now, printer });
+    const noted = async (style?: MindStyle) => {
+      const mind = await core.createMind({ title: "Tides" });
+      const client = await connectToMind(core, mind.id);
+      writeMind(client, [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Neap tides are weak" },
+            {
+              type: "footnote",
+              attrs: { id: "fn-1" },
+              content: [{ type: "text", text: "Twice." }],
+            },
+          ],
+        },
+      ]);
+      if (style) await core.setMindStyle(mind.id, style);
+      await core.exportMind(mind.id, { format: "pdf" });
+      return printed.at(-1);
+    };
+
+    expect((await noted())?.fontFamily).toBeUndefined();
+    expect((await noted({ font: "mono", size: "small" }))?.fontFamily).toBe(
+      '"JetBrains Mono",var(--serif)',
+    );
+    const installed = await noted({ font: { family: "Songti SC" }, size: "default" });
+    expect(installed?.fontFamily).toBe('"Songti SC",var(--serif)');
+    // The footnote is part of the same page: it names no face of its own.
+    expect(installed?.notes).toEqual(["Twice."]);
   });
 
   test("Markdown drops it", async () => {

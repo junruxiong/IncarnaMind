@@ -1301,6 +1301,11 @@ export interface WordLook {
   width: number | null;
   /** How far apart Word's default tab stops are (`w:defaultTabStop`); null when the file doesn't say. */
   defaultTab: number | null;
+  /**
+   * In compatibility mode 14 and lower, Word draws a table's left edge its
+   * left cell margin into the margin, so the cells' text lines up with the page's.
+   */
+  tablesHang?: true;
   paragraphs: Record<string, WordParagraphLook>;
   runs: Record<string, WordRunLook>;
   tables: Record<string, WordTableLook>;

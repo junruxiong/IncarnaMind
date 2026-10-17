@@ -11,8 +11,8 @@ import { CopyCitations } from "../../editor/copyCitations";
 import { RegenerateAnswerContext } from "../../editor/mindContext";
 import { noteExtensions } from "../../editor/noteSchema";
 import { useT } from "../../i18n";
+import { useTableFades } from "../useTableFades";
 import { OpenAsTable } from "./OpenAsTable";
-import { useTableFades } from "./useTableFades";
 
 /** A Citation redraws when it changes, and when its number does (as in a Mind). */
 const citationView = ReactNodeViewRenderer(CitationView, {

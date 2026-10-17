@@ -32,6 +32,8 @@ export function setWordLook(doc: Y.Doc, look: WordLook): void {
   map.set("body", look.body);
   map.set("width", look.width);
   map.set("defaultTab", look.defaultTab);
+  if (look.tablesHang) map.set("tablesHang", true);
+  else map.delete("tablesHang");
   map.set("version", look.version);
 }
 
@@ -217,6 +219,7 @@ export function wordLookOf(doc: Y.Doc): WordLook | null {
     body: size(map.get("body")) ?? null,
     width: num(map.get("width")) ?? null,
     defaultTab: tabSpacing(map.get("defaultTab")) ?? null,
+    ...(map.get("tablesHang") === true && { tablesHang: true as const }),
     paragraphs: styles(map.get("paragraphs"), paragraphLook),
     runs: styles(map.get("runs"), runLook),
     tables: styles(map.get("tables"), tableLook),
