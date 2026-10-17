@@ -76,10 +76,12 @@ async function addTides(window: Page) {
   await addDocuments(window, [join(sources, "Tides.pdf")]);
 }
 
-/** A new Mind, from the sidebar's +, with the mouse. */
+/** A new Mind, from the sidebar's +, with the mouse; its first line body text, not a title (#1088). */
 async function newMindByMouse(window: Page) {
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
+  await enterContent(window);
+  await window.keyboard.press("Backspace");
 }
 
 /** A Mind with a title and two Notes, the cursor on the empty line between them. */

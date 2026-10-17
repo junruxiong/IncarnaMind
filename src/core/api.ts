@@ -84,7 +84,10 @@ export const DEFAULT_MIND_KIND: MindKind = "mind";
 
 export interface CreateMindInput {
   title?: string;
-  /** Its text starts with its title as a Heading 1, as a Mind made with its name does (#908). */
+  /**
+   * Its text starts with its title as a Heading 1, as a Mind made with its
+   * name does (#908); with no title, an empty one, its title to be typed (#1088).
+   */
   headed?: boolean;
   /** Defaults to `"mind"`. */
   kind?: MindKind;
