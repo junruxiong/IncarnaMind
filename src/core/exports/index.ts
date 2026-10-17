@@ -59,7 +59,7 @@ import { withChangesAccepted } from "../shownChanges";
 import { type CitationCard, citationCard } from "./citationCards";
 import { addSources, styleCitations } from "./citations";
 import { piecesOf, renderDocx } from "./docx";
-import { renderHtml } from "./html";
+import { bodyFamily, renderHtml } from "./html";
 import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
 import { unifyIdeographs } from "./pdfUnicode";
@@ -545,6 +545,7 @@ export function createExports(deps: ExportsDependencies) {
           language,
           paper: deps.paper(),
           title: preview.fileName.slice(0, -".pdf".length),
+          ...(prepared.font !== null && { fontFamily: bodyFamily(prepared.font) }),
           body,
           notes,
         });

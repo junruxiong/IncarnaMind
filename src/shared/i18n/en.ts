@@ -2795,6 +2795,7 @@ export const en = {
   "citation.open.rows": "Open the rows",
   "citation.open.lines": "Open the lines",
   "citation.open.document": "Open the Document",
+  "citation.open.removed": "Show the quoted text",
   "citation.open.web": "Open the snapshot",
   "citation.open.time": "Open the transcript",
   "citation.openAnyway.page": "Open the page anyway",

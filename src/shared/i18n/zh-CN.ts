@@ -2677,6 +2677,7 @@ export const zhCN = {
   "citation.open.section": "打开该节",
   "citation.open.rows": "打开这些行",
   "citation.open.lines": "打开这些行",
+  "citation.open.removed": "查看引文",
   "citation.open.document": "打开文档",
   "citation.open.web": "打开快照",
   "citation.open.time": "打开转写稿",
