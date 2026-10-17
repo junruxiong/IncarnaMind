@@ -1350,6 +1350,7 @@ function counterpart(segment: Segment, paragraph: NewParagraph, alike: number): 
   const after = scriptOf(paragraph.tokens);
   return before !== null && after !== null && before !== after;
 }
+
 /** How alike a new paragraph of unknown kind must be to one of the selection's to take its kind. */
 const MOVED_LIKENESS = 0.5;
 
