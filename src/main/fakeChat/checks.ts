@@ -33,7 +33,8 @@ function uncoveredClause(sentence: string, line: string): string | null {
  * Passage line that shares the most words with it. Three shared words or more
  * support it, unless the sentence has a number the line doesn't while the
  * line has numbers: that contradicts it. Fewer leave it unsupported. A
- * sentence with "blank reply" gets an empty reply, and one with "refuse" a refusal.
+ * sentence with "blank reply" gets an empty reply, one with "refuse" a refusal,
+ * and one with "no reason" an unsupported verdict with no reason.
  * Offered calculate, a sentence that states a multiple has it worked out first.
  */
 export function checkReply(prompt: Prompt, tools: readonly string[]): Reply {
@@ -50,7 +51,9 @@ export function checkReply(prompt: Prompt, tools: readonly string[]): Reply {
     const shared = checkWords(line).filter((word) => words.includes(word)).length;
     if (found && (!best || shared > best.shared)) best = { record: found.record, line, shared };
   }
-  if (!best || best.shared < 3) return { text: "Verdict: unsupported" };
+  if (!best || best.shared < 3 || /\bno reason\b/i.test(sentence)) {
+    return { text: "Verdict: unsupported" };
+  }
   const cited = /^The User cites this for it/m.test(lastUserText(prompt));
   const uncovered = cited ? uncoveredClause(sentence, best.line) : null;
   if (uncovered) return { text: `Verdict: unsupported\nPart: ${uncovered}` };

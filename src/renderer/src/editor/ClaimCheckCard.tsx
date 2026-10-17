@@ -304,7 +304,8 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * Location with the quote washed in the state's colour, and Add as Citation
  * when it isn't cited yet; for a contradiction, what the Document says; for a
  * figure worked out, its working and inputs; for nothing found, where it
- * looked, with Search all Documents, or, for a court decision no Document
+ * looked (for a sentence with a Citation, the part the Citation doesn't cover,
+ * with its quote), with Search all Documents, or, for a court decision no Document
  * holds, that it can't be checked here, with Remove the mark only; otherwise
  * why, with Check again. A Passage from a saved web page names the page.
  * Documents IncarnaMind wrote that matched are named, with Count it.

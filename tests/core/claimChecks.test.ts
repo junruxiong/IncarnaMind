@@ -1084,3 +1084,77 @@ describe("What the check is told about dates and its own workings (#821)", () =>
     expect(system).toContain("Never mention the index, the search, the passages");
   });
 });
+
+describe("Why a sentence is unsupported", () => {
+  const HALF = "Spring tides happen at new moon and at full moon, creating very high waters.";
+
+  const reasonOf = async (reply: string, sentence = HALF) => {
+    const { core, client, check } = await mindWith(
+      [sentence],
+      checkingModel({ [sentence]: { reply: { text: reply } } }),
+    );
+    await check();
+    const [shown] = await shownChecks(core, client);
+    return shown?.check.unsupported;
+  };
+
+  test("asks for the reason, and for the part when only part of the sentence is unsupported", async () => {
+    const calls: ModelCall[] = [];
+    const { check } = await mindWith([UNSUPPORTED], checkingModel(PLANS, calls));
+    await check();
+    expect(calls[0]?.system).toContain("For unsupported, one plain sentence in English");
+    expect(calls[0]?.system).toContain('a last line "Part: "');
+  });
+
+  test("is kept with the check: the reason, and the part as the sentence has it", async () => {
+    expect(
+      await reasonOf(
+        "Verdict: unsupported\nTides gives the moon phases, not what they cause.\nPart: “Creating very high waters.”",
+      ),
+    ).toEqual({
+      reason: "Tides gives the moon phases, not what they cause.",
+      part: "creating very high waters",
+    });
+  });
+
+  test("leaves out a part that isn't in the sentence, or is all of it, and keeps the reason", async () => {
+    expect(
+      await reasonOf("Verdict: unsupported\nNot stated.\nPart: causing very low waters"),
+    ).toEqual({ reason: "Not stated.", part: null });
+    expect(await reasonOf(`Verdict: unsupported\nNot stated.\nPart: ${HALF}`)).toEqual({
+      reason: "Not stated.",
+      part: null,
+    });
+  });
+
+  test("is empty when the reply gives neither", async () => {
+    expect(await reasonOf("Verdict: unsupported")).toEqual({ reason: null, part: null });
+  });
+
+  test("is none for a sentence that is supported or contradicted", async () => {
+    const { core, client, check } = await mindWith([SUPPORTED, CONTRADICTED]);
+    await check();
+    expect((await shownChecks(core, client)).map((each) => each.check.unsupported)).toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  test("is replaced when the sentence is checked again", async () => {
+    const plans: Record<string, Plan> = { [HALF]: { reply: { text: "Verdict: unsupported" } } };
+    const { core, client, check } = await mindWith([HALF], checkingModel(plans));
+    await check();
+    expect((await shownChecks(core, client))[0]?.check.unsupported).toEqual({
+      reason: null,
+      part: null,
+    });
+    plans[HALF] = {
+      reply: { text: "Verdict: unsupported\nNot stated.\nPart: creating very high waters" },
+    };
+    await check();
+    expect((await shownChecks(core, client))[0]?.check.unsupported).toEqual({
+      reason: "Not stated.",
+      part: "creating very high waters",
+    });
+  });
+});
