@@ -11,7 +11,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
+import * as Y from "yjs";
 import type { AgentLaunch, CoreBridge } from "../../src/core/api";
+import { BLOCK_ID_ATTRIBUTE, MIND_CONTENT_FIELD } from "../../src/core/api";
 import { AGENT_SOCKET_ENV, AGENT_TOKEN_ENV, handshakeLine } from "../../src/shared/agentSocket";
 import { writeFixtures } from "./fixtures";
 import {
@@ -264,6 +266,61 @@ async function typeFor(window: Page, count: number, delay = 80) {
     await window.keyboard.type(text[i % text.length] as string);
     await window.waitForTimeout(delay * (0.7 + Math.random() * 0.6));
   }
+}
+
+/**
+ * Has the core write into the Mind a word at a time, every `everyMs`, as an
+ * Answer or an edit streams in: a new paragraph at its end, through the
+ * core's bridge, so each word reaches the editor from outside it (#200).
+ * Returns what stops it, with how many writes were made.
+ */
+async function streamIntoMind(
+  window: Page,
+  mindId: string,
+  everyMs: number,
+): Promise<() => Promise<number>> {
+  const state = await window.evaluate(async (id) => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return Array.from((await core.openMind(id)).state);
+  }, mindId);
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, new Uint8Array(state));
+  const send = async (change: () => void) => {
+    const before = Y.encodeStateVector(doc);
+    change();
+    const update = Array.from(Y.encodeStateAsUpdate(doc, before));
+    await window.evaluate(
+      ([id, bytes]) =>
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.applyMindUpdate(
+          id,
+          new Uint8Array(bytes),
+        ),
+      [mindId, update] as const,
+    );
+  };
+  const paragraph = new Y.XmlElement("paragraph");
+  paragraph.setAttribute(BLOCK_ID_ATTRIBUTE, crypto.randomUUID());
+  const text = new Y.XmlText();
+  paragraph.insert(0, [text]);
+  await send(() => doc.getXmlFragment(MIND_CONTENT_FIELD).push([paragraph]));
+  const words =
+    "The survey found that the salt marsh edge had moved about four metres inland since the last report".split(
+      " ",
+    );
+  let running = true;
+  let sent = 0;
+  const writing = (async () => {
+    while (running) {
+      await send(() => text.insert(text.length, `${words[sent % words.length]} `));
+      sent++;
+      await new Promise((resolve) => setTimeout(resolve, everyMs));
+    }
+  })();
+  return async () => {
+    running = false;
+    await writing;
+    return sent;
+  };
 }
 
 /**
@@ -620,6 +677,26 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
       ...(await takeKeyLatency(window)),
       frames: midFrames,
       mainThread: busy(m2, await cdpMetrics(session)),
+    });
+
+    // Typing in the middle while the core writes into the same Mind a word every 50 ms, as an
+    // Answer streams in (#200): y-tiptap 3.0.6 and later rebuild the whole view for each write
+    // that doesn't come from the editor (ueberdosis/y-tiptap#54).
+    const mindId = await window.getByTestId("mind-pane").getAttribute("data-mind-id");
+    if (!mindId) throw new Error("No Mind is open.");
+    await takeKeyLatency(window);
+    const stopWriting = await streamIntoMind(window, mindId, 50);
+    const m4 = await cdpMetrics(session);
+    const stopStreamFrames = await startFrames(window);
+    const streamProfile = await profile(session, () => typeFor(window, 160));
+    const streamFrames = await stopStreamFrames();
+    const writes = await stopWriting();
+    record("speed.typing.longWhileStreaming", {
+      ...(await takeKeyLatency(window)),
+      frames: streamFrames,
+      mainThread: busy(m4, await cdpMetrics(session)),
+      writes,
+      profile: streamProfile,
     });
 
     // Pressing Enter (a new block) in the middle.
