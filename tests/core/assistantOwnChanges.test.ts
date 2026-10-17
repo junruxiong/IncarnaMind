@@ -4,7 +4,7 @@ import * as Y from "yjs";
 import type { Core } from "../../src/core";
 import { EDIT_INSTRUCTIONS } from "../../src/core/edits/prompt";
 import { waitingProblemOf } from "../../src/renderer/src/changeProblems";
-import { pendingProposals, resolveProposals } from "../../src/shared/proposals";
+import { pendingProposals, proposalRequestOf, resolveProposals } from "../../src/shared/proposals";
 import { askAssistant, changesIn, lastResult, mindCalls } from "../helpers/assistant";
 import { answerEnded } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
@@ -783,5 +783,99 @@ describe("Asking again for a reply that claims a change", { timeout: 30_000 }, (
     const { messages } = await core.getConversation(asked.conversation.id);
     const answer = messages.find((message) => message.id === asked.answerId);
     expect(answer?.kind === "answer" && answer.text).not.toContain("added a risks section");
+  });
+});
+
+describe("The assistant's own text already in the Mind (#1061)", { timeout: 30_000 }, () => {
+  // protects=“make the summary longer” after Add to note replaces the added summary with the longer one, tagged as asked so it applies, in English and Chinese; fails_when=the longer text goes in beside the old one, or the change isn't asked for; no_claim=that a real model chooses content over instruction.
+  test.each([
+    [
+      "Make the summary longer.",
+      "The paper is",
+      "The paper is about spring tides.",
+      "The paper is about spring tides, which come at new and full moon, when the tide rises highest.",
+    ],
+    [
+      "把摘要写长一点。",
+      "这篇论文讲的是",
+      "这篇论文讲的是大潮。",
+      "这篇论文讲的是大潮：大潮出现在新月和满月前后，这时潮水涨得最高。",
+    ],
+  ])(
+    "“%s” replaces the summary added from an Answer, never adding a second",
+    async (request, part, summary, longer) => {
+      const model = scriptedModel((call): ScriptedReply => {
+        if (call.results.length > 0) return { text: "Done." };
+        return {
+          calls: [{ tool: "edit_mind", input: { part, content: longer } }],
+        };
+      });
+      const { core, mind, client } = await setUp(model);
+      await core.addToNote({
+        mindId: mind.id,
+        blocks: [{ type: "paragraph", content: [{ type: "text", text: summary }] }],
+        origin: null,
+        model: null,
+      });
+      await client.settled();
+
+      const answer = await askAssistant(core, { text: request, mindId: mind.id });
+
+      await client.settled();
+      const [change] = changesIn(answer);
+      expect(proposalRequestOf(client.doc, change?.request ?? "")).toMatchObject({
+        requested: "edit",
+      });
+      expect(lastResult(model)).toContain("applies in the Mind at once");
+      expect(shownWithChanges(client).slice(-2)).toEqual([`- ${summary}`, `+ ${longer}`]);
+      client.doc.transact(() => resolveProposals(client.blocks, () => true, "accept"));
+      await client.settled();
+      expect(shownWithChanges(client)).toEqual([
+        "Summary",
+        "The quarter was very good, and sales were really strong.",
+        longer,
+      ]);
+    },
+  );
+
+  // protects=asked to make the summary longer, a longer version added beside the summary from an Answer is refused, with how to change it in place, and the change in place follows; fails_when=a second summary goes in, or the model isn't told to use edit_mind; no_claim=that a real model then changes it in place.
+  test("a longer version added beside it is refused, and the summary is changed in place", async () => {
+    const summary = "The paper is about spring tides and the times they come at.";
+    const longer =
+      "The paper is about spring tides and the times they come at, new and full moon, when the tide rises highest.";
+    const told: string[] = [];
+    const model = scriptedModel((call): ScriptedReply => {
+      const results = call.results.map((each) => each.text);
+      if (results.length === 0) {
+        return { calls: [{ tool: "add_to_mind", input: { content: longer } }] };
+      }
+      if (results.length === 1) {
+        told.push(results[0] ?? "");
+        return {
+          calls: [{ tool: "edit_mind", input: { part: "The paper is about", content: longer } }],
+        };
+      }
+      return { text: "Done." };
+    });
+    const { core, mind, client } = await setUp(model);
+    await core.addToNote({
+      mindId: mind.id,
+      blocks: [{ type: "paragraph", content: [{ type: "text", text: summary }] }],
+      origin: null,
+      model: null,
+    });
+    await client.settled();
+
+    await askAssistant(core, { text: "Make the summary longer.", mindId: mind.id });
+
+    await client.settled();
+    expect(told[0]).toContain("Change that text in place with edit_mind");
+    client.doc.transact(() => resolveProposals(client.blocks, () => true, "accept"));
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual([
+      "Summary",
+      "The quarter was very good, and sales were really strong.",
+      longer,
+    ]);
   });
 });

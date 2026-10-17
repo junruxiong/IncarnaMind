@@ -11,6 +11,8 @@
  *   each is cited, or named in a sentence saying it wasn't covered.
  * - **Only what was asked changes**: asked about one paragraph, the others
  *   read as they did.
+ * - **Changed in place**: asked to make text in the Mind longer, it changes
+ *   that text, not adding a second version beside it (#1061).
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
@@ -26,6 +28,8 @@ export interface Expected {
   coverAll: boolean;
   /** Only this top-level Block of the Mind it is asked from (from 0) may change. */
   only?: number;
+  /** It asks to change text already in the Mind: adding a new version beside it fails. */
+  inPlace?: true;
 }
 
 export interface RequestOutcome {
@@ -47,7 +51,8 @@ export type RequestFailure =
   | { kind: "unbacked"; sentences: string[]; flagged: boolean }
   | { kind: "no-citations" }
   | { kind: "uncovered"; documents: string[] }
-  | { kind: "outside"; blocks: number[] };
+  | { kind: "outside"; blocks: number[] }
+  | { kind: "beside" };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
@@ -98,6 +103,10 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
     const outside = outcome.changedBlocks.filter((block) => block !== expected.only);
     if (outside.length > 0) failures.push({ kind: "outside", blocks: outside });
   }
+  const added = answer.toolCalls.some(
+    (call) => call.tool === "add_to_mind" && call.mindChange && call.mindChange.proposals > 0,
+  );
+  if (expected.inPlace && added) failures.push({ kind: "beside" });
   return failures;
 }
 
@@ -114,5 +123,7 @@ export function failureLine(failure: RequestFailure): string {
       return `neither cites nor names as left out ${failure.documents.map((name) => `“${name}”`).join(", ")}`;
     case "outside":
       return `changed what it was asked to leave: Block ${failure.blocks.map((block) => block + 1).join(", ")}`;
+    case "beside":
+      return "added a new version beside the text it was asked to change";
   }
 }

@@ -167,7 +167,10 @@ export function waitingIn(blocks: Y.XmlFragment, from: TextPlace, to: TextPlace)
 }
 
 /** The Blocks of `own` in the Mind now, in order; null once they have changed. */
-function blocksOf(blocks: Y.XmlFragment, own: OwnWaiting): Y.XmlElement[] | null {
+function blocksOf(
+  blocks: Y.XmlFragment,
+  own: Pick<OwnWaiting, "blockIds" | "fingerprint">,
+): Y.XmlElement[] | null {
   const top = topLevelBlocks(blocks);
   const start = top.findIndex((element) => idOf(element) === own.blockIds[0]);
   if (start < 0) return null;
@@ -206,6 +209,60 @@ export function boundsOf(
   const start = top.findIndex((element) => idOf(element) === own.blockIds[0]);
   const end = top.findIndex((element) => idOf(element) === own.blockIds.at(-1));
   return start < 0 || end < start ? null : { before: start, after: top.length - end - 1 };
+}
+
+/** The text of each of the assistant's own Blocks already in the Mind, accepted or added with Add to note, but its headings. */
+export function ownAppliedTexts(blocks: Y.XmlFragment): string[] {
+  return topLevelBlocks(blocks).flatMap((element) =>
+    element.nodeName !== "heading" &&
+    element.getAttribute(PROPOSAL_ATTRIBUTE) === undefined &&
+    !holdsProposal(element.toArray()) &&
+    allAiText(element)
+      ? [elementText(element)]
+      : [],
+  );
+}
+
+/**
+ * The assistant's own text already in the Mind, accepted or added with Add to note: whole
+ * top-level Blocks of AI text over a stretch, with nothing waiting in them (#1061).
+ */
+export interface OwnApplied {
+  kind: "applied";
+  blockIds: string[];
+  fingerprint: string;
+}
+
+export function ownAppliedIn(
+  blocks: Y.XmlFragment,
+  from: TextPlace,
+  to: TextPlace,
+): OwnApplied | null {
+  const range = rangeOf(blocks, from, to);
+  if (range.length === 0 || holdsProposal(range) || !range.every(allAiText)) return null;
+  return { kind: "applied", blockIds: range.map(idOf), fingerprint: fingerprintOf(range) };
+}
+
+/**
+ * Proposes `revised` in place of `applied`'s Blocks: each old one to remove and each new one to
+ * add after them, as Proposals of `request`, so rejecting them leaves the text as it was.
+ * Returns the new Blocks' ids; null, changing nothing, when the old ones changed since they
+ * were read. Call it in a Yjs transaction.
+ */
+export function replaceApplied(
+  blocks: Y.XmlFragment,
+  applied: OwnApplied,
+  revised: readonly Y.XmlElement[],
+  request: string,
+): string[] | null {
+  const old = blocksOf(blocks, applied);
+  const last = old?.at(-1);
+  if (!old || !last) return null;
+  for (const element of old) setProposal(element, { id: randomUUID(), request, kind: "delete" });
+  blocks.insert(blocks.toArray().indexOf(last) + 1, [...revised]);
+  for (const element of revised)
+    setProposal(element, { id: randomUUID(), request, kind: "insert" });
+  return revised.map(idOf);
 }
 
 /** Whether the User asked for all of the text `own` holds (#880): a revision of it is asked for too. */
