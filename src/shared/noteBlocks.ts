@@ -204,8 +204,11 @@ export function citedTables(blocks: readonly NodeJSON[]): NodeJSON[] {
 
 const LEAD_IN =
   /^(?:(?:sure|certainly|of course|okay|ok)\b|here(?:'s| is| are)\b|below (?:is|are)\b|以下是|下面是|好的|当然|如下)/iu;
+// The model saying how it went about the request: "你没有说明是哪一份合同，所以我把四份文档各写了…" (#1061).
+const EXPLAINING =
+  /^(?:(?:since|as|because)\s+)?you\s+(?:didn['’]t|did not)\s+(?:say|specify|mention)\b|^i\s+(?:wasn['’]t sure\b|(?:have\s+|['’]ve\s+)?(?:written|wrote|summari[sz]ed|put together)\b)|^(?:由于|因为)?你(?:没有|没)(?:说明|指定|说|提到)|^(?:所以)?我(?:把|为|将|先)[^。！？]{0,30}?(?:写了|整理了|总结了|概括了)/iu;
 const CLOSING_NOTE =
-  /^(?:(?:note|notes|please note|n\.b\.|i hope|hope this|let me know|feel free)\b|注[：:]|备注|说明[：:]|希望|如需|如果需要|如有)/iu;
+  /^(?:(?:note|notes|please note|n\.b\.|i hope|hope this|let me know|feel free|if you(?:['’]d| would| want| meant))\b|注[：:]|备注|说明[：:]|希望|如需|如果需要|如有|如果你|要是你)/iu;
 /** A figure or a bracketed unit, "(GBP m)": framing that says something about the content stays. */
 const SAYS_SOMETHING =
   /\d|[(（][^)）]+[)）]|\b(?:figures?|currency|units?|thousands?|millions?|billions?|[A-Z]{3})\b|[%％万亿元]/u;
@@ -213,7 +216,8 @@ const CONTENT_BLOCKS = new Set(["table", "bulletList", "orderedList", "heading",
 
 /**
  * An Answer's content without its framing, for Add to note: the model's
- * lead-in before the content ("Here is a draft:", "以下是…：") and its closing
+ * lead-in before the content ("Here is a draft:", "以下是…：", or how it went
+ * about the request, "你没有说明是哪一份合同，所以我…") and its closing
  * note after it ("Note: …", "注：…"), when they hold no Citation, figure or bracketed unit and the
  * Answer has more than the one paragraph. What the User selected is added as it
  * is: this is for a whole Answer.
@@ -228,6 +232,7 @@ export function withoutFraming(blocks: readonly NodeJSON[]): NodeJSON[] {
     !holdsCitation(first) &&
     !SAYS_SOMETHING.test(textOf(first)) &&
     (LEAD_IN.test(textOf(first).trim()) ||
+      EXPLAINING.test(textOf(first).trim()) ||
       (/[:：]\s*$/u.test(textOf(first)) && CONTENT_BLOCKS.has(next.type)))
   ) {
     kept = kept.slice(1);

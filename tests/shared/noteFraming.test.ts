@@ -20,6 +20,18 @@ describe("withoutFraming", () => {
     ]);
     expect(withoutFraming([p("以下是草稿："), table, p("注：以上仅为草稿。")])).toEqual([table]);
   });
+  test("leaves out the model explaining how it went about the request (#1061)", () => {
+    const explaining = p("你没有说明是哪一份合同，所以我把四份文档各写了一段简短摘要。");
+    const summary = p("合同 A 规定租期为两年。");
+    expect(withoutFraming([explaining, summary, p("合同 B 规定月租为八千元。")])).toEqual([
+      summary,
+      p("合同 B 规定月租为八千元。"),
+    ]);
+    const english = p("You didn't say which contract, so I've summarised all four.");
+    expect(
+      withoutFraming([english, summary, p("If you meant one of them, tell me which.")]),
+    ).toEqual([summary]);
+  });
   test("keeps framing that says something: units, figures, and a sentence that starts 这是", () => {
     const units = p("Revenue and operating profit, FY2020–24 (GBP m):");
     const note = p("Note: figures in GBP millions.");
