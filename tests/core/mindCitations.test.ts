@@ -1,7 +1,7 @@
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { describe, expect, test } from "vitest";
 import type { Core } from "../../src/core";
-import { askAssistant, changesIn, lastResult, mindCalls } from "../helpers/assistant";
+import { askAssistant, changesIn, lastResult } from "../helpers/assistant";
 import { setUpWithDocuments, shownPassages } from "../helpers/citations";
 import { connectToMind } from "../helpers/mindClient";
 import { readMind } from "../helpers/minds";
@@ -104,7 +104,11 @@ describe("Sources written as text into a Mind (#1075)", { timeout: 30_000 }, () 
       const model = scriptedModel((call) =>
         searchingFirst(call, (passage) => {
           if (!called(call, "create_mind")) {
-            return { calls: [{ tool: "create_mind", input: { title, content: AS_TEXT } }] };
+            return {
+              calls: [
+                { tool: "create_mind", input: { title, content: AS_TEXT }, streamInput: true },
+              ],
+            };
           }
           if (!called(call, "cite")) {
             told.push(call.results.find((each) => each.tool === "create_mind")?.text ?? "");

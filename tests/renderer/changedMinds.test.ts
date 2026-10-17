@@ -230,6 +230,7 @@ describe("The Minds an Answer changed", () => {
           proposals: 1,
           tables: 1,
           unlinkedSources: 2,
+          droppedSources: 1,
         }),
         call("edit_mind", {
           mindId: "a",
@@ -242,7 +243,7 @@ describe("The Minds an Answer changed", () => {
         }),
       ],
     });
-    expect(row).toMatchObject({ tables: 2, unlinkedSources: 3, extraCells: 3 });
+    expect(row).toMatchObject({ tables: 2, unlinkedSources: 3, droppedSources: 1, extraCells: 3 });
   });
 
   // protects=the card's note on a table's sources uses the glossary's word for a Citation's source, 出处, in Chinese (#961); fails_when=it says 来源; no_claim=how the card lays it out.
@@ -252,6 +253,9 @@ describe("The Minds an Answer changed", () => {
     );
     expect(translate("zh-CN", "mindChanges.unlinked", { count: 3 })).toBe(
       "· 表格中有 3 处出处无法关联，已作为文字显示",
+    );
+    expect(translate("zh-CN", "mindChanges.dropped", { count: 2 })).toBe(
+      "· 有 2 处出处无法匹配，已删去",
     );
   });
 });
