@@ -553,7 +553,9 @@ export class DocumentPatch {
       previous = { table, index: keptHere ? (matched[index] as number) : null };
     });
 
-    // A cell ends with a paragraph, and so does the body before its last section's properties.
+    // A cell ends with a paragraph, and so does the body before its last section's properties,
+    // unless it still ends with the table it ended with in the file: LibreOffice takes minutes
+    // to lay out a paragraph after a table nested thousands deep.
     if (splices.length > 0) {
       const last = spec.current.at(-1);
       const lastBased = last?.key ? this.based.get(last.key) : undefined;
@@ -563,7 +565,7 @@ export class DocumentPatch {
         lastBased !== undefined &&
         last?.key === baseKeys.at(-1) &&
         keptKeys.has(lastBased.counterpart.key ?? "");
-      if (endsInTable && !(stillLast && element.name === "w:body")) {
+      if (endsInTable && !stillLast) {
         splices.push({ from: anchor, to: anchor, text: "<w:p/>" });
       }
     }

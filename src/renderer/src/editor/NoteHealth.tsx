@@ -19,6 +19,7 @@ import { useLanguage, useT } from "../i18n";
 import { startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useAppStore } from "../store";
 import { useCheckUnread } from "../unreadFiles";
+import { AddedDocumentsLine } from "./AddedDocumentsLine";
 import { AnswerError } from "./AnswerView";
 import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
 import { type NoteHealth as Health, type HealthPart, noteHealth } from "./healthCounts";
@@ -224,6 +225,7 @@ export function HealthCard({
 
   return (
     <>
+      <AddedDocumentsLine doc={doc} mindId={mindId} />
       <div className="check-rows" data-testid="mind-health">
         {rows.map(row)}
         {health.unchecked.length > 0 && (

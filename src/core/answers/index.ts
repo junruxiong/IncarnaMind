@@ -48,6 +48,7 @@ import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
 import { linkTableSources } from "../../shared/markdownTables";
+import type { MeetingHelpKind } from "../../shared/meetingHelp";
 import {
   decisionsOn,
   pendingProposals,
@@ -190,6 +191,14 @@ import type {
 } from "./engine";
 import { listenedTokens, newestWithin, withBeforeQuestion, withTranscript } from "./liveTranscript";
 import { markdownToBlocks } from "./markdown";
+import {
+  FOUND_TOKEN_LIMIT,
+  foundWithin,
+  languageSaid,
+  meetingHelpInstructions,
+  newestSaid,
+  withFound,
+} from "./meetingHelp";
 import { paragraphAsked } from "./paragraphAsked";
 import {
   answerInstructions,
@@ -385,13 +394,18 @@ export interface AnswersOptions {
    * Passages in reading order; null when the Mind's Meeting isn't recording or has no lines yet.
    */
   liveTranscript(mindId: string): Promise<WindowedPassage[] | null>;
+  /**
+   * The help button a Question in a conversation is, asked from a Mind whose Meeting
+   * records or is paused: its text is the button's name. Null for any other Question.
+   */
+  meetingHelp?(mindId: string, question: string): MeetingHelpKind | null;
   providerExists(providerId: string): boolean;
   /** Whether Questions can be asked with this model (the default one when undefined). */
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
   /** The model, once the User has accepted its data flow (see `Core.prepareChatModel`). */
   prepareModel(
     choice: ChatModelChoice,
-    thinking: "summary" | "answer" | "careful",
+    thinking: "off" | "summary" | "answer" | "careful",
   ): Promise<PreparedChatModel>;
   /**
    * The quick-tasks model for an Answer asked with `answers`, prepared as
@@ -761,6 +775,11 @@ export function createAnswers(options: AnswersOptions) {
      * to now, to go with the Question. Absent: none.
      */
     listening?: () => Promise<WindowedPassage[] | null>;
+    /**
+     * One-click help during the call: the button pressed. Its Answer is laid out as
+     * the panel reads it, and is offered the Documents' Tools only.
+     */
+    help?: MeetingHelpKind;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
     task?: boolean;
     /** Offers web search's Tools whatever the Question says: a Research Task's Web source (#130). */
@@ -817,6 +836,10 @@ export function createAnswers(options: AnswersOptions) {
     let mindRequest = input.mind?.request;
     /** It listened to a meeting's live transcript: the Question went with it. */
     let listening = false;
+    const { help } = input;
+    let foundAhead = false;
+    /** The language the call's newest lines are in, which a help Answer is written in. */
+    let callLanguage: string | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
@@ -1421,7 +1444,8 @@ export function createAnswers(options: AnswersOptions) {
       try {
         prepared = await options.prepareModel(
           model,
-          input.task ? "summary" : careful ? "careful" : "answer",
+          // Help during a call is read within seconds: the model answers without thinking first.
+          help ? "off" : input.task ? "summary" : careful ? "careful" : "answer",
         );
       } catch (error) {
         finish({ status: "failed", error: failureOf(error) });
@@ -1447,6 +1471,28 @@ export function createAnswers(options: AnswersOptions) {
         if (kept.length > 0) {
           messages = withTranscript(messages, session.show(kept));
           listening = true;
+          if (help) callLanguage = languageSaid(kept);
+        }
+        // Help gets what the User's Documents say about the newest lines at once, with no search
+        // the model has to call first.
+        if (help && kept.length > 0) {
+          const transcript = new Set(kept.map((passage) => passage.documentId));
+          try {
+            const found = await session.find(newestSaid(kept), controller.signal, {
+              rerank: false,
+            });
+            const fitting = foundWithin(
+              found.filter((passage) => !transcript.has(passage.documentId)),
+              FOUND_TOKEN_LIMIT,
+            );
+            if (fitting.length > 0) {
+              messages = withFound(messages, session.show(fitting));
+              foundAhead = true;
+            }
+          } catch (error) {
+            if (!controller.signal.aborted) options.reportError(error);
+          }
+          if (finished) return;
         }
       }
       if (inAssistant) {
@@ -1760,7 +1806,13 @@ export function createAnswers(options: AnswersOptions) {
             mindInstructions(withMindTools, route),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
-            language,
+            help
+              ? meetingHelpInstructions(help, {
+                  found: foundAhead,
+                  language: options.interfaceLanguage(),
+                  callLanguage,
+                })
+              : language,
           ]
             .filter(Boolean)
             .join("\n\n"),
@@ -1773,7 +1825,7 @@ export function createAnswers(options: AnswersOptions) {
         tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
         gate,
         streamsInput,
-        toolSet: input.toolSet,
+        toolSet: input.toolSet ?? (help ? "documents" : undefined),
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         structuredOutput: givesStructuredOutput(prepared.capabilities),
@@ -2110,18 +2162,19 @@ export function createAnswers(options: AnswersOptions) {
     mind: MindToRead | null,
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
+    const help = mind ? (options.meetingHelp?.(mind.mindId, question.text) ?? null) : null;
+    // Each press of a help button stands alone: an earlier suggestion would only steer this one.
+    const earlier = help ? [] : turn.earlier;
     // A long Mind is cut to what the conversation's Questions are about, the earlier ones too: a
     // follow-up keeps the part the first one found, and so the same start for the prompt cache.
     const asking = [
-      ...turn.earlier.flatMap((message) => (message.kind === "question" ? [message.text] : [])),
+      ...earlier.flatMap((message) => (message.kind === "question" ? [message.text] : [])),
       question.text,
     ].join("\n");
     const section =
-      mind && turn.earlier.length > 0
-        ? mind.reading.section(MIND_TOKEN_LIMIT, asking)
-        : mind?.section;
+      mind && earlier.length > 0 ? mind.reading.section(MIND_TOKEN_LIMIT, asking) : mind?.section;
     const documents = options.documents.names();
-    const { context, origins } = conversationContextOf(turn.earlier, question.text, {
+    const { context, origins } = conversationContextOf(earlier, question.text, {
       mind: section,
       documents,
       mindNames: options.readableMindName,
@@ -2153,7 +2206,7 @@ export function createAnswers(options: AnswersOptions) {
                 return null;
               const smaller = mind.reading.section(tokens, asking);
               return {
-                context: conversationContextOf(turn.earlier, question.text, {
+                context: conversationContextOf(earlier, question.text, {
                   mind: smaller,
                   documents,
                   mindNames: options.readableMindName,
@@ -2171,6 +2224,7 @@ export function createAnswers(options: AnswersOptions) {
       forcedSkill: question.forcedSkill,
       consentNeeded: ready.consentNeeded,
       ...(mind && { listening: () => options.liveTranscript(mind.mindId) }),
+      ...(help && { help }),
       assistant: {
         focused: mind && {
           mindId: mind.mindId,

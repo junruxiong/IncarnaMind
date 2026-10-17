@@ -33,6 +33,7 @@ import {
   HistoryLineIcon,
   PlusLineIcon,
 } from "../lineIcons";
+import { HelpStrip } from "../meetings/HelpStrip";
 import { ModelSetupCard } from "../providers/ModelSetupCard";
 import { TaskTray } from "../TaskTray";
 import { AssistantMenu } from "./AssistantMenu";
@@ -286,6 +287,7 @@ function AssistantMain({
   }, [folded]);
   return (
     <div className="assistant-main" hidden={folded}>
+      <HelpStrip mindId={mind?.mindId ?? null} />
       <div
         ref={thread}
         data-testid="assistant-thread"
@@ -296,7 +298,12 @@ function AssistantMain({
       >
         <ConversationThread focusedMindId={mind?.mindId ?? null} />
       </div>
-      <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer">
+      <div
+        ref={onComposerSlot}
+        data-testid="assistant-composer"
+        data-setup={settingUp || undefined}
+        className="assistant-composer"
+      >
         {mind && <TaskTray mindId={mind.mindId} />}
         {settingUp ? <ModelSetupCard /> : <Composer mind={mind} />}
       </div>

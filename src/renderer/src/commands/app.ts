@@ -35,6 +35,7 @@ import { footnoteCommands } from "./footnotes";
 import { formatCommands } from "./format";
 import { citationHandle, findHandle, readMindHandle, sidebarHandle } from "./handles";
 import { linkCommands } from "./links";
+import { meetingHelpCommands } from "./meetingHelp";
 import { meetingCommands } from "./meetings";
 import { newFolderCommands } from "./newFolder";
 import {
@@ -126,6 +127,7 @@ const appCommands: readonly Command[] = [
   ...citationCommands,
   ...tabCommands,
   ...meetingCommands,
+  ...meetingHelpCommands,
   ...webPageCommands,
   ...feedbackCommands,
   ...exampleCommands,

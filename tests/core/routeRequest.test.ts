@@ -38,6 +38,8 @@ const REVIEWED: readonly Row[] = [
   ["把它写长一点", "edit", "after a change"],
   ["把它写长一点", "unclear", "after no change"],
   ["把第二段写得更正式", "edit"],
+  ["把摘要写长一点。", "edit"],
+  ["把这份总结写短一些", "edit"],
   ["把第二段改得更正式，其他段落保持不变", "edit"],
   ["这篇论文说了什么？把这个加到我的笔记里", "unclear"],
   ["What does the paper claim and add it to my notes", "unclear"],

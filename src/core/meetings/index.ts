@@ -38,6 +38,9 @@ import {
   MEETING_AUDIO_KEPT_MS,
   type Meeting,
   type MeetingGap,
+  type MeetingHelp,
+  type MeetingHelpTemplate,
+  type MeetingLevel,
   type MeetingSourceState,
   type Mind,
 } from "../api";
@@ -64,6 +67,16 @@ const SILENT_SAMPLES = MEETING_SAMPLE_RATE * 60;
 
 /** How often audio past its day is looked for. */
 const SWEEP_INTERVAL_MS = 60_000;
+
+const LEVEL_EVERY_MS = 100;
+
+/** Loudness from 0 to 1 for samples: their RMS on a scale where quiet speech is about a third. */
+function loudness(samples: Int16Array): number {
+  let sum = 0;
+  for (const sample of samples) sum += sample * sample;
+  const rms = Math.sqrt(sum / Math.max(1, samples.length)) / 32768;
+  return Math.min(1, Math.sqrt(rms * 8));
+}
 
 type EndedBy = "pause" | "stop" | "sleep" | "interrupted";
 
@@ -119,6 +132,9 @@ interface Live {
   /** Some sound has come from the computer's sound: without it, a macOS that isn't allowing it can't be told from a quiet call. */
   systemSignal: boolean;
   saveError: string | null;
+  /** The loudest each source has been since the level was last told, and when that was. */
+  levels: Record<AudioSource, number>;
+  levelAt: number;
 }
 
 export interface MeetingsOptions {
@@ -136,6 +152,8 @@ export interface MeetingsOptions {
   changed(meetings: Meeting[]): void;
   /** Whether audio is being captured, each time that changes. */
   onCapturingChange(capturing: boolean): void;
+  /** How loud each source is, about ten times a second while audio is captured. */
+  level?(level: MeetingLevel): void;
   /** Transcribes Meetings (#136); absent where this copy can't. */
   transcripts?: Transcripts;
   health: CaptureHealthRecords;
@@ -158,6 +176,9 @@ export function createMeetings(options: MeetingsOptions) {
   let live: Live | null = null;
   /** Whether each Meeting has audio on disk, looked up once. */
   const kept = new Map<string, boolean>();
+  /** For the call's help, kept in memory: it matters only while the Meeting is live. */
+  const help = new Map<string, MeetingHelp>();
+  const templates = new Map<string, MeetingHelpTemplate>();
 
   const rowOf = (meetingId: unknown): MeetingRow => {
     if (typeof meetingId !== "string" || meetingId === "") {
@@ -172,6 +193,8 @@ export function createMeetings(options: MeetingsOptions) {
   };
 
   const periodsOf = (row: MeetingRow): Period[] => JSON.parse(row.periods) as Period[];
+
+  const isLiveRow = (row: MeetingRow) => row.status === "recording" || row.status === "paused";
 
   const hasAudio = (meetingId: string): boolean => {
     let value = kept.get(meetingId);
@@ -221,6 +244,8 @@ export function createMeetings(options: MeetingsOptions) {
       saveError: current?.saveError ?? null,
       transcript: transcripts && row.status !== "ready" ? transcripts.of(row.id) : null,
       health: health.of(row.id),
+      help: help.get(row.id) ?? null,
+      helpTemplate: templates.get(row.id) ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -346,6 +371,7 @@ export function createMeetings(options: MeetingsOptions) {
       }
     }
     transcripts?.hear(current.meetingId, source, samples, run.startMs + msOf(run.samples));
+    tellLevel(current, source, samples);
     run.waiting.push(samples);
     run.waitingSamples += samples.length;
     run.samples += samples.length;
@@ -362,6 +388,16 @@ export function createMeetings(options: MeetingsOptions) {
       source,
       source === "system" && current.silent >= SILENT_SAMPLES ? "silent" : "recording",
     );
+  }
+
+  function tellLevel(current: Live, source: AudioSource, samples: Int16Array): void {
+    if (!options.level) return;
+    current.levels[source] = Math.max(current.levels[source], loudness(samples));
+    const at = clock();
+    if (at - current.levelAt < LEVEL_EVERY_MS) return;
+    current.levelAt = at;
+    options.level({ meetingId: current.meetingId, ...current.levels });
+    current.levels = { microphone: 0, system: 0 };
   }
 
   function setSource(current: Live, source: AudioSource, state: MeetingSourceState): void {
@@ -398,6 +434,8 @@ export function createMeetings(options: MeetingsOptions) {
       silent: 0,
       systemSignal: false,
       saveError: null,
+      levels: { microphone: 0, system: 0 },
+      levelAt: 0,
     };
     for (const part of listParts(current.folder)) {
       const end = part.offsetMs + part.durationMs;
@@ -710,6 +748,8 @@ export function createMeetings(options: MeetingsOptions) {
         audio_expires_at: expiryOf(row.id, periods),
       });
       transcripts?.stop(row.id);
+      help.delete(row.id);
+      templates.delete(row.id);
       log.info("meeting.stopped", { meetingId: row.id });
       changed();
       return toMeeting(rowOf(row.id));
@@ -784,6 +824,31 @@ export function createMeetings(options: MeetingsOptions) {
       log.info("meeting.awake", { meetingId: row.id });
       changed();
     },
+
+    helped(meetingId: string, given: MeetingHelp): void {
+      if (!isLiveRow(rowOf(meetingId))) return;
+      help.set(meetingId, given);
+      changed();
+    },
+
+    setTemplate(meetingId: unknown, template: MeetingHelpTemplate | null): Meeting {
+      const row = rowOf(meetingId);
+      if (!isLiveRow(row)) throw new InvalidInputError({ key: "error.meeting.notBeingRecorded" });
+      if (template) templates.set(row.id, template);
+      else templates.delete(row.id);
+      changed();
+      return toMeeting(row);
+    },
+
+    liveOf(mindId: string): Meeting | null {
+      const row = db.get<MeetingRow>(
+        `SELECT ${COLUMNS} FROM meetings WHERE mind_id = ? AND deleted_at IS NULL AND status IN ('recording', 'paused')`,
+        [mindId],
+      );
+      return row ? toMeeting(row) : null;
+    },
+
+    get: (meetingId: unknown): Meeting => toMeeting(rowOf(meetingId)),
 
     sweep,
 
