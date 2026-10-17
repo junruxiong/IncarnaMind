@@ -675,8 +675,7 @@ describe("Compare Documents", () => {
     const markdown = new TextDecoder().decode(
       (await core.exportMind(mind.id, { format: "markdown" })).data,
     );
-    const [title, table, footnotes] = markdown.trim().split("\n\n");
-    expect(title).toBe("# Tides");
+    const [table, footnotes] = markdown.trim().split("\n\n");
     expect(table?.split("\n")).toEqual([
       "| Document | Termination notice | Liability cap |",
       "| --- | --- | --- |",

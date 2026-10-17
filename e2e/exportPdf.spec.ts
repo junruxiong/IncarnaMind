@@ -24,6 +24,7 @@ import {
   type MindChild,
   mindNode,
   motionSettled,
+  nameMind,
   newMind,
   openOptions,
   pathsOpened,
@@ -119,7 +120,7 @@ const unspaced = (text: string) => text.replace(/\s+/g, "");
 /** Opens a new Mind titled `title`, and adds the two Documents it cites. Returns its id. */
 async function setUpMind(window: Page, folder: string, title: string) {
   await newMind(window);
-  await window.getByTestId("mind-title").fill(title);
+  await nameMind(window, title);
   const mindId = await window.getByTestId("mind-pane").getAttribute("data-mind-id");
   if (!mindId) throw new Error("No Mind is open.");
   await writeFile(join(folder, "Tides.txt"), "Spring tides happen at new moon.");
@@ -228,7 +229,6 @@ test("a Mind with English and Chinese Citations, a table and maths prints as a P
     year: "numeric",
   }).format(new Date(fetched));
   const golden = [
-    "Tides 潮汐",
     "Spring tides",
     "Spring tides happen at new moon and at full moon1.",
     "大潮出现在新月和满月前后2。",
@@ -323,7 +323,6 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
   // Under it, its caption, then its sources: each a footnote naming its Document and
   // Location, numbered with the rest, and the value with no Citation said in words.
   const golden = [
-    "Tides 潮汐",
     "Chart: Tidal range 潮差",
     "Source: 1,2 1 value has no Citation.",
     "1 Tides, p. 1",
@@ -345,7 +344,6 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
   expect(chineseText.map(unspaced)).toEqual([
     unspaced(
       [
-        "Tides 潮汐",
         "图表：Tidal range 潮差",
         "数据来源：1,2 1 个数值没有引用。",
         "1 Tides，第 1 页",
@@ -430,7 +428,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await pointAndClick(window, window.getByTestId("mind-editor"));
   await window.keyboard.type("Spring tides come twice a month.");
   const out = await createDataFolder();

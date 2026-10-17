@@ -6,6 +6,7 @@ import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
   expectDotsBetweenParts,
   forceQuit,
   launchApp,
@@ -63,14 +64,23 @@ const tasksOf = (window: Page) =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listTasks(),
   );
 
-const mindIdOf = (window: Page, title: string) =>
-  window.evaluate(
-    async (wanted) =>
-      (await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listMinds()).find(
-        (mind) => mind.title === wanted,
-      )?.id ?? "",
-    title,
-  );
+/** The Mind of this name, typed or taken from its first line, once the core has it. */
+async function mindIdOf(window: Page, name: string): Promise<string> {
+  let id = "";
+  await expect
+    .poll(async () => {
+      id = await window.evaluate(
+        async (wanted) =>
+          (
+            await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listMinds()
+          ).find((mind) => (mind.title || mind.autoTitle) === wanted)?.id ?? "",
+        name,
+      );
+      return id;
+    })
+    .not.toBe("");
+  return id;
+}
 
 const setLanguage = (window: Page, language: "en" | "zh-CN") =>
   window.evaluate(
@@ -280,8 +290,8 @@ test("a Task waiting for approval comes back paused after a quit: â€œNeeds youâ€
     await newMind(window);
     await window.keyboard.type("Credit memo");
     await window.keyboard.press("ControlOrMeta+t");
-    // Typed once the new tab's title has the focus, or the first keys land in the last Mind.
-    await expect(window.getByTestId("mind-title").last()).toBeFocused();
+    // Typed once the new tab's text has the focus, or the first keys land in the last Mind.
+    await enterContent(window);
     await window.keyboard.type("Notes");
     const memoTab = window.getByTestId("mind-tab").filter({ hasText: "Credit memo" });
     const notesTab = window.getByTestId("mind-tab").filter({ hasText: "Notes" });
