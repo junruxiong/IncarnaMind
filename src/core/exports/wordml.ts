@@ -47,7 +47,24 @@ export interface RunFormat {
   smallCaps?: boolean;
   /** Raised or lowered, as a citation style may write a number or a formula. */
   script?: "superscript" | "subscript";
+  /** A font by name, for every script. */
+  font?: string;
+  /** In points. */
+  size?: number;
+  /** Hex "RRGGBB". */
+  color?: string;
 }
+
+export const fontsXml = (font: string) => {
+  const name = escapeXml(font);
+  return `<w:rFonts w:ascii="${name}" w:hAnsi="${name}" w:eastAsia="${name}" w:cs="${name}"/>`;
+};
+
+/** Word keeps sizes in half points. */
+export const halfPoints = (points: number) => Math.round(points * 2);
+
+const sizeXml = (points: number) =>
+  `<w:sz w:val="${halfPoints(points)}"/><w:szCs w:val="${halfPoints(points)}"/>`;
 
 /**
  * A run of text in a format: tabs and line breaks become Word's. Empty text
@@ -67,11 +84,17 @@ function runOf(text: string, format: RunFormat, textElement: "w:t" | "w:delText"
   // In the order the schema requires.
   const rPr = [
     format.style ? `<w:rStyle w:val="${escapeXml(format.style)}"/>` : "",
-    format.monospace ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>' : "",
+    format.monospace
+      ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>'
+      : format.font
+        ? fontsXml(format.font)
+        : "",
     format.bold ? "<w:b/>" : "",
     format.italic ? "<w:i/>" : "",
     format.smallCaps ? "<w:smallCaps/>" : "",
     format.strike ? "<w:strike/>" : "",
+    format.color ? `<w:color w:val="${escapeXml(format.color)}"/>` : "",
+    format.size ? sizeXml(format.size) : "",
     format.highlight ? '<w:highlight w:val="yellow"/>' : "",
     format.underline ? '<w:u w:val="single"/>' : "",
     format.script ? `<w:vertAlign w:val="${format.script}"/>` : "",

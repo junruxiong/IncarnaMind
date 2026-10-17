@@ -77,6 +77,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | A citation style's form | 作者-年份, 作者, 编号, 代号, 脚注 | What the picker says after each style's name, for author-date, author, numeric, label and note. A label ("[Smi10]") is 代号, never 标签, which is a Tag. |
 | Bibliography | 参考文献 | Its heading in the Mind and in Chinese styles' exports. |
 | Style (a Mind's font and text size) | 样式 | "样式…" in the Mind's menu. Its parts: 字体 (font), 字号 (text size: 小、默认、大) and "设为新建 Mind 的默认样式". The three fonts are 默认, 衬线 and 等宽, as Notion's; a font the computer lacks is "此电脑未安装该字体". |
+| Format (the selection menu's Aa) | 格式 | As Word and WPS name formatting: 字体、字号; alignment 左对齐、居中、右对齐、两端对齐; 行距 with 单倍、1.15、1.5、双倍、自定义…; space around a paragraph 添加/移除段前间距, 添加/移除段后间距, as Google Docs words it; 增加缩进, 减少缩进 and 首行缩进 2 字符; 文字颜色 with 自动; 上标, 下标. A Mind's own line spacing in 样式 is 行距 too, its first choice 默认. |
 | Folder | 文件夹 | |
 | Source location | 文件位置 | The sidebar view of the files as they are on disk. |
 | Tag | 标签 | Tagging is 打标签; automatic tagging is 自动打标签. |

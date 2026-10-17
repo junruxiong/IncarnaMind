@@ -10,7 +10,14 @@ import type { Translate } from "../../shared/locations";
 import type { Language } from "../language";
 import type { Block, Footnote } from "../mindText";
 import type { CardContent, CardRun, CitationCard } from "./citationCards";
-import { bodyFontStyle, HTML_STYLES, htmlFile, notesSection, withTableBodies } from "./html";
+import {
+  bodyFontStyle,
+  bodyLineStyle,
+  HTML_STYLES,
+  htmlFile,
+  notesSection,
+  withTableBodies,
+} from "./html";
 import type { ExportLabels } from "./labels";
 import { escapeHtml, renderPrintHtml, sourceHtml, webLink } from "./printHtml";
 
@@ -224,6 +231,8 @@ export interface SharePage {
   checkedLine: boolean;
   /** The Mind's font by name, or null for the default. */
   font: string | null;
+  /** The Mind's line spacing, or null for the default. */
+  lineSpacing: number | null;
 }
 
 export interface SharePicture {
@@ -282,7 +291,7 @@ export function renderSharePage(page: SharePage): string {
     ...written.map(({ number, card }) => cardHtml(number, card, date, t)),
     `<script>${SCRIPT}</script>`,
   ].join("\n");
-  const styles = STYLES + bodyFontStyle(page.font);
+  const styles = STYLES + bodyFontStyle(page.font) + bodyLineStyle(page.lineSpacing);
   return htmlFile({ language, name: page.name, policy: policyFor(styles), styles, body });
 }
 

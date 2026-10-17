@@ -16,7 +16,7 @@
 
 import { deflateRawSync } from "node:zlib";
 import type { TableAlign } from "../../shared/markdownTables";
-import type { StyledRun } from "../api";
+import type { ParagraphFormat, StyledRun } from "../api";
 import { writeZip } from "../documents/formats/zip";
 import {
   type Block,
@@ -32,6 +32,7 @@ import {
 import { changeKey } from "./citations";
 import type { ExportLabels } from "./labels";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
+import { changedElement, formatChanges } from "./paragraphFormat";
 import {
   COMMENTS_CONTENT_TYPE,
   COMMENTS_RELATIONSHIP,
@@ -64,6 +65,8 @@ export interface DocxOptions {
   review?: ReviewChoices;
   /** The Mind's font by name, which the body is written in; null: Word's own body font. */
   font: string | null;
+  /** The Mind's line spacing, a multiple of a single line; null: the export's own. */
+  lineSpacing: number | null;
 }
 
 /** The prefixes the writer writes, and their namespaces. */
@@ -162,7 +165,7 @@ export function renderDocx(
       { name: "word/_rels/document.xml.rels", data: relationshipsXml(relationships) },
       {
         name: "word/styles.xml",
-        data: styles(options.language, comments.length > 0, options.font),
+        data: styles(options.language, comments.length > 0, options.font, options.lineSpacing),
       },
       { name: "word/settings.xml", data: SETTINGS },
       { name: "word/numbering.xml", data: numbering(target.lists) },
@@ -394,12 +397,17 @@ export class DocxWriter {
     switch (block.kind) {
       case "paragraph":
         return paragraph(
-          { style: context.style, indent, align: context.align },
+          { style: context.style, indent, align: context.align, format: block.format },
           this.inline(block.content, context),
         );
       case "heading":
         return paragraph(
-          { style: this.styles.heading(block.level), indent, align: context.align },
+          {
+            style: this.styles.heading(block.level),
+            indent,
+            align: context.align,
+            format: block.format,
+          },
           this.inline(block.content, context),
         );
       case "question":
@@ -824,11 +832,29 @@ interface ParagraphProperties {
   /** How far the first line hangs left of `indent`, in twips. */
   hanging?: number;
   align?: TableAlign;
+  /** The User's, over the rest; its left indent is from `indent`. */
+  format?: ParagraphFormat;
 }
 
 function paragraph(properties: ParagraphProperties, content: string): string {
   const { style, keepNext, numbering, bottomBorder, spacingAfter, indent, hanging, align } =
     properties;
+  const format = properties.format ?? {};
+  const changes = formatChanges(
+    { ...format, ...(format.left !== undefined && { left: format.left + (indent ?? 0) / 20 }) },
+    {},
+  );
+  const spacing = changedElement(
+    "w:spacing",
+    spacingAfter !== undefined ? `<w:spacing w:after="${spacingAfter}"/>` : null,
+    changes.spacing,
+  );
+  const ind = changedElement(
+    "w:ind",
+    indent ? `<w:ind w:left="${indent}"${hanging ? ` w:hanging="${hanging}"` : ""}/>` : null,
+    changes.ind,
+  );
+  const jc = changes.jc ?? align;
   // In the order the schema requires.
   const pPr = [
     style ? `<w:pStyle w:val="${escapeXml(style)}"/>` : "",
@@ -839,9 +865,9 @@ function paragraph(properties: ParagraphProperties, content: string): string {
     bottomBorder
       ? '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr>'
       : "",
-    spacingAfter !== undefined ? `<w:spacing w:after="${spacingAfter}"/>` : "",
-    indent ? `<w:ind w:left="${indent}"${hanging ? ` w:hanging="${hanging}"` : ""}/>` : "",
-    align ? `<w:jc w:val="${align}"/>` : "",
+    spacing ?? "",
+    ind ?? "",
+    jc ? `<w:jc w:val="${jc}"/>` : "",
   ].join("");
   return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${content}</w:p>`;
 }
@@ -855,6 +881,10 @@ function formatOf(marks: Marks, context: Context, styles: DocxStyles, style?: st
     highlight: marks.highlight,
     underline: marks.underline,
     monospace: marks.code && style !== undefined,
+    font: marks.font,
+    size: marks.size,
+    color: marks.color,
+    script: marks.vertical,
   };
 }
 
@@ -1151,7 +1181,12 @@ const COMMENT_ROLES: ReadonlySet<StyleRole> = new Set(["commentText", "commentRe
 
 const DEFAULT_BODY_FONT = "Calibri";
 
-function styles(language: string, comments: boolean, font: string | null): string {
+function styles(
+  language: string,
+  comments: boolean,
+  font: string | null,
+  lineSpacing: number | null,
+): string {
   const family = escapeXml(font ?? DEFAULT_BODY_FONT);
   const bases: StyleBases = {
     paragraph: "Normal",
@@ -1165,7 +1200,7 @@ function styles(language: string, comments: boolean, font: string | null): strin
   return (
     `${XML_DECLARATION}<w:styles xmlns:w="${NS.w}">` +
     `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${family}" w:hAnsi="${family}" w:cs="${family}"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="${language}"/></w:rPr></w:rPrDefault>` +
-    '<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+    `<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="${lineSpacing === null ? 259 : Math.round(lineSpacing * 240)}" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` +
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
     '<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/><w:unhideWhenUsed/></w:style>' +
     '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>' +

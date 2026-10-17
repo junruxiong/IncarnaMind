@@ -179,7 +179,13 @@ function buildMenu(): void {
       submenu: [
         ...(developer
           ? ([
-              { role: "reload", label: t("menu.reload") },
+              // No ⌘R, the role's own keys: in a Mind ⌘R aligns right, as Users have it.
+              {
+                label: t("menu.reload"),
+                click: (_item, window) => {
+                  if (window instanceof BrowserWindow) window.webContents.reload();
+                },
+              },
               { role: "forceReload", label: t("menu.forceReload") },
               { role: "toggleDevTools", label: t("menu.devTools") },
               { type: "separator" },

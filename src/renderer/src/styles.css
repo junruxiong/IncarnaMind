@@ -197,6 +197,13 @@
   initial-value: 0px;
 }
 
+/* The space a Block keeps above it, which a paragraph's own space before adds to (src/shared/paragraphFormat.ts). Each Block's own. */
+@property --block-gap {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 @layer base {
   html,
   body,
@@ -2403,23 +2410,44 @@
     /* Blocks are 16px apart; headings get 16px more above, Questions 4px, Answers 8px. */
     > * {
       margin-block: 0;
+      margin-top: var(--block-gap);
     }
     > * + * {
-      margin-top: 16px;
+      --block-gap: 16px;
     }
     > * + :is(h1, h2, h3, h4, h5, h6) {
-      margin-top: 32px;
+      --block-gap: 32px;
     }
     > * + :where(.node-question) {
-      margin-top: 24px;
+      --block-gap: 24px;
     }
     > * + :where(.node-answer),
     > :where(.node-answer) + * {
-      margin-top: 24px;
+      --block-gap: 24px;
     }
     /* A Question is one line right above its Answer. */
     > :where(.node-question) + :where(.node-answer) {
-      margin-top: 6px;
+      --block-gap: 6px;
+    }
+    /* A paragraph's own space after is all the space below it. */
+    > [data-space-after] + * {
+      --block-gap: 0px;
+    }
+
+    :where(sup, sub):not([data-type]) {
+      font-size: 0.66em;
+      line-height: 0;
+    }
+    [data-text-color] {
+      color: var(--text-color);
+    }
+    [data-text-font] {
+      font-family: var(--text-font);
+    }
+    /* Code and links keep their own font and colour, over a Word file's text too (wordLookCss.ts). */
+    :is(code, a) :is([data-text-color], [data-text-font]) {
+      color: inherit;
+      font-family: inherit;
     }
 
     /*
@@ -4849,7 +4877,7 @@
   }
   .selection-formats {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 2px;
     padding: 2px 4px;
   }
@@ -4896,6 +4924,117 @@
     font-size: var(--text-meta);
     line-height: 16px;
     color: var(--color-ink-meta);
+  }
+  /* The selection menu's Aa: font and size, alignment, spacing and indents, colour, raise. */
+  .format-menu {
+    width: 268px;
+  }
+  .format-menu-pickers {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 64px;
+    gap: 4px;
+    padding: 2px 2px 4px;
+  }
+  .format-menu-picker {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    height: 28px;
+    padding: 0 6px 0 8px;
+    border-radius: 6px;
+    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+    font-size: 13px;
+    line-height: 20px;
+    outline: none;
+
+    &:hover,
+    &:focus-visible,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+    }
+  }
+  .format-menu-aligns {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px;
+    padding: 0 2px 2px;
+  }
+  .format-menu-align {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--color-ink-secondary);
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &[aria-checked="true"] {
+      background: var(--color-chip);
+      color: var(--color-ink);
+    }
+  }
+  .format-menu-row {
+    height: 30px;
+  }
+  .format-menu-section {
+    padding: 6px 8px 4px;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .format-menu-swatches {
+    display: grid;
+    grid-template-columns: repeat(8, 20px);
+    justify-content: space-between;
+    padding: 4px 8px 6px 32px;
+  }
+  .format-menu-swatch {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px rgb(23 25 28 / 0.12);
+    outline-offset: 1px;
+
+    &[aria-checked="true"] {
+      box-shadow:
+        0 0 0 1.5px var(--color-sheet),
+        0 0 0 3px var(--color-accent);
+    }
+    .format-menu-row > & {
+      width: 16px;
+      height: 16px;
+      box-shadow: none;
+    }
+  }
+  /* Superscript's and subscript's glyphs: an x with its raised or lowered 2, as Word's. */
+  .format-raise {
+    width: 16px;
+    flex-shrink: 0;
+    font-size: 13px;
+    line-height: 16px;
+    text-align: center;
+    color: var(--color-ink-secondary);
+
+    > :is(sup, sub) {
+      font-size: 9px;
+      line-height: 0;
+    }
+  }
+  .format-menu-sizes {
+    width: 120px;
+    max-height: min(360px, 60vh);
+    overflow-y: auto;
+  }
+  .format-spacing-field {
+    width: 260px;
   }
   .link-editor {
     width: 320px;

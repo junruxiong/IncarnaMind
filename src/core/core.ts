@@ -26,6 +26,7 @@ import {
   DEFAULT_MIND_STYLE,
   exportedFamily,
   isMindStyle,
+  lineSpacingOf,
   mindStyleOf,
   sameStyle,
   writeMindStyle,
@@ -1729,6 +1730,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return { style: citationStyles.resolve(style.style, textLanguage), textLanguage };
     },
     font: (mindId) => exportedFamily(content.readSettings(mindId, mindStyleOf).font),
+    lineSpacing: (mindId) => {
+      const lineSpacing = lineSpacingOf(content.readSettings(mindId, mindStyleOf));
+      return lineSpacing === "default" ? null : lineSpacing;
+    },
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     citedPage: (citation) => citedPages.image(citation),

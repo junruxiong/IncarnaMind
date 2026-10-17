@@ -180,6 +180,14 @@ export function PageMenu({
                           useMindStylePanel.getState().pickFont(mindId, anchor),
                         );
                     }}
+                    onCustomLineSpacing={() => {
+                      const anchor = button();
+                      close();
+                      if (anchor)
+                        requestAnimationFrame(() =>
+                          useMindStylePanel.getState().typeSpacing(mindId, anchor),
+                        );
+                    }}
                   />
                 </div>
               )

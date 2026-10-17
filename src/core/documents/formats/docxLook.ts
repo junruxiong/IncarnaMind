@@ -4,25 +4,31 @@
  * Paragraphs: defaults, table style, style chain, list level, direct.
  */
 
+import type { MarkJSON } from "../../../shared/blockJson";
 import { targetHash } from "../../../shared/proposals";
 import { sorted } from "../../../shared/wordFiles";
 import { defined } from "../../../shared/wordLook";
-import type {
-  WordBorder,
-  WordBorders,
-  WordCellLook,
-  WordLook,
-  WordParagraphLook,
-  WordRunLook,
-  WordTableLook,
-  WordTabStop,
-  WordWidth,
+import {
+  type ParagraphFormat,
+  SUBSCRIPT_MARK,
+  SUPERSCRIPT_MARK,
+  TEXT_COLOR_MARK,
+  type WordBorder,
+  type WordBorders,
+  type WordCellLook,
+  type WordLook,
+  type WordParagraphLook,
+  type WordRunLook,
+  type WordTableLook,
+  type WordTabStop,
+  type WordWidth,
 } from "../../api";
 import { child, descendants, elements, local, onOff, parseXml, type XmlElement } from "./xml";
 
 /**
  * How the look was read. A Mind whose look an earlier version read has it
  * cleared (attributes, marks and map) and given again at the next start.
+ * From 5 the look keeps only what styles and lists give (`splitDirect`).
  */
 export const WORD_LOOK_VERSION = 5;
 
@@ -751,6 +757,8 @@ export interface LookParts {
 
 export interface ParagraphLookContext {
   look: WordParagraphLook;
+  /** The paragraph's direct formatting that the look leaves out. */
+  format: ParagraphFormat;
   /** The table style's run formatting, then the paragraph style's. */
   runs: RunProps[];
 }
@@ -1035,16 +1043,27 @@ export class LookReader {
     const level =
       numId !== undefined && numId !== "0" ? this.levels.get(numId)?.get(ilvl) : undefined;
     if (level) props = mergeParagraph(props, readParagraph(level.pPr));
-    props = mergeParagraph(props, own);
+    const merged = mergeParagraph(props, own);
     const next = style.at(-1)?.next;
     // Character indents are in the paragraph's size, as Word draws them.
     const size = paragraphRuns.size ?? tableRuns.size ?? this.runDefaults.size ?? WORD_DEFAULT_SIZE;
-    const look = paragraphLook(props, size);
+    const { look, direct } = splitDirect(
+      paragraphLook(merged, size),
+      paragraphLook(props, size),
+      PARAGRAPH_DIRECT,
+    );
+    const format: ParagraphFormat = direct;
+    const chars = direct.firstLine !== undefined ? characterIndent(merged.indents) : undefined;
+    if (chars !== undefined) {
+      delete format.firstLine;
+      format.firstLineChars = chars;
+      look.characterSize = size;
+    }
     if (next && styleId && next !== styleId) {
       const nextKey = this.nextLook(next, table);
       if (nextKey) look.next = nextKey;
     }
-    return { look, runs: [tableRuns, paragraphRuns] };
+    return { look, format, runs: [tableRuns, paragraphRuns] };
   }
 
   private readonly nextLooks = new Map<string, string | null>();
@@ -1095,26 +1114,33 @@ export class LookReader {
     return this.runs.empty({});
   }
 
-  /** Also counts `characters` toward the body size. */
+  /** Also counts `characters` toward the body size. `marks`: the run's direct formatting the look leaves out. */
   run(
     rPr: XmlElement | undefined,
     paragraph: ParagraphLookContext,
     characters: number,
-  ): { key: string | null; look: WordRunLook } {
+  ): { key: string | null; look: WordRunLook; marks: MarkJSON[] } {
     const styleId = rPr && child(rPr, "w:rStyle")?.attrs["w:val"];
     let characterRuns: RunProps = {};
     for (const level of this.chain("character", styleId ?? null)) {
       characterRuns = mergeRun(characterRuns, readRun(level.rPr));
     }
-    const props = resolveRun(this.runDefaults, [...paragraph.runs, characterRuns], readRun(rPr));
+    const styles = [...paragraph.runs, characterRuns];
+    const own = readRun(rPr);
+    const props = resolveRun(this.runDefaults, styles, own);
     if (props.size !== undefined && characters > 0) {
       this.charactersBySize.set(
         props.size,
         (this.charactersBySize.get(props.size) ?? 0) + characters,
       );
     }
-    const look = this.runLook(props);
-    return { key: this.runs.key(look), look };
+    const { color: _color, vertical: _vertical, ...styled } = own;
+    const { look, direct } = splitDirect(
+      this.runLook(props),
+      this.runLook(resolveRun(this.runDefaults, styles, styled)),
+      RUN_DIRECT,
+    );
+    return { key: this.runs.key(look), look, marks: runFormatMarks(direct) };
   }
 
   private runLook(props: RunProps): WordRunLook {
@@ -1171,6 +1197,69 @@ export class LookReader {
 const EMPTY: XmlElement = { name: "", attrs: {}, children: [] };
 
 const WORD_DEFAULT_SIZE = 10;
+
+/** For each property direct formatting can set apart from the look, what says "none" where a style gave one; null where nothing can. */
+type Direct<T, K extends keyof T> = Record<K, { unset: T[K] | null }>;
+
+const PARAGRAPH_DIRECT: Direct<
+  WordParagraphLook,
+  "align" | "left" | "right" | "firstLine" | "before" | "after" | "line"
+> = {
+  align: { unset: "left" },
+  left: { unset: 0 },
+  right: { unset: 0 },
+  firstLine: { unset: 0 },
+  before: { unset: 0 },
+  after: { unset: 0 },
+  line: { unset: null },
+};
+
+/** Word's "auto" colour or "baseline" over a style's can't be said as a mark. */
+const RUN_DIRECT: Direct<WordRunLook, "color" | "vertical"> = {
+  color: { unset: null },
+  vertical: { unset: null },
+};
+
+/**
+ * Decides what of a paragraph's or run's direct formatting the Mind keeps
+ * as its own formatting rather than in the look: each property of `kinds`
+ * the direct formatting changed (`full`, with it, against `base`, as the
+ * styles and lists give it) that a format or mark can say. The rest stays
+ * in the look, as `full` has it, so the look and the formatting together
+ * draw what `full` does.
+ */
+export function splitDirect<T extends object, K extends keyof T>(
+  full: T,
+  base: T,
+  kinds: Direct<T, K>,
+): { look: T; direct: Partial<Pick<T, K>> } {
+  const look: T = { ...full };
+  const direct: Partial<Pick<T, K>> = {};
+  for (const name of Object.keys(kinds) as K[]) {
+    if (JSON.stringify(full[name]) === JSON.stringify(base[name])) continue;
+    const value = full[name] ?? kinds[name].unset;
+    if (value === null || value === undefined) continue;
+    direct[name] = value;
+    if (base[name] === undefined) delete look[name];
+    else look[name] = base[name];
+  }
+  return { look, direct };
+}
+
+/** As `paragraphLook` resolves the first line: its indent in characters, signed, when characters gave it. */
+function characterIndent(indents: Indents | undefined): number | undefined {
+  if (indents?.hangingChars) return -indents.hangingChars / 100;
+  if (indents?.hanging) return undefined;
+  return indents?.firstLineChars ? indents.firstLineChars / 100 : undefined;
+}
+
+function runFormatMarks(direct: Partial<WordRunLook>): MarkJSON[] {
+  const marks: MarkJSON[] = [];
+  if (direct.color) marks.push({ type: TEXT_COLOR_MARK, attrs: { color: direct.color } });
+  if (direct.vertical === "superscript") marks.push({ type: SUPERSCRIPT_MARK });
+  if (direct.vertical === "subscript") marks.push({ type: SUBSCRIPT_MARK });
+  return marks;
+}
 
 function paragraphLook(props: ParagraphProps, size: number): WordParagraphLook {
   const given = props.indents ?? {};

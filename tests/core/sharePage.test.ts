@@ -584,6 +584,7 @@ function pageOf(
     pictures: [],
     checkedLine: false,
     font,
+    lineSpacing: null,
   });
   return { html, document: parseHTML(html).document };
 }

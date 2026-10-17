@@ -98,6 +98,8 @@ export interface ExportsDependencies {
   citationStyle(mindId: string): { style: ResolvedCitationStyle; textLanguage: Language };
   /** The family the Mind's font is written as in Word and HTML; null: the default. */
   font(mindId: string): string | null;
+  /** The Mind's line spacing, a multiple of a single line; null: its text size's own. */
+  lineSpacing(mindId: string): number | null;
   /** Whether the Mind shows its Bibliography without a citation style (#102). */
   bibliography(mindId: string): boolean;
   /** Formats Citations in a style, as the editor does (see `CoreApi.formatCitations`). */
@@ -157,6 +159,7 @@ interface Prepared {
   documents: readonly SourceDocument[];
   bibliography: boolean;
   font: string | null;
+  lineSpacing: number | null;
   /** Each Citation's footnote with the attributes it was made from, for the source pack. */
   attributesOf: ReadonlyMap<Footnote, Partial<CitationAttributes>>;
 }
@@ -263,6 +266,7 @@ export function createExports(deps: ExportsDependencies) {
       documents,
       bibliography: deps.bibliography(mind.id),
       font: deps.font(mind.id),
+      lineSpacing: deps.lineSpacing(mind.id),
       attributesOf,
     };
   };
@@ -355,6 +359,7 @@ export function createExports(deps: ExportsDependencies) {
         pictures,
         checkedLine: prepared.options.checkedLine,
         font: prepared.font,
+        lineSpacing: prepared.lineSpacing,
       }),
     );
   };
@@ -527,6 +532,7 @@ export function createExports(deps: ExportsDependencies) {
           created: deps.now(),
           review: reviewChoices(prepared, false),
           font: prepared.font,
+          lineSpacing: prepared.lineSpacing,
         }));
       } else if (format === "html" || format === "share-page") {
         const drawn = await withPictures(blocks, language, deps);
@@ -535,6 +541,7 @@ export function createExports(deps: ExportsDependencies) {
             language,
             name: preview.fileName.slice(0, -".html".length),
             font: prepared.font,
+            lineSpacing: prepared.lineSpacing,
           }),
         );
       } else {
