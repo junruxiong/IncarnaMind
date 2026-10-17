@@ -146,14 +146,14 @@ async function ask(
 }
 
 /** The example's Answer, written in advance, as a new conversation's first turn, once the example's Documents are read. */
-async function askExample(core: Core, language: "en" | "zh-CN"): Promise<string> {
+async function askExample(core: Core, language: "en" | "zh-CN") {
   await core.updateSettings({ user: { language } });
-  await core.createExamples();
+  const { mindId } = await core.createExamples();
   const asked = await vi.waitFor(() => core.askReadyQuestion(), {
     timeout: 2 * 60_000,
     interval: 500,
   });
-  return asked.conversationId;
+  return { conversationId: asked.conversationId, mindId };
 }
 
 /** A Word file of the paragraphs, the first its title, imported with its original as a Mind. */
@@ -223,12 +223,13 @@ async function runCase(
     usage.cachedInputTokens += event.usage.cachedInputTokens;
     usage.cacheWriteTokens += event.usage.cacheWriteTokens;
   });
+  const example = each.afterExample ? await askExample(core, each.language) : null;
   const imported = each.word ? await importWord(library, each.word) : null;
-  const mind = imported
-    ? { id: imported.mindId }
-    : each.mind
-      ? await core.createMind({ title: each.mind.title })
-      : null;
+  const mindId =
+    imported?.mindId ??
+    (each.inExample ? example?.mindId : null) ??
+    (each.mind ? (await core.createMind({ title: each.mind.title })).id : null);
+  const mind = mindId ? { id: mindId } : null;
   const client = imported?.client ?? (mind ? await connectToMind(core, mind.id) : null);
   if (client && each.mind) {
     writeMind(
@@ -251,9 +252,7 @@ async function runCase(
     each.selectAll && client
       ? { selection: [...before.values()].join("\n\n"), blockIds: ids }
       : null;
-  let conversationId: string | null = each.afterExample
-    ? await askExample(core, each.language)
-    : null;
+  let conversationId: string | null = example?.conversationId ?? null;
   const earlierCalls: ConversationAnswer["toolCalls"] = [];
   for (const earlier of each.before ?? []) {
     const answer = await ask(core, {
