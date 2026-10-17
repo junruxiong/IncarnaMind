@@ -40,6 +40,8 @@ interface Asking {
   inFolder: boolean;
   /** Null for a plan or a model on this computer, or when `estimateRun` failed. */
   estimate: EstimateLine | null;
+  /** `estimateRun` failed: the ask says the cost couldn't be estimated. */
+  unestimated: boolean;
 }
 
 /** A run that only checks again asks first, with the estimate, when it checks this many or more. */
@@ -155,6 +157,7 @@ export async function startMindCheck(
         claims: plan.findsClaims,
         inFolder: plan.inFolder,
         estimate,
+        unestimated: estimated === null,
       },
     },
   }));
