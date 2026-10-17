@@ -10,7 +10,7 @@ import type { Translate } from "../../shared/locations";
 import type { Language } from "../language";
 import type { Block, Footnote } from "../mindText";
 import type { CardContent, CardRun, CitationCard } from "./citationCards";
-import { HTML_STYLES, htmlFile, notesSection, withTableBodies } from "./html";
+import { bodyFontStyle, HTML_STYLES, htmlFile, notesSection, withTableBodies } from "./html";
 import type { ExportLabels } from "./labels";
 import { escapeHtml, renderPrintHtml, sourceHtml, webLink } from "./printHtml";
 
@@ -191,14 +191,15 @@ const STYLES = HTML_STYLES + SHARE_STYLES;
 
 const hashOf = (text: string) => createHash("sha256").update(text).digest("base64");
 
-const POLICY = [
-  "default-src 'none'",
-  `style-src 'sha256-${hashOf(STYLES)}'`,
-  "img-src data:",
-  `script-src 'sha256-${hashOf(SCRIPT)}'`,
-  "base-uri 'none'",
-  "form-action 'none'",
-].join("; ");
+const policyFor = (styles: string) =>
+  [
+    "default-src 'none'",
+    `style-src 'sha256-${hashOf(styles)}'`,
+    "img-src data:",
+    `script-src 'sha256-${hashOf(SCRIPT)}'`,
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
 
 const MARKS: Readonly<Record<CitationCard["check"], string>> = {
   found: "✓",
@@ -222,6 +223,8 @@ export interface SharePage {
   /** WebP, each written once, whichever cards show it. */
   pictures: readonly SharePicture[];
   checkedLine: boolean;
+  /** The Mind's font by name, or null for the default. */
+  font: string | null;
 }
 
 export interface SharePicture {
@@ -281,13 +284,8 @@ export function renderSharePage(page: SharePage): string {
     ...written.map(({ number, card }) => cardHtml(number, card, date, t)),
     `<script>${SCRIPT}</script>`,
   ].join("\n");
-  return htmlFile({
-    language,
-    name: page.name,
-    policy: POLICY,
-    styles: STYLES,
-    body,
-  });
+  const styles = STYLES + bodyFontStyle(page.font);
+  return htmlFile({ language, name: page.name, policy: policyFor(styles), styles, body });
 }
 
 /** "Found" counts only quotes found: every other card, whatever its state, says why it isn't. */

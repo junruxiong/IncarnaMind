@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isHelpKeys } from "../shared/meetingHelp";
+import { DEFAULT_MIND_STYLE, isMindStyle } from "../shared/mindStyle";
 import {
   type ChatModelChoice,
   type DeviceSettings,
@@ -135,6 +136,7 @@ const userScope: Scope<UserSettings> = {
     monthlyCap: null,
     webSearch: false,
     keepWebPageLook: false,
+    newMindStyle: DEFAULT_MIND_STYLE,
   },
   validators: {
     language: isLanguagePreference,
@@ -148,6 +150,7 @@ const userScope: Scope<UserSettings> = {
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
     webSearch: isBoolean,
     keepWebPageLook: isBoolean,
+    newMindStyle: isMindStyle,
   },
 };
 
