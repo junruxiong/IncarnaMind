@@ -60,6 +60,7 @@ describe("The Minds an Answer changed", () => {
         changed: 2,
         tables: 0,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
       {
@@ -70,6 +71,7 @@ describe("The Minds an Answer changed", () => {
         changed: 0,
         tables: 0,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
     ]);
@@ -90,6 +92,7 @@ describe("The Minds an Answer changed", () => {
         changed: 0,
         tables: 0,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
     ]);
@@ -120,6 +123,7 @@ describe("The Minds an Answer changed", () => {
         changed: 0,
         tables: 0,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
     ]);
@@ -144,6 +148,7 @@ describe("The Minds an Answer changed", () => {
         changed: 0,
         tables: 0,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
     ]);
@@ -186,6 +191,7 @@ describe("The Minds an Answer changed", () => {
         changed: 4,
         tables: 1,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
       {
@@ -196,6 +202,7 @@ describe("The Minds an Answer changed", () => {
         changed: 0,
         tables: 1,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
       {
@@ -206,6 +213,7 @@ describe("The Minds an Answer changed", () => {
         changed: 0,
         tables: 1,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
     ]);
