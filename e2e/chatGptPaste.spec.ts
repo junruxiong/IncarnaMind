@@ -140,9 +140,7 @@ test("first run, in Chinese: an earlier sign-in's address is refused, and the ad
     await field.fill(earlier.href);
     await field.press("Enter");
     const problem = setup.getByTestId("chatgpt-paste-problem");
-    await expect(problem).toHaveText(
-      "这个地址来自之前的一次登录。在刚打开的页面上登录后，再粘贴地址栏里的地址。",
-    );
+    await expect(problem).toHaveText("这是之前登录的地址。请在新打开的页面登录，再粘贴它的地址。");
     const button = setup.getByTestId("chatgpt-paste-continue");
     await expect(button).toHaveText("继续");
     await expectFieldRow(field, button, problem);

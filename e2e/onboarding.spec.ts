@@ -310,7 +310,7 @@ test("an empty Mind of one's own shows the three steps, the example's steps tick
   const guide = window.getByTestId("start-guide");
   await expect(guide).toBeVisible();
   await expect(guide.getByTestId("start-step")).toHaveCount(3);
-  await expect(guide).toContainText("Only your Documents get checked Citations.");
+  await expect(guide).toContainText("without checked Citations.");
 
   await window
     .getByTestId("add-documents-input")
@@ -393,12 +393,10 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   await newMind(window);
   await dismissChatSetup(window);
   const guide = window.getByTestId("start-guide");
-  await expect(guide).toContainText("回答会出现在助手里，一键加入笔记。");
+  await expect(guide).toContainText("向你的文档提问。");
   await expectPlainWords([guide]);
   await setLanguage(window, "en");
-  await expect(guide).toContainText(
-    "The Answer appears in the assistant; add it to your note with one click.",
-  );
+  await expect(guide).toContainText("and ask your Documents.");
   await expectPlainWords([guide, window.getByTestId("sidebar")]);
   await pointAndClick(
     window,
@@ -409,7 +407,7 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   await pointAndClick(window, files.getByRole("button").first());
   // Done with no model: one more step, in place of "You're set up." (#1027).
   const steps = pane.getByTestId("first-open-steps");
-  await expect(steps).toContainText("还差一步：选择 AI 模型，就能就你自己的文件提问。", {
+  await expect(steps).toContainText("选择 AI 模型，就能就你自己的文件提问。", {
     timeout: 15_000,
   });
   await expect(steps).not.toContainText("准备好了。");
@@ -608,9 +606,7 @@ test("finishing the steps with no model asks for one in the card, never says You
 
   const steps = pane.getByTestId("first-open-steps");
   await expect(step(window, "files")).toHaveAttribute("data-state", "done");
-  await expect(steps).toContainText(
-    "One more step: choose an AI model to ask about your own files.",
-  );
+  await expect(steps).toContainText("Choose an AI model to ask about your own files.");
   await expect(steps).not.toContainText("You're set up.");
   await expect(steps.getByTestId("first-open-next")).toHaveCount(0);
   // Each part of the shell still waits for its own moment, and one prompt asks for the model.
