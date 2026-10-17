@@ -107,7 +107,7 @@ What a citation style needs to cite a Document: its type, title, authors, date, 
 _Avoid_: metadata, bibliographic entry, citation (a Citation is the reference in an Answer)
 
 **Citation style**:
-How a Mind's Citations read, in its text and its exports, and how its Bibliography lists their Documents: a style of the Citation Style Language, such as APA 7, IEEE or GB/T 7714—2015, written from the Documents' reference records, or Numbered, IncarnaMind's own (numbered markers, each a footnote naming its Document and Location). Each Mind has one; one that hasn't chosen is Numbered, or GB/T 7714—2015 when the interface and the Mind are in Chinese and it cites a paper or a book, and a new Mind starts in the style last chosen for a Mind in its Folder. A style changes how a Citation reads, never its check.
+How a Mind's Citations read, in its text and its exports, and how its Bibliography lists their Documents: any style of the Citation Style Language's repository, such as APA 7, IEEE, Nature or GB/T 7714—2015, or a journal's, which formats as the style it follows, written from the Documents' reference records, or Numbered, IncarnaMind's own (numbered markers, each a footnote naming its Document and Location). Each Mind has one; one that hasn't chosen is Numbered, or GB/T 7714—2015 when the interface and the Mind are in Chinese and it cites a paper or a book, and a new Mind starts in the style last chosen for a Mind in its Folder. A style changes how a Citation reads, never its check.
 _Avoid_: citation format, reference style
 
 **Bibliography**:

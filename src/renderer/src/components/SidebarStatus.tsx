@@ -64,6 +64,8 @@ interface Status {
   dismiss?: () => void;
   /** It may take two lines, its action said after it, so nothing it names is cut off. */
   wraps?: boolean;
+  /** It asks the User's consent, which is never hidden (ADR-0022). */
+  asks?: true;
 }
 
 /**
@@ -76,8 +78,9 @@ interface Status {
  * the row. Its 28px are kept even when there is nothing to say, so the tree
  * above moves only for a status that takes two lines.
  */
-export function SidebarStatus() {
-  const [first, ...others] = useStatuses();
+export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean }) {
+  const [first, ...others] = useStatuses().filter((status) => !problemsOnly || isProblem(status));
+  if (problemsOnly && !first) return null;
   return (
     <div data-testid="sidebar-status" className="flex min-h-7 shrink-0 flex-col">
       {first && (
@@ -88,6 +91,11 @@ export function SidebarStatus() {
     </div>
   );
 }
+
+// A failure, a one-off the User dismisses (skipped files, a web page not added), or a consent
+// question: the quiet first open hides the footer's other news, never these (DESIGN.md, Problems).
+const isProblem = (status: Status) =>
+  status.tone === "error" || status.dismiss !== undefined || status.asks === true;
 
 function StatusRow({ status, children }: { status: Status; children?: ReactNode }) {
   const t = useT();
@@ -511,6 +519,7 @@ function useStatuses(): Status[] {
       tone: "waiting",
       short: t("status.taggingPermission"),
       full: t("jev.waiting.permission", { service: taggingNeedsOk.name }),
+      asks: true,
       action: {
         label: t("privacy.flows.allow"),
         testId: "tagging-waiting-allow",
@@ -597,20 +606,27 @@ function useStatuses(): Status[] {
   if (!capturing && tagging) {
     const text = service
       ? saysWhatIsSent
-        ? (counts.tagging === 1
-            ? t("status.taggingSends.one", { service })
-            : t("status.taggingSends.other", { count: counts.tagging, service })) + whatIsSent
+        ? counts.tagging === 1
+          ? t("status.taggingSends.one", { service })
+          : t("status.taggingSends.other", { count: counts.tagging, service })
         : counts.tagging === 1
           ? t("status.taggingWith.one", { service })
           : t("status.taggingWith.other", { count: counts.tagging, service })
       : counts.tagging === 1
         ? t("status.tagging.one")
         : t("status.tagging.other", { count: counts.tagging });
+    const short = service && saysWhatIsSent ? text + whatIsSent : text;
+    const full =
+      service && saysWhatIsSent
+        ? (counts.tagging === 1
+            ? t("status.taggingSends.full.one", { service })
+            : t("status.taggingSends.full.other", { count: counts.tagging, service })) + whatIsSent
+        : text;
     statuses.push({
       testId: "tagging-status",
       tone: "progress",
-      short: text,
-      full: text,
+      short,
+      full,
       wraps: true,
       action: stop,
     });
@@ -634,20 +650,27 @@ function useStatuses(): Status[] {
     if (pending) {
       const text = service
         ? saysWhatIsSent
-          ? (pending === 1
-              ? t("library.progressSends.one", { service })
-              : t("library.progressSends.other", { count: pending, service })) + whatIsSent
+          ? pending === 1
+            ? t("library.progressSends.one", { service })
+            : t("library.progressSends.other", { count: pending, service })
           : pending === 1
             ? t("library.progressWith.one", { service })
             : t("library.progressWith.other", { count: pending, service })
         : pending === 1
           ? t("library.progress.one")
           : t("library.progress.other", { count: pending });
+      const short = service && saysWhatIsSent ? text + whatIsSent : text;
+      const full =
+        service && saysWhatIsSent
+          ? (pending === 1
+              ? t("library.progressSends.full.one", { service })
+              : t("library.progressSends.full.other", { count: pending, service })) + whatIsSent
+          : text;
       statuses.push({
         testId: "organization-progress",
         tone: "progress",
-        short: text,
-        full: text,
+        short,
+        full,
         wraps: true,
         action: stop,
       });

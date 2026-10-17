@@ -4,18 +4,23 @@ import type { AudioSource, Meeting, MeetingSourceState } from "../../../core/api
 import type { MessageKey } from "../../../shared/i18n";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
+import { files } from "../core";
 import { useT } from "../i18n";
+import { helpKeysLabel, useMeetingHelp } from "../meetingHelp";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
+import { useAppStore } from "../store";
 import { hideTranscript, showTranscript, useDocumentTab } from "../transcripts";
 import { CaptureDetailsToggle } from "./CaptureDetails";
 import {
   BookmarkLineIcon,
   DocumentLineIcon,
+  FloatLineIcon,
   PauseLineIcon,
   ResumeLineIcon,
   StopLineIcon,
 } from "./lineIcons";
+import { LevelBars } from "./meetings/LevelBars";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { TranscriptLines } from "./TranscriptLines";
 import { useTabPlace } from "./tabs/tabItems";
@@ -46,7 +51,7 @@ export function MeetingBar({ meeting, children }: { meeting: Meeting; children?:
 
 /**
  * The live-recording dot (red, the one red outside Citation checks; grey
- * while paused), "Recording 24:16" (or "Paused"), Pause or Resume and Stop.
+ * while paused), "Recording 24:16" (or "Paused") with its level bars, Pause or Resume and Stop.
  * ⌘⇧P is the "meeting.pauseResume" command's (../commands/meetings).
  */
 function MeetingControls({ meeting }: { meeting: Meeting }) {
@@ -73,6 +78,7 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
         <span role="timer" data-testid="meeting-time" className="meeting-time">
           {time}
         </span>
+        <LevelBars meeting={meeting} />
       </span>
       <button
         type="button"
@@ -113,9 +119,35 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
         <BookmarkLineIcon className="size-3.5" />
         {t("meetings.mark")}
       </button>
+      <CallHelpToggle />
       <TranscriptToggle meeting={meeting} />
       <CaptureDetailsToggle meeting={meeting} />
     </div>
+  );
+}
+
+/** Call help (通话助手): shows or hides the floating panel for this Meeting, as ⌘K and its shortcut do. */
+function CallHelpToggle() {
+  const t = useT();
+  const shown = useMeetingHelp((state) => state.panel.shown);
+  const keys = useAppStore((state) => helpKeysLabel("panel", state.settings));
+  const title = shown
+    ? t("meetings.callHelp.hide")
+    : keys
+      ? t("meetings.callHelp.showKeys", { keys })
+      : t("meetings.callHelp.show");
+  return (
+    <button
+      type="button"
+      data-testid="meeting-call-help"
+      aria-pressed={shown}
+      title={title}
+      onClick={() => files.showMeetingPanel(!shown)}
+      className="meeting-button"
+    >
+      <FloatLineIcon className="size-3.5" />
+      {t("meetings.callHelp")}
+    </button>
   );
 }
 

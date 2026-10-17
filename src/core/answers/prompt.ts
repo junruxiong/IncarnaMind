@@ -16,7 +16,7 @@ const countOf = (text: string, pattern: RegExp) => text.match(pattern)?.length ?
 // A Question is short, so two common words tell its language where a Document's sample needs three.
 const QUESTION_COMMON_WORDS = 2;
 
-function questionLanguage(question: string): string | null {
+export function questionLanguage(question: string): string | null {
   const cjk = countOf(question, CJK_CHARACTERS);
   const words = countOf(question, LATIN_WORDS);
   // A few CJK characters among Latin words are a name, as in "What does 合同条款 say?".
@@ -109,6 +109,32 @@ export function webInstructions(offered: boolean): string {
   ].join("\n");
 }
 
+/** The Document the Mind in focus is the working copy of (#1036), by name; empty for none. */
+export function workingCopyNote(original: string | null): string {
+  if (original === null) return "";
+  return `The Mind in <mind> is the User's working copy of the Document "${listedName(original)}", imported from it: "this document", "the file", "this résumé" ("这份文档", "这份简历") and the like mean that Document. It is among the User's Documents: never say it isn't there or couldn't be found.`;
+}
+
+/**
+ * Passages as the model reads them, from a search or given whole, with the
+ * notes their text calls for: dates, the User's own workings, amounts in
+ * brackets, and Documents that couldn't be read.
+ */
+export function withPassageNotes(passages: string, unread: readonly UnreadFile[]): string {
+  return [
+    passages,
+    datedDocumentsNote(passages),
+    notCitedNote(passages),
+    bracketedAmountsNote(passages),
+    unreadDocumentsNote(unread),
+  ]
+    .filter((part) => part !== "")
+    .join("\n\n");
+}
+
+const NO_MIND_TOOLS =
+  "You can't change the User's Minds (their notes) or make new ones in this chat. When the User asks you to write into a Mind or to change one, write the text in your reply, and never say or promise that you wrote, added, changed or made anything in a Mind: IncarnaMind tells the User that you can't, and lets them add your reply to a Mind.";
+
 /**
  * The Minds' Tools, when offered (#202): the User's words decide whether the
  * Answer answers, changes a Mind or makes one, and `route` says how
@@ -116,7 +142,7 @@ export function webInstructions(offered: boolean): string {
  * from the calls; the reply never repeats the new text.
  */
 export function mindInstructions(offered: boolean, route: RequestRoute | null = null): string {
-  if (!offered) return "";
+  if (!offered) return route ? NO_MIND_TOOLS : "";
   return [
     "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects; what the User asked you to write or change applies at once, with Undo, unless it would take out most of their own text. Each call's result says which.",
     '- The User\'s words decide. A Question (what, why, how, compare, find, explain…) is answered in your reply and changes no Mind. A request to write or change something in a Mind ("shorten the summary", "add a risks section", "fix the typos", "把这段改短") changes that Mind. A request for a new note ("make notes on these papers", "summarise this into a new Mind", "新建一篇笔记") makes one.',

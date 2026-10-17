@@ -110,14 +110,11 @@ import { earlierContext, type RequestMind } from "./context";
 import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
-  bracketedAmountsNote,
-  datedDocumentsNote,
-  notCitedNote,
   SEARCH_QUERY_INSTRUCTIONS,
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
   translateQueryPrompt,
-  unreadDocumentsNote,
+  withPassageNotes,
 } from "./prompt";
 import { retryQuotes } from "./quoteRetry";
 import { claimsOf, createNudges, settleReply, type TurnCheck } from "./turnChecks";
@@ -319,9 +316,12 @@ export interface GatedCall extends RunToolCall {
  * - "check": a check Run's (find support, verify, a comparison table's
  *   cells, contradiction watch): the Documents' search and `cite` only,
  *   whatever the request brings, so the text it checks can't steer a write or
- *   a send.
+ *   a send;
+ * - "documents": the Documents' Tools as an Answer has them, and nothing the
+ *   request brings: help during a call, which reads a transcript
+ *   someone else spoke.
  */
-export type ToolSet = "answer" | "check";
+export type ToolSet = "answer" | "check" | "documents";
 
 export interface AnswerRequest {
   /**
@@ -421,6 +421,8 @@ export interface AnswerRequest {
 export type AnswerEngineEvent =
   /** How the model gives Citations, once its provider has accepted the request. */
   | { type: "support"; support: CitationSupport }
+  /** The Answer is written without Tools: its model can't call them, so it can't change a Mind. */
+  | { type: "without-tools" }
   /**
    * What the Answer is doing now: searching the Documents, the model's turn,
    * or asking the model once more for exact quotes (see ./quoteRetry).
@@ -974,8 +976,9 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
 
   return {
     async *generate(asked) {
-      // A check Run is offered the Documents' search and `cite` only (see `ToolSet`).
-      const request: AnswerRequest = asked.toolSet === "check" ? { ...asked, tools: [] } : asked;
+      // Only an ordinary Answer is offered the Tools the request brings (see `ToolSet`).
+      const request: AnswerRequest =
+        asked.toolSet && asked.toolSet !== "answer" ? { ...asked, tools: [] } : asked;
       const failed = (error: unknown): AnswerEngineEvent => ({
         type: "failed",
         error: classifyProviderError(error),
@@ -1112,6 +1115,7 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
           }
           if (!unsupported || signal.aborted) return;
         }
+        yield { type: "without-tools" };
         for await (const event of onePass("no-documents")) {
           if (event.type === "unsupported") return;
           yield event;
@@ -1234,6 +1238,7 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
           if (!announced && event.type !== "failed") {
             announced = true;
             yield { type: "support", support };
+            if (support !== "tools") yield { type: "without-tools" };
           }
           yield event;
         }
@@ -1344,13 +1349,7 @@ export function documentTools(
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount, found.passageIds);
         // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
-        const notes = [
-          datedDocumentsNote(result.text),
-          notCitedNote(result.text),
-          bracketedAmountsNote(result.text),
-          unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
-        ];
-        return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
+        return withPassageNotes(result.text, documents.unreadDocuments?.() ?? []);
       },
     },
     cite: {

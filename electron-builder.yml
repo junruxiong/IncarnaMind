@@ -44,14 +44,14 @@ extraResources:
     to: examples
     filter:
       - "**/*"
-  # The citation-style engine (wasm/citation-styles, built and committed) and the CSL styles and
-  # locales, as unmodified plain files, as their licence asks (ADR-0016).
+  # The citation-style engine (wasm/citation-styles, built and committed) and every CSL style and
+  # locale, unmodified, in one pack with their licence notice (ADR-0016).
   - from: resources/citation-styles
     to: citation-styles
     filter:
       - "**/*"
   # The licence notices: what the model catalog is generated from (scripts/catalogModels.ts),
-  # the citation-style engine's crates and the CSL styles and locales, and the Speex code the
+  # the citation-style engine's crates and where the CSL styles come from, and the Speex code the
   # Meetings echo canceller is derived from.
   - from: resources/notices
     to: notices

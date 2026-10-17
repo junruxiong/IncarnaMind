@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   openSteps,
   removeDataFolder,
@@ -128,7 +129,7 @@ test("each Folder lists its Minds above its Documents and opens in place; a Mind
     // above its Documents, and open.
     await folder.getByTestId("folder-row").click({ button: "right" });
     await folder.getByTestId("folder.newMind").click();
-    await window.getByTestId("mind-title").fill("Tide questions");
+    await nameMind(window, "Tide questions");
     const listed = folder.locator(":scope > ul > li");
     await expect(listed.first()).toHaveAttribute("data-testid", "mind-row");
     await expect(listed.first()).toContainText("Tide questions");
@@ -205,7 +206,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await bridge(window).createFolder("Finance");
     await bridge(window).createFolder("Research");
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Shortlist");
+    await nameMind(window, "Shortlist");
     const shortlist = mindRow(window, "Shortlist");
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
     const finance = sidebarFolder(window, "Finance");
@@ -246,6 +247,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Check this Mind$/,
       /^Check for contradictions$/,
       /^Citation style…$/,
+      /^Style…$/,
       /^Make this a Skill$/,
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
       /^New Folder with this Mind(⌃⌘N)?$/,
@@ -275,8 +277,8 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(undoLine.getByTestId("undo-message")).toHaveCount(0);
 
     // By the keyboard alone: Shift+F10 on the row, down past Outline, the exports, the AI use
-    // statement, History, Check this Mind, Check for contradictions, Citation style… and Make this
-    // a Skill to Move to…, type, Enter. The row's ⋯ is not a Tab stop.
+    // statement, History, Check this Mind, Check for contradictions, Citation style…, Style… and
+    // Make this a Skill to Move to…, type, Enter. The row's ⋯ is not a Tab stop.
     await shortlist.getByTestId("mind-list-item").focus();
     await window.keyboard.press("Tab");
     await expect(shortlist.getByTestId("mind-menu")).not.toBeFocused();
@@ -284,7 +286,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(shortlist.getByTestId("mind-list-item")).toBeFocused();
     await window.keyboard.press("Shift+F10");
     await expect(actions.getByTestId("mind.open")).toBeFocused();
-    for (let step = 0; step < 18; step++) await window.keyboard.press("ArrowDown");
+    for (let step = 0; step < 19; step++) await window.keyboard.press("ArrowDown");
     await expect(actions.getByTestId("mind.moveTo")).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(picker.getByTestId("move-to-search")).toBeFocused();

@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
+import { useFirstOpen } from "../../firstOpen";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
@@ -81,6 +82,21 @@ export function TabStrip({
     void useAppStore.getState().changeLayout({ type: "show", tabId: next.id });
     focusTab(next.id);
   };
+
+  const quiet = useFirstOpen() && layout?.groups.flatMap((each) => each.tabs).length === 1;
+  if (quiet) {
+    return (
+      <header
+        data-testid="tab-strip"
+        data-group-id={group.id}
+        data-first-group={index === 0 || undefined}
+        data-quiet=""
+        className="tab-strip title-bar"
+      >
+        {index === 0 && <SidebarToggle place="band" />}
+      </header>
+    );
+  }
 
   return (
     <header
@@ -315,16 +331,19 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
   );
 }
 
-/** A Mind's title typed in its tab. */
+/** A Mind's name typed in its tab; blank, it is named by its first line again. */
 function RenameTab({ mindId, title, onDone }: { mindId: string; title: string; onDone(): void }) {
   const t = useT();
   const renameMind = useAppStore((state) => state.renameMind);
+  const typed = useAppStore((state) => state.minds.find((each) => each.id === mindId)?.title ?? "");
   return (
     <InlineName
-      value={title}
+      value={typed}
       label={t("mind.renameLabel", { title })}
+      placeholder={title}
       testId="tab-rename"
       className="tab-rename"
+      clearable
       onCommit={(name) => {
         onDone();
         return renameMind(mindId, name);

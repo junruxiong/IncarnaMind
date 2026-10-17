@@ -39,8 +39,10 @@ export type {
  * This file must stay free of imports with side effects: the preload script and
  * the renderer import it.
  */
-import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
+import type { CitationForm, CitationStyleId, StyleCatalogue } from "../shared/citationStyles";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
+import type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate } from "../shared/meetingHelp";
+import type { MindStyle } from "../shared/mindStyle";
 import type { TagColour } from "../shared/tagColours";
 import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
 import type { ErrorWording } from "./errors";
@@ -82,6 +84,8 @@ export const DEFAULT_MIND_KIND: MindKind = "mind";
 
 export interface CreateMindInput {
   title?: string;
+  /** Its text starts with its title as a Heading 1, as a Mind made with its name does (#908). */
+  headed?: boolean;
   /** Defaults to `"mind"`. */
   kind?: MindKind;
   /** The Folder to make it in; none, or null: Not in a Folder. */
@@ -774,6 +778,7 @@ export interface AnswerAttributes {
   errorMessage: string | null;
   /** When the plan's limit that stopped it resets (ISO 8601), when the provider said. */
   errorResetsAt: string | null;
+  errorSignInRoute: SignInRouteProblem | null;
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
   /**
@@ -1791,6 +1796,16 @@ export interface UserSettings {
    * save says otherwise: off until the User turns it on.
    */
   keepWebPageLook: boolean;
+  /**
+   * The citation styles last chosen for a Mind, newest first, up to five
+   * (`RECENT_CITATION_STYLES`): the picker's Recently used.
+   */
+  recentCitationStyles: CitationStyleId[];
+  /**
+   * The font and text size a new Mind starts in: "Make this the default for new Minds" in a
+   * Mind's Style. Minds already made keep theirs.
+   */
+  newMindStyle: MindStyle;
 }
 
 /**
@@ -1807,6 +1822,8 @@ export interface GettingStarted {
   indexed: boolean;
   /** The User asked a Question of their own, not the example's. */
   askedOwn: boolean;
+  /** The User asked the first open's ready Question (`askReadyQuestion`). */
+  askedReady: boolean;
   /** The User hid the checklist. */
   hidden: boolean;
 }
@@ -1852,6 +1869,12 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
+  /** Settings › Meetings › "Show the call help panel": it appears while a Meeting records. */
+  meetingPanel: boolean;
+  /** Settings › Meetings › "Keep the panel out of my screen share", where the system honours it. */
+  meetingPanelHidden: boolean;
+  /** The help buttons' global shortcuts the User changed; the others keep their defaults. */
+  meetingHelpKeys: HelpKeys;
   /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
   motion: MotionPreference;
 }
@@ -3186,6 +3209,11 @@ export interface Examples {
   /** The example Answer, written in advance, while the example Mind exists. */
   answerId: string | null;
   more: ExampleGroup[];
+  /**
+   * The first open's ready Question (#123), whose Answer is written in advance
+   * (`askReadyQuestion`): the credit paper's, while it exists; null otherwise.
+   */
+  ready: string | null;
 }
 
 /**
@@ -4633,9 +4661,21 @@ export interface ContradictionWatchRun extends ContradictionCheckOutcome {
  * What "Check this Mind" checks (#737): "all", every sentence that makes a
  * claim, found afresh; "changed", the checks that need a re-check and the
  * sentences never checked since, found among those the last run didn't
- * leave out.
+ * leave out; "added", only the checks Documents added since could change
+ * (`documentsAddedSinceChecks`), each in the scope it used.
  */
-export type CheckMindMode = "all" | "changed";
+export type CheckMindMode = "all" | "changed" | "added";
+
+/**
+ * A sentence's check that Documents added since could change (#993): one
+ * found unsupported or not checked, and the Documents added to the scope it
+ * used after it was made. Supported and contradicted checks already have
+ * their evidence, and contradiction watch checks its own marks.
+ */
+export interface DocumentsAddedSince {
+  checkId: string;
+  documentIds: string[];
+}
 
 export interface CheckMindInput {
   requestId: string;
@@ -4655,6 +4695,8 @@ export type MindCheckPlan =
       sentences: number;
       /** Whether the model first names the claims among them; only checks made again don't need it. */
       findsClaims: boolean;
+      /** Every sentence searches only the Mind's Folder; false also for mixed scopes. */
+      inFolder: boolean;
       /** The Mind's own model; null for the default. */
       model: ChatModelChoice | null;
     }
@@ -4870,6 +4912,13 @@ export interface AnswerSteps {
    * Absent: none.
    */
   unbackedClaims?: ClaimedChange[];
+  /** Written in advance for the example (`askReadyQuestion`): no model wrote it, and nothing was searched. */
+  example?: true;
+  /**
+   * Its model can't call Tools, and the User's words asked to write into a
+   * Mind or change one (`routeRequest`): nothing was written. Absent: neither.
+   */
+  withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
 }
@@ -5106,6 +5155,7 @@ export interface ConversationAnswer {
   /** Why it failed, when `status` is "failed". */
   errorKind: ProviderErrorKind | null;
   errorMessage: string | null;
+  errorSignInRoute: SignInRouteProblem | null;
   citationSupport: CitationSupport | null;
   /** The Tools it called, in order: its searches, Skills and Connectors' Tools. */
   toolCalls: AnswerToolCall[];
@@ -5628,13 +5678,21 @@ export interface CopilotModel {
   name: string;
 }
 
+export type CopilotPlan = "free" | "pro" | "pro-plus" | "business" | "enterprise";
+
 /** The User's Copilot plan for Answers instead of an API key; it counts toward the plan's limits. */
 export interface CopilotStatus {
   account:
     | { state: "signed-out" }
     /** Renewing the sign-in failed, or GitHub refused its token: sign in again. */
     | { state: "expired" }
-    | { state: "signed-in"; profile: CopilotProfileId };
+    /** The GitHub login and the plan, as GitHub named them at sign-in, when it did. */
+    | {
+        state: "signed-in";
+        profile: CopilotProfileId;
+        login: string | null;
+        plan: CopilotPlan | null;
+      };
   /** A sign-in is waiting for the User on GitHub's page. */
   signingIn: boolean;
   /** While a sign-in waits, once GitHub has given it: the code the User types, and where. */
@@ -5646,7 +5704,10 @@ export interface CopilotStatus {
 }
 
 export type CopilotSignInErrorKind =
-  | Extract<SignInRouteProblem, "sign-in-cancelled" | "refused" | "no-plan" | "unexpected-response">
+  | Extract<
+      SignInRouteProblem,
+      "sign-in-cancelled" | "refused" | "no-plan" | "policy-blocked" | "unexpected-response"
+    >
   /** The code on GitHub's page expired before the User approved it. */
   | "code-expired"
   /** The User declined on GitHub's page. */
@@ -5926,7 +5987,8 @@ export interface RegisteredDataFlow {
  * - "claude-sign-in": signing in with a Claude account and refreshing it;
  *   listed once the User has started signing in.
  * - "copilot-sign-in": signing in with GitHub for Copilot, renewing it, and
- *   reading the plan's models; listed once the User has started signing in.
+ *   reading the account's name and the plan's models; listed once the User
+ *   has started signing in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
@@ -6958,6 +7020,11 @@ export interface CitationFormatRequest {
   style: CitationStyleId;
   /** In the order they appear in the Mind. */
   clusters: CitationCluster[];
+  /**
+   * The language of the Mind's text, which a style with no language of its own formats in:
+   * Chinese terms for a Chinese Mind. English when left out.
+   */
+  language?: Language;
 }
 
 /** One cluster in the style: its runs, each marked with the work it belongs to. */
@@ -6994,6 +7061,8 @@ export interface FormattedCitations {
   bibliography: BibliographyEntry[];
   /** The style hangs its entries: the first line starts further left than the rest. */
   hangingIndent: boolean;
+  /** The style isn't in this version: the Mind keeps it, and is formatted as Numbered. */
+  unavailable?: true;
 }
 
 /** The citation style a Mind is in. */
@@ -7172,8 +7241,49 @@ export interface Meeting {
   transcript: MeetingTranscript | null;
   /** How well its capture went, so a bad recording can be explained (#161). */
   health: CaptureHealth;
+  /** The help asked for last during the call, whose Answer the floating panel shows; null before any and after Stop. */
+  help: MeetingHelp | null;
+  /** The kind of meeting the help buttons are for, as the User chose it; null: the general buttons only. */
+  helpTemplate: MeetingHelpTemplate | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate };
+
+/** Help asked for during a call: its button, and its Answer in a conversation. */
+export interface MeetingHelp {
+  kind: MeetingHelpKind;
+  conversationId: string;
+  answerId: string;
+  /**
+   * The line it answers, for its heading: the other side's newest ("Them"), the User's own for
+   * "Am I leading them?", or the newest of all where speakers aren't told apart. `speaker` as
+   * the Transcript has it ("Me", "Them", "Speaker ?"). Null for the buttons about the whole call.
+   */
+  heard: { text: string; speaker: string | null } | null;
+}
+
+export interface AskMeetingHelpInput {
+  meetingId: string;
+  kind: MeetingHelpKind;
+  /**
+   * The conversation to ask in, as the assistant shows it; null: a new one. Absent: the one
+   * this meeting's help went to last, or a new one.
+   */
+  conversationId?: string | null;
+}
+
+export interface SetMeetingTemplateInput {
+  meetingId: string;
+  template: MeetingHelpTemplate | null;
+}
+
+/** How loud each source of a recording Meeting is now, from 0 (silence) to 1. */
+export interface MeetingLevel {
+  meetingId: string;
+  microphone: number;
+  system: number;
 }
 
 /**
@@ -7734,6 +7844,14 @@ export interface CoreApi {
    * asked, nothing is kept: no Question, and no conversation. "conversations.changed" follows.
    */
   askInConversation(input: AskInConversationInput): Promise<ConversationAskResult>;
+  /**
+   * Asks the first open's ready Question (`Examples.ready`, #123) in a new
+   * conversation, with its Answer written in advance and its Citations checked
+   * against the example Documents now: no model is asked, and no "answer.*"
+   * event is sent. Throws while the credit paper isn't made or its Documents
+   * aren't all read.
+   */
+  askReadyQuestion(): Promise<{ conversationId: string; answerId: string }>;
   /**
    * Writes an Answer of a conversation again, in place, for its Question as it was asked,
    * reading the Mind it was asked from as that Mind is now.
@@ -8486,6 +8604,8 @@ export interface CoreApi {
    * the run in the Mind (`MindCheckRun`). `cancelCheck` stops it.
    */
   checkMind(input: CheckMindInput): Promise<CheckMindResult>;
+  /** The Mind's checks that Documents added since could change, with those Documents (#993). Sends nothing. */
+  documentsAddedSinceChecks(mindId: string): Promise<DocumentsAddedSince[]>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -8942,6 +9062,18 @@ export interface CoreApi {
     style: CitationStyleId | null,
     options?: SetMindCitationStyleOptions,
   ): Promise<MindCitationStyle>;
+  /**
+   * Every style the app ships but the common ones, for the picker, read from the style pack the
+   * first time it is asked for.
+   */
+  listCitationStyles(): Promise<StyleCatalogue>;
+  /** Opens the licence notice of the shipped citation styles in the app that opens text files. */
+  openCitationStyleLicences(): Promise<void>;
+
+  /** The font and text size a Mind is written in: its own choice, else the default style. */
+  getMindStyle(mindId: string): Promise<MindStyle>;
+  /** Sets the Mind's font and text size together, so Undo can put both back. */
+  setMindStyle(mindId: string, style: MindStyle): Promise<MindStyle>;
 
   /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
   getOutputSettings(): Promise<OutputSettings>;
@@ -8990,6 +9122,15 @@ export interface CoreApi {
   retryTranscript(meetingId: string): Promise<Meeting>;
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
+  /**
+   * One-click help during the call: asks the button's Question in a conversation, from
+   * the Meeting's Mind, while it records or is paused; its Answer is one or two options to
+   * say, read from the live transcript and from what the Mind's Folder says about its newest
+   * lines. The Meeting's `help` names it. As `askInConversation` otherwise.
+   */
+  askMeetingHelp(input: AskMeetingHelpInput): Promise<ConversationAskResult>;
+  /** Sets the kind of meeting a live Meeting's help buttons are for: its template adds two or three. */
+  setMeetingTemplate(input: SetMeetingTemplateInput): Promise<Meeting>;
 
   /** Outside agents (#351, experimental): the setting, what pauses them, and every pairing. */
   getAgents(): Promise<AgentSettings>;
@@ -9213,6 +9354,8 @@ export interface CoreEvents {
    * `listMeetings` now returns it.
    */
   "meetings.changed": Meeting[];
+  /** About ten times a second while a Meeting's audio is captured: how loud each source is. */
+  "meetings.level": MeetingLevel;
   /**
    * Connecting agents was turned on or off, Local mode paused or resumed them, or a pairing
    * was made, changed, used or removed: as `getAgents` now returns it.
@@ -9258,6 +9401,7 @@ const methods: Record<CoreApiMethod, true> = {
   compareCheckpoints: true,
   restoreCheckpoint: true,
   askInConversation: true,
+  askReadyQuestion: true,
   regenerateConversationAnswer: true,
   countScopeDocuments: true,
   stopConversationAnswer: true,
@@ -9382,6 +9526,7 @@ const methods: Record<CoreApiMethod, true> = {
   planMindCheck: true,
   findMindClaims: true,
   checkMind: true,
+  documentsAddedSinceChecks: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
@@ -9505,6 +9650,10 @@ const methods: Record<CoreApiMethod, true> = {
   formatCitations: true,
   getMindCitationStyle: true,
   setMindCitationStyle: true,
+  listCitationStyles: true,
+  openCitationStyleLicences: true,
+  getMindStyle: true,
+  setMindStyle: true,
   getOutputSettings: true,
   setOutputLocation: true,
   setLinkedFolderWriting: true,
@@ -9520,6 +9669,8 @@ const methods: Record<CoreApiMethod, true> = {
   deleteMeetingAudio: true,
   retryTranscript: true,
   openAudioSettings: true,
+  askMeetingHelp: true,
+  setMeetingTemplate: true,
   getAgents: true,
   setAgentsEnabled: true,
   connectAgent: true,

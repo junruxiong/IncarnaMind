@@ -102,6 +102,15 @@ export interface LaunchOptions {
    * standing in for OpenAI (tests/helpers/fakeOpenAI.ts). A test build honours it.
    */
   chatGpt?: string;
+  /** A local stand-in for GitHub and Copilot at this origin, where the Copilot plan signs in and asks. */
+  copilot?: string;
+  /**
+   * Where the Claude account signs in and asks: the origin of a local server
+   * standing in for Anthropic (tests/helpers/fakeAnthropic.ts). A test build honours it.
+   */
+  claude?: string;
+  /** How long the Claude sign-in waits for its code, in milliseconds. A test build honours it. */
+  claudeSignInMs?: number;
   /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
@@ -186,6 +195,9 @@ export async function launchApp(
     connectorDirectory,
     connectorRegistry,
     chatGpt,
+    claude,
+    claudeSignInMs,
+    copilot,
     keepWindow = false,
     computerSound = "allowed",
     transcriber,
@@ -218,6 +230,9 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY;
   delete env.INCARNAMIND_TEST_CONNECTOR_REGISTRY;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_CLAUDE;
+  delete env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS;
+  delete env.INCARNAMIND_TEST_COPILOT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
@@ -243,6 +258,9 @@ export async function launchApp(
   // Nowhere, unless a test serves one: a search in a test never reaches the real Registry.
   env.INCARNAMIND_TEST_CONNECTOR_REGISTRY = connectorRegistry ?? "http://127.0.0.1:9";
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
+  if (claude) env.INCARNAMIND_TEST_CLAUDE = claude;
+  if (claudeSignInMs) env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS = String(claudeSignInMs);
+  if (copilot) env.INCARNAMIND_TEST_COPILOT = copilot;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
@@ -355,13 +373,28 @@ export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.
 
 /**
  * "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind
- * in no Folder. Returns once the menu has gone: keys a test presses a
- * millisecond apart can outrun the editor while frames are busy.
+ * in no Folder. Returns once its first line has the cursor: keys a test
+ * presses a millisecond apart can outrun the editor while frames are busy.
  */
 export async function newMind(window: Page): Promise<void> {
+  const before = await (await coreOf(window)).evaluate(async (core) =>
+    (await core.listMinds()).map((mind) => mind.id),
+  );
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-new-mind").click();
   await motionSettled(window);
+  // Until the new Mind's text has the cursor, keys and names go to the Mind open before it.
+  await expect
+    .poll(async () => {
+      const id = await window.evaluate(
+        () =>
+          document.activeElement
+            ?.closest('[data-testid="mind-pane"]')
+            ?.getAttribute("data-mind-id") ?? null,
+      );
+      return id !== null && !before.includes(id);
+    })
+    .toBe(true);
 }
 
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
@@ -524,6 +557,44 @@ export async function closeSettings(window: Page): Promise<void> {
   const settings = window.getByTestId("settings");
   await settings.getByRole("button", { name: "Close Settings" }).click();
   await expect(settings).toBeHidden();
+}
+
+/** Settings → Meetings → Record meetings, by its switch; `whileOpen` runs before Settings closes. */
+export async function turnOnMeetings(window: Page, whileOpen?: () => Promise<void>): Promise<void> {
+  const settings = await openSettings(window, "meetings");
+  const recording = settings.getByTestId("meetings-enabled");
+  await recording.hover();
+  await recording.click();
+  await expect(recording).toBeChecked();
+  await whileOpen?.();
+  await closeSettings(window);
+}
+
+/** The + menu's "Record a meeting": a new Mind with the start block. */
+export async function recordMeeting(window: Page): Promise<Locator> {
+  const plus = window.getByTestId("plus-menu");
+  await plus.hover();
+  await plus.click();
+  await window.getByRole("menuitem", { name: "Record a meeting" }).click();
+  const start = window.getByTestId("meeting-start");
+  await expect(start).toBeVisible();
+  return start;
+}
+
+/** Starts recording from the start block; the first time, through the one-time notice. */
+export async function startRecording(window: Page, start: Locator, { notice = false } = {}) {
+  const record = start.getByTestId("meeting-start-record");
+  await record.hover();
+  await record.click();
+  if (notice) {
+    const dialog = window.getByTestId("meeting-notice");
+    await expect(dialog).toBeVisible();
+    await dialog.getByTestId("meeting-notice-start").click();
+    await expect(dialog).toBeHidden();
+  }
+  const bar = window.getByTestId("meeting-bar");
+  await expect(bar).toHaveAttribute("data-status", "recording");
+  return bar;
 }
 
 /** Opens Settings from the sidebar, on its Privacy page. */
@@ -1092,6 +1163,18 @@ export async function expectReadyDocuments(window: Page, count: number): Promise
     .toBe(count);
 }
 
+/** Ends the first open (hides its steps), so the shell shows everything, as it does for a returning User. */
+export async function leaveFirstOpen(window: Page): Promise<void> {
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const { device } = await bridge.getSettings();
+    await bridge.updateSettings({
+      device: { gettingStarted: { ...device.gettingStarted, hidden: true } },
+    });
+  });
+  await expect(window.getByTestId("first-open-steps")).toHaveCount(0);
+}
+
 /** The id of the Document listed in the sidebar under `name`. */
 export async function documentIdOf(window: Page, name: string): Promise<string> {
   const id = await window
@@ -1272,6 +1355,41 @@ export async function pointAndClick(
 }
 
 /**
+ * A Mind's check badge card (#909): open already, as a question opens it,
+ * or opened as a person opens it: from the badge, or from ⌘K while no badge shows.
+ */
+export async function checkCard(window: Page, scope: Page | Locator = window): Promise<Locator> {
+  const card = window.getByTestId("check-card");
+  if (!(await card.isVisible())) {
+    const badge = scope.getByTestId("check-badge-open").first();
+    if (await badge.isVisible()) {
+      // "Checking 2 of 2 · Stop" shrinks to the counts as a check ends: aim once it has.
+      await expect(scope.getByTestId("badge-stop")).toHaveCount(0);
+      await motionSettled(window);
+      // The counts are worked out a moment after a change, and the badge can narrow under the pointer: aim again.
+      await expect(async () => {
+        if (!(await card.isVisible())) await pointAndClick(window, badge);
+        await expect(card).toBeVisible({ timeout: 1000 });
+      }).toPass();
+    } else {
+      const chinese = (await window.evaluate(() => document.documentElement.lang)) === "zh-CN";
+      const command = chinese ? "句子和引用" : "Sentences and Citations";
+      await window.keyboard.press("ControlOrMeta+k");
+      await expect(window.getByTestId("palette-search")).toBeFocused();
+      await window.keyboard.type(command);
+      await pointAndClick(
+        window,
+        window.getByTestId("palette-item").filter({ hasText: command }).first(),
+      );
+    }
+  }
+  await expect(card).toBeVisible();
+  // It grows from the badge: a click while it moves could land on the page behind.
+  await motionSettled(window);
+  return card;
+}
+
+/**
  * Drags an element horizontally by `dx` CSS pixels, as a person grabs it: a
  * few pixels off its centre (a divider is a 1px rule with a wider strip to
  * grab), after sliding the mouse there.
@@ -1424,13 +1542,78 @@ export async function slideSelect(
 }
 
 /**
- * Enter in a Mind's title, which takes the cursor into the Mind's text, and
- * waits until it is there: a new Mind's text comes a moment after its title,
- * and until then what is typed still goes into the title.
+ * Waits until the cursor is in the text of the Mind the User is in: a new
+ * Mind's text comes a moment after the Mind, and only then can it be typed in.
  */
 export async function enterContent(window: Page): Promise<void> {
-  await window.getByTestId("mind-title").press("Enter");
-  await expect(window.getByTestId("mind-editor")).toBeFocused();
+  await expect(frontMind(window).getByTestId("mind-editor")).toBeFocused();
+}
+
+/** The page of the Mind the User is in, in the group they are in. */
+export const frontMind = (window: Page) =>
+  window.locator('[data-testid="tab-group"][data-focused] [data-testid="mind-pane"]:visible');
+
+/** The name of the Mind the User is in, as its tab shows it. */
+export const frontMindName = (window: Page) =>
+  window.locator(
+    '[data-testid="tab-group"][data-focused] [data-testid="mind-tab"][aria-selected="true"] [data-testid="tab-title"]',
+  );
+
+/** The ⋯ button at the top right of the Mind's page in view (#908); one Mind in view only. */
+export const pageMenuButton = (window: Page) => window.locator('[data-testid="page-menu"]:visible');
+
+/** Opens the page's ⋯ menu with the mouse, and returns it. */
+export async function openPageMenu(window: Page): Promise<Locator> {
+  await pointAndClick(window, pageMenuButton(window));
+  const menu = window.locator('[data-testid="page-actions"]:visible');
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** "Show word count while writing", in the page's ⋯ menu: the count is hidden until then. */
+export async function showCountWhileWriting(window: Page): Promise<void> {
+  const menu = await openPageMenu(window);
+  const shown = menu.getByTestId("page-count-shown");
+  await pointAndClick(window, shown);
+  await expect(shown).toHaveAttribute("aria-checked", "true");
+  await window.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+}
+
+/** Renames the Mind the User is in from its tab, as a person does: double-click, a name, Enter. */
+export async function renameInTab(window: Page, name: string): Promise<void> {
+  await frontMindName(window).dblclick();
+  const field = window.locator(
+    '[data-testid="tab-group"][data-focused] [data-testid="tab-rename"]',
+  );
+  await expect(field).toBeFocused();
+  await field.fill(name);
+  await field.press("Enter");
+  await expect(frontMindName(window)).toHaveText(name);
+}
+
+/**
+ * Names the Mind the User is in, as Rename does, leaving its text and the
+ * cursor as they are: a Mind's page has no title field (#908).
+ */
+export async function nameMind(window: Page, name: string): Promise<void> {
+  // The tab changes before its page does: a Mind just opened is the tab's.
+  const tab = window.locator(
+    '[data-testid="tab-group"][data-focused] [data-testid="mind-tab"][aria-selected="true"]',
+  );
+  const mindId =
+    (await tab.count()) > 0
+      ? await tab.getAttribute("data-mind-id")
+      : await frontMind(window).getAttribute("data-mind-id");
+  if (!mindId) throw new Error("No Mind is in front.");
+  await (await coreOf(window)).evaluate(
+    (core, named) => core.renameMind(named.mindId, named.name),
+    {
+      mindId,
+      name,
+    },
+  );
+  await expect(frontMindName(window)).toHaveText(name);
 }
 
 /**
@@ -1881,4 +2064,25 @@ export async function exportFromMenu(window: Page, format?: ExportFormat): Promi
     await expect(window.getByTestId("export-more-menu")).toBeVisible();
   }
   await pointAndClick(window, item);
+}
+
+/** The fonts Chromium drew an element's text with, by name, and whether each is bundled with the app. */
+export async function fontsDrawing(window: Page, selector: string) {
+  const session = await window.context().newCDPSession(window);
+  try {
+    await session.send("DOM.enable");
+    await session.send("CSS.enable");
+    const { root } = await session.send("DOM.getDocument", { depth: -1 });
+    const { nodeId } = await session.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+    const { fonts } = await session.send("CSS.getPlatformFontsForNode", { nodeId });
+    return fonts
+      .map((font) => ({
+        family: font.familyName,
+        name: font.postScriptName,
+        bundled: font.isCustomFont,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } finally {
+    await session.detach();
+  }
 }

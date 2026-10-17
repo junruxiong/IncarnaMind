@@ -5,6 +5,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  nameMind,
   newMind,
   openSteps,
   pointAndClick,
@@ -33,9 +34,8 @@ test.afterEach(async () => {
 
 async function writeMind(window: Page, title: string, note: string): Promise<void> {
   await newMind(window);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
-  await window.keyboard.type(title);
   await enterContent(window);
+  await nameMind(window, title);
   await window.keyboard.type(note);
   await expect(window.getByTestId("mind-editor").locator("p")).toHaveText([note]);
 }

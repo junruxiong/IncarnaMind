@@ -1,6 +1,8 @@
 import type { BlockOrigin } from "../../../core/api";
 import { signInAgain } from "../chatGptSignIn";
+import { setCheckCardOpen } from "../checks";
 import { useCitationStylePicker } from "../citationStylePicker";
+import { claudeSignInOffered } from "../claudeSignIn";
 import { startContradictionCheck } from "../contradictions";
 import { blockMenuOpeners } from "../editor/blockMenuOpeners";
 import { originOf } from "../editor/blockOrigins";
@@ -8,6 +10,7 @@ import { blockAt, noteHolding } from "../editor/noteKeymap";
 import { openOrigin } from "../editor/originActions";
 import { useFindSources } from "../findSources";
 import { useHistory } from "../history";
+import { frontTabOfMind, groupsMerged } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
 import { startMindCheck } from "../mindCheck";
 import { useMindTools } from "../mindTools";
@@ -24,12 +27,14 @@ import { comparisonCommands } from "./comparisons";
 import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
+import { exampleCommands } from "./examples";
 import { exportCommands } from "./exports";
 import { feedbackCommands } from "./feedback";
 import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, findHandle, readMindHandle, sidebarHandle } from "./handles";
 import { linkCommands } from "./links";
+import { meetingHelpCommands } from "./meetingHelp";
 import { meetingCommands } from "./meetings";
 import { newFolderCommands } from "./newFolder";
 import {
@@ -41,6 +46,7 @@ import {
   mindCommands,
   tagCommands,
 } from "./objects";
+import { pageCommands } from "./page";
 import { paletteCommands } from "./palette";
 import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
@@ -50,6 +56,7 @@ import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
 import { selectionCommands } from "./selection";
 import { settingsPageCommands } from "./settings";
+import { styleCommands } from "./style";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { taggingCommands } from "./tagging";
@@ -120,8 +127,10 @@ const appCommands: readonly Command[] = [
   ...citationCommands,
   ...tabCommands,
   ...meetingCommands,
+  ...meetingHelpCommands,
   ...webPageCommands,
   ...feedbackCommands,
+  ...exampleCommands,
   ...sortCommands,
   ...fileCommands,
   ...evidenceCommands,
@@ -130,6 +139,8 @@ const appCommands: readonly Command[] = [
   ...exportCommands,
   ...taskCommands,
   ...wordLookCommands,
+  ...pageCommands,
+  ...styleCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
@@ -148,6 +159,15 @@ const appCommands: readonly Command[] = [
       const { openSettings } = useAppStore.getState();
       if (await signInAgain(openSettings)) openSettings("models");
     },
+  },
+  {
+    id: "claude.signIn",
+    label: "claudePlan.signIn",
+    group: "main",
+    reversible: true,
+    when: claudeSignInOffered,
+    // The words come before any request, so it opens the Claude row in Settings › Models.
+    run: () => useAppStore.getState().openSettings("models", "claude-account"),
   },
   {
     ...fromMenu("sidebar.toggle"),
@@ -223,6 +243,22 @@ const appCommands: readonly Command[] = [
     run: (ctx) => {
       const mindId = mindShown(ctx);
       if (mindId) return startMindCheck(mindId, "all");
+    },
+  },
+  {
+    id: "mind.checks",
+    label: "health.label",
+    keywords: ["badge.command.keywords"],
+    group: "main",
+    // Opening the card changes nothing.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: async (ctx) => {
+      const mindId = mindShown(ctx);
+      if (!mindId) return;
+      await useAppStore.getState().openMind(mindId);
+      const tab = frontTabOfMind(useAppStore.getState().layout, mindId, groupsMerged());
+      setCheckCardOpen(tab?.id ?? mindId, true);
     },
   },
   {

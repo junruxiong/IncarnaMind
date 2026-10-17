@@ -1,12 +1,20 @@
 import { mkdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
-import { isCitationStyleId } from "../shared/citationStyles";
+import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { translate } from "../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
+import { holdsOnlyItsTitle } from "../shared/madeMind";
+import {
+  HEARD_FROM,
+  helpKindsFor,
+  helpLabel,
+  isMeetingHelpKind,
+  isMeetingTemplate,
+} from "../shared/meetingHelp";
 import { bibliographyShown } from "../shared/mindBibliography";
 import {
   chosenCitationStyle,
@@ -14,11 +22,20 @@ import {
   setCitationStyle,
 } from "../shared/mindCitationStyle";
 import { mindModelOf } from "../shared/mindModel";
+import {
+  DEFAULT_MIND_STYLE,
+  exportedFamily,
+  isMindStyle,
+  mindStyleOf,
+  sameStyle,
+  writeMindStyle,
+} from "../shared/mindStyle";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
+import { SPEAKER_ME, SPEAKER_THEM } from "../shared/speakers";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
@@ -27,7 +44,6 @@ import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
-import { topLevelBlocks } from "./answers/blocks";
 import { createChecks } from "./answers/checks";
 import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -45,9 +61,9 @@ import type { AnswerSearchOptions } from "./answers/engine";
 import {
   type AddDocumentsResult,
   type ChatModelChoice,
+  type ConversationAskResult,
   type CoreApi,
   type CoreEventSource,
-  type CreateMindInput,
   DEFAULT_MIND_KIND,
   type Document,
   type DocumentStatus,
@@ -56,6 +72,7 @@ import {
   type ExportMindOptions,
   type ExternalService,
   type Meeting,
+  type MeetingHelpKind,
   type Mind,
   type MindCitationStyle,
   NOT_IN_A_FOLDER_ID,
@@ -80,7 +97,7 @@ import { createConnectors } from "./connectors";
 import { connectorDirectory } from "./connectors/directory";
 import { createConnectorRegistry, REGISTRY, REGISTRY_SENDS } from "./connectors/registry";
 import { createConsent, type DataFlowRegistry } from "./consent";
-import { createConversations } from "./conversations";
+import { createConversations, type QuestionInput } from "./conversations";
 import { createMeter } from "./cost/meter";
 import {
   createDocuments,
@@ -124,7 +141,7 @@ import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPicture
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
-import { systemRegion } from "./language";
+import { LANGUAGES, systemRegion } from "./language";
 import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
@@ -149,6 +166,7 @@ import { createMindContent } from "./mindContent";
 import { createMindIndex } from "./mindIndex";
 import {
   createMinds,
+  type NewMind,
   parseCreateMindInput,
   parseFolderChoice,
   parseIds,
@@ -1152,6 +1170,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return isKnownKind(minds.get(mindId).kind) ? found.name : null;
     },
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
+    meetingHelp: (mindId, question) => meetingHelpOf(mindId, question),
     providerExists: (providerId) => chat.exists(providerId),
     readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
     prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
@@ -1170,6 +1189,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableBySize: (documentIds) => documents.searchableBySize(documentIds ?? undefined),
+      passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       search: searchDocuments,
@@ -1220,8 +1240,8 @@ export function createCore(adapters: CoreAdapters): Core {
       checkpoint: (mindId) => {
         checkpoints.save(mindId, "accept");
       },
-      create: (title, folderId) => {
-        const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId });
+      create: (title, folderId, headed) => {
+        const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }, { headed });
         return { id: mind.id, name: mindName(mind) || title };
       },
       folderName: (folderId) =>
@@ -1232,12 +1252,11 @@ export function createCore(adapters: CoreAdapters): Core {
     withdrawChanges: (changes) => {
       for (const change of changes) {
         if (!mindExists(change.mindId)) continue;
+        const { title } = minds.get(change.mindId);
         const emptied = content.edit(change.mindId, (blocks) => {
           resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
           if (change.revised) restoreRevised(blocks, change.request);
-          return topLevelBlocks(blocks).every(
-            (block) => block.nodeName === "paragraph" && block.length === 0,
-          );
+          return holdsOnlyItsTitle(blocks, title);
         });
         if (change.created && emptied) removeMind(change.mindId);
       }
@@ -1284,6 +1303,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    workingCopyOf: (mindId) => wordImports.originalOf(mindId)?.documentIds?.[0] ?? null,
     unscopedDocuments: (mindId) => {
       const made = examples.made();
       if (made.documentIds.length === 0 || (mindId && made.mindIds.includes(mindId))) return null;
@@ -1369,7 +1389,7 @@ export function createCore(adapters: CoreAdapters): Core {
     );
     let mind = "";
     try {
-      mind = task.mindId ? minds.get(task.mindId).title : "";
+      mind = task.mindId ? mindName(minds.get(task.mindId)) : "";
     } catch {
       mind = "";
     }
@@ -1505,7 +1525,7 @@ export function createCore(adapters: CoreAdapters): Core {
     folder: adapters.paths.citationStyles,
     document: liveDocument,
   });
-  const mindCitationStyle = (mindId: string): MindCitationStyle => {
+  const mindStyleAndText = (mindId: string) => {
     const { folderId } = minds.get(mindId);
     const { chineseText, cited } = content.read(mindId, (blocks) => {
       const versions: CitedVersions = new Map();
@@ -1517,12 +1537,14 @@ export function createCore(adapters: CoreAdapters): Core {
     });
     const citesWorks = cited.some((id) => isCitableWork(liveDocument(id)?.reference ?? null));
     const context = { language: settings.get().language, chineseText, citesWorks };
-    return content.readSettings(mindId, (mindSettings) => ({
+    const style: MindCitationStyle = content.readSettings(mindId, (mindSettings) => ({
       style: citationStyleIn(mindSettings, context),
       chosen: chosenCitationStyle(mindSettings) !== null,
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
+    return { style, textLanguage: chineseText ? ("zh-CN" as const) : ("en" as const) };
   };
+  const mindCitationStyle = (mindId: string): MindCitationStyle => mindStyleAndText(mindId).style;
   /** Sends a Mind to Recently deleted; its tabs close. */
   const removeMind = (mindId: unknown) => {
     const at = now();
@@ -1555,14 +1577,33 @@ export function createCore(adapters: CoreAdapters): Core {
   });
 
   // Find support and Check against Documents (#96): check Runs that can only search and cite.
+  const startInWritingStyle = (mindId: string) => {
+    const style = settings.get().user.newMindStyle;
+    if (sameStyle(style, DEFAULT_MIND_STYLE)) return;
+    content.editSettings(mindId, (mindSettings) => writeMindStyle(mindSettings, style));
+  };
   /** A new Mind, in the citation style last chosen for a Mind in its Folder, as its own choice (#289). */
-  const makeMind = (input: Required<CreateMindInput>): Mind => {
+  /**
+   * With `headed`, the Mind's text starts with its title as a Heading 1 and an
+   * empty line under it: a page has no title field (#908), and a Mind made with
+   * its name reads as it did with one.
+   */
+  const makeMind = (input: NewMind, { headed = false } = {}): Mind => {
     if (input.folderId !== null) library.folder(input.folderId);
     const mind = minds.create(input);
+    if (headed && mind.title !== "") {
+      content.edit(mind.id, (note) =>
+        insertBlocks(note, [
+          { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: mind.title }] },
+          { type: "paragraph" },
+        ]),
+      );
+    }
     const style = input.folderId === null ? null : library.citationStyle(input.folderId);
     if (style !== null) {
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
     }
+    startInWritingStyle(mind.id);
     mindsChanged();
     usageData.record({ event: "mind_created", fields: {} });
     return mind;
@@ -1620,6 +1661,8 @@ export function createCore(adapters: CoreAdapters): Core {
     evidence,
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      joinedAfter: (documentIds, since, folderId) =>
+        documents.searchableJoinedAfter(documentIds ?? undefined, since, folderId),
       names: () => documents.names(),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       savedBySearch: (documentId) => documents.getMany([documentId])[0]?.web?.origin === "search",
@@ -1681,7 +1724,11 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     folderName: (folderId) =>
       library.folders().find((folder) => folder.id === folderId)?.name ?? null,
-    citationStyle: (mindId) => mindCitationStyle(mindId).style,
+    citationStyle: (mindId) => {
+      const { style, textLanguage } = mindStyleAndText(mindId);
+      return { style: citationStyles.resolve(style.style, textLanguage), textLanguage };
+    },
+    font: (mindId) => exportedFamily(content.readSettings(mindId, mindStyleOf).font),
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     citedPage: (citation) => citedPages.image(citation),
@@ -2334,6 +2381,7 @@ export function createCore(adapters: CoreAdapters): Core {
         profile.tokenUrl,
         profile.tokenExchange?.url,
         profile.apiBaseUrl,
+        profile.accountUrl,
       ])
       .filter((url): url is string => url !== undefined)
       .map((url) => new URL(url))
@@ -2465,6 +2513,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
+  /** See `AnswersOptions.meetingHelp`; set once Meetings are. */
+  let meetingHelpOf = (_mindId: string, _question: string): MeetingHelpKind | null => null;
   /** See `AnswersOptions.liveTranscript`; set once Meetings are. */
   let liveTranscriptOf = async (_mindId: string): Promise<WindowedPassage[] | null> => null;
   const meetingsChanged = () => {
@@ -2544,6 +2594,7 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     createMind: (title) => {
       const mind = minds.create(parseCreateMindInput({ title }));
+      startInWritingStyle(mind.id);
       mindsChanged();
       return mind;
     },
@@ -2556,6 +2607,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     changed: (list) => events.emit("meetings.changed", list),
+    level: (level) => events.emit("meetings.level", level),
     onCapturingChange: (capturing) => {
       background.setRecording(capturing);
       tasks.setRecording(capturing);
@@ -2566,6 +2618,65 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
+  meetingHelpOf = (mindId, question) => {
+    const meeting = meetings.liveOf(mindId);
+    if (!meeting) return null;
+    return (
+      helpKindsFor(meeting.helpTemplate).find((kind) =>
+        LANGUAGES.some((language) => translate(language, helpLabel(kind)) === question),
+      ) ?? null
+    );
+  };
+  /** The conversation each live Meeting's help went to last: the panel's goes on there. */
+  const helpConversations = new Map<string, string>();
+  const askMeetingHelp = async (given: unknown): Promise<ConversationAskResult> => {
+    const input = isRecord(given) ? given : {};
+    const meeting = meetings.get(input.meetingId);
+    if (meeting.status !== "recording" && meeting.status !== "paused") {
+      throw new InvalidInputError({ key: "error.meeting.notBeingRecorded" });
+    }
+    const { kind } = input;
+    if (!isMeetingHelpKind(kind) || !helpKindsFor(meeting.helpTemplate).includes(kind)) {
+      throw new InvalidInputError({ key: "error.meeting.helpButton" });
+    }
+    const { folderId } = minds.get(meeting.mindId);
+    const question = (conversationId: unknown) =>
+      conversations.parseQuestion({
+        conversationId,
+        text: translate(settings.get().language, helpLabel(kind)),
+        mindId: meeting.mindId,
+        scope: folderId ? { folderIds: [folderId], tagIds: [], documentIds: [] } : null,
+      });
+    let asked: QuestionInput;
+    if (input.conversationId !== undefined) asked = question(input.conversationId);
+    else {
+      try {
+        asked = question(helpConversations.get(meeting.id) ?? null);
+      } catch (error) {
+        // The conversation it went to last was deleted: a new one.
+        if (!(error instanceof NotFoundError)) throw error;
+        asked = question(null);
+      }
+    }
+    const result = await answers.askInConversation(asked);
+    if (result.asked) {
+      helpConversations.set(meeting.id, result.conversation.id);
+      const from = HEARD_FROM[kind];
+      const newest = (speaker?: string) => transcripts?.newestLine(meeting.id, speaker) ?? null;
+      meetings.helped(meeting.id, {
+        kind,
+        conversationId: result.conversation.id,
+        answerId: result.answerId,
+        heard:
+          from === undefined
+            ? null
+            : from === "anyone"
+              ? newest()
+              : (newest(from === "me" ? SPEAKER_ME : SPEAKER_THEM) ?? newest()),
+      });
+    }
+    return result;
+  };
   /** Resolves once a Document's newest version has its Passages, or after `ms` with the last version's. */
   const extracted = (documentId: string, ms: number) =>
     new Promise<void>((resolve) => {
@@ -2714,7 +2825,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
-    createMind: async (input) => makeMind(parseCreateMindInput(input)),
+    createMind: async (input) =>
+      makeMind(parseCreateMindInput(input), { headed: isRecord(input) && input.headed === true }),
     checkWordFile: async (path, folderId) => wordImports.check(path, folderId),
     importWordFile: async (input) => wordImports.import(input),
     addWordOriginal: async (mindId, path) => {
@@ -2753,6 +2865,40 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreCheckpoint: async (mindId, checkpointId) => checkpoints.restore(mindId, checkpointId),
     askInConversation: async (input) =>
       answers.askInConversation(conversations.parseQuestion(input)),
+    askReadyQuestion: async () => {
+      const ready = examples.readyAnswer();
+      if (!ready) {
+        throw new InvalidInputError({ key: "error.examples.reading" });
+      }
+      const turn = conversations.add(
+        {
+          conversationId: null,
+          text: ready.question,
+          mind: { id: ready.mindId, folderId: minds.get(ready.mindId).folderId },
+          focus: null,
+          scope: null,
+          model: null,
+          forcedSkill: null,
+        },
+        null,
+        null,
+      );
+      const answer = conversations.writeAnswer(turn.answer.id, {
+        text: ready.answer,
+        citations: ready.citations,
+        figures: [],
+        toolCalls: [],
+        support: null,
+        textOrigin: null,
+        read: null,
+        steps: { sentAt: null, finishedAt: now(), phases: [], reasoning: null, example: true },
+        outcome: { status: "done", error: null },
+      });
+      events.emit("conversation.message", turn.question);
+      events.emit("conversation.message", answer ?? turn.answer);
+      conversationsChanged();
+      return { conversationId: turn.conversation.id, answerId: turn.answer.id };
+    },
     regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
     countScopeDocuments: async (scope) => {
       const wanted = parseSearchScope(scope);
@@ -3111,6 +3257,7 @@ export function createCore(adapters: CoreAdapters): Core {
     planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
     findMindClaims: (input) => checks.findMindClaims(input),
     checkMind: (input) => checks.checkMind(input),
+    documentsAddedSinceChecks: async (mindId) => checks.documentsAddedSinceChecks(mindId),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
@@ -3560,6 +3707,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const mind = writableMind(mindId);
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
+      // Undo passes the Folder's style back; what it puts back isn't a style the User chose.
+      if (style !== null && folderDefault === undefined) {
+        const recent = withRecentStyle(settings.get().user.recentCitationStyles, style);
+        settings.update({ user: { recentCitationStyles: recent } });
+        settingsChanged();
+      }
       // The style chosen is the one new Minds in its Folder start in, as a document app keeps
       // the last template used; Undo puts back the one before.
       const { folderId } = minds.get(mind.id);
@@ -3568,6 +3721,23 @@ export function createCore(adapters: CoreAdapters): Core {
         else if (style !== null) library.setCitationStyle(folderId, style);
       }
       return mindCitationStyle(mind.id);
+    },
+    listCitationStyles: async () => citationStyles.list(),
+    openCitationStyleLicences: async () => {
+      if (!adapters.shell)
+        throw new Error("This copy of IncarnaMind can't open files in other apps.");
+      // The notice is compressed in the pack, so it is written out, into a folder of its own.
+      const folder = await mkdtemp(join(adapters.paths.tempDir ?? tmpdir(), "incarnamind-"));
+      const path = join(folder, "IncarnaMind citation styles.txt");
+      await writeFile(path, citationStyles.notice());
+      await adapters.shell.openPath(path);
+    },
+    getMindStyle: async (mindId) => content.readSettings(minds.get(mindId).id, mindStyleOf),
+    setMindStyle: async (mindId, style) => {
+      if (!isMindStyle(style)) throw new InvalidInputError({ key: "error.mindStyle.invalid" });
+      const mind = writableMind(mindId);
+      content.editSettings(mind.id, (mindSettings) => writeMindStyle(mindSettings, style));
+      return content.readSettings(mind.id, mindStyleOf);
     },
     getOutputSettings: async () => outputs.settings(),
     setOutputLocation: (path) => outputs.setLocation(path),
@@ -3586,6 +3756,14 @@ export function createCore(adapters: CoreAdapters): Core {
     deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
     openAudioSettings: (source) => meetings.openSettings(source),
+    askMeetingHelp,
+    setMeetingTemplate: async (input) => {
+      const { meetingId, template } = isRecord(input) ? input : {};
+      if (template !== null && !isMeetingTemplate(template)) {
+        throw new InvalidInputError({ key: "error.meeting.template" });
+      }
+      return meetings.setTemplate(meetingId, template);
+    },
 
     openDocumentFile: async (documentId) => {
       const file = await documents.openFile(documentId);

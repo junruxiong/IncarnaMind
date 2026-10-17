@@ -10,6 +10,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  nameMind,
   newMind,
   openSteps,
   pointAndClick,
@@ -86,9 +87,8 @@ async function start(language: "en" | "zh-CN", width: number) {
 
 async function writeMind(window: Page, title: string, notes: readonly string[]): Promise<Locator> {
   await newMind(window);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
-  await window.keyboard.type(title);
   await enterContent(window);
+  await nameMind(window, title);
   for (const [index, line] of notes.entries()) {
     if (index > 0) await window.keyboard.press("Enter");
     await window.keyboard.type(line);

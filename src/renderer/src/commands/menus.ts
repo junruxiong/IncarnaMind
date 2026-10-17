@@ -40,14 +40,18 @@ export interface MenuItem {
 export type MenuEntry = MenuItem | "rule";
 
 /**
- * A kind's menu for this context. A command that doesn't apply is left out; one
- * that applies but can't run now stays, disabled with its reason. A rule
- * separates groups and sections that have items.
+ * A kind's menu for this context. A command that doesn't apply is left out, as
+ * is one in `without`; one that applies but can't run now stays, disabled with
+ * its reason. A rule separates groups and sections that have items.
  */
-export function buildMenu(kind: ObjectKind, ctx: CommandContext): MenuEntry[] {
+export function buildMenu(
+  kind: ObjectKind,
+  ctx: CommandContext,
+  without: readonly CommandId[] = [],
+): MenuEntry[] {
   const items = (registered.get(kind) ?? []).flatMap(({ id, section }) => {
     const command = commands.get(id);
-    if (!command || !offered(command, ctx)) return [];
+    if (!command || without.includes(id) || !offered(command, ctx)) return [];
     const item: MenuItem = { command, enabled: command.enabled?.(ctx) ?? true, section };
     return [{ group: COMMAND_GROUPS.indexOf(command.group), item }];
   });

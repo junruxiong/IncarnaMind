@@ -21,6 +21,7 @@ import { useRequests } from "../../requests";
 import { useAppStore } from "../../store";
 import { TREE_ROW } from "../../treeKeys";
 import { useRename } from "../../useRename";
+import { DetailsLine } from "../DetailsLine";
 import { InlineName } from "../InlineName";
 import { FolderLineIcon } from "../lineIcons";
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
@@ -401,7 +402,12 @@ function OrganizeNeedsModel({ documents }: { documents: readonly Document[] }) {
     >
       <p>{t("library.organize.needsModel")}</p>
       {automatic && automatic.group !== "local" && company && (
-        <p data-testid="library-organize-sends">{t("library.organize.sends", { company })}</p>
+        <DetailsLine
+          testId="library-organize-sends"
+          details={t("library.organize.sends.details", { company })}
+        >
+          {t("library.organize.sends", { company })}
+        </DetailsLine>
       )}
       <p className="flex flex-wrap gap-x-4">
         {company && (

@@ -174,7 +174,7 @@ const matches = (patterns: readonly RegExp[], text: string) =>
   patterns.some((pattern) => pattern.test(text));
 
 export interface RequestContext {
-  /** The conversation's last Answer changed a Mind: "longer" means what it wrote. */
+  /** The conversation's last Answer changed a Mind, or was asked to and couldn't: "longer" means what it wrote. */
   followsAChange: boolean;
   /** The conversation has an Answer before: "add it to my notes" means it. */
   followsAnAnswer: boolean;

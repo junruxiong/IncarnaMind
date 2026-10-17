@@ -49,6 +49,7 @@ import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
 import { linkTableSources } from "../../shared/markdownTables";
+import type { MeetingHelpKind } from "../../shared/meetingHelp";
 import {
   linkSources,
   type NamedSource,
@@ -78,6 +79,7 @@ import {
   type ChatReadiness,
   type CitationSupport,
   type ClaimedChange,
+  type ConversationAnswer,
   type ConversationAskResult,
   type ConversationMessage,
   type ConversationQuestion,
@@ -179,6 +181,14 @@ import {
   readMind,
 } from "./context";
 import { coverageInstructions, coverageOf, documentsAsked, type SizedDocument } from "./coverage";
+import {
+  documentTextBlock,
+  givenUpFront,
+  OPENING_TOKEN_LIMIT,
+  openingWithin,
+  SMALL_SCOPE_DOCUMENTS,
+  upFrontTokens,
+} from "./documentText";
 import type {
   AnswerEngine,
   AnswerSearchOptions,
@@ -188,8 +198,16 @@ import type {
   GatedCall,
   ToolSet,
 } from "./engine";
-import { listenedTokens, newestWithin, withTranscript } from "./liveTranscript";
+import { listenedTokens, newestWithin, withBeforeQuestion, withTranscript } from "./liveTranscript";
 import { markdownToBlocks } from "./markdown";
+import {
+  FOUND_TOKEN_LIMIT,
+  foundWithin,
+  languageSaid,
+  meetingHelpInstructions,
+  newestSaid,
+  withFound,
+} from "./meetingHelp";
 import { paragraphAsked } from "./paragraphAsked";
 import {
   answerInstructions,
@@ -205,6 +223,8 @@ import {
   skillInstructions,
   sourcesInstructions,
   webInstructions,
+  withPassageNotes,
+  workingCopyNote,
 } from "./prompt";
 import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
 import { type RequestContext, routeRequest } from "./routeRequest";
@@ -371,6 +391,11 @@ function lastAnswerOf(
   };
 }
 
+const followsAChange = (answer: ConversationAnswer | undefined) =>
+  answer !== undefined &&
+  (answer.steps?.withoutMindTools === true ||
+    answer.toolCalls.some((call) => call.mindChange && changesAMind(call.mindChange)));
+
 /** The Folder a Search scope is, when it is one Folder alone; null otherwise. */
 const oneFolderOf = (scope: SearchScope | null): string | null =>
   scope && scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
@@ -394,13 +419,18 @@ export interface AnswersOptions {
    * Passages in reading order; null when the Mind's Meeting isn't recording or has no lines yet.
    */
   liveTranscript(mindId: string): Promise<WindowedPassage[] | null>;
+  /**
+   * The help button a Question in a conversation is, asked from a Mind whose Meeting
+   * records or is paused: its text is the button's name. Null for any other Question.
+   */
+  meetingHelp?(mindId: string, question: string): MeetingHelpKind | null;
   providerExists(providerId: string): boolean;
   /** Whether Questions can be asked with this model (the default one when undefined). */
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
   /** The model, once the User has accepted its data flow (see `Core.prepareChatModel`). */
   prepareModel(
     choice: ChatModelChoice,
-    thinking: "summary" | "answer" | "careful",
+    thinking: "off" | "summary" | "answer" | "careful",
   ): Promise<PreparedChatModel>;
   /**
    * The quick-tasks model for an Answer asked with `answers`, prepared as
@@ -422,6 +452,8 @@ export interface AnswersOptions {
    * Mind; null: every Document.
    */
   unscopedDocuments?(mindId: string | null): string[] | null;
+  /** The Document a Mind imported from Word was also added as (#720); null for none. */
+  workingCopyOf?(mindId: string): string | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
   emptyScopeAnswer(): string;
   /** The User's Skills. */
@@ -565,6 +597,8 @@ export interface DocumentsForAnswers
   searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
   /** The Documents to search, the most text first. */
   searchableBySize(documentIds: readonly string[] | null): SizedDocument[];
+  /** The live Passages of a live Document at positions `from` to `to`, in reading order. */
+  passagesBetween(documentId: string, from: number, to: number): WindowedPassage[];
   /** The languages the Documents to search are in, the most common first, with how many are in each. */
   searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
   /** The Documents among these (null: every Document) whose text couldn't be read, or some of it. */
@@ -766,6 +800,11 @@ export function createAnswers(options: AnswersOptions) {
      * to now, to go with the Question. Absent: none.
      */
     listening?: () => Promise<WindowedPassage[] | null>;
+    /**
+     * One-click help during the call: the button pressed. Its Answer is laid out as
+     * the panel reads it, and is offered the Documents' Tools only.
+     */
+    help?: MeetingHelpKind;
     /** Written for a Task (#126), which gives way to Answers itself (see ../runs/tasks). */
     task?: boolean;
     /** Offers web search's Tools whatever the Question says: a Research Task's Web source (#130). */
@@ -823,6 +862,10 @@ export function createAnswers(options: AnswersOptions) {
     let mindRequest = input.mind?.request;
     /** It listened to a meeting's live transcript: the Question went with it. */
     let listening = false;
+    const { help } = input;
+    let foundAhead = false;
+    /** The language the call's newest lines are in, which a help Answer is written in. */
+    let callLanguage: string | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
@@ -834,6 +877,7 @@ export function createAnswers(options: AnswersOptions) {
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
     let figureRetry: FigureRetry | null = null;
     let unbackedClaims: ClaimedChange[] = [];
+    let withoutMindTools = false;
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
       inputTokens: 0,
@@ -888,15 +932,36 @@ export function createAnswers(options: AnswersOptions) {
           firstWordAt !== Infinity && { firstWordMs: wordAfter(sentAt, firstWordAt) }),
         ...(careful && { careful: true as const }),
         ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
+        ...(withoutMindTools && { withoutMindTools: true as const }),
         ...(coverage && { coverage }),
       };
     };
     let skills: SkillSession | null = null;
     const searched = inScope(options.documents, documentIds);
-    const session = createCitationSession(searched, {
-      onRecord: (marker, citation) =>
-        announce("answer.citationAdded", { ...place, answerId, marker, citation }),
-    });
+    const inAssistant = !outside && input.assistant !== undefined;
+    const mindIn = input.assistant?.focused?.mindId ?? null;
+    const originalId =
+      inAssistant && mindIn !== null ? (options.workingCopyOf?.(mindIn) ?? null) : null;
+    const [original = null] =
+      originalId !== null && (documentIds === null || documentIds.includes(originalId))
+        ? options.documents.searchableBySize([originalId])
+        : [];
+    const passagesOf = (documentId: string) =>
+      options.documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
+    const session = createCitationSession(
+      searched,
+      {
+        onRecord: (marker, citation) =>
+          announce("answer.citationAdded", { ...place, answerId, marker, citation }),
+      },
+      original
+        ? {
+            documentId: original.id,
+            name: original.name,
+            passages: () => openingWithin(passagesOf(original.id), OPENING_TOKEN_LIMIT),
+          }
+        : undefined,
+    );
     /**
      * Whether its model is offered `calculate` and its steer: a fact of the
      * model, once prepared (ADR-0021). Off, the Answer is as it was before them.
@@ -1405,7 +1470,8 @@ export function createAnswers(options: AnswersOptions) {
       try {
         prepared = await options.prepareModel(
           model,
-          input.task ? "summary" : careful ? "careful" : "answer",
+          // Help during a call is read within seconds: the model answers without thinking first.
+          help ? "off" : input.task ? "summary" : careful ? "careful" : "answer",
         );
       } catch (error) {
         finish({ status: "failed", error: failureOf(error) });
@@ -1431,6 +1497,57 @@ export function createAnswers(options: AnswersOptions) {
         if (kept.length > 0) {
           messages = withTranscript(messages, session.show(kept));
           listening = true;
+          if (help) callLanguage = languageSaid(kept);
+        }
+        // Help gets what the User's Documents say about the newest lines at once, with no search
+        // the model has to call first.
+        if (help && kept.length > 0) {
+          const transcript = new Set(kept.map((passage) => passage.documentId));
+          try {
+            const found = await session.find(newestSaid(kept), controller.signal, {
+              rerank: false,
+            });
+            const fitting = foundWithin(
+              found.filter((passage) => !transcript.has(passage.documentId)),
+              FOUND_TOKEN_LIMIT,
+            );
+            if (fitting.length > 0) {
+              messages = withFound(messages, session.show(fitting));
+              foundAhead = true;
+            }
+          } catch (error) {
+            if (!controller.signal.aborted) options.reportError(error);
+          }
+          if (finished) return;
+        }
+      }
+      if (inAssistant) {
+        const unread = options.documents.unread(documentIds);
+        const blockOf = (
+          passages: readonly WindowedPassage[],
+          show: (found: readonly WindowedPassage[]) => string,
+        ) =>
+          documentTextBlock(
+            [...new Set(passages.map((passage) => passage.documentName))],
+            withPassageNotes(show(passages), unread),
+          );
+        const scope =
+          options.documents.searchableCount(documentIds) <= SMALL_SCOPE_DOCUMENTS
+            ? options.documents.searchableBySize(documentIds)
+            : [];
+        const given = givenUpFront(
+          [original ? [original] : [], scope],
+          upFrontTokens(prepared.window),
+          passagesOf,
+          (passages) => blockOf(passages, session.measure),
+        );
+        if (given) {
+          messages = withBeforeQuestion(messages, blockOf(given.passages, session.show));
+          // Someone else wrote a saved web page: given up front, it is read as a search reads it (#78).
+          if (given.passages.some((passage) => passage.documentKind === "web")) {
+            contextReasons.push({ via: "read", source: "web-page" });
+            textOrigin ??= "web-page";
+          }
         }
       }
       // Stopped while waiting, e.g. for consent: send nothing.
@@ -1723,10 +1840,17 @@ export function createAnswers(options: AnswersOptions) {
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
+            workingCopyNote(original?.name ?? null),
             mindInstructions(withMindTools, route),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
-            language,
+            help
+              ? meetingHelpInstructions(help, {
+                  found: foundAhead,
+                  language: options.interfaceLanguage(),
+                  callLanguage,
+                })
+              : language,
           ]
             .filter(Boolean)
             .join("\n\n"),
@@ -1739,7 +1863,7 @@ export function createAnswers(options: AnswersOptions) {
         tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
         gate,
         streamsInput,
-        toolSet: input.toolSet,
+        toolSet: input.toolSet ?? (help ? "documents" : undefined),
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         structuredOutput: givesStructuredOutput(prepared.capabilities),
@@ -1789,6 +1913,9 @@ export function createAnswers(options: AnswersOptions) {
           case "claims-unbacked":
             unbackedClaims = event.claims;
             writeSoon();
+            break;
+          case "without-tools":
+            withoutMindTools = requested !== null;
             break;
           case "usage":
             usage.inputTokens += event.usage.inputTokens ?? 0;
@@ -1896,6 +2023,7 @@ export function createAnswers(options: AnswersOptions) {
             errorKind: outcome.status === "failed" ? outcome.error.kind : null,
             errorMessage: outcome.status === "failed" ? outcome.error.message : null,
             errorResetsAt: (outcome.status === "failed" && outcome.error.resetsAt) || null,
+            errorSignInRoute: (outcome.status === "failed" && outcome.error.signInRoute) || null,
             generatedHash: contentHash(element),
           });
         }
@@ -1926,6 +2054,7 @@ export function createAnswers(options: AnswersOptions) {
               status: "failed",
               errorKind: outcome.error.kind,
               errorMessage: outcome.error.message,
+              errorSignInRoute: outcome.error.signInRoute ?? null,
             });
           }
           return !!found;
@@ -1951,6 +2080,7 @@ export function createAnswers(options: AnswersOptions) {
           status: "done",
           errorKind: null,
           errorMessage: null,
+          errorSignInRoute: null,
           providerId: model.providerId,
           modelId: model.modelId,
           toolCalls: answer.toolCalls.length > 0 ? JSON.stringify(answer.toolCalls) : null,
@@ -2070,18 +2200,19 @@ export function createAnswers(options: AnswersOptions) {
     mind: MindToRead | null,
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
+    const help = mind ? (options.meetingHelp?.(mind.mindId, question.text) ?? null) : null;
+    // Each press of a help button stands alone: an earlier suggestion would only steer this one.
+    const earlier = help ? [] : turn.earlier;
     // A long Mind is cut to what the conversation's Questions are about, the earlier ones too: a
     // follow-up keeps the part the first one found, and so the same start for the prompt cache.
     const asking = [
-      ...turn.earlier.flatMap((message) => (message.kind === "question" ? [message.text] : [])),
+      ...earlier.flatMap((message) => (message.kind === "question" ? [message.text] : [])),
       question.text,
     ].join("\n");
     const section =
-      mind && turn.earlier.length > 0
-        ? mind.reading.section(MIND_TOKEN_LIMIT, asking)
-        : mind?.section;
+      mind && earlier.length > 0 ? mind.reading.section(MIND_TOKEN_LIMIT, asking) : mind?.section;
     const documents = options.documents.names();
-    const { context, origins } = conversationContextOf(turn.earlier, question.text, {
+    const { context, origins } = conversationContextOf(earlier, question.text, {
       mind: section,
       documents,
       mindNames: options.readableMindName,
@@ -2113,7 +2244,7 @@ export function createAnswers(options: AnswersOptions) {
                 return null;
               const smaller = mind.reading.section(tokens, asking);
               return {
-                context: conversationContextOf(turn.earlier, question.text, {
+                context: conversationContextOf(earlier, question.text, {
                   mind: smaller,
                   documents,
                   mindNames: options.readableMindName,
@@ -2131,6 +2262,7 @@ export function createAnswers(options: AnswersOptions) {
       forcedSkill: question.forcedSkill,
       consentNeeded: ready.consentNeeded,
       ...(mind && { listening: () => options.liveTranscript(mind.mindId) }),
+      ...(help && { help }),
       assistant: {
         focused: mind && {
           mindId: mind.mindId,
@@ -2140,10 +2272,9 @@ export function createAnswers(options: AnswersOptions) {
         folderId: oneFolderOf(question.scope),
         origin: { from: messageReference(conversation.id, answer.id), question: question.text },
         lastAnswer: lastAnswerOf(conversation.id, turn.earlier),
-        followsAChange:
-          turn.earlier
-            .findLast((message) => message.kind === "answer")
-            ?.toolCalls.some((call) => call.mindChange && changesAMind(call.mindChange)) ?? false,
+        followsAChange: followsAChange(
+          turn.earlier.findLast((message) => message.kind === "answer"),
+        ),
         followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
       },
     });
@@ -2224,6 +2355,7 @@ export function createAnswers(options: AnswersOptions) {
           errorKind: null,
           errorMessage: null,
           errorResetsAt: null,
+          errorSignInRoute: null,
           generatedHash: null,
           generatedMarks: true,
           citationSupport: null,

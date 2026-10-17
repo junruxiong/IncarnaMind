@@ -21,7 +21,7 @@ import { files } from "../../core";
 import { Composer } from "../../editor/Composer";
 import { useT } from "../../i18n";
 import { useAssistantWaiting } from "../../mindStatus";
-import { useModelSetup } from "../../modelSetup";
+import { useSettingUp } from "../../modelSetup";
 import { useAppStore } from "../../store";
 import { GripIcon } from "../icons";
 import {
@@ -33,6 +33,7 @@ import {
   HistoryLineIcon,
   PlusLineIcon,
 } from "../lineIcons";
+import { HelpStrip } from "../meetings/HelpStrip";
 import { ModelSetupCard } from "../providers/ModelSetupCard";
 import { TaskTray } from "../TaskTray";
 import { AssistantMenu } from "./AssistantMenu";
@@ -276,7 +277,7 @@ function AssistantMain({
   // in the Mind in focus once that Mind's editor is open, and of every Document until then.
   const seat = useComposer((state) => state.seat);
   const mind = seat !== null && seat.mindId === readMindId ? seat : null;
-  const waiting = useModelSetup((state) => state.waiting !== null);
+  const settingUp = useSettingUp();
   const thread = useRef<HTMLDivElement>(null);
   useKeepInView(thread);
   /** Where the conversation was scrolled to, put back when it shows again. */
@@ -286,6 +287,7 @@ function AssistantMain({
   }, [folded]);
   return (
     <div className="assistant-main" hidden={folded}>
+      <HelpStrip mindId={mind?.mindId ?? null} />
       <div
         ref={thread}
         data-testid="assistant-thread"
@@ -296,9 +298,14 @@ function AssistantMain({
       >
         <ConversationThread focusedMindId={mind?.mindId ?? null} />
       </div>
-      <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer">
+      <div
+        ref={onComposerSlot}
+        data-testid="assistant-composer"
+        data-setup={settingUp || undefined}
+        className="assistant-composer"
+      >
         {mind && <TaskTray mindId={mind.mindId} />}
-        {waiting ? <ModelSetupCard /> : <Composer mind={mind} />}
+        {settingUp ? <ModelSetupCard /> : <Composer mind={mind} />}
       </div>
     </div>
   );

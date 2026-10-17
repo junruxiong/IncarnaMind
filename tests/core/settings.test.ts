@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { type Executor, type ExportPreferences, InvalidInputError } from "../../src/core";
+import {
+  type Executor,
+  type ExportPreferences,
+  type GettingStarted,
+  InvalidInputError,
+} from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
 
 /**
@@ -47,6 +52,8 @@ describe("Settings", () => {
         monthlyCap: null,
         webSearch: false,
         keepWebPageLook: false,
+        recentCitationStyles: [],
+        newMindStyle: { font: "default", size: "default" },
       },
       device: {
         sidebarWidth: 248,
@@ -57,6 +64,7 @@ describe("Settings", () => {
           citationChecked: false,
           indexed: false,
           askedOwn: false,
+          askedReady: false,
           hidden: false,
         },
         skillScriptsEnabled: true,
@@ -65,6 +73,9 @@ describe("Settings", () => {
         meetingsEnabled: false,
         meetingSystemAudio: true,
         meetingNoticeAccepted: false,
+        meetingPanel: true,
+        meetingPanelHidden: true,
+        meetingHelpKeys: {},
         motion: "system",
       },
       language: "en",
@@ -144,6 +155,8 @@ describe("Settings", () => {
       monthlyCap: null,
       webSearch: false,
       keepWebPageLook: false,
+      recentCitationStyles: [],
+      newMindStyle: { font: "default", size: "default" },
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -154,6 +167,7 @@ describe("Settings", () => {
         citationChecked: false,
         indexed: false,
         askedOwn: false,
+        askedReady: false,
         hidden: false,
       },
       skillScriptsEnabled: true,
@@ -162,6 +176,9 @@ describe("Settings", () => {
       meetingsEnabled: false,
       meetingSystemAudio: true,
       meetingNoticeAccepted: false,
+      meetingPanel: true,
+      meetingPanelHidden: true,
+      meetingHelpKeys: {},
       motion: "system",
     });
   });
@@ -177,6 +194,28 @@ describe("Settings", () => {
     expect((await core.getSettings()).user.exportOptions).toEqual({
       ...DEFAULT_EXPORT,
       format: "pdf",
+    });
+  });
+
+  test("Get started's progress kept before the ready Question reads it as not asked (#123)", async () => {
+    const dataDir = await createTempDataFolder();
+    const before = startCore(dataDir);
+    const kept = {
+      started: true,
+      citationChecked: true,
+      indexed: false,
+      askedOwn: true,
+      hidden: false,
+    };
+    await before.updateSettings({
+      device: { gettingStarted: kept as unknown as GettingStarted },
+    });
+    before.close();
+
+    const after = startCore(dataDir);
+    expect((await after.getSettings()).device.gettingStarted).toEqual({
+      ...kept,
+      askedReady: false,
     });
   });
 
@@ -200,6 +239,7 @@ describe("Settings", () => {
         citationChecked: true,
         indexed: false,
         askedOwn: false,
+        askedReady: true,
         hidden: true,
       },
       skillScriptsEnabled: false,
@@ -208,6 +248,9 @@ describe("Settings", () => {
       meetingsEnabled: true,
       meetingSystemAudio: false,
       meetingNoticeAccepted: true,
+      meetingPanel: false,
+      meetingPanelHidden: false,
+      meetingHelpKeys: { say: "Ctrl+Alt+Q" },
       motion: "reduced" as const,
     };
     await before.updateSettings({
@@ -220,6 +263,7 @@ describe("Settings", () => {
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
         keepWebPageLook: true,
+        newMindStyle: { font: { family: "Georgia" }, size: "large" },
       },
       device,
     });
@@ -240,6 +284,8 @@ describe("Settings", () => {
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
         keepWebPageLook: true,
+        recentCitationStyles: [],
+        newMindStyle: { font: { family: "Georgia" }, size: "large" },
       },
       device,
       language: "zh-CN",
@@ -256,6 +302,14 @@ describe("Settings", () => {
     { name: "an unknown group", patch: { secrets: { apiKey: "sk-…" } } },
     { name: "a negative width", patch: { device: { sidebarWidth: -1 } } },
     { name: "a width that isn't a number", patch: { device: { sidebarWidth: "wide" } } },
+    {
+      name: "a new Mind style with a font that isn't a preset or a family",
+      patch: { user: { newMindStyle: { font: "comic", size: "default" } } },
+    },
+    {
+      name: "a new Mind style with a size it hasn't got",
+      patch: { user: { newMindStyle: { font: "serif", size: "huge" } } },
+    },
     { name: "the tabs the app kept before groups", patch: { device: { openMinds: ["mind-a"] } } },
     {
       name: "a checklist with a step missing",
