@@ -30,9 +30,11 @@ export type AskedOutcome = "applied" | "held";
 interface AskedChangesState {
   /** By Answer, then by Mind: whether the changes the User asked for there applied or wait. */
   outcomes: Readonly<Record<string, Readonly<Record<string, AskedOutcome>>>>;
+  /** By Answer and Mind (`keyOf`): written again over its earlier changes, which stayed. */
+  onTop: Readonly<Record<string, true>>;
 }
 
-export const useAskedChanges = create<AskedChangesState>()(() => ({ outcomes: {} }));
+export const useAskedChanges = create<AskedChangesState>()(() => ({ outcomes: {}, onTop: {} }));
 
 interface Asked {
   answerId: string;
@@ -65,18 +67,28 @@ function setOutcome(answerId: string, mindId: string, outcome: AskedOutcome): vo
  */
 export function applyWhatWasAsked(answerId: string): void {
   askedHere.add(answerId);
+  const stayed: string[] = [];
   for (const [key, each] of asked) {
     if (each.answerId !== answerId) continue;
-    if (each.applied?.followed.onTop()) each.applied.followed.undo();
+    const followed = each.applied?.followed;
+    if (followed?.onTop()) followed.undo();
+    else if (followed && followed.state() !== "undone") stayed.push(key);
     asked.delete(key);
   }
   for (const key of seen) if (key.startsWith(`${answerId} `)) seen.delete(key);
   useAskedChanges.setState((state) => {
     const outcomes = { ...state.outcomes };
     delete outcomes[answerId];
-    return { outcomes };
+    const onTop = Object.fromEntries(
+      Object.entries(state.onTop).filter(([key]) => !key.startsWith(`${answerId} `)),
+    );
+    for (const key of stayed) onTop[key] = true;
+    return { outcomes, onTop };
   });
 }
+
+export const useWrittenOnTop = (answerId: string, mindId: string): boolean =>
+  useAskedChanges((state) => state.onTop[keyOf(answerId, mindId)] === true);
 
 const askedOf = (doc: Y.Doc, row: ChangedMind): Set<string> =>
   new Set(row.requests.filter((request) => askedFor(doc, request)));

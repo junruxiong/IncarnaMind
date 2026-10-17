@@ -1,4 +1,10 @@
-import { type AskedOutcome, reviewAsked, undoAsked, useAskedState } from "../../askedChanges";
+import {
+  type AskedOutcome,
+  reviewAsked,
+  undoAsked,
+  useAskedState,
+  useWrittenOnTop,
+} from "../../askedChanges";
 import type { ChangedMind } from "../../changedMinds";
 import { changeFact, leftText } from "../../changeFacts";
 import { useT } from "../../i18n";
@@ -106,6 +112,7 @@ function AppliedActions({
 }) {
   const t = useT();
   const state = useAskedState(answerId, mindId);
+  const onTop = useWrittenOnTop(answerId, mindId);
   if (state === "undone") {
     return (
       <>
@@ -124,6 +131,12 @@ function AppliedActions({
         : undefined;
   return (
     <>
+      {onTop && (
+        <span data-testid="mind-changes-on-top" className="mind-changes-count">
+          {" "}
+          {t("mindChanges.onTop")}
+        </span>
+      )}
       <Dot />
       <button
         type="button"

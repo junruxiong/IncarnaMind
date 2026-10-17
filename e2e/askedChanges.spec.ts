@@ -109,8 +109,7 @@ test("“write a summary page” makes the page with the summary applied, “mak
   const summary = assistantAnswers(window).first();
   const firstUndo = summary.getByTestId("mind-changes-undo");
   const secondUndo = second.getByTestId("mind-changes-undo");
-  const changedSince =
-    "“Summary” has changed since, so this can't be undone here alone. Review changes restores each change.";
+  const changedSince = "“Summary” changed since. Restore each change in Review changes.";
 
   // Each card undoes its own request: the summary's can't while the longer text is on top of it.
   await expect(firstUndo).toHaveAttribute("aria-disabled", "true");
@@ -183,6 +182,28 @@ test("an Answer written again replaces what it applied with what it writes now, 
   await pointAndClick(window, answer.getByTestId("mind-changes-undo"));
   await expect(paragraphs).toHaveText([SPRING, NEAP]);
   await expect(answer.getByTestId("mind-changes-undone")).toHaveText("Undone");
+
+  // Written again after the Mind changed, the new change comes on top, and the card says so.
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(paragraphs).toHaveText([`${SPRING} It says more.`, `${NEAP} It says more.`]);
+  await paragraphs.last().click();
+  await window.keyboard.press("End");
+  await window.keyboard.type(" Typed.");
+  await expect(paragraphs.last()).toHaveText(`${NEAP} It says more. Typed.`);
+  const secondWrite = await changeRequestOf(window);
+  await openSteps(window, answer);
+  await pointAndClick(window, answer.getByTestId("answer-regenerate"));
+  await expect
+    .poll(async () => {
+      const now = await changeRequestOf(window);
+      return now !== null && now !== secondWrite;
+    })
+    .toBe(true);
+  await expect(answer.getByTestId("mind-changes-on-top")).toHaveText(
+    "· on top of the earlier version, which stays",
+  );
+  await expect(paragraphs.first()).toHaveText(`${SPRING} It says more. It says more.`);
 });
 
 const NOTES = [

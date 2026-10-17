@@ -4389,8 +4389,8 @@ export const en = {
   "mindChanges.also": "I also suggested {count} changes in “{mind}”",
   "mindChanges.also.one": "I also suggested 1 change in “{mind}”",
   "mindChanges.undone": "Undone",
-  "mindChanges.undo.changedSince":
-    "“{mind}” has changed since, so this can't be undone here alone. Review changes restores each change.",
+  "mindChanges.undo.changedSince": "“{mind}” changed since. Restore each change in Review changes.",
+  "mindChanges.onTop": "· on top of the earlier version, which stays",
   "mindChanges.undo.closed": "“{mind}” was closed since, so this can't be undone here.",
   "mindChanges.also.review": "Review",
   "mindChanges.row.created": "Created: {mind}",
