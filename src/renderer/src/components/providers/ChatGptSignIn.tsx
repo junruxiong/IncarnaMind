@@ -21,6 +21,9 @@ import { ChatGptMark } from "./ChatGptMark";
 import { PasteSignInAddress } from "./PasteSignInAddress";
 import { SecretStorageNotice } from "./ProviderForm";
 
+// The plan's service is ChatGPT, but what is sent goes to OpenAI, as Privacy says.
+export const CHATGPT_RECIPIENT = "OpenAI";
+
 /** The ChatGPT plan provider's status, kept up to date with the core's event. */
 export function useChatGptPlan(): [ChatGptPlanStatus | null, (status: ChatGptPlanStatus) => void] {
   const [status, setStatus] = useState<ChatGptPlanStatus | null>(null);
