@@ -306,6 +306,27 @@ describe("What the model is told of each change", { timeout: 30_000 }, () => {
     expect(read[0]?.[1]).toContain("They wait in the Mind for the User");
   });
 
+  // protects=#1061's Chinese request to lengthen the summary is read as an edit, tagged so it applies at once, and told so; fails_when=it routes as unclear, isn't tagged, or is told it waits; no_claim=what a real model writes.
+  test("“把摘要写长一点。” is an edit the User asked for, and is told it applied", async () => {
+    const { model, read } = editing(
+      {
+        calls: [{ tool: "edit_mind", input: { part: "The quarter was", instruction: "写长一点" } }],
+      },
+      (passage) => `${passage} Margins held.`,
+    );
+    const { core, mind } = await setUp(model);
+
+    const answer = await askAssistant(core, { text: "把摘要写长一点。", mindId: mind.id });
+
+    const page = await connectToMind(core, mind.id);
+    await page.settled();
+    const [changed] = changesIn(answer);
+    expect(proposalRequestOf(page.doc, changed?.request ?? "")).toMatchObject({
+      requested: "edit",
+    });
+    expect(read[0]?.[0]).toContain("applies in the Mind at once");
+  });
+
   // protects=a request to write tags what it writes, not a rewrite of the User's own text the model also makes, which waits and is told so; fails_when=the rewrite is tagged or told it applied; no_claim=that a real model makes both calls.
   test("“add a risks section” tags the section, and a rewrite of the User's text alongside it waits", async () => {
     const { model, read } = editing(

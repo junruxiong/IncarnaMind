@@ -30,16 +30,23 @@ export type AskedOutcome = "applied" | "held";
 interface AskedChangesState {
   /** By Answer, then by Mind: whether the changes the User asked for there applied or wait. */
   outcomes: Readonly<Record<string, Readonly<Record<string, AskedOutcome>>>>;
+  /** By Answer and Mind (`keyOf`): what the changes the User asked for there did, the rest left out. */
+  facts: Readonly<Record<string, ChangedMind>>;
   /** By Answer and Mind (`keyOf`): written again over its earlier changes, which stayed. */
   onTop: Readonly<Record<string, true>>;
 }
 
-export const useAskedChanges = create<AskedChangesState>()(() => ({ outcomes: {}, onTop: {} }));
+export const useAskedChanges = create<AskedChangesState>()(() => ({
+  outcomes: {},
+  facts: {},
+  onTop: {},
+}));
 
 interface Asked {
   answerId: string;
   mindId: string;
   requests: ReadonlySet<string>;
+  facts: ChangedMind;
   applied: AppliedAsked | null;
 }
 
@@ -51,14 +58,19 @@ const OPEN_WAIT_MS = 10_000;
 
 const keyOf = (answerId: string, mindId: string) => `${answerId} ${mindId}`;
 
-function setOutcome(answerId: string, mindId: string, outcome: AskedOutcome): void {
+function setOutcome(each: Asked, outcome: AskedOutcome): void {
+  const { answerId, mindId } = each;
   useAskedChanges.setState((state) => ({
     outcomes: {
       ...state.outcomes,
       [answerId]: { ...state.outcomes[answerId], [mindId]: outcome },
     },
+    facts: { ...state.facts, [keyOf(answerId, mindId)]: each.facts },
   }));
 }
+
+export const useAskedFacts = (answerId: string, mindId: string): ChangedMind | undefined =>
+  useAskedChanges((state) => state.facts[keyOf(answerId, mindId)]);
 
 /**
  * An Answer this window asked for, or asks for again: what it was asked to write or change
@@ -79,11 +91,11 @@ export function applyWhatWasAsked(answerId: string): void {
   useAskedChanges.setState((state) => {
     const outcomes = { ...state.outcomes };
     delete outcomes[answerId];
-    const onTop = Object.fromEntries(
-      Object.entries(state.onTop).filter(([key]) => !key.startsWith(`${answerId} `)),
-    );
+    const others = <T>(byKey: Readonly<Record<string, T>>) =>
+      Object.fromEntries(Object.entries(byKey).filter(([key]) => !key.startsWith(`${answerId} `)));
+    const onTop = others(state.onTop);
     for (const key of stayed) onTop[key] = true;
-    return { outcomes, onTop };
+    return { outcomes, facts: others(state.facts), onTop };
   });
 }
 
@@ -144,15 +156,13 @@ async function finish(answer: ConversationAnswer): Promise<void> {
     if (!editor || !doc) continue;
     const requests = askedOf(doc, row);
     if (requests.size === 0) continue;
-    asked.set(keyOf(answer.id, row.mindId), {
-      answerId: answer.id,
-      mindId: row.mindId,
-      requests,
-      applied: null,
-    });
-    if (applyArrived(editor, row.mindId, requests, row) === "held") {
-      setOutcome(answer.id, row.mindId, "held");
-    }
+    const calls = answer.toolCalls.filter(
+      (call) => call.mindChange && requests.has(call.mindChange.request),
+    );
+    const [facts = row] = changedMinds({ toolCalls: calls });
+    const each: Asked = { answerId: answer.id, mindId: row.mindId, requests, facts, applied: null };
+    asked.set(keyOf(answer.id, row.mindId), each);
+    if (applyArrived(editor, row.mindId, requests, facts) === "held") setOutcome(each, "held");
   }
 }
 
@@ -161,7 +171,7 @@ onAskedApplied((mindId, requests, applied) => {
     if (each.mindId !== mindId || ![...requests].some((request) => each.requests.has(request)))
       continue;
     each.applied = applied;
-    setOutcome(each.answerId, mindId, "applied");
+    setOutcome(each, "applied");
   }
 });
 

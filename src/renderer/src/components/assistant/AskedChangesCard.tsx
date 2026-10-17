@@ -2,6 +2,7 @@ import {
   type AskedOutcome,
   reviewAsked,
   undoAsked,
+  useAskedFacts,
   useAskedState,
   useWrittenOnTop,
 } from "../../askedChanges";
@@ -43,42 +44,16 @@ export function AskedChangesCard({
   });
   return (
     <section data-testid="mind-changes" className="mind-changes">
-      {applied.map((row) => {
-        const outcome = outcomes[row.mindId];
-        const left = leftText(t, row, waiting[rows.indexOf(row)]);
-        return (
-          <div key={row.mindId} className="mind-changes-head">
-            <PencilLineIcon aria-hidden="true" className="mind-changes-icon" />
-            <p className="mind-changes-line">
-              <span data-testid="mind-changes-title" className="mind-changes-title">
-                {changeFact(t, row, nameOf(row))}
-              </span>
-              {outcome === "applied" && (
-                <AppliedActions answerId={answerId} mindId={row.mindId} name={nameOf(row)} />
-              )}
-              {outcome === "held" && (
-                <>
-                  {left && (
-                    <span data-testid="mind-changes-left" className="mind-changes-count">
-                      {" "}
-                      {left}
-                    </span>
-                  )}
-                  <Dot />
-                  <button
-                    type="button"
-                    data-testid="mind-changes-review"
-                    onClick={() => showChanges(row)}
-                    className="mind-changes-review"
-                  >
-                    {t("mindChanges.review")}
-                  </button>
-                </>
-              )}
-            </p>
-          </div>
-        );
-      })}
+      {applied.map((row) => (
+        <AskedRow
+          key={row.mindId}
+          answerId={answerId}
+          row={row}
+          outcome={outcomes[row.mindId]}
+          waiting={waiting[rows.indexOf(row)]}
+          name={nameOf(row)}
+        />
+      ))}
       {also.map(({ row, count }) => (
         <p key={row.mindId} data-testid="mind-changes-also" className="mind-changes-line">
           <span className="mind-changes-title">
@@ -98,6 +73,60 @@ export function AskedChangesCard({
         </p>
       ))}
     </section>
+  );
+}
+
+function AskedRow({
+  answerId,
+  row,
+  outcome,
+  waiting,
+  name,
+}: {
+  answerId: string;
+  row: ChangedMind;
+  outcome: AskedOutcome | undefined;
+  waiting: Waiting | undefined;
+  name: string;
+}) {
+  const t = useT();
+  const facts = useAskedFacts(answerId, row.mindId) ?? row;
+  // Applied, what still waits there is what the User didn't ask for.
+  const left =
+    outcome === "held" || (typeof waiting === "number" && waiting > 0)
+      ? leftText(t, row, waiting)
+      : null;
+  return (
+    <div className="mind-changes-head">
+      <PencilLineIcon aria-hidden="true" className="mind-changes-icon" />
+      <p className="mind-changes-line">
+        <span data-testid="mind-changes-title" className="mind-changes-title">
+          {changeFact(t, facts, name)}
+        </span>
+        {left && (
+          <span data-testid="mind-changes-left" className="mind-changes-count">
+            {" "}
+            {left}
+          </span>
+        )}
+        {outcome === "applied" && (
+          <AppliedActions answerId={answerId} mindId={row.mindId} name={name} />
+        )}
+        {outcome === "held" && (
+          <>
+            <Dot />
+            <button
+              type="button"
+              data-testid="mind-changes-review"
+              onClick={() => showChanges(row)}
+              className="mind-changes-review"
+            >
+              {t("mindChanges.review")}
+            </button>
+          </>
+        )}
+      </p>
+    </div>
   );
 }
 

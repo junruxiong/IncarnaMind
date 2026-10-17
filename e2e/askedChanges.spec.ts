@@ -285,6 +285,27 @@ async function writeMind(window: Page, title: string, notes: readonly string[]):
   }
 }
 
+test("a request to write applies what it wrote, and a rewrite of the User's text beside it waits, counted apart", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  await writeMind(window, "Harbour notes", NOTES);
+  const editor = window.getByTestId("mind-editor");
+
+  const answer = await askInAssistant(window, "Add a section on the risks");
+  await expect(editor.getByTestId("applied-count")).toHaveText("Wrote 1 paragraph");
+  await expect(answer.getByTestId("mind-changes-title")).toHaveText(
+    "Wrote 1 paragraph in “Harbour notes”",
+  );
+  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 waiting");
+  await expect(editor.locator("del.proposal-delete, ins.proposal-insert").first()).toBeVisible();
+  await expect(editor).toContainText("The supplier is late.");
+  await setLanguage(window, "zh-CN");
+  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 处待确认");
+  await setLanguage(window, "en");
+});
+
 test("asked to write in a Mind not in view, the assistant opens it in a tab beside the one in view and writes there, applied", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);

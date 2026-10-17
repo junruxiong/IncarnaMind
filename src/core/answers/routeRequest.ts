@@ -120,6 +120,9 @@ const ZH_EDIT_VERB =
   "(?:改得|写得|改成|改为|改短|改长|写长|写短|缩短|扩写|翻译成|翻译为|翻译|润色|精简|删掉|删除|删去|去掉|简化|改)";
 const ZH_CHANGE =
   "(?:更?(?:正式|简洁|简单|清楚|详细|通顺|口语化)|[长短]|中文|英文)?(?:一点|一些|些)?";
+// Made longer or shorter, a part named alone is the User's own: "把摘要写长一点". Translated, "把摘要翻译成中文" may be a paper's abstract.
+const ZH_PART = "(?:这个|这份|这篇)?(?:摘要|总结|概述|引言|结论|开头|结尾)";
+const ZH_LENGTH_VERB = "(?:写长|写短|改长|改短|缩短|扩写|精简)";
 const ZH_LEAVE_THE_REST = "(?:，?其他(?:段落|部分|的)?(?:保持不变|不变|不要动|别动))?";
 const ZH_FREE = "[^，。？！?吗呢吧么]{1,20}";
 
@@ -127,6 +130,7 @@ const ZH_EDITS = [
   new RegExp(
     `^(?:在(?:我的)?笔记(?:里|中))?把${ZH_OWN_TEXT}${ZH_EDIT_VERB}${ZH_CHANGE}${ZH_LEAVE_THE_REST}$`,
   ),
+  new RegExp(`^把${ZH_PART}${ZH_LENGTH_VERB}(?:一点|一些|些)?${ZH_LEAVE_THE_REST}$`),
   new RegExp(
     `^(?:缩短|删掉|删除|润色(?:一下)?|精简(?:一下)?|翻译(?:一下)?|改一下|扩写|简化)${ZH_OWN_TEXT}$`,
   ),

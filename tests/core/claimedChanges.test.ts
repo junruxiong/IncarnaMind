@@ -60,6 +60,7 @@ describe("What a reply claims it changed", () => {
     ["我在笔记里新增了一个风险部分。", ["added"]],
     ["我已生成一份新的笔记。", ["made"]],
     ["我把总结加长了。", ["changed"]],
+    ["我把四份文档的摘要都写长了一些", ["changed"]],
     ["我完善了“周报”的结论。", ["changed"]],
     ["总结现在更长了。", ["changed"]],
   ])("%s", (reply, expected) => {
