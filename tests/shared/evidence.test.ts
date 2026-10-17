@@ -27,6 +27,7 @@ const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
     webSearch: false,
     keepWebPageLook: false,
     recentCitationStyles: [],
+    newMindStyle: { font: "default", size: "default" },
   },
 });
 

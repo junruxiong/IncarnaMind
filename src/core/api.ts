@@ -42,6 +42,7 @@ export type {
 import type { CitationForm, CitationStyleId, StyleCatalogue } from "../shared/citationStyles";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
 import type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate } from "../shared/meetingHelp";
+import type { MindStyle } from "../shared/mindStyle";
 import type { TagColour } from "../shared/tagColours";
 import type { Anchor, UnitKind, UnitLabel } from "../shared/units";
 import type { ErrorWording } from "./errors";
@@ -1789,6 +1790,11 @@ export interface UserSettings {
    * (`RECENT_CITATION_STYLES`): the picker's Recently used.
    */
   recentCitationStyles: CitationStyleId[];
+  /**
+   * The font and text size a new Mind starts in: "Make this the default for new Minds" in a
+   * Mind's Style. Minds already made keep theirs.
+   */
+  newMindStyle: MindStyle;
 }
 
 /**
@@ -9053,6 +9059,11 @@ export interface CoreApi {
   /** Opens the licence notice of the shipped citation styles in the app that opens text files. */
   openCitationStyleLicences(): Promise<void>;
 
+  /** The font and text size a Mind is written in: its own choice, else the default style. */
+  getMindStyle(mindId: string): Promise<MindStyle>;
+  /** Sets the Mind's font and text size together, so Undo can put both back. */
+  setMindStyle(mindId: string, style: MindStyle): Promise<MindStyle>;
+
   /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
   getOutputSettings(): Promise<OutputSettings>;
   /**
@@ -9630,6 +9641,8 @@ const methods: Record<CoreApiMethod, true> = {
   setMindCitationStyle: true,
   listCitationStyles: true,
   openCitationStyleLicences: true,
+  getMindStyle: true,
+  setMindStyle: true,
   getOutputSettings: true,
   setOutputLocation: true,
   setLinkedFolderWriting: true,

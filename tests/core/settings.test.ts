@@ -53,6 +53,7 @@ describe("Settings", () => {
         webSearch: false,
         keepWebPageLook: false,
         recentCitationStyles: [],
+        newMindStyle: { font: "default", size: "default" },
       },
       device: {
         sidebarWidth: 248,
@@ -155,6 +156,7 @@ describe("Settings", () => {
       webSearch: false,
       keepWebPageLook: false,
       recentCitationStyles: [],
+      newMindStyle: { font: "default", size: "default" },
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -261,6 +263,7 @@ describe("Settings", () => {
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
         keepWebPageLook: true,
+        newMindStyle: { font: { family: "Georgia" }, size: "large" },
       },
       device,
     });
@@ -282,6 +285,7 @@ describe("Settings", () => {
         webSearch: true,
         keepWebPageLook: true,
         recentCitationStyles: [],
+        newMindStyle: { font: { family: "Georgia" }, size: "large" },
       },
       device,
       language: "zh-CN",
@@ -298,6 +302,14 @@ describe("Settings", () => {
     { name: "an unknown group", patch: { secrets: { apiKey: "sk-…" } } },
     { name: "a negative width", patch: { device: { sidebarWidth: -1 } } },
     { name: "a width that isn't a number", patch: { device: { sidebarWidth: "wide" } } },
+    {
+      name: "a new Mind style with a font that isn't a preset or a family",
+      patch: { user: { newMindStyle: { font: "comic", size: "default" } } },
+    },
+    {
+      name: "a new Mind style with a size it hasn't got",
+      patch: { user: { newMindStyle: { font: "serif", size: "huge" } } },
+    },
     { name: "the tabs the app kept before groups", patch: { device: { openMinds: ["mind-a"] } } },
     {
       name: "a checklist with a step missing",

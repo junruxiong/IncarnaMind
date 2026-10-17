@@ -237,7 +237,7 @@ function History({ mindId, onClose }: { mindId: string; onClose(): void }) {
                   {t("history.noChanges")}
                 </p>
               )}
-              <ComparedRows comparison={comparison} firstChange={firstChange} />
+              <ComparedRows mindId={mindId} comparison={comparison} firstChange={firstChange} />
             </div>
           )
         )}
