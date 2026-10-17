@@ -110,14 +110,11 @@ import { earlierContext, type RequestMind } from "./context";
 import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
-  bracketedAmountsNote,
-  datedDocumentsNote,
-  notCitedNote,
   SEARCH_QUERY_INSTRUCTIONS,
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
   translateQueryPrompt,
-  unreadDocumentsNote,
+  withPassageNotes,
 } from "./prompt";
 import { retryQuotes } from "./quoteRetry";
 import { claimsOf, createNudges, settleReply, type TurnCheck } from "./turnChecks";
@@ -1352,13 +1349,7 @@ export function documentTools(
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount, found.passageIds);
         // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
-        const notes = [
-          datedDocumentsNote(result.text),
-          notCitedNote(result.text),
-          bracketedAmountsNote(result.text),
-          unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
-        ];
-        return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
+        return withPassageNotes(result.text, documents.unreadDocuments?.() ?? []);
       },
     },
     cite: {

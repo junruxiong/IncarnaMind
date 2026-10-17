@@ -6,6 +6,9 @@ import { type CommandContext, commands, offered } from "../commands/registry";
 import { askReadyQuestion } from "../conversations";
 import { CheckMarkIcon } from "../editor/icons";
 import { useT } from "../i18n";
+import { openModelSetup } from "../modelSetup";
+import { stepsShownOf } from "../nudges";
+import { revealAssistant } from "../quietAssistant";
 import { useAppStore } from "../store";
 import { ExampleBanner, OtherExamples } from "./GettingStarted";
 import { CloseLineIcon } from "./lineIcons";
@@ -86,6 +89,8 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
   const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
   const removeExamples = useAppStore((state) => state.removeExamples);
   const ready = useAppStore((state) => state.examples?.ready ?? null);
+  const modelReady = useAppStore((state) => state.chatReadiness?.ready === true);
+  const placeAssistant = useAppStore((state) => state.placeAssistant);
   const skipped = useAppStore((state) => state.skippedFiles);
   const addFiles = useRef<HTMLButtonElement>(null);
   // The ready Question's button goes once it is asked: the focus moves on to the next step.
@@ -112,6 +117,13 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
   const stateOf = (key: StepKey): "open" | "later" | "done" =>
     done[key] ? "done" : key === current ? "open" : "later";
   const allDone = current === undefined;
+  // Done means a first checked Answer of one's own can come: the ready Question needs no model (#1027).
+  const setUp = allDone && modelReady;
+  const chooseModel = () => {
+    openModelSetup();
+    revealAssistant();
+    if (useAppStore.getState().layout?.assistant.folded) void placeAssistant({ folded: false });
+  };
 
   return (
     <section
@@ -121,7 +133,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
     >
       <div className="flex items-start justify-between gap-2">
         <h2 id={`first-open-${mindId}`} className="text-[16px] leading-6 font-semibold text-ink">
-          {t(allDone ? "firstOpen.done.title" : "firstOpen.title")}
+          {t(setUp ? "firstOpen.done.title" : "firstOpen.title")}
         </h2>
         <button
           type="button"
@@ -202,7 +214,20 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
           )}
         </Step>
       </ol>
-      {allDone && (
+      {allDone && !modelReady && (
+        <div className="flex flex-col items-start gap-2 pt-3">
+          <p className="text-[13px] leading-5 text-ink-secondary">{t("firstOpen.model.body")}</p>
+          <button
+            type="button"
+            data-testid="first-open-choose-model"
+            onClick={chooseModel}
+            className={buttonStyle("primary", "sm")}
+          >
+            {t("firstOpen.model.choose")}
+          </button>
+        </div>
+      )}
+      {setUp && (
         <p className="pt-3 text-[13px] leading-5 text-ink-secondary">
           {t("firstOpen.next.lead")}{" "}
           {NEXT.flatMap(({ id, label }) => {
@@ -254,9 +279,9 @@ function OwnQuestion({ message }: { message: MessageKey }) {
 }
 
 export function ExampleIntro({ mindId }: { mindId: string }) {
-  const stepsShown = useAppStore((state) => {
-    const progress = state.settings?.device.gettingStarted;
-    return state.examples?.mindId === mindId && progress?.started === true && !progress.hidden;
-  });
+  const stepsShown = useAppStore(
+    (state) =>
+      state.examples?.mindId === mindId && stepsShownOf(state.settings?.device.gettingStarted),
+  );
   return stepsShown ? <FirstOpenSteps mindId={mindId} /> : <ExampleBanner mindId={mindId} />;
 }
