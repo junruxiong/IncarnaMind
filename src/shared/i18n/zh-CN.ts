@@ -1648,27 +1648,22 @@ export const zhCN = {
   "fileWrite.linked.deny": "不允许",
 
   "providers.setup.title": "选择回答问题的模型",
-  "providers.setup.body":
-    "提问需要一个 AI 模型。笔记和文档不需要模型也能使用，你也可以稍后在设置中更改。",
+  "providers.setup.body": "提问需要 AI 模型，记笔记不需要。",
   "providers.setup.later": "稍后设置",
-  "setup.title": "选择回答所用的模型",
-  "setup.body": "你的问题会留在这里，选好后立即回答。",
-  "setup.body.ask": "你的问题会用你选的模型来回答。",
+  "setup.title": "选择你的 AI",
   "setup.waiting": "等待你选择模型",
   "setup.chatgpt.use": "使用我的 ChatGPT 订阅",
-  "setup.chatgpt.line":
-    "如果你订阅了 ChatGPT Plus 或 Pro · 无需密钥 · 登录后，以下内容会通过你的 ChatGPT 账号发送给 OpenAI：{sends}。",
-  "setup.chatgpt.line.china":
-    "如果你订阅了 ChatGPT Plus 或 Pro（中国大陆无法使用）· 无需密钥 · 登录后，以下内容会通过你的 ChatGPT 账号发送给 OpenAI：{sends}。",
+  "setup.chatgpt.line": "Plus 或 Pro · 无需密钥",
+  "setup.chatgpt.line.china": "Plus 或 Pro（中国大陆不可用）· 无需密钥",
   "setup.key.use": "粘贴 API 密钥",
-  "setup.key.for": "来自 OpenAI、Anthropic、Google、DeepSeek 等，你自己的或公司的。",
+  "setup.key.for": "OpenAI、Anthropic、Google、DeepSeek 等",
   "setup.back": "返回",
   "setup.getOllama": "获取 Ollama",
   "setup.other": "其他方式",
   "setup.way.local": "使用本机模型",
-  "setup.way.local.line": "免费且私密。需要免费的 Ollama 应用；速度较慢，引用的可靠性较低。",
-  "setup.way.local.running": "Ollama 正在本机运行。免费且私密；速度较慢，引用的可靠性较低。",
-  "setup.way.local.notRunning": "这台电脑上没有运行 Ollama。可以免费获取。",
+  "setup.way.local.line": "免费、不联网 · 较慢",
+  "setup.way.local.running": "Ollama 已运行 · 免费、较慢",
+  "setup.way.local.notRunning": "需要免费的 Ollama 应用",
   "setup.claude.title": "已经在用 Claude 订阅？",
   "setup.claude.line":
     "Anthropic 不允许其他应用使用 Claude 订阅；你可以在 Claude 应用里问你的文档。",
@@ -1695,9 +1690,8 @@ export const zhCN = {
   "providers.choice.local": "数据留在本机",
   "providers.choice.apiKey": "使用 API 密钥",
   "providers.choice.apiKey.body":
-    "OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、OpenRouter、硅基流动，或兼容 OpenAI 的服务器。所选服务会收到：{sends}。",
-  "providers.choice.apiKey.firstRun.body":
-    "{providers}。更多服务在“设置”中。所选服务会收到：{sends}。",
+    "OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、OpenRouter、硅基流动，或兼容 OpenAI 的服务器。",
+  "providers.choice.apiKey.firstRun.body": "{providers}。更多服务在“设置”中。",
   "providers.list.separator": "、",
   "providers.list.last": "{rest}、{last}",
   "providers.kind.short.qwen": "通义千问",
@@ -1745,7 +1739,6 @@ export const zhCN = {
   "providers.form.test": "测试连接",
   "providers.form.testing": "正在测试…",
   "providers.form.save": "使用此服务",
-  "providers.sends": "使用时，以下内容会发送给 {provider}：",
   "providers.sendsLine": "会把你的问题和文档内容发送给 {provider}。",
   "providers.sends.chat":
     "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",
@@ -1754,14 +1747,6 @@ export const zhCN = {
   "providers.sends.edits": "你让助手修改的文字",
   "providers.sends.tagging":
     "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档（没有文字的扫描件会发送页面图片）",
-  "providers.sendsShort.chat": "你的问题连同你所在的 Mind、相关段落和范围内文档的名称",
-  "providers.sendsShort.checks": "你核对的句子",
-  "providers.sendsShort.suggestions": "写作建议时你停下的段落",
-  "providers.sendsShort.edits": "你让助手修改的文字",
-  "providers.sendsShort.tagging":
-    "文档名称、目录和摘录，连同你的文件夹和标签名称，用于打标签和归档（扫描件发送页面图片）",
-  "providers.sendsShort.separator": "；",
-  "providers.sendsShort.last": "{rest}；以及{last}",
   "providers.sends.tagsOnSave": "保存密钥后就开始打标签。",
   "providers.form.saving": "正在保存…",
   "providers.form.moreShort": "更多…",
@@ -1830,7 +1815,7 @@ export const zhCN = {
   "providers.local.rowNotRunning": "尚未运行。",
   "providers.ollama.get": "下载 Ollama",
 
-  "providers.readiness.no-provider": "提问需要先设置 AI 模型。笔记和文档不需要模型也能使用。",
+  "providers.readiness.no-provider": "提问需要 AI 模型，记笔记不需要。",
   "providers.readiness.missing-api-key":
     "此设备上没有保存 {service} 的 API 密钥。请在设置中添加后再提问。",
   "providers.readiness.consent-declined":
@@ -1868,8 +1853,7 @@ export const zhCN = {
   "providers.settings.remove": "移除",
 
   "chatgpt.title": "ChatGPT 订阅",
-  "chatgpt.description":
-    "用你的 ChatGPT Plus 或 Pro 订阅代替 API 密钥。OpenAI 会通过你的 ChatGPT 账号收到：{sends}。用量计入你的订阅额度。",
+  "chatgpt.description": "用你的 ChatGPT Plus 或 Pro 订阅代替 API 密钥。用量计入你的订阅额度。",
   "chatgpt.continue": "使用 ChatGPT 继续",
   "chatgpt.account.signedOut": "尚未登录。",
   "chatgpt.account.expired": "ChatGPT 登录已失效。重新登录后才能继续使用订阅。",
@@ -1914,7 +1898,7 @@ export const zhCN = {
   "claudeAccount.page.failure.title": "未能使用 Claude 账号登录",
   "claudeAccount.page.failure.body": "请关闭此标签页，然后在 IncarnaMind 中重试。",
   "copilot.way.title": "使用我的 Copilot 订阅",
-  "copilot.way.line": "Pro、Pro+、Business 或 Enterprise · 用 GitHub 登录",
+  "copilot.way.line": "Pro、Pro+ 或 Business",
   "copilot.experimental": "实验",
   "copilot.notice.title": "使用你的 Copilot 订阅",
   "copilot.notice.usage": "回答会计入你的 Copilot 订阅用量限额。",
@@ -1970,7 +1954,7 @@ export const zhCN = {
   "claudeAccount.problem.unexpectedResponse": "Claude 返回了 IncarnaMind 无法识别的内容",
   "claudeAccount.wayBack.signIn": "用 Claude 账号登录",
   "claudePlan.way.title": "使用我的 Claude 订阅",
-  "claudePlan.way.line": "Pro、Max 或 Team",
+  "claudePlan.way.line": "Pro、Max 或 Team（中国大陆不可用）",
   "claudePlan.usage": "回答会计入你 Claude 订阅的用量限额。",
   "claudePlan.signIn": "用 Claude 账号登录",
   "claudePlan.cancel": "取消",
@@ -3212,6 +3196,7 @@ export const zhCN = {
   "error.action": "无法完成操作：{message}",
   "error.dismiss": "关闭",
   "error.details": "详情",
+  "details.label": "详情",
   "error.system.notAllowed": "IncarnaMind 没有权限修改这个文件或文件夹。",
   "error.system.full": "磁盘已满。",
   "error.system.gone": "这个文件或文件夹已不存在。",
