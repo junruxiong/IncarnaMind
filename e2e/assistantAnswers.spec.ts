@@ -13,6 +13,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  nameMind,
   openSteps,
   pointAndClick,
   pointAt,
@@ -84,7 +85,7 @@ async function newMindByMouse(window: Page) {
 /** A Mind with a title and two Notes, the cursor on the empty line between them. */
 async function mindWithNotes(window: Page, title: string) {
   await newMindByMouse(window);
-  await window.getByTestId("mind-title").fill(title);
+  await nameMind(window, title);
   await enterContent(window);
   const editor = window.getByTestId("mind-editor");
   await window.keyboard.type("Spring tides come twice a month.");
@@ -205,7 +206,7 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
 test("an Answer goes to another Mind through the ▾, and to a new Mind as changes to accept; the link back opens the conversation at that Answer, and says so once it is deleted", async () => {
   const { app, window } = await start();
   await newMindByMouse(window);
-  await window.getByTestId("mind-title").fill("Chapter 2 outline");
+  await nameMind(window, "Chapter 2 outline");
   await enterContent(window);
   await window.keyboard.type("Outline.");
   const editor = await mindWithNotes(window, "Reading notes: tides");

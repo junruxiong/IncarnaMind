@@ -5,6 +5,7 @@ import type { TestHooks } from "../src/shared/testHooks";
 import {
   createDataFolder,
   dismissChatSetup,
+  frontMindName,
   launchApp,
   leavingCopies,
   motionSettled,
@@ -161,12 +162,11 @@ test("the shortcut, the button and the View menu hide and show the sidebar, and 
   await dismissChatSetup(window);
   await setWindowSize(app, window, 1280, 800);
 
-  // A Mind with some text in its title, the focus in it.
+  // A Mind with some text in it, the focus in it.
   await newMind(window);
-  const title = window.getByTestId("mind-title");
-  await title.fill("A place to keep");
-  await title.click();
-  await expect(title).toBeFocused();
+  const editor = window.getByTestId("mind-editor");
+  await expect(editor).toBeFocused();
+  await window.keyboard.type("A place to keep");
   expect(await sidebarLeft(window)).toBe(0);
   expect(await cardLeft(window)).toBeGreaterThan(200);
   await screenshot(window, "shown");
@@ -174,8 +174,8 @@ test("the shortcut, the button and the View menu hide and show the sidebar, and 
   // The keyboard: the focus stays where it was, and the Mind keeps its state.
   await window.keyboard.press(`${COMMAND}+Backslash`);
   await expect.poll(() => isHidden(window)).toBe(true);
-  await expect(title).toBeFocused();
-  await expect(title).toHaveValue("A place to keep");
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveText("A place to keep");
   await expect.poll(() => cardLeft(window)).toBe(8);
   await expect(window.getByTestId("sidebar-announcement")).toHaveText("Sidebar hidden");
   await expect.poll(() => viewMenuLabels(app)).toContain("Show Sidebar");
@@ -185,7 +185,7 @@ test("the shortcut, the button and the View menu hide and show the sidebar, and 
 
   await window.keyboard.press(`${COMMAND}+Backslash`);
   await expect.poll(() => isHidden(window)).toBe(false);
-  await expect(title).toBeFocused();
+  await expect(editor).toBeFocused();
   await expect(window.getByTestId("sidebar-announcement")).toHaveText("Sidebar shown");
   await expect.poll(() => cardLeft(window)).toBeGreaterThan(200);
   await expect.poll(() => viewMenuLabels(app)).toContain("Hide Sidebar");
@@ -219,8 +219,8 @@ test("the shortcut, the button and the View menu hide and show the sidebar, and 
   await clickViewMenu(app, "Show Sidebar");
   await expect.poll(() => isHidden(window)).toBe(false);
 
-  // The Mind is the one that was open, with its title.
-  await expect(window.getByTestId("mind-title")).toHaveValue("A place to keep");
+  // The Mind is the one that was open, named by its first line.
+  await expect(frontMindName(window)).toHaveText("A place to keep");
   await app.close();
 });
 

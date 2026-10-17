@@ -447,6 +447,12 @@ export function createExamples(options: ExamplesOptions) {
         }),
       });
       blocks.insert(0, [
+        // A page has no title field (#908): the example starts with its title, as a Mind the assistant makes.
+        createElement({
+          type: "heading",
+          attrs: { level: 1 },
+          content: [{ type: "text", text: set.title }],
+        }),
         createElement({ type: "paragraph", content: [{ type: "text", text: set.intro }] }),
         ...draftBlocks(set).map(createElement),
         createElement({
@@ -494,14 +500,18 @@ export function createExamples(options: ExamplesOptions) {
 
   /**
    * Whether the Mind is still as the example made it (#709): its title, its
-   * Note, its draft, its Question and its Answer unchanged, and nothing
-   * written after them. Its draft's checks may be there or not.
+   * heading of it, its Note, its draft, its Question and its Answer unchanged,
+   * and nothing written after them. Its draft's checks may be there or not.
    */
   const untouched = (examples: StoredExamples, set: ExampleSet): boolean => {
     if (options.mindTitle(examples.mindId) !== set.title) return false;
     const draft = draftMarkdown(set);
     return options.editMind(examples.mindId, (blocks) => {
-      const [note, ...afterNote] = topLevelBlocks(blocks);
+      const all = topLevelBlocks(blocks);
+      // An example made before #908 has no heading of its title.
+      const titled =
+        all[0]?.nodeName === "heading" && toMarkdown(all[0]).trim() === `# ${set.title}`;
+      const [note, ...afterNote] = titled ? all.slice(1) : all;
       const drafted = afterNote.slice(0, draft.length);
       const [question, answer, ...rest] = afterNote.slice(draft.length);
       if (!note || !question || !answer) return false;

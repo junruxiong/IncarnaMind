@@ -8,6 +8,7 @@ import {
   comparisonQuestionsOf,
   MAX_COMPARISON_QUESTIONS,
 } from "../../../shared/comparisons";
+import { mindName } from "../../../shared/naming";
 import { readProposalAttribute } from "../../../shared/proposals";
 import {
   expandComparisonTable,
@@ -121,9 +122,10 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
   const waiting = useTasks((state) => tableTask(state, tableId) !== null);
   const expanded = useComparisons((state) => state.expanded === tableId);
   const problem = useComparisons((state) => state.problems[tableId]);
-  const mindTitle = useAppStore(
-    (state) => state.minds.find((mind) => mind.id === mindId)?.title ?? "",
-  );
+  const mindTitle = useAppStore((state) => {
+    const mind = state.minds.find((each) => each.id === mindId);
+    return mind ? mindName(mind) : "";
+  });
   const wrapper = useRef<HTMLDivElement>(null);
   const [adding, setAdding] = useState(false);
   const { total, settled, toFill, stop } = cellCounts(node);

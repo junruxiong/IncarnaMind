@@ -9,8 +9,10 @@ import {
   dismissChatSetup,
   documentIdOf,
   enterContent,
+  frontMindName,
   launchApp,
   mindWrittenBefore,
+  nameMind,
   newMind,
   openDocumentAt,
   removeDataFolder,
@@ -134,7 +136,7 @@ for (const view of VIEWS) {
     }
     await expect(blocks(editor)).toHaveCount(6);
     await expect(blocks(editor).last()).toHaveText("Neap tides are weaker.!!");
-    await expect(window.getByTestId("mind-title")).toHaveValue("Tides");
+    await expect(frontMindName(window)).toHaveText("Tides");
 
     // How much one Undo takes depends on how far apart the words and each "!" were typed: all of
     // them, both "!", or only the last "!", which a second Undo takes.
@@ -154,7 +156,7 @@ test("a click under a table, inside the editor's own space, puts the cursor on a
   await dismissChatSetup(window);
   await setWindowSize(app, window, 1440, 660);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tide tables");
+  await nameMind(window, "Tide tables");
   await enterContent(window);
   await window.keyboard.type("Heights in metres.");
   const editor = window.getByTestId("mind-editor");
@@ -200,6 +202,5 @@ test("in an empty Mind a click under its line puts the cursor on it, and Chinese
   await window.keyboard.type("大潮在朔日和望日。");
   await expect(blocks(editor)).toHaveCount(1);
   await expect(blocks(editor).first()).toHaveText("大潮在朔日和望日。");
-  await expect(window.getByTestId("mind-title")).toHaveValue("");
   await app.close();
 });

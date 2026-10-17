@@ -12,6 +12,7 @@ import {
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
+  frontMindName,
   launchApp,
   openSteps,
   pointAndClick,
@@ -85,7 +86,7 @@ const core = (window: Page) => ({
       }
     }
     await pointAndClick(window, window.getByTestId("mind-list-item").filter({ hasText: title }));
-    await expect(window.getByTestId("mind-title")).toHaveValue(title);
+    await expect(frontMindName(window)).toHaveText(title);
   },
   /** A Folder holding every Document so far. */
   folderOfAll: (name: string) =>
@@ -400,9 +401,9 @@ test("the folded line opens by click, Enter and Space, at once, to the reasoning
     window,
     window.getByTestId("mind-list-item").filter({ hasText: "Moon notes" }),
   );
-  await expect(window.getByTestId("mind-title")).toHaveValue("Moon notes");
+  await expect(frontMindName(window)).toHaveText("Moon notes");
   await pointAndClick(window, timeline.getByTestId("answer-step-read"));
-  await expect(window.getByTestId("mind-title")).toHaveValue("Lit review: tides");
+  await expect(frontMindName(window)).toHaveText("Lit review: tides");
   await app.close();
 });
 
