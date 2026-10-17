@@ -6,6 +6,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import type { RouteWayBack, SignInRoute } from "../../core/providers/signInRoutes";
+import { signInToClaudeAgain } from "./claudeSignIn";
 import { signInToCopilotAgain } from "./copilotSignIn";
 import { core } from "./core";
 import { requestModelMenu } from "./modelMenu";
@@ -13,6 +14,7 @@ import type { SettingsPage } from "./settingsPages";
 import { useAppStore } from "./store";
 
 const SIGN_INS: Partial<Record<SignInRoute, () => Promise<boolean>>> = {
+  "claude-account": signInToClaudeAgain,
   copilot: signInToCopilotAgain,
 };
 

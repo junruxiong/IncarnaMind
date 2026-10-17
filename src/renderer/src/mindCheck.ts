@@ -1,12 +1,13 @@
 /**
  * Check this Mind (#737), the window's side: "Check this Mind" (⌘K, the
- * Mind's menu) checks every sentence that makes a claim; the health line's
- * "Check all" and "Check again" check only what changed. When the model is
- * to name the claims, it does that first, with Stop, and the line under the
- * Mind's title then asks with their number and, billed per token, the
- * estimate (#973); a run that only checks again asks so when it is large,
- * and always for the Documents added since (#993). While it runs, the
- * health line counts the claims checked, with Stop.
+ * Mind's menu) checks every sentence that makes a claim; the check badge
+ * card's "Check all" and "Check again" check only what changed. When the
+ * model is to name the claims, it does that first, with Stop, and the card
+ * then asks with their number and, billed per token, the estimate (#973); a
+ * run that only checks again asks so when it is large, and, for the
+ * Documents added since (#993), whatever their number. Plans and models on
+ * this computer run without asking. While it runs, the badge counts the
+ * claims checked, with Stop.
  */
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
@@ -35,7 +36,6 @@ interface Asking {
   allDocuments: boolean;
   /** The claims the model named and the checks to make again, or, when only checking again, the checks. */
   count: number;
-  claims: boolean;
   /** Checked against the Mind's Folder: the question names it. */
   inFolder: boolean;
   /** Null for a plan or a model on this computer, or when `estimateRun` failed. */
@@ -154,7 +154,6 @@ export async function startMindCheck(
         mode,
         allDocuments,
         count,
-        claims: plan.findsClaims,
         inFolder: plan.inFolder,
         estimate,
         unestimated: estimated === null,
