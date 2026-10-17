@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import type { DataKind } from "../../src/core/api";
 import { CHOSEN_PROVIDER_FLOWS } from "../../src/core/api";
-import { chosenFlowLines, chosenFlowSummary } from "../../src/renderer/src/chosenFlows";
-import { type MessageKey, translate } from "../../src/shared/i18n";
+import { chosenFlowLines } from "../../src/renderer/src/chosenFlows";
+import { translate } from "../../src/shared/i18n";
 import type { Translate } from "../../src/shared/locations";
 import { createTempDataFolder, startCore } from "../helpers/core";
 
@@ -29,12 +29,6 @@ const FULL = {
   ],
 } as const;
 
-const SHORT = {
-  en: "your Questions with the Mind you're in, matching passages and the names of Documents in scope; sentences you check; the paragraph you pause on; text you ask the assistant to change; and Document names, outlines and excerpts with your Folder and Tag names, to tag and file them (page images for scans)",
-  "zh-CN":
-    "你的问题连同你所在的 Mind、相关段落和范围内文档的名称；你核对的句子；写作建议时你停下的段落；你让助手修改的文字；以及文档名称、目录和摘录，连同你的文件夹和标签名称，用于打标签和归档（扫描件发送页面图片）",
-} as const;
-
 /** The kinds of data each item of the line names, so a kind a flow starts sending fails until one does. */
 const NAMED_BY: Record<string, readonly DataKind[]> = {
   chat: ["blocks", "passages"],
@@ -45,55 +39,19 @@ const NAMED_BY: Record<string, readonly DataKind[]> = {
 };
 
 describe("the lines that say what choosing a provider sends (ADR-0022)", () => {
-  test.each(["en", "zh-CN"] as const)("the list above the button, in %s", (language) => {
+  test.each(["en", "zh-CN"] as const)("the list behind Details, in %s", (language) => {
     expect(chosenFlowLines().map((line) => t(language)(line))).toEqual(FULL[language]);
   });
 
-  test.each(["en", "zh-CN"] as const)("the short form, in %s", (language) => {
-    expect(chosenFlowSummary(t(language))).toBe(SHORT[language]);
-  });
-
-  test("the lead names the provider", () => {
-    expect(translate("en", "providers.sends", { provider: "OpenAI" })).toBe(
-      "When you use it, OpenAI receives:",
+  test("the one line where a service is chosen names it, and Details holds the list above", () => {
+    expect(translate("en", "providers.sendsLine", { provider: "OpenAI" })).toBe(
+      "Sends your questions and document text to OpenAI.",
     );
-    expect(translate("zh-CN", "providers.sends", { provider: "OpenAI" })).toBe(
-      "使用时，以下内容会发送给 OpenAI：",
+    expect(translate("zh-CN", "providers.sendsLine", { provider: "OpenAI" })).toBe(
+      "会把你的问题和文档内容发送给 OpenAI。",
     );
-  });
-
-  test("the ChatGPT lines, the API key's row and the ChatGPT plan's description say the short form", () => {
-    const line = (language: Language, key: MessageKey) =>
-      translate(language, key, { sends: chosenFlowSummary(t(language)) });
-
-    expect(line("en", "setup.chatgpt.line")).toBe(
-      `If you pay for ChatGPT Plus or Pro · No key needed · Signing in lets OpenAI receive, under your ChatGPT account: ${SHORT.en}.`,
-    );
-    expect(line("zh-CN", "setup.chatgpt.line")).toBe(
-      `如果你订阅了 ChatGPT Plus 或 Pro · 无需密钥 · 登录后，以下内容会通过你的 ChatGPT 账号发送给 OpenAI：${SHORT["zh-CN"]}。`,
-    );
-    expect(line("en", "setup.chatgpt.line.china")).toContain(
-      `(not in mainland China) · No key needed · Signing in lets OpenAI receive, under your ChatGPT account: ${SHORT.en}.`,
-    );
-    expect(line("zh-CN", "setup.chatgpt.line.china")).toContain(
-      "（中国大陆无法使用）· 无需密钥 · ",
-    );
-    expect(line("en", "chatgpt.description")).toBe(
-      `Use your ChatGPT Plus or Pro plan instead of an API key. OpenAI receives, under your ChatGPT account: ${SHORT.en}. It counts against your plan's limits.`,
-    );
-    expect(line("zh-CN", "chatgpt.description")).toBe(
-      `用你的 ChatGPT Plus 或 Pro 订阅代替 API 密钥。OpenAI 会通过你的 ChatGPT 账号收到：${SHORT["zh-CN"]}。用量计入你的订阅额度。`,
-    );
-    for (const language of ["en", "zh-CN"] as const) {
-      for (const key of [
-        "providers.choice.apiKey.body",
-        "providers.choice.apiKey.firstRun.body",
-      ] as const) {
-        const sends = chosenFlowSummary(t(language));
-        const text = translate(language, key, { sends, providers: "OpenAI" });
-        expect(text.endsWith(`${sends}${language === "en" ? "." : "。"}`)).toBe(true);
-      }
-    }
+    expect(translate("en", "details.label")).toBe("Details");
+    expect(translate("zh-CN", "details.label")).toBe("详情");
   });
 
   test.each([

@@ -1,13 +1,12 @@
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
+import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import type { FakeCapture } from "../src/core/meetings/fakeCapture";
 import type { TestHooks } from "../src/shared/testHooks";
 import {
   askInAssistant,
-  closeSettings,
   createDataFolder,
   DEFAULT_FOLDER_ZH,
   dismissChatSetup,
@@ -16,11 +15,13 @@ import {
   launchApp,
   motionSettled,
   openDocumentAt,
-  openSettings,
   pointAndClick,
+  recordMeeting,
   removeDataFolder,
   setWindowSize,
   showSettingsPage,
+  startRecording,
+  turnOnMeetings,
   useLocalChatModel,
   useOutputLocation,
 } from "./app";
@@ -61,44 +62,6 @@ async function searchPalette(window: Page, text: string): Promise<void> {
   await expect(window.getByTestId("palette-search")).toHaveValue(text);
 }
 
-/** Settings → Meetings → Record meetings, by its switch. */
-async function turnOnMeetings(window: Page, name?: string): Promise<void> {
-  const settings = await openSettings(window, "meetings");
-  const recording = settings.getByTestId("meetings-enabled");
-  await recording.hover();
-  await recording.click();
-  await expect(recording).toBeChecked();
-  if (name) await shot(window, name);
-  await closeSettings(window);
-}
-
-/** The + menu's "Record a meeting": a new Mind with the start block. */
-async function recordMeeting(window: Page): Promise<Locator> {
-  const plus = window.getByTestId("plus-menu");
-  await plus.hover();
-  await plus.click();
-  await window.getByRole("menuitem", { name: "Record a meeting" }).click();
-  const start = window.getByTestId("meeting-start");
-  await expect(start).toBeVisible();
-  return start;
-}
-
-/** Starts recording from the start block; the first time, through the one-time notice. */
-async function startRecording(window: Page, start: Locator, { notice = false } = {}) {
-  const record = start.getByTestId("meeting-start-record");
-  await record.hover();
-  await record.click();
-  if (notice) {
-    const dialog = window.getByTestId("meeting-notice");
-    await expect(dialog).toBeVisible();
-    await dialog.getByTestId("meeting-notice-start").click();
-    await expect(dialog).toBeHidden();
-  }
-  const bar = window.getByTestId("meeting-bar");
-  await expect(bar).toHaveAttribute("data-status", "recording");
-  return bar;
-}
-
 /** The parts saved for a Meeting's source, by where they start, in ms. */
 function partsOf(meetingId: string, source: "microphone" | "system"): number[] {
   const folder = join(dataDir, "meetings", meetingId);
@@ -126,7 +89,7 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await window.getByTestId("plus-menu").click();
   await expect(window.getByRole("menuitem", { name: "Record a meeting" })).toHaveCount(0);
   await window.keyboard.press("Escape");
-  await turnOnMeetings(window, "settings-meetings-en");
+  await turnOnMeetings(window, () => shot(window, "settings-meetings-en"));
   if (SCREENSHOTS) {
     await window.getByTestId("plus-menu").click();
     await expect(window.getByRole("menuitem", { name: "Record a meeting" })).toBeVisible();
@@ -732,9 +695,11 @@ test("killed mid-recording, IncarnaMind recovers the audio up to the last part a
   // The next part was being written when it died.
   await writeFile(join(dataDir, "meetings", meetingId, "microphone-0000010000.wav.writing"), "");
 
-  const { window } = await launchApp(dataDir);
+  const { app, window } = await launchApp(dataDir);
   const bar = window.getByTestId("meeting-bar");
   await expect(bar).toHaveAttribute("data-status", "paused");
+  // A recovered, paused Meeting opens no call help panel: it would open before the app's window.
+  expect(app.windows()).toHaveLength(1);
   const interrupted = window.getByTestId("meeting-line-interrupted");
   await expect(interrupted).toContainText(
     "IncarnaMind closed while recording. Everything up to 0:10 is saved.",
@@ -907,10 +872,9 @@ test("asking during the call: the assistant listens to the live transcript, its 
   await expect(reads).toHaveText(/^Reads “Meeting, .+” · listening to the live transcript$/);
   const starters = window.getByTestId("meeting-starter");
   await expect(starters).toHaveText([
-    "Catch me up",
     "Recap the last 5 minutes",
     "What should I ask next?",
-    "Check what was just said",
+    "Action items so far",
   ]);
   await motionSettled(window);
   await shot(window, "meeting-ask-starters-en");
@@ -947,16 +911,11 @@ test("asking during the call: the assistant listens to the live transcript, its 
   await window.getByTestId("assistant-new-chat").click();
   await window.getByTestId("mind-editor").click();
   await expect(reads).toHaveText(/^正在读“.+” · 正在听：实时转写$/);
-  await expect(starters).toHaveText([
-    "赶上进度",
-    "回顾最近 5 分钟",
-    "接下来该问什么？",
-    "核对刚才说的话",
-  ]);
+  await expect(starters).toHaveText(["回顾最近 5 分钟", "接下来该问什么？", "目前的待办事项"]);
   await shot(window, "meeting-ask-starters-zh");
   await pointAndClick(window, starters.first());
   const asked = window.getByTestId("assistant").getByTestId("assistant-question").last();
-  await expect(asked).toContainText("赶上进度");
+  await expect(asked).toContainText("回顾最近 5 分钟");
   await expect(
     window.getByTestId("assistant").getByTestId("assistant-answer").last(),
   ).toHaveAttribute("data-status", "done", { timeout: 15_000 });

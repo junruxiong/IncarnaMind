@@ -47,11 +47,11 @@ test("over changes it can't revise, the assistant changes nothing, says why, and
   await setLanguage(window, "en");
   await setWindowSize(app, window, 1100, 800);
   await writeMind(window, "Q3 review", "The quarter was very good, and sales were really strong.");
-  await askInAssistant(window, "Shorten the summary");
+  await askInAssistant(window, "Could you shorten the summary?");
   const bar = window.getByTestId("proposals-bar");
   await expect(bar.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
 
-  const refused = await askInAssistant(window, "Shorten the summary");
+  const refused = await askInAssistant(window, "Could you shorten the summary?");
 
   const line = refused.getByTestId("answer-waiting-changes");
   await expect(line).toHaveText(

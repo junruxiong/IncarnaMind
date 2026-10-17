@@ -65,7 +65,7 @@ import type { PreparedChatModel } from "../../providers/chat";
 import { parseSearchScope } from "../../scope";
 import type { AnswerEngine } from "../engine";
 import { type ClaimCheckDependencies, createClaimCheck, recordJudged } from "./claimCheck";
-import { createMindCheck } from "./mindCheck";
+import { createMindCheck, type MindCheckOptions } from "./mindCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
 import { createVerify, type VerifyOptions } from "./verify";
 import { createContradictionWatch, type WatchOptions } from "./watch";
@@ -119,10 +119,11 @@ export interface ChecksOptions
   localOnly(): boolean;
   resolveScope(scope: SearchScope): string[] | null;
   evidence: Pick<Evidence, "scope" | "search">;
-  documents: ClaimCheckDependencies["documents"] & {
-    /** Every live Document's names: what the Citations a sentence already has are named by. */
-    names(): readonly LiveDocument[];
-  };
+  documents: ClaimCheckDependencies["documents"] &
+    MindCheckOptions["documents"] & {
+      /** Every live Document's names: what the Citations a sentence already has are named by. */
+      names(): readonly LiveDocument[];
+    };
   engine: AnswerEngine;
   retention: Pick<VersionRetention, "retain">;
   now(): Date;
@@ -566,6 +567,7 @@ export function createChecks(options: ChecksOptions) {
 
     findMindClaims: (input: unknown) => mindCheck.findMindClaims(input),
     checkMind: (input: unknown) => mindCheck.checkMind(input),
+    documentsAddedSinceChecks: (mindId: unknown) => mindCheck.documentsAddedSinceChecks(mindId),
 
     /** A Document's status changed: a new version has its Folder's Minds checked for contradictions. */
     documentChanged: (document: Document) => watch.documentChanged(document),
