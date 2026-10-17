@@ -13,7 +13,9 @@
  * (叫), its content citing the Documents when there are any; and "add X to
  * <Mind>" (把 X 添加到 <Mind>) calls add_to_mind with X, and "add X" (添加 X)
  * adds X to the Mind in focus; "add X to <Mind> and make a new note called Y"
- * calls both. Each then replies with the first sentence of what its calls
+ * calls both. "Add a section on the risks" first lengthens the User's own
+ * text with edit_mind, then adds the section, as a model sometimes does beyond
+ * the request (#880). Each then replies with the first sentence of what its calls
  * came to; add_to_mind's and create_mind's input streams in word by word,
  * slowly for a Question asked "slowly", as does edit_mind's edit. "Write three
  * paragraphs" is `paragraphsReply`'s. "Write a summary page" (写一个总结页面)
@@ -96,6 +98,8 @@ const ADD_HERE = /^add\s+(.+?)[.。]?$|^添加\s*(.+?)[。]?$/iu;
 const ADD_AND_NEW =
   /^add\s+(.+?)\s+to\s+[“"]?(.+?)[”"]?\s+and\s+(?:make|create)\s+a\s+new\s+note\s+called\s+[“"]?(.+?)[”"]?[.。]?$/iu;
 
+const RISKS_AND_MORE = /^add a section on the risks[.。]?$/i;
+
 /** The first sentence of what a call came to, as the scripted assistant's reply. */
 const firstSentence = (result: string) => /^[^.。]*[.。]?/u.exec(result)?.[0] ?? result;
 
@@ -122,6 +126,14 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     return {
       text: `${firstSentence(lastResult(prompt, "add_to_mind") ?? "")} ${firstSentence(made)}`,
     };
+  }
+  if (RISKS_AND_MORE.test(question)) {
+    if (lastResult(prompt, "edit_mind") === undefined)
+      return { tool: "edit_mind", input: { instruction: "make it longer" } };
+    const added = lastResult(prompt, "add_to_mind");
+    if (added === undefined)
+      return { tool: "add_to_mind", input: { content: "## Risks\n\nThe supplier is late." } };
+    return { text: firstSentence(added) };
   }
   if (SUMMARY_PAGE.test(question)) {
     const made = lastResult(prompt, "create_mind");
