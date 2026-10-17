@@ -17,6 +17,10 @@ export interface EverydayCase {
   mind: { title: string; blocks: readonly string[] } | null;
   /** The whole Mind is selected as it is asked. */
   selectAll?: boolean;
+  /** A Word file of these paragraphs (the first its title) is imported as the Mind it is asked from, in place of `mind`. */
+  word?: { name: string; paragraphs: readonly string[] };
+  /** The example's Answer, written in advance, is the conversation's first turn, in the case's language. */
+  afterExample?: true;
   /** Asked first, in the same conversation, and not checked. */
   before?: readonly string[];
   request: string;
@@ -34,6 +38,7 @@ const WRITE = { write: true, cite: true, coverAll: false } as const;
 const WRITE_ALL = { write: true, cite: true, coverAll: true } as const;
 const EDIT = { write: true, cite: false, coverAll: false } as const;
 const NOTHING = { write: false, cite: false, coverAll: false } as const;
+const ABOUT_THE_QUESTION = { write: false, cite: false, coverAll: false, noEarlier: true } as const;
 
 const READING_GROUP = {
   title: "Reading group",
@@ -72,6 +77,30 @@ const PENSIONS = {
     "Staff get 25 days of leave a year, plus bank holidays.",
     "The pension scheme matches contributions up to 5% of salary.",
     "Health cover starts after three months.",
+  ],
+};
+const READING_GROUP_ZH = {
+  title: "读书会",
+  blocks: [
+    "## 笔记",
+    "魏想要一份周四读书会前可以发给大家的简短材料。",
+    "还需要：每篇论文到底主张什么。",
+  ],
+};
+const SUPPLY_AGREEMENT = {
+  name: "Supply agreement.docx",
+  paragraphs: [
+    "Supply agreement",
+    "Each party's total liability is capped at the fees paid in the twelve months before the claim.",
+    "The Buyer pays each invoice within 30 days of receiving it.",
+  ],
+};
+const SUPPLY_AGREEMENT_ZH = {
+  name: "供货协议.docx",
+  paragraphs: [
+    "供货协议",
+    "每一方的赔偿责任以索赔前十二个月内已付的费用为限。",
+    "买方应在收到每张发票后 30 天内付款。",
   ],
 };
 const OWNER = ["write a summary page", "make the summary section longer", "no citations?"];
@@ -434,5 +463,64 @@ export const CASES: readonly EverydayCase[] = [
     mind: Q3,
     request: "Explain the second paragraph of my notes",
     expected: NOTHING,
+  },
+  // After the example's Answer, written in advance (#1060): the Answer is about the Question asked.
+  {
+    id: "example-own",
+    language: "en",
+    library: "papers",
+    mind: READING_GROUP,
+    afterExample: true,
+    request: "What does the GraphST paper claim?",
+    expected: ABOUT_THE_QUESTION,
+  },
+  {
+    id: "example-own-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: READING_GROUP_ZH,
+    afterExample: true,
+    request: "GraphST 这篇论文的主要主张是什么？",
+    expected: ABOUT_THE_QUESTION,
+  },
+  {
+    id: "example-main",
+    language: "en",
+    library: "papers",
+    mind: READING_GROUP,
+    afterExample: true,
+    before: ["What does the GraphST paper claim?"],
+    request: "Summarise the two main documents.",
+    expected: ABOUT_THE_QUESTION,
+  },
+  {
+    id: "example-main-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: READING_GROUP_ZH,
+    afterExample: true,
+    before: ["GraphST 这篇论文的主要主张是什么？"],
+    request: "总结一下两份主要文档。",
+    expected: ABOUT_THE_QUESTION,
+  },
+  {
+    id: "example-word",
+    language: "en",
+    library: "papers",
+    mind: null,
+    word: SUPPLY_AGREEMENT,
+    afterExample: true,
+    request: "What is the liability cap?",
+    expected: ABOUT_THE_QUESTION,
+  },
+  {
+    id: "example-word-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: null,
+    word: SUPPLY_AGREEMENT_ZH,
+    afterExample: true,
+    request: "赔偿责任的上限是多少？",
+    expected: ABOUT_THE_QUESTION,
   },
 ];

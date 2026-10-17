@@ -2,9 +2,9 @@ import { resolve } from "node:path";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
 import type { Core } from "../../src/core";
+import { answerInstructions } from "../../src/core/answers/prompt";
 import { EXAMPLE_SETS } from "../../src/core/exampleSets";
 import type { Language } from "../../src/core/language";
-import { answerInstructions } from "../../src/core/answers/prompt";
 import { askAssistant } from "../helpers/assistant";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
@@ -59,7 +59,10 @@ const WALKS: Record<Language, Walk> = {
   "zh-CN": {
     system: "zh-CN",
     own: [
-      { name: "海港租约.md", text: "海港路公寓的租约于 2027 年 6 月 30 日到期。月租为 1,450 英镑。" },
+      {
+        name: "海港租约.md",
+        text: "海港路公寓的租约于 2027 年 6 月 30 日到期。月租为 1,450 英镑。",
+      },
       { name: "家财保险.md", text: "公寓的家财保险每年 3 月 1 日续保，保额为 20,000 英镑。" },
     ],
     ownQuestion: "我的租约什么时候到期？",
@@ -169,10 +172,9 @@ for (const language of ["en", "zh-CN"] as const) {
         core,
         await createSourceFolder(),
         wordFile({
-          body: [
-            paragraph(title, { style: "Title" }),
-            ...body.map((each) => paragraph(each)),
-          ].join(""),
+          body: [paragraph(title, { style: "Title" }), ...body.map((each) => paragraph(each))].join(
+            "",
+          ),
         }),
         { origin: "own", addOriginal: true },
       );
@@ -203,7 +205,8 @@ for (const language of ["en", "zh-CN"] as const) {
     test("asked from the example's own Mind, it follows the example's Question and Answer", async () => {
       const { ready, core, model, made, conversationId } = await setUp(language);
 
-      const sent = await askFrom(core, model, conversationId, made?.mindId as string, "Which page?");
+      if (!made?.mindId) throw new Error("The example Mind wasn't made.");
+      const sent = await askFrom(core, model, conversationId, made.mindId, "Which page?");
 
       const [messages = []] = sent.history;
       expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user"]);
