@@ -1930,7 +1930,7 @@ export const zhCN = {
   "claudeAccount.problem.unexpectedResponse": "Claude 返回了 IncarnaMind 无法识别的内容",
   "claudeAccount.wayBack.signIn": "用 Claude 账号登录",
   "claudePlan.way.title": "使用我的 Claude 订阅",
-  "claudePlan.way.line": "Pro、Max 或 Team",
+  "claudePlan.way.line": "Pro、Max 或 Team（中国大陆不可用）",
   "claudePlan.usage": "回答会计入你 Claude 订阅的用量限额。",
   "claudePlan.signIn": "用 Claude 账号登录",
   "claudePlan.cancel": "取消",

@@ -327,7 +327,7 @@ test("in Chinese: the row is first under Other ways too and a model on this comp
 
     const row = card.getByTestId("way-claude");
     await expect(row).toContainText("使用我的 Claude 订阅");
-    await expect(row).toContainText("Pro、Max 或 Team");
+    await expect(row).toContainText("Pro、Max 或 Team（中国大陆不可用）");
     await row.getByTestId("way-claude-open").click();
     const notice = row.getByTestId("claude-plan-notice");
     const usage = notice.getByTestId("claude-plan-usage");
