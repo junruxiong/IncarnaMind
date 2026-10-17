@@ -40,9 +40,9 @@ const BUYER = [
 const mac = process.platform === "darwin";
 /** The first button's shortcut by default: ⌃⌥1 on macOS, Ctrl+Shift+1 elsewhere. */
 const FIRST_KEYS = mac ? "Ctrl+Alt+1" : "Ctrl+Shift+1";
-/** Call help's: ⌃⌥H on macOS, Ctrl+Shift+H elsewhere. */
-const PANEL_KEYS = mac ? "Ctrl+Alt+H" : "Ctrl+Shift+H";
-const PANEL_LABEL = mac ? "⌃⌥H" : "Ctrl+Shift+H";
+/** Call help's: ⌃⌥H on macOS, Ctrl+Shift+8 elsewhere. */
+const PANEL_KEYS = mac ? "Ctrl+Alt+H" : "Ctrl+Shift+8";
+const PANEL_LABEL = mac ? "⌃⌥H" : "Ctrl+Shift+8";
 
 let dataDir: string;
 test.beforeEach(async () => {
