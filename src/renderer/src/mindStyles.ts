@@ -97,10 +97,6 @@ async function apply(mindId: string, style: MindStyle): Promise<void> {
   useMindStyles.getState().know(mindId, await core.setMindStyle(mindId, style));
 }
 
-/**
- * Changes a Mind's style, showing the change at once and putting it back if the core refuses,
- * and offers Undo.
- */
 async function change(
   mindId: string,
   update: (style: MindStyle) => MindStyle,

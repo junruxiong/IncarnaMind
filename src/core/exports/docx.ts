@@ -16,7 +16,7 @@
 
 import { deflateRawSync } from "node:zlib";
 import type { TableAlign } from "../../shared/markdownTables";
-import type { StyledRun } from "../api";
+import type { ParagraphFormat, StyledRun } from "../api";
 import { writeZip } from "../documents/formats/zip";
 import {
   type Block,
@@ -32,6 +32,7 @@ import {
 import { changeKey } from "./citations";
 import type { ExportLabels } from "./labels";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
+import { changedElement, formatChanges } from "./paragraphFormat";
 import {
   COMMENTS_CONTENT_TYPE,
   COMMENTS_RELATIONSHIP,
@@ -395,12 +396,17 @@ export class DocxWriter {
     switch (block.kind) {
       case "paragraph":
         return paragraph(
-          { style: context.style, indent, align: context.align },
+          { style: context.style, indent, align: context.align, format: block.format },
           this.inline(block.content, context),
         );
       case "heading":
         return paragraph(
-          { style: this.styles.heading(block.level), indent, align: context.align },
+          {
+            style: this.styles.heading(block.level),
+            indent,
+            align: context.align,
+            format: block.format,
+          },
           this.inline(block.content, context),
         );
       case "question":
@@ -825,11 +831,29 @@ interface ParagraphProperties {
   /** How far the first line hangs left of `indent`, in twips. */
   hanging?: number;
   align?: TableAlign;
+  /** The User's, over the rest; its left indent is from `indent`. */
+  format?: ParagraphFormat;
 }
 
 function paragraph(properties: ParagraphProperties, content: string): string {
   const { style, keepNext, numbering, bottomBorder, spacingAfter, indent, hanging, align } =
     properties;
+  const format = properties.format ?? {};
+  const changes = formatChanges(
+    { ...format, ...(format.left !== undefined && { left: format.left + (indent ?? 0) / 20 }) },
+    {},
+  );
+  const spacing = changedElement(
+    "w:spacing",
+    spacingAfter !== undefined ? `<w:spacing w:after="${spacingAfter}"/>` : null,
+    changes.spacing,
+  );
+  const ind = changedElement(
+    "w:ind",
+    indent ? `<w:ind w:left="${indent}"${hanging ? ` w:hanging="${hanging}"` : ""}/>` : null,
+    changes.ind,
+  );
+  const jc = changes.jc ?? align;
   // In the order the schema requires.
   const pPr = [
     style ? `<w:pStyle w:val="${escapeXml(style)}"/>` : "",
@@ -840,9 +864,9 @@ function paragraph(properties: ParagraphProperties, content: string): string {
     bottomBorder
       ? '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr>'
       : "",
-    spacingAfter !== undefined ? `<w:spacing w:after="${spacingAfter}"/>` : "",
-    indent ? `<w:ind w:left="${indent}"${hanging ? ` w:hanging="${hanging}"` : ""}/>` : "",
-    align ? `<w:jc w:val="${align}"/>` : "",
+    spacing ?? "",
+    ind ?? "",
+    jc ? `<w:jc w:val="${jc}"/>` : "",
   ].join("");
   return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${content}</w:p>`;
 }
@@ -856,6 +880,10 @@ function formatOf(marks: Marks, context: Context, styles: DocxStyles, style?: st
     highlight: marks.highlight,
     underline: marks.underline,
     monospace: marks.code && style !== undefined,
+    font: marks.font,
+    size: marks.size,
+    color: marks.color,
+    script: marks.vertical,
   };
 }
 
