@@ -7,6 +7,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  nameMind,
   newMind,
   removeDataFolder,
   setLanguage,
@@ -35,7 +36,7 @@ async function start(language: "en" | "zh-CN" = "en") {
   await connectLocalChatModel(window);
   await setLanguage(window, language);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await enterContent(window);
   await window.keyboard.type("Spring tides follow the Moon.");
   return { app, window };

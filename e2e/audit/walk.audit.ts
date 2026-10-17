@@ -178,9 +178,10 @@ test("A1 first run: the example Mind and its Citation card", async () => {
     const { window } = app;
     await sealShell(app.app);
     await step(T, "example mind", async () => {
-      await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper", {
-        timeout: 20_000,
-      });
+      await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+        "Draft: credit committee paper",
+        { timeout: 20_000 },
+      );
       await expect(window.getByTestId("margin-check")).toHaveCount(2, { timeout: 20_000 });
       await window.mouse.move(700, 400);
       await shot(window, "A01-first-run-example-mind");
@@ -376,12 +377,10 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
       }
     });
 
-    await step(T, "a Mind: title, a Note, Questions", async () => {
+    await step(T, "a Mind: a heading, a Note, Questions", async () => {
       await click(window, window.getByTestId("plus-menu"));
       await click(window, window.getByTestId("plus-new-mind"));
-      const title = window.getByTestId("mind-title");
-      await click(window, title);
-      await typeLike(window, "Harbour survey: what the documents say", 50);
+      await typeLike(window, "# Harbour survey: what the documents say", 50);
       await window.keyboard.press("Enter");
       await typeLike(
         window,
@@ -796,9 +795,10 @@ test("A6 window sizes, the three steps, the @ and / menus, hover states", async 
     const { window } = app;
     await sealShell(app.app);
     await step(T, "three steps in an empty Mind (Get started showing)", async () => {
-      await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper", {
-        timeout: 20_000,
-      });
+      await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+        "Draft: credit committee paper",
+        { timeout: 20_000 },
+      );
       await click(window, window.getByTestId("new-tab"));
       await expect(window.getByTestId("start-guide")).toBeVisible();
       await window.mouse.move(700, 600, { steps: 6 });
@@ -866,7 +866,9 @@ test("A6 window sizes, the three steps, the @ and / menus, hover states", async 
         window,
         window.getByTestId("mind-list-item").filter({ hasText: "Draft: credit committee paper" }),
       );
-      await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
+      await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+        "Draft: credit committee paper",
+      );
       await click(window, window.getByTestId("citation-chip").first());
       await window.waitForTimeout(600);
       const open = window.getByTestId("citation-card").getByTestId("citation-open");

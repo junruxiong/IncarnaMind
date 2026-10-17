@@ -12,7 +12,7 @@ import { displayName } from "../../../shared/documentNames";
 import { missingDetails } from "../../../shared/references";
 import { sourceEntry, sourcesOf } from "../../../shared/sources";
 import { retryFormatting, useMindFormatting } from "../citationFormatting";
-import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
+import { useCitationStylePicker, useStyleLabel } from "../citationStylePicker";
 import { CiteAsPanel } from "../components/CiteAsPanel";
 import { ChevronDownLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
@@ -54,6 +54,7 @@ export function ReferencesBlock({
   const language = useLanguage();
   const headingId = useId();
   const formatting = useMindFormatting(mindId);
+  const label = useStyleLabel(formatting?.style, formatting?.formatted?.unavailable === true);
   const documents = useAppStore((state) => state.documents);
   const counted = useEditorState({
     editor,
@@ -69,7 +70,7 @@ export function ReferencesBlock({
 
   if (counted.length === 0 || !formatting) return null;
   const { style, formatted, pending, problem } = formatting;
-  const numbered = style === "numbered";
+  const numbered = style === "numbered" || formatted?.unavailable === true;
   // A Document only a pending change cites is left out: the formatted list counts every Citation.
   const live = new Set(counted.map((citation) => citation.documentId));
   const removed = counted.some(
@@ -116,20 +117,9 @@ export function ReferencesBlock({
     >
       <header className="references-head">
         <h2 id={headingId} className="references-title">
-          {t(numbered ? "bibliography.title" : "references.title")}
+          {t(style === "numbered" ? "bibliography.title" : "references.title")}
         </h2>
-        <button
-          type="button"
-          data-testid="references-style"
-          aria-haspopup="dialog"
-          aria-label={t("citationStyle.button", { style: styleLabel(style, t) })}
-          disabled={readOnly}
-          onClick={(event) => useCitationStylePicker.getState().show(mindId, event.currentTarget)}
-          className="references-button references-style"
-        >
-          <span className="min-w-0 truncate">{styleLabel(style, t)}</span>
-          <ChevronDownLineIcon className="size-3.5 shrink-0" />
-        </button>
+        <span className="flex-1" />
         {byDefault && (
           <span
             data-testid="references-style-default"
@@ -139,7 +129,18 @@ export function ReferencesBlock({
             {t("references.style.default")}
           </span>
         )}
-        <span className="flex-1" />
+        <button
+          type="button"
+          data-testid="references-style"
+          aria-haspopup="dialog"
+          aria-label={t("citationStyle.button", { style: label ?? style })}
+          disabled={readOnly}
+          onClick={(event) => useCitationStylePicker.getState().show(mindId, event.currentTarget)}
+          className="references-button references-style"
+        >
+          <span className="min-w-0 truncate">{label}</span>
+          <ChevronDownLineIcon className="size-3.5 shrink-0" />
+        </button>
         <button
           type="button"
           data-testid="references-copy"
@@ -158,7 +159,7 @@ export function ReferencesBlock({
         >
           {t("references.export")}
         </button>
-        {numbered && !readOnly && (
+        {style === "numbered" && !readOnly && (
           <button
             type="button"
             data-testid="bibliography-hide"
@@ -179,7 +180,7 @@ export function ReferencesBlock({
             testId: "references-retry",
           }}
         >
-          {t("references.failed", { style: styleLabel(style, t), reason: problem })}
+          {t("references.failed", { style: label ?? style, reason: problem })}
         </ProblemLine>
       )}
       {copyProblem && <ProblemLine testId="references-copy-problem">{copyProblem}</ProblemLine>}

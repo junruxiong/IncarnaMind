@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
-import { createDataFolder, dismissChatSetup, launchApp, removeDataFolder } from "./app";
+import { createDataFolder, dismissChatSetup, launchApp, nameMind, removeDataFolder } from "./app";
 
 /*
  * The window's title bar (src/shared/titleBar.ts): on macOS there is no title
@@ -155,7 +155,7 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
     const count = await tabsOf(window).count();
     await slideAndClick(window, newTab);
     await expect(tabsOf(window)).toHaveCount(count + 1);
-    await window.getByTestId("mind-title").fill(title);
+    await nameMind(window, title);
   }
   await expect(titlesOf(window)).toHaveText(["Alpha", "Beta", "Gamma"]);
   await screenshot(window, "title-bar-band");

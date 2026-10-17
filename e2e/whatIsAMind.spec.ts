@@ -54,8 +54,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await dismissChatSetup(window);
     await setLanguage(window, language);
     await newMind(window);
-    await expect(window.getByTestId("mind-title")).toBeFocused();
-    await window.keyboard.type("Notes");
     await enterContent(window);
     const hint = window.getByTestId("end-hint");
     await expect(hint).toContainText(SENTENCE[language]);
@@ -63,8 +61,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(hint).toHaveCount(0);
 
     await newMind(window);
-    await expect(window.getByTestId("mind-title")).toBeFocused();
-    await window.keyboard.type("Second");
     await enterContent(window);
     await expect(hint).toHaveAttribute("data-place", "empty");
     await expect(hint).not.toContainText(SENTENCE[language]);

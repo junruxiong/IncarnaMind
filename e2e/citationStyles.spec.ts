@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge, ReferencePatch } from "../src/core/api";
+import { readPackIndex } from "../src/core/citationStyles/pack";
 import { paragraphsOf, part, unzip } from "../tests/helpers/docx";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
@@ -14,6 +15,7 @@ import {
   exportFromMenu,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -123,7 +125,7 @@ async function chooseStyle(window: Page, search: string, label: string): Promise
   const picker = window.getByTestId("citation-style-picker");
   await expect(picker.getByTestId("citation-style-search")).toBeFocused();
   await window.keyboard.type(search);
-  await expect(picker.getByTestId("citation-style-option").first()).toHaveText(label);
+  await expect(picker.getByTestId("citation-style-option-label").first()).toHaveText(label);
   await window.keyboard.press("Enter");
   await expect(picker).toBeHidden();
 }
@@ -453,7 +455,7 @@ test("in Chinese, a Mind that takes GB/T 7714 by default says so once on the und
     /** A new Mind citing the article, in Chinese, titled `title`. */
     const chineseMind = async (title: string) => {
       const editor = await ask(window, "城市绿地 each");
-      await window.getByTestId("mind-title").fill(title);
+      await nameMind(window, title);
       await pointAndClick(window, editor.locator("p").last());
       await window.keyboard.press("ControlOrMeta+End");
       await window.keyboard.press("Enter");
@@ -578,8 +580,138 @@ test("the style chosen for a Mind in a Folder, from its menu, is the one a new M
   await expect(rows).toHaveCount(2);
   await openPicker(rows.filter({ hasNotText: "Chapter 1" }));
   const current = window.locator('[data-testid="citation-style-option"][data-current="true"]');
-  await expect(current).toHaveText("IEEE");
+  await expect(current.getByTestId("citation-style-option-label")).toHaveText("IEEE");
   await window.keyboard.press("Escape");
   await expect(window.getByTestId("citation-style-picker")).toBeHidden();
+  await app.close();
+});
+
+test("every CSL style: ⌘K and the References' style open the one picker, which finds a journal in English and Chinese and lists Recently used; the Mind keeps the journal's name, a style this version lacks says so, and the picker fits a 1,100px window", async () => {
+  const count = readPackIndex(
+    join(__dirname, "../resources/citation-styles/styles.pack"),
+  ).styles.length.toLocaleString("en");
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1100, 720);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await setRecord(window, await documentIdOf(window, "Tides"), TIDES_RECORD);
+  await ask(window, "When do spring tides happen?");
+
+  // ⌘K's "Citation style…": a journal found by its name, with its form and the style it follows.
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type("citation style");
+  await window.keyboard.press("Enter");
+  const picker = window.getByTestId("citation-style-picker");
+  const search = picker.getByTestId("citation-style-search");
+  await expect(search).toBeFocused();
+  await expect(search).toHaveAttribute("placeholder", `Search ${count} styles and journals…`);
+  const sections = picker.getByTestId("citation-style-section");
+  await expect(sections.filter({ hasText: "Common" })).toBeVisible();
+  await window.keyboard.type("Nature Genetics");
+  const first = picker.getByTestId("citation-style-option").first();
+  await expect(first.getByTestId("citation-style-option-label")).toHaveText("Nature Genetics");
+  await expect(first).toContainText("numeric · follows Nature");
+  await expect(sections.first()).toHaveText("Journals");
+  await screenshot(window, "citation-style-search-en");
+  await window.keyboard.press("Enter");
+  await expect(picker).toBeHidden();
+  await expect(window.getByTestId("undo-line")).toContainText(
+    "Citation style changed to Nature Genetics",
+  );
+
+  // Formatted as Nature, named as the journal.
+  const references = window.getByTestId("references");
+  await expect(references).toHaveAttribute("data-style", "nature-genetics");
+  const style = references.getByTestId("references-style");
+  await expect(style).toHaveText("Nature Genetics");
+  await expect(references.getByTestId("reference-entry").first()).toContainText(
+    "Tides and the Moon",
+  );
+  // "References" on the left; the style, Copy and Export… together on the right.
+  const title = await references.getByRole("heading").boundingBox();
+  const styleBox = await style.boundingBox();
+  const copy = await references.getByTestId("references-copy").boundingBox();
+  if (!title || !styleBox || !copy) throw new Error("The References' head isn't on screen.");
+  expect(styleBox.x).toBeGreaterThan(title.x + title.width + 40);
+  expect(copy.x).toBeGreaterThan(styleBox.x);
+  expect(Math.abs(copy.y - styleBox.y)).toBeLessThan(4);
+
+  // The References' style opens the same picker, the Mind's style first, ticked; it fits the window.
+  await pointAndClick(window, style);
+  await expect(search).toBeFocused();
+  const current = picker.locator('[data-testid="citation-style-option"][data-current="true"]');
+  await expect(current.getByTestId("citation-style-option-label")).toHaveText("Nature Genetics");
+  await expect(picker.getByTestId("citation-style-option").first()).toHaveAttribute(
+    "data-current",
+    "true",
+  );
+  const box = await picker.boundingBox();
+  if (!box) throw new Error("The picker isn't on screen.");
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(1100);
+  await screenshot(window, "citation-style-menu-en");
+  // The arrows reach far down the list, which draws the rows as they come into view.
+  await window.keyboard.type("journal");
+  for (let step = 0; step < 30; step++) await window.keyboard.press("ArrowDown");
+  await expect(
+    picker.locator('[data-testid="citation-style-option"][aria-selected="true"]'),
+  ).toBeInViewport();
+  await window.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+
+  // Another style chosen: Nature Genetics is Recently used, after the Mind's style.
+  await pointAndClick(window, style);
+  await chooseStyle(window, "ieee", "IEEE");
+  await expect(style).toHaveText("IEEE");
+  await pointAndClick(window, style);
+  await expect(search).toBeFocused();
+  const labels = picker.getByTestId("citation-style-option-label");
+  await expect(labels.first()).toHaveText("IEEE");
+  await expect(sections.first()).toHaveText("Recently used");
+  await expect(labels.nth(1)).toHaveText("Nature Genetics");
+  await window.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+
+  // A style only a later version has, as a Mind synced from one would be in: the Mind keeps it,
+  // formatted as Numbered, and its button says it isn't here.
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    for (const mind of await core.listMinds()) {
+      await core.setMindCitationStyle(mind.id, "a-style-from-a-later-pack");
+    }
+  });
+  await expect(references).toHaveAttribute("data-style", "a-style-from-a-later-pack");
+  await expect(style).toHaveText("a-style-from-a-later-pack isn't available in this version");
+  await expect(references.getByTestId("reference-entry").first()).toContainText("Tides");
+  await expect(window.getByTestId("mind-editor").getByTestId("citation-chip").first()).toHaveText(
+    "1",
+  );
+  await screenshot(references, "references-unavailable-en");
+
+  // In Chinese: a Chinese journal by its Chinese name.
+  await window.evaluate(() =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+      user: { language: "zh-CN" },
+    }),
+  );
+  await expect(references.getByRole("heading")).toHaveText("参考文献");
+  await expect(style).toHaveText("a-style-from-a-later-pack 在此版本中不可用");
+  await pointAndClick(window, style);
+  await expect(search).toHaveAttribute("placeholder", `搜索 ${count} 种格式和期刊…`);
+  await expect(sections.filter({ hasText: "最近使用" })).toBeVisible();
+  await expect(sections.filter({ hasText: "常用" })).toBeVisible();
+  await window.keyboard.type("物理学报");
+  await expect(
+    picker.getByTestId("citation-style-option").first().getByTestId("citation-style-option-label"),
+  ).toHaveText("Acta Physica Sinica (物理学报)");
+  await expect(picker.getByTestId("citation-style-option").first()).toContainText("编号");
+  const zhBox = await picker.boundingBox();
+  if (!zhBox) throw new Error("The picker isn't on screen.");
+  expect(zhBox.x + zhBox.width).toBeLessThanOrEqual(1100);
+  await screenshot(window, "citation-style-search-zh");
+  await window.keyboard.press("Escape");
   await app.close();
 });

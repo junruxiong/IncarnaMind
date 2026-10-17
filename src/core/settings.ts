@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isRecentStyles } from "../shared/citationStyles";
 import { isHelpKeys } from "../shared/meetingHelp";
 import { DEFAULT_MIND_STYLE, isMindStyle } from "../shared/mindStyle";
 import {
@@ -136,6 +137,7 @@ const userScope: Scope<UserSettings> = {
     monthlyCap: null,
     webSearch: false,
     keepWebPageLook: false,
+    recentCitationStyles: [],
     newMindStyle: DEFAULT_MIND_STYLE,
   },
   validators: {
@@ -150,6 +152,7 @@ const userScope: Scope<UserSettings> = {
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
     webSearch: isBoolean,
     keepWebPageLook: isBoolean,
+    recentCitationStyles: isRecentStyles,
     newMindStyle: isMindStyle,
   },
 };

@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import * as Y from "yjs";
 import { MIND_CONTENT_FIELD, MIND_PROPOSAL_REQUESTS_FIELD, type ProposalRef } from "../../core/api";
+import { holdsOnlyItsTitle } from "../../shared/madeMind";
 import { aiUseOfAccepted, decideProposals, pendingProposals } from "../../shared/proposals";
 import type { ChangedMind } from "./changedMinds";
 import { readMindHandle } from "./commands/handles";
@@ -200,16 +201,6 @@ interface Done {
   forget(): void;
 }
 
-/** Whether a Mind's copy holds nothing: only empty lines. */
-const isEmpty = (doc: Y.Doc) =>
-  doc
-    .getXmlFragment(MIND_CONTENT_FIELD)
-    .toArray()
-    .every(
-      (block) =>
-        block instanceof Y.XmlElement && block.nodeName === "paragraph" && block.length === 0,
-    );
-
 /**
  * Reject all in a Mind the Answer made: its changes go, and so does the Mind,
  * closing its tab, once nothing else is in it (the User may have written in
@@ -218,7 +209,10 @@ const isEmpty = (doc: Y.Doc) =>
 async function rejectMade(row: ChangedMind): Promise<Done | null> {
   const rejected = await resolveRow(row, "reject");
   const doc = held.get(row.mindId)?.doc;
-  if (!rejected || !doc || !isEmpty(doc)) return rejected;
+  const title = useAppStore.getState().minds.find((mind) => mind.id === row.mindId)?.title ?? "";
+  if (!rejected || !doc || !holdsOnlyItsTitle(doc.getXmlFragment(MIND_CONTENT_FIELD), title)) {
+    return rejected;
+  }
   await core.deleteMind(row.mindId);
   return {
     count: rejected.count,
