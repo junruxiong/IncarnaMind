@@ -31,6 +31,7 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
       testId="mind-check-ask"
       className="mind-health-line"
       {...(asking.estimate && { details: asking.estimate.parts, title: asking.estimate.title })}
+      {...(asking.unestimated && { details: [t("mindCheck.ask.unestimated")] })}
       action={{
         label: t("mindCheck.check"),
         testId: "mind-check-check",

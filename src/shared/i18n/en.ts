@@ -683,6 +683,7 @@ export const en = {
   "contradictions.after": "After “{document}” changed: {result}",
   "mindCheck.command": "Check this Mind",
   "mindCheck.command.keywords": "check all whole draft before sending claims sentences verify",
+  "mindCheck.ask.unestimated": "The cost couldn't be estimated",
   "mindCheck.ask.folder.one": "Check this Mind’s sentence against this Folder’s Documents?",
   "mindCheck.ask.folder": "Check this Mind’s {count} sentences against this Folder’s Documents?",
   "mindCheck.ask.all.one": "Check this Mind’s sentence against your Documents?",

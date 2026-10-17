@@ -69,7 +69,11 @@ describe("Asking before checking against Documents added since", () => {
       "../../src/renderer/src/mindCheck"
     );
     await startMindCheck("mind", "added");
-    expect(useMindCheck.getState().asking.mind).toMatchObject({ count: 1, estimate: null });
+    expect(useMindCheck.getState().asking.mind).toMatchObject({
+      count: 1,
+      estimate: null,
+      unestimated: true,
+    });
     expect(warning).toHaveBeenCalledWith(expect.stringContaining("mind"), error);
     expect(bridge.checkMind).not.toHaveBeenCalled();
     await checkMind("mind", "added");
