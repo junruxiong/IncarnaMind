@@ -34,7 +34,7 @@ import type { ReviewChoices } from "../../src/core/exports/wordReview";
 import { reviewReading } from "../../src/core/mindText";
 import { recordChanges, recordSources } from "../../src/core/wordImports";
 import type { NodeJSON } from "../../src/shared/blockJson";
-import { citationStyle } from "../../src/shared/citationStyles";
+import { NUMBERED_STYLE } from "../../src/shared/citationStyles";
 import {
   NODE_CHARACTER,
   outOfDateProposals,
@@ -124,7 +124,7 @@ async function exportOf(bytes: Uint8Array, doc: Y.Doc, review: ReviewChoices = P
       review: reviewReading(blocks),
     },
     labels: exportLabels("en"),
-    style: citationStyle("numbered"),
+    style: { id: "numbered", ...NUMBERED_STYLE },
     bibliography: false,
     bibliographyHeading: "References",
     sources: { language: "en", documents: [] },

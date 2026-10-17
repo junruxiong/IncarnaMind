@@ -223,7 +223,7 @@ test("an action run from ⌘K is taken back with Undo", async () => {
   const picker = window.getByTestId("citation-style-picker");
   await expect(picker.getByTestId("citation-style-search")).toBeFocused();
   await window.keyboard.type("ieee");
-  await expect(picker.getByTestId("citation-style-option").first()).toHaveText("IEEE");
+  await expect(picker.getByTestId("citation-style-option-label").first()).toHaveText("IEEE");
   await window.keyboard.press("Enter");
   await expect(picker).toBeHidden();
   await expect(window.getByTestId("undo-message")).toContainText("IEEE");
@@ -234,7 +234,7 @@ test("an action run from ⌘K is taken back with Undo", async () => {
   await window.keyboard.press("Enter");
   const current = window.locator('[data-testid="citation-style-option"][data-current="true"]');
   await expect(current).toHaveCount(1);
-  await expect(current).not.toHaveText("IEEE");
+  await expect(current.getByTestId("citation-style-option-label")).not.toHaveText("IEEE");
 });
 
 /** Where the caret is: the text of the node it is in, and its offset there. */
