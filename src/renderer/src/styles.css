@@ -7003,16 +7003,15 @@
     }
   }
   /*
-   * The setup card scrolls inside itself when the assistant is short. Its title and a form's
-   * action row stay in view, at the top and at the foot, covering the card's own padding; a
-   * rule shows on one only while content passes under it. Their margins undo their padding, so
-   * nothing moves while the card isn't scrolled.
+   * The title and a form's action row stay in view as the short setup card scrolls. Their
+   * margins undo their padding, so nothing moves until the card does, and the padding covers
+   * the card's own, so no content shows past them. A rule shows only while content is under one.
    */
   .setup-card {
     --pad: 10px;
     padding-block: var(--pad);
 
-    /* A focused control stops short of the parts that stay: the title, and the tallest action row with its focus ring. */
+    /* Room for the title and for the tallest action row (it wraps) with its focus ring, so Tab never lands a control under them. */
     &:has([data-setup-title]) {
       scroll-padding-top: 3rem;
     }
