@@ -1716,7 +1716,6 @@ export const zhCN = {
   "providers.form.testing": "正在测试…",
   "providers.form.save": "使用此服务",
   "providers.sendsLine": "会把你的问题和文档内容发送给 {provider}。",
-  "providers.sendsDetails": "详情",
   "providers.sends.chat":
     "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",
   "providers.sends.checks": "你核对的每一句话",
@@ -3173,6 +3172,7 @@ export const zhCN = {
   "error.action": "无法完成操作：{message}",
   "error.dismiss": "关闭",
   "error.details": "详情",
+  "details.label": "详情",
   "error.system.notAllowed": "IncarnaMind 没有权限修改这个文件或文件夹。",
   "error.system.full": "磁盘已满。",
   "error.system.gone": "这个文件或文件夹已不存在。",

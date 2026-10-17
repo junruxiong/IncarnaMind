@@ -113,6 +113,19 @@ test("first run: the row is first under Other ways, says the usage limits first 
     expect(await urlsOpened(app)).toHaveLength(0);
     await expectInside(card, [usage, sends]);
 
+    const details = sends.getByTestId("claude-plan-sends-details");
+    await details.focus();
+    await window.keyboard.press("Space");
+    await expect(details).toHaveAttribute("aria-expanded", "true");
+    await expect(sends.getByRole("listitem")).toHaveCount(5);
+    await expect(sends).toContainText("each sentence you check");
+    expect(await urlsOpened(app)).toHaveLength(0);
+    expect(fake.tokenRequests).toHaveLength(0);
+    await window.keyboard.press("Enter");
+    await expect(details).toHaveAttribute("aria-expanded", "false");
+    await expect(sends.getByRole("listitem")).toHaveCount(0);
+    await expect(details).toBeFocused();
+
     await notice.getByTestId("claude-plan-cancel").click();
     await expect(notice).toBeHidden();
     await expect(row.getByTestId("way-claude-open")).toHaveAttribute("aria-expanded", "false");
