@@ -168,7 +168,8 @@ for (const language of ["en", "zh-CN"] as const) {
         await expect(items).toHaveCount(5);
         for (const item of [items.first(), items.last()]) {
           await item.scrollIntoViewIfNeeded();
-          await expect(item).toBeInViewport({ ratio: 1 });
+          // Text can end a fraction of a pixel past the scroller's edge on Linux, still readable.
+          await expect(item).toBeInViewport({ ratio: 0.95 });
         }
         const signIn = row.getByTestId("claude-plan-sign-in");
         await signIn.scrollIntoViewIfNeeded();
