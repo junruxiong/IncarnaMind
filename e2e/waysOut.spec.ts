@@ -165,7 +165,7 @@ test("with no Ollama on this computer, the setup card's local way says so, and o
   await expect(local).toContainText("Needs the free Ollama app");
   await local.click();
   await expect(setup.getByTestId("ollama-status")).toHaveText(
-    "To run models on this computer, install Ollama from ollama.com and start it.",
+    "Install and start Ollama from ollama.com to run models here.",
   );
   const get = setup.getByTestId("ollama-get");
   const again = setup.getByTestId("ollama-check-again");

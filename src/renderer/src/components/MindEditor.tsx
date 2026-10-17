@@ -88,6 +88,7 @@ import { useVerification } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { useCountSettings, WordCount } from "../editor/WordCount";
 import { OriginalNotAdded, useWordFile, WordImportProgress } from "../editor/WordOrigin";
+import { WordTableFades } from "../editor/WordTableFades";
 import { useWordLookStyle } from "../editor/wordLookStyle";
 import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
@@ -697,6 +698,7 @@ function MindEditorView({
         className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""} ${wordLook?.className ?? ""}`}
       >
         {wordLook && <style>{wordLook.css}</style>}
+        {wordLook && <WordTableFades frame={frame} />}
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
         {!readOnly && <AppliedReviewBar editor={editor} />}
         <EditorContent editor={editor} />

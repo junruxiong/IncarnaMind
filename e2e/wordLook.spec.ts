@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import { longContract } from "../tests/helpers/longContract";
 import { paragraph, run, wordFile } from "../tests/helpers/word";
 import { contractFile, resumeFile } from "../tests/helpers/wordLookFiles";
@@ -11,8 +10,7 @@ import {
   documentIdOf,
   enterContent,
   expectReadyDocuments,
-  importWordFromMenu,
-  interceptOpenDialog,
+  importWordFile,
   launchApp,
   motionSettled,
   newMind,
@@ -39,15 +37,6 @@ test.afterEach(async () => {
   await removeDataFolder(files);
 });
 
-async function importFile(app: ElectronApplication, window: Page, name: string, bytes: Buffer) {
-  const path = join(files, name);
-  await writeFile(path, bytes);
-  await interceptOpenDialog(app, path);
-  const dialog = await importWordFromMenu(window);
-  await dialog.getByTestId("word-import-confirm").click();
-  await expect(dialog).toBeHidden();
-}
-
 const fontOf = (target: Locator) =>
   target.evaluate((element) => getComputedStyle(element).fontFamily);
 
@@ -60,7 +49,13 @@ test("a contract imported from Word shows the file's look, and Look › Plain Mi
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "Supply agreement v5 (from Northwind).docx", contractFile());
+  await importWordFile(
+    app,
+    window,
+    files,
+    "Supply agreement v5 (from Northwind).docx",
+    contractFile(),
+  );
 
   const editor = window.getByTestId("mind-editor");
   const clause = editor.locator("p", { hasText: "Prices are fixed" });
@@ -115,7 +110,7 @@ test("a contract imported from Word shows the file's look, and Look › Plain Mi
 test("the 304-page contract opens in its look, with one rule a style", async () => {
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
-  await importFile(app, window, "Framework Services Agreement.docx", longContract());
+  await importWordFile(app, window, files, "Framework Services Agreement.docx", longContract());
 
   const editor = window.getByTestId("mind-editor");
   // The title and every clause's heading in: the import has written every Block.
@@ -135,8 +130,8 @@ test("two Word Minds side by side each keep their own look", async () => {
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "林晓_简历.docx", resumeFile());
-  await importFile(app, window, "Supply agreement.docx", contractFile());
+  await importWordFile(app, window, files, "林晓_简历.docx", resumeFile());
+  await importWordFile(app, window, files, "Supply agreement.docx", contractFile());
   await window.getByTestId("split-group").click();
   await expect(window.getByRole("region", { name: "Group 2" })).toBeVisible();
   // Split opens the shown Mind beside; the first group goes back to the résumé.
@@ -212,7 +207,7 @@ test("in a red Arial run, ⌘B and ⌘I toggle its words and keep its colour, �
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "Payment terms.docx", memoFile());
+  await importWordFile(app, window, files, "Payment terms.docx", memoFile());
 
   const editor = window.getByTestId("mind-editor");
   const line = editor.locator("p", { hasText: "Invoices are paid" });
@@ -279,7 +274,7 @@ test("a Citation pasted into a clause with a hanging indent sits on the clause's
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "Supply agreement.docx", contractFile());
+  await importWordFile(app, window, files, "Supply agreement.docx", contractFile());
   await expectReadyDocuments(window, 1);
   const documentId = await documentIdOf(window, "Supply agreement");
 
@@ -326,7 +321,7 @@ test("a Mind written in the app, beside a Word Mind, keeps the app's look and ha
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "Supply agreement.docx", contractFile());
+  await importWordFile(app, window, files, "Supply agreement.docx", contractFile());
   await newMind(window);
   await enterContent(window);
   await window.keyboard.type("Questions for Northwind");
@@ -348,10 +343,15 @@ test("a Mind written in the app, beside a Word Mind, keeps the app's look and ha
   expect(await fontOf(line)).not.toMatch(/Book Antiqua/);
   await expect(second.locator("[data-word-look], [data-word-run]")).toHaveCount(0);
   await expect(second.locator(".mind-editor-frame > style")).toHaveCount(0);
-  // The file's body size is drawn at the Mind's writing size, zoomed as far as 80% to fit half the window.
+  // Half the window is narrower than the file's page: it zooms down, its body no smaller than 11 px, and the text wraps.
   const sizeOf = (target: Locator) =>
     target.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
-  expect((await sizeOf(clause)) / (await sizeOf(line))).toBeCloseTo(0.8, 2);
+  expect(await sizeOf(clause)).toBeLessThan(await sizeOf(line));
+  expect(await sizeOf(clause)).toBeGreaterThanOrEqual(11);
+  const page = await first.locator(".mind-editor-frame").boundingBox();
+  const clauseBox = await clause.boundingBox();
+  if (!page || !clauseBox) throw new Error("The clause isn't drawn.");
+  expect(clauseBox.x + clauseBox.width).toBeLessThanOrEqual(page.x + page.width + 1);
   if (SCREENSHOTS) {
     await window.screenshot({ path: join(SCREENSHOTS, "word-look-beside-native.png") });
   }
@@ -387,7 +387,7 @@ test("⌘K switches the look both ways and opens the original at the caret, in E
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "Supply agreement.docx", contractFile());
+  await importWordFile(app, window, files, "Supply agreement.docx", contractFile());
   await expectReadyDocuments(window, 1);
 
   const editor = window.getByTestId("mind-editor");
