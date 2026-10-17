@@ -382,6 +382,39 @@ test("text typed elsewhere while a slow edit streams in stays, and one ⌘Z take
   await expect(line).toHaveCount(0);
 });
 
+test("on a slow computer, where the core's reply comes before the edit's last paragraph, the edit still applies whole, at once and from Apply, and one ⌘Z takes it all back", async () => {
+  const { window } = await launch();
+  await useLocalChatModel(window);
+  const { editor, paragraphs } = await mindWith(window, [FIRST, SECOND, THIRD]);
+  const line = lineOf(editor);
+  // The window six times slower: its copy of the Mind then takes the core's reply before the
+  // edit's last update, as CI's Mac did.
+  const devtools = await window.context().newCDPSession(window);
+  await devtools.send("Emulation.setCPUThrottlingRate", { rate: 6 });
+
+  await selectAll(window, editor);
+  await askToChange(window, "replace harbour with port");
+  const ported = [FIRST, SECOND.replace("harbour", "port"), THIRD.replace("harbour", "port")];
+  await expect(paragraphs).toHaveText(ported);
+  await expect(editor.locator("del.proposal-delete, ins.proposal-insert")).toHaveCount(0);
+  await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
+
+  await selectAll(window, editor);
+  await askToChange(window, "replace it all with a haiku");
+  await pointAndClick(window, line.getByTestId("applied-apply"));
+  await expect(paragraphs).toHaveText([
+    "Gulls wheel, crying",
+    "salt wind on stone",
+    "night falls soft",
+  ]);
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
+});
+
 /** Runs a command from ⌘K by the keyboard: its words, then Enter. */
 async function fromPalette(window: Page, id: string, words: string) {
   await window.keyboard.press("ControlOrMeta+k");
