@@ -615,6 +615,7 @@ function useStatuses(): Status[] {
       : counts.tagging === 1
         ? t("status.tagging.one")
         : t("status.tagging.other", { count: counts.tagging });
+    const short = service && saysWhatIsSent ? text + whatIsSent : text;
     const full =
       service && saysWhatIsSent
         ? (counts.tagging === 1
@@ -624,7 +625,7 @@ function useStatuses(): Status[] {
     statuses.push({
       testId: "tagging-status",
       tone: "progress",
-      short: text,
+      short,
       full,
       wraps: true,
       action: stop,
@@ -658,6 +659,7 @@ function useStatuses(): Status[] {
         : pending === 1
           ? t("library.progress.one")
           : t("library.progress.other", { count: pending });
+      const short = service && saysWhatIsSent ? text + whatIsSent : text;
       const full =
         service && saysWhatIsSent
           ? (pending === 1
@@ -667,7 +669,7 @@ function useStatuses(): Status[] {
       statuses.push({
         testId: "organization-progress",
         tone: "progress",
-        short: text,
+        short,
         full,
         wraps: true,
         action: stop,

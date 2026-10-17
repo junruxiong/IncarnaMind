@@ -1,5 +1,5 @@
 import { type ReactNode, useId, useState } from "react";
-import { useGap, useT } from "../i18n";
+import { useT } from "../i18n";
 
 export function DetailsLine({
   children,
@@ -13,14 +13,12 @@ export function DetailsLine({
   className?: string;
 }) {
   const t = useT();
-  const gap = useGap();
   const [open, setOpen] = useState(false);
   const panel = useId();
   return (
     <div data-testid={testId} className={className}>
       <p>
-        {children}
-        {gap(children, "·")}
+        {children}{" "}
         <span className="whitespace-nowrap">
           <span aria-hidden="true">· </span>
           <button
