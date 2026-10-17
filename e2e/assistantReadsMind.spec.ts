@@ -117,7 +117,7 @@ test("“Summarise my notes” beside a Mind reads it: the consent says so, the 
   const answer = await ask(window, "Summarise my notes");
   const consent = window.getByTestId("consent-dialog");
   await expect(consent).toContainText(
-    "The Mind you're in: its text, your Notes and earlier Answers, except Notes you've excluded",
+    "This Mind's text, Notes and earlier Answers, minus excluded Notes",
   );
   await screenshot(window, "consent-en");
   await pointAndClick(window, consent.getByTestId("consent-allow"));
@@ -171,7 +171,7 @@ test("in Chinese: the consent, the Answer that read the Mind, and the steps", as
 
   const answer = await ask(window, "总结我的笔记");
   const consent = window.getByTestId("consent-dialog");
-  await expect(consent).toContainText("你所在的 Mind：正文、笔记和之前的回答，不含你排除的笔记");
+  await expect(consent).toContainText("当前 Mind 的正文、笔记和之前的回答，不含已排除的笔记");
   await screenshot(window, "consent-zh");
   await pointAndClick(window, consent.getByTestId("consent-allow"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });

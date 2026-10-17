@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import type { MessageKey } from "../../../shared/i18n";
 import { core } from "../core";
-import { useGap, useT } from "../i18n";
+import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { CloseLineIcon } from "./lineIcons";
 import { buttonStyle } from "./ui";
@@ -17,7 +17,6 @@ const EXAMPLES: readonly MessageKey[] = [
 
 export function UsageDataCard() {
   const t = useT();
-  const gap = useGap();
   const id = useId();
   const usageData = useAppStore((state) => state.privacy?.usageData);
   const [what, setWhat] = useState(false);
@@ -130,8 +129,6 @@ export function UsageDataCard() {
             ))}
           </ul>
           <p className="text-ink-meta">
-            {t("usageData.card.change")}
-            {gap(t("usageData.card.change"), t("usageData.card.details"))}
             <a
               href={USAGE_DATA_DETAILS_URL}
               target="_blank"
