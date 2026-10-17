@@ -466,7 +466,7 @@ export const CASES: readonly EverydayCase[] = [
     request: "Explain the second paragraph of my notes",
     expected: NOTHING,
   },
-  // After the example's Answer, written in advance (#1060): the Answer is about the Question asked.
+  // After the example's Answer, written in advance: the Answer is about the Question asked.
   {
     id: "example-own",
     language: "en",

@@ -156,7 +156,6 @@ async function askExample(core: Core, language: "en" | "zh-CN") {
   return { conversationId: asked.conversationId, mindId };
 }
 
-/** A Word file of the paragraphs, the first its title, imported with its original as a Mind. */
 async function importWord(library: Library, word: NonNullable<EverydayCase["word"]>) {
   const [title = "", ...body] = word.paragraphs;
   const folder = join(library.dataDir, "word");
