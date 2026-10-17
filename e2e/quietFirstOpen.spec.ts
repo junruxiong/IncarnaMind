@@ -52,6 +52,22 @@ test("a first open shows only the example page: no tab strip, no assistant, a sl
   await app.close();
 });
 
+test("the quiet first open keeps the example's marks to its margin, but a check the User asks for shows the badge and its card (#909)", async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  await setWindowSize(app, window, 1440, 900);
+  await expect(window.getByTestId("margin-check")).toHaveCount(2, { timeout: 30_000 });
+  await expect(window.getByTestId("check-badge")).toHaveCount(0);
+
+  // No model yet: Check this Mind can't run, and says so where the User asked.
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type("Check this Mind");
+  await window.getByTestId("palette-item").filter({ hasText: "Check this Mind" }).first().click();
+  await expect(window.getByTestId("check-badge")).toBeVisible();
+  await expect(window.getByTestId("check-card")).toBeVisible();
+  await app.close();
+});
+
 test("the tab strip comes with the second tab, and the Library with the first own Document (#123)", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
   await expect(window.getByTestId("tab-list")).toHaveCount(0);

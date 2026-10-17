@@ -122,7 +122,9 @@ for (const each of CASES) {
               .length,
         ),
     ).toBe(0);
-    await expect(window.getByTestId("health-notFound")).toHaveCount(0);
+    await expect(window.getByTestId("check-badge").locator('[data-part="notFound"]')).toHaveCount(
+      0,
+    );
 
     // A chart made from that table: every value carries the Citation.
     await pointAndClick(window, table.locator("td").nth(1));

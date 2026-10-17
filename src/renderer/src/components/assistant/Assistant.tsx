@@ -298,7 +298,12 @@ function AssistantMain({
       >
         <ConversationThread focusedMindId={mind?.mindId ?? null} />
       </div>
-      <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer">
+      <div
+        ref={onComposerSlot}
+        data-testid="assistant-composer"
+        data-setup={settingUp || undefined}
+        className="assistant-composer"
+      >
         {mind && <TaskTray mindId={mind.mindId} />}
         {settingUp ? <ModelSetupCard /> : <Composer mind={mind} />}
       </div>

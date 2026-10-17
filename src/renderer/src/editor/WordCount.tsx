@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import type { Transaction } from "@tiptap/pm/state";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { MessageKey } from "../../../shared/i18n";
 import {
@@ -143,13 +143,10 @@ export function WordCount({
   editor,
   doc,
   quiet = false,
-  children,
 }: {
   editor: Editor;
   doc: Y.Doc;
   quiet?: boolean;
-  /** What follows the count on its line: the Mind's health (#96). */
-  children?: ReactNode;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -160,11 +157,7 @@ export function WordCount({
   const [invalid, setInvalid] = useState(false);
 
   if (!counts || quiet) {
-    return (
-      <div className="mind-count" data-testid="mind-count">
-        {children}
-      </div>
-    );
+    return <div className="mind-count" data-testid="mind-count" />;
   }
 
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
@@ -318,7 +311,6 @@ export function WordCount({
           </>
         )}
       </div>
-      {children}
     </div>
   );
 }
