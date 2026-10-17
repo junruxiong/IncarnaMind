@@ -1,6 +1,7 @@
 import type { BlockOrigin } from "../../../core/api";
 import { signInAgain } from "../chatGptSignIn";
 import { useCitationStylePicker } from "../citationStylePicker";
+import { claudeSignInOffered } from "../claudeSignIn";
 import { startContradictionCheck } from "../contradictions";
 import { blockMenuOpeners } from "../editor/blockMenuOpeners";
 import { originOf } from "../editor/blockOrigins";
@@ -24,6 +25,7 @@ import { comparisonCommands } from "./comparisons";
 import { deletedCommands } from "./deleted";
 import { editCommands } from "./edit";
 import { evidenceCommands } from "./evidence";
+import { exampleCommands } from "./examples";
 import { exportCommands } from "./exports";
 import { feedbackCommands } from "./feedback";
 import { fileCommands } from "./fileInfo";
@@ -122,6 +124,7 @@ const appCommands: readonly Command[] = [
   ...meetingCommands,
   ...webPageCommands,
   ...feedbackCommands,
+  ...exampleCommands,
   ...sortCommands,
   ...fileCommands,
   ...evidenceCommands,
@@ -148,6 +151,15 @@ const appCommands: readonly Command[] = [
       const { openSettings } = useAppStore.getState();
       if (await signInAgain(openSettings)) openSettings("models");
     },
+  },
+  {
+    id: "claude.signIn",
+    label: "claudePlan.signIn",
+    group: "main",
+    reversible: true,
+    when: claudeSignInOffered,
+    // The words come before any request, so it opens the Claude row in Settings › Models.
+    run: () => useAppStore.getState().openSettings("models", "claude-account"),
   },
   {
     ...fromMenu("sidebar.toggle"),

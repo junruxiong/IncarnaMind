@@ -64,6 +64,8 @@ interface Status {
   dismiss?: () => void;
   /** It may take two lines, its action said after it, so nothing it names is cut off. */
   wraps?: boolean;
+  /** It asks the User's consent, which is never hidden (ADR-0022). */
+  asks?: true;
 }
 
 /**
@@ -90,9 +92,10 @@ export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean
   );
 }
 
-// A failure, or a one-off the User dismisses (skipped files, a web page not added): the quiet
-// first open hides the footer's other news, never these (DESIGN.md, Problems).
-const isProblem = (status: Status) => status.tone === "error" || status.dismiss !== undefined;
+// A failure, a one-off the User dismisses (skipped files, a web page not added), or a consent
+// question: the quiet first open hides the footer's other news, never these (DESIGN.md, Problems).
+const isProblem = (status: Status) =>
+  status.tone === "error" || status.dismiss !== undefined || status.asks === true;
 
 function StatusRow({ status, children }: { status: Status; children?: ReactNode }) {
   const t = useT();
@@ -516,6 +519,7 @@ function useStatuses(): Status[] {
       tone: "waiting",
       short: t("status.taggingPermission"),
       full: t("jev.waiting.permission", { service: taggingNeedsOk.name }),
+      asks: true,
       action: {
         label: t("privacy.flows.allow"),
         testId: "tagging-waiting-allow",

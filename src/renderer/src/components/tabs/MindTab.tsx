@@ -8,12 +8,14 @@ import {
 } from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { assistantTabOf } from "../../layoutSlice";
+import { useQuietAssistant } from "../../quietAssistant";
 import { useAppStore } from "../../store";
 import { useFittedName } from "../../useFittedName";
 import { useGroupsMerged } from "../../useWindowWidth";
 import { isWordFile, useWordImport } from "../../wordImport";
 import { ExportResultLine } from "../ExportResultLine";
-import { ExampleBanner, useIsExample } from "../GettingStarted";
+import { ExampleIntro } from "../FirstOpenSteps";
+import { useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
 import { MakeSkillCard } from "../MakeSkillCard";
 import { MeetingInMind } from "../MeetingInMind";
@@ -37,6 +39,7 @@ export function MindTab({ mindId }: { mindId: string }) {
   const merged = useGroupsMerged();
   const read = useAppStore((state) => assistantTabOf(state.layout, merged)?.id === tabId);
   const dropTarget = useWordFileDrop();
+  const pill = useQuietAssistant();
   if (!mind) return null;
 
   return (
@@ -45,7 +48,7 @@ export function MindTab({ mindId }: { mindId: string }) {
         {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
         <article data-testid="mind-pane" data-mind-id={mind.id} className="mind-column">
           <div className="mind-measure">
-            {isExample && <ExampleBanner mindId={mindId} />}
+            {isExample && <ExampleIntro mindId={mindId} />}
             <MindTitle mind={mind} />
             <div ref={setCountSlot} data-testid="mind-count-slot" />
             <MeetingInMind mindId={mind.id} />
@@ -61,6 +64,7 @@ export function MindTab({ mindId }: { mindId: string }) {
             <MakeSkillCard mindId={mind.id} />
           </div>
         </article>
+        {pill && <div aria-hidden="true" data-testid="ask-pill-fade" className="ask-pill-fade" />}
       </div>
       {/* The Compare Documents sheet docks here, in the column's measure, below the note. */}
       <div ref={setSheetSlot} className="compare-sheet-dock" />
