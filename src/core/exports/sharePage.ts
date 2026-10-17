@@ -211,7 +211,6 @@ const MARKS: Readonly<Record<CitationCard["check"], string>> = {
 };
 
 export interface SharePage {
-  title: string;
   blocks: readonly Block[];
   labels: ExportLabels;
   language: Language;
@@ -238,7 +237,7 @@ export function renderSharePage(page: SharePage): string {
   const t: Translate = (key, params) => translate(language, key, params);
   const date = formatDate(page.at, language);
   const written: { number: number; card: CitationCard }[] = [];
-  const printed = renderPrintHtml("", page.blocks, labels, {
+  const printed = renderPrintHtml(page.blocks, labels, {
     linkNotes: true,
     isLink: webLink,
     citations: {
@@ -261,7 +260,6 @@ export function renderSharePage(page: SharePage): string {
   });
   const head = [
     `<p class="shared-from">${withDate(t("share.page.shared", { date }), date)}</p>`,
-    page.title ? `<h1 class="mind-title">${escapeHtml(page.title)}</h1>` : "",
     `<p class="shared-about">${escapeHtml(t("share.page.about"))}</p>`,
   ].join("");
   const status = checkedStatus(

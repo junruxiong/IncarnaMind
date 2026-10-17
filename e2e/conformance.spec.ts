@@ -25,6 +25,7 @@ import {
   menuCommands,
   mindWrittenBefore,
   motionSettled,
+  nameMind,
   newMind,
   pointAndClick,
   pointAt,
@@ -728,7 +729,7 @@ const STAGES: Record<Staged, Stage> = {
       await writeFile(join(dir, "Tides.pdf"), TIDES);
       await addDocuments(window, [join(dir, "Tides.pdf")]);
       await newMind(window);
-      await window.getByTestId("mind-title").fill("Cited notes");
+      await nameMind(window, "Cited notes");
       const editor = window.getByTestId("mind-editor");
       await editor.click();
       await addToNote(window, await askInAssistant(window, "When do spring tides happen?"));

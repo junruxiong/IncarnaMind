@@ -109,6 +109,10 @@ describe("the menus", () => {
       "—",
       "mind.delete",
     ]);
+    // The page's ⋯ offers Style as a submenu of its own, so its list leaves the command out.
+    const page = idsIn(buildMenu("mind", focusOn("mind"), ["mind.style"]));
+    expect(page).not.toContain("mind.style");
+    expect(page).toContain("skill.fromMind");
   });
 
   test("a Document's file group is Open in default app, Show the file, Copy path, then Get info", () => {

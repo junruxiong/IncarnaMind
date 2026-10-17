@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Task } from "../../../core/api";
+import { mindName } from "../../../shared/naming";
 import { dayOf } from "../dates";
 import { useLanguage, useT } from "../i18n";
 import type { Translate } from "../objects";
@@ -120,9 +121,10 @@ function TaskLists({ tasks, close }: { tasks: readonly Task[]; close(): void }) 
 function TaskItem({ task, onOpen }: { task: Task; onOpen(): void }) {
   const t = useT();
   const language = useLanguage();
-  const mind = useAppStore(
-    (state) => state.minds.find((each) => each.id === task.mindId)?.title ?? "",
-  );
+  const mind = useAppStore((state) => {
+    const mind = state.minds.find((each) => each.id === task.mindId);
+    return mind ? mindName(mind) : "";
+  });
   const finished = task.finishedAt !== null;
   const { title, line } = finished
     ? recentText(task, mind, t, language)

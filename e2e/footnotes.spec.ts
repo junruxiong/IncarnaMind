@@ -22,6 +22,7 @@ import {
   removeDataFolder,
   setMotionSpeed,
   setWindowSize,
+  showCountWhileWriting,
   slideSelect,
   useLocalChatModel,
 } from "./app";
@@ -89,6 +90,7 @@ test("footnotes by keyboard, the / menu, the selection menu and ^[…], edited i
   await setWindowSize(app, window, 1280, 800);
   await dismissChatSetup(window);
   await newMind(window);
+  await showCountWhileWriting(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Neap tides are weaker");
@@ -279,6 +281,7 @@ test("in Chinese: footnotes typed with an input method number together with an A
   await bridge(window).language("zh-CN");
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
+  await showCountWhileWriting(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Spring tides 大潮");

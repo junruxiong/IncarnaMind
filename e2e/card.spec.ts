@@ -6,6 +6,7 @@ import {
   confirmLink,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
   expectFirstTabAtCardStart,
   interceptOpenDialog,
   launchApp,
@@ -49,7 +50,7 @@ async function boxOf(locator: Locator) {
 /** A new Mind the way a person makes one: the "+" in the band, then typing its title. */
 async function newMind(window: Page, title: string): Promise<void> {
   await window.getByTestId("new-tab").click();
-  await expect(window.getByTestId("mind-title")).toBeFocused();
+  await enterContent(window);
   await window.keyboard.type(title);
 }
 
@@ -246,7 +247,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, C
   await expect(items.first()).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(menu).toBeHidden();
-  await expect(window.getByTestId("mind-title")).toBeFocused();
+  await enterContent(window);
   await window.keyboard.type("From the menu");
   await expect(window.getByTestId("mind-tab").getByTestId("tab-title")).toHaveText([
     "From the menu",
@@ -305,10 +306,10 @@ test("the + menu and the shell speak Chinese too", async () => {
   await window.keyboard.press("Enter");
   await expect(window.getByRole("menuitem").first()).toBeFocused();
   await window.keyboard.press("Enter");
-  await expect(window.getByTestId("mind-title")).toBeFocused();
+  await enterContent(window);
   await window.keyboard.type("茶叶的产地");
   await window.getByTestId("new-tab").click();
-  await expect(window.getByTestId("mind-title")).toBeFocused();
+  await enterContent(window);
   await window.keyboard.type("访谈提纲");
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "shell-zh.png") });
   await app.close();
