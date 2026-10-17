@@ -272,7 +272,6 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
               readiness={problem.readiness}
               testId="comparison-not-ready"
               setUpLabel={t("question.setUp")}
-              refused
             />
           ) : (
             <ProblemLine testId="comparison-not-sent">
