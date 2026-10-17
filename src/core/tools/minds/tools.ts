@@ -1125,7 +1125,6 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
 
   type Content = ReturnType<MindToolsOptions["blocksOf"]>;
 
-  /** The last Answer's Blocks as content: cited already, nothing in them to record or link. */
   const answerContent = (blocks: NodeJSON[]): Content => {
     const citations = blocks.flatMap(citationNodesIn);
     const notFound = citations.filter((node) => node.attrs?.check === "not-found").length;
@@ -1142,11 +1141,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     };
   };
 
-  /**
-   * A call is refused once a Run for sources written as text: a later one goes in, each source
-   * made the Citation recorded for it or left out. A marker with no Citation yet isn't refused:
-   * `cite` may record it later in the same step, and the result tells the model to.
-   */
+  // Refused once a Run: a later call goes in, each source made its Citation or left out. A marker
+  // with no Citation yet isn't refused: `cite` may record it later in the same step.
   let uncitedRefused = false;
 
   const uncitedIn = (
@@ -1323,7 +1319,6 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       }
     : {};
 
-  /** What a call writes: its content, or the last Answer when it asks for that. */
   const givenIn = (
     input: Record<string, unknown>,
   ): string | NonNullable<MindToolsOptions["lastAnswer"]> | null =>
