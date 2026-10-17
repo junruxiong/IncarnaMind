@@ -434,7 +434,7 @@ test("the assistant's changes wait: a double click accepts one once; a change wh
   await window.keyboard.type("The tides are really very strong. They are very high.");
   const note = editor.locator(":scope > p").first();
 
-  await askTheAssistant(window, "Shorten this");
+  await askTheAssistant(window, "Could you shorten this?");
   const bar = window.getByTestId("proposals-bar");
   const count = bar.getByTestId("proposals-count");
   await expect(count).toHaveText("2 changes from the assistant");
@@ -554,7 +554,7 @@ test("copying a paragraph with the assistant's changes waiting gives the text as
 
   // Shorten drops "really": waiting, the copy still has it; accepted, it doesn't.
   await clickEndOf(window, note);
-  await askTheAssistant(window, "Shorten this");
+  await askTheAssistant(window, "Could you shorten this?");
   await expect(note.locator("del.proposal-delete")).toHaveText("really ");
   const shortening = await copyParagraph();
   expect(shortening.plain).toBe("The tides here are powerful and really regular.");
