@@ -4867,7 +4867,7 @@
   }
   .selection-formats {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 2px;
     padding: 2px 4px;
   }
@@ -4914,6 +4914,103 @@
     font-size: var(--text-meta);
     line-height: 16px;
     color: var(--color-ink-meta);
+  }
+  /* The selection menu's Aa: font and size, alignment, spacing and indents, colour, raise. */
+  .format-menu {
+    width: 268px;
+  }
+  .format-menu-pickers {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 64px;
+    gap: 4px;
+    padding: 2px 2px 4px;
+  }
+  .format-menu-picker {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    height: 28px;
+    padding: 0 6px 0 8px;
+    border-radius: 6px;
+    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+    font-size: 13px;
+    line-height: 20px;
+    outline: none;
+
+    &:hover,
+    &:focus-visible,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+    }
+  }
+  .format-menu-aligns {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px;
+    padding: 0 2px 2px;
+  }
+  .format-menu-align {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--color-ink-secondary);
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &[aria-checked="true"] {
+      background: var(--color-chip);
+      color: var(--color-ink);
+    }
+  }
+  .format-menu-row {
+    height: 30px;
+  }
+  .format-menu-section {
+    padding: 6px 8px 4px;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .format-menu-swatches {
+    display: grid;
+    grid-template-columns: repeat(8, 20px);
+    justify-content: space-between;
+    padding: 4px 8px 6px 32px;
+  }
+  .format-menu-swatch {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px rgb(23 25 28 / 0.12);
+    outline-offset: 1px;
+
+    &[aria-checked="true"] {
+      box-shadow:
+        0 0 0 1.5px var(--color-sheet),
+        0 0 0 3px var(--color-accent);
+    }
+    .format-menu-row > & {
+      width: 16px;
+      height: 16px;
+      box-shadow: none;
+    }
+  }
+  .format-menu-sizes {
+    width: 120px;
+    max-height: min(360px, 60vh);
+    overflow-y: auto;
+  }
+  .format-spacing-field {
+    width: 260px;
   }
   .link-editor {
     width: 320px;

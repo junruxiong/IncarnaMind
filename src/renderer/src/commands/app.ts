@@ -32,6 +32,7 @@ import { exportCommands } from "./exports";
 import { feedbackCommands } from "./feedback";
 import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
+import { formatCommands } from "./format";
 import { citationHandle, findHandle, readMindHandle, sidebarHandle } from "./handles";
 import { linkCommands } from "./links";
 import { meetingCommands } from "./meetings";
@@ -401,6 +402,7 @@ const appCommands: readonly Command[] = [
     run: () => findHandle.current?.previous(),
   },
   ...footnoteCommands,
+  ...formatCommands,
   ...linkCommands,
   ...bibliographyCommands,
   ...tableCommands,
