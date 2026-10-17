@@ -328,7 +328,7 @@ export const CASES: readonly EverydayCase[] = [
     before: ["Summarise the tutorial paper in a short paragraph"],
     addToNote: true,
     request: "Make the summary longer.",
-    expected: EDIT,
+    expected: { ...EDIT, inPlace: true },
   },
   {
     id: "added-longer-zh",
@@ -338,7 +338,7 @@ export const CASES: readonly EverydayCase[] = [
     before: ["用一小段话总结一下这篇教程论文"],
     addToNote: true,
     request: "把摘要写长一点。",
-    expected: EDIT,
+    expected: { ...EDIT, inPlace: true },
   },
   {
     id: "follow-shorter",

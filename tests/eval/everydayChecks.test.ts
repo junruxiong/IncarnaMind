@@ -73,6 +73,25 @@ describe("The everyday request guards", () => {
     expect(failures.map((failure) => failure.kind)).toEqual(["no-change", "no-citations"]);
   });
 
+  // protects=asked to make the summary in the Mind longer, a second version added beside it fails, and one changed in place passes; fails_when=either is judged the other way; no_claim=none beyond protects.
+  test("a longer version added beside the summary fails, and one changed in place passes", () => {
+    const call = (tool: string): AnswerToolCall => ({
+      ...created,
+      tool,
+      input: {},
+      mindChange: { mindId: "m1", created: false, request: "r2", proposals: 2 },
+    });
+    const asked = (tool: string) =>
+      requestFailures(
+        outcome({
+          expected: { write: true, cite: false, coverAll: false, inPlace: true },
+          answer: { text: "", citations: [], toolCalls: [call(tool)], steps: null },
+        }),
+      ).map((failure) => failure.kind);
+    expect(asked("add_to_mind")).toEqual(["beside"]);
+    expect(asked("edit_mind")).toEqual([]);
+  });
+
   // protects=a page made with no Citations in it fails, whatever the reply cites; fails_when=the reply's Citations count for the page's; no_claim=none beyond protects.
   test("a page whose Citations were lost fails, whatever the reply cites", () => {
     const failures = requestFailures(
