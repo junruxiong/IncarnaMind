@@ -2,7 +2,6 @@ import { type ReactNode, useId } from "react";
 import type { ChatProvider, ChatProviderKind } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
 import { keyProviderGroups, kindOfCatalogId } from "../../../../core/providers/catalog/providers";
-import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
 import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
 import { OnThisComputer } from "../OnThisComputer";
@@ -15,6 +14,7 @@ import {
   choiceTitleClass,
 } from "../ui";
 import {
+  CHATGPT_RECIPIENT,
   ChatGptSignInState,
   ChatGptStorageNotice,
   ContinueWithChatGptButton,
@@ -203,7 +203,7 @@ function ChatGptChoice({ onSaved }: { onSaved(provider: ChatProvider): void }) {
       <ChatGptStorageNotice storage={storage} />
       {!sign.waiting && (
         <>
-          <ProviderSendsLine provider={CHATGPT_SERVICE.name} />
+          <ProviderSendsLine provider={CHATGPT_RECIPIENT} />
           <ContinueWithChatGptButton onClick={() => void sign.run()} disabled={!storage.canSave} />
         </>
       )}
