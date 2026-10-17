@@ -78,7 +78,7 @@ export function ModelSetupCard() {
       ref={card}
       data-testid="model-setup"
       aria-labelledby="model-setup-title"
-      className="flex max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
+      className="flex min-h-0 max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
     >
       <h2
         id="model-setup-title"
@@ -121,7 +121,10 @@ export function ModelSetupCard() {
                       ? "setup.way.local.running"
                       : "setup.way.local.notRunning",
                 )}
-                onClick={() => setView("local")}
+                onClick={() => {
+                  setOthers(true);
+                  setView("local");
+                }}
                 {...(!running && {
                   link: { label: t("setup.getOllama"), href: "https://ollama.com/download" },
                 })}
