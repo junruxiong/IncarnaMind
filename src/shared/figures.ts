@@ -1246,6 +1246,8 @@ interface Draft extends Span {
   negative: boolean;
   /** "△1,250", or a whole number in brackets: the sign is a question. */
   signUnsure: boolean;
+  /** A count of people in brackets: no sign, and no unit a header states, applies to it. */
+  count: boolean;
   exponent: number;
   scaleWord: string | null;
   /** Where the scale word is, to give it as written. */
@@ -1344,6 +1346,7 @@ function readAround(
     core: found,
     negative: false,
     signUnsure: false,
+    count: false,
     exponent: found.exponent,
     scaleWord: found.scaleWord,
     scaleAt: found.scaleAt,
@@ -1591,6 +1594,7 @@ function readAround(
       draft.signUnsure = true;
       enclose();
     };
+    draft.count = count;
     const currencySigned = outer !== null || currency !== null;
     if (bare && found.formatted) {
       // "(1,250)" and "($1,250)" are accounting negatives, unless they count people.
@@ -1731,7 +1735,12 @@ function readingOf(draft: Draft, written?: Written, number: Digits = draft.core.
 
 /** The readings a header's stated unit gives a figure that has no scale or unit of its own. */
 function statedReadings(draft: Draft, statements: readonly Statement[]): Reading[] {
-  if (draft.scaleWord !== null || draft.core.percent !== null || draft.core.fraction !== null)
+  if (
+    draft.count ||
+    draft.scaleWord !== null ||
+    draft.core.percent !== null ||
+    draft.core.fraction !== null
+  )
     return [];
   if (draft.unit.kind !== "plain" && draft.unit.kind !== "currency") return [];
   const readings: Reading[] = [];
@@ -1838,6 +1847,7 @@ function dateFigures(s: string, span: Span): Draft[] {
       core: core({ from, to }, number),
       negative: false,
       signUnsure: false,
+      count: false,
       exponent: 0,
       scaleWord: null,
       scaleAt: null,

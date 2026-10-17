@@ -95,6 +95,11 @@ const NEGATIVE_EN: Case[] = [
   ],
   ["a count label with an amount's currency", "Staff (£1,250)", [["(£1,250)", -1250]]],
   [
+    "a cost of staff under a unit header",
+    "£'000\nStaff costs (1,250)",
+    [["(1,250)", -1250, ["scale"]]],
+  ],
+  [
     "a count label that doesn't end the line's words",
     "Employees' benefits\t(1,250)",
     [["(1,250)", -1250]],
@@ -241,6 +246,8 @@ const COUNTS_EN: Case[] = [
   ["a label of several words", "Average number of employees (1,250)", [["(1,250)", 1250]]],
   ["a count after a year", "In 2025 headcount (250) rose.", [["(250)", 250]], EN_ACCOUNTS],
   ["a count with its unit", "Employees (1,250 staff)", [["1,250 staff", 1250]]],
+  ["a count under a unit header", "£'000\nHeadcount (250)", [["(250)", 250]]],
+  ["a count under a scale header", "(in millions)\nEmployees (1,250)", [["(1,250)", 1250]]],
   [
     "a count in the cells of a table's row",
     "Headcount\t(250)\t(240)",
@@ -305,6 +312,7 @@ const COUNTS_ZH: Case[] = [
   ["人员", "技术人员（1,250）", [["（1,250）", 1250]], ZH_ACCOUNTS],
   ["职工", "职工（1,250）", [["（1,250）", 1250]]],
   ["a count with its unit", "员工（1,250人）", [["1,250人", 1250]]],
+  ["a count under a unit header", "单位：万元\n员工人数（250）", [["（250）", 250]]],
   [
     "a count in the cells of a row",
     "员工人数\t（250）\t（240）",
