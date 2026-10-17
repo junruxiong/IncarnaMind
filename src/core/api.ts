@@ -39,7 +39,7 @@ export type {
  * This file must stay free of imports with side effects: the preload script and
  * the renderer import it.
  */
-import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
+import type { CitationForm, CitationStyleId, StyleCatalogue } from "../shared/citationStyles";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
 import type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate } from "../shared/meetingHelp";
 import type { MindStyle } from "../shared/mindStyle";
@@ -84,6 +84,8 @@ export const DEFAULT_MIND_KIND: MindKind = "mind";
 
 export interface CreateMindInput {
   title?: string;
+  /** Its text starts with its title as a Heading 1, as a Mind made with its name does (#908). */
+  headed?: boolean;
   /** Defaults to `"mind"`. */
   kind?: MindKind;
   /** The Folder to make it in; none, or null: Not in a Folder. */
@@ -1791,6 +1793,11 @@ export interface UserSettings {
    */
   keepWebPageLook: boolean;
   /**
+   * The citation styles last chosen for a Mind, newest first, up to five
+   * (`RECENT_CITATION_STYLES`): the picker's Recently used.
+   */
+  recentCitationStyles: CitationStyleId[];
+  /**
    * The font and text size a new Mind starts in: "Make this the default for new Minds" in a
    * Mind's Style. Minds already made keep theirs.
    */
@@ -1858,7 +1865,7 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
-  /** Settings › Meetings › "Show the floating panel": it appears while a Meeting records. */
+  /** Settings › Meetings › "Show the call help panel": it appears while a Meeting records. */
   meetingPanel: boolean;
   /** Settings › Meetings › "Keep the panel out of my screen share", where the system honours it. */
   meetingPanelHidden: boolean;
@@ -7009,6 +7016,11 @@ export interface CitationFormatRequest {
   style: CitationStyleId;
   /** In the order they appear in the Mind. */
   clusters: CitationCluster[];
+  /**
+   * The language of the Mind's text, which a style with no language of its own formats in:
+   * Chinese terms for a Chinese Mind. English when left out.
+   */
+  language?: Language;
 }
 
 /** One cluster in the style: its runs, each marked with the work it belongs to. */
@@ -7045,6 +7057,8 @@ export interface FormattedCitations {
   bibliography: BibliographyEntry[];
   /** The style hangs its entries: the first line starts further left than the rest. */
   hangingIndent: boolean;
+  /** The style isn't in this version: the Mind keeps it, and is formatted as Numbered. */
+  unavailable?: true;
 }
 
 /** The citation style a Mind is in. */
@@ -9044,6 +9058,13 @@ export interface CoreApi {
     style: CitationStyleId | null,
     options?: SetMindCitationStyleOptions,
   ): Promise<MindCitationStyle>;
+  /**
+   * Every style the app ships but the common ones, for the picker, read from the style pack the
+   * first time it is asked for.
+   */
+  listCitationStyles(): Promise<StyleCatalogue>;
+  /** Opens the licence notice of the shipped citation styles in the app that opens text files. */
+  openCitationStyleLicences(): Promise<void>;
 
   /** The font and text size a Mind is written in: its own choice, else the default style. */
   getMindStyle(mindId: string): Promise<MindStyle>;
@@ -9625,6 +9646,8 @@ const methods: Record<CoreApiMethod, true> = {
   formatCitations: true,
   getMindCitationStyle: true,
   setMindCitationStyle: true,
+  listCitationStyles: true,
+  openCitationStyleLicences: true,
   getMindStyle: true,
   setMindStyle: true,
   getOutputSettings: true,

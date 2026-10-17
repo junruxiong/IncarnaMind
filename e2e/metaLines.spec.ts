@@ -9,6 +9,7 @@ import {
   dismissChatSetup,
   expectDotsBetweenParts,
   launchApp,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -78,7 +79,7 @@ for (const value of ["en", "zh-CN"] as const) {
     await setWindowSize(app, window, 1440, 900);
     await addDocuments(window, [join(sources, "Tides.pdf")]);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Deal memo");
+    await nameMind(window, "Deal memo");
     // Filed in a Folder with a long name and no Document: its checks have nothing to check against.
     await window.evaluate(async (name) => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;

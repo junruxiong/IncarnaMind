@@ -37,7 +37,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 
 | English | Chinese | Notes |
 |---|---|---|
-| Mind | Mind | A product name, like Notion: no translation, no plural, no measure word in labels. "新建 Mind", "Mind（3）", "这个 Mind" in prose. Where the User first meets it (the example's banner, the first empty Mind, New Mind's tooltip) one sentence says what it is: "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。" |
+| Mind | Mind | A product name, like Notion: no translation, no plural, no measure word in labels. "新建 Mind", "Mind（3）", "这个 Mind" in prose. Where the User first meets it (the example's banner, the first empty Mind, New Mind's tooltip) one sentence says what it is: "Mind：在这里写作、向文档提问，每条引文都会核对。" |
 | Assistant | 助手 | The one per window. "显示助手", "收起助手". As Kimi, Doubao and Yuanbao call themselves (智能助手, AI 助手). |
 | Conversation | 对话 | New chat is "新对话", History "历史对话", counted with 个: "3 个对话". As Doubao, Yuanbao, DeepSeek, Qwen, Feishu, Cherry Studio and Open WebUI show it. |
 | Note | 笔记 | |
@@ -74,6 +74,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Import references | 导入引用信息… | From a CSL JSON, BibTeX or RIS file. Counted with 条: "导入了 3 条". |
 | Reference without a Document | 还没有文档 | Its list: "添加 PDF…" links it. |
 | Citation style | 引用格式 | "引用格式…", "引用格式已改为 APA 第 7 版". A style keeps its own name; its variant goes in full-width brackets, in the standard's words: "GB/T 7714—2015（顺序编码制）", "（著者-出版年制）". |
+| A citation style's form | 作者-年份, 作者, 编号, 代号, 脚注 | What the picker says after each style's name, for author-date, author, numeric, label and note. A label ("[Smi10]") is 代号, never 标签, which is a Tag. |
 | Bibliography | 参考文献 | Its heading in the Mind and in Chinese styles' exports. |
 | Style (a Mind's font and text size) | 样式 | "样式…" in the Mind's menu. Its parts: 字体 (font), 字号 (text size: 小、默认、大) and "设为新建 Mind 的默认样式". The three fonts are 默认, 衬线 and 等宽, as Notion's; a font the computer lacks is "此电脑未安装该字体". |
 | Folder | 文件夹 | |
@@ -181,7 +182,7 @@ The year is left out when it is this year, except in a Date, and a time today is
 |---|---|---|
 | Recently deleted | 回收站 | As Feishu, Yuque, Tencent Docs, WPS, DingTalk, Obsidian and Zotero. Restore: 恢复. Delete permanently: 彻底删除. |
 | Revoke (an allowed service) | 停止允许 | Not 撤销, which is Undo. For a service the User allowed to receive data (Privacy); approvals have their own words. |
-| Local mode | 所有内容都留在这台电脑上 | The one name, quoted: “所有内容都留在这台电脑上”; its button is 允许使用云端模型. Never 本地模式. |
+| Local mode | 所有内容都留在这台电脑上 | The one name, quoted: “所有内容都留在这台电脑上”; its button is 允许使用云端模型. Never 本地模式. A line that names it says what stopped, then the name: “未发送：已开启“所有内容都留在这台电脑上”。” |
 | Chat model | AI 模型 | In sentences and on Settings' labels. |
 | Embedding model | 搜索模型 · 按含义搜索 | "正在为搜索读取文档". Not 嵌入. |
 | Reranking | 把最相关的排在前面 | "最相关的排在前面" on Settings; never 重排序. |

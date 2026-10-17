@@ -64,7 +64,7 @@ test("a contract imported from Word shows the file's look, and Look › Plain Mi
   await expect(title).toHaveCSS("text-align", "center");
   await expect(title).toHaveCSS("font-variant-caps", "small-caps");
   expect(await fontOf(title)).toMatch(/^"Book Antiqua"/);
-  expect(await fontOf(window.getByTestId("mind-title"))).not.toMatch(/Book Antiqua/);
+  expect(await fontOf(window.getByTestId("page-menu"))).not.toMatch(/Book Antiqua/);
   if (SCREENSHOTS) {
     await window.screenshot({ path: join(SCREENSHOTS, "word-look-contract.png") });
   }

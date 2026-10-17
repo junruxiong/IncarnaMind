@@ -179,7 +179,8 @@ describe("exporting a Mind to HTML", () => {
     const { document } = parseHTML(html);
     expect(document.documentElement.getAttribute("lang")).toBe("en");
     expect(document.title).toBe("Tides 潮汐 &");
-    expect(document.querySelector("h1")?.textContent).toBe("Tides 潮汐 <&>");
+    // No title line (#908): the name is the page's title alone.
+    expect(document.querySelector("h1")).toBeNull();
     const main = document.querySelector("main");
     expect(main?.textContent).toContain("Spring tides happen at new moon and at full moon1.");
     expect(main?.textContent).toContain("大潮出现在新月和满月前后2。");
@@ -292,11 +293,13 @@ describe("exporting a Mind to HTML", () => {
     expect(document.querySelector(".notes li")?.textContent).toContain("Tides，第 1 页");
   });
 
-  test("an empty Mind is its title and no notes; a deleted Document's Citation is named as it was cited and marked unverified", async () => {
+  test("an empty Mind is an empty page with no notes; a deleted Document's Citation is named as it was cited and marked unverified", async () => {
     const { core, mind } = await setUp();
     const empty = await core.createMind({ title: "Empty" });
     const emptyHtml = decode((await core.exportMind(empty.id, { format: "html" })).data);
-    expect(parseHTML(emptyHtml).document.querySelector("main")?.textContent).toBe("Empty");
+    const { document: emptyPage } = parseHTML(emptyHtml);
+    expect(emptyPage.querySelector("main")?.textContent).toBe("");
+    expect(emptyPage.title).toBe("Empty");
     expect(emptyHtml).not.toContain('class="notes"');
     const report = await new HtmlValidate({
       extends: ["html-validate:recommended"],

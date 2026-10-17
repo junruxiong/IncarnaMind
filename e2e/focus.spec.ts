@@ -52,7 +52,7 @@ async function pressTab(window: Page): Promise<Stop | null> {
         style.outlineColor === accent
       );
     };
-    const caret = element.isContentEditable || element.matches(".mind-title textarea");
+    const caret = element.isContentEditable;
     const field = element.matches("textarea, select, input:not([type=radio], [type=checkbox])");
     const shows =
       caret ||

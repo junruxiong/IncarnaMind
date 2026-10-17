@@ -3,7 +3,7 @@
  * app, with the help buttons and the latest suggestion. It shares the app's
  * preload, which gives its page the core and this bridge for the argument.
  */
-import type { GeneralHelpKind } from "./meetingHelp";
+import type { GeneralHelpKind, HelpShortcut } from "./meetingHelp";
 
 export const MEETING_PANEL_ARGUMENT = "--incarnamind-meeting-panel";
 export const MEETING_PANEL_BRIDGE_KEY = "incarnamindMeetingPanel";
@@ -16,8 +16,8 @@ export const MEETING_PANEL_BRIDGE_KEY = "incarnamindMeetingPanel";
  */
 export const SAYS_HIDDEN_FROM_SHARES: boolean = false;
 
-/** The help buttons' global shortcuts the main process holds now, by button. */
-export type HeldKeys = Partial<Record<GeneralHelpKind, string>>;
+/** The global shortcuts the main process holds now. */
+export type HeldKeys = Partial<Record<HelpShortcut, string>>;
 
 /** What ⌘K in the app's window asks of the panel: pin its latest suggestion, or fold or unfold it. */
 export type PanelCommand = "pin" | "fold";
