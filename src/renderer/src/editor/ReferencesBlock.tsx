@@ -70,7 +70,6 @@ export function ReferencesBlock({
 
   if (counted.length === 0 || !formatting) return null;
   const { style, formatted, pending, problem } = formatting;
-  // A style this version doesn't have is formatted as Numbered, and listed as Numbered lists.
   const numbered = style === "numbered" || formatted?.unavailable === true;
   // A Document only a pending change cites is left out: the formatted list counts every Citation.
   const live = new Set(counted.map((citation) => citation.documentId));

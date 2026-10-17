@@ -9,7 +9,7 @@
  */
 import { closeSync, openSync, readSync } from "node:fs";
 import { brotliDecompressSync } from "node:zlib";
-import type { CitationFormat } from "../../shared/citationStyles";
+import { CITATION_FORMATS, type CitationFormat } from "../../shared/citationStyles";
 
 export const PACK_MAGIC = "IMCSLPK1";
 export const PACK_HEADER_BYTES = PACK_MAGIC.length + 4;
@@ -22,10 +22,8 @@ export interface PackStyle {
   /** Its file's name without ".csl": "apa", "nature", "the-lancet". */
   id: string;
   title: string;
-  /** Its `<title-short>`, if it has one. */
   short?: string;
   format: CitationFormat;
-  /** Its citations are notes (`class="note"`). */
   note?: true;
   fields?: string[];
   /** Its `default-locale`, if it has one: "zh-CN", "de-DE". */
@@ -42,11 +40,52 @@ export interface PackIndex {
   source: { styles: string; locales: string };
   chunks: { offset: number; length: number }[];
   styles: PackStyle[];
-  /** Each locale's file, by its code: "en-US". */
   locales: Record<string, PackSlot>;
   /** The licence notice made from every style's and locale's `<info>`. */
   notice: PackSlot;
 }
+
+// Not errors.ts's isRecord: the build script imports this file, and Node can't run errors.ts.
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isText = (value: unknown) => typeof value === "string";
+const isCount = (value: unknown) => Number.isInteger(value) && Number(value) >= 0;
+
+const isSlot = (value: unknown): value is PackSlot =>
+  Array.isArray(value) && value.length === 2 && value.every(isCount);
+
+function isPackStyle(value: unknown): value is PackStyle {
+  if (!isObject(value) || !isText(value.id) || !isText(value.title)) return false;
+  return (
+    CITATION_FORMATS.some((format) => format === value.format) &&
+    (value.short === undefined || isText(value.short)) &&
+    (value.note === undefined || value.note === true) &&
+    (value.fields === undefined || (Array.isArray(value.fields) && value.fields.every(isText))) &&
+    (value.locale === undefined || isText(value.locale)) &&
+    (value.at === undefined || isSlot(value.at)) &&
+    (value.parent === undefined || isText(value.parent))
+  );
+}
+
+function isPackIndex(value: unknown): value is PackIndex {
+  if (!isObject(value) || value.version !== 1) return false;
+  const { source, chunks, styles, locales } = value;
+  return (
+    isObject(source) &&
+    isText(source.styles) &&
+    isText(source.locales) &&
+    Array.isArray(chunks) &&
+    chunks.every((chunk) => isObject(chunk) && isCount(chunk.offset) && isCount(chunk.length)) &&
+    Array.isArray(styles) &&
+    styles.every(isPackStyle) &&
+    isObject(locales) &&
+    Object.values(locales).every(isSlot) &&
+    isSlot(value.notice)
+  );
+}
+
+const isTexts = (value: unknown): value is string[] => Array.isArray(value) && value.every(isText);
 
 function readAt(path: string, offset: number, length: number): Buffer {
   const file = openSync(path, "r");
@@ -71,9 +110,10 @@ export function readPackIndex(path: string): PackIndex & { dataOffset: number } 
     throw new Error(`${path} isn't a citation-style pack.`);
   }
   const length = header.readUInt32LE(PACK_MAGIC.length);
-  const index = JSON.parse(
+  const index: unknown = JSON.parse(
     brotliDecompressSync(readAt(path, PACK_HEADER_BYTES, length)).toString("utf8"),
-  ) as PackIndex;
+  );
+  if (!isPackIndex(index)) throw new Error(`${path} has an index this version can't read.`);
   return { ...index, dataOffset: PACK_HEADER_BYTES + length };
 }
 
@@ -82,7 +122,6 @@ export function readPackIndex(path: string): PackIndex & { dataOffset: number } 
  * switching between two styles doesn't decompress either again.
  */
 export class PackFiles {
-  /** How many chunks have been decompressed: what the cache saves shows here. */
   decompressions = 0;
   private readonly kept = new Map<number, string[]>();
   private readonly path: string;
@@ -103,7 +142,9 @@ export class PackFiles {
       const where = this.index.chunks[chunk];
       if (!where) throw new Error(`The style pack has no chunk ${chunk}.`);
       const bytes = readAt(this.path, this.index.dataOffset + where.offset, where.length);
-      files = JSON.parse(brotliDecompressSync(bytes).toString("utf8")) as string[];
+      const read: unknown = JSON.parse(brotliDecompressSync(bytes).toString("utf8"));
+      if (!isTexts(read)) throw new Error(`The style pack's chunk ${chunk} isn't a list of files.`);
+      files = read;
       this.decompressions++;
     }
     this.kept.set(chunk, files);

@@ -4121,7 +4121,7 @@ export const zhCN = {
   "citationStyle.form.author-date": "作者-年份",
   "citationStyle.form.author": "作者",
   "citationStyle.form.numeric": "编号",
-  "citationStyle.form.label": "标签",
+  "citationStyle.form.label": "代号",
   "citationStyle.form.note": "脚注",
   "citationStyle.follows": "沿用 {style}",
   "citationStyle.unavailable": "{style} 在此版本中不可用",

@@ -19,7 +19,7 @@ import { join, resolve } from "node:path";
 import { constants, brotliCompressSync } from "node:zlib";
 import { CslEngine } from "../src/core/citationStyles/wasm";
 import { PACK_MAGIC, type PackIndex, type PackSlot, type PackStyle } from "../src/core/citationStyles/pack";
-import type { CitationFormat } from "../src/shared/citationStyles";
+import { CITATION_FORMATS } from "../src/shared/citationStyles";
 
 const STYLES_COMMIT = "6ba2e9c6aa6e0dab87d3a20b833ed8ff6500f698";
 const LOCALES_COMMIT = "a89adece41013402236e2c9020972d7e931fbab8";
@@ -49,9 +49,6 @@ const SHORT_NOTICE = join(ROOT, "resources/notices/citation-styles.txt");
 const ENGINE = join(ROOT, "resources/citation-styles/engine.wasm");
 const LICENCE = join(ROOT, "resources/notices/cc-by-sa-3.0.txt");
 
-const FORMATS: readonly CitationFormat[] = ["author-date", "author", "numeric", "label", "note"];
-
-/** A repository at a commit, downloaded and unpacked into `into`; the folder it unpacks to. */
 function fetchRepository(name: string, commit: string, into: string): string {
   const archive = join(into, `${name}.tar.gz`);
   execFileSync("curl", [
@@ -68,7 +65,6 @@ function fetchRepository(name: string, commit: string, into: string): string {
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
 
-/** Text from XML, its entities decoded and its white space tidied. */
 const tidy = (text: string) =>
   text
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, name: string) =>
@@ -81,7 +77,6 @@ const tidy = (text: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** An element's attributes, from its start tag's text. */
 function attributes(tag: string): Record<string, string> {
   const found: Record<string, string> = {};
   for (const [, name, double, single] of tag.matchAll(/([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
@@ -90,11 +85,9 @@ function attributes(tag: string): Record<string, string> {
   return found;
 }
 
-/** The text of the first element named `name` in `xml`, or "". */
 const first = (xml: string, name: string) =>
   tidy(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`).exec(xml)?.[1] ?? "");
 
-/** The names of the people in `xml` in a role: "author", "contributor", "translator". */
 const people = (xml: string, role: string) =>
   [...xml.matchAll(new RegExp(`<${role}>([\\s\\S]*?)</${role}>`, "g"))]
     .map(([, person]) => first(person as string, "name"))
@@ -127,7 +120,7 @@ function readStyle(id: string, text: string): Read & { parent: string | null } {
   const style: PackStyle = {
     id,
     title: title || id,
-    format: FORMATS.find((each) => each === format) ?? "author-date",
+    format: CITATION_FORMATS.find((each) => each === format) ?? "author-date",
   };
   if (short) style.short = short;
   if (root.class === "note") style.note = true;
@@ -142,7 +135,6 @@ function readStyle(id: string, text: string): Read & { parent: string | null } {
   };
 }
 
-/** Why the engine can't use a style, or null when it parses and formats a reference. */
 function engineProblem(engine: CslEngine, text: string, locales: string[]): string | null {
   try {
     const { handle } = engine.parse(text, locales);

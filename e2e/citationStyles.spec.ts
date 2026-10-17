@@ -585,7 +585,7 @@ test("the style chosen for a Mind in a Folder, from its menu, is the one a new M
   await app.close();
 });
 
-test("every CSL style: ⌘K and the References' style open the one picker, which finds a journal in English and Chinese; the Mind keeps the journal's name, and the picker fits a 1,100px window", async () => {
+test("every CSL style: ⌘K and the References' style open the one picker, which finds a journal in English and Chinese and lists Recently used; the Mind keeps the journal's name, a style this version lacks says so, and the picker fits a 1,100px window", async () => {
   const count = readPackIndex(
     join(__dirname, "../resources/citation-styles/styles.pack"),
   ).styles.length.toLocaleString("en");
@@ -661,6 +661,35 @@ test("every CSL style: ⌘K and the References' style open the one picker, which
   await window.keyboard.press("Escape");
   await expect(picker).toBeHidden();
 
+  // Another style chosen: Nature Genetics is Recently used, after the Mind's style.
+  await pointAndClick(window, style);
+  await chooseStyle(window, "ieee", "IEEE");
+  await expect(style).toHaveText("IEEE");
+  await pointAndClick(window, style);
+  await expect(search).toBeFocused();
+  const labels = picker.getByTestId("citation-style-option-label");
+  await expect(labels.first()).toHaveText("IEEE");
+  await expect(sections.first()).toHaveText("Recently used");
+  await expect(labels.nth(1)).toHaveText("Nature Genetics");
+  await window.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+
+  // A style only a later version has, as a Mind synced from one would be in: the Mind keeps it,
+  // formatted as Numbered, and its button says it isn't here.
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    for (const mind of await core.listMinds()) {
+      await core.setMindCitationStyle(mind.id, "a-style-from-a-later-pack");
+    }
+  });
+  await expect(references).toHaveAttribute("data-style", "a-style-from-a-later-pack");
+  await expect(style).toHaveText("a-style-from-a-later-pack isn't available in this version");
+  await expect(references.getByTestId("reference-entry").first()).toContainText("Tides");
+  await expect(window.getByTestId("mind-editor").getByTestId("citation-chip").first()).toHaveText(
+    "1",
+  );
+  await screenshot(references, "references-unavailable-en");
+
   // In Chinese: a Chinese journal by its Chinese name.
   await window.evaluate(() =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
@@ -668,8 +697,10 @@ test("every CSL style: ⌘K and the References' style open the one picker, which
     }),
   );
   await expect(references.getByRole("heading")).toHaveText("参考文献");
+  await expect(style).toHaveText("a-style-from-a-later-pack 在此版本中不可用");
   await pointAndClick(window, style);
   await expect(search).toHaveAttribute("placeholder", `搜索 ${count} 种格式和期刊…`);
+  await expect(sections.filter({ hasText: "最近使用" })).toBeVisible();
   await expect(sections.filter({ hasText: "常用" })).toBeVisible();
   await window.keyboard.type("物理学报");
   await expect(

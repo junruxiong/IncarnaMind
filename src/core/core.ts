@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
@@ -3697,7 +3697,9 @@ export function createCore(adapters: CoreAdapters): Core {
     openCitationStyleLicences: async () => {
       if (!adapters.shell)
         throw new Error("This copy of IncarnaMind can't open files in other apps.");
-      const path = join(adapters.paths.tempDir ?? tmpdir(), "IncarnaMind citation styles.txt");
+      // The notice is compressed in the pack, so it is written out, into a folder of its own.
+      const folder = await mkdtemp(join(adapters.paths.tempDir ?? tmpdir(), "incarnamind-"));
+      const path = join(folder, "IncarnaMind citation styles.txt");
       await writeFile(path, citationStyles.notice());
       await adapters.shell.openPath(path);
     },
