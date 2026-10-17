@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
   useEffect,
@@ -23,6 +24,8 @@ export interface PickerOption<Id> {
   icon?: ReactNode;
   /** More attributes on its row, e.g. `data-folder-id`. */
   data?: Record<string, string>;
+  /** How its label is drawn: a font's name in its own face. */
+  labelStyle?: CSSProperties;
 }
 
 /**
@@ -49,7 +52,7 @@ export function SearchPicker<Id>({
   title: string;
   searchLabel: string;
   /** Said when nothing matches what was typed. */
-  noMatch(query: string): string;
+  noMatch(query: string): ReactNode;
   options: readonly PickerOption<Id>[];
   /** The option chosen now, ticked; undefined for none. */
   current: Id | undefined;
@@ -79,6 +82,12 @@ export function SearchPicker<Id>({
       ),
   );
   const shown = Math.min(active, Math.max(0, shownOptions.length - 1));
+
+  useEffect(() => {
+    panel.current?.querySelector(`[id="${CSS.escape(`${id}-${shown}`)}"]`)?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [id, shown]);
 
   // Opens beside its anchor, below it or above if there is no room, growing from it, and takes
   // the focus.
@@ -210,7 +219,11 @@ export function SearchPicker<Id>({
                     }`}
                   >
                     {option.icon}
-                    <span className="min-w-0 flex-1 truncate" title={option.label}>
+                    <span
+                      className="min-w-0 flex-1 truncate"
+                      title={option.label}
+                      style={option.labelStyle}
+                    >
                       {option.label}
                     </span>
                     {here && (
