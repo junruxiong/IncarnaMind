@@ -62,12 +62,8 @@ export function ModelSetupCard() {
   // It takes the composer's place, or opens from the steps card: either way the focus comes in.
   useEffect(() => {
     if (view === null) {
-      const choice =
-        previousView.current === "key"
-          ? '[data-testid="setup-key"]'
-          : previousView.current === "local"
-            ? '[data-testid="way-local"]'
-            : "[data-setup-choice]:not(:disabled)";
+      const back = previousView.current;
+      const choice = back ? `[data-setup-view="${back}"]` : "[data-setup-choice]:not(:disabled)";
       card.current?.querySelector<HTMLButtonElement>(choice)?.focus();
     }
     previousView.current = view;
@@ -113,6 +109,7 @@ export function ModelSetupCard() {
               <CopilotSetupWay onKey={() => setView("key")} />
               <Way
                 testId="way-local"
+                view="local"
                 title={t("setup.way.local")}
                 line={t(
                   running === undefined
@@ -204,6 +201,7 @@ function LeadingWays({
         type="button"
         data-testid="setup-key"
         data-setup-choice
+        data-setup-view="key"
         onClick={onKey}
         className={`w-full ${buttonStyle(chinese ? "primary" : "secondary", "lg")}`}
       >
@@ -225,12 +223,15 @@ function LeadingWays({
 
 function Way({
   testId,
+  view,
   title,
   line,
   onClick,
   link,
 }: {
   testId: string;
+  /** The view the row opens, so Back can return the focus to it. */
+  view?: Exclude<View, null>;
   title: string;
   line: string;
   onClick(): void;
@@ -242,6 +243,7 @@ function Way({
       <button
         type="button"
         data-testid={testId}
+        data-setup-view={view}
         onClick={onClick}
         className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2 py-1.5 text-left"
       >
