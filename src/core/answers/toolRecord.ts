@@ -60,9 +60,11 @@ function whyNot(problem: MindProblem | undefined): string {
     case "changed":
       return "its text changed while it was being read";
     case "content-not-own":
-      return "new text can only replace your own waiting changes";
+      return "new text can only replace your own text, still waiting or as you wrote it";
     case "copy":
       return `“${problem.text}” is there already, as your own waiting text: revise it with edit_mind`;
+    case "new-version":
+      return `it is a new version of your own text “${problem.text}” there: change that text in place with edit_mind`;
     case "stopped":
       return "it was stopped";
     case "no-table":
