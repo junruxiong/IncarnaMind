@@ -204,26 +204,28 @@ test("A1 first run: the example Mind and its Citation card", async () => {
       await window.waitForTimeout(250);
       record("walk.escape.citationCard", { closes: !(await card.isVisible()) });
     });
-    await step(T, "get started card", async () => {
-      const card = window.getByTestId("get-started");
+    await step(T, "the first open's steps", async () => {
+      const card = window.getByTestId("first-open-steps");
       await expect(card).toBeVisible();
-      await shot(card, "A04-get-started-card");
+      await shot(card, "A04-first-open-steps");
     });
     await step(T, "focus walk from the window", async () => {
       await window.mouse.click(5, 5);
       const stops = await focusWalk(window, 45, "focus/A05");
       record("walk.focus.exampleMind", stops);
     });
-    await step(T, "add your own: the ways to add Documents, in place", async () => {
-      await window.keyboard.press("Escape");
-      await click(window, window.getByTestId("example-add-own"));
-      await window.waitForTimeout(800);
-      await shot(window, "A06-after-add-your-own");
-      const ways = window.getByTestId("example-add-items");
-      await window.keyboard.press("Escape");
-      await window.waitForTimeout(300);
-      record("walk.escape.addYourDocuments", { closes: !(await ways.isVisible()) });
-    });
+    await step(
+      T,
+      "the ready question: the assistant with its Answer, written in advance",
+      async () => {
+        await window.keyboard.press("Escape");
+        await click(window, window.getByTestId("first-open-ready"));
+        const answer = window.getByTestId("assistant-answer").last();
+        await expect(answer).toHaveAttribute("data-status", "done");
+        await window.waitForTimeout(300);
+        await shot(window, "A06-ready-question");
+      },
+    );
   } finally {
     if (app) await close(app);
     removeDir(dataDir);

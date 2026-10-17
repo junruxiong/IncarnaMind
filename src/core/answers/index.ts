@@ -171,6 +171,14 @@ import {
   readMind,
 } from "./context";
 import { coverageInstructions, coverageOf, documentsAsked, type SizedDocument } from "./coverage";
+import {
+  documentTextBlock,
+  givenUpFront,
+  OPENING_TOKEN_LIMIT,
+  openingWithin,
+  SMALL_SCOPE_DOCUMENTS,
+  upFrontTokens,
+} from "./documentText";
 import type {
   AnswerEngine,
   AnswerSearchOptions,
@@ -180,7 +188,7 @@ import type {
   GatedCall,
   ToolSet,
 } from "./engine";
-import { listenedTokens, newestWithin, withTranscript } from "./liveTranscript";
+import { listenedTokens, newestWithin, withBeforeQuestion, withTranscript } from "./liveTranscript";
 import { markdownToBlocks } from "./markdown";
 import { paragraphAsked } from "./paragraphAsked";
 import {
@@ -197,6 +205,8 @@ import {
   skillInstructions,
   sourcesInstructions,
   webInstructions,
+  withPassageNotes,
+  workingCopyNote,
 } from "./prompt";
 import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
 import { type RequestContext, routeRequest } from "./routeRequest";
@@ -403,6 +413,8 @@ export interface AnswersOptions {
    * Mind; null: every Document.
    */
   unscopedDocuments?(mindId: string | null): string[] | null;
+  /** The Document a Mind imported from Word was also added as (#720); null for none. */
+  workingCopyOf?(mindId: string): string | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
   emptyScopeAnswer(): string;
   /** The User's Skills. */
@@ -546,6 +558,8 @@ export interface DocumentsForAnswers
   searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
   /** The Documents to search, the most text first. */
   searchableBySize(documentIds: readonly string[] | null): SizedDocument[];
+  /** The live Passages of a live Document at positions `from` to `to`, in reading order. */
+  passagesBetween(documentId: string, from: number, to: number): WindowedPassage[];
   /** The languages the Documents to search are in, the most common first, with how many are in each. */
   searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
   /** The Documents among these (null: every Document) whose text couldn't be read, or some of it. */
@@ -875,10 +889,30 @@ export function createAnswers(options: AnswersOptions) {
     };
     let skills: SkillSession | null = null;
     const searched = inScope(options.documents, documentIds);
-    const session = createCitationSession(searched, {
-      onRecord: (marker, citation) =>
-        announce("answer.citationAdded", { ...place, answerId, marker, citation }),
-    });
+    const inAssistant = !outside && input.assistant !== undefined;
+    const mindIn = input.assistant?.focused?.mindId ?? null;
+    const originalId =
+      inAssistant && mindIn !== null ? (options.workingCopyOf?.(mindIn) ?? null) : null;
+    const [original = null] =
+      originalId !== null && (documentIds === null || documentIds.includes(originalId))
+        ? options.documents.searchableBySize([originalId])
+        : [];
+    const passagesOf = (documentId: string) =>
+      options.documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
+    const session = createCitationSession(
+      searched,
+      {
+        onRecord: (marker, citation) =>
+          announce("answer.citationAdded", { ...place, answerId, marker, citation }),
+      },
+      original
+        ? {
+            documentId: original.id,
+            name: original.name,
+            passages: () => openingWithin(passagesOf(original.id), OPENING_TOKEN_LIMIT),
+          }
+        : undefined,
+    );
     /**
      * Whether its model is offered `calculate` and its steer: a fact of the
      * model, once prepared (ADR-0021). Off, the Answer is as it was before them.
@@ -1415,6 +1449,35 @@ export function createAnswers(options: AnswersOptions) {
           listening = true;
         }
       }
+      if (inAssistant) {
+        const unread = options.documents.unread(documentIds);
+        const blockOf = (
+          passages: readonly WindowedPassage[],
+          show: (found: readonly WindowedPassage[]) => string,
+        ) =>
+          documentTextBlock(
+            [...new Set(passages.map((passage) => passage.documentName))],
+            withPassageNotes(show(passages), unread),
+          );
+        const scope =
+          options.documents.searchableCount(documentIds) <= SMALL_SCOPE_DOCUMENTS
+            ? options.documents.searchableBySize(documentIds)
+            : [];
+        const given = givenUpFront(
+          [original ? [original] : [], scope],
+          upFrontTokens(prepared.window),
+          passagesOf,
+          (passages) => blockOf(passages, session.measure),
+        );
+        if (given) {
+          messages = withBeforeQuestion(messages, blockOf(given.passages, session.show));
+          // Someone else wrote a saved web page: given up front, it is read as a search reads it (#78).
+          if (given.passages.some((passage) => passage.documentKind === "web")) {
+            contextReasons.push({ via: "read", source: "web-page" });
+            textOrigin ??= "web-page";
+          }
+        }
+      }
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
       if (consenting) {
@@ -1693,6 +1756,7 @@ export function createAnswers(options: AnswersOptions) {
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
+            workingCopyNote(original?.name ?? null),
             mindInstructions(withMindTools, route),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),

@@ -1170,6 +1170,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableBySize: (documentIds) => documents.searchableBySize(documentIds ?? undefined),
+      passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       search: searchDocuments,
@@ -1284,6 +1285,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    workingCopyOf: (mindId) => wordImports.originalOf(mindId)?.documentIds?.[0] ?? null,
     unscopedDocuments: (mindId) => {
       const made = examples.made();
       if (made.documentIds.length === 0 || (mindId && made.mindIds.includes(mindId))) return null;
@@ -2334,6 +2336,7 @@ export function createCore(adapters: CoreAdapters): Core {
         profile.tokenUrl,
         profile.tokenExchange?.url,
         profile.apiBaseUrl,
+        profile.accountUrl,
       ])
       .filter((url): url is string => url !== undefined)
       .map((url) => new URL(url))
@@ -2753,6 +2756,40 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreCheckpoint: async (mindId, checkpointId) => checkpoints.restore(mindId, checkpointId),
     askInConversation: async (input) =>
       answers.askInConversation(conversations.parseQuestion(input)),
+    askReadyQuestion: async () => {
+      const ready = examples.readyAnswer();
+      if (!ready) {
+        throw new InvalidInputError({ key: "error.examples.reading" });
+      }
+      const turn = conversations.add(
+        {
+          conversationId: null,
+          text: ready.question,
+          mind: { id: ready.mindId, folderId: minds.get(ready.mindId).folderId },
+          focus: null,
+          scope: null,
+          model: null,
+          forcedSkill: null,
+        },
+        null,
+        null,
+      );
+      const answer = conversations.writeAnswer(turn.answer.id, {
+        text: ready.answer,
+        citations: ready.citations,
+        figures: [],
+        toolCalls: [],
+        support: null,
+        textOrigin: null,
+        read: null,
+        steps: { sentAt: null, finishedAt: now(), phases: [], reasoning: null, example: true },
+        outcome: { status: "done", error: null },
+      });
+      events.emit("conversation.message", turn.question);
+      events.emit("conversation.message", answer ?? turn.answer);
+      conversationsChanged();
+      return { conversationId: turn.conversation.id, answerId: turn.answer.id };
+    },
     regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
     countScopeDocuments: async (scope) => {
       const wanted = parseSearchScope(scope);

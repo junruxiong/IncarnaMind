@@ -1799,6 +1799,8 @@ export interface GettingStarted {
   indexed: boolean;
   /** The User asked a Question of their own, not the example's. */
   askedOwn: boolean;
+  /** The User asked the first open's ready Question (`askReadyQuestion`). */
+  askedReady: boolean;
   /** The User hid the checklist. */
   hidden: boolean;
 }
@@ -3178,6 +3180,11 @@ export interface Examples {
   /** The example Answer, written in advance, while the example Mind exists. */
   answerId: string | null;
   more: ExampleGroup[];
+  /**
+   * The first open's ready Question (#123), whose Answer is written in advance
+   * (`askReadyQuestion`): the credit paper's, while it exists; null otherwise.
+   */
+  ready: string | null;
 }
 
 /**
@@ -4862,6 +4869,8 @@ export interface AnswerSteps {
    * Absent: none.
    */
   unbackedClaims?: ClaimedChange[];
+  /** Written in advance for the example (`askReadyQuestion`): no model wrote it, and nothing was searched. */
+  example?: true;
   /**
    * Its model can't call Tools, and the User's words asked to write into a
    * Mind or change one (`routeRequest`): nothing was written. Absent: neither.
@@ -5626,13 +5635,21 @@ export interface CopilotModel {
   name: string;
 }
 
+export type CopilotPlan = "free" | "pro" | "pro-plus" | "business" | "enterprise";
+
 /** The User's Copilot plan for Answers instead of an API key; it counts toward the plan's limits. */
 export interface CopilotStatus {
   account:
     | { state: "signed-out" }
     /** Renewing the sign-in failed, or GitHub refused its token: sign in again. */
     | { state: "expired" }
-    | { state: "signed-in"; profile: CopilotProfileId };
+    /** The GitHub login and the plan, as GitHub named them at sign-in, when it did. */
+    | {
+        state: "signed-in";
+        profile: CopilotProfileId;
+        login: string | null;
+        plan: CopilotPlan | null;
+      };
   /** A sign-in is waiting for the User on GitHub's page. */
   signingIn: boolean;
   /** While a sign-in waits, once GitHub has given it: the code the User types, and where. */
@@ -5644,7 +5661,10 @@ export interface CopilotStatus {
 }
 
 export type CopilotSignInErrorKind =
-  | Extract<SignInRouteProblem, "sign-in-cancelled" | "refused" | "no-plan" | "unexpected-response">
+  | Extract<
+      SignInRouteProblem,
+      "sign-in-cancelled" | "refused" | "no-plan" | "policy-blocked" | "unexpected-response"
+    >
   /** The code on GitHub's page expired before the User approved it. */
   | "code-expired"
   /** The User declined on GitHub's page. */
@@ -5924,7 +5944,8 @@ export interface RegisteredDataFlow {
  * - "claude-sign-in": signing in with a Claude account and refreshing it;
  *   listed once the User has started signing in.
  * - "copilot-sign-in": signing in with GitHub for Copilot, renewing it, and
- *   reading the plan's models; listed once the User has started signing in.
+ *   reading the account's name and the plan's models; listed once the User
+ *   has started signing in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
@@ -7733,6 +7754,14 @@ export interface CoreApi {
    */
   askInConversation(input: AskInConversationInput): Promise<ConversationAskResult>;
   /**
+   * Asks the first open's ready Question (`Examples.ready`, #123) in a new
+   * conversation, with its Answer written in advance and its Citations checked
+   * against the example Documents now: no model is asked, and no "answer.*"
+   * event is sent. Throws while the credit paper isn't made or its Documents
+   * aren't all read.
+   */
+  askReadyQuestion(): Promise<{ conversationId: string; answerId: string }>;
+  /**
    * Writes an Answer of a conversation again, in place, for its Question as it was asked,
    * reading the Mind it was asked from as that Mind is now.
    */
@@ -9256,6 +9285,7 @@ const methods: Record<CoreApiMethod, true> = {
   compareCheckpoints: true,
   restoreCheckpoint: true,
   askInConversation: true,
+  askReadyQuestion: true,
   regenerateConversationAnswer: true,
   countScopeDocuments: true,
   stopConversationAnswer: true,

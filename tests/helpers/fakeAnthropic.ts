@@ -2,13 +2,13 @@
  * A local stand-in for Anthropic, for the Claude account route: an OAuth
  * authorization server (code exchange with PKCE and the state, refresh with
  * rotation) and the Messages API, on one HTTP server on 127.0.0.1. No real
- * account and no network. Started through `startFakeAnthropic`, stopped when
- * the test finishes.
+ * account and no network. The unit tests stop it when each test finishes; the
+ * smoke tests point a test build at it (INCARNAMIND_TEST_CLAUDE), so it imports
+ * nothing from Vitest.
  */
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { onTestFinished } from "vitest";
 import type { Browser } from "../../src/core";
 import { isRecord } from "../../src/core/errors";
 import type { AnthropicOAuthConfig } from "../../src/core/providers/claudeAccount/config";
@@ -82,7 +82,7 @@ const s256 = (verifier: string) => createHash("sha256").update(verifier).digest(
 
 const CLIENT_ID = "test-client";
 
-export async function startFakeAnthropic(): Promise<FakeAnthropic> {
+export async function createFakeAnthropic(): Promise<FakeAnthropic> {
   const codes = new Map<string, PendingCode>();
   const live = new Set<string>();
   let refreshable: string | null = null;
@@ -302,7 +302,6 @@ export async function startFakeAnthropic(): Promise<FakeAnthropic> {
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  onTestFinished(() => fake.close());
   return fake;
 }
 

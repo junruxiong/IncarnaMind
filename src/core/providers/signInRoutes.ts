@@ -137,6 +137,10 @@ export const COPILOT_SIGN_IN_PROBLEMS: Record<CopilotSignInErrorKind, RouteProbl
   },
   refused: { line: "copilot.problem.refused", waysBack: ["try-again", "paste-api-key"] },
   "no-plan": { line: "copilot.problem.noPlan", waysBack: ["paste-api-key", "use-another-model"] },
+  "policy-blocked": {
+    line: "copilot.problem.policyBlocked",
+    waysBack: ["paste-api-key", "use-another-model"],
+  },
   "unexpected-response": {
     line: "copilot.problem.unexpectedResponse",
     waysBack: ["try-again", "paste-api-key"],
