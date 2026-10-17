@@ -78,13 +78,13 @@ const WORDS = {
   en: {
     title: "Choose your AI",
     chatgpt: "Plus or Pro · no key needed",
-    sends: "Sends your questions and document text to ChatGPT. · Details",
+    sends: "Sends your questions and document text to OpenAI. · Details",
     key: "OpenAI, Anthropic, Google, DeepSeek and more",
   },
   "zh-CN": {
     title: "选择你的 AI",
     chatgpt: "Plus 或 Pro（中国大陆不可用）· 无需密钥",
-    sends: "会把你的问题和文档内容发送给 ChatGPT。· 详情",
+    sends: "会把你的问题和文档内容发送给 OpenAI。· 详情",
     key: "OpenAI、Anthropic、Google、DeepSeek 等",
   },
 } as const;

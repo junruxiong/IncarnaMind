@@ -206,7 +206,7 @@ test("Settings › Models says in one line what the ChatGPT plan sends, with the
   );
   const sends = plan.getByTestId("provider-sends");
   await expect(sends.locator("p")).toHaveText(
-    "Sends your questions and document text to ChatGPT. · Details",
+    "Sends your questions and document text to OpenAI. · Details",
   );
   await sends.getByTestId("provider-sends-details").click();
   await expect(sends.getByRole("listitem")).toHaveText(SENDS_EN.items);

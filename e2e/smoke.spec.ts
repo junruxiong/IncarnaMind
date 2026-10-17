@@ -219,7 +219,7 @@ test("first run asks for no model; the first own Question waits while the setup 
   // Choosing it is the consent (ADR-0022): one line says what goes, and Details names it all.
   await expect(card.getByTestId("setup-chatgpt-line")).toHaveText("Plus or Pro · no key needed");
   await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(
-    "Sends your questions and document text to ChatGPT. · Details",
+    "Sends your questions and document text to OpenAI. · Details",
   );
   // The card says what the Mind's "needs an AI model" line would, so that line steps aside.
   await expect(window.getByTestId("chat-readiness")).toHaveCount(0);
@@ -239,7 +239,7 @@ test("first run asks for no model; the first own Question waits while the setup 
     "Plus 或 Pro（中国大陆不可用）· 无需密钥",
   );
   await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(
-    "会把你的问题和文档内容发送给 ChatGPT。· 详情",
+    "会把你的问题和文档内容发送给 OpenAI。· 详情",
   );
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentClient, ChatProvider } from "../../../../core/api";
-import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
 import { SHOW_AGENT_CONNECTION } from "../../../../shared/agentConnection";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
@@ -12,6 +11,7 @@ import { ProblemLine } from "../ProblemLine";
 import { buttonStyle, hintClass } from "../ui";
 import { ChatGptMark } from "./ChatGptMark";
 import {
+  CHATGPT_RECIPIENT,
   ChatGptSignInState,
   ChatGptStorageNotice,
   useChatGptStorage,
@@ -182,7 +182,7 @@ function LeadingWays({
         {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line")}
       </p>
       {/* It signs in at once, so it says here what goes to OpenAI (ADR-0022). */}
-      <SendsLine provider={CHATGPT_SERVICE.name} testId="setup-chatgpt-sends" />
+      <SendsLine provider={CHATGPT_RECIPIENT} testId="setup-chatgpt-sends" />
     </div>
   );
   const key = (

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { ChatGptAccount, ConnectionTestResult } from "../../../../core/api";
-import { CHATGPT_SERVICE } from "../../../../core/providers/chatgpt/service";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
@@ -16,6 +15,7 @@ import {
   sectionTitleClass,
 } from "../ui";
 import {
+  CHATGPT_RECIPIENT,
   ChatGptSignInState,
   ChatGptStorageNotice,
   ContinueWithChatGptButton,
@@ -95,7 +95,7 @@ export function ChatGptPlanSettings() {
       <div className="flex flex-col gap-1">
         <h4 className={sectionTitleClass}>{t("chatgpt.title")}</h4>
         <p className={rowTextClass}>{t("chatgpt.description")}</p>
-        <SendsLine provider={CHATGPT_SERVICE.name} />
+        <SendsLine provider={CHATGPT_RECIPIENT} />
       </div>
 
       {status && (
