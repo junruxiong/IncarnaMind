@@ -24,11 +24,17 @@ concurrency:
 
 jobs:
   # The whole smoke suite on macOS, including the specs only macOS has, such as the traffic
-  # lights in the title bar (e2e/titleBar.spec.ts) and full screen.
+  # lights in the title bar (e2e/titleBar.spec.ts) and full screen. As one job it takes about two
+  # hours there, so it is split into shards that run at once, balanced as CI's Linux shards are
+  # (scripts/smoke-shard.mjs and e2e/durations.json).
   smoke-macos:
-    name: Electron smoke test (macOS)
+    name: Smoke shard ${{ matrix.shard }}/4 (macOS)
     runs-on: macos-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -36,12 +42,21 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run test:smoke
+      # Downloads from GitHub's releases fail now and then (a 500), and each shard downloads
+      # Electron, so a failed download is tried again here rather than failing every spec.
+      - name: Make sure Electron is installed
+        run: |
+          for attempt in 1 2 3; do
+            node node_modules/electron/install.js && exit 0
+            sleep 20
+          done
+          exit 1
+      - run: npm run test:smoke -- $(node scripts/smoke-shard.mjs ${{ matrix.shard }} 4)
       - name: Upload Playwright traces
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: smoke-test-results-macos
+          name: smoke-test-results-macos-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
 
