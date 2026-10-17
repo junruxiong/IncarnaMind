@@ -18,10 +18,13 @@ import {
   type Core,
   MIND_CONTENT_FIELD,
   type MindFocus,
+  messageReference,
 } from "../../src/core";
 import { toolRecordLines } from "../../src/core/answers/toolRecord";
 import { plainText } from "../../src/core/mindText";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
+import { answerBlocks } from "../../src/renderer/src/answerBlocks";
+import { withoutFraming } from "../../src/shared/noteBlocks";
 import { resolveProposals } from "../../src/shared/proposals";
 import { connectToMind } from "../../tests/helpers/mindClient";
 import { heading, note, writeMind } from "../../tests/helpers/minds";
@@ -206,20 +209,23 @@ async function runCase(
     );
     await client.settled();
   }
-  const ids = client
-    ? client.blocks
-        .toArray()
-        .map((block) =>
-          block instanceof Y.XmlElement ? String(block.getAttribute(BLOCK_ID_ATTRIBUTE)) : "",
-        )
-    : [];
-  const before = client ? acceptedTexts(client.doc, new Set()) : new Map<string, string>();
+  const idsNow = () =>
+    client
+      ? client.blocks
+          .toArray()
+          .map((block) =>
+            block instanceof Y.XmlElement ? String(block.getAttribute(BLOCK_ID_ATTRIBUTE)) : "",
+          )
+      : [];
+  let ids = idsNow();
+  let before = client ? acceptedTexts(client.doc, new Set()) : new Map<string, string>();
   const focus: MindFocus | null =
     each.selectAll && client
       ? { selection: [...before.values()].join("\n\n"), blockIds: ids }
       : null;
   let conversationId: string | null = null;
   const earlierCalls: ConversationAnswer["toolCalls"] = [];
+  let last: ConversationAnswer | null = null;
   for (const earlier of each.before ?? []) {
     const answer = await ask(core, {
       text: earlier,
@@ -229,6 +235,24 @@ async function runCase(
     });
     conversationId = answer.conversationId;
     earlierCalls.push(...answer.toolCalls);
+    last = answer;
+  }
+  let addedBlocks: number[] | undefined;
+  if (each.addToNote && last && mind && client) {
+    const earlier = new Set(ids);
+    await core.addToNote({
+      mindId: mind.id,
+      blocks: withoutFraming(answerBlocks({ ...last, status: "done" })),
+      origin: {
+        from: messageReference(last.conversationId, last.id),
+        question: each.before?.at(-1) ?? "",
+      },
+      model: last.model,
+    });
+    await client.settled();
+    ids = idsNow();
+    addedBlocks = ids.flatMap((id, block) => (earlier.has(id) ? [] : [block]));
+    before = acceptedTexts(client.doc, new Set());
   }
   const answer = await ask(core, {
     text: each.request,
@@ -275,6 +299,7 @@ async function runCase(
     verdict,
     citedInMinds,
     changedBlocks,
+    addedBlocks,
     scoped,
   });
   return {
