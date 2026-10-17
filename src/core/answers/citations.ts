@@ -37,7 +37,7 @@ import {
   resolveRequested,
   unitLocation,
 } from "../../shared/locations";
-import { citesSource, type NamedSource } from "../../shared/markdownTables";
+import { citesSource, type NamedSource } from "../../shared/namedSources";
 import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteMatch";
 import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
@@ -66,8 +66,15 @@ import type {
 } from "./engine";
 import { NOT_CITED_ATTRIBUTE } from "./prompt";
 
-/** How many times one Answer may search; later searches are refused, so the model answers. */
-const MAX_SEARCHES_PER_ANSWER = 5;
+const SEARCHED_ALREADY =
+  "You already searched for this, and have its Passages: answer with them, or search for something different.";
+
+const sameSearch = (query: string) =>
+  query
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
 
 const FIX_THESE = "Fix these with another cite call:";
 
@@ -315,6 +322,8 @@ export interface AnswerDocuments {
   ): PageText[];
   /** A live Document's date, shown with its Passages (see `documentDate` in ../documents); null if none is known. */
   documentDate(documentId: string): string | null;
+  /** The id of the Document to search named `name`, as the instructions list it; null for none. */
+  documentNamed?(name: string): string | null;
 }
 
 /** What re-checking a Citation against the current version needs from Documents. */
@@ -624,9 +633,15 @@ export interface CitationSessionEvents {
 /**
  * One Answer's Citations: the Passages it was given (each with a short id such
  * as "P3", which is what the model cites), the records it gave, and the Tools
- * the Answer engine offers the model.
+ * the Answer engine offers the model. `opening`, when the Question is asked
+ * beside the working copy of a Document (#1036): that Document's opening
+ * Passages, which a search that finds nothing gives instead, once.
  */
-export function createCitationSession(documents: AnswerDocuments, events: CitationSessionEvents) {
+export function createCitationSession(
+  documents: AnswerDocuments,
+  events: CitationSessionEvents,
+  opening?: { documentId: string; name: string; passages(): WindowedPassage[] },
+) {
   const handles = new Map<string, string>();
   const handleOf = new Map<string, string>();
   /** Each Passage's text as the model was given it, by its short id. */
@@ -634,7 +649,8 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
   const records = new Map<number, Accepted>();
   /** Records naming no Passage the model was given, or no marker: as given, and why. */
   const rejected: RejectedRecord[] = [];
-  let searches = 0;
+  const searched = new Set<string>();
+  let openingGiven = false;
   /** Markers in the final text, in order of first appearance, and those that had no record. */
   const finalMarkers: number[] = [];
   let removedMarkers = 0;
@@ -937,8 +953,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     };
   }
 
-  /** The Passages as the model reads them, each under the id it cites it by. */
-  function show(found: readonly WindowedPassage[]): string {
+  /**
+   * The Passages as the model reads them, each under the id it cites it by.
+   * `measuring`: only to count what showing them would send, so nothing is recorded as shown.
+   */
+  function show(found: readonly WindowedPassage[], measuring = false): string {
+    let unseen = 0;
     const dates = new Map<string, string | null>();
     const dateOf = (documentId: string) => {
       if (!dates.has(documentId)) dates.set(documentId, documents.documentDate(documentId));
@@ -959,12 +979,14 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         units.length > 1 || units.some((unit) => innerMarks(unit).length > 0)
           ? withUnitMarks(passage.text, units)
           : passage.text;
-      const id = handleFor(passage.passageId);
+      const id = measuring
+        ? (handleOf.get(passage.passageId) ?? `P${handleOf.size + ++unseen}`)
+        : handleFor(passage.passageId);
       // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
       const text = foldRadicals(withCueMarks(marked, units));
       const notCited = documents.citationSource(passage.passageId)?.notCited ?? false;
       // What later requests offer for citing is what was shown here: never a Passage no record may name.
-      if (!notCited) shownTexts.set(id, text);
+      if (!notCited && !measuring) shownTexts.set(id, text);
       return {
         id,
         documentName: passage.documentName,
@@ -988,14 +1010,35 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       signal?: AbortSignal,
       options?: AnswerSearchOptions,
     ): Promise<SearchResultForModel> {
-      searches++;
-      if (searches > MAX_SEARCHES_PER_ANSWER) {
-        return {
-          text: "You have searched enough for this Question: answer with the Passages you have.",
-          passageCount: 0,
-        };
+      // The same words over another Document are a new search.
+      const same = sameSearch(options?.document ? `${options.document}\n${query}` : query);
+      if (searched.has(same)) return { text: SEARCHED_ALREADY, passageCount: 0 };
+      searched.add(same);
+      let within: string[] | undefined;
+      if (options?.document) {
+        const id = documents.documentNamed?.(options.document) ?? null;
+        if (!id) {
+          return {
+            text: `No Document to search is called “${options.document}”: name one as the instructions list it, or leave document out.`,
+            passageCount: 0,
+          };
+        }
+        within = [id];
       }
-      return search(query, signal, undefined, options);
+      const found = await search(query, signal, within, options);
+      if (found.passageCount > 0 || !opening || openingGiven) return found;
+      if (within && !within.includes(opening.documentId)) return found;
+      const passages = opening.passages();
+      if (passages.length === 0) return found;
+      openingGiven = true;
+      return {
+        text: `No Passages match these words. The opening of “${opening.name}”, which the Mind is the working copy of, instead:\n${show(passages)}`,
+        passageCount: passages.length,
+        passageIds: passages.map((passage) => passage.passageId),
+        ...(passages.some((passage) => passage.documentKind === "web") && {
+          thirdParty: ["web-page"] as const,
+        }),
+      };
     },
 
     cite,
@@ -1115,10 +1158,14 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       search(query, signal, [documentId]),
 
     /**
-     * Gives the model Passages without a search: a meeting's live transcript (#144). They can
-     * be cited as a search's are, and don't count as one of the Answer's searches.
+     * Gives the model Passages without a search: a meeting's live transcript (#144), a short
+     * Document's whole text (#1036). They can be cited as a search's are, and don't count as
+     * one of the Answer's searches.
      */
-    show,
+    show: (found: readonly WindowedPassage[]) => show(found),
+
+    /** What `show` would send for these Passages, recording nothing. */
+    measure: (found: readonly WindowedPassage[]) => show(found, true),
 
     quotes,
 

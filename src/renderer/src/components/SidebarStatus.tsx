@@ -64,6 +64,8 @@ interface Status {
   dismiss?: () => void;
   /** It may take two lines, its action said after it, so nothing it names is cut off. */
   wraps?: boolean;
+  /** It asks the User's consent, which is never hidden (ADR-0022). */
+  asks?: true;
 }
 
 /**
@@ -76,8 +78,9 @@ interface Status {
  * the row. Its 28px are kept even when there is nothing to say, so the tree
  * above moves only for a status that takes two lines.
  */
-export function SidebarStatus() {
-  const [first, ...others] = useStatuses();
+export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean }) {
+  const [first, ...others] = useStatuses().filter((status) => !problemsOnly || isProblem(status));
+  if (problemsOnly && !first) return null;
   return (
     <div data-testid="sidebar-status" className="flex min-h-7 shrink-0 flex-col">
       {first && (
@@ -88,6 +91,11 @@ export function SidebarStatus() {
     </div>
   );
 }
+
+// A failure, a one-off the User dismisses (skipped files, a web page not added), or a consent
+// question: the quiet first open hides the footer's other news, never these (DESIGN.md, Problems).
+const isProblem = (status: Status) =>
+  status.tone === "error" || status.dismiss !== undefined || status.asks === true;
 
 function StatusRow({ status, children }: { status: Status; children?: ReactNode }) {
   const t = useT();
@@ -511,6 +519,7 @@ function useStatuses(): Status[] {
       tone: "waiting",
       short: t("status.taggingPermission"),
       full: t("jev.waiting.permission", { service: taggingNeedsOk.name }),
+      asks: true,
       action: {
         label: t("privacy.flows.allow"),
         testId: "tagging-waiting-allow",

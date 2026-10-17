@@ -119,6 +119,7 @@ const ANSWER_ERRORS = [
   "consent-declined",
   "local-mode",
   "ollama-not-running",
+  "data-retention",
   "not-signed-in",
   "plan-limit",
   "blocked",

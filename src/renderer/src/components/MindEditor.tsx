@@ -88,6 +88,7 @@ import { OriginalNotAdded, useWordFile, WordOrigin } from "../editor/WordOrigin"
 import { useWordLookStyle } from "../editor/wordLookStyle";
 import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
+import { useFirstOpen } from "../firstOpen";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
 import { useMeetingOf, useMeetings } from "../meetings";
@@ -95,11 +96,12 @@ import { type OpenedCopy, openMindCopy } from "../mindCopies";
 import { isWritingIn } from "../mindStatus";
 import { useMindTools } from "../mindTools";
 import { onMindWriting, writingPlaceOf } from "../mindWriting";
+import { firstOpenOf } from "../nudges";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { CompareSheet } from "./CompareSheet";
-import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
+import { StartGuide, useIsExample } from "./GettingStarted";
 import { CheckLineIcon, MineLineIcon, SearchLineIcon, SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
@@ -628,7 +630,9 @@ function MindEditorView({
   }, [empty, explained]);
   const findShown = useMindTools((state) => state.findMindId === mindId);
   const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
-  const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
+  const firstOpen = useFirstOpen();
+  const stepsUnderWay = useAppStore((state) => firstOpenOf(state.settings?.device.gettingStarted));
+  const guide = stepsUnderWay && empty && !isExample && !readOnly;
   const verification = useVerification(doc);
   const frame = useRef<HTMLDivElement>(null);
   useClickBelowNote(editor, frame);
@@ -644,7 +648,7 @@ function MindEditorView({
             {verification ? (
               <VerifyLine editor={editor} doc={doc} mindId={mindId} verification={verification} />
             ) : (
-              <WordCount editor={editor} doc={doc}>
+              <WordCount editor={editor} doc={doc} quiet={firstOpen && isExample}>
                 <NoteHealth editor={editor} doc={doc} mindId={mindId} />
                 <ContradictionLine doc={doc} mindId={mindId} />
                 <MindCheckAsk mindId={mindId} />

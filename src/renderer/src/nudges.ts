@@ -1,36 +1,33 @@
 import type { GettingStarted } from "../../core/api";
 import type { AppState } from "./store";
 
-export type NudgeId = "get-started" | "usage-data";
+export const stepsShownOf = (progress: GettingStarted | undefined): boolean =>
+  progress?.started === true && !progress.hidden;
 
-type NudgeState = Pick<AppState, "settings" | "privacy" | "ownAnswerArrived" | "usageNotice">;
+export const firstOpenOf = (progress: GettingStarted | undefined): boolean =>
+  stepsShownOf(progress) &&
+  !(progress?.citationChecked && progress.indexed && (progress.askedOwn || progress.askedReady));
 
-export const gettingStartedShown = (progress: GettingStarted | undefined): boolean =>
-  progress !== undefined &&
-  progress.started &&
-  !progress.hidden &&
-  !(progress.citationChecked && progress.indexed && progress.askedOwn);
+export type NudgeId = "usage-data";
 
+type NudgeState = Pick<
+  AppState,
+  "settings" | "privacy" | "ownAnswerArrived" | "askedOwnAtLaunch" | "usageNotice"
+>;
+
+// A newcomer meets one ask at a time: a release asks once the first own Answer has arrived and the
+// steps are done or closed, or at the next launch if they are still open.
 export function usageDataShown(state: NudgeState): boolean {
   const usageData = state.privacy?.usageData;
   if (!usageData?.available || usageData.localMode || state.usageNotice === "answered")
     return false;
   if (usageData.testerBuild) return !usageData.asked || state.usageNotice === "kept";
-  const ownAnswered =
-    state.ownAnswerArrived || state.settings?.device.gettingStarted.askedOwn === true;
-  return !usageData.asked && ownAnswered;
+  if (usageData.asked) return false;
+  const stepsOver = !firstOpenOf(state.settings?.device.gettingStarted);
+  return state.askedOwnAtLaunch || (state.ownAnswerArrived && stepsOver);
 }
 
-// A test build sends from its first launch, so its notice must come before Get started.
 const ORDER: readonly { id: NudgeId; shown(state: NudgeState): boolean }[] = [
-  {
-    id: "usage-data",
-    shown: (state) => state.privacy?.usageData.testerBuild === true && usageDataShown(state),
-  },
-  {
-    id: "get-started",
-    shown: (state) => gettingStartedShown(state.settings?.device.gettingStarted),
-  },
   { id: "usage-data", shown: usageDataShown },
 ];
 

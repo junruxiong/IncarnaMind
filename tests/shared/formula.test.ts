@@ -16,6 +16,7 @@ import {
   type ShowOptions,
   scaleChanges,
   showResult,
+  sumOf,
 } from "../../src/shared/formula";
 
 const EN: FigureContext = { language: "en" };
@@ -1061,5 +1062,24 @@ describe("a power of ten that changes an amount's scale (#577)", () => {
     expect(changes("usd / users / 1000", [usd, users]).map((each) => each.text)).toEqual([
       "usd / users / 1000",
     ]);
+  });
+});
+
+describe("a formula that is only a sum (#978)", () => {
+  test.each([
+    ["price - agent - legal", { total: "price", taken: ["agent", "legal"] }],
+    ["price + agent", { total: "price", taken: [] }],
+    ["price - agent + refund - legal", { total: "price", taken: ["agent", "legal"] }],
+    ["b - a", { total: "b", taken: ["a"] }],
+    ["price", { total: "price", taken: [] }],
+    ["(b - a) / a", null],
+    ["price - agent * 2", null],
+    ["price - (agent + legal)", null],
+    ["-agent + price", null],
+    ["SUM(price, -agent)", null],
+    ["price -", null],
+    ["", null],
+  ])("%s", (formula, sum) => {
+    expect(sumOf(formula)).toEqual(sum);
   });
 });

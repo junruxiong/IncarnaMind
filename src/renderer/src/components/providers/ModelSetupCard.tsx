@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentClient, ChatProvider } from "../../../../core/api";
 import { SHOW_AGENT_CONNECTION } from "../../../../shared/agentConnection";
+import { chosenFlowSummary } from "../../chosenFlows";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
@@ -17,6 +18,8 @@ import {
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
 import { OllamaAction } from "./ChatProviderChoices";
+import { ClaudePlanWay } from "./ClaudePlan";
+import { CopilotSetupWay } from "./CopilotPlan";
 import {
   OllamaProgress,
   type Ollama as OllamaState,
@@ -53,9 +56,16 @@ export function ModelSetupCard() {
       );
   }, []);
   const running = ollama.status?.running;
+  const questionWaits = useModelSetup((state) => state.waiting !== null);
+  const card = useRef<HTMLElement>(null);
+  // It takes the composer's place, or opens from the steps card: either way the focus comes in.
+  useEffect(() => {
+    card.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, []);
 
   return (
     <section
+      ref={card}
       data-testid="model-setup"
       aria-labelledby="model-setup-title"
       className="flex max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
@@ -68,7 +78,9 @@ export function ModelSetupCard() {
           {t("setup.title")}
         </h2>
         {view === null && (
-          <p className="text-[13px] leading-5 text-ink-secondary">{t("setup.body")}</p>
+          <p className="text-[13px] leading-5 text-ink-secondary">
+            {t(questionWaits ? "setup.body" : "setup.body.ask")}
+          </p>
         )}
       </div>
 
@@ -94,6 +106,8 @@ export function ModelSetupCard() {
               {t("setup.other")}
             </summary>
             <div className="mt-2 flex flex-col gap-2">
+              <ClaudePlanWay onUseKey={() => setView("key")} />
+              <CopilotSetupWay onKey={() => setView("key")} />
               <Way
                 testId="way-local"
                 title={t("setup.way.local")}
@@ -172,7 +186,9 @@ function LeadingWays({
       </button>
       {/* It signs in at once, so its line also says what goes to OpenAI (ADR-0022). */}
       <p data-testid="setup-chatgpt-sends" className={lineClass}>
-        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line")}
+        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line", {
+          sends: chosenFlowSummary(t),
+        })}
       </p>
     </div>
   );

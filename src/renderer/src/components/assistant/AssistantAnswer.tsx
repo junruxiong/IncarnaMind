@@ -25,7 +25,8 @@ import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
-import { UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
+import { NoMindToolsLine, UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
+import { CoverageLine } from "./CoverageLines";
 import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
 
 /** What adding an Answer needs from the thread around it. */
@@ -50,12 +51,15 @@ export function AssistantAnswer({
   question,
   sought,
   keeping,
+  askedAgain,
 }: {
   answer: ConversationAnswer;
   question: ConversationQuestion | undefined;
   /** A link back from a Note led here: it is flashed. */
   sought: boolean;
   keeping: AnswerKeeping;
+  /** It was asked again with this many Documents an earlier Answer didn't use. */
+  askedAgain?: number;
 }) {
   const t = useT();
   const { text, citations, figures, status } = answer;
@@ -96,6 +100,7 @@ export function AssistantAnswer({
       <AnswerSteps
         answer={answer}
         question={question}
+        askedAgain={askedAgain}
         streaming={streaming}
         waitingForApproval={approvals.length > 0}
         wait={silent ? { usual } : null}
@@ -107,6 +112,7 @@ export function AssistantAnswer({
           providerId={answer.model?.providerId ?? null}
         />
       )}
+      <CoverageLine answer={answer} question={question} />
       {(written || streaming) && (
         <AnswerText
           answerId={answer.id}
@@ -123,6 +129,14 @@ export function AssistantAnswer({
       )}
       {!streaming && <WaitingChangesLine answer={answer} />}
       {!streaming && <UnbackedClaimLine answer={answer} onRegenerate={regenerate} />}
+      {!streaming && written && status !== "failed" && answer.steps?.withoutMindTools && (
+        <NoMindToolsLine
+          answerId={answer.id}
+          onAdd={(button) =>
+            keeping.focusedMindName ? keeping.add(answer) : keeping.pick(answer, button)
+          }
+        />
+      )}
       {!streaming && scopeEmpty && (
         <ProblemLine
           role="status"
@@ -145,6 +159,7 @@ export function AssistantAnswer({
           providerId={answer.model?.providerId ?? null}
           // A conversation doesn't keep when a plan's limit resets: the line says so without it.
           resetsAt={null}
+          signInRoute={answer.errorSignInRoute}
           details={answer.errorMessage}
           failedAt={answer.updatedAt}
           onRetry={regenerate}
