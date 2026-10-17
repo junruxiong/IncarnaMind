@@ -73,7 +73,7 @@ export const TextColor = Mark.create({
         parseHTML: (element: HTMLElement) => readTextColor(element.dataset.textColor),
         renderHTML: (attributes: Record<string, unknown>) => {
           const color = readTextColor(attributes.color);
-          return color ? { "data-text-color": color, style: `color: #${color}` } : {};
+          return color ? { "data-text-color": color, style: `--text-color: #${color}` } : {};
         },
       },
     };
@@ -96,7 +96,7 @@ export const TextFont = Mark.create({
           return family
             ? {
                 "data-text-font": family,
-                style: `font-family: ${fontFamilyList({ family }, true)}`,
+                style: `--text-font: ${fontFamilyList({ family }, true)}`,
               }
             : {};
         },
