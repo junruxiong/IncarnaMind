@@ -4328,6 +4328,12 @@ export type EditWithAiResult =
       held?: true;
       /** What its new text left out of the selection, kept; absent when nothing. */
       leftOut?: LeftOutPart[];
+      /**
+       * The Mind's Yjs state vector once the Proposals were written. This reply can reach a
+       * window before the last `"mind.update"` that wrote them, so a window waits until its
+       * copy has all of this before it applies or holds them.
+       */
+      stateVector: Uint8Array;
     }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }
