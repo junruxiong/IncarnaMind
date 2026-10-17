@@ -171,11 +171,18 @@ export function SelectionMenu({
   const pressed = useRef(false);
   const [turning, setTurning] = useState<"mouse" | "keyboard" | null>(null);
   const [linking, setLinking] = useState(false);
-  /** The Aa menu: under its button in this menu, or at the caret (⌘K), or only its custom line spacing there. */
+  /**
+   * The Aa menu: beside this menu, or at the caret (⌘K), or only its custom line spacing there.
+   * Beside this menu, it stays where it opened (`place`), though a choice moves the text and this menu with it.
+   */
   const [formatting, setFormatting] = useState<{
     at: "menu" | "caret" | "custom";
     focus: boolean;
+    place?: DOMRect;
   } | null>(null);
+  const placed = (rect: DOMRect | undefined) => rect && { getBoundingClientRect: () => rect };
+  const formatBeside = (focus: boolean) =>
+    setFormatting({ at: "menu", focus, place: menu.current?.getBoundingClientRect() });
   /** The AI action whose choices are open, and how it was opened. */
   const [choosing, setChoosing] = useState<{
     action: SelectionAction;
@@ -254,7 +261,8 @@ export function SelectionMenu({
     };
     const openFormat = (event: Event) => {
       const part = event instanceof CustomEvent && event.detail === "custom" ? "custom" : null;
-      setFormatting({ at: part ?? (shown.current ? "menu" : "caret"), focus: true });
+      const place = !part && shown.current ? menu.current?.getBoundingClientRect() : undefined;
+      setFormatting({ at: part ?? (place ? "menu" : "caret"), focus: true, place });
     };
     dom.addEventListener(LINK_EDIT, editLink);
     dom.addEventListener(FORMAT_OPEN, openFormat);
@@ -321,7 +329,7 @@ export function SelectionMenu({
     }
     if (event.key === "ArrowRight" && document.activeElement === formatButton.current) {
       event.preventDefault();
-      setFormatting({ at: "menu", focus: true });
+      formatBeside(true);
       return;
     }
     const withChoices = shownAi.find(
@@ -423,9 +431,10 @@ export function SelectionMenu({
               title={t("format.menu")}
               aria-label={t("format.menu")}
               onMouseDown={keepSelection}
-              onClick={(event) =>
-                setFormatting(formatting ? null : { at: "menu", focus: event.detail === 0 })
-              }
+              onClick={(event) => {
+                if (formatting) setFormatting(null);
+                else formatBeside(event.detail === 0);
+              }}
               className="selection-format"
             >
               <span aria-hidden="true">Aa</span>
@@ -594,7 +603,7 @@ export function SelectionMenu({
         {formatting?.at === "menu" && formatButton.current && (
           <FormatMenu
             editor={editor}
-            anchor={menu.current ?? formatButton.current}
+            anchor={placed(formatting.place) ?? formatButton.current}
             placement="right-start"
             focus={formatting.focus}
             onClose={(refocus) => {

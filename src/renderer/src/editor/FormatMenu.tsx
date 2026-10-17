@@ -178,12 +178,14 @@ export function FormatMenu({
     if (editor.view.composing) return;
     run();
   };
-  const openBeside = (which: Open, event: { currentTarget: HTMLElement; detail: number }) =>
+  const openBeside = (which: Open, event: { currentTarget: HTMLElement; detail: number }) => {
+    // Read now: React empties the event's currentTarget once its handlers have run.
+    const anchor = event.currentTarget;
+    const focus = event.detail === 0;
     setOpen((now) =>
-      now.which === which
-        ? { which: null, anchor: null, focus: false }
-        : { which, anchor: event.currentTarget, focus: event.detail === 0 },
+      now.which === which ? { which: null, anchor: null, focus: false } : { which, anchor, focus },
     );
+  };
   const closeSub = (refocus: boolean) => {
     const back = open.anchor;
     setOpen({ which: null, anchor: null, focus: false });

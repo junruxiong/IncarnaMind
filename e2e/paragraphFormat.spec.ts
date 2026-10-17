@@ -281,6 +281,24 @@ for (const { language, width } of SETTINGS) {
         .toEqual(before.map((each) => each.html));
       await window.keyboard.press("Escape");
     }
+
+    // Several choices in one go, the menu staying open, each its own Undo step.
+    await click(window, lines[0]);
+    await slideSelect(window, lines[1], WORDS);
+    await click(window, selectionMenu.getByTestId("format-aa"));
+    const before = await allDrawn(lines);
+    await click(window, menu.getByTestId("format-align-right"));
+    await click(window, menu.getByTestId("format-color-blue"));
+    await inSpacing(window, menu, "format-line-spacing-2");
+    await expect
+      .poll(async () => Math.abs((await drawn(lines[1])).leading - 16 * 1.15 * 2) <= 1)
+      .toBe(true);
+    expect((await drawn(lines[1])).align).toBe("right");
+    await expect(lines[1].locator('[data-text-color="1D4ED8"]')).not.toHaveCount(0);
+    for (let step = 0; step < 3; step++) await window.keyboard.press("ControlOrMeta+z");
+    await expect
+      .poll(async () => (await allDrawn(lines)).map((each) => each.html))
+      .toEqual(before.map((each) => each.html));
   });
 
   test(`Aa from ⌘K: each control on the caret's paragraph, each taken back by one Undo (${language}, ${width} px)`, async () => {
