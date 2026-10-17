@@ -144,7 +144,7 @@ test("a used-up plan model offers the next one in one click, which answers in pl
     await expect(chip).toHaveText(`GPT-6 Luna · until ${time}`);
     await expect(chip).toHaveAttribute(
       "title",
-      `GPT-6.1 Sol’s limit is used up until ${time}. Questions go to GPT-6 Luna until then.`,
+      `GPT-6.1 Sol’s limit is used up until ${time}. Questions go to GPT-6 Luna.`,
     );
     await expectChipWhole(window);
     await shots(app, window, "answered-en");
