@@ -35,7 +35,10 @@ export function parseRequest(input: unknown): CitationFormatRequest {
     return { works: cluster.works.map(parseWork) };
   });
   if (input.language !== undefined && input.language !== "en" && input.language !== "zh-CN") {
-    throw new InvalidInputError(`"${String(input.language)}" isn't a language a Mind is in.`);
+    throw new InvalidInputError({
+      key: "error.citationStyle.language",
+      values: { language: String(input.language) },
+    });
   }
   return input.language === undefined
     ? { style: input.style, clusters }
