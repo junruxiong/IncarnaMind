@@ -5669,6 +5669,267 @@
   }
 
   /*
+   * Help during a call (the canvas boards Meet-Help-*): the buttons, in the floating
+   * panel two to a row with their keys, and at the top of the assistant as a strip; then a
+   * suggestion: one or two options, the recommended first and starred, each with what it
+   * leads to, read in a second or two.
+   */
+  .help-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px var(--edge);
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .help-strip-label {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .help-buttons--grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0 10px 10px;
+  }
+  .help-buttons--strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .help-buttons--grid .help-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 6px 0 8px;
+    border-radius: 8px;
+    background: var(--color-frame);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    color: var(--color-ink-strong);
+
+    &:hover {
+      background: var(--color-hover);
+    }
+    &[data-general="false"] {
+      background: var(--color-sheet);
+      box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+    }
+    &[aria-pressed="true"] {
+      background: var(--color-accent-wash);
+      box-shadow: inset 0 0 0 1.5px var(--color-accent);
+      color: var(--color-accent);
+    }
+  }
+  .help-buttons--strip .help-button {
+    padding: 3px 10px;
+    border: 1px solid var(--color-rule);
+    border-radius: 999px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &[data-general="false"] {
+      border-color: var(--color-rule-strong);
+    }
+    &[aria-pressed="true"] {
+      border-color: var(--color-accent);
+      background: var(--color-accent-wash);
+      color: var(--color-accent);
+    }
+  }
+  .help-button-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .help-button-keys {
+    flex-shrink: 0;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    font-family: var(--font-sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .help-suggestion {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .help-heading {
+    display: flex;
+    gap: 4px;
+    margin: 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+
+    & b {
+      flex: none;
+      font-weight: 600;
+      white-space: nowrap;
+      color: var(--color-ink-secondary);
+    }
+  }
+  .help-heading-after {
+    display: -webkit-box;
+    min-width: 0;
+    overflow: hidden;
+    overflow-wrap: break-word;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .help-option {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    column-gap: 6px;
+    row-gap: 2px;
+  }
+  .help-option-mark {
+    font-size: 13px;
+    line-height: 20px;
+    text-align: center;
+    color: var(--color-accent);
+  }
+  .help-option-say {
+    font-size: 14.5px;
+    line-height: 20px;
+    overflow-wrap: break-word;
+    color: var(--color-ink-strong);
+  }
+  .help-option--recommended .help-option-say {
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .help-option-note {
+    grid-column: 2;
+    justify-self: start;
+    max-width: 100%;
+    margin: 2px 0;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--color-chip);
+    font-size: 12px;
+    line-height: 20px;
+    overflow-wrap: break-word;
+    color: var(--color-ink-meta);
+  }
+  .help-option-effect {
+    grid-column: 2;
+    font-size: 12.5px;
+    line-height: 17px;
+    overflow-wrap: break-word;
+    color: var(--color-ink-meta);
+  }
+  .help-citation {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 18px;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: var(--color-chip);
+    font-size: 11px;
+    font-weight: 600;
+    vertical-align: 1px;
+    color: var(--color-ink-secondary);
+
+    &[data-check="not-found"],
+    &[data-check="unsupported"],
+    &[data-check="contradicted"] {
+      color: var(--color-warning);
+    }
+  }
+  .help-citation-found {
+    width: 10px;
+    height: 10px;
+    color: var(--color-success);
+  }
+  .help-sources {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .help-source {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .help-outline-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 0;
+  }
+  .help-outline-line {
+    height: 12px;
+    border-radius: 4px;
+    background: var(--color-chip);
+  }
+  .help-failed {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--color-ink-secondary);
+  }
+
+  /*
+   * The level bars while a Meeting records (the canvas board Meet-Polish-Live): the one
+   * thing that moves, so the User knows they're heard. Their heights change; nothing slides.
+   */
+  .level-meter {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    color: var(--color-ink-secondary);
+  }
+  .level-meter--stop:hover,
+  .level-meter--stop:focus-visible {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+  .level-bars {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 12px;
+  }
+  .level-bar {
+    width: 2px;
+    border-radius: 1px;
+    background: currentColor;
+  }
+  .level-warning {
+    display: inline-flex;
+    align-items: center;
+    color: var(--color-warning);
+  }
+
+  /*
    * The conversation (#201; DESIGN.md, Answer): Questions as
    * bubbles at the right, Answers with no box, in one reading size (#391):
    * 14px, Answers 14/22, the actions 13/18, Citation markers 10px; 8–12px
