@@ -14,7 +14,7 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_r
 
 `main` must stay green. A pull request merges through GitHub's merge queue once all three pass: the queue builds it together with `main` and the pull requests ahead of it, runs the checks again, and merges only if they pass. Nobody brings a branch up to date by hand. If `main` goes red, fixing it comes before new work.
 
-Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`.
+Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, in four shards (`Smoke shard N/4 (macOS)`), with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`.
 
 ## Before you open a pull request
 
@@ -27,7 +27,7 @@ Every night, and by hand from the Actions tab, the Electron smoke test (macOS) i
 ## After you open it
 
 - Watch the checks until they finish: `gh pr checks <number> --watch`. Don't report the work as done, or ask for a merge, while a check is red or still running.
-- When a check fails, read why: `gh run view <run id> --log-failed`, and for the smoke test, the failing shard's log and the Playwright traces uploaded as its `smoke-test-results-linux-N` artifact (`smoke-test-results-macos` from the nightly run). Fix it in this pull request, whether or not your change caused it, and say which in the pull request.
+- When a check fails, read why: `gh run view <run id> --log-failed`, and for the smoke test, the failing shard's log and the Playwright traces uploaded as its `smoke-test-results-linux-N` artifact (`smoke-test-results-macos-N` from the nightly run). Fix it in this pull request, whether or not your change caused it, and say which in the pull request.
 - "Flaky" is a claim that needs evidence: it failed, then passed on a rerun with nothing changed, and you can say what timing it depends on. Then fix the test. Don't hide it with more retries, longer timeouts or a skip.
 
 ## Tests that pass on any machine
