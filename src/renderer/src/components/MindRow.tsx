@@ -70,6 +70,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
             label={t("mind.renameLabel", { title })}
             placeholder={title}
             testId="mind-rename"
+            clearable
             {...rename.field((name) => renameMind(mind.id, name))}
           />
         </span>

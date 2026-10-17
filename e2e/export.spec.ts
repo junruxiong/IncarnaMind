@@ -15,11 +15,13 @@ import {
   dismissChatSetup,
   editFolderInLibrary,
   exportFromMenu,
+  frontMindName,
   interceptOpenDialog,
   interceptOpenPath,
   interceptShowItemInFolder,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   openDocumentMenu,
   openSettings,
@@ -83,7 +85,7 @@ test("Export opens a short menu: Word and PDF, the last one used first with ⇧�
   await dismissChatSetup(window);
   await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
   await useOutputLocation(window, sources);
@@ -196,7 +198,7 @@ test("Export saves a .docx from its menu: the first goes to Documents › Incarn
 
   // A Note, then an Answer that misquotes its Document, added from the assistant.
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Notes on tides.");
@@ -267,7 +269,7 @@ test("the Saved line names the folder, goes by itself after ten seconds unless t
   await dismissChatSetup(window);
   await setWindowSize(app, window, 1100, 760);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
   await useOutputLocation(window, sources);
@@ -296,7 +298,7 @@ test("the Saved line names the folder, goes by itself after ten seconds unless t
   await newMind(window);
   await window.clock.fastForward("01:00");
   await window.getByRole("tab", { name: "Tides" }).click();
-  await expect(window.getByTestId("mind-title")).toHaveValue("Tides");
+  await expect(frontMindName(window)).toHaveText("Tides");
   await expect(result).toHaveCount(0);
   await app.close();
 });
@@ -311,7 +313,7 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
   await newMind(window);
   const title =
     "Contract review notes for the fourth-quarter credit committee 信贷委员会合同审阅笔记";
-  await window.getByTestId("mind-title").fill(title);
+  await nameMind(window, title);
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
 
@@ -371,7 +373,7 @@ test("maths exports to .docx as Word equations, which a Word viewer shows as equ
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Gravity");
+  await nameMind(window, "Gravity");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
@@ -435,7 +437,7 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
   await dismissChatSetup(window);
   await bridge(window).link(papers);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
 
@@ -533,7 +535,7 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   );
   await useOutputLocation(window, papers);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
   await exportFromMenu(window);

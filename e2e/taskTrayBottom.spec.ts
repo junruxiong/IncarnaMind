@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   removeDataFolder,
   setLanguage,
@@ -47,7 +48,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await connectLocalChatModel(window);
     await setLanguage(window, language);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Credit memo");
+    await nameMind(window, "Credit memo");
     await askInAssistant(window, "First");
     const mind = await window.evaluate(
       async () =>
