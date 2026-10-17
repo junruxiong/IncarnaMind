@@ -11,6 +11,7 @@ import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import { type Core, type Document, MIND_WORD_FIELD, WORD_ATOM_NODE } from "../../src/core";
+import { elements, parseXml, type XmlElement } from "../../src/core/documents/formats/xml";
 import { recordProposalRequest } from "../../src/shared/proposals";
 import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
 import { createTempDataFolder, startCore } from "../helpers/core";
@@ -917,4 +918,67 @@ describe("Word's rules", () => {
     const head = (xml: string) => xml.slice(0, xml.indexOf("<w:body>"));
     expect(head(document)).toBe(head(original));
   });
+
+  test("a table nested 2,000 deep keeps its depth, and every cell still ends with a paragraph when the one after the nested table goes", async () => {
+    const { core, mindId, client } = await setUp({
+      body: nestedTable(0, NESTED, (level) => paragraph(`After level ${level}`)),
+    });
+    const withoutAfter = (node: JSONContent): JSONContent => ({
+      ...node,
+      ...(node.content && {
+        content: node.content
+          .filter((each) => each.content?.[0]?.text !== "After level 0")
+          .map(withoutAfter),
+      }),
+    });
+    editMind(client, (blocks) => blocks.map(withoutAfter));
+    editText(client, (value) => (value === "Level 0" ? "Level 0, edited" : value));
+    await client.settled();
+    const { document } = await exported(core, mindId);
+    expect(document).toContain("Level 0, edited");
+    expect(document).not.toContain("After level 0");
+    expect(document).toContain("After level 1");
+    const { lastInCell, depth } = cellEndsAndDepth(document);
+    expect(depth).toBe(NESTED);
+    expect(lastInCell).toHaveLength(NESTED);
+    expect(new Set(lastInCell)).toEqual(new Set(["w:p"]));
+  });
+
+  test("a cell that ended with its nested table in the file still does, the table byte for byte and as deep", async () => {
+    const { core, mindId, client } = await setUp({ body: nestedTable(0, NESTED, () => "") });
+    editText(client, (value) => (value === "Level 0" ? "Level 0, edited" : value));
+    await client.settled();
+    const { document } = await exported(core, mindId);
+    expect(document).toContain("Level 0, edited");
+    expect(document).toContain(`${nestedTable(1, NESTED, () => "")}</w:tc>`);
+    expect(cellEndsAndDepth(document).depth).toBe(NESTED);
+  });
 });
+
+const NESTED = 2_000;
+
+function nestedTable(
+  fromLevel: number,
+  untilLevel: number,
+  afterNested: (level: number) => string,
+): string {
+  let inner = "";
+  for (let level = untilLevel - 1; level >= fromLevel; level--) {
+    inner = table([[`${paragraph(`Level ${level}`)}${inner && inner + afterNested(level)}`]]);
+  }
+  return inner;
+}
+
+function cellEndsAndDepth(xml: string): { lastInCell: string[]; depth: number } {
+  const lastInCell: string[] = [];
+  let depth = 0;
+  const stack: [XmlElement, number][] = [[parseXml(xml), 0]];
+  for (let at = stack.pop(); at; at = stack.pop()) {
+    const [element, outside] = at;
+    const tables = element.name === "w:tbl" ? outside + 1 : outside;
+    depth = Math.max(depth, tables);
+    if (element.name === "w:tc") lastInCell.push(elements(element).at(-1)?.name ?? "");
+    for (const each of elements(element)) stack.push([each, tables]);
+  }
+  return { lastInCell, depth };
+}

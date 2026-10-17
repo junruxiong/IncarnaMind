@@ -23,7 +23,6 @@ import { serviceForUrl } from "../../../../core/providers/service";
 import type { MessageKey } from "../../../../shared/i18n";
 import { gap } from "../../../../shared/i18n/join";
 import { modelName } from "../../../../shared/modelName";
-import { chosenFlowLines } from "../../chosenFlows";
 import { core } from "../../core";
 import { dayOf } from "../../dates";
 import { errorMessage } from "../../errors";
@@ -44,6 +43,7 @@ import {
 } from "../ui";
 import { KeyHelp } from "./KeyHelp";
 import { LocalServerLine, useLocalServer } from "./LocalServerLine";
+import { SendsLine } from "./SendsLine";
 import { keyProviderName, testErrorKey, useProviderKey } from "./shared";
 import { useJevSettings } from "./useJevSettings";
 
@@ -684,20 +684,14 @@ export function ProviderSendsLine({
   const t = useT();
   const language = useLanguage();
   const words = language === "zh-CN" ? "zh" : "en";
-  const sends = t("providers.sends", { provider });
   const summary = dataUse && t("providers.form.dataUse", { summary: dataUse.summary[words] });
   const link = `${t("providers.form.dataUseLink")} ↗`;
   return (
     <div className="flex flex-col">
-      <div data-testid="provider-sends" className={hintClass}>
-        <p>{sends}</p>
-        <ul data-testid="provider-sends-list" className="list-disc pl-4">
-          {chosenFlowLines().map((line) => (
-            <li key={line}>{t(line)}</li>
-          ))}
-        </ul>
-        {tagsOnSave && <p>{t("providers.sends.tagsOnSave")}</p>}
-      </div>
+      <SendsLine provider={provider} />
+      {tagsOnSave && (
+        <p className="text-[12px] leading-5 text-ink-meta">{t("providers.sends.tagsOnSave")}</p>
+      )}
       {summary && (
         <p data-testid="provider-data-use" className={`${hintClass} mt-0`}>
           {summary}

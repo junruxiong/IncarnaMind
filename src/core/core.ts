@@ -21,6 +21,14 @@ import {
   setCitationStyle,
 } from "../shared/mindCitationStyle";
 import { mindModelOf } from "../shared/mindModel";
+import {
+  DEFAULT_MIND_STYLE,
+  exportedFamily,
+  isMindStyle,
+  mindStyleOf,
+  sameStyle,
+  writeMindStyle,
+} from "../shared/mindStyle";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
@@ -1570,6 +1578,11 @@ export function createCore(adapters: CoreAdapters): Core {
   });
 
   // Find support and Check against Documents (#96): check Runs that can only search and cite.
+  const startInWritingStyle = (mindId: string) => {
+    const style = settings.get().user.newMindStyle;
+    if (sameStyle(style, DEFAULT_MIND_STYLE)) return;
+    content.editSettings(mindId, (mindSettings) => writeMindStyle(mindSettings, style));
+  };
   /** A new Mind, in the citation style last chosen for a Mind in its Folder, as its own choice (#289). */
   const makeMind = (input: Required<CreateMindInput>): Mind => {
     if (input.folderId !== null) library.folder(input.folderId);
@@ -1578,6 +1591,7 @@ export function createCore(adapters: CoreAdapters): Core {
     if (style !== null) {
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
     }
+    startInWritingStyle(mind.id);
     mindsChanged();
     usageData.record({ event: "mind_created", fields: {} });
     return mind;
@@ -1702,6 +1716,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const { style, textLanguage } = mindStyleAndText(mindId);
       return { style: citationStyles.resolve(style.style, textLanguage), textLanguage };
     },
+    font: (mindId) => exportedFamily(content.readSettings(mindId, mindStyleOf).font),
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     citedPage: (citation) => citedPages.image(citation),
@@ -2567,6 +2582,7 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     createMind: (title) => {
       const mind = minds.create(parseCreateMindInput({ title }));
+      startInWritingStyle(mind.id);
       mindsChanged();
       return mind;
     },
@@ -3702,6 +3718,13 @@ export function createCore(adapters: CoreAdapters): Core {
       const path = join(folder, "IncarnaMind citation styles.txt");
       await writeFile(path, citationStyles.notice());
       await adapters.shell.openPath(path);
+    },
+    getMindStyle: async (mindId) => content.readSettings(minds.get(mindId).id, mindStyleOf),
+    setMindStyle: async (mindId, style) => {
+      if (!isMindStyle(style)) throw new InvalidInputError({ key: "error.mindStyle.invalid" });
+      const mind = writableMind(mindId);
+      content.editSettings(mind.id, (mindSettings) => writeMindStyle(mindSettings, style));
+      return content.readSettings(mind.id, mindStyleOf);
     },
     getOutputSettings: async () => outputs.settings(),
     setOutputLocation: (path) => outputs.setLocation(path),
