@@ -221,6 +221,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
     firstWordMs,
     careful,
     unbackedClaims,
+    example,
     withoutMindTools,
     coverage,
   } = parsed;
@@ -252,6 +253,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
     ...(typeof firstWordMs === "number" && firstWordMs >= 0 && { firstWordMs }),
     ...(careful === true && { careful }),
     ...(claimed.length > 0 && { unbackedClaims: claimed }),
+    ...(example === true && { example }),
     ...(withoutMindTools === true && { withoutMindTools }),
     ...(storedCoverage(coverage) ?? {}),
   };
