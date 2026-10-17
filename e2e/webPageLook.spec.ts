@@ -148,7 +148,7 @@ test("off by default: the box is unticked, a page saved is never loaded for its 
   await expect(dialog.getByTestId("add-web-page-keep-look")).not.toBeChecked();
   // The fetch is one line; its Details say what else comes with the page.
   await expect(dialog.getByTestId("add-web-page-fetch")).toContainText(
-    "Each page is fetched once from this computer",
+    "Fetched once from this computer, kept as a Document.",
   );
   await dialog.getByTestId("add-web-page-fetch-details").click();
   const fetched = dialog.getByTestId("add-web-page-fetch-list");
