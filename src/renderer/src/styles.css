@@ -1851,12 +1851,14 @@
       color: var(--color-ink);
     }
   }
+  /* Too narrow for one row, the last controls wrap to a second, never inside a button. */
   .meeting-controls {
     display: flex;
     flex-shrink: 0;
+    flex-wrap: wrap;
     align-items: center;
     gap: 2px;
-    height: 28px;
+    min-height: 28px;
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink);
@@ -1891,6 +1893,10 @@
       background: var(--color-hover);
       color: var(--color-ink);
     }
+  }
+  .meeting-button[aria-pressed="true"] {
+    background: var(--color-chip);
+    color: var(--color-ink);
   }
   .meeting-button:disabled {
     color: var(--color-ink-placeholder);

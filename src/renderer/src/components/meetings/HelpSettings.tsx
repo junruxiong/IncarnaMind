@@ -2,10 +2,10 @@ import { type KeyboardEvent, useId, useState } from "react";
 import type { Settings } from "../../../../core/api";
 import {
   defaultHelpKeys,
-  GENERAL_HELP,
-  type GeneralHelpKind,
+  HELP_SHORTCUTS,
+  type HelpShortcut,
   helpKeysOf,
-  helpLabel,
+  helpShortcutLabel,
   isGlobalKeys,
 } from "../../../../shared/meetingHelp";
 import { SAYS_HIDDEN_FROM_SHARES } from "../../../../shared/meetingPanel";
@@ -50,21 +50,21 @@ function keysPressed(event: KeyboardEvent): string | null {
 
 type KeysProblem =
   | { kind: "invalid" }
-  | { kind: "taken"; by: GeneralHelpKind }
+  | { kind: "taken"; by: HelpShortcut }
   | { kind: "inUse"; keys: string };
 
 /**
- * One button's shortcut: click, then press the new keys; Esc keeps the old ones, Backspace
- * takes the shortcut away. Keys another app holds say so, and the old ones stay.
+ * One shortcut: click, then press the new keys; Esc keeps the old ones, Backspace takes the
+ * shortcut away. Keys another app holds say so, and the old ones stay.
  */
-function KeysField({ kind, device }: { kind: GeneralHelpKind; device: Settings["device"] }) {
+function KeysField({ kind, device }: { kind: HelpShortcut; device: Settings["device"] }) {
   const t = useT();
   const updateSettings = useAppStore((state) => state.updateSettings);
   const [recording, setRecording] = useState(false);
   const [problem, setProblem] = useState<KeysProblem | null>(null);
   const id = useId();
   const keys = helpKeysOf(kind, device.meetingHelpKeys, isMac);
-  const name = t(helpLabel(kind));
+  const name = t(helpShortcutLabel(kind));
 
   const save = (chosen: string) =>
     updateSettings({ device: { meetingHelpKeys: { ...device.meetingHelpKeys, [kind]: chosen } } });
@@ -91,7 +91,7 @@ function KeysField({ kind, device }: { kind: GeneralHelpKind; device: Settings["
       setProblem({ kind: "invalid" });
       return;
     }
-    const by = GENERAL_HELP.find(
+    const by = HELP_SHORTCUTS.find(
       (other) => other !== kind && helpKeysOf(other, device.meetingHelpKeys, isMac) === chosen,
     );
     if (by) {
@@ -158,7 +158,7 @@ function KeysField({ kind, device }: { kind: GeneralHelpKind; device: Settings["
           {problem.kind === "invalid" &&
             t(isMac ? "meetings.settings.keysInvalid.mac" : "meetings.settings.keysInvalid.other")}
           {problem.kind === "taken" &&
-            t("meetings.settings.keysTaken", { name: t(helpLabel(problem.by)) })}
+            t("meetings.settings.keysTaken", { name: t(helpShortcutLabel(problem.by)) })}
           {problem.kind === "inUse" && (
             <>
               {t("meetings.settings.keysInUse")}
@@ -200,7 +200,7 @@ export function HelpSettings() {
         <div className={ruledRowClass}>
           <div className="flex min-w-0 flex-col gap-0.5">
             <label htmlFor={panelId} className={rowTitleClass}>
-              {t("meetings.panel.show")}
+              {t("meetings.callHelp.show")}
             </label>
             <p id={`${panelId}-description`} className={rowTextClass}>
               {t("meetings.settings.panelBody")}
@@ -249,9 +249,9 @@ export function HelpSettings() {
       <h5 className={`mt-4 mb-1 ${rowTitleClass}`}>{t("meetings.settings.keys")}</h5>
       <p className={`mb-2 ${hintClass}`}>{t("meetings.settings.keysBody")}</p>
       <div className={ruledListClass}>
-        {GENERAL_HELP.map((kind) => (
+        {HELP_SHORTCUTS.map((kind) => (
           <div key={kind} data-testid="help-keys-row" className={ruledRow("center")}>
-            <span className={rowTextClass}>{t(helpLabel(kind))}</span>
+            <span className={rowTextClass}>{t(helpShortcutLabel(kind))}</span>
             <KeysField kind={kind} device={device} />
           </div>
         ))}
