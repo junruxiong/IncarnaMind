@@ -1302,6 +1302,41 @@ export async function pointAndClick(
 }
 
 /**
+ * A Mind's check badge card (#909): open already, as a question opens it,
+ * or opened as a person opens it: from the badge, or from ⌘K while no badge shows.
+ */
+export async function checkCard(window: Page, scope: Page | Locator = window): Promise<Locator> {
+  const card = window.getByTestId("check-card");
+  if (!(await card.isVisible())) {
+    const badge = scope.getByTestId("check-badge-open").first();
+    if (await badge.isVisible()) {
+      // "Checking 2 of 2 · Stop" shrinks to the counts as a check ends: aim once it has.
+      await expect(scope.getByTestId("badge-stop")).toHaveCount(0);
+      await motionSettled(window);
+      // The counts are worked out a moment after a change, and the badge can narrow under the pointer: aim again.
+      await expect(async () => {
+        if (!(await card.isVisible())) await pointAndClick(window, badge);
+        await expect(card).toBeVisible({ timeout: 1000 });
+      }).toPass();
+    } else {
+      const chinese = (await window.evaluate(() => document.documentElement.lang)) === "zh-CN";
+      const command = chinese ? "句子和引用" : "Sentences and Citations";
+      await window.keyboard.press("ControlOrMeta+k");
+      await expect(window.getByTestId("palette-search")).toBeFocused();
+      await window.keyboard.type(command);
+      await pointAndClick(
+        window,
+        window.getByTestId("palette-item").filter({ hasText: command }).first(),
+      );
+    }
+  }
+  await expect(card).toBeVisible();
+  // It grows from the badge: a click while it moves could land on the page behind.
+  await motionSettled(window);
+  return card;
+}
+
+/**
  * Drags an element horizontally by `dx` CSS pixels, as a person grabs it: a
  * few pixels off its centre (a divider is a 1px rule with a wider strip to
  * grab), after sliding the mouse there.
