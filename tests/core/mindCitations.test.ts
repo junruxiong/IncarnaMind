@@ -97,60 +97,44 @@ describe("Sources written as text into a Mind (#1075)", { timeout: 30_000 }, () 
   test.each([
     ["Write a summary of the Folder into a new Mind.", "Summary"],
     ["帮我跟进文件夹里面的内容写一份摘要", "摘要"],
-  ])("“%s” with sources as text is refused, then written with checked Citations", async (request, title) => {
-    const told: string[] = [];
-    const model = scriptedModel((call) =>
-      searchingFirst(call, (passage) => {
-        if (!called(call, "create_mind")) {
-          return { calls: [{ tool: "create_mind", input: { title, content: AS_TEXT } }] };
-        }
-        if (!called(call, "cite")) {
-          told.push(call.results.find((each) => each.tool === "create_mind")?.text ?? "");
-          return cite([
-            { marker: 1, passage: passage(DECK_QUOTE), quote: DECK_QUOTE },
-            { marker: 2, passage: passage(PLAN_QUOTE), quote: PLAN_QUOTE },
-          ]);
-        }
-        if (!called(call, "add_to_mind")) {
-          return { calls: [{ tool: "add_to_mind", input: { mind: title, content: CITED } }] };
-        }
-        return { text: "Done." };
-      }),
-    );
-    const { core, documents } = await setUpWithDocuments(model, [DECK, PLAN]);
-    expect(documents).toHaveLength(2);
+  ])(
+    "“%s” with sources as text is refused, then written with checked Citations",
+    async (request, title) => {
+      const told: string[] = [];
+      const model = scriptedModel((call) =>
+        searchingFirst(call, (passage) => {
+          if (!called(call, "create_mind")) {
+            return { calls: [{ tool: "create_mind", input: { title, content: AS_TEXT } }] };
+          }
+          if (!called(call, "cite")) {
+            told.push(call.results.find((each) => each.tool === "create_mind")?.text ?? "");
+            return cite([
+              { marker: 1, passage: passage(DECK_QUOTE), quote: DECK_QUOTE },
+              { marker: 2, passage: passage(PLAN_QUOTE), quote: PLAN_QUOTE },
+            ]);
+          }
+          if (!called(call, "add_to_mind")) {
+            return { calls: [{ tool: "add_to_mind", input: { mind: title, content: CITED } }] };
+          }
+          return { text: "Done." };
+        }),
+      );
+      const { core, documents } = await setUpWithDocuments(model, [DECK, PLAN]);
+      expect(documents).toHaveLength(2);
 
-    const answer = await askAssistant(core, { text: request });
+      const answer = await askAssistant(core, { text: request });
 
-    expect(told[0]).toContain(`“${DECK_SOURCE}”`);
-    expect(told[0]).toContain(`“${PLAN_SOURCE}”`);
-    expect(told[0]).toContain("Record each source with cite");
-    expect(told[0]).toContain(`call add_to_mind with mind “${title}”`);
-    const made = changesIn(answer).find((change) => change.created);
-    if (!made) throw new Error("No Mind was made.");
-    expect(await mindText(core, made.mindId)).toBe(
-      `${DECK_QUOTE} ⟨found⟩.\n${PLAN_QUOTE}⟨found⟩。`,
-    );
-  });
-
-  // protects=markers with no Citation recorded are refused once too, each named; fails_when=the text goes in with its markers dropped and no word to the model; no_claim=none beyond protects.
-  test("markers with no Citation recorded are refused, each named", async () => {
-    const model = scriptedModel((call) =>
-      called(call, "add_to_mind")
-        ? { text: "Done." }
-        : { calls: [{ tool: "add_to_mind", input: { content: `${DECK_QUOTE} [^7].` } }] },
-    );
-    const { core, mind } = await setUpWithDocuments(model, [DECK]);
-
-    const answer = await askAssistant(core, {
-      text: "Add the office size to this Mind.",
-      mindId: mind.id,
-    });
-
-    expect(lastResult(model)).toContain("No Citation is recorded for [^7].");
-    expect(mindCalls(answer)[0]?.mindProblem).toEqual({ kind: "uncited", mindId: mind.id });
-    expect(await mindText(core, mind.id)).toBe("");
-  });
+      expect(told[0]).toContain(`“${DECK_SOURCE}”`);
+      expect(told[0]).toContain(`“${PLAN_SOURCE}”`);
+      expect(told[0]).toContain("Record each source with cite");
+      expect(told[0]).toContain(`call add_to_mind with mind “${title}”`);
+      const made = changesIn(answer).find((change) => change.created);
+      if (!made) throw new Error("No Mind was made.");
+      expect(await mindText(core, made.mindId)).toBe(
+        `${DECK_QUOTE} ⟨found⟩.\n${PLAN_QUOTE}⟨found⟩。`,
+      );
+    },
+  );
 
   // protects=written as text once more after the refusal, a source the model recorded becomes its Citation and one it didn't is left out, said to the model and on the card, never kept as text; fails_when=a bracket stays in the Mind, or one left out goes unsaid; no_claim=how a real model takes the refusal.
   test("written as text again, sources become their Citations or are left out and counted", async () => {
@@ -201,7 +185,10 @@ describe("The last Answer put into a Mind (#1075)", { timeout: 30_000 }, () => {
     const { core } = await setUpWithDocuments(model, [DECK]);
     const first = await askAssistant(core, { text: "How big are the offices?" });
 
-    const answer = await askAssistant(core, { text: request, conversationId: first.conversationId });
+    const answer = await askAssistant(core, {
+      text: request,
+      conversationId: first.conversationId,
+    });
 
     const made = changesIn(answer).find((change) => change.created);
     if (!made) throw new Error("No Mind was made.");

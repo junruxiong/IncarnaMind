@@ -1230,7 +1230,9 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       const fitting = [...records.values()].filter((record) =>
         citesSource(toCitation(record, record.result), source),
       );
-      const documents = new Set(fitting.map((record) => toCitation(record, record.result).documentId));
+      const documents = new Set(
+        fitting.map((record) => toCitation(record, record.result).documentId),
+      );
       if (source.name === "" && documents.size > 1) return null;
       return fitting[0]?.marker ?? null;
     },

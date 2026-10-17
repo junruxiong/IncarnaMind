@@ -20,7 +20,9 @@ const ALONE: ReadonlySet<RequestedLocation["kind"]> = new Set(["page", "slide", 
 
 function locationOf(written: string): RequestedLocation | null {
   const pages = CHINESE_PAGES.exec(written);
-  return parseRequestedLocation(pages ? `p. ${pages[1]}${pages[2] ? `-${pages[2]}` : ""}` : written);
+  return parseRequestedLocation(
+    pages ? `p. ${pages[1]}${pages[2] ? `-${pages[2]}` : ""}` : written,
+  );
 }
 
 function sourceOf(inner: string): NamedSource | null {
