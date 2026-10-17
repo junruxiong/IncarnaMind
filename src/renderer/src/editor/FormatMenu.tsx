@@ -460,14 +460,9 @@ function keyedTitle(label: string, id: CommandId): string {
 
 function RaisedGlyph({ raised }: { raised: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 shrink-0">
-      <text x="2" y="18" fontSize="15" fill="currentColor">
-        x
-      </text>
-      <text x="13" y={raised ? 10 : 22} fontSize="9" fill="currentColor">
-        2
-      </text>
-    </svg>
+    <span aria-hidden="true" className="format-raise">
+      x{raised ? <sup>2</sup> : <sub>2</sub>}
+    </span>
   );
 }
 

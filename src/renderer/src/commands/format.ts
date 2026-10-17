@@ -14,26 +14,27 @@ import {
   toggleSpaceAfter,
   toggleSpaceBefore,
 } from "../editor/formatCommands";
-import { noteHolding } from "../editor/noteKeymap";
+import { noteHandle } from "./handles";
 import type { Command, CommandContext } from "./registry";
 
+/** From ⌘K, the Mind last written in; from the keys, only while its text has the focus. */
 function noteOf(ctx: CommandContext): Editor | null {
-  const editor = ctx.focus?.kind === "block" ? noteHolding(ctx.focus.id) : null;
-  return editor && !editor.isDestroyed && editor.isEditable ? editor : null;
+  const editor = noteHandle.current?.editor;
+  if (!editor || editor.isDestroyed || !editor.isEditable) return null;
+  return ctx.surface === "palette" || editor.view.hasFocus() ? editor : null;
 }
 
 const KEYWORDS: readonly MessageKey[] = ["format.keywords"];
 
 /** A command on the selected paragraphs, or the caret's; each one Undo step, taken back with the note's own undo (⌘Z). */
 function onParagraphs(
-  command: Omit<Command, "group" | "appliesTo" | "reversible" | "when" | "run" | "keywords">,
+  command: Omit<Command, "group" | "reversible" | "when" | "run" | "keywords">,
   run: (editor: Editor) => unknown,
 ): Command {
   return {
     ...command,
     keywords: KEYWORDS,
     group: "main",
-    appliesTo: ["block"],
     reversible: true,
     when: (ctx) => noteOf(ctx) !== null,
     run(ctx) {
