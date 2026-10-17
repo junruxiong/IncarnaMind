@@ -161,7 +161,7 @@ export interface MindToolsOptions {
    * Citation for, checked, each source written as a name in brackets the
    * Citation recorded for it, and its figures as their shown text, without
    * its sentences about the Answer's searching. Says how many of its
-   * Citations weren't found, which markers had no Citation, which sources
+   * Citations weren't found, how many markers had no Citation, which sources
    * were written as text, and how many sentences it left out.
    */
   blocksOf(markdown: string): {
@@ -169,7 +169,6 @@ export interface MindToolsOptions {
     cited: number;
     notFound: number;
     unrecorded: number;
-    unrecordedMarkers: number[];
     /** The first of `blocks` with a marker no Citation is recorded for yet; -1 for none. */
     firstUnrecorded: number;
     /** The sources written as a name in brackets, as written, before any was made a Citation. */
@@ -1135,7 +1134,6 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       cited: citations.length,
       notFound,
       unrecorded: 0,
-      unrecordedMarkers: [],
       firstUnrecorded: -1,
       sourcesAsText: [],
       droppedSources: 0,
@@ -1144,36 +1142,34 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     };
   };
 
-  /** A call is refused once a Run for sources not cited: a later one goes in, its sources made Citations where they can be. */
+  /**
+   * A call is refused once a Run for sources written as text: a later one goes in, each source
+   * made the Citation recorded for it or left out. A marker with no Citation yet isn't refused:
+   * `cite` may record it later in the same step, and the result tells the model to.
+   */
   let uncitedRefused = false;
 
   const uncitedIn = (
     mind: ChangeableMind,
-    { sourcesAsText, unrecordedMarkers }: Content,
+    { sourcesAsText }: Content,
     again: string,
     answer: boolean,
   ): Refusal | null => {
-    if (uncitedRefused || (sourcesAsText.length === 0 && unrecordedMarkers.length === 0)) {
-      return null;
-    }
+    if (uncitedRefused || sourcesAsText.length === 0) return null;
     uncitedRefused = true;
-    return new Refusal({ kind: "uncited", mindId: mind.id }, [
-      `Nothing was written in “${mind.name}”: each source in content must be a marker like [^3], for a Citation you recorded with cite before this call.`,
-      ...(sourcesAsText.length > 0
-        ? [
-            `These sources are written as text instead: ${someOf(sourcesAsText.map((each) => `“${each}”`))}. A source in brackets is how IncarnaMind shows you a Citation, never a way to write one.`,
-          ]
-        : []),
-      ...(unrecordedMarkers.length > 0
-        ? [
-            `No Citation is recorded for ${someOf(unrecordedMarkers.map((marker) => `[^${marker}]`))}.`,
-          ]
-        : []),
-      `Record each source with cite, its Passage and exact words, searching first for one that isn't in this Answer's results. Then ${again} with the same text, each source replaced by its marker, as in “Rent is due on the 1st [^3].”`,
-      ...(answer && options.lastAnswer
-        ? ["To put your last Answer in as it is, with its Citations, give answer: true instead of content."]
-        : []),
-    ].join(" "));
+    return new Refusal(
+      { kind: "uncited", mindId: mind.id },
+      [
+        `Nothing was written in “${mind.name}”: each source in content must be a marker like [^3], for a Citation you recorded with cite.`,
+        `These sources are written as text instead: ${someOf(sourcesAsText.map((each) => `“${each}”`))}. A source in brackets is how IncarnaMind shows you a Citation, never a way to write one.`,
+        `Record each source with cite, its Passage and exact words, searching first for one that isn't in this Answer's results. Then ${again} with the same text, each source replaced by its marker, as in “Rent is due on the 1st [^3].”`,
+        ...(answer && options.lastAnswer
+          ? [
+              "To put your last Answer in as it is, with its Citations, give answer: true instead of content.",
+            ]
+          : []),
+      ].join(" "),
+    );
   };
 
   /**
@@ -1193,28 +1189,23 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     streams.delete(toolCallId);
     ended.add(toolCallId);
     const markdown = typeof given === "string" ? given : null;
-    const content = typeof given === "string" ? options.blocksOf(given) : answerContent(given.blocks);
+    const content =
+      typeof given === "string" ? options.blocksOf(given) : answerContent(given.blocks);
     const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
     let writer = stream?.writer ?? null;
-    const again = made ? `call add_to_mind with mind “${mind.name}”` : "call add_to_mind again";
-    const uncited = uncitedIn(mind, content, again, true);
-    if (uncited) {
-      if (writer) {
-        withdraw(writer);
-        minds.writing(writer.mind.id, null);
-      }
-      throw uncited;
-    }
     const unmade = blocks.some(unmadeTable);
+    const again = made ? `call add_to_mind with mind “${mind.name}”` : "call add_to_mind again";
+    const uncited = unmade ? null : uncitedIn(mind, content, again, true);
     if (
       writer &&
-      (unmade || stream?.uncited || writer.mind.id !== mind.id || writer.named !== after)
+      (unmade || uncited || stream?.uncited || writer.mind.id !== mind.id || writer.named !== after)
     ) {
       withdraw(writer);
       minds.writing(writer.mind.id, null);
       writer = null;
     }
     if (unmade) return null;
+    if (uncited) throw uncited;
     writer ??= writerFor(mind, after, made);
     if (typeof given !== "string") writer.origin = given.origin;
     const copy = stream?.copy ?? repeatIn(writer, blocks);
@@ -1318,7 +1309,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const contentProperty = {
     type: "string",
     description:
-      "The text, in Markdown, cited as an Answer is: each source a marker like [^1], for a Citation you recorded with cite before this call, right after the words it backs, in a table's cells too. Never write a source as text: \"[Tides, p. 3]\" is how IncarnaMind shows you a Citation, and content with one is refused. A new section starts with its heading. A table has a heading row, a row of ---, then each row on a line of its own. Write it last, after the other fields.",
+      'The text, in Markdown, cited as an Answer is: each source a marker like [^1], for a Citation you recorded with cite before this call, right after the words it backs, in a table\'s cells too. Never write a source as text: "[Tides, p. 3]" is how IncarnaMind shows you a Citation, and content with one is refused. A new section starts with its heading. A table has a heading row, a row of ---, then each row on a line of its own. Write it last, after the other fields.',
   };
 
   // Offered only when there is one: a model may otherwise reach for it with none.
@@ -1327,13 +1318,15 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         answer: {
           type: "boolean",
           description:
-            "true to put your last Answer in this conversation in as it is, with its Citations, instead of content: when the User asks to put that Answer (\"it\", \"this\") in a Mind.",
+            'true to put your last Answer in this conversation in as it is, with its Citations, instead of content: when the User asks to put that Answer ("it", "this") in a Mind.',
         },
       }
     : {};
 
   /** What a call writes: its content, or the last Answer when it asks for that. */
-  const givenIn = (input: Record<string, unknown>): string | NonNullable<MindToolsOptions["lastAnswer"]> | null =>
+  const givenIn = (
+    input: Record<string, unknown>,
+  ): string | NonNullable<MindToolsOptions["lastAnswer"]> | null =>
     input.answer === true && options.lastAnswer ? options.lastAnswer : optional(input.content);
 
   const revisedText = (mind: ChangeableMind, change: MindChange, went: string): string => {
@@ -1355,10 +1348,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     markdown: string,
   ): Written & { change: MindChange; dropped: number } => {
     const content = options.blocksOf(markdown);
-    const uncited = uncitedIn(mind, content, "call edit_mind again", false);
-    if (uncited) throw uncited;
     const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
     if (blocks.some(unmadeTable)) throw noTable(mind);
+    const uncited = uncitedIn(mind, content, "call edit_mind again", false);
+    if (uncited) throw uncited;
     const dropped = minds.read(mind.id, (note) => citationsDropped(note, over, blocks));
     const request = randomUUID();
     minds.checkpoint(mind.id);

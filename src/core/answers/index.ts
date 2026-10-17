@@ -43,11 +43,11 @@
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
 import { asGenerated } from "../../shared/aiText";
+import { answerBlocks } from "../../shared/answerBlocks";
 import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
-import { answerBlocks } from "../../shared/answerBlocks";
 import { linkTableSources } from "../../shared/markdownTables";
 import {
   linkSources,
@@ -55,6 +55,7 @@ import {
   namesOneOf,
   sourcesAsText,
 } from "../../shared/namedSources";
+import { withoutFraming } from "../../shared/noteBlocks";
 import {
   decisionsOn,
   pendingProposals,
@@ -62,7 +63,6 @@ import {
   resolveProposals,
 } from "../../shared/proposals";
 import { hasSearchScope, searchScopeOf } from "../../shared/searchScope";
-import { withoutFraming } from "../../shared/noteBlocks";
 import { setTextOrigin } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
@@ -1523,7 +1523,7 @@ export function createAnswers(options: AnswersOptions) {
               blocksOf: (text) => {
                 let found = 0;
                 let notFound = 0;
-                const unrecorded: number[] = [];
+                let unrecorded = 0;
                 let firstUnrecorded = -1;
                 const written = withoutSearchTalk(withoutFootnoteDefinitions(text));
                 const link = (source: NamedSource) => {
@@ -1544,7 +1544,7 @@ export function createAnswers(options: AnswersOptions) {
                   withCitations([block], (marker) => {
                     const node = session.checkedNode(marker);
                     if (!node) {
-                      unrecorded.push(marker);
+                      unrecorded++;
                       if (firstUnrecorded < 0) firstUnrecorded = index;
                     } else if (node.attrs?.check === "not-found") notFound++;
                     else found++;
@@ -1564,8 +1564,7 @@ export function createAnswers(options: AnswersOptions) {
                   blocks,
                   cited: found + notFound,
                   notFound,
-                  unrecorded: unrecorded.length,
-                  unrecordedMarkers: [...new Set(unrecorded)],
+                  unrecorded,
                   firstUnrecorded,
                   sourcesAsText: asText,
                   droppedSources: sourced.unlinked + tables.unlinked,

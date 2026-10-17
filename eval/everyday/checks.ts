@@ -6,7 +6,8 @@
  * - **Every claimed change is real**, as a model judges the reply against the
  *   record of what the calls did (./judge), never the app's own net.
  * - **Citations are there**: in the reply, or, for text written into a Mind,
- *   in the Mind.
+ *   in the Mind, and no source there is written as text, like
+ *   "[Deck, slide 3]" (#1075).
  * - **Every Document is covered**: asked about all the Documents in scope,
  *   each is cited, or named in a sentence saying it wasn't covered.
  * - **Only what was asked changes**: asked about one paragraph, the others
@@ -45,6 +46,8 @@ export interface RequestOutcome {
   changedBlocks: readonly number[];
   /** The top-level Blocks Add to note put in before the request (from 0): what `inPlace` must change. */
   addedBlocks?: readonly number[];
+  /** Sources the Minds it wrote hold as text, in brackets, as written. */
+  sourcesAsText?: readonly string[];
   scoped: readonly { id: string; name: string }[];
 }
 
@@ -56,7 +59,8 @@ export type RequestFailure =
   | { kind: "uncovered"; documents: string[] }
   | { kind: "outside"; blocks: number[] }
   | { kind: "beside" }
-  | { kind: "untouched" };
+  | { kind: "untouched" }
+  | { kind: "as-text"; sources: string[] };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
@@ -119,6 +123,9 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   ) {
     failures.push({ kind: "untouched" });
   }
+  if (outcome.sourcesAsText && outcome.sourcesAsText.length > 0) {
+    failures.push({ kind: "as-text", sources: [...outcome.sourcesAsText] });
+  }
   return failures;
 }
 
@@ -139,5 +146,7 @@ export function failureLine(failure: RequestFailure): string {
       return "added a new version beside the text it was asked to change";
     case "untouched":
       return "left the text it was asked to change as it was";
+    case "as-text":
+      return `wrote sources into a Mind as text: ${failure.sources.map((source) => `“${source}”`).join(", ")}`;
   }
 }
