@@ -6,6 +6,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  motionSettled,
   newMind,
   openPageMenu,
   pageMenuButton,
@@ -78,7 +79,7 @@ test("the page starts with its text; the ⋯ at its top right opens by click and
   await window.keyboard.type("The last line.");
   expect((await button.boundingBox())?.y).toBeCloseTo(at.y, 0);
 
-  // Its menu is the sidebar row's, in the same order, then the counts.
+  // Its menu is the sidebar row's, in the same order, with Style as a submenu after it, then the counts.
   const menu = await openPageMenu(window);
   const pageItems = await menuItemIds(menu);
   await window.keyboard.press("Escape");
@@ -89,7 +90,7 @@ test("the page starts with its text; the ⋯ at its top right opens by click and
   const rowItems = await menuItemIds(row.getByTestId("mind-actions"));
   await window.keyboard.press("Escape");
   expect(pageItems.length).toBeGreaterThan(5);
-  expect(pageItems).toEqual(rowItems);
+  expect(pageItems).toEqual([...rowItems.filter((id) => id !== "mind.style"), "page-style"]);
 
   // Its Rename names the Mind in its tab, and its text stays as it is.
   await pointAndClick(window, (await openPageMenu(window)).getByTestId("mind.rename"));
@@ -184,7 +185,80 @@ for (const language of ["en", "zh-CN"] as const) {
       );
       if (SCREENSHOTS)
         await window.screenshot({ path: join(SCREENSHOTS, `page-menu-${language}-${width}.png`) });
+
+      // Style, with its value, opens its choices beside the menu, inside the window.
+      const style = menu.getByTestId("page-style");
+      await expect(style).toContainText(language === "en" ? "StyleDefault" : "样式默认");
+      await style.hover();
+      const choices = window.getByTestId("page-style-menu");
+      await expect(choices).toBeVisible();
+      await motionSettled(window);
+      const beside = await choices.boundingBox();
+      if (!beside) throw new Error("Style's choices aren't laid out.");
+      expect(beside.x).toBeGreaterThanOrEqual(0);
+      expect(beside.x + beside.width).toBeLessThanOrEqual(width);
+      expect(beside.y + beside.height).toBeLessThanOrEqual(760);
+      if (SCREENSHOTS)
+        await window.screenshot({ path: join(SCREENSHOTS, `page-style-${language}-${width}.png`) });
       await app.close();
     });
   }
 }
+
+test("Style › in the page's ⋯ opens its choices beside it by pointer and by keyboard; a choice shows on the page at once, and Other fonts… opens the list", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  await newMind(window);
+  await enterContent(window);
+  await window.keyboard.type("Spring tides come at new moon");
+  const paragraph = window.getByTestId("mind-editor").locator("p").first();
+  const familyOf = () => paragraph.evaluate((element) => getComputedStyle(element).fontFamily);
+  const before = await familyOf();
+
+  // By pointer: Serif changes the page at once, and the item says so; the menu stays for the next choice.
+  const menu = await openPageMenu(window);
+  const style = menu.getByTestId("page-style");
+  await style.hover();
+  const choices = window.getByTestId("page-style-menu");
+  await expect(choices).toBeVisible();
+  await pointAndClick(window, choices.getByTestId("mind-style-font-serif"));
+  await expect.poll(familyOf).toMatch(/Source Serif 4/);
+  await expect(choices.getByTestId("mind-style-font-serif")).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(style).toContainText("Serif");
+  await expect(window.getByTestId("undo-line")).toContainText("Font changed to Serif");
+  await window.keyboard.press("Escape");
+  await expect(choices).toBeHidden();
+  await expect(style).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await pointAndClick(window, window.getByTestId("undo-action"));
+  await expect.poll(familyOf).toBe(before);
+
+  // By keyboard: → on Style opens its choices with the first focused; ← goes back.
+  await pageMenuButton(window).focus();
+  await window.keyboard.press("Enter");
+  await expect(menu).toBeVisible();
+  await style.focus();
+  await window.keyboard.press("ArrowRight");
+  await expect(choices).toBeVisible();
+  await expect(choices.getByTestId("mind-style-font-default")).toBeFocused();
+  await window.keyboard.press("ArrowLeft");
+  await expect(choices).toBeHidden();
+  await expect(style).toBeFocused();
+
+  // Other fonts… closes the menu and opens the list of fonts beside the ⋯.
+  await style.hover();
+  await expect(choices).toBeVisible();
+  await pointAndClick(window, choices.getByTestId("mind-style-other-fonts"));
+  const picker = window.getByTestId("mind-style-font-picker");
+  await expect(picker).toBeVisible();
+  await expect(menu).toBeHidden();
+  await window.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+  await app.close();
+});

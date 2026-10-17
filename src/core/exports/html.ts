@@ -5,6 +5,7 @@
  * styles or fonts) and pictures are data URIs; the page's policy refuses everything else.
  */
 
+import { cssString } from "../../shared/mindStyle";
 import type { Language } from "../language";
 import type { Block } from "../mindText";
 import type { ExportLabels } from "./labels";
@@ -63,6 +64,10 @@ img{max-width:100%;height:auto}
 @media print{main{padding-top:0}sup.note-ref a,.backref{color:inherit}}
 `.replace(/\n/g, "");
 
+/** The Mind's own font ahead of the export's, which the reader's computer falls back to. */
+export const bodyFontStyle = (family: string | null) =>
+  family === null ? "" : `body{font-family:${cssString(family)},var(--serif)}`;
+
 /** The print page lays tables out itself; a browser's tables, and the validator, want a body. */
 export const withTableBodies = (body: string) =>
   body.replaceAll("<table>", "<table><tbody>").replaceAll("</table>", "</tbody></table>");
@@ -113,14 +118,14 @@ export function htmlFile({
 export function renderHtml(
   blocks: readonly Block[],
   labels: ExportLabels,
-  { language, name }: { language: Language; name: string },
+  { language, name, font }: { language: Language; name: string; font: string | null },
 ): string {
   const printed = renderPrintHtml(blocks, labels, { linkNotes: true });
   return htmlFile({
     language,
     name,
     policy: "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
-    styles: HTML_STYLES,
+    styles: HTML_STYLES + bodyFontStyle(font),
     body: `<main>${withTableBodies(printed.body)}</main>\n${notesSection(printed.notes, labels)}`,
   });
 }
