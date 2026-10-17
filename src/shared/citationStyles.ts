@@ -10,7 +10,8 @@ import type { Language } from "../core/language";
 import type { MessageKey } from "./i18n";
 
 /** How a style's citations read, as its CSL category says. */
-export type CitationFormat = "author-date" | "author" | "numeric" | "label" | "note";
+export const CITATION_FORMATS = ["author-date", "author", "numeric", "label", "note"] as const;
+export type CitationFormat = (typeof CITATION_FORMATS)[number];
 
 /** The common list's ids, which Minds have kept since before the pack. */
 export const COMMON_CITATION_STYLE_IDS = [

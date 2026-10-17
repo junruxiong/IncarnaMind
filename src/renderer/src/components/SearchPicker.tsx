@@ -4,6 +4,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -32,7 +33,6 @@ export interface PickerOption<Id> {
   data?: Record<string, string>;
 }
 
-/** Options under a small heading, or none for the first. */
 export interface PickerSection<Id> {
   title?: string;
   options: readonly PickerOption<Id>[];
@@ -118,25 +118,27 @@ export function SearchPicker<Id>({
   const open = anchor !== null;
   const virtual = typeof options === "function";
 
-  const wanted = query.trim().toLocaleLowerCase();
-  const sections: readonly PickerSection<Id>[] =
-    typeof options === "function"
-      ? open
-        ? options(query.trim())
-        : []
-      : [
-          {
-            options: options.filter(
-              (option) =>
-                !wanted ||
-                [option.label, ...(option.keywords ?? [])].some((text) =>
-                  text.toLocaleLowerCase().includes(wanted),
-                ),
-            ),
-          },
-        ];
-  const { rows, height } = rowsOf(sections);
-  const optionRows = rows.filter((row) => row.kind === "option");
+  const { rows, height, optionRows } = useMemo(() => {
+    const wanted = query.trim().toLocaleLowerCase();
+    const sections: readonly PickerSection<Id>[] =
+      typeof options === "function"
+        ? open
+          ? options(query.trim())
+          : []
+        : [
+            {
+              options: options.filter(
+                (option) =>
+                  !wanted ||
+                  [option.label, ...(option.keywords ?? [])].some((text) =>
+                    text.toLocaleLowerCase().includes(wanted),
+                  ),
+              ),
+            },
+          ];
+    const laid = rowsOf(sections);
+    return { ...laid, optionRows: laid.rows.filter((row) => row.kind === "option") };
+  }, [options, query, open]);
   const shown = Math.min(active, Math.max(0, optionRows.length - 1));
   const shownRow = optionRows[shown];
 
@@ -167,7 +169,6 @@ export function SearchPicker<Id>({
     if (!open && panel.current?.matches(":popover-open")) panel.current.hidePopover();
   }, [open]);
 
-  // The row the arrows reach stays in view.
   const shownTop = shownRow?.top;
   useEffect(() => {
     const element = list.current;

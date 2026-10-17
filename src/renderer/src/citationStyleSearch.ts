@@ -98,7 +98,6 @@ export function searchStyles(entries: readonly StyleEntry[], query: string): Sty
     const value = score(entry, wanted, words);
     return value === Number.POSITIVE_INFINITY ? [] : [{ entry, value, order }];
   });
-  // Equally good: the common styles first, in their list's order, then the shorter title.
   scored.sort(
     (a, b) =>
       a.value - b.value ||

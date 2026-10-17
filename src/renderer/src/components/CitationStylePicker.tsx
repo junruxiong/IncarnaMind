@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { CitationStyleId } from "../../../shared/citationStyles";
 import {
   chooseCitationStyle,
@@ -39,49 +39,52 @@ export function CitationStylePickerHost() {
   const entries = useMemo(() => styleEntries(language, catalogue), [language, catalogue]);
   const byId = useMemo(() => new Map(entries.map((entry) => [entry.id, entry])), [entries]);
 
-  const optionOf = (entry: StyleEntry): PickerOption<CitationStyleId> => {
-    const form = t(`citationStyle.form.${entry.format}`);
-    return {
-      id: entry.id,
-      label: entry.title,
-      detail: entry.follows
-        ? `${form} · ${t("citationStyle.follows", { style: entry.follows })}`
-        : form,
-      data: { "data-style": entry.id },
-    };
-  };
-
-  const sections = (query: string): PickerSection<CitationStyleId>[] => {
-    if (query) {
-      const found = searchStyles(entries, query);
-      const styles = { title: t("citationStyle.styles"), options: found.styles.map(optionOf) };
-      const journals = {
-        title: t("citationStyle.journals"),
-        options: found.journals.map(optionOf),
+  const sections = useCallback(
+    (query: string): PickerSection<CitationStyleId>[] => {
+      const optionOf = (entry: StyleEntry): PickerOption<CitationStyleId> => {
+        const form = t(`citationStyle.form.${entry.format}`);
+        return {
+          id: entry.id,
+          label: entry.title,
+          detail: entry.follows
+            ? `${form} · ${t("citationStyle.follows", { style: entry.follows })}`
+            : form,
+          data: { "data-style": entry.id },
+        };
       };
-      return found.journalsFirst ? [journals, styles] : [styles, journals];
-    }
-    const mine = current === undefined ? undefined : byId.get(current);
-    const own: PickerOption<CitationStyleId>[] = mine
-      ? [optionOf(mine)]
-      : current === undefined
-        ? []
-        : [{ id: current, label: styleLabel(current, t), data: { "data-style": current } }];
-    const recently = (recent ?? []).flatMap((id) => {
-      const entry = byId.get(id);
-      return entry && id !== current ? [optionOf(entry)] : [];
-    });
-    return [
-      { options: own },
-      { title: t("citationStyle.recent"), options: recently },
-      {
-        title: t("citationStyle.common"),
-        options: commonEntries(entries, language)
-          .filter((entry) => entry.id !== current)
-          .map(optionOf),
-      },
-    ];
-  };
+
+      if (query) {
+        const found = searchStyles(entries, query);
+        const styles = { title: t("citationStyle.styles"), options: found.styles.map(optionOf) };
+        const journals = {
+          title: t("citationStyle.journals"),
+          options: found.journals.map(optionOf),
+        };
+        return found.journalsFirst ? [journals, styles] : [styles, journals];
+      }
+      const mine = current === undefined ? undefined : byId.get(current);
+      const own: PickerOption<CitationStyleId>[] = mine
+        ? [optionOf(mine)]
+        : current === undefined
+          ? []
+          : [{ id: current, label: styleLabel(current, t), data: { "data-style": current } }];
+      const recently = (recent ?? []).flatMap((id) => {
+        const entry = byId.get(id);
+        return entry && id !== current ? [optionOf(entry)] : [];
+      });
+      return [
+        { options: own },
+        { title: t("citationStyle.recent"), options: recently },
+        {
+          title: t("citationStyle.common"),
+          options: commonEntries(entries, language)
+            .filter((entry) => entry.id !== current)
+            .map(optionOf),
+        },
+      ];
+    },
+    [t, entries, byId, current, recent, language],
+  );
 
   const placeholder = catalogue
     ? t("citationStyle.searchCount", { count: formatCount(catalogue.count, language) })
