@@ -185,7 +185,7 @@ test("In Chinese and a narrow window: Check against Documents marks a contradict
   await setLanguage(window, "zh-CN");
   await setWindowSize(app, window, 900, 720);
   await expect((await checkCard(window)).getByTestId("health-noCitation")).toContainText(
-    "2 句没有引用",
+    "2 条没有引用",
   );
 
   await slideSelect(window, line, "Harbours publish", { line, words: "blank reply." });
@@ -207,10 +207,10 @@ test("In Chinese and a narrow window: Check against Documents marks a contradict
   expect(markBox?.x ?? 0).toBeGreaterThanOrEqual((lineBox?.x ?? 0) + (lineBox?.width ?? 0));
   await expect(line.locator(".claim-wash--contradicted")).toHaveText(CONTRADICTED);
   await expect((await checkCard(window)).getByTestId("health-contradicted")).toContainText(
-    "1 句与文档矛盾",
+    "1 条与文档矛盾",
   );
   await expect((await checkCard(window)).getByTestId("health-notChecked")).toContainText(
-    "1 句未核对",
+    "1 条未核对",
   );
   await screenshot(window, "check-results-zh-narrow");
   // In a narrow window the card covers the margin: Esc puts it away.

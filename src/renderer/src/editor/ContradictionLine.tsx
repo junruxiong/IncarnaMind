@@ -71,7 +71,6 @@ export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string 
   return null;
 }
 
-/** The question before a contradiction check billed per token, in the card's place for that check. */
 export function ContradictionAsk({ doc, mindId }: { doc: Y.Doc; mindId: string }) {
   const t = useT();
   const language = useLanguage();

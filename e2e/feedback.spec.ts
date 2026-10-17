@@ -38,7 +38,7 @@ test("Send feedback opens the feedback form with the app version and system, kee
   // The Help menu has it, and so does ⌘K.
   const item = await app.evaluate(({ Menu }) => {
     const help = Menu.getApplicationMenu()?.items.find((each) => each.role === "help");
-    return help?.submenu?.items.map((each) => each.label) ?? [];
+    return help?.submenu?.items.filter((each) => each.visible).map((each) => each.label) ?? [];
   });
   expect(item).toEqual(["Send feedback…"]);
   await window.keyboard.press("ControlOrMeta+k");

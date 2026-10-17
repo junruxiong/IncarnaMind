@@ -4,7 +4,7 @@ import type { MindCheckRun } from "../../../core/api";
 import { formatDateTime } from "../../../shared/dates";
 import { MetaLine } from "../components/MetaLine";
 import { buttonStyle } from "../components/ui";
-import { type EstimateLine, joinMeta, runStopParts } from "../cost";
+import { type EstimateLine, runStopParts } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import { checkMind, dismissMindCheck, useMindCheck } from "../mindCheck";
 import { shownClaims } from "./claimChecks";
@@ -29,7 +29,7 @@ export function AskBlock({
   return (
     <div role="status" data-testid={testId} className="check-card-ask">
       <p className="check-card-ask-title">{question}</p>
-      {estimate && <p title={estimate.title}>{joinMeta(estimate.parts)}</p>}
+      {estimate && <MetaLine parts={estimate.parts} title={estimate.title} />}
       <div className="check-card-ask-actions">
         <button
           type="button"
@@ -52,7 +52,7 @@ export function AskBlock({
   );
 }
 
-/** Check this Mind's question (#737), once the model has named the claims: "Check this Mind's 48 claims against this Folder's Documents?" */
+/** Check this Mind's question (#737): "Check this Mind's 48 claims against this Folder's Documents?" */
 export function MindCheckAsk({ mindId }: { mindId: string }) {
   const t = useT();
   const language = useLanguage();
@@ -64,13 +64,9 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
   return (
     <AskBlock
       testId="mind-check-ask"
-      question={
-        asking.claims
-          ? t(one ? `mindCheck.ask.claims.${where}.one` : `mindCheck.ask.claims.${where}`, {
-              count,
-            })
-          : t(one ? `mindCheck.ask.${where}.one` : `mindCheck.ask.${where}`, { count })
-      }
+      question={t(one ? `mindCheck.ask.claims.${where}.one` : `mindCheck.ask.claims.${where}`, {
+        count,
+      })}
       estimate={asking.estimate}
       check={{
         label: t("mindCheck.check"),
@@ -86,7 +82,6 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
   );
 }
 
-/** How many of the claims a Check this Mind run marked it has checked. */
 export function useMindCheckProgress(editor: Editor, requestId: string | null) {
   return useEditorState({
     editor,
