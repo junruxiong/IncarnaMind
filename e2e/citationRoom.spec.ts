@@ -8,8 +8,10 @@ import {
   askInAssistant,
   createDataFolder,
   dismissChatSetup,
+  frontMindName,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   placeAssistant,
   pointAndClick,
@@ -58,7 +60,7 @@ async function draftCiting(window: Page, lines: number): Promise<void> {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Draft");
+  await nameMind(window, "Draft");
   await window.getByTestId("mind-editor").click();
   if (lines > 0) {
     const text = Array.from({ length: lines }, (_, n) => `Paragraph ${n + 1} of the draft.`);
@@ -72,7 +74,7 @@ const editorOf = (window: Page) => window.getByTestId("mind-editor").filter({ vi
 async function openOthers(window: Page, names: readonly string[]): Promise<void> {
   for (const name of names) {
     await newMind(window);
-    await window.getByTestId("mind-title").fill(name);
+    await nameMind(window, name);
   }
   await window.getByRole("tab", { name: "Draft", exact: true }).click();
 }
@@ -91,7 +93,6 @@ for (const language of ["en", "zh-CN"] as const) {
 
     await pointAndClick(window, editor.getByTestId("citation-chip"));
 
-    // The note stays, with the card over it; nothing opens until the card's Open.
     await expect(window.getByTestId("tab-groups")).toHaveAttribute("data-merged", "true");
     const card = window.getByTestId("citation-card");
     await expect(card).toBeVisible();
@@ -123,7 +124,7 @@ for (const language of ["en", "zh-CN"] as const) {
     );
 
     await expect(editor).toBeVisible();
-    await expect(window.getByTestId("mind-title").filter({ visible: true })).toHaveValue("Draft");
+    await expect(frontMindName(window)).toHaveText("Draft");
     await expect(card).toBeVisible();
     await expect(card).toHaveAttribute("data-check", "found");
     await expect(card).toContainText("Tides");
@@ -212,3 +213,29 @@ for (const dock of ["right", "bottom", "float"] as const) {
     });
   }
 }
+
+test("at 1,100 × 760 with the assistant docked right, a Citation in an Answer shows its card in the panel, and the note stays", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1100, 760);
+  await draftCiting(window, 3);
+  await placeAssistant(window, { dock: "right", folded: false });
+  await motionSettled(window);
+  await expect(window.getByTestId("tab-groups")).toHaveAttribute("data-merged", "true");
+  const answer = window.getByTestId("assistant").getByTestId("citation-chip").last();
+
+  await pointAndClick(window, answer);
+
+  const card = window.getByTestId("citation-card");
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("Tides");
+  await expect(card).toBeInViewport({ ratio: 1 });
+  await expect(editorOf(window)).toBeVisible();
+  await expect(window.getByTestId("viewer")).toHaveCount(0);
+
+  // Its Open brings the page.
+  await pointAndClick(window, card.getByTestId("citation-open"));
+  await expect(window.getByTestId("viewer-title")).toHaveText("Tides");
+  await app.close();
+});

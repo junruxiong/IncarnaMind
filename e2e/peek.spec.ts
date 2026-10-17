@@ -11,6 +11,7 @@ import {
   type LaunchOptions,
   launchApp,
   linkFolderFromSidebar,
+  nameMind,
   newMind,
   type RunningApp,
   removeDataFolder,
@@ -221,7 +222,7 @@ async function addAndShow(
 /** A Mind in the window, to see that nothing replaces it. */
 async function openShortlist(window: Page): Promise<void> {
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Shortlist");
+  await nameMind(window, "Shortlist");
 }
 
 const mindTab = (window: Page) => window.getByTestId("tab-title").filter({ hasText: "Shortlist" });
@@ -675,7 +676,7 @@ test("a Document whose file is gone says Missing in its peek, and a press elsewh
     await expect(state).toHaveText("Missing");
     await expect(state).toHaveAttribute("title", /File missing/);
 
-    await window.getByTestId("mind-title").click();
+    await window.getByTestId("mind-editor").click();
     await expect(peek).toHaveCount(0);
   } finally {
     await app.close();

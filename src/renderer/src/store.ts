@@ -115,12 +115,7 @@ export interface OpenDocumentHow {
 export interface AppState extends LayoutSlice {
   status: Status;
   minds: Mind[];
-  /**
-   * A Mind just created, whose title takes the focus once it shows (see
-   * `MindTitle`), so typing names it instead of pressing the button again.
-   */
-  titleToFocus: string | null;
-  /** A Mind just created with its title given: its text takes the focus once it shows. */
+  /** A Mind just created: its first line takes the focus once it shows (#908). */
   bodyToFocus: string | null;
   /** Set once loaded. */
   settings: Settings | null;
@@ -208,8 +203,7 @@ export interface AppState extends LayoutSlice {
    */
   createMind(options?: {
     startQuestion?: boolean;
-    /** Its text takes the focus, not its title: one asked for by name (#202). */
-    focusBody?: boolean;
+    /** Its name, which its text starts with as a Heading 1 ("Create a new note called …"). */
     title?: string;
     scope?: SearchScope | null;
     folderId?: string | null;
@@ -240,8 +234,6 @@ export interface AppState extends LayoutSlice {
   deleteFolder(folderId: string): Promise<void>;
   /** Lists a Mind just made and opens it in a new tab after the shown one, in the focused group or `groupId`. */
   showNewMind(mind: Mind, groupId?: string): Promise<void>;
-  /** Called once the new Mind's title has the focus. */
-  titleFocused(): void;
   /** Called once the new Mind's text has the focus. */
   bodyFocused(): void;
   /** Starts a Question at the end of the open Mind, or of a new Mind if none is open. */
@@ -282,10 +274,8 @@ export interface AppState extends LayoutSlice {
   closeTab(tabId: string): void;
   /** ⇧⌘T: reopens the tab closed last, where it was. */
   reopenTab(): void;
-  /** Renames a Mind, with Undo; `typing`: as the User types its title, which becomes one step once they leave it (`titleLeft`). */
-  renameMind(id: string, title: string, options?: { typing?: boolean }): Promise<void>;
-  /** The User left a Mind's title: what they typed, from `before` to `after`, becomes one step to undo. */
-  titleLeft(id: string, before: string, after: string): void;
+  /** Renames a Mind, with Undo. */
+  renameMind(id: string, title: string): Promise<void>;
   deleteMind(id: string): Promise<void>;
   /** Shows a failure that happened outside a store action, e.g. while saving an edit. */
   reportError(error: unknown): void;
@@ -686,7 +676,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     ...createLayoutSlice(set, get, (error) => useNotices.getState().showError(error)),
     status: { kind: "loading" },
     minds: [],
-    titleToFocus: null,
     bodyToFocus: null,
     pickingDocuments: false,
     settings: null,
@@ -821,7 +810,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       let made: Undoable | undefined;
       await attempt(async () => {
         const mind = await core.createMind({
-          ...(options?.title && { title: options.title }),
+          ...(options?.title && { title: options.title, headed: true }),
           ...(options?.folderId && { folderId: options.folderId }),
         });
         made = mindMade(
@@ -837,9 +826,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         set(
           options?.startQuestion
             ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
-            : options?.focusBody
-              ? { bodyToFocus: mind.id }
-              : { titleToFocus: mind.id },
+            : { bodyToFocus: mind.id },
         );
         await get().showNewMind(mind, options?.groupId);
         options?.made?.(mind.id);
@@ -857,7 +844,6 @@ export const useAppStore = create<AppState>()((set, get) => {
       });
     },
 
-    titleFocused: () => set({ titleToFocus: null }),
     bodyFocused: () => set({ bodyToFocus: null }),
 
     startQuestion() {
@@ -1113,18 +1099,12 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     // The list follows the core's "minds.changed" event, which arrives before these calls return.
-    renameMind: (id, title, options) =>
+    renameMind: (id, title) =>
       attempt(async () => {
         const before = get().minds.find((mind) => mind.id === id)?.title;
         const mind = await core.renameMind(id, title);
-        if (!options?.typing && before !== undefined) offerRename(mind, before);
+        if (before !== undefined) offerRename(mind, before);
       }),
-
-    titleLeft(id, before, after) {
-      const mind = get().minds.find((each) => each.id === id);
-      // Its last letters may still be on their way to the core: the title is what was typed.
-      if (mind) offerRename({ ...mind, title: after.trim() }, before);
-    },
 
     deleteMind: (id) =>
       attempt(async () => {

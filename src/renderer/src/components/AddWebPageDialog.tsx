@@ -3,6 +3,7 @@ import { typedAddresses } from "../../../shared/webAddresses";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { canTryAgain, reasonKey, useWebPages, type WebPageProblem } from "../webPages";
+import { DetailsLine } from "./DetailsLine";
 import { ProblemLine } from "./ProblemLine";
 import { TypingTextarea } from "./TypingTextarea";
 import {
@@ -84,9 +85,16 @@ export function AddWebPageDialog() {
         </h2>
         {submitted.length === 0 ? (
           <>
-            <p className={dialogTextClass}>
-              {t(keepLook ? "webPages.add.note.keepLook" : "webPages.add.note")}
-            </p>
+            <p className={dialogTextClass}>{t("webPages.add.note")}</p>
+            <DetailsLine
+              testId="add-web-page-fetch"
+              className={dialogTextClass}
+              details={t(
+                keepLook ? "webPages.add.fetch.details.keepLook" : "webPages.add.fetch.details",
+              )}
+            >
+              {t("webPages.add.fetch")}
+            </DetailsLine>
             <div className="flex flex-col gap-1.5">
               <label htmlFor={`${id}-addresses`} className={fieldLabelClass}>
                 {t("webPages.add.label")}

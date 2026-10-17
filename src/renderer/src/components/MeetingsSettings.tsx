@@ -1,4 +1,3 @@
-import { isMacOS } from "@tiptap/core";
 import { useId } from "react";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -94,9 +93,7 @@ export function MeetingsSettings() {
             </select>
           </div>
         </div>
-        <p className={hintClass}>
-          {t(isMacOS() ? "meetings.settings.kept.mac" : "meetings.settings.kept.other")}
-        </p>
+        <p className={hintClass}>{t("meetings.audio.kept")}</p>
       </section>
       <HelpSettings />
     </>

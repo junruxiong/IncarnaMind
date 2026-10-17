@@ -189,6 +189,7 @@ export function CitationView({
   const openCited = (withQuote: boolean, keep = false) => {
     const documentId = state.documentId ?? attributes.documentId;
     if (!documentId) return;
+    recordUsage({ event: "citation_opened", fields: { check: state.check } });
     openCitedPlace(
       { ...attributes, documentId },
       { check: state.check, withQuote, number, label: where, from: place?.groupId, keep },
@@ -199,7 +200,6 @@ export function CitationView({
     setPinned(true);
     // Step 1 of the first open's steps, and step 3 of the steps in an empty Mind.
     useAppStore.getState().updateGettingStarted({ citationChecked: true });
-    recordUsage({ event: "citation_opened", fields: { check: state.check } });
     if (groupsMerged()) return;
     if (quoteSaysSo(state.check)) openCited(true);
     // A deleted Document: the viewer shows the stored quote with "Document removed".
@@ -635,16 +635,15 @@ function CitationCard({
             )}
           </>
         ) : (
-          !removed && (
-            <button
-              type="button"
-              data-testid="citation-open"
-              className="citation-card-action citation-card-action--primary"
-              onClick={() => onOpen(quoteSaysSo(state.check))}
-            >
-              {t(`citation.open.${opens}`)}
-            </button>
-          )
+          <button
+            type="button"
+            data-testid="citation-open"
+            className="citation-card-action citation-card-action--primary"
+            // A deleted Document's view shows the quote it kept.
+            onClick={() => onOpen(removed || quoteSaysSo(state.check))}
+          >
+            {t(removed ? "citation.open.removed" : `citation.open.${opens}`)}
+          </button>
         )}
         <ObjectMenu
           target={menu.target}

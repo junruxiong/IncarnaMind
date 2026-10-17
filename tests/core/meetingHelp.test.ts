@@ -199,10 +199,12 @@ describe("Help during the call", { timeout: 60_000 }, () => {
     expect(messages.at(-2)).toMatchObject({ kind: "question", text: "接下来问什么" });
   });
 
-  test("the buttons' shortcuts are kept per device, and only keys with ⌘, ⌃ or ⌥ are taken", async () => {
+  test("the buttons' and Call help's shortcuts are kept per device, and only keys with ⌘, ⌃ or ⌥ are taken", async () => {
     const { core } = await setUp();
-    const saved = await core.updateSettings({ device: { meetingHelpKeys: { say: "Ctrl+Alt+9" } } });
-    expect(saved.device.meetingHelpKeys).toEqual({ say: "Ctrl+Alt+9" });
+    const saved = await core.updateSettings({
+      device: { meetingHelpKeys: { say: "Ctrl+Alt+9", panel: "Ctrl+Alt+J" } },
+    });
+    expect(saved.device.meetingHelpKeys).toEqual({ say: "Ctrl+Alt+9", panel: "Ctrl+Alt+J" });
     expect(saved.device.meetingPanel).toBe(true);
     expect(saved.device.meetingPanelHidden).toBe(true);
     await expect(

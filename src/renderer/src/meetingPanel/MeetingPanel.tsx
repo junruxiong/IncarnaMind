@@ -48,11 +48,11 @@ function keyLabels(held: HeldKeys) {
     if (keys) labels[kind] = keysHere(keys);
   }
   const first = held.say;
-  const inOrder =
-    first !== undefined &&
-    first.endsWith("+1") &&
-    GENERAL_HELP.every((kind, index) => held[kind] === first.replace(/1$/, String(index + 1)));
-  const run = inOrder ? `${keysHere(first).replace(/1$/, "")}1–${GENERAL_HELP.length}` : null;
+  const run =
+    first?.endsWith("+1") &&
+    GENERAL_HELP.every((kind, index) => held[kind] === first.replace(/1$/, String(index + 1)))
+      ? `${keysHere(first).replace(/1$/, "")}1–${GENERAL_HELP.length}`
+      : null;
   return { labels, run };
 }
 

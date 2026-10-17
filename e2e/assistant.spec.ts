@@ -8,6 +8,7 @@ import {
   dismissChatSetup,
   dragBy,
   launchApp,
+  nameMind,
   newMind,
   removeDataFolder,
   setGroupBeside,
@@ -56,12 +57,9 @@ const near = (actual: number, expected: number) =>
 /** Opens a new Mind in the focused group, with a line in it. */
 async function mindWithText(window: Page, title: string) {
   await newMind(window);
-  // The new Mind's title has the focus, whatever other groups show.
-  const field = window.locator('[data-testid="mind-title"]:focus');
-  await expect(field).toHaveCount(1);
-  await field.fill(title);
-  await field.press("Enter");
+  // The new Mind's text has the focus, whatever other groups show.
   await expect(window.locator('[data-testid="mind-editor"]:focus')).toHaveCount(1);
+  await nameMind(window, title);
   await window.keyboard.type(`Notes on ${title}.`);
 }
 

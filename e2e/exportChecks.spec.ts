@@ -9,6 +9,7 @@ import {
   dismissChatSetup,
   exportFromMenu,
   launchApp,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -54,7 +55,7 @@ test("a Contradicted sentence goes into a Word file as a comment and the line sa
   await useLocalChatModel(window);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Memo");
+  await nameMind(window, "Memo");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type(WRONG);
