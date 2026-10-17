@@ -138,6 +138,16 @@ describe("the type a Mind is written in", () => {
     expect(small.body.leading / small.body.size).toBeCloseTo(26 / 16, 1);
   });
 
+  test("footnotes, References and tables stay one pixel and two of leading below the writing at every font and size", () => {
+    for (const font of ["default", "serif", "mono", { family: "Georgia" }] as const) {
+      for (const size of TEXT_SIZES) {
+        const { body, note } = writingType({ font, size }, true);
+        expect(note).toEqual({ size: body.size - 1, leading: body.leading - 2 });
+      }
+    }
+    expect(writingType(DEFAULT_MIND_STYLE, true).note).toEqual({ size: 15, leading: 24 });
+  });
+
   test("goes to the page as the theme's own sizes and the writing font", () => {
     const properties = writingProperties(writingType({ font: "serif", size: "default" }, true));
     expect(properties).toMatchObject({
@@ -146,6 +156,8 @@ describe("the type a Mind is written in", () => {
       "--text-body--line-height": "28px",
       "--text-heading": "22px",
       "--text-display": "34px",
+      "--text-note": "16px",
+      "--text-note--line-height": "26px",
     });
   });
 });
