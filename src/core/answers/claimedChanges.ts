@@ -74,7 +74,7 @@ const CHINESE_KINDS = [
   ["新建|创建|建立|生成", "made"],
   ["添加|加入|写入|插入|补充|追加|写好|写了|新增", "added"],
   [
-    "修改|改写|更新|扩写|扩展|扩充|缩短|精简|压缩|翻译|调整|重写|润色|修正|改正|改短|改长|改成|加长|完善",
+    "修改|改写|更新|扩写|扩展|扩充|缩短|精简|压缩|翻译|调整|重写|润色|修正|改正|改短|改长|改成|加长|写长|写短|完善",
     "changed",
   ],
   ["删除|删去|删掉|替换|去掉|移除", "removed"],
@@ -86,7 +86,7 @@ const CHINESE: [RegExp, ClaimedChange][] = CHINESE_KINDS.map(([verbs, kind]) => 
   kind,
 ]);
 // Only the User's notes: "我更新了我的理解" or "表 4 已经更新" are not.
-const CHINESE_MIND = /笔记|页面|Mind|总结|章节|段落/;
+const CHINESE_MIND = /笔记|页面|Mind|总结|摘要|章节|段落/;
 // "总结已扩写", "页面已创建": a Mind's text said to be done, not the authors'.
 const CHINESE_STATED: [RegExp, ClaimedChange][] = CHINESE_KINDS.map(([verbs, kind]) => [
   new RegExp(

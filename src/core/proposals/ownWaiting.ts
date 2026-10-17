@@ -10,6 +10,7 @@
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { INLINE_CODE_MARK } from "../../shared/aiText";
+import { askedFor } from "../../shared/askedChanges";
 import {
   keepRevised,
   pendingProposals,
@@ -205,6 +206,20 @@ export function boundsOf(
   const start = top.findIndex((element) => idOf(element) === own.blockIds[0]);
   const end = top.findIndex((element) => idOf(element) === own.blockIds.at(-1));
   return start < 0 || end < start ? null : { before: start, after: top.length - end - 1 };
+}
+
+/** Whether the User asked for all of the text `own` holds (#880): a revision of it is asked for too. */
+export function ownAsked(blocks: Y.XmlFragment, own: OwnWaiting): boolean {
+  const old = blocksOf(blocks, own);
+  const doc = blocks.doc;
+  return (
+    !!old &&
+    !!doc &&
+    old.every((element) => {
+      const attribute = readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE));
+      return !!attribute && askedFor(doc, attribute.request);
+    })
+  );
 }
 
 /**
