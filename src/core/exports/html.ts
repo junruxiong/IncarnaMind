@@ -65,8 +65,10 @@ img{max-width:100%;height:auto}
 `.replace(/\n/g, "");
 
 /** The Mind's own font ahead of the export's, which the reader's computer falls back to. */
+export const bodyFamily = (family: string) => `${cssString(family)},var(--serif)`;
+
 export const bodyFontStyle = (family: string | null) =>
-  family === null ? "" : `body{font-family:${cssString(family)},var(--serif)}`;
+  family === null ? "" : `body{font-family:${bodyFamily(family)}}`;
 
 /** The print page lays tables out itself; a browser's tables, and the validator, want a body. */
 export const withTableBodies = (body: string) =>

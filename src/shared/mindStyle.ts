@@ -119,6 +119,8 @@ export interface WritingType {
   body: TypeSize;
   heading: TypeSize;
   display: TypeSize;
+  /** Footnotes, References and table text: a step below the writing, at every size. */
+  note: TypeSize;
 }
 
 // DESIGN.md › Typography: the writing is 16/26 and a step up in the Serif style, which reads
@@ -139,6 +141,8 @@ const HEADING: TypeSize = { size: 22, leading: 30 };
 const DISPLAY: TypeSize = { size: 34, leading: 42 };
 /** The headings and the title grow with the writing, by the default body size's share. */
 const SCALE: Record<TextSize, number> = { small: 14 / 16, default: 1, large: 18 / 16 };
+
+const NOTE_STEP: TypeSize = { size: 1, leading: 2 };
 
 const scaled = (type: TypeSize, factor: number): TypeSize => ({
   size: Math.round(type.size * factor),
@@ -166,11 +170,13 @@ export function fontFamilyList(font: MindFont, installed: boolean): string {
  */
 export function writingType(style: MindStyle, installed: boolean): WritingType {
   const factor = SCALE[style.size];
+  const body = BODY[style.font === "serif" ? "serif" : "other"][style.size];
   return {
     family: fontFamilyList(style.font, installed),
-    body: BODY[style.font === "serif" ? "serif" : "other"][style.size],
+    body,
     heading: scaled(HEADING, factor),
     display: scaled(DISPLAY, factor),
+    note: { size: body.size - NOTE_STEP.size, leading: body.leading - NOTE_STEP.leading },
   };
 }
 
@@ -187,5 +193,7 @@ export function writingProperties(type: WritingType): Record<`--${string}`, stri
     "--text-heading--line-height": `${type.heading.leading}px`,
     "--text-display": `${type.display.size}px`,
     "--text-display--line-height": `${type.display.leading}px`,
+    "--text-note": `${type.note.size}px`,
+    "--text-note--line-height": `${type.note.leading}px`,
   };
 }
