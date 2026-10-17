@@ -1,0 +1,79 @@
+name: Repeat specs (temporary)
+
+on:
+  push:
+    branches: [fix/1070-flaky-specs]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
+jobs:
+  repeat:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: aiText x30
+            args: e2e/aiText.spec.ts --repeat-each=30
+          - name: assistantChangesMinds x10 (a)
+            args: e2e/assistantChangesMinds.spec.ts --repeat-each=10
+          - name: assistantChangesMinds x10 (b)
+            args: e2e/assistantChangesMinds.spec.ts --repeat-each=10
+          - name: assistantChangesMinds x10 (c)
+            args: e2e/assistantChangesMinds.spec.ts --repeat-each=10
+          - name: Reject all after writing x30
+            args: e2e/assistantChangesMinds.spec.ts --repeat-each=30 --grep "once the User has written in it"
+          - name: aiText x25 on two busy cores (a)
+            pin: true
+            args: e2e/aiText.spec.ts --repeat-each=25 --grep "an Answer added to a note"
+          - name: aiText x25 on two busy cores (b)
+            pin: true
+            args: e2e/aiText.spec.ts --repeat-each=25 --grep "an Answer added to a note"
+          - name: Reject all after writing x25 on two busy cores (a)
+            pin: true
+            args: e2e/assistantChangesMinds.spec.ts --repeat-each=25 --grep "once the User has written in it"
+          - name: Reject all after writing x25 on two busy cores (b)
+            pin: true
+            args: e2e/assistantChangesMinds.spec.ts --repeat-each=25 --grep "once the User has written in it"
+          - name: Reject all after writing x25 on two busy cores (c)
+            pin: true
+            args: e2e/assistantChangesMinds.spec.ts --repeat-each=25 --grep "once the User has written in it"
+          - name: Reject all after writing x25 on two busy cores (d)
+            pin: true
+            args: e2e/assistantChangesMinds.spec.ts --repeat-each=25 --grep "once the User has written in it"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Make sure Electron is installed
+        run: |
+          for attempt in 1 2 3; do
+            node node_modules/electron/install.js && exit 0
+            sleep 20
+          done
+          exit 1
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
+      - name: Keep two cores busy
+        if: matrix.pin
+        run: |
+          for core in 0 1; do
+            nohup taskset -c $core sh -c 'while :; do :; done' > /dev/null 2>&1 &
+          done
+      - run: ${{ matrix.pin && 'taskset -c 0,1 ' || '' }}xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- ${{ matrix.args }}
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: repeat-results-${{ strategy.job-index }}
+          path: test-results/
+          retention-days: 7
