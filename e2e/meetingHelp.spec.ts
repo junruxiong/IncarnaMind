@@ -25,7 +25,7 @@ import {
  * screenshots.
  */
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
-async function shot(page: Page, name: string): Promise<void> {
+async function shot(page: Page | Locator, name: string): Promise<void> {
   if (!SCREENSHOTS) return;
   await mkdir(SCREENSHOTS, { recursive: true });
   await page.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
@@ -40,6 +40,9 @@ const BUYER = [
 const mac = process.platform === "darwin";
 /** The first button's shortcut by default: ⌃⌥1 on macOS, Ctrl+Shift+1 elsewhere. */
 const FIRST_KEYS = mac ? "Ctrl+Alt+1" : "Ctrl+Shift+1";
+/** Call help's: ⌃⌥H on macOS, Ctrl+Shift+H elsewhere. */
+const PANEL_KEYS = mac ? "Ctrl+Alt+H" : "Ctrl+Shift+H";
+const PANEL_LABEL = mac ? "⌃⌥H" : "Ctrl+Shift+H";
 
 let dataDir: string;
 test.beforeEach(async () => {
@@ -66,6 +69,14 @@ const panelOpen = (app: ElectronApplication) =>
 
 const held = (app: ElectronApplication, keys: string) =>
   app.evaluate(({ globalShortcut }, asked) => globalShortcut.isRegistered(asked), keys);
+
+/** Presses a held shortcut, as the system would with another app in front. */
+const pressKeys = (app: ElectronApplication, kind: string) =>
+  app.evaluate((_electron, pressed) => {
+    (
+      globalThis as unknown as { incarnamindPressHelpKeys(kind: string): void }
+    ).incarnamindPressHelpKeys(pressed);
+  }, kind);
 
 /** A meeting recording from both sides, its first lines in. */
 async function recordingMeeting(window: Page) {
@@ -116,8 +127,8 @@ async function expectOptions(suggestion: Locator): Promise<void> {
 }
 
 test("help during the call: the floating panel above the meeting gives one or two options per button in English and Chinese, never takes the focus, and changes with the template", async () => {
-  // Fourteen presses, each one streaming a scripted Answer.
-  test.setTimeout(120_000);
+  // Nineteen presses, each one streaming a scripted Answer.
+  test.setTimeout(150_000);
   const { app, window } = await launchApp(dataDir, {
     fakeChat: true,
     transcriber: { theirLines: BUYER },
@@ -215,6 +226,8 @@ test("help during the call: the floating panel above the meeting gives one or tw
   await expect(buttons.nth(7)).toHaveText("Handle the objection");
   await expect(panel.getByTestId("panel-template")).toHaveText("Sales call");
   await expectOptions(await pressIn(panel, "Handle the objection"));
+  await expectOptions(await pressIn(panel, "Propose the next step"));
+  await expectLines(await pressIn(panel, "Facts from my documents"));
   await pointAndClick(panel, panel.getByTestId("panel-template"));
   await pointAndClick(
     panel,
@@ -225,6 +238,8 @@ test("help during the call: the floating panel above the meeting gives one or tw
   await expect(leading.getByTestId("help-heading")).toHaveText(
     /^Am I leading them\? · You said: “.+”$/,
   );
+  await expectOptions(await pressIn(panel, "A follow-up question"));
+  await expectLines(await pressIn(panel, "Not covered yet"));
   await pointAndClick(panel, panel.getByTestId("panel-template"));
   await pointAndClick(
     panel,
@@ -232,6 +247,7 @@ test("help during the call: the floating panel above the meeting gives one or tw
   );
   await expect(buttons).toHaveCount(9);
   await expect(buttons.nth(8)).toHaveText("Where we disagree");
+  await expectLines(await pressIn(panel, "Decisions and owners so far"));
   await expectLines(await pressIn(panel, "Where we disagree"));
   await shot(panel, "help-panel-team-en");
 
@@ -283,9 +299,9 @@ test("help during the call: the panel folds to level bars that become Stop, ⌘K
   await expect(panel.getByTestId("help-buttons")).toBeVisible();
 
   // ⌘K in the app's window folds and unfolds the panel, pins its suggestion and adds it to notes.
-  await fromPalette(window, "Collapse the floating panel");
+  await fromPalette(window, "Collapse the call help panel");
   await expect(pill).toBeVisible();
-  await fromPalette(window, "Expand the floating panel");
+  await fromPalette(window, "Expand the call help panel");
   await expect(panel.getByTestId("help-buttons")).toBeVisible();
   await fromPalette(window, "Pin the latest suggestion");
   await expect(panel.getByTestId("help-pin").last()).toHaveAttribute("aria-pressed", "true");
@@ -315,7 +331,7 @@ test("help during the call: the panel folds to level bars that become Stop, ⌘K
     { timeout: 20_000 },
   );
   await window.keyboard.press("ControlOrMeta+k");
-  await window.keyboard.type("Show the floating panel");
+  await window.keyboard.type("Show the call help panel");
   await window.keyboard.press("Enter");
   const shown = await panelOf(app);
   await expect(shown.getByTestId("help-heading")).toContainText("Sum up so far");
@@ -324,6 +340,145 @@ test("help during the call: the panel folds to level bars that become Stop, ⌘K
   // Stop ends the meeting, and the panel goes with it.
   await bar.getByTestId("meeting-stop").click();
   await expect.poll(() => panelOpen(app)).toBe(false);
+  await app.close();
+});
+
+/** Where the meeting bar's controls sit, by test id. */
+async function controls(bar: Locator) {
+  const box = async (id: string) => {
+    const found = await bar.getByTestId(id).boundingBox();
+    if (!found) throw new Error(`${id} isn't shown.`);
+    return found;
+  };
+  const [stop, mark, callHelp, transcript, details] = await Promise.all(
+    [
+      "meeting-stop",
+      "meeting-mark",
+      "meeting-call-help",
+      "meeting-transcript-toggle",
+      "meeting-details-toggle",
+    ].map(box),
+  );
+  if (!stop || !mark || !callHelp || !transcript || !details)
+    throw new Error("A control is missing.");
+  const cut = await bar
+    .locator(".meeting-button")
+    .evaluateAll((buttons) =>
+      buttons.some((button) =>
+        [button, ...button.querySelectorAll("span")].some(
+          (each) => each.scrollWidth > each.clientWidth + 1,
+        ),
+      ),
+    );
+  return { stop, mark, callHelp, transcript, details, cut };
+}
+
+/** The bar on one row, or wrapped before Show transcript; no button's words wrap or are cut. */
+async function expectBarRows(bar: Locator, rows: 1 | 2): Promise<void> {
+  await expect
+    .poll(async () => {
+      const { stop, mark, callHelp, transcript, details, cut } = await controls(bar);
+      const sameRow = (a: { y: number }, b: { y: number }) => Math.abs(a.y - b.y) < 2;
+      const oneLine = [mark, callHelp, transcript].every(
+        (each) => Math.abs(each.height - stop.height) < 1,
+      );
+      const shape =
+        sameRow(mark, callHelp) && sameRow(transcript, details)
+          ? sameRow(mark, transcript)
+            ? 1
+            : transcript.y >= callHelp.y + callHelp.height
+              ? 2
+              : 0
+          : 0;
+      return { shape, oneLine, cut };
+    })
+    .toEqual({ shape: rows, oneLine: true, cut: false });
+}
+
+test("help during the call: Call help in the meeting bar shows and hides the panel for the meeting, its tooltip, ⌘K and Settings name its shortcut, held only while recording, and the bar wraps before Show transcript when narrow, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir, {
+    fakeChat: true,
+    transcriber: { theirLines: BUYER },
+  });
+  await setWindowSize(app, window, 1600, 900);
+  await dismissChatSetup(window);
+  const bar = await recordingMeeting(window);
+  await panelOf(app);
+
+  // The panel opened with the recording: Call help is pressed, and hides it.
+  const callHelp = bar.getByTestId("meeting-call-help");
+  await expect(callHelp).toHaveText("Call help");
+  await expect(callHelp).toHaveAttribute("aria-pressed", "true");
+  await expect(callHelp).toHaveAttribute("title", "Hide the call help panel");
+  await expect.poll(() => held(app, PANEL_KEYS)).toBe(true);
+  await pointAndClick(window, callHelp);
+  await expect.poll(() => panelOpen(app)).toBe(false);
+  await expect(callHelp).toHaveAttribute("aria-pressed", "false");
+  await expect(callHelp).toHaveAttribute("title", `Show the call help panel (${PANEL_LABEL})`);
+
+  // Paused, its keys go back to other apps; resumed, they are held again and the panel stays
+  // hidden, the User's choice for this meeting. The shortcut shows it, and hides it again.
+  await bar.getByTestId("meeting-pause").click();
+  await expect.poll(() => held(app, PANEL_KEYS)).toBe(false);
+  await bar.getByTestId("meeting-resume").click();
+  await expect.poll(() => held(app, PANEL_KEYS)).toBe(true);
+  await pressKeys(app, "panel");
+  await panelOf(app);
+  await expect(callHelp).toHaveAttribute("aria-pressed", "true");
+  await pressKeys(app, "panel");
+  await expect.poll(() => panelOpen(app)).toBe(false);
+  await expect(callHelp).toHaveAttribute("aria-pressed", "false");
+
+  // ⌘K has the same words and keys.
+  await window.keyboard.press("ControlOrMeta+k");
+  await window.keyboard.type("Show the call help panel");
+  await expect(
+    window.getByTestId("palette-item").filter({ hasText: "Show the call help panel" }),
+  ).toContainText(PANEL_LABEL);
+  await window.keyboard.press("Enter");
+  await panelOf(app);
+  await expect(callHelp).toHaveAttribute("aria-pressed", "true");
+
+  // Changed in Settings › Meetings with the others, held at once, and the tooltip says so.
+  const settings = await openSettings(window, "meetings");
+  const keys = settings.locator('[data-testid="help-keys"][data-kind="panel"]');
+  await expect(settings.getByTestId("help-keys-row").first()).toContainText("Call help");
+  await expect(keys).toHaveText(PANEL_LABEL);
+  await keys.click();
+  await window.keyboard.press("Control+Alt+J");
+  await expect(keys).toHaveText(mac ? "⌃⌥J" : "Ctrl+Alt+J");
+  await expect.poll(() => held(app, "Ctrl+Alt+J")).toBe(true);
+  await expect.poll(() => held(app, PANEL_KEYS)).toBe(false);
+  await closeSettings(window);
+  await pointAndClick(window, callHelp);
+  await expect(callHelp).toHaveAttribute(
+    "title",
+    `Show the call help panel (${mac ? "⌃⌥J" : "Ctrl+Alt+J"})`,
+  );
+
+  // Wide, the bar is one row; at 1,100 px it wraps before Show transcript. The same in Chinese.
+  await expectBarRows(bar, 1);
+  await shot(bar, "call-help-bar-en-1600");
+  await setWindowSize(app, window, 1100, 800);
+  await expectBarRows(bar, 2);
+  await shot(bar, "call-help-bar-en-1100");
+  await (await core(window)).evaluate((bridge) =>
+    bridge.updateSettings({ user: { language: "zh-CN" } }),
+  );
+  await expect(callHelp).toHaveText("通话助手");
+  await expect(callHelp).toHaveAttribute(
+    "title",
+    `显示通话助手浮窗（${mac ? "⌃⌥J" : "Ctrl+Alt+J"}）`,
+  );
+  await expectBarRows(bar, 2);
+  await shot(bar, "call-help-bar-zh-1100");
+  await setWindowSize(app, window, 1600, 900);
+  await expectBarRows(bar, 1);
+  await shot(bar, "call-help-bar-zh-1600");
+
+  // Stopped, nothing is held.
+  await bar.getByTestId("meeting-stop").click();
+  await expect.poll(() => held(app, "Ctrl+Alt+J")).toBe(false);
   await app.close();
 });
 
@@ -361,11 +516,7 @@ test("help during the call: Answer their question cites the price sheet, checked
 
   // Held while recording; a press with another app in front writes that button's options.
   await expect.poll(() => held(app, FIRST_KEYS)).toBe(true);
-  await app.evaluate((_electron, kind) => {
-    (
-      globalThis as unknown as { incarnamindPressHelpKeys(kind: string): void }
-    ).incarnamindPressHelpKeys(kind);
-  }, "say");
+  await pressKeys(app, "say");
   const said = panel.getByTestId("help-suggestion");
   await expect(said.getByTestId("help-heading")).toContainText("What should I say?", {
     timeout: 20_000,
