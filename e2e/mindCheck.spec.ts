@@ -143,7 +143,7 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
 
   const health = window.getByTestId("check-card");
-  await expect(health.getByTestId("health-checked-all")).toContainText("Checked 15 sentences, ");
+  await expect(health.getByTestId("health-checked-all")).toContainText("Checked 15 claims, ");
   await expect(marks(window)).toHaveCount(15);
   await expect(marks(window).and(window.locator('[data-check="checking"]'))).toHaveCount(0);
   await expect(marks(window).and(window.locator('[data-check="contradicted"]'))).toHaveCount(1);
@@ -202,7 +202,7 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await expect(ask).not.toContainText("约");
   await checkCard(window);
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
-  await expect(health.getByTestId("health-checked-all")).toContainText("已核对 15 句，");
+  await expect(health.getByTestId("health-checked-all")).toContainText("已核对 15 条说法，");
   await expect(marks(window).and(window.locator('[data-check="unsupported"]'))).toHaveCount(15);
 
   // Nothing in the Folder says any of it: checked against every Document, the Tides PDF does.
@@ -218,7 +218,7 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await expect(marks(window).and(window.locator('[data-check="contradicted"]'))).toHaveCount(1);
   await expect(widen).toHaveCount(0);
   await expect(marks(window)).toHaveCount(15);
-  await expect(health.getByTestId("health-unsupported")).toContainText("11 句无依据");
+  await expect(health.getByTestId("health-unsupported")).toContainText("11 条无依据");
   await screenshot(window, "mind-check-done-zh-narrow");
 
   // A sentence written since: "全部核对" checks it, and the rest stay as they were.

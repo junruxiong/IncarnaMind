@@ -1446,7 +1446,6 @@
     margin: 0;
     color: var(--color-ink-meta);
   }
-  /* Its card, above it: the health line's parts a row each, then the whole-Mind checks. */
   .editor-popover.check-card {
     display: flex;
     flex-direction: column;
@@ -1624,7 +1623,6 @@
       margin-left: auto;
     }
   }
-  /* Narrower than 400px: the badge shows only the marks and numbers. */
   @container group (width < 400px) {
     .check-badge-words {
       display: none;

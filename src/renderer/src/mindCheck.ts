@@ -34,7 +34,6 @@ interface Asking {
   allDocuments: boolean;
   /** The claims the model named and the checks to make again, or, when only checking again, the checks. */
   count: number;
-  claims: boolean;
   /** Checked against the Mind's Folder: the question names it. */
   inFolder: boolean;
   /** Null for a plan or a model on this computer, or when `estimateRun` failed. */
@@ -148,7 +147,7 @@ export async function startMindCheck(
   useMindCheck.setState((state) => ({
     asking: {
       ...state.asking,
-      [mindId]: { mode, allDocuments, count, claims: plan.findsClaims, inFolder, estimate },
+      [mindId]: { mode, allDocuments, count, inFolder, estimate },
     },
   }));
 }
