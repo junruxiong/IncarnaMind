@@ -291,43 +291,56 @@ function SizeChoice({ mindId }: { mindId: string }) {
 
 const LINE_SPACING_CHOICES: readonly LineSpacing[] = ["default", ...LINE_SPACINGS];
 
+/** As Text size is chosen, so Style stays short enough to open beside its item in the page's ⋯. */
 function LineSpacingChoice({ mindId, onCustom }: { mindId: string; onCustom(): void }) {
   const t = useT();
   const lineSpacing = lineSpacingOf(useMindStyle(mindId));
   const typed = !LINE_SPACING_CHOICES.includes(lineSpacing);
-  const row = (key: string, chosen: boolean, label: string, onClick: () => void) => (
-    <button
-      key={key}
-      type="button"
-      role="menuitemradio"
-      aria-checked={chosen}
-      data-testid={`mind-style-line-${key}`}
-      onClick={onClick}
-      className={`${menuItemClass} px-2`}
-    >
-      <span className="flex size-4 shrink-0 items-center justify-center">
-        {chosen && <CheckLineIcon className="size-4" />}
-      </span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-    </button>
-  );
   return (
     <>
       <p className={menuTitleClass}>{t("mindStyle.lineSpacing")}</p>
       {/* biome-ignore lint/a11y/useSemanticElements: a menu's radio items are grouped by role; a fieldset is for a form's. */}
-      <div role="group" aria-label={t("mindStyle.lineSpacing")}>
-        {LINE_SPACING_CHOICES.map((each) =>
-          row(String(each), lineSpacing === each, lineSpacingLabel(each), () => {
-            void chooseLineSpacing(mindId, each);
-          }),
-        )}
-        {row(
-          "custom",
-          typed,
-          `${t("format.lineSpacing.custom")}${typed ? ` ${lineSpacing}` : ""}`,
-          onCustom,
-        )}
+      <div
+        role="group"
+        aria-label={t("mindStyle.lineSpacing")}
+        className="mx-2 mt-0.5 mb-1 grid grid-cols-5 gap-0.5 rounded-lg bg-chip p-0.5"
+      >
+        {LINE_SPACING_CHOICES.map((each) => {
+          const chosen = lineSpacing === each;
+          return (
+            <button
+              key={each}
+              type="button"
+              role="menuitemradio"
+              aria-checked={chosen}
+              data-testid={`mind-style-line-${each}`}
+              onClick={() => void chooseLineSpacing(mindId, each)}
+              className={`h-6 truncate rounded-md px-0.5 text-[13px] leading-5 -outline-offset-2 ${
+                chosen
+                  ? "bg-sheet font-semibold text-ink shadow-[0_0_0_1px_var(--color-rule),0_1px_2px_rgb(23_25_28/0.08)]"
+                  : "text-ink-secondary hover:text-ink"
+              }`}
+            >
+              {lineSpacingLabel(each)}
+            </button>
+          );
+        })}
       </div>
+      <button
+        type="button"
+        role="menuitemradio"
+        aria-checked={typed}
+        data-testid="mind-style-line-custom"
+        onClick={onCustom}
+        className={`${menuItemClass} px-2`}
+      >
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          {typed && <CheckLineIcon className="size-4" />}
+        </span>
+        <span className="min-w-0 flex-1 truncate">
+          {`${t("format.lineSpacing.custom")}${typed ? ` ${lineSpacing}` : ""}`}
+        </span>
+      </button>
     </>
   );
 }
