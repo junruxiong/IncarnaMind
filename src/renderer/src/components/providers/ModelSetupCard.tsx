@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentClient, ChatProvider } from "../../../../core/api";
 import { SHOW_AGENT_CONNECTION } from "../../../../shared/agentConnection";
-import { chosenFlowSummary } from "../../chosenFlows";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
@@ -12,6 +11,7 @@ import { ProblemLine } from "../ProblemLine";
 import { buttonStyle, hintClass } from "../ui";
 import { ChatGptMark } from "./ChatGptMark";
 import {
+  CHATGPT_RECIPIENT,
   ChatGptSignInState,
   ChatGptStorageNotice,
   useChatGptStorage,
@@ -27,6 +27,7 @@ import {
   useOllama,
 } from "./OllamaCard";
 import { ProviderForm } from "./ProviderForm";
+import { SendsLine } from "./SendsLine";
 
 const CLAUDE_DOWNLOAD = "https://claude.ai/download";
 
@@ -56,33 +57,31 @@ export function ModelSetupCard() {
       );
   }, []);
   const running = ollama.status?.running;
-  const questionWaits = useModelSetup((state) => state.waiting !== null);
   const card = useRef<HTMLElement>(null);
+  const previousView = useRef<View>(null);
   // It takes the composer's place, or opens from the steps card: either way the focus comes in.
   useEffect(() => {
-    card.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
-  }, []);
+    if (view === null) {
+      const back = previousView.current;
+      const choice = back ? `[data-setup-view="${back}"]` : "[data-setup-choice]:not(:disabled)";
+      card.current?.querySelector<HTMLButtonElement>(choice)?.focus();
+    }
+    previousView.current = view;
+  }, [view]);
 
   return (
     <section
       ref={card}
       data-testid="model-setup"
       aria-labelledby="model-setup-title"
-      className="flex max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
+      className="flex min-h-0 max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
     >
-      <div className="flex flex-col gap-1">
-        <h2
-          id="model-setup-title"
-          className={view === null ? "text-[15px] leading-6 font-semibold text-ink" : "sr-only"}
-        >
-          {t("setup.title")}
-        </h2>
-        {view === null && (
-          <p className="text-[13px] leading-5 text-ink-secondary">
-            {t(questionWaits ? "setup.body" : "setup.body.ask")}
-          </p>
-        )}
-      </div>
+      <h2
+        id="model-setup-title"
+        className={view === null ? "text-[15px] leading-6 font-semibold text-ink" : "sr-only"}
+      >
+        {t("setup.title")}
+      </h2>
 
       {view === null ? (
         <>
@@ -110,6 +109,7 @@ export function ModelSetupCard() {
               <CopilotSetupWay onKey={() => setView("key")} />
               <Way
                 testId="way-local"
+                view="local"
                 title={t("setup.way.local")}
                 line={t(
                   running === undefined
@@ -118,7 +118,10 @@ export function ModelSetupCard() {
                       ? "setup.way.local.running"
                       : "setup.way.local.notRunning",
                 )}
-                onClick={() => setView("local")}
+                onClick={() => {
+                  setOthers(true);
+                  setView("local");
+                }}
                 {...(!running && {
                   link: { label: t("setup.getOllama"), href: "https://ollama.com/download" },
                 })}
@@ -177,6 +180,7 @@ function LeadingWays({
       <button
         type="button"
         data-testid="setup-chatgpt"
+        data-setup-choice
         disabled={!storage.canSave}
         onClick={() => void sign.run()}
         className={`w-full ${buttonStyle(chinese ? "secondary" : "primary", "lg")}`}
@@ -184,12 +188,11 @@ function LeadingWays({
         <ChatGptMark className="size-4" />
         {t("setup.chatgpt.use")}
       </button>
-      {/* It signs in at once, so its line also says what goes to OpenAI (ADR-0022). */}
-      <p data-testid="setup-chatgpt-sends" className={lineClass}>
-        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line", {
-          sends: chosenFlowSummary(t),
-        })}
+      <p data-testid="setup-chatgpt-line" className={lineClass}>
+        {t(chinese ? "setup.chatgpt.line.china" : "setup.chatgpt.line")}
       </p>
+      {/* It signs in at once, so it says here what goes to OpenAI (ADR-0022). */}
+      <SendsLine provider={CHATGPT_RECIPIENT} testId="setup-chatgpt-sends" />
     </div>
   );
   const key = (
@@ -197,6 +200,8 @@ function LeadingWays({
       <button
         type="button"
         data-testid="setup-key"
+        data-setup-choice
+        data-setup-view="key"
         onClick={onKey}
         className={`w-full ${buttonStyle(chinese ? "primary" : "secondary", "lg")}`}
       >
@@ -218,12 +223,15 @@ function LeadingWays({
 
 function Way({
   testId,
+  view,
   title,
   line,
   onClick,
   link,
 }: {
   testId: string;
+  /** The view the row opens, so Back can return the focus to it. */
+  view?: Exclude<View, null>;
   title: string;
   line: string;
   onClick(): void;
@@ -235,6 +243,7 @@ function Way({
       <button
         type="button"
         data-testid={testId}
+        data-setup-view={view}
         onClick={onClick}
         className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2 py-1.5 text-left"
       >
