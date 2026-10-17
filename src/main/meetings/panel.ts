@@ -11,8 +11,9 @@
  * Windows 10 2004 and later).
  *
  * The shortcuts are held only while a Meeting records: never while it is
- * paused or after it stops, so other apps get their keys back. A press goes
- * to the panel, or, with none shown, to the app's window, which asks there.
+ * paused or after it stops, so other apps get their keys back. A button's press
+ * goes to the panel, or, with none shown, to the app's window, which asks
+ * there; Call help's shows or hides the panel.
  */
 import { join } from "node:path";
 import {
@@ -27,7 +28,7 @@ import type { Core, Logger } from "../../core";
 import type { Meeting, Settings } from "../../core/api";
 import { isRecord } from "../../core/errors";
 import { FILES_CHANNELS } from "../../shared/bridge";
-import { GENERAL_HELP, type GeneralHelpKind, helpKeysOf } from "../../shared/meetingHelp";
+import { HELP_SHORTCUTS, type HelpShortcut, helpKeysOf } from "../../shared/meetingHelp";
 import {
   type HeldKeys,
   MEETING_PANEL_ARGUMENT,
@@ -61,18 +62,18 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
   let settings: Settings | null = null;
   let panel: BrowserWindow | null = null;
   /**
-   * The User closed the panel, or showed it from ⌘K, for this Meeting: that holds until it
-   * ends, whatever Settings › Meetings says.
+   * The User showed or hid the panel for this Meeting: that holds until it ends, whatever
+   * Settings › Meetings says.
    */
   let choice: { meetingId: string; shown: boolean } | null = null;
   /** The panel's top right corner where the User left it, for the next one this session. */
   let corner: { right: number; top: number } | null = null;
-  const held = new Map<GeneralHelpKind, string>();
+  const held = new Map<HelpShortcut, string>();
   /**
-   * Keys the system refused while recording, by button: not asked for again, nor logged, on
-   * every Meeting update, until those keys or the recording change.
+   * Keys the system refused while recording: not asked for again, nor logged, on every Meeting
+   * update, until those keys or the recording change.
    */
-  const refused = new Map<GeneralHelpKind, string>();
+  const refused = new Map<HelpShortcut, string>();
 
   const liveMeeting = () =>
     meetings.find((meeting) => meeting.status === "recording" || meeting.status === "paused");
@@ -88,7 +89,18 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     }
   };
 
-  function press(kind: GeneralHelpKind): void {
+  function choose(shown: boolean): void {
+    const meeting = liveMeeting();
+    if (!meeting) return;
+    choice = { meetingId: meeting.id, shown };
+    sync();
+  }
+
+  function press(kind: HelpShortcut): void {
+    if (kind === "panel") {
+      choose(!panel);
+      return;
+    }
     if (panel && !panel.isDestroyed()) {
       panel.webContents.send(MEETING_PANEL_CHANNELS.help, kind);
       return;
@@ -98,9 +110,9 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
   }
 
   function holdKeys(recording: boolean): void {
-    const wanted = new Map<GeneralHelpKind, string>();
+    const wanted = new Map<HelpShortcut, string>();
     if (recording && settings) {
-      for (const kind of GENERAL_HELP) {
+      for (const kind of HELP_SHORTCUTS) {
         const keys = helpKeysOf(kind, settings.device.meetingHelpKeys, mac);
         if (keys) wanted.set(kind, keys);
       }
@@ -241,10 +253,7 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     panel.setBounds({ x: bounds.x + bounds.width - size.width, y: bounds.y, ...size });
   });
   ipcMain.on(MEETING_PANEL_CHANNELS.close, (event) => {
-    const meeting = liveMeeting();
-    if (!fromPanel(event) || !meeting) return;
-    choice = { meetingId: meeting.id, shown: false };
-    sync();
+    if (fromPanel(event)) choose(false);
   });
   ipcMain.on(MEETING_PANEL_CHANNELS.setUp, (event) => {
     if (!fromPanel(event)) return;
@@ -272,10 +281,7 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     return true;
   });
   ipcMain.on(FILES_CHANNELS.showMeetingPanel, (event, shown: unknown) => {
-    const meeting = liveMeeting();
-    if (!options.trusted(event) || typeof shown !== "boolean" || !meeting) return;
-    choice = { meetingId: meeting.id, shown };
-    sync();
+    if (options.trusted(event) && typeof shown === "boolean") choose(shown);
   });
   ipcMain.on(FILES_CHANNELS.meetingPanelWanted, (event) => {
     if (options.trusted(event)) event.sender.send(FILES_CHANNELS.meetingPanel, panelState());
@@ -315,7 +321,7 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
 
   if (options.testHooks) {
     Object.assign(globalThis, {
-      incarnamindPressHelpKeys(kind: GeneralHelpKind) {
+      incarnamindPressHelpKeys(kind: HelpShortcut) {
         if (!held.has(kind)) throw new Error(`The shortcut for ${kind} isn't held.`);
         press(kind);
       },

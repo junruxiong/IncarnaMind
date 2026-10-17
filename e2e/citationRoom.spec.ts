@@ -8,8 +8,10 @@ import {
   askInAssistant,
   createDataFolder,
   dismissChatSetup,
+  frontMindName,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -56,7 +58,7 @@ async function draftCiting(window: Page, lines: number): Promise<void> {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Draft");
+  await nameMind(window, "Draft");
   await window.getByTestId("mind-editor").click();
   if (lines > 0) {
     const text = Array.from({ length: lines }, (_, n) => `Paragraph ${n + 1} of the draft.`);
@@ -70,7 +72,7 @@ const editorOf = (window: Page) => window.getByTestId("mind-editor").filter({ vi
 async function openOthers(window: Page, names: readonly string[]): Promise<void> {
   for (const name of names) {
     await newMind(window);
-    await window.getByTestId("mind-title").fill(name);
+    await nameMind(window, name);
   }
   await window.getByRole("tab", { name: "Draft", exact: true }).click();
 }
@@ -111,7 +113,7 @@ for (const language of ["en", "zh-CN"] as const) {
     );
 
     await expect(editor).toBeVisible();
-    await expect(window.getByTestId("mind-title").filter({ visible: true })).toHaveValue("Draft");
+    await expect(frontMindName(window)).toHaveText("Draft");
     const card = window.getByTestId("citation-card");
     await expect(card).toBeVisible();
     await expect(card).toHaveAttribute("data-check", "found");

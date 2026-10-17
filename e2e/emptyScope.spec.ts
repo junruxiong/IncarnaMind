@@ -6,6 +6,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  nameMind,
   newMind,
   removeDataFolder,
   setLanguage,
@@ -53,7 +54,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await core.createLibraryGroup({ name, description: "" });
     }, words.folder);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Deal memo");
+    await nameMind(window, "Deal memo");
     await window.getByTestId("mind-editor").click();
     await window.keyboard.type("The summary section is long and wordy.");
 

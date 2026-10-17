@@ -9,6 +9,7 @@ import {
   dismissChatSetup,
   launchApp,
   linkedFolderRow,
+  nameMind,
   newMind,
   openLinkedFolderMenu,
   previewLink,
@@ -190,7 +191,7 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
     "Reading notes: LM scaling",
   ]) {
     await newMind(window);
-    await window.getByTestId("mind-title").fill(title);
+    await nameMind(window, title);
     await expect(window.getByTestId("mind-list-item").first()).toHaveText(title);
   }
   await addDocuments(window, [join(sources, "Supervisor meeting notes.txt")]);
@@ -409,7 +410,7 @@ test("the status footer doesn't move the tree when tagging starts or stops", asy
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Field notes");
+  await nameMind(window, "Field notes");
   // An empty Linked folder: its own Folder is listed, with nothing in it to tag.
   await mkdir(join(sources, "Projects"));
   await linkFolder(window, join(sources, "Projects"));
@@ -467,7 +468,7 @@ test("an Answer that waits for the User's approval shows an amber dot on the ass
   );
 
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Trip");
+  await nameMind(window, "Trip");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");

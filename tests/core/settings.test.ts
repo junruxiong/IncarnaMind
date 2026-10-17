@@ -52,6 +52,7 @@ describe("Settings", () => {
         monthlyCap: null,
         webSearch: false,
         keepWebPageLook: false,
+        recentCitationStyles: [],
         newMindStyle: { font: "default", size: "default" },
       },
       device: {
@@ -154,6 +155,7 @@ describe("Settings", () => {
       monthlyCap: null,
       webSearch: false,
       keepWebPageLook: false,
+      recentCitationStyles: [],
       newMindStyle: { font: "default", size: "default" },
     });
     expect(settings.device).toEqual({
@@ -282,6 +284,7 @@ describe("Settings", () => {
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
         keepWebPageLook: true,
+        recentCitationStyles: [],
         newMindStyle: { font: { family: "Georgia" }, size: "large" },
       },
       device,

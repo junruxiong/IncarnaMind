@@ -17,6 +17,7 @@ import {
   launchApp,
   mindWrittenBefore,
   motionSettled,
+  nameMind,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -143,12 +144,13 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await useMockupSize(app, window);
 
-  // A title, a Note, a heading, a list, then an Answer added to the note.
+  // A title as its first line, a Note, a heading, a list, then an Answer added to the note.
   await newMind(window);
-  const title = window.getByTestId("mind-title");
-  await title.fill("Reading notes: tides");
   await enterContent(window);
   const editor = window.getByTestId("mind-editor");
+  await window.keyboard.type("# Reading notes: tides");
+  await window.keyboard.press("Enter");
+  const title = editor.locator(":scope > h1");
   await window.keyboard.type(
     "Goal for this week: find out what drives spring tides, and when they come. Start with the tide tables, then the notes on the Moon.",
   );
@@ -301,8 +303,7 @@ test("a quote, a highlight, a code block and a formula keep the text edge too; t
   await dismissChatSetup(window);
   await useMockupSize(app, window);
   await newMind(window);
-  const title = window.getByTestId("mind-title");
-  await title.fill("Tide tables");
+  await nameMind(window, "Tide tables");
   await enterContent(window);
   const editor = window.getByTestId("mind-editor");
 
@@ -384,8 +385,7 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   await useMockupSize(app, window);
 
   await newMind(window);
-  const title = window.getByTestId("mind-title");
-  await title.fill("Boat trips");
+  await nameMind(window, "Boat trips");
   await enterContent(window);
   await window.keyboard.type("Book the morning boat from Dover, and greet the harbour master.");
   await window.keyboard.press("Enter");
@@ -534,7 +534,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await addDocuments(window, [join(sources, "Tides.pdf")]);
     await setWindowSize(app, window, 1440, 900);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Tides");
+    await nameMind(window, "Tides");
     await enterContent(window);
     const editor = window.getByTestId("mind-editor");
     await window.keyboard.type("Spring tides follow the Moon.");

@@ -18,7 +18,12 @@ import {
   type StyledRun,
 } from "../../core/api";
 import { LANGUAGE_SAMPLE, writtenInChinese } from "../../core/documents/textLanguage";
-import type { CitationStyleId } from "../../shared/citationStyles";
+import type { Language } from "../../core/language";
+import {
+  type CitationForm,
+  type CitationStyleId,
+  commonCitationStyle,
+} from "../../shared/citationStyles";
 import { displayName } from "../../shared/documentNames";
 import { bibliographyShown } from "../../shared/mindBibliography";
 import {
@@ -141,13 +146,8 @@ export function useCitesWorks(editor: Editor): boolean {
   });
 }
 
-/**
- * The style the Mind is in: its choice, else the default for the interface's language, the
- * Mind's text and what it cites (`resolvedCitationStyle`), as the core works it out for exports.
- */
-export function useMindCitationStyle(editor: Editor, choice: MindStyleChoice): CitationStyleId {
-  const language = useLanguage();
-  const citesWorks = useCitesWorks(editor);
+/** The language the Mind's text is in, from its start, as the core reads it for exports. */
+export function useMindTextLanguage(editor: Editor): Language {
   const chineseText = useEditorState({
     editor,
     selector: ({ editor: current }) => {
@@ -157,7 +157,36 @@ export function useMindCitationStyle(editor: Editor, choice: MindStyleChoice): C
       return writtenInChinese(doc.textBetween(0, end, "\n"));
     },
   });
+  return chineseText ? "zh-CN" : "en";
+}
+
+/**
+ * The style the Mind is in: its choice, else the default for the interface's language, the
+ * Mind's text and what it cites (`resolvedCitationStyle`), as the core works it out for exports.
+ */
+export function useMindCitationStyle(
+  editor: Editor,
+  choice: MindStyleChoice,
+  textLanguage: Language,
+): CitationStyleId {
+  const language = useLanguage();
+  const citesWorks = useCitesWorks(editor);
+  const chineseText = textLanguage === "zh-CN";
   return resolvedCitationStyle(choice, { language, chineseText, citesWorks });
+}
+
+/**
+ * How the Mind's Citations read in the text: a common style's form, else the form its last
+ * answer was in, a note style's or Numbered's for a style this version doesn't have.
+ */
+export function citationForm(
+  style: CitationStyleId,
+  formatting: MindFormatting | undefined,
+): CitationForm {
+  const common = commonCitationStyle(style);
+  if (common) return common.form;
+  const formatted = formatting?.style === style ? formatting.formatted : null;
+  return formatted?.form ?? "in-text";
 }
 
 /** How long the editor waits after a change before it asks again: a run of changes asks once. */
@@ -172,6 +201,7 @@ export function useCitationFormattingFor(
   editor: Editor,
   style: CitationStyleId,
   mindId: string,
+  textLanguage: Language,
 ): void {
   const documents = useAppStore((state) => state.documents);
   /** What was asked last, kept across the effect's runs (Documents change often). */
@@ -198,6 +228,7 @@ export function useCitationFormattingFor(
         clusters: clusters.map((cluster) => ({
           works: cluster.members.map((member) => citedWorkOf(member.attributes)),
         })),
+        language: textLanguage,
       };
       // A record edited or a Document renamed since is a new request, though the Citations are as they were.
       const records = new Map(
@@ -245,7 +276,7 @@ export function useCitationFormattingFor(
       editor.off("transaction", onTransaction);
       if (retries.get(mindId) === again) retries.delete(mindId);
     };
-  }, [editor, mindId, style, documents]);
+  }, [editor, mindId, style, textLanguage, documents]);
 
   // Closed: an answer still on its way is dropped, and the Mind's formatting forgotten.
   useEffect(() => {

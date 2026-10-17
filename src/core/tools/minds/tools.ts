@@ -102,8 +102,8 @@ export interface MindsForTools {
   ): { text: string; origins: readonly ThirdPartySource[] };
   /** Saves a Checkpoint of the Mind as it is, before the AI changes it (#113). */
   checkpoint(mindId: string): void;
-  /** Makes a Mind, in the Folder `folderId` or in none. */
-  create(title: string, folderId: string | null): ChangeableMind;
+  /** Makes a Mind, in the Folder `folderId` or in none; `headed`, its text starts with its title (`makeMind`). */
+  create(title: string, folderId: string | null, headed: boolean): ChangeableMind;
   /** The name of a Folder, or null when there is none by that id. */
   folderName(folderId: string): string | null;
   /** Says where a call is writing a Mind's new Blocks as they come (#202); `place` null once it has stopped. */
@@ -1396,6 +1396,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     },
   };
 
+  // A model that began with a heading of its own keeps that one alone.
+  const make = (title: string, content: string): ChangeableMind =>
+    minds.create(title, options.folderId, !/^\s*#{1,6}\s/.test(content));
+
   const create: Tool = {
     name: MIND_TOOLS.create,
     description:
@@ -1421,7 +1425,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       streamContent(toolCallId, input, (fields) => {
         const title = fields.get("title");
         if (!title?.done || title.value.trim() === "") return null;
-        const mind = minds.create(title.value.trim(), options.folderId);
+        // Its first paragraph is whole by now, so whether the model began with a heading is known.
+        const mind = make(title.value.trim(), fields.get("content")?.value ?? "");
         return { writer: writerFor(mind, null, true), created: true };
       });
     },
@@ -1430,7 +1435,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const markdown = optional(input.content);
       // Made already, as its content came in.
       const streamed = streams.get(toolCallId)?.writer?.mind;
-      const mind = streamed ?? minds.create(title, options.folderId);
+      const mind = streamed ?? make(title, markdown ?? "");
       const folder = options.folderId === null ? null : minds.folderName(options.folderId);
       const made = `Made the Mind “${mind.name}”${folder ? ` in the Folder “${folder}”` : ""}, open beside the User's Mind`;
       if (markdown === null) {

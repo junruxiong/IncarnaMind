@@ -8,6 +8,7 @@ import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
+  frontMindName,
   launchApp,
   newMind,
   openFolderInLibrary,
@@ -92,7 +93,7 @@ test("the Library is a tab beside the Mind, which stays in its own tab, and it c
 
     // Back to the Mind by its tab: the Library's tab stays open.
     await window.getByTestId("mind-tab").click();
-    await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
+    await expect(frontMindName(window)).toHaveText("Tide notes");
     await expect(library).toHaveCount(0);
     await expect(window.getByTestId("library-tab")).toHaveCount(1);
     await window.getByTestId("library-tab").click();
@@ -108,7 +109,7 @@ test("the Library is a tab beside the Mind, which stays in its own tab, and it c
     // It closes like a Mind's tab; the Mind is shown again.
     await window.getByTestId("library-tab").getByTestId("tab-close").click();
     await expect(window.getByTestId("library-tab")).toHaveCount(0);
-    await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
+    await expect(frontMindName(window)).toHaveText("Tide notes");
     await session.app.close();
     session = await launchApp(dataDir);
     await expect(session.window.getByTestId("library-tab")).toHaveCount(0);
