@@ -94,6 +94,7 @@ import { markSelectionAsMine } from "../markAsMine";
 import { useMeetingOf, useMeetings } from "../meetings";
 import { type OpenedCopy, openMindCopy } from "../mindCopies";
 import { isWritingIn } from "../mindStatus";
+import { followMindStyle } from "../mindStyles";
 import { useMindTools } from "../mindTools";
 import { onMindWriting, writingPlaceOf } from "../mindWriting";
 import { firstOpenOf } from "../nudges";
@@ -643,6 +644,7 @@ function MindEditorView({
   const frame = useRef<HTMLDivElement>(null);
   useClickBelowNote(editor, frame);
   const wordLook = useWordLookStyle(doc, mindId, editor);
+  useEffect(() => followMindStyle(mindId, doc), [mindId, doc]);
 
   return (
     <MindIdContext.Provider value={mindId}>
