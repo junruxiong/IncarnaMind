@@ -58,6 +58,7 @@ Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the p
 - Run what CI runs: `npm run typecheck`, `npm run lint`, `npm test`, and `npm run test:smoke` for the specs your change touches.
 - Try the edge cases in `docs/agents/testing.md` that apply (empty and huge input, Chinese, broken files, offline, failing models, quitting halfway, twice and Undo), and say which in the pull request.
 - Update or remove the tests for UI you changed.
+- A feature with a real engine (transcription, OCR, embeddings, the reranker, Python analysis) also needs a test that loads the real module the way the built app does. The fake engines are for everything else.
 - Watch `gh pr checks <number> --watch` and fix any red check before reporting.
 - Tests must pass on any machine:
   - launch through `e2e/app.ts` and set the window size;
