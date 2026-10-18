@@ -1231,6 +1231,16 @@ export function darkPixels(canvas: Locator): Promise<number> {
   });
 }
 
+/** The box of the words in an element, in CSS pixels: not of the element, which may be padded or overlap its neighbour. */
+export function textBoxOf(target: Locator) {
+  return target.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const { x, y, width, height } = range.getBoundingClientRect();
+    return { x, y, width, height };
+  });
+}
+
 /** The rendered width of an element, in CSS pixels. */
 export async function widthOf(locator: Locator): Promise<number> {
   const box = await locator.boundingBox();
