@@ -1676,7 +1676,6 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       outcomeOf(mind, written.change.request),
       ...tableNotes(written.change),
       ...writtenNotes(written),
-      ...droppedSaid(written.dropped),
     ].join(" ");
   };
 
