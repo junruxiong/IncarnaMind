@@ -35,32 +35,60 @@ const JSON_START = '(?:\\[\\s*[{\\]]|\\{\\s*(?:"|&quot;|\\}))';
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const alternatives = (names: readonly string[]) => names.map(escapeRegExp).join("|");
 
-/** A block: its opening tag, JSON, and its closing tag, or the end of the text when it was cut off. */
-const blockPattern = (names: readonly string[]) =>
+const closedPattern = (names: readonly string[]) =>
   new RegExp(
-    `${OPEN}(${alternatives(names)})${ATTRIBUTES}${CLOSE}\\s*(${JSON_START}[\\s\\S]*?)(?:\\s*${OPEN}/\\1\\s*${CLOSE}|$)`,
+    `${OPEN}(${alternatives(names)})${ATTRIBUTES}${CLOSE}\\s*(${JSON_START}[\\s\\S]*?)\\s*${OPEN}/\\1\\s*${CLOSE}`,
     "gi",
   );
+
+const openingPattern = (names: readonly string[]) =>
+  new RegExp(`${OPEN}(${alternatives(names)})${ATTRIBUTES}${CLOSE}\\s*(?=${JSON_START})`, "gi");
 
 interface Block {
   from: number;
   to: number;
   tag: string;
+  /** What is between its tags, as written. */
   content: string;
+  escaped: boolean;
 }
 
+/**
+ * The blocks that show: a tag, JSON, and a closing tag. A block never closed
+ * is its tag and the JSON after it, or, when that is cut off, the rest of its
+ * paragraph: the words after it are the Answer's.
+ */
 function blocksIn(text: string, names: readonly string[]): Block[] {
-  const found = [...text.matchAll(blockPattern(names))].map((each) => ({
+  const closed = [...text.matchAll(closedPattern(names))].map((each) => ({
     from: each.index,
     to: each.index + each[0].length,
     tag: (each[1] ?? "").toLowerCase(),
-    content: each[0].startsWith("&") ? decoded(each[2] ?? "") : (each[2] ?? ""),
+    content: each[2] ?? "",
+    escaped: each[0].startsWith("&"),
   }));
+  const cutOff = [...text.matchAll(openingPattern(names))]
+    .filter((each) => !closed.some((block) => each.index >= block.from && each.index < block.to))
+    .map((each) => {
+      const start = each.index + each[0].length;
+      const paragraph = text.indexOf("\n\n", start);
+      const to = jsonEnd(text, start) ?? (paragraph === -1 ? text.length : paragraph);
+      return {
+        from: each.index,
+        to,
+        tag: (each[1] ?? "").toLowerCase(),
+        content: text.slice(start, to),
+        escaped: each[0].startsWith("&"),
+      };
+    });
+  const apart: Block[] = [];
+  for (const block of [...closed, ...cutOff].sort((a, b) => a.from - b.from)) {
+    if (block.from >= (apart.at(-1)?.to ?? 0)) apart.push(block);
+  }
   const shown = shownRanges(
     text,
-    found.map((each) => ({ start: each.from, end: each.to })),
+    apart.map((each) => ({ start: each.from, end: each.to })),
   );
-  return found.filter((_, index) => shown[index]);
+  return apart.filter((_, index) => shown[index]);
 }
 
 const decoded = (text: string) =>
@@ -70,26 +98,38 @@ const decoded = (text: string) =>
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
 
-/** The first JSON value in a block's words, which a marker or other words may follow. */
-function firstJson(content: string): unknown {
+/** Where the JSON value that starts at `from` ends, when it is whole; a marker or words may follow it. */
+function jsonEnd(text: string, from: number): number | undefined {
   let depth = 0;
   let inString = false;
-  for (let at = 0; at < content.length; at++) {
-    const char = content[at];
+  for (let at = from; at < text.length; at++) {
+    const quote = text.startsWith("&quot;", at) ? 6 : text[at] === '"' ? 1 : 0;
     if (inString) {
-      if (char === "\\") at++;
-      else if (char === '"') inString = false;
-    } else if (char === '"') inString = true;
-    else if (char === "[" || char === "{") depth++;
-    else if ((char === "]" || char === "}") && --depth === 0) {
-      try {
-        return JSON.parse(content.slice(0, at + 1));
-      } catch {
-        return undefined;
+      if (text[at] === "\\") at++;
+      else if (quote > 0) {
+        inString = false;
+        at += quote - 1;
       }
-    }
+    } else if (quote > 0) {
+      inString = true;
+      at += quote - 1;
+    } else if (text[at] === "[" || text[at] === "{") depth++;
+    else if ((text[at] === "]" || text[at] === "}") && --depth === 0) return at + 1;
   }
   return undefined;
+}
+
+/** The records a `<cite>` block gives: its first JSON value, one record or a list of them. */
+function recordsIn(block: Block): unknown[] {
+  const end = jsonEnd(block.content, 0);
+  if (end === undefined) return [];
+  try {
+    const written = block.content.slice(0, end);
+    const value: unknown = JSON.parse(block.escaped ? decoded(written) : written);
+    return Array.isArray(value) ? value : [value];
+  } catch {
+    return [];
+  }
 }
 
 /** The tool-call text in `text`, each block as written. */
@@ -110,13 +150,10 @@ export function takeToolText(
   let out = "";
   let at = 0;
   for (const block of blocks) {
-    if (block.tag === CITE) {
-      const value = firstJson(block.content);
-      if (value !== undefined) records.push(...(Array.isArray(value) ? value : [value]));
-    }
+    if (block.tag === CITE) records.push(...recordsIn(block));
     const before = text.slice(at, block.from).replace(/[ \t]+$/, "");
-    const alone =
-      (before === "" || before.endsWith("\n")) && /^[ \t]*(?:\n|$)/.test(text.slice(block.to));
+    const startsLine = out + before === "" || (out + before).endsWith("\n");
+    const alone = startsLine && /^[ \t]*(?:\n|$)/.test(text.slice(block.to));
     out += before;
     at = block.to;
     if (alone) at += /^[ \t]*\n?/.exec(text.slice(block.to))?.[0].length ?? 0;
@@ -132,13 +169,21 @@ export function takeToolText(
  * after it or nothing yet, or from an opening tag still being typed.
  */
 export function heldBackFrom(text: string, names: readonly string[] = TOOL_TEXT_TAGS): number {
-  const opened = new RegExp(
-    `${OPEN}(?:${alternatives(names)})${ATTRIBUTES}${CLOSE}\\s*(?=$|\\[\\s*(?:[{\\]]|$)|\\{\\s*(?:"|&quot;|\\}|$))`,
-    "i",
-  ).exec(text)?.index;
+  const inFence = (at: number) =>
+    (text.slice(0, at).match(/^ {0,3}(?:```|~~~)/gm)?.length ?? 0) % 2 === 1;
+  const opened = [
+    ...text.matchAll(
+      new RegExp(
+        `${OPEN}(?:${alternatives(names)})${ATTRIBUTES}${CLOSE}\\s*(?=$|\\[\\s*(?:[{\\]]|$)|\\{\\s*(?:"|&quot;|\\}|$))`,
+        "gi",
+      ),
+    ),
+  ].find((each) => !inFence(each.index))?.index;
   const typing = /(?:<|&(?:l(?:t;?)?)?)([a-z_]*)$/i.exec(text);
   const partial =
-    typing && names.some((name) => name.startsWith((typing[1] ?? "").toLowerCase()))
+    typing &&
+    names.some((name) => name.startsWith((typing[1] ?? "").toLowerCase())) &&
+    !inFence(typing.index)
       ? typing.index
       : undefined;
   return Math.min(opened ?? text.length, partial ?? text.length);
