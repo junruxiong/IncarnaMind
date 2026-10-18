@@ -198,7 +198,8 @@ export function createTagger(options: TaggerOptions) {
       call.signal.aborted ||
       (requests.get(id) ?? 0) !== request;
     const row = rowOf(id);
-    if (row?.status !== "ready") return;
+    // Tagged meanwhile: Organize did it, in its own turn.
+    if (row?.status !== "ready" || row.tagging_status === "tagged") return;
     const definitions = tags.list();
     if (setState(id, "tagging")) announce([id]);
 
