@@ -1932,13 +1932,14 @@ export function createCore(adapters: CoreAdapters): Core {
     if (changed.length > 0) events.emit("documents.tagged", documents.getMany(changed));
     return documents.getMany(ids);
   };
-  /**
-   * Until there are Folders and Organize has a model, automatic tagging decides
-   * Tags alone; then Organize does both. Automatic covers tagging only.
-   */
   const organizing = () =>
     organizeModelOf(library.settings()) !== null &&
     !!db.get("SELECT 1 FROM library_groups WHERE deleted_at IS NULL LIMIT 1");
+  /**
+   * Organize tags and files new Documents itself only while it does so automatically; otherwise
+   * automatic tagging tags them, and they wait for Organize to be moved. Automatic covers tagging only.
+   */
+  const organizesNewDocuments = () => organizing() && library.settings().automatic;
   // Ollama's decision models run only on this computer, as when one is picked by hand: elsewhere
   // they would get Document text with no consent asked.
   const decisionModelElsewhere = (classifier: TaggingClassifier) =>
@@ -1953,7 +1954,8 @@ export function createCore(adapters: CoreAdapters): Core {
     db,
     now,
     tags,
-    enabled: () => !organizing(),
+    enabled: () => !organizesNewDocuments(),
+    organizing: (id) => organizing() && library.isOrganizing(id),
     stopped: (id) => library.taggingStoppedFor(id),
     canRun: async () => {
       const classifier = await tagging.resolve();
@@ -3552,7 +3554,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return { tag: tags.get(intoTagId), merged: { kind: "tag", id: tagId, links } };
     },
     retagDocuments: async (documentIds) => {
-      if (organizing()) return library.classify(documentIds);
+      if (organizesNewDocuments()) return library.classify(documentIds);
       tagger.retag(documentIds);
     },
     stopTagging: async () => {
