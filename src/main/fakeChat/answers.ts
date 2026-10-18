@@ -5,7 +5,8 @@
  * of the first Passage that shares a word with the Question (on the page, or
  * at the Location, that line is on), then answers with a marker. A Question
  * with "misquote" in it gets a quote that isn't on the page; one with "no page"
- * names no page, as a small model often doesn't; one with "each"
+ * names no page, as a small model often doesn't; one with "without citing" (不引用)
+ * writes a marker and never calls cite, as a model sometimes does; one with "each"
  * cites the first Passage of each Document found, with a marker for each; one
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one with
  * "quotation marks" (引号) quotes the clause after a line's colon or comma, and writes
@@ -75,6 +76,15 @@ const FOUND_PAGES = [
 
 /** The scripted Answer when it cited something: one sentence with a marker. */
 export const CITED_ANSWER = "Your Documents answer this [^1].\n\nThat is all.";
+
+/** A Question the model answers with a marker and no `cite` call. */
+const WITHOUT_CITING = /\bwithout citing\b|不引用/i;
+
+/** The scripted Answer to such a Question: a sentence with a marker no record backs. */
+const uncitedAnswer = (question: string) =>
+  /\p{Script=Han}/u.test(question)
+    ? "文档回答了这个问题[^1]。\n\n以上。"
+    : "Your Documents answer this [^1].\n\nThat is all.";
 
 /** The scripted Answer, as a table, to a Question that asks for one: the markers in a cell. */
 const tableAnswer = (markers: string) =>
@@ -317,6 +327,7 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
       reasoning: reasoningFor(question),
     };
   }
+  if (WITHOUT_CITING.test(question)) return { text: uncitedAnswer(question) };
   const cites = toolResults(prompt, "cite");
   if (cites.length === 0) {
     const records = recordsFor(searches.at(-1) ?? "", question);
