@@ -579,7 +579,7 @@ for (const [language, width] of [
   });
 }
 
-/** The + menu's four rows, then More's, in order (#1245); Record a meeting is off until turned on. */
+/** Record a meeting is left out: it is offered only once meetings are turned on. */
 const NEW_MENU_ROWS: readonly MessageKey[] = [
   "menu.newMind",
   "sidebar.plus.addDocuments",
@@ -595,7 +595,7 @@ const MORE_ROWS: readonly MessageKey[] = [
   "sidebar.plus.findSources",
   "sidebar.plus.linkFolder",
 ];
-/** Each as ⌘K names it. Add Documents… and Link a folder… join ⌘K with #1245. */
+// Add Documents… and Link a folder… join ⌘K once they are commands (#1245).
 const IN_PALETTE: readonly MessageKey[] = [
   "menu.newMind",
   "menu.newFolder",

@@ -223,17 +223,17 @@ test("the + menu in the sidebar header offers New Mind, Add Documents…, New Fo
   await expect(plus).toHaveAttribute("aria-expanded", "true");
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "shell-menu-en.png") });
 
-  // More opens beside it as the pointer comes onto it, with the rest, each also in ⌘K.
+  // More opens beside it as the pointer comes onto it, with the rest.
   await items.nth(3).hover();
   await expect(more).toBeVisible();
   await expect(more.getByRole("menuitem")).toHaveText([
-    /Link a folder…/,
+    /Import a Word file…/,
     /Compare Documents…/,
     /Verify a document…/,
-    /Add a web page…/,
-    /Import a Word file…/,
     /From starter folders…/,
+    /Add a web page…/,
     /Find sources…/,
+    /Link a folder…/,
   ]);
 
   // The arrow keys, Home and End move between the rows; → opens More, ← closes it; Esc closes the
@@ -286,7 +286,9 @@ test("the + menu in the sidebar header offers New Mind, Add Documents…, New Fo
   await window.keyboard.press("End");
   await window.keyboard.press("Enter");
   await expect(more.getByRole("menuitem").first()).toBeFocused();
-  const dialog = await previewLink(app, window, folder, more.getByRole("menuitem").first());
+  await window.keyboard.press("End");
+  await expect(more.getByRole("menuitem").last()).toBeFocused();
+  const dialog = await previewLink(app, window, folder, more.getByRole("menuitem").last());
   await confirmLink(dialog);
   await expect(linkedFolderRow(window, "Library")).toHaveCount(1);
   await app.close();
@@ -310,13 +312,13 @@ test("the + menu and the shell speak Chinese too", async () => {
   ]);
   await window.getByTestId("plus-more").hover();
   await expect(window.getByRole("menu", { name: "更多" }).getByRole("menuitem")).toHaveText([
-    /添加同步文件夹…/,
+    /导入 Word 文件…/,
     /对比文档…/,
     /核对文档…/,
-    /添加网页…/,
-    /导入 Word 文件…/,
     /从预设文件夹新建…/,
+    /添加网页…/,
     /查找资料…/,
+    /添加同步文件夹…/,
   ]);
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "shell-zh-menu.png") });
   await window.keyboard.press("Escape");
