@@ -124,6 +124,13 @@ describe("The built-in Skills", () => {
     // no kind of Document takes another's, and no heading stands over nothing.
     expect(summary).toContain("a contract has no Methods or Limitations");
     expect(summary).toContain("is left out whole: no heading, and no line saying it is missing");
+    // one rule for a missing section: search again, then leave it out; no line in the introduction,
+    expect(summary).toContain(
+      "search again with the Document's own words before you leave that section out",
+    );
+    expect(summary).not.toContain("in one sentence in the introduction");
+    // and several Documents each in the structure for its kind.
+    expect(summary).toContain("each in the structure for its kind but shorter");
     expect(summary).toContain("Search scope");
 
     const review = (await shipped("literature-review")).body;
@@ -526,9 +533,10 @@ describe("The summary Skill's sections follow the kind of Document (#1175)", {
 }, () => {
   /**
    * A model that follows the Skill as it reaches it: it searches, cites the first Passage, and
-   * writes the sections the instructions give for the kind of Document the Question names.
+   * writes the sections the instructions give for the kind of Document the Question names, those
+   * the Document has something for (`covered`) and no others.
    */
-  function followingTheSkill(kind: "agreement" | "paper", quote: string) {
+  function followingTheSkill(kind: "agreement" | "paper", quote: string, covered: string[]) {
     return scriptedModel((call): ScriptedReply => {
       if (!call.tools.includes("search_documents")) return { text: "No search was offered." };
       const searches = call.results.filter((result) => result.tool === "search_documents");
@@ -552,18 +560,25 @@ describe("The summary Skill's sections follow the kind of Document (#1175)", {
           : /\*\*A research paper\*\* gets these sections:\n\n((?:\d\. [^\n]*\n)+)/.exec(
               call.system,
             )?.[1];
-      const headings = [...(given ?? "").matchAll(/\*\*([^*]+)\*\*/g)].map((each) => each[1]);
+      const headings = [...(given ?? "").matchAll(/\*\*([^*]+)\*\*/g)]
+        .map((each) => each[1])
+        .filter((heading) => heading !== undefined && covered.includes(heading));
       return {
         text: headings.map((heading) => `### ${heading}\n\n- ${quote} [^1]`).join("\n\n"),
       };
     });
   }
 
-  async function summarise(kind: "agreement" | "paper", text: string, quote: string) {
+  async function summarise(
+    kind: "agreement" | "paper",
+    text: string,
+    quote: string,
+    covered: string[],
+  ) {
     const dataDir = await createTempDataFolder();
     const sources = await createTempDataFolder();
     const core = startWithBuiltIns(dataDir, BUILT_IN_SKILLS_DIR, {
-      createChatModel: scriptedModels(followingTheSkill(kind, quote)).createChatModel,
+      createChatModel: scriptedModels(followingTheSkill(kind, quote, covered)).createChatModel,
     });
     await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
     const name = kind === "agreement" ? "Employment agreement.txt" : "GraphST.txt";
@@ -590,15 +605,15 @@ describe("The summary Skill's sections follow the kind of Document (#1175)", {
     };
   }
 
-  test("an employment agreement gets its parties, term and obligations, each point cited, and no paper sections", async () => {
+  test("an employment agreement gets the sections its text has, each point cited, none for what it lacks, and no paper sections", async () => {
     const { headings, cited } = await summarise(
       "agreement",
       AGREEMENT,
       "The term is three years from the start date, with a three-month probation.",
+      ["Parties", "Term", "Pay"],
     );
-    expect(headings).toEqual(
-      expect.arrayContaining(["Parties", "Term", "Obligations", "Notice and termination"]),
-    );
+    // The agreement gives no place of work and no notice: its summary has no heading for them.
+    expect(headings).toEqual(["Parties", "Term", "Pay"]);
     for (const paperOnly of [
       "Key claims",
       "Methods or approach",
@@ -615,11 +630,10 @@ describe("The summary Skill's sections follow the kind of Document (#1175)", {
       "paper",
       PAPER,
       "We evaluate it on traffic prediction with ablations over each component.",
+      ["Key claims", "Methods or approach", "Limitations"],
     );
-    expect(headings).toEqual(
-      expect.arrayContaining(["Key claims", "Methods or approach", "Limitations"]),
-    );
-    expect(headings).not.toContain("Parties");
+    // The paper names no future work: no Open questions.
+    expect(headings).toEqual(["Key claims", "Methods or approach", "Limitations"]);
     expect(cited).toBeGreaterThanOrEqual(headings.length);
   });
 });

@@ -13,7 +13,7 @@ Write a structured summary of a Document the User added, drawn only from what it
 ## Which Documents
 
 - If the Question names a Document, or its Search scope holds a single Document, summarise that one.
-- If the Search scope holds several Documents and the Question doesn't pick one, summarise each in turn, in the same structure but shorter, then add a short paragraph on how they relate.
+- If the Search scope holds several Documents and the Question doesn't pick one, summarise each in turn, each in the structure for its kind but shorter, then add a short paragraph on how they relate.
 - If you can't tell which Document is meant, summarise the one the Passages point to and say which one you chose.
 
 ## Gather the material first
@@ -52,5 +52,5 @@ Keep it short: a summary, not a rewrite. Bullet points are fine; don't use table
 - Cite every statement you take from a Document, the way your instructions for citing say: markers that point to the Passages you found. Don't write a list of sources or a bibliography, and never cite a Passage for something it doesn't say.
 - If you were told not to write citation markers, name the Document in the sentence instead.
 - Don't add details the Passages don't give: no names, numbers, dates or sample sizes from memory.
-- When the Passages found don't cover something the kind of Document turns on (an agreement's term, a paper's method), say so plainly, in one sentence in the introduction and under no heading of its own, instead of guessing. If the Documents don't support what the Question assumes, say that too.
+- If a search for something the kind of Document turns on (an agreement's term, a paper's method) finds nothing, search again with the Document's own words before you leave that section out; never guess it. If the Documents don't support what the Question assumes, say that too.
 - Report the Document's views as the Document's. Keep your own views out, apart from the labelled assessment of a paper's limitations.
