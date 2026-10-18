@@ -8,7 +8,6 @@ import {
 } from "../../../shared/mindCitationStyle";
 import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
 import { core } from "../core";
-import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { useUndo } from "../undo";
 
@@ -32,17 +31,14 @@ export function useDefaultStyleNotice({
   chosen: CitationStyleId | null;
   readOnly: boolean;
 }): void {
-  const t = useT();
   useEffect(() => {
     if (readOnly || chosen !== null || style === "numbered") return;
     const settings = doc.getMap<unknown>(MIND_SETTINGS_FIELD);
     if (defaultStyleNoticeShown(settings)) return;
     doc.transact(() => markDefaultStyleNoticeShown(settings));
-    const message = t("citationStyle.defaulted", { style: styleLabel(style, t) });
-    const change = t("citationStyle.change");
     core.getMindCitationStyle(mindId).then(({ folderDefault }) => {
       useUndo.getState().push({
-        message,
+        said: (t) => t("citationStyle.defaulted", { style: styleLabel(style, t) }),
         undo: async () => {
           await core.setMindCitationStyle(mindId, "numbered", { folderDefault });
         },
@@ -50,7 +46,7 @@ export function useDefaultStyleNotice({
           await core.setMindCitationStyle(mindId, null, { folderDefault });
         },
         also: {
-          label: change,
+          label: (t) => t("citationStyle.change"),
           testId: "undo-change-style",
           run: () =>
             useCitationStylePicker
@@ -64,5 +60,5 @@ export function useDefaultStyleNotice({
         },
       });
     }, useAppStore.getState().reportError);
-  }, [mindId, doc, style, chosen, readOnly, t]);
+  }, [mindId, doc, style, chosen, readOnly]);
 }

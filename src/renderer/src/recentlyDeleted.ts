@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { DeletedItem } from "../../core/api";
 import { core } from "./core";
 import { translateNow as t } from "./i18n";
-import { saidInLine } from "./lineNames";
+import type { WordsInLine } from "./lineNames";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
 
@@ -53,18 +53,18 @@ async function deleteAgain(items: readonly DeletedItem[]): Promise<void> {
 }
 
 /** What the undo line says a restore did: where one item went back to, if it was in a Folder still there. */
-function restoredMessage(items: readonly DeletedItem[]) {
+function restoredMessage(items: readonly DeletedItem[]): WordsInLine {
   const [only] = items;
-  return saidInLine(t, (t) => {
-    if (!only || items.length > 1) return t("object.restored.count", { count: items.length });
+  if (!only || items.length > 1) return (t) => t("object.restored.count", { count: items.length });
+  const folder = useAppStore
+    .getState()
+    .library?.groups.find((group) => group.id === only.groupId);
+  return (t) => {
     const name = deletedName(only);
-    const folder = useAppStore
-      .getState()
-      .library?.groups.find((group) => group.id === only.groupId);
     return folder
       ? t("object.restoredTo", { name, folder: folder.name })
       : t("object.restored", { name });
-  });
+  };
 }
 
 /** Puts each back where it was, and says so; Undo deletes them again. */
@@ -76,8 +76,8 @@ export async function restoreItems(items: readonly DeletedItem[]): Promise<void>
   };
   await restore();
   useUndo.getState().push({
-    ...restoredMessage(items),
-    name: t("undo.name.restore"),
+    said: restoredMessage(items),
+    name: (t) => t("undo.name.restore"),
     undo: async () => {
       await deleteAgain(items);
       await refresh();
