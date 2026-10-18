@@ -1,5 +1,6 @@
 import { core } from "./core";
 import { translateNow as t } from "./i18n";
+import { saidInLine } from "./lineNames";
 import { useAppStore } from "./store";
 import { type Undoable, useUndo } from "./undo";
 
@@ -13,7 +14,7 @@ export async function exportAiUseStatement(mindId: string): Promise<Undoable | u
   try {
     const mind = await core.createAiUseStatement(mindId);
     const made: Undoable = {
-      message: t("aiStatement.made", { name: mind.title }),
+      ...saidInLine(t, (t) => t("aiStatement.made", { name: mind.title })),
       name: t("aiStatement.command"),
       undo: async () => {
         await core.deleteMind(mind.id);

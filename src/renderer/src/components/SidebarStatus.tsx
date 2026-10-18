@@ -6,6 +6,7 @@ import { organizes, organizesNewDocuments } from "../../../shared/libraryModels"
 import { commands } from "../commands/registry";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
+import { saidInLine } from "../lineNames";
 import { useCapturing } from "../meetings";
 import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
@@ -503,15 +504,17 @@ function useStatuses(): Status[] {
   for (const problem of pageProblems) {
     const refused = !canTryAgain(problem);
     const reason = t(reasonKey(problem.reason));
-    const short = problem.document
-      ? t("webPages.fetchAgainFailed", { name: problem.document.name, reason })
-      : t(refused ? "webPages.notAdded" : "webPages.couldNotFetch", { reason });
+    const { message: short, fullMessage = short } = saidInLine(t, (t) =>
+      problem.document
+        ? t("webPages.fetchAgainFailed", { name: problem.document.name, reason })
+        : t(refused ? "webPages.notAdded" : "webPages.couldNotFetch", { reason }),
+    );
     const { tryAgain, dismiss } = useWebPages.getState();
     statuses.push({
       testId: `web-page-problem:${problem.key}`,
       tone: refused ? "waiting" : "error",
       short,
-      full: `${short}\n${problem.address}\n${problem.message}`,
+      full: `${fullMessage}\n${problem.address}\n${problem.message}`,
       ...(refused
         ? {}
         : {
