@@ -12,6 +12,11 @@ import { app, type BrowserWindow, dialog, type SaveDialogOptions } from "electro
 import type { Core, UnsavedChanges } from "../core";
 import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 
+/** The quit sheet's buttons, in their order. */
+const SAVE_COPY = 0;
+const QUIT_ANYWAY = 1;
+const KEEP_OPEN = 2;
+
 /** A file name the file systems take: a Mind's title without what they refuse. */
 const fileNameOf = (title: string) => title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "Mind";
 
@@ -43,31 +48,46 @@ export function guardQuit(core: Core, focusedWindow: () => BrowserWindow | null)
     unsaved = state;
   });
   let leaving = false;
+  /** Asks what to do with what still waits; a copy that couldn't be saved asks again, saying why. */
+  const ask = async (left: UnsavedChanges, copyFailed: string | null) => {
+    const { language } = await core.getSettings();
+    const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
+    const window = focusedWindow();
+    const options = {
+      type: "warning" as const,
+      message:
+        left.count === 1
+          ? t("quit.unsaved.title.one")
+          : t("quit.unsaved.title", { count: left.count }),
+      ...(copyFailed !== null && {
+        detail: t("quit.unsaved.copyFailed", { reason: copyFailed }),
+      }),
+      buttons: [t("unsaved.saveCopy"), t("quit.unsaved.quit"), t("quit.unsaved.keep")],
+      defaultId: KEEP_OPEN,
+      cancelId: KEEP_OPEN,
+      noLink: true,
+    };
+    const { response } = window
+      ? await dialog.showMessageBox(window, options)
+      : await dialog.showMessageBox(options);
+    return { response, window };
+  };
   const decide = async () => {
-    const left = await core.saveChangesAgain();
-    if (left) {
-      const { language } = await core.getSettings();
-      const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
-      const window = focusedWindow();
-      const options = {
-        type: "warning" as const,
-        message:
-          left.count === 1
-            ? t("quit.unsaved.title.one")
-            : t("quit.unsaved.title", { count: left.count }),
-        buttons: [t("unsaved.saveCopy"), t("quit.unsaved.quit"), t("quit.unsaved.keep")],
-        defaultId: 2,
-        cancelId: 2,
-        noLink: true,
-      };
-      const { response } = window
-        ? await dialog.showMessageBox(window, options)
-        : await dialog.showMessageBox(options);
-      if (response === 2) return;
-      if (response === 0) {
+    let copyFailed: string | null = null;
+    for (;;) {
+      const left = await core.saveChangesAgain();
+      if (!left) break;
+      const { response, window } = await ask(left, copyFailed);
+      if (response === QUIT_ANYWAY) break;
+      if (response !== SAVE_COPY) return;
+      try {
         for (const mindId of left.mindIds) {
           if (!(await saveMindCopy(core, window, mindId))) return;
         }
+        break;
+      } catch (error) {
+        console.error("quit: a copy of a Mind couldn't be saved", error);
+        copyFailed = error instanceof Error ? error.message : String(error);
       }
     }
     leaving = true;
@@ -76,10 +96,9 @@ export function guardQuit(core: Core, focusedWindow: () => BrowserWindow | null)
   app.on("before-quit", (event) => {
     if (leaving || !unsaved) return;
     event.preventDefault();
+    // Whatever goes wrong here, IncarnaMind stays open: quitting would lose what waits.
     decide().catch((error: unknown) => {
       console.error("quit: the changes waiting couldn't be dealt with", error);
-      leaving = true;
-      app.quit();
     });
   });
 }

@@ -3391,6 +3391,7 @@ export const en = {
   "quit.unsaved.title.one": "1 change isn’t saved",
   "quit.unsaved.quit": "Quit anyway",
   "quit.unsaved.keep": "Keep open",
+  "quit.unsaved.copyFailed": "The copy couldn’t be saved: {reason}",
   "error.mind.missedChange": "This change builds on one the Mind never got, so it wasn’t saved.",
   "error.mind.newerVersionEdit":
     "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",

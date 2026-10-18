@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import * as Y from "yjs";
-import { type Core, DATABASE_FILE, MIND_CONTENT_FIELD, type UnsavedChanges } from "../../src/core";
-import { openDatabase } from "../../src/core/storage";
+import { type Core, MIND_CONTENT_FIELD, type UnsavedChanges } from "../../src/core";
 import { saveFailureReason } from "../../src/core/unsavedChanges";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
+import { refuseWrites } from "../helpers/failingStorage";
 import { appendParagraph, connectToMind } from "../helpers/mindClient";
 import { note } from "../helpers/minds";
 
@@ -22,17 +22,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Makes storing Mind content fail as a full disk does, until the returned function is called. */
-function failWrites(dataDir: string): () => void {
-  const db = openDatabase(join(dataDir, DATABASE_FILE));
-  db.exec(
-    "CREATE TRIGGER fail_writes BEFORE INSERT ON mind_updates BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END",
-  );
-  return () => {
-    db.exec("DROP TRIGGER fail_writes");
-    db.close();
-  };
-}
+const failWrites = (dataDir: string) => refuseWrites(dataDir);
 
 /** A copy of a new Mind holding "BASE", stored, that sends each change as the editor does. */
 async function typingIn(core: Core) {
@@ -209,6 +199,7 @@ describe("Changes storage refuses (#1119)", () => {
     }, core);
 
     expect(await copy.type(" NEXT")).toBe("refused");
+    expect(await copy.type(" MORE")).toBe("refused");
     const other = await connectToMind(core, copy.mindId);
     appendParagraph(other, "ELSEWHERE");
     await expect(other.settled()).resolves.toBeUndefined();
@@ -216,8 +207,22 @@ describe("Changes storage refuses (#1119)", () => {
     core.close();
 
     expect(await afterRestart(dataDir, copy.mindId)).toBe(
-      "<paragraph>BASE MISSED NEXT</paragraph><paragraph>ELSEWHERE</paragraph>",
+      "<paragraph>BASE MISSED NEXT MORE</paragraph><paragraph>ELSEWHERE</paragraph>",
     );
+  });
+
+  // protects=a copy of a Mind can be exported while storage refuses every write, and holds what waits: the rescue never needs a write; fails_when=noting the file as IncarnaMind's fails the export; no_claim=the host's saving of the file, which the e2e checks.
+  test("a copy exports while storage refuses every write, with what waits in it", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const copy = await typingIn(core);
+    const restore = refuseWrites(dataDir, { every: true });
+    await copy.type(" LOST");
+
+    const exported = await core.exportMind(copy.mindId, { format: "markdown" });
+
+    expect(new TextDecoder().decode(exported.data)).toContain("BASE LOST");
+    restore();
   });
 
   // protects=quitting tries once more: storage back, what waits is stored though nothing was typed since; fails_when=it is lost at quit; no_claim=none beyond protects.
