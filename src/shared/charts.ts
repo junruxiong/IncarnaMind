@@ -816,8 +816,13 @@ const span = (value: unknown) =>
 /** A table in JSON on its grid, a cell that spans in each slot it covers (`SourceGrid`). */
 export function gridOfTable(table: NodeJSON): SourceGrid {
   const grid: (SourceCell | null)[][] = [];
+  const rowAt = (at: number) => {
+    const slots = grid[at] ?? [];
+    grid[at] = slots;
+    return slots;
+  };
   (table.content ?? []).forEach((row, at) => {
-    const slots = (grid[at] ??= []);
+    const slots = rowAt(at);
     let column = 0;
     for (const cell of row.content ?? []) {
       while (slots[column] !== undefined) column++;
@@ -828,7 +833,7 @@ export function gridOfTable(table: NodeJSON): SourceGrid {
       };
       const across = span(cell.attrs?.colspan);
       for (let down = 0; down < span(cell.attrs?.rowspan); down++) {
-        const spanned = (grid[at + down] ??= []);
+        const spanned = rowAt(at + down);
         for (let step = 0; step < across; step++) {
           spanned[column + step] = down === 0 && step === 0 ? read : { ...read, continued: true };
         }
