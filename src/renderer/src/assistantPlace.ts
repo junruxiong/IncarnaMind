@@ -28,8 +28,8 @@ export const CARD_MIN_HEIGHT = 200;
 /** A floating box is at least this big, and kept this far inside the window. */
 export const FLOAT_MIN = { width: 300, height: 220 };
 export const WINDOW_EDGE = 8;
-/** The gap between the card and a docked assistant, which is also the line that resizes it. */
-export const GAP = 8;
+/** The gap between the card and a docked assistant, which is also the line that resizes it (#1099). */
+export const GAP = 4;
 /** A side dock folded: a rail this wide. */
 export const RAIL = 44;
 /** The assistant's header, level with the card's tab strip. */
