@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
 import {
   EXPORT_FORMATS,
   type ExportFormat,
@@ -56,7 +56,7 @@ function SwitchRow({
   testId,
 }: {
   label: string;
-  hint?: string;
+  hint?: ReactNode;
   checked: boolean;
   onChange(checked: boolean): void;
   testId: string;
@@ -89,6 +89,29 @@ function SwitchRow({
   );
 }
 
+/** The hint of the tracked-changes switch, with the name a link to where it is changed. */
+function TrackedAsHint({ name }: { name: string }) {
+  const t = useT();
+  const openSettings = useAppStore((state) => state.openSettings);
+  // The name sits in the sentence wherever the language puts it, so the sentence is cut at it.
+  const mark = "\u0000";
+  const [before = "", after = ""] = t("export.trackChanges.hint", { name: mark }).split(mark);
+  return (
+    <>
+      {before}
+      <button
+        type="button"
+        data-testid="export-author-name"
+        onClick={() => openSettings("general", "author-name")}
+        className="underline"
+      >
+        {name}
+      </button>
+      {after}
+    </>
+  );
+}
+
 /**
  * A Word file's review choices (#107): the User's edits as tracked changes,
  * for a Mind imported from a Word file, and IncarnaMind's comments on AI
@@ -110,7 +133,7 @@ function WordReviewRows({
       {fromWord && (
         <SwitchRow
           label={t("export.trackChanges")}
-          hint={t("export.trackChanges.hint", { name: author })}
+          hint={<TrackedAsHint name={author} />}
           checked={draft.trackChanges}
           onChange={(trackChanges) => onChange({ ...draft, trackChanges })}
           testId="export-track-changes"
