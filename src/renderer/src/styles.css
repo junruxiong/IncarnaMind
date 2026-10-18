@@ -706,10 +706,7 @@
       height: 32px;
       border-radius: 10px 10px 0 0;
       background: var(--color-sheet);
-      font-weight: 600;
-    }
-    /* The group the User is in shows only through its shown tab's title, in ink. */
-    &[aria-selected="true"][data-focused-group] {
+      /* The same in every group, as Chrome's (#1100): the caret shows which group the User is in. */
       color: var(--color-ink);
     }
     /* A 1px divider on a tab's right edge; hidden by the tab pointed at, on both its sides. */
@@ -3831,6 +3828,10 @@
   .mind-editor > * + .change-section {
     margin-top: 32px;
   }
+  /* The line's own margin-bottom is all the space under it. */
+  .mind-editor > .applied-line + * {
+    margin-top: 0;
+  }
   .mind-editor > :is(.change-was, .change-section) + *,
   .mind-editor li > .change-was + * {
     margin-top: 2px;
@@ -3883,7 +3884,6 @@
     align-items: center;
     column-gap: 6px;
     min-width: 0;
-    margin-block: 4px;
     font-family: var(--font-sans);
     font-size: 12px;
     line-height: 20px;
@@ -3891,9 +3891,39 @@
     white-space: normal;
   }
   .mind-editor .applied-line {
+    margin-bottom: 6px;
     color: var(--color-accent-strong);
+
+    & :is([data-applied-action="review"], [data-applied-action="done"]) {
+      color: var(--color-ink);
+    }
+  }
+  .mind-editor .applied-restore-holder {
+    margin-inline-start: 6px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    user-select: none;
+    white-space: nowrap;
+  }
+  /* Struck words take their space with them: the words after them need one. */
+  .mind-editor del.applied-old + .applied-restore-holder {
+    margin-inline-end: 6px;
+  }
+  .mind-editor .applied-restore-holder--block {
+    display: block;
+    margin-block: 4px 0;
+    margin-inline-start: 0;
+  }
+  .mind-editor .applied-restore {
+    color: var(--color-ink-meta);
+
+    &:hover {
+      color: var(--color-ink-secondary);
+    }
   }
   .mind-editor .applied-kept-line {
+    margin-block: 4px;
     color: var(--color-ink-meta);
 
     & .proposal-action {

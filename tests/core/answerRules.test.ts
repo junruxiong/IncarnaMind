@@ -186,6 +186,22 @@ describe("The Answer instructions", { timeout: 30_000 }, () => {
     },
   );
 
+  // protects=every way of citing is told a cited sentence says only what its quote supports, and the way with no Citations isn't; fails_when=a mode loses the rule or the one that doesn't cite gets it; no_claim=none beyond protects.
+  test.each([
+    ["tools", true],
+    ["structured-output", true],
+    ["none", false],
+  ] as const)(
+    "when answering with %s, a cited sentence says only what its quote supports: %s",
+    (mode, cites) => {
+      const text = documentInstructions(mode, { total: 1, names: ["Memo"] }, "");
+
+      expect(text.includes("A sentence with a Citation says only what its quote supports.")).toBe(
+        cites,
+      );
+    },
+  );
+
   test.each(["tools", "structured-output", "none"] as const)(
     "when answering with %s, stop where the Documents stop: own knowledge only for a general Question, labelled, with no figures",
     (mode) => {

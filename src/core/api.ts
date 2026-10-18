@@ -2286,7 +2286,10 @@ export interface DocumentScanProgress {
  *   up, a key or sign-in is missing, or the User declined sending excerpts to
  *   the tagger's service). Tagging resumes by itself once one can.
  * - "tagging": the tagger is deciding the Document's Tags.
- * - "tagged": its automatic Tags are up to date.
+ * - "tagged": its automatic Tags are up to date. With none, the tagger asked
+ *   and none fit.
+ * - "no-tags": there were no Tags to choose from, so no model was asked. It is
+ *   tagged once a Tag exists.
  * - "failed": the tagger's provider failed (see `taggingError`); a re-tag, a
  *   change of model or a restart tries again.
  * - "skipped": the Document has no text to tag (processing failed, or found none).
@@ -2298,6 +2301,7 @@ export type TaggingState =
   | "waiting-for-provider"
   | "tagging"
   | "tagged"
+  | "no-tags"
   | "failed"
   | "skipped"
   | "stopped";
@@ -2390,7 +2394,8 @@ export interface Document {
   tagging: TaggingState;
   /**
    * Set when `tagging` is "failed", and when it is "waiting-for-provider" for
-   * a reason worth saying, such as the ChatGPT plan's limit ("plan-limit").
+   * a reason worth saying, such as the ChatGPT plan's limit ("plan-limit") or
+   * a model's rate limit ("rate-limit", with `resetsAt`).
    */
   taggingError: ProviderError | null;
   /**
@@ -3809,7 +3814,10 @@ export interface ProviderError {
   message: string;
   /** The message as a key of the dictionary, when the core worded it, to say in the interface language. */
   wording?: ErrorWording;
-  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  /**
+   * "plan-limit": when the plan's limit resets (ISO 8601), when the provider says.
+   * "rate-limit" on a Document waiting to be tagged: when Tagging resumes.
+   */
   resetsAt?: string;
   /** A sign-in route's request (a Claude account, Copilot): which of its problems it is, for its own line. */
   signInRoute?: SignInRouteProblem;

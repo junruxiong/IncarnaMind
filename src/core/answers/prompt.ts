@@ -224,6 +224,13 @@ function notCovered(cite: boolean): string {
 }
 
 /**
+ * The claim check holds a cited sentence to its quote, so an inference written
+ * into it makes the whole sentence Unsupported (#1073).
+ */
+const CITED_SAYS_ONLY_ITS_QUOTE =
+  '- A sentence with a Citation says only what its quote supports. Your inference, judgement or comparison goes in a sentence of its own with no marker, worded as a reading: "This suggests…" / "这意味着…".';
+
+/**
  * A premise the Passages don't support, and Passages that disagree (#548):
  * what a careful reader catches. The examples are in English and Chinese, so
  * an Answer in either has its model. `cite`: the Answer cites with markers.
@@ -423,6 +430,7 @@ export function documentInstructions(
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
         notCovered(true),
+        CITED_SAYS_ONLY_ITS_QUOTE,
         readingRules(true),
         ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
@@ -445,6 +453,7 @@ export function documentInstructions(
         QUOTATION_MARKS,
         ...(calculate ? [CALCULATIONS] : []),
         notCovered(true),
+        CITED_SAYS_ONLY_ITS_QUOTE,
         readingRules(true),
       ].join("\n");
     case "none":
