@@ -564,6 +564,7 @@ function useStatuses(): Status[] {
       tone: "waiting",
       short: t("status.taggingStopped"),
       full: t("tagging.stoppedIn", { places: placesText(stoppedPlaces, library, t, language) }),
+      needsYou: true,
       action: {
         label: t("tagging.resume"),
         testId: "tagging-resume",
