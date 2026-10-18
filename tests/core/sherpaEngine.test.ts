@@ -9,14 +9,17 @@ import { MEETING_SAMPLE_RATE } from "../../src/core/adapters";
 const RESULTS: string[] = [];
 const latest = () => RESULTS.at(-1) ?? "";
 
+// As the built process gets the package, from a native import(): everything is on `default`.
 vi.mock("sherpa-onnx-node", () => ({
-  OfflineRecognizer: {
-    createAsync: async () => ({
-      createStream: () => ({ acceptWaveform: () => {}, handle: { id: RESULTS.length } }),
-      decodeAsync: async () => JSON.parse(latest()),
-    }),
+  default: {
+    OfflineRecognizer: {
+      createAsync: async () => ({
+        createStream: () => ({ acceptWaveform: () => {}, handle: { id: RESULTS.length } }),
+        decodeAsync: async () => JSON.parse(latest()),
+      }),
+    },
+    Vad: class {},
   },
-  Vad: class {},
 }));
 vi.mock("sherpa-onnx-node/addon.js", () => ({
   default: { getOfflineStreamResultAsJson: latest },
