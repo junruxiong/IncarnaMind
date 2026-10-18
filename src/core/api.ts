@@ -7886,8 +7886,22 @@ export interface CoreApi {
    * `"mind.update"` event for the Mind (these include its own changes, which Yjs ignores).
    */
   openMind(mindId: string): Promise<OpenedMind>;
-  /** Applies a client's Yjs update to the Mind, stores it, and pushes it to every client as `"mind.update"`. */
+  /**
+   * Applies a client's Yjs update to the Mind, pushes it to every client as `"mind.update"`, and
+   * stores it. Storage that refuses it doesn't fail the call: the change waits in memory, as
+   * `unsavedChanges` says (#1119). Throws `"error.mind.missedChange"` for an update that builds
+   * on one the Mind never got: the client sends its whole state then.
+   */
   applyMindUpdate(mindId: string, update: Uint8Array): Promise<void>;
+  /** Changes to Minds storage refused, kept in memory while the app runs (#1119); null when none. */
+  unsavedChanges(): Promise<UnsavedChanges | null>;
+  /** Tries now to store the changes `unsavedChanges` names, and says what still waits. */
+  saveChangesAgain(): Promise<UnsavedChanges | null>;
+  /**
+   * How many changes the last run couldn't store before it closed without quitting (a crash, a
+   * force-quit), once: later calls give null. Null too when it doesn't know.
+   */
+  takeLostChanges(): Promise<number | null>;
   /**
    * Tells the core a client stopped editing the Mind, so it can compact the
    * Mind's stored updates and free its memory. Editing the Mind again is fine.
@@ -9261,6 +9275,19 @@ export interface CoreApi {
  * need to push something (processing progress, Answer streams) add their
  * events here. Payloads are plain data (Uint8Array included), so they survive IPC.
  */
+/** Why storage refused changes to a Mind (#1119), from the database's own code. */
+export type SaveFailureReason = "full" | "io" | "readOnly" | "busy" | "other";
+
+/** Changes to Minds storage refused (#1119): kept in memory while the app runs, tried again. */
+export interface UnsavedChanges {
+  /** How many changes wait, in all the Minds. */
+  count: number;
+  mindIds: string[];
+  reason: SaveFailureReason;
+  /** The database's own words, for Details. */
+  detail: string;
+}
+
 export interface CoreEvents {
   /** The settings in effect changed, e.g. the interface language. */
   "settings.changed": Settings;
@@ -9286,6 +9313,8 @@ export interface CoreEvents {
   "mind.update": MindUpdate;
   /** The assistant is writing changes into a Mind as they come (#202), or has stopped. */
   "mind.writing": MindWriting;
+  /** Changes storage refused wait in memory, or (null) all of them are stored now (#1119). */
+  "minds.unsaved": UnsavedChanges | null;
   /** A Mind's Checkpoints changed: one was saved, kept for good, or thinned out. Read `listCheckpoints` again. */
   "checkpoints.changed": { mindId: string };
   /**
@@ -9485,6 +9514,9 @@ const methods: Record<CoreApiMethod, true> = {
   deleteMind: true,
   openMind: true,
   applyMindUpdate: true,
+  unsavedChanges: true,
+  saveChangesAgain: true,
+  takeLostChanges: true,
   closeMind: true,
   saveCheckpoint: true,
   listCheckpoints: true,

@@ -138,6 +138,10 @@ describe("a failure of the system's", () => {
     ["ENOENT: no such file or directory, open '/a/b.pdf'", "error.system.gone"],
     ["ENAMETOOLONG: name too long, rename '/a/b.pdf' -> '/a/c'", "error.system.nameTooLong"],
     ["EEXIST: file already exists, mkdir '/a/b'", "error.system.exists"],
+    ["database or disk is full", "error.system.full"],
+    ["disk I/O error", "error.system.diskError"],
+    ["attempt to write a readonly database", "error.system.notAllowed"],
+    ["database is locked", "error.system.busy"],
   ])("%s gets plain words", (text, reason) => {
     const description = describeError(ipc("core:renameDocument", "Error", text));
     expect(description.reason).toBe(reason);

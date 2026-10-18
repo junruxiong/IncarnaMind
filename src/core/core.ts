@@ -237,6 +237,7 @@ import {
   QWEN3_ASR_0_6B,
   TRANSCRIPTION_SPEED,
 } from "./transcription/model";
+import { createUnsavedChanges } from "./unsavedChanges";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
 import { createWordImports } from "./wordImports";
@@ -442,16 +443,26 @@ export function createCore(adapters: CoreAdapters): Core {
   // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
   const conversations = createConversations(db, now);
   const conversationsChanged = () => events.emit("conversations.changed", null);
-  const content = createMindContent(db, now, (mindId, update, cause) => {
-    events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
-    // Only notes the change; what became of AI text is worked out once the Mind is quiet.
-    aiUse.contentStored(mindId);
-    checkpoints.edited(mindId);
-    mindIndex.contentStored(mindId);
-    comparisons.mindChanged(mindId);
-    const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
-    if (minds.markEdited(mindId) || renamed) mindsChanged();
+  const unsaved = createUnsavedChanges({
+    dataDir: adapters.paths.dataDir,
+    tempDir: adapters.paths.tempDir ?? tmpdir(),
+    changed: (state) => events.emit("minds.unsaved", state),
   });
+  const content = createMindContent(
+    db,
+    now,
+    (mindId, update, cause) => {
+      events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
+      // Only notes the change; what became of AI text is worked out once the Mind is quiet.
+      aiUse.contentStored(mindId);
+      checkpoints.edited(mindId);
+      mindIndex.contentStored(mindId);
+      comparisons.mindChanged(mindId);
+      const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
+      if (minds.markEdited(mindId) || renamed) mindsChanged();
+    },
+    { unsaved: unsaved.mindUnsaved },
+  );
   const mindIndex = createMindIndex({
     db,
     now,
@@ -2900,6 +2911,12 @@ export function createCore(adapters: CoreAdapters): Core {
     applyMindUpdate: async (mindId, update) => {
       content.apply(writableMind(mindId).id, update);
     },
+    unsavedChanges: async () => unsaved.summary(),
+    saveChangesAgain: async () => {
+      content.storeWaiting();
+      return unsaved.summary();
+    },
+    takeLostChanges: async () => unsaved.takeLost(),
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
     },
@@ -3913,6 +3930,7 @@ export function createCore(adapters: CoreAdapters): Core {
       mindIndex.close();
       events.clear();
       content.closeAll();
+      unsaved.quit();
       db.close();
     },
   };
