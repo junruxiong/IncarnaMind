@@ -2836,7 +2836,7 @@ export const en = {
   "skills.builtIn.mind-to-report":
     "Turns this Mind (the Notes, Questions and Answers above the Question) into a structured report draft with a title, a summary, sections and a conclusion, keeping their Citations and inventing no sources.",
   "skills.builtIn.summarise-document":
-    "Writes a structured summary of a Document, or of each one in the Question's Search scope: its key claims (each cited), its methods, its limitations and the questions it leaves open.",
+    "Writes a cited summary of a Document, with sections that fit its kind: a paper's claims, an agreement's terms.",
   "skills.settings.builtIn.hint": "Comes with IncarnaMind. To change it, duplicate it as your own.",
   "skills.settings.duplicate": "Duplicate as my own",
   "skills.settings.duplicateLabel": "Duplicate {name} as my own",
