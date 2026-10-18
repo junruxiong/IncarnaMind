@@ -43,7 +43,7 @@
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { asGenerated } from "../../shared/aiText";
-import { answerBlocks } from "../../shared/answerBlocks";
+import { answerBlocks, hasText } from "../../shared/answerBlocks";
 import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
@@ -393,7 +393,7 @@ function lastAnswerOf(
   const answer = earlier[at];
   if (answer?.kind !== "answer") return null;
   const blocks = withoutFraming(answerBlocks({ ...answer, status: "done" }));
-  if (blocks.length === 0) return null;
+  if (!hasText(blocks)) return null;
   const question = earlier.slice(0, at).findLast((message) => message.kind === "question");
   return {
     blocks,

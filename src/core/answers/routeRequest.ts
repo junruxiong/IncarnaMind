@@ -120,6 +120,13 @@ const PIECES = [
 // The last Answer, as a Mind of its own: "make it a document", "put this in a new note".
 const AS_A_MIND =
   /^(?:make|turn) (?:it|this|that|the answer|your answer|this answer|that answer) (?:into |as )?(?:a |an )?(?:new |separate )?(?:document|doc|mind)$|^(?:put|save|write|copy|turn) (?:it|this|that|the answer|your answer|this answer|that answer) (?:in|into|as) (?:(?:a |an )?(?:new |separate )?(?:document|doc|mind)|(?:a |an )?(?:new|separate) (?:note|page)|a (?:note|page))$/;
+// Asked as a question, for the User: "can you make me a document of this?", "why didn't you make a
+// document?". The question filter would leave them unclear; "can you make it a document?" still is.
+const ASKED_FOR_A_DOCUMENT =
+  /^(?:[\p{L}'’]+ ){0,4}?(?:make|create|write up|turn)(?: (?:me|it|this|that|the answer|your answer))?(?: (?:into|as))? (?:a|an|one)(?: new| separate)? (?:document|doc|note|mind)(?: (?:of|from|out of|for) (?:this|it|that|the answer|your answer|me))?(?: for me)?\?*$/u;
+const FOR_THE_USER = /\bme\b|\bwhy (?:didn't|did not|don't|not)\b/;
+// "How do I make a document?", "怎么给我建一份文档": how it is done, not a request to do it.
+const HOW = /\bhow\b|怎么|怎样|如何/;
 // A request that names the Mind the User is in as where it goes writes there, never into a new one.
 const INTO_THEIRS =
   /\b(?:in|into|to|for|on|under|after) (?:my|this|the) (?:own )?(?:notes?|page|mind|draft|summary|section|intro|introduction|conclusion|list|table)\b|\b(?:here|below)$/;
@@ -203,7 +210,13 @@ const ZH_PIECES = [
 // "做成文档", "把这个放进一个新笔记": the last Answer, as a Mind of its own. 整理 is Organize: never alone.
 const ZH_AS_A_MIND =
   /^(?:把(?:这个|这些|它|刚才的回答|这个回答|上面的回答|上面的内容|你的回答))?(?:做成|建成|写成|放进|存成|存为)(?:一[份个篇])?(?:新的?)?(?:文档|笔记|页面|Mind)$/u;
+// "你不给我建一份文档吗", "能不能帮我做成文档": for the User (给我, 帮我), unlike "你能写文档吗".
+const ZH_ASKED_FOR_A_DOCUMENT =
+  /^[^，。？！?]{0,8}?(?:给我|帮我|为我|替我)(?:把(?:这个|这些|它|刚才的回答|这个回答|上面的回答|上面的内容|你的回答))?(?:(?:建|做|生成)一[份个篇]|(?:做成|建成|写成|生成|整理成)(?:一[份个篇])?)(?:新的?)?(?:文档|笔记|Mind)(?:吗|呢|吧|么|嘛)?[？?。！!]*$/u;
 const ZH_INTO_THEIRS = /这里|这篇|这个笔记|我的笔记|笔记里|笔记中|下面|本页|这页/;
+// A new page asked for in so many words goes in one, whatever it is about: "a new page on the intro".
+const SAYS_NEW =
+  /\b(?:new|separate|another|fresh)\s+(?:[\p{L}-]+\s+){0,2}(?:page|note|mind|document|doc)\b|另起一页|新建一[页篇个份]|单独(?:写)?一[份页篇]|新的?(?:页面|笔记|文档)/u;
 
 const NEW_MIND =
   /\b(?:new|separate|another|fresh|an?)\s+(?:[\p{L}-]+\s+){0,2}(?:page|note|handout)\b|\b(?:make|take) notes\b|新建|创建|一[个份篇](?:总结|概述)?(?:页面|页)$/u;
@@ -233,6 +246,9 @@ function plainKind(
   // "Make my summary shorter..." trails off.
   if (/(?:\.{2,}|…|。{2,})$/.test(trimmed)) return null;
   if (/\p{Script=Han}/u.test(trimmed)) {
+    if (lastAnswerHasText && !HOW.test(trimmed) && ZH_ASKED_FOR_A_DOCUMENT.test(trimmed)) {
+      return "as-a-mind";
+    }
     const chinese = trimmed
       .replace(/[。！]+$/, "")
       .replace(/，?谢谢$/, "")
@@ -254,6 +270,14 @@ function plainKind(
     .replace(/,? (?:thanks|thank you|then)$/, "")
     .replace(/,? (?:please|pls)$/, "")
     .replace(FILLER, "");
+  if (
+    lastAnswerHasText &&
+    FOR_THE_USER.test(english) &&
+    !HOW.test(english) &&
+    ASKED_FOR_A_DOCUMENT.test(english)
+  ) {
+    return "as-a-mind";
+  }
   if (ASKS.test(english)) return null;
   if (lastAnswerHasText && AS_A_MIND.test(english)) return "as-a-mind";
   if (matches(EDITS, english)) return WHOLE_MIND.test(english) ? null : "edit";
@@ -273,7 +297,8 @@ export function routeRequest(question: string, context: RequestContext): Request
   const kind = plain === "piece" ? "write" : (plain ?? "unclear");
   const lower = question.toLocaleLowerCase();
   const intoTheirs =
-    INTO_THEIRS.test(lower.replace(/[.!?。！？\s]+$/, "")) || ZH_INTO_THEIRS.test(question);
+    !SAYS_NEW.test(lower) &&
+    (INTO_THEIRS.test(lower.replace(/[.!?。！？\s]+$/, "")) || ZH_INTO_THEIRS.test(question));
   const newMind =
     kind === "write" &&
     !NAMES_A_MIND.test(question) &&
