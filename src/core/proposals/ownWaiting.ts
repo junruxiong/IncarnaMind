@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { INLINE_CODE_MARK } from "../../shared/aiText";
 import { askedFor } from "../../shared/askedChanges";
+import { originOf } from "../../shared/blockOrigins";
 import {
   keepRevised,
   pendingProposals,
@@ -264,12 +265,31 @@ export function ownAppliedIn(
   return { kind: "applied", blockIds: range.map(idOf), fingerprint: fingerprintOf(range) };
 }
 
-/** A Mind's top-level Blocks from the `from`th on, to write again whole (#1149); null for none. */
-export function appliedFrom(blocks: Y.XmlFragment, from: number): OwnApplied | null {
-  const range = topLevelBlocks(blocks).slice(from);
-  return range.length === 0
-    ? null
-    : { kind: "applied", blockIds: range.map(idOf), fingerprint: fingerprintOf(range) };
+/**
+ * The top-level Blocks the Answer `answerId` wrote into a Mind, by their origin, to write again
+ * whole (#1149), and, `heading`, the untitled heading above them; null for none. `edited`: the
+ * User has typed in them since.
+ */
+export function writtenByAnswer(
+  blocks: Y.XmlFragment,
+  answerId: string,
+  { heading = false }: { heading?: boolean } = {},
+): { applied: OwnApplied; edited: boolean } | null {
+  const doc = blocks.doc;
+  if (!doc) return null;
+  const top = topLevelBlocks(blocks);
+  const fromAnswer = (element: Y.XmlElement) => {
+    const from = originOf(doc, idOf(element))?.from;
+    return from?.anchor.kind === "message" && from.anchor.messageId === answerId;
+  };
+  const range = top.filter(fromAnswer);
+  const [first] = top;
+  if (range.length === 0) return null;
+  if (heading && first && first.nodeName === "heading" && !fromAnswer(first)) range.unshift(first);
+  return {
+    applied: { kind: "applied", blockIds: range.map(idOf), fingerprint: fingerprintOf(range) },
+    edited: !range.every((element) => !fromAnswer(element) || allAiText(element, writtenAtom)),
+  };
 }
 
 /**

@@ -62,7 +62,6 @@ import type { Language } from "../../language";
 import { plainText } from "../../mindText";
 import { insertBlocks } from "../../noteAdding";
 import {
-  appliedFrom,
   citationsDropped,
   type OwnApplied,
   type OwnWaiting,
@@ -73,6 +72,7 @@ import {
   replaceApplied,
   replaceOwn,
   waitingIn,
+  writtenByAnswer,
 } from "../../proposals/ownWaiting";
 import { layout, textBlocks } from "../../proposals/write";
 import type { PreparedChatModel } from "../../providers/chat";
@@ -162,8 +162,9 @@ export interface MindToolsOptions {
   /** The language the Answer is written in, which the model is told to ask the User in. */
   language: Language;
   /**
-   * The Mind this Answer made when first written, written again from every Document (#1149):
-   * create_mind writes its text there again, as one change, rather than making another.
+   * The Mind this Answer wrote when first written, written again from every Document (#1149):
+   * create_mind or add_to_mind puts its new text in place of what it wrote there, as one change,
+   * rather than writing it a second time.
    */
   remake?: string | null;
   /**
@@ -1605,7 +1606,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         const place = fields.get("after");
         if ((named && !named.done) || (place && !place.done)) return null;
         const mind = targetOf({ mind: named?.value });
-        if (mind instanceof Refusal || wantsNewMind(mind)) return null;
+        if (mind instanceof Refusal || wantsNewMind(mind) || remake === mind.id) return null;
         const after = optional(place?.value);
         // A place that can't be written to is the call's to report, once it has all of its input.
         const there = minds.read(mind.id, (note) => placeAfter(note, after, options.language));
@@ -1616,6 +1617,18 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     async call(input, { toolCallId, canCallAgain }) {
       const given = givenIn(input) ?? text(input.content, "content");
       const mind = found(targetOf(input));
+      if (remake === mind.id && typeof given === "string") {
+        streams.delete(toolCallId);
+        ended.add(toolCallId);
+        const said = remade(
+          toolCallId,
+          mind,
+          given,
+          canCallAgain?.() ?? true,
+          "call add_to_mind again",
+        );
+        if (said !== null) return said;
+      }
       if (wantsNewMind(mind) && (canCallAgain?.() ?? true)) {
         toldNewMind = true;
         streams.delete(toolCallId);
@@ -1658,21 +1671,24 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     mind: ChangeableMind,
     markdown: string,
     retry: boolean,
+    again: string,
   ): string | null => {
-    // Its heading stays unless the new text brings one of its own.
-    const from = minds.read(mind.id, (blocks) =>
-      headed(markdown) || topLevelBlocks(blocks)[0]?.nodeName !== "heading" ? 0 : 1,
+    const { anchor } = options.origin.from;
+    if (anchor.kind !== "message") return null;
+    // Its title heading stays unless the new text brings one of its own.
+    const over = minds.read(mind.id, (blocks) =>
+      writtenByAnswer(blocks, anchor.messageId, { heading: headed(markdown) }),
     );
-    const over = minds.read(mind.id, (blocks) => appliedFrom(blocks, from));
     if (!over) return null;
-    const written = writeOver(toolCallId, mind, over, markdown, retry, {
-      again: "call create_mind again",
-      asWrite: true,
+    // Typed in since, the User's words aren't taken away at once: the new text waits, as #880 holds.
+    const written = writeOver(toolCallId, mind, over.applied, markdown, retry, {
+      again,
+      asWrite: !over.edited,
     });
     remake = null;
     madeHere.add(mind.id);
     return [
-      `Wrote the new text in place of the text of the Mind “${mind.name}”, which you made for this request before, open beside the User's Mind.`,
+      `Wrote the new text in place of the text you wrote for this request before, in “${mind.name}”.`,
       outcomeOf(mind, written.change.request),
       ...tableNotes(written.change),
       ...writtenNotes(written),
@@ -1718,7 +1734,13 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       if (again && typeof given === "string") {
         streams.delete(toolCallId);
         ended.add(toolCallId);
-        const said = remade(toolCallId, again, given, canCallAgain?.() ?? true);
+        const said = remade(
+          toolCallId,
+          again,
+          given,
+          canCallAgain?.() ?? true,
+          "call create_mind again",
+        );
         if (said !== null) return said;
       }
       remake = null;
