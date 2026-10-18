@@ -1,6 +1,6 @@
 /**
- * A Mind's health, under its title (#96): its Citations found and not
- * found, and its sentences without support: those checked as unsupported or
+ * A Mind's health (#96): its Citations found and not found, whatever their
+ * sentence's verdict, and its sentences without support: those checked as unsupported or
  * contradicted, and those that make a claim with no Citation; then those
  * whose check needs a re-check or couldn't be made. Each part keeps where
  * its sentences or Citations are, top to bottom, so it can move to the next.
@@ -113,17 +113,14 @@ export function noteHealth(
       const words = text.slice(span.from, span.to);
       if (!claim && isClaim(words) && !skipped.has(sentenceKey(words))) health.unchecked.push(from);
       const problem = claim && PROBLEM[claim.shown.state];
-      if (problem) {
-        health[problem].push(from);
-        continue;
-      }
+      if (problem) health[problem].push(from);
       const cited = citations.filter((each) => each.at >= span.from && each.at < span.to);
       for (const citation of cited) {
         const check = citationCheck(citation.attributes);
         if (check === "found") health.found.push(citation.pos);
         else if (check === "not-found") health.notFound.push(citation.pos);
       }
-      if (cited.length === 0 && isClaim(words)) health.noCitation.push(from);
+      if (!problem && cited.length === 0 && isClaim(words)) health.noCitation.push(from);
     }
     return false;
   });

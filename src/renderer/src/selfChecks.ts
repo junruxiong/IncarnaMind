@@ -24,14 +24,21 @@ export const selfChecksOf = (toolCalls: readonly AnswerToolCall[]): SelfCheck[] 
 /**
  * One line under the Answer: its words, more parts before its action, and the
  * action: check the sentences left now, or change the spending cap. A plan's
- * limit has none: nothing can be checked until it resets.
+ * limit has none: nothing can be checked until it resets. Nor has a line for
+ * sentences the User's own choice kept from being sent (sending turned off,
+ * Local mode): checking again can't succeed.
  */
 export interface SelfCheckLine {
-  kind: "failed" | "cost-cap" | "plan-limit" | "capped";
+  kind: "failed" | "cost-cap" | "plan-limit" | "consent-revoked" | "local-mode" | "capped";
   text: string;
   details: string[];
   action: { label: string; does: "check" | "change-cap" } | null;
 }
+
+const BLOCKED = {
+  "consent-revoked": "selfCheck.consentRevoked",
+  "local-mode": "selfCheck.localMode",
+} as const;
 
 export function selfCheckLines(
   check: SelfCheck,
@@ -39,7 +46,7 @@ export function selfCheckLines(
   language: Language,
   now = new Date(),
 ): SelfCheckLine[] {
-  const { failed, stop } = check;
+  const { failed, stop, blocked } = check;
   const lines: SelfCheckLine[] = [];
   const one = failed === 1;
   if (failed > 0 && stop?.reason === "cost-cap") {
@@ -58,13 +65,26 @@ export function selfCheckLines(
         : [],
       action: null,
     });
-  } else if (failed > 0) {
-    lines.push({
-      kind: "failed",
-      text: one ? t("selfCheck.failed.one") : t("selfCheck.failed", { count: failed }),
-      details: [],
-      action: { label: t("claim.checkAgain"), does: "check" },
-    });
+  } else {
+    if (blocked) {
+      const { reason, count } = blocked;
+      const key = BLOCKED[reason];
+      lines.push({
+        kind: reason,
+        text: count === 1 ? t(`${key}.one`) : t(key, { count }),
+        details: [],
+        action: null,
+      });
+    }
+    const rest = failed - (blocked?.count ?? 0);
+    if (rest > 0) {
+      lines.push({
+        kind: "failed",
+        text: rest === 1 ? t("selfCheck.failed.one") : t("selfCheck.failed", { count: rest }),
+        details: [],
+        action: { label: t("claim.checkAgain"), does: "check" },
+      });
+    }
   }
   if (check.sent < check.cited) {
     lines.push({

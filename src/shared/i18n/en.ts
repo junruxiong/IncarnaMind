@@ -636,6 +636,7 @@ export const en = {
     "Not checked yet: only the first {cap} cited sentences are checked as they're written",
   "claim.checkNow": "Check now",
   "claim.reason.consent-revoked": "Not checked: you turned off sending to this service.",
+  "claim.reason.local-mode": "Not checked: everything stays on this computer.",
   "claim.recheck.edited": "The sentence has changed since it was checked.",
   "claim.recheck.new-version": "A Document it was checked against has a new version.",
   "claim.recheck.document-removed": "A Document it was checked against was deleted.",
@@ -2728,7 +2729,6 @@ export const en = {
   "cost.provider.unpriced": "This month: {tokens} tokens, price unknown",
 
   "citation.label": "Citation {number}: {document}. {badge}",
-  "citation.mark.label": "Citation {number}: {badge}",
   "citation.inFootnote.label": "Citation: {document}. {badge}",
   "citation.badge.checking": "checking…",
   "citation.badge.found.on": "Quote found on {location}",
@@ -4588,6 +4588,12 @@ export const en = {
   "selfCheck.costCap": "{count} sentences couldn't be checked: spending cap reached",
   "selfCheck.costCap.one": "1 sentence couldn't be checked: spending cap reached",
   "selfCheck.changeCap": "Change the cap",
+  "selfCheck.consentRevoked":
+    "{count} sentences couldn't be checked: you turned off sending to this service",
+  "selfCheck.consentRevoked.one":
+    "1 sentence couldn't be checked: you turned off sending to this service",
+  "selfCheck.localMode": "{count} sentences couldn't be checked: everything stays on this computer",
+  "selfCheck.localMode.one": "1 sentence couldn't be checked: everything stays on this computer",
   "selfCheck.planLimit": "{count} sentences couldn't be checked: plan limit reached",
   "selfCheck.planLimit.one": "1 sentence couldn't be checked: plan limit reached",
   "selfCheck.resumesAt": "Resumes at {time}",

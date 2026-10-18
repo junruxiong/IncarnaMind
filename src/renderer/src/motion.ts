@@ -136,6 +136,23 @@ function between(from: Pose, to: Pose): Keyframes {
 const tween = (token: FadeToken, delay = 0) => ({ ...token, delay });
 
 /**
+ * A live dot's breath: its opacity eases down to 0.45 and back, 1.6 s a round, for as long as it
+ * lives. Reduced keeps it, as DESIGN.md has it; Off stills it.
+ */
+export function planBreathe(mode: MotionMode): Plan | null {
+  if (mode === "off") return null;
+  return {
+    keyframes: { opacity: [1, 0.45] },
+    transition: {
+      duration: 0.8,
+      ease: "easeInOut",
+      repeat: Number.POSITIVE_INFINITY,
+      repeatType: "reverse",
+    },
+  };
+}
+
+/**
  * Entering from an offset: On, a spring there with the opacity fading in;
  * Reduced, the fade alone; Off, nothing (it is simply there).
  */
@@ -694,6 +711,42 @@ export function useFade(ref: RefObject<HTMLElement | null>): void {
       if (play) queueMicrotask(() => element.isConnected || play());
     };
   }, [ref]);
+}
+
+/**
+ * Makes the element of `ref` breathe while `active`: a live dot. It never settles, so it isn't
+ * among the animations the tests wait for (`motionRunning`).
+ */
+export function useBreathing(ref: RefObject<Element | null>, active: boolean): void {
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!active || !element) return;
+    let controls: AnimationPlaybackControlsWithThen | null = null;
+    const rest = () => {
+      controls?.stop();
+      controls = null;
+      if (element instanceof HTMLElement || element instanceof SVGElement) {
+        element.style.removeProperty("opacity");
+      }
+    };
+    const start = () => {
+      rest();
+      const plan = planBreathe(motionMode());
+      if (!plan) return;
+      try {
+        controls = animate(element, plan.keyframes, { ...plan.transition, reduceMotion: false });
+        controls.speed = speed;
+      } catch (error) {
+        report(error);
+      }
+    };
+    start();
+    const unsubscribe = subscribeMotion(start);
+    return () => {
+      unsubscribe();
+      rest();
+    };
+  }, [ref, active]);
 }
 
 /**
