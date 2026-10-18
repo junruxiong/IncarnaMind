@@ -47,7 +47,7 @@ test("embeddings are off by default; turning them on with a cloud provider warns
   const form = section.getByTestId("embedding-form");
   await expect(form.getByLabel("Off", { exact: true })).toBeChecked();
   await expect(form.getByTestId("embedding-trade-off")).toHaveText(
-    "A search model also finds passages worded differently from your Question, at the cost of slower reading and, for the built-in model, a 135 MB download.",
+    "Finds passages worded differently, but reads slower; the built-in model is a 135 MB download.",
   );
   // Choose OpenAI, with a key; its suggested model is filled in.
   await form.getByLabel("OpenAI", { exact: true }).check();
@@ -61,7 +61,7 @@ test("embeddings are off by default; turning them on with a cloud provider warns
   await expect(confirm).toBeVisible();
   await expect(confirm).toContainText("Turn on OpenAI · text-embedding-3-small?");
   await expect(confirm).toContainText(
-    "Every Document (1 in all) will be read for search in the background",
+    "Reads every Document (1) for search; until then search matches words.",
   );
   await expect(confirm.getByTestId("embedding-confirm-cloud")).toHaveText(
     "OpenAI will receive the full text of all your Documents, and every search you make.",
@@ -123,11 +123,11 @@ test("turned on with the built-in model, Documents are embedded; turned off agai
   await section.getByTestId("embedding-change").click();
   await form.getByLabel("Off", { exact: true }).check();
   await expect(form).toContainText(
-    "Documents are searched by their words, best matches first, as soon as they are read. Nothing is downloaded.",
+    "Documents are searched by their words, best matches first. Nothing is downloaded.",
   );
   await form.getByTestId("embedding-switch").click();
   await expect(confirm).toContainText("Turn off search by meaning?");
-  await expect(confirm).toContainText("What the search model has read so far is kept");
+  await expect(confirm).toContainText("What the search model read is kept");
   await confirm.getByTestId("embedding-confirm-switch").click();
 
   await expect(current).toHaveText("Search model: Off");

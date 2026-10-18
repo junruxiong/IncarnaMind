@@ -14,6 +14,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { DetailsLine } from "../DetailsLine";
 import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
@@ -199,9 +200,14 @@ function LocalOnlySetting({ localOnly }: { localOnly: boolean }) {
         <label htmlFor={id} className={rowTitleClass}>
           {t("embeddingProviders.localOnly.label")}
         </label>
-        <p id={`${id}-description`} className={rowTextClass}>
+        <DetailsLine
+          id={`${id}-description`}
+          testId="embedding-local-only-description"
+          className={rowTextClass}
+          details={t("embeddingProviders.localOnly.body.details")}
+        >
           {t("embeddingProviders.localOnly.body")}
-        </p>
+        </DetailsLine>
         {localOnly && chatService && (
           <p className={`mt-1.5 ${noticeClass}`}>
             {t("embeddingProviders.localOnly.cloudChat", { service: chatService.name })}
