@@ -4600,6 +4600,7 @@ export const en = {
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
   "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
   "mindCall.failed.uncited": "Didn't add to “{mind}”: its sources weren't cited",
+  "mindCall.failed.newMind": "Didn't add to “{mind}”: a new Mind was asked for",
   "mindChanges.unlinked":
     "· {count} sources in the table couldn't be linked, so they're shown as text",
   "mindChanges.unlinked.one": "· 1 source in the table couldn't be linked, so it's shown as text",

@@ -906,7 +906,8 @@ export type MindProblem =
         | "content-not-own"
         | "stopped"
         | "no-table"
-        | "uncited";
+        | "uncited"
+        | "new-mind";
       mindId: string;
     }
   | { kind: "local-mode" | "not-ready" }

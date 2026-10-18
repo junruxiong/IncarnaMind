@@ -832,6 +832,14 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     return askedMind === mindId ? requested.change : null;
   };
 
+  // Adding to a Mind this Answer made isn't writing into the User's.
+  const madeHere = new Set<string>();
+  let toldNewMind = false;
+  // Asked for a piece of its own (#1109), text added to the User's Mind is refused once, while a
+  // step is left to make the new Mind instead.
+  const wantsNewMind = (mind: ChangeableMind) =>
+    requested?.change === "write" && requested.newMind && !madeHere.has(mind.id) && !toldNewMind;
+
   const askedIn = new Map<string, Set<string>>();
   /** What became of a call's change, for the model to say: applied, or waiting for the User and why. */
   const outcomeOf = (mind: ChangeableMind, request: string): string => {
@@ -1585,7 +1593,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         const place = fields.get("after");
         if ((named && !named.done) || (place && !place.done)) return null;
         const mind = targetOf({ mind: named?.value });
-        if (mind instanceof Refusal) return null;
+        if (mind instanceof Refusal || wantsNewMind(mind)) return null;
         const after = optional(place?.value);
         // A place that can't be written to is the call's to report, once it has all of its input.
         const there = minds.read(mind.id, (note) => placeAfter(note, after, options.language));
@@ -1596,6 +1604,15 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     async call(input, { toolCallId, canCallAgain }) {
       const given = givenIn(input) ?? text(input.content, "content");
       const mind = found(targetOf(input));
+      if (wantsNewMind(mind) && (canCallAgain?.() ?? true)) {
+        toldNewMind = true;
+        streams.delete(toolCallId);
+        ended.add(toolCallId);
+        throw new Refusal(
+          { kind: "new-mind", mindId: mind.id },
+          `Nothing was added to “${mind.name}”: the User asked for a new Mind for this. Call create_mind with a short title and the same ${input.answer === true ? "answer: true" : "content"} instead.`,
+        );
+      }
       const after = optional(input.after);
       const written = finishContent(
         toolCallId,
@@ -1651,6 +1668,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         if (!title?.done || title.value.trim() === "") return null;
         // Its first paragraph is whole by now, so whether the model began with a heading is known.
         const mind = make(title.value.trim(), headed(fields.get("content")?.value ?? ""));
+        madeHere.add(mind.id);
         return { writer: writerFor(mind, null, true), created: true };
       });
     },
@@ -1669,6 +1687,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           typeof given === "string" ? headed(given) : given?.blocks[0]?.type === "heading",
           folderId,
         );
+      madeHere.add(mind.id);
       const folder = folderId === null ? null : minds.folderName(folderId);
       const made = `Made the Mind “${mind.name}”${folder ? ` in the Folder “${folder}”` : ""}, open beside the User's Mind`;
       const empty = () =>
