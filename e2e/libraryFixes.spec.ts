@@ -83,12 +83,12 @@ const WORDS = {
     fixes: [
       [
         "Broken",
-        "This file looks damaged. Open it in your PDF app, save a copy, then add the copy",
+        "Damaged file: save a copy from your PDF app, then add it",
         ["Open in default app", "Retry"],
       ],
       [
         "Locked",
-        "This file is locked with a password. Remove the password in its app, then add the copy",
+        "Password-protected: remove it in its app, then add the copy",
         ["Open in default app", "Retry"],
       ],
       ["Scan", "A scan with no text yet", ["Open in default app", "Read it again"]],
@@ -97,16 +97,8 @@ const WORDS = {
   },
   "zh-CN": {
     fixes: [
-      [
-        "Broken",
-        "这个文件似乎已损坏。请用 PDF 应用打开，另存一份副本，再添加副本",
-        ["用默认应用打开", "重试"],
-      ],
-      [
-        "Locked",
-        "这个文件设有密码。请在它的应用中去掉密码，再添加副本",
-        ["用默认应用打开", "重试"],
-      ],
+      ["Broken", "文件已损坏：用 PDF 应用另存一份，再添加副本", ["用默认应用打开", "重试"]],
+      ["Locked", "文件设有密码：在它的应用中去掉密码，再添加副本", ["用默认应用打开", "重试"]],
       ["Scan", "这是扫描件，暂时没有文字", ["用默认应用打开", "重新读取"]],
       ["Empty", "这个文件是空的", ["重试"]],
     ],
@@ -155,8 +147,8 @@ for (const language of ["en", "zh-CN"] as const) {
     const lib = window.getByTestId("library");
     await expect(lib.getByTestId("library-organize-explain")).toHaveText(
       language === "en"
-        ? "Suggests a Folder and Tags for each Document here. You accept or change each one."
-        : "为这里的每个文档建议文件夹和标签，由你接受或更改。",
+        ? "Suggests a Folder and Tags for each. You decide."
+        : "为每个文档建议文件夹和标签，由你决定。",
     );
     await pointAndClick(window, lib.getByTestId("library-organize"));
     const needs = lib.getByTestId("library-organize-needs-model");
