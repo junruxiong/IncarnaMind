@@ -84,7 +84,7 @@ export function datesIn(text: string): string[] {
 }
 
 const FILE_INFORMATION =
-  /\bfiles?\b[^.!?]*\b(?:created|modified|changed|saved|made)\b|\b(?:created|modified|last changed|saved)\b[^.!?]*\bfiles?\b|文件[^。！？]*(?:创建|修改|生成|保存)|(?:创建|修改|生成|保存)[^。！？]*文件/i;
+  /\bfiles?\b[^.!?]*\b(?:created|creation|modified|modification|changed|saved|made)\b|\b(?:created|creation|modified|modification|last changed|saved)\b[^.!?]*\bfiles?\b|文件[^。！？]*(?:创建|修改|生成|保存)|(?:创建|修改|生成|保存)[^。！？]*文件/i;
 
 /** The dates an Answer gives that no Document's text writes, leaving out those named as a file's. */
 export function datesNotInText(answer: string, texts: readonly string[]): string[] {
