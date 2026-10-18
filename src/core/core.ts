@@ -233,6 +233,7 @@ import { createRateLimitPause } from "./tags/rateLimit";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
 import { createPublicFetch } from "./tools/web/fetcher";
+import { createCloudTranscription } from "./transcription/cloud/routes";
 import {
   createTranscriptionModel,
   QWEN3_ASR_0_6B,
@@ -2636,21 +2637,39 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: meetingsChanged,
   });
   const transcriber = adapters.transcriber;
+  const transcriptionModel =
+    transcriber &&
+    createTranscriptionModel({
+      dataDir,
+      transcriber,
+      ...(adapters.transcriptionModelSource && { source: adapters.transcriptionModelSource }),
+      speed: () => {
+        const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
+        return isRecord(value) ? (value as Record<string, number>) : {};
+      },
+      emitStatus: () => meetingsChanged(),
+    });
+  // Where meeting audio is transcribed (#141): this computer, or the cloud service the User chose.
+  const cloudTranscription = createCloudTranscription({
+    settings,
+    secrets,
+    consent,
+    meter,
+    localOnly: () => embedding.localOnly(),
+    providerKey: (catalogId) => chat.apiKeyOf(catalogId),
+    vadFile: async () => {
+      if (!transcriptionModel) throw new Error("This copy can't transcribe.");
+      return transcriptionModel.vadFile();
+    },
+  });
   const transcripts =
     transcriber &&
+    transcriptionModel &&
     createTranscripts({
       dataDir,
       transcriber,
-      model: createTranscriptionModel({
-        dataDir,
-        transcriber,
-        ...(adapters.transcriptionModelSource && { source: adapters.transcriptionModelSource }),
-        speed: () => {
-          const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
-          return isRecord(value) ? (value as Record<string, number>) : {};
-        },
-        emitStatus: () => meetingsChanged(),
-      }),
+      model: transcriptionModel,
+      cloud: cloudTranscription,
       documents: {
         add: (id, name, file) => documents.addSnapshot(id, name, file, () => {}, "transcript"),
         file: (documentId, folderId) => library.assign(documentId, folderId),
@@ -3072,8 +3091,13 @@ export function createCore(adapters: CoreAdapters): Core {
           change = { ...patch, user };
         }
       }
+      const route =
+        isRecord(patch) && isRecord(patch.device) ? patch.device.transcriptionRoute : undefined;
+      if (route !== undefined) await cloudTranscription.check(route);
       const languageWas = settings.get().language;
       const updated = settings.update(change);
+      // Choosing a cloud service where its line says meeting audio goes to it is the consent (ADR-0022).
+      if (route !== undefined) cloudTranscription.chose(updated.device.transcriptionRoute);
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
@@ -3902,6 +3926,13 @@ export function createCore(adapters: CoreAdapters): Core {
     stopMeeting: async (meetingId) => meetings.stop(meetingId),
     deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
+    listTranscriptionServices: () => cloudTranscription.list(),
+    setTranscriptionKey: (input) => cloudTranscription.setKey(input),
+    removeTranscriptionKey: async (route) => {
+      const listed = await cloudTranscription.removeKey(route);
+      events.emit("settings.changed", settings.get());
+      return listed;
+    },
     openAudioSettings: (source) => meetings.openSettings(source),
     askMeetingHelp,
     setMeetingTemplate: async (input) => {

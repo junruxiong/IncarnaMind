@@ -10,6 +10,14 @@ export const SPEAKER_ME = "Me";
 export const SPEAKER_THEM = "Them";
 export const SPEAKER_UNKNOWN = "Speaker ?";
 
+/** Someone a cloud service told apart as they spoke (#141), numbered in the order heard in the Meeting. */
+export const numberedSpeaker = (n: number) => `Speaker ${n}`;
+const NUMBERED = /^Speaker (\d+)$/;
+
+/** Another person's line: the computer's sound in a call, or someone told apart. */
+export const isTheirs = (speaker: string | null) =>
+  speaker !== null && (speaker === SPEAKER_THEM || NUMBERED.test(speaker));
+
 const KEYS: Readonly<Record<string, MessageKey>> = {
   [SPEAKER_ME]: "transcript.speaker.me",
   [SPEAKER_THEM]: "transcript.speaker.them",
@@ -23,5 +31,7 @@ export function speakerName(
   t: (key: MessageKey, params?: MessageParams) => string,
 ): string {
   const key = speakerKey(speaker);
-  return key ? t(key) : speaker;
+  if (key) return t(key);
+  const numbered = NUMBERED.exec(speaker);
+  return numbered ? t("transcript.speaker.numbered", { n: numbered[1] as string }) : speaker;
 }

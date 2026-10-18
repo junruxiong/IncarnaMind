@@ -647,7 +647,23 @@ export interface SpeechSegment {
   decodeMs: number;
   /** The engine couldn't decode it: a final with no text. */
   failed?: true;
+  /** Who said it, as the engine tells speakers apart within the stream ("1", "2"): Soniox does. */
+  speaker?: string;
 }
+
+/**
+ * A stream's audio sent to a cloud transcription service instead (#141), with the User's key.
+ * OpenAI's live model needs our own voice activity detection: `vad` is Silero's file.
+ */
+export type CloudStream =
+  | { service: "openai"; model: string; apiKey: string; vad: string }
+  | { service: "soniox"; model: string; apiKey: string };
+
+/**
+ * Why a cloud stream ended before it was finished: the connection was lost ("dropped"), or the
+ * service refused the key or the account has no credit left ("refused").
+ */
+export type CloudLoss = "dropped" | "refused";
 
 /**
  * Turns speech into text off the core's thread (#136): the desktop app runs
@@ -669,6 +685,11 @@ export interface Transcriber {
   finish(stream: string): Promise<void>;
   /** Forgets a stream, and its audio not yet decoded. */
   drop(stream: string): void;
+  /**
+   * The stream's audio goes to a cloud service from now on, before any is pushed. If it can't,
+   * or the connection is lost, the listeners hear `lost` and the stream is gone.
+   */
+  open(stream: string, cloud: CloudStream): void;
   /** Hears every segment, and how far each stream is done: all its audio up to `doneMs` has given its final text. */
   listen(listener: TranscriberListener): void;
   /** Stops the engine and frees its memory. Loading again starts it afresh. */
@@ -684,6 +705,8 @@ export interface TranscriberListener {
   stopped(reason: string): void;
   /** The transcriber moved a stream to another engine, for the stream's audio from now on. */
   switched(change: EngineSwitch): void;
+  /** A cloud stream ended before it was finished (see `CloudLoss`): its audio not yet transcribed is lost. */
+  lost(stream: string, loss: CloudLoss): void;
 }
 
 export interface EngineSwitch {

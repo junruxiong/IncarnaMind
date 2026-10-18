@@ -5,6 +5,8 @@ import { useAppStore } from "../../store";
 
 export const ROUTE_LABELS: Record<(typeof TRANSCRIPTION_ROUTES)[number], MessageKey> = {
   local: "meetings.route.local",
+  openai: "meetings.route.openai",
+  soniox: "meetings.route.soniox",
 };
 
 /**
