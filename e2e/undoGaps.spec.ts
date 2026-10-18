@@ -12,6 +12,7 @@ import {
   launchApp,
   linkedFolderRow,
   linkFolderFromSidebar,
+  motionRunning,
   motionSettled,
   newMind,
   openLinkedFolderMenu,
@@ -19,6 +20,7 @@ import {
   removeDataFolder,
   renameInTab,
   setLanguage,
+  setMotionSpeed,
   setWindowSize,
   showSourceLocations,
   sidebarFolder,
@@ -312,6 +314,26 @@ test("typing in a multi-line field is one step: a form in a dialog, and a form i
   const form = await editFolderInLibrary(window, "Finance");
   const description = form.locator("textarea");
   await typedWordIsOneStep(window, description, "Rent");
+});
+
+// protects=one Undo takes back a whole word typed while a menu's closing copy is still fading, which
+// leaves the page mid-word; fails_when=that copy's removal ends the typing run (#1140).
+test("typing while a closed menu is still fading is one step, though its copy would leave mid-word", async () => {
+  const { window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await setMotionSpeed(window, 0.2);
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-add-web-page").click();
+  const addresses = window.getByTestId("add-web-page-dialog").getByTestId("add-web-page-addresses");
+  await pointAndClick(window, addresses);
+  await window.keyboard.type("ti");
+  await expect.poll(() => motionRunning(window)).toBe(0);
+  await window.keyboard.type("des");
+  await expect(addresses).toHaveValue("tides");
+  await undo(window);
+  await expect(addresses).toHaveValue("");
+  await redo(window);
+  await expect(addresses).toHaveValue("tides");
 });
 
 test("Chinese typed by an input method into a multi-line field is one step too", async () => {
