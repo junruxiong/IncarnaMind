@@ -120,7 +120,7 @@ import { findUnreadDocuments } from "./documents/unread";
 import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
-import { createEdits } from "./edits";
+import { createEdits, editText } from "./edits";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import {
@@ -128,6 +128,7 @@ import {
   InvalidInputError,
   isRecord,
   LinkedFolderWritesDeclinedError,
+  LocalModeError,
   MindReadOnlyError,
   NotFoundError,
   TaggingNotReadyError,
@@ -237,6 +238,7 @@ import {
   QWEN3_ASR_0_6B,
   TRANSCRIPTION_SPEED,
 } from "./transcription/model";
+import { createUnsavedChanges } from "./unsavedChanges";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
 import { createWordImports } from "./wordImports";
@@ -442,16 +444,26 @@ export function createCore(adapters: CoreAdapters): Core {
   // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
   const conversations = createConversations(db, now);
   const conversationsChanged = () => events.emit("conversations.changed", null);
-  const content = createMindContent(db, now, (mindId, update, cause) => {
-    events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
-    // Only notes the change; what became of AI text is worked out once the Mind is quiet.
-    aiUse.contentStored(mindId);
-    checkpoints.edited(mindId);
-    mindIndex.contentStored(mindId);
-    comparisons.mindChanged(mindId);
-    const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
-    if (minds.markEdited(mindId) || renamed) mindsChanged();
+  const unsaved = createUnsavedChanges({
+    dataDir: adapters.paths.dataDir,
+    tempDir: adapters.paths.tempDir ?? tmpdir(),
+    changed: (state) => events.emit("minds.unsaved", state),
   });
+  const content = createMindContent(
+    db,
+    now,
+    (mindId, update, cause) => {
+      events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
+      // Only notes the change; what became of AI text is worked out once the Mind is quiet.
+      aiUse.contentStored(mindId);
+      checkpoints.edited(mindId);
+      mindIndex.contentStored(mindId);
+      comparisons.mindChanged(mindId);
+      const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
+      if (minds.markEdited(mindId) || renamed) mindsChanged();
+    },
+    { unsaved: unsaved.mindUnsaved },
+  );
   const mindIndex = createMindIndex({
     db,
     now,
@@ -841,6 +853,13 @@ export function createCore(adapters: CoreAdapters): Core {
     const wasLocal = embedding.localOnly();
     await embedding.setLocalOnly(enabled);
     library.resume();
+    if (embedding.localOnly()) {
+      // A prompt still open for a cloud service closes: whatever the User answers, nothing goes (ADR-0022).
+      consent.refuseWaiting(
+        ({ flow }) => !consent.onThisComputer(flow.id, flow.service.id),
+        () => new LocalModeError(),
+      );
+    }
     if (wasLocal !== embedding.localOnly()) {
       usageData.localModeChanged();
       privacyChanged();
@@ -1258,6 +1277,7 @@ export function createCore(adapters: CoreAdapters): Core {
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
       writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
       proposeInMind: (input) => edits.proposeInMind(input),
+      checkWritten: (input) => checks.checkWritten(input),
     },
     withdrawChanges: (changes) => {
       for (const change of changes) {
@@ -1692,6 +1712,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     engine: answerEngine,
     retention,
+    editText,
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1873,6 +1894,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     hostedUrl: adapters.jevHostedUrl,
     signal: lifetime.signal,
+    localOnly: () => embedding.localOnly(),
   });
   // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds.
   const planPace = createPlanPace({
@@ -2237,6 +2259,7 @@ export function createCore(adapters: CoreAdapters): Core {
     tags,
     library,
     mindsChanged,
+    mindsRestored: (mindIds) => wordImports.resume(mindIds),
     conversationsChanged,
     tagsChanged,
     tagged: announceTagged,
@@ -2937,6 +2960,12 @@ export function createCore(adapters: CoreAdapters): Core {
     applyMindUpdate: async (mindId, update) => {
       content.apply(writableMind(mindId).id, update);
     },
+    unsavedChanges: async () => unsaved.summary(),
+    saveChangesAgain: async () => {
+      content.storeWaiting();
+      return unsaved.summary();
+    },
+    takeLostChanges: async () => unsaved.takeLost(),
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
     },
@@ -3759,9 +3788,15 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     exportMind: async (mindId, options) => {
       const exported = await mindExports.export(mindId, options);
-      // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
-      recordOwnFile(exported.data, ownFileOf(options));
-      recordExport(options);
+      // The host saves these bytes as a file: IncarnaMind's, wherever it goes. Noting so is
+      // never needed for the file itself: a copy saved while storage refuses every write (#1119)
+      // still goes out.
+      try {
+        recordOwnFile(exported.data, ownFileOf(options));
+        recordExport(options);
+      } catch (error) {
+        console.error("export: the file couldn't be noted as IncarnaMind's", error);
+      }
       return exported;
     },
     saveMindExport: async (mindId, options) => {
@@ -3947,6 +3982,7 @@ export function createCore(adapters: CoreAdapters): Core {
       checks.stopAll();
       skillDrafts.stopAll();
       scriptRunner.close();
+      adapters.analysisRuntime?.close();
       approvals.close();
       connectors.close();
       tagger.close();
@@ -3967,6 +4003,7 @@ export function createCore(adapters: CoreAdapters): Core {
       mindIndex.close();
       events.clear();
       content.closeAll();
+      unsaved.quit();
       db.close();
     },
   };

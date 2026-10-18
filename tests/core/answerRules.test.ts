@@ -1,8 +1,8 @@
 /**
  * Two things a careful reader catches (#548). Each Passage handed to the
  * model carries its Document's date: the date it states (its reference
- * record's, else the one its file gives), else the day its file was last
- * modified. And every way of answering is told to say first when the Question
+ * record's, else a year its text writes), else the file's creation or last
+ * modified day, named as the file's. And every way of answering is told to say first when the Question
  * takes for granted what the Passages don't say, and to lead with the newer of
  * two Documents that disagree, with examples in English and Chinese.
  */
@@ -13,6 +13,7 @@ import {
   bracketedAmountsNote,
   datedDocumentsNote,
   documentInstructions,
+  fileDatesNote,
 } from "../../src/core/answers/prompt";
 import { askAndFinish, setUpWithDocuments, shownPassages } from "../helpers/citations";
 import { createTempDataFolder } from "../helpers/core";
@@ -23,7 +24,7 @@ import { type ModelCall, scriptedModel } from "../helpers/models";
 const RULES = [
   "If the Question takes for granted what the Passages don't say",
   "文档中没有董事会批准的记录",
-  "give different figures for the same thing (one updates the other), lead with the newer Document by its date",
+  "give different figures for the same thing (one updates the other), lead with the newer Document by its date (a Passage's date, else its file-created or file-modified date)",
   "较早的手册（2024 年 1 月）写的是 6 小时",
 ];
 
@@ -99,13 +100,13 @@ const datesIn = (text: string) =>
   Object.fromEntries(shownPassages(text).map((passage) => [passage.document, passage.date]));
 
 const EXPECTED_DATES = {
-  "Outage memo": "2025",
-  "Operations handbook": "2024-03-01",
-  Circular: "2023-11",
+  "Outage memo": 'date="2025"',
+  "Operations handbook": 'file-modified="2024-03-01"',
+  Circular: 'date="2023-11"',
 };
 
 describe("The Passages handed to the model", { timeout: 30_000 }, () => {
-  test("carry their Document's date: the date it states, else the day its file was modified", async () => {
+  test("carry their Document's date: the date it states, else the day its file was modified, named as the file's", async () => {
     const seen: Seen = { system: [], results: [] };
     const { core, client, mind } = await setUp(searchingModel(seen));
 
@@ -149,14 +150,15 @@ describe("The Passages handed to the model", { timeout: 30_000 }, () => {
         search: async () => [passage("memo", "Memo"), passage("note", "Note")],
         citationSource: () => null,
         pageTexts: () => [],
-        documentDate: (documentId) => (documentId === "memo" ? "2025-05-14" : null),
+        documentDate: (documentId) =>
+          documentId === "memo" ? { date: "2025-05-14", of: "document" } : null,
       },
       { onRecord: () => undefined },
     );
 
     const { text } = await session.tools.searchDocuments("outages");
 
-    expect(datesIn(text)).toEqual({ Memo: "2025-05-14", Note: null });
+    expect(datesIn(text)).toEqual({ Memo: 'date="2025-05-14"', Note: null });
     expect(text).toContain('<passage id="P2" document="Note">');
   });
 });
@@ -296,7 +298,7 @@ describe("The note on Documents of different dates (#660)", { timeout: 30_000 },
     expect(datedDocumentsNote("No Passages in the User's Documents match this search.")).toBe("");
   });
 
-  test("follows a Tool-loop search's Passages when they come from Documents of different dates", async () => {
+  test("follows a Tool-loop search's Passages when they come from Documents of different dates, before the note on a file's date", async () => {
     const seen: Seen = { system: [], results: [] };
     const { core, client, mind } = await setUp(searchingModel(seen));
 
@@ -305,7 +307,7 @@ describe("The note on Documents of different dates (#660)", { timeout: 30_000 },
     const [result = ""] = seen.results;
     expect(
       result.endsWith(
-        `${NOTE} "Outage memo" (2025), "Operations handbook" (2024-03-01), "Circular" (2023-11). Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`,
+        `${NOTE} "Outage memo" (2025), "Operations handbook" (file modified 2024-03-01), "Circular" (2023-11). Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.\n\n${fileDatesNote(result)}`,
       ),
     ).toBe(true);
   });
@@ -331,8 +333,8 @@ describe("The note on Documents of different dates (#660)", { timeout: 30_000 },
     await askAndFinish(setup.core, setup.client, setup.mind.id, QUESTION);
 
     expect(shownPassages(seen.results.join("\n\n")).map((passage) => passage.date)).toEqual([
-      "2024-03-01",
-      "2024-03-01",
+      'file-modified="2024-03-01"',
+      'file-modified="2024-03-01"',
     ]);
     expect(seen.results.join("\n")).not.toContain(NOTE);
   });

@@ -216,6 +216,20 @@ export const assistantCommands: readonly Command[] = [
     },
   },
   {
+    id: "answer.useAllDocuments",
+    label: "command.answer.useAll",
+    group: "main",
+    // Its new text is one change in the Mind it wrote, which that Mind's Undo takes back.
+    reversible: true,
+    when: isThere,
+    enabled: () =>
+      answerInFocus()?.steps?.writtenFrom ? true : { reason: "command.answer.useAll.unavailable" },
+    run: () => {
+      const answer = answerInFocus();
+      if (answer?.steps?.writtenFrom) void regenerateAnswer(answer.id, { clearScope: true });
+    },
+  },
+  {
     // The composer's Stop, which its send button is while an Answer is written.
     id: "answer.stop",
     label: "command.answer.stop",
