@@ -1795,7 +1795,9 @@ async function* toolLoop(
         if (keptText.trim() === "" && unmarked.trim() !== "") keptText = unmarked;
         const taken = takeToolText(keptText, toolTextTags);
         if (mode === "tools" && !request.documents.wroteIntoMind?.()) {
-          const records = parseRecords(taken.records);
+          const records = parseRecords(taken.records).filter(
+            ({ marker }) => !request.documents.hasRecord?.(marker),
+          );
           cited.push(...records);
           try {
             request.documents.cite(records, { structured: true });
@@ -1930,7 +1932,7 @@ async function* structured(
   } catch (error) {
     console.error(`The Citations couldn't be recorded: ${messageOf(error)}`);
   }
-  yield* emit(answer);
+  yield* emit(typeof answer === "string" ? takeToolText(answer).text : answer);
   if (typeof answer === "string") {
     // A small model often gives the records but leaves their markers out.
     const marked = yield* missingMarkerEvents(emitted, records, request.documents);
@@ -2005,6 +2007,8 @@ async function* plain(
     return;
   }
   if (signal.aborted) return;
-  yield* flagClaims(request, produced);
+  const written = takeToolText(produced).text;
+  yield* textEdits(produced, written);
+  yield* flagClaims(request, written);
   yield { type: "finished" };
 }
