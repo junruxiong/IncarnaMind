@@ -188,10 +188,10 @@ test("Add folder… shows what linking would take, then the folder's row shows i
   await expect(dialog.getByTestId("link-folder-path")).toHaveText(library);
   await expect(dialog.getByTestId("link-folder-files")).toHaveText(/^4 supported files, 1\.\d MB$/);
   await expect(dialog.getByTestId("link-folder-time")).toContainText(
-    /Reading its files takes (under a minute|about .+) on this computer, newest first/,
+    /Reading takes (under a minute|about .+), newest first/,
   );
   await expect(dialog.getByTestId("link-folder-online-only")).toContainText(
-    "2 files are online only",
+    "2 online-only files are skipped for now",
   );
   await expect(dialog.getByTestId("link-folder-layout-tree")).toBeChecked();
   await expect(dialog.getByTestId("link-folder-merge")).toHaveCount(0);
@@ -396,8 +396,8 @@ test("unlinking asks first, and leaves the folder on disk exactly as it was", as
   await menu.getByTestId("linkedFolder.unlink").click();
   const dialog = window.getByTestId("unlink-folder-dialog");
   await expect(dialog.getByRole("heading")).toHaveText("Unlink “Library”?");
-  await expect(dialog).toContainText("The folder and the files in it aren't touched.");
-  await expect(dialog).toContainText("It keeps only the text your Citations quote");
+  await expect(dialog).toContainText("Your files aren't touched.");
+  await expect(dialog).toContainText("It keeps only what your Citations quote");
   await screenshot(window, "unlink-dialog");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
@@ -509,7 +509,7 @@ test("a Linked folder that can't be reached shows as unavailable, and so do its 
   await window.keyboard.press("Escape");
   // The viewer says so too, rather than that the Document was deleted.
   await items.first().getByTestId("open-document").click();
-  await expect(window.getByTestId("viewer-removed")).toContainText("can't be reached right now");
+  await expect(window.getByTestId("viewer-removed")).toContainText("right now (drive unplugged?)");
   await expect(window.getByTestId("viewer-removed")).not.toContainText("deleted");
   await running.app.close();
 });
@@ -549,7 +549,7 @@ test("a Linked folder that moved is located from its menu, and its Document and 
   await expect(row).toHaveAttribute("data-state", "unavailable", { timeout: 15_000 });
   await expect(row.getByTestId("folder-status")).toHaveAttribute(
     "title",
-    /If it moved, choose Locate folder… in its menu\.$/,
+    /If it moved, use Locate folder…$/,
   );
 
   await interceptOpenDialog(app, moved);
@@ -582,7 +582,7 @@ test("a Linked folder that moved is located from its menu, and its Document and 
   await interceptOpenDialog(app, sources);
   await (await openLinkedFolderMenu(located)).getByTestId("linkedFolder.locate").click();
   await expect(window.getByRole("alert")).toHaveText(
-    /^That didn't work: None of the files in “Library 2026” are in that folder\. Choose the folder that holds them now\./,
+    /^That didn't work: That folder doesn't hold “Library 2026”'s files\. Choose the folder that does\./,
   );
   await expect(located).toHaveAttribute("data-state", "idle");
   await expect(item).toHaveAttribute("data-file-status", "available");
@@ -611,13 +611,13 @@ test("in Chinese a folder that doesn't hold the Linked folder's files is refused
     await (await openLinkedFolderMenu(row)).getByTestId("linkedFolder.locate").click();
     const notice = window.getByTestId("error-notice");
     await expect(notice.getByTestId("error-notice-message")).toHaveText(
-      "无法完成操作：这个文件夹中没有“Library”里的文件。选择现在存放这些文件的文件夹。",
+      "无法完成操作：这个文件夹中没有“Library”的文件。请选择存放这些文件的文件夹。",
     );
     const details = notice.getByTestId("error-notice-details");
     await details.getByText("详情").click();
     await expect(details).toContainText("core:locateLinkedFolder");
     await expect(details).toContainText(
-      "InvalidInputError: None of the files in “Library” are in that folder. Choose the folder that holds them now.",
+      "InvalidInputError: That folder doesn't hold “Library”'s files. Choose the folder that does.",
     );
     await screenshot(window, "locate-refused-zh-900");
     await setWindowSize(app, window, 1600, 900);
@@ -652,7 +652,7 @@ test("an empty Linked folder says so; with nothing linked or added, the sidebar 
     start.getByTestId("documents-empty-link-folder"),
   );
   await expect(dialog.getByTestId("link-folder-files")).toHaveText(
-    "No supported files in it yet. Files added to it later are read then.",
+    "No supported files yet. Files added later are read.",
   );
   await expect(dialog.getByTestId("link-folder-time")).toHaveCount(0);
   await confirmLink(dialog);
@@ -689,7 +689,7 @@ test("linking a folder that overlaps a Linked folder says what happens: they mer
   const dialog = window.getByTestId("link-folder-dialog");
   await expect(dialog.getByRole("heading")).toHaveText("Already in IncarnaMind");
   await expect(dialog.getByTestId("link-folder-inside")).toContainText(
-    "This folder is inside “2026”, which is linked already",
+    "This folder is inside linked “2026”",
   );
   await expect(dialog.getByTestId("link-folder-confirm")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Close" }).click();
@@ -698,7 +698,7 @@ test("linking a folder that overlaps a Linked folder says what happens: they mer
   // The folder around it: the Linked folder inside merges into it, its Documents with it.
   const around = await previewLink(app, window, papers);
   await expect(around.getByTestId("link-folder-merge")).toContainText(
-    "“2026”, linked already, is inside this folder: it merges into this one",
+    "“2026”, already linked, merges into this folder",
   );
   await screenshot(window, "link-dialog-merge");
   await confirmLink(around);

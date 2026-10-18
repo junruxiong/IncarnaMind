@@ -14,6 +14,7 @@ import {
   type ChatReadiness,
   type EditAction,
   type EditWithAiResult,
+  type ProviderError,
 } from "../../core/api";
 import { mindModelOf } from "../../shared/mindModel";
 import { aiUseOfAccepted, proposalRequestOf } from "../../shared/proposals";
@@ -32,8 +33,10 @@ import {
   setEditTarget,
   watchMovedOn,
 } from "./editor/proposalReview";
+import { failedEdit } from "./editProblems";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
+import type { Words } from "./lineNames";
 import { useAppStore } from "./store";
 
 /** The languages Translate… offers: each in its own name, and as the model is told it. */
@@ -62,7 +65,8 @@ export type EditProblem =
         | "late";
     }
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
-  | { kind: "failed"; message: string; retry: () => void };
+  | { kind: "failed"; message: string; retry: () => void }
+  | { kind: "consent-revoked"; error: ProviderError };
 
 interface Pending {
   requestId: string;
@@ -287,9 +291,7 @@ async function arrived(
   set(
     "problems",
     mindId,
-    result.kind === "failed"
-      ? { kind: "failed", message: result.error.message, retry: () => void retry() }
-      : result,
+    result.kind === "failed" ? failedEdit(result.error, () => void retry()) : result,
   );
 }
 
@@ -451,7 +453,7 @@ export function resolveProposalsIn(
     }
   }
   const count = resolved.length;
-  const message =
+  const said: Words = (t) =>
     outcome === "accept"
       ? count === 1
         ? t("proposal.accepted.one")
@@ -459,6 +461,6 @@ export function resolveProposalsIn(
       : count === 1
         ? t("proposal.rejected.one")
         : t("proposal.rejected", { count });
-  speak(mindId, message);
-  offerEditorUndo(editor, message);
+  speak(mindId, said(t));
+  offerEditorUndo(editor, said);
 }

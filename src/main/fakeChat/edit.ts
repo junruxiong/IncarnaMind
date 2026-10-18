@@ -10,12 +10,16 @@
  * that asks for a table (表格) adds a Markdown table after the passage, a
  * row for each paragraph, its markers in the cells, and a last row whose
  * source is a name in brackets no Citation has (#961). "Rewrite the
- * section" (重写这一节) writes its heading and each paragraph anew (#1028). The
+ * section" (重写这一节) writes its heading and each paragraph anew (#1028).
+ * Cut the unsupported part gives a sentence `PARTLY` lists its cut words,
+ * with the passage's markers, and takes the part named out of any other
+ * (#1111). The
  * new text streams in word by word, slowly when the instruction says
  * "slowly", then a line saying why (#202).
  */
 
 import { appliedEditReply } from "./appliedEdits";
+import { PARTLY } from "./checks";
 import { type Prompt, SHORTEN, SLOWLY, type StreamPart, USAGE } from "./prompt";
 
 const FILLER = /(?:\b(?:very|really|truly|quite|actually|basically)\s+|非常|真的|其实|十分)/giu;
@@ -67,6 +71,7 @@ const EDIT_REASONS: Readonly<Record<string, readonly [string, string]>> = {
   improve: ["Each sentence starts with a capital.", "每句话的开头都大写了。"],
   translate: ["Translated.", "已翻译。"],
   instruction: ["Changed as you asked.", "已按你的要求修改。"],
+  "cut-unsupported": ["The part its Citations don't support is gone.", "删去了引用不支持的部分。"],
 };
 
 /**
@@ -90,7 +95,9 @@ export function fakeEdit(prompt: Prompt): { text: string; slow: boolean } | null
   const text = editedText(action, passage, asked.replace(/\s+slowly\.?$/i, ""));
   // In the passage's language, as the instructions ask.
   const why = EDIT_REASONS[action]?.[/\p{Script=Han}/u.test(passage) ? 1 : 0];
-  return { text: why ? `${text}\n\n<why>${why}</why>` : text, slow: SLOWLY.test(asked) };
+  // A cut's task quotes the sentence's sources, which may say "slowly" themselves.
+  const slow = action !== "cut-unsupported" && SLOWLY.test(asked);
+  return { text: why ? `${text}\n\n<why>${why}</why>` : text, slow };
 }
 
 /** The scripted Edit with AI's new text for `passage`, or its explanation. */
@@ -107,6 +114,13 @@ function editedText(action: string, passage: string, asked: string): string {
         );
     case "translate":
       return passage.toUpperCase();
+    case "cut-unsupported": {
+      const markers = (passage.match(/\[\d+\]/g) ?? []).join("");
+      const listed = PARTLY.find((each) => each.when.test(passage));
+      if (listed) return `${listed.cut}${markers}`;
+      const part = /support this part of it: ([\s\S]*?)\. Every word/.exec(asked)?.[1] ?? "";
+      return part === "" ? passage : passage.split(part).join("");
+    }
     case "explain": {
       const words = passage
         .replace(/\s*\[\d+\]/g, "")

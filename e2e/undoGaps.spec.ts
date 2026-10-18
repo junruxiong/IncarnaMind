@@ -24,6 +24,7 @@ import {
   setWindowSize,
   showSourceLocations,
   sidebarFolder,
+  tabMenu,
 } from "./app";
 
 /*
@@ -193,6 +194,46 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(window.getByTestId("sidebar").getByTestId("mind-row")).toHaveCount(1);
   });
 }
+
+test("a line already showing follows a switch of language, in its words, its name and its Undo", async () => {
+  const { window } = await startWithADocument();
+  const undoButton = window.getByTestId("undo-action");
+
+  // A line with a name in it, there and back.
+  const before = await mindIds(window);
+  await documentMenuCommand(window, "Tides", "document.startMind");
+  await expect(undoMessage(window)).toHaveText("Started “Tides”");
+  await setLanguage(window, "zh-CN");
+  await expect(undoMessage(window)).toHaveText("已新建“Tides”");
+  await setLanguage(window, "en");
+  await expect(undoMessage(window)).toHaveText("Started “Tides”");
+
+  // A line of plain words, with Undo's accessible name: Undo still takes the change back.
+  const started = (await mindIds(window)).find((id) => !before.includes(id));
+  if (!started) throw new Error("No Mind was made.");
+  const font = async () =>
+    (await coreOf(window)).evaluate(
+      async (core, mindId) => (await core.getMindStyle(mindId)).font,
+      started,
+    );
+  const menu = await tabMenu(window);
+  await pointAndClick(window, menu.getByTestId("mind.style"));
+  await pointAndClick(window, window.getByTestId("mind-style-font-serif"));
+  await expect(undoMessage(window)).toHaveText("Font changed to Serif");
+  await expect.poll(font).toBe("serif");
+  await setLanguage(window, "zh-CN");
+  await expect(undoMessage(window)).toHaveText("字体已改为“衬线”");
+  await expect(undoButton).toHaveText("撤销");
+  await expect(undoButton).toHaveAttribute("aria-label", /衬线/);
+  await pointAndClick(window, undoButton);
+  await expect.poll(font).toBe("default");
+
+  await newMind(window);
+  await expect(undoMessage(window)).toHaveText("已新建 Mind");
+  await setLanguage(window, "en");
+  await expect(undoMessage(window)).toHaveText("Made a new Mind");
+  await expect(undoButton).toHaveAttribute("aria-label", /Made a new Mind/);
+});
 
 test("⌘N twice in a row makes two Minds, and ⌘Z twice and ⇧⌘Z twice take them back and make them again, one at a time", async () => {
   const { window } = await launchApp(dataDir);

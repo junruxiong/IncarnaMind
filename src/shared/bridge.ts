@@ -33,6 +33,11 @@ export interface FilesBridge {
    * the folder's absolute path, or null if the User cancelled.
    */
   pickOutputLocation(): Promise<string | null>;
+  /**
+   * Saves the Mind as a .docx where the User chooses, in the system's save dialog: a copy of
+   * changes storage refused (#1119). False when they chose nowhere.
+   */
+  saveMindCopy(mindId: string): Promise<boolean>;
   /** Shows the data folder in the system's file manager, e.g. to back it up. */
   openDataFolder(): Promise<void>;
   /** Shows the data folder's `logs/` in the system's file manager, e.g. to attach the log to a bug report. */
@@ -88,6 +93,11 @@ export interface FilesBridge {
    * reached.
    */
   showLinkedFolder(linkedFolderId: string): Promise<void>;
+  /**
+   * Whether Chromium's sandbox is off for this app (`--no-sandbox` or
+   * `ELECTRON_DISABLE_SANDBOX`), the check Analyses make too: the window says so.
+   */
+  runsWithoutSandbox(): Promise<boolean>;
   /** Writes an error nothing in the window caught to the log, scrubbed of the User's content. */
   logError(report: RendererErrorReport): void;
   /** Calls `listener` with each command chosen in the application menu. Returns how to stop. */
@@ -155,6 +165,7 @@ export const FILES_CHANNELS = {
   showSavedFile: "files:showSavedFile",
   openSavedFile: "files:openSavedFile",
   pickOutputLocation: "files:pickOutputLocation",
+  saveMindCopy: "files:saveMindCopy",
   openDataFolder: "files:openDataFolder",
   openLogsFolder: "files:openLogsFolder",
   pickSkill: "files:pickSkill",
@@ -166,6 +177,7 @@ export const FILES_CHANNELS = {
   pickWordFile: "files:pickWordFile",
   pickPdfFile: "files:pickPdfFile",
   showLinkedFolder: "files:showLinkedFolder",
+  runsWithoutSandbox: "files:runsWithoutSandbox",
   logError: "files:logError",
   /** From the page: the sidebar is hidden (true) or shown (false), for the View menu's label. */
   sidebarHidden: "app:sidebarHidden",

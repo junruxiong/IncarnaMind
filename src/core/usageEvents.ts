@@ -117,6 +117,7 @@ const ANSWER_ERRORS = [
   "network",
   "provider",
   "consent-declined",
+  "consent-revoked",
   "local-mode",
   "ollama-not-running",
   "data-retention",

@@ -58,7 +58,6 @@ import {
 } from "./layoutSlice";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
-import { saidInLine } from "./lineNames";
 import { folderName as linkedFolderName } from "./linkedFolders";
 import {
   foldersMovedFrom,
@@ -68,6 +67,9 @@ import {
   movedLocally,
   moveMessage,
   moveName,
+  type Names,
+  namesOfFolders,
+  namesOfMoving,
   undoMoves,
 } from "./moves";
 import { untitledFolderName } from "./newFolder";
@@ -524,8 +526,8 @@ export const useAppStore = create<AppState>()((set, get) => {
     const gone = folderIds.find((id) => !library.groups.some((group) => group.id === id));
     if (gone === undefined) return;
     const name = names.get(gone) ?? "";
-    throw new UndoRefused(t("undo.folderGone", { name }), {
-      label: t("undo.restoreFolder", { name }),
+    throw new UndoRefused((t) => t("undo.folderGone", { name }), {
+      label: (t) => t("undo.restoreFolder", { name }),
       run: async () => {
         await core.restore([{ kind: "folder", id: gone }]);
         await get().refreshLibrary();
@@ -542,6 +544,58 @@ export const useAppStore = create<AppState>()((set, get) => {
   };
 
   /**
+   * Built here, not in the action that reads the Minds, Documents and Library: closures made in
+   * one scope all keep what any of them uses, and the undo stack keeps these as long as the session.
+   * `named` and `names` are cut to what the line and the refusal say.
+   */
+  const moveChange = (made: {
+    moving: MoveItems;
+    folderId: string | null;
+    folderName: string;
+    named: Names;
+    names: ReadonlyMap<string, string>;
+    done: FolderMove;
+  }): Undoable => {
+    const { moving, folderId, folderName, named, names } = made;
+    let { done } = made;
+    return {
+      said: (t) =>
+        moveMessage(t, moving, folderId === null ? t("library.unsorted") : folderName, named),
+      name: (t) => moveName(t, moving, named),
+      undo: () => putBack(done, names),
+      redo: async () => {
+        if (folderId !== null) refuseIfDeleted([folderId], names);
+        done = await move(moving, folderId);
+      },
+    };
+  };
+
+  const folderMade = (made: {
+    folderId: string;
+    going: MoveItems | null;
+    named: Names;
+    names: ReadonlyMap<string, string>;
+    done: FolderMove | null;
+  }) => {
+    const { folderId, going, named, names } = made;
+    let { done } = made;
+    return (folderName: string): Undoable => ({
+      said: (t) => madeMessage(t, folderName, going, named),
+      name: (t) => t("undo.name.newFolder"),
+      undo: async () => {
+        if (done) await putBack(done, names);
+        await core.deleteLibraryGroup(folderId);
+        await get().refreshLibrary();
+      },
+      redo: async () => {
+        await core.restore([{ kind: "folder", id: folderId }]);
+        await get().refreshLibrary();
+        if (going) done = await move(going, folderId);
+      },
+    });
+  };
+
+  /**
    * The Folder made last, until it is named: its first name is part of making
    * it, so that replaces its step and one Undo takes both back.
    */
@@ -550,9 +604,10 @@ export const useAppStore = create<AppState>()((set, get) => {
   /** A Mind renamed from `before`, with Undo, if its title changed. */
   const offerRename = (mind: Mind, before: string) => {
     if (before === mind.title) return;
-    const shown = mindName(mind) || t("mind.untitled");
     const rename = (name: string) => core.renameMind(mind.id, name);
-    push(renamed(t, shown, rename, { before, after: mind.title }));
+    push(
+      renamed((t) => mindName(mind) || t("mind.untitled"), rename, { before, after: mind.title }),
+    );
   };
 
   /** Puts a Folder's fields back as given. */
@@ -577,7 +632,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       added ? core.addTagToDocuments(ids, tagId) : core.removeTagFromDocuments(ids, tagId);
     await again();
     const tag = get().tags.find((each) => each.id === tagId)?.name ?? "";
-    push(retagged(t, { added, tag, names }, before, again));
+    push(retagged({ added, tag, names }, before, again));
   };
 
   /** Closes a tab, then says so with Reopen. */
@@ -818,7 +873,6 @@ export const useAppStore = create<AppState>()((set, get) => {
           ...(options?.folderId && { folderId: options.folderId }),
         });
         made = mindMade(
-          t,
           mindName(mind),
           () => core.deleteMind(mind.id),
           async () => {
@@ -896,22 +950,17 @@ export const useAppStore = create<AppState>()((set, get) => {
         );
         if (mindIds.length + documentIds.length === 0) return;
         const moving = { mindIds, documentIds };
-        const folderName =
-          folderId === null
-            ? t("library.unsorted")
-            : (library?.groups.find((group) => group.id === folderId)?.name ?? "");
-        const said = saidInLine(t, (t) => moveMessage(t, moving, folderName, { minds, documents }));
-        const names = new Map(library?.groups.map((group) => [group.id, group.name]));
-        let done = await move(moving, folderId);
-        push({
-          ...said,
-          name: moveName(t, moving, { minds, documents }),
-          undo: () => putBack(done, names),
-          redo: async () => {
-            if (folderId !== null) refuseIfDeleted([folderId], names);
-            done = await move(moving, folderId);
-          },
-        });
+        const done = await move(moving, folderId);
+        push(
+          moveChange({
+            moving,
+            folderId,
+            folderName: library?.groups.find((group) => group.id === folderId)?.name ?? "",
+            named: namesOfMoving(moving, { minds, documents }),
+            names: namesOfFolders(library, [folderId, ...foldersMovedFrom(done)]),
+            done,
+          }),
+        );
       }),
 
     createFolder: async (items) => {
@@ -927,21 +976,13 @@ export const useAppStore = create<AppState>()((set, get) => {
         const chosen = items ? itemsOf(items) : null;
         const going =
           chosen && chosen.mindIds.length + chosen.documentIds.length > 0 ? chosen : null;
-        let done = going ? await move(going, folder.id) : null;
-        const names = new Map(library?.groups.map((group) => [group.id, group.name]));
-        const stepNamed = (shown: string): Undoable => ({
-          ...saidInLine(t, (t) => madeMessage(t, shown, going, { minds, documents })),
-          name: t("undo.name.newFolder"),
-          undo: async () => {
-            if (done) await putBack(done, names);
-            await core.deleteLibraryGroup(folder.id);
-            await get().refreshLibrary();
-          },
-          redo: async () => {
-            await core.restore([{ kind: "folder", id: folder.id }]);
-            await get().refreshLibrary();
-            if (going) done = await move(going, folder.id);
-          },
+        const done = going ? await move(going, folder.id) : null;
+        const stepNamed = folderMade({
+          folderId: folder.id,
+          going,
+          named: namesOfMoving(going ?? {}, { minds, documents }),
+          names: namesOfFolders(library, done ? foldersMovedFrom(done) : []),
+          done,
         });
         const step = stepNamed(name);
         justMade = { id: folder.id, step, stepNamed };
@@ -992,10 +1033,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (JSON.stringify(before) === JSON.stringify(after)) return;
       const rename = before.name !== after.name;
       push({
-        ...saidInLine(t, (t) =>
-          t(rename ? "object.renamed" : "undo.folderEdited", { name: after.name }),
-        ),
-        name: t(rename ? "undo.name.rename" : "undo.name.editFolder"),
+        said: (t) => t(rename ? "object.renamed" : "undo.folderEdited", { name: after.name }),
+        name: (t) => t(rename ? "undo.name.rename" : "undo.name.editFolder"),
         undo: folderFields(folderId, before),
         redo: folderFields(folderId, after),
       });
@@ -1010,7 +1049,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           await get().refreshLibrary();
         };
         await remove();
-        if (folder) push(deleted(t, folder.name, [{ kind: "folder", id: folderId }], remove));
+        if (folder) push(deleted(folder.name, [{ kind: "folder", id: folderId }], remove));
       }),
 
     openExamples: () =>
@@ -1027,8 +1066,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       attempt(async () => {
         await get().openExamples();
         push({
-          message: t("undo.examplesShown"),
-          name: t("undo.name.showExamples"),
+          said: (t) => t("undo.examplesShown"),
+          name: (t) => t("undo.name.showExamples"),
           undo: () => core.removeExamples(),
           redo: async () => {
             await core.createExamples();
@@ -1058,8 +1097,8 @@ export const useAppStore = create<AppState>()((set, get) => {
         };
         await remove();
         push({
-          message: t("undo.examplesRemoved"),
-          name: t("undo.name.removeExamples"),
+          said: (t) => t("undo.examplesRemoved"),
+          name: (t) => t("undo.name.removeExamples"),
           undo: async () => {
             for (const group of groups) await core.createExamples(group);
             get().updateGettingStarted({ hidden });
@@ -1117,8 +1156,13 @@ export const useAppStore = create<AppState>()((set, get) => {
         const mind = get().minds.find((each) => each.id === id);
         const remove = () => core.deleteMind(id);
         await remove();
-        const shown = (mind && mindName(mind)) || t("mind.untitled");
-        push(deleted(t, shown, [{ kind: "mind", id }], remove));
+        push(
+          deleted(
+            (t) => (mind && mindName(mind)) || t("mind.untitled"),
+            [{ kind: "mind", id }],
+            remove,
+          ),
+        );
       }),
 
     reportError(error) {
@@ -1230,7 +1274,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         };
         const document = await rename(name);
         if (before === undefined || before === document.name) return;
-        push(renamed(t, displayName(document), rename, { before, after: document.name }));
+        push(renamed(displayName(document), rename, { before, after: document.name }));
       }),
 
     deleteDocuments: (ids) =>
@@ -1246,7 +1290,6 @@ export const useAppStore = create<AppState>()((set, get) => {
         const shown = first ? displayName(first) : "";
         push(
           deleted(
-            t,
             shown,
             ids.map((id) => ({ kind: "document", id })),
             remove,
@@ -1324,7 +1367,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         };
         await setPaused(paused);
         if (before && (before.status === "paused") !== paused) {
-          change = linkedFolderPaused(t, linkedFolderName(before.path), paused, setPaused);
+          change = linkedFolderPaused(linkedFolderName(before.path), paused, setPaused);
           push(change);
         }
       });
@@ -1341,7 +1384,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         await setLayout(layout);
         if (before && before.layout !== layout) {
           const layouts = { before: before.layout, after: layout };
-          change = linkedFolderShown(t, linkedFolderName(before.path), layouts, setLayout);
+          change = linkedFolderShown(linkedFolderName(before.path), layouts, setLayout);
           push(change);
         }
       });

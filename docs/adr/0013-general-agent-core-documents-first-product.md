@@ -58,10 +58,11 @@ The owner asked why we write our own harness rather than use Claude Code's, Code
 - We start it in its most restrictive mode, and never in one that skips permissions.
 - Its own Tools are outside our Effects, and we say so in its consent.
 
-**Vendor terms decide which agents.**
-- We never show a vendor's sign-in, read its tokens, or bundle its proprietary binary.
+**Which agents.**
+- We never bundle an agent's proprietary binary.
 - Codex, Goose, OpenCode, and Gemini CLI on a paid key are hosted first.
-- Claude is not hosted for now. Claude Code and Claude Desktop connect through the MCP server above, on the User's own sign-in. Hosting it can be reconsidered if Anthropic confirms subscription use in a third-party app.
+- Claude Code and Claude Desktop connect through the MCP server above, on the User's own sign-in. The User's own Claude Code can also run on their Claude plan, as an opt-in (#385).
+- Signing in with a Claude or GitHub Copilot plan is an experimental sign-in route (ADR-0019): off until the User signs in, never preselected. With either plan, the setup and Settings say that Answers count toward the plan's usage limits.
 
 **Considered options.**
 - **Run the User's harness as our engine.** Rejected for the reasons above.

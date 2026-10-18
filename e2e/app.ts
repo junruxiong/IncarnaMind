@@ -148,6 +148,19 @@ export interface LaunchOptions {
    * Folder's Minds (#112), instead of 30 seconds. Needs a test build.
    */
   contradictionWatchDelayMs?: number;
+  /**
+   * Starts Electron with Chromium's sandbox on Linux too, as the User's app runs: Playwright
+   * starts it with --no-sandbox there otherwise, and Analyses don't run without the sandbox.
+   * CI's Linux runners give Electron's sandbox helper the rights it needs (ci.yml).
+   */
+  sandboxed?: boolean;
+  /**
+   * The window may say when the app runs without its sandbox (#1179), which a test build keeps
+   * quiet otherwise, as Playwright starts every test on Linux with --no-sandbox. "switch": the
+   * app is started with --no-sandbox; "environment": with ELECTRON_DISABLE_SANDBOX; "on": with
+   * its sandbox, where the line must not show. The sandbox is on in the last two on Linux too.
+   */
+  sandboxNotice?: "switch" | "environment" | "on";
 }
 
 /**
@@ -207,6 +220,8 @@ export async function launchApp(
     lookLimit,
     scriptedTasks = false,
     contradictionWatchDelayMs,
+    sandboxed = false,
+    sandboxNotice,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -240,6 +255,9 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_LOOK_LIMIT;
   delete env.INCARNAMIND_TEST_TASKS;
   delete env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS;
+  delete env.INCARNAMIND_TEST_SANDBOX_NOTICE;
+  if (sandboxNotice) env.INCARNAMIND_TEST_SANDBOX_NOTICE = "1";
+  if (sandboxNotice === "environment") env.ELECTRON_DISABLE_SANDBOX = "1";
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -276,7 +294,16 @@ export async function launchApp(
   env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
   if (transcriber) env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS = JSON.stringify(transcriber);
 
-  const app = await electron.launch({ args: [...KEYCHAIN_ARGS, appDir, ...APP_ARGS], env });
+  const app = await electron.launch({
+    args: [
+      ...KEYCHAIN_ARGS,
+      ...(sandboxNotice === "switch" ? ["--no-sandbox"] : []),
+      appDir,
+      ...APP_ARGS,
+    ],
+    env,
+    chromiumSandbox: sandboxed || sandboxNotice === "environment" || sandboxNotice === "on",
+  });
   openApps.set(app, dataDir);
   app.on("close", () => {
     openApps.delete(app);
@@ -562,6 +589,22 @@ export async function showSettingsPage(window: Page, page: SettingsPage): Promis
   await expect(settings).toHaveAttribute("data-page", page);
   return settings;
 }
+
+/** In Settings › Models, opens Add a provider and the page that adds `catalogId` (#179). */
+export async function addProviderPage(settings: Locator, catalogId: string): Promise<Locator> {
+  await settings.getByTestId("models-add-provider").click();
+  await settings
+    .getByTestId("provider-directory")
+    .locator(`[data-catalog-id="${catalogId}"]`)
+    .click();
+  const page = settings.getByTestId("provider-add");
+  await expect(page).toHaveAttribute("data-catalog-id", catalogId);
+  return page;
+}
+
+/** As `addProviderPage`, returning that page's key form. */
+export const addProviderForm = async (settings: Locator, catalogId: string): Promise<Locator> =>
+  (await addProviderPage(settings, catalogId)).getByTestId("provider-form");
 
 /** Closes Settings with its close button. */
 export async function closeSettings(window: Page): Promise<void> {
@@ -1130,6 +1173,26 @@ export async function motionSettled(window: Page): Promise<void> {
       ),
     )
     .toBe(0);
+}
+
+/** A design token (`--color-warning-wash`) as the colour the browser draws it in. */
+export function tokenColor(window: Page, token: string): Promise<string> {
+  return window.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  }, token);
+}
+
+/** The colours an element is drawn in: its text and its background. */
+export function paintOf(target: Locator): Promise<{ color: string; background: string }> {
+  return target.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, background: style.backgroundColor };
+  });
 }
 
 /**

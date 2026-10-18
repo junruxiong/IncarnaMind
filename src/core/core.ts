@@ -120,7 +120,7 @@ import { findUnreadDocuments } from "./documents/unread";
 import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
-import { createEdits } from "./edits";
+import { createEdits, editText } from "./edits";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import {
@@ -128,6 +128,7 @@ import {
   InvalidInputError,
   isRecord,
   LinkedFolderWritesDeclinedError,
+  LocalModeError,
   MindReadOnlyError,
   NotFoundError,
   TaggingNotReadyError,
@@ -237,6 +238,7 @@ import {
   QWEN3_ASR_0_6B,
   TRANSCRIPTION_SPEED,
 } from "./transcription/model";
+import { createUnsavedChanges } from "./unsavedChanges";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
 import { createWordImports } from "./wordImports";
@@ -442,16 +444,26 @@ export function createCore(adapters: CoreAdapters): Core {
   // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
   const conversations = createConversations(db, now);
   const conversationsChanged = () => events.emit("conversations.changed", null);
-  const content = createMindContent(db, now, (mindId, update, cause) => {
-    events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
-    // Only notes the change; what became of AI text is worked out once the Mind is quiet.
-    aiUse.contentStored(mindId);
-    checkpoints.edited(mindId);
-    mindIndex.contentStored(mindId);
-    comparisons.mindChanged(mindId);
-    const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
-    if (minds.markEdited(mindId) || renamed) mindsChanged();
+  const unsaved = createUnsavedChanges({
+    dataDir: adapters.paths.dataDir,
+    tempDir: adapters.paths.tempDir ?? tmpdir(),
+    changed: (state) => events.emit("minds.unsaved", state),
   });
+  const content = createMindContent(
+    db,
+    now,
+    (mindId, update, cause) => {
+      events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
+      // Only notes the change; what became of AI text is worked out once the Mind is quiet.
+      aiUse.contentStored(mindId);
+      checkpoints.edited(mindId);
+      mindIndex.contentStored(mindId);
+      comparisons.mindChanged(mindId);
+      const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
+      if (minds.markEdited(mindId) || renamed) mindsChanged();
+    },
+    { unsaved: unsaved.mindUnsaved },
+  );
   const mindIndex = createMindIndex({
     db,
     now,
@@ -723,6 +735,7 @@ export function createCore(adapters: CoreAdapters): Core {
     pictureFetch: pictureFetcher.fetch,
     ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
     keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    signal: lifetime.signal,
     reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
   });
@@ -841,6 +854,13 @@ export function createCore(adapters: CoreAdapters): Core {
     const wasLocal = embedding.localOnly();
     await embedding.setLocalOnly(enabled);
     library.resume();
+    if (embedding.localOnly()) {
+      // A prompt still open for a cloud service closes: whatever the User answers, nothing goes (ADR-0022).
+      consent.refuseWaiting(
+        ({ flow }) => !consent.onThisComputer(flow.id, flow.service.id),
+        () => new LocalModeError(),
+      );
+    }
     if (wasLocal !== embedding.localOnly()) {
       usageData.localModeChanged();
       privacyChanged();
@@ -1172,7 +1192,8 @@ export function createCore(adapters: CoreAdapters): Core {
     readableMindName: (mindId) => {
       const found = minds.locate(mindId);
       if (!found || found.deletedAt !== null) return null;
-      return isKnownKind(minds.get(mindId).kind) ? found.name : null;
+      if (!isKnownKind(minds.get(mindId).kind)) return null;
+      return found.name || translate(settings.get().language, "mind.untitled");
     },
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     meetingHelp: (mindId, question) => meetingHelpOf(mindId, question),
@@ -1258,6 +1279,7 @@ export function createCore(adapters: CoreAdapters): Core {
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
       writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
       proposeInMind: (input) => edits.proposeInMind(input),
+      checkWritten: (input) => checks.checkWritten(input),
     },
     withdrawChanges: (changes) => {
       for (const change of changes) {
@@ -1692,6 +1714,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     engine: answerEngine,
     retention,
+    editText,
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1873,6 +1896,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     hostedUrl: adapters.jevHostedUrl,
     signal: lifetime.signal,
+    localOnly: () => embedding.localOnly(),
   });
   // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds.
   const planPace = createPlanPace({
@@ -2237,6 +2261,7 @@ export function createCore(adapters: CoreAdapters): Core {
     tags,
     library,
     mindsChanged,
+    mindsRestored: (mindIds) => wordImports.resume(mindIds),
     conversationsChanged,
     tagsChanged,
     tagged: announceTagged,
@@ -2274,7 +2299,44 @@ export function createCore(adapters: CoreAdapters): Core {
     await taggingChanged();
     return status;
   };
-  documentReady = (documentId) => tagger.documentReady(documentId);
+  /**
+   * Automatic found no model to tag with: work it out again, asking Ollama afresh, so a model
+   * installed since is picked up without a restart. Waiting Documents then go on. One Ollama list
+   * call per lookup, never a model call. A lookup already under way may have asked before what
+   * the caller knows changed, so one more follows it, and later callers share that one.
+   */
+  let lookingForModel: Promise<void> | null = null;
+  let lookingAgain: Promise<void> | null = null;
+  const lookForTaggingModel = (): Promise<void> => {
+    if (tagsWith() !== null) return Promise.resolve();
+    if (lookingForModel) {
+      lookingAgain ??= lookingForModel.then(() => {
+        lookingAgain = null;
+        return lookForTaggingModel();
+      });
+      return lookingAgain;
+    }
+    lookingForModel = (async () => {
+      try {
+        await tagging.resolve(undefined, true);
+      } catch (error) {
+        if (!lifetime.signal.aborted) {
+          console.error("The model to tag with couldn't be worked out.", error);
+        }
+        return;
+      } finally {
+        lookingForModel = null;
+      }
+      if (lifetime.signal.aborted || tagsWith() === null) return;
+      tagger.resume();
+      library.resume();
+    })();
+    return lookingForModel;
+  };
+  documentReady = (documentId) => {
+    tagger.documentReady(documentId);
+    void lookForTaggingModel();
+  };
 
   const settingsChanged = () => events.emit("settings.changed", settings.get());
   const readinessChanged = async () => {
@@ -2900,6 +2962,12 @@ export function createCore(adapters: CoreAdapters): Core {
     applyMindUpdate: async (mindId, update) => {
       content.apply(writableMind(mindId).id, update);
     },
+    unsavedChanges: async () => unsaved.summary(),
+    saveChangesAgain: async () => {
+      content.storeWaiting();
+      return unsaved.summary();
+    },
+    takeLostChanges: async () => unsaved.takeLost(),
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
     },
@@ -3235,6 +3303,8 @@ export function createCore(adapters: CoreAdapters): Core {
       await readinessChanged();
     },
     testChatConnection: (input) => loggingTest("chat")(chat.test(input)),
+    testChatProvider: (providerId) => loggingTest("chat")(chat.testProvider(providerId)),
+    getModelRoles: async () => ({ quickTasks: chat.quickTasksModel(), images: chat.imageModel() }),
     getChatReadiness: () => chat.readiness(),
     listChatModels: () => chat.listModels(),
     setChatModelInMenu: async (input) => chat.setInMenu(input),
@@ -3351,7 +3421,13 @@ export function createCore(adapters: CoreAdapters): Core {
           lifetime.signal,
         );
       }
-      const provider = await chat.save({ kind: "ollama", baseUrl, modelId: model });
+      const provider = await chat.save({
+        kind: "ollama",
+        baseUrl,
+        modelId: model,
+        // Local mode leaves only a model on this computer to answer.
+        keepDefault: input?.keepDefault === true && input.localOnly !== true,
+      });
       settingsChanged();
       await readinessChanged();
       // Local mode is the User's choice here (#545), made in the box under the button.
@@ -3475,7 +3551,15 @@ export function createCore(adapters: CoreAdapters): Core {
       if (tagsAnew || organizesAnew) await dataFlowsChanged();
       await taggingChanged();
     },
-    getTaggingModels: () => tagging.models(),
+    getTaggingModels: async () => {
+      const hadModel = tagsWith() !== null;
+      const models = await tagging.models();
+      if (!hadModel && tagsWith() !== null && !lifetime.signal.aborted) {
+        tagger.resume();
+        library.resume();
+      }
+      return models;
+    },
     classifyDocuments: async (ids) => {
       library.classify(ids);
       const classifier = organizeModelOf(library.settings());
@@ -3578,8 +3662,17 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     retagDocuments: async (documentIds) => {
       rateLimit.resumeNow();
-      if (organizesNewDocuments()) return library.classify(documentIds);
-      tagger.retag(documentIds);
+      const byTagger = async (ids: unknown) => {
+        await lookForTaggingModel();
+        tagger.retag(ids);
+      };
+      if (!organizesNewDocuments()) return byTagger(documentIds);
+      // Organize re-tags the Documents it holds, and the tagger the rest.
+      if (!Array.isArray(documentIds)) return library.classify(documentIds);
+      const held = documentIds.filter((id) => typeof id === "string" && library.isOrganizing(id));
+      const rest = documentIds.filter((id) => !held.includes(id));
+      if (rest.length > 0) await byTagger(rest);
+      if (held.length > 0 || rest.length === 0) library.classify(held);
     },
     stopTagging: async () => {
       const places = library.taggingPlaces();
@@ -3705,9 +3798,15 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     exportMind: async (mindId, options) => {
       const exported = await mindExports.export(mindId, options);
-      // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
-      recordOwnFile(exported.data, ownFileOf(options));
-      recordExport(options);
+      // The host saves these bytes as a file: IncarnaMind's, wherever it goes. Noting so is
+      // never needed for the file itself: a copy saved while storage refuses every write (#1119)
+      // still goes out.
+      try {
+        recordOwnFile(exported.data, ownFileOf(options));
+        recordExport(options);
+      } catch (error) {
+        console.error("export: the file couldn't be noted as IncarnaMind's", error);
+      }
       return exported;
     },
     saveMindExport: async (mindId, options) => {
@@ -3893,6 +3992,7 @@ export function createCore(adapters: CoreAdapters): Core {
       checks.stopAll();
       skillDrafts.stopAll();
       scriptRunner.close();
+      adapters.analysisRuntime?.close();
       approvals.close();
       connectors.close();
       tagger.close();
@@ -3913,6 +4013,7 @@ export function createCore(adapters: CoreAdapters): Core {
       mindIndex.close();
       events.clear();
       content.closeAll();
+      unsaved.quit();
       db.close();
     },
   };

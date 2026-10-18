@@ -214,6 +214,7 @@ import {
   answerInstructions,
   connectorInstructions,
   documentInstructions,
+  emptyMindNote,
   LISTED_DOCUMENTS,
   type ListedDocuments,
   languageInstruction,
@@ -375,6 +376,11 @@ const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
 const changesAMind = (change: MindChange) =>
   change.created || change.revised === true || change.proposals > 0;
+
+const blank = (blocks: Y.XmlFragment): boolean =>
+  blocks
+    .toArray()
+    .every((block) => !(block instanceof Y.XmlElement) || plainText(block).trim() === "");
 
 const holdsNothing = (blocks: Y.XmlFragment): boolean =>
   blocks
@@ -828,7 +834,10 @@ export function createAnswers(options: AnswersOptions) {
      * Blocks the User selected there, where a Mind it makes goes, and what
      * Blocks it adds link back to. It is offered the Minds' Tools. Absent: none.
      */
-    assistant?: Pick<MindToolsOptions, "focused" | "folderId" | "origin" | "lastAnswer"> &
+    assistant?: Pick<
+      MindToolsOptions,
+      "focused" | "folderId" | "origin" | "lastAnswer" | "remake"
+    > &
       RequestContext;
   }): void {
     const { home, answerId, model, context, forcedSkill } = input;
@@ -845,6 +854,14 @@ export function createAnswers(options: AnswersOptions) {
         : null;
     const documentIds = coverage ? coverage.used.map((each) => each.id) : input.documentIds;
     const outside = input.outside === true;
+    const routed =
+      !outside && options.minds && input.assistant
+        ? routeRequest(context.question, input.assistant)
+        : null;
+    const writtenFrom =
+      routed?.kind === "write" && !routed.fromAnswer
+        ? someOfTheDocuments(input.documentIds, input.assistant?.focused?.mindId ?? null)
+        : null;
     const { place } = home;
     const announce = <E extends CoreEventName>(event: E, payload: CoreEvents[E]) => {
       if (!outside) events.emit(event, payload);
@@ -946,6 +963,7 @@ export function createAnswers(options: AnswersOptions) {
         ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
         ...(withoutMindTools && { withoutMindTools: true as const }),
         ...(coverage && { coverage }),
+        ...(writtenFrom && { writtenFrom }),
       };
     };
     let skills: SkillSession | null = null;
@@ -1634,14 +1652,14 @@ export function createAnswers(options: AnswersOptions) {
           : [];
       // The Minds' Tools, for an Answer in the assistant (#202).
       const minds = outside ? undefined : options.minds;
-      const routed =
-        minds && input.assistant ? routeRequest(context.question, input.assistant) : null;
       const focusedId = input.assistant?.focused?.mindId ?? null;
       // A new piece fills the empty Mind the User is in rather than making another (#1109).
       const route =
         routed?.fillsEmpty && minds && focusedId && minds.read(focusedId, holdsNothing)
           ? { ...routed, newMind: false }
           : routed;
+      const focusedBlank =
+        minds !== undefined && focusedId !== null && minds.read(focusedId, blank);
       const requested =
         route && (route.kind === "write" || route.kind === "edit")
           ? { change: route.kind, newMind: route.newMind }
@@ -1862,6 +1880,7 @@ export function createAnswers(options: AnswersOptions) {
             webInstructions(withWebTools),
             workingCopyNote(original?.name ?? null),
             mindInstructions(withMindTools, route),
+            emptyMindNote(withMindTools, focusedBlank),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             help
@@ -2218,6 +2237,7 @@ export function createAnswers(options: AnswersOptions) {
     documentIds: string[] | null,
     emptyScope: boolean,
     mind: MindToRead | null,
+    remake: string | null = null,
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
     const help = mind ? (options.meetingHelp?.(mind.mindId, question.text) ?? null) : null;
@@ -2297,10 +2317,18 @@ export function createAnswers(options: AnswersOptions) {
         ),
         followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
         lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier) !== null,
+        remake,
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
   }
+
+  const someOfTheDocuments = (documentIds: string[] | null, mindId: string | null) => {
+    if (documentIds === null) return null;
+    const total = options.documents.searchableCount(options.unscopedDocuments?.(mindId) ?? null);
+    const documents = options.documents.searchableCount(documentIds);
+    return documents > 0 && documents < total ? { documents, total } : null;
+  };
 
   /** The Documents of a Search scope as it is now, and whether it covers none to search. */
   const scopeNow = (scope: SearchScope | null, mindId: string | null) => {
@@ -2471,15 +2499,20 @@ export function createAnswers(options: AnswersOptions) {
     /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */
     async regenerateInConversation(input: unknown): Promise<ConversationAskResult> {
       const asked = options.conversations.questionOf(input);
-      if (isRecord(input) && input.clearScope === true) {
-        options.conversations.clearScope(asked.question.id);
-      }
+      const everyDocument = isRecord(input) && input.clearScope === true;
+      if (everyDocument) options.conversations.clearScope(asked.question.id);
       const { answerId, question, toolCalls } = options.conversations.questionOf(input);
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
       active.get(answerId)?.finish({ status: "stopped" });
+      const changes = toolCalls.flatMap((call) => call.mindChange ?? []);
       // Written again, it proposes its changes again: those still waiting from before go.
-      options.withdrawChanges?.(toolCalls.flatMap((call) => call.mindChange ?? []));
+      options.withdrawChanges?.(changes);
+      // From every Document, the Mind it wrote keeps that text's place and takes the new text (#1149).
+      const made = everyDocument
+        ? (changes.find((change) => change.created) ?? changes[0])
+        : undefined;
+      const remake = made && options.readableMindName(made.mindId) !== null ? made.mindId : null;
       const from = question.askedFrom;
       const { documentIds, emptyScope } = scopeNow(
         question.scope,
@@ -2488,7 +2521,7 @@ export function createAnswers(options: AnswersOptions) {
       const mind =
         !from || from.deleted ? null : mindToRead(from.mindId, question.focus, question.text);
       const turn = options.conversations.restartAnswer(answerId, ready.model, readOf(mind));
-      return startInConversation(turn, ready, documentIds, emptyScope, mind);
+      return startInConversation(turn, ready, documentIds, emptyScope, mind, remake);
     },
 
     /** Stops an Answer of a conversation being written, keeping what it has. */
@@ -2695,7 +2728,7 @@ export function createAnswers(options: AnswersOptions) {
           status: "failed",
           error: {
             kind: "local-mode",
-            message: "Stopped: “Keep everything on this computer” is on.",
+            message: "Stopped: everything stays on this computer.",
           },
         });
       }
