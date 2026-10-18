@@ -198,14 +198,12 @@ test("reranking is on by default with the built-in model, can be turned off, and
   await rerank.getByTestId("rerank-set-up").click();
   const form = rerank.getByTestId("rerank-form");
   await form.getByLabel("On this computer (built-in model)").check();
-  await expect(form.getByTestId("rerank-built-in-note")).toContainText(
-    "Your searches and Documents stay on this computer.",
-  );
+  await expect(form.getByTestId("rerank-built-in-note")).toContainText("runs on this computer.");
   await expect(form.getByLabel("API key")).toHaveCount(0);
   await form.getByRole("button", { name: "Use for ordering results" }).click();
 
   await expect(rerank.getByTestId("rerank-current")).toHaveText(
-    /^The built-in model puts the best search results first \(.+\)\.$/,
+    "The built-in model puts the best results first.",
   );
   const settings = await window.evaluate(() =>
     (globalThis as Page).incarnamind.getRerankSettings(),

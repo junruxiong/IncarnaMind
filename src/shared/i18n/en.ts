@@ -2383,8 +2383,7 @@ export const en = {
   "models.removed": "Removed {provider}.",
   "models.removed.answers": "Removed {provider}. Answers now use {model}.",
   "models.removed.noAnswers": "Removed {provider}. Choose a model for Answers.",
-  "models.removed.automatic":
-    "Removed {provider}. The defaults that used it are back to Automatic.",
+  "models.removed.automatic": "Removed {provider}. Its defaults are back to Automatic.",
   "models.providers.title": "Your providers",
   "models.providers.none": "No provider yet.",
   "models.providers.add": "Add a provider…",

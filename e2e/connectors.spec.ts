@@ -339,7 +339,7 @@ test("the search asks the MCP Registry only once the User types and agrees, and 
     await expect(found.getByTestId("connectors-registry-badge")).toHaveText(
       "Community · not reviewed",
     );
-    await expect(found).toContainText("The Registry was searched only because you typed.");
+    await expect(found).toContainText("Community connectors aren’t reviewed.");
     await expect(found.getByTestId("registry-server")).toHaveCount(3);
     expect(registry.requests).toEqual(["/v0.1/servers?search=zotero&version=latest&limit=20"]);
 
@@ -383,7 +383,7 @@ test("a whole command line pasted as the command is split into its arguments, an
   await form.getByLabel(/^Arguments, one per line/).focus();
   await expect(command).toHaveValue(process.execPath);
   await expect(form.getByLabel(/^Arguments, one per line/)).toHaveValue(TIDE_SERVER);
-  await expect(form).toContainText("The rest of what you pasted went into Arguments");
+  await expect(form).toContainText("The rest went into Arguments");
   await form.getByRole("button", { name: "Cancel" }).click();
 
   // A Connector added with a command that isn't there fails; changing its command fixes it.
