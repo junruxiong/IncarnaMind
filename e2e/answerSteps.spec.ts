@@ -242,6 +242,7 @@ test("a slow Answer shows its step line from the start, then how long it is taki
   await expect(answer.getByTestId("answer-steps-live")).toBeVisible();
   await expect(answer.getByTestId("answer-stop")).toHaveCount(1);
   await expect(answer.getByTestId("answer-stop")).toBeVisible();
+  await expect(answer.getByTestId("answer-actions").getByRole("button")).toHaveCount(0);
   await screenshot(window, "wait-still-en");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
   expect((await shown()).filter((state) => state !== "none")).toEqual(["line", "wait", "text"]);
@@ -322,7 +323,7 @@ test("with earlier Answers that took about a minute, the line says how long this
   await app.close();
 });
 
-test("a long model name wraps inside the wait line, and Stop stays inside the Answer", async () => {
+test("a long model name stays on one line inside the wait line, and Stop stays inside the Answer", async () => {
   const { app, window } = await startWithMinuteHistory(
     "claude-haiku-5-5-with-a-very-long-experimental-identifier-20261016",
   );
@@ -330,6 +331,8 @@ test("a long model name wraps inside the wait line, and Stop stays inside the An
   const answer = assistantAnswers(window).last();
   const wait = answer.getByTestId("answer-wait");
   await expect(wait).toContainText("Usually about a minute with claude-haiku-5-5-with-a-very-long");
+  const name = wait.getByTestId("answer-wait-model");
+  expect(await name.evaluate((node) => node.getClientRects().length)).toBe(1);
   const stop = await wait.getByTestId("answer-stop").boundingBox();
   const inside = await answer.boundingBox();
   expect((stop?.x ?? 0) + (stop?.width ?? 0)).toBeLessThanOrEqual(
@@ -339,6 +342,51 @@ test("a long model name wraps inside the wait line, and Stop stays inside the An
   await screenshot(window, "wait-long-name-en");
   await pointAndClick(window, wait.getByTestId("answer-stop"));
   await expect(answer).toHaveAttribute("data-status", "stopped");
+  await app.close();
+});
+
+test("at 1,100 × 760, in English and Chinese, the wait line keeps the model's name on one line, and Stop is only the composer's ■ until the wait line brings its own, each stopping the Answer", async () => {
+  const { app, window } = await startWithMinuteHistory();
+  await setWindowSize(app, window, 1100, 760);
+  const composerStop = window.getByTestId("composer-stop");
+  const languages = [
+    ["en", "Usually about a minute with Claude Haiku 5.5 · Stop"],
+    ["zh-CN", "用 Claude Haiku 5.5 通常要 1 分钟左右 · 停止"],
+  ] as const;
+
+  for (const [language, said] of languages) {
+    await core(window).language(language);
+
+    // Before the wait line: nothing under the step line stops the Answer; the composer's ■ does.
+    await setSilentWaitMs(window, 600_000);
+    await askSlowly(window, "When do spring tides happen? Answer slowly.");
+    const early = assistantAnswers(window).last();
+    await expect(early.getByTestId("answer-steps-live")).toBeVisible();
+    await expect(early.getByTestId("answer-wait")).toHaveCount(0);
+    await expect(early.getByTestId("answer-stop")).toHaveCount(0);
+    await expect(early.getByTestId("answer-actions").getByRole("button")).toHaveCount(0);
+    await expect(composerStop).toBeVisible();
+    const resting = await composerStop.boundingBox();
+    await screenshot(window, `wait-before-${language}`);
+    await pointAndClick(window, composerStop);
+    await expect(early).toHaveAttribute("data-status", "stopped");
+
+    // The wait line brings its own Stop beside the composer's, which has not moved.
+    await setSilentWaitMs(window, 600);
+    await askSlowly(window, "When do neap tides happen? Answer slowly.");
+    const answer = assistantAnswers(window).last();
+    const wait = answer.getByTestId("answer-wait");
+    await expect(wait).toHaveText(said);
+    const name = wait.getByTestId("answer-wait-model");
+    await expect(name).toHaveText(MODEL_NAME);
+    expect(await name.evaluate((node) => node.getClientRects().length)).toBe(1);
+    await expect(answer.getByTestId("answer-stop")).toHaveCount(1);
+    await expect(answer.getByTestId("answer-actions").getByRole("button")).toHaveCount(0);
+    expect(await composerStop.boundingBox()).toEqual(resting);
+    await screenshot(window, `wait-after-${language}`);
+    await pointAndClick(window, wait.getByTestId("answer-stop"));
+    await expect(answer).toHaveAttribute("data-status", "stopped");
+  }
   await app.close();
 });
 
