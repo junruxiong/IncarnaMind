@@ -15,6 +15,7 @@ import {
   openSteps,
   pointAndClick,
   pointAt,
+  pressTextStart,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -169,8 +170,8 @@ test("one Mind changed: the card says what was changed and how much of it waits,
   const card = answer.getByTestId("mind-changes");
   const title = card.getByTestId("mind-changes-title");
   const left = card.getByTestId("mind-changes-left");
-  await expect(title).toHaveText("在“第三季度”中已修改 2 处");
-  await expect(left).toHaveText("· 2 处待确认");
+  await expect(title).toHaveText("在“第三季度”中修改了 1 个段落");
+  await expect(left).toHaveText("· 1 个段落待确认");
   await expect(card.getByTestId("mind-changes-row")).toHaveCount(0);
   await screenshot(window, "card-one-mind-zh");
 
@@ -180,11 +181,11 @@ test("one Mind changed: the card says what was changed and how much of it waits,
   await pointAndClick(window, card.getByTestId("mind-changes-accept-all"));
   const editor = window.getByTestId("mind-editor");
   await expect(editor.locator("p")).toHaveText(["销售好，利润很高。"]);
-  await expect(title).toHaveText("在“第三季度”中已修改 2 处");
+  await expect(title).toHaveText("在“第三季度”中修改了 1 个段落");
   await expect(left).toHaveText("· 没有待确认的修订");
 
   await window.keyboard.press("ControlOrMeta+z");
-  await expect(left).toHaveText("· 2 处待确认");
+  await expect(left).toHaveText("· 1 个段落待确认");
   await expect(window.getByTestId("proposals-count")).toHaveText("来自助手的 2 处修订");
 });
 
@@ -302,7 +303,7 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
   await expect(editor.locator(":scope > h1")).toHaveCount(0);
   await editor.focus();
   await focusSettled(window, editor);
-  await window.keyboard.press(process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home");
+  await pressTextStart(window);
   // The cursor is in the first change once its bar shows.
   await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");
   await window.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
@@ -388,7 +389,7 @@ test("a change the assistant makes in a Mind comes in paragraph by paragraph, wi
   await expect(writing).toHaveCount(0);
   await expect(window.getByTestId("proposals-count")).toHaveText("6 changes from the assistant");
   await expect(answer.getByTestId("mind-changes-title")).toHaveText(
-    "Changed 6 places in “Q3 review”",
+    "Changed 3 paragraphs in “Q3 review”",
   );
   await screenshot(window, "assistant-edit-done");
 });

@@ -253,7 +253,8 @@ async function arrived(
     return;
   }
   if (outcome !== null && outcome !== "held") {
-    if (outcome.applied > 0) speak(mindId, appliedMessage(outcome.applied));
+    const { paragraphs, tables } = outcome.applied;
+    if (paragraphs + tables > 0) speak(mindId, appliedMessage(outcome.applied));
     return;
   }
   if (stopped) return;

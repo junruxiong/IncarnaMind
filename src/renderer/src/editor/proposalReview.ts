@@ -11,6 +11,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { ySyncPluginKey, yUndoPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 import {
+  BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
   type CitationAttributes,
   type KeptCitationText,
@@ -109,13 +110,53 @@ function blockEndAt(doc: ProseMirrorNode, pos: number): number {
 }
 
 /**
+ * The paragraph or heading a Proposal writes anew, all of its text removed
+ * and new text in its place (#1028); null for any other.
+ */
+export function paragraphWrittenAnew(
+  doc: ProseMirrorNode,
+  proposal: PendingProposal,
+): ProseMirrorNode | null {
+  if (proposal.block || proposal.removed.trim() === "" || proposal.added.trim() === "") return null;
+  const $from = doc.resolve(proposal.from);
+  const covered = proposal.ranges.reduce((sum, range) => sum + range.to - range.from, 0);
+  return $from.parent.isTextblock &&
+    proposal.from === $from.start() &&
+    proposal.to === $from.end() &&
+    covered === $from.end() - $from.start()
+    ? $from.parent
+    : null;
+}
+
+/** The Block id of the paragraph a Proposal writes anew, to find it once its old words are gone. */
+export function rewrittenParagraphOf(
+  doc: ProseMirrorNode,
+  proposal: PendingProposal,
+): string | null {
+  const id: unknown = paragraphWrittenAnew(doc, proposal)?.attrs[BLOCK_ID_ATTRIBUTE];
+  return typeof id === "string" ? id : null;
+}
+
+/**
  * Every Proposal in the document, in the order they start. A Citation a
  * Proposal removes and doesn't add back counts as dropped; one the same
  * request adds elsewhere (moved) doesn't. One is out of date as the core
  * reads it: the words or Block it removes aren't what it recorded, or aren't
  * in one piece any more.
  */
-export function proposalsIn(doc: ProseMirrorNode): PendingProposal[] {
+export function proposalsIn(doc: ProseMirrorNode): readonly PendingProposal[] {
+  let proposals = readProposals.get(doc);
+  if (!proposals) {
+    proposals = readProposalsIn(doc);
+    readProposals.set(doc, proposals);
+  }
+  return proposals;
+}
+
+// The review bars and the rewritten-paragraph lines both read each document the User's typing makes.
+const readProposals = new WeakMap<ProseMirrorNode, readonly PendingProposal[]>();
+
+function readProposalsIn(doc: ProseMirrorNode): PendingProposal[] {
   const found = new Map<string, PendingProposal>();
   const removedCitations = new Map<string, string[]>();
   const addedCitations = new Map<string, Set<string>>();
