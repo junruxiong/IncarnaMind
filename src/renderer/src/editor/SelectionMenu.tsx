@@ -4,6 +4,7 @@ import { PluginKey, TextSelection } from "@tiptap/pm/state";
 import { type Editor, useEditorState } from "@tiptap/react";
 import { BubbleMenu, type BubbleMenuProps } from "@tiptap/react/menus";
 import {
+  type FocusEvent,
   type KeyboardEvent,
   type ReactNode,
   useCallback,
@@ -15,6 +16,9 @@ import type { MessageKey } from "../../../shared/i18n";
 import { shortcutLabel } from "../commands/keymap";
 import { ChevronIcon } from "../components/icons";
 import { useT } from "../i18n";
+import { isComposing } from "./composing";
+import { EditField, EditWorking } from "./EditField";
+import { selectionForEdit } from "./editSelection";
 import { CustomSpacing, FormatMenu } from "./FormatMenu";
 import { footnotePlace, insertFootnote } from "./footnoteSchema";
 import { FORMAT_OPEN, setLineSpacing } from "./formatCommands";
@@ -26,11 +30,13 @@ import {
   canTurnInto,
   clearFormatting,
   currentTurnInto,
+  EDIT_FIELD,
   inOneTextblock,
   LINK_EDIT,
   selectionToMath,
   TURN_INTO,
 } from "./selectionCommands";
+import { type EditWithAiField, useEditField } from "./useEditField";
 
 /**
  * One action of the menu's AI section: Edit with AI, Find support and the
@@ -119,13 +125,12 @@ const MARKS: readonly {
   },
 ];
 
-const isComposing = (event: KeyboardEvent) =>
-  event.nativeEvent.isComposing || event.key === "Process";
-
 /** The menu's controls, in the order the arrow keys go through them. */
 const controlsOf = (menu: HTMLElement | null) =>
   Array.from(
-    menu?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"])') ?? [],
+    menu?.querySelectorAll<HTMLElement>(
+      '[role^="menuitem"]:not([aria-disabled="true"]), [data-menu-field]',
+    ) ?? [],
   );
 
 /** The selection the User closed the menu over, which keeps it closed until the selection changes, even for an update already waiting. */
@@ -159,11 +164,15 @@ function showsOver(editor: Editor, pressed: boolean): boolean {
 export function SelectionMenu({
   editor,
   ai = [],
+  edit,
 }: {
   editor: Editor;
   ai?: readonly SelectionAction[];
+  /** What the "Edit with AI…" field at the menu's foot asks with; with none the field isn't there. */
+  edit?: EditWithAiField;
 }) {
   const t = useT();
+  const frame = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const turnRow = useRef<HTMLButtonElement>(null);
   const linkButton = useRef<HTMLButtonElement>(null);
@@ -199,6 +208,20 @@ export function SelectionMenu({
   const actions = useRef(ai);
   actions.current = ai;
 
+  /** Out of the menu: the cursor is back in the text if it was in the menu, and the menu closes. */
+  const closeMenu = useCallback(() => {
+    const active = document.activeElement;
+    if (!active || active === document.body || frame.current?.contains(active)) {
+      editor.view.focus();
+    }
+    hideMenu(editor);
+  }, [editor]);
+  const field = useEditField(editor, edit, closeMenu);
+  const fieldNow = useRef(field);
+  fieldNow.current = field;
+  const withField = useRef(edit !== undefined);
+  withField.current = edit !== undefined;
+
   const state = useEditorState({
     editor,
     selector: ({ editor: current }) => ({
@@ -218,15 +241,18 @@ export function SelectionMenu({
       ai: actions.current
         .filter((action) => action.available?.(current) ?? true)
         .map((action) => action.id),
+      editable: selectionForEdit(current.state) !== null,
     }),
   });
   const shownAi = ai.filter((action) => state.ai.includes(action.id));
 
+  const working = field.working;
   const shouldShow = useCallback<NonNullable<BubbleMenuProps["shouldShow"]>>(
     ({ editor: current, element, view }) =>
-      showsOver(current, pressed.current) &&
-      (view.hasFocus() || element.contains(document.activeElement)),
-    [],
+      working.current ||
+      (showsOver(current, pressed.current) &&
+        (view.hasFocus() || element.contains(document.activeElement))),
+    [working],
   );
 
   // While a mouse button is down the menu waits: it opens under what the User
@@ -242,6 +268,27 @@ export function SelectionMenu({
       if (editor.isDestroyed || !showsOver(editor, false)) return;
       editor.view.dispatch(editor.state.tr.setMeta(PLUGIN_KEY, "show"));
       editor.view.dispatch(editor.state.tr.setMeta(PLUGIN_KEY, "updatePosition"));
+    };
+    // ⌘J puts the cursor in the Edit with AI field, opening the menu if it is closed; where the
+    // menu can't open over the selection (all of the Mind), it is left to the composer.
+    const takeEditField = (event: Event) => {
+      const anywhere = event instanceof CustomEvent && event.detail?.anywhere === true;
+      const current = fieldNow.current;
+      const inField = current.input.current === document.activeElement;
+      if (!withField.current || !current.input.current || current.working.current) return;
+      if (!anywhere && !inField && !editor.view.hasFocus()) return;
+      if (!inField) {
+        if (selectionForEdit(editor.state) === null) return;
+        dismissedOver.delete(editor);
+        if (!showsOver(editor, false)) return;
+      }
+      event.preventDefault();
+      if (inField) return;
+      if (!shown.current) {
+        editor.view.dispatch(editor.state.tr.setMeta(PLUGIN_KEY, "show"));
+        editor.view.dispatch(editor.state.tr.setMeta(PLUGIN_KEY, "updatePosition"));
+      }
+      current.focus();
     };
     // ⌘/ moves into the menu; Esc, with the focus still in the text, closes it, ahead of the editor's own use of Esc.
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -276,6 +323,7 @@ export function SelectionMenu({
       );
     };
     dom.addEventListener(LINK_EDIT, editLink);
+    dom.addEventListener(EDIT_FIELD, takeEditField);
     dom.addEventListener(FORMAT_OPEN, openFormat);
     dom.addEventListener("compositionend", afterComposition);
     dom.addEventListener("mousedown", press);
@@ -283,6 +331,7 @@ export function SelectionMenu({
     dom.addEventListener("keydown", onKey, true);
     return () => {
       dom.removeEventListener(LINK_EDIT, editLink);
+      dom.removeEventListener(EDIT_FIELD, takeEditField);
       dom.removeEventListener(FORMAT_OPEN, openFormat);
       dom.removeEventListener("compositionend", afterComposition);
       dom.removeEventListener("mousedown", press);
@@ -302,6 +351,7 @@ export function SelectionMenu({
     },
     onHide: () => {
       shown.current = false;
+      fieldNow.current.reset();
       setTurning(null);
       setLinking(false);
       setChoosing(null);
@@ -327,6 +377,7 @@ export function SelectionMenu({
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
+      editor.view.focus();
       editor.commands.focus();
       hideMenu(editor);
       return;
@@ -389,19 +440,36 @@ export function SelectionMenu({
     editor.commands.focus();
   };
 
+  /** The cursor went to something outside the menu and the text: the menu is done. */
+  const leaveField = (event: FocusEvent<HTMLInputElement>) => {
+    const next = event.relatedTarget;
+    if (!(next instanceof Element) || field.working.current) return;
+    const inside = frame.current?.contains(next) || editor.view.dom.contains(next);
+    if (!inside && !next.closest(".editor-popover")) hideMenu(editor);
+  };
+
+  const handOff = () => {
+    edit?.handOff?.(editor, field.text);
+    hideMenu(editor);
+  };
+
   return (
     <>
       <BubbleMenu
+        ref={frame}
         editor={editor}
         pluginKey={PLUGIN_KEY}
         updateDelay={50}
         shouldShow={shouldShow}
+        getReferencedVirtualElement={field.anchor}
         options={options}
         className="selection-menu-frame"
       >
+        {field.phase === "working" && edit && <EditWorking mindId={edit.mindId} />}
         <div
           ref={menu}
           role="menu"
+          hidden={field.phase === "working"}
           aria-label={t("editor.selection.label")}
           data-testid="selection-menu"
           onKeyDown={onMenuKeyDown}
@@ -541,7 +609,7 @@ export function SelectionMenu({
               <span aria-hidden="true">T×</span>
             </button>
           </div>
-          {shownAi.length > 0 && (
+          {(shownAi.length > 0 || (edit && state.editable)) && (
             <>
               <hr className="selection-rule" />
               {/* biome-ignore lint/a11y/useSemanticElements: a group of a menu's items, which a fieldset can't hold. */}
@@ -580,6 +648,16 @@ export function SelectionMenu({
                     {action.choices && <ChevronIcon className="size-4 text-ink-meta" />}
                   </button>
                 ))}
+                {edit && state.editable && (
+                  <EditField
+                    editor={editor}
+                    edit={edit}
+                    field={field}
+                    keys={shortcutLabel("composer.focus")}
+                    onLeave={leaveField}
+                    onHandOff={handOff}
+                  />
+                )}
               </div>
             </>
           )}

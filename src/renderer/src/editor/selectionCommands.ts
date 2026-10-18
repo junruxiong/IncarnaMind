@@ -220,3 +220,16 @@ export const LINK_EDIT = "link-edit";
 
 export const requestLinkEdit = (editor: Editor): boolean =>
   editor.view.dom.dispatchEvent(new CustomEvent(LINK_EDIT));
+
+/** What the editor's element is told when ⌘J asks for the Edit with AI field of the selection menu. */
+export const EDIT_FIELD = "edit-field";
+
+/**
+ * Asks the selection menu to take the cursor in its Edit with AI field, from
+ * the text or with the focus anywhere (`anywhere`). True when it did: it
+ * cancels the event, and doesn't when the menu can't open over the selection.
+ */
+export const requestEditField = (editor: Editor, anywhere = false): boolean =>
+  !editor.view.dom.dispatchEvent(
+    new CustomEvent(EDIT_FIELD, { cancelable: true, detail: { anywhere } }),
+  );

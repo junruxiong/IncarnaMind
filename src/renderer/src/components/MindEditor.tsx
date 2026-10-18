@@ -91,6 +91,7 @@ import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { TitleLine } from "../editor/titleLine";
 import { SmartTypography } from "../editor/typography";
+import type { EditWithAiField } from "../editor/useEditField";
 import { useVerification } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { useCountSettings, WordCount } from "../editor/WordCount";
@@ -115,7 +116,7 @@ import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useIsExample } from "./GettingStarted";
-import { CheckLineIcon, MineLineIcon, SearchLineIcon, SparkLineIcon } from "./lineIcons";
+import { CheckLineIcon, MineLineIcon, SearchLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
@@ -545,18 +546,32 @@ function MindEditorView({
         available: (current) => holdsAiText(current.state),
         run: (current) => void markSelectionAsMine(current),
       },
-      {
-        id: "edit",
-        label: "editor.ai.edit",
-        icon: <SparkLineIcon className="size-3.5" />,
-        keys: shortcutLabel("composer.focus"),
-        available,
-        run: (current) => {
-          if (startEditing(current, mindId)) useComposer.getState().requestFocus();
-        },
-      },
     ];
   }, [mindId, doc, hasDocuments]);
+
+  // The field at the foot of the selection menu asks as the assistant's composer would, so the
+  // change applies in place; its hand-off moves the request to that composer.
+  const editField = useMemo(
+    (): EditWithAiField => ({
+      mindId,
+      send: (current, instruction) =>
+        void requestEdit(current, mindId, doc, "instruction", instruction),
+      ...(reads && {
+        handOff(current: typeof editor, typed: string) {
+          if (!startEditing(current, mindId)) return;
+          const composer = useComposer.getState();
+          const draft = composer.draft(mindId).text;
+          if (typed.trim() !== "") {
+            composer.update(mindId, {
+              text: draft === "" ? typed.trim() : `${draft} ${typed.trim()}`,
+            });
+          }
+          composer.requestFocus();
+        },
+      }),
+    }),
+    [mindId, doc, reads],
+  );
 
   // When the language changes: relabel. Setting the props also redraws the placeholder,
   // and the footnotes' markers are named anew.
@@ -736,7 +751,7 @@ function MindEditorView({
         createPortal(<CompareSheet mindId={mindId} doc={doc} editor={editor} />, sheetSlot)}
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
-      {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}
+      {!readOnly && <SelectionMenu editor={editor} ai={aiActions} edit={editField} />}
       {!readOnly && <LinkBubble editor={editor} />}
       {findShown && <FindBar editor={editor} onClose={() => useMindTools.getState().hideFind()} />}
       {outlineShown && (

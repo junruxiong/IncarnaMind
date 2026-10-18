@@ -566,6 +566,8 @@ export const zhCN = {
   "editor.ai.translate": "翻译…",
   "editor.ai.explain": "解释",
   "editor.ai.edit": "用 AI 编辑…",
+  "editor.edit.handOff": "在助手中继续",
+  "editor.edit.handOff.tip": "在助手中继续，适合较长的要求",
   "editor.ai.markAsMine": "标为我写的",
   "editor.ai.findSupport": "查找出处",
   "editor.ai.checkAgainstDocuments": "对照文档核对",

@@ -575,6 +575,8 @@ export const en = {
   "editor.ai.translate": "Translate…",
   "editor.ai.explain": "Explain",
   "editor.ai.edit": "Edit with AI…",
+  "editor.edit.handOff": "Continue in the assistant",
+  "editor.edit.handOff.tip": "Continue in the assistant, for a longer request",
   "editor.ai.markAsMine": "Mark as mine",
   "editor.ai.findSupport": "Find support",
   "editor.ai.checkAgainstDocuments": "Check against Documents",
