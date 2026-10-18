@@ -3857,6 +3857,7 @@ export function createCore(adapters: CoreAdapters): Core {
       checks.stopAll();
       skillDrafts.stopAll();
       scriptRunner.close();
+      adapters.analysisRuntime?.close();
       approvals.close();
       connectors.close();
       tagger.close();

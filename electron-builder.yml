@@ -50,9 +50,17 @@ extraResources:
     to: citation-styles
     filter:
       - "**/*"
+  # What Analyses run with (ADR-0023): Pyodide's files, unmodified, and the wheels of numpy, pandas
+  # and what they depend on, which the build fetches into resources/python
+  # (scripts/pythonRuntime.ts), each checked against Pyodide's lock file. Their licences are in
+  # notices/python.txt.
+  - from: resources/python
+    to: python
+    filter:
+      - "**/*"
   # The licence notices: what the model catalog is generated from (scripts/catalogModels.ts),
-  # the citation-style engine's crates and where the CSL styles come from, and the Speex code the
-  # Meetings echo canceller is derived from.
+  # the citation-style engine's crates and where the CSL styles come from, the Speex code the
+  # Meetings echo canceller is derived from, and what Analyses run with.
   - from: resources/notices
     to: notices
     filter:
