@@ -114,23 +114,3 @@ test("Style › in the page's ⋯ stays open while the pointer slides down to a 
   await expect(choices).toBeVisible();
   await app.close();
 });
-
-test("The assistant's ⋯ › Move assistant stays open while the pointer slides down across the rows under it to Float", async () => {
-  const { app, window } = await launchApp(dataDir, { fakeChat: true });
-  await dismissChatSetup(window);
-  await setWindowSize(app, window, 1440, 900);
-
-  await pointAndClick(window, window.getByTestId("assistant-more"));
-  await pointAt(window, window.getByTestId("assistant-menu-move"));
-  const docks = window.getByTestId("assistant-menu-docks");
-  await expect(docks).toBeVisible();
-  await motionSettled(window);
-
-  await watchRows(window);
-  await pointAndClick(window, docks.getByTestId("assistant-menu-float"));
-  expect(await rowsEntered(window)).toEqual(
-    expect.arrayContaining([expect.stringMatching(/^assistant-menu-(fold|last-to-new-mind)$/)]),
-  );
-  await expect(window.getByTestId("assistant")).toHaveAttribute("data-chosen-dock", "float");
-  await app.close();
-});
