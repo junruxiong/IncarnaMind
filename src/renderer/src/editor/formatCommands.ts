@@ -70,7 +70,6 @@ function paragraphsOf(editor: Editor): Paragraph[] {
   return found;
 }
 
-/** The paragraph's Word look as the Mind draws it, if it draws one. */
 function lookOf(editor: Editor, node: ProseMirrorNode): WordParagraphLook | null {
   const doc = editorDoc(editor);
   const key: unknown = node.attrs[WORD_LOOK_ATTRIBUTE];
@@ -81,7 +80,6 @@ function lookOf(editor: Editor, node: ProseMirrorNode): WordParagraphLook | null
 const formatOf = (node: ProseMirrorNode) =>
   readParagraphFormat(node.attrs[PARAGRAPH_FORMAT_ATTRIBUTE]);
 
-/** Changes the format of each paragraph the selection touches; false when none changed. */
 function changeFormat(
   editor: Editor,
   change: (format: ParagraphFormat, look: WordParagraphLook | null) => ParagraphFormat,
@@ -99,9 +97,9 @@ function changeFormat(
   return true;
 }
 
-/** Whether a paragraph has space above or below it now, from its format, its look, or the Mind's. */
 const spaceBefore = (format: ParagraphFormat, look: WordParagraphLook | null) =>
   (format.before ?? look?.before ?? 0) > 0;
+// Without a Word look, the Mind's style puts space after every paragraph.
 const lookSpaceAfter = (look: WordParagraphLook | null) => (look ? (look.after ?? 0) > 0 : true);
 const spaceAfter = (format: ParagraphFormat, look: WordParagraphLook | null) =>
   format.after !== undefined ? format.after > 0 : lookSpaceAfter(look);
@@ -203,7 +201,6 @@ export function toggleSpaceAfter(editor: Editor): boolean {
   });
 }
 
-/** The text a mark goes on: the selection, or the caret's paragraphs as a whole. */
 function textRanges(editor: Editor): { from: number; to: number }[] {
   const { selection } = editor.state;
   if (!selection.empty)
@@ -241,7 +238,6 @@ function allHave(editor: Editor, name: string): boolean {
   return texts > 0 && marked === texts;
 }
 
-/** Sets a mark, with `attrs`, on the text; null takes it off. */
 function setMark(
   editor: Editor,
   type: MarkType | undefined,

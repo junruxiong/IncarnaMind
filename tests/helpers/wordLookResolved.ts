@@ -118,7 +118,7 @@ export function drawnParagraphs(blocks: readonly NodeJSON[], look: WordLook): st
           const runLook = typeof k === "string" ? (look.runs[k] ?? null) : null;
           return [child.text?.length ?? 0, withMarks(runLook, child.marks)];
         });
-      const drawn = entry || format ? withFormat(own, characterSize, format) : null;
+      const drawn = entry ? withFormat(own, characterSize, format) : null;
       hashes.push(short({ look: drawn, runs }));
     }
     for (const child of node.content ?? []) visit(child);

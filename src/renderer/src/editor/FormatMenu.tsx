@@ -114,7 +114,8 @@ function useMenuKeys(onClose: (refocus: boolean) => void, submenu: boolean) {
       return;
     }
     const all = itemsOf(menu.current);
-    const index = all.indexOf(document.activeElement as HTMLElement);
+    const active = document.activeElement;
+    const index = active instanceof HTMLElement ? all.indexOf(active) : -1;
     const step =
       event.key === "ArrowDown" || event.key === "ArrowRight"
         ? 1
@@ -211,9 +212,14 @@ export function FormatMenu({
         if (open.which === null) onClose(how === "escape");
       }}
       onKeyDown={(event) => {
-        if (event.key === "ArrowRight" && document.activeElement?.getAttribute("aria-haspopup")) {
+        const active = document.activeElement;
+        if (
+          event.key === "ArrowRight" &&
+          active instanceof HTMLElement &&
+          active.getAttribute("aria-haspopup")
+        ) {
           event.preventDefault();
-          (document.activeElement as HTMLElement).click();
+          active.click();
           return;
         }
         onKeyDown(event);

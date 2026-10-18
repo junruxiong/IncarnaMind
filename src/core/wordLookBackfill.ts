@@ -52,7 +52,12 @@ function givenValue(node: NodeJSON, name: string): string | object | null {
 }
 
 type LookChange =
-  | { kind: "attribute"; element: Y.XmlElement; name: string; value: string | object }
+  | {
+      kind: "attribute";
+      element: Y.XmlElement<Record<string, string | object>>;
+      name: string;
+      value: string | object;
+    }
   | {
       kind: "marks";
       text: Y.XmlText;
@@ -249,7 +254,6 @@ function editedParagraph(element: Y.XmlElement, node: NodeJSON, restyle: boolean
   if (restyle && key !== null && element.getAttribute(WORD_LOOK_ATTRIBUTE) === undefined) {
     changes.push({ kind: "attribute", element, name: WORD_LOOK_ATTRIBUTE, value: key });
   }
-  // The User's setting of a property wins over the file's.
   const own = readParagraphFormat(element.getAttribute(PARAGRAPH_FORMAT_ATTRIBUTE));
   const format = { ...readParagraphFormat(node.attrs?.[PARAGRAPH_FORMAT_ATTRIBUTE]), ...own };
   if (JSON.stringify(format) !== JSON.stringify(own)) {
@@ -269,12 +273,13 @@ function editedParagraph(element: Y.XmlElement, node: NodeJSON, restyle: boolean
   for (const child of element.toArray()) {
     if (!(child instanceof Y.XmlText)) continue;
     let at = 0;
-    for (const run of child.toDelta() as Delta) {
-      if (typeof run.insert !== "string") {
+    const delta: unknown = child.toDelta();
+    for (const run of Array.isArray(delta) ? delta : []) {
+      if (!isRecord(run) || typeof run.insert !== "string") {
         at += 1;
         continue;
       }
-      const has = new Set(Object.keys(run.attributes ?? {}));
+      const has = new Set(isRecord(run.attributes) ? Object.keys(run.attributes) : []);
       for (const char of run.insert) chars.push({ text: child, index: at++, char, has });
     }
   }
@@ -430,8 +435,7 @@ function fingerprintAgain(doc: Y.Doc, element: Y.XmlElement): void {
 export function applyLook(doc: Y.Doc, plan: LookPlan): void {
   for (const change of plan.changes) {
     if (change.kind === "attribute") {
-      const element: Y.XmlElement<Record<string, string | object>> = change.element;
-      element.setAttribute(change.name, change.value);
+      change.element.setAttribute(change.name, change.value);
     } else if (change.kind === "marks") {
       change.text.format(change.index, change.length, change.marks);
     } else if (change.kind === "source") {

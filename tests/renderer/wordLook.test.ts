@@ -28,7 +28,6 @@ async function editorOnImport() {
   return { editor: boundEditor(client), client };
 }
 
-/** What a paragraph draws with: its Word look, and its own format, where a file's direct formatting goes. */
 const lookOf = (node: ProseMirrorNode | undefined) => ({
   look: node?.attrs[WORD_LOOK_ATTRIBUTE] ?? null,
   format: node?.attrs[PARAGRAPH_FORMAT_ATTRIBUTE] ?? null,
@@ -59,6 +58,7 @@ describe("typing in a Mind imported from Word keeps the file's look", () => {
     const { editor } = await editorOnImport();
     const first = lookOf(editor.state.doc.child(0));
     expect(first.format).toEqual({ align: "center" });
+    expect(first.look).not.toBeNull();
     cursorAfter(editor, "bold");
     editor.commands.splitBlock();
     typeText(editor, "Typed");

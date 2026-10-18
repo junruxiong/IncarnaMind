@@ -36,19 +36,19 @@ function readLine(value: unknown): WordParagraphLook["line"] | undefined {
 /** A paragraph's format as stored; anything malformed is left out. */
 export function readParagraphFormat(value: unknown): ParagraphFormat {
   if (!isRecord(value)) return {};
-  const format: ParagraphFormat = {
-    align: oneOf(value.align, ALIGNS),
-    left: indent(value.left),
-    right: indent(value.right),
-    firstLine: indent(value.firstLine),
-    firstLineChars: characters(value.firstLineChars),
-    before: space(value.before),
-    after: space(value.after),
-    line: readLine(value.line),
+  const format: ParagraphFormat = {};
+  const set = <K extends keyof ParagraphFormat>(name: K, read: ParagraphFormat[K]) => {
+    if (read !== undefined) format[name] = read;
   };
-  return Object.fromEntries(
-    Object.entries(format).filter(([, each]) => each !== undefined),
-  ) as ParagraphFormat;
+  set("align", oneOf(value.align, ALIGNS));
+  set("left", indent(value.left));
+  set("right", indent(value.right));
+  set("firstLine", indent(value.firstLine));
+  set("firstLineChars", characters(value.firstLineChars));
+  set("before", space(value.before));
+  set("after", space(value.after));
+  set("line", readLine(value.line));
+  return format;
 }
 
 /** The value to store: null for a format that sets nothing, so the paragraph is as it was. */
