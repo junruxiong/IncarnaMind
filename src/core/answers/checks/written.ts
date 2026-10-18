@@ -30,6 +30,7 @@
  */
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
+import { SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
 import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import {
@@ -42,6 +43,7 @@ import {
   type ClaimCheckResult,
   type EditAction,
   type RecordAiUseInput,
+  type RunStop,
 } from "../../api";
 import type { PreparedChatModel } from "../../providers/chat";
 import { RunItemError, runItems } from "../../runs/stop";
@@ -49,9 +51,6 @@ import { type MarkJSON, type NodeJSON, syncContent, topLevelBlocks } from "../bl
 import { type ClaimCheckRequest, recordJudged, runFailureOf } from "./claimCheck";
 import { markSentence } from "./sentences";
 import type { CheckScope } from "./verify";
-
-/** The most sentences one write has checked: past it, a long draft would wait minutes and cost dozens of requests. */
-export const SENTENCES_CHECKED_AT_MOST = 12;
 
 const CLOUD_SENTENCES_AT_ONCE = 3;
 
@@ -100,8 +99,9 @@ export interface CheckWrittenInput {
 
 /**
  * What the check did: of the sentences with Citations (`cited`), how many it
- * sent, how many got a verdict and how many couldn't be checked; each part it
- * cut, as it named it; how many land marked. Its marks share `request`.
+ * sent, how many got a verdict and how many couldn't be checked, and what
+ * stopped it; each part it cut, as it named it; how many land marked. Its
+ * marks share `request`.
  */
 export interface WrittenCheck {
   request: string;
@@ -109,6 +109,7 @@ export interface WrittenCheck {
   sent: number;
   checked: number;
   failed: number;
+  stop: RunStop | null;
   cut: string[];
   unsupported: number;
   contradicted: number;
@@ -495,7 +496,7 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
     input.checking(sending.length);
     const request = randomUUID();
     const startedAt = options.now().toISOString();
-    const { outcomes } = await runItems(
+    const { outcomes, stop } = await runItems(
       sending,
       async (sentence) => {
         const result = await checkWithin(sentence, mindId, scope, prepared, signal);
@@ -518,6 +519,7 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
       sent: sending.length,
       checked: 0,
       failed: 0,
+      stop,
       cut: [],
       unsupported: 0,
       contradicted: 0,

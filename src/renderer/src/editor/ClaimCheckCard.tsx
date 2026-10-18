@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import type * as Y from "yjs";
 import { CITATION_NODE, type CitationAttributes, type ClaimCalculation } from "../../../core/api";
 import { shownDocumentName } from "../../../shared/citations";
+import { SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { savedPageSource } from "../../../shared/webSource";
@@ -391,9 +392,13 @@ function ClaimCard({
   const ownWorkings =
     state === "unsupported" && check.excluded.some((left) => left.reason === "own-workings");
   const cuttable = fixes && uncoveredOf(claim) !== null;
+  const pastCap = shown.state === "not-checked" && shown.reason === "too-many";
   const reason =
     shown.state === "not-checked"
-      ? t(`claim.reason.${shown.reason}`, { detail: check.detail ?? "" })
+      ? t(`claim.reason.${shown.reason}`, {
+          detail: check.detail ?? "",
+          cap: SENTENCES_CHECKED_AT_MOST,
+        })
       : shown.state === "needs-recheck"
         ? t(`claim.recheck.${shown.why}`)
         : null;
@@ -498,7 +503,25 @@ function ClaimCard({
           </button>
         </p>
       )}
-      {reason && (
+      {reason && pastCap && (
+        <div className="citation-card-note">
+          <MetaLine
+            data-testid="claim-reason"
+            parts={[
+              reason,
+              <LineAction
+                key="now"
+                action={{
+                  label: t("claim.checkNow"),
+                  testId: "claim-check-now",
+                  onClick: () => onCheckAgain(),
+                }}
+              />,
+            ]}
+          />
+        </div>
+      )}
+      {reason && !pastCap && (
         <p data-testid="claim-reason" className="citation-card-note">
           {reason}
         </p>
@@ -633,7 +656,7 @@ function ClaimCard({
             {t("claim.removeMark")}
           </button>
         )}
-        {(state === "needs-recheck" || (state === "not-checked" && added === 0)) && (
+        {(state === "needs-recheck" || (state === "not-checked" && added === 0 && !pastCap)) && (
           <button
             type="button"
             data-testid="claim-check-again"
