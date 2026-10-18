@@ -734,7 +734,7 @@ export function createConversations(db: Database, now: () => string) {
         throw new InvalidInputError("A forced Skill must be a Skill's name.");
       }
       if (analyse !== undefined && typeof analyse !== "boolean") {
-        throw new InvalidInputError("analyse must be true or false.");
+        throw new InvalidInputError({ key: "error.question.analyseChoice" });
       }
       return {
         conversationId:
