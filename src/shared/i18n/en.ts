@@ -4644,7 +4644,7 @@ export const en = {
   "answer.writtenFrom": "From {count} of your {total} Documents (this Mind's scope)",
   "answer.writtenFrom.useAll": "Use all",
   "command.answer.useAll": "Write the reply again from all Documents",
-  "command.answer.useAll.unavailable": "This reply was written from all your Documents",
+  "command.answer.useAll.unavailable": "Only for a reply written from some of your Documents",
   "mindChanges.unlinked": "· {count} sources shown as text, not linked",
   "mindChanges.unlinked.one": "· 1 source shown as text, not linked",
   "mindChanges.dropped": "· {count} sources couldn't be matched, so they were left out",

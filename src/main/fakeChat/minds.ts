@@ -20,14 +20,13 @@
  * slowly for a Question asked "slowly", as does edit_mind's edit. "Write three
  * paragraphs" is `paragraphsReply`'s. "Write a summary page" (写一个总结页面)
  * calls create_mind with a short summary. "Write a summary of my leases"
- * (根据我的租约写一份总结) searches, then calls create_mind naming the Documents
- * it found, so what it was written from shows (#1149).
+ * (根据我的租约写一份总结) calls create_mind naming the Documents in its scope,
+ * so what it was written from shows (#1149).
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
 import { ASSISTANT_REPLACES } from "./appliedEdits";
 import { paragraphsReply } from "./paragraphs";
-import { passagesIn } from "./passages";
 import {
   lastQuestion,
   lastResult,
@@ -35,6 +34,7 @@ import {
   type Prompt,
   type Reply,
   SHORTEN,
+  systemOf,
   toolResults,
   userText,
 } from "./prompt";
@@ -146,9 +146,8 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
   if (LEASES_SUMMARY.test(question)) {
     const made = lastResult(prompt, "create_mind");
     if (made !== undefined) return { text: firstSentence(made) };
-    const [searched] = toolResults(prompt, "search_documents");
-    if (searched === undefined) return { tool: "search_documents", input: { query: "lease rent" } };
-    const names = [...new Set(passagesIn(searched).map((passage) => passage.document))].sort();
+    const listed = /^Their names, newest first:\n((?:- .+\n?)+)/m.exec(systemOf(prompt))?.[1] ?? "";
+    const names = [...listed.matchAll(/^- (.+)$/gm)].map((line) => line[1]).sort();
     const content = `Written from ${names.join(", ")}.`;
     return { tool: "create_mind", input: { title: "Summary", content } };
   }
