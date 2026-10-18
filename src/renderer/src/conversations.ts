@@ -9,6 +9,7 @@ import type {
 import { conversationName } from "../../shared/naming";
 import { settleAsk, useAnswers } from "./answers";
 import { applyWhatWasAsked } from "./askedChanges";
+import { watchCommands } from "./assistantCommands";
 import { watchMindsMadeBy } from "./assistantMinds";
 import { composerKey, useComposer } from "./composer";
 import { core } from "./core";
@@ -189,6 +190,7 @@ export async function askInAssistant(
     if (!result.asked) return false;
     watchMindsMadeBy(result.answerId);
     applyWhatWasAsked(result.answerId);
+    watchCommands(result.answerId);
     const id = result.conversation.id;
     if (useConversations.getState().stopWanted) {
       core.stopConversationAnswer({ conversationId: id, answerId: result.answerId }).catch(report);
@@ -247,6 +249,7 @@ export async function regenerateAnswer(
   try {
     watchMindsMadeBy(answerId);
     applyWhatWasAsked(answerId, { keepWritten: clearScope });
+    watchCommands(answerId);
     settleAsk(
       answerId,
       await core.regenerateConversationAnswer({

@@ -194,7 +194,7 @@ function AppliedActions({
   );
 }
 
-const Dot = () => (
+export const Dot = () => (
   <span aria-hidden="true" className="mind-changes-dot">
     {" · "}
   </span>

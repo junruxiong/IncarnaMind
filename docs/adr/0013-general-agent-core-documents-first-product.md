@@ -105,3 +105,18 @@ An edit the User asks for applies at once, with one Undo and a line over it sayi
 ## Amendment, 2026-10-18: model-written code in a sandbox runs without asking (ADR-0023)
 
 Code a model writes for an analysis runs in Pyodide, in a hidden, sandboxed renderer with no network, no Node and no files (ADR-0023). That is a new Effect scope, **sandboxed code**, which runs without asking. It needs no ask because its only inputs are values cited from the Documents, which reading already does without asking, and it can neither write a file nor send anything. The OS sandbox's levels above stay as they are for the processes a Tool starts; this sandbox is Chromium's, and runs on Windows too.
+
+## Amendment, 2026-10-18: the assistant runs the app's commands (#1110)
+
+The assistant can do what the User does with the app's commands. A **Commands** Tool provider gives an Answer in the assistant two Tools: `list_commands` finds the Documents or Minds a command would act on, and `run_command` runs one command on what it found, by id. It matches exactly, by words in a name, a Tag or a Folder, never by meaning. A command added later needs no new Tool, only its mark.
+
+- **Only commands marked for the assistant run** (`ASSISTANT_COMMANDS`, keyed by the command list's ids, and `documents.add` for the Add Documents button, which isn't in ⌘K). An unmarked command is off. The marked ones rename, move to a Folder, tag, delete to Recently deleted, export a Mind, and add files from a folder. No mark is ever given to a command that changes consent, Local mode, keys, sign-ins, approval policies or Privacy, or that deletes for good.
+- **The core runs them**, through its own public interface, as the window's clicks do. The renderer's command list stays the window's.
+- **Effects come from each command's own metadata.** An in-app change is a write on the Library, a new scope. Export is a write to the Output location, a new scope the User chose for new files, or to the folder named. Adding files is a read of that folder plus a write on the Library.
+- **Approvals by Effect.**
+  - In-app changes run at once, and the undo line says what changed. A Run's changes are one step of Undo, kept for the session (`undoCommands`).
+  - Export into the Output location also runs at once: it adds a new file where the User chose new files to go.
+  - Export to any other folder, and reading a folder's files, ask every time. The User can Allow or Don't allow, never "always", whatever the Run read. A folder read lists the files right in that folder, of the kinds asked for, and reads nothing a link leads to outside it.
+  - None of the marked commands sends anything off the computer. A later one that does asks the same way.
+- **Reported from results.** The card under the reply says only what each `run_command` call returned, including the failed and the denied ones.
+- **Not for every Run.** Check Runs and outside agents aren't offered them.

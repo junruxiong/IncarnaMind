@@ -37,3 +37,34 @@ export const MENU_COMMANDS = {
 } as const satisfies Record<CommandId, { label: MessageKey; keys: Keys | undefined }>;
 
 export type MenuCommandId = keyof typeof MENU_COMMANDS;
+
+/**
+ * What a command the assistant runs does, which decides whether it asks the User first
+ * (ADR-0013, amended for #1110): "app", a change inside IncarnaMind that Undo takes back, runs
+ * at once; "export" saves a Mind as a file, at once in the Output location and asking anywhere
+ * else; "add" reads a folder's files and adds them to the Library, asking first.
+ */
+export type AssistantEffect = "app" | "export" | "add";
+
+/**
+ * The commands of the list the assistant may run for the User (#1110), and what each does. A
+ * command not here is never offered to it: nothing that changes consent, Local mode, keys,
+ * sign-ins, approvals or Privacy settings, and nothing that deletes for good (a delete goes to
+ * Recently deleted, as the User's own does).
+ */
+export const ASSISTANT_COMMANDS = {
+  "document.rename": { on: "document", does: "app" },
+  "document.moveTo": { on: "document", does: "app" },
+  "document.tags": { on: "document", does: "app" },
+  "document.delete": { on: "document", does: "app" },
+  "mind.rename": { on: "mind", does: "app" },
+  "mind.moveTo": { on: "mind", does: "app" },
+  "mind.delete": { on: "mind", does: "app" },
+  "mind.export": { on: "mind", does: "export" },
+  "documents.add": { on: "library", does: "add" },
+} as const satisfies Record<
+  CommandId,
+  { on: "document" | "mind" | "library"; does: AssistantEffect }
+>;
+
+export type AssistantCommandId = keyof typeof ASSISTANT_COMMANDS;
