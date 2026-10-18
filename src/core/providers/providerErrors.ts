@@ -1,6 +1,11 @@
 import { APICallError, RetryError, UnsupportedFunctionalityError } from "ai";
 import type { ProviderError, ProviderErrorKind, SignInRouteProblem } from "../api";
-import { ConsentDeclinedError, TranslatableError } from "../errors";
+import {
+  ConsentDeclinedError,
+  ConsentRevokedError,
+  LocalModeError,
+  TranslatableError,
+} from "../errors";
 import { OAuthTokenError } from "../oauth";
 import { ChatGptPlanError, ChatGptSignInRequiredError } from "./chatgpt/errors";
 import { JevRequestError } from "./jev";
@@ -165,6 +170,13 @@ export function classifyProviderError(error: unknown): ProviderError {
   const message = messageOf(cause);
 
   if (cause instanceof ConsentDeclinedError) return { kind: "consent-declined", message };
+  if (cause instanceof ConsentRevokedError || cause instanceof LocalModeError) {
+    return {
+      kind: cause instanceof LocalModeError ? "local-mode" : "consent-revoked",
+      message,
+      ...(cause.wording && { wording: cause.wording }),
+    };
+  }
   if (cause instanceof LocalModelError) return { kind: cause.kind, message };
   if (cause instanceof OllamaNotRunningError) {
     return {

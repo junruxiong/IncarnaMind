@@ -1856,6 +1856,7 @@ export const en = {
   "providers.test.network": "Couldn't reach the server. Check its URL and your connection.",
   "providers.test.provider": "The provider returned an error.",
   "providers.test.local-mode": "Not sent: “Keep everything on this computer” is on.",
+  "providers.test.consent-revoked": "Not sent: you turned off sending to this service.",
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
   "providers.test.too-long": "The model's context window is too small for even a short request.",
@@ -2460,7 +2461,8 @@ export const en = {
   "answer.error.network": "Couldn't reach {service}. Check your internet connection",
   "answer.error.provider": "{service} ran into a problem",
   "answer.error.consent-declined": "Nothing was sent: you chose not to send data to this service",
-  "answer.error.local-mode": "Stopped: “Keep everything on this computer” is on",
+  "answer.error.local-mode": "Stopped: everything stays on this computer",
+  "answer.error.consent-revoked": "Stopped: you turned off sending to {service}",
   "answer.error.useLocal": "Use a local model",
   "answer.error.ollama-not-running": "Ollama isn't running on this computer",
   "answer.error.too-long":
@@ -3431,6 +3433,8 @@ export const en = {
   "error.secrets.unencrypted": "This system can't encrypt API keys, so they can't be saved.",
   "error.consent.declined": "You declined sending data to {service}, so nothing was sent.",
   "error.consent.needed": "Waiting until you allow sending data to {service}. Nothing was sent.",
+  "error.consent.revoked": "Stopped: you turned off sending to {service}",
+  "error.localMode.stopped": "Stopped: everything stays on this computer",
   "error.connector.notFound": "That Connector doesn't exist.",
   "error.connector.nameEmpty": "A Connector's name can't be empty.",
   "error.connector.nameTooLong": "A Connector's name can't be longer than {max} characters.",
@@ -4618,6 +4622,10 @@ export const en = {
   "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
   "mindCall.failed.uncited": "Didn't add to “{mind}”: its sources weren't cited",
   "mindCall.failed.newMind": "Didn't add to “{mind}”: a new Mind was asked for",
+  "answer.writtenFrom": "From {count} of your {total} Documents (this Mind's scope)",
+  "answer.writtenFrom.useAll": "Use all",
+  "command.answer.useAll": "Write the Answer again from all Documents",
+  "command.answer.useAll.unavailable": "Only for an Answer written from some of your Documents",
   "mindChanges.unlinked": "· {count} sources shown as text, not linked",
   "mindChanges.unlinked.one": "· 1 source shown as text, not linked",
   "mindChanges.dropped": "· {count} sources couldn't be matched, so they were left out",
@@ -4940,4 +4948,10 @@ export const en = {
   "wordAtom.kind.header": "Header",
   "wordAtom.kind.footer": "Footer",
   "wordAtom.kind.other": "Word content",
+  "analysis.unavailable.missing":
+    "Analysis can't run on this computer: some of its files are missing. Installing IncarnaMind again puts them back.",
+  "analysis.unavailable.start": "Analysis can't run on this computer: its sandbox couldn't start.",
+  "analysis.unavailable.noSandbox": "Analyses need the app's sandbox, which is off",
+  "analysis.unavailable.noSandbox.fix": "How to fix",
+  "analysis.crashed": "The analysis stopped unexpectedly. Run it again.",
 } as const satisfies Record<string, string>;

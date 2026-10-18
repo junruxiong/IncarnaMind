@@ -54,7 +54,13 @@ import {
   type WritingPlace,
 } from "../api";
 import type { Consent } from "../consent";
-import { ChatNotReadyError, ConsentDeclinedError, InvalidInputError, isRecord } from "../errors";
+import {
+  ChatNotReadyError,
+  ConsentDeclinedError,
+  InvalidInputError,
+  isRecord,
+  LocalModeError,
+} from "../errors";
 import type { MindContent } from "../mindContent";
 import { parseMindId } from "../minds";
 import { docOf, forkChanges } from "../proposals/merge";
@@ -80,6 +86,7 @@ import {
 } from "../proposals/write";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
+import { gateStop } from "../sendGate";
 import { asksToRemove, waitsForUser } from "./applies";
 import {
   EDIT_INSTRUCTIONS,
@@ -90,6 +97,11 @@ import {
   reasonOf,
   sameText,
 } from "./prompt";
+
+const failedEdit = (failure: unknown): EditWithAiResult =>
+  gateStop(failure) instanceof LocalModeError
+    ? { kind: "local-mode" }
+    : { kind: "failed", error: classifyProviderError(failure) };
 
 // The whole passage deleted, as `asksToRemove` reads a part named: "Remove it", "Delete the part
 // about pensions". Never a shortening ("Cut it down to two sentences").
@@ -481,6 +493,7 @@ export function createEdits(options: EditsOptions) {
     try {
       prepared = await chat.prepareModel(choice ?? undefined, "edits");
     } catch (error) {
+      if (error instanceof LocalModeError) return { kind: "local-mode" };
       if (error instanceof ChatNotReadyError)
         return { kind: "not-ready", readiness: error.readiness };
       if (error instanceof ConsentDeclinedError) {
@@ -665,7 +678,7 @@ export function createEdits(options: EditsOptions) {
     }
     if (failure !== null && !refused) {
       takeBackWritten();
-      return ended({ kind: "failed", error: classifyProviderError(failure) });
+      return ended(failedEdit(failure));
     }
     const reply = readEditReply(raw, selection.text);
     // No text back removes the passage only when that is what was asked; otherwise its reason
@@ -828,7 +841,7 @@ export function createEdits(options: EditsOptions) {
       }
       if (input.signal.aborted) return nothing({ kind: "cancelled" });
       if (streamed.failure !== null) {
-        return nothing({ kind: "failed", error: classifyProviderError(streamed.failure) });
+        return nothing(failedEdit(streamed.failure));
       }
       const reply = readEditReply(streamed.raw, selection.text);
       if (sameText(reply, selection.text)) return nothing({ kind: "unchanged" });
