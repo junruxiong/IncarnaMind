@@ -29,7 +29,7 @@
   <!-- 第一个版本发布后，加上：<a href="https://github.com/IncarnaMind/IncarnaMind/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/IncarnaMind/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示六个界面：在 Mind 里选中草稿的两句话，菜单里有“对照文档核对”；同一篇草稿核对后，页边每句话一个标记（有依据、无依据、与文档矛盾），页面角落的核对标记列出各项数量；在 Mind 旁打开一条引用，PDF 页面上高亮着引文；用“核对文档…”打开一份别人写的贷款人季度更新，显示“核对 8 条说法”；这些说法核对完毕，其中一条与贷款协议矛盾，卡片写明文档里的原话；以及中文界面下核对过的草稿。"></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示六个界面：Mind 里的一篇草稿，选中了两句话，选区菜单里有“对照文档核对”；同一篇草稿核对后，页边每句话一个标记（与文档矛盾、有依据、无依据），页面角落的核对标记列出各项数量；在 Mind 旁打开一条引用，PDF 页面上高亮着引文；别人写的一份贷款人季度更新，在文字旁打开核对，显示“核对 8 条说法”；核对结果中有一条说法与贷款协议矛盾，卡片写明文档里的原话；以及中文界面下核对过的草稿。"></p>
 
 <p align="center"><sub>图中展示的功能现在都能用。</sub></p>
 
