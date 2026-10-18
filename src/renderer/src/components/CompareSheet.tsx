@@ -262,6 +262,9 @@ export function CompareSheet({
                     aria-label={t("comparison.sheet.removeQuestion", {
                       question: question || String(index + 1),
                     })}
+                    title={t("comparison.sheet.removeQuestion", {
+                      question: question || String(index + 1),
+                    })}
                     onClick={() => setQuestions(questions.filter((_, at) => at !== index))}
                   >
                     <RemoveIcon className="size-3" />

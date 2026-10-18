@@ -35,8 +35,30 @@ async function unnamedControls(window: Page): Promise<string[]> {
   );
 }
 
-const expectNamed = async (window: Page, where: string) =>
+/** Visible buttons that hold no text, only an icon, and say nothing in a tooltip. */
+const untitledIcons = (window: Page) =>
+  window.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("button, [role=button]")]
+      .filter(
+        (each) =>
+          each.getClientRects().length > 0 &&
+          (each.textContent ?? "").trim() === "" &&
+          each.getAttribute("title") === null &&
+          each.closest("[aria-hidden=true]") === null &&
+          each.closest("[popover]:not(:popover-open)") === null,
+      )
+      .map(
+        (each) =>
+          each.getAttribute("data-testid") ??
+          each.getAttribute("aria-label") ??
+          each.outerHTML.slice(0, 80),
+      ),
+  );
+
+const expectNamed = async (window: Page, where: string) => {
   expect(await unnamedControls(window), `controls with no name: ${where}`).toEqual([]);
+  expect(await untitledIcons(window), `icon buttons with no tooltip: ${where}`).toEqual([]);
+};
 
 for (const language of ["en", "zh-CN"] as const) {
   test(`every control on the first screens, an Answer and each Settings page has a name (${language})`, async () => {

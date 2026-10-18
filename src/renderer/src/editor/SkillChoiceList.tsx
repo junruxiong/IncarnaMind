@@ -84,8 +84,8 @@ export function SkillChoiceList({
       onResearch?.();
       return;
     }
-    const name = nameOf(index);
-    if (name) onChoose(name);
+    const id = shown[index]?.id;
+    if (id?.startsWith("skill-")) onChoose(id.slice("skill-".length));
   };
 
   useEffect(() => {
