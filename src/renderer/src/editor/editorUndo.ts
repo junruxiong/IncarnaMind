@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
+import type { WordsInLine } from "../lineNames";
 import { type Undoable, useUndo } from "../undo";
 
 type StackEvent = "stack-item-added" | "stack-item-popped";
@@ -48,12 +49,12 @@ export function asOneStep<T>(editor: Editor, change: () => T): T {
  * 2 changes · Undo", or under an Answer with `shownAt`). Once the User edits
  * again, takes it back in the note, or closes the note, it leaves the stack.
  */
-export function offerEditorUndo(editor: Editor, message: string, shownAt?: string): void {
+export function offerEditorUndo(editor: Editor, said: WordsInLine, shownAt?: string): void {
   const manager = undoStackOf(editor);
   const step = manager?.undoStack.at(-1);
   if (!manager || step === undefined) return;
   const change: Undoable = {
-    message,
+    said,
     undo: async () => {
       if (!editor.isDestroyed && manager.undoStack.at(-1) === step) editor.commands.undo();
     },

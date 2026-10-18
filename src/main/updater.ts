@@ -8,8 +8,9 @@
  *   with a Developer ID), it downloads in the background and installs when the User quits.
  *   Once it's downloaded, the User can restart to install it straight away.
  * - An unsigned macOS build can't install updates: Squirrel.Mac refuses to update an app
- *   that isn't signed with a Developer ID. The User is told that a new version is out
- *   and offered its download page instead.
+ *   that isn't signed with a Developer ID. The Linux .deb doesn't either: electron-updater
+ *   installs it as root through `pkexec bash -c 'dpkg -i …'` (#1178). In both, the User is
+ *   told that a new version is out and offered its download page instead.
  *
  * The check sends nothing of the User's, so it needs no consent; the Privacy page lists
  * it, and the User can turn automatic checks off there. They are on by default.
@@ -58,7 +59,7 @@ async function checkForUpdates(core: SettingsSource): Promise<void> {
   autoUpdater.autoDownload = installable;
   autoUpdater.autoInstallOnAppQuit = installable;
 
-  // Null when the updater is inactive, e.g. on Linux outside an AppImage.
+  // Null when the updater is inactive, e.g. on Linux outside an AppImage and a .deb.
   const result = await autoUpdater.checkForUpdates();
   if (!result?.isUpdateAvailable) return;
   const { version } = result.updateInfo;
@@ -76,8 +77,12 @@ async function checkForUpdates(core: SettingsSource): Promise<void> {
   if (await ask(language, "ready", version)) autoUpdater.quitAndInstall();
 }
 
-/** Squirrel.Mac only installs updates into an app signed with a Developer ID. */
+/**
+ * Squirrel.Mac only installs updates into an app signed with a Developer ID, and on Linux only
+ * an AppImage replaces itself (the AppImage runtime sets APPIMAGE).
+ */
 function canInstallUpdates(): Promise<boolean> {
+  if (process.platform === "linux") return Promise.resolve(Boolean(process.env.APPIMAGE));
   if (process.platform !== "darwin") return Promise.resolve(true);
   // …/IncarnaMind.app/Contents/MacOS/IncarnaMind → …/IncarnaMind.app
   const bundle = resolve(process.execPath, "../../..");

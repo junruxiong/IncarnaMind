@@ -5,6 +5,7 @@
  * with a scripted model: no network.
  */
 import { join } from "node:path";
+import { APICallError } from "ai";
 import { describe, expect, test, vi } from "vitest";
 import { type Core, DATABASE_FILE, type Document } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
@@ -254,5 +255,47 @@ describe("turning on Organize filing new Documents by itself", () => {
 
     await waitForTagging(second, [document.id]);
     expect(chat.purposesFor("first report")).toEqual(["tags"]);
+  });
+});
+
+describe("with Organize filing new Documents by itself, a Document the tagger holds", () => {
+  const wrongKey = () =>
+    new APICallError({
+      message: "Invalid API key",
+      url: "https://api.example.com/v1/messages",
+      requestBodyValues: {},
+      statusCode: 401,
+      isRetryable: false,
+    });
+
+  test("shows its failure, and Retry tags it without filing it", async () => {
+    const { core, chat, save } = await start(false);
+    chat.fail(wrongKey());
+    const [held] = await add(core, { "One.txt": "The first report, about revenue." });
+    if (!held) throw new Error("Nothing was added.");
+    await waitForTagging(core, [held.id], (each) => each.tagging === "failed");
+
+    await save(true);
+    const [failed] = await waitForTagging(core, [held.id], (each) => each.tagging === "failed");
+    expect(failed?.taggingError).toMatchObject({ kind: "auth" });
+
+    chat.fail(null);
+    await core.retagDocuments([held.id]);
+    await waitForTagging(core, [held.id]);
+    expect(chat.calls.at(-1)?.purpose).toBe("tags");
+    expect(await assignmentsOf(core)).toEqual([]);
+  });
+
+  test("a Document Organize holds is re-tagged and filed by Organize", async () => {
+    const { core, chat, reports } = await start(true);
+    const [document] = await add(core, { "One.txt": "The first report, about revenue." });
+    if (!document) throw new Error("Nothing was added.");
+    await filed(core, [document.id], reports.id);
+    const before = chat.calls.length;
+
+    await core.retagDocuments([document.id]);
+
+    await vi.waitFor(() => expect(chat.calls.length).toBe(before + 1));
+    expect(chat.calls.at(-1)?.purpose).toBe("organize");
   });
 });

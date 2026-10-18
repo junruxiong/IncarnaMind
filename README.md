@@ -51,7 +51,7 @@ Windows releases will be signed through the SignPath Foundation's free signing f
 
 - **Windows** says "Windows protected your PC": the installer isn't code-signed yet. Click **More info**, then **Run anyway**.
 - **macOS** says it can't verify IncarnaMind: until the app is notarized, open it once and click **Done**, then **System Settings → Privacy & Security → Open Anyway**. Or run `xattr -dr com.apple.quarantine /Applications/IncarnaMind.app`. An unsigned Mac app can't update itself: IncarnaMind tells you when a new version is out and offers its download page.
-- **Linux**: run `chmod +x IncarnaMind-*.AppImage`. On Ubuntu 22.04 or later, also `sudo apt install libfuse2` (`libfuse2t64` on 24.04 and later).
+- **Linux**: the .deb for Ubuntu and Debian (recommended), or the AppImage. On Ubuntu 24.04 and later, the AppImage runs without the app's sandbox. To open the AppImage, run `chmod +x IncarnaMind-*.AppImage`. On Ubuntu 22.04 or later, also `sudo apt install libfuse2` (`libfuse2t64` on 24.04 and later).
 
 </details>
 

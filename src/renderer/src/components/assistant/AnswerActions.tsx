@@ -4,6 +4,7 @@ import { copyAnswer } from "../../answerEditors";
 import { shortcutLabel } from "../../commands/keymap";
 import { useDismissOnEscape } from "../../escapeDismiss";
 import { useT } from "../../i18n";
+import { saidInLine } from "../../lineNames";
 import { useAppStore } from "../../store";
 import { useAnswerLine, useUndo } from "../../undo";
 import { CheckLineIcon, ChevronDownLineIcon, CopyLineIcon, PlusLineIcon } from "../lineIcons";
@@ -62,21 +63,22 @@ export function AnswerActions({
   if (streaming) return <WritingLine />;
 
   if (added) {
+    const said = saidInLine(t, added.said);
     return (
       <div
         data-testid="answer-added"
         className="assistant-answer-actions assistant-answer-actions--added"
       >
         <CheckLineIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-secondary" />
-        <span role="status" title={added.fullMessage} className="assistant-answer-added">
-          {added.message}
+        <span role="status" title={said.fullMessage} className="assistant-answer-added">
+          {said.message}
         </span>
         <span aria-hidden="true">·</span>
         <button
           ref={undoButton}
           type="button"
           data-testid="answer-added-undo"
-          aria-label={t("move.undoLabel", { message: added.fullMessage ?? added.message })}
+          aria-label={t("move.undoLabel", { message: said.fullMessage ?? said.message })}
           onClick={() => {
             useUndo
               .getState()

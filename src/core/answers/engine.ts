@@ -117,6 +117,7 @@ import {
   withPassageNotes,
 } from "./prompt";
 import { retryQuotes } from "./quoteRetry";
+import { heldBackFrom, TOOL_TEXT_TAGS, takeToolText } from "./toolText";
 import { claimsOf, createNudges, settleReply, type TurnCheck } from "./turnChecks";
 import { citeUnmarked } from "./unmarkedQuotes";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
@@ -1603,7 +1604,9 @@ async function* toolLoop(
     yield { type: "text-delta", text: text.slice(released, end) };
     released = end;
   }
-  const releasable = (text: string) => request.shownUpTo?.(text) ?? text.length;
+  const toolTextTags = [...new Set([...TOOL_TEXT_TAGS, ...offered.keys()])];
+  const releasable = (text: string) =>
+    Math.min(request.shownUpTo?.(text) ?? text.length, heldBackFrom(text, toolTextTags));
   function* flag(text: string): Generator<AnswerEngineEvent> {
     const claims = claimsOf(request.turnChecks ?? [], text);
     if (claims.length > 0) yield { type: "claims-unbacked", claims };
@@ -1790,9 +1793,23 @@ async function* toolLoop(
         return;
       case "finished": {
         if (keptText.trim() === "" && unmarked.trim() !== "") keptText = unmarked;
-        const settled = settleReply(request.turnChecks ?? [], keptText, nudges);
+        const taken = takeToolText(keptText, toolTextTags);
+        if (mode === "tools" && !request.documents.wroteIntoMind?.()) {
+          const records = parseRecords(taken.records).filter(
+            ({ marker }) => !request.documents.hasRecord?.(marker),
+          );
+          cited.push(...records);
+          try {
+            request.documents.cite(records, { structured: true });
+          } catch (error) {
+            console.error(
+              `The Citations written as text couldn't be recorded: ${messageOf(error)}`,
+            );
+          }
+        }
+        const settled = settleReply(request.turnChecks ?? [], taken.text, nudges);
         if ("nudge" in settled) {
-          standing = keptText;
+          standing = taken.text;
           if (released > 0) yield { type: "text-retracted", length: released };
           released = 0;
           keptText = "";
@@ -1801,6 +1818,11 @@ async function* toolLoop(
           unmarked = "";
           again = [...event.messages, { role: "user", text: settled.nudge }];
           break;
+        }
+        if (taken.text !== keptText) {
+          yield* textEdits(keptText.slice(0, released), taken.text);
+          keptText = taken.text;
+          released = keptText.length;
         }
         yield* release(keptText.length);
         if (settled.claims.length > 0) yield { type: "claims-unbacked", claims: settled.claims };
@@ -1910,7 +1932,7 @@ async function* structured(
   } catch (error) {
     console.error(`The Citations couldn't be recorded: ${messageOf(error)}`);
   }
-  yield* emit(answer);
+  yield* emit(typeof answer === "string" ? takeToolText(answer).text : answer);
   if (typeof answer === "string") {
     // A small model often gives the records but leaves their markers out.
     const marked = yield* missingMarkerEvents(emitted, records, request.documents);
@@ -1985,6 +2007,8 @@ async function* plain(
     return;
   }
   if (signal.aborted) return;
-  yield* flagClaims(request, produced);
+  const written = takeToolText(produced).text;
+  yield* textEdits(produced, written);
+  yield* flagClaims(request, written);
   yield { type: "finished" };
 }
