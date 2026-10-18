@@ -36,6 +36,11 @@ jobs:
             sleep 20
           done
           exit 1
+      - name: Let Electron's sandbox start
+        if: runner.os == 'Linux'
+        run: |
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
       - run: npx electron-vite build --mode test
       - name: Smoke (Linux)
         if: runner.os == 'Linux'

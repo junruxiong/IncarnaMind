@@ -15,7 +15,7 @@ const python = (code: string): AnalysisJob => ({ language: "python", code, input
 test("times", async () => {
   test.setTimeout(300_000);
   const dataDir = await createDataFolder();
-  const { app } = await launchApp(dataDir);
+  const { app } = await launchApp(dataDir, { sandboxed: true });
   const memory = () =>
     app.evaluate(({ app: electron, webContents }) => {
       const page = webContents

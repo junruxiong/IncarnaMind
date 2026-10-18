@@ -148,6 +148,12 @@ export interface LaunchOptions {
    * Folder's Minds (#112), instead of 30 seconds. Needs a test build.
    */
   contradictionWatchDelayMs?: number;
+  /**
+   * Starts Electron with Chromium's sandbox on Linux too, as the User's app runs: Playwright
+   * starts it with --no-sandbox there otherwise, and Analyses don't run without the sandbox.
+   * CI's Linux runners give Electron's sandbox helper the rights it needs (ci.yml).
+   */
+  sandboxed?: boolean;
 }
 
 /**
@@ -207,6 +213,7 @@ export async function launchApp(
     lookLimit,
     scriptedTasks = false,
     contradictionWatchDelayMs,
+    sandboxed = false,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -276,7 +283,7 @@ export async function launchApp(
   env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
   if (transcriber) env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS = JSON.stringify(transcriber);
 
-  const app = await electron.launch({ args: [appDir], env });
+  const app = await electron.launch({ args: [appDir], env, chromiumSandbox: sandboxed });
   openApps.set(app, dataDir);
   app.on("close", () => {
     openApps.delete(app);

@@ -4,6 +4,8 @@ status: accepted (2026-10-18)
 
 # Python analysis runs in Pyodide, in a sandboxed hidden window
 
+**Amended 2026-10-18 (#446's review): each job runs in a fresh interpreter, with one spare kept ready.** A warm interpreter shared by every job let one job change what the next ran with: Python's modules, pandas and the helper, and the rows it had read. Below, "A fresh interpreter for each job" replaces "One Worker", and the measurements are taken again.
+
 Analysts ask questions about spreadsheets and CSV files, such as "revenue by region and quarter: which grew fastest?". Models answer those badly in their heads and well with code. So the assistant will write code and run it on data cited from the User's Documents. Running code a model wrote is only safe in a sandbox tested against escape and network access, on every system we ship.
 
 The spike in #444 measured one design on macOS, Windows and Linux. Its report and its rerunnable probes are on the branch `spike/444-pyodide`, in `docs/adr/0023-python-sandbox-spike-report.md` and `spike/python/`.
@@ -29,12 +31,14 @@ We run **Python first, offline, in Pyodide** (CPython compiled to WebAssembly), 
   - writing files, which stay in memory;
   - storage carried from one run to the next (localStorage, sessionStorage, IndexedDB, the in-memory files).
   - In every case nothing left the window, and a control fetch from the main process reached the network.
-- **One Worker.** Python runs in a module Worker in that window, started on the first analysis, never at launch.
-  - It costs 180–370 MB of memory, and starting it takes 3–6 s (below).
-  - It stays warm between calls: a call to a running Worker takes about a millisecond.
-  - It is ended and started again after a time-out, a `MemoryError`, or a heap past a cap. Wasm memory never shrinks, so a Worker that hit the 4 GB ceiling keeps it until it ends.
+- **A fresh interpreter for each job, with one spare kept ready.** Python runs in module Workers in that window, which starts on the first analysis, never at launch, and closes after 5 minutes idle.
+  - Each job runs in a Worker of its own, which is ended once the job is done. Nothing a job changes or reads reaches the next: not Python's modules, pandas or the helper, nor the rows it read.
+  - Pyodide's memory snapshots are not used: they are experimental.
+  - While a job runs, a spare Worker starts, so a job that comes once the spare is ready starts within tens of milliseconds. A job straight after another waits for the spare to start, 3–6 s (below).
+  - The window's storage (IndexedDB, the file system and the rest) is cleared after each job and before each new window.
+  - A time-out, a stop, a `MemoryError` or a page past 2 GB ends the window, and another starts at once.
 - **Bundled, never fetched.** Pyodide's files and the wheels for numpy, pandas, python-dateutil, pytz and six ship in the app's resources and load from there. There is no CDN and no package index. They add about 14 MB to the installer compressed (21.4 MB unpacked), and the files are the same on every system. scipy, statsmodels and matplotlib are not bundled; they are added only if Users ask.
-- **Linux:** Chromium's sandbox needs its setuid helper (`chrome-sandbox` owned by root, mode 4755, as a .deb installs it) or unprivileged user namespaces. The app is never run with `--no-sandbox`. Whether the AppImage gets a working sandbox on Ubuntu 24.04, where AppArmor restricts user namespaces, is a packaging question for the whole app, checked in #1116.
+- **Linux:** Chromium's sandbox needs its setuid helper (`chrome-sandbox` owned by root, mode 4755, as a .deb installs it) or unprivileged user namespaces. The app is never run with `--no-sandbox`. When it is started that way, or with `ELECTRON_DISABLE_SANDBOX`, every renderer is unsandboxed, so Analyses don't run: each ends as unavailable, and the User reads "Analyses need the app's sandbox, which is off · How to fix", which links to `docs/linux-sandbox.md`. Whether the AppImage gets a working sandbox on Ubuntu 24.04, where AppArmor restricts user namespaces, is a packaging question for the whole app, checked in #1116.
 
 ## Licences: an exception for Pyodide
 
@@ -70,9 +74,21 @@ The spike used Pyodide 314.0.7 (Python 3.14.2), numpy 2.4.6 and pandas 3.0.2 on 
 | An endless loop: ended and a new Worker ready | 2.7 s | 3.6 s | 5.4 s | 4.1 s |
 | Out of memory | `MemoryError` at 3,968 MB, then the Worker answers; the window lives | the same | the same | the same |
 
+Measured again on 2026-10-18 with a fresh interpreter for each job, on this branch built for testing (the "A fresh interpreter" rows of `e2e/analysis.spec.ts` and a timing run):
+
+| | M2 Max (local) | macOS runner | Windows runner | Linux runner |
+|---|---|---|---|---|
+| The first job: the window and Python started | 3.6 s | | | |
+| A job once the spare is ready | 37 ms | | | |
+| A job straight after another, waiting for the spare | 3.3 s | | | |
+| The window's memory with the spare ready | 508 MB | | | |
+| The window's memory while a job runs, at most | 690 MB | | | |
+
 ## The runtime interface
 
-Python is the first language behind an interface in the core, written for more than one language: code in, values and tables out, with a time limit and a memory cap. JavaScript on QuickJS (MIT) comes later as a second language behind the same interface. The core never imports Electron: the desktop app supplies the sandboxed window as an adapter.
+Python is the first language behind an interface in the core, written for more than one language: code in, values and tables out, with a time limit and a memory cap. Each run records the SHA-256 of its code, of each input's values and of what it came to, and what it ran with: Pyodide's, Python's and each package's version, the SHA-256 of the helper every job runs through, and the app's version.
+
+The helper takes the clock away where code reaches it as a matter of course (`datetime`, `time`, pandas' `Timestamp` and "today"), so an Analysis doesn't read the date by accident and gives the same result when run again. That is best-effort, not a boundary: code that means to can still find the time. JavaScript on QuickJS (MIT) comes later as a second language behind the same interface. The core never imports Electron: the desktop app supplies the sandboxed window as an adapter.
 
 ## Considered options
 
@@ -88,4 +104,4 @@ Python is the first language behind an interface in the core, written for more t
 - `AGENTS.md`'s dependency rule names this exception and this record.
 - ADR-0013 is amended: code run in this sandbox is a new Effect scope, "sandboxed code", that runs without asking. It reads only inputs cited from the Documents, which already run without asking, and it can neither write a file nor reach the network.
 - The runtime is not offered in the hosted version until that version has a sandbox of its own.
-- The window and its Worker are started on first use and kept alive after it, so the first analysis in a session waits 3–6 s; later ones don't.
+- The first analysis waits 3–6 s for the window and Python, and so does one that follows another straight away; one that comes once the spare is ready starts at once. While a job runs, two interpreters are in memory, about 700 MB.

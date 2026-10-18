@@ -74,7 +74,7 @@ test.afterEach(async () => {
 
 test("a group-by over a sheet gives its totals, with the steps, the cells that aren't numbers and a merge's unmatched rows reported", async () => {
   test.setTimeout(180_000);
-  const { app } = await launchApp(dataDir);
+  const { app } = await launchApp(dataDir, { sandboxed: true });
 
   const ran = await run(
     app,
@@ -149,7 +149,7 @@ test("a group-by over a sheet gives its totals, with the steps, the cells that a
 
 test("the same job gives the same output; the clock can't be read; the numbers written in the code are listed", async () => {
   test.setTimeout(180_000);
-  const { app } = await launchApp(dataDir);
+  const { app } = await launchApp(dataDir, { sandboxed: true });
   const seeded = python(
     [
       "import random, numpy as np",
@@ -187,7 +187,7 @@ test("the same job gives the same output; the clock can't be read; the numbers w
 
 test("a loop that never ends is stopped at its time limit and when stopped, and the next job runs", async () => {
   test.setTimeout(240_000);
-  const { app } = await launchApp(dataDir);
+  const { app } = await launchApp(dataDir, { sandboxed: true });
 
   const late = await run(app, { ...python("while True:\n    pass"), timeLimitMs: 3_000 });
   expect(late.result.end).toEqual({ kind: "timed-out", limitMs: 3_000 });
@@ -225,7 +225,7 @@ test("nothing leaves the sandbox: every way out to the network, to the computer'
   await writeFile(secret, "kept on the computer");
   // Python's /tmp is the sandbox's own, in memory: written there, the file isn't on the computer.
   const marker = `/tmp/incarnamind-analysis-marker-${randomUUID()}.txt`;
-  const { app } = await launchApp(dataDir);
+  const { app } = await launchApp(dataDir, { sandboxed: true });
 
   const probes = [
     `import urllib.request\nurllib.request.urlopen("${url}/urllib", timeout=5).read()`,
@@ -271,7 +271,7 @@ test("nothing leaves the sandbox: every way out to the network, to the computer'
 
 test("each job runs in a fresh interpreter: what a job changes in Python, pandas or the helper, and what it read, never reach the next", async () => {
   test.setTimeout(180_000);
-  const { app } = await launchApp(dataDir);
+  const { app } = await launchApp(dataDir, { sandboxed: true });
 
   const first = await run(
     app,
@@ -309,7 +309,7 @@ test("each job runs in a fresh interpreter: what a job changes in Python, pandas
 
 test("what a job's page could keep is cleared after it: the next job's IndexedDB starts empty", async () => {
   test.setTimeout(180_000);
-  const { app } = await launchApp(dataDir);
+  const { app } = await launchApp(dataDir, { sandboxed: true });
   const inPage = (script: string) =>
     app.evaluate(async ({ webContents }, code) => {
       const page = webContents
@@ -347,7 +347,7 @@ test("what a job's page could keep is cleared after it: the next job's IndexedDB
 
 test("with Chromium's sandbox off for the app, no job runs: each ends as unavailable, for the sandbox", async () => {
   process.env.ELECTRON_DISABLE_SANDBOX = "1";
-  const launched = launchApp(dataDir);
+  const launched = launchApp(dataDir, { sandboxed: true });
   delete process.env.ELECTRON_DISABLE_SANDBOX;
   const { app } = await launched;
 
