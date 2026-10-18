@@ -66,10 +66,10 @@ export function Popover({
   placing.current = middleware;
   const returning = useRef(returnFocus);
   returning.current = returnFocus;
-  const dismissByEscape = (from: Element | VirtualElement) => {
+  const dismissByEscape = useRef((from: Element | VirtualElement) => {
     if (returning.current && from instanceof HTMLElement) from.focus();
     dismiss.current("escape");
-  };
+  });
 
   // First, so it is copied while it still shows: closed, it shrinks back toward its anchor.
   useExitToward(ref, () => (anchor instanceof Element ? anchor : anchor.getBoundingClientRect()));
@@ -122,7 +122,7 @@ export function Popover({
       if (event.key !== "Escape" || event.defaultPrevented || inLater(event.target)) return;
       if (event.target instanceof Node && element.contains(event.target)) return;
       event.preventDefault();
-      dismissByEscape(anchor);
+      dismissByEscape.current(anchor);
     };
     document.addEventListener("pointerdown", dismissOnPressOutside, true);
     document.addEventListener("keydown", dismissOnEscape, true);
@@ -147,7 +147,7 @@ export function Popover({
         if (event.key === "Escape" && !event.defaultPrevented) {
           // Handled here, so Esc doesn't also close the Document viewer.
           event.preventDefault();
-          dismissByEscape(anchor);
+          dismissByEscape.current(anchor);
         }
       }}
       className={`editor-popover ${className}`}
