@@ -636,6 +636,7 @@ export const en = {
   "claim.reason.too-many":
     "Not checked yet: only the first {cap} cited sentences are checked as they're written",
   "claim.checkNow": "Check now",
+  "claim.reason.consent-revoked": "Not checked: you turned off sending to this service.",
   "claim.recheck.edited": "The sentence has changed since it was checked.",
   "claim.recheck.new-version": "A Document it was checked against has a new version.",
   "claim.recheck.document-removed": "A Document it was checked against was deleted.",

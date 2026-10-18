@@ -622,6 +622,7 @@ export const zhCN = {
   "claim.reason.stopped": "核对前已停止。",
   "claim.reason.too-many": "尚未核对：写入时只核对前 {cap} 句带引用的话",
   "claim.checkNow": "立即核对",
+  "claim.reason.consent-revoked": "未核对：你关闭了向此服务发送内容。",
   "claim.recheck.edited": "核对之后，这句话改过了。",
   "claim.recheck.new-version": "核对时用到的文档有了新版本。",
   "claim.recheck.document-removed": "核对时用到的文档已删除。",
