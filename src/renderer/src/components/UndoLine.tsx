@@ -120,7 +120,9 @@ function Line({ line }: { line: UndoLineState }) {
           <span key="message" data-testid="undo-message" title={fullMessage}>
             {message}
           </span>,
-          undo,
+          <span key="undo" className="-ml-1 mr-1">
+            {undo}
+          </span>,
         ]}
       />
     </div>

@@ -19,6 +19,7 @@ import {
 } from "../exports";
 import { showFileLabelKey } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
+import { saidInLine } from "../lineNames";
 import { folderName } from "../linkedFolders";
 import { enter } from "../motion";
 import {
@@ -331,19 +332,23 @@ function NeedsDetailsLine({ mindId, documentIds }: { mindId: string; documentIds
     return document ? [displayName(document)] : [];
   });
   if (names.length === 0) return null;
-  const listed = names.slice(0, NAMED_BEFORE_MORE).map((name) => `“${name}”`);
   const separator = language === "zh-CN" ? "、" : ", ";
-  const text =
+  const said = saidInLine(t, (t, cut) =>
     names.length === 1
       ? t("export.needsDetails.line.one", { name: names[0] ?? "" })
       : t("export.needsDetails.line.other", {
           count: names.length,
-          names: `${listed.join(separator)}${names.length > NAMED_BEFORE_MORE ? "…" : ""}`,
-        });
+          names: `${names
+            .slice(0, NAMED_BEFORE_MORE)
+            .map((name) => `“${cut(name)}”`)
+            .join(separator)}${names.length > NAMED_BEFORE_MORE ? "…" : ""}`,
+        }),
+  );
   return (
     <ProblemLine
       role="status"
       testId="export-needs-details"
+      title={said.fullMessage}
       action={{
         label: t("export.needsDetails.show"),
         testId: "export-needs-details-show",
@@ -354,7 +359,7 @@ function NeedsDetailsLine({ mindId, documentIds }: { mindId: string; documentIds
         aria-hidden="true"
         className="mr-2 inline-block size-1.5 rounded-full bg-attention align-[2px]"
       />
-      {text}
+      {said.message}
     </ProblemLine>
   );
 }

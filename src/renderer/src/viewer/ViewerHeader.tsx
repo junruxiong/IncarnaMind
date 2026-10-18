@@ -11,6 +11,7 @@ import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useLeftOutOfEvidence } from "../evidence";
 import { useLanguage, useT } from "../i18n";
+import { type Said, saidInLine } from "../lineNames";
 import { useAppStore } from "../store";
 import { useRename } from "../useRename";
 import { pageDate } from "../webPages";
@@ -61,7 +62,7 @@ export function ViewerHeader({
   const language = useLanguage();
   const { document, preview, keep } = useContext(ViewerFrameContext);
   /** Why the Document's own app couldn't open it, until it is tried again. */
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<Said | null>(null);
   const leftOut = useLeftOutOfEvidence(document);
   const objectMenu = useObjectMenu({ kind: "document", id: document?.id ?? "" });
   const rename = useRename<HTMLButtonElement>(`viewer:${document?.id}`);
@@ -73,7 +74,9 @@ export function ViewerHeader({
     setProblem(null);
     files.openDocumentExternally(document.id).catch((failure: unknown) => {
       setProblem(
-        t("viewer.file.openFailed", { name: document.name, reason: errorMessage(failure, t) }),
+        saidInLine(t, (t) =>
+          t("viewer.file.openFailed", { name: document.name, reason: errorMessage(failure, t) }),
+        ),
       );
     });
   };
@@ -162,8 +165,12 @@ ${sourceOf(document)}`
         )}
       </header>
       {problem && (
-        <ProblemLine testId="viewer-open-problem" className="shrink-0 px-4 py-2">
-          {problem}
+        <ProblemLine
+          testId="viewer-open-problem"
+          title={problem.fullMessage}
+          className="shrink-0 px-4 py-2"
+        >
+          {problem.message}
         </ProblemLine>
       )}
       {document && leftOut && (
