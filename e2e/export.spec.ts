@@ -303,7 +303,7 @@ test("the Saved line names the folder, goes by itself after ten seconds unless t
   await app.close();
 });
 
-test("in Chinese, at the narrowest window, the first export says it went to 文稿 (文档 off macOS) › IncarnaMind, its long name wrapped whole; if that folder can't be made, the save asks where instead, in plain words, and Esc saves nothing", async () => {
+test("in Chinese, at the narrowest window, the first export says it went to 文稿 (文档 off macOS) › IncarnaMind, its long name cut in the middle; if that folder can't be made, the save asks where instead, in plain words, and Esc saves nothing", async () => {
   // A file where the folder would be made.
   await mkdir(join(dataDir, "Documents"), { recursive: true });
   const blocked = join(dataDir, "Documents", "IncarnaMind");
@@ -343,12 +343,13 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
   await expect(ask).toBeHidden();
   await expect(result).toHaveCount(0);
 
-  // With the file out of the way, the save goes there and says so, the whole name wrapped
-  // inside the line rather than cut short.
+  // With the file out of the way, the save goes there and says so, the name cut in the middle
+  // to fit the line, and whole in the line's accessible name.
   await rm(blocked);
   await exportFromMenu(window);
   const done = result.getByTestId("export-done");
-  await expect(done).toHaveText(`已保存“${title}.docx”到“${DEFAULT_FOLDER_ZH}”`);
+  await expect(done).toHaveText(/^已保存“Contract review[^…]*…[^…]*笔记\.docx”到“/);
+  await expect(done).toHaveAccessibleName(`已保存“${title}.docx”到“${DEFAULT_FOLDER_ZH}”`);
   await expect(result.getByTestId("export-open")).toHaveText("打开");
   await expect(result.getByTestId("export-change-folder")).toHaveText("更改文件夹…");
   await expect(ask).toBeHidden();
@@ -358,7 +359,6 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
     window.evaluate(() => globalThis.innerWidth),
   ]);
   if (!line || !saved) throw new Error("The line isn't laid out.");
-  expect(saved.height).toBeGreaterThan(30);
   expect(saved.x + saved.width).toBeLessThanOrEqual(line.x + line.width);
   expect(line.x + line.width).toBeLessThanOrEqual(windowWidth);
   expect(await done.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
