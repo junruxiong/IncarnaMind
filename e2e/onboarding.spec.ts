@@ -614,13 +614,14 @@ test("finishing the steps with no model asks for one in the card, never says You
   await expect(steps).toContainText("Choose an AI model to ask about your own files.");
   await expect(steps).not.toContainText("You're set up.");
   await expect(steps.getByTestId("first-open-next")).toHaveCount(0);
-  // Each part of the shell still waits for its own moment, and one prompt asks for the model.
+  // Each part of the shell still waits for its own moment. The card asks for the model, and the
+  // footer's one line says the files wait for it (#1128).
   const sidebar = window.getByTestId("sidebar");
   await expect(window.getByTestId("tab-list")).toHaveCount(0);
   await expect(window.getByTestId("assistant")).toBeHidden();
   await expect(window.getByTestId("ask-pill")).toBeVisible();
-  await expect(sidebar.getByTestId("sidebar-status")).toHaveCount(0);
-  await expect(sidebar.getByTestId("tagging-waiting")).toHaveCount(0);
+  await expect(sidebar.getByTestId("sidebar-status")).toHaveCount(1);
+  await expect(sidebar.getByTestId("tagging-waiting")).toContainText("No AI model for Tags");
 
   await pointAndClick(window, steps.getByTestId("first-open-choose-model"));
   const setup = window.getByTestId("model-setup");
@@ -630,6 +631,7 @@ test("finishing the steps with no model asks for one in the card, never says You
   await expect(steps).toContainText("You're set up.");
   await expect(steps.getByTestId("first-open-next").first()).toBeVisible();
   await expect(setup).toHaveCount(0);
+  await expect(sidebar.getByTestId("tagging-waiting")).toHaveCount(0);
   await expect(window.getByTestId("composer-input")).toBeVisible();
   await app.close();
 });

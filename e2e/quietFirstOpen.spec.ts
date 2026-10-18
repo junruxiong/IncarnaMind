@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import {
   assistantAnswers,
   createDataFolder,
@@ -96,6 +97,72 @@ test("a file the first open can't take still says so in the footer, though its o
   await expect(skipped).toBeVisible();
   await expect(skipped).toHaveAttribute("title", /Picture\.png/);
   await expect(sidebar.getByTestId("tagging-waiting")).toHaveCount(0);
+  await app.close();
+});
+
+const taggingOf = (window: Page) =>
+  window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await bridge.listDocuments()).map((each) => ({
+      name: each.name,
+      tagging: each.tagging,
+    }));
+  });
+
+test("the examples alone keep the footer quiet, but the User's own file waiting for a Tagging model says so, and a saved model clears it (#1128)", async () => {
+  const notes = join(sources, "Harbour notes.md");
+  await writeFile(notes, "# Harbour notes\n\nThe harbour master publishes the tide tables.\n");
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  const sidebar = window.getByTestId("sidebar");
+  const line = sidebar.getByTestId("tagging-waiting");
+  await expect(window.getByTestId("first-open-steps")).toBeVisible();
+
+  // The examples need no model, so their Tags waiting for one is no news.
+  await expect
+    .poll(async () => {
+      const documents = await taggingOf(window);
+      return (
+        documents.length > 0 && documents.every((each) => each.tagging === "waiting-for-provider")
+      );
+    })
+    .toBe(true);
+  await expect(sidebar.getByTestId("sidebar-status")).toHaveCount(0);
+
+  await window.getByTestId("add-documents-input").setInputFiles([notes]);
+  await expect(line).toBeVisible();
+  await expect(line).toContainText("No AI model for Tags");
+  await expect(window.getByTestId("first-open-steps")).toBeVisible();
+  await expect(window.getByTestId("tab-list")).toHaveCount(0);
+
+  const choose = line.getByTestId("tagging-waiting-setup");
+  await expect(choose).toHaveText("Choose…");
+  await setLanguage(window, "zh-CN");
+  await expect(line).toContainText("打标签需要 AI 模型");
+  await expect(choose).toHaveText("选择…");
+  for (const [width, height] of [
+    [900, 700],
+    [1440, 900],
+  ] as const) {
+    await setWindowSize(app, window, width, height);
+    const within = await sidebar.boundingBox();
+    const button = await choose.boundingBox();
+    expect(within && button && button.x + button.width <= within.x + within.width).toBe(true);
+  }
+
+  await choose.focus();
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "models");
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("settings")).toBeHidden();
+
+  await useLocalChatModel(window);
+  await expect(line).toHaveCount(0);
+  await expect
+    .poll(
+      async () => (await taggingOf(window)).find((each) => each.name === "Harbour notes")?.tagging,
+    )
+    .toBe("tagged");
   await app.close();
 });
 

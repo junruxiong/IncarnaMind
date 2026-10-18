@@ -678,10 +678,9 @@ describe("Support tiers (ADR-0019)", () => {
         expect(step.zh, each.id).not.toMatch(/不含|不包含|附带/);
       }
     }
-    // The Anthropic note says where the plan is linked, which its step no longer does.
     const note = catalogProvider("anthropic")?.planCredits;
-    expect(note?.en).toContain("claude.ai's Billing");
-    expect(note?.zh).toContain("claude.ai");
+    expect(note?.en).toContain("Anthropic Console");
+    expect(note?.zh).toContain("Anthropic Console");
   });
 
   test("a best-effort provider keeps its link to the provider's key page", () => {

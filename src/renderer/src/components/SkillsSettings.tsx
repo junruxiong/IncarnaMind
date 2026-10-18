@@ -14,6 +14,7 @@ import { showFileLabelKey } from "../fileInfo";
 import { useT } from "../i18n";
 import { formatSize, pickSkill, skillDescription } from "../skills";
 import { useAppStore } from "../store";
+import { DetailsLine } from "./DetailsLine";
 import { ExportLineIcon, MoreLineIcon, PlusLineIcon } from "./lineIcons";
 import { MetaLine } from "./MetaLine";
 import { ProblemLine, ProblemMark } from "./ProblemLine";
@@ -380,14 +381,23 @@ export function SkillScriptsSettings() {
             <label htmlFor={enabledId} className={rowTitleClass}>
               {t("scripts.settings.enabled")}
             </label>
-            <p
+            <div
               id={`${enabledId}-description`}
               data-testid="skill-scripts-sandbox"
               data-sandbox={sandboxed ? "os" : "none"}
               className={rowTextClass}
             >
-              {t(sandboxed ? "scripts.settings.bodySandboxed" : "scripts.settings.body")}
-            </p>
+              {sandboxed ? (
+                <DetailsLine
+                  testId="skill-scripts-reach"
+                  details={t("scripts.settings.bodySandboxed.details")}
+                >
+                  {t("scripts.settings.bodySandboxed")}
+                </DetailsLine>
+              ) : (
+                <p>{t("scripts.settings.body")}</p>
+              )}
+            </div>
           </div>
           <input
             id={enabledId}
