@@ -696,10 +696,7 @@
       height: 32px;
       border-radius: 10px 10px 0 0;
       background: var(--color-sheet);
-      font-weight: 600;
-    }
-    /* The group the User is in shows only through its shown tab's title, in ink. */
-    &[aria-selected="true"][data-focused-group] {
+      /* The same in every group, as Chrome's (#1100): the caret shows which group the User is in. */
       color: var(--color-ink);
     }
     /* A 1px divider on a tab's right edge; hidden by the tab pointed at, on both its sides. */
