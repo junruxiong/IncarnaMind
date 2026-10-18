@@ -130,10 +130,15 @@ for (const [language, request, line, useAll] of [
       window.locator('[data-testid="mind-tab"]').filter({ hasText: "Summary" }),
     ).toHaveCount(1);
 
-    await editor.click();
+    // Applied as one change, which the reply's card and ⌘Z in the Mind take back.
+    const undo = rewritten.getByTestId("mind-changes-undo");
+    await expect(undo).toBeVisible();
+    await expect(undo).not.toHaveAttribute("aria-disabled");
+    await editor.focus();
     await window.keyboard.press("ControlOrMeta+z");
     await expect(editor).toContainText("Written from Lease 1, Lease 2.");
     await expect(editor).not.toContainText("Lease 7");
+    await expect(rewritten.getByTestId("mind-changes-undone")).toBeVisible();
 
     await tab(window, "Lease notes").click();
     await expect(editor).toContainText("My notes on the leases.");

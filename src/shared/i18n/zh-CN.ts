@@ -4426,7 +4426,7 @@ export const zhCN = {
   "answer.writtenFrom": "来自 {count} 个文档（此 Mind 的范围，共 {total} 个）",
   "answer.writtenFrom.useAll": "改用全部",
   "command.answer.useAll": "改用全部文档重写回答",
-  "command.answer.useAll.unavailable": "这条回答已经来自你的全部文档",
+  "command.answer.useAll.unavailable": "只用于根据部分文档写的回答",
   "mindChanges.unlinked": "· {count} 处出处未关联，显示为文字",
   "mindChanges.unlinked.one": "· 1 处出处未关联，显示为文字",
   "mindChanges.dropped": "· 有 {count} 处出处无法匹配，已删去",
