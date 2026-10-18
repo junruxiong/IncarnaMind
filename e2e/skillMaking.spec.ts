@@ -159,7 +159,7 @@ test("a Skill name that is taken, an empty field and a too-long description are 
 
   const settings = await openSettings(window, "skills");
   const section = settings.getByTestId("skills-settings");
-  await expect(section.getByTestId("skills-yours")).toContainText("You haven't made a Skill yet");
+  await expect(section.getByTestId("skills-yours")).toContainText("No Skills yet.");
   await expect(section.getByTestId("skills-built-in").getByTestId("skill-item")).toHaveCount(3);
 
   // New Skill…: a Built-in Skill's name is taken, and each field says what is wrong.
