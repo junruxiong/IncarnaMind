@@ -60,7 +60,7 @@ export interface WrittenCheckOptions {
   editText(
     prepared: PreparedChatModel,
     ask: { action: EditAction; instruction: string },
-    passage: { text: string; context: string },
+    passage: { text: string; context: string; quotes: readonly string[] },
     signal: AbortSignal,
   ): Promise<string | null>;
   now(): Date;
@@ -314,7 +314,11 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
     const cut = await options.editText(
       prepared,
       { action: "cut-unsupported", instruction: uncovered },
-      { text: marked.passage, context: marked.context },
+      {
+        text: marked.passage,
+        context: marked.context,
+        quotes: [...marked.citations.values()].map((node) => quoteOf(node)?.quote ?? ""),
+      },
       signal,
     );
     if (cut === null || cut.replace(/\s+/g, " ") === marked.passage.replace(/\s+/g, " ")) {
