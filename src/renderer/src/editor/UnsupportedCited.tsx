@@ -69,7 +69,7 @@ export function UnsupportedCited({
             <span
               data-testid="claim-cited-chip"
               data-check={attributes.check}
-              className="citation-marker"
+              className="citation-marker claim-card-cited-chip"
             >
               {number}
             </span>

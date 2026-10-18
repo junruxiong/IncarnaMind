@@ -4593,11 +4593,11 @@
     &:is(button):hover {
       background: var(--color-frame);
     }
-    .citation-marker {
-      flex-shrink: 0;
-      margin: 0;
-      vertical-align: baseline;
-    }
+  }
+  .claim-card-cited-chip {
+    flex-shrink: 0;
+    margin: 0;
+    vertical-align: baseline;
   }
   .citation-card-note {
     padding-left: 22px;
