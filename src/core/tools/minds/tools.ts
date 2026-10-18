@@ -732,13 +732,12 @@ interface Written {
   notFound: number;
   unrecorded: number;
   searchTalk: number;
-  /** The Blocks it wrote in a Mind, as it wrote them, and their ids, in order. */
+  /** `ids` in the order of `blocks`. */
   blocks: { mindId: string; ids: readonly string[]; blocks: readonly NodeJSON[] };
 }
 
 const sentencesWord = (count: number) => (count === 1 ? "1 sentence" : `${count} sentences`);
 
-/** What the model is told of the check of the sentences it wrote, before they landed (#1111). */
 function checkedNotes(checked: WrittenCheck | null): string[] {
   if (!checked || checked.sentences === 0) return [];
   const { sentences, cut, unsupported, contradicted } = checked;
@@ -1273,11 +1272,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     };
   };
 
-  /**
-   * Checks the cited sentences a call wrote against their Citations before
-   * they land (#1111), its card saying so meanwhile. Not while markers `cite`
-   * hadn't recorded are still to get their Citations: that writes the Blocks again.
-   */
+  // Not while markers `cite` hadn't recorded are still to get their Citations: `settle` writes the Blocks again.
   const checkWritten = async (
     toolCallId: string,
     written: Written & { change: MindChange },
