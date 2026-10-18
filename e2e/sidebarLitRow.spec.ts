@@ -162,6 +162,16 @@ for (const language of ["en", "zh-CN"] as const) {
     await pointAndClick(window, sidebar(window).getByTestId("open-library"));
     await expect(window.getByTestId("library")).toBeVisible();
     await expect(lit(window)).toHaveCount(0);
+    // A row ⌘-clicked meanwhile stays lit as rows come and go.
+    await pointAndClick(window, mindRow(window, "Alpha"), { modifiers: ["ControlOrMeta"] });
+    await litAre(window, ["Alpha"]);
+    await window.evaluate(() =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.createMind({
+        title: "Beta",
+      }),
+    );
+    await expect(mindRow(window, "Beta")).toHaveCount(1);
+    await litAre(window, ["Alpha"]);
     await pointAndClick(window, mindRow(window, "Alpha"));
     await litAre(window, ["Alpha"]);
     await pointAndClick(

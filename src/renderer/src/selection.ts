@@ -199,16 +199,18 @@ export function useSelectionFollowsShown(tree: RefObject<HTMLElement | null>): v
     const root = tree.current;
     // Only while the shown item has no row does a row that comes later light: Esc stays.
     let missing = false;
-    const follow = () => {
+    const follow = (later: boolean) => {
       const { surface, items, choose, clear } = useSelection.getState();
       // The Library's selection, or one of several made on purpose, is the User's to keep.
       if ((surface !== null && surface !== "sidebar") || items.length > 1) return;
+      // A row chosen since, while the shown item had none, is the User's to keep too.
+      if (later && items.length > 0) return;
       const ref = shown === null ? null : refOfKey(shown);
       const row =
         shown === null ? null : root?.querySelector(`[data-select-ref="${CSS.escape(shown)}"]`);
       missing = !ref || !row;
       if (!ref || !row) {
-        clear("sidebar");
+        if (!later) clear("sidebar");
         return;
       }
       choose("sidebar", ref);
@@ -218,11 +220,11 @@ export function useSelectionFollowsShown(tree: RefObject<HTMLElement | null>): v
       // A row with the focus hands it on with the Tab stop, so the two never part.
       if (root?.contains(document.activeElement) && document.activeElement !== main) main.focus();
     };
-    follow();
+    follow(false);
     if (!root) return;
     // A row that comes later (a Mind just made, a Folder unfolded) is lit once it is there.
     const observer = new MutationObserver(() => {
-      if (missing) follow();
+      if (missing) follow(true);
     });
     observer.observe(root, { childList: true, subtree: true });
     return () => observer.disconnect();
