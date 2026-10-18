@@ -27,11 +27,13 @@ async function start(automatic: boolean, dataDir?: string) {
   const core = startOn(directory, chat);
   const provider = await core.saveChatProvider(LOCAL);
   const reports = await core.createLibraryGroup({ name: "Reports", description: "Reports" });
-  await core.saveLibrarySettings({
-    classifier: { kind: "chat", choice: { providerId: provider.id, modelId: LOCAL.modelId } },
-    automatic,
-  });
-  return { core, chat, reports, dataDir: directory };
+  const save = (filesByItself: boolean) =>
+    core.saveLibrarySettings({
+      classifier: { kind: "chat", choice: { providerId: provider.id, modelId: LOCAL.modelId } },
+      automatic: filesByItself,
+    });
+  await save(automatic);
+  return { core, chat, reports, dataDir: directory, save };
 }
 
 async function add(core: Core, files: Record<string, string | Uint8Array>): Promise<Document[]> {
@@ -208,5 +210,49 @@ describe("with Organize moving new Documents by itself", () => {
     await waitForTagging(core, [document.id]);
 
     expect(chat.calls.map((call) => call.purpose)).toEqual(["organize"]);
+  });
+});
+
+describe("turning on Organize filing new Documents by itself", () => {
+  test("Documents automatic tagging holds are still tagged, and stay where they are", async () => {
+    const { core, chat, save } = await start(false);
+    chat.hold();
+    const added = await add(core, {
+      "One.txt": "The first report, about revenue.",
+      "Two.txt": "The second report, about costs.",
+      "Three.txt": "The third report, about staff.",
+    });
+    await vi.waitFor(() => expect(chat.calls).toHaveLength(1));
+
+    await save(true);
+    chat.release();
+
+    await waitForTagging(
+      core,
+      added.map((each) => each.id),
+    );
+    expect(chat.calls.map((call) => call.purpose)).toEqual(["tags", "tags", "tags"]);
+    expect(await assignmentsOf(core)).toEqual([]);
+  });
+
+  test("so are those still waiting after a restart", async () => {
+    const first = await start(false);
+    const [document] = await add(first.core, { "One.txt": "The first report, about revenue." });
+    if (!document) throw new Error("Nothing was added.");
+    await waitForTagging(first.core, [document.id]);
+    await first.save(true);
+    first.core.close();
+    const db = openDatabase(join(first.dataDir, DATABASE_FILE));
+    try {
+      db.run("UPDATE documents SET tagging_status = 'pending'");
+    } finally {
+      db.close();
+    }
+
+    const chat = scriptedChat();
+    const second = startOn(first.dataDir, chat);
+
+    await waitForTagging(second, [document.id]);
+    expect(chat.purposesFor("first report")).toEqual(["tags"]);
   });
 });
