@@ -163,8 +163,13 @@ export function mindInstructions(offered: boolean, route: RequestRoute | null = 
 function routeLine(route: RequestRoute | null): string {
   switch (route?.kind) {
     case "write":
+      if (route.fromAnswer) {
+        return route.newMind
+          ? "- This request asks for your last Answer as a document: call create_mind with a short title and answer: true, and nothing else. It puts in that Answer as it is, with its Citations and every Document it covered: don't search again or write it anew."
+          : "- This request asks for your last Answer as a document: the Mind in <mind> is empty, so call add_to_mind with answer: true, and nothing else. It puts in that Answer as it is, with its Citations and every Document it covered: don't search again or write it anew.";
+      }
       return route.newMind
-        ? "- This request asks for a new page or note: write it into a new Mind with create_mind, not in your reply."
+        ? "- This request asks for a new page or note: write it into a new Mind with create_mind, not in your reply and not into the Mind in <mind>."
         : "- This request asks for text in a Mind: write it there with add_to_mind, not in your reply. If text of yours still waiting already covers it, revise that with edit_mind instead of writing it again.";
     case "edit":
       return "- This request asks to change text in a Mind: change it there with edit_mind, not in your reply, and in place: never add a new version beside it with add_to_mind. Text you wrote, an Answer added with Add to note among it, takes its whole new text as content, cited.";
@@ -209,6 +214,13 @@ export function signInNeededInstructions(connectorNames: readonly string[]): str
 function notCovered(cite: boolean): string {
   return `If the Documents don't cover the Question, say so plainly. You may add what the Passages do say that comes closest${cite ? ", cited" : ""}, then stop: never fill the gap from your own knowledge, so no figure, date or name that isn't in a Passage. Only a general Question that isn't about the User's Documents (a concept or a method) may be answered from your own knowledge, in a paragraph that starts "Not from your Documents:" ("以下内容不是来自你的文档："), with no figures${cite ? " and no markers" : ""}.`;
 }
+
+/**
+ * The claim check holds a cited sentence to its quote, so an inference written
+ * into it makes the whole sentence Unsupported (#1073).
+ */
+const CITED_SAYS_ONLY_ITS_QUOTE =
+  '- A sentence with a Citation says only what its quote supports. Your inference, judgement or comparison goes in a sentence of its own with no marker, worded as a reading: "This suggests…" / "这意味着…".';
 
 /**
  * A premise the Passages don't support, and Passages that disagree (#548):
@@ -410,6 +422,7 @@ export function documentInstructions(
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
         notCovered(true),
+        CITED_SAYS_ONLY_ITS_QUOTE,
         readingRules(true),
         ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
@@ -432,6 +445,7 @@ export function documentInstructions(
         QUOTATION_MARKS,
         ...(calculate ? [CALCULATIONS] : []),
         notCovered(true),
+        CITED_SAYS_ONLY_ITS_QUOTE,
         readingRules(true),
       ].join("\n");
     case "none":
