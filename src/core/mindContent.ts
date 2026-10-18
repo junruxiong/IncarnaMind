@@ -7,7 +7,7 @@ import {
   MIND_CONTENT_FIELD,
   MIND_SETTINGS_FIELD,
 } from "./api";
-import { InvalidInputError, MindReadOnlyError, TranslatableError } from "./errors";
+import { InvalidInputError, MindReadOnlyError } from "./errors";
 import { readContentVersion } from "./mindAccess";
 import type { Database } from "./storage";
 
@@ -44,22 +44,57 @@ interface LoadedMind {
   doc: Y.Doc;
   /** Rows stored for this Mind, a compacted one included. */
   storedRows: number;
-  /** Updates the document emitted that aren't stored yet. */
+  /** Updates the document emitted that aren't reported and stored yet. */
   outbox: { update: Uint8Array; cause: EditCause | undefined }[];
   cause: EditCause | undefined;
+  unsaved: Unsaved | null;
 }
+
+/** A Mind's changes storage refused (#1119): kept in memory as one update, and tried again. */
+interface Unsaved {
+  update: Uint8Array;
+  /** How many changes it holds. */
+  count: number;
+  failure: unknown;
+  /** How many tries in a row have failed. */
+  tries: number;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+/** What the core hears of changes that couldn't be stored. */
+export interface MindContentOptions {
+  /** Some of the Mind's changes couldn't be stored, or (null) all of them are now. */
+  unsaved?(mindId: string, state: { count: number; failure: unknown } | null): void;
+}
+
+/** How long to wait before storing again after each failed try; the last repeats. */
+const RETRY_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
+
+/** Whether an update starts past what the document has of one of its clients: it builds on a change the document never got. */
+function missesEarlier(doc: Y.Doc, update: Uint8Array): boolean {
+  const { from } = Y.parseUpdateMeta(update);
+  const have = Y.decodeStateVector(Y.encodeStateVector(doc));
+  return [...from].some(([client, clock]) => clock > (have.get(client) ?? 0));
+}
+
+const holdsBack = (doc: Y.Doc) => doc.store.pendingStructs !== null || doc.store.pendingDs !== null;
 
 /**
  * The authoritative Yjs document of each Mind being edited (ADR-0003).
  *
- * Every change to a document, whoever made it, is stored as one row and then
- * reported through `onStored`. A document is loaded on first use and stays in
+ * Every change to a document, whoever made it, is reported through `onChanged`
+ * at once and stored as one row. A document is loaded on first use and stays in
  * memory until `close`, `remove` or `closeAll`. Callers check that the Mind exists.
+ *
+ * When storage refuses a write, the document keeps the change and every later
+ * one builds on it (#1119): they wait, merged, are tried again with each change
+ * and on a backoff, and `options.unsaved` hears of them until they are stored.
  */
 export function createMindContent(
   db: Database,
   now: () => string,
-  onStored: (mindId: string, update: Uint8Array, cause: EditCause | undefined) => void,
+  onChanged: (mindId: string, update: Uint8Array, cause: EditCause | undefined) => void,
+  options: MindContentOptions = {},
 ) {
   const loaded = new Map<string, LoadedMind>();
 
@@ -82,7 +117,9 @@ export function createMindContent(
   };
 
   const unload = (mindId: string) => {
-    loaded.get(mindId)?.doc.destroy();
+    const mind = loaded.get(mindId);
+    if (mind?.unsaved?.timer) clearTimeout(mind.unsaved.timer);
+    mind?.doc.destroy();
     loaded.delete(mindId);
   };
 
@@ -104,7 +141,13 @@ export function createMindContent(
     if (existing) return existing;
 
     const { doc, rows } = fromStorage(mindId);
-    const mind: LoadedMind = { doc, storedRows: rows, outbox: [], cause: undefined };
+    const mind: LoadedMind = {
+      doc,
+      storedRows: rows,
+      outbox: [],
+      cause: undefined,
+      unsaved: null,
+    };
     // Listening only after loading, so the stored rows aren't stored again. The
     // listener must not throw: Yjs calls it while finishing a transaction.
     doc.on("update", (update: Uint8Array) => {
@@ -116,32 +159,74 @@ export function createMindContent(
     return mind;
   };
 
-  /**
-   * Stores and reports what the document emitted since the last flush. What can't be stored
-   * stays first in line, and the document keeps it, so the next flush stores it in order:
-   * the changes a client sends after it build on it (#1119).
-   */
+  /** Reports what the document emitted since the last flush, and stores it. */
   const flush = (mindId: string, mind: LoadedMind) => {
     if (mind.outbox.length === 0) return;
     const updates = mind.outbox.splice(0);
+    for (const { update, cause } of updates) {
+      try {
+        onChanged(mindId, update, cause);
+      } catch (error) {
+        // What follows a change (its index, the Mind's title) mustn't keep it from being stored.
+        console.error(`Mind ${mindId}: what follows a change failed`, error);
+      }
+    }
+    store(
+      mindId,
+      mind,
+      updates.map(({ update }) => update),
+    );
+  };
+
+  /**
+   * Stores `updates` after any still waiting, merged into one row with them. True once nothing
+   * waits; on a failure all of them wait, and are tried again later.
+   */
+  const store = (mindId: string, mind: LoadedMind, updates: readonly Uint8Array[]): boolean => {
+    const waiting = mind.unsaved;
+    if (!waiting && updates.length === 0) return true;
+    const rows = waiting ? [Y.mergeUpdates([waiting.update, ...updates])] : updates;
     try {
       const at = now();
       db.transaction(() => {
-        for (const { update } of updates) insert(mindId, update, at);
+        for (const row of rows) insert(mindId, row, at);
       });
-    } catch (error) {
-      mind.outbox.unshift(...updates);
-      throw new TranslatableError(
-        {
-          key: "error.mind.notStored",
-          values: { reason: error instanceof Error ? error.message : String(error) },
-        },
-        { cause: error },
-      );
+    } catch (failure) {
+      if (waiting?.timer) clearTimeout(waiting.timer);
+      const unsaved: Unsaved = {
+        update: rows.length === 1 && rows[0] ? rows[0] : Y.mergeUpdates([...rows]),
+        count: (waiting?.count ?? 0) + updates.length,
+        failure,
+        tries: (waiting?.tries ?? 0) + 1,
+        timer: null,
+      };
+      mind.unsaved = unsaved;
+      unsaved.timer = retryLater(mindId, mind, unsaved.tries);
+      options.unsaved?.(mindId, { count: unsaved.count, failure });
+      return false;
     }
-    mind.storedRows += updates.length;
-    for (const { update, cause } of updates) onStored(mindId, update, cause);
+    mind.storedRows += rows.length;
+    if (waiting) {
+      if (waiting.timer) clearTimeout(waiting.timer);
+      mind.unsaved = null;
+      options.unsaved?.(mindId, null);
+    }
     if (mind.storedRows >= COMPACT_AFTER_UPDATES) compact(mindId, mind);
+    return true;
+  };
+
+  const retryLater = (mindId: string, mind: LoadedMind, tries: number) => {
+    const timer = setTimeout(
+      () => {
+        if (loaded.get(mindId) !== mind || !mind.unsaved) return;
+        mind.unsaved.timer = null;
+        store(mindId, mind, []);
+      },
+      RETRY_MS[Math.min(tries, RETRY_MS.length) - 1],
+    );
+    // Waiting to store again never keeps the app from quitting: quitting tries once more.
+    timer.unref?.();
+    return timer;
   };
 
   /** Refuses a write to a Mind a newer version wrote: the editor's schema would delete what it doesn't know. */
@@ -198,8 +283,11 @@ export function createMindContent(
       const mind = load(mindId);
       requireWritable(mind);
       let failure: unknown;
+      let missed = false;
+      const heldBack = holdsBack(mind.doc);
       mind.cause = cause;
       try {
+        missed = missesEarlier(mind.doc, update);
         // One transaction, so recording the version rides in the same stored update.
         mind.doc.transact(() => {
           Y.applyUpdate(mind.doc, update);
@@ -216,7 +304,7 @@ export function createMindContent(
         throw new InvalidInputError("That isn't a valid Yjs update.", { cause: failure });
       }
       // Yjs holds back a change that builds on one it never got; acknowledging it would lose it.
-      if (mind.doc.store.pendingStructs !== null || mind.doc.store.pendingDs !== null) {
+      if (missed || (!heldBack && holdsBack(mind.doc))) {
         throw new InvalidInputError({ key: "error.mind.missedChange" });
       }
     },
@@ -301,12 +389,13 @@ export function createMindContent(
 
     /**
      * Compacts the Mind and drops its document from memory. Does nothing if it isn't loaded.
-     * Changes that still can't be stored keep it in memory, and the error says why.
+     * Changes that still can't be stored keep it in memory, still tried again.
      */
     close(mindId: string): void {
       const mind = loaded.get(mindId);
       if (!mind) return;
       flush(mindId, mind);
+      if (!store(mindId, mind, [])) return;
       // A Mind a newer version wrote is left exactly as stored.
       if (contentVersionOf(mind.doc) <= CONTENT_SCHEMA_VERSION) compact(mindId, mind);
       unload(mindId);
@@ -314,6 +403,14 @@ export function createMindContent(
 
     /** Marks the Mind's content deleted. Run it in the same transaction as deleting the Mind. */
     remove(mindId: string, at: string): void {
+      const mind = loaded.get(mindId);
+      if (mind?.unsaved && !store(mindId, mind, [])) {
+        console.error(
+          `${mind.unsaved.count} changes to Mind ${mindId} couldn't be stored before it was deleted.`,
+          mind.unsaved.failure,
+        );
+        options.unsaved?.(mindId, null);
+      }
       unload(mindId);
       db.run(
         "UPDATE mind_updates SET deleted_at = ?, updated_at = ? WHERE mind_id = ? AND deleted_at IS NULL",
@@ -329,15 +426,22 @@ export function createMindContent(
       );
     },
 
+    /** Tries once more to store what is waiting; the Minds whose changes still wait. */
+    storeWaiting(): { mindId: string; count: number; failure: unknown }[] {
+      for (const [mindId, mind] of loaded) if (mind.unsaved) store(mindId, mind, []);
+      return [...loaded].flatMap(([mindId, { unsaved }]) =>
+        unsaved ? [{ mindId, count: unsaved.count, failure: unsaved.failure }] : [],
+      );
+    },
+
     /** Drops every document from memory, storing first what couldn't be stored before. */
     closeAll(): void {
       for (const [mindId, mind] of [...loaded]) {
-        try {
-          flush(mindId, mind);
-        } catch (error) {
+        flush(mindId, mind);
+        if (!store(mindId, mind, [])) {
           console.error(
-            `${mind.outbox.length} changes to Mind ${mindId} couldn't be stored before quitting, and are lost.`,
-            error,
+            `${mind.unsaved?.count ?? 0} changes to Mind ${mindId} couldn't be stored before quitting, and are lost.`,
+            mind.unsaved?.failure,
           );
         }
         unload(mindId);
