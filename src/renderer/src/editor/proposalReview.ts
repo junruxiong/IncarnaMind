@@ -137,28 +137,6 @@ export function rewrittenParagraphOf(
   return typeof id === "string" ? id : null;
 }
 
-/** The Blocks a change counts by: paragraphs and headings, as `changedParagraphs` counts them in the Mind. */
-const COUNTED_BLOCKS: ReadonlySet<string> = new Set(["paragraph", "heading"]);
-
-/** How many paragraphs and headings the requests' Proposals change, add or remove. */
-export function changedParagraphsIn(doc: ProseMirrorNode, requests: ReadonlySet<string>): number {
-  const counted = new Set<number>();
-  for (const proposal of proposalsIn(doc)) {
-    if (!requests.has(proposal.request)) continue;
-    for (const range of proposal.ranges) {
-      doc.nodesBetween(range.from, range.to, (node, pos) => {
-        // A table added or removed whole counts as a table, not by its cells.
-        if (node.type.name === "table" && readProposalAttribute(node.attrs[PROPOSAL_ATTRIBUTE])) {
-          return false;
-        }
-        if (COUNTED_BLOCKS.has(node.type.name)) counted.add(pos);
-        return !node.isTextblock;
-      });
-    }
-  }
-  return counted.size;
-}
-
 /**
  * Every Proposal in the document, in the order they start. A Citation a
  * Proposal removes and doesn't add back counts as dropped; one the same
@@ -166,7 +144,19 @@ export function changedParagraphsIn(doc: ProseMirrorNode, requests: ReadonlySet<
  * reads it: the words or Block it removes aren't what it recorded, or aren't
  * in one piece any more.
  */
-export function proposalsIn(doc: ProseMirrorNode): PendingProposal[] {
+export function proposalsIn(doc: ProseMirrorNode): readonly PendingProposal[] {
+  let proposals = readProposals.get(doc);
+  if (!proposals) {
+    proposals = readProposalsIn(doc);
+    readProposals.set(doc, proposals);
+  }
+  return proposals;
+}
+
+// The review bars and the rewritten-paragraph lines both read each document the User's typing makes.
+const readProposals = new WeakMap<ProseMirrorNode, readonly PendingProposal[]>();
+
+function readProposalsIn(doc: ProseMirrorNode): PendingProposal[] {
   const found = new Map<string, PendingProposal>();
   const removedCitations = new Map<string, string[]>();
   const addedCitations = new Map<string, Set<string>>();

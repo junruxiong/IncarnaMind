@@ -65,8 +65,8 @@ export type AppliedLine = (
       kind: "applied";
       /** Null at the Mind's end. */
       blockId: string | null;
-      /** The paragraphs and headings it changed, added or removed. */
-      paragraphs: number;
+      /** What it changed, added or removed. */
+      blocks: ChangedBlocks;
       /** What the assistant was asked for, as its Answer counts it (#880): "Wrote 3 paragraphs". */
       facts?: ChangeCounts;
       reason: string | null;
@@ -207,40 +207,96 @@ const textOf = (removed: Fragment) => removed.textBetween(0, removed.size, "\n",
 
 const COUNTED: ReadonlySet<string> = new Set(["paragraph", "heading"]);
 
-/** How many paragraphs and headings the changes shown again are in: what Review changes counts. */
-export function paragraphsOfChanges(state: EditorState, changes: readonly AppliedChange[]): number {
+/** What an edit's lines count: the paragraphs and headings it changed, and its tables added or removed whole. */
+export interface ChangedBlocks {
+  paragraphs: number;
+  tables: number;
+}
+
+/**
+ * What the changes shown again are in, as the applied line, its Undo notice
+ * and Review changes all count it: a table added or removed whole is one
+ * table, not its cells.
+ */
+export function changedBlocksOf(
+  state: EditorState,
+  changes: readonly AppliedChange[],
+): ChangedBlocks {
   const counted = new Set<number>();
+  const tables = new Set<number>();
   let removed = 0;
+  let removedTables = 0;
   for (const change of changes) {
     const place = placeOfChange(state, change);
     if (!place) continue;
     if (change.block === "removed") {
       let blocks = 0;
+      let wholeTables = 0;
       change.removed.descendants((node) => {
+        if (node.type.name === "table") {
+          wholeTables++;
+          return false;
+        }
         if (COUNTED.has(node.type.name)) blocks++;
         return !node.isTextblock;
       });
-      removed += Math.max(blocks, 1);
+      removedTables += wholeTables;
+      removed += wholeTables > 0 ? blocks : Math.max(blocks, 1);
       continue;
     }
     state.doc.nodesBetween(place.from, Math.max(place.to, place.from + 1), (node, pos) => {
+      if (node.type.name === "table" && change.block === "added") {
+        tables.add(pos);
+        return false;
+      }
       if (COUNTED.has(node.type.name)) counted.add(pos);
       return !node.isTextblock;
     });
   }
-  return counted.size + removed;
+  return { paragraphs: counted.size + removed, tables: tables.size + removedTables };
 }
 
-function mainLine(line: AppliedLine, options: Options, paragraphs: number): HTMLElement {
+const changesIn = (t: Translate, { paragraphs, tables }: ChangedBlocks): string => {
+  const counted =
+    tables === 1 ? t("edit.count.tables.one") : t("edit.count.tables", { count: tables });
+  if (paragraphs === 0) return counted;
+  return t("edit.changes", {
+    paragraphs:
+      paragraphs === 1
+        ? t("mindChanges.count.paragraphs.one")
+        : t("mindChanges.count.paragraphs", { count: paragraphs }),
+    tables: counted,
+  });
+};
+
+/** What the applied line and its Undo notice say an edit changed: "Changed 3 paragraphs and 1 table". */
+export function appliedText(t: Translate, blocks: ChangedBlocks): string {
+  if (blocks.tables > 0) return t("edit.applied.changes", { changes: changesIn(t, blocks) });
+  return blocks.paragraphs === 1
+    ? t("edit.applied.one")
+    : t("edit.applied", { count: blocks.paragraphs });
+}
+
+function reviewText(t: Translate, blocks: ChangedBlocks, byAssistant: boolean): string {
+  if (blocks.tables > 0) {
+    const changes = changesIn(t, blocks);
+    return byAssistant
+      ? t("edit.review.assistant.changes", { changes })
+      : t("edit.review.changes", { changes });
+  }
+  const count = blocks.paragraphs;
+  if (byAssistant) {
+    return count === 1 ? t("edit.review.assistant.one") : t("edit.review.assistant", { count });
+  }
+  return count === 1 ? t("edit.review.one") : t("edit.review", { count });
+}
+
+function mainLine(line: AppliedLine, options: Options, blocks: ChangedBlocks): HTMLElement {
   const t = options.translate;
   if (line.kind === "applied") {
     const what = text(
       "min-w-0",
-      line.facts
-        ? changeFact(t, line.facts, null)
-        : line.paragraphs === 1
-          ? t("edit.applied.one")
-          : t("edit.applied", { count: line.paragraphs }),
+      line.facts ? changeFact(t, line.facts, null) : appliedText(t, line.blocks),
       "applied-count",
     );
     const parts: (Node | string)[] = [
@@ -256,7 +312,6 @@ function mainLine(line: AppliedLine, options: Options, paragraphs: number): HTML
     return element;
   }
   if (line.kind === "review") {
-    const count = paragraphs;
     const undo = button("undo-all", t("edit.review.undoAll"));
     if (line.undo && !line.undo.available()) {
       undo.setAttribute("aria-disabled", "true");
@@ -264,17 +319,7 @@ function mainLine(line: AppliedLine, options: Options, paragraphs: number): HTML
     }
     return lineElement("applied-line", "applied-line", [
       sparkle(),
-      text(
-        "min-w-0",
-        line.byAssistant
-          ? count === 1
-            ? t("edit.review.assistant.one")
-            : t("edit.review.assistant", { count })
-          : count === 1
-            ? t("edit.review.one")
-            : t("edit.review", { count }),
-        "applied-count",
-      ),
+      text("min-w-0", reviewText(t, blocks, line.byAssistant === true), "applied-count"),
       dot(),
       undo,
       dot(),
@@ -444,15 +489,16 @@ function decorations(state: EditorState, line: AppliedLine, options: Options): D
   const at = placeOf(doc, line.blockId);
   const shared = { side: -1, ignoreSelection: true, stopEvent: () => true };
   if (at !== null) {
-    const count =
+    const blocks =
       line.kind === "applied"
-        ? line.paragraphs
+        ? line.blocks
         : line.kind === "review"
-          ? paragraphsOfChanges(state, line.changes)
-          : 0;
+          ? changedBlocksOf(state, line.changes)
+          : { paragraphs: 0, tables: 0 };
+    const count = `${blocks.paragraphs}/${blocks.tables}`;
     const canUndo = line.kind !== "review" || !line.undo || line.undo.available();
     marks.push(
-      Decoration.widget(at, () => mainLine(line, options, count), {
+      Decoration.widget(at, () => mainLine(line, options, blocks), {
         ...shared,
         // Drawn again in the interface language once it changes.
         key: `applied:${line.kind}:${count}:${line.blockId}:${canUndo}:${options.translate("edit.applied.undo")}`,

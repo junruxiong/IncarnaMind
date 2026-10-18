@@ -2178,6 +2178,60 @@ describe("How a change reads (#1028)", () => {
     ]);
   });
 
+  test("asked to replace a list item, without saying to remove it, the old item goes and the new one comes: neither is kept as left out, nor read as a translation", async () => {
+    const degree = "2016.09—2018.06 上海财经大学 会计学 硕士";
+    const job = "2018.10—至今 Deloitte Touche Tohmatsu, Senior Manager";
+    const { core, mind, client } = await setUp(
+      editingModel(() =>
+        ["## 经历", "- 2012.09—2016.06 复旦大学 金融学 学士", `- ${job}`].join("\n\n"),
+      ),
+    );
+    writeMind(client, [heading("经历"), bullets("2012.09—2016.06 复旦大学 金融学 学士", degree)]);
+    await client.settled();
+
+    const result = await core.editWithAi(everything(client, mind.id, "把硕士那条换成现在的工作"));
+    await client.settled();
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("leftOut");
+    expect(shownWhole(client)).toEqual([
+      "经历",
+      "2012.09—2016.06 复旦大学 金融学 学士",
+      `+ ${job}`,
+      `- ${degree}`,
+    ]);
+    await resolveChanges(client, "accept");
+    expect(shownWhole(client)).toEqual(["经历", "2012.09—2016.06 复旦大学 金融学 学士", job]);
+  });
+
+  test("list items reworded past matching, in Chinese and English, each go once and their new wording comes once: none is doubled", async () => {
+    const before = [
+      "熟悉财务建模与估值，曾主导三个并购项目的尽职调查。",
+      "Led quarterly forecasting for a team of twelve analysts.",
+      "Presented findings to the board every month.",
+      "Cut month-end close from ten days to six.",
+    ];
+    const after = [
+      "主导过三起并购尽调，独立搭建估值模型。",
+      "Ran the quarterly forecast with twelve analysts reporting to me.",
+      "Briefed the board monthly on results.",
+      "Shortened the monthly close by four days.",
+    ];
+    const { core, mind, client } = await setUp(
+      editingModel(() => after.map((item) => `- ${item}`).join("\n\n")),
+    );
+    writeMind(client, [bullets(...before)]);
+    await client.settled();
+
+    const result = await core.editWithAi(everything(client, mind.id, "把这些要点写得更有力"));
+    await client.settled();
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("leftOut");
+    await resolveChanges(client, "accept");
+    expect(shownWhole(client)).toEqual(after);
+  });
+
   test("in Chinese, a date range changed is one change, and a paragraph mostly rewritten reads whole, no old and new words alternating", async () => {
     const before = [
       "2017.05—2017.04 某咨询公司 分析师",
