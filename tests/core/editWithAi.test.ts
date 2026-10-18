@@ -1822,6 +1822,39 @@ describe("Edit with AI and the model's service", () => {
     expect(calls).toHaveLength(1);
   });
 
+  test("Local mode turned on while a rate-limited request waits to be tried again: nothing more is sent, and the edit says Local mode", async () => {
+    const calls: EditCall[] = [];
+    const model = editingModel((call) => {
+      if (calls.length === 1) {
+        throw new APICallError({
+          message: "Rate limit reached.",
+          url: "https://api.openai.com/v1/responses",
+          requestBodyValues: {},
+          statusCode: 429,
+          responseHeaders: { "retry-after-ms": "2000" },
+          isRetryable: true,
+        });
+      }
+      return call.passage;
+    }, calls);
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: scriptedModels(model).createChatModel,
+    });
+    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    const mind = await core.createMind({ title: "Private" });
+    const client = await connectToMind(core, mind.id);
+    const note = paragraph(text("合成私密段落：此文字不应离开本机。"));
+    writeMind(client, [note]);
+    await client.settled();
+
+    const editing = core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    await core.setLocalOnly(true);
+
+    expect(await editing).toEqual({ kind: "local-mode" });
+    expect(calls).toHaveLength(1);
+  });
+
   test("with no chat model it says so, and nothing is written", async () => {
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir);

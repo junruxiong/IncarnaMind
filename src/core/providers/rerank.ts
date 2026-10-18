@@ -33,7 +33,7 @@ import type { Reranker, SearchCandidate } from "../documents/searchTool";
 import { InvalidInputError, isRecord } from "../errors";
 import type { RerankingModel } from "../reranking";
 import type { Secrets } from "../secrets";
-import { createSendGate } from "../sendGate";
+import { createSendGate, gateStop } from "../sendGate";
 import type { SettingsStore } from "../settings";
 import { classifyProviderError } from "./providerErrors";
 
@@ -211,9 +211,12 @@ export function createRerank(options: {
     if (!apiKey) return [...candidates];
     try {
       await consent.ensure("rerank", RERANK_SERVICES[kind]);
-      gate.check("rerank", RERANK_SERVICES[kind]);
       const { ranking } = await rerank({
-        model: createModel({ kind, apiKey, modelId }),
+        model: gate.rerankingModel(
+          createModel({ kind, apiKey, modelId }),
+          "rerank",
+          RERANK_SERVICES[kind],
+        ),
         documents: candidates.map(candidateText),
         query,
         topN: candidates.length,
@@ -238,7 +241,7 @@ export function createRerank(options: {
     } catch (error) {
       // The Answer was stopped: stop too.
       if (abortSignal?.aborted) throw error;
-      if (!signal.aborted) reportError(error);
+      if (!signal.aborted && !gateStop(error)) reportError(error);
       return [...candidates];
     }
   };

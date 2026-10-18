@@ -303,8 +303,8 @@ export function createJevTagging(options: {
         // No service to send to: a Jev-compatible server on this computer.
         local: service === null,
         async decide({ tags, excerpt, signal: stop }) {
-          if (service) gate.check("tagging", service);
           const probabilities = await askJev({
+            ...(service && { beforeSend: () => gate.check("tagging", service) }),
             baseUrl: baseUrlOf(jev.endpoint),
             apiKey,
             model: jev.model ?? JEV_DEFAULT_MODEL,
@@ -327,7 +327,8 @@ export function createJevTagging(options: {
       if (!apiKey) throw new TaggingNotReadyError({ key: "error.tagging.jevKeyUnreadable" });
       const service = serviceOf(jev.endpoint);
       if (service) await consent.ensure("classification", service);
-      const classifier = decisionGroupClassifier({
+      return decisionGroupClassifier({
+        ...(service && { beforeSend: () => gate.check("classification", service) }),
         baseUrl: baseUrlOf(jev.endpoint),
         apiKey,
         model: jev.model ?? JEV_DEFAULT_MODEL,
@@ -336,14 +337,6 @@ export function createJevTagging(options: {
         usePageImages: false,
         reviewBand: jev.reviewBand,
       });
-      if (!service) return classifier;
-      return {
-        ...classifier,
-        organize: (...args: Parameters<typeof classifier.organize>) => {
-          gate.check("classification", service);
-          return classifier.organize(...args);
-        },
-      };
     },
 
     /**

@@ -12,13 +12,13 @@ import {
   ConsentNeededError,
   InvalidInputError,
   isRecord,
-  LocalModeError,
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
 import { isPlanLimit } from "../providers/chatgpt/errors";
 import { normalizeBaseUrl, serviceForUrl } from "../providers/kinds";
 import { classifyProviderError } from "../providers/providerErrors";
+import { gateStop } from "../sendGate";
 import { isChatModelChoice, type SettingsStore } from "../settings";
 import type { Database } from "../storage";
 import { sameName, type TagsStore } from "../tags";
@@ -571,7 +571,7 @@ export function createLibrary(options: {
               error instanceof ChatNotReadyError ||
               error instanceof ConsentDeclinedError ||
               error instanceof ConsentNeededError ||
-              error instanceof LocalModeError ||
+              gateStop(error) !== null ||
               error instanceof TaggingNotReadyError ||
               isPlanLimit(error);
             state(

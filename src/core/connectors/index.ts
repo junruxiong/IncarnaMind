@@ -890,21 +890,23 @@ export function createConnectors(options: ConnectorsOptions) {
             `The Connector "${row.name}" isn't used while everything stays on this computer, so ${tool.name} wasn't called. Go on without it.`,
           );
         }
-        try {
-          await untilAborted(consent.ensure("connectors", service), signal);
-          gate.check("connectors", service);
-        } catch (error) {
+        const refusal = (error: unknown) => {
           if (error instanceof ConsentDeclinedError || error instanceof ConsentRevokedError) {
-            throw new Error(
+            return new Error(
               `The User didn't allow sending data to the Connector "${row.name}", so ${tool.name} wasn't called. Go on without it.`,
             );
           }
           if (error instanceof LocalModeError) {
-            throw new Error(
+            return new Error(
               `The Connector "${row.name}" isn't used while everything stays on this computer, so ${tool.name} wasn't called. Go on without it.`,
             );
           }
-          throw error;
+          return error;
+        };
+        try {
+          await untilAborted(consent.ensure("connectors", service), signal);
+        } catch (error) {
+          throw refusal(error);
         }
         const runtime = runtimes.get(row.id);
         const client = runtime?.client;
@@ -915,6 +917,17 @@ export function createConnectors(options: ConnectorsOptions) {
         let result: Awaited<ReturnType<Client["callTool"]>>;
         try {
           if (config.transport === "http") await authOf(row.id, config.url).refreshIfStale();
+        } catch (error) {
+          if (config.transport === "http") remoteCallFailed(row, runtime, generation, error);
+          throw error;
+        }
+        // After the sign-in's refresh, which can wait on its server: the call is what sends.
+        try {
+          gate.check("connectors", service);
+        } catch (error) {
+          throw refusal(error);
+        }
+        try {
           result = await client.callTool({ name: tool.name, arguments: input }, undefined, {
             signal,
             timeout: timing.callTimeoutMs,

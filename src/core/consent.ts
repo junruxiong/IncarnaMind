@@ -276,7 +276,6 @@ export function createConsent(
     onThisComputer: (flowId: DataFlowId, serviceId: string) =>
       definitions.get(flowId)?.onThisComputer?.(serviceId) === true,
 
-    /** The flow to the service, with what it sends. */
     dataFlow: flowFor,
 
     /**
