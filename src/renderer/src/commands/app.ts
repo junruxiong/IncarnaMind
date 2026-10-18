@@ -18,6 +18,7 @@ import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { verifyDocument } from "../verify";
 import { useWordImport } from "../wordImport";
+import { analysisCommands } from "./analysis";
 import { answerTableCommands } from "./answerTables";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
@@ -137,6 +138,7 @@ const appCommands: readonly Command[] = [
   ...evidenceCommands,
   ...comparisonCommands,
   ...researchCommands,
+  ...analysisCommands,
   ...exportCommands,
   ...taskCommands,
   ...wordLookCommands,

@@ -48,6 +48,7 @@ const answer: ConversationAnswer = {
   text: "",
   citations: [],
   figures: [],
+  analyses: [],
   model: null,
   status: "done",
   errorKind: null,

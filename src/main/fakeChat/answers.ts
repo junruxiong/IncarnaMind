@@ -22,7 +22,10 @@
  * table whose one Citation stands in a paragraph under it, and one with "framed" (or 带说明)
  * gets a lead-in before its content and a closing note after it (#702).
  * One that asks how much something grew (增长) has the growth from the first
- * two numbers of its quote calculated, and writes it with its marker.
+ * two numbers of its quote calculated, and writes it with its marker. Offered
+ * an Analysis (#447), one that asks for revenue by region (按地区) runs one over the
+ * first sheet found, its Region and Revenue columns, and writes its table and
+ * total; with "manager" (负责人) it joins the regions sheet found too.
  * Before its search it reasons, a line that quotes the Question, as a model
  * that thinks does. A Question asked "slowly" waits a moment before each step
  * and writes its Answer word by word, so a test sees each step of the Answer.
@@ -299,6 +302,45 @@ export function searchParts(tool: string, query: string): StreamPart[] {
   ];
 }
 
+const BY_REGION = /\bby region\b|按地区/i;
+const WITH_MANAGERS = /\bmanager|负责人/i;
+
+/** An Analysis of revenue by region over the sheets found, then the Answer with its results. */
+function analysisReply(prompt: Prompt, question: string, searched: string): Reply | null {
+  const ran = toolResults(prompt, "run_analysis");
+  const chinese = /\p{Script=Han}/u.test(question);
+  if (ran.length > 0) {
+    return {
+      text: chinese
+        ? "各地区收入如下：\n\n[=table 1]\n\n合计 [=1]。"
+        : "Revenue by region:\n\n[=table 1]\n\nIn total, [=1].",
+    };
+  }
+  const passages = passagesIn(searched);
+  const sales = passages.find((passage) => /sales|销售/i.test(passage.document));
+  if (!sales) return null;
+  const regions = passages.find((passage) => /regions|地区/i.test(passage.document));
+  const joining = WITH_MANAGERS.test(question) && regions;
+  const code = [
+    'sales = step("Read the sales", inputs["sales"])',
+    'totals = sales.groupby("Region", sort=True)["Revenue"].sum()',
+    'result("by_region", totals, "Revenue by region")',
+    'result("total", totals.sum(), "Total revenue")',
+    ...(joining ? ['merged = sales.merge(inputs["regions"], on="Region", how="left")'] : []),
+  ].join("\n");
+  return {
+    tool: "run_analysis",
+    input: {
+      title: chinese ? "各地区收入" : "Revenue by region",
+      inputs: [
+        { name: "sales", passage: sales.id },
+        ...(joining ? [{ name: "regions", passage: regions.id }] : []),
+      ],
+      code,
+    },
+  };
+}
+
 /** What the model does next, apart from Connector Tools: call a Tool, or stream its Answer. */
 export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   const question = lastQuestion(prompt);
@@ -316,6 +358,10 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
       input: { query: question },
       reasoning: reasoningFor(question),
     };
+  }
+  if (tools.includes("run_analysis") && BY_REGION.test(question)) {
+    const reply = analysisReply(prompt, question, searches.at(-1) ?? "");
+    if (reply) return reply;
   }
   const cites = toolResults(prompt, "cite");
   if (cites.length === 0) {

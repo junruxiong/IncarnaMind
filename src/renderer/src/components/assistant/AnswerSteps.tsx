@@ -22,6 +22,7 @@ import { checkedWords, checkingWords } from "../../answerStepWords";
 import { useAnswers } from "../../answers";
 import { stepsScope } from "../../assistantContext";
 import { NO_SCOPE } from "../../composer";
+import { analysisCallText } from "../../editor/AnalysisCall";
 import { CallRow, SkillRow } from "../../editor/AnswerView";
 import { CheckMarkIcon, RegenerateSmallIcon } from "../../editor/icons";
 import { holdSteps, type ShownStep, type StepHold, takeOver } from "../../heldStep";
@@ -250,6 +251,7 @@ function runningText(
   }
   if (call.source === "sources") return t("sources.call.running", { query: field(call, "query") });
   if (call.source === "minds") return mindCallText(t, call, mindOf(call));
+  if (call.source === "analysis") return analysisCallText(t, call);
   if (call.source === "web") {
     return call.tool === "search_web"
       ? t("web.call.searching", { query: field(call, "query") })

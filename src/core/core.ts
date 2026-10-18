@@ -1163,6 +1163,7 @@ export function createCore(adapters: CoreAdapters): Core {
     content,
     events,
     engine: answerEngine,
+    ...(adapters.analysisRuntime && { analysisRuntime: adapters.analysisRuntime }),
     requireMind: (mindId) => writableMind(mindId).id,
     mindExists,
     readableMindName: (mindId) => {
@@ -1190,6 +1191,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableBySize: (documentIds) => documents.searchableBySize(documentIds ?? undefined),
+      searchableHasSheets: (documentIds) => documents.searchableHasSheets(documentIds ?? undefined),
       passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
@@ -2898,6 +2900,7 @@ export function createCore(adapters: CoreAdapters): Core {
           scope: null,
           model: null,
           forcedSkill: null,
+          analyse: false,
         },
         null,
         null,
@@ -2906,6 +2909,7 @@ export function createCore(adapters: CoreAdapters): Core {
         text: ready.answer,
         citations: ready.citations,
         figures: [],
+        analyses: [],
         toolCalls: [],
         support: null,
         textOrigin: null,

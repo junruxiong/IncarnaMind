@@ -21,8 +21,15 @@
  */
 import type { Effect, ReadThirdPartySource } from "../api";
 
-/** v1's providers, Find sources, web search and the Minds; later ones add their kind here. */
-export type ToolProviderKind = "documents" | "skills" | "connector" | "sources" | "web" | "minds";
+/** v1's providers, Find sources, web search, the Minds and Analyses; later ones add their kind here. */
+export type ToolProviderKind =
+  | "documents"
+  | "skills"
+  | "connector"
+  | "sources"
+  | "web"
+  | "minds"
+  | "analysis";
 
 /** Which provider a Tool comes from: for its Tool-call card, its approvals and the log. */
 export interface ToolProviderInfo {
@@ -129,6 +136,9 @@ export const MIND_TOOLS = {
   create: "create_mind",
 } as const;
 
+/** The name of the Analyses' Tool (#447). */
+export const ANALYSIS_TOOLS = { run: "run_analysis" } as const;
+
 /**
  * IncarnaMind's own Tools' names. They are reserved: a Tool from outside
  * IncarnaMind (a Connector's) never takes one (see `offeredTools`).
@@ -139,6 +149,7 @@ export const RESERVED_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
   ...Object.values(SOURCE_TOOLS),
   ...Object.values(WEB_TOOLS),
   ...Object.values(MIND_TOOLS),
+  ...Object.values(ANALYSIS_TOOLS),
 ]);
 
 /** A Tool from outside IncarnaMind: a Connector's. Every other provider is IncarnaMind's own. */

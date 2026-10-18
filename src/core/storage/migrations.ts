@@ -1770,6 +1770,21 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE document_groups ADD COLUMN filed_at TEXT;
     `,
   },
+  {
+    version: 100,
+    description: "Answers in conversations keep their Analyses, and a Question that asked for one",
+    sql: `
+      -- An Answer's Analyses (src/core/analysis, ADR-0023), as a JSON list: each one's number,
+      -- title, code, inputs (each range with its Citation, shape and the SHA-256 of its values;
+      -- each quoted number as a calculated figure's input), the runtime's versions, how it ended,
+      -- what it gave, the hashes of its code and output, and the markers of its results.
+      -- '[]' for a Question, and for an Answer with none.
+      ALTER TABLE conversation_messages ADD COLUMN analyses TEXT NOT NULL DEFAULT '[]';
+      -- A Question asked with "Analyse data…": its Answer may run an Analysis whatever its
+      -- Search scope holds, also when it is written again. 0 for every other row.
+      ALTER TABLE conversation_messages ADD COLUMN analyse INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 /**
