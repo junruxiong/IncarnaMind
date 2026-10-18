@@ -504,12 +504,12 @@ const PROVIDERS = [
       },
       url: "https://platform.kimi.ai/docs/agreement/modeluse",
     },
-    notes: [
-      {
-        en: "If Kimi refuses requests, top up your Kimi account.",
-        zh: "如果 Kimi 拒绝请求，请为你的 Kimi 账户充值。",
-      },
-    ],
+    keyLine: {
+      en: "If Kimi refuses requests, check your Kimi account",
+      zh: "如果 Kimi 拒绝请求，请检查你的 Kimi 账户",
+      url: "https://platform.kimi.ai/docs/pricing/chat",
+      link: "pricing",
+    },
     checked: "2026-10-16",
   },
   {

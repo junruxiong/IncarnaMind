@@ -670,7 +670,7 @@ describe("Support tiers (ADR-0019)", () => {
   test("a key guide's steps and notes say what to do, and no line states another company's price, fee, credit or plan contents, in both languages", () => {
     const withLine = CATALOG_PROVIDERS.filter((each) => each.keyLine);
     expect(withLine.map((each) => each.id)).toEqual(
-      expect.arrayContaining(["anthropic", "openai", "google", "openrouter"]),
+      expect.arrayContaining(["anthropic", "openai", "google", "openrouter", "kimi"]),
     );
     for (const each of CATALOG_PROVIDERS) {
       const lines = [
