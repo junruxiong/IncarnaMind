@@ -392,6 +392,25 @@ const toMessage = (row: MessageRow): ConversationMessage | null =>
 const messagesOf = (rows: readonly MessageRow[]) =>
   rows.map(toMessage).filter((message): message is ConversationMessage => message !== null);
 
+/**
+ * No model wrote the example's Answer, so it isn't the model's own earlier turn
+ * for a Question asked from another Mind than the one the example was asked in.
+ */
+function withoutExample(
+  messages: readonly ConversationMessage[],
+  mindId: string | null,
+): ConversationMessage[] {
+  const left = new Set<string>();
+  for (const answer of messages) {
+    if (answer.kind !== "answer" || !answer.steps?.example) continue;
+    const question = messages.find((each) => each.id === answer.questionId);
+    if (question?.kind === "question" && question.askedFrom?.mindId !== mindId) {
+      left.add(question.id).add(answer.id);
+    }
+  }
+  return messages.filter((each) => !left.has(each.id));
+}
+
 /** An Answer's `read_mind_id`, `read_mind_version` and `read_partial`. */
 const readColumns = (read: AnswerRead | null): [string | null, string | null, number] => [
   read?.mindId ?? null,
@@ -551,8 +570,11 @@ export function createConversations(db: Database, now: () => string) {
     conversation: get(question.conversation_id),
     question: toQuestion(question),
     answer: toAnswer(storedMessage(answerId)),
-    earlier: messagesOf(
-      messageRows(question.conversation_id, "AND msg.position < ?", [BigInt(question.position)]),
+    earlier: withoutExample(
+      messagesOf(
+        messageRows(question.conversation_id, "AND msg.position < ?", [BigInt(question.position)]),
+      ),
+      question.asked_from_mind_id,
     ),
   });
 
