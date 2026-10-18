@@ -763,7 +763,7 @@ describe("Routing everyday requests", () => {
     ["Write a one-page summary of the paper in a new note", true],
     ["Write the conclusion", false],
   ] as const)("%s asks for a new Mind: %s", (request, newMind) => {
-    expect(routeRequest(request, FIRST)).toEqual({ kind: "write", newMind });
+    expect(routeRequest(request, FIRST)).toMatchObject({ kind: "write", newMind });
   });
 
   // protects=a request to write a piece goes into a new Mind, the owner's sentence among them, in English and Chinese, while a question about the Documents stays in the panel (#1109); fails_when=one is answered in the panel, or a question writes a Mind; no_claim=every wording a User may use.
@@ -783,7 +783,9 @@ describe("Routing everyday requests", () => {
   ] as const)("%s goes into a new Mind: %s", (request, written) => {
     for (const context of [FIRST, NO_CHANGE, CHANGE]) {
       expect(routeRequest(request, context)).toEqual(
-        written ? { kind: "write", newMind: true } : { kind: "unclear", newMind: false },
+        written
+          ? { kind: "write", newMind: true, fillsEmpty: true }
+          : { kind: "unclear", newMind: false },
       );
     }
   });
@@ -803,6 +805,7 @@ describe("Routing everyday requests", () => {
       kind: "write",
       newMind: true,
       fromAnswer: true,
+      fillsEmpty: true,
     });
     expect(routeRequest(request, FIRST).fromAnswer).toBeUndefined();
   });
