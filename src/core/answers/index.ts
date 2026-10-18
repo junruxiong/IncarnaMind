@@ -158,6 +158,7 @@ import { asksToCheckOrCalculate } from "./carefulIntent";
 import {
   type AnswerDocuments,
   createCitationSession,
+  withoutDeadMarkers,
   withoutFootnoteDefinitions,
 } from "./citations";
 import {
@@ -1116,6 +1117,8 @@ export function createAnswers(options: AnswersOptions) {
       } catch (error) {
         options.reportError(error);
       }
+      // A marker no Citation backs is not kept in the text, and each is counted for the summary.
+      markdown = withoutDeadMarkers(markdown, (marker) => session.finalCitation(marker) !== null);
       // Its steps say how many figures it shows, and its end how many it couldn't calculate.
       const placed = placedFigures(withoutFootnoteDefinitions(markdown), true);
       if (placed.figures.length > 0 || placed.missing > 0) {

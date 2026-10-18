@@ -667,20 +667,29 @@ describe("Support tiers (ADR-0019)", () => {
     }
   });
 
-  test("a key guide's steps say what to do; what a plan includes is said once, in the note under them, in both languages", () => {
-    const withNote = CATALOG_PROVIDERS.filter((each) => each.planCredits && each.keyGuide);
-    expect(withNote.map((each) => each.id)).toEqual(
-      expect.arrayContaining(["anthropic", "openai"]),
+  test("a key guide's steps and notes say what to do, and no line states another company's price, fee, credit or plan contents, in both languages", () => {
+    const withLine = CATALOG_PROVIDERS.filter((each) => each.keyLine);
+    expect(withLine.map((each) => each.id)).toEqual(
+      expect.arrayContaining(["anthropic", "openai", "google", "openrouter", "kimi"]),
     );
-    for (const each of withNote) {
-      for (const step of each.keyGuide ?? []) {
-        expect(step.en, each.id).not.toMatch(/include|doesn't/i);
-        expect(step.zh, each.id).not.toMatch(/不含|不包含|附带/);
+    for (const each of CATALOG_PROVIDERS) {
+      const lines = [
+        ...(each.keyGuide ?? []),
+        ...(each.notes ?? []),
+        ...(each.keyLine ? [each.keyLine] : []),
+      ];
+      for (const line of lines) {
+        expect(line.en, each.id).not.toMatch(
+          /include|doesn't|\bfree\b|\bfees?\b|\bdouble\b|[$¥]\s?\d|\d\s?%/i,
+        );
+        expect(line.zh, each.id).not.toMatch(/不含|不包含|附带|免费|手续费|翻倍|[$¥]\s?\d|\d\s?%/);
       }
     }
-    const note = catalogProvider("anthropic")?.planCredits;
-    expect(note?.en).toContain("Anthropic Console");
-    expect(note?.zh).toContain("Anthropic Console");
+    for (const each of withLine) {
+      expect(each.keyLine?.url, each.id).toMatch(/^https:\/\//);
+    }
+    expect(catalogProvider("google")?.keyLine?.link).toBe("pricing");
+    expect(catalogProvider("openrouter")?.keyLine?.link).toBe("pricing");
   });
 
   test("a best-effort provider keeps its link to the provider's key page", () => {

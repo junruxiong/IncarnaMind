@@ -1,6 +1,7 @@
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
 import { askInAssistant, regenerateAnswer } from "../../conversations";
 import { useLanguage, useT } from "../../i18n";
+import { saidInLine } from "../../lineNames";
 import { MetaLine } from "../MetaLine";
 import { LineAction } from "../ProblemLine";
 
@@ -23,16 +24,17 @@ export function CoverageLine({
   const coverage = answer.steps?.coverage;
   if (!coverage || !question) return null;
   const { used, rest } = coverage;
-  const text =
+  const said = saidInLine(t, (t, cut) =>
     coverage.kind === "largest"
       ? t("coverage.largest", { count: used.length, total: used.length + rest.length })
       : used.length === 1
-        ? t("coverage.main.one", { document: `“${used[0]?.name ?? ""}”` })
+        ? t("coverage.main.one", { document: `“${cut(used[0]?.name ?? "")}”` })
         : t("coverage.main", {
             documents: new Intl.ListFormat(language, { type: "conjunction" }).format(
-              used.map((each) => `“${each.name}”`),
+              used.map((each) => `“${cut(each.name)}”`),
             ),
-          });
+          }),
+  );
   const askAgain = () =>
     void askInAssistant({
       text: question.text,
@@ -45,9 +47,10 @@ export function CoverageLine({
   return (
     <MetaLine
       data-testid="answer-coverage"
+      title={said.fullMessage}
       className="answer-coverage"
       parts={[
-        text,
+        said.message,
         rest.length > 0 && (
           <LineAction
             action={{

@@ -1,6 +1,6 @@
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { displayName } from "../../../shared/documentNames";
-import { shortenMiddle } from "../../../shared/naming";
+import { nameInLine } from "../../../shared/naming";
 import { core, files } from "../core";
 import { CheckStateIcon } from "../editor/icons";
 import { errorMessage } from "../errors";
@@ -19,6 +19,7 @@ import {
 } from "../exports";
 import { showFileLabelKey } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
+import { saidInLine } from "../lineNames";
 import { folderName } from "../linkedFolders";
 import { enter } from "../motion";
 import {
@@ -34,9 +35,6 @@ import { WordExportReview } from "./WordExportReview";
 
 /** How long a plain "Saved …" stays, unless the pointer or the focus is on it. */
 const SAVED_SHOWN_MS = 10_000;
-
-/** Wide enough for a name that reads, narrow enough that the sentence stays in two lines in a group half the window wide. */
-const SAVED_NAME_COLUMNS = 40;
 
 type SavedResult = Extract<ExportResult, { state: "saved" }>;
 
@@ -334,19 +332,23 @@ function NeedsDetailsLine({ mindId, documentIds }: { mindId: string; documentIds
     return document ? [displayName(document)] : [];
   });
   if (names.length === 0) return null;
-  const listed = names.slice(0, NAMED_BEFORE_MORE).map((name) => `“${name}”`);
   const separator = language === "zh-CN" ? "、" : ", ";
-  const text =
+  const said = saidInLine(t, (t, cut) =>
     names.length === 1
       ? t("export.needsDetails.line.one", { name: names[0] ?? "" })
       : t("export.needsDetails.line.other", {
           count: names.length,
-          names: `${listed.join(separator)}${names.length > NAMED_BEFORE_MORE ? "…" : ""}`,
-        });
+          names: `${names
+            .slice(0, NAMED_BEFORE_MORE)
+            .map((name) => `“${cut(name)}”`)
+            .join(separator)}${names.length > NAMED_BEFORE_MORE ? "…" : ""}`,
+        }),
+  );
   return (
     <ProblemLine
       role="status"
       testId="export-needs-details"
+      title={said.fullMessage}
       action={{
         label: t("export.needsDetails.show"),
         testId: "export-needs-details-show",
@@ -357,7 +359,7 @@ function NeedsDetailsLine({ mindId, documentIds }: { mindId: string; documentIds
         aria-hidden="true"
         className="mr-2 inline-block size-1.5 rounded-full bg-attention align-[2px]"
       />
-      {text}
+      {said.message}
     </ProblemLine>
   );
 }
@@ -365,7 +367,7 @@ function NeedsDetailsLine({ mindId, documentIds }: { mindId: string; documentIds
 function SavedSentence({ result, withFile }: { result: SavedResult; withFile: SavedWithFile }) {
   const t = useT();
   const folder = result.inDefaultFolder ? defaultFolderLabel(t) : folderName(result.folder);
-  const name = shortenMiddle(result.name, SAVED_NAME_COLUMNS);
+  const name = nameInLine(result.name);
   return (
     <p
       role="status"
