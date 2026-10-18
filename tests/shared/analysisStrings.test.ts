@@ -1,33 +1,43 @@
 import { describe, expect, test } from "vitest";
-import { type AnalysisUnavailableReason, UNAVAILABLE_REASONS } from "../../src/shared/analysis";
+import {
+  type AnalysisUnavailableReason,
+  CRASHED_LINE,
+  LINUX_SANDBOX_HELP_URL,
+  UNAVAILABLE_LINES,
+} from "../../src/shared/analysis";
 import { translate } from "../../src/shared/i18n";
 
 /*
- * Where the User would use an Analysis that can't run on their computer, they read why, in plain
- * words, in English and in Chinese (ADR-0023).
+ * Where the User would see an Analysis that couldn't run, or that crashed, they read why, in
+ * plain words, in English and in Chinese (ADR-0023); with the sandbox off, a link says how to fix it.
  */
 
-const REASONS = Object.keys(UNAVAILABLE_REASONS) as AnalysisUnavailableReason[];
+const REASONS = Object.keys(UNAVAILABLE_LINES) as AnalysisUnavailableReason[];
 
 describe("why an Analysis can't run", () => {
-  test.each(REASONS)("%s reads as one sentence in English and in Chinese", (reason) => {
-    const english = translate("en", "analysis.unavailable", {
-      reason: translate("en", UNAVAILABLE_REASONS[reason]),
-    });
-    const chinese = translate("zh-CN", "analysis.unavailable", {
-      reason: translate("zh-CN", UNAVAILABLE_REASONS[reason]),
-    });
+  test.each(REASONS)("%s reads in English and in Chinese", (reason) => {
+    const line = UNAVAILABLE_LINES[reason];
+    const english = translate("en", line.text);
+    const chinese = translate("zh-CN", line.text);
 
-    expect(english).toMatch(/^Analysis can't run on this computer: [a-z].+\.$/);
-    expect(chinese).toMatch(/^这台电脑上无法运行数据分析：\p{Script=Han}.+。$/u);
+    expect(english).toMatch(/^Analys[ei]s /);
+    expect(chinese).toMatch(/\p{Script=Han}/u);
+    expect(chinese).toMatch(/数据分析|分析/);
     expect(chinese).not.toContain("沙箱");
   });
 
-  test("a sandbox that can't start says so", () => {
-    expect(
-      translate("en", "analysis.unavailable", {
-        reason: translate("en", UNAVAILABLE_REASONS.start),
-      }),
-    ).toBe("Analysis can't run on this computer: its sandbox couldn't start.");
+  test("with the sandbox off, the line links to how to turn it back on", () => {
+    const line = UNAVAILABLE_LINES["no-sandbox"];
+
+    expect(translate("en", line.text)).toBe("Analyses need the app's sandbox, which is off");
+    expect(translate("zh-CN", line.text)).toBe("分析需要应用的沙盒，但它已关闭");
+    expect(line.fix?.url).toBe(LINUX_SANDBOX_HELP_URL);
+    expect(line.fix && translate("en", line.fix.label)).toBe("How to fix");
+    expect(line.fix && translate("zh-CN", line.fix.label)).toBe("如何解决");
+  });
+
+  test("a crash says to run it again, in English and in Chinese", () => {
+    expect(translate("en", CRASHED_LINE)).toBe("The analysis stopped unexpectedly. Run it again.");
+    expect(translate("zh-CN", CRASHED_LINE)).toBe("数据分析意外停止。请重新运行。");
   });
 });

@@ -1,16 +1,18 @@
 /**
- * The core's `AnalysisRuntime` (ADR-0023): Python runs in Pyodide, in a
- * module Worker of a hidden page. The page is sandboxed, with no Node, in a
- * session of its own that serves only the page and the bundled Python files,
- * each under a Content-Security-Policy that allows no network, and cancels
- * every other request; permissions, navigation, new windows and downloads are
- * refused. It starts with the first job and closes when idle. A job that runs
- * past its time, is stopped or runs out of memory, or a page that goes, ends
- * the window, and another starts.
+ * The core's `AnalysisRuntime` (ADR-0023): Python runs in Pyodide, in module
+ * Workers of a hidden page, a fresh one for each job, with a spare kept
+ * ready. The page is sandboxed, with no Node, in a session of its own that
+ * serves only the page and the bundled Python files, each under a
+ * Content-Security-Policy that allows no network, and cancels every other
+ * request; permissions, navigation, new windows and downloads are refused, and
+ * its storage is cleared after each job. It starts with the first job and
+ * closes when idle. A job that runs past its time, is stopped or runs out of
+ * memory, or a page that goes, ends the window, and another starts.
  */
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { extname, join, normalize, sep } from "node:path";
+import { extname, join } from "node:path";
 import {
   app,
   BaseWindow,
@@ -25,6 +27,7 @@ import {
 } from "electron";
 import type { AnalysisRuntime, Logger } from "../core";
 import { isRecord } from "../core/errors";
+import helper from "../renderer/analysis/incarnamind.py?raw";
 import {
   ANALYSIS_LIMITS,
   ANALYSIS_TIME_LIMIT_MS,
@@ -47,6 +50,7 @@ import {
   MAX_REPLY_CHARACTERS,
   PYTHON_PATH,
 } from "../shared/analysisWindow";
+import { devServerUrl, pageFile, sandboxOff } from "./analysisPaths";
 
 /** Registered with the app's other privileged schemes, before it is ready (index.ts). */
 export const ANALYSIS_SCHEME_PRIVILEGES: CustomScheme = {
@@ -78,7 +82,7 @@ const TYPES: Readonly<Record<string, string>> = {
 
 /** Starting Pyodide with numpy and pandas took 3–6 s on the spike's runners; a slow computer gets far longer. */
 const START_LIMIT_MS = 120_000;
-/** A warm interpreter waits this long for the next job before its window closes, freeing its memory. */
+/** The window and its spare interpreter wait this long for the next job before they close, freeing their memory. */
 const IDLE_MS = 5 * 60_000;
 /** Past this, a job is ended as out of memory, well before WebAssembly's 4 GB would let Python run out. */
 const MEMORY_LIMIT_KB = 2 * 1024 * 1024;
@@ -111,6 +115,8 @@ function versionsIn(folder: string, log: Logger): AnalysisVersions | null {
       languageVersion: read.python,
       runtime: `Pyodide ${read.pyodide}`,
       packages,
+      helper: createHash("sha256").update(helper).digest("hex"),
+      app: app.getVersion(),
     };
   } catch (error) {
     log.warn("analysis.noFiles", {
@@ -134,11 +140,6 @@ const respond = (body: ConstructorParameters<typeof Response>[0], type: string, 
 
 const notFound = () => respond("Not found", "text/plain", 404);
 
-function inside(root: string, path: string): string | null {
-  const file = normalize(join(root, path));
-  return file.startsWith(`${root}${sep}`) ? file : null;
-}
-
 function prepareSession(options: ElectronAnalysisOptions): Session {
   const sandbox = session.fromPartition(PARTITION, { cache: false });
   const page = join(__dirname, "../renderer");
@@ -157,15 +158,16 @@ function prepareSession(options: ElectronAnalysisOptions): Session {
     if (options.rendererUrl) {
       // Development: the dev server builds the page; the main process fetches it, so the page
       // itself still reaches nothing but this scheme.
-      const fetched = await net.fetch(new URL(`${pathname}${search}`, options.rendererUrl).href);
+      const url = devServerUrl(`${pathname}${search}`, options.rendererUrl);
+      if (!url) return notFound();
+      const fetched = await net.fetch(url);
       return respond(
         await fetched.arrayBuffer(),
         fetched.headers.get("Content-Type") ?? "text/plain",
         fetched.status,
       );
     }
-    if (path !== "/analysis.html" && !path.startsWith("/assets/")) return notFound();
-    const file = inside(page, path);
+    const file = pageFile(page, path);
     const bytes = file ? await readFile(file).catch(() => null) : null;
     return bytes ? respond(bytes, TYPES[extname(path)] ?? "application/octet-stream") : notFound();
   });
@@ -183,6 +185,8 @@ interface Sandbox {
   contents: WebContents;
   ready: Promise<AnalysisReady>;
   replies: Map<number, (reply: AnalysisReply) => void>;
+  /** The job waiting for its interpreter to take it. */
+  starts: Map<number, () => void>;
   /** Resolves with why the page went: "closed" when it was ended here. */
   gone: Promise<string>;
   end(reason: string): void;
@@ -193,6 +197,7 @@ type Outcome =
   | { kind: "timed-out" }
   | { kind: "stopped" }
   | { kind: "memory" }
+  | { kind: "no-start" }
   | { kind: "gone"; reason: string };
 
 function resultOf(text: string, ms: number): AnalysisResult {
@@ -245,7 +250,13 @@ export function createElectronAnalysisRuntime(options: ElectronAnalysisOptions):
         answer({ id, failure: typeof reply.failure === "string" ? reply.failure : "No result." });
       }
     });
+    ipcMain.on(ANALYSIS_CHANNELS.started, (event, id: unknown) => {
+      if (typeof id === "number") sandboxOf(event)?.starts.get(id)?.();
+    });
   };
+
+  /** Clears what the window's pages could keep: IndexedDB, the file system and the rest. */
+  const clearStorage = () => analysisSession?.clearStorageData() ?? Promise.resolve();
 
   const open = (): Sandbox => {
     listen();
@@ -317,17 +328,21 @@ export function createElectronAnalysisRuntime(options: ElectronAnalysisOptions):
       else log.error("analysis.startFailed", { message: state.message });
       return state;
     });
-    void contents.loadURL(`${ANALYSIS_ORIGIN}/analysis.html`).catch((error: unknown) => {
-      log.error("analysis.pageFailed", {
-        message: error instanceof Error ? error.message : String(error),
+    // A new window starts with nothing an earlier one left.
+    void clearStorage()
+      .then(() => contents.loadURL(`${ANALYSIS_ORIGIN}/analysis.html`))
+      .catch((error: unknown) => {
+        log.error("analysis.pageFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
       });
-    });
 
     return {
       window,
       contents,
       ready,
       replies: new Map(),
+      starts: new Map(),
       gone,
       end(reason) {
         markGone(reason);
@@ -354,17 +369,30 @@ export function createElectronAnalysisRuntime(options: ElectronAnalysisOptions):
     return app.getAppMetrics().find((each) => each.pid === pid)?.memory.workingSetSize ?? null;
   };
 
-  const wait = (sandbox: Sandbox, request: AnalysisRequest, limitMs: number, signal: AbortSignal) =>
-    new Promise<Outcome>((resolve) => {
+  /** Sends a job, and waits for its end: its time runs from when its fresh interpreter takes it. */
+  const wait = (
+    sandbox: Sandbox,
+    request: AnalysisRequest,
+    limitMs: number,
+    signal: AbortSignal,
+  ): Promise<{ outcome: Outcome; ms: number }> =>
+    new Promise((resolve) => {
+      let started: number | null = null;
       const done = (outcome: Outcome) => {
         clearTimeout(timer);
         clearInterval(memory);
         signal.removeEventListener("abort", stop);
         sandbox.replies.delete(request.id);
-        resolve(outcome);
+        sandbox.starts.delete(request.id);
+        resolve({ outcome, ms: started === null ? 0 : Math.round(performance.now() - started) });
       };
       const stop = () => done({ kind: "stopped" });
-      const timer = setTimeout(() => done({ kind: "timed-out" }), limitMs);
+      let timer = setTimeout(() => done({ kind: "no-start" }), START_LIMIT_MS);
+      sandbox.starts.set(request.id, () => {
+        started = performance.now();
+        clearTimeout(timer);
+        timer = setTimeout(() => done({ kind: "timed-out" }), limitMs);
+      });
       const memory = setInterval(() => {
         if ((memoryOf(sandbox.contents) ?? 0) > MEMORY_LIMIT_KB) done({ kind: "memory" });
       }, MEMORY_CHECK_MS);
@@ -380,6 +408,14 @@ export function createElectronAnalysisRuntime(options: ElectronAnalysisOptions):
         kind: "unavailable",
         reason: "missing",
         detail: `No Python files in ${options.folder}.`,
+      });
+    }
+    // With Chromium's sandbox off for every renderer, nothing would keep the code from this computer.
+    if (sandboxOff((name) => app.commandLine.hasSwitch(name), process.env)) {
+      return endedBefore({
+        kind: "unavailable",
+        reason: "no-sandbox",
+        detail: "Electron runs with its sandbox off (--no-sandbox or ELECTRON_DISABLE_SANDBOX).",
       });
     }
     if (signal.aborted) return endedBefore({ kind: "stopped" });
@@ -407,9 +443,7 @@ export function createElectronAnalysisRuntime(options: ElectronAnalysisOptions):
       id: ++nextId,
       job: JSON.stringify({ code: job.code, inputs: job.inputs, limits: ANALYSIS_LIMITS }),
     };
-    const started = performance.now();
-    const outcome = await wait(sandbox, request, limitMs, signal);
-    const ms = Math.round(performance.now() - started);
+    const { outcome, ms } = await wait(sandbox, request, limitMs, signal);
     let result: AnalysisResult;
     let again = false;
     if (outcome.kind === "reply") {
@@ -419,13 +453,8 @@ export function createElectronAnalysisRuntime(options: ElectronAnalysisOptions):
           result.end.kind === "out-of-memory" ||
           (memoryOf(sandbox.contents) ?? 0) > RESTART_ABOVE_KB;
       } else {
-        // Pyodide can't go on after a fatal error under the code: the interpreter starts again.
         log.error("analysis.failed", { message: outcome.reply.failure });
-        result = {
-          end: { kind: "error", message: outcome.reply.failure, line: null },
-          output: noAnalysisOutput(),
-          ms,
-        };
+        result = { end: { kind: "crashed" }, output: noAnalysisOutput(), ms };
         again = true;
       }
     } else {
@@ -433,18 +462,16 @@ export function createElectronAnalysisRuntime(options: ElectronAnalysisOptions):
         "timed-out": { kind: "timed-out", limitMs },
         stopped: { kind: "stopped" },
         memory: { kind: "out-of-memory" },
+        "no-start": { kind: "crashed" },
         gone:
           outcome.kind === "gone" && outcome.reason === "oom"
             ? { kind: "out-of-memory" }
             : outcome.kind === "gone" && outcome.reason === "closed"
               ? { kind: "stopped" }
-              : {
-                  kind: "error",
-                  message: "The analysis stopped unexpectedly. Run it again.",
-                  line: null,
-                },
+              : { kind: "crashed" },
       };
       result = { ...endedBefore(ends[outcome.kind]), ms };
+      if (outcome.kind === "no-start") log.error("analysis.noStart", { limitMs: START_LIMIT_MS });
       if (outcome.kind === "gone" && outcome.reason !== "closed") {
         log.error("analysis.windowGone", { reason: outcome.reason });
       }
@@ -452,6 +479,7 @@ export function createElectronAnalysisRuntime(options: ElectronAnalysisOptions):
     }
     log.info("analysis.ran", { ms, end: result.end.kind });
     if (again && current === sandbox) endWindow(true);
+    await clearStorage();
     closeWhenIdle();
     return result;
   };

@@ -16,6 +16,7 @@ const bridge: AnalysisBridge = {
     ipcRenderer.on(ANALYSIS_CHANNELS.run, (_event, request: AnalysisRequest) => listener(request));
   },
   ready: (state) => ipcRenderer.send(ANALYSIS_CHANNELS.ready, state),
+  started: (id) => ipcRenderer.send(ANALYSIS_CHANNELS.started, id),
   done: (reply) => ipcRenderer.send(ANALYSIS_CHANNELS.done, reply),
 };
 

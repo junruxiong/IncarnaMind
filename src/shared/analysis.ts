@@ -158,14 +158,29 @@ export interface AnalysisOutput {
 /**
  * Why Analyses can't run on this computer:
  * - "missing": this copy of IncarnaMind has no runtime, or its files are missing;
- * - "start": its sandbox or interpreter couldn't start.
+ * - "start": its sandbox or interpreter couldn't start;
+ * - "no-sandbox": the app runs with Chromium's sandbox off (`--no-sandbox`), so
+ *   nothing would keep the code from the computer.
  */
-export type AnalysisUnavailableReason = "missing" | "start";
+export type AnalysisUnavailableReason = "missing" | "start" | "no-sandbox";
 
-/** Why, in plain words, where the User would use an Analysis: "analysis.unavailable" says the rest. */
-export const UNAVAILABLE_REASONS: Readonly<Record<AnalysisUnavailableReason, MessageKey>> = {
-  missing: "analysis.unavailable.missing",
-  start: "analysis.unavailable.start",
+/** How to turn the sandbox back on, for the distributions that block it. */
+export const LINUX_SANDBOX_HELP_URL =
+  "https://github.com/IncarnaMind/IncarnaMind/blob/main/docs/linux-sandbox.md";
+
+/**
+ * What the User reads where an Analysis would have been, when it couldn't
+ * run, and the link that says how to fix it, where there is one.
+ */
+export const UNAVAILABLE_LINES: Readonly<
+  Record<AnalysisUnavailableReason, { text: MessageKey; fix?: { label: MessageKey; url: string } }>
+> = {
+  missing: { text: "analysis.unavailable.missing" },
+  start: { text: "analysis.unavailable.start" },
+  "no-sandbox": {
+    text: "analysis.unavailable.noSandbox",
+    fix: { label: "analysis.unavailable.noSandbox.fix", url: LINUX_SANDBOX_HELP_URL },
+  },
 };
 
 /** How a run ended. */
@@ -176,8 +191,13 @@ export type AnalysisEnd =
   | { kind: "timed-out"; limitMs: number }
   | { kind: "stopped" }
   | { kind: "out-of-memory" }
+  /** Python or its window stopped under the code, for no reason it gave: the log has the detail. */
+  | { kind: "crashed" }
   /** `detail`: technical, in English, for the log. */
   | { kind: "unavailable"; reason: AnalysisUnavailableReason; detail: string };
+
+/** What the User reads of a run that crashed. */
+export const CRASHED_LINE: MessageKey = "analysis.crashed";
 
 export interface AnalysisResult {
   end: AnalysisEnd;
@@ -195,6 +215,10 @@ export interface AnalysisVersions {
   runtime: string;
   /** Each package it loads, by name: `{ numpy: "2.4.6" }`. */
   packages: Readonly<Record<string, string>>;
+  /** SHA-256 of the helper every job runs through (`incarnamind`): its rules are part of the result. */
+  helper: string;
+  /** The IncarnaMind version that ran it. */
+  app: string;
 }
 
 export const noAnalysisOutput = (): AnalysisOutput => ({

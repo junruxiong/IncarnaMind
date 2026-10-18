@@ -3,7 +3,13 @@
 The code reads its inputs from `inputs`, reports with `step`, `result` and
 `chart`, and runs in a namespace of its own, with the same seeds every time
 and no clock. Before it runs, the numbers written in it are listed. What it
-gives is cut to the limits each job brings, and goes back as JSON.
+gives is cut to the limits each job brings, and goes back as JSON. Each job
+runs in a fresh interpreter (../../main/analysis.ts).
+
+The clock is taken away where code reaches it as a matter of course
+(datetime, time, pandas' Timestamp and "today"), so an Analysis doesn't read
+the date by accident. It is best-effort, not a boundary: code that means to
+can still find the time.
 """
 
 import ast
