@@ -1093,7 +1093,11 @@ export class LookReader {
   }
 
   paragraphKey(paragraph: ParagraphLookContext, run: string | null): string | null {
-    return this.paragraphs.key(run ? { ...paragraph.look, run } : paragraph.look);
+    const look = run ? { ...paragraph.look, run } : paragraph.look;
+    const key = this.paragraphs.key(look);
+    if (key || Object.keys(paragraph.format).length === 0) return key;
+    // With no key, a paragraph draws in the Mind's style rather than as Word draws its format.
+    return this.paragraphs.empty(look);
   }
 
   /** Drawn on a paragraph, these would cover all its text, not only the text that has them. */
@@ -1199,26 +1203,26 @@ const EMPTY: XmlElement = { name: "", attrs: {}, children: [] };
 const WORD_DEFAULT_SIZE = 10;
 
 /** For each property direct formatting can set apart from the look, what says "none" where a style gave one; null where nothing can. */
-type Direct<T, K extends keyof T> = Record<K, { unset: T[K] | null }>;
+type Direct<T, K extends keyof T> = readonly { [P in K]: readonly [P, T[P] | null] }[K][];
 
 const PARAGRAPH_DIRECT: Direct<
   WordParagraphLook,
   "align" | "left" | "right" | "firstLine" | "before" | "after" | "line"
-> = {
-  align: { unset: "left" },
-  left: { unset: 0 },
-  right: { unset: 0 },
-  firstLine: { unset: 0 },
-  before: { unset: 0 },
-  after: { unset: 0 },
-  line: { unset: null },
-};
+> = [
+  ["align", "left"],
+  ["left", 0],
+  ["right", 0],
+  ["firstLine", 0],
+  ["before", 0],
+  ["after", 0],
+  ["line", null],
+];
 
 /** Word's "auto" colour or "baseline" over a style's can't be said as a mark. */
-const RUN_DIRECT: Direct<WordRunLook, "color" | "vertical"> = {
-  color: { unset: null },
-  vertical: { unset: null },
-};
+const RUN_DIRECT: Direct<WordRunLook, "color" | "vertical"> = [
+  ["color", null],
+  ["vertical", null],
+];
 
 /**
  * Decides what of a paragraph's or run's direct formatting the Mind keeps
@@ -1235,9 +1239,9 @@ export function splitDirect<T extends object, K extends keyof T>(
 ): { look: T; direct: Partial<Pick<T, K>> } {
   const look: T = { ...full };
   const direct: Partial<Pick<T, K>> = {};
-  for (const name of Object.keys(kinds) as K[]) {
+  for (const [name, unset] of kinds) {
     if (JSON.stringify(full[name]) === JSON.stringify(base[name])) continue;
-    const value = full[name] ?? kinds[name].unset;
+    const value = full[name] ?? unset;
     if (value === null || value === undefined) continue;
     direct[name] = value;
     if (base[name] === undefined) delete look[name];
