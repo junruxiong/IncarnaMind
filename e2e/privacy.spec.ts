@@ -41,7 +41,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   const chat = privacy.locator('[data-testid="data-flow"][data-flow-id="chat"]');
   await expect(chat).toContainText("Chat");
   await expect(chat).toContainText(
-    "The Mind you're in: its text, your Notes and earlier Answers, except Notes you've excluded",
+    "This Mind's text, Notes and earlier Answers, minus excluded Notes",
   );
   await expect(chat).toContainText("passages from your Documents");
   await expect(privacy.locator('[data-flow-id="tagging"]')).toContainText("Automatic Tags");
@@ -116,7 +116,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
       value,
     );
   await language("zh-CN");
-  await expect(chat).toContainText("你所在的 Mind：正文、笔记和之前的回答，不含你排除的笔记");
+  await expect(chat).toContainText("当前 Mind 的正文、笔记和之前的回答，不含已排除的笔记");
   await language("en");
   await app.close();
 

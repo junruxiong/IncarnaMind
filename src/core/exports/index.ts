@@ -140,6 +140,15 @@ const EXTENSIONS: Readonly<Record<ExportFormat, string>> = {
   "share-page": "html",
 };
 
+/** A new Mind's title line left empty says nothing in a file: no empty heading at its top. */
+function withoutEmptyTitle(blocks: Block[]): Block[] {
+  const [first] = blocks;
+  const empty =
+    first?.kind === "heading" &&
+    first.content.every((inline) => inline.kind === "text" && inline.text.trim() === "");
+  return empty ? blocks.slice(1) : blocks;
+}
+
 /** What an export holds, read once for both its preview and its file. */
 interface Prepared {
   format: ExportFormat;
@@ -231,8 +240,9 @@ export function createExports(deps: ExportsDependencies) {
         };
       },
     );
+    const shown = withoutEmptyTitle(read);
     const blocks =
-      format !== "docx" && options.theirChanges === "accepted" ? withChangesAccepted(read) : read;
+      format !== "docx" && options.theirChanges === "accepted" ? withChangesAccepted(shown) : shown;
     // A source pack holds the Citations the Mind numbers; the others, every footnote.
     const footnotes =
       format === "source-pack"
