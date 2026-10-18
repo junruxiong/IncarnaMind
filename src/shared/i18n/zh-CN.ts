@@ -1107,8 +1107,9 @@ export const zhCN = {
   "evidence.citeAgain.doneMany": "{count} 个文档已恢复为引用来源",
   "evidence.settings.title": "核对",
   "evidence.settings.switch": "不把 IncarnaMind 导出的文件计为依据",
-  "evidence.settings.body":
-    "开启后，核对你写的内容或对比文档时，IncarnaMind 保存的导出文件和原文包不计为依据，以免笔记自己证明自己。单个文件夹或文档仍可将它们计入。正在核对的文档的副本始终不计入。转写稿和保存的网页照常计为依据。",
+  "evidence.settings.body": "导出的文件不计为依据，以免笔记自己证明自己。",
+  "evidence.settings.body.details":
+    "核对你写的内容或对比文档时，IncarnaMind 保存的导出文件和原文包不计为依据。单个文件夹或文档仍可将它们计入。正在核对的文档的副本始终不计入。转写稿和保存的网页照常计为依据。",
   "documents.skipped":
     "只能添加 PDF、Word、PowerPoint、Excel、CSV、TXT 和 Markdown 文件。已跳过：{names}",
   "documents.alreadyAdded": "这些文件已在 IncarnaMind 中，未重复添加：{names}",
@@ -1308,8 +1309,7 @@ export const zhCN = {
   "webPages.fetchAgainFailed": "无法重新抓取“{name}”：{reason}",
   "webPages.tryAgain": "重试",
   "webPages.add.keepLook": "保留网页原貌",
-  "webPages.keepLook.body":
-    "同时保存一份网页原样的 PDF。生成时会重新加载网页，网页引用的其他网站会看到这次访问。",
+  "webPages.keepLook.body": "同时保存一份网页的 PDF。会重新加载网页，相关网站会看到这次访问。",
   "webPages.reason.invalid-address": "这不是网址",
   "webPages.reason.unreachable": "无法连接到网站",
   "webPages.reason.timed-out": "网站响应超时",
@@ -1345,8 +1345,7 @@ export const zhCN = {
   "embedding.model.failure.storage": "无法保存到数据文件夹",
 
   "embeddingProviders.settings.title": "文档搜索",
-  "embeddingProviders.settings.body":
-    "搜索文档时先按关键词查找，最佳结果排在前面。搜索模型还能按含义查找，找到措辞与问题不同的段落，但读取文档更慢，内置模型需要下载 135 MB。云端模型可能找得更准，但会收到每个文档的全文。",
+  "embeddingProviders.settings.body": "按含义搜索还能找到措辞不同的段落。",
   "embeddingProviders.settings.current": "搜索模型：",
   "embeddingProviders.settings.off": "关闭",
   "embeddingProviders.settings.offNote":
@@ -1365,10 +1364,8 @@ export const zhCN = {
   "embeddingProviders.kind.openai-compatible": "OpenAI 兼容服务器",
   "embeddingProviders.kind.ollama": "Ollama",
   "embeddingProviders.form.label": "搜索模型",
-  "embeddingProviders.form.tradeOff":
-    "搜索模型还能找到措辞与问题不同的段落，代价是读取更慢；内置模型需要下载 135 MB。",
-  "embeddingProviders.form.offHint":
-    "文档读取完成后即可按关键词搜索，最佳结果排在前面，无需下载任何模型。",
+  "embeddingProviders.form.tradeOff": "能找到措辞不同的段落，但读取更慢；内置模型需下载 135 MB。",
+  "embeddingProviders.form.offHint": "按关键词搜索文档，最佳结果排在前面，无需下载。",
   "embeddingProviders.form.localOnly": "云端模型不可用：已开启“所有内容都留在这台电脑上”。",
   "embeddingProviders.form.localOnlyServer":
     "请使用本机上的服务器：已开启“所有内容都留在这台电脑上”。",
@@ -1376,56 +1373,55 @@ export const zhCN = {
     "multilingual-e5-small：约 135 MB，只需下载一次，在这台电脑上运行，支持中文和英文。",
   "embeddingProviders.form.ollamaUrl": "Ollama 地址（可选）",
   "embeddingProviders.form.ollamaHint":
-    "使用本机的 Ollama 时留空即可。请先在 Ollama 中下载模型，例如 ollama pull bge-m3。",
+    "本机的 Ollama 留空即可。请先下载模型，例如 ollama pull bge-m3。",
   "embeddingProviders.form.model": "模型名称",
   "embeddingProviders.form.switch": "切换…",
   "embeddingProviders.form.turnOn": "开启…",
   "embeddingProviders.form.turnOff": "关闭…",
   "embeddingProviders.test.ok": "连接成功：模型生成了一个 {dimensions} 维的向量。",
   "embeddingProviders.confirm.title": "切换到 {provider}？",
-  "embeddingProviders.confirm.reprocess":
-    "所有文档（共 {count} 个）都会用新模型重新读取，可能需要一段时间。每个文档读取完之前，搜索只按关键词查找它的段落。",
+  "embeddingProviders.confirm.reprocess": "将重新读取全部 {count} 个文档，完成前按关键词搜索。",
   "embeddingProviders.confirm.cloud": "{service} 将收到你所有文档的全文，以及你的每一次搜索。",
   "embeddingProviders.confirm.local": "所有内容都留在这台电脑上。",
   "embeddingProviders.confirm.cancel": "取消",
   "embeddingProviders.confirm.switch": "切换并重新处理",
   "embeddingProviders.confirm.onTitle": "开启 {provider}？",
-  "embeddingProviders.confirm.embed":
-    "所有文档（共 {count} 个）会在后台读取，可能需要一段时间。每个文档读取完之前，搜索只按关键词查找它的段落。",
+  "embeddingProviders.confirm.embed": "将读取全部 {count} 个文档用于搜索，完成前按关键词搜索。",
   "embeddingProviders.confirm.turnOn": "开启",
   "embeddingProviders.confirm.offTitle": "关闭按含义搜索？",
-  "embeddingProviders.confirm.off":
-    "搜索将按关键词查找段落，最佳结果排在前面，新文档读取完成后即可搜索。搜索模型已读取的内容会保留，以便日后重新开启。",
+  "embeddingProviders.confirm.off": "搜索改回按关键词匹配。模型已读取的内容会保留。",
   "embeddingProviders.confirm.turnOff": "关闭",
   "embeddingProviders.localOnly.label": "所有内容都留在这台电脑上",
-  "embeddingProviders.localOnly.body":
+  "embeddingProviders.localOnly.body": "你的内容都不离开这台电脑：只用本机模型回答。",
+  "embeddingProviders.localOnly.body.details":
     "开启后，按含义搜索只使用内置模型或 Ollama，搜索结果不会发送出去排序，问题只交给这台电脑上的模型回答，也不发送使用数据。如果正在使用云端搜索模型，会切换回内置模型，并重新读取你的文档。",
   "embeddingProviders.localOnly.cloudChat":
-    "你的 AI 模型在 {service}，因此开启期间不会发送问题。想提问，请在“AI 模型”中选择本地模型。",
+    "你的 AI 模型在 {service}，开启期间不会发送问题。请选择本地模型后提问。",
   "embeddingProviders.rebuild.title": "正在为搜索读取文档：{done} / {total} 个",
   "embeddingProviders.rebuild.localMode": "搜索改用内置模型：已开启“所有内容都留在这台电脑上”。",
   "embeddingProviders.rebuild.note": "每个文档读取完之前，搜索按关键词查找它的段落。",
   "embeddingProviders.error.notice": "搜索暂时无法使用 {provider}。{reason}",
 
   "rerank.settings.title": "最相关的排在前面",
-  "rerank.settings.body":
-    "搜索会用一个小模型把最相关的段落排在前面。默认开启，使用在这台电脑上运行的内置模型；Cohere 和 Voyage AI 需要密钥。你也可以关闭它。它用于只搜索一次的模型生成的回答、写作建议，以及检查和对比表；自己搜索的模型不使用它，段落没能回答问题时会再搜一次。",
+  "rerank.settings.body": "用一个小模型把最相关的段落排在前面。",
+  "rerank.settings.body.details":
+    "默认开启，使用在这台电脑上运行的内置模型；Cohere 和 Voyage AI 需要密钥。你也可以关闭它。它用于只搜索一次的模型生成的回答、写作建议，以及检查和对比表；自己搜索的模型不使用它，段落没能回答问题时会再搜一次。",
   "rerank.settings.inUse": "{service} 把最相关的搜索结果排在前面（{model}）。",
   "rerank.settings.sends": "每次搜索和找到的段落都会发送到 {service}。",
   "rerank.settings.builtInUse": "内置模型把最相关的搜索结果排在前面（{model}）。",
   "rerank.settings.builtInDefault": "默认由内置模型把最相关的搜索结果排在前面（{model}）。",
   "rerank.settings.notDownloaded":
-    "有可搜索的文档后会下载一次（{total} MB）。在此之前，搜索结果保持原有顺序。",
+    "有文档可搜索时下载一次（{total} MB），在此之前搜索保持原有顺序。",
   "rerank.settings.builtInNote": "所有内容都留在这台电脑上。每次搜索会稍慢一些。",
   "rerank.settings.runsOn": "在这台电脑上 · {device}",
   "rerank.settings.downloading":
-    "正在下载排序模型：{downloaded} / {total} MB。下载完成前，搜索结果保持原有顺序。",
+    "正在下载排序模型：{downloaded} / {total} MB。完成前搜索保持原有顺序。",
   "rerank.settings.failed": "排序模型下载失败：{reason}。",
   "rerank.settings.loadFailed": "重排序模型无法在这台电脑上启动。",
   "rerank.settings.retry": "重试",
   "rerank.settings.paused": "已暂停：已开启“所有内容都留在这台电脑上”。",
   "rerank.settings.keyMissing":
-    "这台设备上读取不到 {service} 的密钥，因此不会调整搜索结果的顺序。请重新输入密钥。",
+    "这台设备上没有 {service} 的密钥，不会调整搜索结果顺序。请重新输入。",
   "rerank.settings.setUp": "设置…",
   "rerank.settings.localOnly": "云端模型不可用：已开启“所有内容都留在这台电脑上”。",
   "rerank.settings.change": "更改",
@@ -1535,12 +1531,11 @@ export const zhCN = {
   "jev.chip.review": "{tag}：自动添加，但可能性只有 {percent}%。确认即可保留，也可以移除。",
   "jev.chip.confirm": "确认 {name} 的标签 {tag}",
   "jev.settings.title": "TypeSafe Jev",
-  "jev.settings.body":
-    "添加 TypeSafe Jev 密钥后，可以用 Jev 打标签：它会给出每个标签的可能性，并把拿不准的标签标记出来，供你确认。“自动”会优先使用它。",
+  "jev.settings.body": "用 TypeSafe Jev 密钥打标签，拿不准的会标出供你确认。“自动”优先使用它。",
   "jev.settings.inUse": "已保存你的 Jev 密钥。",
   "jev.settings.server": "服务器：{server}",
   "jev.settings.hosted": "TypeSafe",
-  "jev.settings.keyMissing": "这台设备上没有保存 Jev 密钥，文档会一直等待打标签。请重新输入密钥。",
+  "jev.settings.keyMissing": "这台设备上没有 Jev 密钥，文档暂不打标签。请重新输入。",
   "jev.settings.setUp": "使用 TypeSafe Jev…",
   "jev.settings.change": "更改",
   "jev.settings.remove": "停用 Jev",
@@ -1548,15 +1543,14 @@ export const zhCN = {
   "jev.form.advanced": "服务器、模型与确认范围",
   "jev.form.endpoint": "服务器地址（可选）",
   "jev.form.endpointHint":
-    "使用 TypeSafe 的 Jev 时留空即可。如果使用兼容 Jev 的模型，请填写它的服务器，例如 https://jev.example.com。",
+    "使用 TypeSafe 的 Jev 时留空；兼容服务器请填写其地址，例如 https://jev.example.com。",
   "jev.form.model": "模型（可选）",
   "jev.form.reviewFrom": "需要确认的范围：从（%）",
   "jev.form.reviewTo": "到（%）",
-  "jev.form.reviewHint": "低于第一个数值的标签不会添加；达到第二个数值的标签会直接添加，不作标记。",
+  "jev.form.reviewHint": "低于第一个值：不添加。达到第二个值：直接添加，不作标记。",
   "jev.form.save": "用 Jev 打标签",
   "tagging.title": "自动打标签",
-  "tagging.intro":
-    "为你添加的每个文档打标签；有文件夹后，还会为它推荐文件夹。不会改动你自己设置的标签和文件夹。",
+  "tagging.intro": "为新文档打标签并建议文件夹，不改动你自己设置的。",
   "tagging.model": "打标签所用的模型",
   "tagging.automatic": "自动",
   "tagging.using.jev": "正在使用 {model}（你的 Jev 密钥）",
@@ -1566,8 +1560,7 @@ export const zhCN = {
   "tagging.using.plan": "正在使用 {model}：通过你的 ChatGPT 订阅",
   "tagging.using.decision-models": "正在使用本地分类模型（{model}）",
   "tagging.using.local-chat": "正在使用 {model}：在本机运行",
-  "tagging.using.none":
-    "还没有可用来打标签的模型：请设置一个 AI 模型，或在 Ollama 中安装 Tev1。在此之前，文档会等待打标签。",
+  "tagging.using.none": "还没有可用来打标签的模型：请设置 AI 模型，或在 Ollama 中安装 Tev1。",
   "tagging.group.plan": "ChatGPT 订阅",
   "tagging.group.local": "在本机运行",
   "tagging.label.good": "适合打标签",
@@ -1590,13 +1583,12 @@ export const zhCN = {
   "tagging.organize.with": "“整理”使用 {model}，这是你在资料库里选的。",
   "tagging.organize.same": "“整理”也使用这个模型。",
   "tagging.localMode": "云端模型不能打标签：已开启“所有内容都留在这台电脑上”。",
-  "tagging.plan":
-    "使用你的 ChatGPT 订阅，每次只处理一个文档，不会占满你聊天要用的额度。达到订阅的用量上限时，会等额度恢复后再继续。",
+  "tagging.plan": "使用你的 ChatGPT 订阅，每次处理一个文档。",
   "tagging.plan.local": "想把订阅留给聊天，可以改用本机模型打标签。",
   "tagging.plan.useLocal": "使用 {model}",
   "tagging.plan.paused": "ChatGPT 订阅的用量已达上限：将在 {time} 继续打标签。",
-  "tagging.review.marked": "此模型会给出每个标签的可能性，并把拿不准的标签标记出来，供你确认。",
-  "tagging.review.kept": "此模型不会给出把握程度，所以它添加的标签都会保留。不需要的可以移除。",
+  "tagging.review.marked": "此模型会给出把握程度，拿不准的标签会标出供你确认。",
+  "tagging.review.kept": "它添加的标签都会保留，不需要的可以移除。",
   "tagging.stop": "停止",
   "tagging.stop.command": "停止打标签",
   "tagging.tagNotInFolder": "用 AI 给不在文件夹中的文档打标签",
@@ -1621,8 +1613,7 @@ export const zhCN = {
   "settings.authorName": "你的名字",
   "settings.authorName.body": "Word 文件以修订显示你的修改时，使用这个名字。",
   "settings.motion": "动效",
-  "settings.motion.body":
-    "打开、关闭和移动时的动画。选“减弱”只保留短暂的淡入淡出，选“关”则所有变化立即完成。",
+  "settings.motion.body": "“减弱”只用短暂淡入淡出；“关”则立即变化。",
   "settings.motion.on": "开",
   "settings.motion.reduced": "减弱",
   "settings.motion.off": "关",
@@ -1644,7 +1635,7 @@ export const zhCN = {
   "outputLocation.pick.button": "选择",
   "outputLocation.linked.title": "在同步文件夹中添加文件",
   "outputLocation.linked.body":
-    "IncarnaMind 只读取同步文件夹，除非你允许它在其中添加新文件。它不会修改或删除你的文件。",
+    "只读取同步文件夹，除非你允许在其中添加新文件。绝不修改或删除你的文件。",
   "outputLocation.linked.allow": "允许在“{name}”中添加新文件",
   "fileWrite.location.title": "新文件保存到哪里？",
   "fileWrite.location.missing": "无法把“{name}”保存到“{folder}”：IncarnaMind 无法创建这个文件夹。",
@@ -1681,20 +1672,18 @@ export const zhCN = {
   "setup.claude.line":
     "Anthropic 不允许其他应用使用 Claude 订阅；你可以在 Claude 应用里问你的文档。",
   "setup.claude.connect": "连接 Claude 应用",
-  "setup.claude.missing":
-    "需要 Mac 或 Windows 版 Claude 应用；浏览器里的 claude.ai 无法访问这台电脑。",
+  "setup.claude.missing": "需要 Mac 或 Windows 版 Claude 应用，浏览器里的 claude.ai 不行。",
   "setup.claude.download": "下载 Claude",
   "setup.claude.copied": "已复制。粘贴到 Claude 应用里，然后在那里问你的文档。",
   "setup.claude.connected": "已连接。打开 Claude 应用，在那里问你的文档。",
-  "setup.claude.noFolder":
-    "Claude 只能读取一个文件夹。请先把这个 Mind 放进文件夹，或在设置中配置。",
+  "setup.claude.noFolder": "Claude 只能读取一个文件夹。请先把这个 Mind 放进文件夹。",
   "setup.claude.openAgents": "打开智能体设置",
   "plans.title": "已经在付费订阅？",
   "plans.chatgpt.title": "ChatGPT Plus 或 Pro",
   "plans.chatgpt.line": "用你的 ChatGPT 账号登录，无需密钥。",
   "plans.claude.title": "Claude Pro、Max 或 Team",
   "plans.claude.line":
-    "在 Claude 应用里使用 IncarnaMind，由你的订阅付费。Max 和 Team 还附带每月的 API 额度，可用于密钥。",
+    "在 Claude 应用里使用 IncarnaMind，由你的订阅付费。Max 和 Team 还含每月 API 额度。",
   "plans.google.title": "Google AI Pro 或 Ultra",
   "plans.google.line": "在 Antigravity 里使用 IncarnaMind，由你的订阅付费。",
   "plans.google.connect": "连接 Antigravity",
@@ -1797,16 +1786,16 @@ export const zhCN = {
   "providers.test.no-answer": "模型没有回复。",
   "providers.test.ollama-not-running": "Ollama 没有在这台电脑上运行。请先打开它，再测试一次。",
   "providers.test.data-retention":
-    "密钥可用，但 {model} 要求你的 Anthropic 组织开启 30 天数据保留。请换一个模型，或使用已开启此设置的组织的密钥。",
+    "密钥可用，但 {model} 要求你的 Anthropic 组织开启 30 天数据保留。请换一个模型。",
   "providers.test.unknown": "测试未通过。",
 
   "providers.secrets.plainText.title": "没有正在运行的密钥环",
   "providers.secrets.plainText.body":
-    "IncarnaMind 使用系统密钥环加密 API 密钥，但当前没有运行任何密钥环，密钥会以明文形式保存在数据文件夹中。请启动 GNOME Keyring 或 KWallet（例如安装 gnome-keyring 后注销并重新登录），然后重启 IncarnaMind。",
+    "没有运行密钥环，密钥会以明文保存。请启动 GNOME Keyring 或 KWallet，然后重启 IncarnaMind。",
   "providers.secrets.plainText.accept":
     "仍然在没有密钥环的情况下保存密钥。能读取我文件的人都能看到这些密钥。",
   "providers.secrets.unavailable":
-    "此系统无法加密 API 密钥，因此无法保存密钥。你仍然可以使用 Ollama，或不需要密钥的服务器。",
+    "此系统无法加密 API 密钥，无法保存。可使用 Ollama 或无需密钥的服务器。",
 
   "providers.ollama.title": "在本机运行（免费）",
   "providers.ollama.checking": "正在查找本机的 Ollama…",
@@ -1858,7 +1847,7 @@ export const zhCN = {
   "providers.settings.remove": "移除",
 
   "chatgpt.title": "ChatGPT 订阅",
-  "chatgpt.description": "用你的 ChatGPT Plus 或 Pro 订阅代替 API 密钥。用量计入你的订阅额度。",
+  "chatgpt.description": "Plus 或 Pro，无需密钥。回答会计入订阅额度。",
   "chatgpt.continue": "使用 ChatGPT 继续",
   "chatgpt.account.signedOut": "尚未登录。",
   "chatgpt.account.expired": "ChatGPT 登录已失效。重新登录后才能使用订阅。",
@@ -2156,10 +2145,10 @@ export const zhCN = {
 
   "privacy.tabs.general": "通用",
   "privacy.tabs.privacy": "隐私",
-  "privacy.intro":
-    "IncarnaMind 不收集任何使用数据。本页列出它从这台电脑发出的所有内容，你可以在这里更改。",
-  "privacy.flows.intro":
-    "以下数据流会把你的内容发送到这台电脑以外。选择服务即表示允许；没有允许的服务不会收到任何内容，开启“所有内容都留在这台电脑上”时一律不会发送。服务提供该选项时，IncarnaMind 会要求它不要保存你的请求。",
+  "privacy.intro": "IncarnaMind 不收集任何使用数据。",
+  "privacy.flows.intro": "以下数据流会把你的内容发送到这台电脑以外。选择服务即表示允许。",
+  "privacy.flows.intro.details":
+    "没有允许的服务不会收到任何内容，开启“所有内容都留在这台电脑上”时一律不会发送。服务提供该选项时，IncarnaMind 会要求它不要保存你的请求。",
   "privacy.flows.service": "发送到 {service}",
   "privacy.flows.local": "留在这台电脑上",
   "privacy.flows.sends": "发送：",
@@ -2168,59 +2157,59 @@ export const zhCN = {
   "privacy.flows.chosen": "{date}选择 {service} 时已允许",
   "privacy.flows.allow": "允许",
   "privacy.traffic.title": "其他网络连接",
-  "privacy.traffic.intro":
-    "IncarnaMind 还会连接以下服务。它们不会收到你的任何内容：没有文档、Mind、问题或回答。",
+  "privacy.traffic.intro": "这些服务不会收到你的任何内容：没有文档、Mind、问题或回答。",
   "privacy.traffic.on": "开",
   "privacy.traffic.off": "关",
   "privacy.traffic.update-check": "检查更新",
   "privacy.traffic.update-check.description":
-    "IncarnaMind 启动时会向 GitHub Releases 查询是否有新版本。请求中包含你使用的版本和操作系统。",
+    "启动时向 GitHub Releases 查询新版本，请求含你的版本和操作系统。",
   "privacy.traffic.update-check.toggle": "自动检查更新",
   "privacy.traffic.embedding-model": "下载搜索模型",
   "privacy.traffic.embedding-model.description":
     "内置搜索模型只下载一次，在第一次有文档需要它时下载。",
   "privacy.traffic.text-recognition-model": "下载文字识别模型",
   "privacy.traffic.text-recognition-model.description":
-    "第一次需要识别扫描页时，下载一次内置的文字识别模型。扫描件在这台电脑上识别，不会发送任何内容。",
+    "内置文字识别模型在第一次需要识别扫描页时下载一次。扫描件在本机识别，不会发送任何内容。",
   "privacy.traffic.reranking-model": "下载重排序模型",
   "privacy.traffic.reranking-model.description":
-    "内置重排序模型只下载一次，在有文档可搜索时下载，除非重新排序已关闭或使用了在线服务。如果这台电脑的 GPU 可以运行它，还会下载它的 GPU 版本。",
+    "有文档可搜索时下载一次内置排序模型；如果这台电脑能用 GPU，还会下载它的 GPU 版本。",
   "privacy.traffic.transcription-model": "下载语音模型",
   "privacy.traffic.transcription-model.description":
-    "在本机转写会议的语音模型只下载一次，在第一次转写会议时下载。你说的内容不会发送出去。",
+    "会议的语音模型只在第一次转写会议时下载一次。你说的内容不会发送出去。",
   "privacy.traffic.ollama-pull": "下载本地模型",
   "privacy.traffic.ollama-pull.description":
     "当你选择本地模型时，Ollama 会从它的模型库下载这个模型。",
   "privacy.traffic.chatgpt-sign-in": "使用 ChatGPT 登录",
   "privacy.traffic.chatgpt-sign-in.description":
-    "使用 ChatGPT 继续时，IncarnaMind 会向 OpenAI 登录、续期和退出登录，并读取 OpenAI 的签名密钥和你的订阅可用的模型。用订阅提问属于上面的对话数据流。",
+    "通过 OpenAI 登录、续期和退出登录，读取 OpenAI 的签名密钥和订阅可用的模型。提问属于上面的对话数据流。",
   "privacy.traffic.claude-sign-in": "使用 Claude 账号登录",
   "privacy.traffic.claude-sign-in.description":
-    "使用 Claude 账号登录时，IncarnaMind 会通过 Anthropic 为你登录并续期。用订阅提出的问题属于上面的对话数据流。",
+    "通过 Anthropic 登录并续期。提问属于上面的对话数据流。",
   "privacy.traffic.copilot-sign-in": "用 GitHub 登录 Copilot",
   "privacy.traffic.copilot-sign-in.description":
-    "用 GitHub 登录 Copilot 时，IncarnaMind 会通过 GitHub 为你登录、续期，并读取你的账号名称和订阅可用的模型。用订阅提出的问题属于上面的对话数据流。",
+    "通过 GitHub 登录并续期，读取你的账号名称和订阅可用的模型。提问属于上面的对话数据流。",
   "privacy.traffic.remote-connectors": "远程连接器及其登录",
   "privacy.traffic.remote-connectors.description":
-    "IncarnaMind 会连接你的远程连接器的服务器以列出它们的工具，并连接它们指定的登录服务，为你登录和续期登录。发送给这些工具的内容属于上面的连接器数据流。",
+    "连接你的远程连接器的服务器以列出工具，并连接它们指定的登录服务。发送给工具的内容属于上面的连接器数据流。",
   "privacy.skills.title": "技能脚本",
   "privacy.skills.body":
-    "技能脚本在这台电脑上运行，可以自行发起网络请求，发送它能读取的任何内容。本页的设置对它们不起作用：它们只受每次运行前你的批准控制。你也可以在“设置”的“技能”中关闭它们。",
+    "技能脚本在这台电脑上运行，可通过网络发送它能读取的任何内容。本页无法控制它们：每次运行前都会询问，也可在“设置 › 技能”中关闭。",
   "privacy.aiUse.title": "AI 使用记录",
-  "privacy.aiUse.body":
-    "IncarnaMind 会记录 AI 向你的 Mind 写入了什么、核对了多少句子，以及你保留、修改还是删除了写入的内容，方便你说明自己如何使用 AI。记录不含你或 AI 的任何文字，只保存在这台电脑上；无论你如何设置使用数据，都不会发送到任何地方。",
+  "privacy.aiUse.body": "记录 AI 写了什么、核对了什么，方便你说明 AI 使用情况。",
+  "privacy.aiUse.private": "不含任何文字，绝不发送。",
   "privacy.aiUse.entries": "共 {count} 条",
   "privacy.aiUse.clear": "清除记录",
   "privacy.aiUse.cleared": "已清除 AI 使用记录。",
   "privacy.crashReports.title": "崩溃报告",
   "privacy.crashReports.toggle": "发送崩溃报告",
   "privacy.crashReports.body":
-    "除非你开启，否则不会发送。IncarnaMind 崩溃或出错时，会通过 Sentry 向开发者发送一份报告：错误内容、出错的代码位置、应用版本和你的操作系统。文件路径、文档文本、Mind、问题和回答都会先移除，也不会保存 IP 地址。",
-  "privacy.intro.usageData":
-    "只有在你同意后，IncarnaMind 才会收集使用数据。本页列出它从这台电脑发出的所有内容，你可以在这里更改。",
+    "除非你开启，否则不会发送。通过 Sentry 发送崩溃报告，不含你的文字和文件。",
+  "privacy.crashReports.body.details":
+    "报告包含错误内容、出错的代码位置、应用版本和你的操作系统。文件路径、文档文本、Mind、问题和回答都会先移除，也不会保存 IP 地址。",
+  "privacy.intro.usageData": "只有在你同意后，IncarnaMind 才会收集使用数据。",
   "privacy.traffic.usage-data": "使用数据",
   "privacy.traffic.usage-data.description":
-    "匿名事件，只在开启时发送：用了哪些功能、在哪里卡住了，并带上这次安装的随机 ID。绝不包括你的文档或文档名、问题、回答，以及你输入的任何内容。",
+    "匿名事件，仅在开启时发送：用了哪些功能、在哪里卡住，并带上随机的安装 ID。绝不包括你的文档、文档名、问题、回答或输入内容。",
   "privacy.traffic.usage-data.toggle": "发送匿名使用数据",
   "privacy.usageData.tester": "测试版默认开启，这是你加入内测时同意的。你可以随时关闭。",
   "privacy.usageData.localMode": "已关闭：已开启“所有内容都留在这台电脑上” · 设置 › 搜索",
@@ -2605,8 +2594,7 @@ export const zhCN = {
   "cost.estimate.month": "本月已用 {spent}，上限 {cap}",
   "cost.cap.title": "每月花费上限",
   "cost.cap.switch": "限制 API 密钥每月的花费",
-  "cost.cap.body":
-    "达到上限后，按 token 计费的模型不再生成回答或处理其他请求，并用一行文字说明。通过登录使用的订阅（如 ChatGPT）按其自身限额计算。",
+  "cost.cap.body": "按 token 计费的模型达到上限后停止。订阅按自身额度计算。",
   "cost.cap.spent": "本月 API 密钥已花费：{spent}。",
   "cost.cap.spentOf": "本月 API 密钥已花费：{spent}，上限 {cap}。",
   "cost.cap.nothing": "本月 API 密钥尚无花费。",
@@ -2695,8 +2683,7 @@ export const zhCN = {
   "search.details": "搜索详情",
 
   "skills.settings.title": "技能",
-  "skills.settings.body":
-    "技能是 AI 处理某类任务时遵循的步骤，采用标准的 SKILL.md 格式。问题需要时，AI 会自行选用；想亲自指定，请在输入框中输入“/”。",
+  "skills.settings.body": "AI 处理某类任务时遵循的步骤。输入“/”即可选用。",
   "skills.settings.enabled": "使用 {name}",
   "skills.settings.remove": "移除",
   "skills.settings.removeLabel": "移除 {name}",
@@ -2711,15 +2698,13 @@ export const zhCN = {
     "把这个 Mind（问题上方的笔记、问题和回答）整理成结构化的报告草稿，包括标题、摘要、章节和结论，保留其中的引用，不虚构来源。",
   "skills.builtIn.summarise-document":
     "为一篇文档（或问题搜索范围内的每篇文档）撰写结构化摘要：主要论点（各附引用）、方法、局限以及尚待回答的问题。",
-  "skills.settings.builtIn.hint":
-    "随 IncarnaMind 提供，并随应用一起更新。想修改它，请复制为你自己的技能。",
+  "skills.settings.builtIn.hint": "随 IncarnaMind 提供。想修改，请复制为你自己的技能。",
   "skills.settings.duplicate": "复制为我的技能",
   "skills.settings.duplicateLabel": "将 {name} 复制为我的技能",
   "skills.settings.restoreBuiltIns": "恢复内置技能",
   "skills.settings.restoreBuiltIns.hint": "已移除：{names}",
   "skills.settings.yours": "我的技能",
-  "skills.settings.yours.empty":
-    "你还没有技能。可以从刚在 Mind 里做的事生成一个（Mind 的 ⋯ 菜单），也可以自己写或导入。",
+  "skills.settings.yours.empty": "还没有技能。可从 Mind 的 ⋯ 菜单生成、自己写或导入。",
   "skills.settings.new": "新建技能…",
   "skills.settings.import": "导入…",
   "skills.settings.actions": "{name}的操作",
@@ -2775,16 +2760,15 @@ export const zhCN = {
   "skills.preview.importing": "正在导入…",
   "skills.preview.cancel": "取消",
   "skills.error.unreadable": "无法读取这个文件夹或文件。",
-  "skills.error.not-a-skill": "这不是技能：文件夹或 ZIP 文件的顶层没有 SKILL.md。",
+  "skills.error.not-a-skill": "这不是技能：文件夹或 ZIP 顶层没有 SKILL.md。",
   "skills.error.invalid-zip": "这不是 IncarnaMind 能读取的 ZIP 文件。",
   "skills.error.invalid-frontmatter":
-    "SKILL.md 的 frontmatter 无效：需要 name（小写字母、数字和连字符）和 description。",
+    "SKILL.md 需要 name（小写字母、数字、连字符）和 description。",
   "skills.error.path-traversal": "ZIP 文件中有文件会写到技能文件夹之外：{path}",
   "skills.error.link-outside": "技能中有链接指向技能之外：{path}",
-  "skills.error.too-large": "技能太大：所有文件合计最多 {size}，SKILL.md 最多 {instructions}。",
+  "skills.error.too-large": "技能太大：合计最多 {size}，SKILL.md 最多 {instructions}。",
   "skills.error.too-many-files": "技能的文件太多：最多 {count} 个。",
-  "skills.error.built-in-name":
-    "已有同名的内置技能，内置技能无法替换。请在它的 SKILL.md 中换一个名字，或将内置技能复制为你自己的技能。",
+  "skills.error.built-in-name": "已有同名的内置技能。请在 SKILL.md 中改名，或复制内置技能。",
   "skills.error.details": "详情",
   "skills.size.kb": "{size} KB",
   "skills.size.mb": "{size} MB",
@@ -2804,10 +2788,10 @@ export const zhCN = {
 
   "scripts.settings.title": "技能脚本",
   "scripts.settings.enabled": "允许技能运行它们的脚本",
-  "scripts.settings.body":
-    "脚本在这台电脑上运行，没有沙盒。每次运行前都会先问你，除非你为该技能选择了“始终运行”。关闭后，任何技能脚本都不会运行。",
-  "scripts.settings.bodySandboxed":
-    "脚本在这台电脑上的沙盒中运行：无法访问你的个人文件夹和 IncarnaMind 的数据，只能写入自己的工作文件夹，也不能访问互联网。每次运行前都会先问你，除非你为该技能选择了“始终运行”。关闭后，任何技能脚本都不会运行。",
+  "scripts.settings.body": "脚本在这台电脑上运行，没有沙盒，每次运行前先问你。",
+  "scripts.settings.bodySandboxed": "脚本在沙盒中运行，每次运行前先问你。",
+  "scripts.settings.bodySandboxed.details":
+    "无法访问你的个人文件夹和 IncarnaMind 的数据，只能写入自己的工作文件夹，也不能访问互联网。除非你为某个技能选择了“始终运行”，每次运行前都会先问你。",
   "scripts.settings.timeout": "脚本运行超过此时长即停止：",
   "scripts.settings.seconds": "秒",
 
@@ -2821,8 +2805,7 @@ export const zhCN = {
   "suggestion.offer.on": "已开启建议：按 Tab 接受，按 Esc 忽略。可在设置中关闭。",
   "suggestions.settings.title": "写作",
   "suggestions.settings.switch": "写作时根据我的文档给出建议",
-  "suggestions.settings.body":
-    "在段落末尾停顿时，用灰色文字显示接下来可以怎么写。只在文档能支持时出现，并且总附有引用。按 Tab 接受，按 Esc 忽略。",
+  "suggestions.settings.body": "用灰色文字建议下一句，并附引用。按 Tab 接受。",
   "suggestions.settings.today": "今天：建议 {shown} 次，接受 {accepted} 次",
   "suggestions.settings.paused.no-model": "已暂停：先在“模型”中设置 AI 模型。",
   "suggestions.settings.paused.consent": "已暂停：需要你允许向 {service} 发送正在写的内容。",
@@ -3179,12 +3162,12 @@ export const zhCN = {
   "export.change.replaced": "替换：{author}，{date}",
   "export.change.replaced.noDate": "替换：{author}",
   "export.dataFolder.title": "数据文件夹",
-  "export.dataFolder.body":
-    "你的 Mind、对话、文档和设置都保存在这台电脑上的一个文件夹里。如需备份，请先退出 IncarnaMind，再复制这个文件夹。",
+  "export.dataFolder.body": "你在 IncarnaMind 中的所有内容都在这个文件夹里。",
+  "export.dataFolder.backup": "备份时请先退出，再复制它。",
   "export.dataFolder.open": "打开数据文件夹",
   "export.dataFolder.openLogs": "打开日志文件夹",
   "export.dataFolder.logs":
-    "日志记录了 IncarnaMind 的运行情况，例如处理了哪些文档、出现了哪些错误，便于排查问题。其中不包含你的文档内容、Mind、问题、回答或密钥。",
+    "日志记录 IncarnaMind 的运行情况，便于排查问题。绝不包含你的文档内容、Mind、问题、回答或密钥。",
 
   "error.load": "IncarnaMind 无法加载你的数据：{message}",
   "error.action": "无法完成操作：{message}",
@@ -3507,18 +3490,17 @@ export const zhCN = {
   "update.later": "稍后",
 
   "connectors.settings.title": "连接器",
-  "connectors.directory.intro":
-    "助手可以在这些服务里查找资料。你同意之前，不会向它们发送你的任何内容；修改那里的内容前也会先问你。",
+  "connectors.directory.intro": "助手可以在这些服务里查找资料。你同意之前不会向它们发送任何内容。",
   "connectors.directory.search": "搜索连接器和 MCP 注册表",
   "connectors.registry.title": "来自 MCP 注册表",
   "connectors.registry.badge": "社区 · 未审核",
   "connectors.registry.note":
-    "只因为你输入了搜索词才查询。社区连接器没有经过审核，连接前先看看它能做什么。",
+    "只因你输入了搜索词才查询。社区连接器未经审核，连接前先看看它能做什么。",
   "connectors.registry.searching": "正在搜索 MCP 注册表…",
   "connectors.registry.none": "MCP 注册表里没有与“{query}”匹配的连接器。",
   "connectors.registry.failed.local-mode": "未搜索 MCP 注册表：已开启“所有内容都留在这台电脑上”。",
   "connectors.registry.failed.declined":
-    "你选择了不把搜索内容发送给 MCP 注册表。可以在“隐私”里更改。",
+    "未发送：你选择了不向 MCP 注册表发送搜索内容 · 设置 › 隐私",
   "connectors.registry.failed.unreachable": "无法连接 MCP 注册表。请检查网络后重试。",
   "connectors.registry.failed.service-error": "MCP 注册表没有正常响应。请稍后重试。",
   "connectors.registry.retry": "重试",
@@ -3529,7 +3511,7 @@ export const zhCN = {
   "connectors.registry.add": "添加",
   "connectors.registry.setUp": "设置…",
   "connectors.registry.link": "查看介绍",
-  "connectors.registry.cannot": "IncarnaMind 无法直接运行这个连接器。查看介绍，了解如何设置。",
+  "connectors.registry.cannot": "IncarnaMind 无法直接运行它。查看介绍了解如何设置。",
   "connectors.directory.connected": "已连接",
   "connectors.directory.browse": "浏览",
   "connectors.directory.group.files": "你的文件在哪里",
@@ -3556,18 +3538,18 @@ export const zhCN = {
   "connectors.directory.what": "它能做什么",
   "connectors.directory.what.before": "连接后，这里会列出它的工具，以及每个工具运行前是否先问你。",
   "connectors.directory.what.listed":
-    "这是 IncarnaMind 审核时看到的工具。连接后，你可以选择哪些工具先问你，哪些关闭。",
+    "IncarnaMind 审核时看到的工具。连接后可选择哪些先问你、哪些关闭。",
   "connectors.directory.tool.reads": "只读",
   "connectors.directory.tool.changes": "可能修改内容",
   "connectors.directory.where": "你的数据去哪里",
   "connectors.directory.where.body":
-    "连接后，助手向 {name} 查询的内容（例如问题里的关键词）会发送给 {name}。它返回的内容会发给你的 AI 模型，和你的文档一样。",
+    "助手向 {name} 查询的内容会发送给 {name}；返回的内容会发给你的 AI 模型。",
   "connectors.directory.how": "怎么登录",
-  "connectors.directory.how.browser": "在浏览器里登录 {name}。登录信息保存在你的钥匙串里。",
+  "connectors.directory.how.browser": "在浏览器里登录 {name}。",
   "connectors.directory.how.browser.subscription":
-    "在浏览器里登录 {name}；需要你自己的 {product} 订阅。登录信息保存在你的钥匙串里。",
+    "在浏览器里登录 {name}。需要你自己的 {product} 订阅。",
   "connectors.directory.how.own-app":
-    "{name} 只允许它认识的应用登录：先在 {name} 注册一个应用，在这里填写它的客户端 ID，再在浏览器里登录。登录信息保存在你的钥匙串里。",
+    "{name} 只接受它认识的应用：先注册一个，在这里填写它的客户端 ID，再登录。",
   "connectors.directory.how.none": "不需要登录。",
   "connectors.custom.title": "添加自定义连接器",
   "connectors.custom.remote": "服务器地址",
@@ -3592,11 +3574,10 @@ export const zhCN = {
   "connectors.error.stopped": "已意外停止运行。",
   "connectors.error.failed": "无法连接。",
   "connectors.tools.none": "没有工具",
-  "connectors.tools.note":
-    "连接器会声明哪些工具只读取内容，IncarnaMind 无法核实。这些工具运行前不会询问，其他工具每次调用前都会询问。你可以在这里更改，也可以关闭某个工具，让回答不再使用它。",
+  "connectors.tools.note": "标为只读的工具运行前不询问；IncarnaMind 无法核实是否只读。",
   "connectors.form.name": "名称",
   "connectors.form.command": "命令",
-  "connectors.form.commandHint": "启动 MCP 服务器的程序，例如 npx 或 uvx。查找方式与你的终端相同。",
+  "connectors.form.commandHint": "启动 MCP 服务器的程序，例如 npx 或 uvx。",
   "connectors.form.args": "参数，每行一个",
   "connectors.form.argsMoved": "粘贴内容的其余部分已移到“参数”，每行一个。",
   "connectors.form.env": "环境变量，NAME=value，每行一个",
@@ -3604,15 +3585,14 @@ export const zhCN = {
     "用于 API 密钥等。这些值会加密保存在系统中，绝不会存入 IncarnaMind 的数据库。",
   "connectors.form.envInvalid": "请按 NAME=value 的格式填写每个环境变量。",
   "connectors.form.add": "添加连接器",
-  "connectors.form.sends":
-    "回答向这个连接器的工具提出的请求会发送给它，它可能再通过互联网发送出去。",
+  "connectors.form.sends": "回答向这个连接器的工具提出的请求会发送给它，它可能再通过互联网发送。",
   "connectors.form.adding": "正在添加…",
   "connectors.form.cancel": "取消",
   "connectors.form.save": "保存并重启",
   "connectors.form.saving": "正在保存…",
   "connectors.form.envKeep": "留空则保留已保存的 {names} 的值。",
   "connectors.import.body":
-    "粘贴 Claude Desktop（claude_desktop_config.json）或 Cursor（mcp.json）中的 mcpServers JSON，或选择该文件。添加前会先显示将要添加的内容。",
+    "粘贴 Claude Desktop 或 Cursor 的 mcpServers JSON，或选择文件。添加前你会先看到内容。",
   "connectors.import.json": "配置",
   "connectors.import.file": "选择文件…",
   "connectors.import.preview": "查看将要添加的内容",
@@ -3624,7 +3604,7 @@ export const zhCN = {
   "connectors.import.confirm": "添加 {count} 个连接器",
   "connectors.import.confirm.one": "添加 1 个连接器",
   "connectors.import.sends":
-    "回答向这些连接器的工具提出的请求会发送给它们，它们可能再通过互联网发送出去。",
+    "回答向这些连接器的工具提出的请求会发送给它们，它们可能再通过互联网发送。",
   "connectors.import.nothing": "没有可以添加的内容。",
   "connectors.import.adding": "正在添加…",
   "connectors.consent.note": "这个连接器在你的电脑上运行，但它可能会把收到的内容通过网络发送出去。",
@@ -3639,10 +3619,10 @@ export const zhCN = {
   "remoteConnectors.form.kind.remote": "远程服务器（URL）",
   "remoteConnectors.form.url": "服务器 URL",
   "remoteConnectors.form.urlHint":
-    "它的 MCP 端点，例如 https://mcp.example.com/mcp。如果需要登录，你将在浏览器中完成。",
+    "它的 MCP 端点，例如 https://mcp.example.com/mcp。如需登录，在浏览器中完成。",
   "remoteConnectors.form.client": "使用我自己的 OAuth 应用",
   "remoteConnectors.client.hint":
-    "仅用于无法自动注册 IncarnaMind 的服务。请在该服务中注册一个 OAuth 应用，重定向 URI 填写 http://127.0.0.1/callback（任意端口）。",
+    "仅用于无法自动注册 IncarnaMind 的服务。请注册 OAuth 应用，重定向 URI 填 http://127.0.0.1/callback（任意端口）。",
   "remoteConnectors.client.id": "客户端 ID",
   "remoteConnectors.client.secret": "客户端密钥（如果有）",
   "remoteConnectors.client.secretHint": "加密保存在系统中，不会存入 IncarnaMind 的数据库。",
@@ -3664,7 +3644,7 @@ export const zhCN = {
   "remoteConnectors.signIn.error.cancelled": "登录已取消。",
   "remoteConnectors.signIn.error.denied": "该服务未完成登录，请重试。",
   "remoteConnectors.signIn.error.client-id-required":
-    "这个服务无法自动注册 IncarnaMind。请填写你在该服务中注册的 OAuth 应用的客户端 ID。",
+    "这个服务无法自动注册 IncarnaMind。请填写你注册的 OAuth 应用的客户端 ID。",
   "remoteConnectors.signIn.error.secret-storage":
     "此系统没有可用的密钥环，IncarnaMind 无法安全地保存你的登录信息。",
   "remoteConnectors.signIn.error.failed": "未能登录。",
@@ -3710,9 +3690,8 @@ export const zhCN = {
   "approvals.tools.always": "始终允许",
   "approvals.tools.off": "关闭",
   "approvals.settings.title": "批准",
-  "approvals.settings.body":
-    "可能修改内容的工具和技能脚本在每次运行前都会询问。这里列出你始终允许、设为每次询问或已关闭的每个工具，以及脚本始终运行的每个技能。恢复默认后，它会按默认方式运行。",
-  "approvals.settings.empty": "没有设为始终允许、每次询问或关闭的工具，也没有脚本始终运行的技能。",
+  "approvals.settings.body": "你设为始终运行、每次询问或关闭的工具和技能。",
+  "approvals.settings.empty": "没有设为始终允许、每次询问或关闭的工具或技能。",
   "approvals.settings.revoke": "恢复默认",
   "approvals.settings.revokeLabel": "将 {name} 恢复默认",
   "approvals.settings.skillScripts": "{skill} 的脚本",
@@ -3917,7 +3896,7 @@ export const zhCN = {
   "meetings.settings.title": "录制",
   "meetings.settings.enabled": "录制会议",
   "meetings.settings.enabledBody":
-    "在 + 菜单中加入“录制会议”。录制时会在这台电脑上实时转写；第一次使用时会下载一次语音模型（约 1 GB）。",
+    "在 + 菜单中加入“录制会议”。在本机转写；语音模型（约 1 GB）首次使用时下载一次。",
   "meetings.settings.cantRecord": "这个版本的 IncarnaMind 无法录制音频。",
   "meetings.settings.what": "录制内容",
   "meetings.settings.whatBoth": "你的麦克风和其他人（电脑声音）。",
@@ -4032,13 +4011,13 @@ export const zhCN = {
   "web.settings.pages.title": "保存的网页",
   "web.settings.keepLook": "保留网页原貌",
   "web.settings.switch": "允许回答联网搜索",
-  "web.settings.body": "只在问题要求时搜索。回答用到的每个网页都会保存为文档，引用可以核对。",
+  "web.settings.body": "只在问题需要时搜索。用到的网页保存为文档。",
   "web.settings.route": "搜索方式",
   "web.settings.route.model": "模型自带的搜索",
-  "web.settings.route.hint": "通过模型的服务联网搜索。第一次搜索前会先征得你的同意。",
+  "web.settings.route.hint": "通过模型服务商的联网搜索。第一次搜索前会先问你。",
   "web.settings.supported": "{model} 通过 {provider} 联网搜索。",
   "web.settings.unsupported":
-    "{provider} 没有自带的联网搜索，用 {model} 提问时不会联网。Claude、OpenAI 和 ChatGPT 的模型可以。",
+    "{provider} 没有联网搜索，{model} 不会联网。Claude、OpenAI 和 ChatGPT 的模型可以。",
   "web.settings.localMode": "不可用：已开启“所有内容都留在这台电脑上”。",
   "meetings.command.pause": "暂停录制",
   "meetings.command.resume": "继续录制",
@@ -4236,8 +4215,7 @@ export const zhCN = {
   "meetings.help.none": "先按一个帮助按钮",
   "meetings.help.stillWriting": "建议还在生成中。",
   "meetings.level.label": "音量",
-  "meetings.settings.panelBody":
-    "会议录制时，一个小窗口浮在会议应用上方，放着帮助按钮。它不会抢走通话窗口的焦点。",
+  "meetings.settings.panelBody": "会议录制时，一个放着帮助按钮的小窗口浮在会议应用上方。",
   "meetings.settings.hidden": "共享屏幕时不显示浮窗",
   "meetings.settings.keys": "快捷键",
   "meetings.settings.keysBody": "会议应用在前台时也能使用，仅在会议录制时有效。",
@@ -4479,7 +4457,7 @@ export const zhCN = {
   "agents.settings.experimental": "实验",
   "agents.settings.lead": "在 Claude、Codex 或 Cursor 里问你的文档。",
   "agents.settings.intro":
-    "连接你已在用的 AI 工具，选好它能读的文件夹，它的回答就会引用这些文档，每条引文都由 IncarnaMind 核对。",
+    "连接你已在用的 AI 工具，选好它能读的文件夹。每条引文都由 IncarnaMind 核对。",
   "agents.settings.switch": "连接 AI 智能体",
   "agents.settings.switch.off": "已关闭：任何智能体都无法读取你的文档。",
   "agents.settings.switch.on":
@@ -4490,7 +4468,7 @@ export const zhCN = {
   "agents.settings.connect": "连接智能体",
   "agents.settings.connect.note": "在这台电脑上找到的智能体排在前面。",
   "agents.settings.web":
-    "只能在互联网上使用的聊天应用（例如网页版 ChatGPT 和 Claude、Gemini、Le Chat、Grok）无法连接 IncarnaMind，因为它只服务这台电脑。",
+    "只能在线使用的聊天应用（例如网页版 ChatGPT 和 Claude、Gemini、Le Chat、Grok）无法连接 IncarnaMind。",
   "agents.settings.connectButton": "连接",
   "agents.settings.help": "分步说明",
   "agents.setup.bundle": "一键连接：打开 Claude 进行安装",
@@ -4517,7 +4495,7 @@ export const zhCN = {
   "agents.pairing.copySettings": "复制设置",
   "agents.pairing.copySkill": "复制技能",
   "agents.pairing.copySkill.hint":
-    "将它保存为 SKILL.md，放进智能体技能文件夹中名为 incarnamind 的文件夹，智能体就知道何时使用 IncarnaMind。",
+    "将它保存为 SKILL.md，放进智能体技能文件夹中名为 incarnamind 的文件夹。",
   "agents.pairing.copied": "已复制",
   "agents.pairing.copy": "复制",
   "agents.pairing.command": "命令",
@@ -4548,12 +4526,12 @@ export const zhCN = {
   "agents.reason.failed": "出了点问题",
   "agents.connect.title": "允许{agent}读取你的文档？",
   "agents.connect.body":
-    "它将可以搜索和读取你所选文件夹中的文档，以及其中的 Mind。它读到的内容会发送给{agent}所用的 AI 模型，适用该服务的条款，而非 IncarnaMind 的条款。某些套餐可能会用这些内容训练模型。",
+    "它可以读取你所选的文件夹和其中的 Mind。读到的内容会发送给{agent}所用的 AI 模型，适用该服务的条款；某些套餐可能会用这些内容训练模型。",
   "agents.connect.name": "名称",
   "agents.connect.namePlaceholder": "我的智能体",
   "agents.connect.folders": "它可以读取的文件夹",
   "agents.connect.allUnfiled":
-    "你的文档还没有放进文件夹，所以这里就是全部文档。如果只想分享一部分，先在资料库里把它们放进一个文件夹。",
+    "你的文档还没有放进文件夹，这里就是全部文档。想只分享一部分，先把它们放进一个文件夹。",
   "agents.connect.empty.title": "还没有可读取的内容",
   "agents.connect.empty.body": "添加你想让{agent}读取的文档。它们会出现在这里，随时可选。",
   "agents.connect.pickOne": "至少选择一个文件夹。",
@@ -4569,9 +4547,8 @@ export const zhCN = {
   "agents.done.command": "已复制。粘贴到终端中运行。",
   "agents.done.settings": "已复制。在{agent}中把它添加为新的服务器，然后重新启动它。",
   "agents.done.settings.other":
-    "已复制。在智能体添加服务器的地方粘贴，然后重新启动智能体。如果它要求分别填写命令、参数和环境变量，可在“技术细节”里逐项复制。",
-  "agents.done.unreadable":
-    "无法读取{agent}的设置文件，IncarnaMind 未作改动。设置已复制：粘贴到 {path} 中。",
+    "已复制。在智能体添加服务器的地方粘贴，然后重新启动它。如果它要求分项填写，可在“技术细节”里逐项复制。",
+  "agents.done.unreadable": "无法读取{agent}的设置文件，未作改动。设置已复制：粘贴到 {path} 中。",
   "agents.done.undo": "撤销",
   "agents.bundle.description": "搜索你在 IncarnaMind 中的文档并引用，每条引文都经过核对。",
   "figure.points": "{value}个百分点",
