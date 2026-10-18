@@ -23,6 +23,10 @@ const ROOT_RELS = {
   name: "_rels/.rels",
   data: `${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>`,
 };
+const THEME_RELS = {
+  name: "ppt/theme/_rels/theme1.xml.rels",
+  data: `${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>`,
+};
 const TIMING = `<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" nodeType="tmRoot"/></p:par></p:tnLst><p:bldLst><p:bldP spid="3" grpId="0" build="p"/></p:bldLst></p:timing>`;
 const BY_PARAGRAPH = `<p:timing><p:tnLst><p:par><p:cTn id="1"><p:childTnLst><p:anim><p:cBhvr><p:tgtEl><p:spTgt spid="3"><p:txEl><p:pRg st="1" end="1"/></p:txEl></p:spTgt></p:tgtEl></p:cBhvr></p:anim></p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>`;
 
@@ -69,7 +73,7 @@ function deckBytes(timing = TIMING): Uint8Array {
         { shapes: sp({ id: 2, name: "Other", body: txBody(para("Untouched slide")) }) },
       ],
       layout: { shapes: layout, attrs: 'type="obj"' },
-      parts: [ROOT_RELS],
+      parts: [ROOT_RELS, THEME_RELS],
     }),
   );
 }
@@ -145,6 +149,17 @@ describe("A shape's text", () => {
 });
 
 describe("Speaker notes", () => {
+  // protects=the theme copied for a new notes master keeps its relationships, so a background picture it names still resolves; fails_when=the copy names a relationship it doesn't have (the schema check's Sem_InvalidRelationshipId); no_claim=themes in other folders.
+  test("copy the theme's relationships with the theme a new notes master gets", async () => {
+    const deck = Deck.open(deckBytes());
+    await setNotes(deck, "ppt/slides/slide1.xml", ["A note."]);
+    const saved = openPackage(await deck.save());
+    expect(await saved.readText("ppt/theme/_rels/theme2.xml.rels")).toBe(THEME_RELS.data);
+    expect(await saved.readText("ppt/notesMasters/_rels/notesMaster1.xml.rels")).toContain(
+      'Target="../theme/theme2.xml"',
+    );
+  });
+
   // protects=a slide without notes in a deck without a notes master gets both, linked both ways, and the presentation lists the master in the schema's place; fails_when=a link, content type or list entry is missing; no_claim=how PowerPoint draws the notes page.
   test("make a notes slide, and a notes master when the deck has none", async () => {
     const deck = Deck.open(deckBytes());

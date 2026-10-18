@@ -4,7 +4,7 @@
  * and a deck without a notes master gets one, on a copy of its first theme.
  */
 import { child, descendants, type XmlElement } from "../../documents/formats/xml";
-import { PackagePartError } from "../packagePatch/package";
+import { PackagePartError, relationshipsPartOf } from "../packagePatch/package";
 import { applySplices, endOf, type Splice, startOf } from "../packagePatch/text";
 import { escapeXml } from "../wordml";
 import {
@@ -63,6 +63,10 @@ async function notesMaster(deck: Deck): Promise<string> {
   const masterTheme = deck.pkg.freeName("ppt/theme/theme", "xml");
   deck.pkg.add(master, notesMasterXml());
   deck.pkg.add(masterTheme, themeBytes);
+  // The copy sits in the same folder, so the theme's own relationships (a background picture)
+  // point at the same parts from it.
+  const themeRelationships = await deck.pkg.bytes(relationshipsPartOf(theme.target));
+  if (themeRelationships) deck.pkg.add(relationshipsPartOf(masterTheme), themeRelationships);
   await deck.pkg.addContentType(master, PRESENTATION_CONTENT_TYPES.notesMaster);
   await deck.pkg.addContentType(masterTheme, PRESENTATION_CONTENT_TYPES.theme);
   (await deck.pkg.relationshipsOf(master)).add(
