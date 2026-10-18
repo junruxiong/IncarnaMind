@@ -51,8 +51,8 @@ jobs:
       - name: openpyxl judges what each copy kept of its original
         run: |
           for set in repo gen excel; do
-            python3 -I eval/xlsx/judge.py corpus/$set rt/$set/noedit rt/$set/judge-noedit.json
-            python3 -I eval/xlsx/judge.py corpus/$set rt/$set/edit rt/$set/judge-edit.json
+            python3 eval/xlsx/judge.py corpus/$set rt/$set/noedit rt/$set/judge-noedit.json
+            python3 eval/xlsx/judge.py corpus/$set rt/$set/edit rt/$set/judge-edit.json
           done
       - name: The same round trip through ExcelJS and SheetJS, for comparison
         run: |
@@ -60,7 +60,7 @@ jobs:
           for set in repo gen excel; do
             NODE_PATH="$RUNNER_TEMP/ej/node_modules" node eval/xlsx/others.cjs corpus/$set others/$set
             for tool in exceljs sheetjs; do
-              python3 -I eval/xlsx/judge.py corpus/$set others/$set/$tool others/$set/judge-$tool.json
+              python3 eval/xlsx/judge.py corpus/$set others/$set/$tool others/$set/judge-$tool.json
             done
           done
       - name: The decision rule's counts
