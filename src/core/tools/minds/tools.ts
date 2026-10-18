@@ -47,6 +47,7 @@ import type { ParagraphAsked } from "../../answers/paragraphAsked";
 import {
   BLOCK_ID_ATTRIBUTE,
   type BlockOrigin,
+  CHART_NODE,
   CITATION_NODE,
   type EditWithAiResult,
   type Effect,
@@ -77,6 +78,7 @@ import { layout, textBlocks } from "../../proposals/write";
 import type { PreparedChatModel } from "../../providers/chat";
 import { MIND_TOOLS, type Tool, type ToolProviderInfo } from "..";
 import { partialFields } from "../partialInput";
+import { type ChartAsked, chartAsked, chartOfTable, chartProperty } from "./charts";
 
 const PROVIDER: ToolProviderInfo = { kind: "minds", id: "minds", name: "Minds" };
 
@@ -803,12 +805,16 @@ function nodeText(node: NodeJSON): string {
   return node.text ?? (node.content ?? []).map(nodeText).join(" ");
 }
 
-function writtenBy(note: Y.XmlFragment, request: string): { paragraphs: number; tables: number } {
-  const counts = { paragraphs: 0, tables: 0 };
+function writtenBy(
+  note: Y.XmlFragment,
+  request: string,
+): { paragraphs: number; tables: number; charts: number } {
+  const counts = { paragraphs: 0, tables: 0, charts: 0 };
   const visit = (element: Y.XmlElement, written: boolean) => {
     const proposal = readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE));
     const ours = written || (proposal?.kind === "insert" && proposal.request === request);
     if (ours && element.nodeName === "table") counts.tables++;
+    else if (ours && element.nodeName === CHART_NODE) counts.charts++;
     else if (ours && element.nodeName === "paragraph") counts.paragraphs++;
     else {
       for (const child of element.toArray()) if (child instanceof Y.XmlElement) visit(child, ours);
@@ -965,7 +971,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
 
   /** What a request did in a Mind: how many of its changes wait there now. */
   const changeIn = (mindId: string, request: string, created: boolean): MindChange => {
-    const { proposals, paragraphs, tables } = minds.read(mindId, (note) => ({
+    const { proposals, paragraphs, tables, charts } = minds.read(mindId, (note) => ({
       proposals: pendingProposals(note).filter((each) => each.request === request).length,
       ...writtenBy(note, request),
     }));
@@ -976,6 +982,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       proposals,
       ...(paragraphs > 0 && { paragraphs }),
       ...(tables > 0 && { tables }),
+      ...(charts > 0 && { charts }),
     };
   };
 
@@ -1194,7 +1201,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     given: string | NonNullable<MindToolsOptions["lastAnswer"]>,
     made: boolean,
     retry: boolean,
-  ): (Written & { change: MindChange }) | null => {
+    chart: ChartAsked | null = null,
+  ): (Written & { change: MindChange; charted: string | null }) | null => {
     const stream = streams.get(toolCallId);
     streams.delete(toolCallId);
     ended.add(toolCallId);
@@ -1223,6 +1231,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     }
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
+    const charted = chart ? drawChart(writer, blocks, chart) : null;
     // Markers `cite` may still record in this step count as left out only once the Run is done.
     const change = {
       ...changeOf(writer, made),
@@ -1238,7 +1247,20 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         change: () => changeOf(writer, made),
       });
     }
-    return { change, notFound, unrecorded, searchTalk };
+    return { change, notFound, unrecorded, searchTalk, charted };
+  };
+
+  /** Puts the chart asked for after its table, as part of the writer's change; what to tell the model. */
+  const drawChart = (writer: Writer, blocks: readonly NodeJSON[], asked: ChartAsked): string => {
+    const drawn = chartOfTable(blocks, writer.ids, asked, options.language);
+    if ("why" in drawn) return drawn.why;
+    minds.edit(writer.mind.id, (note) => {
+      const table = topLevelBlocks(note).find((each) => idOf(each) === drawn.after) ?? null;
+      const ids = insertBlocks(note, [drawn.chart], { after: table, request: writer.request });
+      const doc = note.doc;
+      if (doc) setOrigins(doc, ids, writer.origin);
+    });
+    return "IncarnaMind drew the chart from the table, right after it.";
   };
 
   /** By call: text written with markers `cite` hadn't recorded yet. */
@@ -1283,6 +1305,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       ...tableNotes(written.change),
       outcomeOf(mind, written.change.request),
       ...writtenNotes(written),
+      ...(written.charted ? [written.charted] : []),
     ].join(" ");
 
   const mindProperty = {
@@ -1581,6 +1604,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           description:
             'The heading of the section to add it at the end of, or the first words of the paragraph to add it after, as written in the Mind. Whenever the User names a place, give its name here alone, also when the Mind has it more than once: you are then told how to ask the User which. Only when the User names the heading it is under ("the Summary under Part 2"), put that first: "Part 2 > Summary". Leave it out to add it at the Mind\'s end.',
         },
+        ...chartProperty,
         content: contentProperty,
         ...answerProperty,
       },
@@ -1626,6 +1650,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         given,
         false,
         canCallAgain?.() ?? true,
+        chartAsked(input.chart),
       );
       if (!written) throw noTable(mind);
       return added(
@@ -1656,6 +1681,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           type: "string",
           description: "A short title, from the User's words, in their language.",
         },
+        ...chartProperty,
         content: contentProperty,
         ...answerProperty,
       },
@@ -1703,7 +1729,15 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       }
       let written: ReturnType<typeof finishContent>;
       try {
-        written = finishContent(toolCallId, mind, null, given, true, canCallAgain?.() ?? true);
+        written = finishContent(
+          toolCallId,
+          mind,
+          null,
+          given,
+          true,
+          canCallAgain?.() ?? true,
+          chartAsked(input.chart),
+        );
       } catch (error) {
         if (error instanceof Refusal && error.problem.kind === "uncited") minds.discard(mind.id);
         throw error;

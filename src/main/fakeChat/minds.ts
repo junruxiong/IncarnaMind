@@ -19,12 +19,15 @@
  * came to; add_to_mind's and create_mind's input streams in word by word,
  * slowly for a Question asked "slowly", as does edit_mind's edit. "Write three
  * paragraphs" is `paragraphsReply`'s. "Write a summary page" (写一个总结页面)
- * calls create_mind with a short summary.
+ * calls create_mind with a short summary. "Make a bar chart of revenue by quarter"
+ * (画一个各季度收入的柱状图; "line chart", 折线图) searches, cites each quarter's
+ * revenue, and adds them as a table with its chart (#1091).
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
 import { ASSISTANT_REPLACES } from "./appliedEdits";
 import { paragraphsReply } from "./paragraphs";
+import { passagesIn } from "./passages";
 import {
   lastQuestion,
   lastResult,
@@ -79,6 +82,8 @@ export function mindRead(prompt: Prompt): string | null {
 const SUMMARY_PAGE =
   /\bwrite a summary page\b|写一个总结页面|\bwrite a summary of my documents\b|根据我现有的文件帮我写一份summary/i;
 const LONGER = /\blonger\b|长一点|更长/i;
+const REVENUE_CHART = /\bchart of revenue by quarter\b|各季度收入的(?:柱状图|折线图)/i;
+const QUARTER_REVENUE = /Revenue in (Q\d) was (€\d+ million)/g;
 /** A rewrite of the User's text (改写), which Edit with AI's scripted model writes anew. */
 const REWRITE = /\brewrite\b|改写/i;
 const SUMMARY = [
@@ -139,6 +144,7 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
       return { tool: "add_to_mind", input: { content: "## Risks\n\nThe supplier is late." } };
     return { text: firstSentence(added) };
   }
+  if (REVENUE_CHART.test(question)) return revenueChart(prompt, question);
   if (SUMMARY_PAGE.test(question)) {
     const made = lastResult(prompt, "create_mind");
     if (made === undefined)
@@ -187,4 +193,46 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
   const title = called?.[1] ?? called?.[2] ?? "Scripted notes";
   const content = `## Summary\n\n${cited ? CITED_ANSWER : "Written by the scripted assistant."}`;
   return { tool: "create_mind", input: { title, content } };
+}
+
+/** Each quarter's revenue the search found, cited, as a table and its chart. */
+function revenueChart(prompt: Prompt, question: string): Reply {
+  const added = lastResult(prompt, "add_to_mind");
+  if (added !== undefined) return { text: firstSentence(added) };
+  const [searched] = toolResults(prompt, "search_documents");
+  if (searched === undefined) {
+    return { tool: "search_documents", input: { query: "revenue by quarter" } };
+  }
+  const found = passagesIn(searched).flatMap((passage) =>
+    [...passage.text.matchAll(QUARTER_REVENUE)].map((match) => ({
+      passage: passage.id,
+      quarter: match[1] ?? "",
+      revenue: match[2] ?? "",
+      quote: match[0],
+    })),
+  );
+  if (toolResults(prompt, "cite").length === 0) {
+    const citations = found.map((each, index) => ({
+      marker: index + 1,
+      passage: each.passage,
+      quote: each.quote,
+    }));
+    return { tool: "cite", input: { citations } };
+  }
+  const chinese = /\p{Script=Han}/u.test(question);
+  const table = [
+    chinese ? "| 季度 | 收入 |" : "| Quarter | Revenue |",
+    "|---|---|",
+    ...found.map((each, index) => `| ${each.quarter} | ${each.revenue} [^${index + 1}] |`),
+  ].join("\n");
+  return {
+    tool: "add_to_mind",
+    input: {
+      chart: {
+        kind: /\bline chart\b|折线图/i.test(question) ? "line" : "bar",
+        title: chinese ? "各季度收入" : "Revenue by quarter",
+      },
+      content: table,
+    },
+  };
 }

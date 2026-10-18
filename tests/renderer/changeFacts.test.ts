@@ -38,6 +38,12 @@ describe("What an Answer did in a Mind, in words (#880), counted by paragraph (#
       "修改了 4 个段落，添加了 1 个表格",
     ],
     [row({ tables: 2 }), "Added 2 tables to “Q3”", "Added 2 tables", "添加了 2 个表格"],
+    [
+      row({ tables: 1, charts: 1 }),
+      "Added a table and a chart to “Q3”",
+      "Added a table and a chart",
+      "添加了 1 个表格和 1 个图表",
+    ],
   ] as const)(
     "on the card and on the Mind's line, the same counts: %o",
     (counts, card, line, zhLine) => {

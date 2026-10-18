@@ -9,7 +9,14 @@
  * Pure, with no Node or DOM imports: the editor, the core's one reader
  * (exports, Question context) and the tests share it.
  */
-import type { CitationAttributes, CitationCheck } from "../core/api";
+import {
+  CITATION_NODE,
+  type CitationAttributes,
+  type CitationCheck,
+  FOOTNOTE_NODE,
+  PROPOSAL_ATTRIBUTE,
+} from "../core/api";
+import type { NodeJSON } from "./blockJson";
 import { type Figure, type FigureUnit, figureContextOf, readFigures } from "./figures";
 import type { MessageKey, MessageParams } from "./i18n";
 import { holdsPeriods } from "./periods";
@@ -686,6 +693,32 @@ export function chartFromTable(
 export interface SourceLine {
   text: string;
   citation: CitationAttributes | null;
+}
+
+/** A table the assistant writes (#1091), as `chartFromTable` reads it; its cells span nothing. */
+export function gridOfTable(table: NodeJSON): SourceGrid {
+  return (table.content ?? []).map((row) =>
+    (row.content ?? []).map((cell) => ({ ...lineOf(cell), header: cell.type === "tableHeader" })),
+  );
+}
+
+function lineOf(node: NodeJSON): SourceLine {
+  let text = "";
+  let citation: CitationAttributes | null = null;
+  const visit = (child: NodeJSON) => {
+    if (child.type === CITATION_NODE) {
+      citation ??= Object.fromEntries(
+        Object.entries(child.attrs ?? {}).filter(([key]) => key !== PROPOSAL_ATTRIBUTE),
+      ) as unknown as CitationAttributes;
+      return;
+    }
+    if (child.type === FOOTNOTE_NODE) return;
+    if (child.type === "text") text += child.text ?? "";
+    else if (child.type === "hardBreak" || (child.type === "paragraph" && text !== "")) text += " ";
+    for (const each of child.content ?? []) visit(each);
+  };
+  for (const child of node.content ?? []) visit(child);
+  return { text: text.replace(/\s+/g, " ").trim(), citation };
 }
 
 /** What separates a label from the figure after it: "Q1: 289.4", "Revenue – $1.2bn". */

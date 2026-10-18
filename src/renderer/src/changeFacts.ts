@@ -8,16 +8,27 @@ import type { MessageKey, MessageParams } from "../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** What was done in one Mind: paragraphs changed, paragraphs written in whole Blocks, tables added. */
+/** What was done in one Mind: paragraphs changed, paragraphs written in whole Blocks, tables and charts added. */
 export interface ChangeCounts {
   created: boolean;
   changed: number;
   wrote: number;
   tables: number;
+  /** Absent: none. */
+  charts?: number;
 }
 
-const counted = (t: Translate, count: number, what: "tables" | "paragraphs") =>
+const counted = (t: Translate, count: number, what: "tables" | "paragraphs" | "charts") =>
   count === 1 ? t(`mindChanges.count.${what}.one`) : t(`mindChanges.count.${what}`, { count });
+
+/** The tables added, and the charts with them (#1091): "a table and a chart". */
+function tablesText(t: Translate, row: ChangeCounts): string {
+  const tables = counted(t, row.tables, "tables");
+  const charts = row.charts ?? 0;
+  return charts > 0
+    ? t("mindChanges.count.tablesAndCharts", { tables, charts: counted(t, charts, "charts") })
+    : tables;
+}
 
 /** How many of what was done still wait, while that is known and there was something. */
 export function leftText(
@@ -57,7 +68,7 @@ export function changeFact(t: Translate, row: ChangeCounts, name: string | null)
 }
 
 function tablesFact(t: Translate, row: ChangeCounts, name: string | null): string {
-  const tables = counted(t, row.tables, "tables");
+  const tables = tablesText(t, row);
   const count = row.wrote + row.changed;
   if (name === null) {
     if (count === 0) return t("edit.tables", { tables });

@@ -951,6 +951,8 @@ export interface MindChange {
   paragraphs?: number;
   /** How many tables it added. Absent: none. */
   tables?: number;
+  /** How many charts it added (#1091). Absent: none. */
+  charts?: number;
   /** Sources in its tables' cells written as a name in brackets that matched no Citation, kept as text. Absent: none. */
   unlinkedSources?: number;
   /** Sources the assistant wrote as a name in brackets that matched no Citation it recorded, so left out. Absent: none. */
