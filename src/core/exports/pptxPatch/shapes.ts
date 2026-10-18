@@ -3,7 +3,14 @@
  * or its non-visual properties, are spliced; the rest of the slide keeps its
  * bytes, animations included.
  */
-import { child, descendants, elements, local, walk, type XmlElement } from "../../documents/formats/xml";
+import {
+  child,
+  descendants,
+  elements,
+  local,
+  walk,
+  type XmlElement,
+} from "../../documents/formats/xml";
 import { PackagePartError } from "../packagePatch/package";
 import {
   appendInside,

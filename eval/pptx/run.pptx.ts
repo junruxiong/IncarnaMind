@@ -479,7 +479,9 @@ test("PowerPoint patch spike", async () => {
     try {
       survival = await citationSurvival(await fetchPinned(entry.url, entry.sha256, cache));
     } catch (error) {
-      log(`${entry.id}: no Citation tag and note (${error instanceof Error ? error.message : String(error)})`);
+      log(
+        `${entry.id}: no Citation tag and note (${error instanceof Error ? error.message : String(error)})`,
+      );
     }
     if (survival) {
       await writeFile(join(outputs, "citation-survival.pptx"), survival.saved);
