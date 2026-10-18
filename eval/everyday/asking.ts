@@ -13,6 +13,7 @@ import * as Y from "yjs";
 import {
   type AnswerUsage,
   BLOCK_ID_ATTRIBUTE,
+  type ChatModelChoice,
   CITATION_NODE,
   type ConversationAnswer,
   type Core,
@@ -221,6 +222,7 @@ export async function runCase(
   judge: ReturnType<typeof createAiSdkChatModel>,
   model: string,
   each: AskedRequest,
+  checkModel: ChatModelChoice | null = null,
 ): Promise<CaseResult> {
   const { core } = library;
   const started = Date.now();
@@ -311,7 +313,7 @@ export async function runCase(
   const minds = await core.listMinds();
   const names = (id: string) => minds.find((each) => each.id === id)?.title ?? null;
   const record = toolRecordLines(answer.toolCalls, names);
-  const support = each.research ? await checkCitedSentences(core, answer) : null;
+  const support = each.research ? await checkCitedSentences(core, answer, checkModel) : null;
   const verdict = await judgeClaims(
     judge,
     answer.text,

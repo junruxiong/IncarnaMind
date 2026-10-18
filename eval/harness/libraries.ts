@@ -5,7 +5,7 @@
  * outside agents, which start the bake-off's shim (./shim.ts) with this Node.
  */
 import { join, resolve } from "node:path";
-import { type Core, DATABASE_FILE } from "../../src/core";
+import { type ChatModelChoice, type Core, DATABASE_FILE } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
 import { fetchPapers, reports } from "../everyday/asking";
 import { writeDatedDocuments } from "../everyday/dated";
@@ -62,18 +62,24 @@ export interface HarnessLibraryHandle {
   scoped: { id: string; name: string }[];
   /** The data folder's database, read for the Citations minted for outside agents. */
   db: ReturnType<typeof openDatabase>;
+  /** The model the Supported column's check runs on; null: the model under test. */
+  checkModel: ChatModelChoice | null;
   close(): Promise<void>;
 }
 
-/** A library with the chat model under test saved, outside agents on, and the consent for both given. */
+/**
+ * A library with the chat model under test saved, outside agents on, and the consent for both
+ * given; with `checker`, that model is saved too, for the support check.
+ */
 export async function openHarnessLibrary(options: {
   name: HarnessLibrary;
   documents: readonly EvalDocument[];
   chat: ChatSettings;
+  checker: ChatSettings | null;
   config: EvalConfig;
   log: Log;
 }): Promise<HarnessLibraryHandle> {
-  const { config, chat } = options;
+  const { config, chat, checker } = options;
   const library = await openLibrary({
     name: `harness-${options.name}`,
     embedder: createWorkerEmbedder(),
@@ -95,12 +101,18 @@ export async function openHarnessLibrary(options: {
       request.flow.id === "chat" || request.flow.id === "checks",
     );
   });
-  await core.saveChatProvider({
-    kind: chat.kind,
-    modelId: chat.modelId,
-    ...(chat.apiKey !== null && { apiKey: chat.apiKey }),
-    ...(chat.baseUrl !== null && { baseUrl: chat.baseUrl }),
-  });
+  const save = (settings: ChatSettings) =>
+    core.saveChatProvider({
+      kind: settings.kind,
+      modelId: settings.modelId,
+      ...(settings.apiKey !== null && { apiKey: settings.apiKey }),
+      ...(settings.baseUrl !== null && { baseUrl: settings.baseUrl }),
+    });
+  // The checker first: the provider saved last holds the default model, the one under test.
+  const checkModel = checker
+    ? { providerId: (await save(checker)).id, modelId: checker.modelId }
+    : null;
+  await save(chat);
   await core.setAgentsEnabled(true);
   const db = openDatabase(join(library.dataDir, DATABASE_FILE));
   return {
@@ -111,6 +123,7 @@ export async function openHarnessLibrary(options: {
       name: document.name,
     })),
     db,
+    checkModel,
     async close() {
       db.close();
       await library.close();

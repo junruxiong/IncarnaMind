@@ -93,7 +93,14 @@ export async function runOurs(
   run: number,
 ): Promise<HarnessRun> {
   const model = `${setup.chat.kind}/${setup.chat.modelId}`;
-  const result = await runCase(handle.library, handle.scoped, setup.judge, model, each);
+  const result = await runCase(
+    handle.library,
+    handle.scoped,
+    setup.judge,
+    model,
+    each,
+    handle.checkModel,
+  );
   const usage = usageOf(result.usage);
   const dead = result.failures.flatMap((failure) =>
     failure.kind === "dead-markers" ? failure.markers : [],
@@ -282,7 +289,11 @@ export async function runOutside(
         });
   const support =
     each.research && reply !== ""
-      ? await checkCitedSentences(core, { text: marked.text, citations: marked.citations })
+      ? await checkCitedSentences(
+          core,
+          { text: marked.text, citations: marked.citations },
+          handle.checkModel,
+        )
       : each.research
         ? []
         : null;

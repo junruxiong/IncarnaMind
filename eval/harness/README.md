@@ -40,7 +40,7 @@ Each is tagged with the persona it stands in for (analyst, litigator, student). 
 The same way for every harness, from the reply the User reads. An outside harness's `[cite:…]` tokens become Citation markers with the Citations minted for its own pairing (`score.ts`); a token minted for no one, or for another pairing, is a marker without a Citation.
 
 - **Completed:** the run passes every guard `eval/everyday/checks.ts` holds its request to, and, for a draft, gives the Documents' figure for each wrong one.
-- **Supported, Unsupported, Contradicted:** the research questions' cited sentences, as the app's own Check against Documents judges them, on the model under test (`eval/everyday/support.ts`).
+- **Supported, Unsupported, Contradicted:** the research questions' cited sentences, as the app's own Check against Documents judges them (`eval/everyday/support.ts`), on the model under test or on the one `INCARNAMIND_EVAL_HARNESS_CHECK_*` names.
 - **Invented facts:** Contradicted sentences, plus dates the Documents' text doesn't give (`eval/everyday/dates.ts`).
 - **Wrong figures caught** (new): the reply gives the Documents' figure for a wrong one, in any of the ways it is written ("38.6%", "3.5:1", "3.1 倍").
 - **Claimed, not done:** the claims judge (`eval/everyday/judge.ts`) finds a sentence claiming a change no Tool made. An outside harness's record lists its MCP calls, none of which changes a Mind.
@@ -59,7 +59,7 @@ INCARNAMIND_EVAL_CHAT_KEY=sk-ant-... \
 npm run eval:harness
 ```
 
-On an OpenAI model, also name the judge: `INCARNAMIND_EVAL_JUDGE_KIND`, `_MODEL` and `_KEY` (another model than the one asked, as in `eval/everyday`).
+On an OpenAI model, also name the judge: `INCARNAMIND_EVAL_JUDGE_KIND`, `_MODEL` and `_KEY` (another model than the one asked, as in `eval/everyday`). To compare two models' results, keep the judge and the support check the same for both: set the judge, and `INCARNAMIND_EVAL_HARNESS_CHECK_KIND`, `_MODEL` and `_KEY` for the check.
 
 | Variable | Default | |
 |---|---|---|
@@ -71,6 +71,7 @@ On an OpenAI model, also name the judge: `INCARNAMIND_EVAL_JUDGE_KIND`, `_MODEL`
 | `INCARNAMIND_EVAL_HARNESS_TIMEOUT_S` | `300` | A turn that takes longer is stopped and fails. |
 | `INCARNAMIND_EVAL_HARNESS_CLAUDE`, `_CODEX` | on the PATH | The harnesses' binaries. |
 | `INCARNAMIND_EVAL_HARNESS_RESUME` | none | A results folder to go on with: runs already in it are skipped. |
+| `INCARNAMIND_EVAL_HARNESS_CHECK_KIND`, `_MODEL`, `_KEY` | the model under test | The model the support check runs on, saved beside the one under test. |
 | `INCARNAMIND_EVAL_HARNESS_KEEP_REQUESTS` | off | `1` keeps each request Codex sent to the model, next to the run's record. |
 
 The runs go one at a time, in an order shuffled with the seed, the harnesses mixed. Each is appended to `eval/results/<start>-harness-<model>/runs.jsonl` as it ends, with each harness's events in `events/`; `report.md` and `report.json` are written at the end. The report gives each harness's version, its MCP config (without the pairing's token, which is each run's own and is revoked when the run ends) and the Tools it offered the model.

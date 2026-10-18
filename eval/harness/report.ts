@@ -122,6 +122,8 @@ export function adapterCheck(records: readonly OutsideRecord[]): {
 export function harnessReport(options: {
   model: string;
   judge: string;
+  /** The model the support check ran on; null: the model under test. */
+  checker: string | null;
   startedAt: string;
   seed: number;
   runsPerRequest: number;
@@ -139,7 +141,7 @@ export function harnessReport(options: {
   return [
     `# Harness bake-off: ${options.model}`,
     "",
-    `Started ${options.startedAt}. ${options.requests.length} requests, each asked ${options.runsPerRequest} times per harness, in an order shuffled with seed ${options.seed}. Claims judged by ${options.judge}; cited sentences checked by the app's own Check against Documents, on the model under test.`,
+    `Started ${options.startedAt}. ${options.requests.length} requests, each asked ${options.runsPerRequest} times per harness, in an order shuffled with seed ${options.seed}. Claims judged by ${options.judge}; cited sentences checked by the app's own Check against Documents, on ${options.checker ?? "the model under test"}.`,
     "",
     "## The harnesses",
     "",

@@ -11,7 +11,7 @@ import { delimiter, join, resolve } from "node:path";
 import { test } from "vitest";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
 import { judgeOf } from "../everyday/asking";
-import { readConfig } from "../lib/config";
+import { chatSettings, readConfig } from "../lib/config";
 import { createLog } from "../lib/log";
 import { HARNESS_CASES, type HarnessCase, type HarnessLibrary } from "./cases";
 import { claudeMcpConfig } from "./claudeCode";
@@ -111,6 +111,7 @@ test("harness bake-off", async () => {
   const effort = setting("_EFFORT") ?? (chat.kind === "anthropic" ? "low" : "medium");
   const timeoutMs = (Number(setting("_TIMEOUT_S") ?? "300") || 300) * 1000;
   const judging = judgeOf(config, chat);
+  const checker = chatSettings(process.env, "HARNESS_CHECK");
   const judge = createAiSdkChatModel({
     kind: judging.kind,
     modelId: judging.modelId,
@@ -176,6 +177,7 @@ test("harness bake-off", async () => {
         name,
         documents: await documentsOf(name, config, datedFolder, log),
         chat,
+        checker,
         config,
         log,
       });
@@ -213,6 +215,7 @@ test("harness bake-off", async () => {
   const report = harnessReport({
     model: `${chat.kind}/${chat.modelId}`,
     judge: `${judging.kind}/${judging.modelId}`,
+    checker: checker ? `${checker.kind}/${checker.modelId}` : null,
     startedAt,
     seed,
     runsPerRequest,
@@ -226,7 +229,15 @@ test("harness bake-off", async () => {
   await writeFile(
     join(folder, "report.json"),
     JSON.stringify(
-      { model: `${chat.kind}/${chat.modelId}`, seed, configurations, skipped, runs },
+      {
+        model: `${chat.kind}/${chat.modelId}`,
+        judge: `${judging.kind}/${judging.modelId}`,
+        checker: checker ? `${checker.kind}/${checker.modelId}` : `${chat.kind}/${chat.modelId}`,
+        seed,
+        configurations,
+        skipped,
+        runs,
+      },
       null,
       2,
     ),

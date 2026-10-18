@@ -129,6 +129,22 @@ describe("Checking the cited sentences", () => {
       },
     ]);
   });
+
+  // protects=the check runs on the model it is given, so two rounds on different models can share one checker; fails_when=the model is dropped and the default chat model checks instead; no_claim=none beyond protects.
+  test("the check runs on the model it is given, and on the default without one", async () => {
+    const asked: CheckClaimInput[] = [];
+    const core = {
+      checkClaim: async (input: CheckClaimInput) => {
+        asked.push(input);
+        return verdict("supported");
+      },
+    };
+    const answer = { text: "Cost is quadratic [^2].", citations: CITATIONS };
+    const checker = { providerId: "provider-1", modelId: "claude-sonnet-5-5" };
+    await checkCitedSentences(core, answer, checker);
+    await checkCitedSentences(core, answer);
+    expect(asked.map((input) => input.model)).toEqual([checker, null]);
+  });
 });
 
 describe("The share of cited sentences supported", () => {
