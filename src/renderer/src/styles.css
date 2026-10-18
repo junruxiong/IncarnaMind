@@ -3825,7 +3825,7 @@
     display: none;
   }
   /* Each line sits with the Block it is about: a gap above it, the Block right under it. */
-  .mind-editor > * + .change-section {
+  .mind-editor > :not(.applied-line) + .change-section {
     margin-top: 32px;
   }
   .mind-editor > :is(.change-was, .change-section) + *,
@@ -3880,17 +3880,51 @@
     align-items: center;
     column-gap: 6px;
     min-width: 0;
-    margin-block: 4px;
     font-family: var(--font-sans);
     font-size: 12px;
     line-height: 20px;
     user-select: none;
     white-space: normal;
   }
+  /* The line is 16px under the Block above, as any Block is, and 6px over the Block it is about. */
+  .mind-editor > .applied-line + * {
+    --block-gap: 0px;
+  }
   .mind-editor .applied-line {
+    margin-bottom: 6px;
     color: var(--color-accent-strong);
+
+    & :is([data-applied-action="review"], [data-applied-action="done"]) {
+      color: var(--color-ink);
+    }
+  }
+  /* Review changes: each change ends with its own Restore original, after its new words. */
+  .mind-editor .applied-restore-holder {
+    margin-inline-start: 6px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    user-select: none;
+    white-space: nowrap;
+  }
+  /* Struck words take their space with them: the words after them need one. */
+  .mind-editor del.applied-old + .applied-restore-holder {
+    margin-inline-end: 6px;
+  }
+  .mind-editor .applied-restore-holder--block {
+    display: block;
+    margin-block: 4px 0;
+    margin-inline-start: 0;
+  }
+  .mind-editor .applied-restore {
+    color: var(--color-ink-meta);
+
+    &:hover {
+      color: var(--color-ink-secondary);
+    }
   }
   .mind-editor .applied-kept-line {
+    margin-block: 4px;
     color: var(--color-ink-meta);
 
     & .proposal-action {
