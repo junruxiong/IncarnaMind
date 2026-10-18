@@ -607,6 +607,11 @@ const OURS: readonly Row[] = [
 const FIRST: RequestContext = { followsAChange: false, followsAnAnswer: false };
 const NO_CHANGE: RequestContext = { followsAChange: false, followsAnAnswer: true };
 const CHANGE: RequestContext = { followsAChange: true, followsAnAnswer: true };
+const WITH_TEXT: RequestContext = {
+  followsAChange: false,
+  followsAnAnswer: true,
+  lastAnswerHasText: true,
+};
 
 const contexts = (after: After | undefined): RequestContext[] =>
   after === "after a change"
@@ -790,24 +795,51 @@ describe("Routing everyday requests", () => {
     }
   });
 
-  // protects=after an Answer, asking for it as a document, a new note or a Mind, even as a question, puts that Answer in a new Mind as it is (#1109); before any Answer it is no such request, and "add it to my notes" still writes into the Mind in focus; fails_when=the owner's "你不给我建一份文档吗" stays in the panel, or "add it to my notes" makes a new Mind; no_claim=none beyond protects.
+  // protects=after an Answer with text, asking for it as a document, a new note or a Mind puts that Answer in a new Mind as it is (#1109); with no Answer, or one with no text, it is no such request; fails_when=one of these stays in the panel, or routes with nothing to put in; no_claim=none beyond protects.
   test.each([
     "make it a document",
-    "Can you put this in a new note?",
+    "make this a document",
+    "put this in a new note",
     "turn that answer into a doc",
-    "make a document of it",
-    "你不给我建一份文档吗",
     "做成文档",
     "把这个放进一个新笔记",
-    "帮我整理成文档",
+    "把上面的回答做成文档",
   ])("%s puts the last Answer in a new Mind", (request) => {
-    expect(routeRequest(request, NO_CHANGE)).toEqual({
+    expect(routeRequest(request, WITH_TEXT)).toEqual({
       kind: "write",
       newMind: true,
       fromAnswer: true,
       fillsEmpty: true,
     });
     expect(routeRequest(request, FIRST).fromAnswer).toBeUndefined();
+    expect(routeRequest(request, NO_CHANGE).fromAnswer).toBeUndefined();
+  });
+
+  // protects=a question, or a request to organize files, after an Answer is never read as putting the Answer in a Mind (#1133 review); fails_when=one of them makes a Mind of the last Answer; no_claim=none beyond protects.
+  test.each([
+    "你能写文档吗",
+    "你可以整理文件吗",
+    "帮我整理文件",
+    "存文件",
+    "生成文件",
+    "Can you make it a document?",
+    "整理成文档",
+  ])("%s doesn't put the last Answer in a Mind", (request) => {
+    expect(routeRequest(request, WITH_TEXT).fromAnswer).toBeUndefined();
+  });
+
+  // protects=a request that names the Mind the User is in as where the writing goes writes there, in English and Chinese, and is never sent to a new Mind (#1133 review); fails_when=it routes to a new Mind; no_claim=none beyond protects.
+  test.each([
+    "Write a summary of the lease in my notes",
+    "Write a summary of the lease into this note",
+    "Write a summary for my notes",
+    "Draft a plan for this page",
+    "Create a summary of the documents below",
+    "Add a short note to the summary",
+    "写一份这篇笔记的总结",
+    "根据我的笔记写一份总结",
+  ])("%s writes into the Mind in focus", (request) => {
+    expect(routeRequest(request, WITH_TEXT)).toEqual({ kind: "write", newMind: false });
   });
 
   // protects=adding the last Answer to my notes writes it into the Mind in focus, not a new one; fails_when=it makes a new Mind; no_claim=none beyond protects.

@@ -1807,7 +1807,7 @@ export function createAnswers(options: AnswersOptions) {
           name: "claimed-change",
           check: (text) => {
             mindsNow = null;
-            const claims = claimsNoCallMade(text, toolCalls, mindsListed());
+            const claims = claimsNoCallMade(text, toolCalls, mindsListed(), focusedId);
             return claims.length > 0
               ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
               : null;
@@ -2293,6 +2293,7 @@ export function createAnswers(options: AnswersOptions) {
           turn.earlier.findLast((message) => message.kind === "answer"),
         ),
         followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
+        lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier) !== null,
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };

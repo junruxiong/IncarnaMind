@@ -152,7 +152,7 @@ describe("A request to write something (#1109)", { timeout: 60_000 }, () => {
 
 describe("“Make it a document” after an Answer (#1109)", { timeout: 60_000 }, () => {
   // protects=after a panel Answer citing all seven Documents, asking for it as a document, in the owner's words or in English, makes a Mind of that Answer as it is: the same Citations, checked, with no new search, in the Folder the Answer searched; fails_when=the model searches again, the Mind covers fewer Documents, its Citations are lost, or it lands in another Folder; no_claim=that a real model gives answer: true.
-  test.each(["你不给我建一份文档吗", "Make it a document"])(
+  test.each(["把这个做成文档", "Make it a document"])(
     "“%s” makes a Mind of the Answer, every Citation kept, nothing searched again",
     async (request) => {
       const systems: string[] = [];
