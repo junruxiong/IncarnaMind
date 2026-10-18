@@ -1,5 +1,5 @@
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
-import { askInAssistant } from "../../conversations";
+import { askInAssistant, regenerateAnswer } from "../../conversations";
 import { useLanguage, useT } from "../../i18n";
 import { saidInLine } from "../../lineNames";
 import { MetaLine } from "../MetaLine";
@@ -63,6 +63,30 @@ export function CoverageLine({
             }}
           />
         ),
+      ]}
+    />
+  );
+}
+
+/** Use all takes the scope off the Question alone, so the Mind's scope stays (#1149). */
+export function WrittenFromLine({ answer }: { answer: Pick<ConversationAnswer, "id" | "steps"> }) {
+  const t = useT();
+  const from = answer.steps?.writtenFrom;
+  if (!from) return null;
+  return (
+    <MetaLine
+      data-testid="answer-written-from"
+      className="answer-coverage"
+      parts={[
+        t("answer.writtenFrom", { count: from.documents, total: from.total }),
+        <LineAction
+          key="use-all"
+          action={{
+            label: t("answer.writtenFrom.useAll"),
+            testId: "answer-written-from-all",
+            onClick: () => void regenerateAnswer(answer.id, { clearScope: true }),
+          }}
+        />,
       ]}
     />
   );

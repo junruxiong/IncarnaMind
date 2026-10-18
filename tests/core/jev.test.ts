@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   type Core,
   type CoreAdapters,
@@ -443,6 +443,28 @@ describe("Consent for Jev (ADR-0022)", { timeout: 30_000 }, () => {
     await core.allowDataFlow("tagging", TYPESAFE.id);
     await waitForTagging(core, [first.id, second.id]);
     expect(jev.requests).toHaveLength(2);
+  });
+});
+
+describe("Jev and Local mode", { timeout: 30_000 }, () => {
+  test("turned on while Jev's request waits to be tried again, nothing more is sent, and the Document waits", async () => {
+    const { core, jev } = await startWithJev();
+    jev.fail({ status: 503, message: "Overloaded.", headers: { "retry-after": "1" } });
+    await core.saveJevSettings({ apiKey: JEV_KEY });
+    const sources = await createTempDataFolder();
+    await core.addDocuments([await writeSourceFile(sources, "Attention.md", PAPER_TEXT)]);
+    await vi.waitFor(() => expect(jev.requests).toHaveLength(1), { timeout: 10_000 });
+
+    await core.setLocalOnly(true);
+
+    const [document] = await core.listDocuments();
+    const [waiting] = await waitForTagging(
+      core,
+      [document?.id ?? ""],
+      (each) => each.tagging === "waiting-for-provider",
+    );
+    expect(waiting?.tagging).toBe("waiting-for-provider");
+    expect(jev.requests).toHaveLength(1);
   });
 });
 

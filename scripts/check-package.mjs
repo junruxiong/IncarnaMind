@@ -5,9 +5,11 @@
 //   2. Each app.asar and each installer is within its size budget.
 //   3. Each app has the speech-to-text addon (#136) of its own platform and architecture, and no
 //      other, unpacked beside app.asar.
+//   4. Each app has what Analyses run with (ADR-0023) in python/ beside app.asar, as
+//      packages.json lists it.
 // Usage: node scripts/check-package.mjs [dist-folder]   (default: dist)
 // Exit code 1 when a check fails.
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { listPackage } from "@electron/asar";
 
@@ -16,11 +18,12 @@ const ALLOWED_TOP_LEVEL = new Set(["out", "node_modules", "package.json"]);
 // Set from the fixed macOS arm64 build (app.asar 130.8 MB) plus about 20%. The asar holds
 // JavaScript and pure-JS dependencies; the native libraries are unpacked beside it.
 const MAX_ASAR_BYTES = 157_000_000;
-// The largest installer of the fixed macOS arm64 build (the dmg, 184.3 MB) plus about 20%.
-// The Windows and Linux installers are checked against the same limit.
-const MAX_INSTALLER_BYTES = 221_000_000;
-// The .deb of the Linux x64 build (170 MB) plus about 9%.
-const MAX_DEB_BYTES = 185_000_000;
+// The largest installer, the Linux AppImage with what Analyses run with (231.3 MB, ADR-0023),
+// plus about 14 MB: the next real growth trips it, to be argued for. The macOS and Windows
+// installers are checked against the same limit.
+const MAX_INSTALLER_BYTES = 245_000_000;
+// The .deb of the Linux x64 build (170 MB before Analyses, which add about 14 MB) plus about 15 MB.
+const MAX_DEB_BYTES = 199_000_000;
 
 const distDir = resolve(process.argv[2] ?? "dist");
 const INSTALLER_EXT = /\.(dmg|zip|exe|AppImage|deb)$/;
@@ -104,6 +107,26 @@ for (const asar of asars) {
 	const others = found.filter((name) => name !== expected);
 	if (others.length > 0) {
 		failures.push(`${asar} carries another platform's speech package: ${others.join(", ")}`);
+	}
+}
+
+for (const asar of asars) {
+	const python = join(dirname(asar), "python");
+	let listed = [];
+	try {
+		listed = JSON.parse(readFileSync(join(python, "packages.json"), "utf8")).packages.map(
+			(each) => each.file,
+		);
+	} catch {
+		failures.push(`${asar} has no python/packages.json beside it`);
+		continue;
+	}
+	const pyodide = ["pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip"];
+	const missing = [...pyodide, "pyodide-lock.json", ...listed].filter(
+		(name) => !existsSync(join(python, name)),
+	);
+	if (missing.length > 0) {
+		failures.push(`${asar} is missing Python files beside it: ${missing.join(", ")}`);
 	}
 }
 

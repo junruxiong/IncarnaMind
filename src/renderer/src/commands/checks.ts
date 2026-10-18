@@ -3,6 +3,15 @@ import { documentsAdded, useAddedDocuments } from "../addedDocuments";
 import { checkSentences, useChecks } from "../checks";
 import { selectionForEdit } from "../editor/editSelection";
 import { startMindCheck } from "../mindCheck";
+import {
+  cutUnsupported,
+  fixesFree,
+  keepAsView,
+  searchAllDocuments,
+  searchedFolder,
+  uncoveredOf,
+  unsupportedAt,
+} from "../unsupportedFixes";
 import { noteHandle } from "./handles";
 import type { Command } from "./registry";
 
@@ -37,6 +46,13 @@ function withAdded(): string | null {
   return documentsAdded(added).length > 0 ? note.mindId : null;
 }
 
+function withUnsupported() {
+  const note = noteHandle.current;
+  if (!note || note.editor.isDestroyed || !fixesFree(note.mindId)) return null;
+  const claim = unsupportedAt(note.editor);
+  return claim ? { ...note, claim } : null;
+}
+
 export const checkCommands: readonly Command[] = [
   checkCommand("find-support", "editor.ai.findSupport"),
   checkCommand("check-against-documents", "editor.ai.checkAgainstDocuments"),
@@ -49,6 +65,47 @@ export const checkCommands: readonly Command[] = [
     run() {
       const mindId = withAdded();
       if (mindId) void startMindCheck(mindId, "added");
+    },
+  },
+  {
+    id: "check.cutUnsupported",
+    label: "claim.cutUnsupported",
+    group: "main",
+    // Applied as one step of the Mind's Undo.
+    reversible: true,
+    when: () => {
+      const at = withUnsupported();
+      return at !== null && uncoveredOf(at.claim) !== null;
+    },
+    run() {
+      const at = withUnsupported();
+      if (at) void cutUnsupported(at.editor, at.mindId, at.doc, at.claim);
+    },
+  },
+  {
+    id: "check.searchAllDocuments",
+    label: "claim.searchAll",
+    group: "main",
+    // It changes no words, as Check against Documents.
+    reversible: true,
+    when: () => {
+      const at = withUnsupported();
+      return at !== null && searchedFolder(at.claim);
+    },
+    run() {
+      const at = withUnsupported();
+      if (at) void searchAllDocuments(at.editor, at.mindId, at.doc, at.claim);
+    },
+  },
+  {
+    id: "check.keepAsView",
+    label: "claim.keepAsView",
+    group: "main",
+    reversible: true,
+    when: () => withUnsupported() !== null,
+    run() {
+      const at = withUnsupported();
+      if (at) keepAsView(at.editor, at.claim);
     },
   },
 ];

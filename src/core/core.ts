@@ -120,7 +120,7 @@ import { findUnreadDocuments } from "./documents/unread";
 import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
-import { createEdits } from "./edits";
+import { createEdits, editText } from "./edits";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import {
@@ -128,6 +128,7 @@ import {
   InvalidInputError,
   isRecord,
   LinkedFolderWritesDeclinedError,
+  LocalModeError,
   MindReadOnlyError,
   NotFoundError,
   TaggingNotReadyError,
@@ -852,6 +853,13 @@ export function createCore(adapters: CoreAdapters): Core {
     const wasLocal = embedding.localOnly();
     await embedding.setLocalOnly(enabled);
     library.resume();
+    if (embedding.localOnly()) {
+      // A prompt still open for a cloud service closes: whatever the User answers, nothing goes (ADR-0022).
+      consent.refuseWaiting(
+        ({ flow }) => !consent.onThisComputer(flow.id, flow.service.id),
+        () => new LocalModeError(),
+      );
+    }
     if (wasLocal !== embedding.localOnly()) {
       usageData.localModeChanged();
       privacyChanged();
@@ -1269,6 +1277,7 @@ export function createCore(adapters: CoreAdapters): Core {
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
       writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
       proposeInMind: (input) => edits.proposeInMind(input),
+      checkWritten: (input) => checks.checkWritten(input),
     },
     withdrawChanges: (changes) => {
       for (const change of changes) {
@@ -1703,6 +1712,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     engine: answerEngine,
     retention,
+    editText,
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1884,6 +1894,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     hostedUrl: adapters.jevHostedUrl,
     signal: lifetime.signal,
+    localOnly: () => embedding.localOnly(),
   });
   // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds.
   const planPace = createPlanPace({
@@ -3971,6 +3982,7 @@ export function createCore(adapters: CoreAdapters): Core {
       checks.stopAll();
       skillDrafts.stopAll();
       scriptRunner.close();
+      adapters.analysisRuntime?.close();
       approvals.close();
       connectors.close();
       tagger.close();
