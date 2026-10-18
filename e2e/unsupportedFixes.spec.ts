@@ -22,10 +22,10 @@ import {
 
 /**
  * A cited sentence found unsupported offers three fixes in its card (#1111):
- * Cut the unsupported part (an Edit with AI applied at once), Find support
- * in every Document, and Keep as my view; each is also in ⌘K, and the ones
- * that change the Mind take one ⌘Z. A sentence with no Citation keeps its
- * card. The scripted model (src/main/fakeChat/checks.ts) finds the owner's
+ * Cut the unsupported part (an Edit with AI applied at once), Search all
+ * Documents while its check searched only the Mind's Folder, and Keep as my
+ * view; each is also in ⌘K, and the ones that change the Mind take one ⌘Z.
+ * A sentence with no Citation keeps its card. The scripted model (src/main/fakeChat/checks.ts) finds the tutorial's
  * sentence partly supported and cuts it as `PARTLY` says.
  */
 let dataDir: string;
@@ -45,26 +45,26 @@ const UNCITED = "Penguins nest on the harbour cliffs.";
 
 const LANGUAGES = {
   en: {
-    owner:
+    tutorial:
       "The tutorial discusses the trade-off between training speed, robustness and memory needs: experiments usually show quasi-Newton methods are faster than gradient descent; first-order methods are usually more robust but slower.",
     cut: "Experiments usually show quasi-Newton methods are faster than gradient descent, and first-order methods are slower.",
     first: "The tutorial discusses",
     cutAction: "Cut the unsupported part",
-    findSupport: "Find support",
+    searchAll: "Search all Documents",
     keep: "Keep as my view",
     keepCommand: "Keep as my view",
-    nothing: "Nothing in your Documents says this.",
+    nothing: "Nothing in “Tutorials” says this.",
   },
   "zh-CN": {
-    owner:
+    tutorial:
       "教程讨论了训练速度、鲁棒性和内存需求之间的权衡：已有实验通常显示，拟牛顿方法比梯度下降更快；一阶优化方法通常更加稳健，但速度较慢。",
     cut: "已有实验通常显示，拟牛顿方法比梯度下降更快，一阶优化方法速度较慢。",
     first: "教程讨论了",
     cutAction: "删去无依据的部分",
-    findSupport: "查找出处",
+    searchAll: "搜索全部文档",
     keep: "保留为我的观点",
     keepCommand: "保留为我的观点",
-    nothing: "你的文档中没有内容提到这一点。",
+    nothing: "“Tutorials”中没有内容提到这一点。",
   },
 } as const;
 
@@ -90,7 +90,7 @@ const wordsOf = (line: Locator) =>
 
 for (const language of ["en", "zh-CN"] as const) {
   const words = LANGUAGES[language];
-  test(`a cited unsupported sentence's card cuts the part, finds support and keeps it as the User's view, each with Undo and from ⌘K; one with no Citation keeps its card (${language})`, async () => {
+  test(`a cited unsupported sentence's card cuts the part, searches all Documents and keeps it as the User's view, each with Undo and from ⌘K; one with no Citation keeps its card (${language})`, async () => {
     test.setTimeout(180_000);
     await writeFile(join(sources, "Tutorial one.md"), `# One\n\n${QUOTE_ONE} in practice.\n`);
     await writeFile(join(sources, "Tutorial two.md"), `# Two\n\n${QUOTE_TWO} than QN methods.\n`);
@@ -136,7 +136,7 @@ for (const language of ["en", "zh-CN"] as const) {
         {
           type: "paragraph",
           content: [
-            text(words.owner),
+            text(words.tutorial),
             cite("Tutorial one", QUOTE_ONE),
             cite("Tutorial two", QUOTE_TWO),
           ],
@@ -144,11 +144,21 @@ for (const language of ["en", "zh-CN"] as const) {
         { type: "paragraph", content: [text(UNCITED)] },
       ],
     );
+    // In a Folder, so its check searches the Folder and Search all Documents has more to search.
+    await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const folder = await core.createLibraryGroup({ name: "Tutorials", description: "" });
+      await core.moveToFolder({
+        documentIds: (await core.listDocuments()).map((each) => each.id),
+        mindIds: (await core.listMinds()).map((each) => each.id),
+        folderId: folder.id,
+      });
+    });
     const lines = editor.locator(":scope > p");
-    const owner = lines.nth(0);
+    const tutorial = lines.nth(0);
     const marks = window.getByTestId("claim-mark");
     const card = window.getByTestId("claim-card");
-    const ownerMark = () => marks.first();
+    const tutorialMark = () => marks.first();
     const openCard = async (mark: Locator) => {
       await motionSettled(window);
       await pointAndClick(window, mark);
@@ -160,7 +170,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await window.keyboard.press("ControlOrMeta+z");
     };
 
-    await slideSelect(window, owner, words.first, { line: lines.nth(1), words: "cliffs." });
+    await slideSelect(window, tutorial, words.first, { line: lines.nth(1), words: "cliffs." });
     await pointAndClick(
       window,
       window.getByTestId("selection-menu").getByTestId("selection-action-check-against-documents"),
@@ -174,7 +184,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(card.getByTestId("claim-nothing")).toHaveText(words.nothing);
     await expect(card.getByTestId("claim-find-sources")).toBeVisible();
     await expect(card.getByTestId("claim-remove")).toBeVisible();
-    for (const fix of ["claim-cut", "claim-find-support", "claim-keep"]) {
+    for (const fix of ["claim-cut", "claim-keep"]) {
       await expect(card.getByTestId(fix)).toHaveCount(0);
     }
     await window.keyboard.press("Escape");
@@ -182,15 +192,15 @@ for (const language of ["en", "zh-CN"] as const) {
     // With Citations: the three fixes, the first the primary one, inside the card at both widths.
     for (const width of [1600, 1100]) {
       await setWindowSize(app, window, width, 900);
-      await openCard(ownerMark());
+      await openCard(tutorialMark());
       await expect(card.getByTestId("claim-covers")).toBeVisible();
       const fixes = [
         card.getByTestId("claim-cut"),
-        card.getByTestId("claim-find-support"),
+        card.getByTestId("claim-search-all"),
         card.getByTestId("claim-keep"),
       ];
       await expect(fixes[0] as Locator).toHaveText(words.cutAction);
-      await expect(fixes[1] as Locator).toHaveText(words.findSupport);
+      await expect(fixes[1] as Locator).toHaveText(words.searchAll);
       await expect(fixes[2] as Locator).toHaveText(words.keep);
       await expect(fixes[0] as Locator).toHaveClass(/citation-card-action--primary/);
       for (const fix of fixes) expect(await inside(fix, card)).toBe(true);
@@ -203,39 +213,43 @@ for (const language of ["en", "zh-CN"] as const) {
     // Cut the unsupported part: applied at once, the Citations kept; ⌘Z puts the sentence back.
     // Wide, so the Mind keeps the focus once a card closes (one group gives it up, #963).
     await setWindowSize(app, window, 1600, 900);
-    await openCard(ownerMark());
+    await openCard(tutorialMark());
     await pointAndClick(window, card.getByTestId("claim-cut"));
-    await expect.poll(() => wordsOf(owner)).toBe(words.cut);
-    await expect(owner.getByTestId("citation")).toHaveCount(2);
-    await expect(ownerMark()).toHaveAttribute("data-check", "needs-recheck");
+    await expect.poll(() => wordsOf(tutorial)).toBe(words.cut);
+    await expect(tutorial.getByTestId("citation")).toHaveCount(2);
+    await expect(tutorialMark()).toHaveAttribute("data-check", "needs-recheck");
     await undo();
-    await expect.poll(() => wordsOf(owner)).toBe(words.owner);
-    await expect(ownerMark()).toHaveAttribute("data-check", "unsupported");
+    await expect.poll(() => wordsOf(tutorial)).toBe(words.tutorial);
+    await expect(tutorialMark()).toHaveAttribute("data-check", "unsupported");
 
     // Keep as my view: the mark goes, and ⌘Z brings it back.
-    await openCard(ownerMark());
+    await openCard(tutorialMark());
     await pointAndClick(window, card.getByTestId("claim-keep"));
     await expect(marks).toHaveCount(1);
     await undo();
     await expect(marks).toHaveCount(2);
-    await expect(ownerMark()).toHaveAttribute("data-check", "unsupported");
+    await expect(tutorialMark()).toHaveAttribute("data-check", "unsupported");
 
-    // Find support: the sentence is checked again, in every Document.
-    const before = await ownerMark().getAttribute("data-claim");
-    await openCard(ownerMark());
-    await pointAndClick(window, card.getByTestId("claim-find-support"));
-    await expect(ownerMark()).not.toHaveAttribute("data-claim", before ?? "");
-    await expect(ownerMark()).toHaveAttribute("data-check", "unsupported");
+    // Search all Documents: the sentence is checked again in every Document, after which the card doesn't offer it.
+    const before = await tutorialMark().getAttribute("data-claim");
+    await openCard(tutorialMark());
+    await pointAndClick(window, card.getByTestId("claim-search-all"));
+    await expect(tutorialMark()).not.toHaveAttribute("data-claim", before ?? "");
+    await expect(tutorialMark()).toHaveAttribute("data-check", "unsupported");
+    await openCard(tutorialMark());
+    await expect(card.getByTestId("claim-keep")).toBeVisible();
+    await expect(card.getByTestId("claim-search-all")).toHaveCount(0);
+    await window.keyboard.press("Escape");
 
     // From ⌘K, with the cursor in the sentence.
-    await clickEndOf(window, owner);
+    await clickEndOf(window, tutorial);
     await runCommand(window, "check.keepAsView", words.keepCommand);
     await expect(marks).toHaveCount(1);
     await undo();
     await expect(marks).toHaveCount(2);
-    await clickEndOf(window, owner);
+    await clickEndOf(window, tutorial);
     await runCommand(window, "check.cutUnsupported", words.cutAction);
-    await expect.poll(() => wordsOf(owner)).toBe(words.cut);
+    await expect.poll(() => wordsOf(tutorial)).toBe(words.cut);
     await app.close();
   });
 }
@@ -249,3 +263,76 @@ async function runCommand(window: Page, id: string, label: string): Promise<void
   await expect(item).toContainText(label);
   await pointAndClick(window, item);
 }
+
+test("a sentence past the most one write checks says why, in English and Chinese, and Check now checks it alone", async () => {
+  test.setTimeout(120_000);
+  await writeFile(join(sources, "Tutorial one.md"), `# One\n\n${QUOTE_ONE} in practice.\n`);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1600, 900);
+  await addDocuments(window, [join(sources, "Tutorial one.md")]);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  // As a write of the assistant's leaves the sentences past the most it checks.
+  const pastCap = (id: string, text: string) => ({
+    type: "paragraph",
+    content: [
+      {
+        type: "text",
+        text,
+        marks: [
+          {
+            type: "claimCheck",
+            attrs: {
+              id,
+              request: "write-1",
+              action: "check-against-documents",
+              state: "not-checked",
+              reason: "too-many",
+              text,
+              scope: { folderId: null, widened: false },
+              versions: [],
+              excluded: [],
+              checkedAt: "2026-10-18T09:00:00.000Z",
+            },
+          },
+        ],
+      },
+    ],
+  });
+  await editor.evaluate(
+    (dom, content) => {
+      (dom as unknown as { editor: Editor }).editor.commands.insertContentAt(0, content);
+    },
+    [pastCap("past-1", UNCITED), pastCap("past-2", "Gulls nest on the harbour walls.")],
+  );
+  const marks = window.getByTestId("claim-mark");
+  const card = window.getByTestId("claim-card");
+  await expect(marks).toHaveCount(2);
+  for (const [language, reason, now] of [
+    [
+      "en",
+      "Not checked yet: only the first 12 cited sentences are checked as they're written",
+      "Check now",
+    ],
+    ["zh-CN", "尚未核对：写入时只核对前 12 句带引用的话", "立即核对"],
+  ] as const) {
+    await setLanguage(window, language);
+    await motionSettled(window);
+    await pointAndClick(window, marks.first());
+    await expect(card.getByTestId("claim-reason")).toContainText(reason);
+    await expect(card.getByTestId("claim-check-now")).toHaveText(now);
+    await expect(card.getByTestId("claim-check-again")).toHaveCount(0);
+    await window.keyboard.press("Escape");
+  }
+
+  await motionSettled(window);
+  await pointAndClick(window, marks.first());
+  await pointAndClick(window, card.getByTestId("claim-check-now"));
+  await expect(marks.first()).not.toHaveAttribute("data-claim", "past-1");
+  await expect(marks.first()).toHaveAttribute("data-check", "unsupported");
+  await expect(marks.last()).toHaveAttribute("data-claim", "past-2");
+  await expect(marks.last()).toHaveAttribute("data-check", "not-checked");
+  await app.close();
+});

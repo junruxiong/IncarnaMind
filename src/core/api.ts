@@ -175,8 +175,12 @@ export interface CreateMindInput {
  *   would strip. A Word file's direct formatting is read into them (the look
  *   keeps what its styles give, `WORD_LOOK_VERSION` 6). Older content is
  *   version 24 content as it is.
+ * - 25: a check the User keeps as their own view (#1111): `kept` on the
+ *   `claimCheck` mark, and the `unsupported` reason a check gives (#1072),
+ *   which an older version's editor would strip, so the sentence would count
+ *   and be checked again. Older content is version 25 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 24;
+export const CONTENT_SCHEMA_VERSION = 25;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -912,7 +916,8 @@ export type MindProblem =
         | "content-not-own"
         | "stopped"
         | "no-table"
-        | "uncited";
+        | "uncited"
+        | "new-mind";
       mindId: string;
     }
   | { kind: "local-mode" | "not-ready" }
@@ -970,6 +975,21 @@ export interface MindChange {
    * they land (#1111). Absent: none, or the check is over.
    */
   checking?: number;
+  /**
+   * The check of the sentences with Citations it wrote, once over: how many there were
+   * (`cited`), how many it sent to be checked (`sent`), how many got a verdict
+   * (`checked`) and how many couldn't be checked (`failed`), and what stopped it, if
+   * anything did. Those it couldn't check, or didn't, are marked not checked, under
+   * `request`. Absent: none was checked.
+   */
+  selfCheck?: {
+    request: string;
+    cited: number;
+    sent: number;
+    checked: number;
+    failed: number;
+    stop?: RunStop;
+  };
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
@@ -2288,7 +2308,10 @@ export interface DocumentScanProgress {
  *   up, a key or sign-in is missing, or the User declined sending excerpts to
  *   the tagger's service). Tagging resumes by itself once one can.
  * - "tagging": the tagger is deciding the Document's Tags.
- * - "tagged": its automatic Tags are up to date.
+ * - "tagged": its automatic Tags are up to date. With none, the tagger asked
+ *   and none fit.
+ * - "no-tags": there were no Tags to choose from, so no model was asked. It is
+ *   tagged once a Tag exists.
  * - "failed": the tagger's provider failed (see `taggingError`); a re-tag, a
  *   change of model or a restart tries again.
  * - "skipped": the Document has no text to tag (processing failed, or found none).
@@ -2300,6 +2323,7 @@ export type TaggingState =
   | "waiting-for-provider"
   | "tagging"
   | "tagged"
+  | "no-tags"
   | "failed"
   | "skipped"
   | "stopped";
@@ -2392,7 +2416,8 @@ export interface Document {
   tagging: TaggingState;
   /**
    * Set when `tagging` is "failed", and when it is "waiting-for-provider" for
-   * a reason worth saying, such as the ChatGPT plan's limit ("plan-limit").
+   * a reason worth saying, such as the ChatGPT plan's limit ("plan-limit") or
+   * a model's rate limit ("rate-limit", with `resetsAt`).
    */
   taggingError: ProviderError | null;
   /**
@@ -3811,7 +3836,10 @@ export interface ProviderError {
   message: string;
   /** The message as a key of the dictionary, when the core worded it, to say in the interface language. */
   wording?: ErrorWording;
-  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  /**
+   * "plan-limit": when the plan's limit resets (ISO 8601), when the provider says.
+   * "rate-limit" on a Document waiting to be tagged: when Tagging resumes.
+   */
   resetsAt?: string;
   /** A sign-in route's request (a Claude account, Copilot): which of its problems it is, for its own line. */
   signInRoute?: SignInRouteProblem;
@@ -4475,6 +4503,7 @@ export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
  * - "plan-limit": the plan's usage limit is reached.
  * - "failed": the model or its service failed otherwise (`detail` says how).
  * - "stopped": the User stopped the check, or IncarnaMind quit, before this sentence was checked.
+ * - "too-many": the assistant wrote more sentences with Citations than one write has checked (#1111).
  */
 export type ClaimCheckFailure =
   | "refused"
@@ -4485,7 +4514,8 @@ export type ClaimCheckFailure =
   | "cost-cap"
   | "plan-limit"
   | "failed"
-  | "stopped";
+  | "stopped"
+  | "too-many";
 
 /** Why a sentence was found unsupported, as the check gave it. */
 export interface UnsupportedReason {
@@ -7897,8 +7927,22 @@ export interface CoreApi {
    * `"mind.update"` event for the Mind (these include its own changes, which Yjs ignores).
    */
   openMind(mindId: string): Promise<OpenedMind>;
-  /** Applies a client's Yjs update to the Mind, stores it, and pushes it to every client as `"mind.update"`. */
+  /**
+   * Applies a client's Yjs update to the Mind, pushes it to every client as `"mind.update"`, and
+   * stores it. Storage that refuses it doesn't fail the call: the change waits in memory, as
+   * `unsavedChanges` says (#1119). Throws `"error.mind.missedChange"` for an update that builds
+   * on one the Mind never got: the client sends its whole state then.
+   */
   applyMindUpdate(mindId: string, update: Uint8Array): Promise<void>;
+  /** Changes to Minds storage refused, kept in memory while the app runs (#1119); null when none. */
+  unsavedChanges(): Promise<UnsavedChanges | null>;
+  /** Tries now to store the changes `unsavedChanges` names, and says what still waits. */
+  saveChangesAgain(): Promise<UnsavedChanges | null>;
+  /**
+   * How many changes the last run couldn't store before it closed without quitting (a crash, a
+   * force-quit), once: later calls give null. Null too when it doesn't know.
+   */
+  takeLostChanges(): Promise<number | null>;
   /**
    * Tells the core a client stopped editing the Mind, so it can compact the
    * Mind's stored updates and free its memory. Editing the Mind again is fine.
@@ -9272,6 +9316,19 @@ export interface CoreApi {
  * need to push something (processing progress, Answer streams) add their
  * events here. Payloads are plain data (Uint8Array included), so they survive IPC.
  */
+/** Why storage refused changes to a Mind (#1119), from the database's own code. */
+export type SaveFailureReason = "full" | "io" | "readOnly" | "busy" | "other";
+
+/** Changes to Minds storage refused (#1119): kept in memory while the app runs, tried again. */
+export interface UnsavedChanges {
+  /** How many changes wait, in all the Minds. */
+  count: number;
+  mindIds: string[];
+  reason: SaveFailureReason;
+  /** The database's own words, for Details. */
+  detail: string;
+}
+
 export interface CoreEvents {
   /** The settings in effect changed, e.g. the interface language. */
   "settings.changed": Settings;
@@ -9297,6 +9354,8 @@ export interface CoreEvents {
   "mind.update": MindUpdate;
   /** The assistant is writing changes into a Mind as they come (#202), or has stopped. */
   "mind.writing": MindWriting;
+  /** Changes storage refused wait in memory, or (null) all of them are stored now (#1119). */
+  "minds.unsaved": UnsavedChanges | null;
   /** A Mind's Checkpoints changed: one was saved, kept for good, or thinned out. Read `listCheckpoints` again. */
   "checkpoints.changed": { mindId: string };
   /**
@@ -9496,6 +9555,9 @@ const methods: Record<CoreApiMethod, true> = {
   deleteMind: true,
   openMind: true,
   applyMindUpdate: true,
+  unsavedChanges: true,
+  saveChangesAgain: true,
+  takeLostChanges: true,
   closeMind: true,
   saveCheckpoint: true,
   listCheckpoints: true,

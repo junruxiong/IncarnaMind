@@ -538,6 +538,7 @@ export function createChecks(options: ChecksOptions) {
     citedNow,
     withResult,
     retainEvidence,
+    claimTimeLimitMs: options.watch.claimTimeLimitMs,
   });
 
   return {

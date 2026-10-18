@@ -22,6 +22,9 @@ import {
 } from "../core/api";
 import { comparableSentence } from "./sentences";
 
+/** The most sentences with Citations one write of the assistant's has checked as it lands (#1111): past it, a long draft would wait minutes and cost dozens of requests. */
+export const SENTENCES_CHECKED_AT_MOST = 12;
+
 const STATES: readonly ClaimCheckAttributes["state"][] = [
   "checking",
   "supported",
@@ -40,6 +43,7 @@ const FAILURES: readonly ClaimCheckFailure[] = [
   "plan-limit",
   "failed",
   "stopped",
+  "too-many",
 ];
 
 const EXCLUSIONS: readonly EvidenceExclusion[] = ["own-file", "own-workings", "checked-document"];

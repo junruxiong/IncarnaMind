@@ -18,13 +18,12 @@ export const en = {
   "library.showAll": "Show all {count}",
   "library.suggested": "Suggested",
   "library.suggested.title":
-    "Organize suggested “{folder}”. It counts here until you accept it or move it.",
+    "Organize suggested “{folder}”. Counts here until you accept or move it.",
   "library.organizing": "Organizing {count}…",
   "library.organize.failed.one": "Organize couldn't sort 1 Document",
   "library.organize.failed": "Organize couldn't sort {count} Documents",
   "library.organize.retry": "Try again",
-  "library.organize.explain":
-    "Suggests a Folder and Tags for each Document here. You accept or change each one.",
+  "library.organize.explain": "Suggests a Folder and Tags for each Document. You decide.",
   "library.organize.needsModel": "Organize needs an AI model",
   "library.organize.use": "Use {company}",
   "library.organize.sends": "Sends document names and excerpts to {company}.",
@@ -61,12 +60,9 @@ export const en = {
   "unread.reason.damaged": "The file is damaged or couldn't be opened.",
   "unread.reason.too-large": "Too large to open.",
   "unread.reason.pages": "Some scanned pages haven't been read yet.",
-  "library.fix.damaged":
-    "This file looks damaged. Open it in its app, save a copy, then add the copy",
-  "library.fix.damaged.pdf":
-    "This file looks damaged. Open it in your PDF app, save a copy, then add the copy",
-  "library.fix.password":
-    "This file is locked with a password. Remove the password in its app, then add the copy",
+  "library.fix.damaged": "Damaged file: save a copy from its app, then add it",
+  "library.fix.damaged.pdf": "Damaged file: save a copy from your PDF app, then add it",
+  "library.fix.password": "Password-protected: remove it in its app, then add the copy",
   "library.fix.tooLarge": "This file is too large to open",
   "library.fix.processing": "Something went wrong while reading this file",
   "library.fix.appStopped": "IncarnaMind stopped while reading this file",
@@ -110,8 +106,7 @@ export const en = {
     "Organizing 1 Document with {service}: its name, outline and short excerpts are sent",
   "library.progressSends.full.other":
     "Organizing {count} Documents with {service}: each one's name, outline and short excerpts are sent",
-  "library.waiting":
-    "{count} Documents need text, a model or permission. Open their details to check.",
+  "library.waiting": "{count} Documents can't be organized yet. Show why",
   "library.count": "{count} Documents",
   "library.count.one": "1 Document",
   "library.manual": "Your choice",
@@ -123,12 +118,11 @@ export const en = {
   "library.descriptionHint": "What belongs in this folder?",
   "library.countsOwnFiles": "Count files IncarnaMind wrote as evidence in this folder",
   "library.countsOwnFiles.hint":
-    "Files IncarnaMind wrote that are in other folders stay out of checks' evidence.",
+    "Files IncarnaMind wrote in other folders stay out of checks' evidence.",
   "library.countsOwnFiles.everywhere":
     "Counted in every folder: Settings → Search doesn't leave them out.",
   "library.save": "Save folder",
-  "library.startersHint":
-    "Start with the folders you need. Rename them or add your own at any time.",
+  "library.startersHint": "Pick the folders you need; rename or add more any time.",
   "library.addSelected": "Add selected folders",
   "library.connection": "Connection",
   "library.ollama": "Local decision model · Ollama",
@@ -139,9 +133,8 @@ export const en = {
   "library.route.unavailable": "4B model not installed",
   "library.model": "Model name",
   "library.server": "Local Ollama address",
-  "library.pageImages":
-    "Include up to 3 PDF page images with local Clef-Flash. Other formats use text only.",
-  "library.automatic": "Organize new and changed Documents automatically. Keep my manual choices.",
+  "library.pageImages": "Up to 3 PDF page images go to local Clef-Flash. Other formats use text.",
+  "library.automatic": "Move new Documents into Folders automatically",
   "library.preset.research": "Research papers",
   "library.preset.research.description": "Academic papers, experiments and research methods.",
   "library.preset.reports": "Reports & presentations",
@@ -222,6 +215,7 @@ export const en = {
   "sidebar.resize": "Resize the sidebar",
   "sidebar.hide": "Hide sidebar",
   "sidebar.show": "Show sidebar",
+  "sidebar.show.taggingNeedsYou": "Show sidebar · Tagging needs you",
   "sidebar.hidden.announce": "Sidebar hidden",
   "sidebar.shown.announce": "Sidebar shown",
   "sidebar.tree": "Folders, Minds and Documents",
@@ -314,8 +308,7 @@ export const en = {
   "undo.name.restore": "Restore",
   "deleted.title": "Recently deleted",
   "deleted.command": "Show Recently deleted",
-  "deleted.intro":
-    "Deleted things wait here for 30 days, then go for good. Your files on disk are never touched.",
+  "deleted.intro": "Kept here for 30 days, then deleted for good. Files on disk aren't touched.",
   "deleted.empty": "Nothing was deleted in the last 30 days.",
   "deleted.list": "Recently deleted",
   "deleted.name": "Name",
@@ -359,8 +352,7 @@ export const en = {
   "deleted.lost.mind": "The notes in {count} Minds are gone.",
   "deleted.lost.conversation.one": "The messages in “{name}” are gone.",
   "deleted.lost.conversation": "The messages in {count} conversations are gone.",
-  "deleted.lost.folder.one":
-    "The Folder “{name}” is gone. Its Documents and Minds stay, in no Folder.",
+  "deleted.lost.folder.one": "“{name}” is gone. Its Documents and Minds stay, in no Folder.",
   "deleted.lost.folder": "{count} Folders are gone. Their Documents and Minds stay, in no Folder.",
   "deleted.lost.tag.one": "The Tag “{name}” and where it was used are gone.",
   "deleted.lost.tag": "{count} Tags and where they were used are gone.",
@@ -401,13 +393,12 @@ export const en = {
   "tabs.close": "Close {title}",
   "tabs.unpin": "Unpin {title}",
   "tabs.writing": "An Answer is being written",
-  "tabs.preview":
-    "{title} · Preview: the next Document opened in this group replaces it. Double-click the tab, or scroll or select text in it, to keep it.",
+  "tabs.preview": "{title} · Preview: the next one you open replaces it. Double-click to keep.",
   "tabs.pinned": "{title} · Pinned to the left of this group",
   "tabs.split": "Split to the right ({shortcut})",
   "tabs.groupMenu": "More for this group",
   "tabs.tabMenu": "More for {title}",
-  "tabs.resize": "Resize the groups: ← and → move it; a double-click makes them equal",
+  "tabs.resize": "Resize the groups: ← and → move it; double-click makes them equal",
   "tabs.menu.keep": "Keep open",
   "tabs.menu.pin": "Pin",
   "tabs.menu.unpin": "Unpin",
@@ -429,8 +420,7 @@ export const en = {
   "tabs.notice.maxGroups": "Three groups fit side by side at most.",
   "tabs.notice.noGroup": "There’s no group {n}. {shortcut} splits the shown tab to the right.",
   "tabs.notice.pinned": "“{title}” is pinned: close it from its menu, or unpin it first.",
-  "tabs.notice.merged":
-    "There isn’t room for groups side by side, so they share one strip. Widen the window, or fold or move the assistant.",
+  "tabs.notice.merged": "No room side by side, so groups share one strip. Widen the window.",
   "tabs.notice.dismiss": "Dismiss",
   "tabs.drop.left": "Split left",
   "tabs.drop.right": "Split right",
@@ -445,7 +435,7 @@ export const en = {
   "wordCount.selected": "{selected} of {total} {unit}",
   "wordCount.target": "{count} / {target} {unit}",
   "wordCount.rule":
-    "Counts words in English and characters in Chinese and Japanese. Citation markers and Questions are left out.",
+    "Words in English, characters in Chinese and Japanese; Citation markers and Questions don't count.",
   "page.count.words": "{count} words",
   "page.count.words.one": "1 word",
   "page.count.characters": "{count} characters",
@@ -613,17 +603,15 @@ export const en = {
   "claim.unsupported.noReason": "The check gave no reason",
   "claim.openCitation": "Open citation {number}",
   "claim.cutUnsupported": "Cut the unsupported part",
-  "claim.findSupport": "Find support",
-  "claim.findSupport.command": "Find support in all Documents",
   "claim.keepAsView": "Keep as my view",
   "claim.keptAsView": "Kept as your view",
   "claim.courtDecision.title": "This cites a court decision.",
   "claim.courtDecision.body":
-    "IncarnaMind can't check that the case exists or that it says this. Look it up in your legal research service before you rely on it.",
+    "IncarnaMind can't check that this case exists or says this. Check it in your legal research service before you rely on it.",
   "claim.citedCaseUnchecked":
-    "The case this sentence cites isn't in your Documents, so it hasn't been checked. Look it up in your legal research service before you rely on it.",
+    "Not checked: the cited case isn't in your Documents. Check it in your legal research service before you rely on it.",
   "claim.courtDecision.held":
-    "This cites a court decision. The quoted words were found in your saved copy of the opinion ({document}, {location}). Whether it has been overruled or changed isn't checked: look it up in your legal research service before you rely on it.",
+    "Quote found in your copy of the opinion ({document}, {location}). Not checked whether it was overruled or changed. Check it in your legal research service before you rely on it.",
   "claim.unsupported.ownWorkings": "Only your own working file says this.",
   "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
@@ -639,13 +627,15 @@ export const en = {
   "claim.reason.refused": "The model declined to check it.",
   "claim.reason.malformed": "The model's reply couldn't be read.",
   "claim.reason.empty": "The model gave an empty reply.",
-  "claim.reason.no-evidence":
-    "The model's quote isn't in the Document it named, so its verdict isn't shown.",
+  "claim.reason.no-evidence": "Verdict hidden: the model's quote isn't in that Document.",
   "claim.reason.rate-limit": "The model's service is busy for now. Check again in a moment.",
   "claim.reason.cost-cap": "Checking it could pass your monthly cap.",
   "claim.reason.plan-limit": "Your plan's usage limit is reached.",
   "claim.reason.failed": "The check failed: {detail}",
   "claim.reason.stopped": "Stopped before it was checked.",
+  "claim.reason.too-many":
+    "Not checked yet: only the first {cap} cited sentences are checked as they're written",
+  "claim.checkNow": "Check now",
   "claim.recheck.edited": "The sentence has changed since it was checked.",
   "claim.recheck.new-version": "A Document it was checked against has a new version.",
   "claim.recheck.document-removed": "A Document it was checked against was deleted.",
@@ -676,8 +666,7 @@ export const en = {
   "health.checkedAll": "Checked {count} claims, {when}",
   "health.checkAll": "Check all",
   "health.next": "{part}: go to the next",
-  "checks.smallModel":
-    "This model is small, so its verdicts may be wrong. A larger model checks more reliably.",
+  "checks.smallModel": "Small model: its verdicts may be wrong. A larger one is more reliable.",
   "checks.running.find-support": "Finding support…",
   "checks.running.check-against-documents": "Checking against Documents…",
   "checks.running.contradiction-watch": "Checking cited claims for contradictions…",
@@ -702,8 +691,7 @@ export const en = {
   "checks.problem.chooseModel": "Choose a model",
   "checks.tryAgain": "Try again",
   "checks.problem.failed": "Couldn't check: {message}",
-  "checks.problem.no-folder":
-    "This Mind isn't in a Folder, so there are no other Documents to check it against.",
+  "checks.problem.no-folder": "Nothing to check against: this Mind isn't in a Folder.",
   "checks.problem.only-cited.folder": "“{folder}” holds only the Documents these claims cite.",
   "checks.problem.no-cited": "This Mind has no cited claims to check.",
   "checks.problem.no-claims": "This Mind has no claims to check.",
@@ -736,8 +724,7 @@ export const en = {
   "verify.pick.title": "Verify a document",
   "verify.pick.filter": "PDF documents",
   "verify.refused.unreadable": "Couldn't read that PDF.",
-  "verify.refused.no-text":
-    "That PDF has no text to check. If it's a scan, its pages couldn't be read.",
+  "verify.refused.no-text": "That PDF has no text to check. If it's a scan, it couldn't be read.",
   "verify.mindTitle": "Checking: {name}",
   "verify.from": "From {name}",
   "verify.from.title": "Someone else wrote this text. Open {name} beside it",
@@ -797,9 +784,10 @@ export const en = {
   "references.reason.rate-limited": "Not checked: {service} asked to slow down. Check again later",
   "references.reason.service-error": "Not checked: {service} had an error",
   "references.reason.registered-elsewhere":
-    "Not checked: its DOI exists, but neither Crossref nor OpenAlex has its record",
-  "references.notListed.detail":
-    "Neither has a record like it, but neither holds every conference paper, preprint or Chinese journal, so the work may still exist.",
+    "Not checked: the DOI exists, but Crossref and OpenAlex have no record",
+  "references.notListed.detail": "No record found, but the work may still exist.",
+  "references.notListed.why":
+    "Neither Crossref nor OpenAlex holds every conference paper, preprint or Chinese journal.",
   "references.stopped.unreachable": "{service} couldn't be reached.",
   "references.stopped.rate-limited": "{service} asked to slow down. Try again later.",
   "references.stopped.rate-limitedUntil":
@@ -823,20 +811,17 @@ export const en = {
   "edit.stop": "Stop",
   "edit.close": "Close",
   "edit.problem.unchanged": "Nothing to change: the model gave the text back as it was.",
-  "edit.problem.changed": "The text changed while the AI worked on it. Select it and try again.",
+  "edit.problem.changed": "The text changed while the AI worked. Select it and try again.",
   "edit.problem.has-proposals":
     "The selection holds changes that are waiting: accept or reject them first.",
-  "edit.problem.too-long": "That is more text than the model can take at once: select less.",
+  "edit.problem.too-long": "Too much text for the model: select less.",
   "edit.problem.local-mode": "Couldn't edit: “Keep everything on this computer” is on.",
   "edit.problem.chooseModel": "Choose a model",
   "edit.problem.failed": "Edit with AI didn't work: {message}",
   "edit.problem.retry": "Try again",
-  "edit.problem.cant-regenerate":
-    "This change can't be made again. Reject it, then select the text and edit it with AI.",
-  "edit.problem.no-table":
-    "The AI's table wasn't complete, so nothing was changed. Try again, or ask for a list instead.",
-  "edit.problem.late":
-    "This edit took too long to arrive, so it wasn't applied. Accept or reject its changes.",
+  "edit.problem.cant-regenerate": "Can't be made again: reject it, then edit the text with AI.",
+  "edit.problem.no-table": "The AI's table wasn't complete, so nothing changed. Try again.",
+  "edit.problem.late": "This edit arrived too late to apply. Accept or reject its changes.",
   "composer.edit.placeholder": "Say what to change…",
   "composer.edit.label": "Say what to change in the selected text",
   "composer.edit.quote": "Editing “{text}”",
@@ -872,20 +857,17 @@ export const en = {
   "proposal.arrived.outOfDate": "{count} are out of date: you edited their text meanwhile.",
   "proposal.arrived.outOfDate.one": "1 is out of date: you edited its text meanwhile.",
   "proposal.outOfDate": "Out of date",
-  "proposal.outOfDate.why":
-    "You changed this text after the change was suggested, so it can't be accepted",
-  "proposal.outOfDate.label":
-    "Change {index} of {count}, out of date: you changed this text after it was suggested",
+  "proposal.outOfDate.why": "Can't accept: its text has changed since it was suggested",
+  "proposal.outOfDate.label": "Change {index} of {count}, out of date: its text has changed",
   "proposal.announce.outOfDate":
-    "Change out of date: {what}. You changed its text after it was suggested. Reject it with {reject}, or regenerate it.",
+    "Out of date: {what}. You changed its text. Reject it with {reject}, or regenerate.",
   "proposal.cantAccept": "This change is out of date: regenerate it or reject it.",
   "proposal.regenerate": "Regenerate",
   "proposal.regenerate.label": "Regenerate change {index} from the text as it is now",
   "proposal.reject.label": "Reject change {index}",
   "proposal.acceptAll.outOfDate": "Changes out of date are left as they are",
   "proposal.sourceRemoved": "Source removed",
-  "proposal.sourceRemoved.why":
-    "A Document this change cites has been deleted. Its Citation keeps the quote.",
+  "proposal.sourceRemoved.why": "A cited Document was deleted. Its Citation keeps the quote.",
   "proposal.region.review": "Changes to review",
   "proposal.theirs.count": "{count} changes from {name}",
   "proposal.theirs.count.one": "1 change from {name}",
@@ -905,7 +887,7 @@ export const en = {
   "edit.changes": "{paragraphs} and {tables}",
   "edit.count.tables": "{count} tables",
   "edit.count.tables.one": "1 table",
-  "edit.held.own": "This would rewrite most of your text, so it's waiting for you",
+  "edit.held.own": "Waiting for you: this rewrites most of your text",
   "edit.review.assistant": "{count} paragraphs changed by the assistant",
   "edit.review.assistant.one": "1 paragraph changed by the assistant",
   "edit.review.assistant.changes": "{changes} changed by the assistant",
@@ -922,7 +904,7 @@ export const en = {
   "change.rewrote": "Rewrote “{heading}”",
   "change.showOriginal": "Show original",
   "change.hideOriginal": "Hide original",
-  "edit.held": "This edit would remove most of what you selected, so it's waiting for you",
+  "edit.held": "Waiting for you: this edit removes most of your selection",
   "edit.held.apply": "Apply",
   "edit.held.discard": "Discard",
   "edit.kept.paragraphs": "Kept {count} paragraphs the edit left out",
@@ -932,14 +914,12 @@ export const en = {
   "edit.kept.remove": "Remove them",
   "edit.kept.remove.one": "Remove it",
   "edit.kept.removed": "Removed what the edit left out",
-  "proposal.outOfDate.why.theirs":
-    "You edited this text after the change was made, so it can't be accepted. Reject it, or finish the edit yourself.",
+  "proposal.outOfDate.why.theirs": "Out of date: you've edited this text. Reject it.",
   "proposal.announce.theirs":
     "{author}'s change: {what}. Accept with {accept}, reject with {reject}.",
   "proposal.announce.theirs.outOfDate":
-    "{author}'s change, out of date: {what}. You edited its text after it was made. Reject it with {reject}.",
-  "proposal.cantAccept.theirs":
-    "This change is out of date: reject it, or finish the edit yourself.",
+    "{author}'s change is out of date: {what}. Reject it with {reject}.",
+  "proposal.cantAccept.theirs": "Out of date: reject it, or finish the edit yourself.",
   "editor.turnInto.label": "Turn into",
   "editor.turnInto.bulletList": "Bulleted list",
   "editor.turnInto.orderedList": "Numbered list",
@@ -1000,12 +980,10 @@ export const en = {
   "viewer.removed.unlinked":
     "This Document's folder was unlinked. IncarnaMind kept the text your Citation quotes.",
   "viewer.removed.quote": "The quoted text:",
-  "viewer.file.missing":
-    "The file for {name} is missing from its folder. It shows here again once it is back",
-  "viewer.file.unavailable":
-    "The file for {name} can't be reached right now, such as when its drive is unplugged. It shows here again once it can be",
+  "viewer.file.missing": "The file for {name} is missing from its folder.",
+  "viewer.file.unavailable": "Can't reach “{name}” right now (drive unplugged?).",
   "viewer.file.locate": "Locate file…",
-  "viewer.file.notThis": "That isn't the file for {name}. IncarnaMind added it as a new Document",
+  "viewer.file.notThis": "Not the file for “{name}”: added as a new Document",
   "viewer.file.locateFailed": "Couldn't use that file: {reason}",
   "viewer.file.openFailed": "Couldn't open {name} in its app: {reason}",
   "viewer.page.label": "Page {number}",
@@ -1095,8 +1073,7 @@ export const en = {
   "documents.moveTo": "Move to…",
   "documents.none": "No Documents yet",
   "documents.none.addFiles": "Add files…",
-  "documents.drop":
-    "Drop PDF, Word, PowerPoint, Excel, CSV, TXT or Markdown files to add them, or a folder to link it",
+  "documents.drop": "Drop files to add them, or a folder to link it",
   "documents.status.queued": "Queued",
   "documents.status.extracting": "Extracting text…",
   "documents.status.ready": "Ready",
@@ -1119,10 +1096,9 @@ export const en = {
   "documents.failure.passwordProtected": "the file needs a password",
   "documents.failure.tooLarge": "the file is too large to open",
   "documents.failure.fileMissing": "its file is missing",
-  "documents.file.missing":
-    "File missing: it was removed from its folder. Its text and Citations are kept; new searches leave it out.",
+  "documents.file.missing": "File missing: Citations keep its text; searches skip it.",
   "documents.file.unavailable":
-    "File can't be reached right now, e.g. its drive is unplugged. It's still searched from its stored text.",
+    "Can't reach the file (drive unplugged?). Still searched from saved text.",
   "documents.file.missingReason": "The file is missing from its folder.",
   "documents.file.unavailableReason": "The file can't be reached right now.",
   "documents.fileShort.missing": "Missing",
@@ -1151,16 +1127,13 @@ export const en = {
   // Checks leave the files IncarnaMind wrote out of their evidence (#80).
   "evidence.ownFile": "IncarnaMind wrote this file, so checks don't count it as evidence",
   "evidence.countIt": "Count it",
-  "evidence.excluded.ownFile":
-    "Also found in “{name}”, which IncarnaMind wrote, so it isn't counted as evidence",
-  "evidence.excluded.checked":
-    "Also found in “{name}”, a copy of the document being checked, so it isn't counted as evidence",
+  "evidence.excluded.ownFile": "Also in “{name}”, which IncarnaMind wrote: not counted",
+  "evidence.excluded.checked": "Also in “{name}”, a copy of the checked document: not counted",
   "evidence.count": "Count as evidence",
   "evidence.countMany": "Count {count} Documents as evidence",
   "evidence.leaveOut": "Don't count as evidence",
   "evidence.leaveOutMany": "Don't count {count} Documents as evidence",
-  "evidence.menuHint":
-    "IncarnaMind wrote this file. Checks leave it out of their evidence unless you count it.",
+  "evidence.menuHint": "IncarnaMind wrote this file; checks skip it unless you count it.",
   "evidence.counted": "“{name}” counts as evidence now",
   "evidence.countedMany": "{count} Documents count as evidence now",
   "evidence.leftOut": "“{name}” no longer counts as evidence",
@@ -1169,8 +1142,7 @@ export const en = {
   "evidence.notCitedMany": "Don't cite {count} Documents",
   "evidence.citeAgain": "Cite this Document again",
   "evidence.citeAgainMany": "Cite {count} Documents again",
-  "evidence.notCited.hint":
-    "IncarnaMind can still read it to understand your question, but won't cite it or use it to support a check.",
+  "evidence.notCited.hint": "Read for context only: never cited or used as evidence.",
   "evidence.notCited.label": "Not cited",
   "evidence.notCited.done": "“{name}” won't be cited",
   "evidence.notCited.doneMany": "{count} Documents won't be cited",
@@ -1239,33 +1211,28 @@ export const en = {
   "linkedFolders.pick.button": "Link folder",
   "linkedFolders.preview.title": "Link this folder?",
   "linkedFolders.preview.titleLinked": "Already in IncarnaMind",
-  "linkedFolders.preview.already":
-    "“{name}” is linked already, so its files are in IncarnaMind. Linking it again changes nothing.",
+  "linkedFolders.preview.already": "“{name}” is already linked, so its files are in IncarnaMind.",
   "linkedFolders.preview.counting": "Counting the files in it…",
   "linkedFolders.preview.files.one": "1 supported file, {size}",
   "linkedFolders.preview.files.other": "{count} supported files, {size}",
-  "linkedFolders.preview.noFiles":
-    "No supported files in it yet. Files added to it later are read then.",
-  "linkedFolders.preview.time":
-    "Reading its files takes {time} on this computer, newest first. You can pause it at any time.",
-  "linkedFolders.preview.onlineOnly.one":
-    "1 file is online only, so it's skipped for now. You can download and read it later.",
-  "linkedFolders.preview.onlineOnly.other":
-    "{count} files are online only, so they're skipped for now. You can download and read them later.",
+  "linkedFolders.preview.noFiles": "No supported files yet. Files added later are read.",
+  "linkedFolders.preview.time": "Reading takes {time}, newest first.",
+  "linkedFolders.preview.onlineOnly.one": "1 online-only file is skipped for now.",
+  "linkedFolders.preview.onlineOnly.other": "{count} online-only files are skipped for now.",
   "linkedFolders.preview.readOnly":
-    "IncarnaMind only reads the folder. It never changes, moves or deletes anything in it.",
+    "IncarnaMind only reads this folder. It never changes, moves or deletes anything.",
   "linkedFolders.preview.merge.one":
-    "“{names}”, linked already, is inside this folder: it merges into this one, and its Documents keep their Tags and Citations.",
+    "“{names}”, already linked, merges into this folder and keeps its Tags and Citations.",
   "linkedFolders.preview.merge.other":
-    "{names}, linked already, are inside this folder: they merge into this one, and their Documents keep their Tags and Citations.",
+    "{names}, already linked, merge into this folder and keep their Tags and Citations.",
   "linkedFolders.preview.inside":
-    "This folder is inside “{name}”, which is linked already, so its files are in IncarnaMind. Linking it changes nothing.",
+    "This folder is inside linked “{name}”, so its files are already in IncarnaMind.",
   "linkedFolders.preview.layout": "Show it as",
   "linkedFolders.preview.layout.tree": "Folders",
   "linkedFolders.preview.layout.tree.hint": "Its subfolders, as they are on disk.",
   "linkedFolders.preview.layout.flat": "A flat list",
   "linkedFolders.preview.layout.flat.hint":
-    "Every Document in one list. Suits folders where most subfolders hold one file, like Zotero's storage.",
+    "One list of every Document. Suits Zotero-style storage folders.",
   "linkedFolders.preview.suggested": "Suggested",
   "linkedFolders.preview.failed": "Couldn't look in this folder: {message}",
   "linkedFolders.preview.cancel": "Cancel",
@@ -1281,7 +1248,7 @@ export const en = {
   "linkedFolders.state.paused.progress": "Reading is paused: {indexed} of {files} files read",
   "linkedFolders.state.unavailable": "Unavailable",
   "linkedFolders.state.unavailable.full":
-    "The folder can't be reached right now, e.g. its drive is unplugged. Its Documents are still searched from their stored text. If it moved, choose Locate folder… in its menu.",
+    "Can't reach this folder. Its saved text is still searched. If it moved, use Locate folder…",
   "linkedFolders.state.downloading": "Downloading…",
   "linkedFolders.state.downloading.full.one": "Downloading 1 online-only file to read it",
   "linkedFolders.state.downloading.full.other":
@@ -1309,10 +1276,9 @@ export const en = {
   "linkedFolders.locate.pickButton": "Choose",
   "linkedFolders.unlinkAction": "Unlink…",
   "linkedFolders.unlink.title": "Unlink “{name}”?",
-  "linkedFolders.unlink.body":
-    "The folder and the files in it aren't touched. IncarnaMind stops following it and forgets what it read in them.",
+  "linkedFolders.unlink.body": "Your files aren't touched. IncarnaMind forgets what it read.",
   "linkedFolders.unlink.citations":
-    "It keeps only the text your Citations quote, so they can still be checked.",
+    "It keeps only what your Citations quote, so they stay checkable.",
   "linkedFolders.unlink.cancel": "Cancel",
   "linkedFolders.unlink.confirm": "Unlink",
   "units.kb": "{size} KB",
@@ -1344,8 +1310,7 @@ export const en = {
   "status.taggingPermission": "Tags need your OK",
   "status.taggingFailed.one": "1 Document couldn't be tagged",
   "status.taggingFailed.other": "{count} Documents couldn't be tagged",
-  "status.taggingFailed.offline":
-    "The AI model couldn't be reached. Tagging tries again when you're back online, or now with Retry.",
+  "status.taggingFailed.offline": "Can't reach the AI model. Tagging resumes when you're online.",
   "status.taggingFailed.full": "The AI model couldn't tag them. Retry to try again.",
   "status.choose": "Choose…",
   "status.downloading": "Search model",
@@ -1359,10 +1324,9 @@ export const en = {
   "status.scanModelDownloading": "Text recognition",
   "status.scanModelDownloadFailed": "Text recognition model download failed",
   "status.scanModelFailed": "Text recognition model couldn't start",
-  "scan.model.downloading":
-    "Downloading the text recognition model: {downloaded} of {total} MB. Scanned pages are read as soon as it's ready, on this computer.",
+  "scan.model.downloading": "Downloading text recognition: {downloaded} of {total} MB",
   "scan.model.failed":
-    "The text recognition model couldn't be downloaded: {reason}. Scanned pages can't be read until it is.",
+    "Couldn't download text recognition: {reason}. Scans can't be read until then.",
   "scan.model.loadFailed": "The text recognition model couldn't start on this computer.",
   "status.rebuilding": "Rebuilding search",
   "status.searchError": "Search can't use {provider}",
@@ -1390,8 +1354,7 @@ export const en = {
   "webPages.fetchAgainFailed": "Couldn't fetch “{name}” again: {reason}",
   "webPages.tryAgain": "Try again",
   "webPages.add.keepLook": "Keep the page as it looks",
-  "webPages.keepLook.body":
-    "Also keeps a PDF of the page. It loads the page again, so its sites see a visit.",
+  "webPages.keepLook.body": "Also keeps a PDF: loads the page again, so its site sees a visit.",
   "webPages.reason.invalid-address": "it isn't a web address",
   "webPages.reason.unreachable": "the site can't be reached",
   "webPages.reason.timed-out": "the site took too long to answer",
@@ -1411,7 +1374,7 @@ export const en = {
   "webPages.menuTitle": "Web page",
   "webPages.fetched": "Fetched {date}",
   "webPages.source": "Saved web page · {address} · saved {date}",
-  "webPages.drop": "Drop to save the web page, or drop it on a Folder in the sidebar",
+  "webPages.drop": "Drop to save the page, or drop it on a Folder",
   "status.alreadyAdded.one": "1 already added",
   "status.alreadyAdded.other": "{count} already added",
   "status.more": "+{count}",
@@ -1579,15 +1542,14 @@ export const en = {
   "tags.dialog.count.one": "1 Document",
   "tags.dialog.toReview": "{count} to review",
   "tags.dialog.descriptionNote":
-    "Automatic tagging goes by the name and description, so a clear description makes it more accurate. Re-tag to apply a change.",
+    "Clear descriptions make tagging more accurate. Re-tag to apply a change.",
   "tags.dialog.search": "Find a Tag",
   "tags.dialog.noMatch": "No Tags match.",
   "tags.dialog.show": "Show the Documents tagged {name}",
   "tags.dialog.merge": "Merge {name} into another Tag",
   "tags.dialog.merge.label": "Merge “{name}” into",
   "tags.dialog.merge.choose": "Choose a Tag",
-  "tags.dialog.merge.body":
-    "Its Documents get “{into}” instead, and “{name}” is deleted. Tags you chose stay yours.",
+  "tags.dialog.merge.body": "Its Documents get “{into}”; “{name}” is deleted. Tags you chose stay.",
   "tags.dialog.merge.confirm": "Merge",
   "library.select": "Select {name}",
   "library.selectAll": "Select all {count} shown",
@@ -1607,9 +1569,11 @@ export const en = {
   "tags.menu.manage": "Manage Tags…",
   "tags.state.pending": "Waiting to be tagged",
   "tags.state.tagging": "Tagging…",
+  "tags.state.noFit": "No Tag fits",
+  "tags.state.noTags": "No Tags yet",
+  "tags.state.addTag": "Add a Tag",
   "tags.state.failed": "Tagging failed. Re-tag to try again.",
-  "tags.dialog.body":
-    "Documents get their Tags, and once you have Folders a suggested Folder, going by these names and descriptions, from the model chosen in Settings → Models → Tagging: Automatic, unless you choose another. Tags you add to or remove from a Document are never changed automatically.",
+  "tags.dialog.body": "Tagging goes by these names and descriptions. Tags you set never change.",
   "tags.dialog.preset": "Preset",
   "tags.dialog.empty": "No Tags yet. Add one below.",
   "tags.dialog.name": "Name",
@@ -1622,8 +1586,7 @@ export const en = {
   "tags.dialog.new": "New Tag",
   "tags.dialog.create": "Add Tag",
   "tags.dialog.retag": "Re-tag all Documents",
-  "tags.dialog.retag.hint":
-    "Works out every Document's automatic Tags again, e.g. after you edit a Tag. Tags you added or removed yourself stay as they are.",
+  "tags.dialog.retag.hint": "Redoes automatic Tags for every Document. Tags you set stay.",
   "tags.dialog.retag.started": "Re-tagging has started.",
   "tags.dialog.done": "Done",
 
@@ -1705,9 +1668,14 @@ export const en = {
   "tagging.stopped.notInFolder": "Stopped Tagging Documents {places}",
   "tagging.restarted": "Tagging Documents {places} with AI again",
   "tagging.stoppedIn": "Tagging with AI is stopped for Documents {places}.",
+  "tagging.resume": "Resume",
+  "tagging.resume.keywords": "resume restart turn on tagging stopped",
+  "status.taggingStopped": "Tagging stopped",
   "status.taggingPaused": "Tagging waits for your ChatGPT plan",
   "status.taggingPaused.full":
-    "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
+    "ChatGPT plan limit reached: tagging waits for the reset, then resumes.",
+  "status.taggingRateLimited": "Rate limit reached · resumes at {time}",
+  "status.taggingRateLimited.full": "Rate limit reached: tagging resumes at {time}.",
   "jev.form.sends": "Sends Document text to Jev for tagging.",
 
   "settings.title": "Settings",
@@ -1748,13 +1716,14 @@ export const en = {
   "fileWrite.location.missing":
     "Couldn't save “{name}” in {folder}: IncarnaMind couldn't make that folder.",
   "fileWrite.location.notWritable":
-    "Couldn't save “{name}” in {folder}: IncarnaMind isn't allowed to write there.",
+    "Couldn't save “{name}” in {folder}: IncarnaMind can't write there.",
   "fileWrite.location.choose": "Choose another folder…",
   "fileWrite.location.cancel": "Cancel",
   "fileWrite.location.failed": "Couldn't use that folder: {reason}",
   "fileWrite.linked.title": "Add files to “{folder}”?",
   "fileWrite.linked.body":
-    "“{folder}” is a Linked folder, which IncarnaMind only reads. Allow it to save “{name}” there, and to add new files there from now on? It never changes or deletes your files.",
+    "IncarnaMind only reads “{folder}”. Save “{name}” there, and allow new files from now on?",
+  "fileWrite.linked.safe": "IncarnaMind never changes or deletes your files.",
   "fileWrite.linked.note": "You can change this in Settings › General.",
   "fileWrite.linked.allow": "Allow",
   "fileWrite.linked.deny": "Don't allow",
@@ -1834,10 +1803,10 @@ export const en = {
   "providers.form.more": "More services",
   "providers.form.keyGuide": "How do I get one?",
   "providers.form.getKey": "Get a key",
-  "providers.form.planCredits": "Learn more",
   "providers.form.dataUse": "{summary}",
   "providers.form.dataUseLink": "Data use",
   "providers.form.details": "Details",
+  "providers.form.pricing": "Pricing",
   "providers.form.keyPage": "Open {provider}'s key page",
   "providers.form.modelsAndPrices": "Models and prices",
   "providers.form.baseUrl": "Server URL",
@@ -2186,7 +2155,7 @@ export const en = {
   "reference.authors.placeholder": "Family, Given; one name after another",
   "reference.issued.placeholder": "2010, or 2010-08-04",
   "reference.issued.invalid": "Write a year, such as 2010, or a date, such as 2010-08-04",
-  "reference.doi.invalid": "That isn't a DOI: one starts with 10. and has a slash in it",
+  "reference.doi.invalid": "Not a DOI: a DOI starts with 10. and has a slash",
   "reference.source.file": "Read from the file",
   "reference.source.lookup": "Filled in by Look up",
   "reference.source.user": "Edited or checked by you",
@@ -2196,7 +2165,7 @@ export const en = {
   "reference.toCheck.title": "Read from the file and not checked yet",
   "reference.confirm": "Mark as checked",
   "reference.undo.confirm": "Marked the details of “{name}” as checked",
-  "reference.addIdentifier": "Add its DOI or arXiv address, and Look up can fill in the rest.",
+  "reference.addIdentifier": "Add a DOI or arXiv address, then Look up fills the rest.",
   "reference.lookUp": "Look up",
   "reference.lookingUp": "Looking up…",
   "reference.lookUp.doi": "Fills empty fields from Crossref. Sends only the DOI.",
@@ -2220,7 +2189,7 @@ export const en = {
   "references.import.menu": "Import references…",
   "references.import.pick.title": "Import references",
   "references.import.pick.message":
-    "Choose a CSL JSON, BibTeX or RIS file exported from Zotero, EndNote or Mendeley.",
+    "Choose a CSL JSON, BibTeX or RIS file from Zotero, EndNote or Mendeley.",
   "references.import.pick.filter": "References (CSL JSON, BibTeX, RIS)",
   "references.import.running": "Importing “{name}”…",
   "references.import.running.reason": "Another import is running",
@@ -2237,14 +2206,13 @@ export const en = {
   "references.import.by.doi": "by DOI",
   "references.import.by.arxiv": "by arXiv ID",
   "references.import.by.title": "by title and year",
-  "references.import.unmatchedHint":
-    "Add the PDF to link it, or import again after adding the Documents.",
+  "references.import.unmatchedHint": "Add the PDF to link it, or import again afterwards.",
   "references.import.addPdf": "Add the PDF…",
   "references.import.files": "Attached files found on this computer: {count}",
   "references.import.addFiles": "Add them as Documents",
   "references.import.addingFiles": "Adding…",
   "references.import.failed.unreadable":
-    "Couldn't read “{name}”. Check that the file is still there, then try again.",
+    "Couldn't read “{name}”. Check the file is there, then retry.",
   "references.import.failed.too-large": "“{name}” is over 50 MB, too large to import.",
   "references.import.failed.unknown-format": "“{name}” isn't a CSL JSON, BibTeX or RIS file.",
   "references.import.failed.empty": "“{name}” has no references in it.",
@@ -2253,11 +2221,11 @@ export const en = {
   "references.import.help.zotero":
     "Zotero: File ▸ Export Library…, then choose CSL JSON or BibTeX.",
   "references.import.help.endnote":
-    "EndNote: File ▸ Export…, save as a text file with the Refman (RIS) Export style.",
+    "EndNote: File ▸ Export…, as text with the Refman (RIS) Export style.",
   "references.import.help.mendeley":
-    "Mendeley: select the references, then File ▸ Export… and choose BibTeX or RIS.",
+    "Mendeley: select references, then File ▸ Export… as BibTeX or RIS.",
   "references.import.help.folder":
-    "To read Zotero's PDFs in IncarnaMind, add its storage folder as a Linked folder, then import again: each reference is matched to its PDF.",
+    "To read Zotero's PDFs, link its storage folder, then import again.",
   "references.import.undo": "Imported references from “{name}”",
 
   "consent.settings.title": "Data sent to other services",
@@ -2752,14 +2720,11 @@ export const en = {
   "citation.badge.unsupported": "Unsupported by your Documents",
   "citation.badge.contradicted": "Contradicted",
   "citation.reason.quote-not-on-pages": "The quote isn't in the text of the place it cites.",
-  "citation.reason.pages-outside-passage":
-    "The place it cites isn't part of the Passage the quote came from.",
-  "citation.reason.too-many-pages":
-    "A Citation can cite one page, slide, section, or block of rows or lines, or two in a row.",
-  "citation.reason.no-text": "The place it cites has no text to check, e.g. a scanned page.",
+  "citation.reason.pages-outside-passage": "The cited place isn't in the quote's Passage.",
+  "citation.reason.too-many-pages": "A Citation can cite one place, or two in a row.",
+  "citation.reason.no-text": "The cited place has no text, e.g. a scan.",
   "citation.reason.document-removed": "The Document has been deleted.",
-  "citation.reason.quoted-words-not-on-pages":
-    "The words in quotation marks aren’t in the text of the place it cites.",
+  "citation.reason.quoted-words-not-on-pages": "The quoted words aren’t in the cited place.",
   "citation.reason.checking": "The quote is checked when the Answer is finished.",
   "citation.where": "{document}, {location}",
   "citation.scan": "Text read from a scan",
@@ -2775,10 +2740,9 @@ export const en = {
   "citation.closest.in": "Closest words in {location}",
   "citation.closest.document": "Closest words in {document}",
   "citation.closest.transcript": "Closest words in the transcript at {location}",
-  "citation.quoted.why":
-    "Quotation marks promise the Document’s exact words, so IncarnaMind checks them too.",
+  "citation.quoted.why": "Words in quotation marks are checked word for word.",
   "citation.meaning":
-    "“Quote found” means these words are where it cites. It doesn’t mean they support the sentence.",
+    "“Quote found” means the words are there, not that they support the sentence.",
   "citation.open.page": "Open the page",
   "citation.open.slide": "Open the slide",
   "citation.open.section": "Open the section",
@@ -3010,17 +2974,14 @@ export const en = {
   "export.options.saveHint": "Export and {shortcut} will use these",
   "export.options.docx": "Citations become Word footnotes, each naming its Document and Location.",
   "export.options.pdf": "Citations become footnotes with the Document and Location.",
-  "export.options.html":
-    "One file that opens in any browser. Citations become footnotes linked both ways.",
-  "export.options.share-page":
-    "One file anyone can open in a browser, to send or put on your own site. Nothing is uploaded.",
+  "export.options.html": "Opens in any browser; Citations become linked footnotes.",
+  "export.options.share-page": "One file anyone opens in a browser. Nothing is uploaded.",
   "export.share.cards": "Readers can open each Citation",
-  "export.share.cards.hint": "Each quote, with a picture of its place on the page",
+  "export.share.cards.hint": "Each quote, shown in a picture of its page",
   "export.share.inFile": "In the file:",
   "export.share.contents": "{quotes} and {pictures} from {documents}.",
   "export.share.contents.text": "{quotes} from {documents}.",
-  "export.share.readers":
-    "Anyone you send it to can read them. The Documents themselves aren't included.",
+  "export.share.readers": "Anyone with the file can read these; Documents aren't included.",
   "export.share.quotes.one": "1 quote",
   "export.share.quotes.other": "{count} quotes",
   "export.share.pagePictures.one": "1 page picture",
@@ -3035,12 +2996,10 @@ export const en = {
   "export.share.large.other": "Large file: {count} page pictures make it {size}",
   "export.share.fewer": "Use fewer pictures",
   "export.share.checkedLine": "Say “Citations checked with IncarnaMind” at the foot",
-  "export.share.checkedLine.hint": "One line of plain text that links to how the check works.",
+  "export.share.checkedLine.hint": "One plain-text line linking to how the check works.",
   "export.options.markdown": "Citations become footnotes. Questions are kept.",
-  "export.options.source-pack":
-    "A cover list, then each cited page as it was saved, its quotes highlighted and numbered like the Mind's Citations.",
-  "export.pack.empty":
-    "This Mind has no Citations yet, so there are no cited pages to put in a pack.",
+  "export.options.source-pack": "Each cited page, its quotes highlighted and numbered.",
+  "export.pack.empty": "No Citations yet, so no cited pages to export.",
   "export.pack.fileName": "{name} - source pack",
   "export.pack.caption":
     "The pages this Mind cites. Each quote is highlighted and numbered as its Citation is in the Mind.",
@@ -3052,22 +3011,18 @@ export const en = {
   "export.pack.noPage": "This page wasn't saved when it was cited, so only the quotes are shown.",
   "export.saveTo": "Save to",
   "export.theirChanges": "Tracked changes",
-  "export.theirChanges.hint.one":
-    "1 change from the Word file is waiting to be accepted or rejected.",
-  "export.theirChanges.hint.other":
-    "{count} changes from the Word file are waiting to be accepted or rejected.",
+  "export.theirChanges.hint.one": "1 change from the Word file is still waiting.",
+  "export.theirChanges.hint.other": "{count} changes from the Word file are still waiting.",
   "export.theirChanges.shown": "With changes shown",
   "export.theirChanges.accepted": "As if accepted",
   "export.includeQuestions": "Include Questions",
-  "export.options.docx.pending": "Changes waiting for you go in as tracked changes by IncarnaMind.",
+  "export.options.docx.pending": "Changes waiting for you go in as IncarnaMind's tracked changes.",
   "export.trackChanges": "Show my edits as tracked changes",
-  "export.trackChanges.hint":
-    "Your edits since the import, as tracked changes by {name}. Your name is in Settings › General.",
+  "export.trackChanges.hint": "Your edits since import, tracked as {name}.",
   "export.markAiText": "Mark AI-written text with a comment",
   "export.markAiText.hint": "Each passage gets a comment: “Written by IncarnaMind”.",
   "export.commentFailedChecks": "Comment on checks that failed",
-  "export.commentFailedChecks.hint":
-    "When a quote wasn't found, or a sentence is Contradicted, Unsupported or Needs re-check.",
+  "export.commentFailedChecks.hint": "Quote not found, Contradicted, Unsupported or Needs re-check",
   "aiStatement.command": "Export AI use statement",
   "aiStatement.keywords": "AI use disclosure declaration thesis dissertation paper record",
   "aiStatement.made": "Made “{name}”",
@@ -3237,15 +3192,15 @@ export const en = {
   "export.word.comment.anonymous": "The comment “{text}” is on text you deleted",
   "export.word.change": "{author}'s tracked change “{text}” is in text you deleted",
   "export.word.change.anonymous": "The tracked change “{text}” is in text you deleted",
-  "export.word.copy": "Your copy of “{text}” goes into the file as plain text",
-  "export.word.copy.empty": "Your copy of a picture or shape from the Word file is left out",
-  "export.word.edit": "Your edit “{text}” can't be written: that spot stays as it was",
+  "export.word.copy": "Your copy of “{text}” goes in as plain text",
+  "export.word.copy.empty": "Your copy of a picture or shape is left out",
+  "export.word.edit": "Your edit “{text}” can't be written: the original stays",
   "export.word.signature": "The file's digital signature won't match once it changes",
   "export.word.more.one": "1 more",
   "export.word.more.other": "{count} more",
-  "export.word.kept.header": "The header you deleted from the Mind stays in the file",
-  "export.word.kept.footer": "The footer you deleted from the Mind stays in the file",
-  "export.word.kept.both": "The header and footer you deleted from the Mind stay in the file",
+  "export.word.kept.header": "The header you deleted stays in the file",
+  "export.word.kept.footer": "The footer you deleted stays in the file",
+  "export.word.kept.both": "The header and footer you deleted stay in the file",
   "export.question": "Question:",
   "export.unverified": "[unverified]",
   "export.needsDetails.line.one": "“{name}” needs details, marked in the file",
@@ -3336,6 +3291,8 @@ export const en = {
   "details.label": "Details",
   "error.system.notAllowed": "IncarnaMind isn't allowed to change that file or folder.",
   "error.system.full": "The disk is full.",
+  "error.system.diskError": "The disk couldn’t be written to.",
+  "error.system.busy": "Another program is using IncarnaMind’s data.",
   "error.system.gone": "That file or folder isn't there any more.",
   "error.system.nameTooLong": "That name is too long for the file system.",
   "error.system.exists": "A file or folder with that name is already there.",
@@ -3398,6 +3355,23 @@ export const en = {
   "error.mind.notFromWord":
     "This Mind wasn’t imported from a Word file, so it has no original to add.",
   "error.mind.newerVersion": "A newer version of IncarnaMind made this. Update to open it.",
+  "unsaved.notice": "Couldn’t save your recent changes: {reason}. Keep IncarnaMind open",
+  "unsaved.reason.full": "the disk is full",
+  "unsaved.reason.io": "the disk couldn’t be written to",
+  "unsaved.reason.readOnly": "IncarnaMind isn’t allowed to write to its data folder",
+  "unsaved.reason.busy": "another program is using IncarnaMind’s data",
+  "unsaved.reason.other": "the data couldn’t be written",
+  "unsaved.tryAgain": "Try again",
+  "unsaved.saveCopy": "Save a copy…",
+  "unsaved.saveCopy.title": "Save a copy of the Mind",
+  "unsaved.lost": "{count} changes made before IncarnaMind closed couldn’t be saved",
+  "unsaved.lost.one": "1 change made before IncarnaMind closed couldn’t be saved",
+  "quit.unsaved.title": "{count} changes aren’t saved",
+  "quit.unsaved.title.one": "1 change isn’t saved",
+  "quit.unsaved.quit": "Quit anyway",
+  "quit.unsaved.keep": "Keep open",
+  "quit.unsaved.copyFailed": "The copy couldn’t be saved: {reason}",
+  "error.mind.missedChange": "This change builds on one the Mind never got, so it wasn’t saved.",
   "error.mind.newerVersionEdit":
     "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",
   "error.conversation.notFound": "That conversation doesn't exist or has been deleted.",
@@ -3976,8 +3950,7 @@ export const en = {
   "meetings.mindTitle": "Meeting, {date}",
   "settings.pages.meetings": "Meetings",
   "status.readingPaused": "Reading paused while recording",
-  "status.readingPaused.full":
-    "Documents are read and tagged once the meeting is paused or stopped: recording comes first.",
+  "status.readingPaused.full": "Paused while recording: Documents are read after the meeting.",
   "meetings.record": "Record a meeting",
   "meetings.hint.agenda": "Write the agenda, or anything you want to cover…",
   "meetings.audio.both": "Me and them",
@@ -3992,11 +3965,9 @@ export const en = {
     "I’m recording this meeting with IncarnaMind to take notes. The recording stays on my computer.",
   "meetings.start.dismiss": "Don’t record; keep this as a note (Esc)",
   "meetings.notice.title": "Before you record",
-  "meetings.notice.both":
-    "IncarnaMind records your microphone and the computer’s sound, which carries everyone else in the meeting.",
+  "meetings.notice.both": "Records your microphone and the computer’s sound: everyone in the call.",
   "meetings.notice.microphone": "IncarnaMind records your microphone.",
-  "meetings.notice.tell":
-    "In many places it’s against the law to record people without telling them. Tell everyone you’re recording before you start.",
+  "meetings.notice.tell": "Tell everyone you’re recording: in many places it’s the law.",
   "meetings.notice.cancel": "Cancel",
   "meetings.bar.label": "Meeting recording",
   "meetings.bar.recording": "Recording",
@@ -4014,10 +3985,8 @@ export const en = {
   "meetings.line.microphoneDenied": "IncarnaMind isn’t allowed to use the microphone.",
   "meetings.line.microphoneUnavailable": "No microphone was found.",
   "meetings.line.microphoneEnded": "The microphone stopped, and no other could be opened.",
-  "meetings.line.systemDenied":
-    "Only your microphone is recorded: IncarnaMind isn’t allowed to record the computer’s sound.",
-  "meetings.line.systemSilent":
-    "No sound from the computer for a minute. If the others are talking, IncarnaMind may not be allowed to record it.",
+  "meetings.line.systemDenied": "Only your microphone is recorded: computer sound isn’t allowed.",
+  "meetings.line.systemSilent": "No sound from the call for a minute: recording may be blocked.",
   "meetings.line.systemEnded": "The computer’s sound stopped. Your microphone is still recorded.",
   "meetings.line.systemUnavailable": "This computer records only your microphone.",
   "meetings.line.openSettings.mac": "Open System Settings",
@@ -4028,20 +3997,18 @@ export const en = {
   "meetings.bar.hideTranscript": "Hide transcript",
   "meetings.bar.transcriptSoon": "The transcript appears with its first line",
   "meetings.transcript.downloading":
-    "Getting the transcript ready: downloading the speech model, {percent}% of {size}. The meeting is recorded meanwhile.",
+    "Downloading the speech model: {percent}% of {size}. Still recording.",
   "meetings.transcript.starting": "Starting the transcript…",
   "meetings.transcript.behind":
     "Recording… Live text fell behind; the transcript catches up when you stop.",
-  "meetings.transcript.behindPaused":
-    "Part of the meeting isn’t transcribed yet; the transcript catches up when you stop.",
+  "meetings.transcript.behindPaused": "Not all transcribed yet; it catches up when you stop.",
   "meetings.transcript.finishing": "Finishing the transcript…",
   "meetings.transcript.finishingDownload":
     "Finishing the transcript: downloading the speech model, {percent}% of {size}…",
   "meetings.transcript.saved": "Transcript saved",
   "meetings.transcript.savedIn": "Transcript saved in {folder}",
   "meetings.transcript.open": "Open transcript",
-  "meetings.transcript.empty":
-    "Nothing was said that could be transcribed, so no transcript was saved.",
+  "meetings.transcript.empty": "Nothing to transcribe, so no transcript was saved.",
   "meetings.transcript.downloadFailed": "The speech model couldn’t be downloaded: {message}",
   "meetings.transcript.engineFailed": "Transcription stopped: {message}",
   "meetings.transcript.engineStopped": "Transcription stopped.",
@@ -4070,12 +4037,11 @@ export const en = {
   "meetings.duration.minutes": "{count} min",
   "meetings.duration.hours": "{hours} h {minutes} min",
   "meetings.audio.recorded": "Recorded {time}",
-  "meetings.audio.kept": "Audio stays on this computer, deleted within a day.",
+  "meetings.audio.kept": "Audio stays on this computer; deleted within a day.",
   "meetings.audio.keptUntil": "Audio stays on this computer until {time}",
-  "meetings.audio.keptWhile": "Audio stays on this computer until a day after the meeting",
+  "meetings.audio.keptWhile": "Audio stays on this computer until a day after the meeting.",
   "meetings.audio.delete": "Delete audio now",
-  "meetings.audio.confirm":
-    "Delete this meeting’s audio? It can’t be brought back. Your notes stay.",
+  "meetings.audio.confirm": "Delete this meeting’s audio for good? Your notes stay.",
   "meetings.audio.deleteConfirm": "Delete audio",
   "meetings.audio.keep": "Keep it",
   "meetings.audio.deleted": "Audio deleted",
@@ -4086,8 +4052,7 @@ export const en = {
   "meetings.health.none": "Open a meeting’s Mind to see how its recording went",
   "meetings.health.details": "Details",
   "meetings.health.speed": "Transcribed on this computer at {speed}× real time",
-  "meetings.health.speedSlow":
-    "Transcribed on this computer at {speed}× real time, too slow to keep up live",
+  "meetings.health.speedSlow": "Transcribed here at {speed}× real time, too slow to keep up",
   "meetings.health.speedUnknown": "Transcription speed not measured yet",
   "meetings.health.noLoss": "No audio was lost",
   "meetings.health.lost.microphone": "{duration} of microphone audio lost: {cause}",
@@ -4110,12 +4075,11 @@ export const en = {
   "meetings.health.reason.cloudBehind": "the cloud fell behind",
   "meetings.health.reason.cloudFailed": "the cloud dropped",
   "meetings.health.reason.user": "you chose it",
-  "meetings.health.unsaved":
-    "{duration} of audio couldn’t be saved, so it isn’t in the transcript.",
+  "meetings.health.unsaved": "{duration} of audio couldn’t be saved, so it’s not transcribed.",
   "meetings.settings.title": "Recording",
   "meetings.settings.enabled": "Record meetings",
   "meetings.settings.enabledBody":
-    "Adds “Record a meeting” to the + menu. Transcribed on this computer; the speech model (about 1 GB) downloads once.",
+    "Adds “Record a meeting” to the + menu. Transcribed on this computer; a 1 GB speech model downloads once.",
   "meetings.settings.cantRecord": "This copy of IncarnaMind can’t record audio.",
   "meetings.settings.what": "What is recorded",
   "meetings.settings.whatBoth": "Your microphone and the other people (the computer’s sound).",
@@ -4123,7 +4087,7 @@ export const en = {
 
   "sources.title": "Find sources",
   "sources.intro":
-    "Search OpenAlex, arXiv and PubMed for papers. Open-access ones are added as Documents, the others as references. Choose openFDA, DailyMed, ClinicalTrials.gov or the eCFR below to find drug labels, clinical trials and US federal regulations, or type a citation such as 17 CFR 240.10b-5 or 42 U.S.C. § 1983.",
+    "Search papers in OpenAlex, arXiv and PubMed. Open-access ones become Documents.",
   "sources.search.label": "Search for sources",
   "sources.search.placeholder": "Topic, title, DOI, arXiv ID, NCT number or citation",
   "sources.search": "Search",
@@ -4142,7 +4106,7 @@ export const en = {
   "sources.problem.declined": "{provider} wasn't searched: you didn't allow it",
   "sources.problem.unreachable": "Couldn't reach {provider}",
   "sources.problem.rate-limited":
-    "{provider} asked to slow down, or its free searches for today are used up",
+    "{provider} asked to slow down, or today's free searches are used up",
   "sources.problem.service-error": "{provider} answered with an error",
   "sources.problem.needs-key": "{provider} is off: it needs your own free key",
   "sources.problem.key-rejected": "{provider} didn't accept your key",
@@ -4182,29 +4146,29 @@ export const en = {
   "sources.failed.key-rejected": "Your key wasn't accepted: change it above, then try again",
   "sources.failed": "Couldn't add it",
   "sources.provider.openalex.about":
-    "Papers in every field, with where they're open and how often they're cited. Its records are CC0.",
+    "Papers in every field, with open-access links and citation counts. CC0 records.",
   "sources.provider.arxiv.about":
-    "Preprints in physics, mathematics, computer science and more, all open. Its records are CC0.",
+    "Open preprints in physics, mathematics, computer science and more. CC0 records.",
   "sources.provider.pubmed.about":
     "Biomedical and life-science papers, with open full text from PubMed Central.",
   "sources.provider.crossref.about": "Looks up a DOI you type.",
   "sources.provider.openfda.about":
-    "FDA drug labels, section by section. Search by drug name or set id. Its records are CC0; it says not to rely on it for decisions about medical care. Asked only when you choose it.",
+    "FDA drug labels, by section. Search by drug name or set id. CC0 records; not for medical decisions. Asked only when you choose it.",
   "sources.provider.dailymed.about":
-    "The full drug labels filed with the FDA, from the National Library of Medicine, with their section numbers. Search by drug name or set id. Asked only when you choose it.",
+    "Full FDA drug labels, with section numbers. Search by drug name or set id. Asked only when you choose it.",
   "sources.provider.clinicaltrials.about":
-    "Clinical trial records: arms, outcomes, eligibility criteria and posted results. Search by condition or drug, or type an NCT number. Asked only when you choose it.",
+    "Clinical trial records: arms, outcomes, eligibility and results. Search by condition, drug or NCT number. Asked only when you choose it.",
   "sources.provider.ecfr.about":
-    "US federal regulations as amended to date (the Code of Federal Regulations), paragraph by paragraph: an unofficial compilation by the Office of the Federal Register. Search by words, or type a citation such as 17 CFR 240.10b-5, with “as of 2019-06-30” for an earlier version. Asked only when you choose it.",
+    "US federal regulations (CFR), by paragraph; an unofficial compilation. Search by words or a citation like 17 CFR 240.10b-5. Asked only when you choose it.",
   "sources.provider.govinfo.about":
-    "The United States Code and the official annual edition of the CFR, from the Government Publishing Office. Type a citation such as 42 U.S.C. § 1983. Needs your own free api.data.gov key.",
+    "The United States Code and the CFR's official annual edition. Type a citation like 42 U.S.C. § 1983. Needs your own free api.data.gov key.",
   "sources.notice": "The source says: {notice}",
   "sources.key.open": "{provider} key…",
   "sources.key.title": "Your own {provider} key",
   "sources.key.hint":
-    "Optional. A key gives {provider} a higher daily limit. It is kept in your keychain and sent only to {provider}.",
+    "Optional: a higher daily limit. Kept in your keychain, sent only to {provider}.",
   "sources.key.hint.needed":
-    "Needed: {provider} is off without one. It is kept in your keychain and sent only to {provider}.",
+    "Needed, or {provider} stays off. Kept in your keychain, sent only to {provider}.",
   "sources.key.signUp": "Get a free key",
   "sources.key.add": "Add key…",
   "sources.key.change": "Change key…",
@@ -4244,8 +4208,7 @@ export const en = {
   "meetings.command.pause": "Pause recording",
   "meetings.command.resume": "Resume recording",
   "meetings.command.stop": "Stop recording",
-  "meetings.command.stopConfirm":
-    "Stop recording? This meeting can’t be picked up again. What was recorded is kept.",
+  "meetings.command.stopConfirm": "Stop recording? You can’t resume it; the recording is kept.",
   "meetings.command.noneLive": "No meeting is being recorded",
   "meetings.command.mark": "Mark this moment",
   "meetings.command.markPaused": "Resume recording to leave a mark",
@@ -4395,7 +4358,7 @@ export const en = {
   "citedSource.cited": "{entry}. Cited: {locations}",
   "citation.note": "Note",
   "export.citationStyle": "Citation style",
-  "export.citationStyle.default": "The default for a Mind in Chinese that cites papers or books",
+  "export.citationStyle.default": "Default for Chinese Minds citing papers or books",
   "references.style.default": "Default",
   "assistant.label": "Assistant",
   "assistant.newChat": "New chat",
@@ -4407,7 +4370,7 @@ export const en = {
   "assistant.more": "More for the assistant",
   "assistant.fold": "Fold the assistant",
   "assistant.unfold": "Show the assistant ({shortcut})",
-  "assistant.move": "Drag to move the assistant: dock it to an edge, or drop it anywhere to float",
+  "assistant.move": "Drag to move the assistant: dock it, or drop it to float",
   "assistant.dock.right": "Dock on the right",
   "assistant.dock.left": "Dock on the left",
   "assistant.dock.bottom": "Dock at the bottom",
@@ -4417,12 +4380,9 @@ export const en = {
   "assistant.lastToNewMind.unavailable": "There’s no Answer in this conversation yet",
   "assistant.clear": "Clear this conversation",
   "assistant.clear.unavailable": "This conversation is empty",
-  "assistant.resize.side":
-    "Resize the assistant: ← and → move it; a double-click restores its size",
-  "assistant.resize.bottom":
-    "Resize the assistant: ↑ and ↓ move it; a double-click restores its size",
-  "assistant.resize.float":
-    "Resize the assistant: the arrow keys change its size; a double-click restores it",
+  "assistant.resize.side": "Resize the assistant: ← and → move it; double-click resets",
+  "assistant.resize.bottom": "Resize the assistant: ↑ and ↓ move it; double-click resets",
+  "assistant.resize.float": "Resize the assistant: arrow keys change its size; double-click resets",
   "assistant.reads.all": "Reads “{mind}” · searches All Documents",
   "assistant.reads.one": "Reads “{mind}” · searches “{scope}”",
   "assistant.reads.more": "Reads “{mind}” · searches “{scope}” and {count} more",
@@ -4485,11 +4445,10 @@ export const en = {
   "meetings.help.stillWriting": "The suggestion is still being written.",
   "meetings.level.label": "Sound level",
   "meetings.settings.panelBody":
-    "While a meeting records, a small panel with the help buttons floats above the meeting app.",
+    "While recording, a panel of help buttons floats above the meeting app.",
   "meetings.settings.hidden": "Keep the panel out of my screen share",
   "meetings.settings.keys": "Shortcuts",
-  "meetings.settings.keysBody":
-    "They work while the meeting app is in front, and only while a meeting records.",
+  "meetings.settings.keysBody": "They work over the meeting app, only while recording.",
   "meetings.settings.keysChange": "Change the shortcut for “{name}”",
   "meetings.settings.keysPress": "Press the new keys…",
   "meetings.settings.keysNone": "None",
@@ -4609,6 +4568,16 @@ export const en = {
   "mindCall.creating.new": "Making a new Mind…",
   "mindCall.checking": "Checking {count} sentences in “{mind}”…",
   "mindCall.checking.one": "Checking 1 sentence in “{mind}”…",
+  "selfCheck.failed": "{count} sentences couldn't be checked",
+  "selfCheck.failed.one": "1 sentence couldn't be checked",
+  "selfCheck.capped": "Checked {checked} of {count} cited sentences",
+  "selfCheck.checkRest": "Check the rest",
+  "selfCheck.costCap": "{count} sentences couldn't be checked: spending cap reached",
+  "selfCheck.costCap.one": "1 sentence couldn't be checked: spending cap reached",
+  "selfCheck.changeCap": "Change the cap",
+  "selfCheck.planLimit": "{count} sentences couldn't be checked: plan limit reached",
+  "selfCheck.planLimit.one": "1 sentence couldn't be checked: plan limit reached",
+  "selfCheck.resumesAt": "Resumes at {time}",
   "mindCall.read": "Read “{mind}”",
   "mindCall.edited": "Edited “{mind}” · {count} changes",
   "mindCall.edited.one": "Edited “{mind}” · 1 change",
@@ -4647,6 +4616,7 @@ export const en = {
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
   "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
   "mindCall.failed.uncited": "Didn't add to “{mind}”: its sources weren't cited",
+  "mindCall.failed.newMind": "Didn't add to “{mind}”: a new Mind was asked for",
   "mindChanges.unlinked": "· {count} sources shown as text, not linked",
   "mindChanges.unlinked.one": "· 1 source shown as text, not linked",
   "mindChanges.dropped": "· {count} sources couldn't be matched, so they were left out",
@@ -4692,8 +4662,7 @@ export const en = {
   "origin.open": "Open the source conversation",
   "origin.deleted": "From the conversation “{title}”, now in Recently deleted",
   "origin.gone": "From a conversation that has been deleted",
-  "assistant.narrow":
-    "While the window is narrower than 1,000 px the assistant sits at the bottom; it goes back to the side when the window is wider.",
+  "assistant.narrow": "Narrow window: the assistant moved to the bottom.",
   "command.assistant.dock": "Assistant: {dock}",
   "command.assistant.fold": "Assistant: Fold",
   "command.assistant.unfold": "Assistant: Show",
@@ -4875,8 +4844,7 @@ export const en = {
   "history.added": "Added: ",
   "history.image": "Image",
   "history.chart": "Chart",
-  "history.empty":
-    "No versions yet. History keeps one before every AI change, and after 5 minutes without edits.",
+  "history.empty": "No versions yet: saved before AI changes and after 5 idle minutes.",
   "history.noChanges": "No changes: these two versions read the same.",
   "history.restored": "Restored the version from {version}",
   "history.restored.name": "Restore Version",
@@ -4889,12 +4857,10 @@ export const en = {
   "wordImport.own": "Mine",
   "wordImport.own.note": "You wrote it, or it’s yours to change.",
   "wordImport.someoneElse": "Someone else’s",
-  "wordImport.someoneElse.note":
-    "After reading it, the assistant asks you before it writes or sends anything.",
+  "wordImport.someoneElse.note": "The assistant then asks before writing or sending anything.",
   "wordImport.others": "It has changes or comments by {names}.",
   "wordImport.othersMore": "{count} more",
-  "wordImport.keeps":
-    "IncarnaMind keeps a copy of the file, so export can write your changes back into it.",
+  "wordImport.keeps": "Keeps a copy, so export can write your changes back.",
   "wordImport.addOriginal": "Also add the original to the Library, so Answers can cite it",
   "wordImport.newerDraft": "A newer draft of “{name}”? Keep both as versions",
   "wordImport.import": "Import",
@@ -4903,18 +4869,16 @@ export const en = {
   "wordImport.asDocument": "Add as a Document instead",
   "wordImport.chooseAnother": "Choose another file…",
   "wordImport.refusal.legacy":
-    "“{name}” is an older Word file (.doc). Save it as .docx in Word, then import that.",
+    "“{name}” is an older .doc file. Save it as .docx in Word, then import.",
   "wordImport.refusal.macros":
-    "“{name}” has macros (.docm), and IncarnaMind never runs macros. Save it as .docx in Word, then import that.",
-  "wordImport.refusal.encrypted":
-    "“{name}” is protected with a password. Remove the password in Word, then import it.",
+    "“{name}” has macros, which IncarnaMind never runs. Save it as .docx in Word, then import.",
+  "wordImport.refusal.encrypted": "“{name}” has a password. Remove it in Word, then import.",
   "wordImport.refusal.strict":
-    "“{name}” is saved as Strict Open XML. Save it as a Word Document (.docx) in Word, then import that.",
-  "wordImport.refusal.damaged":
-    "“{name}” is damaged or isn’t a Word document, so it can’t be read.",
+    "“{name}” is Strict Open XML. Save it as a Word Document (.docx) in Word, then import.",
+  "wordImport.refusal.damaged": "“{name}” is damaged or isn’t a Word document.",
   "wordImport.refusal.too-large": "“{name}” is too large to import.",
   "wordImport.refusal.unreadable":
-    "“{name}” couldn’t be read. It may have moved, or IncarnaMind isn’t allowed to open it.",
+    "“{name}” couldn’t be read: it may have moved, or can’t be opened.",
   "wordImport.from": "From {name}",
   "wordImport.keepsStyles": "Export keeps its styles",
   "look.title": "Look",
@@ -4927,7 +4891,7 @@ export const en = {
   "wordImport.notAdded": "“{name}” couldn’t be added to the Library, so Answers can’t cite it.",
   "wordImport.addToLibrary": "Add to Library",
   "wordImport.from.tooltip":
-    "Opened from a Word file. Export writes your changes back into it and keeps its styles, numbering, headers and footers.",
+    "Opened from a Word file. Export writes your changes back into it, with its styles intact.",
   "wordImport.progress": "Importing “{name}” · {percent}%",
   "wordImport.progress.label": "Import progress",
   "wordImport.report.editable": "Can be edited: {list}.",

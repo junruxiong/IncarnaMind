@@ -26,6 +26,7 @@
  * lines, narrowed to those the quote covers ("Revenue, rows 12–14"); for
  * sections, the heading it sits under.
  */
+import { shownRanges } from "../../shared/answerBlocks";
 import { citationNode, type NodeJSON } from "../../shared/blockJson";
 import { parseQuotedWords } from "../../shared/citations";
 import {
@@ -1300,4 +1301,26 @@ export function createCitationSession(
  */
 export function withoutFootnoteDefinitions(markdown: string): string {
   return markdown.replace(/^ {0,3}\[\^\d{1,4}\]:.*(?:\n|$)/gm, "");
+}
+
+export function withoutDeadMarkers(markdown: string, backed: (marker: number) => boolean): string {
+  const found = [...markdown.matchAll(/([ \t]*)\[\^(\d{1,4})\](?!:)/g)].map((each) => ({
+    from: each.index,
+    space: (each[1] ?? "").length,
+    end: each.index + each[0].length,
+    marker: Number(each[2]),
+  }));
+  const shown = shownRanges(
+    markdown,
+    found.map((each) => ({ start: each.from + each.space, end: each.end })),
+  );
+  let text = "";
+  let at = 0;
+  found.forEach((each, index) => {
+    if (!shown[index] || backed(each.marker)) return;
+    const keepsSpace = /^\p{L}/u.test(markdown.charAt(each.end));
+    text += markdown.slice(at, keepsSpace ? each.from + each.space : each.from);
+    at = each.end;
+  });
+  return text + markdown.slice(at);
 }

@@ -160,10 +160,11 @@ export interface MindToolsOptions {
   origin: BlockOrigin;
   /**
    * The conversation's last Answer before this one, as Add to note puts it
-   * in a Mind, with its Citations, and the Answer its Blocks link back to:
+   * in a Mind, with its Citations, the Answer its Blocks link back to, and
+   * the Folder of its Question's Search scope, where a Mind made of it goes:
    * what `answer: true` writes. Null: there is none.
    */
-  lastAnswer: { blocks: NodeJSON[]; origin: BlockOrigin } | null;
+  lastAnswer: { blocks: NodeJSON[]; origin: BlockOrigin; folderId: string | null } | null;
   /** The language the Answer is written in, which the model is told to ask the User in. */
   language: Language;
   /**
@@ -740,11 +741,15 @@ interface Written {
 const sentencesWord = (count: number) => (count === 1 ? "1 sentence" : `${count} sentences`);
 
 function checkedNotes(checked: WrittenCheck | null): string[] {
-  if (!checked || checked.sentences === 0) return [];
-  const { sentences, cut, unsupported, contradicted } = checked;
+  if (!checked) return [];
+  const { cited, sent, checked: judged, failed, cut, unsupported, contradicted } = checked;
   const are = (count: number) => (count === 1 ? "is" : "are");
   return [
-    `Before it went in, ${sentencesWord(sentences)} with Citations ${sentences === 1 ? "was" : "were"} checked against them.`,
+    ...(judged > 0
+      ? [
+          `Before it went in, ${sentencesWord(judged)} with Citations ${judged === 1 ? "was" : "were"} checked against them.`,
+        ]
+      : []),
     ...(cut.length > 0
       ? [
           `What their Citations don't support was taken out: ${cut.map((part) => `“${part}”`).join(", ")}. Don't state it in your reply.`,
@@ -758,6 +763,16 @@ function checkedNotes(checked: WrittenCheck | null): string[] {
     ...(contradicted > 0
       ? [
           `${sentencesWord(contradicted)} ${contradicted === 1 ? "contradicts" : "contradict"} a Document, and ${are(contradicted)} marked so in the Mind: say so.`,
+        ]
+      : []),
+    ...(failed > 0
+      ? [
+          `${sentencesWord(failed)} couldn't be checked, and ${are(failed)} marked so in the Mind: say so.`,
+        ]
+      : []),
+    ...(sent < cited
+      ? [
+          `Only the first ${sent} of its ${cited} sentences with Citations were checked; the rest are marked not checked in the Mind: say so.`,
         ]
       : []),
   ];
@@ -866,6 +881,14 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     askedMind ??= mindId;
     return askedMind === mindId ? requested.change : null;
   };
+
+  // Adding to a Mind this Answer made isn't writing into the User's.
+  const madeHere = new Set<string>();
+  let toldNewMind = false;
+  // Asked for a piece of its own (#1109), text added to the User's Mind is refused once, while a
+  // step is left to make the new Mind instead.
+  const wantsNewMind = (mind: ChangeableMind) =>
+    requested?.change === "write" && requested.newMind && !madeHere.has(mind.id) && !toldNewMind;
 
   const askedIn = new Map<string, Set<string>>();
   /** What became of a call's change, for the model to say: applied, or waiting for the User and why. */
@@ -1282,23 +1305,19 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const { mindId, ids, blocks } = written.blocks;
     if (written.unrecorded > 0 || ids.length !== blocks.length) return null;
     let reported = false;
+    let checked: WrittenCheck | null = null;
     try {
-      return await minds.checkWritten({
+      checked = await minds.checkWritten({
         mindId,
         blocks,
+        ids,
         prepared: options.prepared,
         signal,
         checking: (count) => {
           reported = true;
           options.changed(toolCallId, { ...written.change, checking: count });
         },
-        write: (landing) =>
-          minds.edit(mindId, (note) => {
-            for (const element of topLevelBlocks(note)) {
-              const block = landing[ids.indexOf(idOf(element))];
-              if (block) syncContent(element, block.content ?? []);
-            }
-          }),
+        edit: (change) => minds.edit(mindId, change),
       });
     } catch (error) {
       // A check that fails never takes back what the call wrote: it stands, unchecked.
@@ -1306,10 +1325,23 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         `What the assistant wrote in Mind ${mindId} couldn't be checked before it landed:`,
         error,
       );
-      return null;
-    } finally {
-      if (reported) options.changed(toolCallId, written.change);
     }
+    if (checked) {
+      const { request, cited, sent, failed, stop } = checked;
+      written.change = {
+        ...written.change,
+        selfCheck: {
+          request,
+          cited,
+          sent,
+          checked: checked.checked,
+          failed,
+          ...(stop && { stop }),
+        },
+      };
+    }
+    if (reported || checked) options.changed(toolCallId, written.change);
+    return checked;
   };
 
   /** By call: text written with markers `cite` hadn't recorded yet. */
@@ -1680,7 +1712,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         const place = fields.get("after");
         if ((named && !named.done) || (place && !place.done)) return null;
         const mind = targetOf({ mind: named?.value });
-        if (mind instanceof Refusal) return null;
+        if (mind instanceof Refusal || wantsNewMind(mind)) return null;
         const after = optional(place?.value);
         // A place that can't be written to is the call's to report, once it has all of its input.
         const there = minds.read(mind.id, (note) => placeAfter(note, after, options.language));
@@ -1691,6 +1723,15 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     async call(input, { toolCallId, signal, canCallAgain }) {
       const given = givenIn(input) ?? text(input.content, "content");
       const mind = found(targetOf(input));
+      if (wantsNewMind(mind) && (canCallAgain?.() ?? true)) {
+        toldNewMind = true;
+        streams.delete(toolCallId);
+        ended.add(toolCallId);
+        throw new Refusal(
+          { kind: "new-mind", mindId: mind.id },
+          `Nothing was added to “${mind.name}”: the User asked for a new Mind for this. Call create_mind with a short title and the same ${input.answer === true ? "answer: true" : "content"} instead, and don't mention this in your reply: it is how the request goes.`,
+        );
+      }
       const after = optional(input.after);
       const written = finishContent(
         toolCallId,
@@ -1714,8 +1755,11 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   // A model that began with a heading of its own keeps that one alone.
   const headed = (content: string) => /^\s*#{1,6}\s/.test(content);
 
-  const make = (title: string, startsWithHeading: boolean): ChangeableMind =>
-    minds.create(title, options.folderId, !startsWithHeading);
+  const make = (
+    title: string,
+    startsWithHeading: boolean,
+    folderId = options.folderId,
+  ): ChangeableMind => minds.create(title, folderId, !startsWithHeading);
 
   const create: Tool = {
     name: MIND_TOOLS.create,
@@ -1745,6 +1789,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         if (!title?.done || title.value.trim() === "") return null;
         // Its first paragraph is whole by now, so whether the model began with a heading is known.
         const mind = make(title.value.trim(), headed(fields.get("content")?.value ?? ""));
+        madeHere.add(mind.id);
         return { writer: writerFor(mind, null, true), created: true };
       });
     },
@@ -1753,13 +1798,18 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const given = givenIn(input);
       // Made already, as its content came in.
       const streamed = streams.get(toolCallId)?.writer?.mind;
+      // A Mind made of the last Answer goes where that Answer searched, not where this Question does.
+      const folderId =
+        given !== null && typeof given !== "string" ? given.folderId : options.folderId;
       const mind =
         streamed ??
         make(
           title,
           typeof given === "string" ? headed(given) : given?.blocks[0]?.type === "heading",
+          folderId,
         );
-      const folder = options.folderId === null ? null : minds.folderName(options.folderId);
+      madeHere.add(mind.id);
+      const folder = folderId === null ? null : minds.folderName(folderId);
       const made = `Made the Mind “${mind.name}”${folder ? ` in the Folder “${folder}”` : ""}, open beside the User's Mind`;
       const empty = () =>
         options.changed(toolCallId, { mindId: mind.id, created: true, request: "", proposals: 0 });

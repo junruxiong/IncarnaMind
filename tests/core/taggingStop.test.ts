@@ -273,7 +273,7 @@ describe("Stop while Organize tags", () => {
     expect(recorder.sent("renewed to 2031")).toBe(false);
   });
 
-  test("with automatic Organize off, Tag with AI organizes what was stopped", async () => {
+  test("with automatic Organize off, Tag with AI tags what was stopped and leaves it where it is", async () => {
     const { core, recorder, contracts } = await organizing(false);
     await core.setTaggingWithAi(contracts.id, false);
     const lease = await add(core, "Lease.md", "The lease for the Austin warehouse.", contracts.id);
@@ -281,6 +281,7 @@ describe("Stop while Organize tags", () => {
     await core.setTaggingWithAi(contracts.id, true);
     await vi.waitFor(() => expect(recorder.sent("Austin warehouse")).toBe(true));
     await waitForTagging(core, [lease.id], (each) => each.tagging === "tagged");
+    expect(recorder.calls.map((call) => call.purpose)).toEqual(["tags"]);
   });
 });
 

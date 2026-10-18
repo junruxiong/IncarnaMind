@@ -28,6 +28,7 @@ import { AnswerText } from "./AnswerText";
 import { NoMindToolsLine, UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
 import { CoverageLine } from "./CoverageLines";
 import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
+import { SelfCheckLines } from "./SelfCheckLines";
 
 /** What adding an Answer needs from the thread around it. */
 export interface AnswerKeeping {
@@ -124,6 +125,7 @@ export function AssistantAnswer({
         />
       )}
       <MindChangesCard answer={answer} streaming={streaming} />
+      {!streaming && <SelfCheckLines answer={answer} />}
       {!streaming && question && !question.askedFrom && wantedAMind(answer) && (
         <NoMindLine question={question} />
       )}

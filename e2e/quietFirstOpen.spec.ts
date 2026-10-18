@@ -166,6 +166,33 @@ test("the examples alone keep the footer quiet, but the User's own file waiting 
   await app.close();
 });
 
+test("Tagging stopped for the User's own files shows in the footer on the first open, with Resume (#1129)", async () => {
+  const notes = join(sources, "Harbour notes.md");
+  await writeFile(notes, "# Harbour notes\n\nThe harbour master publishes the tide tables.\n");
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await useLocalChatModel(window);
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.setTaggingWithAi(null, false);
+  });
+  const sidebar = window.getByTestId("sidebar");
+  await expect(window.getByTestId("first-open-steps")).toBeVisible();
+  await window.getByTestId("add-documents-input").setInputFiles([notes]);
+  const row = sidebar.getByTestId("tagging-stopped");
+  await expect(row).toContainText("Tagging stopped");
+  await expect(window.getByTestId("first-open-steps")).toBeVisible();
+  await row.getByTestId("tagging-resume").focus();
+  await window.keyboard.press("Enter");
+  await expect(row).toHaveCount(0);
+  await expect
+    .poll(
+      async () => (await taggingOf(window)).find((each) => each.name === "Harbour notes")?.tagging,
+    )
+    .toBe("tagged");
+  await app.close();
+});
+
 test("a Mind of one's own made on the first open isn't listed under Examples (#123)", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true });
   const section = window.getByTestId("sidebar").getByTestId("not-in-a-folder-toggle");

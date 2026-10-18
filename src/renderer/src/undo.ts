@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import type { ErrorWording } from "../../core/errors";
+import { translate } from "../../shared/i18n";
 import { describeError } from "./errors";
+import type { Words, WordsInLine } from "./lineNames";
 
 /**
  * Undo instead of asking (docs/agents/interaction.md, rule 4): a change the User
@@ -9,10 +10,13 @@ import { describeError } from "./errors";
  * ⌘Z / Ctrl+Z outside text, which ⇧⌘Z / Ctrl+Shift+Z (or Ctrl+Y) does again.
  */
 export interface Undoable {
-  /** What happened, said plainly. */
-  message: string;
+  /**
+   * What happened, said plainly, in the words of the interface language when it is shown, so a
+   * switch of language reaches a line already showing. A long name in it is cut in the middle.
+   */
+  said: WordsInLine;
   /** What was done, for the Edit menu: "Move 3 Documents" makes "Undo Move 3 Documents". */
-  name?: string;
+  name?: Words;
   /** Takes it back. Throws `UndoRefused` when a fix would let it. */
   undo(): Promise<void>;
   /**
@@ -23,7 +27,7 @@ export interface Undoable {
   /** Does it again once taken back. Without it, taking it back ends what can be redone. */
   redo?(): Promise<void>;
   /** An action before Undo, for a change made for the User rather than by them: "Change". */
-  also?: { label: string; testId: string; run(): void };
+  also?: { label: Words; testId: string; run(): void };
 }
 
 /** Where the line of what was done with an Answer in the assistant shows: under that Answer. */
@@ -31,17 +35,17 @@ export const answerUndoPlace = (answerId: string) => `answer:${answerId}`;
 
 /** The one action that lets a refused undo or redo happen. */
 export interface UndoFix {
-  label: string;
+  label: Words;
   run(): Promise<void>;
 }
 
 /** An undo or a redo the core can't do yet, with the fix that lets it: it stays on the stack. */
 export class UndoRefused extends Error {
   constructor(
-    message: string,
+    readonly said: Words,
     readonly fix: UndoFix,
   ) {
-    super(message);
+    super(said((key, params) => translate("en", key, params)));
     this.name = "UndoRefused";
   }
 }
@@ -49,9 +53,7 @@ export class UndoRefused extends Error {
 /** Why taking a change back, or doing it again, didn't happen. */
 export interface UndoProblem {
   step: "undo" | "redo";
-  reason: string;
-  /** The reason as a key of the dictionary, when the core gave one. */
-  wording?: ErrorWording;
+  reason: Words;
   fix: UndoFix | null;
 }
 
@@ -99,6 +101,10 @@ export const useUndo = create<UndoState>()((set, get) => {
     const fix = error instanceof UndoRefused ? error.fix : null;
     const stack = step === "undo" ? "done" : "undone";
     const { message, wording } = describeError(error);
+    const reason: Words =
+      error instanceof UndoRefused
+        ? error.said
+        : (t) => (wording ? t(wording.key, wording.values) : message);
     set((state) => ({
       ...(fix &&
         (step === "undo"
@@ -108,8 +114,7 @@ export const useUndo = create<UndoState>()((set, get) => {
         id: ++lines,
         problem: {
           step,
-          reason: message,
-          ...(wording && { wording }),
+          reason,
           fix: fix && {
             label: fix.label,
             run: async () => {

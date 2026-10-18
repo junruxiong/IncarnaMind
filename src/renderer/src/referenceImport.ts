@@ -5,8 +5,6 @@
  */
 import { create } from "zustand";
 import type { ReferenceImportResult, ReferenceRecord } from "../../core/api";
-import { resolveLanguage } from "../../core/language";
-import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { core, files } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
@@ -42,13 +40,6 @@ interface ReferenceImportState {
   dismiss(): void;
 }
 
-const words = (key: MessageKey, params?: MessageParams) =>
-  translate(
-    useAppStore.getState().settings?.language ?? resolveLanguage("system", navigator.languages),
-    key,
-    params,
-  );
-
 const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
 export const useReferenceImport = create<ReferenceImportState>()((set, get) => {
@@ -78,11 +69,9 @@ export const useReferenceImport = create<ReferenceImportState>()((set, get) => {
       set({ phase: "done", result, progress: null });
       await refreshUnmatched();
       if (result.changed === 0) return undefined;
+      const { fileName } = get();
       return {
-        message: words("references.import.undo", {
-          count: result.total,
-          name: get().fileName,
-        }),
+        said: (t) => t("references.import.undo", { count: result.total, name: fileName }),
         undo: async () => {
           await core.undoReferenceImport(result.importId);
           set({ phase: "idle", result: null });

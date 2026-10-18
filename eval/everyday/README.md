@@ -9,14 +9,17 @@
 - **Asked to write, a Mind changed.** A request for text in a Mind ("write a summary page", "make it longer", "把第二段改得更正式") must change one, not answer in the panel.
 - **Every claimed change is real.** A model judges the reply against the record of what the Answer's Tools did (`judge.ts`), apart from the app's own detector, which the report shows next to it.
 - **Citations are there**: in the reply, or, for text written into a Mind, in that Mind, where no source may be written as text in brackets, like "[Deck, slide 3]".
+- **No marker without a Citation**: every Citation marker in the Answer's text ("[^2]") has its Citation. A model that writes markers without calling `cite` is asked once for its Citations (`src/core/answers/unmarkedQuotes.ts`), and the app takes out any marker still unbacked; the report says how many it took out, and a marker left in the text fails the request.
+- **No tool-call text**: nothing in the Answer's text is a Tool's call written as words, such as a `<cite>` block. The app takes it out, and gives the records of a `<cite>` block back to be recorded (`src/core/answers/toolText.ts`); one left in the text fails the request.
 - **Every Document is covered**: asked about all the Documents in scope, each is cited, or named in a sentence saying it wasn't covered.
 - **Only what was asked changes**: asked about one paragraph, the others read as they did once the Answer's changes are accepted.
 - **Changed in place**: asked to make the summary in the Mind longer, it changes that summary rather than adding a second version beside it.
 - **About the Question asked**: after the example's Answer, written in advance, the reply says nothing of an earlier Answer or of the example's Documents and figures.
+- **A cited sentence says only what its quote supports** (#1073), for the research questions: each sentence of the reply that carries a Citation is checked by the app's own Check against Documents, with the quotes it cites (`support.ts`), run by the model asked. The report gives the share judged Supported, which must be at least 95%, and lists the others. An inference belongs in a sentence of its own, with no Citation.
 
 ## The requests
 
-`cases.ts`: 52 requests in eight groups. The owner's four turns (2026-10-15). Only the paragraph asked about. Questions about the Documents. Text asked for in a Mind. The User's own text changed. Follow-ups after a write, and after an Answer put into the Mind with Add to note. Several Documents. No Mind in focus. Questions that only sound like requests. Questions asked after the example's Answer, about the User's own Documents (also from the example's own Mind), the two main ones, and a Word file just imported, in the example's language. Each is asked from a Mind of its own, after the requests it follows, in one conversation.
+`cases.ts`: 72 requests in nine groups. The owner's four turns (2026-10-15). Only the paragraph asked about. Questions about the Documents. Text asked for in a Mind. The User's own text changed. Follow-ups after a write, and after an Answer put into the Mind with Add to note. Several Documents. No Mind in focus. Questions that only sound like requests. Questions asked after the example's Answer, about the User's own Documents (also from the example's own Mind), the two main ones, and a Word file just imported, in the example's language. Each is asked from a Mind of its own, after the requests it follows, in one conversation. Twenty research questions, ten in English and ten in Chinese, are asked with no Mind in focus, over the sample PDFs, where an inference from what a Document says is tempting ("does self-attention handle very long sequences better?").
 
 The Documents:
 
@@ -36,7 +39,7 @@ INCARNAMIND_EVAL_CHAT_KEY=sk-ant-... \
 npm run eval:everyday
 ```
 
-- `INCARNAMIND_EVAL_EVERYDAY=hard` asks only the hard requests, for a stronger model such as Claude Sonnet 5.5. A list of ids asks only those: `INCARNAMIND_EVAL_EVERYDAY=owner-1,only-second-en`.
+- `INCARNAMIND_EVAL_EVERYDAY=hard` asks only the hard requests, for a stronger model such as Claude Sonnet 5.5, and `research` only the research questions. A list of ids asks only those: `INCARNAMIND_EVAL_EVERYDAY=owner-1,only-second-en`.
 - `INCARNAMIND_EVAL_EVERYDAY_RUNS` sets how many times each request is asked (3 by default).
 - Another model judges the claims, never the one asked: Claude Sonnet 5.5 on the Anthropic key (Opus 5.5 when Sonnet is asked), or the one `INCARNAMIND_EVAL_JUDGE_KIND`, `_MODEL` and `_KEY` name, which a run on another provider must set. The report says which.
 - The report goes into `eval/results/<start time>-everyday/`. `report.md` has the pass rates by language and by request, against each request's floor, the Answers' tokens, then every run's result with its reply and the Blocks it changed. `report.json` has the same data.

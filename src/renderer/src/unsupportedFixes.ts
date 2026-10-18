@@ -1,9 +1,10 @@
 /**
  * The fixes for a cited sentence found unsupported (#1111), from its card and
  * ⌘K: Cut the unsupported part, an Edit with AI that applies at once with
- * Undo; Find support, its check again in every Document; and Keep as my view,
- * which makes the sentence the User's own, as Mark as mine does, and keeps its
- * check from showing or counting, one step of Undo.
+ * Undo; Search all Documents, its check again in every Document, while it
+ * searched only a Folder; and Keep as my view, which makes the sentence the
+ * User's own, as Mark as mine does, and keeps its check from showing or
+ * counting, one step of Undo.
  */
 import type { Editor } from "@tiptap/core";
 import type * as Y from "yjs";
@@ -14,7 +15,6 @@ import { type NumberedCitation, numberedCitations } from "./editor/citationNumbe
 import { type ShownClaim, shownClaims } from "./editor/claimChecks";
 import { asOneStep, offerEditorUndo } from "./editor/editorUndo";
 import { requestEdit, useEdits } from "./editWithAi";
-import { translateNow } from "./i18n";
 
 /** The Citations a check's sentence holds, with their numbers in the Mind. */
 export const citedIn = (editor: Editor, claim: ShownClaim): NumberedCitation[] =>
@@ -53,7 +53,6 @@ export function unsupportedAt(editor: Editor): ShownClaim | null {
   );
 }
 
-/** Whether a fix can start now: no edit or check runs in the Mind. */
 export const fixesFree = (mindId: string): boolean =>
   !useEdits.getState().pending[mindId] && !useChecks.getState().running[mindId];
 
@@ -72,8 +71,11 @@ export function cutUnsupported(
   });
 }
 
-/** Checks the sentence again in every Document: one that backs it is offered as a Citation. */
-export const findSupport = (editor: Editor, mindId: string, doc: Y.Doc, claim: ShownClaim) =>
+/** Whether its check searched only the Mind's Folder, so every Document could still back it. */
+export const searchedFolder = (claim: ShownClaim): boolean =>
+  !claim.check.scope.widened && claim.check.scope.folderId !== null;
+
+export const searchAllDocuments = (editor: Editor, mindId: string, doc: Y.Doc, claim: ShownClaim) =>
   checkAgain(editor, mindId, doc, claim, true);
 
 /** Makes the sentence the User's own view: their words, and a check that no longer counts. */
@@ -93,5 +95,5 @@ export function keepAsView(editor: Editor, claim: ShownClaim): void {
   });
   makeMine(state, tr, claim.sentence.from, claim.sentence.to);
   asOneStep(editor, () => editor.view.dispatch(tr));
-  offerEditorUndo(editor, translateNow("claim.keptAsView"));
+  offerEditorUndo(editor, (t) => t("claim.keptAsView"));
 }

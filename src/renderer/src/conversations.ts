@@ -320,11 +320,12 @@ export function stopWriting(): void {
 export async function clearConversation(): Promise<void> {
   const { openId } = useConversations.getState();
   if (!openId) return;
-  const name = conversationLabel(conversationById(openId));
+  const conversation = conversationById(openId);
+  const name = (conversation && conversationName(conversation)) || "";
   await core.deleteConversation(openId);
   startNewChat();
   useUndo.getState().push({
-    message: translateNow("assistant.cleared", { title: name }),
+    said: (t) => t("assistant.cleared", { title: name || t("conversation.untitled") }),
     undo: async () => {
       await core.restore([{ kind: "conversation", id: openId }]);
       await openConversation(openId);

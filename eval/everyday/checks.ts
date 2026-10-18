@@ -8,6 +8,10 @@
  * - **Citations are there**: in the reply, or, for text written into a Mind,
  *   in the Mind, and no source there is written as text, like
  *   "[Deck, slide 3]" (#1075).
+ * - **No marker without a Citation**: every Citation marker the Answer's text
+ *   shows has its Citation, whatever the request.
+ * - **No tool-call text**: nothing in the Answer's text is a Tool's call
+ *   written as words, such as a `<cite>` block.
  * - **Every Document is covered**: asked about all the Documents in scope,
  *   each is cited, or named in a sentence saying it wasn't covered.
  * - **Only what was asked changes**: asked about one paragraph, the others
@@ -19,7 +23,9 @@
  *   Answer, nothing in the reply is about an earlier Answer or the example.
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
+import { toolTextIn } from "../../src/core/answers/toolText";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
+import { markersWithoutCitation } from "../../src/shared/answerBlocks";
 import type { ClaimVerdict } from "./judge";
 
 /** What a request expects of its Answer. */
@@ -41,7 +47,7 @@ export interface Expected {
 export interface RequestOutcome {
   expected: Expected;
   answer: Pick<ConversationAnswer, "text" | "toolCalls" | "steps"> & {
-    citations: readonly Pick<MarkedCitation, "documentId">[];
+    citations: readonly Pick<MarkedCitation, "documentId" | "marker">[];
   };
   verdict: ClaimVerdict;
   /** The Documents the Citations it wrote into Minds quote, by id. */
@@ -60,6 +66,8 @@ export type RequestFailure =
   /** `flagged`: the app's own net said so under the reply. */
   | { kind: "unbacked"; sentences: string[]; flagged: boolean }
   | { kind: "no-citations" }
+  | { kind: "dead-markers"; markers: number[] }
+  | { kind: "tool-text"; blocks: string[] }
   | { kind: "uncovered"; documents: string[] }
   | { kind: "outside"; blocks: number[] }
   | { kind: "beside" }
@@ -111,6 +119,10 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   if (expected.cite && outcome.scoped.length > 0 && citedHere === 0) {
     failures.push({ kind: "no-citations" });
   }
+  const dead = markersWithoutCitation(answer);
+  if (dead.length > 0) failures.push({ kind: "dead-markers", markers: dead });
+  const shaped = toolTextIn(answer.text);
+  if (shaped.length > 0) failures.push({ kind: "tool-text", blocks: shaped });
   if (expected.coverAll) {
     const cited = new Set([
       ...answer.citations.map((citation) => citation.documentId),
@@ -156,6 +168,10 @@ export function failureLine(failure: RequestFailure): string {
       return `claims a change no call made${failure.flagged ? " (flagged under the reply)" : ""}: ${failure.sentences.map((sentence) => `“${sentence}”`).join(" ")}`;
     case "no-citations":
       return "Documents in scope, and nothing it wrote cites them";
+    case "dead-markers":
+      return `wrote Citation markers that no Citation backs: ${failure.markers.map((marker) => `[^${marker}]`).join(", ")}`;
+    case "tool-text":
+      return `shows a Tool's call written as text: ${failure.blocks.map((block) => `“${block.slice(0, 60)}”`).join(", ")}`;
     case "uncovered":
       return `neither cites nor names as left out ${failure.documents.map((name) => `“${name}”`).join(", ")}`;
     case "outside":

@@ -36,6 +36,7 @@ import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } fro
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { realHomeProblem } from "./testHome";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
+import { guardQuit } from "./unsavedChanges";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 import { keepWindowPlace, windowPlace } from "./windowState";
 
@@ -271,6 +272,7 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
+  guardQuit(core, () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null);
   if (taskKinds.length > 0) {
     const started = core;
     (globalThis as { incarnamindScriptedTask?: unknown }).incarnamindScriptedTask = {

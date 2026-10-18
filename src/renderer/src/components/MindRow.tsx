@@ -49,7 +49,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
   const title = mindName(mind) || t("mind.untitled");
   const objectMenu = useObjectMenu({ kind: "mind", id: mind.id });
   const select = useSelectable({ kind: "mind", id: mind.id }, "sidebar", () => openMind(mind.id));
-  const lit = isOpen || select.selected;
+  const lit = select.selected;
   const treeItem = useTreeItem({ depth, selected: select.selected });
   /** The Minds a drag or "Move to…" from this row takes: all those selected, if it is one of them. */
   const mindIdsHere = () => {
