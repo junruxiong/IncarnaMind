@@ -31,6 +31,7 @@ import {
   BLOCK_ID_ATTRIBUTE,
   IMAGE_NODE,
   type KeptChangeKind,
+  PARAGRAPH_FORMAT_ATTRIBUTE,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
@@ -555,7 +556,7 @@ class Reader {
   private readonly absorbed = new Set<XmlElement>();
   /** Someone's changes kept as is, by kind. */
   private readonly kept: Partial<Record<KeptChangeKind, number>> = {};
-  private paragraphLook: ParagraphLookContext = { look: {}, runs: [] };
+  private paragraphLook: ParagraphLookContext = { look: {}, format: {}, runs: [] };
   private tableLook: TableLookContext | null = null;
 
   private constructor(
@@ -1107,6 +1108,9 @@ class Reader {
     if (main !== null) this.markOnlyOtherRuns(node.content, main);
     const look = this.look.paragraphKey(this.paragraphLook, main);
     if (look) node.attrs[WORD_LOOK_ATTRIBUTE] = look;
+    if (Object.keys(this.paragraphLook.format).length > 0) {
+      node.attrs[PARAGRAPH_FORMAT_ATTRIBUTE] = this.paragraphLook.format;
+    }
     this.noteWhole(node, pPr, inCell);
     const sectPr = pPr && child(pPr, "w:sectPr");
     if (sectPr) {
@@ -1451,13 +1455,14 @@ class Reader {
     }
   }
 
-  /** Bold, italic, underline and strike as Word resolves them, styles included, so the editor's toggles act on them. */
+  /** Bold, italic, underline and strike as Word resolves them, styles included, so the editor's toggles act on them; then the run's own colour and raise. */
   private marksOfRun(run: XmlElement): MarkJSON[] {
     const rPr = child(run, "w:rPr");
-    const { key, look } = this.look.run(rPr, this.paragraphLook, textIn(run).length);
+    const { key, look, marks } = this.look.run(rPr, this.paragraphLook, textIn(run).length);
     return [
       ...formattingMarks(look),
       ...runMarks(rPr).filter((mark) => !RESOLVED_MARKS.has(mark.type)),
+      ...marks,
       ...(key ? [{ type: WORD_RUN_MARK, attrs: { k: key } }] : []),
     ];
   }
