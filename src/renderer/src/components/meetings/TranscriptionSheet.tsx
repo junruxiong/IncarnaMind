@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { TranscriptionRoute, TranscriptionServiceStatus } from "../../../../core/api";
-import { useLanguage, useT } from "../../i18n";
+import { useGap, useLanguage, useT } from "../../i18n";
 import { useMeetings } from "../../meetings";
 import { serviceMeta, useTranscriptionServices } from "../../transcriptionServices";
 import { CloudLineIcon, ComputerLineIcon } from "../lineIcons";
@@ -23,6 +23,9 @@ const lineClass = "text-[13px] leading-[19px] text-ink-secondary";
  */
 export function TranscriptionSheet() {
   const t = useT();
+  const gap = useGap();
+  const foot = t("meetings.sheet.foot");
+  const tell = t("meetings.notice.tell");
   const waiting = useMeetings((state) => state.sheetFor);
   const services = useTranscriptionServices((state) => state.services).filter(
     (service) => service.hasKey,
@@ -63,7 +66,9 @@ export function TranscriptionSheet() {
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-1">
           <p className="min-w-0 flex-1 text-[13px] leading-[18px] text-ink-meta">
-            {t("meetings.sheet.foot")} {t("meetings.notice.tell")}
+            {foot}
+            {gap(foot, tell)}
+            {tell}
           </p>
           <button
             type="button"

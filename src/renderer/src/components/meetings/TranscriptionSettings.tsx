@@ -36,8 +36,27 @@ export function TranscriptionRouteLine({ id }: { id?: string }) {
     );
   }
   return (
-    <p id={id} data-testid="meetings-route-line" className={rowTextClass}>
-      {serviceMeta(service, t, language)}. {t("meetings.route.data", { service: service.name })}
+    <div id={id} data-testid="meetings-route-line" className="flex flex-col gap-0.5">
+      <p className="text-[13px] leading-5 text-ink-meta tabular-nums">
+        {serviceMeta(service, t, language)}
+      </p>
+      <p className={rowTextClass}>{t("meetings.route.data", { service: service.name })}</p>
+    </div>
+  );
+}
+
+/**
+ * Where a job list offers the Meetings choice (first run, Settings › Models), the line saying
+ * that meeting audio goes to the chosen cloud service; nothing while it is this computer.
+ */
+export function TranscriptionRouteConsent() {
+  const t = useT();
+  const route = useAppStore((state) => state.settings?.device.transcriptionRoute) ?? "local";
+  const service = useTranscriptionServicesList().find((each) => each.route === route);
+  if (!service) return null;
+  return (
+    <p data-testid="meetings-route-consent" className="text-[12px] leading-5 text-ink-meta">
+      {t("meetings.route.data", { service: service.name })}
     </p>
   );
 }

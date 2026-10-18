@@ -7,6 +7,7 @@ import { useLanguage, useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { CheckLineIcon } from "../lineIcons";
 import { ROUTE_LABELS, TranscriptionRouteSelect } from "../meetings/TranscriptionRouteSelect";
+import { TranscriptionRouteConsent } from "../meetings/TranscriptionSettings";
 import { buttonStyle } from "../ui";
 import { CHATGPT_RECIPIENT } from "./ChatGptSignIn";
 import { jobSelectClass, ROWS, RoleSelect, useJobSummary, useModelRoles } from "./ModelDefaults";
@@ -119,6 +120,7 @@ export function SetupReady() {
         />
       </section>
       {recipient && <SendsLine provider={recipient} testId="setup-ready-sends" />}
+      <TranscriptionRouteConsent />
       <div data-setup-foot>
         <button
           ref={next}
