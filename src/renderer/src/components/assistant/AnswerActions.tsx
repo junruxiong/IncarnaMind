@@ -2,12 +2,10 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { ConversationAnswer } from "../../../../core/api";
 import { copyAnswer } from "../../answerEditors";
 import { shortcutLabel } from "../../commands/keymap";
-import { stopAnswer } from "../../conversations";
 import { useDismissOnEscape } from "../../escapeDismiss";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { useAnswerLine, useUndo } from "../../undo";
-import { StopIcon } from "../icons";
 import { CheckLineIcon, ChevronDownLineIcon, CopyLineIcon, PlusLineIcon } from "../lineIcons";
 import { useGoesBy } from "../UndoLine";
 
@@ -18,13 +16,13 @@ const COPIED_MS = 1500;
  * Under an Answer in the assistant (#201, #391; DESIGN.md, Answer): only
  * "Copy · Add to note ▾", after "Stopped" for one stopped; on hover or focus,
  * and always on the newest. Its model, scope and searches are in its steps.
- * While it is written, Stop. Once added, "Added to “{Mind}” · Undo" (⌘Z
- * too), while that can be taken back. Tab reaches each by its name.
+ * While it is written, Stop is the composer's and the wait line's, not here.
+ * Once added, "Added to “{Mind}” · Undo" (⌘Z too), while that can be taken
+ * back. Tab reaches each by its name.
  */
 export function AnswerActions({
   answer,
   streaming,
-  stopAbove,
   canKeep,
   focusedMindName,
   onAdd,
@@ -32,8 +30,6 @@ export function AnswerActions({
 }: {
   answer: ConversationAnswer;
   streaming: boolean;
-  /** Stop is already on the line above, which says how long the wait takes. */
-  stopAbove: boolean;
   /** It has something to keep: Copy and Add to note. */
   canKeep: boolean;
   /** The Mind in focus, which Add to note adds to; null opens the ▾ instead. */
@@ -63,9 +59,7 @@ export function AnswerActions({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  if (streaming) {
-    return stopAbove ? null : <WritingLine onStop={() => stopAnswer(answer.id)} />;
-  }
+  if (streaming) return <WritingLine />;
 
   if (added) {
     return (
@@ -168,25 +162,14 @@ export function AnswerActions({
 }
 
 /**
- * Under an Answer being written, or on its way: Stop, or what it says
- * instead (that it stopped before it started). Its step is on its steps' line.
+ * Under an Answer being written, or on its way: the room its actions take, so
+ * they come without moving the page, and "Stopped" for one stopped before it
+ * started. Its step is on its steps' line.
  */
-export function WritingLine({ status, onStop }: { status?: ReactNode; onStop?: () => void }) {
-  const t = useT();
+export function WritingLine({ status }: { status?: ReactNode }) {
   return (
     <div data-testid="answer-actions" className="assistant-answer-actions">
       {status}
-      {onStop && (
-        <button
-          type="button"
-          data-testid="answer-stop"
-          onClick={onStop}
-          className="assistant-answer-action"
-        >
-          <StopIcon className="size-3" />
-          {t("answer.stop")}
-        </button>
-      )}
     </div>
   );
 }

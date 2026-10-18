@@ -194,7 +194,6 @@ export function AssistantAnswer({
       <AnswerActions
         answer={answer}
         streaming={streaming}
-        stopAbove={silent}
         canKeep={written}
         focusedMindName={keeping.focusedMindName}
         onAdd={() => keeping.add(answer)}
