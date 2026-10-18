@@ -3,7 +3,8 @@
  * checked in one run, as Verify checks someone else's PDF (#97).
  *
  * 1. The Mind's sentences are read, as for note health: those in paragraphs,
- *    lists, quotes and Answers, not headings or Questions.
+ *    lists, quotes and Answers, not headings or Questions, nor those the User
+ *    keeps as their own view (#1111).
  * 2. The model names the claims among them, leaving out questions and the
  *    User's own opinions (./findClaims), before the run is asked for, so its
  *    estimate counts them (`findMindClaims`), and only once. In "changed"
@@ -43,6 +44,7 @@ import { type QueuedClaim, type RunChecksOptions, runChecks } from "./runChecks"
 import {
   checkedSentences,
   everySentence,
+  keptAsView,
   markedSentences,
   markSentence,
   type SelectedSentence,
@@ -215,13 +217,16 @@ export function createMindCheck(options: MindCheckOptions) {
       const sentences = everySentence(blocks).filter((sentence) => isClaim(sentence.text));
       const keys = new Set(sentences.map((sentence) => sentenceKey(sentence.text)));
       const widened = new Set<SelectedSentence>();
-      if (mode === "all") return { fresh: sentences, again: [], keys, skipped: new Set(), widened };
       const marks = markedSentences(blocks);
       const markOf = (sentence: SelectedSentence) =>
         marks.find(
           (mark) =>
             mark.element === sentence.element && mark.from < sentence.to && mark.to > sentence.from,
         );
+      if (mode === "all") {
+        const fresh = sentences.filter((sentence) => !keptAsView(marks, sentence));
+        return { fresh, again: [], keys, skipped: new Set(), widened };
+      }
       const fresh: SelectedSentence[] = [];
       const again: SelectedSentence[] = [];
       for (const sentence of sentences) {

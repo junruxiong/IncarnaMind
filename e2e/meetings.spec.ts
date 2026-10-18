@@ -108,7 +108,9 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   // The first recording on this device shows the notice once; Cancel records nothing.
   await start.getByTestId("meeting-start-record").click();
   const notice = window.getByTestId("meeting-notice");
-  await expect(notice).toContainText("Tell everyone you’re recording before you start.");
+  await expect(notice).toContainText(
+    "Tell everyone you’re recording: in many places it’s the law.",
+  );
   await shot(window, "meeting-notice-en");
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
@@ -116,7 +118,7 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
     }),
   );
   const zhNotice = await notice.locator("#meeting-notice-body p").first().textContent();
-  expect(zhNotice).toContain("会议中其他人的声音。音频只保存在");
+  expect(zhNotice).toContain("会议中的所有人。音频只存在");
   expect(zhNotice).not.toMatch(/[。：] /);
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
@@ -229,7 +231,7 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   // It can't be undone, so the line asks first; Esc keeps it.
   await audio.getByTestId("meeting-audio-delete").click();
   const confirm = window.getByTestId("meeting-audio-confirm");
-  await expect(confirm).toContainText("It can’t be brought back. Your notes stay.");
+  await expect(confirm).toContainText("for good? Your notes stay.");
   await expect(confirm.getByTestId("meeting-audio-delete-confirm")).toBeFocused();
   const question = await confirm.textContent();
   await window.keyboard.press("Escape");
@@ -614,7 +616,7 @@ test("with the computer's sound denied, a line says so and opens System Settings
 
   const line = window.getByTestId("meeting-line-system");
   await expect(line).toContainText(
-    "Only your microphone is recorded: IncarnaMind isn’t allowed to record the computer’s sound.",
+    "Only your microphone is recorded: computer sound isn’t allowed.",
   );
   await expect(bar).toHaveAttribute("data-status", "recording");
   await shot(window, "meeting-system-denied-en");
@@ -638,7 +640,7 @@ test("with the computer's sound denied, a line says so and opens System Settings
       user: { language: "zh-CN" },
     }),
   );
-  await expect(line).toContainText("只录到了你的麦克风：IncarnaMind 没有录制电脑声音的权限。");
+  await expect(line).toContainText("只录到了麦克风：没有录制电脑声音的权限。");
   await expect(speakers.first()).toHaveText("发言人 ?");
   await expect(bar).toContainText("正在录制");
   await shot(window, "meeting-system-denied-zh");
@@ -758,10 +760,9 @@ test("recording details: a slow engine, a fallback and a part that can't be save
   await toggle.click();
   const details = bar.getByTestId("meeting-details");
   await expect(details).toBeVisible();
-  await expect(details).toContainText(
-    /Transcribed on this computer at 0\.\d× real time, too slow to keep up live/,
-    { timeout: 30_000 },
-  );
+  await expect(details).toContainText(/Transcribed here at 0\.\d× real time, too slow to keep up/, {
+    timeout: 30_000,
+  });
   await expect(details).toContainText(
     "Switched to cloud transcription: this computer fell behind",
     {
@@ -784,7 +785,7 @@ test("recording details: a slow engine, a fallback and a part that can't be save
   await expect(details).toBeHidden();
   const unsaved = bar.getByTestId("meeting-line-unsaved");
   await expect(unsaved).toHaveText(
-    /^\d+ s of audio couldn’t be saved, so it isn’t in the transcript\. · Details$/,
+    /^\d+ s of audio couldn’t be saved, so it’s not transcribed\. · Details$/,
     { timeout: 30_000 },
   );
   await expect(window.getByTestId("meeting-line-save")).toHaveCount(0);
@@ -794,7 +795,7 @@ test("recording details: a slow engine, a fallback and a part that can't be save
   await expect(details).toContainText(
     /\d+ s of (microphone audio|the computer’s sound) lost: it couldn’t be saved/,
   );
-  await expect(unsaved).toHaveText(/couldn’t be saved, so it isn’t in the transcript\.$/);
+  await expect(unsaved).toHaveText(/couldn’t be saved, so it’s not transcribed\.$/);
   await shot(window, "meeting-details-unsaved-wide-en");
 
   await setWindowSize(app, window, 900, 700);
@@ -814,7 +815,7 @@ test("recording details: a slow engine, a fallback and a part that can't be save
     }),
   );
   await expect(details).toContainText("已改用云端转写：这台电脑跟不上");
-  await expect(details).toContainText(/在这台电脑上转写，速度是实时的 0\.\d 倍，跟不上实时转写/);
+  await expect(details).toContainText(/在这台电脑上转写，速度是实时的 0\.\d 倍，跟不上/);
   await expect(unsaved).toHaveText(/^有 \d+ 秒的音频无法保存，转写稿中缺少这部分。$/);
   await expect(toggle).toHaveAttribute("aria-label", "隐藏录制详情");
   await shot(window, "meeting-details-narrow-zh");

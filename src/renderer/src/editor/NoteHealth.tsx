@@ -21,7 +21,7 @@ import { useAppStore } from "../store";
 import { useCheckUnread } from "../unreadFiles";
 import { AddedDocumentsLine } from "./AddedDocumentsLine";
 import { AnswerError } from "./AnswerView";
-import { coverageOf, sameCoverage, shownClaims } from "./claimChecks";
+import { coverageOf, keptSentences, sameCoverage, shownClaims } from "./claimChecks";
 import { type NoteHealth as Health, type HealthPart, noteHealth } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
 import { CheckedWhen, MindCheckAction } from "./MindCheckLine";
@@ -90,7 +90,7 @@ export function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health 
           editor.state.doc,
           shownClaims(editor.state),
           (attributes: CitationAttributes) => citationState(attributes, documents, kept).check,
-          skipped,
+          new Set([...skipped, ...keptSentences(editor.state)]),
         ),
       );
     };

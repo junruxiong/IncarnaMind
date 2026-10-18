@@ -145,6 +145,54 @@ describe("A Citation marker never shows without a Citation behind it", { timeout
     expect(markersWithoutCitation(answer)).toEqual([]);
   });
 
+  // protects=markers in a table's cells are asked about once like any others, and each Citation takes the marker of the cell it names, in English and Chinese over an English Document; fails_when=the model isn't asked, a Citation lands outside the table, or a marker is left; no_claim=none beyond protects.
+  test.each([
+    [
+      "English",
+      ENGLISH.question,
+      ["Tea began in southwest China [^1]", "Traders took it to Tibet [^2]"],
+      "Source",
+    ],
+    [
+      "Chinese",
+      CHINESE.question,
+      ["茶最早在中国西南地区被当作药饮[^1]", "商人把茶叶运到了西藏[^2]"],
+      "来源",
+    ],
+  ])(
+    "%s: the markers in a table's cells are asked about once",
+    async (_language, question, cells, head) => {
+      const table = [
+        `| Claim | ${head} |`,
+        "|:--|:--|",
+        ...cells.map((cell) => `| ${cell} | Tea history |`),
+      ].join("\n");
+      let requests = 0;
+      const model = markingModel(table, (call) => {
+        requests++;
+        const [id] = passageIds(call);
+        return {
+          text: JSON.stringify({
+            citations: [
+              { sentence: cells[0], passage: id, quote: FIRST },
+              { sentence: cells[1], passage: id, quote: SECOND },
+            ],
+          }),
+        };
+      });
+      const { core } = await setUpWithDocuments(model, [TEA]);
+
+      const answer = await askAssistant(core, { text: question });
+
+      expect(requests).toBe(1);
+      expect(answer.text).toBe(table);
+      expect(answer.citations.map(({ marker, quote }) => [marker, quote])).toEqual([
+        [1, FIRST],
+        [2, SECOND],
+      ]);
+    },
+  );
+
   // protects=when the model gives no Citation for what it wrote, the Answer shows no marker and keeps its sentences, after one request and no more; fails_when=a marker shows, a sentence goes, or the model is asked again; no_claim=how the check treats the uncited sentences (tests/core/claims.test.ts).
   test.each([
     ["English", ENGLISH],
@@ -204,5 +252,15 @@ describe("The text without markers nothing backs", () => {
       "\n",
     );
     expect(withoutDeadMarkers(kept, backed)).toBe(kept);
+    for (const written of [
+      "Write ``a [^2] b`` for it.",
+      "The sum $x[^2] + y$ stays.",
+      "$$\nx[^2]\n$$",
+    ]) {
+      expect(withoutDeadMarkers(written, backed)).toBe(written);
+    }
+    expect(withoutDeadMarkers("| A [^2] | B [^1] |\n|:--|:--|\n| C [^3] | D |", backed)).toBe(
+      "| A | B [^1] |\n|:--|:--|\n| C | D |",
+    );
   });
 });

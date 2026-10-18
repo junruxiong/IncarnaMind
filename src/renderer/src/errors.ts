@@ -33,8 +33,10 @@ const STACK_FROM = /\r?\n\s+at\s[\s\S]*$/;
 
 /** The failures of the system a User can read plain words for, by their code. */
 const SYSTEM_REASONS: readonly (readonly [RegExp, MessageKey])[] = [
-  [/\b(EACCES|EPERM|EROFS)\b/, "error.system.notAllowed"],
-  [/\b(ENOSPC|EDQUOT)\b/, "error.system.full"],
+  [/\b(EACCES|EPERM|EROFS)\b|attempt to write a readonly database/, "error.system.notAllowed"],
+  [/\b(ENOSPC|EDQUOT)\b|database or disk is full/, "error.system.full"],
+  [/disk I\/O error/, "error.system.diskError"],
+  [/database is (?:locked|busy)/, "error.system.busy"],
   [/\b(ENOENT|ENOTDIR)\b/, "error.system.gone"],
   [/\bENAMETOOLONG\b/, "error.system.nameTooLong"],
   [/\bEEXIST\b/, "error.system.exists"],

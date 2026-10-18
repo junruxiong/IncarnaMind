@@ -98,6 +98,26 @@ describe("The everyday request guards", () => {
     expect(asked("Self-attention is faster [^1]. Write `[^2]` for a marker.", [1])).toEqual([]);
   });
 
+  // protects=a Tool's call written as text in the Answer fails, in English and Chinese, and the same tag around words or in code doesn't; fails_when=a <cite> block passes or an HTML explanation fails; no_claim=none beyond protects.
+  test("a Tool's call written as text fails", () => {
+    const asked = (text: string) =>
+      requestFailures(
+        outcome({
+          expected: { write: false, cite: false, coverAll: false },
+          answer: { text, citations: [], toolCalls: [], steps: null },
+          citedInMinds: [],
+        }),
+      ).map((failure) => failure.kind);
+    const block = '<cite>\n[{"marker":1,"passage":"P1","quote":"A quote."}]\n</cite>';
+    expect(asked(`Self-attention is faster.\n\n${block}`)).toEqual(["tool-text"]);
+    expect(
+      asked(
+        `自注意力更快。\n\n${block.replace(/<|>/g, (found) => (found === "<" ? "&lt;" : "&gt;"))}`,
+      ),
+    ).toEqual(["tool-text"]);
+    expect(asked("The <cite> element marks a title, as in `<cite>[{}]</cite>`.")).toEqual([]);
+  });
+
   // protects=asked to make the summary in the Mind longer, a second version added beside it fails, and one changed in place passes; fails_when=either is judged the other way; no_claim=none beyond protects.
   test("a longer version added beside the summary fails, and one changed in place passes", () => {
     const call = (tool: string): AnswerToolCall => ({

@@ -6,7 +6,8 @@
  * at the Location, that line is on), then answers with a marker. A Question
  * with "misquote" in it gets a quote that isn't on the page; one with "no page"
  * names no page, as a small model often doesn't; one with "without citing" (不引用)
- * writes a marker and never calls cite, as a model sometimes does; one with "each"
+ * writes a marker and never calls cite, as a model sometimes does; one with "citing as text" (文字引用)
+ * writes its records as text in a <cite> block instead of calling cite; one with "each"
  * cites the first Passage of each Document found, with a marker for each; one
  * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one with
  * "quotation marks" (引号) quotes the clause after a line's colon or comma, and writes
@@ -84,6 +85,13 @@ export const CITED_ANSWER = "Your Documents answer this [^1].\n\nThat is all.";
 
 /** A Question the model answers with a marker and no `cite` call. */
 const WITHOUT_CITING = /\bwithout citing\b|不引用/i;
+
+/** A Question the model answers with its records written as text, not a `cite` call. */
+const CITING_AS_TEXT = /\bciting as text\b|文字引用/i;
+
+/** The scripted Answer to such a Question: a sentence with a marker, then the records in a `<cite>` block. */
+const citedAsText = (question: string, records: readonly unknown[]) =>
+  `${uncitedAnswer(question)}\n\n<cite>\n${JSON.stringify(records)}\n</cite>`;
 
 /** The scripted Answer to such a Question: a sentence with a marker no record backs. */
 const uncitedAnswer = (question: string) =>
@@ -350,6 +358,9 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
     };
   }
   if (WITHOUT_CITING.test(question)) return { text: uncitedAnswer(question) };
+  if (CITING_AS_TEXT.test(question)) {
+    return { text: citedAsText(question, recordsFor(searches.at(-1) ?? "", question)) };
+  }
   const cites = toolResults(prompt, "cite");
   if (cites.length === 0) {
     const records = recordsFor(searches.at(-1) ?? "", question);

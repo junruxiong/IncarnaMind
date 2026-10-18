@@ -69,6 +69,7 @@ import { createMindCheck, type MindCheckOptions } from "./mindCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
 import { createVerify, type VerifyOptions } from "./verify";
 import { createContradictionWatch, type WatchOptions } from "./watch";
+import { createWrittenCheck, type WrittenCheckOptions } from "./written";
 
 /**
  * What the "checks" flow sends: the sentences checked, with their paragraphs,
@@ -126,6 +127,8 @@ export interface ChecksOptions
     };
   engine: AnswerEngine;
   retention: Pick<VersionRetention, "retain">;
+  /** Edit with AI's new text for a passage not in a Mind, for what the assistant writes (#1111). */
+  editText: WrittenCheckOptions["editText"];
   now(): Date;
 }
 
@@ -525,8 +528,24 @@ export function createChecks(options: ChecksOptions) {
     track,
   });
 
+  const checkWritten = createWrittenCheck({
+    ...options,
+    allowed: ({ provider }) =>
+      provider.service === null ||
+      options.consent.status("checks", provider.service) === "accepted",
+    claimCheck,
+    scopeOf: (mindId) => scopeOf(mindId, false, options.originalOf(mindId) ?? undefined),
+    citedNow,
+    withResult,
+    retainEvidence,
+    claimTimeLimitMs: options.watch.claimTimeLimitMs,
+  });
+
   return {
     ...verify,
+
+    /** What the assistant wrote in a Mind, checked before it lands (./written). */
+    checkWritten,
 
     async checkSentences(input: unknown): Promise<CheckSentencesResult> {
       const parsed = parseCheck(input);
