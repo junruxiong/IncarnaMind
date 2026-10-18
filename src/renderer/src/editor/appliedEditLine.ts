@@ -12,6 +12,16 @@ import type { Language } from "../../../core/language";
 import type { MessageKey, MessageParams } from "../../../shared/i18n";
 import { type ChangeCounts, changeFact } from "../changeFacts";
 import { SPARK_PATH } from "../components/iconPaths";
+import {
+  type ChangedBlock,
+  LINE_WIDGET,
+  originalShown,
+  rewrittenSections,
+  sectionKey,
+  sectionLine,
+  toggled,
+  wasLine,
+} from "./changeOriginals";
 import { fromDocument, proposalsIn } from "./proposalReview";
 import { blockAt } from "./writingPlace";
 
@@ -43,6 +53,11 @@ export interface AppliedChange {
   removed: Fragment;
   /** Whole Blocks, added or taken out; `to` of added ones is just inside the last one's end. */
   block: "added" | "removed" | null;
+  /**
+   * The paragraph it wrote anew, by Block id (#1028): its place is all that
+   * paragraph's text, as the positions before its old words went with them.
+   */
+  paragraph?: string;
 }
 
 export type AppliedLine = (
@@ -50,7 +65,8 @@ export type AppliedLine = (
       kind: "applied";
       /** Null at the Mind's end. */
       blockId: string | null;
-      places: number;
+      /** What it changed, added or removed. */
+      blocks: ChangedBlocks;
       /** What the assistant was asked for, as its Answer counts it (#880): "Wrote 3 paragraphs". */
       facts?: ChangeCounts;
       reason: string | null;
@@ -63,6 +79,8 @@ export type AppliedLine = (
       changes: readonly AppliedChange[];
       byAssistant?: true;
       undo?: { available(): boolean; mind: string };
+      /** Changes, and sections, whose old text shows, struck (`changeOriginals`). */
+      shown?: readonly string[];
     }
   | {
       kind: "held";
@@ -170,6 +188,10 @@ export function placeOfChange(
   state: EditorState,
   change: AppliedChange,
 ): { from: number; to: number } | null {
+  if (change.paragraph) {
+    const found = blockAt(state.doc, change.paragraph);
+    return found ? { from: found.pos + 1, to: found.pos + found.node.nodeSize - 1 } : null;
+  }
   const binding = ySyncPluginKey.getState(state)?.binding;
   if (!binding) return null;
   const at = (relative: unknown): number | null =>
@@ -183,16 +205,98 @@ export function placeOfChange(
 
 const textOf = (removed: Fragment) => removed.textBetween(0, removed.size, "\n", "￼");
 
-function mainLine(line: AppliedLine, options: Options): HTMLElement {
+const COUNTED: ReadonlySet<string> = new Set(["paragraph", "heading"]);
+
+/** What an edit's lines count: the paragraphs and headings it changed, and its tables added or removed whole. */
+export interface ChangedBlocks {
+  paragraphs: number;
+  tables: number;
+}
+
+/**
+ * What the changes shown again are in, as the applied line, its Undo notice
+ * and Review changes all count it: a table added or removed whole is one
+ * table, not its cells.
+ */
+export function changedBlocksOf(
+  state: EditorState,
+  changes: readonly AppliedChange[],
+): ChangedBlocks {
+  const counted = new Set<number>();
+  const tables = new Set<number>();
+  let removed = 0;
+  let removedTables = 0;
+  for (const change of changes) {
+    const place = placeOfChange(state, change);
+    if (!place) continue;
+    if (change.block === "removed") {
+      let blocks = 0;
+      let wholeTables = 0;
+      change.removed.descendants((node) => {
+        if (node.type.name === "table") {
+          wholeTables++;
+          return false;
+        }
+        if (COUNTED.has(node.type.name)) blocks++;
+        return !node.isTextblock;
+      });
+      removedTables += wholeTables;
+      removed += wholeTables > 0 ? blocks : Math.max(blocks, 1);
+      continue;
+    }
+    state.doc.nodesBetween(place.from, Math.max(place.to, place.from + 1), (node, pos) => {
+      if (node.type.name === "table" && change.block === "added") {
+        tables.add(pos);
+        return false;
+      }
+      if (COUNTED.has(node.type.name)) counted.add(pos);
+      return !node.isTextblock;
+    });
+  }
+  return { paragraphs: counted.size + removed, tables: tables.size + removedTables };
+}
+
+const changesIn = (t: Translate, { paragraphs, tables }: ChangedBlocks): string => {
+  const counted =
+    tables === 1 ? t("edit.count.tables.one") : t("edit.count.tables", { count: tables });
+  if (paragraphs === 0) return counted;
+  return t("edit.changes", {
+    paragraphs:
+      paragraphs === 1
+        ? t("mindChanges.count.paragraphs.one")
+        : t("mindChanges.count.paragraphs", { count: paragraphs }),
+    tables: counted,
+  });
+};
+
+/** What the applied line and its Undo notice say an edit changed: "Changed 3 paragraphs and 1 table". */
+export function appliedText(t: Translate, blocks: ChangedBlocks): string {
+  if (blocks.tables > 0) return t("edit.applied.changes", { changes: changesIn(t, blocks) });
+  return blocks.paragraphs === 1
+    ? t("edit.applied.one")
+    : t("edit.applied", { count: blocks.paragraphs });
+}
+
+function reviewText(t: Translate, blocks: ChangedBlocks, byAssistant: boolean): string {
+  if (blocks.tables > 0) {
+    const changes = changesIn(t, blocks);
+    return byAssistant
+      ? t("edit.review.assistant.changes", { changes })
+      : t("edit.review.changes", { changes });
+  }
+  const count = blocks.paragraphs;
+  if (byAssistant) {
+    return count === 1 ? t("edit.review.assistant.one") : t("edit.review.assistant", { count });
+  }
+  return count === 1 ? t("edit.review.one") : t("edit.review", { count });
+}
+
+function mainLine(line: AppliedLine, options: Options, blocks: ChangedBlocks): HTMLElement {
   const t = options.translate;
   if (line.kind === "applied") {
     const what = text(
       "min-w-0",
-      line.facts
-        ? changeFact(t, line.facts, null)
-        : line.places === 1
-          ? t("edit.applied.one")
-          : t("edit.applied", { count: line.places }),
+      line.facts ? changeFact(t, line.facts, null) : appliedText(t, line.blocks),
       "applied-count",
     );
     const parts: (Node | string)[] = [
@@ -208,7 +312,6 @@ function mainLine(line: AppliedLine, options: Options): HTMLElement {
     return element;
   }
   if (line.kind === "review") {
-    const count = line.changes.length;
     const undo = button("undo-all", t("edit.review.undoAll"));
     if (line.undo && !line.undo.available()) {
       undo.setAttribute("aria-disabled", "true");
@@ -216,17 +319,7 @@ function mainLine(line: AppliedLine, options: Options): HTMLElement {
     }
     return lineElement("applied-line", "applied-line", [
       sparkle(),
-      text(
-        "min-w-0",
-        line.byAssistant
-          ? count === 1
-            ? t("edit.review.assistant.one")
-            : t("edit.review.assistant", { count })
-          : count === 1
-            ? t("edit.review.one")
-            : t("edit.review", { count }),
-        "applied-count",
-      ),
+      text("min-w-0", reviewText(t, blocks, line.byAssistant === true), "applied-count"),
       dot(),
       undo,
       dot(),
@@ -260,54 +353,152 @@ function placeOf(doc: ProseMirrorNode, blockId: string | null): number | null {
   return blockAt(doc, blockId)?.pos ?? null;
 }
 
-/** An applied edit's changes shown again (Review changes): old words struck, new ones underlined, the doc left as it is. */
-function changeMarks(state: EditorState, changes: readonly AppliedChange[]): Decoration[] {
-  return changes.flatMap((change, index) => {
+const lineText = (text: string) =>
+  text
+    .replace(/\uFFFC/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+function changedBlockOf(
+  state: EditorState,
+  change: AppliedChange,
+  index: number,
+  place: { from: number; to: number },
+): ChangedBlock {
+  const key = `applied:${index}`;
+  if (change.block) {
+    return { key, pos: place.from, how: change.block === "added" ? "added" : "removed" };
+  }
+  const $from = state.doc.resolve(place.from);
+  const pos = $from.depth > 0 ? $from.before() : place.from;
+  return change.paragraph
+    ? {
+        key,
+        pos,
+        how: "rewritten",
+        old: lineText(textOf(change.removed)),
+        title: lineText(state.doc.textBetween(place.from, place.to, " ", "\uFFFC")),
+      }
+    : { key, pos, how: "words" };
+}
+
+function reviewedBlocks(state: EditorState, changes: readonly AppliedChange[]) {
+  const placed = changes.flatMap((change, index) => {
     const place = placeOfChange(state, change);
-    if (!place) return [];
-    const marks: Decoration[] = [];
-    if (change.removed.size > 0) {
-      const old = () => {
-        const element = document.createElement(change.block ? "div" : "del");
-        element.className = change.block ? "applied-old applied-old--block" : "applied-old";
-        element.dataset.appliedChange = String(index);
-        element.textContent = textOf(change.removed);
-        return element;
-      };
-      marks.push(
-        Decoration.widget(place.from, old, {
-          side: -1,
-          ignoreSelection: true,
-          key: `applied-old:${index}:${textOf(change.removed)}`,
-        }),
-      );
-    }
-    if (place.to > place.from) {
-      const attributes = { "data-applied-change": String(index) };
-      marks.push(
-        change.block
-          ? Decoration.node(place.from, place.to, {
-              ...attributes,
-              class: "applied-new applied-new--block",
-            })
-          : Decoration.inline(place.from, place.to, { ...attributes, class: "applied-new" }),
-      );
-    }
-    return marks;
+    return place
+      ? [{ change, index, place, block: changedBlockOf(state, change, index, place) }]
+      : [];
   });
+  const sections = rewrittenSections(
+    state.doc,
+    placed.map(({ block }) => block),
+    false,
+  );
+  return { placed, sections };
+}
+
+/**
+ * What shows the old text of the change shown again that the cursor is in,
+ * its section's when it is in one, and whether it shows; null for one not
+ * written anew.
+ */
+export function appliedOriginalAt(state: EditorState): { key: string; shown: boolean } | null {
+  const line = appliedLineIn(state);
+  if (line?.kind !== "review") return null;
+  const { placed, sections } = reviewedBlocks(state, line.changes);
+  const { from } = state.selection;
+  const here = placed.find(({ place }) => place.from <= from && from <= place.to);
+  if (!here) return null;
+  const shownKeys = new Set(line.shown);
+  const { inSection, shown } = originalShown(here.block, sections, shownKeys);
+  if (inSection) return { key: sectionKey(inSection), shown };
+  return here.block.how === "rewritten" ? { key: here.block.key, shown } : null;
+}
+
+/**
+ * An applied edit's changes shown again (Review changes): old words struck,
+ * new ones underlined, the doc left as it is; a paragraph written anew, and
+ * a section, read as `changeOriginals` says.
+ */
+function changeMarks(
+  state: EditorState,
+  changes: readonly AppliedChange[],
+  shownKeys: ReadonlySet<string>,
+  t: Translate,
+): Decoration[] {
+  const { placed, sections } = reviewedBlocks(state, changes);
+  const lines: Decoration[] = sections.map((section) => {
+    const open = shownKeys.has(sectionKey(section));
+    return Decoration.widget(section.heading.pos, () => sectionLine(t, section, open), {
+      ...LINE_WIDGET,
+      key: `rewrote:${section.heading.key}:${open}:${section.heading.title}:${t("change.showOriginal")}`,
+    });
+  });
+  return lines.concat(
+    placed.flatMap(({ change, index, place, block }) => {
+      const { inSection, shown } = originalShown(block, sections, shownKeys);
+      const marks: Decoration[] = [];
+      if (block.how === "rewritten" && !inSection) {
+        marks.push(
+          Decoration.widget(block.pos, () => wasLine(t, block, shown), {
+            ...LINE_WIDGET,
+            key: `was:${block.key}:${shown}:${block.old}:${t("change.showOriginal")}`,
+          }),
+        );
+      }
+      const oldShows =
+        block.how === "rewritten" || (block.how === "removed" && inSection) ? shown : true;
+      if (change.removed.size > 0 && oldShows) {
+        const old = () => {
+          const element = document.createElement(change.block ? "div" : "del");
+          element.className = change.block ? "applied-old applied-old--block" : "applied-old";
+          element.dataset.appliedChange = String(index);
+          element.textContent = textOf(change.removed);
+          return element;
+        };
+        marks.push(
+          Decoration.widget(place.from, old, {
+            side: -1,
+            ignoreSelection: true,
+            key: `applied-old:${index}:${textOf(change.removed)}`,
+          }),
+        );
+      }
+      if (place.to > place.from) {
+        const attributes = { "data-applied-change": String(index) };
+        marks.push(
+          change.block
+            ? Decoration.node(place.from, place.to, {
+                ...attributes,
+                class: "applied-new applied-new--block",
+              })
+            : Decoration.inline(place.from, place.to, { ...attributes, class: "applied-new" }),
+        );
+      }
+      return marks;
+    }),
+  );
 }
 
 function decorations(state: EditorState, line: AppliedLine, options: Options): DecorationSet {
   const { doc } = state;
-  const marks: Decoration[] = line.kind === "review" ? changeMarks(state, line.changes) : [];
+  const marks: Decoration[] =
+    line.kind === "review"
+      ? changeMarks(state, line.changes, new Set(line.shown), options.translate)
+      : [];
   const at = placeOf(doc, line.blockId);
   const shared = { side: -1, ignoreSelection: true, stopEvent: () => true };
   if (at !== null) {
-    const count =
-      line.kind === "applied" ? line.places : line.kind === "review" ? line.changes.length : 0;
+    const blocks =
+      line.kind === "applied"
+        ? line.blocks
+        : line.kind === "review"
+          ? changedBlocksOf(state, line.changes)
+          : { paragraphs: 0, tables: 0 };
+    const count = `${blocks.paragraphs}/${blocks.tables}`;
     const canUndo = line.kind !== "review" || !line.undo || line.undo.available();
     marks.push(
-      Decoration.widget(at, () => mainLine(line, options), {
+      Decoration.widget(at, () => mainLine(line, options, blocks), {
         ...shared,
         // Drawn again in the interface language once it changes.
         key: `applied:${line.kind}:${count}:${line.blockId}:${canUndo}:${options.translate("edit.applied.undo")}`,
@@ -391,6 +582,13 @@ export const AppliedEditLine = Extension.create<Options>({
     ];
   },
 });
+
+/** Shows an applied change's old text, or its section's, struck in place; or hides it again. */
+export function toggleAppliedOriginal(editor: Editor, key: string): void {
+  const line = appliedLineIn(editor.state);
+  if (line?.kind !== "review") return;
+  setAppliedLine(editor, { ...line, shown: [...toggled(new Set(line.shown), key)] });
+}
 
 export const appliedLineIn = (state: EditorState): AppliedLine | null =>
   appliedLineKey.getState(state)?.line ?? null;

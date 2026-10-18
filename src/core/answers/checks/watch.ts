@@ -218,6 +218,7 @@ export function createContradictionWatch(options: WatchOptions) {
         text: sentence.text,
         evidence: null,
         says: null,
+        unsupported: null,
         calculation: null,
         citedCaseUnchecked: false,
         citedCaseFound: false,
