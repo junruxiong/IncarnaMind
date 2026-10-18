@@ -5,6 +5,7 @@ import { useT } from "../i18n";
 import { useFade } from "../motion";
 import { useAppStore } from "../store";
 import { UNDO_SHOWN_MS, type UndoLineState, useUndo } from "../undo";
+import { MetaLine } from "./MetaLine";
 
 const lineClass =
   "mx-2 flex min-w-0 shrink-0 gap-1 pt-0.5 pb-1 pl-2 text-[12px] leading-4 text-ink-secondary";
@@ -72,12 +73,12 @@ function Line({ line }: { line: UndoLineState }) {
     );
   }
 
-  const { message, also } = line.change;
+  const { message, fullMessage, also } = line.change;
   const undo = (
     <button
       type="button"
       data-testid="undo-action"
-      aria-label={t("move.undoLabel", { message })}
+      aria-label={t("move.undoLabel", { message: fullMessage ?? message })}
       title={t("undo.title", { shortcut: shortcutLabel("edit.undo") })}
       onClick={() => void useUndo.getState().undo()}
       className={actionClass}
@@ -111,12 +112,17 @@ function Line({ line }: { line: UndoLineState }) {
     );
   }
   return (
-    <div ref={shown} className={`${lineClass} items-center`}>
-      <span data-testid="undo-message" title={message} className="min-w-0 truncate">
-        {message}
-      </span>
-      <span aria-hidden="true">·</span>
-      {undo}
+    <div ref={shown} className={lineClass}>
+      <MetaLine
+        as="div"
+        className="grow items-center"
+        parts={[
+          <span key="message" data-testid="undo-message" title={fullMessage}>
+            {message}
+          </span>,
+          undo,
+        ]}
+      />
     </div>
   );
 }

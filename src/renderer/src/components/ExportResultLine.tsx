@@ -1,6 +1,6 @@
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { displayName } from "../../../shared/documentNames";
-import { shortenMiddle } from "../../../shared/naming";
+import { nameInLine } from "../../../shared/naming";
 import { core, files } from "../core";
 import { CheckStateIcon } from "../editor/icons";
 import { errorMessage } from "../errors";
@@ -34,9 +34,6 @@ import { WordExportReview } from "./WordExportReview";
 
 /** How long a plain "Saved …" stays, unless the pointer or the focus is on it. */
 const SAVED_SHOWN_MS = 10_000;
-
-/** Wide enough for a name that reads, narrow enough that the sentence stays in two lines in a group half the window wide. */
-const SAVED_NAME_COLUMNS = 40;
 
 type SavedResult = Extract<ExportResult, { state: "saved" }>;
 
@@ -365,7 +362,7 @@ function NeedsDetailsLine({ mindId, documentIds }: { mindId: string; documentIds
 function SavedSentence({ result, withFile }: { result: SavedResult; withFile: SavedWithFile }) {
   const t = useT();
   const folder = result.inDefaultFolder ? defaultFolderLabel(t) : folderName(result.folder);
-  const name = shortenMiddle(result.name, SAVED_NAME_COLUMNS);
+  const name = nameInLine(result.name);
   return (
     <p
       role="status"
