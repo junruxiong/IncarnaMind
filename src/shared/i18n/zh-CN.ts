@@ -2279,7 +2279,6 @@ export const zhCN = {
   "composer.model.standIn.title": "{chosen} 的额度已用完，{time} 恢复。期间提问交给 {model}。",
   "composer.model.standIn.titleForNow": "{chosen} 的额度已用完，恢复之前，提问交给 {model}。",
   "composer.model.menu": "此 Mind 使用的模型",
-  "composer.model.intro": "用于此 Mind 的提问。",
   "composer.model.group.keys": "你的密钥",
   "composer.model.group.plan": "ChatGPT 订阅",
   "composer.model.group.local": "在本机运行",

@@ -1,5 +1,5 @@
 import { DOCKS, dockCommandId } from "../../commands/assistant";
-import { commands, labelOf, offered } from "../../commands/registry";
+import { commands, labelOf } from "../../commands/registry";
 import { useConversations } from "../../conversations";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
@@ -25,8 +25,8 @@ const ICONS = {
 /**
  * The assistant's ⋯: "Move assistant ▸", whose submenu has where it sits (the
  * User's choice is checked, even while a narrow window shows a side dock at the
- * bottom) and, `withFold`, Fold (on Windows docked right, where the header has
- * no room for it); then what acts on its conversation. Each is a command, as in ⌘K.
+ * bottom); `withFold`, Fold (on Windows docked right, where the header has no
+ * room for it); then what acts on its conversation. Each is a command, as in ⌘K.
  */
 export function AssistantMenu({ withFold = false }: { withFold?: boolean }) {
   const t = useT();
@@ -37,10 +37,6 @@ export function AssistantMenu({ withFold = false }: { withFold?: boolean }) {
     menu.close();
     commands.run(id).catch(useAppStore.getState().reportError);
   };
-  // Offered while there is a Mind to make it from: the one the assistant reads.
-  const make = commands.get("skill.fromMind");
-  const makeSkill =
-    menu.open && make && offered(make, { selection: [], focus: null, surface: "mind" });
   const HereIcon = ICONS[chosen ?? "right"];
   return (
     <>
@@ -74,18 +70,18 @@ export function AssistantMenu({ withFold = false }: { withFold?: boolean }) {
               <span className="flex-1">{t("assistant.moveMenu")}</span>
               <ChevronRightLineIcon className="size-3.5 text-ink-meta" />
             </button>
-            <div className={menuRuleClass} />
-            {makeSkill && (
+            {withFold && (
               <button
                 type="button"
                 role="menuitem"
-                data-testid="assistant-menu-make-skill"
-                onClick={() => run("skill.fromMind")}
+                data-testid="assistant-menu-fold"
+                onClick={() => run("assistant.fold")}
                 className={`${menuItemClass} pl-8`}
               >
-                {t("skills.make.command")}
+                {t("assistant.fold")}
               </button>
             )}
+            <div className={menuRuleClass} />
             <ConversationItem
               id="assistant.lastToNewMind"
               testId="assistant-menu-last-to-new-mind"
@@ -120,20 +116,6 @@ export function AssistantMenu({ withFold = false }: { withFold?: boolean }) {
             </button>
           );
         })}
-        {withFold && (
-          <>
-            <div className={menuRuleClass} />
-            <button
-              type="button"
-              role="menuitem"
-              data-testid="assistant-menu-fold"
-              onClick={() => run("assistant.fold")}
-              className={`${menuItemClass} pl-8`}
-            >
-              {t("assistant.fold")}
-            </button>
-          </>
-        )}
       </div>
     </>
   );

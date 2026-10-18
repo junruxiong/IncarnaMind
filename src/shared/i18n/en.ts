@@ -2370,7 +2370,6 @@ export const en = {
   "composer.model.standIn.titleForNow":
     "{chosen}’s limit is used up. Questions go to {model} until it’s back.",
   "composer.model.menu": "Model for this Mind",
-  "composer.model.intro": "For this Mind’s Questions.",
   "composer.model.group.keys": "Your keys",
   "composer.model.group.plan": "ChatGPT plan",
   "composer.model.group.local": "On this computer",

@@ -273,7 +273,6 @@ export function ModelChip({
                 }
               }}
             >
-              <p className="model-menu-intro">{t("composer.model.intro")}</p>
               <input
                 ref={search}
                 type="search"

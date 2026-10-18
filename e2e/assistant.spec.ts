@@ -144,7 +144,9 @@ test("a new window's assistant is docked on the right, outside the groups, the c
   // The header: the conversation's title with ▾ (History), New chat, ⋯ and fold; no clock.
   await expect(window.getByTestId("assistant-title")).toHaveText("New chat");
   await expect(window.getByTestId("assistant-header").getByRole("button")).toHaveCount(4);
-  await expect(window.getByTestId("assistant-history")).toHaveCount(0);
+  await expect(window.getByTestId("assistant-header").getByTestId("assistant-history")).toHaveCount(
+    0,
+  );
   await expect(window.getByTestId("assistant-new-chat")).toHaveAccessibleName(
     /^New chat \((⇧⌘O|Ctrl\+Shift\+O)\)$/,
   );
@@ -350,7 +352,7 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await window.keyboard.press("Enter");
   const menu = window.getByTestId("assistant-menu");
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("menuitem")).toHaveCount(4);
+  await expect(menu.getByRole("menuitem")).toHaveCount(3);
   await expect(menu.getByTestId("assistant-menu-move")).toBeFocused();
   await expect(menu.getByRole("menuitem", { name: "Clear this conversation" })).toHaveAttribute(
     "aria-disabled",
@@ -375,7 +377,7 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await fromMenu(window, "right");
   await expect(assistant).toHaveAttribute("data-dock", "right");
 
-  // Folded on a side: a 44px rail with show and New chat; the card takes the room.
+  // Folded on a side: a 44px rail with show, New chat and History; the card takes the room.
   const cardWidth = await widthOf(cardOf(window));
   await window.getByTestId("assistant-fold").click();
   await expect(assistant).toHaveAttribute("data-folded", "true");
@@ -383,12 +385,18 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await expect.poll(() => widthOf(assistant)).toBe(44);
   expect(await widthOf(cardOf(window))).toBeGreaterThan(cardWidth + 260);
   const rail = window.getByTestId("assistant-rail");
-  await expect(rail.getByRole("button")).toHaveCount(2);
+  await expect(rail.getByRole("button")).toHaveCount(3);
   await expect(rail.getByTestId("assistant-fold")).toHaveAccessibleName(
     /^Show the assistant \((⌘J|Ctrl\+J)\)$/,
   );
   await expect(window.getByTestId("composer-input")).toBeHidden();
   await screenshot(window, "assistant-folded-rail");
+  // The rail has no title, so History is its own button; Esc puts the focus back on it.
+  await rail.getByTestId("assistant-history").click();
+  await expect(window.getByTestId("assistant-history-popover")).toBeVisible();
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("assistant-history-popover")).toBeHidden();
+  await expect(rail.getByTestId("assistant-history")).toBeFocused();
   // ⌘J unfolds it, the cursor in its composer.
   await window.getByTestId("mind-editor").click();
   await window.keyboard.press("ControlOrMeta+j");
