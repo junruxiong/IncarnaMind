@@ -60,6 +60,29 @@ export function markersWithoutCitation(answer: {
   return [...new Set(markersIn(answer.text))].filter((marker) => !cited.has(marker));
 }
 
+/** Where the stand-ins of `shownRanges` count from: higher than any marker an Answer writes. */
+const STAND_IN = 9000;
+
+/**
+ * Which of the `ranges` of `text` (in order, apart) the Answer shows as text
+ * rather than inside code or maths, read as `answerBlocks` reads it: each is
+ * swapped for a marker, and the markers that come out are the shown ones.
+ */
+export function shownRanges(
+  text: string,
+  ranges: readonly { start: number; end: number }[],
+): boolean[] {
+  if (ranges.length === 0 || ranges.length > 999) return ranges.map(() => false);
+  let swapped = "";
+  let at = 0;
+  ranges.forEach(({ start, end }, index) => {
+    swapped += `${text.slice(at, start)}[^${STAND_IN + index}]`;
+    at = end;
+  });
+  const shown = new Set(markersIn(swapped + text.slice(at)));
+  return ranges.map((_, index) => shown.has(STAND_IN + index));
+}
+
 /** A space between two Citations, or between a Citation and the punctuation after it, is not kept (#612). */
 const PUNCTUATION_AFTER = /^[ \t]+(?=[.,;:!?)\]。，、；：！？）])/u;
 

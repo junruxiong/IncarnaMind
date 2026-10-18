@@ -19,9 +19,12 @@
  * came to; add_to_mind's and create_mind's input streams in word by word,
  * slowly for a Question asked "slowly", as does edit_mind's edit. "Write three
  * paragraphs" is `paragraphsReply`'s. "Write a summary page" (写一个总结页面)
- * calls create_mind with a short summary. "Make a bar chart of revenue by quarter"
- * (画一个各季度收入的柱状图; "line chart", 折线图) searches, cites each quarter's
- * revenue, and adds them as a table with its chart (#1091).
+ * calls create_mind with a short summary. "Write a summary of my leases"
+ * (根据我的租约写一份总结) writes, naming the Documents in its scope, into a new
+ * Mind, or the empty one it is asked from, so what it was written from shows (#1149).
+ * "Make a bar chart of revenue by quarter" (画一个各季度收入的柱状图; "line chart",
+ * 折线图) searches, cites each quarter's revenue, and adds them as a table with its
+ * chart (#1091).
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
@@ -35,6 +38,7 @@ import {
   type Prompt,
   type Reply,
   SHORTEN,
+  systemOf,
   toolResults,
   userText,
 } from "./prompt";
@@ -84,6 +88,7 @@ const SUMMARY_PAGE =
 const LONGER = /\blonger\b|长一点|更长/i;
 const REVENUE_CHART = /\bchart of revenue by quarter\b|各季度收入的(?:柱状图|折线图)/i;
 const QUARTER_REVENUE = /Revenue in (Q\d) was (€\d+ million)/g;
+const LEASES_SUMMARY = /\bwrite a summary of my leases\b|根据我的租约写一份总结/i;
 /** A rewrite of the User's text (改写), which Edit with AI's scripted model writes anew. */
 const REWRITE = /\brewrite\b|改写/i;
 const SUMMARY = [
@@ -145,6 +150,17 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     return { text: firstSentence(added) };
   }
   if (REVENUE_CHART.test(question)) return revenueChart(prompt, question);
+  if (LEASES_SUMMARY.test(question)) {
+    const made = lastResult(prompt, "create_mind") ?? lastResult(prompt, "add_to_mind");
+    if (made !== undefined) return { text: firstSentence(made) };
+    const listed = /^Their names, newest first:\n((?:- .+\n?)+)/m.exec(systemOf(prompt))?.[1] ?? "";
+    const names = [...listed.matchAll(/^- (.+)$/gm)].map((line) => line[1]).sort();
+    const content = `Written from ${names.join(", ")}.`;
+    // An empty Mind is filled; any other gets a new one beside it.
+    return systemOf(prompt).includes("write it there with add_to_mind")
+      ? { tool: "add_to_mind", input: { content } }
+      : { tool: "create_mind", input: { title: "Summary", content } };
+  }
   if (SUMMARY_PAGE.test(question)) {
     const made = lastResult(prompt, "create_mind");
     if (made === undefined)

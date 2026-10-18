@@ -26,6 +26,7 @@
  * lines, narrowed to those the quote covers ("Revenue, rows 12–14"); for
  * sections, the heading it sits under.
  */
+import { shownRanges } from "../../shared/answerBlocks";
 import { citationNode, type NodeJSON } from "../../shared/blockJson";
 import { parseQuotedWords } from "../../shared/citations";
 import {
@@ -50,7 +51,7 @@ import {
   type QuotedWords,
   type RejectedRecord,
 } from "../api";
-import type { CitationSource } from "../documents";
+import type { CitationSource, DocumentDate } from "../documents";
 import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
 import { writtenInCjk } from "../documents/textLanguage";
@@ -321,7 +322,7 @@ export interface AnswerDocuments {
     to: number | null,
   ): PageText[];
   /** A live Document's date, shown with its Passages (see `documentDate` in ../documents); null if none is known. */
-  documentDate(documentId: string): string | null;
+  documentDate(documentId: string): DocumentDate | null;
   /** The id of the Document to search named `name`, as the instructions list it; null for none. */
   documentNamed?(name: string): string | null;
 }
@@ -548,7 +549,7 @@ interface ShownPassage {
   id: string;
   documentName: string;
   /** Its Document's date, when known: what tells the newer of two Documents that disagree (#548). */
-  date: string | null;
+  date: DocumentDate | null;
   range: PageRange;
   /** For every kind but PDF: the label of the Units it covers, e.g. "slides 3–4". */
   location: string | null;
@@ -566,7 +567,9 @@ function formatPassages(passages: readonly ShownPassage[]): string {
         : pages
           ? ` pages="${pages}"`
           : "";
-      const dated = date ? ` date="${attribute(date)}"` : "";
+      const dated = date
+        ? ` ${date.of === "document" ? "date" : date.of}="${attribute(date.date)}"`
+        : "";
       const never = notCited ? NOT_CITED_ATTRIBUTE : "";
       return `<passage id="${id}" document="${attribute(documentName)}"${dated}${where}${never}>\n${text}\n</passage>`;
     })
@@ -959,7 +962,7 @@ export function createCitationSession(
    */
   function show(found: readonly WindowedPassage[], measuring = false): string {
     let unseen = 0;
-    const dates = new Map<string, string | null>();
+    const dates = new Map<string, DocumentDate | null>();
     const dateOf = (documentId: string) => {
       if (!dates.has(documentId)) dates.set(documentId, documents.documentDate(documentId));
       return dates.get(documentId) ?? null;
@@ -1302,37 +1305,24 @@ export function withoutFootnoteDefinitions(markdown: string): string {
   return markdown.replace(/^ {0,3}\[\^\d{1,4}\]:.*(?:\n|$)/gm, "");
 }
 
-/**
- * The text without the Citation markers `backed` says have no Citation, each
- * with the space before it unless a word follows, as the Answer shows them
- * gone: "a claim [^3]." reads "a claim.". Code and footnote definitions keep theirs.
- */
 export function withoutDeadMarkers(markdown: string, backed: (marker: number) => boolean): string {
-  let fenced = false;
-  return markdown
-    .split("\n")
-    .map((line) => {
-      if (/^ {0,3}(?:```|~~~)/.test(line)) {
-        fenced = !fenced;
-        return line;
-      }
-      if (fenced) return line;
-      return line
-        .split(/(`[^`\n]*`)/)
-        .map((part, index) =>
-          index % 2 === 1
-            ? part
-            : part.replace(
-                /([ \t]*)\[\^(\d{1,4})\](?!:)/g,
-                (found, space: string, marker: string, at: number) =>
-                  backed(Number(marker))
-                    ? found
-                    : /^\p{L}/u.test(part.charAt(at + found.length))
-                      ? space
-                      : "",
-              ),
-        )
-        .join("");
-    })
-    .join("\n");
+  const found = [...markdown.matchAll(/([ \t]*)\[\^(\d{1,4})\](?!:)/g)].map((each) => ({
+    from: each.index,
+    space: (each[1] ?? "").length,
+    end: each.index + each[0].length,
+    marker: Number(each[2]),
+  }));
+  const shown = shownRanges(
+    markdown,
+    found.map((each) => ({ start: each.from + each.space, end: each.end })),
+  );
+  let text = "";
+  let at = 0;
+  found.forEach((each, index) => {
+    if (!shown[index] || backed(each.marker)) return;
+    const keepsSpace = /^\p{L}/u.test(markdown.charAt(each.end));
+    text += markdown.slice(at, keepsSpace ? each.from + each.space : each.from);
+    at = each.end;
+  });
+  return text + markdown.slice(at);
 }

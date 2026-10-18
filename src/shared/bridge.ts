@@ -33,6 +33,11 @@ export interface FilesBridge {
    * the folder's absolute path, or null if the User cancelled.
    */
   pickOutputLocation(): Promise<string | null>;
+  /**
+   * Saves the Mind as a .docx where the User chooses, in the system's save dialog: a copy of
+   * changes storage refused (#1119). False when they chose nowhere.
+   */
+  saveMindCopy(mindId: string): Promise<boolean>;
   /** Shows the data folder in the system's file manager, e.g. to back it up. */
   openDataFolder(): Promise<void>;
   /** Shows the data folder's `logs/` in the system's file manager, e.g. to attach the log to a bug report. */
@@ -155,6 +160,7 @@ export const FILES_CHANNELS = {
   showSavedFile: "files:showSavedFile",
   openSavedFile: "files:openSavedFile",
   pickOutputLocation: "files:pickOutputLocation",
+  saveMindCopy: "files:saveMindCopy",
   openDataFolder: "files:openDataFolder",
   openLogsFolder: "files:openLogsFolder",
   pickSkill: "files:pickSkill",

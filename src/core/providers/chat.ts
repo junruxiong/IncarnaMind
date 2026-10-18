@@ -21,8 +21,9 @@ import {
 } from "../api";
 import type { Consent } from "../consent";
 import type { Meter, MeteredModel } from "../cost/meter";
-import { ChatNotReadyError, InvalidInputError, isRecord } from "../errors";
+import { ChatNotReadyError, InvalidInputError, isRecord, LocalModeError } from "../errors";
 import type { Secrets } from "../secrets";
+import { createSendGate } from "../sendGate";
 import type { SettingsStore } from "../settings";
 import type { Database } from "../storage";
 import {
@@ -323,6 +324,7 @@ export function createChat(options: {
     ollamaModels,
     meter,
   } = options;
+  const gate = createSendGate(consent, options.localOnly);
 
   const needsSignIn = async (kind: ChatProviderKind) =>
     (kind === "chatgpt" && !(await chatGpt.hasSignIn())) ||
@@ -1086,7 +1088,17 @@ export function createChat(options: {
       const readiness = await readinessFor(choice ?? settings.get().user.chatModel, flow);
       if (!readiness.ready) throw new ChatNotReadyError(readiness);
       const { provider, modelId } = readiness;
-      if (provider.service) await consent.ensure(flow, provider.service);
+      if (provider.service) {
+        try {
+          await consent.ensure(flow, provider.service);
+        } catch (error) {
+          // Its prompt closed as Local mode came on: a Question says so as it does when asked in Local mode.
+          if (error instanceof LocalModeError && flow === "chat") {
+            throw new ChatNotReadyError({ ready: false, reason: "local-mode", provider, modelId });
+          }
+          throw error;
+        }
+      }
       const apiKey = acceptsApiKey(provider.kind, provider.catalogId)
         ? await secrets.get(keyName(provider.id))
         : null;
@@ -1129,13 +1141,18 @@ export function createChat(options: {
         await listedModels(row, provider);
       }
       const capabilities = capabilitiesOf(row, modelId, profile ? ollamaFacts(profile) : undefined);
-      const metered = meter.wrap(
-        model,
-        meteredModel(provider, provider.id, modelId, flow, capabilities, profile),
+      // The gate goes outside the meter, so a request it stops reserves nothing.
+      const gated = gate.model(
+        meter.wrap(
+          model,
+          meteredModel(provider, provider.id, modelId, flow, capabilities, profile),
+        ),
+        flow,
+        provider.service,
       );
       const support = startingSupport(capabilities);
       const prepared = {
-        model: metered,
+        model: gated,
         provider,
         modelId,
         capabilities,

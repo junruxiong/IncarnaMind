@@ -6,8 +6,11 @@
  */
 import type { Expected } from "./checks";
 
-/** The Documents a request is asked over: two arXiv papers, the repository's seven sample PDFs, or none. */
-export type LibraryName = "papers" | "reports";
+/**
+ * The Documents a request is asked over: two arXiv papers, the repository's seven sample PDFs,
+ * or contracts and minutes whose files' dates are none of their text's (./dated).
+ */
+export type LibraryName = "papers" | "reports" | "dated";
 
 export interface EverydayCase {
   id: string;
@@ -33,6 +36,8 @@ export interface EverydayCase {
   hard?: boolean;
   /** An inference is tempting: the app's own check judges each of its cited sentences (./support). */
   research?: true;
+  /** A summary: the report counts its sentences outside headings that carry a Citation (./dates). */
+  summary?: true;
 }
 
 /** The share of its runs a request must pass: two in three, one in three for a hard one. */
@@ -45,6 +50,7 @@ const WRITE_ALL = { write: true, cite: true, coverAll: true } as const;
 const EDIT = { write: true, cite: false, coverAll: false } as const;
 const NOTHING = { write: false, cite: false, coverAll: false } as const;
 const ABOUT_THE_QUESTION = { write: false, cite: false, coverAll: false, noEarlier: true } as const;
+const TEXT_DATES = { write: false, cite: true, coverAll: false, textDates: true } as const;
 
 const READING_GROUP = {
   title: "Reading group",
@@ -751,5 +757,88 @@ export const CASES: readonly EverydayCase[] = [
     request: "ABPI 守则是不是意味着药企绝对不能给医生任何东西？",
     expected: ANSWER,
     research: true,
+  },
+  // Dated-looking Documents: every date an Answer gives is one their text writes, never their file's (#1173).
+  {
+    id: "dates-contract-summary",
+    language: "en",
+    library: "dated",
+    mind: null,
+    request: "Summarise the employment contract.",
+    expected: TEXT_DATES,
+    summary: true,
+  },
+  {
+    id: "dates-contract-signed",
+    language: "en",
+    library: "dated",
+    mind: null,
+    request: "When was the employment contract signed?",
+    expected: TEXT_DATES,
+  },
+  {
+    id: "dates-contract-key-dates",
+    language: "en",
+    library: "dated",
+    mind: null,
+    request: "What are the key dates in the employment contract?",
+    expected: TEXT_DATES,
+  },
+  {
+    id: "dates-nda-effective",
+    language: "en",
+    library: "dated",
+    mind: null,
+    request: "When does the mutual NDA take effect?",
+    expected: TEXT_DATES,
+  },
+  {
+    id: "dates-minutes",
+    language: "en",
+    library: "dated",
+    mind: null,
+    request: "When did the board meet, and what did it decide?",
+    expected: TEXT_DATES,
+  },
+  {
+    id: "dates-contract-summary-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: null,
+    request: "总结一下这份劳动合同。",
+    expected: TEXT_DATES,
+    summary: true,
+  },
+  {
+    id: "dates-contract-signed-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: null,
+    request: "这份劳动合同是什么时候签订的？",
+    expected: TEXT_DATES,
+  },
+  {
+    id: "dates-contract-key-dates-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: null,
+    request: "劳动合同里有哪些关键日期？",
+    expected: TEXT_DATES,
+  },
+  {
+    id: "dates-nda-effective-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: null,
+    request: "保密协议什么时候生效？",
+    expected: TEXT_DATES,
+  },
+  {
+    id: "dates-minutes-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: null,
+    request: "董事会是哪天开的会？做了什么决定？",
+    expected: TEXT_DATES,
   },
 ];

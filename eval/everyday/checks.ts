@@ -10,6 +10,8 @@
  *   "[Deck, slide 3]" (#1075).
  * - **No marker without a Citation**: every Citation marker the Answer's text
  *   shows has its Citation, whatever the request.
+ * - **No tool-call text**: nothing in the Answer's text is a Tool's call
+ *   written as words, such as a `<cite>` block.
  * - **Every Document is covered**: asked about all the Documents in scope,
  *   each is cited, or named in a sentence saying it wasn't covered.
  * - **Only what was asked changes**: asked about one paragraph, the others
@@ -19,10 +21,14 @@
  *   was (#1061).
  * - **The Question asked is the Answer's subject**: asked after the example's
  *   Answer, nothing in the reply is about an earlier Answer or the example.
+ * - **Only the text's dates**: every date the reply gives is one the
+ *   Documents' text writes, or is named as a file's (./dates).
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
+import { toolTextIn } from "../../src/core/answers/toolText";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
 import { markersWithoutCitation } from "../../src/shared/answerBlocks";
+import { datesNotInText } from "./dates";
 import type { ClaimVerdict } from "./judge";
 
 /** What a request expects of its Answer. */
@@ -39,6 +45,8 @@ export interface Expected {
   inPlace?: true;
   /** It is asked after the example's Answer, and its reply says nothing of an earlier Answer or the example. */
   noEarlier?: boolean;
+  /** Every date its reply gives is one the Documents' text writes (`RequestOutcome.texts`), or a file's named as such. */
+  textDates?: boolean;
 }
 
 export interface RequestOutcome {
@@ -56,6 +64,8 @@ export interface RequestOutcome {
   /** Sources the Minds it wrote hold as text, in brackets, as written. */
   sourcesAsText?: readonly string[];
   scoped: readonly { id: string; name: string }[];
+  /** The text of the Documents in scope, for `textDates`. */
+  texts?: readonly string[];
 }
 
 export type RequestFailure =
@@ -64,12 +74,14 @@ export type RequestFailure =
   | { kind: "unbacked"; sentences: string[]; flagged: boolean }
   | { kind: "no-citations" }
   | { kind: "dead-markers"; markers: number[] }
+  | { kind: "tool-text"; blocks: string[] }
   | { kind: "uncovered"; documents: string[] }
   | { kind: "outside"; blocks: number[] }
   | { kind: "beside" }
   | { kind: "untouched" }
   | { kind: "as-text"; sources: string[] }
-  | { kind: "earlier"; said: string };
+  | { kind: "earlier"; said: string }
+  | { kind: "date-not-in-text"; dates: string[] };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
@@ -117,6 +129,8 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   }
   const dead = markersWithoutCitation(answer);
   if (dead.length > 0) failures.push({ kind: "dead-markers", markers: dead });
+  const shaped = toolTextIn(answer.text);
+  if (shaped.length > 0) failures.push({ kind: "tool-text", blocks: shaped });
   if (expected.coverAll) {
     const cited = new Set([
       ...answer.citations.map((citation) => citation.documentId),
@@ -150,6 +164,8 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   }
   const said = expected.noEarlier ? answer.text.match(EARLIER)?.[0] : undefined;
   if (said) failures.push({ kind: "earlier", said });
+  const dates = expected.textDates ? datesNotInText(answer.text, outcome.texts ?? []) : [];
+  if (dates.length > 0) failures.push({ kind: "date-not-in-text", dates });
   return failures;
 }
 
@@ -164,6 +180,8 @@ export function failureLine(failure: RequestFailure): string {
       return "Documents in scope, and nothing it wrote cites them";
     case "dead-markers":
       return `wrote Citation markers that no Citation backs: ${failure.markers.map((marker) => `[^${marker}]`).join(", ")}`;
+    case "tool-text":
+      return `shows a Tool's call written as text: ${failure.blocks.map((block) => `“${block.slice(0, 60)}”`).join(", ")}`;
     case "uncovered":
       return `neither cites nor names as left out ${failure.documents.map((name) => `“${name}”`).join(", ")}`;
     case "outside":
@@ -176,5 +194,7 @@ export function failureLine(failure: RequestFailure): string {
       return `wrote sources into a Mind as text: ${failure.sources.map((source) => `“${source}”`).join(", ")}`;
     case "earlier":
       return `talks about an earlier Answer or the example: “${failure.said}”`;
+    case "date-not-in-text":
+      return `gives a date the Documents' text doesn't: ${failure.dates.join(", ")}`;
   }
 }

@@ -25,6 +25,7 @@
  * change to how a record says where its quote is (pages, or a Location)
  * doesn't touch it.
  */
+import { delimiterRow, looksLikeTable, tableCellRanges } from "../../shared/markdownTables";
 import type { AnswerEngineEvent, AnswerTools } from "./engine";
 
 /** What placing a marker needs of a Citation record. */
@@ -163,6 +164,37 @@ export function answerSentences(
       return { ...span, text: sentence.trim(), markers };
     }),
   );
+}
+
+/**
+ * The rows and cells of the Answer's tables, outside code, by offset in
+ * `text`: each one's text and the markers in it. `answerSentences` leaves
+ * them out, since no marker is placed in a table.
+ */
+export function answerTableUnits(
+  text: string,
+): { start: number; end: number; text: string; markers: number[] }[] {
+  const units: { start: number; end: number; text: string; markers: number[] }[] = [];
+  const unit = (start: number, end: number) => {
+    const found = text.slice(start, end);
+    units.push({
+      start,
+      end,
+      text: found.trim(),
+      markers: [...found.matchAll(MARKER)].map((each) => Number(each[1])),
+    });
+  };
+  let fenced = false;
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    const start = offset;
+    offset += line.length + 1;
+    if (FENCE.test(line)) fenced = !fenced;
+    if (fenced || !looksLikeTable(line) || delimiterRow(line)) continue;
+    unit(start, start + line.length);
+    for (const cell of tableCellRanges(line)) unit(start + cell.start, start + cell.end);
+  }
+  return units;
 }
 
 /**

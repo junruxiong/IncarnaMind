@@ -8,6 +8,7 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   powerMonitor,
+  protocol,
 } from "electron";
 import {
   type ChatModelFactory,
@@ -23,8 +24,9 @@ import type { Language } from "../core/language";
 import { defaultOllamaUrl } from "../core/providers/kinds";
 import { installedOllamaModels } from "../core/providers/ollama";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
+import { ANALYSIS_SCHEME_PRIVILEGES } from "./analysis";
 import { showDevelopmentDockIcon, windowIcon } from "./appIcon";
-import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
+import { DOCUMENT_SCHEME_PRIVILEGES, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
 import { handle } from "./ipc";
 import { startLogging } from "./logging";
@@ -36,6 +38,7 @@ import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } fro
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { realHomeProblem } from "./testHome";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
+import { guardQuit } from "./unsavedChanges";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 import { keepWindowPlace, windowPlace } from "./windowState";
 
@@ -66,7 +69,8 @@ const rendererUrl = process.env.ELECTRON_RENDERER_URL;
 /** Test-only launch flag: lets the smoke tests drive UI directly, e.g. open the Document viewer at a page. */
 const testHooks = process.env.INCARNAMIND_TEST_HOOKS === "1";
 
-registerDocumentScheme();
+// Electron takes every privileged scheme in one call: a second would replace the first.
+protocol.registerSchemesAsPrivileged([DOCUMENT_SCHEME_PRIVILEGES, ANALYSIS_SCHEME_PRIVILEGES]);
 
 /**
  * The scripted chat model the smoke tests answer Questions with. Only a test
@@ -271,6 +275,7 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
+  guardQuit(core, () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null);
   if (taskKinds.length > 0) {
     const started = core;
     (globalThis as { incarnamindScriptedTask?: unknown }).incarnamindScriptedTask = {

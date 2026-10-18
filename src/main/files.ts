@@ -34,6 +34,7 @@ import {
   setMenuSidebarHidden,
 } from "./menu";
 import { rememberPick, startFolder, startNear } from "./pickerFolders";
+import { saveMindCopy } from "./unsavedChanges";
 
 /** What "Add Documents" offers; the core decides what it takes (and says what it skipped). */
 const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "csv", "txt", "md", "markdown"];
@@ -92,6 +93,12 @@ export function serveFileActions(
       ? await dialog.showOpenDialog(window, openOptions)
       : await dialog.showOpenDialog(openOptions);
     return canceled ? null : (filePaths[0] ?? null);
+  });
+
+  handle(FILES_CHANNELS.saveMindCopy, async (event, mindId: unknown): Promise<boolean> => {
+    refuseUnknown(event);
+    if (typeof mindId !== "string") throw new Error("A Mind id must be a string.");
+    return saveMindCopy(core, BrowserWindow.fromWebContents(event.sender), mindId);
   });
 
   handle(FILES_CHANNELS.openDataFolder, async (event) => {

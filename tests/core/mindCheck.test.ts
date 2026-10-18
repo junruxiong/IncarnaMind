@@ -6,6 +6,7 @@
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import type { CheckMindInput, Core } from "../../src/core";
+import { updateCheck } from "../../src/core/answers/checks/sentences";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
 import { mindCheckOf } from "../../src/shared/mindCheck";
@@ -195,6 +196,30 @@ describe("Check this Mind", () => {
       "contradicted",
       "unsupported",
     ]);
+  });
+
+  // protects=a sentence the User keeps as their own view (#1111) isn't checked again, in any mode, until its words change; fails_when=a run sends it, or an edit of it doesn't bring it back; no_claim=how the card sets it.
+  test("a sentence kept as the User's own view isn't checked again until its words change", async () => {
+    const { core, client, mindId, folderId } = await setUp();
+    await core.checkMind(request(mindId, "all"));
+    const penguins = claimSpans(readMind(client)).find((span) =>
+      span.sentence.text.startsWith(PENGUINS),
+    );
+    client.doc.transact(() => {
+      updateCheck(client.blocks, penguins?.check.id ?? "", (check) => ({ ...check, kept: true }));
+    }, "editor");
+    await client.settled();
+    expect((await shownChecks(core, client, folderId)).map(({ shown }) => shown.state)).toEqual([
+      "supported",
+      "contradicted",
+      "kept",
+    ]);
+
+    expect(await core.planMindCheck(mindId, "all")).toMatchObject({ kind: "ready", sentences: 4 });
+    expect(await core.planMindCheck(mindId, "changed")).toEqual({ kind: "nothing" });
+
+    typeInto(client, 2, OPINION.length + 1, "Some ");
+    expect(await core.planMindCheck(mindId, "changed")).toMatchObject({ sentences: 1 });
   });
 
   test("a sentence written since is found among the new ones only, and the opinion isn't sent again", async () => {

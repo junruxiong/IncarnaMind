@@ -42,7 +42,7 @@ import type {
 } from "../api";
 import type { Consent } from "../consent";
 import { keywordTerms } from "../documents/keywords";
-import { ConsentDeclinedError, InvalidInputError, isRecord } from "../errors";
+import { ConsentDeclinedError, InvalidInputError, isRecord, LocalModeError } from "../errors";
 import type { createEventHub } from "../events";
 import { parseIds, parseMindId } from "../minds";
 import { givesStructuredOutput } from "../providers/capabilities";
@@ -456,6 +456,7 @@ export function createSuggestions(options: SuggestionsOptions) {
         return true;
       } catch (error) {
         if (error instanceof ConsentDeclinedError) return false;
+        if (error instanceof LocalModeError) return true;
         throw error;
       }
     },
