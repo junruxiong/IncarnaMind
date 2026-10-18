@@ -185,7 +185,8 @@ for (const { language, width, question, name } of FROM_QUESTION) {
     // The exported file is named by it, and ends at the same clean cut.
     await exportFromMenu(window);
     const done = window.getByTestId("export-result").getByTestId("export-done");
-    await expect(done).toContainText(`${name}.docx`, { timeout: 30_000 });
+    await expect(done).toContainText(".docx", { timeout: 30_000 });
+    expect(await done.getAttribute("title")).toContain(`${name}.docx`);
     await app.close();
   });
 }

@@ -230,9 +230,11 @@ test("typing in the composer and pressing Enter shows the Question in the assist
   await expect(bubble).toHaveCSS("font-size", "14px");
   const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "streaming");
-  // While it is written: the pulsing dot and Stop show; it is read out in a polite live region.
+  // While it is written: the pulsing dot shows and the composer's button is Stop, with none under
+  // the line; it is read out in a polite live region.
   await expect(answer.getByTestId("answer-writing")).toBeVisible();
-  await expect.poll(() => opacityOf(answer.getByTestId("answer-actions"))).toBe(1);
+  await expect(composer.getByTestId("composer-stop")).toBeVisible();
+  await expect(answer.getByTestId("answer-stop")).toHaveCount(0);
   const live = composer.getByTestId("composer-live");
   await expect(live).toHaveAttribute("aria-live", "polite");
   await expect(live).toHaveText(/Writing the Answer…|Your Documents answer this/);
@@ -295,7 +297,7 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   const answer = assistantAnswers(window).first();
   await expect(answer).toContainText("scripted");
   await expect(answer).toHaveAttribute("data-status", "streaming");
-  await pointAndClick(window, answer.getByTestId("answer-stop"));
+  await pointAndClick(window, composer.getByTestId("composer-stop"));
   await expect(answer).toHaveAttribute("data-status", "stopped");
   const kept = await answer.locator(".assistant-answer-text").textContent();
   expect(kept).toContain("scripted");
@@ -343,7 +345,7 @@ test("sending empties the composer and shows the Question with its Answer on its
 
     // Ollama is slow to say where the model runs, so the Question waits on it. Meanwhile, at
     // once: the composer is empty, the Question is in the assistant with its first step, reading
-    // the Mind in focus, and Stop under it, and the send button is Stop. A second Enter, in the empty composer, does nothing.
+    // the Mind in focus, and the send button is Stop, with none under the line. A second Enter, in the empty composer, does nothing.
     ollama.hold();
     await window.keyboard.type(LONG_QUESTION);
     await window.keyboard.press("Enter");
@@ -353,14 +355,14 @@ test("sending empties the composer and shows the Question with its Answer on its
     await expect(questions).toHaveCount(1);
     await expect(questions).toContainText(LONG_QUESTION);
     await expect(onItsWay.getByTestId("answer-writing")).toHaveText("Reading Untitled…");
-    await expect(onItsWay.getByTestId("answer-stop")).toBeVisible();
+    await expect(onItsWay.getByTestId("answer-stop")).toHaveCount(0);
     await expect(stop).toHaveAccessibleName("Stop the Answer");
     await expect(ask).toHaveCount(0);
     await expect(answers).toHaveCount(0);
     await screenshot(window, "composer-stop-on-its-way-en");
 
-    // Once Ollama answers, the Answer streams in where its first step was, Stop still under it and
-    // in the composer; then it is written. One Question, one Answer.
+    // Once Ollama answers, the Answer streams in where its first step was, Stop still in the
+    // composer; then it is written. One Question, one Answer.
     ollama.release();
     const first = answers.first();
     await expect(first).toHaveAttribute("data-status", "streaming");
@@ -465,7 +467,7 @@ test("Stop works before the Answer has started; a Question that can't be asked p
     await expect(answers).toHaveCount(1);
     await expect(ask).toBeEnabled();
 
-    // In Chinese, on this computer again: the first step and Stop say so in Chinese.
+    // In Chinese, on this computer again: the first step and the composer's Stop say so in Chinese.
     await bridge(window).localOnly(false);
     ollama.inTheCloud(false);
     await bridge(window).language("zh-CN");
@@ -475,7 +477,7 @@ test("Stop works before the Answer has started; a Question that can't be asked p
     await expect(input).toHaveValue("");
     await expect(refusal).toHaveCount(0);
     await expect(onItsWay.getByTestId("answer-writing")).toHaveText("正在读“未命名”…");
-    await expect(onItsWay.getByTestId("answer-stop")).toHaveText("停止");
+    await expect(onItsWay.getByTestId("answer-stop")).toHaveCount(0);
     await expect(stop).toHaveAccessibleName("停止生成回答");
     await screenshot(window, "composer-stop-on-its-way-zh");
     ollama.release();
