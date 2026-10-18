@@ -59,7 +59,7 @@ const WORDS = {
     add: "Add Documents…",
     notInFolder: "Not in a Folder",
     allUnfiled:
-      "Your Documents aren’t in Folders yet, so these are all of them. To share only some, put them in a Folder in the Library first.",
+      "Your Documents aren’t in Folders yet, so these are all of them. To share some, put them in a Folder first.",
     count: (count: number | string) => `${count} Document${count === 1 ? "" : "s"}`,
     allow: "Allow and connect",
     reads: (names: string) => `Reads ${names}`,
@@ -71,7 +71,7 @@ const WORDS = {
     add: "添加文档…",
     notInFolder: "不在文件夹中",
     allUnfiled:
-      "你的文档还没有放进文件夹，所以这里就是全部文档。如果只想分享一部分，先在资料库里把它们放进一个文件夹。",
+      "你的文档还没有放进文件夹，这里就是全部文档。想只分享一部分，先把它们放进一个文件夹。",
     count: (count: number | string) => `${count} 个文档`,
     allow: "允许并连接",
     reads: (names: string) => `可读取：${names}`,

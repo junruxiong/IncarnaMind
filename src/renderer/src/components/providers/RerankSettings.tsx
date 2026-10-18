@@ -13,6 +13,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { DetailsLine } from "../DetailsLine";
 import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
@@ -76,7 +77,13 @@ export function RerankSettingsSection() {
   return (
     <section data-testid="rerank-settings" className="flex flex-col">
       <h4 className={sectionTitleClass}>{t("rerank.settings.title")}</h4>
-      <p className={sectionNoteClass}>{t("rerank.settings.body")}</p>
+      <DetailsLine
+        testId="rerank-settings-body"
+        className={sectionNoteClass}
+        details={t("rerank.settings.body.details")}
+      >
+        {t("rerank.settings.body")}
+      </DetailsLine>
 
       {!editing && (
         <div className={ruledListClass}>
