@@ -176,33 +176,33 @@ test("the target's field keeps the focus when the menu's toggle event comes late
 
 /** How long after the next click or key the count read `shown`, measured in the page so the test's own round trips don't add to it. */
 async function countShownAfter(window: Page, shown: string, act: () => Promise<void>) {
-  const took = window.evaluate(
-    (expected) =>
-      new Promise<number>((resolve) => {
-        let from: number | null = null;
-        const start = (event: Event) => {
-          from ??= event.timeStamp;
-        };
-        document.addEventListener("click", start, true);
-        document.addEventListener("keydown", start, true);
-        const shown = () =>
-          document
-            .querySelector('[data-testid="mind-count-button"]')
-            ?.textContent?.replace(/\s+/g, " ")
-            .trim() === expected;
-        const watch = new MutationObserver(() => {
-          if (from === null || !shown()) return;
-          watch.disconnect();
-          document.removeEventListener("click", start, true);
-          document.removeEventListener("keydown", start, true);
-          resolve(performance.now() - from);
-        });
-        watch.observe(document.body, { childList: true, subtree: true, characterData: true });
-      }),
-    shown,
-  );
+  // Listening before acting: on a busy computer the click can reach the page before a listener
+  // installed alongside it, and the wait would never start.
+  await window.evaluate((expected) => {
+    (globalThis as { countShown?: Promise<number> }).countShown = new Promise<number>((resolve) => {
+      let from: number | null = null;
+      const start = (event: Event) => {
+        from ??= event.timeStamp;
+      };
+      document.addEventListener("click", start, true);
+      document.addEventListener("keydown", start, true);
+      const shown = () =>
+        document
+          .querySelector('[data-testid="mind-count-button"]')
+          ?.textContent?.replace(/\s+/g, " ")
+          .trim() === expected;
+      const watch = new MutationObserver(() => {
+        if (from === null || !shown()) return;
+        watch.disconnect();
+        document.removeEventListener("click", start, true);
+        document.removeEventListener("keydown", start, true);
+        resolve(performance.now() - from);
+      });
+      watch.observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+  }, shown);
   await act();
-  return took;
+  return window.evaluate(() => (globalThis as { countShown?: Promise<number> }).countShown);
 }
 
 const COUNTS = {
