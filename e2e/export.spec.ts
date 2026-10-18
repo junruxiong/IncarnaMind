@@ -543,7 +543,7 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
 
   // The Linked folder picks the export up, beside the User's own file.
   await showSourceLocations(window);
-  const items = window.getByTestId("document-list-item");
+  const items = window.getByTestId("linked-folders-section").getByTestId("document-list-item");
   const exported = items.filter({ hasText: "Tides" });
   const moon = items.filter({ hasText: "Moon" });
   await expect(exported).toHaveAttribute("data-status", "ready", { timeout: 30_000 });

@@ -561,3 +561,51 @@ test("every row kind in the tree has the shared menu, renames in place and selec
     await app.close();
   }
 });
+
+/** The New menu's items, each as ⌘K names its command; Record a meeting is off until turned on. */
+const NEW_MENU_COMMANDS: readonly MessageKey[] = [
+  "menu.newMind",
+  "sidebar.plus.addDocuments",
+  "menu.newFolder",
+  "sidebar.plus.linkFolder",
+  "command.compareDocuments",
+  "verify.command",
+  "sidebar.plus.addWebPage",
+  "wordImport.command",
+  "library.chooseStarters",
+  "command.sources.find",
+];
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`the New menu's four rows and what is under More are each in ⌘K too (${language})`, async () => {
+    const t = (key: MessageKey) => translate(language, key);
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1440, 660);
+      await setLanguage(window, language);
+      await window.getByTestId("plus-menu").click();
+      const rows = window.getByTestId("plus-menu-items").getByRole("menuitem");
+      await expect(rows).toHaveCount(4);
+      await expect(rows.nth(3)).toContainText(t("sidebar.plus.more"));
+      await window.getByTestId("plus-more").hover();
+      const more = window.getByTestId("plus-more-menu").getByRole("menuitem");
+      await expect(more).toHaveCount(NEW_MENU_COMMANDS.length - 3);
+      await window.keyboard.press("Escape");
+      await window.keyboard.press("Escape");
+      for (const key of NEW_MENU_COMMANDS) {
+        const label = t(key).replace(/…$/, "");
+        await window.keyboard.press("ControlOrMeta+k");
+        const search = window.getByTestId("palette-search");
+        await expect(search).toBeFocused();
+        await window.keyboard.type(`>${label}`);
+        await expect(
+          window.getByTestId("palette-item").filter({ hasText: label }).first(),
+        ).toBeVisible();
+        await window.keyboard.press("Escape");
+        await expect(search).toHaveCount(0);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+}

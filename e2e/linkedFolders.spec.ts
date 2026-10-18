@@ -24,7 +24,6 @@ import {
   pathsShown,
   previewLink,
   removeDataFolder,
-  setLanguage,
   setWindowSize,
   showSourceLocations,
   useLocalChatModel,
@@ -409,8 +408,8 @@ test("unlinking asks first, and leaves the folder on disk exactly as it was", as
   await expect(row).toHaveCount(0);
   await expect(items).toHaveCount(0);
   expect(await linkedAt(window, library)).toBeUndefined();
-  // Nothing linked and nothing added: the section says how to start again.
-  await expect(window.getByTestId("documents-empty")).toBeVisible();
+  // Nothing linked: the Linked folders section is gone with it.
+  await expect(window.getByTestId("linked-folders-section")).toHaveCount(0);
   // Byte for byte, time for time, as it was.
   expect(await snapshot(library)).toEqual(before);
   await app.close();
@@ -630,40 +629,30 @@ test("in Chinese a folder that doesn't hold the Linked folder's files is refused
   }
 });
 
-test("an empty Linked folder says so; with nothing linked or added, the sidebar says where to start", async () => {
+test("an empty Linked folder says so, in its section, which comes with it", async () => {
   const empty = join(sources, "Projects");
   await mkdir(empty);
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
 
-  // The empty sidebar offers both ways in, as the "+" menu does.
-  const start = window.getByTestId("documents-empty");
-  await expect(start).toHaveText("No Documents yet · Add files… · Link a folder…");
-  await screenshot(window.getByTestId("sidebar"), "documents-empty");
-  await setLanguage(window, "zh-CN");
-  await expect(start).toHaveText("还没有文档 · 添加文件… · 添加同步文件夹…");
-  await setLanguage(window, "en");
+  // An empty sidebar says nothing: no section waits for its first item.
+  await expect(window.getByTestId("linked-folders-section")).toHaveCount(0);
+  await expect(window.getByTestId("sidebar-sections")).toHaveText("");
 
-  // Its "Link a folder…".
-  const dialog = await previewLink(
-    app,
-    window,
-    empty,
-    start.getByTestId("documents-empty-link-folder"),
-  );
+  // The + menu's More › Link a folder….
+  const dialog = await previewLink(app, window, empty);
   await expect(dialog.getByTestId("link-folder-files")).toHaveText(
     "No supported files yet. Files added later are read.",
   );
   await expect(dialog.getByTestId("link-folder-time")).toHaveCount(0);
   await confirmLink(dialog);
-  await showSourceLocations(window);
+  await expect(window.getByTestId("linked-folders-section")).toBeVisible();
 
   const row = linkedFolderRow(window, "Projects");
   await expect(row).toHaveAttribute("data-state", "empty");
   await expect(row.getByTestId("folder-status")).toHaveText(/^No supported files/);
   // Nothing to unfold: no chevron, no toggle.
   await expect(row.getByTestId("folder-toggle")).toHaveCount(0);
-  await expect(start).toHaveCount(0);
   await screenshot(window.getByTestId("sidebar"), "row-empty");
   await app.close();
 });

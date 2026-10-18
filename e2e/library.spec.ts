@@ -568,9 +568,9 @@ test("organized folders remain separate from source locations and follow changes
     const row = rowOf(library, "Membrane separation");
     await moveRow(window, row, "Finance");
     await expect(rowOf(section(library, "Finance"), "Membrane separation")).toHaveCount(1);
-    await window.getByRole("button", { name: "Folders on disk", exact: true }).click();
-    await expect(window.getByTestId("folder-item")).toHaveCount(1);
-    await window.getByRole("button", { name: "Folders", exact: true }).click();
+    await expect(
+      window.getByTestId("linked-folders-section").getByTestId("folder-item"),
+    ).toHaveCount(1);
     await expect(window.getByTestId("library-folders")).toBeVisible();
     const path = join(sources, "Membrane separation.txt");
     const revised = "Research report: membrane invoice for laboratory services. Total GBP 250.";
@@ -764,9 +764,7 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
     const remove = library.getByTestId("library-filter-remove");
     while ((await remove.count()) > 0) await pointAndClick(window, remove.first());
 
-    // The sidebar's Tags: the same counts, and a Tag shows its Documents across Folders.
-    const browse = window.getByTestId("browse-views");
-    await browse.getByRole("button", { name: "Tags", exact: true }).click();
+    // The sidebar's Tags in use: the same counts, and a Tag shows its Documents across Folders.
     const tagRow = (name: string) =>
       window
         .getByTestId("sidebar-tags")
@@ -774,8 +772,9 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
         .filter({
           has: window.locator(':scope > div [data-testid="row-text"]', { hasText: name }),
         });
-    for (const name of ["Paper", "Report", "Invoice", "Notes", "Book"])
+    for (const name of ["Paper", "Report", "Invoice", "Notes"])
       await expect(tagRow(name).getByTestId("browse-count")).toHaveText(String(saved.byTag[name]));
+    await expect(tagRow("Book")).toHaveCount(0);
     await tagRow("Invoice")
       .locator(":scope > div")
       .getByRole("treeitem", { name: /^Invoice/ })
@@ -796,12 +795,6 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
       .getByRole("treeitem", { name: /^Invoice/ })
       .click({ position: { x: 120, y: 12 } });
     await expect(library.getByTestId("library-filter")).toHaveCount(0);
-
-    // Folders on disk: every Document's row, each done.
-    await browse.getByRole("button", { name: "Folders on disk", exact: true }).click();
-    const rows = window.getByTestId("sidebar").getByTestId("document-list-item");
-    await expect(rows).toHaveCount(count);
-    await expect(rows.and(window.locator('[data-tagging="tagged"]'))).toHaveCount(count);
   } finally {
     await app.close();
   }
