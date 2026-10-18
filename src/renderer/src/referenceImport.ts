@@ -70,10 +70,11 @@ export const useReferenceImport = create<ReferenceImportState>()((set, get) => {
       await refreshUnmatched();
       if (result.changed === 0) return undefined;
       const { fileName } = get();
+      const { total, importId } = result;
       return {
-        said: (t) => t("references.import.undo", { count: result.total, name: fileName }),
+        said: (t) => t("references.import.undo", { count: total, name: fileName }),
         undo: async () => {
-          await core.undoReferenceImport(result.importId);
+          await core.undoReferenceImport(importId);
           set({ phase: "idle", result: null });
           await refreshUnmatched();
         },

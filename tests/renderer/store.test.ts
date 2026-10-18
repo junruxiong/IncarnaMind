@@ -6,8 +6,10 @@ import type {
   DocumentGroupAssignment,
   Folder,
   LibrarySnapshot,
+  Mind,
 } from "../../src/core/api";
 import type { Translate } from "../../src/renderer/src/objects";
+import { isFreed } from "../helpers/freed";
 import { undoLines } from "../helpers/undoLines";
 
 /*
@@ -919,5 +921,165 @@ describe("Organize says what it did (#763)", () => {
     const restored = method("restoreAssignment");
     expect(restored).toHaveBeenCalledTimes(1);
     expect(restored.mock.calls[0]?.[0]).toBe("a");
+  });
+});
+
+describe("an undo line keeps only what it shows", () => {
+  const plan: Mind = {
+    id: "m",
+    title: "Plan",
+    autoTitle: "",
+    kind: "mind",
+    folderId: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  const made = {
+    id: "n",
+    name: "Untitled Folder",
+    description: "",
+    countsOwnFiles: false,
+    createdAt: "",
+    updatedAt: "",
+  };
+  let useUndo: typeof import("../../src/renderer/src/undo").useUndo;
+  let stopTagging: typeof import("../../src/renderer/src/taggingStop").stopTagging;
+
+  beforeAll(async () => {
+    ({ useUndo } = await import("../../src/renderer/src/undo"));
+    ({ stopTagging } = await import("../../src/renderer/src/taggingStop"));
+  });
+
+  beforeEach(() => {
+    useUndo.setState({ done: [], undone: [], line: null });
+    useAppStore.setState({ settings: null });
+    method("createLibraryGroup").mockResolvedValue(made);
+    method("getLibrary").mockResolvedValue(snapshot([]));
+  });
+
+  const top = () => useUndo.getState().done.at(-1);
+
+  /** The lists the store holds, held nowhere else: each is freed once the store holds others. */
+  const holdLists = () => {
+    const library = snapshot([assignment("a", "classified")]);
+    const documents = [doc("a"), doc("b")];
+    const minds = [plan];
+    useAppStore.setState({ library, documents, minds });
+    return [library, library.groups, library.assignments, documents, minds].map(
+      (list) => new WeakRef(list),
+    );
+  };
+
+  const freedOnceReplaced = async (held: WeakRef<object>[]) => {
+    useAppStore.setState({ library: snapshot([]), documents: [], minds: [] });
+    expect(await Promise.all(held.map(isFreed))).toEqual(held.map(() => true));
+  };
+
+  test("moving a Document", async () => {
+    const held = holdLists();
+    method("moveToFolder").mockResolvedValue({
+      folderId: "g",
+      minds: [],
+      documents: [{ id: "a", from: null, previous: null }],
+      conversations: [],
+    });
+    await useAppStore.getState().moveToFolder({ documentIds: ["a"] }, "g");
+    await freedOnceReplaced(held);
+    expect(said(top())).toBe("Moved “a v0” to Research");
+    expect(named(top())).toBe("Move “a v0”");
+  });
+
+  test("moving a Mind and a Document", async () => {
+    const held = holdLists();
+    method("moveToFolder").mockResolvedValue({
+      folderId: "g",
+      minds: [{ id: "m", from: null }],
+      documents: [{ id: "a", from: null, previous: null }],
+      conversations: [],
+    });
+    await useAppStore.getState().moveToFolder({ mindIds: ["m"], documentIds: ["a"] }, "g");
+    await freedOnceReplaced(held);
+    expect(said(top())).toBe("Moved 2 items to Research");
+  });
+
+  test("making a Folder with a Document in it, and naming it", async () => {
+    const held = holdLists();
+    method("moveToFolder").mockResolvedValue({
+      folderId: "n",
+      minds: [],
+      documents: [{ id: "a", from: null, previous: null }],
+      conversations: [],
+    });
+    const library = snapshot([]);
+    method("getLibrary").mockResolvedValue({ ...library, groups: [...library.groups, made] });
+    method("updateLibraryGroup").mockResolvedValue({ ...made, name: "Chapter 2" });
+    await useAppStore.getState().createFolder({ documentIds: ["a"] });
+    expect(said(top())).toBe("Made “Untitled Folder” with “a v0”");
+    await useAppStore.getState().nameNewFolder("n", "Chapter 2");
+    await freedOnceReplaced(held);
+    expect(said(top())).toBe("Made “Chapter 2” with “a v0”");
+  });
+
+  test("counting Documents as evidence", async () => {
+    const { countAsEvidence } = await import("../../src/renderer/src/evidence");
+    const count = async () => {
+      const documents = [doc("a"), doc("b")];
+      return { change: await countAsEvidence(documents, true), held: new WeakRef(documents) };
+    };
+    const { change, held } = await count();
+    expect(await isFreed(held)).toBe(true);
+    expect(said(change)).toBe("2 Documents count as evidence now");
+    await change.undo();
+    expect(method("setCountedAsEvidence")).toHaveBeenLastCalledWith("b", false);
+  });
+
+  test("tagging Documents", async () => {
+    const { retagged } = await import("../../src/renderer/src/changes");
+    const tag = () => {
+      const names = ["a v0", "b v0"];
+      const change = retagged({ added: true, tag: "Report", names }, [], async () => undefined);
+      return { change, held: new WeakRef(names) };
+    };
+    const { change, held } = tag();
+    expect(await isFreed(held)).toBe(true);
+    expect(said(change)).toBe("Tagged 2 Documents Report");
+  });
+
+  test("importing references", async () => {
+    const { useReferenceImport } = await import("../../src/renderer/src/referenceImport");
+    const read = async () => {
+      const entries = [{ title: "Tides" }, { title: "Harbours" }];
+      method("importReferences").mockResolvedValue({
+        outcome: "imported",
+        importId: "i",
+        format: "bibtex",
+        total: 2,
+        matched: 0,
+        unmatched: 2,
+        changed: 2,
+        merged: 0,
+        problems: [],
+        entries,
+        files: 0,
+      });
+      method("listUnmatchedReferences").mockResolvedValue([]);
+      const change = await useReferenceImport.getState().importPath("/refs/tides.bib");
+      method("importReferences").mockReset();
+      useReferenceImport.setState({ result: null });
+      return { change, held: new WeakRef(entries) };
+    };
+    const { change, held } = await read();
+    expect(await isFreed(held)).toBe(true);
+    expect(said(change)).toBe("Imported references from “tides.bib”");
+    await change?.undo();
+    expect(method("undoReferenceImport")).toHaveBeenCalledWith("i");
+  });
+
+  test("stopping Tagging", async () => {
+    const held = holdLists();
+    method("stopTagging").mockResolvedValue(["g", null]);
+    const change = await stopTagging();
+    await freedOnceReplaced(held);
+    expect(said(change)).toBe("Stopped Tagging Documents in “Research” and not in a Folder");
   });
 });
