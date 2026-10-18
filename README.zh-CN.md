@@ -33,7 +33,7 @@
 
 <p align="center"><sub>图中展示的功能现在都能用。</sub></p>
 
-**IncarnaMind** 是一款免费开源的桌面应用，支持 macOS、Windows 和 Linux：你可以借助 AI 写作，并就自己的文档（PDF、Word、PowerPoint、Excel 等）提问。它能把草稿里的每一句话、每一个数字都对照这些文档核对，不管草稿是谁写的；每个回答都标明出处的确切页码。它用你已经在用的 AI：你自己的 API 密钥（比如 DeepSeek），或你的 ChatGPT 订阅。
+**IncarnaMind** 是一款免费开源的桌面应用，支持 macOS、Windows 和 Linux：你可以借助 AI 写作，并就自己的文档（PDF、Word、PowerPoint、Excel 等）提问。它能把草稿里的每一句话、每一个数字都对照这些文档核对，不管草稿是谁写的；每个回答都标明出处的确切页码。它用你已经在用的 AI：你自己的 API 密钥（比如 DeepSeek），或你的 ChatGPT、Claude、Copilot 订阅。
 
 ## 下载
 
@@ -94,10 +94,11 @@ Windows 版将通过 SignPath Foundation 为开源项目提供的免费签名服
 <details>
 <summary><b>常见问题</b></summary>
 
-- **要花钱吗？** 不用。IncarnaMind 开源免费（Apache 2.0 许可证）。AI 模型由它的提供商收费：用你自己的 API 密钥按用量付费，或用你已有的 ChatGPT 订阅。
+- **要花钱吗？** 不用。IncarnaMind 开源免费（Apache 2.0 许可证）。AI 模型由它的提供商收费：用你自己的 API 密钥按用量付费，或用你已有的 ChatGPT、Claude、Copilot 订阅。
 - **一定要有 API 密钥吗？** 需要一个 AI 模型，最省事的是填一个 DeepSeek 密钥（设置里有“如何获取？”）。也可以填通义千问、硅基流动、OpenAI、Anthropic、Google、OpenRouter 的密钥；“设置”中还有更多提供商，例如 Kimi、智谱 GLM、Mistral、xAI，或任何兼容 OpenAI 接口的服务。订阅了 ChatGPT Plus 或 Pro，可以使用 ChatGPT 登录。
-- **是 NotebookLM（现名 Gemini Notebook）的替代品吗？** 是。IncarnaMind 在你的电脑上运行，文件在原处读取，不需要账号；模型由你来选（你自己的密钥或 ChatGPT 订阅）；每条引用都和原文所在页逐一核对，你自己写的句子也能核对；Mind 还能导出为带引用的 Word。
+- **是 NotebookLM（现名 Gemini Notebook）的替代品吗？** 是。IncarnaMind 在你的电脑上运行，文件在原处读取，不需要账号；模型由你来选（你自己的密钥，或 ChatGPT、Claude、Copilot 订阅）；每条引用都和原文所在页逐一核对，你自己写的句子也能核对；Mind 还能导出为带引用的 Word。
 - **能用我的 ChatGPT 订阅吗？** 能，需要 ChatGPT Plus 或 Pro。在**设置 → 模型**里选**使用 ChatGPT 继续**，在浏览器里完成登录即可：之后的提问会以你的账号发给 OpenAI，计入订阅的用量上限，不需要密钥。
+- **能用我的 Claude 或 GitHub Copilot 订阅吗？** 能。在**其他方式**或**设置 → 模型**里，用你的 Claude 或 GitHub 账号登录；登录之前不会启用。回答会计入你订阅的用量限额。Copilot 登录目前是实验性的。
 - **能离线用吗？** 读取文件和搜索可以离线。回答和核对需要 AI 模型，大多数人要联网。通过 [Ollama](https://ollama.com) 运行的本地模型可以离线回答，但比云端模型慢，也没那么可靠。按含义搜索（嵌入）是可选功能，默认关闭。
 - **会改动我的文件吗？** 不会。它只在原处读取文件，只往自己的数据文件夹和你导出的文件里写内容。
 - **“找到引文”是什么意思？** 意思是这段文字确实在引用所指的位置，但不代表它能证明你写的那句话，所以原文永远只差一次点击。“无法核对”表示那里没有可以比对的文字，比如扫描页。

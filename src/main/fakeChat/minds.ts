@@ -19,7 +19,9 @@
  * came to; add_to_mind's and create_mind's input streams in word by word,
  * slowly for a Question asked "slowly", as does edit_mind's edit. "Write three
  * paragraphs" is `paragraphsReply`'s. "Write a summary page" (写一个总结页面)
- * calls create_mind with a short summary.
+ * calls create_mind with a short summary. "Write a summary of my leases"
+ * (根据我的租约写一份总结) writes, naming the Documents in its scope, into a new
+ * Mind, or the empty one it is asked from, so what it was written from shows (#1149).
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
@@ -32,6 +34,7 @@ import {
   type Prompt,
   type Reply,
   SHORTEN,
+  systemOf,
   toolResults,
   userText,
 } from "./prompt";
@@ -79,6 +82,7 @@ export function mindRead(prompt: Prompt): string | null {
 const SUMMARY_PAGE =
   /\bwrite a summary page\b|写一个总结页面|\bwrite a summary of my documents\b|根据我现有的文件帮我写一份summary/i;
 const LONGER = /\blonger\b|长一点|更长/i;
+const LEASES_SUMMARY = /\bwrite a summary of my leases\b|根据我的租约写一份总结/i;
 /** A rewrite of the User's text (改写), which Edit with AI's scripted model writes anew. */
 const REWRITE = /\brewrite\b|改写/i;
 const SUMMARY = [
@@ -138,6 +142,17 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     if (added === undefined)
       return { tool: "add_to_mind", input: { content: "## Risks\n\nThe supplier is late." } };
     return { text: firstSentence(added) };
+  }
+  if (LEASES_SUMMARY.test(question)) {
+    const made = lastResult(prompt, "create_mind") ?? lastResult(prompt, "add_to_mind");
+    if (made !== undefined) return { text: firstSentence(made) };
+    const listed = /^Their names, newest first:\n((?:- .+\n?)+)/m.exec(systemOf(prompt))?.[1] ?? "";
+    const names = [...listed.matchAll(/^- (.+)$/gm)].map((line) => line[1]).sort();
+    const content = `Written from ${names.join(", ")}.`;
+    // An empty Mind is filled; any other gets a new one beside it.
+    return systemOf(prompt).includes("write it there with add_to_mind")
+      ? { tool: "add_to_mind", input: { content } }
+      : { tool: "create_mind", input: { title: "Summary", content } };
   }
   if (SUMMARY_PAGE.test(question)) {
     const made = lastResult(prompt, "create_mind");

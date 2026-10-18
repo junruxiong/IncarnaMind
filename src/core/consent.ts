@@ -44,6 +44,8 @@ export interface DataFlowDefinition {
   services(): Promise<ExternalService[]>;
   /** Background work, which never asks (ADR-0022): it waits until the User allows the flow. */
   background?: boolean;
+  /** Whether a service the flow goes to runs on this computer, so Local mode doesn't stop it. Absent: none does. */
+  onThisComputer?(serviceId: string): boolean;
 }
 
 /** The registry of every external data flow. Registering an id again replaces it. */
@@ -271,6 +273,19 @@ export function createConsent(
     /** Whether the flow is background work, which never asks. */
     isBackground: (flowId: DataFlowId) => definitions.get(flowId)?.background === true,
 
+    onThisComputer: (flowId: DataFlowId, serviceId: string) =>
+      definitions.get(flowId)?.onThisComputer?.(serviceId) === true,
+
+    dataFlow: flowFor,
+
+    /**
+     * Whether the User's acceptance of the flow to the service still stands. A flow that has
+     * since grown to send more still counts: work started before it grew doesn't send the more.
+     */
+    allows(flowId: DataFlowId, service: ExternalService): boolean {
+      return find(flowId, service.id)?.decision === "accepted";
+    },
+
     /**
      * Resolves once the User has accepted everything the flow sends to the
      * service, asking them first if needed. Throws `ConsentDeclinedError` if
@@ -362,6 +377,19 @@ export function createConsent(
 
     requests(): ConsentRequest[] {
       return [...pending.values()].map((entry) => entry.request);
+    },
+
+    /**
+     * Fails each waiting request `refuses` names with `error`, and closes its prompt: what the User
+     * would answer no longer matters, e.g. once Local mode is on.
+     */
+    refuseWaiting(refuses: (request: ConsentRequest) => boolean, error: () => Error): void {
+      for (const entry of [...pending.values()]) {
+        if (!refuses(entry.request)) continue;
+        pending.delete(entry.request.requestId);
+        events.emit("consent.resolved", { requestId: entry.request.requestId, accepted: false });
+        entry.fail(error());
+      }
     },
 
     /** Fails every request still waiting, so nothing is left hanging after the core closes. */

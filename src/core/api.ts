@@ -3804,6 +3804,8 @@ export type ProviderErrorKind =
   | "network"
   | "provider"
   | "consent-declined"
+  /** The User turned off the flow to the model's service while the work was under way: nothing more was sent. */
+  | "consent-revoked"
   /** "Keep everything on this computer" is on and the model isn't on this computer: nothing was sent, or the Answer was stopped. */
   | "local-mode"
   /** The model is in Ollama on this computer, and Ollama isn't running: found before anything was sent. */
@@ -5052,6 +5054,11 @@ export interface AnswerSteps {
   withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
+  /**
+   * A request to write, written from a Search scope that holds `documents` of the User's
+   * `total` Documents (#1149). Absent: from all of them, or not a request to write.
+   */
+  writtenFrom?: { documents: number; total: number };
 }
 
 /**

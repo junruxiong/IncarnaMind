@@ -32,6 +32,7 @@ import {
 import { normalizeBaseUrl, serviceForUrl } from "../providers/kinds";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { Secrets } from "../secrets";
+import { createSendGate } from "../sendGate";
 import type { SettingsStore } from "../settings";
 import {
   type DocumentExcerpt,
@@ -190,8 +191,10 @@ export function createJevTagging(options: {
   hostedUrl?: string;
   /** Aborts requests when the core closes. */
   signal: AbortSignal;
+  localOnly(): boolean;
 }) {
   const { settings, secrets, consent, signal } = options;
+  const gate = createSendGate(consent, options.localOnly);
   const hostedUrl = options.hostedUrl ?? JEV_HOSTED_URL;
 
   const stored = () => parseStored(settings.readDeviceValue(SETTINGS_KEY));
@@ -301,6 +304,7 @@ export function createJevTagging(options: {
         local: service === null,
         async decide({ tags, excerpt, signal: stop }) {
           const probabilities = await askJev({
+            ...(service && { beforeSend: () => gate.check("tagging", service) }),
             baseUrl: baseUrlOf(jev.endpoint),
             apiKey,
             model: jev.model ?? JEV_DEFAULT_MODEL,
@@ -324,6 +328,7 @@ export function createJevTagging(options: {
       const service = serviceOf(jev.endpoint);
       if (service) await consent.ensure("classification", service);
       return decisionGroupClassifier({
+        ...(service && { beforeSend: () => gate.check("classification", service) }),
         baseUrl: baseUrlOf(jev.endpoint),
         apiKey,
         model: jev.model ?? JEV_DEFAULT_MODEL,

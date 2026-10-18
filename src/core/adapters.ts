@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { AnalysisJob, AnalysisResult, AnalysisVersions } from "../shared/analysis";
 import type { DrawnPage, PageCaptureRequest } from "../shared/citedPage";
 import type { PrintDocument } from "../shared/printDocument";
 import type { AgentLauncher } from "./agents";
@@ -702,6 +703,27 @@ export interface Pictures {
   png(svg: string): Promise<Uint8Array>;
 }
 
+/**
+ * Runs Analyses (ADR-0023): code a model wrote, over inputs cited from the
+ * User's Documents, in a sandbox with no files and no network. The desktop
+ * app runs Python in a hidden, sandboxed window (src/main/analysis.ts); tests
+ * pass a fake (./analysis/fake). Each job names its language, so a second
+ * one can run behind the same port.
+ */
+export interface AnalysisRuntime {
+  /** The languages it runs, each with what it runs them with; none when it can't run on this computer. */
+  readonly languages: readonly AnalysisVersions[];
+  /**
+   * Runs a job in a namespace of its own, with the same seeds and no clock,
+   * to its end, its time limit or `signal`, one job at a time. Never rejects:
+   * a failure is how the result ends (an error in the code, timed out,
+   * stopped, out of memory, or unavailable).
+   */
+  run(job: AnalysisJob, signal: AbortSignal): Promise<AnalysisResult>;
+  /** Stops what is running and frees the interpreter's memory; the next run starts another. */
+  close(): void;
+}
+
 export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
@@ -962,6 +984,11 @@ export interface CoreAdapters {
    * Meetings): Meetings can't start.
    */
   audioCapture?: AudioCapture;
+  /**
+   * Runs Analyses (see `AnalysisRuntime`). Absent (tests that aren't about
+   * them, a host with no sandbox): Analyses can't run.
+   */
+  analysisRuntime?: AnalysisRuntime;
   /**
    * Draws cited pages other than PDFs' (see `CapturePage`). The desktop app
    * draws them in a hidden window (src/main/citedPageCapture.ts). Absent
