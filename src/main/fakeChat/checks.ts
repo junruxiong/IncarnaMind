@@ -19,11 +19,30 @@ const checkWords = (text: string): string[] => [
   ...(text.toLowerCase().match(/[a-z]{4,}|\d+(?:[.,]\d+)?/g) ?? []),
 ];
 
-/** Sentences the User cites a quote for that the scripted model finds partly supported: what the quote covers, and what it doesn't. */
-const PARTLY = [
-  { when: /scaling constraint/, covered: "the harbour times", uncovered: "the scaling constraint" },
-  { when: /memory needs/, covered: "the speed comparison", uncovered: "memory and robustness" },
-  { when: /内存需求/, covered: "速度比较", uncovered: "内存和鲁棒性" },
+/**
+ * Sentences the User cites a quote for that the scripted model finds partly
+ * supported: what the quote covers, what it doesn't, and the sentence with
+ * that part cut, as Cut the unsupported part writes it (./edit, #1111).
+ */
+export const PARTLY = [
+  {
+    when: /scaling constraint/,
+    covered: "the harbour times",
+    uncovered: "the scaling constraint",
+    cut: "Harbours publish the times of high water every 12 months.",
+  },
+  {
+    when: /memory needs/,
+    covered: "the speed comparison",
+    uncovered: "memory and robustness",
+    cut: "Experiments usually show quasi-Newton methods are faster than gradient descent, and first-order methods are slower.",
+  },
+  {
+    when: /内存需求/,
+    covered: "速度比较",
+    uncovered: "内存和鲁棒性",
+    cut: "已有实验通常显示，拟牛顿方法比梯度下降更快，一阶优化方法速度较慢。",
+  },
 ];
 
 /**

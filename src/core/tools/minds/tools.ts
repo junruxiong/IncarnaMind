@@ -18,6 +18,10 @@
  *   Question's Search scope when that is one Folder, else in none, holding
  *   the text the model wrote, if any.
  *
+ * The sentences with Citations a call writes, new or as `edit_mind`'s
+ * content, are checked against them before they land, and what they don't
+ * support is taken out or marked (../../answers/checks/written, #1111).
+ *
  * A Mind is named by its name; left out, it is the one in focus. A call that
  * changed a Mind says so on its card (`MindChange`), and one that changed
  * nothing says why (`MindProblem`). What the model reads back says what was
@@ -43,6 +47,7 @@ import {
 } from "../../../shared/proposals";
 import { countFor, countText, mostlyCjk } from "../../../shared/wordCount";
 import { createElement, type NodeJSON, syncContent, topLevelBlocks } from "../../answers/blocks";
+import type { CheckWrittenInput, WrittenCheck } from "../../answers/checks/written";
 import type { ParagraphAsked } from "../../answers/paragraphAsked";
 import {
   BLOCK_ID_ATTRIBUTE,
@@ -139,6 +144,8 @@ export interface MindsForTools {
     reason: string | null;
     revised: { blockIds: string[] } | null;
   }>;
+  /** Checks the cited sentences a call wrote before they land (../../answers/checks/written). */
+  checkWritten(input: CheckWrittenInput): Promise<WrittenCheck | null>;
 }
 
 export interface MindToolsOptions {
@@ -727,6 +734,48 @@ interface Written {
   notFound: number;
   unrecorded: number;
   searchTalk: number;
+  /** `ids` in the order of `blocks`. */
+  blocks: { mindId: string; ids: readonly string[]; blocks: readonly NodeJSON[] };
+}
+
+const sentencesWord = (count: number) => (count === 1 ? "1 sentence" : `${count} sentences`);
+
+function checkedNotes(checked: WrittenCheck | null): string[] {
+  if (!checked) return [];
+  const { cited, sent, checked: judged, failed, cut, unsupported, contradicted } = checked;
+  const are = (count: number) => (count === 1 ? "is" : "are");
+  return [
+    ...(judged > 0
+      ? [
+          `Before it went in, ${sentencesWord(judged)} with Citations ${judged === 1 ? "was" : "were"} checked against them.`,
+        ]
+      : []),
+    ...(cut.length > 0
+      ? [
+          `What their Citations don't support was taken out: ${cut.map((part) => `“${part}”`).join(", ")}. Don't state it in your reply.`,
+        ]
+      : []),
+    ...(unsupported > 0
+      ? [
+          `${sentencesWord(unsupported)} ${are(unsupported)} still not supported by ${unsupported === 1 ? "its" : "their"} Citations, and marked so in the Mind: say so.`,
+        ]
+      : []),
+    ...(contradicted > 0
+      ? [
+          `${sentencesWord(contradicted)} ${contradicted === 1 ? "contradicts" : "contradict"} a Document, and ${are(contradicted)} marked so in the Mind: say so.`,
+        ]
+      : []),
+    ...(failed > 0
+      ? [
+          `${sentencesWord(failed)} couldn't be checked, and ${are(failed)} marked so in the Mind: say so.`,
+        ]
+      : []),
+    ...(sent < cited
+      ? [
+          `Only the first ${sent} of its ${cited} sentences with Citations were checked; the rest are marked not checked in the Mind: say so.`,
+        ]
+      : []),
+  ];
 }
 
 function writtenNotes({ notFound, unrecorded, searchTalk }: Written) {
@@ -1238,7 +1287,61 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         change: () => changeOf(writer, made),
       });
     }
-    return { change, notFound, unrecorded, searchTalk };
+    return {
+      change,
+      notFound,
+      unrecorded,
+      searchTalk,
+      blocks: { mindId: writer.mind.id, ids: writer.ids, blocks },
+    };
+  };
+
+  // Not while markers `cite` hadn't recorded are still to get their Citations: `settle` writes the Blocks again.
+  const checkWritten = async (
+    toolCallId: string,
+    written: Written & { change: MindChange },
+    signal: AbortSignal,
+  ): Promise<WrittenCheck | null> => {
+    const { mindId, ids, blocks } = written.blocks;
+    if (written.unrecorded > 0 || ids.length !== blocks.length) return null;
+    let reported = false;
+    let checked: WrittenCheck | null = null;
+    try {
+      checked = await minds.checkWritten({
+        mindId,
+        blocks,
+        ids,
+        prepared: options.prepared,
+        signal,
+        checking: (count) => {
+          reported = true;
+          options.changed(toolCallId, { ...written.change, checking: count });
+        },
+        edit: (change) => minds.edit(mindId, change),
+      });
+    } catch (error) {
+      // A check that fails never takes back what the call wrote: it stands, unchecked.
+      console.error(
+        `What the assistant wrote in Mind ${mindId} couldn't be checked before it landed:`,
+        error,
+      );
+    }
+    if (checked) {
+      const { request, cited, sent, failed, stop } = checked;
+      written.change = {
+        ...written.change,
+        selfCheck: {
+          request,
+          cited,
+          sent,
+          checked: checked.checked,
+          failed,
+          ...(stop && { stop }),
+        },
+      };
+    }
+    if (reported || checked) options.changed(toolCallId, written.change);
+    return checked;
   };
 
   /** By call: text written with markers `cite` hadn't recorded yet. */
@@ -1277,12 +1380,14 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     mind: ChangeableMind,
     written: NonNullable<ReturnType<typeof finishContent>>,
     where: string,
+    checked: WrittenCheck | null,
   ): string =>
     [
       `Proposed ${written.change.proposals === 1 ? "1 new Block" : `${written.change.proposals} new Blocks`} ${where}.`,
       ...tableNotes(written.change),
       outcomeOf(mind, written.change.request),
       ...writtenNotes(written),
+      ...checkedNotes(checked),
     ].join(" ");
 
   const mindProperty = {
@@ -1403,7 +1508,14 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if (unrecorded > 0) {
       unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision });
     }
-    return { change, notFound, unrecorded, searchTalk, dropped };
+    return {
+      change,
+      notFound,
+      unrecorded,
+      searchTalk,
+      dropped,
+      blocks: { mindId: mind.id, ids, blocks },
+    };
   };
 
   const unmadeSaid = (name: string) =>
@@ -1490,6 +1602,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         }
         const before = minds.read(mind.id, (blocks) => stretchText(blocks, stretch));
         const written = writeOver(toolCallId, mind, over, markdown, canCallAgain?.() ?? true);
+        const checked = await checkWritten(toolCallId, written, signal);
         const went = ` (${lengths(before, markdown)})`;
         return [
           over.kind === "own"
@@ -1498,6 +1611,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           ...tableNotes(written.change),
           ...writtenNotes(written),
           ...droppedSaid(written.dropped),
+          ...checkedNotes(checked),
         ].join(" ");
       }
       // Only a request for an edit rewrites the User's text at once; one to write waits there (#880).
@@ -1606,7 +1720,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         return { writer: writerFor(mind, after, false), created: false };
       });
     },
-    async call(input, { toolCallId, canCallAgain }) {
+    async call(input, { toolCallId, signal, canCallAgain }) {
       const given = givenIn(input) ?? text(input.content, "content");
       const mind = found(targetOf(input));
       if (wantsNewMind(mind) && (canCallAgain?.() ?? true)) {
@@ -1628,10 +1742,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         canCallAgain?.() ?? true,
       );
       if (!written) throw noTable(mind);
+      const checked = await checkWritten(toolCallId, written, signal);
       return added(
         mind,
         written,
         `in “${mind.name}”, ${after ? `after “${after}”` : "at its end"}`,
+        checked,
       );
     },
   };
@@ -1677,7 +1793,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         return { writer: writerFor(mind, null, true), created: true };
       });
     },
-    async call(input, { toolCallId, canCallAgain }) {
+    async call(input, { toolCallId, signal, canCallAgain }) {
       const title = text(input.title, "title");
       const given = givenIn(input);
       // Made already, as its content came in.
@@ -1712,7 +1828,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         empty();
         return `${made}. It is empty. ${noTable(mind).message}`;
       }
-      return `${made}. ${added(mind, written, "in it")}`;
+      const checked = await checkWritten(toolCallId, written, signal);
+      return `${made}. ${added(mind, written, "in it", checked)}`;
     },
   };
 

@@ -7,7 +7,7 @@
 import * as Y from "yjs";
 import { readClaimCheck } from "../../../shared/claimChecks";
 import { readProposalAttribute, readProposalRef } from "../../../shared/proposals";
-import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
+import { comparableSentence, INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 import {
   BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
@@ -264,6 +264,21 @@ export function markedSentences(blocks: Y.XmlFragment): MarkedSentence[] {
     }
   }
   return [...found.values()];
+}
+
+/** Whether the User keeps a sentence as their own view (#1111): a check's mark on it says so, and its words are as they were. */
+export function keptAsView(
+  marks: readonly MarkedSentence[],
+  sentence: Pick<SelectedSentence, "element" | "from" | "to" | "text">,
+): boolean {
+  return marks.some(
+    ({ element, from, to, check }) =>
+      check.kept === true &&
+      element === sentence.element &&
+      from < sentence.to &&
+      to > sentence.from &&
+      comparableSentence(check.text) === comparableSentence(sentence.text),
+  );
 }
 
 /**

@@ -204,7 +204,10 @@ function parseInput(input: unknown): ParsedInput {
     throw new InvalidInputError(`Unknown Edit with AI action "${String(action)}".`);
   }
   const words = typeof instruction === "string" ? instruction.trim() : "";
-  if ((action === "translate" || action === "instruction") && words === "") {
+  if (
+    (action === "translate" || action === "instruction" || action === "cut-unsupported") &&
+    words === ""
+  ) {
     throw new InvalidInputError({ key: "error.edit.noInstruction" });
   }
   if (words.length > MAX_INSTRUCTION_CHARACTERS) {
@@ -329,8 +332,17 @@ interface EditCall {
   maxOutputTokens: number;
 }
 
+const quotesOf = (selection: Selection): string[] =>
+  selection.citations.map((citation) => (typeof citation.quote === "string" ? citation.quote : ""));
+
 /** The request for `ask` over `selection`; null when it is more than the model can take at once. */
-function editCall(prepared: PreparedChatModel, ask: Ask, selection: Selection): EditCall | null {
+function editCall(
+  prepared: PreparedChatModel,
+  ask: Pick<Ask, "action" | "instruction">,
+  selection: Pick<Selection, "text" | "context" | "before" | "after" | "characters"> & {
+    quotes?: readonly string[];
+  },
+): EditCall | null {
   const explain = ask.action === "explain";
   const instructions = explain ? EXPLAIN_INSTRUCTIONS : EDIT_INSTRUCTIONS;
   const prompt = editPrompt({
@@ -340,6 +352,7 @@ function editCall(prepared: PreparedChatModel, ask: Ask, selection: Selection): 
     context: selection.context,
     // Explain writes under the passage, not into it: the words around it don't matter.
     ...(!explain && { before: selection.before, after: selection.after }),
+    ...(ask.action === "cut-unsupported" && { quotes: selection.quotes }),
   });
   // The reply is about as long as the passage; a translation into Chinese can count more.
   let maxOutputTokens = Math.min(16_000, Math.max(1_024, Math.ceil(selection.characters * 1.5)));
@@ -392,6 +405,35 @@ async function streamEdit(
     failure = error;
   }
   return { raw, failure };
+}
+
+/**
+ * The new text Edit with AI gives for a passage that isn't in a Mind yet (#1111: a sentence
+ * the assistant is about to write), its Citations as numbered markers: the same request and
+ * the same reading of the reply, with no Proposals. Null when the model fails, gives nothing,
+ * or the passage is more than it can take at once.
+ */
+export async function editText(
+  prepared: PreparedChatModel,
+  ask: Pick<Ask, "action" | "instruction">,
+  passage: { text: string; context: string; quotes: readonly string[] },
+  signal: AbortSignal,
+): Promise<string | null> {
+  const call = editCall(prepared, ask, {
+    ...passage,
+    before: "",
+    after: "",
+    characters: passage.text.length,
+  });
+  if (!call) return null;
+  const { raw, failure } = await streamEdit(prepared, call, signal);
+  if (signal.aborted) return null;
+  if (failure !== null) {
+    console.warn(`Edit with AI (${ask.action}) of a passage not in a Mind failed:`, failure);
+    return null;
+  }
+  const text = readEditReply(raw, passage.text);
+  return text === "" ? null : text;
 }
 
 export function createEdits(options: EditsOptions) {
@@ -465,7 +507,7 @@ export function createEdits(options: EditsOptions) {
     const { mindId, fork, selection } = draft;
     const explain = ask.action === "explain";
     const ended = (result: EditWithAiResult) => ({ result, reply: "", reason: null });
-    const call = editCall(prepared, ask, selection);
+    const call = editCall(prepared, ask, { ...selection, quotes: quotesOf(selection) });
     if (!call) return ended({ kind: "too-long" });
 
     const request = randomUUID();

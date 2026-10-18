@@ -120,7 +120,7 @@ import { findUnreadDocuments } from "./documents/unread";
 import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
-import { createEdits } from "./edits";
+import { createEdits, editText } from "./edits";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import {
@@ -1269,6 +1269,7 @@ export function createCore(adapters: CoreAdapters): Core {
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
       writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
       proposeInMind: (input) => edits.proposeInMind(input),
+      checkWritten: (input) => checks.checkWritten(input),
     },
     withdrawChanges: (changes) => {
       for (const change of changes) {
@@ -1703,6 +1704,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     engine: answerEngine,
     retention,
+    editText,
     now: () => adapters.now?.() ?? new Date(),
   });
 
