@@ -3,7 +3,14 @@ import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
 import type { Core } from "../../src/core";
 import { pendingProposals } from "../../src/shared/proposals";
-import { askAssistant, changesIn, lastResult, mindCalls } from "../helpers/assistant";
+import {
+  answerRequests,
+  askAssistant,
+  changesIn,
+  lastResult,
+  mindCalls,
+} from "../helpers/assistant";
+import { checkReply, isCheckRun } from "../helpers/checks";
 import { answerEnded, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { createSourceFolder, waitForProcessing, writeSourceFile } from "../helpers/documents";
@@ -1154,7 +1161,9 @@ describe("Arguments a model gets slightly wrong cost no extra step", { timeout: 
     ["an array written in JSON", (record: object) => JSON.stringify([record])],
     ["an array encoded twice", (record: object) => JSON.stringify(JSON.stringify([record]))],
   ])("cite given %s", async (_how, wrap) => {
-    const model = scriptedModel(({ results }): ScriptedReply => {
+    const model = scriptedModel((call): ScriptedReply => {
+      if (isCheckRun(call)) return checkReply(call, {});
+      const { results } = call;
       const search = results.find((result) => result.tool === "search_documents");
       if (!search)
         return { calls: [{ tool: "search_documents", input: { query: "spring tides" } }] };
@@ -1183,7 +1192,7 @@ describe("Arguments a model gets slightly wrong cost no extra step", { timeout: 
       mindId: mind.id,
     });
 
-    expect(model.doStreamCalls).toHaveLength(4);
+    expect(answerRequests(model)).toHaveLength(4);
     const [change] = changesIn(answer);
     const madeClient = await connectToMind(core, change?.mindId ?? "");
     expect(shownWithChanges(madeClient)).toEqual([

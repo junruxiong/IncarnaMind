@@ -24,8 +24,8 @@ import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import {
   CITATION_NODE,
-  CLAIM_CHECK_MARK,
   type CitedQuote,
+  CLAIM_CHECK_MARK,
   type ClaimCheckAttributes,
   type ClaimCheckResult,
   type EditAction,
