@@ -160,7 +160,7 @@ test("LM Studio and Unsloth Studio are On this computer in Add a provider, besid
     await settings.getByTestId("models-back").click();
 
     let form = await addProviderForm(settings, "unsloth");
-    const useIt = () => form.getByTestId("provider-use-key");
+    const saveButton = () => form.getByTestId("provider-use-key");
     await expect(form.getByTestId("provider-field")).toHaveValue("127.0.0.1:8888");
     await expect(form.getByTestId("local-server")).toContainText("Unsloth Studio is running");
     const model = form.getByTestId("provider-model");
@@ -172,9 +172,9 @@ test("LM Studio and Unsloth Studio are On this computer in Add a provider, besid
     await expect(form.getByTestId("provider-model-reason")).toHaveText(
       "Not yet tested for checked Citations",
     );
-    await expect(useIt()).toBeDisabled();
+    await expect(saveButton()).toBeDisabled();
     await form.getByLabel(/^API key/).fill("sk-unsloth-test");
-    await expect(useIt()).toBeEnabled();
+    await expect(saveButton()).toBeEnabled();
     await expect(form.getByTestId("provider-sends")).toHaveCount(0);
     // An address on another computer is a service like any other, and says what goes to it.
     await form.getByTestId("provider-field").fill("192.168.1.20:8888");
@@ -198,7 +198,7 @@ test("LM Studio and Unsloth Studio are On this computer in Add a provider, besid
     await expect(form.getByTestId("local-server")).toContainText(
       "Nothing answers at 127.0.0.1:1234",
     );
-    await expect(useIt()).toBeDisabled();
+    await expect(saveButton()).toBeDisabled();
     await expect(form.getByTestId("provider-use-key-why")).toHaveText("Start LM Studio first.");
     await expect(form.getByTestId("local-server-check")).toBeVisible();
 
