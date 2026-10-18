@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import type { Document } from "../../../core/api";
-import { organizes } from "../../../shared/libraryModels";
+import type { Document, Tag } from "../../../core/api";
+import { organizesNewDocuments } from "../../../shared/libraryModels";
 import { useT } from "../i18n";
 import { NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
@@ -67,14 +67,24 @@ export function DocumentTagMenu({
 
 type NoTagsWhy = "stopped" | "noTags" | "noFit";
 
-/** Why a Document has no Tags, or why none will come, when the Tags alone don't say. */
-function whyNoTags(item: Document, anyTags: boolean): NoTagsWhy | null {
+const whyKeys = {
+  stopped: "status.taggingStopped",
+  noTags: "tags.state.noTags",
+  noFit: "tags.state.noFit",
+} as const;
+
+function whyNoTags(item: Document, tags: readonly Tag[]): NoTagsWhy | null {
   if (item.status !== "ready") return null;
   if (item.tagging === "stopped") return "stopped";
   if (item.tags.length > 0 || (item.tagging !== "tagged" && item.tagging !== "no-tags"))
     return null;
-  if (!anyTags) return "noTags";
-  return item.tagging === "tagged" ? "noFit" : null;
+  if (tags.length === 0) return "noTags";
+  // Tagged before any Tag existed (before "no-tags" was kept), it was never checked against one.
+  const firstTag = tags.reduce(
+    (first, tag) => (tag.createdAt < first ? tag.createdAt : first),
+    "~",
+  );
+  return item.tagging === "tagged" && item.updatedAt >= firstTag ? "noFit" : null;
 }
 
 const footerButton =
@@ -89,9 +99,9 @@ const footerButton =
 export function DocumentTagFooter({ item, close }: { item: Document; close(): void }) {
   const t = useT();
   const library = useAppStore((state) => state.library);
-  const anyTags = useAppStore((state) => state.tags.length > 0);
-  const why = whyNoTags(item, anyTags);
-  const organizing = organizes(library);
+  const tags = useAppStore((state) => state.tags);
+  const why = whyNoTags(item, tags);
+  const organizing = organizesNewDocuments(library);
   const taggingLine =
     item.status !== "ready" || organizing
       ? null
@@ -113,7 +123,7 @@ export function DocumentTagFooter({ item, close }: { item: Document; close(): vo
           {why !== "noFit" && (
             <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention" />
           )}
-          <span className="min-w-0 truncate">{t(`tags.state.${why}`)}</span>
+          <span className="min-w-0 truncate">{t(whyKeys[why])}</span>
           {why === "stopped" && (
             <>
               <span aria-hidden="true">·</span>
