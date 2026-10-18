@@ -22,6 +22,8 @@
  * calls create_mind with a short summary. "Write a summary of my leases"
  * (根据我的租约写一份总结) writes, naming the Documents in its scope, into a new
  * Mind, or the empty one it is asked from, so what it was written from shows (#1149).
+ * "Write a brief summary" (写一份简要总结) adds one to the Mind in <mind>, but
+ * answers that no Mind is open when that Mind has no name, as models did (#1212).
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
@@ -83,6 +85,7 @@ const SUMMARY_PAGE =
   /\bwrite a summary page\b|写一个总结页面|\bwrite a summary of my documents\b|根据我现有的文件帮我写一份summary/i;
 const LONGER = /\blonger\b|长一点|更长/i;
 const LEASES_SUMMARY = /\bwrite a summary of my leases\b|根据我的租约写一份总结/i;
+const BRIEF_SUMMARY = /\bbrief summary\b|简要总结/i;
 /** A rewrite of the User's text (改写), which Edit with AI's scripted model writes anew. */
 const REWRITE = /\brewrite\b|改写/i;
 const SUMMARY = [
@@ -153,6 +156,19 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     return systemOf(prompt).includes("write it there with add_to_mind")
       ? { tool: "add_to_mind", input: { content } }
       : { tool: "create_mind", input: { title: "Summary", content } };
+  }
+  if (BRIEF_SUMMARY.test(question)) {
+    const mind = userText(prompt.find((message) => message.role === "user"));
+    if (!/<mind name="[^"]+">/.test(mind)) {
+      return {
+        text: /\p{Script=Han}/u.test(question)
+          ? "没有打开的笔记，所以没法写进去。"
+          : "No Mind is open, so I can't write it there.",
+      };
+    }
+    const added = lastResult(prompt, "add_to_mind");
+    if (added === undefined) return { tool: "add_to_mind", input: { content: SUMMARY } };
+    return { text: firstSentence(added) };
   }
   if (SUMMARY_PAGE.test(question)) {
     const made = lastResult(prompt, "create_mind");

@@ -1191,7 +1191,8 @@ export function createCore(adapters: CoreAdapters): Core {
     readableMindName: (mindId) => {
       const found = minds.locate(mindId);
       if (!found || found.deletedAt !== null) return null;
-      return isKnownKind(minds.get(mindId).kind) ? found.name : null;
+      if (!isKnownKind(minds.get(mindId).kind)) return null;
+      return found.name || translate(settings.get().language, "mind.untitled");
     },
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     meetingHelp: (mindId, question) => meetingHelpOf(mindId, question),
