@@ -4422,6 +4422,7 @@ export const zhCN = {
   "mindCall.failed.stopped": "已停止，“{mind}”没有改动",
   "mindCall.failed.noTable": "未能生成表格，因此没有向“{mind}”添加内容",
   "mindCall.failed.uncited": "未添加到“{mind}”：出处没有引用",
+  "mindCall.failed.newMind": "未添加到“{mind}”：要的是新的 Mind",
   "mindChanges.unlinked": "· {count} 处出处未关联，显示为文字",
   "mindChanges.unlinked.one": "· 1 处出处未关联，显示为文字",
   "mindChanges.dropped": "· 有 {count} 处出处无法匹配，已删去",
