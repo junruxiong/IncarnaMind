@@ -1,0 +1,40 @@
+{
+  "run": 2,
+  "platform": "linux",
+  "arch": "x64",
+  "electron": "44.5.1",
+  "chrome": "152.0.7977.130",
+  "windowOpenedAt": 107.525532,
+  "renderer": {
+    "sandboxed": true,
+    "contextIsolated": true
+  },
+  "storage": {
+    "page": {
+      "ok": true,
+      "value": {
+        "local": null,
+        "session": null
+      },
+      "cancelled": []
+    },
+    "worker": {
+      "id": 2,
+      "ok": true,
+      "value": null,
+      "cancelled": []
+    },
+    "python": {
+      "id": 3,
+      "ok": true,
+      "value": false,
+      "ms": 1.1999999999970896,
+      "memory": 75,
+      "cancelled": []
+    }
+  },
+  "blocked": [],
+  "navigations": [],
+  "windows": [],
+  "downloads": []
+}

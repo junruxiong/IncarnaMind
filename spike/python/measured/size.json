@@ -1,0 +1,62 @@
+{
+  "files": {
+    "numpy-2.4.6-cp314-cp314-pyemscripten_2026_0_wasm32.whl": {
+      "raw": 2960568,
+      "gzip": 2924334,
+      "brotli": 2913946
+    },
+    "packages.json": {
+      "raw": 689,
+      "gzip": 246,
+      "brotli": 224
+    },
+    "pandas-3.0.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl": {
+      "raw": 4177749,
+      "gzip": 4141942,
+      "brotli": 4136251
+    },
+    "pyodide-lock.json": {
+      "raw": 119077,
+      "gzip": 26335,
+      "brotli": 21689
+    },
+    "pyodide.asm.mjs": {
+      "raw": 1250344,
+      "gzip": 259957,
+      "brotli": 207390
+    },
+    "pyodide.asm.wasm": {
+      "raw": 9598218,
+      "gzip": 3528803,
+      "brotli": 2741061
+    },
+    "pyodide.mjs": {
+      "raw": 17931,
+      "gzip": 7152,
+      "brotli": 6453
+    },
+    "python_dateutil-2.9.0.post0-py2.py3-none-any.whl": {
+      "raw": 229892,
+      "gzip": 228235,
+      "brotli": 227544
+    },
+    "python_stdlib.zip": {
+      "raw": 2545637,
+      "gzip": 2503129,
+      "brotli": 2487479
+    },
+    "pytz-2026.1.post1-py2.py3-none-any.whl": {
+      "raw": 510489,
+      "gzip": 377378,
+      "brotli": 287397
+    },
+    "six-1.17.0-py2.py3-none-any.whl": {
+      "raw": 11050,
+      "gzip": 10640,
+      "brotli": 10559
+    }
+  },
+  "raw": 21421644,
+  "gzip": 14008151,
+  "brotli": 13039993
+}

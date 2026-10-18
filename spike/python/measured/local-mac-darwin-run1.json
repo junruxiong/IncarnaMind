@@ -1,0 +1,424 @@
+{
+  "run": 1,
+  "platform": "darwin",
+  "arch": "arm64",
+  "electron": "44.5.1",
+  "chrome": "152.0.7977.130",
+  "windowOpenedAt": 542.473583,
+  "renderer": {
+    "sandboxed": true,
+    "contextIsolated": true
+  },
+  "control": {
+    "mainProcessFetch": 200,
+    "sandboxSessionFetch": "Error: net::ERR_BLOCKED_BY_CLIENT",
+    "sandboxSessionCancelled": [
+      "https://example.com/"
+    ]
+  },
+  "memory": {
+    "beforeBootMb": 90,
+    "atRestMb": 460,
+    "wasmMb": 75,
+    "afterWarmStartMb": 477
+  },
+  "coldStart": {
+    "id": 1,
+    "ok": true,
+    "timings": {
+      "core": 995.9000000953674,
+      "packages": 387.1999999284744,
+      "imports": 1555.2000000476837,
+      "total": 2997
+    },
+    "memory": 75,
+    "cancelled": [],
+    "windowToReadyMs": 3775
+  },
+  "performance": {
+    "groupBy20000": {
+      "id": 2,
+      "ok": true,
+      "value": {
+        "rows": 20000,
+        "groups": 96,
+        "parse_ms": 20,
+        "groupby_ms": 19,
+        "fastest": [
+          "Central",
+          "East",
+          "Coast"
+        ]
+      },
+      "ms": 41.300000071525574,
+      "memory": 90,
+      "cancelled": [],
+      "peakMb": 474
+    },
+    "groupBy50000": {
+      "id": 3,
+      "ok": true,
+      "value": {
+        "rows": 50000,
+        "groups": 96,
+        "parse_ms": 14,
+        "groupby_ms": 13,
+        "fastest": [
+          "North",
+          "Central",
+          "East"
+        ]
+      },
+      "ms": 28.5,
+      "memory": 90,
+      "cancelled": [],
+      "peakMb": 488
+    }
+  },
+  "warmStart": {
+    "ok": true,
+    "value": {
+      "ms": 3113.5,
+      "booted": {
+        "id": 4,
+        "ok": true,
+        "timings": {
+          "core": 1056.7999999523163,
+          "packages": 388.5,
+          "imports": 1662.7000000476837,
+          "total": 3108.3000000715256
+        },
+        "memory": 75
+      }
+    },
+    "cancelled": []
+  },
+  "escape": {
+    "python.jsNames": {
+      "id": 5,
+      "ok": true,
+      "value": {
+        "process": false,
+        "require": false,
+        "Buffer": false,
+        "electron": false,
+        "spikeBridge": false,
+        "importScripts": true
+      },
+      "ms": 1.5999999046325684,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.jsEval": {
+      "id": 6,
+      "ok": false,
+      "error": "pyodide.ffi.JsException: EvalError: Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script: script-src pyspike: 'wasm-unsafe-eval'\". |  | ",
+      "ms": 4.600000023841858,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.jsFunction": {
+      "id": 7,
+      "ok": false,
+      "error": "pyodide.ffi.JsException: EvalError: Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script: script-src pyspike: 'wasm-unsafe-eval'\". |  | ",
+      "ms": 1.5999999046325684,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.ffiGlobals": {
+      "id": 8,
+      "ok": true,
+      "value": [],
+      "ms": 0.9000000953674316,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.listRoot": {
+      "id": 9,
+      "ok": true,
+      "value": [
+        "dev",
+        "home",
+        "lib",
+        "proc",
+        "tmp"
+      ],
+      "ms": 0.8999999761581421,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.readHosts": {
+      "id": 10,
+      "ok": false,
+      "error": "  File \"<exec>\", line 1, in <module> | FileNotFoundError: [Errno 44] No such file or directory: '/etc/hosts' | ",
+      "ms": 1.399999976158142,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.readHome": {
+      "id": 11,
+      "ok": false,
+      "error": "  File \"<exec>\", line 2, in <module> | FileNotFoundError: [Errno 44] No such file or directory: '/home/pyodide/.ssh/id_rsa' | ",
+      "ms": 1.6999999284744263,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.readWindows": {
+      "id": 12,
+      "ok": false,
+      "error": "  File \"<exec>\", line 1, in <module> | FileNotFoundError: [Errno 44] No such file or directory: 'C:/Windows/win.ini' | ",
+      "ms": 1.600000023841858,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.writeTmp": {
+      "id": 13,
+      "ok": true,
+      "value": "left by the first run",
+      "ms": 1.2000000476837158,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.urllib": {
+      "id": 14,
+      "ok": false,
+      "error": "    raise RuntimeError(\"TLS not supported in this environment\") from None | RuntimeError: TLS not supported in this environment | ",
+      "ms": 120.79999995231628,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.socket": {
+      "id": 15,
+      "ok": false,
+      "error": "  File \"<exec>\", line 3, in <module> | OSError: [Errno 53] Socket not connected | ",
+      "ms": 2.3000000715255737,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.pyfetch": {
+      "id": 16,
+      "ok": false,
+      "error": "    raise AbortError(e) from None | pyodide.http._exceptions.AbortError: Failed to fetch | ",
+      "ms": 16.699999928474426,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.micropip": {
+      "id": 17,
+      "ok": false,
+      "error": "  await pyodide.loadPackage(\"micropip\") in JavaScript | See https://pyodide.org/en/stable/usage/loading-packages.html for more details. | ",
+      "ms": 1.5,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.loadMicropip": {
+      "id": 18,
+      "ok": false,
+      "error": "  await pyodide.loadPackage(\"micropip\") in JavaScript | See https://pyodide.org/en/stable/usage/loading-packages.html for more details. | ",
+      "ms": 6.600000023841858,
+      "memory": 75,
+      "cancelled": []
+    },
+    "python.subprocess": {
+      "id": 19,
+      "ok": false,
+      "error": "    ) | OSError: [Errno 138] emscripten does not support processes. | ",
+      "ms": 2.5,
+      "memory": 75,
+      "cancelled": []
+    },
+    "worker.typeofs": {
+      "id": 20,
+      "ok": true,
+      "value": {
+        "require": "undefined",
+        "process": "undefined",
+        "Buffer": "undefined",
+        "importScripts": "function",
+        "WebTransport": "function",
+        "electron": "undefined",
+        "spikeBridge": "undefined"
+      },
+      "cancelled": []
+    },
+    "worker.eval": {
+      "id": 21,
+      "ok": false,
+      "error": "Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script: script-src pyspike: 'wasm-unsafe-eval'\". | ",
+      "cancelled": []
+    },
+    "worker.newFunction": {
+      "id": 22,
+      "ok": false,
+      "error": "Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script: script-src pyspike: 'wasm-unsafe-eval'\". | ",
+      "cancelled": []
+    },
+    "worker.importNodeFs": {
+      "id": 23,
+      "ok": false,
+      "error": "Failed to fetch dynamically imported module: node:fs",
+      "cancelled": []
+    },
+    "worker.importWeb": {
+      "id": 24,
+      "ok": false,
+      "error": "Failed to fetch dynamically imported module: https://example.com/module.js",
+      "cancelled": []
+    },
+    "worker.importScriptsWeb": {
+      "id": 25,
+      "ok": false,
+      "error": "Failed to execute 'importScripts' on 'WorkerGlobalScope': Module scripts don't support importScripts().",
+      "cancelled": []
+    },
+    "worker.fetch": {
+      "id": 26,
+      "ok": false,
+      "error": "Failed to fetch",
+      "cancelled": []
+    },
+    "worker.fetchDns": {
+      "id": 27,
+      "ok": false,
+      "error": "Failed to fetch",
+      "cancelled": []
+    },
+    "worker.fetchFile": {
+      "id": 28,
+      "ok": false,
+      "error": "Failed to fetch",
+      "cancelled": []
+    },
+    "worker.xhr": {
+      "id": 29,
+      "ok": false,
+      "error": "XMLHttpRequest failed",
+      "cancelled": []
+    },
+    "worker.webSocket": {
+      "id": 30,
+      "ok": false,
+      "error": "WebSocket failed",
+      "cancelled": []
+    },
+    "worker.eventSource": {
+      "id": 31,
+      "ok": false,
+      "error": "EventSource failed",
+      "cancelled": []
+    },
+    "worker.webTransport": {
+      "id": 32,
+      "ok": false,
+      "error": "Refused to connect to 'https://example.com:4433/' because it violates the document's Content Security Policy",
+      "cancelled": []
+    },
+    "page.typeofs": {
+      "ok": true,
+      "value": {
+        "require": "undefined",
+        "process": "undefined",
+        "module": "undefined",
+        "electron": "undefined",
+        "bridge": [
+          "ready",
+          "reply",
+          "onRequest"
+        ]
+      },
+      "cancelled": []
+    },
+    "page.fetch": {
+      "ok": false,
+      "error": "Failed to fetch",
+      "cancelled": []
+    },
+    "page.image": {
+      "ok": false,
+      "error": "image failed",
+      "cancelled": []
+    },
+    "page.css": {
+      "ok": false,
+      "error": "stylesheet failed",
+      "cancelled": []
+    },
+    "page.formPost": {
+      "ok": true,
+      "value": "submitted",
+      "cancelled": []
+    },
+    "page.navigate": {
+      "ok": true,
+      "value": "asked",
+      "cancelled": []
+    },
+    "page.windowOpen": {
+      "ok": true,
+      "value": "null",
+      "cancelled": []
+    },
+    "page.download": {
+      "ok": true,
+      "value": "clicked",
+      "cancelled": []
+    },
+    "host.tmpMarkerOnDisk": false
+  },
+  "storage": {
+    "page": {
+      "ok": true,
+      "value": "written",
+      "cancelled": []
+    },
+    "worker": {
+      "id": 33,
+      "ok": true,
+      "value": "written",
+      "cancelled": []
+    }
+  },
+  "limits": {
+    "endlessLoop": {
+      "reply": {
+        "ok": false,
+        "timedOut": true,
+        "cancelled": []
+      },
+      "recoveryMs": 2800,
+      "after": 2
+    },
+    "outOfMemory": {
+      "reply": {
+        "id": 37,
+        "ok": true,
+        "value": "MemoryError after 3968 MB",
+        "ms": 523.6000000238419,
+        "memory": 4096,
+        "cancelled": []
+      },
+      "peakMb": 3877,
+      "after": {
+        "id": 38,
+        "ok": true,
+        "value": 2,
+        "ms": 1.100000023841858,
+        "memory": 4096,
+        "cancelled": []
+      },
+      "windowAlive": true
+    }
+  },
+  "blocked": [
+    "https://example.com/"
+  ],
+  "navigations": [
+    "https://example.com/"
+  ],
+  "windows": [
+    "https://example.com/"
+  ],
+  "downloads": [
+    "spike.txt"
+  ]
+}
