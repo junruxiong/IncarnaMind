@@ -1462,7 +1462,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     }
     if (checked) {
       redrawCharts(mindId, ids);
-      const { request, cited, sent, failed, stop } = checked;
+      const { request, cited, sent, failed, stop, blocked } = checked;
       written.change = {
         ...written.change,
         selfCheck: {
@@ -1472,6 +1472,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           checked: checked.checked,
           failed,
           ...(stop && { stop }),
+          ...(blocked && { blocked }),
         },
       };
     }

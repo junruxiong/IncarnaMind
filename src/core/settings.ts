@@ -188,6 +188,7 @@ const deviceScope: Scope<DeviceSettings> = {
     sidebarWidth: 248,
     sidebarHidden: false,
     chatSetupDismissed: false,
+    sandboxNoticeDismissed: false,
     gettingStarted: {
       started: false,
       citationChecked: false,
@@ -211,6 +212,7 @@ const deviceScope: Scope<DeviceSettings> = {
     sidebarWidth: isPaneWidth,
     sidebarHidden: isBoolean,
     chatSetupDismissed: isBoolean,
+    sandboxNoticeDismissed: isBoolean,
     gettingStarted: isGettingStarted,
     skillScriptsEnabled: isBoolean,
     skillScriptTimeoutSeconds: isScriptTimeout,

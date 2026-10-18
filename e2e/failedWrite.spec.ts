@@ -143,28 +143,32 @@ test("Save a copy… writes the Mind as a Word file where the User chooses, thou
   await expect(notice(window)).toHaveCount(0);
 });
 
-test("quitting, a copy that can't be saved keeps IncarnaMind open and asks again, saying why", async () => {
-  const { app, window, editor } = await start("en");
-  const restore = failWrites();
-  await window.keyboard.type(" LOST");
-  await expect(notice(window)).toBeVisible();
-  await chooseSavePath(app, join(elsewhere, "missing folder", "Notes.docx"));
-  await answerSheets(app, [0, 2]);
+for (const [language, why] of [
+  [
+    "en",
+    /^The copy couldn’t be saved\. That file or folder isn't there any more\.\n\nDetails: .*ENOENT/,
+  ],
+  ["zh-CN", /^副本没能保存。这个文件或文件夹已不存在。\n\n详情：.*ENOENT/],
+] as const) {
+  test(`quitting, a copy that can't be saved keeps IncarnaMind open and asks again, saying why (${language})`, async () => {
+    const { app, window, editor } = await start(language);
+    const restore = failWrites();
+    await window.keyboard.type(" LOST");
+    await expect(notice(window)).toBeVisible();
+    await chooseSavePath(app, join(elsewhere, "missing folder", "Notes.docx"));
+    await answerSheets(app, [0, 2]);
 
-  await app.evaluate(({ app: electron }) => electron.quit());
+    await app.evaluate(({ app: electron }) => electron.quit());
 
-  await expect.poll(async () => (await sheetsAsked(app)).length).toBe(2);
-  const [, again] = await sheetsAsked(app);
-  expect(again).toMatchObject({
-    detail: expect.stringMatching(/^The copy couldn’t be saved: .*ENOENT/),
-    defaultId: 2,
-    cancelId: 2,
+    await expect.poll(async () => (await sheetsAsked(app)).length).toBe(2);
+    const [, again] = await sheetsAsked(app);
+    expect(again).toMatchObject({ detail: expect.stringMatching(why), defaultId: 2, cancelId: 2 });
+    await expect(editor).toHaveText("BASE LOST");
+    restore();
+    await notice(window).getByTestId("unsaved-try-again").click();
+    await expect(notice(window)).toHaveCount(0);
   });
-  await expect(editor).toHaveText("BASE LOST");
-  restore();
-  await notice(window).getByTestId("unsaved-try-again").click();
-  await expect(notice(window)).toHaveCount(0);
-});
+}
 
 test("after a crash while changes wait, the next start says how many were lost", async () => {
   const { app, window } = await start("en");

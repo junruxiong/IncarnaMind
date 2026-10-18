@@ -26,6 +26,10 @@
  * 折线图) searches, cites each quarter's revenue, and adds them as a table with its
  * chart (#1091); "Make a bar chart of rent by lease" does the same with each unit's
  * monthly rent, so Use all can draw it again from every lease.
+ * "Write a short summary of this agreement" (为这份协议写一份简短摘要) calls
+ * add_to_mind with it, for the Mind in focus.
+ * "Write a brief summary" (写一份简要总结) adds one to the Mind in <mind>, but
+ * answers that no Mind is open when that Mind has no name, as models did (#1212).
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
@@ -92,6 +96,7 @@ const QUARTER_REVENUE = /Revenue in (Q\d) was (€\d+ million)/g;
 const RENT_CHART = /\bchart of rent by lease\b/i;
 const UNIT_RENT = /The monthly rent for (unit \d+) is (€[\d,]+)/g;
 const LEASES_SUMMARY = /\bwrite a summary of my leases\b|根据我的租约写一份总结/i;
+const BRIEF_SUMMARY = /\bbrief summary\b|简要总结/i;
 /** A rewrite of the User's text (改写), which Edit with AI's scripted model writes anew. */
 const REWRITE = /\brewrite\b|改写/i;
 const SUMMARY = [
@@ -99,6 +104,9 @@ const SUMMARY = [
   "Spring tides come at new and full moon, when the Sun and the Moon pull together.",
   "Neap tides come in between, at the quarter moons.",
 ].join("\n\n");
+
+/** The newcomer's first request (#1174): a short summary of "this agreement", written into the Mind in focus. */
+const SUMMARY_HERE = /\bwrite a short summary of this agreement\b|为这份协议写一份简短摘要/i;
 
 /** A request to change the Mind so it has a table: "…, with a table" (加上表格). */
 const WITH_A_TABLE = /\bwith a table\b|加上?表格/i;
@@ -165,11 +173,29 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
       ? { tool: "add_to_mind", input: { content } }
       : { tool: "create_mind", input: { title: "Summary", content } };
   }
+  if (BRIEF_SUMMARY.test(question)) {
+    const mind = userText(prompt.find((message) => message.role === "user"));
+    if (!/<mind name="[^"]+">/.test(mind)) {
+      return {
+        text: /\p{Script=Han}/u.test(question)
+          ? "没有打开的笔记，所以没法写进去。"
+          : "No Mind is open, so I can't write it there.",
+      };
+    }
+    const added = lastResult(prompt, "add_to_mind");
+    if (added === undefined) return { tool: "add_to_mind", input: { content: SUMMARY } };
+    return { text: firstSentence(added) };
+  }
   if (SUMMARY_PAGE.test(question)) {
     const made = lastResult(prompt, "create_mind");
     if (made === undefined)
       return { tool: "create_mind", input: { title: "Summary", content: SUMMARY } };
     return { text: firstSentence(made) };
+  }
+  if (SUMMARY_HERE.test(question)) {
+    const added = lastResult(prompt, "add_to_mind");
+    if (added === undefined) return { tool: "add_to_mind", input: { content: SUMMARY } };
+    return { text: firstSentence(added) };
   }
   if (
     SHORTEN.test(question) ||

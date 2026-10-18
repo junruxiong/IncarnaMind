@@ -9,7 +9,36 @@ import {
 import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
 import { core } from "../core";
 import { useAppStore } from "../store";
-import { useUndo } from "../undo";
+import { type Undoable, useUndo } from "../undo";
+
+function defaulted(
+  mindId: string,
+  style: CitationStyleId,
+  folderDefault: CitationStyleId | null,
+): Undoable {
+  return {
+    said: (t) => t("citationStyle.defaulted", { style: styleLabel(style, t) }),
+    undo: async () => {
+      await core.setMindCitationStyle(mindId, "numbered", { folderDefault });
+    },
+    redo: async () => {
+      await core.setMindCitationStyle(mindId, null, { folderDefault });
+    },
+    also: {
+      label: (t) => t("citationStyle.change"),
+      testId: "undo-change-style",
+      run: () =>
+        useCitationStylePicker
+          .getState()
+          .show(
+            mindId,
+            document.querySelector<HTMLElement>(
+              `article[data-mind-id="${CSS.escape(mindId)}"] [data-testid="references-style"]`,
+            ),
+          ),
+    },
+  };
+}
 
 /**
  * Says once, on the undo line, that a Mind took the Chinese default style because it cites a
@@ -37,28 +66,7 @@ export function useDefaultStyleNotice({
     if (defaultStyleNoticeShown(settings)) return;
     doc.transact(() => markDefaultStyleNoticeShown(settings));
     core.getMindCitationStyle(mindId).then(({ folderDefault }) => {
-      useUndo.getState().push({
-        said: (t) => t("citationStyle.defaulted", { style: styleLabel(style, t) }),
-        undo: async () => {
-          await core.setMindCitationStyle(mindId, "numbered", { folderDefault });
-        },
-        redo: async () => {
-          await core.setMindCitationStyle(mindId, null, { folderDefault });
-        },
-        also: {
-          label: (t) => t("citationStyle.change"),
-          testId: "undo-change-style",
-          run: () =>
-            useCitationStylePicker
-              .getState()
-              .show(
-                mindId,
-                document.querySelector<HTMLElement>(
-                  `article[data-mind-id="${CSS.escape(mindId)}"] [data-testid="references-style"]`,
-                ),
-              ),
-        },
-      });
+      useUndo.getState().push(defaulted(mindId, style, folderDefault));
     }, useAppStore.getState().reportError);
   }, [mindId, doc, style, chosen, readOnly]);
 }

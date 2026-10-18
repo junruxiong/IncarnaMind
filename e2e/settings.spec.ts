@@ -41,7 +41,14 @@ const ALL_PAGES = [
   {
     page: "models",
     name: "Models",
-    sections: ["chat-model-settings", "chatgpt-settings", "tagging-settings", "jev-settings"],
+    sections: [
+      "model-defaults",
+      "your-providers",
+      "plans-settings",
+      "chatgpt-settings",
+      "tagging-settings",
+      "jev-settings",
+    ],
   },
   { page: "search", name: "Search", sections: ["embedding-settings", "rerank-settings"] },
   { page: "meetings", name: "Meetings", sections: ["meetings-settings"] },
@@ -198,7 +205,7 @@ test("the pages are named in Chinese too", async () => {
   }
 });
 
-test("signed in with ChatGPT, the plan's model is chosen in one place: Chat model", async () => {
+test("signed in with ChatGPT, the plan's model is chosen in one place: the Answers default", async () => {
   // A local stand-in for OpenAI: the sign-in and the account's models, with no network or account.
   const openai = await createFakeOpenAI();
   const { app, window } = await launchApp(dataDir, { chatGpt: openai.endpoints.issuer });
@@ -217,12 +224,14 @@ test("signed in with ChatGPT, the plan's model is chosen in one place: Chat mode
       "Signed in as reader@example.com.",
     );
 
-    // With no model before, the plan became the default: Chat model offers the account's models.
-    const chatModel = settings.getByTestId("chat-model-settings");
-    await expect(chatModel.getByTestId("chat-provider-current")).toHaveText("ChatGPT plan");
-    const model = chatModel.getByRole("combobox", { name: "Default model" });
-    await expect(model.locator("option")).toHaveText(["GPT-6.1 Sol", "GPT-6 Luna"]);
-    await expect(model).toHaveValue("gpt-6.1-sol");
+    // With no model before, the plan became the default: Answers offers the account's models.
+    await expect(settings.getByTestId("provider-row")).toHaveText([/^ChatGPT plan/]);
+    const model = settings.getByRole("combobox", { name: "Answers" });
+    await expect(model.locator("option")).toHaveText([
+      "GPT-6.1 Sol · ChatGPT plan",
+      "GPT-6 Luna · ChatGPT plan",
+    ]);
+    await expect(model).toHaveValue(/\ngpt-6\.1-sol$/);
 
     // The plan's own section keeps the account, its usage, a test and Sign out: no second model choice.
     await expect(plan.getByTestId("chatgpt-in-use")).toContainText("Using ChatGPT plan");
@@ -233,8 +242,7 @@ test("signed in with ChatGPT, the plan's model is chosen in one place: Chat mode
     await expect(plan.getByTestId("chatgpt-sign-out")).toBeVisible();
 
     // Another of the plan's models, chosen there, becomes the default.
-    await model.selectOption("gpt-6-luna");
-    await chatModel.getByRole("button", { name: "Save" }).click();
+    await model.selectOption({ label: "GPT-6 Luna · ChatGPT plan" });
     await expect
       .poll(async () =>
         window.evaluate(async () => {
@@ -243,7 +251,7 @@ test("signed in with ChatGPT, the plan's model is chosen in one place: Chat mode
         }),
       )
       .toBe("gpt-6-luna");
-    await expect(model).toHaveValue("gpt-6-luna");
+    await expect(model).toHaveValue(/\ngpt-6-luna$/);
   } finally {
     await app.close();
     await openai.close();

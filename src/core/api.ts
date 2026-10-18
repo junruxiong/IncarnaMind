@@ -993,7 +993,8 @@ export interface MindChange {
    * (`cited`), how many it sent to be checked (`sent`), how many got a verdict
    * (`checked`) and how many couldn't be checked (`failed`), and what stopped it, if
    * anything did. Those it couldn't check, or didn't, are marked not checked, under
-   * `request`. Absent: none was checked.
+   * `request`; `blocked` says how many of them the User's own choice kept from being sent
+   * (the flow turned off, or Local mode), which checking again can't change. Absent: none was checked.
    */
   selfCheck?: {
     request: string;
@@ -1002,6 +1003,7 @@ export interface MindChange {
     checked: number;
     failed: number;
     stop?: RunStop;
+    blocked?: { reason: "consent-revoked" | "local-mode"; count: number };
   };
 }
 
@@ -1935,6 +1937,8 @@ export interface DeviceSettings {
   sidebarHidden: boolean;
   /** The User chose "set up later" on the first-run chat setup screen. */
   chatSetupDismissed: boolean;
+  /** The User dismissed the sidebar's line saying the app runs without its sandbox (#1179). */
+  sandboxNoticeDismissed: boolean;
   /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
   gettingStarted: GettingStarted;
   /**
@@ -3795,6 +3799,8 @@ export interface SaveChatProviderInput {
   apiKey?: string | null;
   /** The model to make the default, e.g. "gpt-5.4-mini". */
   modelId: string;
+  /** The default model stays as it is when there is one; `modelId` becomes it only when there is none. */
+  keepDefault?: boolean;
 }
 
 export interface TestChatConnectionInput {
@@ -4238,6 +4244,37 @@ export interface OtherModel {
 /** Which API, other than chat, a model needs. */
 export type CannotAnswerReason = "completion" | "audio" | "deep-research" | "computer-use";
 
+/** What a typical Answer (`TYPICAL_ANSWER`) costs with a model, in the provider's own currency. */
+export type ModelCost =
+  | { kind: "estimate"; currency: Currency; amount: number }
+  | { kind: "free" }
+  | { kind: "plan" };
+
+export interface ModelAbout {
+  /** Null where nothing says. */
+  tools: boolean | null;
+  readsImages: boolean;
+  /** Null where nothing says. */
+  reasoning: boolean | null;
+  /** In tokens; null when unknown. */
+  context: number | null;
+  /** Null when its price isn't known. */
+  cost: ModelCost | null;
+}
+
+/** `step` says which request failed: the model list, or the one word from `modelId`. */
+export type ProviderTestResult =
+  | { ok: true; modelId: string; ms: number }
+  | { ok: false; step: "list" | "answer"; modelId: string | null; error: ProviderError };
+
+/** The quick-tasks and image models as `UserSettings` leaves them to be worked out, worked out now. */
+export interface ModelRoles {
+  /** Null with no Answers model. */
+  quickTasks: ChatModelChoice | null;
+  /** Null when no model reads images. */
+  images: ChatModelChoice | null;
+}
+
 export interface SetChatModelInMenuInput {
   providerId: string;
   modelId: string;
@@ -4263,6 +4300,14 @@ export interface ChatModelGroup {
   other: OtherModel[];
   /** The ids in `models` that the User added from `other`; "In the menu" is on for them. */
   added: string[];
+  /** The ids in the menu unless taken out, in the menu's order, those taken out (`hidden`) in place. */
+  offered: string[];
+  /** Never the default model. */
+  hidden: string[];
+  /** For each id in `offered`, `added` and `other`. */
+  about: Record<string, ModelAbout>;
+  /** `checked` is when the prices were checked (YYYY-MM-DD); null where nothing is priced. */
+  prices: { url: string; checked: string } | null;
   /**
    * The ids in `models` whose capabilities are unknown: neither the catalog
    * nor the provider says what they can do. They still work; an Answer finds
@@ -4519,6 +4564,8 @@ export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
  * - "failed": the model or its service failed otherwise (`detail` says how).
  * - "stopped": the User stopped the check, or IncarnaMind quit, before this sentence was checked.
  * - "too-many": the assistant wrote more sentences with Citations than one write has checked (#1111).
+ * - "consent-revoked": the User turned off sending checks to the model's service while it ran.
+ * - "local-mode": "Keep everything on this computer" came on while it ran.
  */
 export type ClaimCheckFailure =
   | "refused"
@@ -4530,7 +4577,9 @@ export type ClaimCheckFailure =
   | "plan-limit"
   | "failed"
   | "stopped"
-  | "too-many";
+  | "too-many"
+  | "consent-revoked"
+  | "local-mode";
 
 /** Why a sentence was found unsupported, as the check gave it. */
 export interface UnsupportedReason {
@@ -5940,6 +5989,8 @@ export interface SelectOllamaInput {
    * to match. Left out, Local mode stays as it was.
    */
   localOnly?: boolean;
+  /** As `SaveChatProviderInput.keepDefault`. */
+  keepDefault?: boolean;
 }
 
 export interface OllamaPullProgress {
@@ -8534,6 +8585,12 @@ export interface CoreApi {
   deleteChatProvider(id: string): Promise<void>;
   /** Makes one small real request. A cloud provider's data flow needs consent first. */
   testChatConnection(input: TestChatConnectionInput): Promise<ConnectionTestResult>;
+  /**
+   * Asks a saved provider for its model list, then sends one word to its quick-tasks
+   * model. Neither goes in Local mode; both need the chat flow allowed, which asks the User.
+   */
+  testChatProvider(providerId: string): Promise<ProviderTestResult>;
+  getModelRoles(): Promise<ModelRoles>;
   getChatReadiness(): Promise<ChatReadiness>;
   /**
    * The models a Question's model picker offers: for each saved provider, the
@@ -8543,8 +8600,8 @@ export interface CoreApi {
    */
   listChatModels(): Promise<ChatModelGroup[]>;
   /**
-   * Puts a model id in a provider's model menu, or takes an id the User added
-   * back out. Any id can be added, listed by the provider or not.
+   * Puts a model id in a provider's model menu, or takes one out of it, the
+   * provider's own included. Any id can be added, listed by the provider or not.
    */
   setChatModelInMenu(input: SetChatModelInMenuInput): Promise<void>;
   /**
@@ -9668,6 +9725,8 @@ const methods: Record<CoreApiMethod, true> = {
   saveChatProvider: true,
   deleteChatProvider: true,
   testChatConnection: true,
+  testChatProvider: true,
+  getModelRoles: true,
   getChatReadiness: true,
   listChatModels: true,
   setChatModelInMenu: true,

@@ -33,7 +33,6 @@
  * Word export reads them too, for review (`ReadOptions.review`, #107).
  */
 import * as Y from "yjs";
-import { originOf } from "../shared/blockOrigins";
 import { type ChartAttributes, chartSources, chosenSeries, readChart } from "../shared/charts";
 import { type RecheckReason, readClaimCheck } from "../shared/claimChecks";
 import { cellProblemMessage, comparisonCellOf, comparisonQuestionsOf } from "../shared/comparisons";
@@ -56,7 +55,6 @@ import {
 import { readWordAtom, wordAtomText } from "../shared/wordFiles";
 import {
   ANSWER_BLOCK,
-  BLOCK_ID_ATTRIBUTE,
   CHART_NODE,
   CITATION_NODE,
   type CitedWork,
@@ -398,10 +396,10 @@ function firstText(element: Y.XmlElement): string {
 }
 
 /**
- * What a Mind without a title is called: its first line of text, cut as a title.
+ * What a Mind without a title is called: its first line of text, cut as a title, whether
+ * the User wrote it or the assistant did. Never an instruction typed to the assistant,
+ * which the Blocks it wrote remember as their origin (#1174).
  * An Answer's text, or a comparison table's, is not the User's, so it isn't read.
- * A Note added from an Answer is named by the Question it answered (#769): the
- * Answer's first line isn't a name.
  */
 export function firstLineOf(blocks: Y.XmlFragment): string {
   for (const block of blocks.toArray()) {
@@ -413,9 +411,7 @@ export function firstLineOf(blocks: Y.XmlFragment): string {
       continue;
     }
     const written = cutTitle(firstText(block));
-    if (written === "") continue;
-    const origin = blocks.doc && originOf(blocks.doc, stringAttribute(block, BLOCK_ID_ATTRIBUTE));
-    return (origin && cutTitle(origin.question)) || written;
+    if (written !== "") return written;
   }
   return "";
 }

@@ -44,19 +44,19 @@ async function choose(
   choice: Choice,
   on: boolean,
 ): Promise<Undoable> {
-  for (const document of documents) await choice.set(document.id, on);
+  const ids = documents.map((document) => document.id);
+  for (const id of ids) await choice.set(id, on);
   const [only] = documents;
+  const name = only && ids.length === 1 ? displayName(only) : null;
   const state = on ? "on" : "off";
   const undoable: Undoable = {
     said: (t) =>
-      only && documents.length === 1
-        ? t(choice.one[state], { name: displayName(only) })
-        : t(choice.many[state], { count: documents.length }),
+      name === null ? t(choice.many[state], { count: ids.length }) : t(choice.one[state], { name }),
     undo: async () => {
-      for (const document of documents) await choice.set(document.id, !on);
+      for (const id of ids) await choice.set(id, !on);
     },
     redo: async () => {
-      for (const document of documents) await choice.set(document.id, on);
+      for (const id of ids) await choice.set(id, on);
     },
   };
   useUndo.getState().push(undoable);

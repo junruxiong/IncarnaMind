@@ -12,6 +12,7 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
+  addProviderForm,
   closeSettings,
   createDataFolder,
   launchApp,
@@ -77,12 +78,7 @@ const documentItem = (window: Page, name: string) =>
 
 async function pasteKey(window: Page): Promise<void> {
   const settings = await openSettings(window, "models");
-  await settings.getByTestId("chat-choice-api-key").check();
-  const form = settings.getByTestId("provider-form");
-  await form
-    .locator("label")
-    .filter({ hasText: /^Anthropic$/ })
-    .click();
+  const form = await addProviderForm(settings, "anthropic");
   await expect(form.getByText("Tagging starts when you save the key.")).toBeVisible();
   await acceptPlainTextKeys(window, form);
   await form.getByLabel(/^API key/).fill("sk-ant-not-a-real-key");
