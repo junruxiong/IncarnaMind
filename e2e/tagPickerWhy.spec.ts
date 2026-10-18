@@ -98,6 +98,11 @@ test("the Tag picker says why a Document has no Tags: no Tag fits, or no Tags ye
   const tokens = await openDocumentTags(quarterly);
   await expect(tokens).toHaveText(["Report"]);
   await expect(why(quarterly)).toHaveCount(0);
+  await window.keyboard.press("Escape");
+
+  // The Document checked before that Tag existed has no line: no Tag was shown not to fit.
+  await openDocumentTags(tides);
+  await expect(why(tides)).toHaveCount(0);
   await app.close();
 });
 
