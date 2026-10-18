@@ -42,6 +42,12 @@ import { citationLocation } from "../shared/locations";
 import type { TableAlign } from "../shared/markdownTables";
 import { cutTitle } from "../shared/naming";
 import {
+  readParagraphFormat,
+  readTextColor,
+  readTextFont,
+  readTextSize,
+} from "../shared/paragraphFormat";
+import {
   outOfDateProposals,
   proposalRequestOf,
   readProposalAttribute,
@@ -60,16 +66,24 @@ import {
   DOCUMENT_CHIP_NODE,
   FOOTNOTE_NODE,
   GENERATED_MARK,
+  PARAGRAPH_FORMAT_ATTRIBUTE,
+  type ParagraphFormat,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
   type ProposalRequest,
   QUESTION_BLOCK,
   type StyledRun,
+  SUBSCRIPT_MARK,
+  SUPERSCRIPT_MARK,
+  TEXT_COLOR_MARK,
+  TEXT_FONT_MARK,
+  TEXT_SIZE_MARK,
   WORD_ATOM_NODE,
   WORD_BLOCK_NODE,
   WORD_CHANGE_ID,
 } from "./api";
+import { isRecord } from "./errors";
 
 export interface Marks {
   bold: boolean;
@@ -80,6 +94,12 @@ export interface Marks {
   code: boolean;
   /** The link's target, or null. */
   link: string | null;
+  /** Hex "RRGGBB". */
+  color?: string;
+  font?: string;
+  /** In points. */
+  size?: number;
+  vertical?: "superscript" | "subscript";
 }
 
 /** A Citation's footnote: one per Citation, in the order they appear. */
@@ -202,8 +222,8 @@ export interface TableSlot {
 }
 
 export type Block = (
-  | { kind: "paragraph"; content: Inline[] }
-  | { kind: "heading"; level: number; content: Inline[] }
+  | { kind: "paragraph"; content: Inline[]; format?: ParagraphFormat }
+  | { kind: "heading"; level: number; content: Inline[]; format?: ParagraphFormat }
   | { kind: "code"; language: string; code: string }
   | { kind: "math"; latex: string }
   | { kind: "list"; ordered: boolean; start: number; items: Block[][] }
@@ -487,10 +507,23 @@ const hasBlockChildren = (element: Y.XmlElement) =>
 function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] {
   switch (element.nodeName) {
     case "paragraph":
-      return [{ kind: "paragraph", content: readInline(element.toArray(), options) }];
+      return [
+        {
+          kind: "paragraph",
+          content: readInline(element.toArray(), options),
+          ...formatOf(element),
+        },
+      ];
     case "heading": {
       const level = Math.min(Math.max(Number(element.getAttribute("level")) || 1, 1), 6);
-      return [{ kind: "heading", level, content: readInline(element.toArray(), options) }];
+      return [
+        {
+          kind: "heading",
+          level,
+          content: readInline(element.toArray(), options),
+          ...formatOf(element),
+        },
+      ];
     }
     case "codeBlock":
       return [
@@ -716,7 +749,7 @@ function readImage(element: Y.XmlElement): Image {
   return { src: stringAttribute(element, "src"), alt: stringAttribute(element, "alt") };
 }
 
-const NO_MARKS: Marks = {
+export const NO_MARKS: Marks = {
   bold: false,
   italic: false,
   strike: false,
@@ -726,8 +759,24 @@ const NO_MARKS: Marks = {
   link: null,
 };
 
+function formatOf(element: Y.XmlElement): { format?: ParagraphFormat } {
+  const format = readParagraphFormat(element.getAttribute(PARAGRAPH_FORMAT_ATTRIBUTE));
+  return Object.keys(format).length > 0 ? { format } : {};
+}
+
+const attributeOf = (mark: unknown, name: string): unknown =>
+  isRecord(mark) ? mark[name] : undefined;
+
 function marksOf(attributes: Record<string, unknown> = {}): Marks {
   const link = attributes.link as { href?: unknown } | undefined;
+  const color = readTextColor(attributeOf(attributes[TEXT_COLOR_MARK], "color"));
+  const font = readTextFont(attributeOf(attributes[TEXT_FONT_MARK], "family"));
+  const size = readTextSize(attributeOf(attributes[TEXT_SIZE_MARK], "size"));
+  const vertical = Object.hasOwn(attributes, SUPERSCRIPT_MARK)
+    ? "superscript"
+    : Object.hasOwn(attributes, SUBSCRIPT_MARK)
+      ? "subscript"
+      : null;
   return {
     bold: Object.hasOwn(attributes, "bold"),
     italic: Object.hasOwn(attributes, "italic"),
@@ -736,6 +785,10 @@ function marksOf(attributes: Record<string, unknown> = {}): Marks {
     highlight: Object.hasOwn(attributes, "highlight"),
     code: Object.hasOwn(attributes, "code"),
     link: link && typeof link.href === "string" && link.href !== "" ? link.href : null,
+    ...(color && { color }),
+    ...(font && { font }),
+    ...(size && { size }),
+    ...(vertical && { vertical }),
   };
 }
 
