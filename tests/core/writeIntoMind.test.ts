@@ -336,3 +336,37 @@ describe("A request to write from part of the Documents (#1149)", { timeout: 60_
     expect(question.steps?.writtenFrom).toBeUndefined();
   });
 });
+
+describe("“Make it a document” after an Answer with no words (#1133 review)", {
+  timeout: 60_000,
+}, () => {
+  // protects=after an Answer that failed, or came back empty, "make it a document" isn't read as putting that Answer in a Mind, and no Mind holding only its title is made; fails_when=the model is told to call create_mind with answer: true, or a title-only Mind appears; no_claim=what a real model then says.
+  test.each([
+    ["after a failed Answer", { error: { status: 500, message: "The server failed." } }],
+    ["after an empty Answer", { text: "" }],
+  ] as const)("%s, nothing is put in a Mind", async (_, first) => {
+    const systems: string[] = [];
+    const model = scriptedModel((call) => {
+      if (!call.prompt.includes("Make it a document")) return first;
+      systems.push(call.system);
+      if (call.system.includes(AS_A_DOCUMENT) && !called(call, "create_mind")) {
+        return { calls: [{ tool: "create_mind", input: { title: "Leases", answer: true } }] };
+      }
+      return { text: "There's no Answer to put in a document yet." };
+    });
+    const { core, mind } = await setUpWithDocuments(model, LEASES.slice(0, 1));
+    const before = (await core.listMinds()).length;
+
+    const result = await core.askInConversation({ text: "What are the rents?", mindId: mind.id });
+    if (!result.asked) throw new Error("Not asked.");
+    await answerEnded(core, result.answerId);
+    await askAssistant(core, {
+      text: "Make it a document",
+      mindId: mind.id,
+      conversationId: result.conversation.id,
+    });
+
+    expect(withMindTools(systems)).not.toContain(AS_A_DOCUMENT);
+    expect(await core.listMinds()).toHaveLength(before);
+  });
+});

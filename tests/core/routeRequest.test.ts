@@ -815,8 +815,30 @@ describe("Routing everyday requests", () => {
     expect(routeRequest(request, NO_CHANGE).fromAnswer).toBeUndefined();
   });
 
+  // protects=a request for a document phrased as a question, for the User, puts the last Answer in a new Mind, the owner's "你不给我建一份文档吗" among them (#1109); fails_when=one of them stays in the panel; no_claim=none beyond protects.
+  test.each([
+    "你不给我建一份文档吗",
+    "能不能帮我做成文档",
+    "can you make me a document of this?",
+    "why didn't you make a document?",
+  ])("%s, asked as a question, puts the last Answer in a new Mind", (request) => {
+    expect(routeRequest(request, WITH_TEXT)).toEqual({
+      kind: "write",
+      newMind: true,
+      fromAnswer: true,
+      fillsEmpty: true,
+    });
+    expect(routeRequest(request, NO_CHANGE).fromAnswer).toBeUndefined();
+  });
+
   // protects=a question, or a request to organize files, after an Answer is never read as putting the Answer in a Mind (#1133 review); fails_when=one of them makes a Mind of the last Answer; no_claim=none beyond protects.
   test.each([
+    "how do I make a document?",
+    "can you make a document?",
+    "怎么给我建一份文档",
+    "怎么帮我生成文档？",
+    "如何帮我整理成文档",
+    "tell me how to create a doc?",
     "你能写文档吗",
     "你可以整理文件吗",
     "帮我整理文件",
@@ -840,6 +862,15 @@ describe("Routing everyday requests", () => {
     "根据我的笔记写一份总结",
   ])("%s writes into the Mind in focus", (request) => {
     expect(routeRequest(request, WITH_TEXT)).toEqual({ kind: "write", newMind: false });
+  });
+
+  // protects=a new, separate or another page asked for in so many words goes into a new Mind, whatever it is about, in English and Chinese (#1133 review); fails_when=what it is about reads as where it goes, and it lands in the User's Mind; no_claim=none beyond protects.
+  test.each([
+    "write a new page on the introduction",
+    "make a separate page for the summary",
+    "根据我的笔记另起一页写一份总结",
+  ])("%s goes into a new Mind", (request) => {
+    expect(routeRequest(request, WITH_TEXT)).toMatchObject({ kind: "write", newMind: true });
   });
 
   // protects=adding the last Answer to my notes writes it into the Mind in focus, not a new one; fails_when=it makes a new Mind; no_claim=none beyond protects.
