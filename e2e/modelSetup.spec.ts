@@ -5,16 +5,19 @@ import { createFakeOpenAI, signInAt } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
   assistantAnswers,
+  continueSetup,
   createDataFolder,
   interceptOpenExternal,
   launchApp,
   newMind,
+  openSettings,
   placeAssistant,
   pointAndClick,
   removeDataFolder,
   setLanguage,
   setWindowSize,
   urlsOpened,
+  useLocalChatModel,
 } from "./app";
 
 /*
@@ -565,6 +568,151 @@ test("the key step follows the company picked and Back returns keyboard focus to
     await expect(card.locator("details")).toHaveAttribute("open", "");
     await expect(card.getByTestId("way-local")).toBeFocused();
     await expect(card.getByTestId("way-local")).toBeInViewport({ ratio: 1 });
+  } finally {
+    await app.close();
+  }
+});
+
+const JOBS = {
+  en: {
+    ready: "Ollama works",
+    title: "What each job uses",
+    change: "Change",
+    automatic: /^Automatic · /,
+    meetings: "On this computer",
+  },
+  "zh-CN": {
+    ready: "“Ollama”可以使用了",
+    title: "各项任务使用的模型",
+    change: "更改",
+    automatic: /^自动 · /,
+    meetings: "在本机",
+  },
+} as const;
+
+/** The first Question waits, a model starts to work (as a key or sign-in accepted does): the card says what each job uses. */
+async function jobsAfterModelWorks(window: Page) {
+  await acceptPlainTextKeys(window);
+  const card = await askFirstQuestion(window);
+  await useLocalChatModel(window);
+  await expect(card.getByTestId("setup-ready-title")).toBeVisible();
+  // The Question is not asked until Continue.
+  await expect(assistantAnswers(window)).toHaveCount(0);
+  return card;
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`once a model works, the card lists what each job uses with Change in place, and Continue asks the waiting Question (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    try {
+      // The narrowest window the app allows.
+      await setWindowSize(app, window, 900, 760);
+      await setLanguage(window, language);
+      const words = JOBS[language];
+      const card = await jobsAfterModelWorks(window);
+      await expect(card.getByTestId("setup-ready-title")).toHaveText(words.ready);
+      await expect(card.getByTestId("setup-jobs").getByRole("heading")).toHaveText(words.title);
+      // Answers and Quick tasks use a model; Reading images is left out for a model that reads images or isn't known.
+      await expect(card.getByTestId("setup-job-chatModel-value")).toContainText("fake-model");
+      await expect(card.getByTestId("setup-job-quickTasksModel-value")).toContainText("fake-model");
+      await expect(card.getByTestId("setup-job-meetings-value")).toHaveText(words.meetings);
+      await expect(card.getByTestId("setup-job-imageModel")).toHaveCount(0);
+      await expect(card.getByTestId("setup-continue")).toBeEnabled();
+      const box = await card.boundingBox();
+      expect((box?.x ?? -1) >= 0 && (box?.x ?? 0) + (box?.width ?? 0) <= 900).toBe(true);
+
+      // Change edits the row where it is: the words give way to the choice, and Esc puts them back.
+      const quick = card.getByTestId("setup-job-quickTasksModel");
+      await pointAndClick(window, quick.getByTestId("setup-job-quickTasksModel-change"));
+      const choice = quick.getByTestId("model-default-quickTasksModel");
+      await expect(choice).toBeFocused();
+      await expect(quick.getByTestId("setup-job-quickTasksModel-value")).toHaveCount(0);
+      await window.keyboard.press("Escape");
+      await expect(quick.getByTestId("setup-job-quickTasksModel-value")).toBeVisible();
+      await expect(quick.getByTestId("setup-job-quickTasksModel-change")).toBeFocused();
+
+      // A choice is the setting Settings › Models shows at once.
+      await window.keyboard.press("Enter");
+      await window.keyboard.press("ArrowDown");
+      await window.keyboard.press("Enter");
+      await expect(quick.getByTestId("setup-job-quickTasksModel-value")).toContainText(
+        "fake-model",
+      );
+      expect(
+        await window.evaluate(async () => {
+          const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+          return (await core.getSettings()).user.quickTasksModel?.modelId ?? null;
+        }),
+      ).toBe("fake-model");
+
+      // Meetings is the same setting Settings › Meetings has.
+      const meetings = card.getByTestId("setup-job-meetings");
+      await pointAndClick(window, meetings.getByTestId("setup-job-meetings-change"));
+      const route = meetings.getByTestId("meetings-route");
+      await expect(route).toBeFocused();
+      await route.selectOption("local");
+      await expect(meetings.getByTestId("setup-job-meetings-value")).toHaveText(words.meetings);
+      expect(
+        await window.evaluate(async () => {
+          const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+          return (await core.getSettings()).device.transcriptionRoute;
+        }),
+      ).toBe("local");
+
+      await continueSetup(window);
+      await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
+        timeout: 15_000,
+      });
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+test("Continue works without touching a row, and Models and Meetings in Settings show the same Meetings choice", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await jobsAfterModelWorks(window);
+    await continueSetup(window);
+    await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
+      timeout: 15_000,
+    });
+
+    const models = await openSettings(window, "models");
+    await expect(models.getByTestId("model-default-label-meetings")).toHaveText("Meetings");
+    const here = models.getByTestId("meetings-route");
+    await expect(here).toHaveValue("local");
+    const meetings = await openSettings(window, "meetings");
+    await expect(meetings.getByTestId("meetings-route")).toHaveValue("local");
+    expect(
+      await window.evaluate(async () => {
+        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        return (await core.getSettings()).device.transcriptionRoute;
+      }),
+    ).toBeNull();
+  } finally {
+    await app.close();
+  }
+});
+
+test("Reading images is listed only when the Answers model can't read images", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const card = await askFirstQuestion(window);
+    await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await core.saveChatProvider({
+        kind: "deepseek",
+        apiKey: "sk-not-real",
+        modelId: "deepseek-flash",
+      });
+    });
+    await expect(card.getByTestId("setup-ready-title")).toHaveText("DeepSeek works");
+    await expect(card.getByTestId("setup-job-imageModel")).toBeVisible();
+    await expect(card.getByTestId("setup-job-imageModel-value")).toContainText(/^Automatic/);
   } finally {
     await app.close();
   }
