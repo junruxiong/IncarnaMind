@@ -119,6 +119,7 @@ describe("The Tools a Run offers", () => {
       "read_mind",
       "read_skill_file",
       "read_web_page",
+      "run_analysis",
       "run_skill_script",
       "search_documents",
       "search_web",

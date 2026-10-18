@@ -251,7 +251,6 @@ class _Inputs(Mapping):
 
 
 class _Run:
-
     def __init__(self, limits):
         self.limits = limits
         self.steps = []
@@ -433,7 +432,7 @@ def _clock_parsed_at(tree):
     return None
 
 
-def _column(input_name, heading, cells, first_row):
+def _column(input_name, heading, cells, row_numbers):
     filled = [cell for cell in cells if cell is not None and cell != ""]
     count = sum(1 for cell in filled if _is_number(cell))
     if count == 0 or count * 2 < len(filled):
@@ -445,7 +444,7 @@ def _column(input_name, heading, cells, first_row):
             values.append(cell)
         else:
             values.append(math.nan)
-            bad.append({"row": first_row + offset, "value": "" if cell is None else str(cell)})
+            bad.append({"row": row_numbers[offset], "value": "" if cell is None else str(cell)})
     if bad:
         limits = _run.limits
         _run.keep(
@@ -468,10 +467,11 @@ def _column(input_name, heading, cells, first_row):
 def _frame(spec):
     columns = [str(name) for name in spec["columns"]]
     rows = spec["rows"]
+    row_numbers = spec.get("rowNumbers") or range(spec["firstRow"], spec["firstRow"] + len(rows))
     data = {}
     for index, heading in enumerate(columns):
         cells = [row[index] if index < len(row) else None for row in rows]
-        data[index] = _column(spec["name"], heading, cells, spec["firstRow"])
+        data[index] = _column(spec["name"], heading, cells, row_numbers)
     frame = pd.DataFrame(data, index=pd.RangeIndex(len(rows)))
     frame.columns = columns
     return frame
@@ -526,7 +526,6 @@ def _frame_merge(self, right, *args, **kwargs):
 
 
 class _Printed(io.TextIOBase):
-
     def __init__(self, limit):
         self.parts = []
         self.size = 0

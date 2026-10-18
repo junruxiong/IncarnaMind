@@ -65,8 +65,13 @@ import {
 } from "../../shared/proposals";
 import { hasSearchScope, searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
+import type { AnalysisRuntime } from "../adapters";
+import { withAnalysisResults } from "../analysis/markers";
+import { analysisTool } from "../analysis/tool";
 import {
   ANSWER_BLOCK,
+  type AnalysisCall,
+  type AnswerAnalysis,
   type AnswerAttributes,
   type AnswerPhase,
   type AnswerPlace,
@@ -210,6 +215,7 @@ import {
 } from "./meetingHelp";
 import { paragraphAsked } from "./paragraphAsked";
 import {
+  analysisInstructions,
   answerInstructions,
   connectorInstructions,
   documentInstructions,
@@ -274,6 +280,8 @@ interface WrittenAnswer {
   citations(): MarkedCitation[];
   /** Its calculated figures, in the order of their markers in the text, each once. */
   figures(): MarkedFigure[];
+  /** The Analyses it ran, in order (#447). */
+  analyses: AnswerAnalysis[];
   toolCalls: AnswerToolCall[];
   support: CitationSupport | null;
   /** Where the third-party text its Run had read came from (#78); null: none. */
@@ -442,6 +450,8 @@ export interface AnswersOptions {
   ): Promise<PreparedChatModel["model"]>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: DocumentsForAnswers;
+  /** Runs Analyses (#447, ADR-0023); absent: no Answer is offered `run_analysis`. */
+  analysisRuntime?: AnalysisRuntime;
   /** What an Answer is written in when its Question has no language of its own. */
   interfaceLanguage(): Language;
   /** The ids of the live Documents a Search scope covers; null with no Search scope (every Document). */
@@ -579,6 +589,7 @@ const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
   sources: "sources",
   web: "web",
   minds: "minds",
+  analysis: "analysis",
 };
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -597,6 +608,8 @@ export interface DocumentsForAnswers
   searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
   /** The Documents to search, the most text first. */
   searchableBySize(documentIds: readonly string[] | null): SizedDocument[];
+  /** Whether a Document to search is a workbook or a CSV file: what an Analysis reads (#447). */
+  searchableHasSheets(documentIds: readonly string[] | null): boolean;
   /** The live Passages of a live Document at positions `from` to `to`, in reading order. */
   passagesBetween(documentId: string, from: number, to: number): WindowedPassage[];
   /** The languages the Documents to search are in, the most common first, with how many are in each. */
@@ -809,6 +822,8 @@ export function createAnswers(options: AnswersOptions) {
     task?: boolean;
     /** Offers web search's Tools whatever the Question says: a Research Task's Web source (#130). */
     web?: boolean;
+    /** "Analyse data…" was chosen (#447): `run_analysis` is offered whatever the Search scope holds. */
+    analyse?: boolean;
     /** Hears each Tool call as it ends. */
     onCall?(call: AnswerToolCall): void;
     /**
@@ -970,6 +985,8 @@ export function createAnswers(options: AnswersOptions) {
     /** Its `calculate` calls, as one Tool call (see `calculatedCall`), once a figure is recorded. */
     let calculated: AnswerToolCall | null = null;
     const recordedFigures = new Set<number>();
+    /** The Analyses it ran (#447), in order. */
+    const analyses: AnswerAnalysis[] = [];
     const figures = createCalculationSession({
       documents: searched,
       quotes: session.quotes,
@@ -1014,7 +1031,11 @@ export function createAnswers(options: AnswersOptions) {
     /** Writes the Answer as it stands into its home; false if it is gone. */
     const write = (outcome?: Outcome): boolean => {
       const final = outcome !== undefined;
-      const text = withoutFootnoteDefinitions(markdown);
+      const text = withAnalysisResults(
+        withoutFootnoteDefinitions(markdown),
+        analyses,
+        answerLanguage(context.question),
+      );
       // Final: a marker with no record is removed, and each is counted for the summary.
       const citationOf = (marker: number) =>
         final ? session.finalCitation(marker) : session.streamingCitation(marker);
@@ -1053,6 +1074,7 @@ export function createAnswers(options: AnswersOptions) {
               return found;
             },
             figures: () => placedFigures(text, final).figures,
+            analyses,
             toolCalls,
             support,
             textOrigin,
@@ -1118,6 +1140,7 @@ export function createAnswers(options: AnswersOptions) {
           citationSupport: support,
           quoteRetry,
           figures: placed.figures,
+          analyses,
           uncalculated: placed.missing,
           figureRetry,
           usage,
@@ -1168,7 +1191,7 @@ export function createAnswers(options: AnswersOptions) {
       resultCount: number | null,
       found: Pick<
         AnswerToolCall,
-        "passages" | "error" | "webPage" | "mindChange" | "mindProblem"
+        "passages" | "error" | "webPage" | "mindChange" | "mindProblem" | "analysis"
       > = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1182,6 +1205,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.webPage) call.webPage = found.webPage;
       if (found.mindChange) call.mindChange = found.mindChange;
       if (found.mindProblem) call.mindProblem = found.mindProblem;
+      if (found.analysis) call.analysis = found.analysis;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       input.onCall?.({ ...call });
       writeSoon();
@@ -1197,6 +1221,8 @@ export function createAnswers(options: AnswersOptions) {
     /** What each call of a Minds' Tool changed, by call, for its card when it finishes (#202). */
     const mindChanges = new Map<string, MindChange>();
     const mindProblems = new Map<string, MindProblem>();
+    /** What each call of `run_analysis` ran, by call, for its card when it finishes (#447). */
+    const analysisCalls = new Map<string, AnalysisCall>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1736,6 +1762,57 @@ export function createAnswers(options: AnswersOptions) {
           figureProblems: () => figures.problems(),
         }),
       };
+      // An Analysis (#447): for a model that writes calculated figures, where the sandbox runs
+      // here, over a sheet or CSV in the Search scope, or whatever it holds when the User asked.
+      const runtime = outside ? undefined : options.analysisRuntime;
+      const fromAnalysis: Tool[] =
+        runtime?.languages.some((each) => each.language === "python") &&
+        calculating &&
+        input.toolSet === undefined &&
+        !help &&
+        (input.analyse === true || options.documents.searchableHasSheets(documentIds))
+          ? [
+              analysisTool({
+                runtime,
+                passage: (id) => {
+                  const named = id.trim().toLowerCase();
+                  const shown = session
+                    .shownPassages()
+                    .find((each) => each.id.toLowerCase() === named);
+                  const source = shown ? searched.citationSource(shown.passageId) : null;
+                  if (!source || source.documentDeleted) return null;
+                  return {
+                    source,
+                    units: searched.pageTexts(source.documentId, source.contentHash, null, null),
+                  };
+                },
+                number: (given) => figures.number(given),
+                figure: (figure) => figures.record(figure),
+                language: answerLanguage(context.question),
+                now: () => new Date(),
+                ran: (toolCallId, analysis) => {
+                  analyses.push(analysis);
+                  analysisCalls.set(toolCallId, {
+                    number: analysis.number,
+                    title: analysis.title,
+                    documents: [
+                      ...new Set(
+                        analysis.inputs.map((each) =>
+                          each.kind === "range"
+                            ? each.citation.documentName
+                            : each.input.citation.documentName,
+                        ),
+                      ),
+                    ],
+                    end: analysis.end.kind,
+                    ...(analysis.end.kind === "unavailable" && { reason: analysis.end.reason }),
+                    ...(analysis.end.kind === "timed-out" && { limitMs: analysis.end.limitMs }),
+                  });
+                  writeSoon();
+                },
+              }),
+            ]
+          : [];
       // Scripts can run when a Skill has some, unless the User turned them off.
       const scripts = !outside && opened.hasScripts && options.scripts.enabled();
       const fromSkills: Tool[] =
@@ -1814,6 +1891,7 @@ export function createAnswers(options: AnswersOptions) {
             sourceTools = false,
             webTools: withWebTools = false,
             mindTools: withMindTools = false,
+            analysisTools: withAnalysisTools = false,
           } = {},
         ) =>
           [
@@ -1842,6 +1920,7 @@ export function createAnswers(options: AnswersOptions) {
             webInstructions(withWebTools),
             workingCopyNote(original?.name ?? null),
             mindInstructions(withMindTools, route),
+            analysisInstructions(withAnalysisTools),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             help
@@ -1860,7 +1939,13 @@ export function createAnswers(options: AnswersOptions) {
         model: prepared.model,
         ...(prepareQuick && { quickModel: () => prepareQuick(model, prepared) }),
         documents,
-        tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
+        tools: [
+          ...provided,
+          ...fromSkills,
+          ...fromWeb,
+          ...(mindsTools?.tools ?? []),
+          ...fromAnalysis,
+        ],
         gate,
         streamsInput,
         toolSet: input.toolSet ?? (help ? "documents" : undefined),
@@ -1966,7 +2051,9 @@ export function createAnswers(options: AnswersOptions) {
             const webPage = webPages.get(event.id);
             const mindChange = mindChanges.get(event.id);
             const mindProblem = mindProblems.get(event.id);
+            const analysis = analysisCalls.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
+              ...(analysis && { analysis }),
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
               ...(webPage && { webPage }),
@@ -2117,6 +2204,7 @@ export function createAnswers(options: AnswersOptions) {
         text: answer.markdown,
         citations: answer.citations(),
         figures: answer.figures(),
+        analyses: answer.analyses,
         toolCalls: answer.toolCalls,
         support: answer.support,
         textOrigin: answer.textOrigin,
@@ -2260,6 +2348,7 @@ export function createAnswers(options: AnswersOptions) {
       scoped: question.scope !== null && hasSearchScope(question.scope),
       emptyScope,
       forcedSkill: question.forcedSkill,
+      analyse: question.analyse,
       consentNeeded: ready.consentNeeded,
       ...(mind && { listening: () => options.liveTranscript(mind.mindId) }),
       ...(help && { help }),

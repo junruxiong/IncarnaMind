@@ -110,6 +110,21 @@ export function webInstructions(offered: boolean): string {
   ].join("\n");
 }
 
+/**
+ * `run_analysis`, when offered (#447): data comes only from inputs, every
+ * change to the rows is a step, and a number the result uses is never typed
+ * into the code.
+ */
+export function analysisInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    "For a question about a sheet or CSV file (totals, groups, changes, joins), call run_analysis instead of working it out from the rows you read: it runs your Python with pandas over the whole range.",
+    '- Read data only from inputs["name"], each a range of a Passage you found or a number quoted from one. A number a calculation uses must be an input, cited, never written in the code.',
+    "- Call step(label, df) after each change to the rows, and result(name, value, label, unit) for each figure or table the Answer uses. Each run starts clean, with no clock: take a date as an input.",
+    "- When it stops with an error, fix the code and run it again.",
+  ].join("\n");
+}
+
 /** The Document the Mind in focus is the working copy of (#1036), by name; empty for none. */
 export function workingCopyNote(original: string | null): string {
   if (original === null) return "";

@@ -17,7 +17,7 @@ import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/search
 import { useAnswers } from "../answers";
 import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon, StopIcon } from "../components/icons";
-import { SearchLineIcon, SparkLineIcon } from "../components/lineIcons";
+import { SearchLineIcon, SparkLineIcon, TableLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { answerAskFrom } from "../components/TaskTray";
 import { TypingTextarea } from "../components/TypingTextarea";
@@ -189,6 +189,7 @@ export function Composer({
   /** The Research plan open in the tray (#130): what is typed changes it. */
   const plan = useResearch((state) => (mindId ? state.plans[mindId] : undefined));
   const researching = mind !== null && draft.research === true;
+  const analysing = draft.analyse === true && !researching;
   /** Tell it… (#130): the running Task what is typed goes to. */
   const told = useTasks((state) => (draft.tell ? state.tasks[draft.tell] : undefined));
   const target = mind && tellable(told) ? told : undefined;
@@ -484,7 +485,7 @@ export function Composer({
       return;
     }
     useAnswers.getState().dismiss(composerKey(mindId));
-    if (said === undefined) update({ text: "", skill: null, pastes: [] });
+    if (said === undefined) update({ text: "", skill: null, pastes: [], analyse: false });
     setExpanded(false);
     setViewing(null);
     setPicking(null);
@@ -496,6 +497,7 @@ export function Composer({
       scope: composerScope(current, folderId),
       model: mind ? mindModelOf(mind.doc) : useComposer.getState().modelWithoutMind,
       forcedSkill: draft.skill,
+      ...(draft.analyse && { analyse: true }),
     });
     if (asked) {
       selection.asked();
@@ -504,7 +506,12 @@ export function Composer({
     // Not asked: its words come back here, unless the User has typed anew meanwhile.
     const now = useComposer.getState().draft(key);
     if (now.text === "" && now.pastes.length === 0) {
-      update({ text: typed, pastes: draft.pastes, skill: now.skill ?? draft.skill });
+      update({
+        text: typed,
+        pastes: draft.pastes,
+        skill: now.skill ?? draft.skill,
+        analyse: now.analyse || draft.analyse,
+      });
     }
   };
 
@@ -604,6 +611,11 @@ export function Composer({
       // Back to asking; the next Esc is the assistant's.
       event.preventDefault();
       update({ research: false });
+      return;
+    }
+    if (event.key === "Escape" && analysing) {
+      event.preventDefault();
+      update({ analyse: false });
       return;
     }
     if (event.key === "Escape" && expanded) {
@@ -803,6 +815,28 @@ export function Composer({
               // The text keeps the focus.
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => update({ research: false })}
+              className="scope-chip-remove"
+            >
+              <RemoveIcon className="size-2.5" />
+            </button>
+          </span>
+        )}
+        {analysing && !target && (
+          <span
+            data-testid="composer-analyse"
+            title={t("analysis.chip.hint")}
+            className="question-skill"
+          >
+            <TableLineIcon className="question-skill-icon" />
+            <span className="truncate">{t("analysis.chip")}</span>
+            <button
+              type="button"
+              data-testid="composer-analyse-remove"
+              aria-label={t("analysis.chip.remove")}
+              title={t("analysis.chip.remove")}
+              // The text keeps the focus.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => update({ analyse: false })}
               className="scope-chip-remove"
             >
               <RemoveIcon className="size-2.5" />
