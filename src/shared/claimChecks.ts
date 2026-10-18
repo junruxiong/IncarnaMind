@@ -87,7 +87,11 @@ function calculationOf(value: unknown): ClaimCalculation | null {
 
 function unsupportedOf(value: unknown): UnsupportedReason | null {
   if (!isRecord(value)) return null;
-  return { reason: text(value.reason), part: text(value.part) };
+  return {
+    reason: text(value.reason),
+    covered: text(value.covered),
+    uncovered: text(value.uncovered),
+  };
 }
 
 function scopeOf(value: unknown): ClaimCheckScope {

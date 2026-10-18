@@ -4408,11 +4408,10 @@ export type ClaimCheckFailure =
 export interface UnsupportedReason {
   /** One plain sentence on what no Passage states; null when the reply gave none. */
   reason: string | null;
-  /**
-   * The words of the sentence that nothing supports, as the sentence has them, when the rest of
-   * it is supported. Null when the reply named none, or words the sentence doesn't hold.
-   */
-  part: string | null;
+  /** A short phrase for what the Passages do state of the sentence ("the speed comparison"); null when none. */
+  covered: string | null;
+  /** A short phrase for what they don't ("memory and robustness"); null when none. */
+  uncovered: string | null;
 }
 
 /** A Document version a check read, which it no longer holds for once the Document changes. */

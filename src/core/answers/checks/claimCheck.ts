@@ -68,7 +68,6 @@ import {
   EVIDENCE_INSTRUCTIONS,
   evidencePrompt,
   NEAREST_INSTRUCTIONS,
-  partOfSentence,
   type ReadVerdict,
   readEvidence,
   readJudgement,
@@ -326,7 +325,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     if (byCalculation && verdict.verdict !== "contradicted") return byCalculation;
     /** Unsupported, with the nearest line when it states another value for the same thing (#770). */
     const unsupported = async (
-      why: UnsupportedReason = { reason: null, part: null },
+      why: UnsupportedReason = { reason: null, covered: null, uncovered: null },
     ): Promise<ClaimCheckResult> => {
       const nearest = await nearestDifferent(request, session, signal);
       if (signal.aborted) return notChecked("stopped");
@@ -346,7 +345,8 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     if (verdict.verdict === "unsupported") {
       return unsupported({
         reason: verdict.says,
-        part: partOfSentence(request.claim, verdict.part),
+        covered: verdict.covered,
+        uncovered: verdict.uncovered,
       });
     }
     const evidence =

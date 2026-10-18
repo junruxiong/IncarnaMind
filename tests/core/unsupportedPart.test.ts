@@ -1,56 +1,93 @@
 import { describe, expect, test } from "vitest";
-import { partOfSentence, readVerdict } from "../../src/core/answers/checks/prompt";
+import { readVerdict } from "../../src/core/answers/checks/prompt";
 
-const SENTENCE =
-  "GraphST's variational adaptive graph augmentation has complexity O(|V|² × d), creating a potential scaling constraint.";
-
-describe("The part of a sentence a reply names as unsupported", () => {
-  test("is the line after the reason, whatever the label's markup", () => {
+describe("What a reply says its Citations cover and don't", () => {
+  test("are the phrases on the lines after the reason, whatever the label's markup", () => {
     expect(
       readVerdict(
-        "Verdict: unsupported\nThe Passage gives the complexity, not what it causes.\nPart: creating a potential scaling constraint",
+        "Verdict: unsupported\nThe Passages compare speed, not memory or robustness.\nCovered: the speed comparison\nNot covered: memory and robustness",
       ),
     ).toEqual({
       verdict: "unsupported",
-      says: "The Passage gives the complexity, not what it causes.",
-      part: "creating a potential scaling constraint",
-    });
-    expect(readVerdict("**Verdict:** unsupported\n**Part:** “a scaling constraint”")?.part).toBe(
-      "“a scaling constraint”",
-    );
-    expect(readVerdict("Verdict: unsupported\n部分：一个扩展瓶颈")?.part).toBe("一个扩展瓶颈");
-  });
-
-  test("never takes the place of the reason", () => {
-    expect(readVerdict("Verdict: unsupported\nPart: a scaling constraint")).toEqual({
-      verdict: "unsupported",
-      says: null,
-      part: "a scaling constraint",
+      says: "The Passages compare speed, not memory or robustness.",
+      covered: "the speed comparison",
+      uncovered: "memory and robustness",
     });
     expect(
-      readVerdict("Verdict: unsupported\nPart of it is missing.\nPart: a scaling constraint"),
-    ).toMatchObject({ says: "Part of it is missing.", part: "a scaling constraint" });
+      readVerdict(
+        "**Verdict:** unsupported\n**Covered:** “速度比较”\n**Not covered:** 内存和鲁棒性。",
+      ),
+    ).toMatchObject({ covered: "速度比较", uncovered: "内存和鲁棒性" });
+    expect(
+      readVerdict("Verdict: unsupported\n已涵盖：速度比较\n未涵盖：内存和鲁棒性"),
+    ).toMatchObject({
+      covered: "速度比较",
+      uncovered: "内存和鲁棒性",
+    });
   });
 
-  test("is none when the reply names none", () => {
+  test("never take the place of the reason", () => {
+    expect(readVerdict("Verdict: unsupported\nCovered: the speed\nNot covered: memory")).toEqual({
+      verdict: "unsupported",
+      says: null,
+      covered: "the speed",
+      uncovered: "memory",
+    });
+    expect(
+      readVerdict("Verdict: unsupported\nNothing here is covered.\nNot covered: memory"),
+    ).toMatchObject({ says: "Nothing here is covered.", covered: null, uncovered: "memory" });
+  });
+
+  test("read as phrases: no quotes or closing stop, a capital that only starts the phrase made small", () => {
+    expect(
+      readVerdict(
+        "Verdict: unsupported\nCovered: “The speed comparison.”\nNot covered: Memory, and GD runs;",
+      ),
+    ).toMatchObject({ covered: "the speed comparison", uncovered: "memory, and GD runs" });
+    expect(readVerdict("Verdict: unsupported\nCovered: QN methods\nNot covered: GD")).toMatchObject(
+      {
+        covered: "QN methods",
+        uncovered: "GD",
+      },
+    );
+  });
+
+  test("are none when the reply gives none, or one too long to be a phrase", () => {
     expect(readVerdict("Verdict: unsupported")).toEqual({
       verdict: "unsupported",
       says: null,
-      part: null,
+      covered: null,
+      uncovered: null,
     });
     expect(readVerdict("Verdict: unsupported\nNo Passage mentions penguins.")).toEqual({
       verdict: "unsupported",
       says: "No Passage mentions penguins.",
-      part: null,
+      covered: null,
+      uncovered: null,
     });
-    expect(readVerdict("Verdict: unsupported\nPart:")?.part).toBeNull();
+    expect(readVerdict("Verdict: unsupported\nCovered:\nNot covered: ")).toMatchObject({
+      covered: null,
+      uncovered: null,
+    });
+    const long = "x".repeat(200);
+    expect(
+      readVerdict(`Verdict: unsupported\nCovered: ${long}\nNot covered: memory`),
+    ).toMatchObject({
+      covered: null,
+      uncovered: "memory",
+    });
   });
 
-  test("comes with a JSON reply's verdict", () => {
-    expect(readVerdict('{"verdict": "unsupported", "says": "Not stated.", "part": "d)"}')).toEqual({
+  test("come with a JSON reply's verdict", () => {
+    expect(
+      readVerdict(
+        '{"verdict": "unsupported", "says": "Not stated.", "covered": "speed", "uncovered": "Memory"}',
+      ),
+    ).toEqual({
       verdict: "unsupported",
       says: "Not stated.",
-      part: "d)",
+      covered: "speed",
+      uncovered: "memory",
     });
   });
 
@@ -58,55 +95,8 @@ describe("The part of a sentence a reply names as unsupported", () => {
     expect(readVerdict("Verdict: supported\nThe Document says so [^1].")).toEqual({
       verdict: "supported",
       says: "The Document says so.",
-      part: null,
+      covered: null,
+      uncovered: null,
     });
-  });
-});
-
-describe("The part, as the sentence has it", () => {
-  test("is the words copied from the sentence, without quotes or a closing stop", () => {
-    expect(partOfSentence(SENTENCE, "creating a potential scaling constraint")).toBe(
-      "creating a potential scaling constraint",
-    );
-    expect(partOfSentence(SENTENCE, "“creating a potential scaling constraint.”")).toBe(
-      "creating a potential scaling constraint",
-    );
-    expect(partOfSentence(SENTENCE, ", creating a potential scaling constraint")).toBe(
-      "creating a potential scaling constraint",
-    );
-  });
-
-  test("keeps the sentence's own case and spacing", () => {
-    expect(partOfSentence(SENTENCE, "Creating  a potential\nscaling constraint")).toBe(
-      "creating a potential scaling constraint",
-    );
-    expect(partOfSentence("Sales rose 5%\tin 2025 (a record).", "rose 5% in 2025")).toBe(
-      "rose 5% in 2025",
-    );
-  });
-
-  test("holds words with regular-expression marks as plain words", () => {
-    expect(partOfSentence(SENTENCE, "O(|V|² × d)")).toBe("O(|V|² × d)");
-  });
-
-  test("works in Chinese, which has no spaces", () => {
-    expect(
-      partOfSentence("该方法的复杂度为 O(n²)，因此难以扩展到大规模图。", "因此难以扩展到大规模图"),
-    ).toBe("因此难以扩展到大规模图");
-  });
-
-  test.each([
-    ["words the sentence doesn't hold", "causing a scaling bottleneck"],
-    ["words with an ellipsis in them", "creating … constraint"],
-    ["nothing", ""],
-    ["only quotes", "“”"],
-  ])("is left out for %s", (_name, named) => {
-    expect(partOfSentence(SENTENCE, named)).toBeNull();
-  });
-
-  test("is left out when it is the whole sentence, which is no part", () => {
-    expect(partOfSentence(SENTENCE, SENTENCE)).toBeNull();
-    expect(partOfSentence(SENTENCE, `“${SENTENCE.slice(0, -1)}”`)).toBeNull();
-    expect(partOfSentence(SENTENCE, null)).toBeNull();
   });
 });

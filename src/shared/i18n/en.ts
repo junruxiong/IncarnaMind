@@ -606,8 +606,10 @@ export const en = {
   "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
   "claim.unsupported.anywhere": "Nothing in your Documents says this.",
   "claim.unsupported.differs": "Your Documents say something different:",
-  "claim.unsupported.part.one": "Citation {number} doesn't say this part: “{part}”.",
-  "claim.unsupported.part.other": "Citations {number} don't say this part: “{part}”.",
+  "claim.unsupported.covers.one":
+    "Your Citation supports {covered}, not the parts about {uncovered}.",
+  "claim.unsupported.covers.other":
+    "Your Citations support {covered}, not the parts about {uncovered}.",
   "claim.unsupported.noReason": "No reason was given",
   "claim.openCitation": "Open citation {number}",
   "claim.courtDecision.title": "This cites a court decision.",
