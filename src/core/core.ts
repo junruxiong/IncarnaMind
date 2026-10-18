@@ -26,6 +26,7 @@ import {
   DEFAULT_MIND_STYLE,
   exportedFamily,
   isMindStyle,
+  lineSpacingOf,
   mindStyleOf,
   sameStyle,
   writeMindStyle,
@@ -1244,6 +1245,11 @@ export function createCore(adapters: CoreAdapters): Core {
         const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }, { headed });
         return { id: mind.id, name: mindName(mind) || title };
       },
+      discard: (mindId) => {
+        if (!mindExists(mindId)) return;
+        const { title } = minds.get(mindId);
+        if (content.read(mindId, (blocks) => holdsOnlyItsTitle(blocks, title))) removeMind(mindId);
+      },
       folderName: (folderId) =>
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
       writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
@@ -1738,6 +1744,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return { style: citationStyles.resolve(style.style, textLanguage), textLanguage };
     },
     font: (mindId) => exportedFamily(content.readSettings(mindId, mindStyleOf).font),
+    lineSpacing: (mindId) => {
+      const lineSpacing = lineSpacingOf(content.readSettings(mindId, mindStyleOf));
+      return lineSpacing === "default" ? null : lineSpacing;
+    },
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     citedPage: (citation) => citedPages.image(citation),
