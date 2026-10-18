@@ -4,30 +4,17 @@ IncarnaMind runs an Analysis in a sandbox that has no access to your files or th
 
 ## Why it is off
 
-Some Linux distributions block the way Electron starts its sandbox. Ubuntu 24.04, for example, has an AppArmor rule that refuses unprivileged user namespaces to programs without a profile that allows them. When the sandbox can't start, the AppImage doesn't open at all, so people start it with `--no-sandbox`, which turns the sandbox off for the whole app.
+Ubuntu 23.10 and later, including 24.04, have an AppArmor rule that refuses unprivileged user namespaces to programs without a profile that allows them. Chromium's sandbox needs them. The AppImage checks for this when it starts, and if the rule is in the way it starts the app with the sandbox off, without saying so. Starting the app with `--no-sandbox` turns it off the same way.
 
-## The safe fix: an AppArmor profile for IncarnaMind
+## The fix: install the .deb
 
-This allows user namespaces for IncarnaMind alone. The AppImage runs its program from a temporary folder whose name starts with `.mount_`, so the profile names that path.
+Download the `.deb` for your version from the [releases page](https://github.com/IncarnaMind/IncarnaMind/releases) and install it:
 
-1. Save this as `/etc/apparmor.d/incarnamind`:
+```sh
+sudo apt install ./IncarnaMind_*_amd64.deb
+```
 
-   ```
-   abi <abi/4.0>,
-   include <tunables/global>
-
-   profile incarnamind /tmp/.mount_*/incarnamind flags=(unconfined) {
-     userns,
-
-     include if exists <local/incarnamind>
-   }
-   ```
-
-2. Load it:
-
-   ```sh
-   sudo apparmor_parser -r /etc/apparmor.d/incarnamind
-   ```
+The .deb installs an AppArmor profile that allows user namespaces for IncarnaMind's own install path, so the sandbox works with no further step. Then start IncarnaMind from your applications, not the AppImage, and without `--no-sandbox`.
 
 ## The last resort: allow user namespaces for every program
 
@@ -35,6 +22,4 @@ This allows user namespaces for IncarnaMind alone. The AppImage runs its program
 sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 ```
 
-This lifts the rule for the whole system, not just for IncarnaMind. Any program can then create user namespaces again. Attacks on the kernel often use them, which is why Ubuntu added the rule. The setting lasts until you restart the computer. To keep it after that, put `kernel.apparmor_restrict_unprivileged_userns=0` in a file in `/etc/sysctl.d/`. Use this only if the profile above doesn't work for you.
-
-Then start IncarnaMind without `--no-sandbox`.
+This lifts the rule for the whole system, not just for IncarnaMind, and the AppImage then starts with its sandbox on. Any program can then create user namespaces again. Attacks on the kernel often use them, which is why Ubuntu added the rule. The setting lasts until you restart the computer. To keep it after that, put `kernel.apparmor_restrict_unprivileged_userns=0` in a file in `/etc/sysctl.d/`. Use this only if you can't install the .deb.

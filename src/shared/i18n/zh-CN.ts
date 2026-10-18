@@ -4732,7 +4732,7 @@ export const zhCN = {
   "analysis.unavailable.missing":
     "这台电脑上无法运行数据分析：缺少部分文件。重新安装 IncarnaMind 即可恢复。",
   "analysis.unavailable.start": "这台电脑上无法运行数据分析：沙盒未能启动。",
-  "analysis.unavailable.noSandbox": "分析需要应用的沙盒，但它已关闭",
+  "analysis.unavailable.noSandbox": "沙盒已关闭，无法运行数据分析",
   "analysis.unavailable.noSandbox.fix": "如何解决",
   "analysis.crashed": "数据分析意外停止。请重新运行。",
   "analysis.command": "分析数据…",
