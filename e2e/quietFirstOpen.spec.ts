@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  acceptPlainTextKeys,
   assistantAnswers,
   createDataFolder,
   launchApp,
@@ -190,6 +191,28 @@ test("Tagging stopped for the User's own files shows in the footer on the first 
       async () => (await taggingOf(window)).find((each) => each.name === "Harbour notes")?.tagging,
     )
     .toBe("tagged");
+  await app.close();
+});
+
+test("Tagging paused by a rate limit shows in the footer on the first open, with Retry", async () => {
+  const limited = join(sources, "Harbour notes.md");
+  await writeFile(limited, "# Harbour notes\n\nThe invoice server was rate-limited.\n");
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await acceptPlainTextKeys(window);
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-6-luna" });
+  });
+  const sidebar = window.getByTestId("sidebar");
+  await expect(window.getByTestId("first-open-steps")).toBeVisible();
+  await window.getByTestId("add-documents-input").setInputFiles([limited]);
+  const row = sidebar.getByTestId("tagging-rate-limited");
+  await expect(row.getByTestId("status-label")).toContainText("Rate limit reached");
+  await expect(window.getByTestId("first-open-steps")).toBeVisible();
+  await row.getByTestId("tagging-rate-limited-retry").focus();
+  await window.keyboard.press("Enter");
+  await expect(row).toHaveCount(0);
   await app.close();
 });
 
