@@ -1,7 +1,8 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { CATALOG_PROVIDERS } from "../src/core/providers/catalog";
 import { createFakeOpenAI } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
@@ -281,6 +282,59 @@ test("the provider's own line on what it does with the data sits under the sente
     await language(window, "zh-CN");
     await expect(line).toContainText("数据使用：");
     await expect(line.getByRole("link")).toHaveText("数据使用 ↗");
+  } finally {
+    await app.close();
+  }
+});
+
+test("every provider's line on what it does with the data is one line beside its link at 900px wide, in English and Chinese, at first run and in Settings", async () => {
+  const { app, window } = await launchApp(dataDir);
+  const hosted = CATALOG_PROVIDERS.filter(
+    (each) => each.group !== "local" && each.id !== "openai-compatible",
+  );
+  const oneLine = (line: Locator) =>
+    line.evaluate((element) => {
+      const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+      return element.getBoundingClientRect().height < lineHeight * 1.5;
+    });
+  try {
+    await setWindowSize(app, window, 900, 900);
+    await acceptPlainTextKeys(window);
+    let checked = 0;
+    for (const [value, words] of [
+      ["en", "en"],
+      ["zh-CN", "zh"],
+    ] as const) {
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await card.getByTestId("setup-key").click();
+      const form = card.getByTestId("provider-form");
+      await form.getByTestId("provider-more-toggle").click();
+      for (const provider of hosted.filter((each) => each.support === "first-class")) {
+        await form
+          .locator("label", { has: window.locator(`input[value="${provider.id}"]`) })
+          .click();
+        const line = form.getByTestId("provider-data-use");
+        await expect(line).toContainText(provider.dataUse.summary[words]);
+        expect(await oneLine(line), `${provider.id} at first run, ${value}`).toBe(true);
+        checked += 1;
+      }
+      await card.getByTestId("setup-back").click();
+
+      const settings = await openSettings(window, "models");
+      for (const provider of hosted) {
+        const line = (await addProviderForm(settings, provider.id)).getByTestId(
+          "provider-data-use",
+        );
+        await expect(line).toContainText(provider.dataUse.summary[words]);
+        expect(await oneLine(line), `${provider.id} in Settings, ${value}`).toBe(true);
+        await expect(line.getByRole("link")).toHaveAttribute("href", provider.dataUse.url ?? "");
+        checked += 1;
+        await settings.getByTestId("models-back").click();
+      }
+      await closeSettings(window);
+    }
+    expect(checked).toBeGreaterThan(40);
   } finally {
     await app.close();
   }

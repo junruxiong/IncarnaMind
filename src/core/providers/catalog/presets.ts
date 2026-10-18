@@ -28,12 +28,12 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "unknown",
       summary: {
-        en: "Groq doesn't keep API requests by default. It may log some for up to 30 days to look into errors or abuse, which you can turn off.",
-        zh: "Groq 默认不保留 API 请求。为排查错误或滥用，它可能记录部分请求最多 30 天，你可以关闭这项记录。",
+        en: "Doesn't keep requests by default; may log some up to 30 days, which you can turn off.",
+        zh: "默认不保留请求；可能为排查问题记录最多 30 天，可关闭。",
       },
       url: "https://console.groq.com/docs/your-data",
     },
-    checked: "2026-10-14",
+    checked: "2026-10-18",
   },
   {
     id: "together",
@@ -57,12 +57,12 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Together doesn't train on your data unless you opt in. With Zero Data Retention on, what you send is removed once it's processed.",
-        zh: "除非你同意，Together 不会用你的数据训练模型。开启零数据保留后，请求处理完即删除。",
+        en: "Trains only if you opt in; keeps prompts and replies unless Zero Data Retention is on.",
+        zh: "你选择加入才会用于训练；开启零数据保留前会保存提示和回复。",
       },
-      url: "https://www.together.ai/privacy",
+      url: "https://docs.together.ai/docs/privacy-and-security",
     },
-    checked: "2026-10-15",
+    checked: "2026-10-18",
   },
   {
     id: "fireworks",
@@ -90,12 +90,12 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "unknown",
       summary: {
-        en: "Fireworks doesn't log or store prompts or replies for open models unless you opt in.",
-        zh: "除非你同意，Fireworks 不会记录或保存开放模型的提示和回复。",
+        en: "Doesn't log or store prompts or replies for open models unless you opt in.",
+        zh: "开放模型的提示和回复默认不记录、不保存，除非你选择加入。",
       },
       url: "https://docs.fireworks.ai/guides/security_compliance/data_handling",
     },
-    checked: "2026-10-15",
+    checked: "2026-10-18",
   },
   {
     id: "cerebras",
@@ -115,12 +115,12 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "unknown",
       summary: {
-        en: "Cerebras says it doesn't keep the inputs and outputs of its inference service.",
-        zh: "Cerebras 表示不保留推理服务的输入和输出。",
+        en: "Says it doesn't keep your inputs or outputs.",
+        zh: "称不保留你的输入和输出。",
       },
       url: "https://www.cerebras.ai/privacy-policy",
     },
-    checked: "2026-10-15",
+    checked: "2026-10-18",
   },
   {
     id: "cohere",
@@ -149,12 +149,12 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "opt-out",
       summary: {
-        en: "Cohere may train on prompts and replies unless you turn that off in Data Controls. It deletes logged ones after 30 days.",
-        zh: "除非你在“Data Controls”中关闭，Cohere 可能用提示和回复训练模型。记录的内容 30 天后删除。",
+        en: "May train on prompts and replies unless you opt out; logged ones are deleted after 30 days.",
+        zh: "可能用提示和回复训练，可选择退出；记录的内容 30 天后删除。",
       },
       url: "https://cohere.com/data-usage-policy",
     },
-    checked: "2026-10-15",
+    checked: "2026-10-18",
   },
   {
     id: "venice",
@@ -178,12 +178,12 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "unknown",
       summary: {
-        en: "Venice doesn't store or log what you send or what it replies.",
-        zh: "Venice 不保存也不记录你发送的内容和它的回复。",
+        en: "Doesn't store or log prompts; some models are run by other companies that may see them.",
+        zh: "不存储、不记录提示；部分模型由其他公司运行，对方可能看到。",
       },
       url: "https://docs.venice.ai/overview/privacy",
     },
-    checked: "2026-10-15",
+    checked: "2026-10-18",
   },
   {
     id: "bedrock",
@@ -245,12 +245,12 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Amazon Bedrock doesn't use your prompts and replies to train models, and the models' makers can't see them.",
-        zh: "Amazon Bedrock 不会用你的提示和回复训练模型，模型的开发方也看不到它们。",
+        en: "Not used to train models or shared with their makers; some models are kept up to 30 days.",
+        zh: "不用于训练，也不提供给模型开发方；部分模型最多保留 30 天。",
       },
       url: "https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html",
     },
-    checked: "2026-10-15",
+    checked: "2026-10-18",
   },
   {
     id: "cloudflare",
@@ -287,12 +287,12 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Cloudflare doesn't use what you send to Workers AI to train any model.",
-        zh: "Cloudflare 不会用你发送给 Workers AI 的内容训练任何模型。",
+        en: "Not used to train models; not kept after the request unless you use its storage features.",
+        zh: "不用于训练；请求结束后不保留，除非你使用其存储功能。",
       },
       url: "https://developers.cloudflare.com/workers-ai/platform/data-usage/",
     },
-    checked: "2026-10-15",
+    checked: "2026-10-18",
   },
   {
     id: "lmstudio",
@@ -321,11 +321,12 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "no",
       summary: {
-        en: "LM Studio runs on this computer, so what you ask stays on it.",
-        zh: "LM Studio 在这台电脑上运行，你的提问不会离开这台电脑。",
+        en: "Runs on this computer: what you ask stays on it, unless you pick a cloud model in it.",
+        zh: "在本机运行，提问不会离开本机；在其中选用云端模型则除外。",
       },
+      url: "https://lmstudio.ai/app-privacy",
     },
-    checked: "2026-10-15",
+    checked: "2026-10-18",
   },
   {
     id: "unsloth",
@@ -354,10 +355,11 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Unsloth Studio runs on this computer, so what you ask stays on it.",
-        zh: "Unsloth Studio 在这台电脑上运行，你的提问不会离开这台电脑。",
+        en: "Runs on this computer: what you ask stays on it, unless you pick a cloud model in it.",
+        zh: "在本机运行，提问不会离开本机；在其中选用云端模型则除外。",
       },
+      url: "https://unsloth.ai/docs/new/studio",
     },
-    checked: "2026-10-15",
+    checked: "2026-10-18",
   },
 ];

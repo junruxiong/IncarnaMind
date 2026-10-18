@@ -412,8 +412,8 @@ describe("The providers of #178", () => {
     );
   });
 
-  test("Anthropic's data line names every model that needs 30-day retention, and no link uses an address that has moved", () => {
-    for (const model of ["Fable 5.1", "Fable 5", "Mythos 5.1", "Mythos 5"]) {
+  test("Anthropic's data line names the models that need 30-day retention, and no link uses an address that has moved", () => {
+    for (const model of ["Fable", "Mythos"]) {
       expect(catalogProvider("anthropic")?.dataUse.summary.en, model).toContain(model);
       expect(catalogProvider("anthropic")?.dataUse.summary.zh, model).toContain(model);
     }
@@ -421,6 +421,32 @@ describe("The providers of #178", () => {
     expect(
       links.filter((url) => /docs\.anthropic\.com|platform\.openai\.com\/docs/.test(url ?? "")),
     ).toEqual([]);
+  });
+
+  test("every provider's data-use line fits one line at 900px beside its link, states no price or plan, and a hosted provider links its own page", () => {
+    // The narrowest 900px screen is first run's key form, 524px wide, in 12px type: the line,
+    // "Data use ↗" and in Chinese "数据使用：" before it must fit in one line of it.
+    const MOST_ENGLISH_CHARACTERS = 90;
+    const MOST_CHINESE_UNITS = 30;
+    const wide = /[\u2e80-\u9fff\uff00-\uffef]/u;
+    const units = (text: string) =>
+      [...text].reduce((sum, each) => sum + (wide.test(each) ? 1 : each === " " ? 0.25 : 0.5), 0);
+    for (const provider of CATALOG_PROVIDERS) {
+      const { summary, url } = provider.dataUse;
+      expect(summary.en.length, provider.id).toBeLessThanOrEqual(MOST_ENGLISH_CHARACTERS);
+      expect(units(summary.zh), provider.id).toBeLessThanOrEqual(MOST_CHINESE_UNITS);
+      expect(summary.en, provider.id).not.toMatch(
+        /\bplans?\b|\bfees?\b|\bcredits?\b|\bprices?\b|[$¥]\s?\d|\d\s?%/i,
+      );
+      expect(summary.zh, provider.id).not.toMatch(
+        /订阅|套餐|方案|费用|收费|价格|额度|[$¥]\s?\d|\d\s?%/,
+      );
+      if (provider.id === "openai-compatible") {
+        expect(url, provider.id).toBeUndefined();
+      } else {
+        expect(url, provider.id).toMatch(/^https:\/\//);
+      }
+    }
   });
 
   test("a provider with regions has an endpoint for each, the first the default, and a set of model facts for each", () => {
