@@ -332,11 +332,16 @@ interface EditCall {
   maxOutputTokens: number;
 }
 
+const quotesOf = (selection: Selection): string[] =>
+  selection.citations.map((citation) => (typeof citation.quote === "string" ? citation.quote : ""));
+
 /** The request for `ask` over `selection`; null when it is more than the model can take at once. */
 function editCall(
   prepared: PreparedChatModel,
   ask: Pick<Ask, "action" | "instruction">,
-  selection: Pick<Selection, "text" | "context" | "before" | "after" | "characters">,
+  selection: Pick<Selection, "text" | "context" | "before" | "after" | "characters"> & {
+    quotes?: readonly string[];
+  },
 ): EditCall | null {
   const explain = ask.action === "explain";
   const instructions = explain ? EXPLAIN_INSTRUCTIONS : EDIT_INSTRUCTIONS;
@@ -347,6 +352,7 @@ function editCall(
     context: selection.context,
     // Explain writes under the passage, not into it: the words around it don't matter.
     ...(!explain && { before: selection.before, after: selection.after }),
+    ...(ask.action === "cut-unsupported" && { quotes: selection.quotes }),
   });
   // The reply is about as long as the passage; a translation into Chinese can count more.
   let maxOutputTokens = Math.min(16_000, Math.max(1_024, Math.ceil(selection.characters * 1.5)));
@@ -410,7 +416,7 @@ async function streamEdit(
 export async function editText(
   prepared: PreparedChatModel,
   ask: Pick<Ask, "action" | "instruction">,
-  passage: { text: string; context: string },
+  passage: { text: string; context: string; quotes: readonly string[] },
   signal: AbortSignal,
 ): Promise<string | null> {
   const call = editCall(prepared, ask, {
@@ -501,7 +507,7 @@ export function createEdits(options: EditsOptions) {
     const { mindId, fork, selection } = draft;
     const explain = ask.action === "explain";
     const ended = (result: EditWithAiResult) => ({ result, reply: "", reason: null });
-    const call = editCall(prepared, ask, selection);
+    const call = editCall(prepared, ask, { ...selection, quotes: quotesOf(selection) });
     if (!call) return ended({ kind: "too-long" });
 
     const request = randomUUID();
