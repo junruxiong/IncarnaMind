@@ -98,11 +98,11 @@ function answerAround(
  * the marker. The margin holds the sentences' own checks (`MarginChecks`). In a
  * footnote's text it is part of the footnote: the marker shows where it points
  * and its check's icon instead of a number. Hovering or focusing it shows its
- * card: the check in words, the quote, and Open; Esc closes it. Clicking it opens the cited page and keeps the card; where the
- * window shows one group, the page would cover the Mind, so the click keeps
- * the card alone and its Open brings the page (#963). When the quote wasn't
- * found, the card offers ways on: open the page anyway, remove the Citation,
- * or regenerate the Answer.
+ * card: the check in words, the quote, and Open; Esc closes it. Clicking it
+ * opens the cited page and keeps the card; where the window shows one group,
+ * the page would cover the Mind, so the click keeps the card alone and its
+ * Open brings the page (#963). When the quote wasn't found, the card offers
+ * ways on: open the page anyway, remove the Citation, or regenerate the Answer.
  */
 export function CitationView({
   node,
