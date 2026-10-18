@@ -4575,6 +4575,30 @@
     line-height: 18px;
     color: var(--color-ink-meta);
   }
+  /* A Citation's quote on an Unsupported card, then its own chip; it opens the Citation. */
+  .claim-card-cited {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    /* The text starts at the card's text edge, 22px in, as the card's other notes do. */
+    width: calc(100% - 18px);
+    margin: 0 0 0 18px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    text-align: left;
+    font-size: var(--text-meta);
+    line-height: 18px;
+    color: var(--color-ink-meta);
+
+    &:is(button):hover {
+      background: var(--color-frame);
+    }
+    .citation-marker {
+      flex-shrink: 0;
+      margin: 0;
+      vertical-align: baseline;
+    }
+  }
   .citation-card-note {
     padding-left: 22px;
     font-size: var(--text-meta);

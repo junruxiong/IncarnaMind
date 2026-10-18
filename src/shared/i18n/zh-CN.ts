@@ -588,7 +588,7 @@ export const zhCN = {
   "claim.unsupported.differs": "你的文档里是另一种说法：",
   "claim.unsupported.covers.one": "引用支持{covered}，但不支持{uncovered}的部分。",
   "claim.unsupported.covers.other": "引用支持{covered}，但不支持{uncovered}的部分。",
-  "claim.unsupported.noReason": "没有给出原因",
+  "claim.unsupported.noReason": "核对没有给出原因",
   "claim.openCitation": "打开引用 {number}",
   "claim.courtDecision.title": "本句引用了法院判决。",
   "claim.courtDecision.body":
