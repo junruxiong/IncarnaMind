@@ -1,10 +1,10 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, test } from "@playwright/test";
-import { buildPdf } from "../tests/helpers/pdf";
+import type { Editor } from "@tiptap/core";
+import type { CoreBridge } from "../src/core/api";
 import {
   addDocuments,
-  clickEndOf,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -19,12 +19,11 @@ import {
 } from "./app";
 
 /**
- * A cited sentence's Unsupported card says which part its Citation doesn't
- * cover, and never "Nothing in your Documents says this", which a sentence with
- * no Citation keeps. The scripted model (src/main/fakeChat/checks.ts) finds a
- * cited sentence unsupported and names its last clause when the Passage shares
- * none of its words, and gives no reason when the Passage shares almost nothing
- * with it.
+ * A cited sentence's Unsupported card says what its Citations support and what
+ * they don't, and never "Nothing in your Documents says this", which a sentence
+ * with no Citation keeps. The scripted model (src/main/fakeChat/checks.ts)
+ * finds the sentences listed in `PARTLY` partly supported, and gives a
+ * sentence that says "no reason" no reason.
  */
 let dataDir: string;
 let sources: string;
@@ -37,27 +36,39 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-const TIDES = buildPdf([
-  { lines: ["Harbour times", "Harbours publish the times of high water every 12 months."] },
-]);
-const COVERED = "Harbours publish the times of high water every 12 months.";
-const SECOND_HALF = "creating a scaling constraint";
+const QUOTE_ONE = "QN methods are much faster than GD algorithms";
+const QUOTE_TWO = "First-order methods converge more slowly";
+const HARBOURS =
+  "Harbours publish the times of high water every 12 months, creating a scaling constraint.";
+const NO_REASON = "Penguins nest on the harbour cliffs, with no reason.";
 const UNCITED = "Penguins nest on the harbour cliffs.";
 
-const WORDS = {
+const LANGUAGES = {
   en: {
-    part: `Citation 1 doesn't say this part: “${SECOND_HALF}”.`,
+    width: 1440,
+    owner:
+      "The tutorial discusses the trade-off between training speed, robustness and memory needs: experiments usually show quasi-Newton methods are faster than gradient descent; first-order methods are usually more robust but slower.",
+    first: "The tutorial discusses",
+    covers:
+      "Your Citations support the speed comparison, not the parts about memory and robustness.",
+    coversOne:
+      "Your Citation supports the harbour times, not the parts about the scaling constraint.",
     nothing: "Nothing in your Documents says this.",
     noReason: "No reason was given",
     checkAgain: "Check again",
-    open: "Open citation 1",
+    open: (number: number) => `Open citation ${number}`,
   },
   "zh-CN": {
-    part: `引用 1 没有提到这部分：“${SECOND_HALF}”。`,
+    width: 900,
+    owner:
+      "教程讨论了训练速度、鲁棒性和内存需求之间的权衡：已有实验通常显示，拟牛顿方法比梯度下降更快；一阶优化方法通常更加稳健，但速度较慢。",
+    first: "教程讨论了",
+    covers: "引用支持速度比较，但不支持内存和鲁棒性的部分。",
+    coversOne: "引用支持the harbour times，但不支持the scaling constraint的部分。",
     nothing: "你的文档中没有内容提到这一点。",
     noReason: "没有给出原因",
     checkAgain: "重新核对",
-    open: "打开引用 1",
+    open: (number: number) => `打开引用 ${number}`,
   },
 } as const;
 
@@ -68,31 +79,69 @@ const fitsWithin = async (inner: Locator, outer: Locator) => {
   return a.x >= b.x - 1 && a.x + a.width <= b.x + b.width + 1;
 };
 
-for (const [language, width] of [
-  ["en", 1440],
-  ["zh-CN", 900],
-] as const) {
-  test(`a cited sentence's Unsupported card names the part its Citation doesn't cover, says when no reason was given, and a sentence with no Citation keeps its line (${language}, ${width}px)`, async () => {
+for (const language of ["en", "zh-CN"] as const) {
+  const words = LANGUAGES[language];
+  test(`a cited sentence's Unsupported card says what its Citations support and what they don't, says when no reason was given, and a sentence with no Citation keeps its line (${language}, ${words.width}px)`, async () => {
     test.setTimeout(120_000);
-    const words = WORDS[language];
-    await writeFile(join(sources, "Tides.pdf"), TIDES);
+    await writeFile(join(sources, "Tutorial one.md"), `# One\n\n${QUOTE_ONE} in practice.\n`);
+    await writeFile(join(sources, "Tutorial two.md"), `# Two\n\n${QUOTE_TWO} than QN methods.\n`);
     const { app, window } = await launchApp(dataDir, { fakeChat: true });
     await dismissChatSetup(window);
     await useLocalChatModel(window);
     await setLanguage(window, language);
-    await setWindowSize(app, window, width, 900);
-    await addDocuments(window, [join(sources, "Tides.pdf")]);
+    await setWindowSize(app, window, words.width, 900);
+    await addDocuments(window, [
+      join(sources, "Tutorial one.md"),
+      join(sources, "Tutorial two.md"),
+    ]);
+    const documents = await window.evaluate(() =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listDocuments(),
+    );
+    const cite = (name: string, quote: string) => {
+      const document = documents.find((each) => each.name === name);
+      return {
+        type: "citation",
+        attrs: {
+          passageId: "passage-1",
+          documentId: document?.id,
+          documentName: name,
+          contentHash: document?.contentHash,
+          pageFrom: 1,
+          pageTo: 1,
+          location: null,
+          quote,
+          check: "found",
+          checkReason: null,
+        },
+      };
+    };
+    const paragraph = (...content: object[]) => ({ type: "paragraph", content });
+    const text = (value: string) => ({ type: "text", text: value });
+
     await newMind(window);
     const editor = window.getByTestId("mind-editor");
-    await editor.click();
-    await window.keyboard.type(COVERED);
-    await window.keyboard.press("Enter");
-    await window.keyboard.type(UNCITED);
-    const cited = editor.locator(":scope > p").first();
-    const uncited = editor.locator(":scope > p").nth(1);
+    await editor.evaluate(
+      (dom, content) => {
+        (dom as unknown as { editor: Editor }).editor.commands.insertContentAt(0, content);
+      },
+      [
+        paragraph(
+          text("Quasi-Newton methods approximate the Hessian."),
+          cite("Tutorial one", QUOTE_ONE),
+        ),
+        paragraph(
+          text(words.owner),
+          cite("Tutorial one", QUOTE_ONE),
+          cite("Tutorial two", QUOTE_TWO),
+        ),
+        paragraph(text(HARBOURS), cite("Tutorial one", QUOTE_ONE)),
+        paragraph(text(NO_REASON), cite("Tutorial two", QUOTE_TWO)),
+        paragraph(text(UNCITED)),
+      ],
+    );
+    const lines = editor.locator(":scope > p");
     const marks = window.getByTestId("claim-mark");
     const card = window.getByTestId("claim-card");
-    const menu = window.getByTestId("selection-menu");
     /** Opens a mark's card once the marks have settled in the margin. */
     const openCard = async (mark: Locator) => {
       await motionSettled(window);
@@ -100,73 +149,68 @@ for (const [language, width] of [
       await expect(card).toBeVisible();
     };
 
-    // The first sentence is supported and becomes a Citation; the second finds nothing.
-    await slideSelect(window, cited, "Harbours publish", { line: uncited, words: "cliffs." });
-    await pointAndClick(window, menu.getByTestId("selection-action-find-support"));
-    await expect(marks.first()).toHaveAttribute("data-check", "supported");
-    await expect(marks.nth(1)).toHaveAttribute("data-check", "unsupported");
-    await openCard(marks.first());
-    await pointAndClick(window, card.getByTestId("claim-add-citation"));
-    await expect(cited.getByTestId("citation")).toHaveAttribute("data-check", "found");
-    await expect(marks).toHaveCount(1);
+    await slideSelect(window, lines.nth(1), words.first, { line: lines.nth(4), words: "cliffs." });
+    await pointAndClick(
+      window,
+      window.getByTestId("selection-menu").getByTestId("selection-action-check-against-documents"),
+    );
+    await expect(marks).toHaveCount(4);
+    for (const index of [0, 1, 2, 3]) {
+      await expect(marks.nth(index)).toHaveAttribute("data-check", "unsupported");
+    }
 
-    // The writer adds a second half that no Passage states, after the Citation.
-    await clickEndOf(window, cited);
-    await window.keyboard.press("ArrowLeft");
-    await window.keyboard.type(`, ${SECOND_HALF}`);
-    await slideSelect(window, cited, "Harbours publish the times");
-    await pointAndClick(window, menu.getByTestId("selection-action-check-against-documents"));
-    await expect(marks).toHaveCount(2);
-    const mark = marks.first();
-    await expect(mark).toHaveAttribute("data-check", "unsupported");
-
-    await openCard(mark);
+    // Two Citations: what they support and what they don't, then each quote, opening at its place.
+    await openCard(marks.nth(0));
     await expect(card.getByTestId("claim-badge")).toHaveAttribute("data-check", "unsupported");
-    await expect(card.getByTestId("claim-part")).toHaveText(words.part);
+    await expect(card.getByTestId("claim-covers")).toHaveText(words.covers);
     await expect(card.getByTestId("claim-nothing")).toHaveCount(0);
-    await expect(card.getByTestId("claim-cited")).toContainText(COVERED);
-    await expect(card.getByTestId("claim-open-citation")).toHaveText(words.open);
-    expect(await fitsWithin(card.getByTestId("claim-cited"), card)).toBe(true);
+    await expect(card.getByTestId("claim-cited")).toHaveCount(2);
+    await expect(card.getByTestId("claim-cited").first()).toContainText(QUOTE_ONE);
+    await expect(card.getByTestId("claim-cited").last()).toContainText(QUOTE_TWO);
+    await expect(card.getByTestId("claim-open-citation")).toHaveText([
+      words.open(2),
+      words.open(3),
+    ]);
+    for (const row of await card.getByTestId("claim-cited").all()) {
+      expect(await fitsWithin(row, card)).toBe(true);
+    }
     // The card's actions stay as they were.
     await expect(card.getByTestId("claim-find-sources")).toBeVisible();
     await expect(card.getByTestId("claim-search-web")).toBeVisible();
     await expect(card.getByTestId("claim-remove")).toBeVisible();
     await window.keyboard.press("Escape");
 
-    // A sentence with no Citation keeps today's wording.
+    // One Citation says "Citation", not "Citations".
     await openCard(marks.nth(1));
-    await expect(card.getByTestId("claim-nothing")).toHaveText(words.nothing);
-    await expect(card.getByTestId("claim-part")).toHaveCount(0);
-    await expect(card.getByTestId("claim-no-reason")).toHaveCount(0);
-    await expect(card.getByTestId("claim-cited")).toHaveCount(0);
+    await expect(card.getByTestId("claim-covers")).toHaveText(words.coversOne);
+    await expect(card.getByTestId("claim-open-citation")).toHaveText(words.open(4));
     await window.keyboard.press("Escape");
 
-    // The scripted model gives a sentence that says "no reason" an unsupported verdict and no reason.
-    await clickEndOf(window, cited);
-    await window.keyboard.press("ArrowLeft");
-    await window.keyboard.type(" with no reason");
-    await expect(marks.first()).toHaveAttribute("data-check", "needs-recheck");
-    await openCard(marks.first());
-    await pointAndClick(window, card.getByTestId("claim-check-again"));
-    await expect(marks.first()).toHaveAttribute("data-check", "unsupported");
-    await openCard(marks.first());
+    // No reason comes back: the card says so, and Check again checks the sentence again.
+    await openCard(marks.nth(2));
     const noReason = card.getByTestId("claim-no-reason");
     await expect(noReason).toContainText(words.noReason);
     await expect(card.getByTestId("claim-no-reason-check")).toHaveText(words.checkAgain);
     await expect(card.getByTestId("claim-nothing")).toHaveCount(0);
-    await expect(card.getByTestId("claim-part")).toHaveCount(0);
-    await expect(card.getByTestId("claim-cited")).toContainText(COVERED);
+    await expect(card.getByTestId("claim-covers")).toHaveCount(0);
+    await expect(card.getByTestId("claim-cited")).toContainText(QUOTE_TWO);
     expect(await fitsWithin(noReason, card)).toBe(true);
-
-    // Check again checks the sentence again: its check is a new one.
-    const before = await marks.first().getAttribute("data-claim");
+    const before = await marks.nth(2).getAttribute("data-claim");
     await pointAndClick(window, card.getByTestId("claim-no-reason-check"));
-    await expect(marks.first()).not.toHaveAttribute("data-claim", before ?? "");
-    await expect(marks.first()).toHaveAttribute("data-check", "unsupported");
+    await expect(marks.nth(2)).not.toHaveAttribute("data-claim", before ?? "");
+    await expect(marks.nth(2)).toHaveAttribute("data-check", "unsupported");
 
-    // The Citation's number opens its Document at the quote.
-    await openCard(marks.first());
-    await pointAndClick(window, card.getByTestId("claim-open-citation"));
+    // A sentence with no Citation keeps its line.
+    await openCard(marks.nth(3));
+    await expect(card.getByTestId("claim-nothing")).toHaveText(words.nothing);
+    await expect(card.getByTestId("claim-covers")).toHaveCount(0);
+    await expect(card.getByTestId("claim-no-reason")).toHaveCount(0);
+    await expect(card.getByTestId("claim-cited")).toHaveCount(0);
+    await window.keyboard.press("Escape");
+
+    // A Citation's number opens its Document.
+    await openCard(marks.nth(0));
+    await pointAndClick(window, card.getByTestId("claim-open-citation").last());
     await expect(card).toHaveCount(0);
     await expect(window.getByTestId("viewer")).toBeVisible();
     await app.close();

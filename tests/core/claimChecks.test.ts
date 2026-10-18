@@ -1087,6 +1087,8 @@ describe("What the check is told about dates and its own workings (#821)", () =>
 
 describe("Why a sentence is unsupported", () => {
   const HALF = "Spring tides happen at new moon and at full moon, creating very high waters.";
+  const OWNER =
+    "教程讨论了训练速度、鲁棒性和内存需求之间的权衡：已有实验通常显示，拟牛顿方法比梯度下降更快；一阶优化方法通常更加稳健，但速度较慢。";
 
   const reasonOf = async (reply: string, sentence = HALF) => {
     const { core, client, check } = await mindWith(
@@ -1098,37 +1100,50 @@ describe("Why a sentence is unsupported", () => {
     return shown?.check.unsupported;
   };
 
-  test("asks for the reason, and for the part when only part of the sentence is unsupported", async () => {
+  test("asks for the reason, and for what the Passages cover and don't when part of the sentence is supported", async () => {
     const calls: ModelCall[] = [];
     const { check } = await mindWith([UNSUPPORTED], checkingModel(PLANS, calls));
     await check();
     expect(calls[0]?.system).toContain("For unsupported, one plain sentence in English");
-    expect(calls[0]?.system).toContain('a last line "Part: "');
+    expect(calls[0]?.system).toContain('"Covered: "');
+    expect(calls[0]?.system).toContain('"Not covered: "');
   });
 
-  test("is kept with the check: the reason, and the part as the sentence has it", async () => {
+  test("is kept with the check: the reason and the phrases", async () => {
     expect(
       await reasonOf(
-        "Verdict: unsupported\nTides gives the moon phases, not what they cause.\nPart: “Creating very high waters.”",
+        "Verdict: unsupported\nTides gives the moon phases, not what they cause.\nCovered: the moon phases\nNot covered: the high waters",
       ),
     ).toEqual({
       reason: "Tides gives the moon phases, not what they cause.",
-      part: "creating very high waters",
+      covered: "the moon phases",
+      uncovered: "the high waters",
     });
   });
 
-  test("leaves out a part that isn't in the sentence, or is all of it, and keeps the reason", async () => {
+  test("keeps the owner's sentence in Chinese, with its phrases in Chinese", async () => {
     expect(
-      await reasonOf("Verdict: unsupported\nNot stated.\nPart: causing very low waters"),
-    ).toEqual({ reason: "Not stated.", part: null });
-    expect(await reasonOf(`Verdict: unsupported\nNot stated.\nPart: ${HALF}`)).toEqual({
+      await reasonOf(
+        "Verdict: unsupported\n引用只比较了速度。\nCovered: 速度比较\nNot covered: 内存和鲁棒性",
+        OWNER,
+      ),
+    ).toEqual({ reason: "引用只比较了速度。", covered: "速度比较", uncovered: "内存和鲁棒性" });
+  });
+
+  test("keeps the reason alone when the reply names only one side", async () => {
+    expect(await reasonOf("Verdict: unsupported\nNot stated.\nNot covered: high waters")).toEqual({
       reason: "Not stated.",
-      part: null,
+      covered: null,
+      uncovered: "high waters",
     });
   });
 
-  test("is empty when the reply gives neither", async () => {
-    expect(await reasonOf("Verdict: unsupported")).toEqual({ reason: null, part: null });
+  test("is empty when the reply gives nothing", async () => {
+    expect(await reasonOf("Verdict: unsupported")).toEqual({
+      reason: null,
+      covered: null,
+      uncovered: null,
+    });
   });
 
   test("is none for a sentence that is supported or contradicted", async () => {
@@ -1146,15 +1161,19 @@ describe("Why a sentence is unsupported", () => {
     await check();
     expect((await shownChecks(core, client))[0]?.check.unsupported).toEqual({
       reason: null,
-      part: null,
+      covered: null,
+      uncovered: null,
     });
     plans[HALF] = {
-      reply: { text: "Verdict: unsupported\nNot stated.\nPart: creating very high waters" },
+      reply: {
+        text: "Verdict: unsupported\nNot stated.\nCovered: the moon phases\nNot covered: the high waters",
+      },
     };
     await check();
     expect((await shownChecks(core, client))[0]?.check.unsupported).toEqual({
       reason: "Not stated.",
-      part: "creating very high waters",
+      covered: "the moon phases",
+      uncovered: "the high waters",
     });
   });
 });

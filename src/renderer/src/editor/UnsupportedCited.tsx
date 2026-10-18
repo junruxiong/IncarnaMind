@@ -1,15 +1,15 @@
 import type { UnsupportedReason } from "../../../core/api";
 import { MetaLine } from "../components/MetaLine";
 import { LineAction } from "../components/ProblemLine";
-import { useLanguage, useT } from "../i18n";
+import { useT } from "../i18n";
 import { openCited, quoteSaysSo } from "../openCited";
 import type { NumberedCitation } from "./citationNumbers";
 
 /**
  * What a cited sentence's Unsupported card says in place of "Nothing in your
- * Documents says this": the part its Citation doesn't cover, or the reason
- * the check gave, or that it gave none; then each Citation's quote, which
- * opens at its place.
+ * Documents says this": what its Citations support and what they don't, or
+ * the reason the check gave, or that it gave none; then each Citation's quote,
+ * which opens at its place.
  */
 export function UnsupportedCited({
   cited,
@@ -23,18 +23,17 @@ export function UnsupportedCited({
   onOpen(): void;
 }) {
   const t = useT();
-  const language = useLanguage();
-  const numbers = new Intl.ListFormat(language, { type: "conjunction" }).format(
-    cited.map((each) => String(each.number)),
-  );
   return (
     <>
-      {why?.part ? (
-        <p data-testid="claim-part" className="claim-card-says">
-          {t(cited.length === 1 ? "claim.unsupported.part.one" : "claim.unsupported.part.other", {
-            number: numbers,
-            part: why.part,
-          })}
+      {why?.covered && why.uncovered ? (
+        <p data-testid="claim-covers" className="claim-card-says">
+          {t(
+            cited.length === 1 ? "claim.unsupported.covers.one" : "claim.unsupported.covers.other",
+            {
+              covered: why.covered,
+              uncovered: why.uncovered,
+            },
+          )}
         </p>
       ) : why?.reason ? (
         <p data-testid="claim-why" className="claim-card-says">
