@@ -1,14 +1,14 @@
 /**
  * What an Answer's calls did in a Mind, in words: on the Answer's card, with
- * the Mind's name ("Changed 3 places in “Q3 review”"), and on the Mind's own
- * line, without it ("Changed 3 places"). One function, so the two counts
- * always agree (#880).
+ * the Mind's name ("Changed 3 paragraphs in “Q3 review”"), and on the Mind's
+ * own line, without it ("Changed 3 paragraphs"). One function, so the two
+ * counts always agree (#880). Changes count by paragraph (#1028).
  */
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** What was done in one Mind: places changed, paragraphs written in whole Blocks, tables added. */
+/** What was done in one Mind: paragraphs changed, paragraphs written in whole Blocks, tables added. */
 export interface ChangeCounts {
   created: boolean;
   changed: number;
@@ -16,7 +16,7 @@ export interface ChangeCounts {
   tables: number;
 }
 
-const counted = (t: Translate, count: number, what: "tables" | "paragraphs" | "places") =>
+const counted = (t: Translate, count: number, what: "tables" | "paragraphs") =>
   count === 1 ? t(`mindChanges.count.${what}.one`) : t(`mindChanges.count.${what}`, { count });
 
 /** How many of what was done still wait, while that is known and there was something. */
@@ -63,7 +63,7 @@ function tablesFact(t: Translate, row: ChangeCounts, name: string | null): strin
     if (count === 0) return t("edit.tables", { tables });
     return row.changed === 0
       ? t("edit.wrote.tables", { paragraphs: counted(t, count, "paragraphs"), tables })
-      : t("edit.applied.tables", { places: counted(t, count, "places"), tables });
+      : t("edit.applied.tables", { paragraphs: counted(t, count, "paragraphs"), tables });
   }
   if (count === 0) {
     return row.created
@@ -73,9 +73,5 @@ function tablesFact(t: Translate, row: ChangeCounts, name: string | null): strin
   const paragraphs = counted(t, count, "paragraphs");
   if (row.created) return t("mindChanges.created.wrote.tables", { mind: name, paragraphs, tables });
   if (row.changed === 0) return t("mindChanges.wrote.tables", { mind: name, paragraphs, tables });
-  return t("mindChanges.changed.tables", {
-    mind: name,
-    places: counted(t, count, "places"),
-    tables,
-  });
+  return t("mindChanges.changed.tables", { mind: name, paragraphs, tables });
 }
