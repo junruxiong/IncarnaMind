@@ -41,7 +41,7 @@
  * Everything here depends on the `AnswerEngine` port, not on the AI SDK.
  */
 import { randomUUID } from "node:crypto";
-import type * as Y from "yjs";
+import * as Y from "yjs";
 import { asGenerated } from "../../shared/aiText";
 import { answerBlocks } from "../../shared/answerBlocks";
 import { runsByDefault } from "../../shared/approvalRules";
@@ -375,6 +375,16 @@ const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 const changesAMind = (change: MindChange) =>
   change.created || change.revised === true || change.proposals > 0;
 
+const holdsNothing = (blocks: Y.XmlFragment): boolean =>
+  blocks
+    .toArray()
+    .filter((block): block is Y.XmlElement => block instanceof Y.XmlElement)
+    .every((block, index) =>
+      block.nodeName === "paragraph"
+        ? block.length === 0
+        : index === 0 && block.nodeName === "heading",
+    );
+
 function lastAnswerOf(
   conversationId: string,
   earlier: readonly ConversationMessage[],
@@ -388,6 +398,7 @@ function lastAnswerOf(
   return {
     blocks,
     origin: { from: messageReference(conversationId, answer.id), question: question?.text ?? "" },
+    folderId: question?.kind === "question" ? oneFolderOf(question.scope) : null,
   };
 }
 
@@ -1620,8 +1631,14 @@ export function createAnswers(options: AnswersOptions) {
           : [];
       // The Minds' Tools, for an Answer in the assistant (#202).
       const minds = outside ? undefined : options.minds;
-      const route =
+      const routed =
         minds && input.assistant ? routeRequest(context.question, input.assistant) : null;
+      const focusedId = input.assistant?.focused?.mindId ?? null;
+      // A new piece fills the empty Mind the User is in rather than making another (#1109).
+      const route =
+        routed?.newMind && minds && focusedId && minds.read(focusedId, holdsNothing)
+          ? { ...routed, newMind: false }
+          : routed;
       const requested =
         route && (route.kind === "write" || route.kind === "edit")
           ? { change: route.kind, newMind: route.newMind }
