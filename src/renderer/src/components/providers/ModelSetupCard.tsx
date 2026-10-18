@@ -74,10 +74,11 @@ export function ModelSetupCard() {
       ref={card}
       data-testid="model-setup"
       aria-labelledby="model-setup-title"
-      className="flex min-h-0 max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4 py-2.5"
+      className="setup-card flex min-h-0 max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4"
     >
       <h2
         id="model-setup-title"
+        data-setup-title={view === null ? true : undefined}
         className={view === null ? "text-[15px] leading-6 font-semibold text-ink" : "sr-only"}
       >
         {t("setup.title")}
