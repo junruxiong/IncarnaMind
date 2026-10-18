@@ -12,7 +12,7 @@
 import type { CitationAttributes, CitationCheck } from "../core/api";
 import { type Figure, type FigureUnit, figureContextOf, readFigures } from "./figures";
 import type { MessageKey, MessageParams } from "./i18n";
-import { holdsPeriods } from "./periods";
+import { holdsPeriods, isPeriod } from "./periods";
 
 export const CHART_KINDS = ["bar", "line", "pie", "scatter"] as const;
 export type ChartKind = (typeof CHART_KINDS)[number];
@@ -456,6 +456,27 @@ interface TableReading {
   columns: number;
   /** Each text is read once: `numericSeries` and the chart read the table twice. */
   figuresOf(text: string): readonly Figure[];
+  /** A cell of a body column: `figuresOf`, but a bare year-like number in a quantity column is one. */
+  figuresIn(text: string, column: number): readonly Figure[];
+}
+
+/** A whole number from 1900 to 2099 and nothing else: `readFigures` leaves it out, as a year. */
+const BARE_YEAR = /^(?:19|20)\d{2}$/;
+
+const QUANTITY_HEADER =
+  /\b(?:units?|sold|sales|revenues?|income|profit|cost|price|amount|quantity|qty|count|total|orders?|users?|customers?|visitors?|volume|headcount|employees)\b|销量|销售|收入|营收|数量|金额|价格|成本|利润|总计|人数|订单|用户|客户|员工/iu;
+
+const YEAR_HEADER =
+  /\b(?:years?|dates?|periods?|fy|founded|established|since|born|launched|released|published|opened)\b|年份|年度|日期|成立|创立|创办|始于|出生|发布|上市|^年$/iu;
+
+/**
+ * Whether a body column is a year or date axis, whose bare years are labels, not values: its
+ * header names none of a quantity or a period, and says "year" or holds nothing but years. Any
+ * other column holds quantities, so 2000 under "Units sold" is a value (#1131).
+ */
+function yearAxis(header: string, cells: readonly string[]): boolean {
+  if (QUANTITY_HEADER.test(header) || isPeriod(header)) return false;
+  return YEAR_HEADER.test(header) || (cells.length > 0 && cells.every((c) => BARE_YEAR.test(c)));
 }
 
 function readTable(grid: SourceGrid, language: string): TableReading {
@@ -478,13 +499,40 @@ function readTable(grid: SourceGrid, language: string): TableReading {
     first.length > 0 &&
     (first.every((cell) => cell === null || cell.header) ||
       first.slice(1).every((cell) => !cell || figureIn(figuresOf(cell.text)) === null));
+  const dataRows = headingRow ? grid.slice(1) : grid;
+  const axes = new Map<number, boolean>();
+  const isYearAxis = (column: number) => {
+    let axis = axes.get(column);
+    if (axis === undefined) {
+      const cells = dataRows.flatMap((row) => {
+        const cell = row[column];
+        const text = cell?.text.trim() ?? "";
+        return !cell || cell.continued || text === "" || BLANK_MARK.test(text) ? [] : [text];
+      });
+      axis = yearAxis(headingRow ? (first[column]?.text.trim() ?? "") : "", cells);
+      axes.set(column, axis);
+    }
+    return axis;
+  };
+  const asQuantities = new Map<string, readonly Figure[]>();
+  const figuresIn = (text: string, column: number) => {
+    const trimmed = text.trim();
+    if (!BARE_YEAR.test(trimmed) || isYearAxis(column)) return figuresOf(trimmed);
+    let figures = asQuantities.get(trimmed);
+    if (!figures) {
+      figures = readFigures(trimmed, { ...context, dates: true });
+      asQuantities.set(trimmed, figures);
+    }
+    return figures;
+  };
   return {
     first,
     headingRow,
     firstDataRow: headingRow ? 1 : 0,
-    dataRows: headingRow ? grid.slice(1) : grid,
+    dataRows,
     columns: Math.max(0, ...grid.map((row) => row.length)),
     figuresOf,
+    figuresIn,
   };
 }
 
@@ -517,7 +565,7 @@ function readCell(
 export const isNumericSeries = (grid: SourceGrid, language: string): boolean =>
   numericSeries(readTable(grid, language));
 
-function numericSeries({ dataRows, columns, figuresOf }: TableReading): boolean {
+function numericSeries({ dataRows, columns, figuresIn }: TableReading): boolean {
   const counts: Record<CellKind, number> = { number: 0, calculation: 0, words: 0 };
   const down: Figure[][] = Array.from({ length: columns }, () => []);
   const across: Figure[][] = [];
@@ -527,7 +575,7 @@ function numericSeries({ dataRows, columns, figuresOf }: TableReading): boolean 
       const cell = row[column];
       const text = cell?.text.trim() ?? "";
       if (!cell || cell.continued || text === "" || BLANK_MARK.test(text)) continue;
-      const { kind, figure } = readCell(text, figuresOf(text));
+      const { kind, figure } = readCell(text, figuresIn(text, column));
       counts[kind]++;
       if (figure) {
         line.push(figure);
@@ -626,12 +674,12 @@ export function chartFromTable(
   options: FromTableOptions,
 ): ChartAttributes | null {
   const table = readTable(grid, options.language);
-  const { first, headingRow, firstDataRow, dataRows, columns, figuresOf } = table;
+  const { first, headingRow, firstDataRow, dataRows, columns, figuresIn } = table;
   if (!numericSeries(table)) return null;
 
   const valueAt = (cell: SourceCell | null, row: number, column: number): ChartValue | null => {
     if (!cell || cell.continued || cell.text.trim() === "") return null;
-    const read = figureIn(figuresOf(cell.text));
+    const read = figureIn(figuresIn(cell.text, column));
     return {
       shown: cell.text.trim(),
       value: read?.value ?? null,

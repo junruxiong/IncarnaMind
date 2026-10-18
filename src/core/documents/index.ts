@@ -157,6 +157,7 @@ interface DocumentRow {
   tagging_status: string;
   tagging_error_kind: string | null;
   tagging_error_message: string | null;
+  tagging_error_resets_at: string | null;
   embedding_model: string | null;
   path: string;
   linked_folder_id: string | null;
@@ -201,7 +202,7 @@ const toUnitText = (row: UnitRow): PageText => ({
 
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
-  tagging_error_message, embedding_model, path, linked_folder_id, file_status,
+  tagging_error_message, tagging_error_resets_at, embedding_model, path, linked_folder_id, file_status,
   creation_date, title, own_file, counted_as_evidence, not_cited, processing_version, file_mtime_ms,
   created_at, updated_at`;
 
@@ -542,12 +543,15 @@ export function createDocuments(options: DocumentsOptions) {
       folderId: row.folder_id,
       tags: tagsOfDocument(db, row.id),
       tagging,
-      // Why it failed, or why it waits when that is worth saying (the ChatGPT plan's limit).
+      // Why it failed, or why it waits when that is worth saying (a plan's or a rate limit).
       taggingError:
         tagging === "failed" || (tagging === "waiting-for-provider" && row.tagging_error_kind)
           ? {
               kind: (row.tagging_error_kind ?? "unknown") as ProviderErrorKind,
               message: row.tagging_error_message ?? "",
+              ...(row.tagging_error_resets_at !== null && {
+                resetsAt: row.tagging_error_resets_at,
+              }),
             }
           : null,
       creationDate:

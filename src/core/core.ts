@@ -228,6 +228,7 @@ import { createSuggestions } from "./suggestions";
 import { createTags, tagsOfDocument } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging, decisionModelTagger } from "./tags/jev";
+import { createRateLimitPause } from "./tags/rateLimit";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
 import { createPublicFetch } from "./tools/web/fetcher";
@@ -1885,6 +1886,14 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     signal: lifetime.signal,
   });
+  const rateLimit = createRateLimitPause({
+    timers: paceTimers,
+    resumed: () => {
+      tagger.resume();
+      library.resume();
+    },
+    signal: lifetime.signal,
+  });
   // The one Tagging setting: the model automatic tagging uses, and Organize when picked by hand.
   const tagging = createTagging({
     setting: () => library.settings().classifier,
@@ -2016,6 +2025,8 @@ export function createCore(adapters: CoreAdapters): Core {
     announce: announceTagged,
     reportError: (error) => console.error(error),
     background,
+    rateLimit,
+    timers: paceTimers,
   });
   const automaticClassifiers = new Map<string, ReturnType<typeof automaticGroupClassifier>>();
   const library = createLibrary({
@@ -2034,6 +2045,7 @@ export function createCore(adapters: CoreAdapters): Core {
       batches.changed(assignments.map((each) => each.documentId));
     },
     providerExists: (id) => chat.exists(id),
+    rateLimit,
     readsPages: (classifier) => {
       switch (classifier.kind) {
         case "auto":
@@ -2240,9 +2252,10 @@ export function createCore(adapters: CoreAdapters): Core {
 
   /**
    * What tagging may use changed (a model, a key, local mode): Automatic picks
-   * again, and Documents waiting may go on.
+   * again, and Documents waiting may go on, a rate-limit pause ended too, unless
+   * this is the start, which keeps the pause a quit interrupted.
    */
-  const taggingChanged = async () => {
+  const taggingChanged = async (endsPause = true) => {
     try {
       await tagging.resolve();
     } catch (error) {
@@ -2250,6 +2263,7 @@ export function createCore(adapters: CoreAdapters): Core {
       console.error("The model to tag with couldn't be worked out.", error);
     }
     if (lifetime.signal.aborted) return;
+    if (endsPause) rateLimit.resumeNow();
     tagger.resume();
     library.resume();
   };
@@ -2323,7 +2337,13 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Tagging a quit interrupted starts again, once Automatic knows what it tags with;
   // Documents waiting for a model are checked.
-  void taggingChanged().then(() => {
+  const stillLimited = db.get<{ ends: string | null }>(
+    `SELECT max(tagging_error_resets_at) AS ends FROM documents
+     WHERE deleted_at IS NULL AND tagging_status = 'waiting-for-provider'
+       AND tagging_error_kind = 'rate-limit'`,
+  )?.ends;
+  if (stillLimited) rateLimit.restore(Date.parse(stillLimited));
+  void taggingChanged(false).then(() => {
     if (!lifetime.signal.aborted) tagger.start();
   });
 
@@ -3559,6 +3579,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return { tag: tags.get(intoTagId), merged: { kind: "tag", id: tagId, links } };
     },
     retagDocuments: async (documentIds) => {
+      rateLimit.resumeNow();
       if (organizesNewDocuments()) return library.classify(documentIds);
       tagger.retag(documentIds);
     },
