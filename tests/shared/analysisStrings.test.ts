@@ -30,7 +30,7 @@ describe("why an Analysis can't run", () => {
     const line = UNAVAILABLE_LINES["no-sandbox"];
 
     expect(translate("en", line.text)).toBe("Analyses need the app's sandbox, which is off");
-    expect(translate("zh-CN", line.text)).toBe("分析需要应用的沙盒，但它已关闭");
+    expect(translate("zh-CN", line.text)).toBe("沙盒已关闭，无法运行数据分析");
     expect(line.fix?.url).toBe(LINUX_SANDBOX_HELP_URL);
     expect(line.fix && translate("en", line.fix.label)).toBe("How to fix");
     expect(line.fix && translate("zh-CN", line.fix.label)).toBe("如何解决");
