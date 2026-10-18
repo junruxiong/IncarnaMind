@@ -180,6 +180,15 @@ function routeLine(route: RequestRoute | null): string {
 }
 
 /**
+ * The Mind in focus has nothing in it yet (#1212): read as an empty <mind>,
+ * models took it for no Mind open and refused to write there.
+ */
+export function emptyMindNote(offered: boolean, empty: boolean): string {
+  if (!offered || !empty) return "";
+  return "- The Mind in <mind> is open and still empty: it is the page the User is in. A request to write something goes into it; never say that no Mind is open.";
+}
+
+/**
  * A Question asked while the meeting the User is in records (#144): the live transcript goes
  * with it (see ./liveTranscript), and is what Questions about the call are answered from.
  */

@@ -111,6 +111,8 @@ function failureOf(error: ProviderError): { reason: ClaimCheckFailure; detail: s
       return { reason: "plan-limit", detail: null };
     case "consent-revoked":
       return { reason: "consent-revoked", detail: null };
+    case "local-mode":
+      return { reason: "local-mode", detail: null };
     case "no-answer":
       return { reason: "empty", detail: null };
     default:

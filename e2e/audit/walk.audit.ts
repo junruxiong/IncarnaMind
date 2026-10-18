@@ -182,7 +182,7 @@ test("A1 first run: the example Mind and its Citation card", async () => {
         "Draft: credit committee paper",
         { timeout: 20_000 },
       );
-      await expect(window.getByTestId("margin-check")).toHaveCount(2, { timeout: 20_000 });
+      await expect(window.getByTestId("claim-mark")).toHaveCount(1, { timeout: 20_000 });
       await window.mouse.move(700, 400);
       await shot(window, "A01-first-run-example-mind");
       await scan(window, "A01-first-run-example-mind");

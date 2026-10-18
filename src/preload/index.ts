@@ -104,6 +104,7 @@ const files: FilesBridge = {
   pickPdfFile: () => ipcRenderer.invoke(FILES_CHANNELS.pickPdfFile),
   showLinkedFolder: (linkedFolderId) =>
     ipcRenderer.invoke(FILES_CHANNELS.showLinkedFolder, linkedFolderId),
+  runsWithoutSandbox: () => ipcRenderer.invoke(FILES_CHANNELS.runsWithoutSandbox),
   logError: (report) => ipcRenderer.send(FILES_CHANNELS.logError, report),
   onMenuCommand: (listener) => {
     const receive = (_event: unknown, command: MenuCommand) => listener(command);
