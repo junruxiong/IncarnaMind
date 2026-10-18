@@ -823,6 +823,8 @@ export const en = {
     "This change can't be made again. Reject it, then select the text and edit it with AI.",
   "edit.problem.no-table":
     "The AI's table wasn't complete, so nothing was changed. Try again, or ask for a list instead.",
+  "edit.problem.late":
+    "This edit took too long to arrive, so it wasn't applied. Accept or reject its changes.",
   "composer.edit.placeholder": "Say what to change…",
   "composer.edit.label": "Say what to change in the selected text",
   "composer.edit.quote": "Editing “{text}”",
