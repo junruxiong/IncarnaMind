@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import type { CoreBridge, ReferencePatch } from "../src/core/api";
 import { readPackIndex } from "../src/core/citationStyles/pack";
 import { paragraphsOf, part, unzip } from "../tests/helpers/docx";
@@ -160,6 +161,32 @@ test("a Mind citing a paper offers a citation style; chosen, its Citations and R
   // The second Citation is drawn by the first, with its own check on its words.
   await expect(answer.locator('[data-testid="citation"][data-styled="joined"]')).toHaveCount(1);
   await expect(styled.locator('[data-work="1"]').first()).toHaveAttribute("data-check", "found");
+  await expect(styled.locator(".citation-run-icon")).toHaveCount(0);
+  // A work whose quote isn't found has its mark before its words, so colour isn't the only cue.
+  const setSecondCheck = (check: string, checkReason: string | null) =>
+    answer.evaluate(
+      (dom, change) => {
+        const { view } = (dom as unknown as { editor: Editor }).editor;
+        const tr = view.state.tr;
+        let seen = 0;
+        view.state.doc.descendants((node, pos) => {
+          if (node.type.name === "citation" && ++seen === 2) {
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...change });
+          }
+        });
+        view.dispatch(tr);
+      },
+      { check, checkReason },
+    );
+  await setSecondCheck("not-found", "quote-not-on-pages");
+  await expect(styled.locator('[data-work="1"]').first()).toHaveAttribute(
+    "data-check",
+    "not-found",
+  );
+  await expect(styled.locator('[data-work="1"] .citation-run-icon')).toHaveCount(1);
+  await expect(styled.locator('[data-work="0"] .citation-run-icon')).toHaveCount(0);
+  await setSecondCheck("found", null);
+  await expect(styled.locator(".citation-run-icon")).toHaveCount(0);
 
   // Over a work's words, the pointer shows that Citation's card.
   const chip = styled.getByTestId("citation-chip");

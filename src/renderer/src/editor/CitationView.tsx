@@ -464,8 +464,9 @@ function workAt(target: EventTarget | null, place: ClusterPlace | null): number 
 }
 
 /**
- * A cluster in the style's words, each work's words in its own Citation's colours (a quote
- * not found turns amber), and no links: a click here opens the Citation, not an address.
+ * A cluster in the style's words, each work's words in its own Citation's colours and, when
+ * its quote isn't found, with its mark (not found turns amber), and no links: a click here
+ * opens the Citation, not an address.
  */
 function ClusterRuns({
   runs,
@@ -475,17 +476,26 @@ function ClusterRuns({
   /** Each member's check, by its place in the cluster. */
   checks: readonly CitationCheck[];
 }) {
-  return runs.map(({ work, link: _, ...run }, index) => (
-    <span
-      // biome-ignore lint/suspicious/noArrayIndexKey: runs have no identity but their place.
-      key={index}
-      data-work={work}
-      data-check={work === undefined ? undefined : checks[work]}
-      className="citation-run"
-    >
-      <StyledRunView run={run} />
-    </span>
-  ));
+  let marked: number | undefined;
+  return runs.map(({ work, link: _, ...run }, index) => {
+    const check = work === undefined ? undefined : checks[work];
+    const first = work !== undefined && work !== marked;
+    if (work !== undefined) marked = work;
+    return (
+      <span
+        // biome-ignore lint/suspicious/noArrayIndexKey: runs have no identity but their place.
+        key={index}
+        data-work={work}
+        data-check={check}
+        className="citation-run"
+      >
+        {first && check !== undefined && check !== "found" && (
+          <CheckMarkIcon check={check} className="citation-run-icon" />
+        )}
+        <StyledRunView run={run} />
+      </span>
+    );
+  });
 }
 
 /**

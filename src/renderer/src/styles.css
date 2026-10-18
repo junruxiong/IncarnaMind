@@ -3577,6 +3577,9 @@
       font-weight: 700;
       color: var(--color-danger);
     }
+    &[data-check="checking"] {
+      color: var(--color-ink-meta);
+    }
     /* Selected: its card is open, or it is the node selected. */
     &:focus-visible,
     &[aria-expanded="true"],
@@ -4069,12 +4072,40 @@
     white-space: nowrap;
   }
 
-  /* The check's icon shows only in the markers that carry it: an Answer's, a cell's, a footnote's. */
   .citation-marker-icon {
     display: none;
     width: 11px;
     height: 11px;
     flex-shrink: 0;
+  }
+  /*
+   * A Citation that isn't found carries its mark, so colour is never the only signal; one that
+   * is found stays bare, the usual case. Zero specificity, so an Answer's and a cell's own rules win.
+   */
+  .citation-marker:where(
+    :not([data-check="found"], .citation-marker--styled, .citation-marker--joined)
+  ) {
+    padding: 0 5px 0 3px;
+
+    .citation-marker-icon {
+      display: block;
+    }
+    &[data-check="checking"] .citation-marker-icon {
+      animation: mind-pulse 1.6s ease-in-out infinite;
+    }
+  }
+  /* In the style's words, each work that isn't found has its mark before its words. */
+  .citation-run-icon {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    margin-right: 2px;
+    vertical-align: -1px;
+  }
+  .citation-marker--raised .citation-run-icon {
+    width: 9px;
+    height: 9px;
+    vertical-align: -1px;
   }
   /*
    * A Citation in a footnote's text has no number, so the marker says where
@@ -8955,12 +8986,6 @@
     font-size: 11px;
     font-weight: 700;
     color: var(--color-warning);
-  }
-  /* In a cell, a Citation not found shows its icon in its marker, as in an Answer. */
-  .comparison-cell
-    .citation-marker:is([data-check="not-found"], [data-check="unsupported"])
-    .citation-marker-icon {
-    display: block;
   }
   /*
    * Waiting as a change, it is drawn as one Block added: an accent edge, not every word

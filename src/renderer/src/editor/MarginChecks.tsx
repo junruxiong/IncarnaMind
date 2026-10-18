@@ -183,7 +183,7 @@ export function MarginChecks({
       characterData: true,
       attributes: true,
       attributeOldValue: true,
-      attributeFilter: ["aria-expanded", "data-check", "data-number", "class", "style"],
+      attributeFilter: ["class", "style"],
     });
     document.fonts.addEventListener("loadingdone", request);
     void document.fonts.ready.then(request);

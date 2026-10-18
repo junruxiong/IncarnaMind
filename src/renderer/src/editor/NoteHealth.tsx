@@ -1,9 +1,9 @@
 import type { Editor } from "@tiptap/core";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState } from "@tiptap/react";
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
-import { CITATION_NODE, type CitationAttributes } from "../../../core/api";
+import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
 import { acceptAndCheck, checkSentences, dismissCheckProblem, useChecks } from "../checks";
 import { ProblemLine } from "../components/ProblemLine";
@@ -174,23 +174,20 @@ export function HealthCard({
   };
 
   /**
-   * Puts the cursor at the next such sentence after it, round to the first; for a Citation it
-   * selects the marker, which is where its state shows.
+   * Puts the cursor at the next such sentence after it, round to the first; for a Citation, just
+   * after its marker, where its state shows, so a key can't take the Citation away.
    */
   const goToNext = (part: HealthPart) => {
     if (editor.isDestroyed) return;
-    const places = health[part];
+    const cited = part === "found" || part === "notFound";
+    const targets = health[part].map((pos) => (cited ? pos + 1 : pos));
     const head = editor.state.selection.head;
-    const next = places.find((pos) => pos > head) ?? places[0];
+    const next = targets.find((pos) => pos > head) ?? targets[0];
     if (next === undefined) return;
     const { doc } = editor.state;
     const at = Math.min(next, doc.content.size);
-    const marker =
-      (part === "found" || part === "notFound") && doc.nodeAt(at)?.type.name === CITATION_NODE;
     editor.view.dispatch(
-      editor.state.tr
-        .setSelection(marker ? NodeSelection.create(doc, at) : TextSelection.near(doc.resolve(at)))
-        .scrollIntoView(),
+      editor.state.tr.setSelection(TextSelection.near(doc.resolve(at))).scrollIntoView(),
     );
     editor.view.focus();
   };
