@@ -401,7 +401,7 @@ export const en = {
   "tabs.close": "Close {title}",
   "tabs.unpin": "Unpin {title}",
   "tabs.writing": "An Answer is being written",
-  "tabs.preview": "{title} · Preview: double-click to keep it open",
+  "tabs.preview": "{title} · Preview: the next one you open replaces it. Double-click to keep.",
   "tabs.pinned": "{title} · Pinned to the left of this group",
   "tabs.split": "Split to the right ({shortcut})",
   "tabs.groupMenu": "More for this group",
@@ -443,7 +443,7 @@ export const en = {
   "wordCount.selected": "{selected} of {total} {unit}",
   "wordCount.target": "{count} / {target} {unit}",
   "wordCount.rule":
-    "Words in English; characters in Chinese and Japanese. No Citations or Questions.",
+    "Words in English, characters in Chinese and Japanese; Citation markers and Questions don't count.",
   "page.count.words": "{count} words",
   "page.count.words.one": "1 word",
   "page.count.characters": "{count} characters",
@@ -861,8 +861,8 @@ export const en = {
   "proposal.arrived.outOfDate": "{count} are out of date: you edited their text meanwhile.",
   "proposal.arrived.outOfDate.one": "1 is out of date: you edited its text meanwhile.",
   "proposal.outOfDate": "Out of date",
-  "proposal.outOfDate.why": "Can't accept: you changed this text since",
-  "proposal.outOfDate.label": "Change {index} of {count}, out of date: you changed this text since",
+  "proposal.outOfDate.why": "Can't accept: its text has changed since it was suggested",
+  "proposal.outOfDate.label": "Change {index} of {count}, out of date: its text has changed",
   "proposal.announce.outOfDate":
     "Out of date: {what}. You changed its text. Reject it with {reject}, or regenerate.",
   "proposal.cantAccept": "This change is out of date: regenerate it or reject it.",
@@ -918,7 +918,7 @@ export const en = {
   "edit.kept.remove": "Remove them",
   "edit.kept.remove.one": "Remove it",
   "edit.kept.removed": "Removed what the edit left out",
-  "proposal.outOfDate.why.theirs": "Out of date: you edited this text since. Reject it.",
+  "proposal.outOfDate.why.theirs": "Out of date: you've edited this text. Reject it.",
   "proposal.announce.theirs":
     "{author}'s change: {what}. Accept with {accept}, reject with {reject}.",
   "proposal.announce.theirs.outOfDate":
