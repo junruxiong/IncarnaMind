@@ -39,6 +39,11 @@ export interface Shortcut {
    * focus isn't in text: there they keep their meaning, the text's own undo.
    */
   outsideText?: true;
+  /**
+   * Keys that do nothing while the focus is in text, so a picker never opens over what the User
+   * is typing. Unlike `outsideText`, the menu item and ⌘K run the command from anywhere.
+   */
+  notInText?: true;
   /** The same command's second keys on Windows and Linux: Ctrl+Y redoes there, as Ctrl+Shift+Z does. */
   alsoOther?: Keys;
   /** Keys only macOS has (Finder's ⌃⌘N): elsewhere the command has none, and stays in menus and ⌘K. */

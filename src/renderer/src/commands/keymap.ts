@@ -84,7 +84,7 @@ export function runShortcut(
     ];
     if (!keys.some((each) => pressed(each, event, isMac))) continue;
     if (shortcut.list && !inList(event.target)) continue;
-    if (shortcut.outsideText && typesText(event.target)) continue;
+    if ((shortcut.outsideText || shortcut.notInText) && typesText(event.target)) continue;
     // Only now, for keys that are a shortcut: the search goes through the whole page.
     if (dialogOpen()) return false;
     // A list's own keys act on the row the focus is in.
