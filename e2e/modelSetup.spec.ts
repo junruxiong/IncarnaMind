@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { createFakeAnthropic } from "../tests/helpers/fakeAnthropic";
 import { createFakeOpenAI, signInAt } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
@@ -208,15 +209,133 @@ async function expectInsideCardAndWindow(window: Page, card: Locator, target: Lo
   if (!box || !cardBox) throw new Error("The card and its control aren't laid out.");
   expect(cardBox.y).toBeGreaterThanOrEqual(0);
   expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(page.height);
-  expect(box.y).toBeGreaterThanOrEqual(cardBox.y);
+  // A scroll lands on whole pixels, so a control can sit half a pixel past the edge.
+  expect(box.y).toBeGreaterThanOrEqual(cardBox.y - 0.5);
   expect(box.y + box.height).toBeLessThanOrEqual(cardBox.y + cardBox.height + 0.5);
   expect(box.x).toBeGreaterThanOrEqual(cardBox.x);
   expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 0.5);
 }
 
+const PINNED = "[data-setup-title], [data-setup-foot]";
+
+async function expectStaysOverContent(window: Page, card: Locator, part: Locator) {
+  await expectInsideCardAndWindow(window, card, part);
+  const { onTop, under } = await part.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const onTop = [box.x + 8, box.x + box.width / 2, box.right - 8].every((x) => {
+      const hit = document.elementFromPoint(x, box.y + box.height / 2);
+      return hit !== null && element.contains(hit);
+    });
+    const root = element.closest("[data-testid=model-setup]");
+    const covered = [
+      ...(root?.querySelectorAll("button, a, input, select, summary, p, label") ?? []),
+    ]
+      .filter((each) => !element.contains(each))
+      .filter((each) => {
+        const other = each.getBoundingClientRect();
+        const rows = Math.min(other.bottom, box.bottom) - Math.max(other.top, box.top);
+        const columns = Math.min(other.right, box.right) - Math.max(other.left, box.left);
+        return rows > 4 && columns > 8;
+      });
+    return { onTop, under: covered.length };
+  });
+  expect(onTop).toBe(true);
+  expect(under).toBeGreaterThan(0);
+}
+
+/** The rule is the part's ::before, shown only while content passes under the part. */
+const edgeShown = (part: Locator) =>
+  part.evaluate((element) => getComputedStyle(element, "::before").display !== "none");
+
+async function expectClearOfPinned(card: Locator, target: Locator) {
+  const [box, parts] = await Promise.all([
+    target.boundingBox(),
+    card.locator(PINNED).evaluateAll((elements) =>
+      elements.map((element) => {
+        const part = element.getBoundingClientRect();
+        const focused = document.activeElement;
+        const holdsFocus = focused !== null && element.contains(focused);
+        let ringInside = true;
+        if (holdsFocus) {
+          const control = focused.getBoundingClientRect();
+          const { outlineStyle, outlineWidth, outlineOffset } = getComputedStyle(focused);
+          const reach =
+            outlineStyle === "none"
+              ? 0
+              : Number.parseFloat(outlineWidth) + Math.max(0, Number.parseFloat(outlineOffset));
+          ringInside =
+            control.left - reach >= part.left - 0.5 &&
+            control.right + reach <= part.right + 0.5 &&
+            control.top - reach >= part.top - 0.5 &&
+            control.bottom + reach <= part.bottom + 0.5;
+        }
+        return { top: part.top, bottom: part.bottom, holdsFocus, ringInside };
+      }),
+    ),
+  ]);
+  if (!box) throw new Error("The focused control isn't laid out.");
+  for (const part of parts) {
+    if (part.holdsFocus) expect(part.ringInside).toBe(true);
+    else expect(box.y >= part.bottom - 0.5 || box.y + box.height <= part.top + 0.5).toBe(true);
+  }
+}
+
+const TABBABLE =
+  "a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), summary";
+
+async function tabThroughEveryControl(
+  window: Page,
+  card: Locator,
+  direction: "forward" | "backward" = "forward",
+) {
+  const place = (focus?: number) =>
+    card.evaluate(
+      (root, given) => {
+        const controls = [...root.querySelectorAll<HTMLElement>(given.selector)].filter(
+          (each) =>
+            each.checkVisibility() &&
+            !(each instanceof HTMLInputElement && each.type === "radio" && !each.checked),
+        );
+        if (given.focus === 0) root.scrollTop = 0;
+        if (given.focus !== undefined) controls[given.focus]?.focus();
+        return {
+          index: controls.findIndex((each) => each === document.activeElement),
+          count: controls.length,
+        };
+      },
+      { selector: TABBABLE, focus },
+    );
+  const { count } = await place(direction === "forward" ? 0 : undefined);
+  expect(count).toBeGreaterThan(3);
+  const order = [...Array(count).keys()];
+  if (direction === "backward") {
+    order.reverse();
+    await place(count - 1);
+  }
+  for (const [step, index] of order.entries()) {
+    if (step > 0) await window.keyboard.press(direction === "forward" ? "Tab" : "Shift+Tab");
+    expect((await place()).index).toBe(index);
+    const focused = window.locator(":focus");
+    await expectInsideCardAndWindow(window, card, focused);
+    await expectClearOfPinned(card, focused);
+  }
+}
+
+async function wheelToEnd(window: Page, card: Locator) {
+  const box = await card.boundingBox();
+  if (!box) throw new Error("The card isn't laid out.");
+  await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
+  await expect
+    .poll(async () => {
+      await window.mouse.wheel(0, 120);
+      return card.evaluate((root) => root.scrollTop + root.clientHeight >= root.scrollHeight - 1);
+    })
+    .toBe(true);
+}
+
 for (const dock of ["bottom", "float"] as const) {
   for (const language of ["en", "zh-CN"] as const) {
-    test(`at 900 px with the assistant ${dock === "bottom" ? "docked at the bottom" : "floating"}, the card scrolls inside itself and the last control under Other ways is reached by wheel and by Tab (${language})`, async () => {
+    test(`at 900 px with the assistant ${dock === "bottom" ? "docked at the bottom" : "floating"}, the card scrolls inside itself with its title in view, and the last control under Other ways is reached by wheel and by Tab (${language})`, async () => {
       const { app, window } = await launchApp(dataDir);
       try {
         await setWindowSize(app, window, SMALLEST_WINDOW.width, SMALLEST_WINDOW.height);
@@ -226,14 +345,16 @@ for (const dock of ["bottom", "float"] as const) {
         await placeAssistant(window, { dock });
         await pointAndClick(window, card.getByTestId("setup-other"));
         const last = card.locator("details").locator("button, a").last();
+        const title = card.getByRole("heading", { level: 2 });
 
         for (const first of [
-          card.getByRole("heading", { level: 2 }),
+          title,
           card.getByTestId("setup-chatgpt"),
           card.getByTestId("setup-key"),
         ]) {
           await expectInsideCardAndWindow(window, card, first);
         }
+        expect(await edgeShown(title)).toBe(false);
 
         const cardBox = await card.boundingBox();
         if (!cardBox) throw new Error("The card isn't laid out.");
@@ -249,20 +370,106 @@ for (const dock of ["bottom", "float"] as const) {
           .toBe(true);
         await expectInsideCardAndWindow(window, card, last);
         await expect(card.getByTestId("setup-later")).toBeInViewport({ ratio: 1 });
+        await expectStaysOverContent(window, card, title);
+        expect(Math.abs(((await title.boundingBox())?.y ?? NaN) - cardBox.y)).toBeLessThan(1);
+        await expect.poll(() => edgeShown(title)).toBe(true);
 
-        await card.evaluate((element) => {
-          element.scrollTop = 0;
-        });
-        await card.locator("[data-setup-choice]:not(:disabled)").first().focus();
-        for (let tabs = 0; tabs < 12; tabs++) {
-          await window.keyboard.press("Tab");
-          const focused = window.locator(":focus");
-          await expectInsideCardAndWindow(window, card, focused);
-          if (await last.evaluate((element) => element === document.activeElement)) break;
-        }
+        await tabThroughEveryControl(window, card);
+        await window.keyboard.press("Shift+Tab");
         await expect(last).toBeFocused();
+        await expectInsideCardAndWindow(window, card, last);
+        await expectClearOfPinned(card, last);
+        await tabThroughEveryControl(window, card, "backward");
       } finally {
         await app.close();
+      }
+    });
+  }
+}
+
+for (const dock of ["bottom", "float"] as const) {
+  for (const language of ["en", "zh-CN"] as const) {
+    test(`at 900 px with the assistant ${dock === "bottom" ? "docked at the bottom" : "floating"}, the key form's action row and a plan sign-in's Finish signing in stay at the card's foot as it scrolls (${language})`, async () => {
+      const fake = await createFakeAnthropic();
+      const { app, window } = await launchApp(dataDir, { claude: fake.origin });
+      try {
+        await setWindowSize(app, window, SMALLEST_WINDOW.width, SMALLEST_WINDOW.height);
+        await interceptOpenExternal(app);
+        await acceptPlainTextKeys(window);
+        await setLanguage(window, language);
+        const card = await askFirstQuestion(window);
+        await placeAssistant(window, { dock });
+        const scrollsInside = () => card.evaluate((root) => root.scrollHeight > root.clientHeight);
+        const scrollTo = (top: number) =>
+          card.evaluate((root, to) => {
+            root.scrollTop = to;
+          }, top);
+
+        await pointAndClick(window, card.getByTestId("setup-key"));
+        const form = card.getByTestId("provider-form");
+        await form.getByLabel(/^API /).fill("not-a-key");
+        const action = form.getByTestId("provider-use-key");
+        const foot = form.locator("[data-setup-foot]");
+        await expect(foot).toHaveCount(1);
+        expect(await scrollsInside()).toBe(true);
+        await scrollTo(0);
+        await expectStaysOverContent(window, card, foot);
+        await expectInsideCardAndWindow(window, card, action);
+        const [cardBox, footBox] = await Promise.all([card.boundingBox(), foot.boundingBox()]);
+        if (!cardBox || !footBox) throw new Error("The card and its action row aren't laid out.");
+        expect(Math.abs(footBox.y + footBox.height - (cardBox.y + cardBox.height))).toBeLessThan(1);
+        await expect.poll(() => edgeShown(foot)).toBe(true);
+
+        await wheelToEnd(window, card);
+        await expectInsideCardAndWindow(window, card, action);
+        await expect(card.getByTestId("setup-later")).toBeInViewport({ ratio: 1 });
+        const [later, endFoot] = await Promise.all([
+          card.getByTestId("setup-later").boundingBox(),
+          foot.boundingBox(),
+        ]);
+        expect(later?.y ?? NaN).toBeGreaterThanOrEqual(
+          (endFoot?.y ?? NaN) + (endFoot?.height ?? NaN) - 0.5,
+        );
+        await expect.poll(() => edgeShown(foot)).toBe(false);
+        await tabThroughEveryControl(window, card);
+        await tabThroughEveryControl(window, card, "backward");
+
+        await pointAndClick(window, card.getByTestId("setup-back"));
+        await pointAndClick(window, card.getByTestId("setup-other"));
+        await pointAndClick(window, card.getByTestId("way-claude-open"));
+        await pointAndClick(window, card.getByTestId("claude-plan-sign-in"));
+        const waiting = card.getByTestId("claude-plan-waiting");
+        await expect(waiting).toBeVisible();
+        const code = waiting.getByTestId("claude-paste-address");
+        await code.fill("not-a-code");
+        const finish = waiting.getByTestId("claude-paste-continue");
+        const paste = waiting.getByTestId("claude-paste");
+        await expect(finish).toBeEnabled();
+
+        // Its top just in view: its row is pulled up from below the fold, and can't leave the block.
+        await card.evaluate((root) => {
+          const block = root.querySelector("[data-testid=claude-plan-waiting]");
+          if (block) {
+            root.scrollTop +=
+              block.getBoundingClientRect().top - (root.getBoundingClientRect().bottom - 100);
+          }
+        });
+        const blockBox = await waiting.boundingBox();
+        expect((blockBox?.y ?? NaN) + (blockBox?.height ?? NaN)).toBeGreaterThan(
+          cardBox.y + cardBox.height,
+        );
+        await expectStaysOverContent(window, card, paste);
+        await expectInsideCardAndWindow(window, card, finish);
+        await expect.poll(() => edgeShown(paste)).toBe(true);
+        await tabThroughEveryControl(window, card);
+        await tabThroughEveryControl(window, card, "backward");
+
+        // The row is in its own place now, up under the title, which stays over it.
+        await wheelToEnd(window, card);
+        await expectStaysOverContent(window, card, card.getByRole("heading", { level: 2 }));
+      } finally {
+        await app.close();
+        await fake.close();
       }
     });
   }
