@@ -579,13 +579,13 @@ for (const [language, width] of [
   });
 }
 
-/** Record a meeting is left out: it is offered only once meetings are turned on. */
 const NEW_MENU_ROWS: readonly MessageKey[] = [
   "menu.newMind",
   "sidebar.plus.addDocuments",
   "menu.newFolder",
   "sidebar.plus.more",
 ];
+// Record a meeting is left out: it is offered only once meetings are turned on.
 const MORE_ROWS: readonly MessageKey[] = [
   "wordImport.command",
   "command.compareDocuments",
