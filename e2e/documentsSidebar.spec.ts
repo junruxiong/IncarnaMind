@@ -104,7 +104,7 @@ test("dropping folders offers each for linking in turn; what's there already is 
   await window.getByTestId("plus-link-folder").click();
   await expect(dialog.getByRole("heading")).toHaveText("Already in IncarnaMind");
   await expect(dialog.getByTestId("link-folder-inside")).toHaveText(
-    "“Papers” is linked already, so its files are in IncarnaMind. Linking it again changes nothing.",
+    "“Papers” is already linked, so its files are in IncarnaMind.",
   );
   await screenshot(window, "link-dialog-already-linked");
   await dialog.getByRole("button", { name: "Close" }).click();

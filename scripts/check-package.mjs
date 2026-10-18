@@ -19,9 +19,11 @@ const MAX_ASAR_BYTES = 157_000_000;
 // The largest installer of the fixed macOS arm64 build (the dmg, 184.3 MB) plus about 20%.
 // The Windows and Linux installers are checked against the same limit.
 const MAX_INSTALLER_BYTES = 221_000_000;
+// The .deb of the Linux x64 build (170 MB) plus about 9%.
+const MAX_DEB_BYTES = 185_000_000;
 
 const distDir = resolve(process.argv[2] ?? "dist");
-const INSTALLER_EXT = /\.(dmg|zip|exe|AppImage)$/;
+const INSTALLER_EXT = /\.(dmg|zip|exe|AppImage|deb)$/;
 /** An installer is at the top of dist/; win-unpacked/IncarnaMind.exe is the app itself. */
 const isInstaller = (file) => dirname(file) === distDir && INSTALLER_EXT.test(file);
 
@@ -107,9 +109,10 @@ for (const asar of asars) {
 
 for (const file of files.filter(isInstaller)) {
 	const size = statSync(file).size;
+	const budget = file.endsWith(".deb") ? MAX_DEB_BYTES : MAX_INSTALLER_BYTES;
 	console.log(`${file}: ${mb(size)}`);
-	if (size > MAX_INSTALLER_BYTES) {
-		failures.push(`${file} is ${mb(size)}, over the ${mb(MAX_INSTALLER_BYTES)} installer budget`);
+	if (size > budget) {
+		failures.push(`${file} is ${mb(size)}, over the ${mb(budget)} installer budget`);
 	}
 }
 
