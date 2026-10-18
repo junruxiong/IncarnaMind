@@ -42,8 +42,8 @@ const PROVIDERS = [
         zh: "打开 Anthropic 的密钥页面，登录 Anthropic Console。",
       },
       {
-        en: "Add credit under Billing, or link your Claude Max or Team plan there (see below).",
-        zh: "在 Billing 中充值，或在那里关联你的 Claude Max 或 Team 订阅（见下方说明）。",
+        en: "Add credit under Billing.",
+        zh: "在 Billing 中充值。",
       },
       {
         en: "Create a key, copy it (it's shown once) and paste it here.",
@@ -102,10 +102,11 @@ const PROVIDERS = [
         zh: "中国大陆和香港无法使用。",
       },
     ],
-    planCredits: {
+    keyLine: {
       en: "Paste an API key from the Anthropic Console.",
       zh: "粘贴 Anthropic Console 中的 API 密钥。",
       url: "https://support.claude.com/en/articles/17154008",
+      link: "details",
     },
     checked: "2026-10-16",
   },
@@ -184,10 +185,11 @@ const PROVIDERS = [
         zh: "中国大陆和香港无法使用。",
       },
     ],
-    planCredits: {
-      en: "ChatGPT plans don't include API usage. With ChatGPT Plus or Pro, you can use Continue with ChatGPT instead of a key.",
-      zh: "ChatGPT 订阅不包含 API 用量。如果你有 ChatGPT Plus 或 Pro，可以改用“使用 ChatGPT 继续”，无需密钥。",
+    keyLine: {
+      en: "With a ChatGPT plan, you can use Continue with ChatGPT instead of a key.",
+      zh: "有 ChatGPT 订阅时，可以改用“使用 ChatGPT 继续”，无需密钥。",
       url: "https://learn.chatgpt.com/docs/sign-in-with-chatgpt",
+      link: "details",
     },
     checked: "2026-10-16",
   },
@@ -237,14 +239,15 @@ const PROVIDERS = [
     },
     notes: [
       {
-        en: "Not available in mainland China or Hong Kong. In the EEA, the UK and Switzerland, only paid plans.",
-        zh: "中国大陆和香港无法使用。欧洲经济区、英国和瑞士仅限付费方案。",
+        en: "Not available in mainland China or Hong Kong.",
+        zh: "中国大陆和香港无法使用。",
       },
     ],
-    planCredits: {
-      en: "Google AI Pro and Ultra include monthly Google Cloud credits that can pay for the Gemini API, once you activate them in the Google Developer Program.",
-      zh: "Google AI Pro 和 Ultra 订阅每月附带 Google Cloud 额度，在 Google 开发者计划中激活后可用于 Gemini API。",
-      url: "https://blog.google/innovation-and-ai/technology/developers-tools/gdp-premium-ai-pro-ultra/",
+    keyLine: {
+      en: "Paste a Gemini API key from Google AI Studio",
+      zh: "粘贴 Google AI Studio 的 Gemini API 密钥",
+      url: "https://ai.google.dev/gemini-api/docs/pricing",
+      link: "pricing",
     },
     checked: "2026-10-16",
   },
@@ -263,8 +266,8 @@ const PROVIDERS = [
         zh: "打开 OpenRouter 的密钥页面并登录。",
       },
       {
-        en: "Add credit under Credits. One balance pays for every model.",
-        zh: "在 Credits 中充值。一份余额可用于所有模型。",
+        en: "Add credit under Credits.",
+        zh: "在 Credits 中充值。",
       },
       {
         en: "Create a key, copy it (it's shown once) and paste it here.",
@@ -292,12 +295,12 @@ const PROVIDERS = [
       },
       url: "https://openrouter.ai/docs/guides/routing/provider-selection",
     },
-    notes: [
-      {
-        en: "OpenRouter adds a fee of 5.5% to credits bought by card.",
-        zh: "OpenRouter 对刷卡充值的额度收取 5.5% 的手续费。",
-      },
-    ],
+    keyLine: {
+      en: "Pay per use with OpenRouter credits",
+      zh: "用 OpenRouter 额度按用量付费",
+      url: "https://openrouter.ai/pricing",
+      link: "pricing",
+    },
     checked: "2026-10-16",
   },
   {
@@ -376,8 +379,8 @@ const PROVIDERS = [
         zh: "打开 DeepSeek 的密钥页面，注册或登录 DeepSeek 开放平台。",
       },
       {
-        en: "Top up your balance. API use is paid by what you use.",
-        zh: "充值账户余额。API 按用量计费。",
+        en: "Top up your balance.",
+        zh: "充值账户余额。",
       },
       {
         en: "Create a key, copy it (it's shown once) and paste it here.",
@@ -400,12 +403,6 @@ const PROVIDERS = [
       },
       url: "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
     },
-    notes: [
-      {
-        en: "Weekdays 09:00–12:00 and 14:00–18:00 Beijing time cost double.",
-        zh: "北京时间工作日 9:00–12:00 和 14:00–18:00 为高峰时段，价格翻倍。",
-      },
-    ],
     checked: "2026-10-16",
   },
   {
@@ -437,8 +434,8 @@ const PROVIDERS = [
         zh: "先在上方选择账号所在的地域，再打开通义千问的密钥页面。密钥只在创建它的地域有效。",
       },
       {
-        en: "Sign in to Model Studio and turn it on if it asks. New accounts may get free use for a while.",
-        zh: "登录百炼并按提示开通。新账号可能有一段时间的免费额度。",
+        en: "Sign in to Model Studio and turn it on if it asks.",
+        zh: "登录百炼并按提示开通。",
       },
       {
         en: "Create a key, copy it and paste it here.",
@@ -509,8 +506,8 @@ const PROVIDERS = [
     },
     notes: [
       {
-        en: "Kimi allows 3 requests a minute until you top up; ¥50 on the China platform or $10 on the international one lifts that to 100.",
-        zh: "充值前 Kimi 每分钟只允许 3 次请求；中国站充值 ¥50、国际站充值 $10 后提高到 100 次。",
+        en: "If Kimi refuses requests, top up your Kimi account.",
+        zh: "如果 Kimi 拒绝请求，请为你的 Kimi 账户充值。",
       },
     ],
     checked: "2026-10-16",

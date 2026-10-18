@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { createFakeOpenAI } from "../tests/helpers/fakeOpenAI";
 import {
@@ -90,13 +90,13 @@ test("at 900px high the key form is in view, or scrolls inside its card, in Engl
   }
 });
 
-test("Where do I find it? opens with the keyboard, and holds the notes, the steps, the plan's credits and the key page, in English and Chinese", async () => {
+test("Where do I find it? opens with the keyboard, and holds the notes, the steps, the key line and the key page, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
     await acceptPlainTextKeys(window);
-    // The first provider is Anthropic in English, which has all four; DeepSeek in Chinese, with no plan's credits.
-    for (const [value, plan, keyPage] of [
+    // The first provider is Anthropic in English, which has all four; DeepSeek in Chinese, with no note and no key line.
+    for (const [value, count, keyPage] of [
       ["en", 1, "Open Anthropic's key page ↗"],
       ["zh-CN", 0, "打开 DeepSeek 的密钥页面 ↗"],
     ] as const) {
@@ -111,31 +111,31 @@ test("Where do I find it? opens with the keyboard, and holds the notes, the step
       await expect(form.getByTestId("provider-key-help-toggle")).toBeFocused();
       await window.keyboard.press("Enter");
       await expect(help).toHaveAttribute("open", "");
-      await expect(help.getByTestId("provider-note")).toHaveCount(1);
+      await expect(help.getByTestId("provider-note")).toHaveCount(count);
       await expect(help.locator("ol > li")).toHaveCount(3);
-      await expect(help.getByTestId("provider-plan-credits")).toHaveCount(plan);
+      await expect(help.getByTestId("provider-key-line")).toHaveCount(count);
       await expect(help.getByTestId("provider-key-link")).toHaveText(keyPage);
       if (process.env.INCARNAMIND_SCREENSHOTS) {
         await window.screenshot({
           path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-help-open-${value}.png`,
         });
       }
-      // The notes come first, then the steps, then the credits, then the key page.
+      // The notes come first, then the steps, then the key line, then the key page.
       const order = await help.evaluate((element) =>
         [
           ...element.querySelectorAll(
-            "[data-testid=provider-note], ol, [data-testid=provider-plan-credits], [data-testid=provider-key-link]",
+            "[data-testid=provider-note], ol, [data-testid=provider-key-line], [data-testid=provider-key-link]",
           ),
         ].map((each) => each.getAttribute("data-testid") ?? each.tagName),
       );
       expect(order).toEqual(
-        plan
-          ? ["provider-note", "OL", "provider-plan-credits", "provider-key-link"]
-          : ["provider-note", "OL", "provider-key-link"],
+        count
+          ? ["provider-note", "OL", "provider-key-line", "provider-key-link"]
+          : ["OL", "provider-key-link"],
       );
-      // At first run the notes and the credits are in the disclosure only, and the model has no docs link.
-      await expect(form.getByTestId("provider-note")).toHaveCount(1);
-      await expect(form.getByTestId("provider-plan-credits")).toHaveCount(plan);
+      // At first run the notes and the key line are in the disclosure only, and the model has no docs link.
+      await expect(form.getByTestId("provider-note")).toHaveCount(count);
+      await expect(form.getByTestId("provider-key-line")).toHaveCount(count);
       await expect(form.getByTestId("provider-docs-link")).toHaveCount(0);
       await window.keyboard.press("Enter");
       await expect(help).not.toHaveAttribute("open", "");
@@ -146,7 +146,7 @@ test("Where do I find it? opens with the keyboard, and holds the notes, the step
   }
 });
 
-test("in Settings the notes and the plan's credits are under the key field, the steps and the key page behind Where do I find it?, and the model has a link to its models and prices; in English and Chinese", async () => {
+test("in Settings the notes and the key line are under the key field, the steps and the key page behind Where do I find it?, and the model has a link to its models and prices; in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
@@ -168,14 +168,14 @@ test("in Settings the notes and the plan's credits are under the key field, the 
         });
       }
       const note = form.getByTestId("provider-note");
-      const credits = form.getByTestId("provider-plan-credits");
+      const line = form.getByTestId("provider-key-line");
       await expect(note).toBeVisible();
-      await expect(credits).toBeVisible();
+      await expect(line).toBeVisible();
       // One column with the hint lines' own spacing, no more.
-      const [noteBox, creditsBox] = await Promise.all([note.boundingBox(), credits.boundingBox()]);
-      expect(
-        (creditsBox?.y ?? 0) - ((noteBox?.y ?? 0) + (noteBox?.height ?? 0)),
-      ).toBeLessThanOrEqual(4);
+      const [noteBox, lineBox] = await Promise.all([note.boundingBox(), line.boundingBox()]);
+      expect((lineBox?.y ?? 0) - ((noteBox?.y ?? 0) + (noteBox?.height ?? 0))).toBeLessThanOrEqual(
+        4,
+      );
       await expect(help.locator("ol")).toBeHidden();
       await expect(form.getByTestId("provider-docs-link")).toHaveText(link);
       await expect(form.getByTestId("provider-docs-link")).toHaveAttribute("href", /^https:\/\//);
@@ -191,8 +191,68 @@ test("in Settings the notes and the plan's credits are under the key field, the 
     await help.getByTestId("provider-key-help-toggle").click();
     await expect(help.locator("ol > li")).toHaveCount(3);
     await expect(help.getByTestId("provider-note")).toHaveCount(0);
-    await expect(help.getByTestId("provider-plan-credits")).toHaveCount(0);
+    await expect(help.getByTestId("provider-key-line")).toHaveCount(0);
     await expect(help.getByTestId("provider-key-link")).toHaveText("打开 Anthropic 的密钥页面 ↗");
+  } finally {
+    await app.close();
+  }
+});
+
+/** Picks a provider's chip, opening More… first when it is folded under it. */
+async function chooseProvider(form: Locator, name: string) {
+  const chip = form.locator("label", { hasText: new RegExp(`^${name}$`) });
+  if ((await chip.count()) === 0) await form.getByTestId("provider-more-toggle").click();
+  await chip.click();
+}
+
+test("a key line says what to do in IncarnaMind and links to the company's own page for the rest, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const settings = await openSettings(window, "models");
+    await settings.getByTestId("chat-choice-api-key").check();
+    const form = settings.getByTestId("provider-form");
+    for (const [name, en, zh] of [
+      [
+        "Anthropic",
+        "Paste an API key from the Anthropic Console. · Details ↗",
+        "粘贴 Anthropic Console 中的 API 密钥。 · 详情 ↗",
+      ],
+      [
+        "OpenAI",
+        "With a ChatGPT plan, you can use Continue with ChatGPT instead of a key. · Details ↗",
+        "有 ChatGPT 订阅时，可以改用“使用 ChatGPT 继续”，无需密钥。 · 详情 ↗",
+      ],
+      [
+        "Google",
+        "Paste a Gemini API key from Google AI Studio · Pricing ↗",
+        "粘贴 Google AI Studio 的 Gemini API 密钥 · 价格 ↗",
+      ],
+      [
+        "OpenRouter",
+        "Pay per use with OpenRouter credits · Pricing ↗",
+        "用 OpenRouter 额度按用量付费 · 价格 ↗",
+      ],
+    ] as const) {
+      await language(window, "en");
+      await chooseProvider(form, name);
+      const line = form.getByTestId("provider-key-line");
+      await expect(line).toHaveText(en);
+      await expect(line.getByRole("link")).toHaveAttribute("href", /^https:\/\//);
+      if (process.env.INCARNAMIND_SCREENSHOTS) {
+        await settings.screenshot({
+          path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-line-${name}-en.png`,
+        });
+      }
+      await language(window, "zh-CN");
+      await expect(line).toHaveText(zh);
+      if (process.env.INCARNAMIND_SCREENSHOTS) {
+        await settings.screenshot({
+          path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-line-${name}-zh-CN.png`,
+        });
+      }
+    }
   } finally {
     await app.close();
   }
