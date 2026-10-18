@@ -169,8 +169,14 @@ export interface CreateMindInput {
  * - 23: the `wordTab` mark on a Word file's tab characters (#746), which an
  *   older version's editor would strip. Older content is version 23 content
  *   as it is.
+ * - 24: paragraph formatting (#912): the `paragraphFormat` attribute
+ *   (`ParagraphFormat`), and the `textColor`, `textFont`, `textSize`,
+ *   `superscript` and `subscript` marks, which an older version's editor
+ *   would strip. A Word file's direct formatting is read into them (the look
+ *   keeps what its styles give, `WORD_LOOK_VERSION` 6). Older content is
+ *   version 24 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 23;
+export const CONTENT_SCHEMA_VERSION = 24;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -899,7 +905,14 @@ export type MindProblem =
   | { kind: "no-place"; mindId: string; place: string }
   | { kind: "several-places"; mindId: string; name: string; adding: boolean }
   | {
-      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped" | "no-table";
+      kind:
+        | "no-text"
+        | "too-long"
+        | "changed"
+        | "content-not-own"
+        | "stopped"
+        | "no-table"
+        | "uncited";
       mindId: string;
     }
   | { kind: "local-mode" | "not-ready" }
@@ -931,12 +944,16 @@ export interface MindChange {
   request: string;
   /** How many Proposals it made there. */
   proposals: number;
+  /** How many paragraphs and headings they change, add or remove (`changedParagraphs`). Absent: none. */
+  changed?: number;
   /** How many paragraphs the whole Blocks it wrote hold (a heading or a table holds none). Absent: none. */
   paragraphs?: number;
   /** How many tables it added. Absent: none. */
   tables?: number;
   /** Sources in its tables' cells written as a name in brackets that matched no Citation, kept as text. Absent: none. */
   unlinkedSources?: number;
+  /** Sources the assistant wrote as a name in brackets that matched no Citation it recorded, so left out. Absent: none. */
+  droppedSources?: number;
   /** Cells beyond its tables' columns, their text kept in their row's last cell. Absent: none. */
   extraCells?: number;
   /**
@@ -1250,6 +1267,45 @@ export const WORD_RUN_MARK = "wordRun";
 /** A mark on each tab character of a Word file's text, so each is drawn to its tab stop. */
 export const WORD_TAB_MARK = "wordTab";
 
+/**
+ * On paragraphs and headings: how the User formatted the paragraph
+ * (`ParagraphFormat`), over its Word look and the Mind's style. A Word file's
+ * direct paragraph formatting is read into it too, so export writes it back
+ * as the file's own `w:pPr`.
+ */
+export const PARAGRAPH_FORMAT_ATTRIBUTE = "paragraphFormat";
+
+/** Text in a colour (`color`, hex "RRGGBB"); without it, text is in the automatic colour. */
+export const TEXT_COLOR_MARK = "textColor";
+/** Text in a font (`family`, as the system names it); without it, in its paragraph's. */
+export const TEXT_FONT_MARK = "textFont";
+/** Text in a size (`size`, in points); without it, in its paragraph's. */
+export const TEXT_SIZE_MARK = "textSize";
+export const SUPERSCRIPT_MARK = "superscript";
+export const SUBSCRIPT_MARK = "subscript";
+
+/**
+ * Lengths are in points, which a Mind draws in proportion to its text size
+ * (its body text is 11 pt, as Word export writes it; a Word file's, its own).
+ * What is left out is as the paragraph's look or the Mind's style has it.
+ */
+export interface ParagraphFormat {
+  align?: "left" | "center" | "right" | "justify" | "distribute";
+  left?: number;
+  right?: number;
+  /** Negative for a hanging indent. */
+  firstLine?: number;
+  /**
+   * The first line's indent in characters of the paragraph's text, as Word
+   * keeps it (`w:firstLineChars`, in hundredths); negative for a hanging
+   * indent. It wins over `firstLine`.
+   */
+  firstLineChars?: number;
+  before?: number;
+  after?: number;
+  line?: WordParagraphLook["line"];
+}
+
 /** Lengths are in points and colours hex "RRGGBB"; unset properties are left out. */
 export interface WordLook {
   version: number;
@@ -1320,6 +1376,12 @@ export interface WordParagraphLook {
   run?: string;
   /** The paragraph look Enter gives the paragraph after, when the style names another (`w:next`). */
   next?: string;
+  /**
+   * The size, in points, a character indent of the paragraph's own
+   * (`ParagraphFormat.firstLineChars`) is measured in: its style's, as Word
+   * draws it. Without it, the paragraph's text size.
+   */
+  characterSize?: number;
   align?: "left" | "center" | "right" | "justify" | "distribute";
   left?: number;
   right?: number;
@@ -4336,6 +4398,12 @@ export type EditWithAiResult =
       held?: true;
       /** What its new text left out of the selection, kept; absent when nothing. */
       leftOut?: LeftOutPart[];
+      /**
+       * The Mind's Yjs state vector once the Proposals were written. This reply can reach a
+       * window before the last `"mind.update"` that wrote them, so a window waits until its
+       * copy has all of this before it applies or holds them.
+       */
+      stateVector: Uint8Array;
     }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }
@@ -4404,6 +4472,16 @@ export type ClaimCheckFailure =
   | "failed"
   | "stopped";
 
+/** Why a sentence was found unsupported, as the check gave it. */
+export interface UnsupportedReason {
+  /** One plain sentence on what no Passage states; null when the reply gave none. */
+  reason: string | null;
+  /** A short phrase for what the Passages do state of the sentence ("the speed comparison"); null when none. */
+  covered: string | null;
+  /** A short phrase for what they don't ("memory and robustness"); null when none. */
+  uncovered: string | null;
+}
+
 /** A Document version a check read, which it no longer holds for once the Document changes. */
 export interface CheckedVersion {
   documentId: string;
@@ -4459,6 +4537,8 @@ export type ClaimCheckResult =
       evidence: Citation | null;
       /** For "supported" and "contradicted": what the Document says, in one plain sentence. */
       says: string | null;
+      /** For "unsupported": why. Null for the other verdicts. */
+      unsupported: UnsupportedReason | null;
       /** A figure worked out that decided it; null when a Passage did. */
       calculation: ClaimCalculation | null;
       /**
@@ -4544,6 +4624,8 @@ export interface ClaimCheckAttributes {
   evidence: CitationAttributes | null;
   /** "supported" and "contradicted": what the Document says, in one plain sentence. */
   says: string | null;
+  /** "unsupported": why. */
+  unsupported: UnsupportedReason | null;
   /** A figure worked out that decided it; null when a Passage did. */
   calculation: ClaimCalculation | null;
   citedCaseUnchecked: boolean;

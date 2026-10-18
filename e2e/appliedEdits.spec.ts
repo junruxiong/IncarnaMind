@@ -17,7 +17,7 @@ import {
 
 /*
  * An edit the User asks for on the text applies at once (#880): ⌘J and the
- * selection menu's AI actions. A line over it says how many places changed, with Undo and
+ * selection menu's AI actions. A line over it says how many paragraphs changed, with Undo and
  * Review changes. The scripted model (src/main/fakeChat/edit.ts and
  * src/main/fakeChat/appliedEdits.ts) does what "replace X with Y" says, shortens
  * by dropping "very" and "really", gives back only the second paragraph
@@ -82,7 +82,7 @@ async function selectAll(window: Page, editor: Locator) {
 
 const lineOf = (editor: Locator) => editor.getByTestId("applied-line");
 
-test("⌘J applies the change at once as AI text, with Changed 1 place · Undo ⌘Z · Review changes over it; ⌘Z takes it back and ⌘⇧Z does it again, in Chinese too", async () => {
+test("⌘J applies the change at once as AI text, with Changed 1 paragraph · Undo ⌘Z · Review changes over it; ⌘Z takes it back and ⌘⇧Z does it again, in Chinese too", async () => {
   const { window } = await launch();
   await useLocalChatModel(window);
   const { editor, paragraphs } = await mindWith(window, [TIDES]);
@@ -96,11 +96,11 @@ test("⌘J applies the change at once as AI text, with Changed 1 place · Undo �
   await expect(note.locator(".generated-text")).toHaveText("powerful");
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
   const line = lineOf(editor);
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 place");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 paragraph");
   await expect(line).toContainText(/Undo(⌘Z|Ctrl\+Z)/);
   await expect(line.getByTestId("applied-review")).toHaveText("Review changes");
   await expect(line).toHaveAttribute("title", "Why: Changed as you asked.");
-  await expect(window.getByTestId("undo-message")).toHaveText("Changed 1 place");
+  await expect(window.getByTestId("undo-message")).toHaveText("Changed 1 paragraph");
   // Over the Block it changed.
   const lineBox = await line.boundingBox();
   const noteBox = await note.boundingBox();
@@ -109,7 +109,7 @@ test("⌘J applies the change at once as AI text, with Changed 1 place · Undo �
   await screenshot(window, "applied-en");
 
   await setLanguage(window, "zh-CN");
-  await expect(line.getByTestId("applied-count")).toHaveText("已修改 1 处");
+  await expect(line.getByTestId("applied-count")).toHaveText("修改了 1 个段落");
   await expect(line.getByTestId("applied-undo")).toHaveText("撤销");
   await expect(line.getByTestId("applied-review")).toHaveText("查看改动");
   await screenshot(window, "applied-zh");
@@ -135,11 +135,11 @@ test("Shorten from the menu applies at once; Review changes shows what it did, s
   await slideSelect(window, note, TIDES);
   await pointAndClick(window, window.getByTestId("selection-action-shorten"));
   await expect(note).toHaveText("The tides here are strong and regular.");
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 2 places");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 paragraph");
 
   await pointAndClick(window, line.getByTestId("applied-review"));
   await expect(removed).toHaveText(["very ", "really "]);
-  await expect(line.getByTestId("applied-count")).toHaveText("2 changes made by Edit with AI");
+  await expect(line.getByTestId("applied-count")).toHaveText("1 paragraph changed by Edit with AI");
   await expect(line.getByTestId("applied-undo-all")).toHaveText("Undo all");
   await expect(line.getByTestId("applied-done")).toHaveText("Done");
   await expect(note.locator(".applied-new")).toHaveCount(0);
@@ -156,7 +156,7 @@ test("Shorten from the menu applies at once; Review changes shows what it did, s
   await expect(removed).toHaveText(["really "]);
   await expect(note).toContainText("are very strong");
   await expect(window.getByTestId("undo-message")).toHaveText("Restored the original");
-  await expect(line.getByTestId("applied-count")).toHaveText("1 change made by Edit with AI");
+  await expect(line.getByTestId("applied-count")).toHaveText("1 paragraph changed by Edit with AI");
   await pointAndClick(window, line.getByTestId("applied-done"));
   await expect(note).toHaveText("The tides here are very strong and regular.");
   await expect(removed).toHaveCount(0);
@@ -168,7 +168,7 @@ test("Shorten from the menu applies at once; Review changes shows what it did, s
   await pointAndClick(window, window.getByTestId("selection-action-shorten"));
   await expect(note).toHaveText("The tides here are strong and regular.");
   await pointAndClick(window, line.getByTestId("applied-review"));
-  await expect(line.getByTestId("applied-count")).toHaveText("用 AI 编辑做的 1 处改动");
+  await expect(line.getByTestId("applied-count")).toHaveText("用 AI 编辑修改的 1 个段落");
   await expect(line.getByTestId("applied-done")).toHaveText("完成");
   await pointAndClick(window, removed.first());
   await expect(window.getByTestId("change-restore")).toHaveText("恢复原文");
@@ -188,7 +188,7 @@ test("whole note selected, “make the second paragraph more formal”, the mode
   await askToChange(window, "make the second paragraph more formal; leave the others as they are");
 
   await expect(paragraphs).toHaveText([FIRST, FORMAL, THIRD]);
-  await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ places$/);
+  await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ paragraphs?$/);
   await expect(kept).toHaveText("Kept 2 paragraphs the edit left out·Remove them");
   // The line over the paragraph it changed, the kept one's over the first it kept.
   const keptBox = await kept.boundingBox();
@@ -239,7 +239,9 @@ test("Remove them, then Review changes: only the edit's own change is shown agai
   await expect(paragraphs).toHaveText([FORMAL, NEXT]);
 
   await pointAndClick(window, line.getByTestId("applied-review"));
-  await expect(line.getByTestId("applied-count")).toHaveText(/changes? made by Edit with AI$/);
+  await expect(line.getByTestId("applied-count")).toHaveText(
+    /paragraphs? changed by Edit with AI$/,
+  );
   await expect(paragraphs.first().locator(".applied-new").first()).toBeVisible();
   await expect(paragraphs.first().locator("del.applied-old").first()).toBeVisible();
   await expect(heading).toHaveText("Harbour notes");
@@ -268,6 +270,11 @@ test("an edit that would remove most of what was selected, and can't be mapped o
   await expect(line.getByTestId("applied-count")).toHaveText(
     "This edit would remove most of what you selected, so it's waiting for you",
   );
+  // Each paragraph written anew reads whole, its old text one line above it, struck on a click (#1028).
+  const was = editor.getByTestId("change-was-line").first();
+  await expect(was).toBeVisible();
+  await expect(editor.locator("del.proposal-delete").first()).toBeHidden();
+  await pointAndClick(window, was.getByTestId("change-was"));
   await expect(editor.locator("del.proposal-delete").first()).toBeVisible();
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
   await motionSettled(window);
@@ -301,7 +308,7 @@ test("an edit that would remove most of what was selected, and can't be mapped o
     "night falls soft",
     "Notes: tide tables",
   ]);
-  await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ places$/);
+  await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ paragraphs?$/);
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+z");
   await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD, "Notes: tide tables"]);
@@ -346,7 +353,7 @@ test("“delete the second paragraph” applies at once", async () => {
   await selectAll(window, editor);
   await askToChange(window, "delete the second paragraph");
   await expect(paragraphs).toHaveText([FIRST, THIRD]);
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 place");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 paragraph");
   await expect(editor.getByTestId("applied-kept")).toHaveCount(0);
 });
 
@@ -373,13 +380,89 @@ test("text typed elsewhere while a slow edit streams in stays, and one ⌘Z take
   await window.keyboard.press("End");
   await window.keyboard.type(" typed meanwhile");
   await expect(editor.getByTestId("mind-writing")).toHaveCount(0, { timeout: 30_000 });
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 5 places");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 3 paragraphs");
   await expect(paragraphs.last()).toHaveText("Notes: typed meanwhile");
 
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+z");
   await expect(paragraphs).toHaveText([...lines, "Notes: typed meanwhile"]);
   await expect(line).toHaveCount(0);
+});
+
+test("on a slow computer, where the core's reply comes before the edit's last paragraph, the edit still applies whole, at once and from Apply, and one ⌘Z takes it all back", async () => {
+  const { window } = await launch();
+  await useLocalChatModel(window);
+  const { editor, paragraphs } = await mindWith(window, [FIRST, SECOND, THIRD]);
+  const line = lineOf(editor);
+  // The window six times slower: its copy of the Mind then takes the core's reply before the
+  // edit's last update, as CI's Mac did.
+  const devtools = await window.context().newCDPSession(window);
+  await devtools.send("Emulation.setCPUThrottlingRate", { rate: 6 });
+
+  await selectAll(window, editor);
+  await askToChange(window, "replace harbour with port");
+  const ported = [FIRST, SECOND.replace("harbour", "port"), THIRD.replace("harbour", "port")];
+  await expect(paragraphs).toHaveText(ported);
+  await expect(editor.locator("del.proposal-delete, ins.proposal-insert")).toHaveCount(0);
+  await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
+
+  await selectAll(window, editor);
+  await askToChange(window, "replace it all with a haiku");
+  await pointAndClick(window, line.getByTestId("applied-apply"));
+  await expect(paragraphs).toHaveText([
+    "Gulls wheel, crying",
+    "salt wind on stone",
+    "night falls soft",
+  ]);
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
+});
+
+test("an edit whose last update never reaches the window waits as changes to review, says so in English and Chinese, and the next edit can be asked", async () => {
+  const { app, window } = await launch();
+  await useLocalChatModel(window);
+  const { editor, paragraphs } = await mindWith(window, [FIRST, SECOND, THIRD]);
+  // The window misses the edit's second update, as when taking it in fails.
+  await app.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0]?.webContents;
+    if (!contents) return;
+    const send = contents.send.bind(contents);
+    let tagged = 0;
+    contents.send = (channel: string, ...args: unknown[]) => {
+      const [name, payload] = args as [string, { cause?: unknown } | undefined];
+      if (name === "mind.update" && payload?.cause && ++tagged === 2) return;
+      send(channel, ...args);
+    };
+  });
+
+  await selectAll(window, editor);
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("replace harbour with port");
+  await window.keyboard.press("Enter");
+  const problem = window.getByTestId("edit-problem");
+  await expect(problem).toHaveText(
+    /This edit took too long to arrive, so it wasn't applied\. Accept or reject its changes\./,
+    { timeout: 15_000 },
+  );
+  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+  await expect(editor.locator("del.proposal-delete").first()).toBeVisible();
+  await expect(window.getByTestId("proposals-bar")).toBeVisible();
+  await setLanguage(window, "zh-CN");
+  await expect(problem).toContainText("这次修改送达太慢，没有直接应用。请接受或拒绝这些修订。");
+  await setLanguage(window, "en");
+
+  await pointAndClick(window, window.getByTestId("proposals-reject-all"));
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
+  // Nothing waits on it any more: the next edit is asked, not refused.
+  await slideSelect(window, paragraphs.first(), "Tides rise");
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("replace coast with shore");
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("edit-pending")).toBeVisible();
 });
 
 /** Runs a command from ⌘K by the keyboard: its words, then Enter. */
@@ -405,7 +488,7 @@ test("by the keyboard alone: ⌘J, Review changes from ⌘K, ⌘⌫ restores the
   await askToChange(window, "replace strong with powerful");
   await expect(note).toHaveText("The tides here are very powerful and really regular.");
   await fromPalette(window, "edit.reviewApplied", "Review changes");
-  await expect(line.getByTestId("applied-count")).toHaveText("1 change made by Edit with AI");
+  await expect(line.getByTestId("applied-count")).toHaveText("1 paragraph changed by Edit with AI");
   await expect(window.getByTestId("applied-change-bar")).toBeVisible();
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+Backspace");
@@ -426,7 +509,7 @@ test("by the keyboard alone: ⌘J, Review changes from ⌘K, ⌘⌫ restores the
   const heldLine = lineOf(held.editor);
   await expect(heldLine.getByTestId("applied-apply")).toBeVisible();
   await fromPalette(window, "edit.applyHeld", "Apply the waiting edit");
-  await expect(heldLine.getByTestId("applied-count")).toHaveText(/^Changed \d+ places?$/);
+  await expect(heldLine.getByTestId("applied-count")).toHaveText(/^Changed \d+ paragraphs?$/);
   await expect(held.paragraphs).toHaveText([
     "Gulls wheel, crying",
     "salt wind on stone",

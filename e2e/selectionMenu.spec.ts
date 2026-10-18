@@ -101,13 +101,13 @@ test("selecting text with the mouse or the keyboard opens a menu: Turn into, for
   await window.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
 
-  // Underline from the keyboard: ⌘/, then the arrows to its button, then Enter.
+  // Underline from the keyboard: ⌘/, then the arrows to its button (past Aa, B and I), then Enter.
   await paragraphs.nth(2).click();
   await shiftSelectBack(window, "closing line".length);
   await expect(menu).toBeVisible();
   await window.keyboard.press("ControlOrMeta+/");
   await expect(turnInto).toBeFocused();
-  for (let step = 0; step < 3; step++) await window.keyboard.press("ArrowDown");
+  for (let step = 0; step < 4; step++) await window.keyboard.press("ArrowDown");
   await expect(window.getByTestId("format-underline")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(paragraphs.nth(2).locator("u")).toHaveText("closing line");
