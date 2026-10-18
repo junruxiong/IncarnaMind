@@ -980,7 +980,8 @@ export interface MindChange {
    * (`cited`), how many it sent to be checked (`sent`), how many got a verdict
    * (`checked`) and how many couldn't be checked (`failed`), and what stopped it, if
    * anything did. Those it couldn't check, or didn't, are marked not checked, under
-   * `request`. Absent: none was checked.
+   * `request`; `blocked` says how many of them the User's own choice kept from being sent
+   * (the flow turned off, or Local mode), which checking again can't change. Absent: none was checked.
    */
   selfCheck?: {
     request: string;
@@ -989,6 +990,7 @@ export interface MindChange {
     checked: number;
     failed: number;
     stop?: RunStop;
+    blocked?: { reason: "consent-revoked" | "local-mode"; count: number };
   };
 }
 
@@ -4507,6 +4509,7 @@ export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
  * - "stopped": the User stopped the check, or IncarnaMind quit, before this sentence was checked.
  * - "too-many": the assistant wrote more sentences with Citations than one write has checked (#1111).
  * - "consent-revoked": the User turned off sending checks to the model's service while it ran.
+ * - "local-mode": "Keep everything on this computer" came on while it ran.
  */
 export type ClaimCheckFailure =
   | "refused"
@@ -4519,7 +4522,8 @@ export type ClaimCheckFailure =
   | "failed"
   | "stopped"
   | "too-many"
-  | "consent-revoked";
+  | "consent-revoked"
+  | "local-mode";
 
 /** Why a sentence was found unsupported, as the check gave it. */
 export interface UnsupportedReason {

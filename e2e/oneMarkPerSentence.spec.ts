@@ -6,6 +6,7 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  assistantAnswers,
   checkCard,
   createDataFolder,
   dismissChatSetup,
@@ -26,7 +27,7 @@ import {
  * The margin holds one mark per sentence, its verdict (#1112); a Citation's own state shows on
  * its marker in the text: neutral when its quote is found, warning when it isn't, error when the
  * Document now says otherwise. Colour is never the only signal: every state but found has its
- * icon on the marker. One page holds a supported sentence, an unsupported one with two found
+ * icon on the marker ("?" for a quote that isn't there, never the "!" of an unsupported sentence). One page holds a supported sentence, an unsupported one with two found
  * Citations, a contradicted one, a supported one whose Citation isn't found, and two unchecked
  * ones: a quote that isn't found, and a Citation to a Document that is gone (can't check). The
  * scripted model (src/main/fakeChat/checks.ts) gives the verdicts.
@@ -46,6 +47,7 @@ const SENTENCES = {
   supportedMissing: "Spring tides come at new moon and full moon, say the tide tables.",
   notFound: "The Moon raises two bulges of water on the Earth.",
   cantCheck: "A source that was deleted said the Earth has two bulges.",
+  checking: "A check of this one is still on its way.",
 };
 
 const LANGUAGES = {
@@ -154,6 +156,7 @@ for (const language of ["en", "zh-CN"] as const) {
           text(SENTENCES.notFound),
           cite(2, "Neap tides pull the sea out.", "not-found", "quote-not-on-pages"),
         ),
+        paragraph(text(SENTENCES.checking), cite(2, springQuote, "checking")),
         paragraph(text(SENTENCES.cantCheck), {
           ...cite(1, "Two bulges.", "found"),
           attrs: {
@@ -165,10 +168,17 @@ for (const language of ["en", "zh-CN"] as const) {
       ],
     );
     const lines = editor.locator(":scope > p");
-    const [supported, unsupported, contradicted, supportedMissing, notFound, cantCheck] = [
-      0, 1, 2, 3, 4, 5,
-    ].map((at) => lines.nth(at));
-    if (!supported || !unsupported || !contradicted || !supportedMissing || !notFound || !cantCheck)
+    const [supported, unsupported, contradicted, supportedMissing, notFound, checking, cantCheck] =
+      [0, 1, 2, 3, 4, 5, 6].map((at) => lines.nth(at));
+    if (
+      !supported ||
+      !unsupported ||
+      !contradicted ||
+      !supportedMissing ||
+      !notFound ||
+      !checking ||
+      !cantCheck
+    )
       throw new Error("No page.");
 
     // The first four sentences are checked; the last two are left alone.
@@ -188,16 +198,18 @@ for (const language of ["en", "zh-CN"] as const) {
     }
 
     const margin = window.getByTestId("margin-checks");
-    const [neutral, neutralInk, warningWash, warning, errorWash, error] = await Promise.all(
-      [
-        "--color-chip",
-        "--color-ink-secondary",
-        "--color-warning-wash",
-        "--color-warning",
-        "--color-danger-wash",
-        "--color-danger",
-      ].map((token) => tokenColor(window, token)),
-    );
+    const [neutral, neutralInk, metaInk, warningWash, warning, errorWash, error] =
+      await Promise.all(
+        [
+          "--color-chip",
+          "--color-ink-secondary",
+          "--color-ink-meta",
+          "--color-warning-wash",
+          "--color-warning",
+          "--color-danger-wash",
+          "--color-danger",
+        ].map((token) => tokenColor(window, token)),
+      );
     const iconOf = (marker: Locator) => marker.locator(".citation-marker-icon");
 
     for (const width of [1440, 900]) {
@@ -230,7 +242,7 @@ for (const language of ["en", "zh-CN"] as const) {
           .soft(mark.x, `mark ${at + 1} is right of the text`)
           .toBeGreaterThanOrEqual(column.right - 1);
       }
-      for (const line of [notFound, cantCheck]) {
+      for (const line of [notFound, checking, cantCheck]) {
         const unchecked = await box(line);
         for (const mark of await marks.all()) {
           const rect = await box(mark);
@@ -259,7 +271,7 @@ for (const language of ["en", "zh-CN"] as const) {
       }
 
       // Not found, in a sentence found supported and in one nobody checked: warning on its wash
-      // with its "!", and nothing in the margin for it.
+      // with its "?", and nothing in the margin for it.
       for (const line of [supportedMissing, notFound]) {
         const missing = line.getByTestId("citation-chip");
         await expect(missing).toHaveAttribute("data-check", "not-found");
@@ -282,13 +294,20 @@ for (const language of ["en", "zh-CN"] as const) {
       expect(await paintOf(unreadable)).toEqual({ background: neutral, color: neutralInk });
       await expect(iconOf(unreadable)).toBeVisible();
 
+      // Checking: the neutral chip with its dot, still, as no check of the User's is running.
+      const waiting = checking.getByTestId("citation-chip");
+      await expect(waiting).toHaveAttribute("data-check", "checking");
+      expect(await paintOf(waiting)).toEqual({ background: neutral, color: metaInk });
+      await expect(iconOf(waiting)).toBeVisible();
+      expect(await iconOf(waiting).evaluate((icon) => icon.getAnimations().length)).toBe(0);
+
       // Each state has a shape of its own, so colour is never the only signal.
       const shapes = await Promise.all(
-        [notFound, contradicted, cantCheck].map((line) =>
+        [notFound, contradicted, cantCheck, checking].map((line) =>
           iconOf(line.getByTestId("citation-chip")).innerHTML(),
         ),
       );
-      expect(new Set(shapes).size).toBe(3);
+      expect(new Set(shapes).size).toBe(4);
       await screenshot(window, `one-mark-${language}-${width}`);
     }
 
@@ -339,3 +358,36 @@ for (const language of ["en", "zh-CN"] as const) {
     await app.close();
   });
 }
+
+test("a Citation's dot breathes only while the Answer that checks it is being written", async () => {
+  test.setTimeout(120_000);
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await newMind(window);
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  // Asked "slowly", the Answer is written word by word, its Citations checking until it ends.
+  await window.keyboard.type("When do spring tides happen? slowly");
+  await window.keyboard.press("Enter");
+  const answer = assistantAnswers(window).last();
+  const breathing = () =>
+    window.evaluate(
+      () =>
+        document
+          .getAnimations()
+          .filter(
+            (animation) =>
+              animation.effect instanceof KeyframeEffect &&
+              animation.effect.target?.closest(".citation-marker") !== null,
+          ).length,
+    );
+  await expect.poll(breathing, { timeout: 30_000 }).toBeGreaterThan(0);
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 60_000 });
+  await expect(answer.getByTestId("citation-chip").first()).toHaveAttribute("data-check", "found");
+  await expect.poll(breathing).toBe(0);
+  await app.close();
+});

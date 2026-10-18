@@ -30,8 +30,10 @@ import { citationHandle } from "../commands/handles";
 import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
+import { useAnswerBeingWritten } from "../conversations";
 import { useGap, useLanguage, useT } from "../i18n";
 import { currentTabOf, groupsMerged } from "../layoutSlice";
+import { useBreathing } from "../motion";
 import type { ObjectRef } from "../objects";
 import { openCited as openCitedPlace, quoteSaysSo } from "../openCited";
 import {
@@ -139,6 +141,11 @@ export function CitationView({
   const [peeking, setPeeking] = useState(false);
   const open = pinned || peeking;
   const marker = useRef<HTMLButtonElement>(null);
+  // Its dot breathes only while a check the User started runs: an Answer is being written.
+  const writing = useAnswers((store) => store.writing.size > 0);
+  const answering = useAnswerBeingWritten() !== null;
+  const dot = useRef<SVGSVGElement>(null);
+  useBreathing(dot, state.check === "checking" && (writing || answering));
   /** The marker whose card the pointer over this one asks for: its own, or a neighbour's. */
   const pointed = useRef<HTMLElement | null>(null);
   const formatting = useMindFormatting(mindId);
@@ -320,7 +327,7 @@ export function CitationView({
           else onClick();
         }}
       >
-        <CheckMarkIcon check={state.check} className="citation-marker-icon" />
+        <CheckMarkIcon ref={dot} check={state.check} className="citation-marker-icon" />
         {inFootnote ? (
           <span>{pointsTo}</span>
         ) : styled.kind === "runs" ? (
