@@ -2274,7 +2274,44 @@ export function createCore(adapters: CoreAdapters): Core {
     await taggingChanged();
     return status;
   };
-  documentReady = (documentId) => tagger.documentReady(documentId);
+  /**
+   * Automatic found no model to tag with: work it out again, asking Ollama afresh, so a model
+   * installed since is picked up without a restart. Waiting Documents then go on. One Ollama list
+   * call per lookup, never a model call. A lookup already under way may have asked before what
+   * the caller knows changed, so one more follows it, and later callers share that one.
+   */
+  let lookingForModel: Promise<void> | null = null;
+  let lookingAgain: Promise<void> | null = null;
+  const lookForTaggingModel = (): Promise<void> => {
+    if (tagsWith() !== null) return Promise.resolve();
+    if (lookingForModel) {
+      lookingAgain ??= lookingForModel.then(() => {
+        lookingAgain = null;
+        return lookForTaggingModel();
+      });
+      return lookingAgain;
+    }
+    lookingForModel = (async () => {
+      try {
+        await tagging.resolve(undefined, true);
+      } catch (error) {
+        if (!lifetime.signal.aborted) {
+          console.error("The model to tag with couldn't be worked out.", error);
+        }
+        return;
+      } finally {
+        lookingForModel = null;
+      }
+      if (lifetime.signal.aborted || tagsWith() === null) return;
+      tagger.resume();
+      library.resume();
+    })();
+    return lookingForModel;
+  };
+  documentReady = (documentId) => {
+    tagger.documentReady(documentId);
+    void lookForTaggingModel();
+  };
 
   const settingsChanged = () => events.emit("settings.changed", settings.get());
   const readinessChanged = async () => {
@@ -3475,7 +3512,15 @@ export function createCore(adapters: CoreAdapters): Core {
       if (tagsAnew || organizesAnew) await dataFlowsChanged();
       await taggingChanged();
     },
-    getTaggingModels: () => tagging.models(),
+    getTaggingModels: async () => {
+      const hadModel = tagsWith() !== null;
+      const models = await tagging.models();
+      if (!hadModel && tagsWith() !== null && !lifetime.signal.aborted) {
+        tagger.resume();
+        library.resume();
+      }
+      return models;
+    },
     classifyDocuments: async (ids) => {
       library.classify(ids);
       const classifier = organizeModelOf(library.settings());
@@ -3579,6 +3624,7 @@ export function createCore(adapters: CoreAdapters): Core {
     retagDocuments: async (documentIds) => {
       rateLimit.resumeNow();
       if (organizesNewDocuments()) return library.classify(documentIds);
+      await lookForTaggingModel();
       tagger.retag(documentIds);
     },
     stopTagging: async () => {
