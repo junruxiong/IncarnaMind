@@ -1699,16 +1699,10 @@ export const zhCN = {
   "plans.google.line": "在 Antigravity 里使用 IncarnaMind，由你的订阅付费。",
   "plans.google.connect": "连接 Antigravity",
   "plans.google.credits": "Google 关于开发者额度的页面",
-  "providers.choice.label": "AI 模型",
   "providers.choice.local": "数据留在本机",
-  "providers.choice.apiKey": "使用 API 密钥",
-  "providers.choice.apiKey.body": "OpenAI、Anthropic、Google、DeepSeek 等。",
-  "providers.choice.apiKey.firstRun.body": "{providers}。更多服务在“设置”中。",
   "providers.list.separator": "、",
-  "providers.list.last": "{rest}、{last}",
   "providers.kind.short.qwen": "通义千问",
   "providers.kind.short.deepseek": "DeepSeek",
-  "providers.choice.chatgpt.body": "用你的 ChatGPT Plus 或 Pro 账号登录，无需密钥。",
 
   "providers.kind.openai": "OpenAI",
   "providers.kind.anthropic": "Anthropic",
@@ -1809,7 +1803,6 @@ export const zhCN = {
   "providers.secrets.unavailable":
     "此系统无法加密 API 密钥，无法保存。可使用 Ollama 或无需密钥的服务器。",
 
-  "providers.ollama.title": "在本机运行（免费）",
   "providers.ollama.checking": "正在查找本机的 Ollama…",
   "providers.ollama.detected": "Ollama 正在运行。问题和文档不会离开这台电脑。",
   "providers.ollama.notDetected": "要在本机运行模型，请从 ollama.com 安装并启动 Ollama。",
@@ -1820,9 +1813,6 @@ export const zhCN = {
   "providers.local.running": "{provider} 正在运行。问题和文档不会离开这台电脑。",
   "providers.local.notRunning": "{address} 没有响应。请启动 {provider}，或修改地址。",
   "providers.local.runningAway": "{address} 上的 {provider} 有响应。",
-  "providers.local.also": "也支持",
-  "providers.local.rowRunning": "正在这台电脑上运行。",
-  "providers.local.rowNotRunning": "尚未运行。",
   "providers.ollama.get": "下载 Ollama",
 
   "providers.readiness.no-provider": "提问需要 AI 模型，记笔记不需要。",
@@ -1847,14 +1837,8 @@ export const zhCN = {
   "localModel.opening": "正在打开 Ollama…",
   "localModel.cancel": "取消",
 
-  "providers.settings.title": "AI 模型",
-  "providers.settings.none": "尚未设置 AI 模型。",
-  "providers.settings.provider": "服务",
   "providers.settings.local": "在本机运行",
   "providers.settings.cloud": "云端，在 ollama.com 运行",
-  "providers.settings.defaultModel": "默认模型",
-  "providers.settings.saveModel": "保存",
-  "providers.settings.change": "更换服务",
   "providers.settings.cancel": "取消",
   "providers.settings.remove": "移除",
 

@@ -1764,16 +1764,10 @@ export const en = {
   "plans.google.line": "Use IncarnaMind in Antigravity, where your plan pays.",
   "plans.google.connect": "Connect Antigravity",
   "plans.google.credits": "Google’s page on developer credits",
-  "providers.choice.label": "AI model",
   "providers.choice.local": "Stays on this computer",
-  "providers.choice.apiKey": "An API key",
-  "providers.choice.apiKey.body": "OpenAI, Anthropic, Google, DeepSeek and more.",
-  "providers.choice.apiKey.firstRun.body": "{providers}. More providers are in Settings.",
   "providers.list.separator": ", ",
-  "providers.list.last": "{rest} or {last}",
   "providers.kind.short.qwen": "Qwen",
   "providers.kind.short.deepseek": "DeepSeek",
-  "providers.choice.chatgpt.body": "Sign in with your ChatGPT Plus or Pro account. No key needed.",
 
   "providers.kind.openai": "OpenAI",
   "providers.kind.anthropic": "Anthropic",
@@ -1878,7 +1872,6 @@ export const en = {
   "providers.secrets.unavailable":
     "This system can't encrypt API keys, so they can't be saved. Use Ollama or a server that needs no key.",
 
-  "providers.ollama.title": "On this computer (free)",
   "providers.ollama.checking": "Looking for Ollama on this computer…",
   "providers.ollama.detected": "Ollama is running. Questions and Documents stay on this computer.",
   "providers.ollama.notDetected": "Install and start Ollama from ollama.com to run models here.",
@@ -1891,9 +1884,6 @@ export const en = {
   "providers.local.notRunning":
     "Nothing answers at {address}. Start {provider}, or change the address.",
   "providers.local.runningAway": "{provider} answers at {address}.",
-  "providers.local.also": "Also works with",
-  "providers.local.rowRunning": "Running on this computer.",
-  "providers.local.rowNotRunning": "Not running yet.",
   "providers.ollama.get": "Get Ollama",
 
   "providers.readiness.no-provider": "Asking needs an AI model. Notes work without one.",
@@ -1920,14 +1910,8 @@ export const en = {
   "localModel.opening": "Opening Ollama…",
   "localModel.cancel": "Cancel",
 
-  "providers.settings.title": "AI model",
-  "providers.settings.none": "No AI model is set up yet.",
-  "providers.settings.provider": "Service",
   "providers.settings.local": "on this computer",
   "providers.settings.cloud": "cloud, on ollama.com",
-  "providers.settings.defaultModel": "Default model",
-  "providers.settings.saveModel": "Save",
-  "providers.settings.change": "Change service",
   "providers.settings.cancel": "Cancel",
   "providers.settings.remove": "Remove",
 

@@ -153,9 +153,7 @@ test("adds a provider from the directory with a fake endpoint, tests it, and pic
     await expect(settings.getByTestId("provider-row")).toHaveCount(2);
     await expect(settings.getByTestId("models-add-provider")).toBeFocused();
     await answers.selectOption(`${added}\nb-strong`);
-    await expect
-      .poll(() => chatModel(window))
-      .toEqual({ providerId: added, modelId: "b-strong" });
+    await expect.poll(() => chatModel(window)).toEqual({ providerId: added, modelId: "b-strong" });
   } finally {
     await app.close();
   }

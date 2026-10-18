@@ -1189,6 +1189,7 @@ export function createChat(options: {
       let listed: ListedModel[];
       try {
         if (provider.service) {
+          // Local mode first: a prompt for what couldn't be sent anyway would only be in the way.
           if (options.localOnly()) {
             throw new ChatNotReadyError({
               ready: false,
@@ -1198,6 +1199,7 @@ export function createChat(options: {
             });
           }
           await consent.ensure("chat", provider.service);
+          gate.check("chat", provider.service);
         }
         listed =
           provider.kind === "chatgpt" || provider.kind === "copilot"

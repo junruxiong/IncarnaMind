@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ChatProvider, OllamaPullProgress, OllamaStatus } from "../../../../core/api";
+import { OLLAMA_DOWNLOAD_URL } from "../../../../core/providers/catalog/billing";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { localModeChosen } from "../../localMode";
 import { useAppStore } from "../../store";
 import { ProblemMark } from "../ProblemLine";
-import { errorTextClass } from "../ui";
+import { buttonStyle, errorTextClass } from "../ui";
 import { useKeepLocal } from "./KeepLocalChoice";
 
 /** `open` resolves null when Ollama's app couldn't be opened; that failure is already reported. */
@@ -133,5 +134,49 @@ export function OllamaProgress({ ollama }: { ollama: Ollama }) {
         </p>
       )}
     </div>
+  );
+}
+
+/** Ollama's button: use it (pulling the recommended model), or get it and look for it again. */
+export function OllamaAction({ ollama, large = false }: { ollama: Ollama; large?: boolean }) {
+  const t = useT();
+  const { status, pulling } = ollama;
+  const size = large ? "lg" : "md";
+  if (status?.running) {
+    return (
+      <button
+        type="button"
+        data-testid="ollama-use"
+        disabled={pulling || !ollama.keepLocal.asked}
+        onClick={() => void ollama.use()}
+        className={buttonStyle("primary", size)}
+      >
+        {t("providers.ollama.use", { model: status.recommendedModel })}
+      </button>
+    );
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      {status !== null && (
+        // The main process opens it in the User's browser.
+        <button
+          type="button"
+          data-testid="ollama-get"
+          onClick={() => window.open(OLLAMA_DOWNLOAD_URL, "_blank", "noreferrer")}
+          className={buttonStyle("primary", size)}
+        >
+          {t("providers.ollama.get")} ↗
+        </button>
+      )}
+      <button
+        type="button"
+        data-testid="ollama-check-again"
+        disabled={status === null}
+        onClick={() => void ollama.detect()}
+        className={buttonStyle("secondary", size)}
+      >
+        {t("providers.ollama.checkAgain")}
+      </button>
+    </span>
   );
 }

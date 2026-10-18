@@ -17,10 +17,10 @@ import {
   useChatGptStorage,
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
-import { OllamaAction } from "./ChatProviderChoices";
 import { ClaudePlanWay } from "./ClaudePlan";
 import { CopilotSetupWay } from "./CopilotPlan";
 import {
+  OllamaAction,
   OllamaProgress,
   type Ollama as OllamaState,
   ollamaDescription,
