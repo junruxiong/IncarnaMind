@@ -74,7 +74,6 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-/** What the paragraph says: its own words, without the struck ones or the buttons drawn among them. */
 const wordsOf = (paragraph: Locator) =>
   paragraph.evaluate((node) => {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -87,7 +86,6 @@ const wordsOf = (paragraph: Locator) =>
     return words;
   });
 
-/** How many of the Mind's controls overlap a word of its paragraph, the struck ones included. */
 const controlsOverText = (editor: Locator) =>
   editor.evaluate((node) => {
     const rects = (range: Range) => [...range.getClientRects()];
@@ -117,7 +115,6 @@ interface Box {
   height: number;
 }
 
-/** Whether `a` comes before `b` as a page is read: on an earlier line, or the same line and further left. */
 const readsBefore = (a: Box, b: Box) => {
   const apart = b.y + b.height / 2 - (a.y + a.height / 2);
   return Math.abs(apart) < Math.min(a.height, b.height) / 2 ? a.x < b.x : apart > 0;
@@ -164,7 +161,6 @@ for (const { language, lines, ask, shortened, veryBack, reallyBack, restore } of
       await expect(window.getByTestId("edit-pending")).toHaveCount(0);
       await expect.poll(() => wordsOf(note)).toBe(shortened);
 
-      // The line is nearer the paragraph it changed than the one above it, with and without Review.
       const applied = await gapsAround(line, first, note);
       expect(applied.below).toBeGreaterThanOrEqual(0);
       expect(applied.below).toBeLessThan(applied.above);
@@ -186,7 +182,6 @@ for (const { language, lines, ask, shortened, veryBack, reallyBack, restore } of
       await expect(restores.first()).toHaveCSS("font-size", "12px");
       await expect(restores.first()).toHaveCSS("color", "rgb(101, 107, 116)");
 
-      // Nothing floats over the words, and each Restore follows its own struck words.
       await expect(window.getByTestId("applied-change-bar")).toHaveCount(0);
       expect(await controlsOverText(editor)).toBe(0);
       const [struckFirst, struckLast, restoreFirst, restoreLast] = await Promise.all([
@@ -208,7 +203,6 @@ for (const { language, lines, ask, shortened, veryBack, reallyBack, restore } of
       await motionSettled(window);
       await screenshot(window, `restore-inline-${language}-${width}`);
 
-      // By Tab, in reading order.
       await editor.focus();
       const reached: Box[] = [];
       for (let presses = 0; presses < 8 && reached.length < 2; presses++) {
@@ -227,7 +221,6 @@ for (const { language, lines, ask, shortened, veryBack, reallyBack, restore } of
       const [early, late] = reached;
       expect(early && late && readsBefore(early, late)).toBe(true);
 
-      // Enter on the second restores it alone, and Undo brings it back.
       await window.keyboard.press("Enter");
       await expect.poll(() => wordsOf(note)).toBe(reallyBack);
       await expect(removed).toHaveCount(1);
@@ -236,7 +229,6 @@ for (const { language, lines, ask, shortened, veryBack, reallyBack, restore } of
       await window.keyboard.press("ControlOrMeta+z");
       await expect.poll(() => wordsOf(note)).toBe(shortened);
 
-      // The mouse on the first restores it alone, and Undo brings it back.
       await expect(restores).toHaveCount(1);
       await pointAndClick(window, restores.first());
       await expect.poll(() => wordsOf(note)).toBe(veryBack);
