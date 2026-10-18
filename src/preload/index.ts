@@ -89,6 +89,7 @@ const files: FilesBridge = {
   showSavedFile: (path) => ipcRenderer.invoke(FILES_CHANNELS.showSavedFile, path),
   openSavedFile: (path) => ipcRenderer.invoke(FILES_CHANNELS.openSavedFile, path),
   pickOutputLocation: () => ipcRenderer.invoke(FILES_CHANNELS.pickOutputLocation),
+  saveMindCopy: (mindId) => ipcRenderer.invoke(FILES_CHANNELS.saveMindCopy, mindId),
   openDataFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openDataFolder),
   openLogsFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openLogsFolder),
   pickSkill: (kind) => ipcRenderer.invoke(FILES_CHANNELS.pickSkill, kind),
