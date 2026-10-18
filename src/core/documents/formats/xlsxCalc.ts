@@ -148,6 +148,8 @@ export class Calculator {
   readonly touched = new Set<number>();
   /** Shared formula groups whose first cell was edited: their other cells get their own formulas. */
   readonly unshared = new Set<string>();
+  /** The stored results were refreshed: once, before the first edit, in a file that doesn't keep results. */
+  private refreshed = false;
 
   constructor(book: Book) {
     this.book = book;
@@ -483,6 +485,10 @@ export class Calculator {
     const sheet = this.sheetNamed(sheetName);
     const at = parseCellRef(ref);
     if (!sheet || !at) throw new Error(`No cell ${sheetName}!${ref}`);
+    // A file that asks Excel to recalculate everything stores placeholders (0), which the
+    // cells an edit doesn't reach would hand on to the ones it does: work them all out first.
+    const refreshed = this.book.fullCalcOnLoad && !this.refreshed ? this.recalculateAll() : null;
+    this.refreshed = true;
     const key = cellKey(at.row, at.column);
     const id = cellId(sheet.index, key);
     const existing = sheet.cells.get(key);
@@ -538,7 +544,10 @@ export class Calculator {
     if (!sameValue(before, cell.value))
       changed.push({ sheet: sheet.name, row: at.row, column: at.column, value: cell.value });
     const result = this.recalculate([id]);
-    return { changed: [...changed, ...result.changed], stale: result.stale };
+    return {
+      changed: [...(refreshed?.changed ?? []), ...changed, ...result.changed],
+      stale: [...(refreshed?.stale ?? []), ...result.stale],
+    };
   }
 
   /** Recalculates every formula (for checking the calculator against a file's stored results). */

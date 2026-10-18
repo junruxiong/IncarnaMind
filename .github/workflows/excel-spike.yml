@@ -17,7 +17,7 @@ jobs:
   libreoffice:
     name: Calculator judged by LibreOffice
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
@@ -48,6 +48,24 @@ jobs:
           for set in repo gen excel; do node "$RUNNER_TEMP/roundtrip.mjs" corpus/$set rt/$set > rt-$set.log; done
       - name: LibreOffice recalculates the edited copies
         run: for set in repo gen excel; do python3 eval/xlsx/lo_judge.py corpus/$set rt/$set rt/$set/lo.json; done
+      - name: openpyxl judges what each copy kept of its original
+        run: |
+          for set in repo gen excel; do
+            python3 -I eval/xlsx/judge.py corpus/$set rt/$set/noedit rt/$set/judge-noedit.json
+            python3 -I eval/xlsx/judge.py corpus/$set rt/$set/edit rt/$set/judge-edit.json
+          done
+      - name: The same round trip through ExcelJS and SheetJS, for comparison
+        run: |
+          (cd "$RUNNER_TEMP/ej" && npm install --silent xlsx@0.18.5)
+          for set in repo gen excel; do
+            NODE_PATH="$RUNNER_TEMP/ej/node_modules" node eval/xlsx/others.cjs corpus/$set others/$set
+            for tool in exceljs sheetjs; do
+              python3 -I eval/xlsx/judge.py corpus/$set others/$set/$tool others/$set/judge-$tool.json
+            done
+          done
+      - name: The decision rule's counts
+        run: |
+          python3 -I eval/xlsx/summarize.py rt others | tee summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -55,6 +73,10 @@ jobs:
           path: |
             rt/*/lo.json
             rt/*/ours.json
+            rt/*/judge-*.json
+            others/*/judge-*.json
+            others/*/others.json
+            summary.md
           retention-days: 14
 
   viewer:

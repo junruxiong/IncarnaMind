@@ -104,6 +104,11 @@ export interface Book {
   names: DefinedName[];
   tables: Map<string, BookTable>;
   date1904: boolean;
+  /**
+   * The file asks Excel to recalculate everything on opening (`calcPr fullCalcOnLoad`), as
+   * XlsxWriter, ExcelJS and openpyxl do: the values it stores are placeholders, not results.
+   */
+  fullCalcOnLoad: boolean;
   /** A cell's number format code, by style index. */
   formats: (string | undefined)[];
 }
@@ -123,6 +128,9 @@ export async function readBook(bytes: Uint8Array): Promise<Book> {
   }
   const workbook = parseXml(workbookXml);
   const date1904 = ["1", "true"].includes(child(workbook, "workbookPr")?.attrs.date1904 ?? "");
+  const fullCalcOnLoad = ["1", "true"].includes(
+    child(workbook, "calcPr")?.attrs.fullCalcOnLoad ?? "",
+  );
   const rels = await relationshipsOf(zip, "xl/workbook.xml");
 
   const formats: (string | undefined)[] = [];
@@ -212,7 +220,7 @@ export async function readBook(bytes: Uint8Array): Promise<Book> {
       else delete formula.problem;
     }
   }
-  return { sheets, names, tables, date1904, formats };
+  return { sheets, names, tables, date1904, fullCalcOnLoad, formats };
 }
 
 const stringItem = (si: XmlElement) =>

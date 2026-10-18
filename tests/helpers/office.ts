@@ -89,6 +89,8 @@ export function xlsxPackage(input: {
   sharedStrings?: readonly string[];
   /** The sheet the workbook opens at, by its place among all sheets. */
   activeTab?: number;
+  /** The workbook's calculation properties, as written: `<calcPr fullCalcOnLoad="1"/>`. */
+  calcPr?: string;
   parts?: readonly { name: string; data: string | Buffer }[];
 }): Buffer {
   const ns = `xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
@@ -117,7 +119,7 @@ export function xlsxPackage(input: {
           (sheet, index) =>
             `<sheet name="${escapeXml(sheet.name)}" sheetId="${index + 1}"${sheet.state ? ` state="${sheet.state}"` : ""} r:id="rId${index + 1}"/>`,
         )
-        .join("")}</sheets></workbook>`,
+        .join("")}</sheets>${input.calcPr ?? ""}</workbook>`,
     },
     { name: "xl/_rels/workbook.xml.rels", data: relationships(workbookRels) },
     ...input.sheets.flatMap((sheet, index) => [
