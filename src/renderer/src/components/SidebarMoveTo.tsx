@@ -20,14 +20,14 @@ export function SidebarMoveTo() {
     ),
   ]);
   const [current] = folders;
+  // Only while asked for: the Library has a picker of its own, and a page has one at a time.
+  if (!request) return null;
   return (
     <MoveToPicker
-      anchor={request?.anchor ?? null}
-      name={request ? nameOfMoved(request.items) : ""}
+      anchor={request.anchor}
+      name={nameOfMoved(request.items)}
       current={folders.size === 1 ? (current ?? null) : undefined}
-      onChoose={(folderId) => {
-        if (request) void useAppStore.getState().moveToFolder(request.items, folderId);
-      }}
+      onChoose={(folderId) => void useAppStore.getState().moveToFolder(request.items, folderId)}
       onClose={() => useSidebarMove.getState().hide()}
     />
   );

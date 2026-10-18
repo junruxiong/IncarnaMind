@@ -51,7 +51,6 @@ const FOLDS_KEY = "incarnamind.sidebar.folders";
 interface Folds {
   /** The Folders shown open; the rest are closed. */
   open: ReadonlySet<string>;
-  /** The Tags section folded away. */
   tagsFolded: boolean;
   /** How many Documents each lists, past the first few, by key. Forgotten at a restart. */
   shown: Readonly<Record<string, number>>;
