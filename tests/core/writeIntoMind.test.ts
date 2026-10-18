@@ -2,7 +2,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { describe, expect, test } from "vitest";
 import type { Core } from "../../src/core";
 import { askAssistant, changesIn, mindCalls } from "../helpers/assistant";
-import { setUpWithDocuments, shownPassages } from "../helpers/citations";
+import { answerEnded, setUpWithDocuments, shownPassages } from "../helpers/citations";
 import { connectToMind } from "../helpers/mindClient";
 import { note, readMind, writeMind } from "../helpers/minds";
 import { type ModelCall, type ScriptedReply, scriptedModel } from "../helpers/models";
@@ -203,4 +203,38 @@ describe("“Make it a document” after an Answer (#1109)", { timeout: 60_000 }
       expect(minds.find((each) => each.id === made.mindId)?.folderId).toBe(folder.id);
     },
   );
+});
+
+describe("“Make it a document” after an Answer with no words (#1133 review)", {
+  timeout: 60_000,
+}, () => {
+  // protects=after an Answer that failed, or came back empty, "make it a document" isn't read as putting that Answer in a Mind, and no Mind holding only its title is made; fails_when=the model is told to call create_mind with answer: true, or a title-only Mind appears; no_claim=what a real model then says.
+  test.each([
+    ["after a failed Answer", { error: { status: 500, message: "The server failed." } }],
+    ["after an empty Answer", { text: "" }],
+  ] as const)("%s, nothing is put in a Mind", async (_, first) => {
+    const systems: string[] = [];
+    const model = scriptedModel((call) => {
+      if (!call.prompt.includes("Make it a document")) return first;
+      systems.push(call.system);
+      if (call.system.includes(AS_A_DOCUMENT) && !called(call, "create_mind")) {
+        return { calls: [{ tool: "create_mind", input: { title: "Leases", answer: true } }] };
+      }
+      return { text: "There's no Answer to put in a document yet." };
+    });
+    const { core, mind } = await setUpWithDocuments(model, LEASES.slice(0, 1));
+    const before = (await core.listMinds()).length;
+
+    const result = await core.askInConversation({ text: "What are the rents?", mindId: mind.id });
+    if (!result.asked) throw new Error("Not asked.");
+    await answerEnded(core, result.answerId);
+    await askAssistant(core, {
+      text: "Make it a document",
+      mindId: mind.id,
+      conversationId: result.conversation.id,
+    });
+
+    expect(withMindTools(systems)).not.toContain(AS_A_DOCUMENT);
+    expect(await core.listMinds()).toHaveLength(before);
+  });
 });

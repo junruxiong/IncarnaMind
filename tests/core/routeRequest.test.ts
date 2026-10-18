@@ -835,6 +835,10 @@ describe("Routing everyday requests", () => {
   test.each([
     "how do I make a document?",
     "can you make a document?",
+    "怎么给我建一份文档",
+    "怎么帮我生成文档？",
+    "如何帮我整理成文档",
+    "tell me how to create a doc?",
     "你能写文档吗",
     "你可以整理文件吗",
     "帮我整理文件",
@@ -858,6 +862,15 @@ describe("Routing everyday requests", () => {
     "根据我的笔记写一份总结",
   ])("%s writes into the Mind in focus", (request) => {
     expect(routeRequest(request, WITH_TEXT)).toEqual({ kind: "write", newMind: false });
+  });
+
+  // protects=a new, separate or another page asked for in so many words goes into a new Mind, whatever it is about, in English and Chinese (#1133 review); fails_when=what it is about reads as where it goes, and it lands in the User's Mind; no_claim=none beyond protects.
+  test.each([
+    "write a new page on the introduction",
+    "make a separate page for the summary",
+    "根据我的笔记另起一页写一份总结",
+  ])("%s goes into a new Mind", (request) => {
+    expect(routeRequest(request, WITH_TEXT)).toMatchObject({ kind: "write", newMind: true });
   });
 
   // protects=adding the last Answer to my notes writes it into the Mind in focus, not a new one; fails_when=it makes a new Mind; no_claim=none beyond protects.
