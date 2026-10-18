@@ -337,6 +337,9 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
       "data-source",
       "automatic",
     );
+    // Automatic tagging may tag them before Organize files them: wait for that, so the rows stay put.
+    await expect(library.getByTestId("library-suggested")).toHaveCount(4);
+    await expect(library.getByTestId("library-organizing")).toHaveCount(0);
     await screenshot(window, "library-review");
 
     // The viewer's header shows the open Document's Tags too, in a viewer wide enough for chips.

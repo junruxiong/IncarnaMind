@@ -210,7 +210,7 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
     });
     // On by default; turned off here, so the Document waits for Organize.
     const automatic = settings.getByRole("checkbox", {
-      name: /^Organize new and changed Documents automatically/,
+      name: /^Move new Documents into Folders automatically/,
     });
     await expect(automatic).toBeChecked();
     await automatic.uncheck();
@@ -356,7 +356,11 @@ test("a Document waiting for Ollama says why in the interface language, in its i
 
 /** Real HTTP protocol and PDF rendering; only inference is deterministic here. */
 test("Auto routes text and scans with tags, reports failures, retries and preserves overrides", async () => {
-  const requests: { model: string; images?: string[] }[] = [];
+  const requests: {
+    model: string;
+    images?: string[];
+    questions: Record<string, { type: string }>;
+  }[] = [];
   let models = ["tev1:0.8b", "clef-flash:latest"];
   let fail = false;
   const loaded = new Set<string>();
@@ -445,9 +449,13 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     await expect(library.getByTestId("library-organizing")).toHaveCount(0);
     await organized(notes, "tev1:0.8b · Text");
     await organized(scan, "clef-flash · Text + PDF pages");
-    expect(requests.map((item) => item.model)).toEqual(["tev1:0.8b", "clef-flash"]);
-    expect(requests[0]?.images).toBeUndefined();
-    expect(requests[1]?.images).toHaveLength(1);
+    // Organize's requests ask for a Folder; the Document that waited for a model was tagged before it ran.
+    const sorting = requests.filter((item) =>
+      Object.values(item.questions).some((question) => question.type === "choice"),
+    );
+    expect(sorting.map((item) => item.model)).toEqual(["tev1:0.8b", "clef-flash"]);
+    expect(sorting[0]?.images).toBeUndefined();
+    expect(sorting[1]?.images).toHaveLength(1);
 
     // A failure says so where it happened, with one way to try again.
     models = [...models, "tev1:4b"];

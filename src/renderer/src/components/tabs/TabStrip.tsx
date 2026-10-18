@@ -52,7 +52,6 @@ export function TabStrip({
   const tabs = merged && layout ? layout.groups.flatMap((each) => each.tabs) : group.tabs;
   const shownId = group.activeTabId;
   const shown = group.tabs.find((tab) => tab.id === shownId);
-  const focused = merged || layout?.focusedGroupId === group.id;
   const last = merged || index === (layout?.groups.length ?? 1) - 1;
 
   // The shown tab stays in sight when there are more tabs than room.
@@ -132,7 +131,6 @@ export function TabStrip({
               tab={tab}
               groupId={owner?.id ?? group.id}
               selected={selected}
-              focusedGroup={focused}
               // A divider on a tab's right edge: not on the last, nor next to the shown one.
               divider={!selected && next !== undefined && next.id !== shownId}
               dragged={drag.dragged?.tabId === tab.id}
@@ -182,15 +180,13 @@ interface TabProps {
   /** The group it is in. */
   groupId: string;
   selected: boolean;
-  /** Its group is the one the User is in: its shown tab's title is in ink. */
-  focusedGroup: boolean;
   divider: boolean;
   dragged: boolean;
   drag: TabDrag;
 }
 
 /** One tab: its icon, its title (italic while a preview), and ✕, or a pin for a pinned one. */
-function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: TabProps) {
+function Tab({ tab, groupId, selected, divider, dragged, drag }: TabProps) {
   const t = useT();
   const title = useTabTitle(tab.item);
   const renaming = useAppStore((state) => state.renamingTabId === tab.id);
@@ -232,7 +228,6 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
       data-document-id={tab.item.kind === "document" ? tab.item.documentId : undefined}
       data-preview={tab.preview || undefined}
       data-pinned={tab.pinned || undefined}
-      data-focused-group={focusedGroup || undefined}
       data-divider={divider || undefined}
       data-dragging={dragged || undefined}
       style={{ "--tab-label-min": `${tabLabelEm(title)}em` } as CSSProperties}
