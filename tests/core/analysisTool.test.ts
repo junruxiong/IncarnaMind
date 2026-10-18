@@ -183,7 +183,7 @@ describe("an Analysis an Answer runs", () => {
     expect((await read()).analyses).toEqual(answer.analyses);
   });
 
-  test("a result table written as [=table 1] on a line of its own is in the Answer as a table", async () => {
+  test("a result table written as [=table 1] on a line of its own is in the Answer as a table, its numbers as a report shows them", async () => {
     const model = analysingModel({
       query: "revenue",
       runs: [salesRun('result("by_region", inputs["sales"].groupby("Region")["Revenue"].sum())')],
@@ -198,13 +198,13 @@ describe("an Analysis an Answer runs", () => {
             label: "Revenue by region",
             unit: null,
             table: {
-              columns: ["Region", "Revenue"],
+              columns: ["Region", "Revenue", "Share"],
               rows: [
-                ["North", 270.5],
-                ["South", 80],
+                ["North", 270.5, 0.7717546362339514],
+                ["South", 80.00000000000001, 0.22824536376604851],
               ],
               rowCount: 2,
-              columnCount: 2,
+              columnCount: 3,
             },
           },
         ],
@@ -213,8 +213,9 @@ describe("an Analysis an Answer runs", () => {
 
     const { answer } = await askAndRead(core, "Revenue by region?");
 
-    expect(answer.text).toContain("| Region | Revenue |");
-    expect(answer.text).toContain("| North | 270.5 |");
+    expect(answer.text).toContain("| Region | Revenue | Share |");
+    expect(answer.text).toContain("| North | 270.5 | 0.7718 |");
+    expect(answer.text).toContain("| South | 80 | 0.2282 |");
     expect(answer.text).not.toContain("[=table");
     expect(told(model, "run_analysis")[0]).toContain("[=table 1] Revenue by region");
   });

@@ -638,6 +638,9 @@ def _run_job(job):
                 "result": result,
                 "chart": chart,
                 "incarnamind": module,
+                # Models write pd and np without importing them, as notebooks have them.
+                "pd": pd,
+                "np": np,
             }
             linecache.cache[FILENAME] = (len(code), None, code.splitlines(True), FILENAME)
             os.chdir(WORKING_FOLDER)

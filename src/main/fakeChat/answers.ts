@@ -323,6 +323,7 @@ function analysisReply(prompt: Prompt, question: string, searched: string): Repl
   const joining = WITH_MANAGERS.test(question) && regions;
   const code = [
     'sales = step("Read the sales", inputs["sales"])',
+    'sales["Revenue"] = pd.to_numeric(sales["Revenue"], errors="coerce")',
     'totals = sales.groupby("Region", sort=True)["Revenue"].sum()',
     'result("by_region", totals, "Revenue by region")',
     'result("total", totals.sum(), "Total revenue")',
