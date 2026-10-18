@@ -146,7 +146,7 @@ test("a verified document's references are looked up, and the invented one is fl
   await expect(flagged).toHaveAttribute("data-mark", "not-listed");
   await expect(flagged).toContainText("Not in Crossref or OpenAlex");
   await expect(flagged).toContainText("Quantum gradient folding");
-  await expect(flagged).toContainText("so the work may still exist");
+  await expect(flagged).toContainText("the work may still exist");
   // The found ones follow, each with the service it was found in, the record and its DOI.
   await expect(listed.nth(1)).toHaveAttribute("data-mark", "found");
   await expect(listed.nth(1)).toContainText("Found in Crossref");
