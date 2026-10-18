@@ -497,7 +497,10 @@ export function createCore(adapters: CoreAdapters): Core {
   const tags = createTags(db, now);
   // First run: the preset Tags, in the interface language of the time.
   tags.seedPresets(settings.get().language);
-  const tagsChanged = () => events.emit("tags.changed", tags.list());
+  const tagsChanged = () => {
+    events.emit("tags.changed", tags.list());
+    tagger.tagsDefined();
+  };
   /** Set once automatic tagging exists: it hears about every Document that becomes ready. */
   let documentReady = (_documentId: string) => {};
   /** Set once rerank exists: a Document became ready, so the built-in reranking model is needed. */
