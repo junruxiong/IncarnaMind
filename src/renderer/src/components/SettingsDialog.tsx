@@ -284,7 +284,11 @@ function DataFolderSettings() {
   return (
     <section data-testid="data-folder-settings">
       <h4 className={sectionTitleClass}>{t("export.dataFolder.title")}</h4>
-      <p className={sectionNoteClass}>{t("export.dataFolder.body")}</p>
+      <p className={sectionNoteClass}>
+        {t("export.dataFolder.body")}
+        <br />
+        {t("export.dataFolder.backup")}
+      </p>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

@@ -288,7 +288,6 @@ function LocalWay({ ollama }: { ollama: OllamaState }) {
   );
 }
 
-/** "Already pay for Claude?": Anthropic doesn't let other apps use the plan, so the Claude app connects instead. */
 function ClaudeWay() {
   const t = useT();
   const reportError = useAppStore((state) => state.reportError);

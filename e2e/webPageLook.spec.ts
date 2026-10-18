@@ -154,7 +154,7 @@ test("off by default: the box is unticked, a page saved is never loaded for its 
   await expect(fetched).toContainText("Nothing else on the page is loaded.");
   await dialog.getByTestId("add-web-page-keep-look").check();
   await expect(fetched).not.toContainText("Nothing else on the page is loaded.");
-  await expect(dialog).toContainText("Making it loads the page again");
+  await expect(dialog).toContainText("It loads the page again");
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
   await add(window, "/report", "Harbour trade in 2026", false);
