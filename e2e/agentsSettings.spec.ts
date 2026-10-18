@@ -106,7 +106,7 @@ test("off by default; Connect asks once, writes Codex's settings as shown, and U
 
     const dialog = window.getByTestId("connect-agent-dialog");
     await expect(dialog).toContainText("Let the ChatGPT app or Codex read your Documents?");
-    await expect(dialog).toContainText("Some plans may use it to train their models.");
+    await expect(dialog).toContainText("some plans may train on it.");
     await expect(dialog.getByTestId("connect-agent-change")).toContainText(codexSettings);
     const skillFile = join(home, ".agents", "skills", "incarnamind", "SKILL.md");
     await expect(dialog.getByTestId("connect-agent-skill")).toContainText(skillFile);

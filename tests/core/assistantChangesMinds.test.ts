@@ -82,7 +82,7 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
     const [checkpoint] = await checkpointsOf(core, mind.id);
     expect(checkpoint?.reason).toBe("accept");
     expect(changesIn(answer)).toEqual([
-      { mindId: mind.id, created: false, request: expect.any(String), proposals: 2 },
+      { mindId: mind.id, created: false, request: expect.any(String), proposals: 2, changed: 1 },
     ]);
     expect(mindCalls(answer)[0]?.status).toBe("done");
     expect(answer.text).toBe("Shortened the summary in “Q3 review”: dropped two fillers.");
