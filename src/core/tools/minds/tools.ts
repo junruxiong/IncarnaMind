@@ -1281,25 +1281,34 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const { mindId, ids, blocks } = written.blocks;
     if (written.unrecorded > 0 || ids.length !== blocks.length) return null;
     let reported = false;
-    const checked = await minds.checkWritten({
-      mindId,
-      blocks,
-      prepared: options.prepared,
-      signal,
-      checking: (count) => {
-        reported = true;
-        options.changed(toolCallId, { ...written.change, checking: count });
-      },
-      write: (landing) =>
-        minds.edit(mindId, (note) => {
-          for (const element of topLevelBlocks(note)) {
-            const block = landing[ids.indexOf(idOf(element))];
-            if (block) syncContent(element, block.content ?? []);
-          }
-        }),
-    });
-    if (reported) options.changed(toolCallId, written.change);
-    return checked;
+    try {
+      return await minds.checkWritten({
+        mindId,
+        blocks,
+        prepared: options.prepared,
+        signal,
+        checking: (count) => {
+          reported = true;
+          options.changed(toolCallId, { ...written.change, checking: count });
+        },
+        write: (landing) =>
+          minds.edit(mindId, (note) => {
+            for (const element of topLevelBlocks(note)) {
+              const block = landing[ids.indexOf(idOf(element))];
+              if (block) syncContent(element, block.content ?? []);
+            }
+          }),
+      });
+    } catch (error) {
+      // A check that fails never takes back what the call wrote: it stands, unchecked.
+      console.error(
+        `What the assistant wrote in Mind ${mindId} couldn't be checked before it landed:`,
+        error,
+      );
+      return null;
+    } finally {
+      if (reported) options.changed(toolCallId, written.change);
+    }
   };
 
   /** By call: text written with markers `cite` hadn't recorded yet. */
