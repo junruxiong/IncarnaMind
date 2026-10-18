@@ -19,8 +19,9 @@ const ALLOWED_TOP_LEVEL = new Set(["out", "node_modules", "package.json"]);
 // JavaScript and pure-JS dependencies; the native libraries are unpacked beside it.
 const MAX_ASAR_BYTES = 157_000_000;
 // The largest installer, the Linux AppImage with what Analyses run with (231.3 MB, ADR-0023),
-// plus about 20%. The macOS and Windows installers are checked against the same limit.
-const MAX_INSTALLER_BYTES = 278_000_000;
+// plus about 14 MB: the next real growth trips it, to be argued for. The macOS and Windows
+// installers are checked against the same limit.
+const MAX_INSTALLER_BYTES = 245_000_000;
 
 const distDir = resolve(process.argv[2] ?? "dist");
 const INSTALLER_EXT = /\.(dmg|zip|exe|AppImage)$/;
