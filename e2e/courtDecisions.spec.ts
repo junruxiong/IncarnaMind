@@ -55,21 +55,21 @@ const HELD = `A supplier lien attaches when the materials are delivered to the j
 const WORDS = {
   en: {
     title: "This cites a court decision.",
-    body: "IncarnaMind can't check this case exists or says this. Verify it before you rely on it.",
+    body: "IncarnaMind can't check that this case exists or says this. Check it in your legal research service before you rely on it.",
     nothing: "Nothing in your Documents says this.",
     unchecked:
-      "Not checked: the cited case isn't in your Documents. Verify it before you rely on it.",
+      "Not checked: the cited case isn't in your Documents. Check it in your legal research service before you rely on it.",
     held: (document: string, location: string) =>
-      `Quote found in your copy of the opinion (${document}, ${location}). Not checked whether it was overruled or changed: verify it before you rely on it.`,
+      `Quote found in your copy of the opinion (${document}, ${location}). Not checked whether it was overruled or changed. Check it in your legal research service before you rely on it.`,
     page: "p. 1",
   },
   "zh-CN": {
     title: "本句引用了法院判决。",
-    body: "IncarnaMind 无法核对该判决是否存在、是否这样说。依赖前请先查证。",
+    body: "IncarnaMind 无法核对该判决是否存在、是否这样说。依赖前请在你的法律数据库中查证。",
     nothing: "你的文档中没有内容提到这一点。",
-    unchecked: "未核对：引用的判决不在你的文档中。依赖前请先查证。",
+    unchecked: "未核对：引用的判决不在你的文档中。依赖前请在你的法律数据库中查证。",
     held: (document: string, location: string) =>
-      `已在你保存的判决书中找到引文（${document}，${location}）。未核对是否已被推翻或修改：依赖前请先查证。`,
+      `已在你保存的判决书中找到引文（${document}，${location}）。未核对是否已被推翻或修改。依赖前请在你的法律数据库中查证。`,
     page: "第 1 页",
   },
 } as const;
