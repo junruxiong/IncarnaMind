@@ -957,6 +957,11 @@ export interface MindChange {
   cited?: number;
   /** How many of its text's markers had no Citation recorded, and were left out. Absent: none. */
   unrecorded?: number;
+  /**
+   * How many of the sentences it wrote are being checked against their Citations now, before
+   * they land (#1111). Absent: none, or the check is over.
+   */
+  checking?: number;
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
@@ -4277,10 +4282,18 @@ export interface TextPlace {
 
 /**
  * What Edit with AI does with the selected text (#93): improve the writing,
- * shorten it, translate it, explain it in a new paragraph under it, or what
- * the User asked for in their own words.
+ * shorten it, translate it, explain it in a new paragraph under it, what the
+ * User asked for in their own words, or take out the part of a cited sentence
+ * its Citations don't support (#1111).
  */
-export const editActions = ["improve", "shorten", "translate", "explain", "instruction"] as const;
+export const editActions = [
+  "improve",
+  "shorten",
+  "translate",
+  "explain",
+  "instruction",
+  "cut-unsupported",
+] as const;
 export type EditAction = (typeof editActions)[number];
 
 export interface EditWithAiInput {
@@ -4299,7 +4312,9 @@ export interface EditWithAiInput {
   action: EditAction;
   /**
    * For "translate", the language to translate into, as the User would name
-   * it ("English", "简体中文"); for "instruction", what the User asked for.
+   * it ("English", "简体中文"); for "instruction", what the User asked for;
+   * for "cut-unsupported", the part the check found unsupported
+   * (`UnsupportedReason.uncovered`).
    */
   instruction?: string;
   /** The model to use: the Mind's own; none, or null, the default chat model. */
@@ -4576,6 +4591,11 @@ export interface ClaimCheckAttributes {
   excluded: LeftOutDocument[];
   /** When it was checked, or started. ISO 8601, UTC. */
   checkedAt: string;
+  /**
+   * The User keeps the sentence as their own view (#1111): while its words
+   * stay as they were checked, it isn't shown, counted or checked again.
+   */
+  kept?: true;
 }
 
 export interface CheckSentencesInput {

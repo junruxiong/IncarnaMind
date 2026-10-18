@@ -127,6 +127,7 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
     versions: versionsOf(value.versions),
     excluded: excludedOf(value.excluded),
     checkedAt: text(value.checkedAt) ?? "",
+    ...(value.kept === true && { kept: true }),
   };
 }
 
@@ -138,12 +139,13 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
  */
 export type RecheckReason = "edited" | "new-version" | "document-removed" | "scope";
 
-/** A check as it shows now. */
+/** A check as it shows now; "kept": the User keeps the sentence as their own view, and it shows nothing. */
 export type ClaimCheckShown =
   | { state: "checking" }
   | { state: ClaimVerdict }
   | { state: "not-checked"; reason: ClaimCheckFailure }
-  | { state: "needs-recheck"; why: RecheckReason };
+  | { state: "needs-recheck"; why: RecheckReason }
+  | { state: "kept" };
 
 /** What a check is compared with. */
 export interface ClaimCheckNow {
@@ -170,6 +172,7 @@ export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow)
   if (comparableSentence(now.text) !== comparableSentence(check.text)) {
     return { state: "needs-recheck", why: "edited" };
   }
+  if (check.kept) return { state: "kept" };
   if (now.versions) {
     const relied = new Set(restsOn(check).map((each) => each.documentId));
     for (const version of check.versions) {
@@ -203,7 +206,8 @@ export const addedCouldChange = (check: ClaimCheckAttributes, shown: ClaimCheckS
 
 /**
  * A sentence's check as a record lists it: the counts' keys (`needsRecheck` is a Document or the
- * scope that changed), and "changed" once its words were edited. Null while it is still checking.
+ * scope that changed), and "changed" once its words were edited. Null while it is still checking,
+ * and for a sentence the User keeps as their own view.
  */
 export type SentenceResult =
   | "supported"
@@ -216,6 +220,7 @@ export type SentenceResult =
 export function sentenceResultOf(shown: ClaimCheckShown): SentenceResult | null {
   switch (shown.state) {
     case "checking":
+    case "kept":
       return null;
     case "needs-recheck":
       return shown.why === "edited" ? "changed" : "needsRecheck";

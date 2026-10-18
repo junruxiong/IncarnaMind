@@ -19,7 +19,15 @@ import { groupsMerged } from "../layoutSlice";
 import { firstOpenOf } from "../nudges";
 import { openCited } from "../openCited";
 import { useAppStore } from "../store";
-import { type NumberedCitation, numberedCitations } from "./citationNumbers";
+import {
+  citedIn,
+  cutUnsupported,
+  findSupport,
+  keepAsView,
+  offersFixes,
+  uncoveredOf,
+} from "../unsupportedFixes";
+import type { NumberedCitation } from "./citationNumbers";
 import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
@@ -55,12 +63,6 @@ function citesEvidence(editor: Editor, claim: ShownClaim): boolean {
   });
   return cited;
 }
-
-/** The Citations the sentence holds, with their numbers in the Mind. */
-const citedIn = (editor: Editor, claim: ShownClaim): NumberedCitation[] =>
-  numberedCitations(editor.state).filter(
-    (each) => each.pos >= claim.sentence.from && each.pos < claim.sentence.to,
-  );
 
 /** The words of the sentence a check is about. */
 const sentenceOf = (editor: Editor, claim: ShownClaim) =>
@@ -194,6 +196,7 @@ export function ClaimMark({
             <ClaimCard
               claim={claim}
               cited={citedIn(editor, claim)}
+              fixes={offersFixes(editor, claim)}
               addable={plus}
               added={added}
               onAdd={() => {
@@ -227,6 +230,18 @@ export function ClaimMark({
               }}
               onRemove={() => {
                 removeClaimMark(editor, claim);
+                done();
+              }}
+              onCut={() => {
+                void cutUnsupported(editor, mindId, doc, claim);
+                done();
+              }}
+              onFindSupport={() => {
+                void findSupport(editor, mindId, doc, claim);
+                done();
+              }}
+              onKeep={() => {
+                keepAsView(editor, claim);
                 done();
               }}
             />
@@ -304,15 +319,17 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * Location with the quote washed in the state's colour, and Add as Citation
  * when it isn't cited yet; for a contradiction, what the Document says; for a
  * figure worked out, its working and inputs; for nothing found, where it
- * looked (for a sentence with a Citation, the part the Citation doesn't cover,
- * with its quote), with Search all Documents, or, for a court decision no Document
- * holds, that it can't be checked here, with Remove the mark only; otherwise
- * why, with Check again. A Passage from a saved web page names the page.
- * Documents IncarnaMind wrote that matched are named, with Count it.
+ * looked, with Search all Documents, or, for a court decision no Document
+ * holds, that it can't be checked here, with Remove the mark only; for a
+ * sentence with a Citation, the part the Citation doesn't cover, with its
+ * quote, and Cut the unsupported part, Find support and Keep as my view
+ * (#1111); otherwise why, with Check again. A Passage from a saved web page
+ * names the page. Documents IncarnaMind wrote that matched are named, with Count it.
  */
 function ClaimCard({
   claim,
   cited,
+  fixes,
   addable,
   added,
   onAdd,
@@ -323,9 +340,14 @@ function ClaimCard({
   onSearchWeb,
   onTurnOnWebSearch,
   onRemove,
+  onCut,
+  onFindSupport,
+  onKeep,
 }: {
   claim: ShownClaim;
   cited: readonly NumberedCitation[];
+  /** A cited sentence nothing backs: its card offers the fixes (../unsupportedFixes). */
+  fixes: boolean;
   addable: boolean;
   added: number;
   onAdd(): void;
@@ -336,6 +358,9 @@ function ClaimCard({
   onSearchWeb(): void;
   onTurnOnWebSearch(): void;
   onRemove(): void;
+  onCut(): void;
+  onFindSupport(): void;
+  onKeep(): void;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -379,6 +404,7 @@ function ClaimCard({
   const searchedFolder = !check.scope.widened && folderName !== null;
   const ownWorkings =
     state === "unsupported" && check.excluded.some((left) => left.reason === "own-workings");
+  const cuttable = fixes && uncoveredOf(claim) !== null;
   const reason =
     shown.state === "not-checked"
       ? t(`claim.reason.${shown.reason}`, { detail: check.detail ?? "" })
@@ -451,7 +477,7 @@ function ClaimCard({
       )}
       {state === "unsupported" && !differs && !decisionMissing && (
         <>
-          {!ownWorkings && cited.length > 0 && (
+          {fixes && (
             <UnsupportedCited
               cited={cited}
               why={check.unsupported}
@@ -459,7 +485,7 @@ function ClaimCard({
               onOpen={onOpen}
             />
           )}
-          {(ownWorkings || cited.length === 0) && (
+          {!fixes && (
             <p
               data-testid={ownWorkings ? "claim-own-workings" : "claim-nothing"}
               className="citation-card-note"
@@ -560,7 +586,37 @@ function ClaimCard({
             {t("claim.fixSentence")}
           </button>
         )}
-        {state === "unsupported" && searchedFolder && !decisionMissing && (
+        {fixes && (
+          <>
+            {cuttable && (
+              <button
+                type="button"
+                data-testid="claim-cut"
+                className="citation-card-action citation-card-action--primary"
+                onClick={onCut}
+              >
+                {t("claim.cutUnsupported")}
+              </button>
+            )}
+            <button
+              type="button"
+              data-testid="claim-find-support"
+              className={`citation-card-action ${cuttable ? "" : "citation-card-action--primary"}`}
+              onClick={onFindSupport}
+            >
+              {t("claim.findSupport")}
+            </button>
+            <button
+              type="button"
+              data-testid="claim-keep"
+              className="citation-card-action"
+              onClick={onKeep}
+            >
+              {t("claim.keepAsView")}
+            </button>
+          </>
+        )}
+        {state === "unsupported" && searchedFolder && !decisionMissing && !fixes && (
           <button
             type="button"
             data-testid="claim-search-all"
@@ -571,7 +627,7 @@ function ClaimCard({
           </button>
         )}
         {/* Where the Documents say something different the card has Open the page and Fix the sentence already, so it offers no more ways to look. */}
-        {state === "unsupported" && !differs && !decisionMissing && (
+        {state === "unsupported" && !differs && !decisionMissing && !fixes && (
           <>
             <button
               type="button"
@@ -591,7 +647,7 @@ function ClaimCard({
             </button>
           </>
         )}
-        {state === "unsupported" && (
+        {state === "unsupported" && !fixes && (
           <button
             type="button"
             data-testid="claim-remove"
