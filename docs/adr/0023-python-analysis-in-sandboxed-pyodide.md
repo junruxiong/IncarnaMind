@@ -74,15 +74,15 @@ The spike used Pyodide 314.0.7 (Python 3.14.2), numpy 2.4.6 and pandas 3.0.2 on 
 | An endless loop: ended and a new Worker ready | 2.7 s | 3.6 s | 5.4 s | 4.1 s |
 | Out of memory | `MemoryError` at 3,968 MB, then the Worker answers; the window lives | the same | the same | the same |
 
-Measured again on 2026-10-18 with a fresh interpreter for each job, on this branch built for testing (the "A fresh interpreter" rows of `e2e/analysis.spec.ts` and a timing run):
+Measured again on 2026-10-18 with a fresh interpreter for each job, on a build for testing, with Chromium's sandbox on on every system:
 
 | | M2 Max (local) | macOS runner | Windows runner | Linux runner |
 |---|---|---|---|---|
-| The first job: the window and Python started | 3.6 s | | | |
-| A job once the spare is ready | 37 ms | | | |
-| A job straight after another, waiting for the spare | 3.3 s | | | |
-| The window's memory with the spare ready | 508 MB | | | |
-| The window's memory while a job runs, at most | 690 MB | | | |
+| The first job: the window and Python started | 3.6 s | 4.1 s | 6.2 s | 6.0 s |
+| A job once the spare is ready | 37 ms | 26 ms | 14 ms | 16 ms |
+| A job straight after another, waiting for the spare | 3.3 s | 4.2 s | 6.7 s | 6.5 s |
+| The window's memory with the spare ready | 508 MB | 504 MB | 323 MB | 323 MB |
+| The window's memory while a job runs, at most | 690 MB | 670 MB | 463 MB | 455 MB |
 
 ## The runtime interface
 
@@ -104,4 +104,4 @@ The helper takes the clock away where code reaches it as a matter of course (`da
 - `AGENTS.md`'s dependency rule names this exception and this record.
 - ADR-0013 is amended: code run in this sandbox is a new Effect scope, "sandboxed code", that runs without asking. It reads only inputs cited from the Documents, which already run without asking, and it can neither write a file nor reach the network.
 - The runtime is not offered in the hosted version until that version has a sandbox of its own.
-- The first analysis waits 3–6 s for the window and Python, and so does one that follows another straight away; one that comes once the spare is ready starts at once. While a job runs, two interpreters are in memory, about 700 MB.
+- The first analysis waits 3–6 s for the window and Python, and so does one that follows another straight away; one that comes once the spare is ready starts at once. While a job runs, two interpreters are in memory: up to about 700 MB.
