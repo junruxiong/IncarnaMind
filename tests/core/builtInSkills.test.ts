@@ -113,9 +113,17 @@ describe("The built-in Skills", () => {
 
   test("each does its own task: a summary, a review by theme, and a report from the Mind", async () => {
     const summary = (await shipped("summarise-document")).body;
-    for (const section of ["Key claims", "Methods or approach", "Limitations", "Open questions"]) {
-      expect(summary).toContain(`**${section}**`);
+    // A paper keeps its claims, method and limitations,
+    for (const section of ["Key claims", "Methods or approach", "Limitations"]) {
+      expect(summary).toContain(section);
     }
+    // an agreement gets its own sections (#1175),
+    for (const section of ["Parties", "Term", "Obligations", "Notice and termination"]) {
+      expect(summary).toContain(section);
+    }
+    // no kind of Document takes another's, and no heading stands over nothing.
+    expect(summary).toContain("a contract has no Methods or Limitations");
+    expect(summary).toContain("is left out whole: no heading, and no line saying it is missing");
     expect(summary).toContain("Search scope");
 
     const review = (await shipped("literature-review")).body;
@@ -500,6 +508,120 @@ describe("Built-in Skills forced on a Question", { timeout: 30_000 }, () => {
       ]);
     },
   );
+});
+
+const AGREEMENT = [
+  "Employment agreement between Harbour Logistics Limited and Wei Chen.",
+  "The term is three years from the start date, with a three-month probation.",
+  "The employee is paid 3,200 pounds a month and works forty hours a week.",
+].join("\n");
+const PAPER = [
+  "Abstract. We propose GraphST, a contrastive model for urban graphs.",
+  "We evaluate it on traffic prediction with ablations over each component.",
+  "A limitation is that region graphs built from noisy data may mislead it.",
+].join("\n");
+
+describe("The summary Skill's sections follow the kind of Document (#1175)", {
+  timeout: 30_000,
+}, () => {
+  /**
+   * A model that follows the Skill as it reaches it: it searches, cites the first Passage, and
+   * writes the sections the instructions give for the kind of Document the Question names.
+   */
+  function followingTheSkill(kind: "agreement" | "paper", quote: string) {
+    return scriptedModel((call): ScriptedReply => {
+      if (!call.tools.includes("search_documents")) return { text: "No search was offered." };
+      const searches = call.results.filter((result) => result.tool === "search_documents");
+      if (searches.length === 0) {
+        return { calls: [{ tool: "search_documents", input: { query: quote } }] };
+      }
+      if (!call.results.some((result) => result.tool === "cite")) {
+        const [passage] = shownPassages(searches.at(-1)?.text ?? "");
+        if (!passage) return { text: "Nothing found." };
+        return {
+          calls: [
+            { tool: "cite", input: { citations: [{ marker: 1, passage: passage.id, quote }] } },
+          ],
+        };
+      }
+      const given =
+        kind === "agreement"
+          ? /\*\*A contract or agreement\*\* gets ([^\n]*?)\. Give the amounts/.exec(
+              call.system,
+            )?.[1]
+          : /\*\*A research paper\*\* gets these sections:\n\n((?:\d\. [^\n]*\n)+)/.exec(
+              call.system,
+            )?.[1];
+      const headings = [...(given ?? "").matchAll(/\*\*([^*]+)\*\*/g)].map((each) => each[1]);
+      return {
+        text: headings.map((heading) => `### ${heading}\n\n- ${quote} [^1]`).join("\n\n"),
+      };
+    });
+  }
+
+  async function summarise(kind: "agreement" | "paper", text: string, quote: string) {
+    const dataDir = await createTempDataFolder();
+    const sources = await createTempDataFolder();
+    const core = startWithBuiltIns(dataDir, BUILT_IN_SKILLS_DIR, {
+      createChatModel: scriptedModels(followingTheSkill(kind, quote)).createChatModel,
+    });
+    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+    const name = kind === "agreement" ? "Employment agreement.txt" : "GraphST.txt";
+    await addAndProcess(core, [await writeSourceFile(sources, name, text)]);
+    const mind = await core.createMind({ title: "Summary" });
+    const client = await connectToMind(core, mind.id);
+    const asked = question(
+      kind === "agreement" ? "Summarise the employment agreement" : "Summarise the GraphST paper",
+    );
+    Object.assign(asked.attrs, { forcedSkill: "summarise-document" });
+    writeMind(client, [asked]);
+    await client.settled();
+    const result = await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id });
+    if (!result.asked) throw new Error(`Not asked: ${JSON.stringify(result)}`);
+    const ended = await answerEnded(core, result.answerId);
+    if (ended.event !== "finished") throw new Error(JSON.stringify(ended.payload));
+    const headings: string[] = [];
+    answerIn(client, result.answerId).descendants((node) => {
+      if (node.type.name === "heading") headings.push(node.textContent);
+    });
+    return {
+      headings,
+      cited: citationsIn(client, result.answerId).length,
+    };
+  }
+
+  test("an employment agreement gets its parties, term and obligations, each point cited, and no paper sections", async () => {
+    const { headings, cited } = await summarise(
+      "agreement",
+      AGREEMENT,
+      "The term is three years from the start date, with a three-month probation.",
+    );
+    expect(headings).toEqual(
+      expect.arrayContaining(["Parties", "Term", "Obligations", "Notice and termination"]),
+    );
+    for (const paperOnly of [
+      "Key claims",
+      "Methods or approach",
+      "Limitations",
+      "Open questions",
+    ]) {
+      expect(headings).not.toContain(paperOnly);
+    }
+    expect(cited).toBeGreaterThanOrEqual(headings.length);
+  });
+
+  test("a paper keeps its claims, method and limitations", async () => {
+    const { headings, cited } = await summarise(
+      "paper",
+      PAPER,
+      "We evaluate it on traffic prediction with ablations over each component.",
+    );
+    expect(headings).toEqual(
+      expect.arrayContaining(["Key claims", "Methods or approach", "Limitations"]),
+    );
+    expect(headings).not.toContain("Parties");
+    expect(cited).toBeGreaterThanOrEqual(headings.length);
+  });
 });
 
 /** The `extraResources` entries of electron-builder.yml, read with just enough YAML for them. */
