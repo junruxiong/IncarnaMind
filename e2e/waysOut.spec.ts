@@ -92,20 +92,20 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   // Anthropic's key field, open, focused, with the refusal said beside it.
   const settings = window.getByTestId("settings");
   await expect(settings).toHaveAttribute("data-page", "models");
-  const form = settings.getByTestId("provider-form");
-  await expect(form.getByRole("radio", { name: "Anthropic" })).toBeChecked();
-  const key = form.locator('input[type="password"]');
+  const page = settings.getByTestId("provider-page");
+  await expect(page.getByTestId("provider-page-title")).toHaveText("Anthropic");
+  const key = page.getByTestId("provider-page-key");
   await expect(key).toBeFocused();
   await expect(key).toBeInViewport();
-  await expect(form.getByTestId("provider-key-refused")).toHaveText(
-    /^Anthropic refused this key \(Today, .+\)\.$/,
-  );
+  const refusal = page.getByTestId("provider-key-refused");
+  await expect(refusal).toHaveText(/^Anthropic refused this key \(Today, .+\)\.$/);
   await motionSettled(window);
   await screenshot(window, "key-refused-settings");
 
   await window.keyboard.type("sk-ant-new-key");
-  await form.getByTestId("provider-use-key").click();
-  await expect(form).toBeHidden();
+  await window.keyboard.press("Enter");
+  await expect(refusal).toHaveCount(0);
+  await expect(key).toHaveValue("");
   await window.keyboard.press("Escape");
   await expect(settings).toBeHidden();
 
