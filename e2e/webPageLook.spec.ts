@@ -144,7 +144,6 @@ test("off by default: the box is unticked, a page saved is never loaded for its 
   await dismissChatSetup(window);
 
   await window.getByTestId("plus-menu").click();
-
   await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
@@ -182,7 +181,6 @@ test("off by default: the box is unticked, a page saved is never loaded for its 
   await closeSettings(window);
 
   await window.getByTestId("plus-menu").click();
-
   await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   await expect(dialog.getByTestId("add-web-page-keep-look")).toBeChecked();
