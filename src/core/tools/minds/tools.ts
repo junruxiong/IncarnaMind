@@ -1334,7 +1334,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   };
 
   const drawChart = (
-    writer: Writer,
+    writer: Pick<Writer, "mind" | "request" | "origin"> & { ids: readonly string[] },
     blocks: readonly NodeJSON[],
     asked: ChartAsked,
     markdown: string | null,
@@ -1838,6 +1838,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           given,
           canCallAgain?.() ?? true,
           "call add_to_mind again",
+          asked,
         );
         if (said !== null) return said;
       }
@@ -1887,6 +1888,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     markdown: string,
     retry: boolean,
     again: string,
+    chart: ChartAsked | null,
   ): string | null => {
     const { anchor } = options.origin.from;
     if (anchor.kind !== "message") return null;
@@ -1902,8 +1904,30 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     });
     remake = null;
     madeHere.add(mind.id);
+    // Its chart, if one was asked for, is drawn again from the new table, in the same change.
+    const target = {
+      mind,
+      request: written.change.request,
+      ids: written.blocks.ids,
+      origin: options.origin,
+    };
+    const later = chart !== null && written.unrecorded > 0;
+    const drawn =
+      chart && !later ? drawChart(target, written.blocks.blocks, chart, markdown) : null;
+    const settling = unsettled.get(toolCallId);
+    if (later && chart && settling) {
+      settling.chart = (settled) => drawChart(target, settled, chart, markdown);
+    }
+    if (drawn) {
+      options.changed(toolCallId, {
+        ...written.change,
+        ...changeIn(mind.id, written.change.request, false),
+        ...(drawn.problem && { chartNotDrawn: drawn.problem }),
+      });
+    }
     return [
       `Wrote the new text in place of the text you wrote for this request before, in “${mind.name}”.`,
+      ...(drawn ? [drawn.said] : []),
       outcomeOf(mind, written.change.request),
       ...tableNotes(written.change),
       ...writtenNotes(written),
@@ -1956,6 +1980,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           given,
           canCallAgain?.() ?? true,
           "call create_mind again",
+          chartAsked(input.chart),
         );
         if (said !== null) return said;
       }

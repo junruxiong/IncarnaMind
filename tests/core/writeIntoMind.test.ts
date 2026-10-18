@@ -2,7 +2,8 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
 import { type Core, GENERATED_MARK } from "../../src/core";
-import { proposalRequestOf } from "../../src/shared/proposals";
+import { readChart } from "../../src/shared/charts";
+import { pendingProposals, proposalRequestOf } from "../../src/shared/proposals";
 import { askAssistant, changesIn, lastResult, mindCalls } from "../helpers/assistant";
 import { answerEnded, setUpWithDocuments, shownPassages } from "../helpers/citations";
 import { connectToMind } from "../helpers/mindClient";
@@ -411,5 +412,89 @@ describe("Use all, where the text went (#1171 review)", { timeout: 60_000 }, () 
     expect(proposalRequestOf(summary.doc, change?.request ?? "")).not.toHaveProperty("requested");
     expect(lastResult(model)).toContain("wait");
     expect(shownWithChanges(summary).join("\n")).toContain("My own words.");
+  });
+});
+
+/** Searches each lease, cites the rents it was shown, and adds them as a table with a bar chart. */
+function chartOfShown(call: ModelCall): ScriptedReply {
+  if (!called(call, "search_documents")) return citingAll(call, () => ({ text: "" }));
+  const shown = call.results
+    .filter((each) => each.tool === "search_documents")
+    .flatMap((each) => shownPassages(each.text));
+  const citations = QUOTES.flatMap((quote, index) => {
+    const passage = shown.find((each) => each.text.includes(quote));
+    return passage ? [{ marker: index + 1, passage: passage.id, quote }] : [];
+  });
+  if (!called(call, "cite")) return { calls: [{ tool: "cite", input: { citations } }] };
+  if (called(call, "add_to_mind")) return { text: "" };
+  const content = [
+    "| Unit | Rent |",
+    "|---|---|",
+    ...citations.map(
+      (each) =>
+        `| Unit ${each.marker} | ${1000 + (each.marker - 1) * 100} euros [^${each.marker}] |`,
+    ),
+  ].join("\n");
+  return {
+    calls: [{ tool: "add_to_mind", input: { chart: { kind: "bar", title: "Rents" }, content } }],
+  };
+}
+
+/** The Mind's charts' row labels, as they read now. */
+function chartRows(doc: ProseMirrorNode): string[][] {
+  const charts: string[][] = [];
+  doc.forEach((node) => {
+    if (node.type.name === "chart")
+      charts.push(readChart(node.attrs).data.rows.map((row) => row.label));
+  });
+  return charts;
+}
+
+describe("Use all of a chart asked for (#1091 review)", { timeout: 60_000 }, () => {
+  // protects=a chart asked for over 2 of 7 Documents, written again from all 7 with Use all, gets its chart drawn again from the new cited table, the table and the chart one change; rejecting it brings back both as they were; fails_when=Use all leaves the old chart, drops it, or Undo can't bring back the 2-Document table and chart; no_claim=the window's own Undo step.
+  test("Use all redraws the chart from the rewritten table, and rejecting brings both back", async () => {
+    const model = scriptedModel(chartOfShown);
+    const { core, mind, scope, client } = await inAFolderOfTwo(model);
+    const first = await askAssistant(core, {
+      text: "make a bar chart of the rents",
+      mindId: mind.id,
+      scope,
+    });
+    expect(first.steps?.writtenFrom).toEqual({ documents: 2, total: 7 });
+    await resolveChanges(client, "accept");
+    await client.settled();
+    const fromTwo = shownWithChanges(client);
+    expect(chartRows(readMind(client))).toEqual([["Unit 1", "Unit 2"]]);
+
+    const rewritten = await useAll(core, first);
+    await client.settled();
+
+    const changes = changesIn(rewritten);
+    expect(changes).toEqual([expect.objectContaining({ mindId: mind.id, tables: 1, charts: 1 })]);
+    expect(new Set(pendingProposals(client.blocks).map((each) => each.request))).toEqual(
+      new Set([changes[0]?.request]),
+    );
+    await resolveChanges(client, "reject");
+    expect(shownWithChanges(client)).toEqual(fromTwo);
+    expect(chartRows(readMind(client))).toEqual([["Unit 1", "Unit 2"]]);
+  });
+
+  // protects=accepted, the rewrite holds the table of all 7 and one chart of it, no second chart; fails_when=the old chart stays beside the new; no_claim=none beyond protects.
+  test("accepted, the rewrite holds one chart, of all 7", async () => {
+    const model = scriptedModel(chartOfShown);
+    const { core, mind, scope, client } = await inAFolderOfTwo(model);
+    const first = await askAssistant(core, {
+      text: "make a bar chart of the rents",
+      mindId: mind.id,
+      scope,
+    });
+    await resolveChanges(client, "accept");
+    await client.settled();
+
+    await useAll(core, first);
+    await client.settled();
+    await resolveChanges(client, "accept");
+
+    expect(chartRows(readMind(client))).toEqual([LEASES.map((_, index) => `Unit ${index + 1}`)]);
   });
 });
