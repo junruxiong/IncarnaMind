@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type KeyboardEvent,
   type ReactNode,
   useCallback,
   useLayoutEffect,
@@ -34,6 +35,8 @@ import type { ViewerTarget } from "../store";
 import { useCitedArea } from "./citedArea";
 import { FileStates } from "./FileStates";
 import { CitationMark, quoteMarkOf, quoteTone } from "./quoteMark";
+import { SheetEditBar } from "./SheetEditBar";
+import { type SelectedCell, useSheetEditing } from "./sheetEditing";
 import {
   Axis,
   borderCss,
@@ -65,6 +68,8 @@ const INDENT = 9;
 interface Loaded {
   workbook: Workbook;
   units: TextUnit[];
+  /** A workbook's file, for editing it (spike: excel-edit). */
+  bytes?: Uint8Array;
 }
 
 const readXlsx = async (bytes: Uint8Array): Promise<Loaded> => {
@@ -78,7 +83,7 @@ const readXlsx = async (bytes: Uint8Array): Promise<Loaded> => {
       .map((style) => canvasFont(fullFont(style, workbook.layout ?? null), 11)),
   );
   await Promise.allSettled([...fonts].map((font) => globalThis.document.fonts.load(font)));
-  return { workbook, units: gridUnits(workbook.sheets, true) };
+  return { workbook, units: gridUnits(workbook.sheets, true), bytes };
 };
 
 const readCsv = (bytes: Uint8Array): Loaded => extractCsv(bytes);
@@ -100,7 +105,9 @@ export function SheetView({ document, target }: { document: Document; target: Vi
     <FileStates
       loaded={loaded}
       quote={target.quote}
-      ready={(value) => <Sheets loaded={value} name={document.name} target={target} />}
+      ready={(value) => (
+        <Sheets loaded={value} name={document.name} documentId={document.id} target={target} />
+      )}
     />
   );
 }
@@ -142,9 +149,22 @@ interface ScrollRequest {
   request: number;
 }
 
-function Sheets({ loaded, name, target }: { loaded: Loaded; name: string; target: ViewerTarget }) {
+function Sheets({
+  loaded,
+  name,
+  documentId,
+  target,
+}: {
+  loaded: Loaded;
+  name: string;
+  documentId: string;
+  target: ViewerTarget;
+}) {
   const t = useT();
   const { workbook, units } = loaded;
+  const editing = useSheetEditing(documentId, workbook, loaded.bytes ?? null);
+  const [selected, setSelected] = useState<SelectedCell | null>(null);
+  const [draft, setDraft] = useState<string | null>(null);
   const sheets = workbook.sheets;
   const from = target.pageFrom ?? 1;
   const to = target.pageTo ?? from;
@@ -222,9 +242,65 @@ function Sheets({ loaded, name, target }: { loaded: Loaded; name: string; target
     citedArea,
   );
 
+  const commit = (text: string, move: "down" | "right" | null = "down") => {
+    if (!sheet || !selected) return;
+    editing.commit(sheet.name, selected, text);
+    setDraft(null);
+    if (move === "down") setSelected({ row: selected.row + 1, column: selected.column });
+    else if (move === "right") setSelected({ row: selected.row, column: selected.column + 1 });
+  };
+  const editable = loaded.bytes !== undefined;
+
   return (
     <>
-      <ViewerHeader />
+      <ViewerHeader>
+        {editable && !editing.on && (
+          <button
+            type="button"
+            data-testid="sheet-edit"
+            disabled={editing.starting}
+            onClick={() => void editing.start()}
+            className="viewer-keep"
+          >
+            {t("viewer.sheet.edit")}
+          </button>
+        )}
+        {editing.on && (
+          <>
+            <button
+              type="button"
+              data-testid="sheet-save-copy"
+              disabled={editing.edits.length === 0 || editing.saving}
+              onClick={() => void editing.save()}
+              className="viewer-keep"
+            >
+              {t("viewer.sheet.saveCopy")}
+            </button>
+            <button
+              type="button"
+              data-testid="sheet-edit-done"
+              onClick={() => {
+                editing.stop();
+                setSelected(null);
+                setDraft(null);
+              }}
+              className="viewer-keep"
+            >
+              {t("viewer.sheet.done")}
+            </button>
+          </>
+        )}
+      </ViewerHeader>
+      {editing.on && sheet && (
+        <SheetEditBar
+          editing={editing}
+          sheet={sheet.name}
+          selected={selected}
+          draft={draft}
+          setDraft={setDraft}
+          commit={(text) => commit(text)}
+        />
+      )}
       <div
         ref={box}
         data-testid="viewer-sheet"
@@ -239,6 +315,23 @@ function Sheets({ loaded, name, target }: { loaded: Loaded; name: string; target
             highlighted={found?.sheet === sheet.name ? found.cells : null}
             mark={found?.sheet === sheet.name ? mark : null}
             scrollTo={sheet.name === (citedSheet ?? "") ? scrollTo : null}
+            revision={editing.revision}
+            edit={
+              editing.on
+                ? {
+                    selected,
+                    select: (cell) => {
+                      setSelected(cell);
+                      setDraft(null);
+                    },
+                    draft,
+                    setDraft,
+                    commit,
+                    undo: editing.undo,
+                    inputOf: (cell) => editing.inputOf(sheet.name, cell),
+                  }
+                : null
+            }
           />
         ) : (
           <p data-testid="viewer-sheet-empty" className="viewer-sheet-empty">
@@ -263,7 +356,11 @@ function Sheets({ loaded, name, target }: { loaded: Loaded; name: string; target
               role="tab"
               aria-selected={index === active}
               data-testid="viewer-sheet-tab"
-              onClick={() => setActive(index)}
+              onClick={() => {
+                setActive(index);
+                setSelected(null);
+                setDraft(null);
+              }}
               className="viewer-sheet-tab"
               style={
                 each.layout?.tabColor
@@ -489,18 +586,34 @@ function Spacer({ height, columns }: { height: number; columns: number }) {
   ) : null;
 }
 
+/** What the grid needs while its workbook is being edited (spike: excel-edit). */
+interface GridEditing {
+  selected: SelectedCell | null;
+  select(cell: SelectedCell): void;
+  /** The text being typed into the selected cell; null when it isn't being edited. */
+  draft: string | null;
+  setDraft(text: string | null): void;
+  commit(text: string, move?: "down" | "right" | null): void;
+  undo(): void;
+  inputOf(cell: SelectedCell): string;
+}
+
 function Grid({
   sheet,
   book,
   highlighted,
   mark,
   scrollTo,
+  revision = 0,
+  edit = null,
 }: {
   sheet: Sheet;
   book: WorkbookLayout | null;
   highlighted: ReadonlySet<string> | null;
   mark: ReturnType<typeof quoteMarkOf>;
   scrollTo: ScrollRequest | null;
+  revision?: number;
+  edit?: GridEditing | null;
 }) {
   const t = useT();
   const scroller = useRef<HTMLDivElement>(null);
@@ -509,7 +622,8 @@ function Grid({
   const [place, setPlace] = useState<MarkPlace | null>(null);
   const [markWidth, setMarkWidth] = useState(40);
   const applied = useRef<number | null>(null);
-  const model = useMemo(() => buildModel(sheet, book), [sheet, book]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: an edit changes the sheet's cells in place
+  const model = useMemo(() => buildModel(sheet, book), [sheet, book, revision]);
   const csv = model.look === null;
 
   // As in Excel, empty rows and columns fill the view past the sheet's last ones.
@@ -799,6 +913,8 @@ function Grid({
           data-ref={ref}
           data-row={top}
           data-quote-highlight={isHighlighted ? "" : undefined}
+          onMouseDown={edit ? () => edit.select({ row: top, column }) : undefined}
+          onDoubleClick={edit ? () => edit.setDraft(edit.inputOf({ row: top, column })) : undefined}
           rowSpan={spanRows > 1 ? spanRows : undefined}
           colSpan={spanColumns > 1 ? spanColumns : undefined}
           title={note}
@@ -849,6 +965,7 @@ function Grid({
     "--grid-width": `${ROW_HEADER_WIDTH + columns.total}px`,
   } as CSSProperties;
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: while editing, the grid takes Excel's keys (spike: excel-edit)
     <div
       ref={scroller}
       data-testid="viewer-grid"
@@ -859,6 +976,8 @@ function Grid({
           : undefined
       }
       onScroll={updateView}
+      tabIndex={edit ? 0 : undefined}
+      onKeyDown={edit ? (event) => gridKey(event, edit) : undefined}
       className={`viewer-grid-scroll min-h-0 flex-1 overflow-auto ${csv ? "" : "viewer-grid-scroll--styled"}`}
     >
       <div className="relative w-max" style={style}>
@@ -908,6 +1027,17 @@ function Grid({
             }
           />
         ))}
+        {edit?.selected && (
+          <CellEditor
+            edit={edit}
+            cell={edit.selected}
+            top={HEADER_HEIGHT + rows.start(edit.selected.row)}
+            left={ROW_HEADER_WIDTH + columns.start(edit.selected.column)}
+            width={columns.size(edit.selected.column)}
+            height={rows.size(edit.selected.row)}
+            onDone={() => scroller.current?.focus()}
+          />
+        )}
         {mark && place && (
           <CitationMark
             mark={mark}
@@ -1035,5 +1165,99 @@ function Drawing({
       <span className="viewer-sheet-placeholder-kind">{kind}</span>
       {drawing.text && <span className="viewer-sheet-placeholder-title">{drawing.text}</span>}
     </div>
+  );
+}
+
+/** The grid's keys while editing: arrows move, Enter or F2 edits, typing replaces, Delete clears, ⌘Z undoes. */
+function gridKey(event: KeyboardEvent<HTMLDivElement>, edit: GridEditing): void {
+  const cell = edit.selected;
+  if (!cell || edit.draft !== null) return;
+  const move = (row: number, column: number) => {
+    event.preventDefault();
+    edit.select({ row: Math.max(1, row), column: Math.max(0, column) });
+  };
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+    event.preventDefault();
+    edit.undo();
+  } else if (event.key === "ArrowDown") move(cell.row + 1, cell.column);
+  else if (event.key === "ArrowUp") move(cell.row - 1, cell.column);
+  else if (event.key === "ArrowRight" || event.key === "Tab") move(cell.row, cell.column + 1);
+  else if (event.key === "ArrowLeft") move(cell.row, cell.column - 1);
+  else if (event.key === "Enter" || event.key === "F2") {
+    event.preventDefault();
+    edit.setDraft(edit.inputOf(cell));
+  } else if (event.key === "Delete" || event.key === "Backspace") {
+    event.preventDefault();
+    edit.commit("", null);
+  } else if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    event.preventDefault();
+    edit.setDraft(event.key);
+  }
+}
+
+/** The selected cell's outline, and while it is being typed into, its editor over it. */
+function CellEditor({
+  edit,
+  cell,
+  top,
+  left,
+  width,
+  height,
+  onDone,
+}: {
+  edit: GridEditing;
+  cell: SelectedCell;
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  onDone(): void;
+}) {
+  const t = useT();
+  const input = useRef<HTMLInputElement>(null);
+  const typing = edit.draft !== null;
+  useLayoutEffect(() => {
+    if (typing) input.current?.focus();
+  }, [typing]);
+  const box: CSSProperties = {
+    top,
+    left,
+    width: Math.max(width, 24),
+    height: Math.max(height, 18),
+  };
+  if (!typing) {
+    return (
+      <div
+        data-testid="sheet-selected"
+        data-ref={`${columnName(cell.column)}${cell.row}`}
+        className="viewer-sheet-selected"
+        style={box}
+      />
+    );
+  }
+  return (
+    <input
+      ref={input}
+      data-testid="sheet-cell-input"
+      aria-label={t("viewer.sheet.cellInput", { ref: `${columnName(cell.column)}${cell.row}` })}
+      value={edit.draft ?? ""}
+      onChange={(event) => edit.setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === "Tab") {
+          event.preventDefault();
+          edit.commit(event.currentTarget.value, event.key === "Tab" ? "right" : "down");
+          onDone();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          edit.setDraft(null);
+          onDone();
+        }
+      }}
+      onBlur={(event) => {
+        if (edit.draft !== null) edit.commit(event.currentTarget.value, null);
+      }}
+      className="viewer-sheet-cell-input"
+      style={{ ...box, minWidth: Math.max(width, 120) }}
+    />
   );
 }

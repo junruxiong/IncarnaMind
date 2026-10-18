@@ -1,0 +1,106 @@
+name: Excel editing spike
+
+# Spike (excel-edit), never merged: LibreOffice judges the workbook calculator on Linux, and
+# the viewer's editing spec runs on Linux and macOS, with the open time of a 12,000-row workbook.
+on:
+  push:
+    branches: [spike/excel-edit]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
+jobs:
+  libreoffice:
+    name: Calculator judged by LibreOffice
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install LibreOffice Calc and its Python bridge
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libreoffice-calc python3-uno
+          python3 -m pip install --quiet openpyxl==3.1.5 XlsxWriter==3.2.9
+          soffice --version
+      - name: Build the corpus
+        run: |
+          mkdir -p corpus/repo corpus/gen corpus/excel
+          git ls-files -z '*.xlsx' | xargs -0 -I{} cp "{}" corpus/repo/
+          python3 eval/xlsx/gen_xlsxwriter.py corpus/gen
+          python3 eval/xlsx/gen_openpyxl.py corpus/gen
+          mkdir -p "$RUNNER_TEMP/ej" && (cd "$RUNNER_TEMP/ej" && npm init -y >/dev/null && npm install --silent exceljs@4.4.0)
+          NODE_PATH="$RUNNER_TEMP/ej/node_modules" node eval/xlsx/gen_exceljs.cjs corpus/gen
+          python3 eval/xlsx/fetch.py eval/xlsx/excel-files.json corpus/excel
+      - name: Open, recalculate, save and edit every workbook
+        run: |
+          npx esbuild eval/xlsx/roundtrip.ts --bundle --platform=node --format=esm --outfile="$RUNNER_TEMP/roundtrip.mjs"
+          for set in repo gen excel; do node "$RUNNER_TEMP/roundtrip.mjs" corpus/$set rt/$set > rt-$set.log; done
+      - name: LibreOffice recalculates the edited copies
+        run: for set in repo gen excel; do python3 eval/xlsx/lo_judge.py corpus/$set rt/$set rt/$set/lo.json; done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: excel-spike-libreoffice
+          path: |
+            rt/*/lo.json
+            rt/*/ours.json
+          retention-days: 14
+
+  viewer:
+    name: Editing in the viewer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Make sure Electron is installed
+        run: |
+          for attempt in 1 2 3; do
+            node node_modules/electron/install.js && exit 0
+            sleep 20
+          done
+          exit 1
+      - name: Let Electron's sandbox start
+        if: runner.os == 'Linux'
+        run: |
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+      - name: A 12,000-row workbook
+        run: |
+          python3 -m pip install --quiet XlsxWriter==3.2.9 || python3 -m pip install --quiet --break-system-packages XlsxWriter==3.2.9
+          mkdir -p "$RUNNER_TEMP/big" && python3 eval/xlsx/gen_xlsxwriter.py "$RUNNER_TEMP/big"
+      - run: npx electron-vite build --mode test
+      - name: The spec, three times
+        env:
+          INCARNAMIND_SPIKE_BIG: ${{ runner.temp }}/big/xw-sales-12k-rows.xlsx
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npx playwright test e2e/excelEdit.spec.ts --repeat-each=3 --reporter=list
+          else
+            npx playwright test e2e/excelEdit.spec.ts --repeat-each=3 --reporter=list
+          fi
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: excel-spike-viewer-${{ matrix.os }}
+          path: test-results/
+          retention-days: 7

@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
+import { deflateRawSync } from "node:zlib";
 import * as Y from "yjs";
 import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
@@ -109,6 +110,8 @@ import {
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
 import { pdfIsLocked, pdfOpensWith } from "./documents/extract";
 import { statIdentity } from "./documents/files";
+import { Calculator } from "./documents/formats/xlsxCalc";
+import { writeCopy } from "./documents/formats/xlsxCopy";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
@@ -3133,6 +3136,56 @@ export function createCore(adapters: CoreAdapters): Core {
       const saved = added[0];
       if (!saved) throw new InvalidInputError("The text couldn't be saved.");
       return saved;
+    },
+    saveSheetCopy: async (input) => {
+      if (!isRecord(input) || typeof input.documentId !== "string" || !Array.isArray(input.edits)) {
+        throw new InvalidInputError("Nothing to save.");
+      }
+      const document = documents.getMany([input.documentId])[0];
+      if (!document) throw new NotFoundError({ key: "error.document.notFound" });
+      if (document.kind !== "xlsx")
+        throw new InvalidInputError("Only Excel workbooks can be edited.");
+      const bytes = new Uint8Array(await readFile(await documents.filePath(document.id)));
+      const calc = await Calculator.open(bytes);
+      let stale = 0;
+      for (const edit of input.edits as unknown[]) {
+        if (
+          !isRecord(edit) ||
+          typeof edit.sheet !== "string" ||
+          typeof edit.ref !== "string" ||
+          typeof edit.input !== "string"
+        ) {
+          throw new InvalidInputError("An edit is malformed.");
+        }
+        try {
+          stale = calc.edit(edit.sheet, edit.ref, edit.input).stale.length;
+        } catch (error) {
+          throw new InvalidInputError(error instanceof Error ? error.message : String(error));
+        }
+      }
+      const copy = await writeCopy(bytes, calc.writes(), deflateRawSync);
+      const base = document.name.replace(/\.xlsx$/i, "");
+      try {
+        const file = await outputs.save({
+          name: `${base} (edited).xlsx`,
+          data: copy,
+          ownFile: null,
+        });
+        const { documents: added } = await documents.add([file.path]);
+        const saved = added[0];
+        if (!saved) throw new InvalidInputError("The copy couldn't be added.");
+        return { status: "saved", file, document: saved, stale };
+      } catch (error) {
+        if (error instanceof FileWriteCancelledError) return { status: "cancelled" };
+        if (error instanceof LinkedFolderWritesDeclinedError) {
+          return {
+            status: "not-allowed",
+            linkedFolderId: error.linkedFolderId,
+            linkedFolderPath: error.linkedFolderPath,
+          };
+        }
+        throw error;
+      }
     },
     listDocuments: async (options) => {
       const { folderId, includeSubfolders, tagId, linkedFolderId } = parseListOptions(options);

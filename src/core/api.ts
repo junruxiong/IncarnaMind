@@ -7110,6 +7110,19 @@ export type SavedMindExport =
   | { status: "review"; word: WordExportReport }
   | Exclude<SavedExport, { status: "saved" }>;
 
+/** One cell changed in a workbook's editor (spike: excel-edit): what the User typed, "=…" for a formula. */
+export interface SheetEdit {
+  sheet: string;
+  /** "B12". */
+  ref: string;
+  input: string;
+}
+
+/** What `saveSheetCopy` did. `stale`: cells the copy leaves for Excel to recalculate when it opens it. */
+export type SavedSheetCopy =
+  | { status: "saved"; file: SavedFile; document: Document; stale: number }
+  | Exclude<SavedExport, { status: "saved" }>;
+
 /** What saving an export did: a Skill's zip (`saveSkillExport`), and the base of a Mind's. */
 export type SavedExport =
   | { status: "saved"; file: SavedFile }
@@ -8116,6 +8129,14 @@ export interface CoreApi {
    * already gets a number. Throws InvalidInputError for text with no words.
    */
   saveTextAsDocument(input: { name: string; text: string }): Promise<Document>;
+  /**
+   * Spike (excel-edit): saves a copy of an Excel Document with the User's
+   * edits made and what depends on them recalculated, in the Output
+   * location, and adds the copy as a Document so it can be cited. The
+   * original file is never written. Throws InvalidInputError for a Document
+   * that isn't a workbook, or an edit Excel wouldn't allow (inside an array formula).
+   */
+  saveSheetCopy(input: { documentId: string; edits: SheetEdit[] }): Promise<SavedSheetCopy>;
   /**
    * Saves a web page as a Document (#261): its readable text, without
    * navigation, ads or scripts, kept as a snapshot that Citations point at
@@ -9597,6 +9618,7 @@ const methods: Record<CoreApiMethod, true> = {
   keepWebPageLook: true,
   fetchWebPageAgain: true,
   saveTextAsDocument: true,
+  saveSheetCopy: true,
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
