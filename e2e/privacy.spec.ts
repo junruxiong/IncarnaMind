@@ -35,6 +35,8 @@ test("the Privacy page lists the data flows and the update check, and offers no 
 
   const privacy = await openPrivacySettings(window);
   await expect(privacy).toContainText("collects no usage data");
+  await expect(privacy).toContainText("Choosing a service allows its flow.");
+  await privacy.getByTestId("privacy-flows-intro-details").click();
   await expect(privacy).toContainText("asks it not to store your requests");
 
   // Every registered flow, with what it sends and where.
@@ -80,9 +82,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(privacy.locator('[data-traffic-id="ollama-pull"]')).toContainText("Ollama");
 
   // Skill scripts are their own matter.
-  await expect(privacy.getByTestId("skill-scripts-note")).toContainText(
-    "approval you give before each run",
-  );
+  await expect(privacy.getByTestId("skill-scripts-note")).toContainText("each run asks first");
 
   // A copy built without a crash-report address doesn't offer crash reports.
   await expect(privacy.getByTestId("crash-reports")).toHaveCount(0);
@@ -167,6 +167,7 @@ test("with a crash-report address, crash reports are off until opted in, scrubbe
     const privacy = await openPrivacySettings(window);
     const crashReports = privacy.getByTestId("crash-reports-switch");
     await expect(crashReports).not.toBeChecked();
+    await privacy.getByTestId("crash-reports-description-details").click();
     await expect(privacy.getByTestId("crash-reports")).toContainText("removed first");
 
     // Off by default: nothing is sent. The first report that arrives, once opted in, is the

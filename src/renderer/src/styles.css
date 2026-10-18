@@ -481,8 +481,18 @@
   /* Folded beside the card: the gap stays, with nothing to drag in it. */
   .workbench-gap {
     flex: none;
-    width: 8px;
-    height: 8px;
+    width: 4px;
+    height: 4px;
+  }
+  /*
+   * Beside the docked assistant the gap is 4px, not the sidebar's 8px (#1099); its strip to grab
+   * still reaches 2px past each edge, 8px in all.
+   */
+  .workbench > .pane-divider--gap {
+    width: 4px;
+  }
+  .workbench > .pane-divider--gap-y {
+    height: 4px;
   }
   /* The assistant docked on the right takes the window's top-right corner, and Windows' buttons with it. */
   .app-card[data-assistant-right] {
