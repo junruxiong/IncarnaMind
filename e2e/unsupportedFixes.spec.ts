@@ -8,6 +8,7 @@ import {
   clickEndOf,
   createDataFolder,
   dismissChatSetup,
+  focusSettled,
   launchApp,
   motionSettled,
   newMind,
@@ -153,8 +154,9 @@ for (const language of ["en", "zh-CN"] as const) {
       await pointAndClick(window, mark);
       await expect(card).toBeVisible();
     };
+    // ⌘Z in the Mind, where each fix leaves the focus.
     const undo = async () => {
-      await expect(editor.locator(".ProseMirror")).toBeFocused();
+      await focusSettled(window, editor);
       await window.keyboard.press("ControlOrMeta+z");
     };
 
@@ -199,6 +201,8 @@ for (const language of ["en", "zh-CN"] as const) {
     }
 
     // Cut the unsupported part: applied at once, the Citations kept; ⌘Z puts the sentence back.
+    // Wide, so the Mind keeps the focus once a card closes (one group gives it up, #963).
+    await setWindowSize(app, window, 1600, 900);
     await openCard(ownerMark());
     await pointAndClick(window, card.getByTestId("claim-cut"));
     await expect.poll(() => wordsOf(owner)).toBe(words.cut);
@@ -227,7 +231,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await clickEndOf(window, owner);
     await runCommand(window, "check.keepAsView", words.keepCommand);
     await expect(marks).toHaveCount(1);
-    await editor.locator(".ProseMirror").focus();
     await undo();
     await expect(marks).toHaveCount(2);
     await clickEndOf(window, owner);
