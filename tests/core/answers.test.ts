@@ -359,6 +359,7 @@ describe("Streaming Answers into the Mind", () => {
             id: expect.any(String),
             level: 2,
             includeInContext: null,
+            paragraphFormat: null,
             proposal: null,
             wordLook: null,
           },
@@ -366,7 +367,13 @@ describe("Streaming Answers into the Mind", () => {
         },
         {
           type: "paragraph",
-          attrs: { id: expect.any(String), includeInContext: null, proposal: null, wordLook: null },
+          attrs: {
+            id: expect.any(String),
+            includeInContext: null,
+            paragraphFormat: null,
+            proposal: null,
+            wordLook: null,
+          },
           content: [
             { type: "text", text: "The " },
             { type: "text", text: "Moon", marks: [{ type: "bold" }] },
@@ -388,6 +395,7 @@ describe("Streaming Answers into the Mind", () => {
                   attrs: {
                     id: expect.any(String),
                     includeInContext: null,
+                    paragraphFormat: null,
                     proposal: null,
                     wordLook: null,
                   },
@@ -404,6 +412,7 @@ describe("Streaming Answers into the Mind", () => {
                   attrs: {
                     id: expect.any(String),
                     includeInContext: null,
+                    paragraphFormat: null,
                     proposal: null,
                     wordLook: null,
                   },
@@ -437,7 +446,13 @@ describe("Streaming Answers into the Mind", () => {
         },
         {
           type: "paragraph",
-          attrs: { id: expect.any(String), includeInContext: null, proposal: null, wordLook: null },
+          attrs: {
+            id: expect.any(String),
+            includeInContext: null,
+            paragraphFormat: null,
+            proposal: null,
+            wordLook: null,
+          },
           content: [
             { type: "text", text: "See " },
             {
