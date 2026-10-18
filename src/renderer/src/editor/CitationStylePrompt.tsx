@@ -47,7 +47,7 @@ export function CitationStylePrompt({
   const dismiss = () => {
     doc.transact(() => dismissCitationStylePrompt(settings));
     useUndo.getState().push({
-      message: t("citationStyle.prompt.dismissed"),
+      said: (t) => t("citationStyle.prompt.dismissed"),
       undo: async () => doc.transact(() => dismissCitationStylePrompt(settings, false)),
       redo: async () => doc.transact(() => dismissCitationStylePrompt(settings)),
     });

@@ -79,6 +79,7 @@ describe("Why a call changed nothing, on its row", () => {
     { kind: "stopped", mindId: "a" },
     { kind: "no-table", mindId: "a" },
     { kind: "uncited", mindId: "a" },
+    { kind: "new-mind", mindId: "a" },
     { kind: "local-mode" },
     { kind: "not-ready" },
     { kind: "model", mindId: "a", message: "Overloaded" },

@@ -164,6 +164,16 @@ describe("Claims against what the calls did", () => {
     );
   });
 
+  // protects=a claim about the User's own notes, named by no name ("your notes", "这篇笔记"), holds only by a change in the Mind they are in, as after a piece was sent to a new Mind (#1109); fails_when=a new Mind's text backs "added it to your notes"; no_claim=none beyond protects.
+  test("a claim about the User's notes needs a change in the Mind they are in", () => {
+    const madeElsewhere = [mindCall("create_mind", { mindId: "tides", created: true })];
+    const inTheirs = [mindCall("add_to_mind", { mindId: "q3" })];
+    for (const reply of ["I added it to your notes.", "我已把摘要写进你的笔记里。"]) {
+      expect(unbackedClaims(reply, madeElsewhere, MINDS, "q3"), reply).not.toEqual([]);
+      expect(unbackedClaims(reply, inTheirs, MINDS, "q3"), reply).toEqual([]);
+    }
+  });
+
   // protects=a made Mind needs a call that made one; "replaced" needs text changed, not only added; a claim about an earlier Answer gets no pass; fails_when=any of these passes; no_claim=none beyond protects.
   test("made, replaced and earlier", () => {
     const added = [mindCall("add_to_mind", {})];

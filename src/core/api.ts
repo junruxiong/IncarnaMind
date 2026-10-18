@@ -912,7 +912,8 @@ export type MindProblem =
         | "content-not-own"
         | "stopped"
         | "no-table"
-        | "uncited";
+        | "uncited"
+        | "new-mind";
       mindId: string;
     }
   | { kind: "local-mode" | "not-ready" }
@@ -2391,7 +2392,8 @@ export interface Document {
   tagging: TaggingState;
   /**
    * Set when `tagging` is "failed", and when it is "waiting-for-provider" for
-   * a reason worth saying, such as the ChatGPT plan's limit ("plan-limit").
+   * a reason worth saying, such as the ChatGPT plan's limit ("plan-limit") or
+   * a model's rate limit ("rate-limit", with `resetsAt`).
    */
   taggingError: ProviderError | null;
   /**
@@ -3810,7 +3812,10 @@ export interface ProviderError {
   message: string;
   /** The message as a key of the dictionary, when the core worded it, to say in the interface language. */
   wording?: ErrorWording;
-  /** "plan-limit": when the plan's limit resets (ISO 8601), when the provider says. */
+  /**
+   * "plan-limit": when the plan's limit resets (ISO 8601), when the provider says.
+   * "rate-limit" on a Document waiting to be tagged: when Tagging resumes.
+   */
   resetsAt?: string;
   /** A sign-in route's request (a Claude account, Copilot): which of its problems it is, for its own line. */
   signInRoute?: SignInRouteProblem;
