@@ -308,6 +308,9 @@ export function CitationView({
         onMouseDown={(event) => event.preventDefault()}
         // In a cluster, the pointer shows the card of the Citation whose words it is over.
         onPointerMove={(event) => pointAt(markerOfWork(workAt(event.target, inCluster)))}
+        // The pointer can come back without moving: the card first placed before its font
+        // loaded grows and moves up off it, which a Citation that only heard moves took as a leave.
+        onPointerOver={(event) => pointAt(markerOfWork(workAt(event.target, inCluster)))}
         onPointerLeave={() => pointAt(null)}
         onFocus={() => hold("focus", true)}
         onBlur={() => hold("focus", false)}

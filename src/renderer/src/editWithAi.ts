@@ -58,7 +58,8 @@ export type EditProblem =
         | "too-long"
         | "local-mode"
         | "cant-regenerate"
-        | "no-table";
+        | "no-table"
+        | "late";
     }
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   | { kind: "failed"; message: string; retry: () => void };
@@ -241,14 +242,19 @@ async function arrived(
     stopped &&
     (edits.editing[mindId] !== undefined || (!mine && edits.pending[mindId] !== undefined));
   if (!waitedOn && !editor.isDestroyed) setEditTarget(editor, null);
-  let outcome: { applied: number } | "held" | null = null;
+  let outcome: Awaited<ReturnType<typeof finishApplying>> = null;
   try {
     outcome = applying ? await finishApplying(applying, result) : null;
   } finally {
     if (mine) set("pending", mindId, null);
   }
+  if (outcome === "late") {
+    set("problems", mindId, { kind: "late" });
+    return;
+  }
   if (outcome !== null && outcome !== "held") {
-    if (outcome.applied > 0) speak(mindId, appliedMessage(outcome.applied));
+    const { paragraphs, tables } = outcome.applied;
+    if (paragraphs + tables > 0) speak(mindId, appliedMessage(outcome.applied));
     return;
   }
   if (stopped) return;
