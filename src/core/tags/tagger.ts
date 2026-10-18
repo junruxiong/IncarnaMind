@@ -38,6 +38,7 @@ import {
 } from "../errors";
 import { isPlanLimit } from "../providers/chatgpt/errors";
 import { classifyProviderError } from "../providers/providerErrors";
+import type { PaceTimers } from "../sources/pace";
 import type { Database } from "../storage";
 import {
   type DocumentExcerpt,
@@ -47,6 +48,7 @@ import {
 } from "./classify";
 import type { TagsStore } from "./index";
 import { type RateLimitPause, rateLimitError } from "./rateLimit";
+import { isTransient, RETRY_WAIT_MS } from "./transient";
 
 /** What the "tagging" flow sends to the tagger's service: the chat model's or Jev's. */
 export const TAGGING_FLOW_SENDS = ["tags", "document-excerpts"] as const;
@@ -92,6 +94,8 @@ export interface TaggerOptions {
   background: BackgroundQueue;
   /** The pause a rate limit puts on all Tagging (see ./rateLimit). */
   rateLimit: Pick<RateLimitPause, "pausedUntil" | "pause" | "succeeded">;
+  /** Waits before the one retry after a passing error. */
+  timers: PaceTimers;
 }
 
 interface DocumentRow {
@@ -228,12 +232,20 @@ export function createTagger(options: TaggerOptions) {
       // A model on this computer serves one request at a time: an Answer goes first.
       if (tagger.local) call.runsLocally();
       if (stale()) return;
+      const signal = AbortSignal.any([lifetime.signal, call.signal]);
+      const decide = () =>
+        tagger.decide({ tags: definitions, excerpt: excerptOf(id, row), signal });
       try {
-        decisions = await tagger.decide({
-          tags: definitions,
-          excerpt: excerptOf(id, row),
-          signal: AbortSignal.any([lifetime.signal, call.signal]),
-        });
+        try {
+          decisions = await decide();
+        } catch (error) {
+          if (!isTransient(error)) throw error;
+          await options.timers.sleep(
+            RETRY_WAIT_MS.least + Math.random() * RETRY_WAIT_MS.jitter,
+            signal,
+          );
+          decisions = await decide();
+        }
       } catch (error) {
         if (stale()) return;
         const limitedUntil = options.rateLimit.pause(error);
