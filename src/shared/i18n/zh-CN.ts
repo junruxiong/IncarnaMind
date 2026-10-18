@@ -2743,7 +2743,7 @@ export const zhCN = {
   "skills.builtIn.mind-to-report":
     "把这个 Mind（问题上方的笔记、问题和回答）整理成结构化的报告草稿，包括标题、摘要、章节和结论，保留其中的引用，不虚构来源。",
   "skills.builtIn.summarise-document":
-    "为一篇文档（或问题搜索范围内的每篇文档）撰写结构化摘要：主要论点（各附引用）、方法、局限以及尚待回答的问题。",
+    "为文档撰写附引用的摘要，章节依文档类型而定：论文看论点，合同看条款。",
   "skills.settings.builtIn.hint": "随 IncarnaMind 提供。想修改，请复制为你自己的技能。",
   "skills.settings.duplicate": "复制为我的技能",
   "skills.settings.duplicateLabel": "将 {name} 复制为我的技能",
