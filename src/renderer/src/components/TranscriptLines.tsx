@@ -54,9 +54,7 @@ export function TranscriptLines({
       };
     } else if (problem.kind === "engine") {
       line = {
-        text: message
-          ? t("meetings.transcript.engineFailed", { message })
-          : t("meetings.transcript.engineStopped"),
+        text: t("meetings.transcript.engineStopped"),
         action: retry("meetings.transcript.retry"),
         role: "alert",
       };
