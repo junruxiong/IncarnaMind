@@ -4484,8 +4484,7 @@ export const zhCN = {
   "mindCall.failed.noTable": "未能生成表格，因此没有向“{mind}”添加内容",
   "mindCall.failed.uncited": "未添加到“{mind}”：出处没有引用",
   "mindCall.failed.noChart.noTable": "没有生成图表：“{mind}”里没有表格",
-  "mindCall.failed.noChart.several":
-    "没有生成图表：“{mind}”里有多个表格，光标不在其中任何一个",
+  "mindCall.failed.noChart.several": "没有生成图表：“{mind}”里有多个表格，光标不在其中任何一个",
   "mindCall.failed.noChart.noNumbers": "没有生成图表：“{mind}”里的表格没有数字列",
   "mindCall.failed.noChart.needsTwo": "没有生成图表：散点图需要两列数字",
   "mindCall.failed.noChart.uncited": "没有生成图表：“{mind}”里的表格有些数字没有引用",
