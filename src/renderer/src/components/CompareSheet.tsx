@@ -298,7 +298,6 @@ export function CompareSheet({
             testId="compare-sheet-not-ready"
             className="compare-sheet-problem"
             setUpLabel={t("question.setUp")}
-            refused
           />
         ) : (
           <ProblemLine testId="compare-sheet-not-sent" className="compare-sheet-problem">

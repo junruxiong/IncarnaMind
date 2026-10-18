@@ -107,24 +107,19 @@ export function ReadinessExplanation({
  * Why Questions can't be asked, as one line with the one thing that fixes it.
  * Local mode refusing a cloud model has two ways out, so it offers both: a
  * local model, or turning local mode off (which can be undone).
- * `refused`: a Question was just asked and not sent, rather than Questions
- * being off in general.
  */
 export function ReadinessLine({
   readiness,
   testId,
   className,
   setUpLabel,
-  refused = false,
 }: {
   readiness: Extract<ChatReadiness, { ready: false }>;
   testId: string;
   className?: string;
   setUpLabel: string;
-  refused?: boolean;
 }) {
   const t = useT();
-  const language = useLanguage();
   const openSettings = useAppStore((state) => state.openSettings);
   if (readiness.reason === "local-mode") {
     return (
@@ -144,11 +139,7 @@ export function ReadinessLine({
             turnOffLocalMode().catch((error: unknown) => useAppStore.getState().reportError(error)),
         }}
       >
-        {refused ? (
-          <>{t("localMode.refused", { service: serviceName(readiness.provider, t, language) })}</>
-        ) : (
-          <ReadinessExplanation readiness={readiness} inLine />
-        )}
+        <ReadinessExplanation readiness={readiness} inLine />
       </ProblemLine>
     );
   }
