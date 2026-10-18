@@ -134,7 +134,6 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
             readiness={blocked.readiness}
             testId="question-not-ready"
             setUpLabel={t("question.setUp")}
-            refused
           />
         </div>
       )}

@@ -67,7 +67,7 @@ export function providerLabel(provider: ChatProvider, t: Translate, language: La
   return `${kind} · ${provider.service?.name ?? t("providers.settings.local")}`;
 }
 
-/** Who receives the data, for messages like "You chose not to send data to {service}". */
+/** Who receives the data, for messages like "Questions are off: you chose not to send to {service}". */
 export const serviceName = (provider: ChatProvider, t: Translate, language: Language) =>
   provider.service?.name ?? providerLabel(provider, t, language);
 
