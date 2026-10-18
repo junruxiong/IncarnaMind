@@ -241,14 +241,15 @@ async function arrived(
     stopped &&
     (edits.editing[mindId] !== undefined || (!mine && edits.pending[mindId] !== undefined));
   if (!waitedOn && !editor.isDestroyed) setEditTarget(editor, null);
-  let outcome: { applied: number } | "held" | null = null;
+  let outcome: Awaited<ReturnType<typeof finishApplying>> = null;
   try {
     outcome = applying ? await finishApplying(applying, result) : null;
   } finally {
     if (mine) set("pending", mindId, null);
   }
   if (outcome !== null && outcome !== "held") {
-    if (outcome.applied > 0) speak(mindId, appliedMessage(outcome.applied));
+    const { paragraphs, tables } = outcome.applied;
+    if (paragraphs + tables > 0) speak(mindId, appliedMessage(outcome.applied));
     return;
   }
   if (stopped) return;

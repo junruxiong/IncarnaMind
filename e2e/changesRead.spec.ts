@@ -216,3 +216,110 @@ test("a résumé's section rewritten as a whole reads as one line in Review chan
   await screenshot(window, "changes-section-open-zh");
   await app.close();
 });
+
+/** A Mind with a heading and a bulleted list under it, typed as the User would. */
+async function listWith(window: Page, heading: string, items: readonly string[]): Promise<Locator> {
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type(`## ${heading}`);
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("- ");
+  for (const [index, item] of items.entries()) {
+    if (index > 0) await window.keyboard.press("Enter");
+    await window.keyboard.type(item);
+  }
+  await expect(editor.locator("li")).toHaveText(items);
+  return editor;
+}
+
+/** ⌘J over the whole Mind, saying what to change, and the edit applied. */
+async function changeAll(window: Page, instruction: string) {
+  await window.keyboard.press("ControlOrMeta+a");
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type(instruction);
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`a résumé's list item replaced by one about something else goes, and the new one comes once: none is kept as left out, and Review strikes the old item whole (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, 1100, 760);
+    const [heading, items, old, made, count, review] =
+      language === "en"
+        ? [
+            "Experience",
+            [
+              "Led quarterly forecasting for a team of twelve analysts",
+              "Presented findings to the board every month",
+              "Cut the month-end close from ten days to six",
+            ],
+            "Led quarterly forecasting for a team of twelve analysts",
+            "Ran the forecast cycle each quarter",
+            "Changed 2 paragraphs",
+            "2 paragraphs changed by Edit with AI",
+          ]
+        : [
+            "教育经历",
+            ["2012.09—2016.06 复旦大学 金融学 学士", "2016.09—2018.06 上海财经大学 会计学 硕士"],
+            "2016.09—2018.06 上海财经大学 会计学 硕士",
+            "2018.10—至今 Deloitte Touche Tohmatsu, Senior Manager",
+            "修改了 2 个段落",
+            "用 AI 编辑修改的 2 个段落",
+          ];
+    const editor = await listWith(window, heading, items);
+
+    await changeAll(
+      window,
+      language === "en" ? `replace ${old} with ${made}` : `把${old}换成${made}`,
+    );
+
+    const line = editor.getByTestId("applied-line");
+    await expect(line.getByTestId("applied-count")).toHaveText(count);
+    await expect(editor.locator("li")).toHaveText(
+      items.map((item) => (item === old ? made : item)),
+    );
+    await expect(editor.getByTestId("applied-kept")).toHaveCount(0);
+
+    await pointAndClick(window, line.getByTestId("applied-review"));
+    await expect(line.getByTestId("applied-count")).toHaveText(review);
+    await expect(editor.locator(".applied-old--block")).toHaveText(old);
+    await expect(editor.getByTestId("change-was-line")).toHaveCount(0);
+    await motionSettled(window);
+    await screenshot(window, `changes-item-replaced-${language}`);
+    await app.close();
+  });
+
+  test(`a table added by Edit with AI counts as one table on its line, its Undo notice and in Review changes (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, 1100, 760);
+    const [line, instruction, count, review] =
+      language === "en"
+        ? [
+            "Spring tides are strongest at new moon.",
+            "add a table",
+            "Changed 1 table",
+            "1 table changed by Edit with AI",
+          ]
+        : ["新月时大潮最强。", "加一个表格", "修改了 1 个表格", "用 AI 编辑修改的 1 个表格"];
+    const editor = await mindWith(window, [line]);
+
+    await changeAll(window, instruction);
+
+    const applied = editor.getByTestId("applied-line");
+    await expect(editor.locator("table")).toHaveCount(1);
+    await expect(applied.getByTestId("applied-count")).toHaveText(count);
+    await expect(window.getByTestId("undo-message")).toHaveText(count);
+    await pointAndClick(window, applied.getByTestId("applied-review"));
+    await expect(applied.getByTestId("applied-count")).toHaveText(review);
+    await app.close();
+  });
+}
