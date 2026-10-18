@@ -5,10 +5,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { caughtFigures, HARNESS_CASES, POINTS_BACK } from "../../eval/harness/cases";
+import { ownUsage } from "../../eval/harness/codex";
 import {
   flatTools,
   responsesEvents,
   toMessagesRequest,
+  toolNames,
   toResponsesOutput,
 } from "../../eval/harness/modelProxy";
 import { type MintedCitation, signTestP, withMarkers } from "../../eval/harness/score";
@@ -266,6 +268,50 @@ describe("the harness bake-off", () => {
       expect(() => toMessagesRequest({ input: [{ type: "local_shell_call" }] })).toThrow(
         /local_shell_call/,
       );
+    });
+
+    it("records the Tools Code Mode offers in an additional_tools item, not in tools", () => {
+      const body = {
+        input: [
+          {
+            type: "additional_tools",
+            role: "developer",
+            tools: [
+              {
+                type: "namespace",
+                name: "functions",
+                tools: [
+                  { type: "custom", name: "exec" },
+                  { type: "function", name: "wait" },
+                ],
+              },
+            ],
+          },
+          { type: "message", role: "user", content: "Hi" },
+        ],
+      };
+      expect(toolNames(body)).toEqual(["functions__exec", "functions__wait"]);
+    });
+  });
+
+  describe("Codex's usage", () => {
+    const usage = (inputTokens: number, cachedInputTokens: number, outputTokens: number) => ({
+      inputTokens,
+      cachedInputTokens,
+      cacheWriteTokens: 0,
+      outputTokens,
+    });
+
+    it("counts a resumed turn's own tokens, not the thread's running total again", () => {
+      const first = ownUsage(usage(59_401, 46_426, 312), usage(0, 0, 0));
+      expect(first.usage).toEqual(usage(59_401, 46_426, 312));
+      const second = ownUsage(usage(116_310, 101_049, 815), first.thread);
+      expect(second.usage).toEqual(usage(56_909, 54_623, 503));
+    });
+
+    it("counts nothing for a turn that ended before Codex reported its usage", () => {
+      const thread = usage(59_401, 46_426, 312);
+      expect(ownUsage(usage(0, 0, 0), thread)).toEqual({ usage: usage(0, 0, 0), thread });
     });
   });
 });

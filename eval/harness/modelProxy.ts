@@ -76,9 +76,19 @@ export function resultsIn(body: Json): ProxyRecord["results"] {
   );
 }
 
-/** The Tools a request offers, by name, whatever their type: for the log only. */
+/**
+ * The Tools a request offers, by name, whatever their type: for the log only. Codex in Code
+ * Mode sends them in an `additional_tools` input item instead of `tools`.
+ */
 export const toolNames = (body: Json): string[] =>
-  (Array.isArray(body.tools) ? body.tools : []).flatMap((tool) => {
+  [
+    ...(Array.isArray(body.tools) ? body.tools : []),
+    ...(Array.isArray(body.input) ? body.input : []).flatMap((item) =>
+      isRecord(item) && item.type === "additional_tools" && Array.isArray(item.tools)
+        ? item.tools
+        : [],
+    ),
+  ].flatMap((tool) => {
     if (!isRecord(tool)) return [];
     if (tool.type === "namespace" && Array.isArray(tool.tools)) {
       return tool.tools.map(

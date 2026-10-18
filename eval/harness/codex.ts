@@ -94,6 +94,28 @@ export function codexSettings(options: OutsideRunOptions, proxyBaseUrl: string):
 
 const number = (value: unknown) => (typeof value === "number" ? value : 0);
 
+type Usage = Required<typeof NO_TOKENS>;
+
+/**
+ * A turn's own usage from what `codex exec` reported for it: a resumed session reports the
+ * thread's running total, so the turns before are taken off. A turn that ended before Codex
+ * reported anything used nothing it can count.
+ */
+export function ownUsage(reported: Usage, thread: Usage): { usage: Usage; thread: Usage } {
+  if (reported.inputTokens === 0 || reported.inputTokens < thread.inputTokens) {
+    return { usage: { ...NO_TOKENS }, thread };
+  }
+  return {
+    usage: {
+      inputTokens: reported.inputTokens - thread.inputTokens,
+      cachedInputTokens: reported.cachedInputTokens - thread.cachedInputTokens,
+      cacheWriteTokens: 0,
+      outputTokens: reported.outputTokens - thread.outputTokens,
+    },
+    thread: reported,
+  };
+}
+
 export async function runCodex(
   bin: string,
   proxy: { baseUrl: string; token: string },
@@ -104,6 +126,7 @@ export async function runCodex(
   const off = CODEX_OFF.flatMap((feature) => ["--disable", feature]);
   const turns: OutsideTurn[] = [];
   const session: { thread: string | null } = { thread: null };
+  let threadUsage: Usage = { ...NO_TOKENS };
   for (const [index, prompt] of options.turns.entries()) {
     const args = [
       "exec",
@@ -168,6 +191,9 @@ export async function runCodex(
     });
     const failed =
       !spawned.timedOut && (spawned.code !== 0 || (seen.error !== null && !seen.reply));
+    const own = ownUsage(seen.usage, threadUsage);
+    threadUsage = own.thread;
+    const turnUsage = own.usage;
     turns.push({
       reply: seen.reply,
       status: spawned.timedOut ? "timed-out" : failed ? "failed" : "done",
@@ -176,7 +202,7 @@ export async function runCodex(
         : failed
           ? (seen.error ?? (lastLines(spawned.stderr) || `Codex exited with ${spawned.code}.`))
           : null,
-      usage: seen.usage,
+      usage: turnUsage,
       reportedCostUsd: null,
       toolsOffered: null,
       calls,
