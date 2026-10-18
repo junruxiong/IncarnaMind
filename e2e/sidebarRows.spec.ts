@@ -22,8 +22,8 @@ import {
 /*
  * The sidebar's rows, its two rules and its status line (#615): a row that
  * is pointed at or focused ends its name with "…" before its actions; the
- * rule above Settings is inset like the header's; a long name leaves the undo
- * line on one line with Undo; and a model's download keeps its figure whole
+ * rule above Settings is inset like the header's; a long name is cut in the
+ * middle of the undo line, which keeps Undo whole; and a model's download keeps its figure whole
  * at the narrowest sidebar, in both languages.
  */
 
@@ -169,7 +169,7 @@ for (const language of ["en", "zh-CN"] as const) {
     }
   });
 
-  test(`${language}: a long name leaves the undo line on one line, with Undo, and its tooltip gives the whole name`, async () => {
+  test(`${language}: a long name is cut in the middle of the undo line, which keeps Undo whole inside the sidebar, and its tooltip gives the whole name`, async () => {
     test.setTimeout(120_000);
     const { app, window } = await launchApp(dataDir);
     try {
@@ -187,6 +187,7 @@ for (const language of ["en", "zh-CN"] as const) {
       for (const [index, width] of [DEFAULT, NARROWEST].entries()) {
         await setSidebarWidth(window, width);
         const name = `${renamed} ${index + 1}`;
+        const characters = [...name];
         await renameInTab(window, name);
         await expect(undo).toBeVisible();
         const [messageBox, undoBox, sidebarBox] = await Promise.all([
@@ -194,17 +195,23 @@ for (const language of ["en", "zh-CN"] as const) {
           boxOf(undo),
           boxOf(sidebar),
         ]);
-        // One line, level with Undo, which ends inside the sidebar, after the message.
-        expect(messageBox.height).toBeLessThanOrEqual(20);
-        expect(
-          Math.abs(messageBox.y + messageBox.height / 2 - (undoBox.y + undoBox.height / 2)),
-        ).toBeLessThanOrEqual(1);
-        expect(messageBox.x + messageBox.width).toBeLessThanOrEqual(undoBox.x);
+        // Undo ends inside the sidebar, after the message or under it, and nothing is cut at its end.
         expect(undoBox.x + undoBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width);
-        expect(await message.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
-          true,
+        expect(messageBox.x + messageBox.width).toBeLessThanOrEqual(
+          sidebarBox.x + sidebarBox.width,
         );
-        // The tooltip has all of it, name included.
+        const after = messageBox.x + messageBox.width <= undoBox.x + 0.5;
+        const under = messageBox.y + messageBox.height <= undoBox.y + 0.5;
+        expect(after || under).toBe(true);
+        expect(
+          await message.evaluate((element) => element.scrollWidth <= element.clientWidth),
+        ).toBe(true);
+        // The name is cut in the middle: its start and its end show, and the tooltip has all of it.
+        const said = (await message.textContent()) ?? "";
+        expect(said).toContain(characters.slice(0, 8).join(""));
+        expect(said).toContain("…");
+        expect(said).toContain(characters.slice(-8).join(""));
+        expect(said).not.toContain(name);
         expect(await message.getAttribute("title")).toContain(name);
       }
     } finally {
