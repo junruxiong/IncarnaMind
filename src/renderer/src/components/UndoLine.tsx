@@ -10,7 +10,7 @@ import {
 import { NAME_IN_LINE_COLUMNS } from "../../../shared/naming";
 import { shortcutLabel } from "../commands/keymap";
 import { useDismissOnEscape } from "../escapeDismiss";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { type Said, saidInLine } from "../lineNames";
 import { useFade } from "../motion";
 import { useAppStore } from "../store";
@@ -129,7 +129,8 @@ const LEAST_NAME_COLUMNS = 8;
 
 /**
  * The message takes two lines at most (DESIGN.md, Sidebar): a name in it is cut shorter, two
- * columns at a time, until it does, and again when the sidebar changes width. Its words never are.
+ * columns at a time, until it does, and again when the sidebar changes width or the language
+ * changes, its words being of another length. Its words never are cut.
  */
 function ChangeLine({
   said,
@@ -144,6 +145,12 @@ function ChangeLine({
   const message = useRef<HTMLSpanElement>(null);
   const [columns, setColumns] = useState(NAME_IN_LINE_COLUMNS);
   const [, measureAgain] = useReducer((times: number) => times + 1, 0);
+  const language = useLanguage();
+  const [measuredIn, setMeasuredIn] = useState(language);
+  if (measuredIn !== language) {
+    setMeasuredIn(language);
+    setColumns(NAME_IN_LINE_COLUMNS);
+  }
 
   // After every render, as the room can change without the columns.
   useLayoutEffect(() => {

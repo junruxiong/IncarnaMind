@@ -4564,6 +4564,7 @@ export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
  * - "failed": the model or its service failed otherwise (`detail` says how).
  * - "stopped": the User stopped the check, or IncarnaMind quit, before this sentence was checked.
  * - "too-many": the assistant wrote more sentences with Citations than one write has checked (#1111).
+ * - "consent-revoked": the User turned off sending checks to the model's service while it ran.
  */
 export type ClaimCheckFailure =
   | "refused"
@@ -4575,7 +4576,8 @@ export type ClaimCheckFailure =
   | "plan-limit"
   | "failed"
   | "stopped"
-  | "too-many";
+  | "too-many"
+  | "consent-revoked";
 
 /** Why a sentence was found unsupported, as the check gave it. */
 export interface UnsupportedReason {

@@ -735,6 +735,7 @@ export function createCore(adapters: CoreAdapters): Core {
     pictureFetch: pictureFetcher.fetch,
     ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
     keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    signal: lifetime.signal,
     reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
   });

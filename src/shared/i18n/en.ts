@@ -637,6 +637,7 @@ export const en = {
   "claim.reason.too-many":
     "Not checked yet: only the first {cap} cited sentences are checked as they're written",
   "claim.checkNow": "Check now",
+  "claim.reason.consent-revoked": "Not checked: you turned off sending to this service.",
   "claim.recheck.edited": "The sentence has changed since it was checked.",
   "claim.recheck.new-version": "A Document it was checked against has a new version.",
   "claim.recheck.document-removed": "A Document it was checked against was deleted.",
@@ -3407,7 +3408,8 @@ export const en = {
   "quit.unsaved.title.one": "1 change isn’t saved",
   "quit.unsaved.quit": "Quit anyway",
   "quit.unsaved.keep": "Keep open",
-  "quit.unsaved.copyFailed": "The copy couldn’t be saved: {reason}",
+  "quit.unsaved.copyFailed": "The copy couldn’t be saved. {reason}",
+  "quit.unsaved.copyFailed.details": "Details: {raw}",
   "error.mind.missedChange": "This change builds on one the Mind never got, so it wasn’t saved.",
   "error.mind.newerVersionEdit":
     "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",
