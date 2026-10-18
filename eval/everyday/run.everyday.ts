@@ -597,9 +597,12 @@ test("everyday requests", async () => {
     return;
   }
   const only = process.env.INCARNAMIND_EVAL_EVERYDAY?.trim();
-  const cases = CASES.filter((each) =>
-    !only ? true : only === "hard" ? each.hard === true : only.split(",").includes(each.id),
-  );
+  const cases = CASES.filter((each) => {
+    if (!only) return true;
+    if (only === "hard") return each.hard === true;
+    if (only === "research") return each.research === true;
+    return only.split(",").includes(each.id);
+  });
   const runs = Number(process.env.INCARNAMIND_EVAL_EVERYDAY_RUNS ?? "3") || 3;
   const judging = judgeOf(config, config.chat);
   const results = await runModel(config.chat, judging, cases, runs, log);
