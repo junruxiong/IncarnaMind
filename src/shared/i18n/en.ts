@@ -4940,4 +4940,10 @@ export const en = {
   "wordAtom.kind.header": "Header",
   "wordAtom.kind.footer": "Footer",
   "wordAtom.kind.other": "Word content",
+  "analysis.unavailable.missing":
+    "Analysis can't run on this computer: some of its files are missing. Installing IncarnaMind again puts them back.",
+  "analysis.unavailable.start": "Analysis can't run on this computer: its sandbox couldn't start.",
+  "analysis.unavailable.noSandbox": "Analyses need the app's sandbox, which is off",
+  "analysis.unavailable.noSandbox.fix": "How to fix",
+  "analysis.crashed": "The analysis stopped unexpectedly. Run it again.",
 } as const satisfies Record<string, string>;

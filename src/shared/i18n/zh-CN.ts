@@ -4747,4 +4747,10 @@ export const zhCN = {
   "wordAtom.kind.header": "页眉",
   "wordAtom.kind.footer": "页脚",
   "wordAtom.kind.other": "Word 内容",
+  "analysis.unavailable.missing":
+    "这台电脑上无法运行数据分析：缺少部分文件。重新安装 IncarnaMind 即可恢复。",
+  "analysis.unavailable.start": "这台电脑上无法运行数据分析：沙盒未能启动。",
+  "analysis.unavailable.noSandbox": "沙盒已关闭，无法运行数据分析",
+  "analysis.unavailable.noSandbox.fix": "如何解决",
+  "analysis.crashed": "数据分析意外停止。请重新运行。",
 } satisfies Dictionary;
