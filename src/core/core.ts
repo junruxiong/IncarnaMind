@@ -2278,7 +2278,7 @@ export function createCore(adapters: CoreAdapters): Core {
   let lookingForModel: Promise<void> | null = null;
   let lookingAgain: Promise<void> | null = null;
   const lookForTaggingModel = (): Promise<void> => {
-    if (organizesNewDocuments() || tagsWith() !== null) return Promise.resolve();
+    if (tagsWith() !== null) return Promise.resolve();
     if (lookingForModel) {
       lookingAgain ??= lookingForModel.then(() => {
         lookingAgain = null;
