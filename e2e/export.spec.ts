@@ -684,6 +684,7 @@ for (const language of ["en", "zh-CN"] as const) {
     const second = await askInAssistant(window, words.second);
     await expect(second.getByTestId("mind-changes-title")).toContainText("“Summary”");
     await expect(frontMindName(window)).toHaveText("Summary");
+    await screenshot(window, `mind-named-by-first-line-${language}`);
 
     await exportFromMenu(window);
     await expect(window.getByTestId("export-result").getByTestId("export-done")).toContainText(
