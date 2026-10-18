@@ -1574,6 +1574,7 @@ export function createCore(adapters: CoreAdapters): Core {
       content.remove(mind.id, at);
       return mind;
     });
+    content.removed(deleted.id, at);
     meetings.mindDeleted(deleted.id);
     mindsChanged();
     layouts.forgetDeletedMinds();
@@ -2571,10 +2572,12 @@ export function createCore(adapters: CoreAdapters): Core {
     mindExists: (mindId) => minds.list().some((mind) => mind.id === mindId),
     deleteMind: (mindId) => {
       const at = now();
-      db.transaction(() => {
+      const deleted = db.transaction(() => {
         const mind = minds.delete(mindId, at);
         content.remove(mind.id, at);
+        return mind;
       });
+      content.removed(deleted.id, at);
       mindsChanged();
       layouts.forgetDeletedMinds();
     },

@@ -421,22 +421,27 @@ export function createMindContent(
       unload(mindId);
     },
 
-    /** Marks the Mind's content deleted. Run it in the same transaction as deleting the Mind. */
+    /**
+     * Marks the Mind's content deleted, in the transaction that deletes the Mind; `removed`
+     * follows once that commits.
+     */
     remove(mindId: string, at: string): void {
-      const mind = loaded.get(mindId);
-      if (mind?.unsaved && !store(mindId, mind, [])) {
-        const { unsaved } = mind;
-        mind.deletedAt = at;
-        options.unsaved?.(mindId, {
-          count: unsaved.count,
-          failure: unsaved.failure,
-          deleted: true,
-        });
-      } else unload(mindId);
       db.run(
         "UPDATE mind_updates SET deleted_at = ?, updated_at = ? WHERE mind_id = ? AND deleted_at IS NULL",
         [at, at, mindId],
       );
+    },
+
+    /**
+     * The Mind's deletion at `at` committed: its document leaves memory. Changes that still
+     * wait are stored deleted with it, or stay in memory, tried again, until they are.
+     */
+    removed(mindId: string, at: string): void {
+      const mind = loaded.get(mindId);
+      if (!mind) return;
+      // Only now: had the deletion rolled back, later typing would be stored as deleted.
+      mind.deletedAt = at;
+      if (!mind.unsaved || store(mindId, mind, [])) unload(mindId);
     },
 
     /** Brings back the content `remove` marked deleted at `deletedAt`, what still waits included. */

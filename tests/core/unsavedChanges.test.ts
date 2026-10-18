@@ -6,7 +6,7 @@ import * as Y from "yjs";
 import { type Core, MIND_CONTENT_FIELD, type UnsavedChanges } from "../../src/core";
 import { saveFailureReason } from "../../src/core/unsavedChanges";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
-import { refuseWrites } from "../helpers/failingStorage";
+import { failMindDeleteCommits, refuseWrites } from "../helpers/failingStorage";
 import { appendParagraph, connectToMind } from "../helpers/mindClient";
 import { note } from "../helpers/minds";
 
@@ -316,6 +316,52 @@ describe("Changes waiting when their Mind is deleted (#1202)", () => {
     await core.deleteMind(copy.mindId);
 
     expect(await core.unsavedChanges()).toMatchObject({ count: 2, mindIds: [] });
+    restore();
+  });
+
+  // protects=a deletion that fails, at its own write or at its commit, leaves the Mind there, and what is typed after it is stored as the Mind's; fails_when=memory takes the Mind for deleted, so that typing is stored as deleted and is gone after a restart; no_claim=none beyond protects.
+  test.each(["write", "commit"] as const)(
+    "a deletion that fails at its %s keeps the Mind, with what is typed after it",
+    async (step) => {
+      const dataDir = await createTempDataFolder();
+      const core = startCore(dataDir);
+      const copy = await typingIn(core);
+      const restoreWrites = refuseWrites(dataDir, { updates: step === "write" });
+      const restoreCommits = step === "commit" ? failMindDeleteCommits(dataDir) : null;
+      await copy.type(" WAITS");
+
+      await expect(core.deleteMind(copy.mindId)).rejects.toThrow();
+      restoreCommits?.();
+      restoreWrites();
+      expect(await copy.type(" AFTER")).toBe("stored");
+      core.close();
+
+      const again = startCore(dataDir);
+      expect((await again.listMinds()).map((mind) => mind.id)).toContain(copy.mindId);
+      again.close();
+      expect(await afterRestart(dataDir, copy.mindId)).toBe(
+        "<paragraph>BASE WAITS AFTER</paragraph>",
+      );
+    },
+  );
+
+  // protects=deleting for good that fails keeps what waits in a Mind it would have purged; fails_when=that Mind's waiting changes go though nothing was purged; no_claim=none beyond protects.
+  test("deleting for good that fails keeps what waits", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const copy = await typingIn(core);
+    const restore = failWrites(dataDir);
+    await copy.type(" WAITS");
+    await core.deleteMind(copy.mindId);
+
+    await expect(
+      core.deletePermanently([
+        { kind: "mind", id: copy.mindId },
+        { kind: "mind", id: "no-such-mind" },
+      ]),
+    ).rejects.toThrow();
+
+    expect(await core.unsavedChanges()).toMatchObject({ count: 1 });
     restore();
   });
 
