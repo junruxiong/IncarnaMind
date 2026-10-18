@@ -1668,8 +1668,7 @@ export const en = {
   "status.taggingPaused.full":
     "ChatGPT plan limit reached: tagging waits for the reset, then resumes.",
   "status.taggingRateLimited": "Rate limit reached · resumes at {time}",
-  "status.taggingRateLimited.full":
-    "AI model rate limit reached: tagging resumes at {time}, or now with Retry.",
+  "status.taggingRateLimited.full": "Rate limit reached: tagging resumes at {time}.",
   "jev.form.sends": "Sends Document text to Jev for tagging.",
 
   "settings.title": "Settings",
