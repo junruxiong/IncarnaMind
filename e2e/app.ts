@@ -677,6 +677,22 @@ export function savedLine(name: string, folder: string, language: "en" | "zh-CN"
     : `Saved “${name}” in ${basename(folder)}`;
 }
 
+/** Opens the assistant's ⋯ and its Move assistant row, whose submenu has the places it docks. */
+export async function openMoveAssistant(window: Page): Promise<void> {
+  await window.getByTestId("assistant-more").click();
+  await window.getByTestId("assistant-menu-move").click();
+  await expect(window.getByTestId("assistant-menu-docks")).toBeVisible();
+}
+
+/** Docks or floats the assistant from its ⋯ › Move assistant. */
+export async function moveAssistant(
+  window: Page,
+  place: "right" | "left" | "bottom" | "float",
+): Promise<void> {
+  await openMoveAssistant(window);
+  await window.getByTestId(`assistant-menu-${place}`).click();
+}
+
 /** The result line's saved file, once it says it saved one. */
 export async function savedPath(window: Page, name: string): Promise<string> {
   const done = window.getByTestId("export-result").getByTestId("export-done");

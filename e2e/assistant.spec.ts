@@ -8,8 +8,10 @@ import {
   dismissChatSetup,
   dragBy,
   launchApp,
+  moveAssistant,
   nameMind,
   newMind,
+  openMoveAssistant,
   removeDataFolder,
   setGroupBeside,
   setLanguage,
@@ -112,10 +114,9 @@ async function dragByXY(window: Page, handle: Locator, dx: number, dy: number): 
   await window.mouse.up();
 }
 
-/** Opens the assistant's ⋯ and chooses an item. */
+/** Opens the assistant's ⋯ › Move assistant and chooses a place. */
 async function fromMenu(window: Page, item: "right" | "left" | "bottom" | "float") {
-  await window.getByTestId("assistant-more").click();
-  await window.getByTestId(`assistant-menu-${item}`).click();
+  await moveAssistant(window, item);
   await expect(assistantOf(window)).toHaveAttribute("data-chosen-dock", item);
 }
 
@@ -140,9 +141,10 @@ test("a new window's assistant is docked on the right, outside the groups, the c
   const strip = await boxOf(window.getByTestId("tab-strip").first());
   near(header.y + header.height, strip.y + strip.height);
 
-  // The header: the conversation's title with ▾, History, New chat, ⋯ and fold.
+  // The header: the conversation's title with ▾ (History), New chat, ⋯ and fold; no clock.
   await expect(window.getByTestId("assistant-title")).toHaveText("New chat");
-  await expect(window.getByTestId("assistant-history")).toHaveAccessibleName("History");
+  await expect(window.getByTestId("assistant-header").getByRole("button")).toHaveCount(4);
+  await expect(window.getByTestId("assistant-history")).toHaveCount(0);
   await expect(window.getByTestId("assistant-new-chat")).toHaveAccessibleName(
     /^New chat \((⇧⌘O|Ctrl\+Shift\+O)\)$/,
   );
@@ -151,6 +153,9 @@ test("a new window's assistant is docked on the right, outside the groups, the c
   await expect(window.getByTestId("assistant-reads")).toHaveText(
     "Reads “Tides” · searches All Documents",
   );
+  // An empty panel is that one line; the composer's placeholder says the rest.
+  await expect(window.getByTestId("assistant-empty").locator("p")).toHaveCount(1);
+  await expect(assistant.getByText("Ask about this Mind")).toHaveCount(0);
   // The composer is the assistant's, the one in the window.
   await expect(window.getByTestId("composer")).toHaveCount(1);
   await expect(assistant.getByTestId("composer-input")).toBeVisible();
@@ -340,21 +345,26 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   const { window } = await start();
   const assistant = assistantOf(window);
 
-  // The ⋯ menu by keyboard: the place it is in is checked.
+  // The ⋯ menu by keyboard: Move assistant first, and in it, the place it is in is checked.
   await window.getByTestId("assistant-more").focus();
   await window.keyboard.press("Enter");
   const menu = window.getByTestId("assistant-menu");
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("menuitemradio", { name: "Dock on the right" })).toHaveAttribute(
-    "aria-checked",
-    "true",
-  );
-  await expect(menu.getByRole("menuitemradio", { name: "Dock on the right" })).toBeFocused();
+  await expect(menu.getByRole("menuitem")).toHaveCount(4);
+  await expect(menu.getByTestId("assistant-menu-move")).toBeFocused();
   await expect(menu.getByRole("menuitem", { name: "Clear this conversation" })).toHaveAttribute(
     "aria-disabled",
     "true",
   );
   await screenshot(window, "assistant-menu");
+  await window.keyboard.press("ArrowRight");
+  const docks = window.getByTestId("assistant-menu-docks");
+  await expect(docks.getByRole("menuitemradio", { name: "Dock on the right" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(docks.getByRole("menuitemradio", { name: "Dock on the right" })).toBeFocused();
+  await screenshot(window, "assistant-menu-move");
   await window.keyboard.press("ArrowDown");
   await window.keyboard.press("Enter");
   await expect(assistant).toHaveAttribute("data-dock", "left");
@@ -365,7 +375,7 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await fromMenu(window, "right");
   await expect(assistant).toHaveAttribute("data-dock", "right");
 
-  // Folded on a side: a 44px rail with show, New chat and History; the card takes the room.
+  // Folded on a side: a 44px rail with show and New chat; the card takes the room.
   const cardWidth = await widthOf(cardOf(window));
   await window.getByTestId("assistant-fold").click();
   await expect(assistant).toHaveAttribute("data-folded", "true");
@@ -373,7 +383,7 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await expect.poll(() => widthOf(assistant)).toBe(44);
   expect(await widthOf(cardOf(window))).toBeGreaterThan(cardWidth + 260);
   const rail = window.getByTestId("assistant-rail");
-  await expect(rail.getByRole("button")).toHaveCount(3);
+  await expect(rail.getByRole("button")).toHaveCount(2);
   await expect(rail.getByTestId("assistant-fold")).toHaveAccessibleName(
     /^Show the assistant \((⌘J|Ctrl\+J)\)$/,
   );
@@ -407,8 +417,9 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await window.keyboard.press("ControlOrMeta+Shift+O");
   await expect(window.getByTestId("composer-input")).toBeFocused();
 
-  // History from the clock, and from the title's ▾: none kept yet. Esc closes it.
-  await window.getByTestId("assistant-history").click();
+  // History from the title's ▾: none kept yet. Esc closes it, and the focus is back on the title.
+  const title = window.getByTestId("assistant-title");
+  await title.click();
   const history = window.getByTestId("assistant-history-popover");
   await expect(history).toBeVisible();
   await expect(history.getByTestId("assistant-history-empty")).toHaveText(
@@ -421,10 +432,15 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await setLanguage(window, "en");
   await window.keyboard.press("Escape");
   await expect(history).toBeHidden();
-  await window.getByTestId("assistant-title").click();
+  await expect(title).toBeFocused();
+  // ⌘K reaches it too, and Esc there puts the focus back on the title as well.
+  await window.keyboard.press("ControlOrMeta+k");
+  await window.keyboard.type("Conversation history");
+  await window.keyboard.press("Enter");
   await expect(history).toBeVisible();
   await window.keyboard.press("Escape");
   await expect(history).toBeHidden();
+  await expect(title).toBeFocused();
 });
 
 test("under 1,000px a side dock sits at the bottom and goes back when wider; groups merge beside it and come back as it folds; its place, sizes and fold survive a closed tab and a restart", async () => {
@@ -441,7 +457,7 @@ test("under 1,000px a side dock sits at the bottom and goes back when wider; gro
   await setWindowSize(app, window, 960, 660);
   await expect(assistant).toHaveAttribute("data-dock", "bottom");
   await expect(assistant).toHaveAttribute("data-chosen-dock", "left");
-  await window.getByTestId("assistant-more").click();
+  await openMoveAssistant(window);
   await expect(window.getByTestId("assistant-menu-left")).toHaveAttribute("aria-checked", "true");
   // Choosing a side here says why it stays at the bottom.
   await window.getByTestId("assistant-menu-right").click();
@@ -558,7 +574,7 @@ test("moving, resizing and folding it keep the composer's draft, the Mind's scro
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.askInConversation({ text: "When do neap tides come?" });
   });
-  await window.getByTestId("assistant-history").click();
+  await window.getByTestId("assistant-title").click();
   const rows = window.getByTestId("assistant-history-row");
   await expect(rows).toHaveCount(2);
   await expect(rows.first()).toContainText("When do neap tides come");
@@ -580,11 +596,10 @@ test("in Chinese: the header, the line, the menu and the zones", async () => {
   });
   await expect(window.getByTestId("assistant-title")).toHaveText("新对话");
   await expect(assistantOf(window)).toHaveAccessibleName("助手");
-  await expect(window.getByTestId("assistant-history")).toHaveAccessibleName("历史对话");
   await expect(window.getByTestId("assistant-fold")).toHaveAccessibleName("收起助手");
   await expect(window.getByTestId("assistant-reads")).toHaveText("正在读“Tides” · 搜索全部文档");
-  await window.getByTestId("assistant-more").click();
-  await expect(window.getByTestId("assistant-menu").getByRole("menuitemradio")).toHaveText([
+  await openMoveAssistant(window);
+  await expect(window.getByTestId("assistant-menu-docks").getByRole("menuitemradio")).toHaveText([
     "停靠在右侧",
     "停靠在左侧",
     "停靠在底部",

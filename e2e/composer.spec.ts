@@ -586,6 +586,9 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     const stays = menu.getByTestId("on-this-computer").first();
     await expect(stays).toHaveCSS("color", "rgb(74, 79, 87)");
     expect(await stays.evaluate((element) => element.firstElementChild?.tagName)).toBe("svg");
+    // Where models run is said once, by the group's heading, not on every row.
+    await expect(menu.getByTestId("on-this-computer")).toHaveCount(1);
+    await expect(menu.getByText(/^Stays on this/)).toHaveCount(0);
     await screenshot(window, "composer-model-menu-en");
     await pointAndClick(window, options.nth(1));
     await expect(menu).toBeHidden();
