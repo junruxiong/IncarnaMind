@@ -402,13 +402,12 @@ export const en = {
   "tabs.close": "Close {title}",
   "tabs.unpin": "Unpin {title}",
   "tabs.writing": "An Answer is being written",
-  "tabs.preview":
-    "{title} · Preview: the next Document opened in this group replaces it. Double-click the tab, or scroll or select text in it, to keep it.",
+  "tabs.preview": "{title} · Preview: the next one you open replaces it. Double-click to keep.",
   "tabs.pinned": "{title} · Pinned to the left of this group",
   "tabs.split": "Split to the right ({shortcut})",
   "tabs.groupMenu": "More for this group",
   "tabs.tabMenu": "More for {title}",
-  "tabs.resize": "Resize the groups: ← and → move it; a double-click makes them equal",
+  "tabs.resize": "Resize the groups: ← and → move it; double-click makes them equal",
   "tabs.menu.keep": "Keep open",
   "tabs.menu.pin": "Pin",
   "tabs.menu.unpin": "Unpin",
@@ -430,8 +429,7 @@ export const en = {
   "tabs.notice.maxGroups": "Three groups fit side by side at most.",
   "tabs.notice.noGroup": "There’s no group {n}. {shortcut} splits the shown tab to the right.",
   "tabs.notice.pinned": "“{title}” is pinned: close it from its menu, or unpin it first.",
-  "tabs.notice.merged":
-    "There isn’t room for groups side by side, so they share one strip. Widen the window, or fold or move the assistant.",
+  "tabs.notice.merged": "No room side by side, so groups share one strip. Widen the window.",
   "tabs.notice.dismiss": "Dismiss",
   "tabs.drop.left": "Split left",
   "tabs.drop.right": "Split right",
@@ -446,7 +444,7 @@ export const en = {
   "wordCount.selected": "{selected} of {total} {unit}",
   "wordCount.target": "{count} / {target} {unit}",
   "wordCount.rule":
-    "Counts words in English and characters in Chinese and Japanese. Citation markers and Questions are left out.",
+    "Words in English, characters in Chinese and Japanese; Citation markers and Questions don't count.",
   "page.count.words": "{count} words",
   "page.count.words.one": "1 word",
   "page.count.characters": "{count} characters",
@@ -815,20 +813,17 @@ export const en = {
   "edit.stop": "Stop",
   "edit.close": "Close",
   "edit.problem.unchanged": "Nothing to change: the model gave the text back as it was.",
-  "edit.problem.changed": "The text changed while the AI worked on it. Select it and try again.",
+  "edit.problem.changed": "The text changed while the AI worked. Select it and try again.",
   "edit.problem.has-proposals":
     "The selection holds changes that are waiting: accept or reject them first.",
-  "edit.problem.too-long": "That is more text than the model can take at once: select less.",
+  "edit.problem.too-long": "Too much text for the model: select less.",
   "edit.problem.local-mode": "Couldn't edit: “Keep everything on this computer” is on.",
   "edit.problem.chooseModel": "Choose a model",
   "edit.problem.failed": "Edit with AI didn't work: {message}",
   "edit.problem.retry": "Try again",
-  "edit.problem.cant-regenerate":
-    "This change can't be made again. Reject it, then select the text and edit it with AI.",
-  "edit.problem.no-table":
-    "The AI's table wasn't complete, so nothing was changed. Try again, or ask for a list instead.",
-  "edit.problem.late":
-    "This edit took too long to arrive, so it wasn't applied. Accept or reject its changes.",
+  "edit.problem.cant-regenerate": "Can't be made again: reject it, then edit the text with AI.",
+  "edit.problem.no-table": "The AI's table wasn't complete, so nothing changed. Try again.",
+  "edit.problem.late": "This edit arrived too late to apply. Accept or reject its changes.",
   "composer.edit.placeholder": "Say what to change…",
   "composer.edit.label": "Say what to change in the selected text",
   "composer.edit.quote": "Editing “{text}”",
@@ -864,20 +859,17 @@ export const en = {
   "proposal.arrived.outOfDate": "{count} are out of date: you edited their text meanwhile.",
   "proposal.arrived.outOfDate.one": "1 is out of date: you edited its text meanwhile.",
   "proposal.outOfDate": "Out of date",
-  "proposal.outOfDate.why":
-    "You changed this text after the change was suggested, so it can't be accepted",
-  "proposal.outOfDate.label":
-    "Change {index} of {count}, out of date: you changed this text after it was suggested",
+  "proposal.outOfDate.why": "Can't accept: its text has changed since it was suggested",
+  "proposal.outOfDate.label": "Change {index} of {count}, out of date: its text has changed",
   "proposal.announce.outOfDate":
-    "Change out of date: {what}. You changed its text after it was suggested. Reject it with {reject}, or regenerate it.",
+    "Out of date: {what}. You changed its text. Reject it with {reject}, or regenerate.",
   "proposal.cantAccept": "This change is out of date: regenerate it or reject it.",
   "proposal.regenerate": "Regenerate",
   "proposal.regenerate.label": "Regenerate change {index} from the text as it is now",
   "proposal.reject.label": "Reject change {index}",
   "proposal.acceptAll.outOfDate": "Changes out of date are left as they are",
   "proposal.sourceRemoved": "Source removed",
-  "proposal.sourceRemoved.why":
-    "A Document this change cites has been deleted. Its Citation keeps the quote.",
+  "proposal.sourceRemoved.why": "A cited Document was deleted. Its Citation keeps the quote.",
   "proposal.region.review": "Changes to review",
   "proposal.theirs.count": "{count} changes from {name}",
   "proposal.theirs.count.one": "1 change from {name}",
@@ -897,7 +889,7 @@ export const en = {
   "edit.changes": "{paragraphs} and {tables}",
   "edit.count.tables": "{count} tables",
   "edit.count.tables.one": "1 table",
-  "edit.held.own": "This would rewrite most of your text, so it's waiting for you",
+  "edit.held.own": "Waiting for you: this rewrites most of your text",
   "edit.review.assistant": "{count} paragraphs changed by the assistant",
   "edit.review.assistant.one": "1 paragraph changed by the assistant",
   "edit.review.assistant.changes": "{changes} changed by the assistant",
@@ -914,7 +906,7 @@ export const en = {
   "change.rewrote": "Rewrote “{heading}”",
   "change.showOriginal": "Show original",
   "change.hideOriginal": "Hide original",
-  "edit.held": "This edit would remove most of what you selected, so it's waiting for you",
+  "edit.held": "Waiting for you: this edit removes most of your selection",
   "edit.held.apply": "Apply",
   "edit.held.discard": "Discard",
   "edit.kept.paragraphs": "Kept {count} paragraphs the edit left out",
@@ -924,14 +916,12 @@ export const en = {
   "edit.kept.remove": "Remove them",
   "edit.kept.remove.one": "Remove it",
   "edit.kept.removed": "Removed what the edit left out",
-  "proposal.outOfDate.why.theirs":
-    "You edited this text after the change was made, so it can't be accepted. Reject it, or finish the edit yourself.",
+  "proposal.outOfDate.why.theirs": "Out of date: you've edited this text. Reject it.",
   "proposal.announce.theirs":
     "{author}'s change: {what}. Accept with {accept}, reject with {reject}.",
   "proposal.announce.theirs.outOfDate":
-    "{author}'s change, out of date: {what}. You edited its text after it was made. Reject it with {reject}.",
-  "proposal.cantAccept.theirs":
-    "This change is out of date: reject it, or finish the edit yourself.",
+    "{author}'s change is out of date: {what}. Reject it with {reject}.",
+  "proposal.cantAccept.theirs": "Out of date: reject it, or finish the edit yourself.",
   "editor.turnInto.label": "Turn into",
   "editor.turnInto.bulletList": "Bulleted list",
   "editor.turnInto.orderedList": "Numbered list",
@@ -1595,6 +1585,9 @@ export const en = {
   "tags.menu.manage": "Manage Tags…",
   "tags.state.pending": "Waiting to be tagged",
   "tags.state.tagging": "Tagging…",
+  "tags.state.noFit": "No Tag fits",
+  "tags.state.noTags": "No Tags yet",
+  "tags.state.addTag": "Add a Tag",
   "tags.state.failed": "Tagging failed. Re-tag to try again.",
   "tags.dialog.body":
     "Documents get their Tags, and once you have Folders a suggested Folder, going by these names and descriptions, from the model chosen in Settings → Models → Tagging: Automatic, unless you choose another. Tags you add to or remove from a Document are never changed automatically.",
@@ -1693,6 +1686,9 @@ export const en = {
   "tagging.stopped.notInFolder": "Stopped Tagging Documents {places}",
   "tagging.restarted": "Tagging Documents {places} with AI again",
   "tagging.stoppedIn": "Tagging with AI is stopped for Documents {places}.",
+  "tagging.resume": "Resume",
+  "tagging.resume.keywords": "resume restart turn on tagging stopped",
+  "status.taggingStopped": "Tagging stopped",
   "status.taggingPaused": "Tagging waits for your ChatGPT plan",
   "status.taggingPaused.full":
     "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
@@ -4392,7 +4388,7 @@ export const en = {
   "assistant.more": "More for the assistant",
   "assistant.fold": "Fold the assistant",
   "assistant.unfold": "Show the assistant ({shortcut})",
-  "assistant.move": "Drag to move the assistant: dock it to an edge, or drop it anywhere to float",
+  "assistant.move": "Drag to move the assistant: dock it, or drop it to float",
   "assistant.dock.right": "Dock on the right",
   "assistant.dock.left": "Dock on the left",
   "assistant.dock.bottom": "Dock at the bottom",
@@ -4402,12 +4398,9 @@ export const en = {
   "assistant.lastToNewMind.unavailable": "There’s no Answer in this conversation yet",
   "assistant.clear": "Clear this conversation",
   "assistant.clear.unavailable": "This conversation is empty",
-  "assistant.resize.side":
-    "Resize the assistant: ← and → move it; a double-click restores its size",
-  "assistant.resize.bottom":
-    "Resize the assistant: ↑ and ↓ move it; a double-click restores its size",
-  "assistant.resize.float":
-    "Resize the assistant: the arrow keys change its size; a double-click restores it",
+  "assistant.resize.side": "Resize the assistant: ← and → move it; double-click resets",
+  "assistant.resize.bottom": "Resize the assistant: ↑ and ↓ move it; double-click resets",
+  "assistant.resize.float": "Resize the assistant: arrow keys change its size; double-click resets",
   "assistant.reads.all": "Reads “{mind}” · searches All Documents",
   "assistant.reads.one": "Reads “{mind}” · searches “{scope}”",
   "assistant.reads.more": "Reads “{mind}” · searches “{scope}” and {count} more",
@@ -4675,8 +4668,7 @@ export const en = {
   "origin.open": "Open the source conversation",
   "origin.deleted": "From the conversation “{title}”, now in Recently deleted",
   "origin.gone": "From a conversation that has been deleted",
-  "assistant.narrow":
-    "While the window is narrower than 1,000 px the assistant sits at the bottom; it goes back to the side when the window is wider.",
+  "assistant.narrow": "Narrow window: the assistant moved to the bottom.",
   "command.assistant.dock": "Assistant: {dock}",
   "command.assistant.fold": "Assistant: Fold",
   "command.assistant.unfold": "Assistant: Show",
@@ -4858,8 +4850,7 @@ export const en = {
   "history.added": "Added: ",
   "history.image": "Image",
   "history.chart": "Chart",
-  "history.empty":
-    "No versions yet. History keeps one before every AI change, and after 5 minutes without edits.",
+  "history.empty": "No versions yet: saved before AI changes and after 5 idle minutes.",
   "history.noChanges": "No changes: these two versions read the same.",
   "history.restored": "Restored the version from {version}",
   "history.restored.name": "Restore Version",
@@ -4872,12 +4863,10 @@ export const en = {
   "wordImport.own": "Mine",
   "wordImport.own.note": "You wrote it, or it’s yours to change.",
   "wordImport.someoneElse": "Someone else’s",
-  "wordImport.someoneElse.note":
-    "After reading it, the assistant asks you before it writes or sends anything.",
+  "wordImport.someoneElse.note": "The assistant then asks before writing or sending anything.",
   "wordImport.others": "It has changes or comments by {names}.",
   "wordImport.othersMore": "{count} more",
-  "wordImport.keeps":
-    "IncarnaMind keeps a copy of the file, so export can write your changes back into it.",
+  "wordImport.keeps": "Keeps a copy, so export can write your changes back.",
   "wordImport.addOriginal": "Also add the original to the Library, so Answers can cite it",
   "wordImport.newerDraft": "A newer draft of “{name}”? Keep both as versions",
   "wordImport.import": "Import",
@@ -4886,18 +4875,16 @@ export const en = {
   "wordImport.asDocument": "Add as a Document instead",
   "wordImport.chooseAnother": "Choose another file…",
   "wordImport.refusal.legacy":
-    "“{name}” is an older Word file (.doc). Save it as .docx in Word, then import that.",
+    "“{name}” is an older .doc file. Save it as .docx in Word, then import.",
   "wordImport.refusal.macros":
-    "“{name}” has macros (.docm), and IncarnaMind never runs macros. Save it as .docx in Word, then import that.",
-  "wordImport.refusal.encrypted":
-    "“{name}” is protected with a password. Remove the password in Word, then import it.",
+    "“{name}” has macros, which IncarnaMind never runs. Save it as .docx in Word, then import.",
+  "wordImport.refusal.encrypted": "“{name}” has a password. Remove it in Word, then import.",
   "wordImport.refusal.strict":
-    "“{name}” is saved as Strict Open XML. Save it as a Word Document (.docx) in Word, then import that.",
-  "wordImport.refusal.damaged":
-    "“{name}” is damaged or isn’t a Word document, so it can’t be read.",
+    "“{name}” is Strict Open XML. Save it as a Word Document (.docx) in Word, then import.",
+  "wordImport.refusal.damaged": "“{name}” is damaged or isn’t a Word document.",
   "wordImport.refusal.too-large": "“{name}” is too large to import.",
   "wordImport.refusal.unreadable":
-    "“{name}” couldn’t be read. It may have moved, or IncarnaMind isn’t allowed to open it.",
+    "“{name}” couldn’t be read: it may have moved, or can’t be opened.",
   "wordImport.from": "From {name}",
   "wordImport.keepsStyles": "Export keeps its styles",
   "look.title": "Look",
@@ -4910,7 +4897,7 @@ export const en = {
   "wordImport.notAdded": "“{name}” couldn’t be added to the Library, so Answers can’t cite it.",
   "wordImport.addToLibrary": "Add to Library",
   "wordImport.from.tooltip":
-    "Opened from a Word file. Export writes your changes back into it and keeps its styles, numbering, headers and footers.",
+    "Opened from a Word file. Export writes your changes back into it, with its styles intact.",
   "wordImport.progress": "Importing “{name}” · {percent}%",
   "wordImport.progress.label": "Import progress",
   "wordImport.report.editable": "Can be edited: {list}.",
