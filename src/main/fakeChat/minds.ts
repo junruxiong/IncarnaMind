@@ -20,8 +20,8 @@
  * slowly for a Question asked "slowly", as does edit_mind's edit. "Write three
  * paragraphs" is `paragraphsReply`'s. "Write a summary page" (写一个总结页面)
  * calls create_mind with a short summary. "Write a summary of my leases"
- * (根据我的租约写一份总结) calls create_mind naming the Documents in its scope,
- * so what it was written from shows (#1149).
+ * (根据我的租约写一份总结) writes, naming the Documents in its scope, into a new
+ * Mind, or the empty one it is asked from, so what it was written from shows (#1149).
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
@@ -144,12 +144,15 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     return { text: firstSentence(added) };
   }
   if (LEASES_SUMMARY.test(question)) {
-    const made = lastResult(prompt, "create_mind");
+    const made = lastResult(prompt, "create_mind") ?? lastResult(prompt, "add_to_mind");
     if (made !== undefined) return { text: firstSentence(made) };
     const listed = /^Their names, newest first:\n((?:- .+\n?)+)/m.exec(systemOf(prompt))?.[1] ?? "";
     const names = [...listed.matchAll(/^- (.+)$/gm)].map((line) => line[1]).sort();
     const content = `Written from ${names.join(", ")}.`;
-    return { tool: "create_mind", input: { title: "Summary", content } };
+    // An empty Mind is filled; any other gets a new one beside it.
+    return systemOf(prompt).includes("write it there with add_to_mind")
+      ? { tool: "add_to_mind", input: { content } }
+      : { tool: "create_mind", input: { title: "Summary", content } };
   }
   if (SUMMARY_PAGE.test(question)) {
     const made = lastResult(prompt, "create_mind");

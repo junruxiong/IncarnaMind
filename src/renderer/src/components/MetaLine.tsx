@@ -1,6 +1,5 @@
 import type { HTMLAttributes, ReactNode } from "react";
-
-const AFTER_STOP = /[。！？）]$/;
+import { dotAfter } from "./metaDot";
 
 /** What a selection across the parts of `line` copies as, on one line: "A · B · C"; null where the browser's copy is right. */
 function selectedAsOneLine(line: HTMLElement): string | null {
@@ -16,7 +15,7 @@ function selectedAsOneLine(line: HTMLElement): string | null {
       return part.textContent?.trim() ?? "";
     })
     .filter(Boolean)
-    .reduce((text, part) => `${text}${AFTER_STOP.test(text) ? "· " : " · "}${part}`);
+    .reduce((text, part) => `${text}${dotAfter(text)}${part}`);
 }
 
 /**
@@ -57,7 +56,7 @@ export function MetaLine({
           <span key={index} className="meta-part">
             {index > 0 && (
               <span className="meta-dot" aria-hidden="true">
-                {typeof before === "string" && AFTER_STOP.test(before) ? "· " : " · "}
+                {typeof before === "string" ? dotAfter(before) : " · "}
               </span>
             )}
             {part}

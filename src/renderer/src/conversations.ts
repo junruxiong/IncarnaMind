@@ -247,7 +247,7 @@ export async function regenerateAnswer(
   settleAsk(answerId, null);
   try {
     watchMindsMadeBy(answerId);
-    applyWhatWasAsked(answerId, { keepMade: clearScope });
+    applyWhatWasAsked(answerId, { keepWritten: clearScope });
     settleAsk(
       answerId,
       await core.regenerateConversationAnswer({

@@ -2314,7 +2314,6 @@ export function createAnswers(options: AnswersOptions) {
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
   }
 
-  /** How many of the User's Documents a scope holds, when it holds only some of them (#1149). */
   const someOfTheDocuments = (documentIds: string[] | null, mindId: string | null) => {
     if (documentIds === null) return null;
     const total = options.documents.searchableCount(options.unscopedDocuments?.(mindId) ?? null);
@@ -2500,8 +2499,10 @@ export function createAnswers(options: AnswersOptions) {
       const changes = toolCalls.flatMap((call) => call.mindChange ?? []);
       // Written again, it proposes its changes again: those still waiting from before go.
       options.withdrawChanges?.(changes);
-      // From every Document, a Mind it made with text keeps its place and takes the new text (#1149).
-      const made = everyDocument ? changes.find((change) => change.created) : undefined;
+      // From every Document, the Mind it wrote keeps that text's place and takes the new text (#1149).
+      const made = everyDocument
+        ? (changes.find((change) => change.created) ?? changes[0])
+        : undefined;
       const remake = made && options.readableMindName(made.mindId) !== null ? made.mindId : null;
       const from = question.askedFrom;
       const { documentIds, emptyScope } = scopeNow(

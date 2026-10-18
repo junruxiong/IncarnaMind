@@ -43,7 +43,12 @@ const tab = (window: Page, title: string) =>
     .filter({ hasText: title });
 
 /** Seven leases, the first two in the Folder "Two leases", and the Mind "Lease notes" there. */
-async function addLeases(app: ElectronApplication, window: Page, language: "en" | "zh-CN") {
+async function addLeases(
+  app: ElectronApplication,
+  window: Page,
+  language: "en" | "zh-CN",
+  { empty = false } = {},
+) {
   await setLanguage(window, language);
   await setWindowSize(app, window, 1600, 900);
   const paths = await Promise.all(
@@ -56,7 +61,7 @@ async function addLeases(app: ElectronApplication, window: Page, language: "en" 
   await addDocuments(window, paths);
   await newMind(window);
   await nameMind(window, "Lease notes");
-  await window.keyboard.type("My notes on the leases.");
+  if (!empty) await window.keyboard.type("My notes on the leases.");
   await window.evaluate(async () => {
     const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     const folder = await core.createLibraryGroup({ name: "Two leases", description: "" });
@@ -145,3 +150,30 @@ for (const [language, request, line, useAll] of [
     await expect(window.getByTestId("composer-scope")).toContainText("Two leases");
   });
 }
+
+test("in an empty Mind the request filled, Use all writes it again there, and ⌘Z brings the 2-Document text back", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addLeases(app, window, "en", { empty: true });
+
+  const answer = await askInAssistant(window, "Write a summary of my leases");
+
+  const editor = window.getByTestId("mind-editor");
+  await expect(tab(window, "Lease notes")).toHaveAttribute("aria-selected", "true");
+  await expect(editor).toContainText("Written from Lease 1, Lease 2.");
+  await expect(window.locator('[data-testid="mind-tab"]')).toHaveCount(1);
+  await answer.getByTestId("answer-written-from-all").click();
+  const rewritten = assistantAnswers(window).last();
+  await expect(rewritten).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(editor).toContainText(`Written from ${LEASES.join(", ")}.`);
+  await expect(window.locator('[data-testid="mind-tab"]')).toHaveCount(1);
+  const undo = rewritten.getByTestId("mind-changes-undo");
+  await expect(undo).not.toHaveAttribute("aria-disabled");
+
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+
+  await expect(editor).toContainText("Written from Lease 1, Lease 2.");
+  await expect(editor).not.toContainText("Lease 7");
+});
