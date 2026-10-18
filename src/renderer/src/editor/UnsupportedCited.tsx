@@ -59,38 +59,47 @@ export function UnsupportedCited({
       )}
       {cited.map(({ key, number, attributes }) => {
         const { documentId, quote } = attributes;
-        return (
-          <div key={key} className="citation-card-note">
-            <MetaLine
-              data-testid="claim-cited"
-              parts={[
-                quote ? (
-                  <span key="quote" className="line-clamp-2" title={quote}>
-                    “{quote}”
-                  </span>
-                ) : null,
-                documentId ? (
-                  <LineAction
-                    key="open"
-                    action={{
-                      label: t("claim.openCitation", { number }),
-                      testId: "claim-open-citation",
-                      onClick: () => {
-                        openCited(
-                          { ...attributes, documentId },
-                          {
-                            check: attributes.check,
-                            withQuote: quoteSaysSo(attributes.check),
-                            number,
-                          },
-                        );
-                        onOpen();
-                      },
-                    }}
-                  />
-                ) : null,
-              ]}
-            />
+        const content = (
+          <>
+            {quote && (
+              <span data-testid="claim-cited-quote" className="line-clamp-2 min-w-0">
+                “{quote}”
+              </span>
+            )}
+            <span
+              data-testid="claim-cited-chip"
+              data-check={attributes.check}
+              className="citation-marker"
+            >
+              {number}
+            </span>
+          </>
+        );
+        return documentId ? (
+          <button
+            key={key}
+            type="button"
+            data-testid="claim-cited"
+            className="claim-card-cited"
+            title={quote ?? undefined}
+            aria-label={t("claim.openCitation", { number })}
+            onClick={() => {
+              openCited(
+                { ...attributes, documentId },
+                {
+                  check: attributes.check,
+                  withQuote: quoteSaysSo(attributes.check),
+                  number,
+                },
+              );
+              onOpen();
+            }}
+          >
+            {content}
+          </button>
+        ) : (
+          <div key={key} data-testid="claim-cited" className="claim-card-cited">
+            {content}
           </div>
         );
       })}

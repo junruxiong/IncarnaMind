@@ -610,7 +610,7 @@ export const en = {
     "Your Citation supports {covered}, not the parts about {uncovered}.",
   "claim.unsupported.covers.other":
     "Your Citations support {covered}, not the parts about {uncovered}.",
-  "claim.unsupported.noReason": "No reason was given",
+  "claim.unsupported.noReason": "The check gave no reason",
   "claim.openCitation": "Open citation {number}",
   "claim.courtDecision.title": "This cites a court decision.",
   "claim.courtDecision.body":

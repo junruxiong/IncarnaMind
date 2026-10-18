@@ -37,7 +37,7 @@ const reply = (language: Language) =>
     "Reply in exactly this form, the verdict word in English:",
     "Verdict: supported, unsupported or contradicted",
     `Then, for supported or contradicted, one plain sentence in ${LANGUAGE_NAMES[language]}, whatever language the Documents and the User's sentence are in, saying what the Document says, with the marker [^1] at its end. For contradicted, name the thing, and give the Document's value and the sentence's.`,
-    `For unsupported, one plain sentence in ${LANGUAGE_NAMES[language]} saying what no Passage states and, when part of the sentence is supported, two last lines: "Covered: " and a short phrase in ${LANGUAGE_NAMES[language]} for what the Passages state ("the speed comparison"), then "Not covered: " and the topics they don't, as a phrase of the same kind ("memory and robustness").`,
+    `For unsupported, one plain sentence in ${LANGUAGE_NAMES[language]} saying what the Documents don't say and, when part of the sentence is supported, two last lines: "Covered: " and a short phrase in ${LANGUAGE_NAMES[language]} for what the cited Passages state ("the speed comparison"), then "Not covered: " and the topics they don't, as a phrase of the same kind ("memory and robustness").`,
     "Write nothing else.",
   ].join("\n");
 
@@ -249,7 +249,10 @@ const BARE = /^[\s>*_#`"'“”-]*(supported|unsupported|contradicted)\b[\s*_"'�
 const COVERED = /^[\s>*_#`"'“”-]*(?:covered|已涵盖|涵盖)[\s*_]*[:：][\s*_]*(.*)$/i;
 const NOT_COVERED = /^[\s>*_#`"'“”-]*(?:not covered|uncovered|未涵盖)[\s*_]*[:：][\s*_]*(.*)$/i;
 const MAX_PHRASE = 120;
+const MAX_REASON = 300;
 const PHRASE_EDGES = /^[\s"'“”‘’「」『』*_`]+|[\s"'“”‘’「」『』*_`.。;；:：,，]+$/gu;
+/** What a model writes for a side it has nothing to say of. */
+const NO_PHRASE = /^(?:none|nothing|n\/a|无)$/i;
 
 /** The JSON object a reply holds, fenced or not, when it has one with a verdict. */
 function jsonVerdict(reply: string): ReadVerdict | null {
@@ -274,17 +277,21 @@ function jsonVerdict(reply: string): ReadVerdict | null {
 }
 
 /**
- * A short phrase from a reply, without quotes or a closing stop, and its first
- * word lower-cased where it follows other words ("Memory" in "the parts about
- * memory"); null when it is empty or too long to be a phrase.
+ * A short phrase from a reply, without quotes or a closing stop; null when it
+ * is empty, "none" or too long to be a phrase. Its length is checked first:
+ * trimming a long run of stops and spaces from its end takes time quadratic in it.
  */
 const phraseOf = (text: string | undefined): string | null => {
+  if ((text?.length ?? 0) > MAX_PHRASE * 4) return null;
   const phrase = (text ?? "").replace(MARKERS, "").replace(PHRASE_EDGES, "").replace(/\s+/gu, " ");
-  if (phrase === "" || phrase.length > MAX_PHRASE) return null;
-  return /^[A-Z][a-z]/.test(phrase)
-    ? `${phrase.charAt(0).toLowerCase()}${phrase.slice(1)}`
-    : phrase;
+  return phrase === "" || phrase.length > MAX_PHRASE || NO_PHRASE.test(phrase) ? null : phrase;
 };
+
+/** An unsupported verdict's reason is one sentence: a longer one isn't kept. */
+const withShortReason = (read: ReadVerdict | null): ReadVerdict | null =>
+  read?.verdict === "unsupported" && (read.says?.length ?? 0) > MAX_REASON
+    ? { ...read, says: null }
+    : read;
 
 const cleanSays = (text: string): string | null => {
   const said = text.replace(MARKERS, "").replace(/\s+/g, " ").trim();
@@ -316,14 +323,14 @@ export function readVerdict(reply: string): ReadVerdict | null {
     const phrase = (label: RegExp) =>
       phraseOf(after.map((each) => label.exec(each)?.[1]).find(Boolean));
     const next = after.find((each) => !COVERED.test(each) && !NOT_COVERED.test(each));
-    return {
+    return withShortReason({
       verdict,
       says: cleanSays(rest || (next ?? "")),
       covered: phrase(COVERED),
       uncovered: phrase(NOT_COVERED),
-    };
+    });
   }
-  return jsonVerdict(text);
+  return withShortReason(jsonVerdict(text));
 }
 
 /** Words a model refuses with, in English and Chinese: a reply with no verdict that says this declined. */

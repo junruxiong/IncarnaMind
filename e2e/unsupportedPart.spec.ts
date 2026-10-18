@@ -54,7 +54,7 @@ const LANGUAGES = {
     coversOne:
       "Your Citation supports the harbour times, not the parts about the scaling constraint.",
     nothing: "Nothing in your Documents says this.",
-    noReason: "No reason was given",
+    noReason: "The check gave no reason",
     checkAgain: "Check again",
     open: (number: number) => `Open citation ${number}`,
   },
@@ -66,7 +66,7 @@ const LANGUAGES = {
     covers: "引用支持速度比较，但不支持内存和鲁棒性的部分。",
     coversOne: "引用支持the harbour times，但不支持the scaling constraint的部分。",
     nothing: "你的文档中没有内容提到这一点。",
-    noReason: "没有给出原因",
+    noReason: "核对没有给出原因",
     checkAgain: "重新核对",
     open: (number: number) => `打开引用 ${number}`,
   },
@@ -159,20 +159,25 @@ for (const language of ["en", "zh-CN"] as const) {
       await expect(marks.nth(index)).toHaveAttribute("data-check", "unsupported");
     }
 
-    // Two Citations: what they support and what they don't, then each quote, opening at its place.
+    // Two Citations: what they support and what they don't, then each quote with its Citation's chip.
     await openCard(marks.nth(0));
     await expect(card.getByTestId("claim-badge")).toHaveAttribute("data-check", "unsupported");
     await expect(card.getByTestId("claim-covers")).toHaveText(words.covers);
     await expect(card.getByTestId("claim-nothing")).toHaveCount(0);
-    await expect(card.getByTestId("claim-cited")).toHaveCount(2);
-    await expect(card.getByTestId("claim-cited").first()).toContainText(QUOTE_ONE);
-    await expect(card.getByTestId("claim-cited").last()).toContainText(QUOTE_TWO);
-    await expect(card.getByTestId("claim-open-citation")).toHaveText([
-      words.open(2),
-      words.open(3),
-    ]);
-    for (const row of await card.getByTestId("claim-cited").all()) {
+    const rows = card.getByTestId("claim-cited");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first().getByTestId("claim-cited-quote")).toHaveText(`“${QUOTE_ONE}”`);
+    await expect(rows.last().getByTestId("claim-cited-quote")).toHaveText(`“${QUOTE_TWO}”`);
+    await expect(card.getByTestId("claim-cited-chip")).toHaveText(["2", "3"]);
+    await expect(rows.first()).toHaveAccessibleName(words.open(2));
+    await expect(rows.last()).toHaveAccessibleName(words.open(3));
+    // Both rows are laid out alike: the chip follows its quote on the quote's first line, inside the card.
+    for (const row of await rows.all()) {
       expect(await fitsWithin(row, card)).toBe(true);
+      const quote = await row.getByTestId("claim-cited-quote").boundingBox();
+      const chip = await row.getByTestId("claim-cited-chip").boundingBox();
+      expect(chip?.x ?? 0).toBeGreaterThanOrEqual((quote?.x ?? 0) + (quote?.width ?? 0));
+      expect(chip?.y ?? 0).toBeLessThan((quote?.y ?? 0) + 18);
     }
     // The card's actions stay as they were.
     await expect(card.getByTestId("claim-find-sources")).toBeVisible();
@@ -183,7 +188,8 @@ for (const language of ["en", "zh-CN"] as const) {
     // One Citation says "Citation", not "Citations".
     await openCard(marks.nth(1));
     await expect(card.getByTestId("claim-covers")).toHaveText(words.coversOne);
-    await expect(card.getByTestId("claim-open-citation")).toHaveText(words.open(4));
+    await expect(card.getByTestId("claim-cited-chip")).toHaveText("4");
+    await expect(card.getByTestId("claim-cited")).toHaveAccessibleName(words.open(4));
     await window.keyboard.press("Escape");
 
     // No reason comes back: the card says so, and Check again checks the sentence again.
@@ -193,7 +199,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(card.getByTestId("claim-no-reason-check")).toHaveText(words.checkAgain);
     await expect(card.getByTestId("claim-nothing")).toHaveCount(0);
     await expect(card.getByTestId("claim-covers")).toHaveCount(0);
-    await expect(card.getByTestId("claim-cited")).toContainText(QUOTE_TWO);
+    await expect(card.getByTestId("claim-cited-quote")).toHaveText(`“${QUOTE_TWO}”`);
     expect(await fitsWithin(noReason, card)).toBe(true);
     const before = await marks.nth(2).getAttribute("data-claim");
     await pointAndClick(window, card.getByTestId("claim-no-reason-check"));
@@ -208,9 +214,9 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(card.getByTestId("claim-cited")).toHaveCount(0);
     await window.keyboard.press("Escape");
 
-    // A Citation's number opens its Document.
+    // A Citation's quote opens its Document.
     await openCard(marks.nth(0));
-    await pointAndClick(window, card.getByTestId("claim-open-citation").last());
+    await pointAndClick(window, card.getByTestId("claim-cited-quote").last());
     await expect(card).toHaveCount(0);
     await expect(window.getByTestId("viewer")).toBeVisible();
     await app.close();
