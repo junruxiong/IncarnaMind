@@ -23,4 +23,4 @@ The workflow runs the spike, then two checks on every original and every copy:
 - the Open XML SDK's validator (`validator/`, MIT) checks the schema;
 - LibreOffice opens each file and converts it to PDF.
 
-It uploads the copies and the results as the `pptx-spike` artifact. LibreOffice runs in CI only.
+It uploads the copies and the results as the `pptx-spike` artifact. It also uploads `pptx-owner-check`: ten sampled decks, each beside its patched copies, the template deck and the Citation test, with `CHECK.md` saying what to look for in PowerPoint and WPS. LibreOffice runs in CI only.

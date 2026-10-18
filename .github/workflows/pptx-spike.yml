@@ -72,3 +72,11 @@ jobs:
             ${{ env.OUT }}*.jsonl
           if-no-files-found: warn
           retention-days: 30
+      - name: Upload the person's check
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pptx-owner-check
+          path: ${{ env.OUT }}owner-check/
+          if-no-files-found: warn
+          retention-days: 90

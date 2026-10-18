@@ -153,6 +153,9 @@ interface DeckResult {
   } | null;
   chart: {
     part: string;
+    /** The slide the chart is on, and its first series' values before and after. */
+    slide: number | null;
+    firstSeries: { before: (number | null)[]; after: number[] };
     before: { points: number; agreeing: number };
     after: { points: number; agreeing: number; differences: string[] };
     output: string;
@@ -295,11 +298,17 @@ async function editChart(deck: Deck): Promise<{
       await setChartValues(deck, part, values);
       const saved = await deck.save();
       const after = await chartAgreement(Deck.open(saved), part);
+      const firstSeries = {
+        before: (series[0]?.points ?? []).map((point) => point.value),
+        after: values[0]?.filter((value) => value !== undefined) ?? [],
+      };
       return {
         part,
         saved,
         result: {
           part,
+          slide: await chartSlide(deck, part),
+          firstSeries,
           before,
           after: {
             points: after.points,
@@ -315,12 +324,23 @@ async function editChart(deck: Deck): Promise<{
         saved: null,
         result: {
           part,
+          slide: null,
+          firstSeries: { before: [], after: [] },
           before,
           after: { points: 0, agreeing: 0, differences: [] },
           error: error instanceof Error ? error.message : String(error),
         },
       };
     }
+  }
+  return null;
+}
+
+/** The number of the slide that shows a chart. */
+async function chartSlide(deck: Deck, chartPart: string): Promise<number | null> {
+  for (const slide of await deck.slides()) {
+    const own = await deck.pkg.relationshipsOf(slide.part);
+    if (own.existing.some((each) => each.target === chartPart)) return slide.number;
   }
   return null;
 }
@@ -411,9 +431,13 @@ async function newDeckFromTemplate(template: Uint8Array): Promise<Uint8Array> {
 }
 
 /** A deck with a Citation tag on its chart's frame and a note on the chart's first value cell. */
-async function citationSurvival(
-  bytes: Uint8Array,
-): Promise<{ saved: Uint8Array; slide: string; frame: string; cell: string } | null> {
+async function citationSurvival(bytes: Uint8Array): Promise<{
+  saved: Uint8Array;
+  slide: string;
+  number: number;
+  frame: string;
+  cell: string;
+} | null> {
   const deck = Deck.open(bytes);
   for (const slide of await deck.slides()) {
     const own = await deck.pkg.relationshipsOf(slide.part);
@@ -445,6 +469,7 @@ async function citationSurvival(
     return {
       saved: await deck.save(),
       slide: slide.part,
+      number: slide.number,
       frame: frameId,
       cell: `${sheet}!${cell}`,
     };
@@ -493,8 +518,130 @@ test("PowerPoint patch spike", async () => {
     join(folder, "results.json"),
     JSON.stringify({ results, survival: survival && { ...survival, saved: undefined } }, null, 2),
   );
+  await ownerCheck(join(folder, "owner-check"), outputs, cache, results, survival);
   log(`Results in ${folder}`);
 });
+
+/** The decks a person opens in PowerPoint and WPS, chosen to cover what the rule names. */
+const SAMPLE: readonly [string, string][] = [
+  ["c84", "Welsh Government deck: 21 slides, a chart with its workbook, animations"],
+  ["c73", "Chinese deck saved by WPS: a chart, two masters, animations"],
+  ["c75", "Chinese deck saved by WPS: three charts; it had no notes, so notes were made"],
+  ["c43", "Chinese course deck saved by WPS (Kingsoft); notes were made"],
+  ["c22", "a deck with comments"],
+  ["c32", "a deck with 10 SmartArt diagrams, Chinese text and animations"],
+  ["c25", "a deck with 7 masters; it had no notes master, so one was made"],
+  ["c44", "a Chinese lecture with audio and animations"],
+  ["c00", "an association's deck with 9 masters and two charts"],
+  ["c12", "a company's deck with pictures and animations"],
+];
+
+const SAMPLE_EDIT = (cjk: boolean) => (cjk ? EDIT.zh : EDIT.en);
+const SAMPLE_NOTE = (cjk: boolean) => (cjk ? NOTE.zh : NOTE.en);
+const listed = (values: readonly (number | null)[]) =>
+  values
+    .slice(0, 6)
+    .map((value) => (value === null ? "empty" : String(value)))
+    .join(", ");
+
+/**
+ * One folder for the person's check: each sampled deck as published beside its patched copies,
+ * paired by name, and CHECK.md saying what changed and what to write back.
+ */
+async function ownerCheck(
+  into: string,
+  outputs: string,
+  cache: string,
+  results: readonly DeckResult[],
+  survival: Awaited<ReturnType<typeof citationSurvival>>,
+): Promise<void> {
+  await mkdir(into, { recursive: true });
+  const sections: string[] = [];
+  const rows: string[] = [];
+  for (const [index, [id, what]] of SAMPLE.entries()) {
+    const entry = CORPUS.find((each) => each.id === id);
+    const result = results.find((each) => each.id === id);
+    if (!entry || !result?.edited) continue;
+    const prefix = `${String(index + 1).padStart(2, "0")}-${id}`;
+    await writeFile(
+      join(into, `${prefix}-original.pptx`),
+      await fetchPinned(entry.url, entry.sha256, cache),
+    );
+    await writeFile(
+      join(into, `${prefix}-edited.pptx`),
+      readFileSync(join(outputs, result.edited.output)),
+    );
+    const cjk = entry.has.includes("cjk");
+    const lines = [
+      `## ${prefix}: ${what}`,
+      "",
+      `- \`${prefix}-original.pptx\` is the deck as published.`,
+      `- \`${prefix}-edited.pptx\`: slides ${result.edited.slides.join(", ")} changed.`,
+      `  - The first text box on each now starts: ${SAMPLE_EDIT(cjk)}`,
+      `  - Their speaker notes say: ${SAMPLE_NOTE(cjk)}`,
+      "  - Everything else should look as it does in the original.",
+    ];
+    rows.push(`| ${prefix}-edited.pptx | | | – |`);
+    if (result.chart?.output) {
+      await writeFile(
+        join(into, `${prefix}-chart.pptx`),
+        readFileSync(join(outputs, result.chart.output)),
+      );
+      lines.push(
+        `- \`${prefix}-chart.pptx\`: the chart on slide ${result.chart.slide ?? "?"} has new numbers. Its first series went from ${listed(result.chart.firstSeries.before)} to ${listed(result.chart.firstSeries.after)}. Right-click the chart and choose Edit Data: the sheet should show the new numbers too.`,
+      );
+      rows.push(`| ${prefix}-chart.pptx | | | |`);
+    }
+    sections.push(lines.join("\n"));
+  }
+  await writeFile(join(into, "11-template.pptx"), readFileSync(join(outputs, "template.pptx")));
+  await writeFile(
+    join(into, "11-new-from-template.pptx"),
+    readFileSync(join(outputs, "new-from-template.pptx")),
+  );
+  sections.push(
+    [
+      "## 11: a new deck made from the template",
+      "",
+      "- `11-template.pptx` is the template: one master, 11 layouts, no slides.",
+      "- `11-new-from-template.pptx` has 3 slides made from its layouts, one in Chinese, each with notes. Type into a slide, add a slide (Home → New Slide) and save. Does anything look wrong?",
+    ].join("\n"),
+  );
+  rows.push("| 11-new-from-template.pptx | | | – |");
+  if (survival) {
+    await writeFile(join(into, "12-citation-survival.pptx"), survival.saved);
+    sections.push(
+      [
+        "## 12: does a Citation survive an edit in PowerPoint?",
+        "",
+        `\`12-citation-survival.pptx\` is deck 09 with two things added, both on slide ${survival.number}:`,
+        "- the chart carries a hidden tag (`INCARNAMIND_CITATION`); you can't see it, we check it in the saved file;",
+        `- in the chart's data, cell ${survival.cell.split("!")[1]} has a note: "Source: spike-citation-1" (Edit Data shows a red corner on the cell).`,
+        "",
+        `Open it in PowerPoint, change one word on slide ${survival.number}, right-click the chart, choose Edit Data, change one number and close the sheet. Save it into this folder as \`12-citation-survival-after.pptx\`.`,
+      ].join("\n"),
+    );
+    rows.push("| 12-citation-survival.pptx | | – | note still there after saving? |");
+  }
+  const check = [
+    "# PowerPoint and WPS check",
+    "",
+    "Copies of 10 public decks that IncarnaMind edited, each beside the deck as published, and a new deck made from a template. About 30 minutes. Nothing to install.",
+    "",
+    "For every file below, open it in PowerPoint, and then in WPS. Note whether either one offers to repair the file. Then look at what the section says changed.",
+    "",
+    ...sections.flatMap((section) => [section, ""]),
+    "## What to send back",
+    "",
+    "This table, filled with yes or no, and where this folder is (for the saved 12 file):",
+    "",
+    "| File | PowerPoint asks to repair? | WPS asks to repair? | Edit Data shows the new numbers? |",
+    "|---|---|---|---|",
+    ...rows,
+    "",
+  ].join("\n");
+  await writeFile(join(into, "CHECK.md"), check);
+}
 
 async function runDeck(entry: CorpusDeck, cache: string, outputs: string): Promise<DeckResult> {
   const result: DeckResult = {
