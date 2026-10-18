@@ -1,9 +1,9 @@
 import { type ReactNode, type ToggleEvent, useEffect, useId, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
+import type { DocumentStatus, EmbeddingModelError, LibrarySnapshot } from "../../../core/api";
 import { formatDateTime } from "../../../shared/dates";
 import type { MessageKey } from "../../../shared/i18n";
-import { organizes } from "../../../shared/libraryModels";
+import { organizes, organizesNewDocuments } from "../../../shared/libraryModels";
 import { commands } from "../commands/registry";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
@@ -34,6 +34,19 @@ const modelFailures: Record<Exclude<EmbeddingModelError["kind"], "load">, Messag
   integrity: "embedding.model.failure.integrity",
   storage: "embedding.model.failure.storage",
 };
+
+/**
+ * While Organize doesn't file new Documents by itself, a run the User asked for holds its
+ * Documents: Organize's rows say how it is going, not the tagging ones.
+ */
+function organizeHeld(library: LibrarySnapshot | null): ReadonlySet<string> {
+  if (!library || !organizes(library) || organizesNewDocuments(library)) return new Set();
+  return new Set(
+    library.assignments
+      .filter((assignment) => assignment.status !== "classified")
+      .map((assignment) => assignment.documentId),
+  );
+}
 
 const PROCESSING: ReadonlySet<DocumentStatus> = new Set([
   "queued",
@@ -67,6 +80,8 @@ interface Status {
   wraps?: boolean;
   /** It asks the User's consent, which is never hidden (ADR-0022). */
   asks?: true;
+  /** The User's own Documents wait for them to act, so the quiet first open shows it too. */
+  needsYou?: true;
 }
 
 /**
@@ -93,10 +108,14 @@ export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean
   );
 }
 
-// A failure, a one-off the User dismisses (skipped files, a web page not added), or a consent
-// question: the quiet first open hides the footer's other news, never these (DESIGN.md, Problems).
+// A failure, a one-off the User dismisses (skipped files, a web page not added), a consent
+// question, or the User's own files waiting for a model: the quiet first open hides the footer's
+// other news, never these (DESIGN.md, Problems).
 const isProblem = (status: Status) =>
-  status.tone === "error" || status.dismiss !== undefined || status.asks === true;
+  status.tone === "error" ||
+  status.dismiss !== undefined ||
+  status.asks === true ||
+  status.needsYou === true;
 
 function StatusRow({ status, children }: { status: Status; children?: ReactNode }) {
   const t = useT();
@@ -247,6 +266,7 @@ function useStatuses(): Status[] {
   const embedding = useAppStore((state) => state.embedding);
   const library = useAppStore((state) => state.library);
   const organizing = organizes(library);
+  const organizesNew = organizesNewDocuments(library);
   const capturing = useCapturing();
   const counts = useAppStore(
     useShallow((state) => {
@@ -261,6 +281,7 @@ function useStatuses(): Status[] {
       let rateLimitEnds: string | null = null;
       let failedTagging = 0;
       let unreached = 0;
+      const heldByOrganize = organizeHeld(state.library);
       // A paused Linked folder's Documents wait for the User: its row says so, not the footer.
       const paused = new Set(
         state.linkedFolders.filter((each) => each.status === "paused").map((each) => each.id),
@@ -272,8 +293,10 @@ function useStatuses(): Status[] {
             if (item.scan?.of === "scanned-pages") scannedPages += item.scan.pages - item.scan.read;
           }
         } else if (item.status === "ready") {
-          if (item.tagging === "pending" || item.tagging === "tagging") tagging++;
-          else if (
+          const held = heldByOrganize.has(item.id);
+          if (item.tagging === "pending" || item.tagging === "tagging") {
+            if (!held) tagging++;
+          } else if (
             item.tagging === "waiting-for-provider" &&
             isOwnDocument(item, allExamples(state))
           ) {
@@ -284,10 +307,14 @@ function useStatuses(): Status[] {
                 rateLimitEnds = ends;
               }
             } else {
-              waitingForTagger++;
+              if (!held) waitingForTagger++;
               if (item.taggingError?.kind === "plan-limit") waitingForPlan++;
             }
-          } else if (item.tagging === "failed" && isOwnDocument(item, allExamples(state))) {
+          } else if (
+            item.tagging === "failed" &&
+            !held &&
+            isOwnDocument(item, allExamples(state))
+          ) {
             failedTagging++;
             if (item.taggingError?.kind === "network") unreached++;
           }
@@ -318,15 +345,15 @@ function useStatuses(): Status[] {
   const dismissSkipped = useAppStore((state) => state.dismissSkippedFiles);
   const dismissAlreadyAdded = useAppStore((state) => state.dismissAlreadyAdded);
   const openSettings = useAppStore((state) => state.openSettings);
-  const taggingWaits = !organizing && counts.waitingForTagger > 0;
-  const tagging = !organizing && counts.tagging > 0;
+  const taggingWaits = !organizesNew && counts.waitingForTagger > 0;
+  const tagging = !organizesNew && counts.tagging > 0;
   const organizingNow =
     organizing &&
     !!library?.assignments.some(
       (item) => item.status === "pending" || item.status === "classifying",
     );
   const taggingService = useTaggingService(
-    organizing ? "classification" : "tagging",
+    organizingNow ? "classification" : "tagging",
     taggingWaits || tagging || organizingNow,
   );
   const taggingNeedsOk =
@@ -439,10 +466,13 @@ function useStatuses(): Status[] {
     });
   }
 
-  if (!organizing && counts.failedTagging > 0) {
+  if (!organizesNew && counts.failedTagging > 0) {
+    const held = organizeHeld(library);
     const failed = useAppStore
       .getState()
-      .documents.filter((each) => each.status === "ready" && each.tagging === "failed");
+      .documents.filter(
+        (each) => each.status === "ready" && each.tagging === "failed" && !held.has(each.id),
+      );
     statuses.push({
       testId: "tagging-failed",
       tone: "error",
@@ -572,6 +602,7 @@ function useStatuses(): Status[] {
       tone: "waiting",
       short: t("status.taggingWaiting"),
       full: t("jev.waiting.notice"),
+      needsYou: true,
       action: {
         label: t("status.choose"),
         testId: "tagging-waiting-setup",

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Document } from "../../../core/api";
-import { organizes } from "../../../shared/libraryModels";
+import { organizesNewDocuments } from "../../../shared/libraryModels";
 import { useT } from "../i18n";
 import { NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
@@ -72,7 +72,7 @@ export function DocumentTagMenu({
 export function DocumentTagFooter({ item, close }: { item: Document; close(): void }) {
   const t = useT();
   const library = useAppStore((state) => state.library);
-  const organizing = organizes(library);
+  const organizing = organizesNewDocuments(library);
   const taggingLine =
     item.status !== "ready" || organizing
       ? null

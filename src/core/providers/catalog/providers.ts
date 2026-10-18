@@ -103,8 +103,8 @@ const PROVIDERS = [
       },
     ],
     planCredits: {
-      en: "Claude Max and Team plans include monthly API credits, for keys in the Console organization you link to the plan in claude.ai's Billing. Free, Pro and Enterprise plans don't.",
-      zh: "Claude Max 和 Team 订阅每月附带 API 额度，可用于你在 claude.ai 账单设置中关联到订阅的 Console 组织里的密钥。Free、Pro 和 Enterprise 订阅不含。",
+      en: "Paste an API key from the Anthropic Console.",
+      zh: "粘贴 Anthropic Console 中的 API 密钥。",
       url: "https://support.claude.com/en/articles/17154008",
     },
     checked: "2026-10-16",

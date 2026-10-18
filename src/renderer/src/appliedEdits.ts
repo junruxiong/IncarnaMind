@@ -26,6 +26,9 @@ import {
   type AppliedChange,
   appliedLineIn,
   appliedLineKey,
+  appliedText,
+  type ChangedBlocks,
+  changedBlocksOf,
   type KeptLine,
   placeOfChange,
   setAppliedLine,
@@ -51,6 +54,7 @@ import {
   type PendingProposal,
   proposalsIn,
   resolveInEditor,
+  rewrittenParagraphOf,
   setApplying,
 } from "./editor/proposalReview";
 import { blockAt } from "./editor/writingPlace";
@@ -275,11 +279,13 @@ function changesOf(state: EditorState, request: string): AppliedChange[] {
       });
     }
     const words = added.from < 0 ? { from: end, to: end } : added;
+    const paragraph = rewrittenParagraphOf(doc, proposal);
     return {
       from: relative(words.from),
       to: relative(words.to),
       removed: Fragment.from(removed),
       block: null,
+      ...(paragraph && { paragraph }),
     };
   });
 }
@@ -312,11 +318,10 @@ function keptLineOf(leftOut: readonly LeftOutPart[]): KeptLine | null {
   };
 }
 
-export const appliedMessage = (places: number) =>
-  places === 1 ? t("edit.applied.one") : t("edit.applied", { count: places });
+export const appliedMessage = (blocks: ChangedBlocks) => appliedText(t, blocks);
 
-/** Accepts the edit's Proposals as part of its Undo step, and shows the line over it. Returns how many places changed. */
-function apply(edit: Applying, request: string): number {
+/** Accepts the edit's Proposals as part of its Undo step, and shows the line over it. Returns what changed. */
+function apply(edit: Applying, request: string): ChangedBlocks {
   const { editor } = edit;
   const changes = changesOf(editor.state, request);
   const blocks = edit.doc.getXmlFragment(MIND_CONTENT_FIELD);
@@ -330,19 +335,19 @@ function apply(edit: Applying, request: string): number {
   drawApplying(editor, request, false);
   const entries = aiUseOfAccepted(edit.doc, edit.mindId, resolved, new Date().toISOString());
   if (entries.length > 0) core.recordAiUse(entries).catch(useAppStore.getState().reportError);
-  const places = resolved.length;
-  if (places === 0 || editor.isDestroyed) return places;
+  if (resolved.length === 0 || editor.isDestroyed) return { paragraphs: 0, tables: 0 };
   const { doc } = editor.state;
+  const changed = changedBlocksOf(editor.state, changes);
   setAppliedLine(editor, {
     kind: "applied",
     blockId: firstBlockOf(editor.state, changes),
-    places,
+    blocks: changed,
     reason: reasonOf(edit.doc, request),
     changes,
     kept: keptLineOf(edit.leftOut.filter((part) => blockAt(doc, part.blockId) !== null)),
   });
-  offerEditorUndo(editor, appliedMessage(places));
-  return places;
+  offerEditorUndo(editor, appliedMessage(changed));
+  return changed;
 }
 
 // Setting the assistant's changes aside before writing them as the editor's own: no Undo tracks it.
@@ -417,7 +422,7 @@ export function applyArrived(
   setAppliedLine(editor, {
     kind: "applied",
     blockId: firstBlockOf(editor.state, changes),
-    places: resolved.length,
+    blocks: { paragraphs: facts.changed + facts.wrote, tables: facts.tables },
     facts,
     reason: null,
     changes,
@@ -438,7 +443,7 @@ const topBlockAt = (state: EditorState, pos: number): string | null => {
 export async function finishApplying(
   edit: Applying,
   result: EditWithAiResult,
-): Promise<{ applied: number } | "held" | "late" | null> {
+): Promise<{ applied: ChangedBlocks } | "held" | "late" | null> {
   if (result.kind !== "proposed") {
     edit.stopTaking();
     if (edit.request) drawApplying(edit.editor, edit.request, false);
