@@ -56,7 +56,7 @@ test("Documents that couldn't reach the model: one line with Retry, and tagged a
   await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn't be tagged");
   await expect(failed).toHaveAttribute(
     "title",
-    /^The AI model couldn't be reached\. Tagging tries again when you're back online, or now with Retry\./,
+    /^Can't reach the AI model\. Tagging resumes when you're online\./,
   );
   await failed.getByTestId("tagging-failed-retry").click();
   await expect(item(window, "Invoice 51")).toHaveAttribute("data-tagging", "tagged");
@@ -111,5 +111,55 @@ test("A rate limit pauses Tagging: one line says when it resumes, and Retry goes
   await expect(item(window, "Invoice 61")).toHaveAttribute("data-tagging", "tagged");
   await expect(item(window, "Invoice 62")).toHaveAttribute("data-tagging", "tagged");
   await expect(paused).toHaveCount(0);
+  await app.close();
+});
+
+test("With Organize filing new Documents, a failure for a Document the tagger holds still has its row, and one Organize holds has only Organize's", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1280, 800);
+  await acceptPlainTextKeys(window);
+  const providerId = await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const provider = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-refused",
+      modelId: "claude-sonnet-5-5",
+    });
+    return provider.id;
+  });
+  const footer = window.getByTestId("sidebar-status");
+  const failed = footer.getByTestId("tagging-failed");
+
+  // Added before there were Folders: the tagger has it, and the key is refused.
+  const held = join(sources, "Invoice 71.txt");
+  await writeFile(held, "Invoice 71. Nothing in the way.\n");
+  await addDocuments(window, [held]);
+  await expect(item(window, "Invoice 71")).toHaveAttribute("data-tagging", "failed");
+
+  // Organize now files new Documents by itself, with the same refused key.
+  await window.evaluate(async (providerId) => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await core.createLibraryGroup({ name: "Invoices", description: "Invoices" });
+    await core.saveLibrarySettings({
+      classifier: { kind: "chat", choice: { providerId, modelId: "claude-sonnet-5-5" } },
+      automatic: true,
+    });
+  }, providerId);
+  await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn't be tagged");
+  await expect(failed.getByTestId("tagging-failed-retry")).toBeVisible();
+
+  // A Document added now is Organize's: it fails there, and says so in Organize's row alone.
+  const own = join(sources, "Invoice 72.txt");
+  await writeFile(own, "Invoice 72. Nothing in the way.\n");
+  await window.getByTestId("add-documents-input").setInputFiles([own]);
+  await expect(item(window, "Invoice 72")).toHaveAttribute("data-tagging", "failed");
+  await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn't be tagged");
+  await footer.getByTestId("status-more").click();
+  await expect(
+    footer.getByTestId("status-others").getByTestId("organization-attention"),
+  ).toBeVisible();
+
+  await setLanguage(window, "zh-CN");
+  await expect(failed.getByTestId("status-label").first()).toHaveText("1 个文档未能打标签");
   await app.close();
 });

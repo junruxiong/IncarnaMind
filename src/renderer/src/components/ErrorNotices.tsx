@@ -74,7 +74,7 @@ function Notice({ notice }: { notice: ErrorNoticeState }) {
           }}
           className={buttonStyle("secondary", "sm")}
         >
-          {notice.action.label}
+          {notice.action.label(t)}
         </button>
       )}
       <button

@@ -169,6 +169,7 @@ export function createRecentlyDeleted(options: {
   tags: TagsStore;
   library: ReturnType<typeof createLibrary>;
   mindsChanged(): void;
+  mindsRestored(mindIds: readonly string[]): void;
   conversationsChanged(): void;
   tagsChanged(): void;
   tagged(documentIds: string[]): void;
@@ -294,6 +295,7 @@ export function createRecentlyDeleted(options: {
       const done = db.transaction(() => {
         const restored = {
           minds: false,
+          mindIds: [] as string[],
           conversations: false,
           documents: [] as string[],
           folders: false,
@@ -320,6 +322,7 @@ export function createRecentlyDeleted(options: {
               minds.restore(ref.id);
               content.restore(ref.id, row.deleted_at);
               restored.minds = true;
+              restored.mindIds.push(ref.id);
             } else if (kind === "conversation") {
               conversations.restore(ref.id);
               restored.conversations = true;
@@ -352,6 +355,7 @@ export function createRecentlyDeleted(options: {
         return restored;
       });
       if (done.minds) options.mindsChanged();
+      if (done.mindIds.length > 0) options.mindsRestored(done.mindIds);
       if (done.conversations) options.conversationsChanged();
       if (done.documents.length > 0) {
         documents.restored(done.documents);

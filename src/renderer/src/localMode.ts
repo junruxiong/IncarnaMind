@@ -1,5 +1,4 @@
 import { core } from "./core";
-import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
 
@@ -15,7 +14,7 @@ async function setLocalMode(enabled: boolean): Promise<void> {
 export async function turnOffLocalMode(): Promise<void> {
   await setLocalMode(false);
   useUndo.getState().push({
-    message: translateNow("localMode.turnedOff"),
+    said: (t) => t("localMode.turnedOff"),
     undo: () => setLocalMode(true),
     redo: () => setLocalMode(false),
   });
@@ -32,7 +31,7 @@ export async function localModeChosen(wasOn: boolean, shownAt?: string): Promise
   if (embedding.localOnly === wasOn) return;
   const now = embedding.localOnly;
   useUndo.getState().push({
-    message: translateNow(now ? "localMode.turnedOn" : "localMode.turnedOff"),
+    said: (t) => t(now ? "localMode.turnedOn" : "localMode.turnedOff"),
     undo: () => setLocalMode(wasOn),
     redo: () => setLocalMode(now),
     ...(shownAt && { shownAt }),
