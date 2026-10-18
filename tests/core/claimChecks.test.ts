@@ -95,6 +95,7 @@ const LEFT_CHECKING: ClaimCheckAttributes = {
   text: SUPPORTED,
   evidence: null,
   says: null,
+  unsupported: null,
   calculation: null,
   citedCaseUnchecked: false,
   citedCaseFound: false,
@@ -1212,5 +1213,98 @@ describe("What the check is told about dates and its own workings (#821)", () =>
     expect(system).toContain("file's own metadata");
     expect(system).toContain("never mention it unless the sentence itself is about a date");
     expect(system).toContain("Never mention the index, the search, the passages");
+  });
+});
+
+describe("Why a sentence is unsupported", () => {
+  const HALF = "Spring tides happen at new moon and at full moon, creating very high waters.";
+  const OWNER =
+    "教程讨论了训练速度、鲁棒性和内存需求之间的权衡：已有实验通常显示，拟牛顿方法比梯度下降更快；一阶优化方法通常更加稳健，但速度较慢。";
+
+  const reasonOf = async (reply: string, sentence = HALF) => {
+    const { core, client, check } = await mindWith(
+      [sentence],
+      checkingModel({ [sentence]: { reply: { text: reply } } }),
+    );
+    await check();
+    const [shown] = await shownChecks(core, client);
+    return shown?.check.unsupported;
+  };
+
+  test("asks for the reason, and for what the Passages cover and don't when part of the sentence is supported", async () => {
+    const calls: ModelCall[] = [];
+    const { check } = await mindWith([UNSUPPORTED], checkingModel(PLANS, calls));
+    await check();
+    expect(calls[0]?.system).toContain("For unsupported, one plain sentence in English");
+    expect(calls[0]?.system).toContain('"Covered: "');
+    expect(calls[0]?.system).toContain('"Not covered: "');
+  });
+
+  test("is kept with the check: the reason and the phrases", async () => {
+    expect(
+      await reasonOf(
+        "Verdict: unsupported\nTides gives the moon phases, not what they cause.\nCovered: the moon phases\nNot covered: the high waters",
+      ),
+    ).toEqual({
+      reason: "Tides gives the moon phases, not what they cause.",
+      covered: "the moon phases",
+      uncovered: "the high waters",
+    });
+  });
+
+  test("keeps the owner's sentence in Chinese, with its phrases in Chinese", async () => {
+    expect(
+      await reasonOf(
+        "Verdict: unsupported\n引用只比较了速度。\nCovered: 速度比较\nNot covered: 内存和鲁棒性",
+        OWNER,
+      ),
+    ).toEqual({ reason: "引用只比较了速度。", covered: "速度比较", uncovered: "内存和鲁棒性" });
+  });
+
+  test("keeps the reason alone when the reply names only one side", async () => {
+    expect(await reasonOf("Verdict: unsupported\nNot stated.\nNot covered: high waters")).toEqual({
+      reason: "Not stated.",
+      covered: null,
+      uncovered: "high waters",
+    });
+  });
+
+  test("is empty when the reply gives nothing", async () => {
+    expect(await reasonOf("Verdict: unsupported")).toEqual({
+      reason: null,
+      covered: null,
+      uncovered: null,
+    });
+  });
+
+  test("is none for a sentence that is supported or contradicted", async () => {
+    const { core, client, check } = await mindWith([SUPPORTED, CONTRADICTED]);
+    await check();
+    expect((await shownChecks(core, client)).map((each) => each.check.unsupported)).toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  test("is replaced when the sentence is checked again", async () => {
+    const plans: Record<string, Plan> = { [HALF]: { reply: { text: "Verdict: unsupported" } } };
+    const { core, client, check } = await mindWith([HALF], checkingModel(plans));
+    await check();
+    expect((await shownChecks(core, client))[0]?.check.unsupported).toEqual({
+      reason: null,
+      covered: null,
+      uncovered: null,
+    });
+    plans[HALF] = {
+      reply: {
+        text: "Verdict: unsupported\nNot stated.\nCovered: the moon phases\nNot covered: the high waters",
+      },
+    };
+    await check();
+    expect((await shownChecks(core, client))[0]?.check.unsupported).toEqual({
+      reason: "Not stated.",
+      covered: "the moon phases",
+      uncovered: "the high waters",
+    });
   });
 });

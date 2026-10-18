@@ -82,6 +82,7 @@ function checked(
     text: asked,
     evidence: null,
     says: null,
+    unsupported: null,
     calculation: null,
     citedCaseUnchecked: false,
     citedCaseFound: false,

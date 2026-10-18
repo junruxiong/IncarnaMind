@@ -112,8 +112,8 @@ test("Shorten applies at once; Review changes shows its two changes over the app
   await pointAndClick(window, menu.getByTestId("selection-action-shorten"));
   await expect(note).toContainText("The tides here are strong and regular");
   const line = editor.getByTestId("applied-line");
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 2 places");
-  await expect(window.getByTestId("proposal-spoken")).toHaveText("Changed 2 places");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 paragraph");
+  await expect(window.getByTestId("proposal-spoken")).toHaveText("Changed 1 paragraph");
 
   // Review changes: what it removed, struck, over the text as it now is, and the cursor in the first change.
   await pointAndClick(window, line.getByTestId("applied-review"));
@@ -132,7 +132,7 @@ test("Shorten applies at once; Review changes shows its two changes over the app
   await pointAndClick(window, changeBar.getByTestId("change-restore"));
   await expect(removed).toHaveText(["really "]);
   await expect(note).toContainText("The tides here are very strong and");
-  await expect(line.getByTestId("applied-count")).toHaveText("1 change made by Edit with AI");
+  await expect(line.getByTestId("applied-count")).toHaveText("1 paragraph changed by Edit with AI");
   await expect(window.getByTestId("undo-message")).toHaveText("Restored the original");
 
   // Restore by keyboard, with the cursor at the other change: then none is left to show.
@@ -294,9 +294,9 @@ test("⌘J with text selected says what to change in the composer, in Chinese; t
   await expect(note.locator(".generated-text")).toHaveText("准时");
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
   const line = editor.getByTestId("applied-line");
-  await expect(line.getByTestId("applied-count")).toHaveText("已修改 1 处");
+  await expect(line.getByTestId("applied-count")).toHaveText("修改了 1 个段落");
   await expect(line).toHaveAttribute("title", "原因：已按你的要求修改。");
-  await expect(window.getByTestId("proposal-spoken")).toHaveText("已修改 1 处");
+  await expect(window.getByTestId("proposal-spoken")).toHaveText("修改了 1 个段落");
   await screenshot(window, "edit-applied-zh");
   // The line fits in the narrow window.
   const box = await line.getByTestId("applied-review").boundingBox();
@@ -311,7 +311,7 @@ test("⌘J with text selected says what to change in the composer, in Chinese; t
   await selectWords(window, note, "潮水每天非常规律地涨落两次。");
   await pointAndClick(window, window.getByTestId("selection-action-shorten"));
   await expect(note).toHaveText("潮水每天规律地涨落两次。");
-  await expect(line.getByTestId("applied-count")).toHaveText("已修改 1 处");
+  await expect(line.getByTestId("applied-count")).toHaveText("修改了 1 个段落");
 
   // Translate… asks for the language beside it. A text the model gives back as it was (the
   // scripted model only capitalises) says so in the composer, and changes nothing.
@@ -374,7 +374,7 @@ test("⌘J's change streams in and applies paragraph by paragraph, with Writing�
   // Once done, Writing… goes, every change is in, and the line says why on hover.
   // Asked "slowly", the scripted model takes a few seconds over the rest.
   await expect(writing).toHaveCount(0, { timeout: 30_000 });
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 5 places");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 3 paragraphs");
   await expect(line).toHaveAttribute("title", "Why: Changed as you asked.");
   await expect(paragraphs).toHaveText([
     "The tides here are strong and regular.",
@@ -400,12 +400,12 @@ test("⌘J's change streams in and applies paragraph by paragraph, with Writing�
   await expect(paragraphs.nth(2)).toHaveText(
     "Harbours are very busy in the spring and really quiet in winter.",
   );
-  await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ places$/);
+  await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ paragraphs?$/);
 
   // The next edit, asked right after Stop, has its own Undo: the stopped one's stays its own.
   await ask("replace tides with waves");
   await expect(paragraphs.first()).toHaveText("The waves here are strong and regular.");
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 place");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 1 paragraph");
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+z");
   await expect(paragraphs.first()).toHaveText("The tides here are strong and regular.");
