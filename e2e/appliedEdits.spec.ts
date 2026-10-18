@@ -266,7 +266,7 @@ test("an edit that would remove most of what was selected, and can't be mapped o
   await selectThree();
   await askToChange(window, "replace it all with a haiku");
   await expect(line.getByTestId("applied-count")).toHaveText(
-    "This edit would remove most of what you selected, so it's waiting for you",
+    "Waiting for you: this edit removes most of your selection",
   );
   await expect(editor.locator("del.proposal-delete").first()).toBeVisible();
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
@@ -274,7 +274,7 @@ test("an edit that would remove most of what was selected, and can't be mapped o
   await screenshot(window, "applied-held-en");
   await setLanguage(window, "zh-CN");
   await expect(line.getByTestId("applied-count")).toHaveText(
-    "这次修改会删掉你选中的大部分内容，所以先等你确认",
+    "等你确认：这次修改会删掉选中的大部分内容",
   );
   await expect(line.getByTestId("applied-apply")).toHaveText("应用");
   await expect(line.getByTestId("applied-discard")).toHaveText("放弃");
@@ -438,7 +438,7 @@ test("an edit whose last update never reaches the window waits as changes to rev
   await window.keyboard.press("Enter");
   const problem = window.getByTestId("edit-problem");
   await expect(problem).toHaveText(
-    /This edit took too long to arrive, so it wasn't applied\. Accept or reject its changes\./,
+    /This edit arrived too late to apply\. Accept or reject its changes\./,
     { timeout: 15_000 },
   );
   await expect(window.getByTestId("edit-pending")).toHaveCount(0);
