@@ -43,6 +43,7 @@ import {
   type TagDecision,
 } from "./classify";
 import type { TagsStore } from "./index";
+import { type RateLimitPause, rateLimitError } from "./rateLimit";
 
 /** What the "tagging" flow sends to the tagger's service: the chat model's or Jev's. */
 export const TAGGING_FLOW_SENDS = ["tags", "document-excerpts"] as const;
@@ -87,6 +88,8 @@ export interface TaggerOptions {
   reportError(error: unknown): void;
   /** The background model queue, in which tagging each Document takes one turn. */
   background: BackgroundQueue;
+  /** The pause a rate limit puts on all Tagging (see ./rateLimit). */
+  rateLimit: Pick<RateLimitPause, "pausedUntil" | "pause" | "succeeded">;
 }
 
 interface DocumentRow {
@@ -97,6 +100,7 @@ interface DocumentRow {
   tagging_status: string;
   tagging_error_kind: string | null;
   tagging_error_message: string | null;
+  tagging_error_resets_at: string | null;
 }
 
 export function createTagger(options: TaggerOptions) {
@@ -117,7 +121,8 @@ export function createTagger(options: TaggerOptions) {
 
   const rowOf = (id: string) =>
     db.get<DocumentRow>(
-      `SELECT name, kind, page_count, status, tagging_status, tagging_error_kind, tagging_error_message
+      `SELECT name, kind, page_count, status, tagging_status, tagging_error_kind, tagging_error_message,
+         tagging_error_resets_at
        FROM documents WHERE id = ? AND deleted_at IS NULL`,
       [id],
     );
@@ -133,15 +138,16 @@ export function createTagger(options: TaggerOptions) {
       !row ||
       (row.tagging_status === state &&
         row.tagging_error_kind === (error?.kind ?? null) &&
-        row.tagging_error_message === (error?.message ?? null))
+        row.tagging_error_message === (error?.message ?? null) &&
+        row.tagging_error_resets_at === (error?.resetsAt ?? null))
     ) {
       return false;
     }
     db.run(
       `UPDATE documents SET tagging_status = ?, tagging_error_kind = ?, tagging_error_message = ?,
-         updated_at = ?
+         tagging_error_resets_at = ?, updated_at = ?
        WHERE id = ?`,
-      [state, error?.kind ?? null, error?.message ?? null, now(), id],
+      [state, error?.kind ?? null, error?.message ?? null, error?.resetsAt ?? null, now(), id],
     );
     return true;
   };
@@ -228,7 +234,12 @@ export function createTagger(options: TaggerOptions) {
         });
       } catch (error) {
         if (stale()) return;
-        if (isPlanLimit(error)) {
+        const limitedUntil = options.rateLimit.pause(error);
+        if (limitedUntil !== null) {
+          const why = rateLimitError(limitedUntil, error);
+          if (setState(id, "waiting-for-provider", why)) announce([id]);
+          park(why);
+        } else if (isPlanLimit(error)) {
           // The ChatGPT plan's limit: this and the rest wait for it to reset (see ../library/planPace).
           const why = classifyProviderError(error);
           if (setState(id, "waiting-for-provider", why)) announce([id]);
@@ -238,6 +249,7 @@ export function createTagger(options: TaggerOptions) {
         }
         return;
       }
+      options.rateLimit.succeeded();
     }
     if (stale()) return;
 
@@ -255,6 +267,11 @@ export function createTagger(options: TaggerOptions) {
       if (queue.length === 0 || lifetime.signal.aborted) return;
       if (options.enabled?.() === false) {
         queue.length = 0;
+        return;
+      }
+      const limitedUntil = options.rateLimit.pausedUntil();
+      if (limitedUntil !== null) {
+        park(rateLimitError(limitedUntil));
         return;
       }
       const ready = await options.canRun();
@@ -352,13 +369,17 @@ export function createTagger(options: TaggerOptions) {
       );
       return;
     }
-    // Queued, they are about to be tagged, not waiting for a model; a plan's pause keeps saying why.
+    // Queued, they are about to be tagged, not waiting for a model; a plan's pause keeps saying
+    // why, and a rate limit's does until it ends.
+    const limited = options.rateLimit.pausedUntil() !== null;
     setStates(
       rest
         .filter(
           (row) =>
             row.tagging_status === "stopped" ||
-            (row.tagging_status === "waiting-for-provider" && row.tagging_error_kind === null),
+            (row.tagging_status === "waiting-for-provider" &&
+              (row.tagging_error_kind === null ||
+                (row.tagging_error_kind === "rate-limit" && !limited))),
         )
         .map((row) => row.id),
       "pending",
