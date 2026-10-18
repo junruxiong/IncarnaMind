@@ -74,7 +74,7 @@ The spike used Pyodide 314.0.7 (Python 3.14.2), numpy 2.4.6 and pandas 3.0.2 on 
 | An endless loop: ended and a new Worker ready | 2.7 s | 3.6 s | 5.4 s | 4.1 s |
 | Out of memory | `MemoryError` at 3,968 MB, then the Worker answers; the window lives | the same | the same | the same |
 
-Measured again on 2026-10-18 with a fresh interpreter for each job, on a build for testing, with Chromium's sandbox on on every system:
+Measured again on 2026-10-18 with a fresh interpreter for each job, on a build for testing, with Chromium's sandbox running on every system:
 
 | | M2 Max (local) | macOS runner | Windows runner | Linux runner |
 |---|---|---|---|---|
