@@ -622,6 +622,7 @@ export const zhCN = {
   "claim.reason.stopped": "核对前已停止。",
   "claim.reason.too-many": "尚未核对：写入时只核对前 {cap} 句带引用的话",
   "claim.checkNow": "立即核对",
+  "claim.reason.consent-revoked": "未核对：你关闭了向此服务发送内容。",
   "claim.recheck.edited": "核对之后，这句话改过了。",
   "claim.recheck.new-version": "核对时用到的文档有了新版本。",
   "claim.recheck.document-removed": "核对时用到的文档已删除。",
@@ -3252,7 +3253,8 @@ export const zhCN = {
   "quit.unsaved.title.one": "有 1 处改动尚未保存",
   "quit.unsaved.quit": "仍然退出",
   "quit.unsaved.keep": "保持打开",
-  "quit.unsaved.copyFailed": "副本没能保存：{reason}",
+  "quit.unsaved.copyFailed": "副本没能保存。{reason}",
+  "quit.unsaved.copyFailed.details": "详情：{raw}",
   "error.mind.missedChange": "这次改动依赖一处 Mind 没有收到的改动，所以没有保存。",
   "error.mind.newerVersionEdit":
     "较新版本的 IncarnaMind 修改过这个 Mind。更新 IncarnaMind 后才能编辑。",
