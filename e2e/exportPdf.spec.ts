@@ -457,7 +457,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   );
   // Word's review choices (#107), on to begin with; a Mind made here has no import to track edits since.
   await expect(sheet.getByTestId("export-pending-note")).toHaveText(
-    "Changes waiting for you go in as tracked changes by IncarnaMind.",
+    "Changes waiting for you go in as IncarnaMind's tracked changes.",
   );
   await expect(sheet.getByTestId("export-mark-ai-text")).toBeChecked();
   await expect(sheet.getByTestId("export-comment-failed-checks")).toBeChecked();
@@ -596,7 +596,7 @@ test("Export as HTML saves one .html file whose footnotes link both ways, and th
   const sheet = window.getByTestId("export-dialog");
   await expect(sheet.getByTestId("export-format")).toHaveValue("html");
   await expect(sheet.getByTestId("export-format-note")).toHaveText(
-    "One file that opens in any browser. Citations become footnotes linked both ways.",
+    "Opens in any browser; Citations become linked footnotes.",
   );
   await app.close();
   await removeDataFolder(out);
