@@ -125,6 +125,7 @@ export function withPassageNotes(passages: string, unread: readonly UnreadFile[]
   return [
     passages,
     datedDocumentsNote(passages),
+    fileDatesNote(passages),
     notCitedNote(passages),
     bracketedAmountsNote(passages),
     unreadDocumentsNote(unread),
@@ -231,12 +232,15 @@ function readingRules(cite: boolean): string {
   const marker = (n: number) => (cite ? `[^${n}]` : "");
   return [
     `- If the Question takes for granted what the Passages don't say (an approval, a date, a figure, a cause), say so first, in one plain sentence, then answer from what they say: "The Documents don't record a Board approval; the 14 May memo asks for one." / "文档中没有董事会批准的记录；5 月 14 日的备忘录是在申请批准。"`,
-    `- If Passages from different Documents disagree, or give different figures for the same thing (one updates the other), lead with the newer Document by its date (a Passage's date is its Document's: the date it states, else when its file last changed)${cite ? " and cite it" : ""}. Then write one sentence naming the older Document, its date and its figure${cite ? ", with a Citation" : ""}; never leave it out: "Report outages over 4 hours (memo, May 2025)${marker(1)}. The older handbook (January 2024) says 6 hours${marker(2)}." / "2025 年 5 月的备忘录要求报告超过 4 小时的停电${marker(1)}。较早的手册（2024 年 1 月）写的是 6 小时${marker(2)}。" Say "probably" (可能) only when neither is dated or newer.`,
+    `- If Passages from different Documents disagree, or give different figures for the same thing (one updates the other), lead with the newer Document by its date (a Passage's date, else its file-created or file-modified date)${cite ? " and cite it" : ""}. Then write one sentence naming the older Document, its date and its figure${cite ? ", with a Citation" : ""}; never leave it out: "Report outages over 4 hours (memo, May 2025)${marker(1)}. The older handbook (January 2024) says 6 hours${marker(2)}." / "2025 年 5 月的备忘录要求报告超过 4 小时的停电${marker(1)}。较早的手册（2024 年 1 月）写的是 6 小时${marker(2)}。" Say "probably" (可能) only when neither is dated or newer.`,
   ].join("\n");
 }
 
 /** A Passage's Document and its date, as `formatPassages` (./citations) writes them. */
-const DATED_PASSAGE = /<passage id="[^"]*" document="([^"]*)" date="([^"]+)"/g;
+const DATED_PASSAGE =
+  /<passage id="[^"]*" document="([^"]*)" (date|file-created|file-modified)="([^"]+)"/g;
+
+const FILE_DATED_PASSAGE = /<passage [^>]*\bfile-(?:created|modified)="/;
 
 /**
  * A reminder after Passages that come from Documents of different dates
@@ -247,18 +251,31 @@ const DATED_PASSAGE = /<passage id="[^"]*" document="([^"]*)" date="([^"]+)"/g;
  * in NIST CSF 2.0 for the Core's count.
  */
 export function datedDocumentsNote(passages: string): string {
-  const dates = new Map<string, string>();
-  for (const [, document, date] of passages.matchAll(DATED_PASSAGE)) {
-    if (document !== undefined && date !== undefined && !dates.has(document)) {
-      dates.set(document, date);
+  const dates = new Map<string, { date: string; of: string }>();
+  for (const [, document, of, date] of passages.matchAll(DATED_PASSAGE)) {
+    if (document !== undefined && of !== undefined && date !== undefined && !dates.has(document)) {
+      dates.set(document, { date, of });
     }
   }
-  if (new Set(dates.values()).size < 2) return "";
+  if (new Set([...dates.values()].map(({ date }) => date)).size < 2) return "";
   const listed = [...dates]
-    .sort(([, a], [, b]) => b.localeCompare(a))
-    .map(([document, date]) => `"${document}" (${date})`)
+    .sort(([, a], [, b]) => b.date.localeCompare(a.date))
+    .map(
+      ([document, { date, of }]) =>
+        `"${document}" (${of === "date" ? "" : `${of.replace("-", " ")} `}${date})`,
+    )
     .join(", ");
   return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
+}
+
+/**
+ * A reminder after Passages dated by their file's information (#1173): a
+ * contract whose text gives no date was summarised as signed on the day its
+ * PDF was made. Empty when every Passage's date is its Document's, or none has one.
+ */
+export function fileDatesNote(passages: string): string {
+  if (!FILE_DATED_PASSAGE.test(passages)) return "";
+  return 'A Passage\'s file-created or file-modified date is when its file was made or last changed, not a date the Document states: never give it as the Document\'s date, such as when it was signed, issued or takes effect. Mention it only as the file\'s, with no marker: "file created on …" / "文件创建于 …".';
 }
 
 /**
@@ -405,7 +422,12 @@ export function documentInstructions(
 ): string {
   const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
   const dated = datedDocumentsNote(passages);
-  const notes = [dated, notCitedNote(passages), bracketedAmountsNote(passages)].filter(Boolean);
+  const notes = [
+    dated,
+    fileDatesNote(passages),
+    notCitedNote(passages),
+    bracketedAmountsNote(passages),
+  ].filter(Boolean);
   const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, Word, PowerPoint, Excel, CSV, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
@@ -455,7 +477,7 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
-        ...[dated, bracketedAmountsNote(passages)].filter(Boolean),
+        ...[dated, fileDatesNote(passages), bracketedAmountsNote(passages)].filter(Boolean),
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),
