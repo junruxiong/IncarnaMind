@@ -937,6 +937,13 @@ export interface MindWriting {
  * What a call of a Minds' Tool did (#202): the changes it proposed in one
  * Mind, which wait there for the User to accept or reject them.
  */
+/**
+ * Why a chart the User asked the assistant for wasn't drawn (#1091): no table to draw it from,
+ * no column of numbers, one column for a scatter chart, or figures with no Citation and no
+ * calculation.
+ */
+export type ChartProblem = "noTable" | "noNumbers" | "needsTwo" | "uncited";
+
 export interface MindChange {
   mindId: string;
   /** The call made the Mind. */
@@ -953,6 +960,8 @@ export interface MindChange {
   tables?: number;
   /** How many charts it added (#1091). Absent: none. */
   charts?: number;
+  /** Why the chart asked for wasn't drawn, the table kept (#1091). Absent: none was asked for, or it was drawn. */
+  chartNotDrawn?: ChartProblem;
   /** Sources in its tables' cells written as a name in brackets that matched no Citation, kept as text. Absent: none. */
   unlinkedSources?: number;
   /** Sources the assistant wrote as a name in brackets that matched no Citation it recorded, so left out. Absent: none. */

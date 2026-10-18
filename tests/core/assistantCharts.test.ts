@@ -1,5 +1,7 @@
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { describe, expect, test } from "vitest";
+import { markdownToBlocks } from "../../src/core/answers/markdown";
+import { calculatedCells, chartOfTable } from "../../src/core/tools/minds/charts";
 import { type ChartAttributes, readChart } from "../../src/shared/charts";
 import { pendingProposals } from "../../src/shared/proposals";
 import { askAssistant, changesIn, lastResult } from "../helpers/assistant";
@@ -46,28 +48,23 @@ const TABLE = [
 const called = (call: ModelCall, tool: string) => call.results.some((each) => each.tool === tool);
 
 /** Searches, cites each quarter's revenue, then adds the table with `chart`. */
-function chartingModel(chart: { kind?: string; title: string }, systems: string[] = []) {
-  return scriptedModel((call): ScriptedReply => {
+const charting =
+  (chart: { kind?: string; title: string }, systems: string[]) =>
+  (call: ModelCall): ScriptedReply => {
     if (call.system.includes("read_mind")) systems.push(call.system);
     const search = call.results.find((each) => each.tool === "search_documents");
     if (!search) return { calls: [{ tool: "search_documents", input: { query: "revenue" } }] };
     if (!called(call, "cite")) {
-      const shown = shownPassages(search.text);
-      const citations = QUARTERS.map(([quarter, million], index) => {
-        const quote = quoteOf(quarter, million);
-        return {
-          marker: index + 1,
-          passage: shown.find((each) => each.text.includes(quote))?.id,
-          quote,
-        };
-      });
-      return { calls: [{ tool: "cite", input: { citations } }] };
+      return { calls: [{ tool: "cite", input: { citations: citationsIn(search) } }] };
     }
     if (!called(call, "add_to_mind")) {
       return { calls: [{ tool: "add_to_mind", input: { chart, content: TABLE } }] };
     }
     return { text: "" };
-  });
+  };
+
+function chartingModel(chart: { kind?: string; title: string }, systems: string[] = []) {
+  return scriptedModel(charting(chart, systems));
 }
 
 /** The Mind's top-level Blocks by type, and its charts as they read. */
@@ -170,5 +167,161 @@ describe("A chart the User asks the assistant for (#1091)", { timeout: 60_000 },
     expect(changesIn(answer)[0]).toMatchObject({ tables: 1 });
     expect(changesIn(answer)[0]?.charts).toBeUndefined();
     expect(lastResult(model)).toContain("A scatter chart needs two columns of numbers");
+  });
+});
+
+function citationsIn(search: { text: string }) {
+  const shown = shownPassages(search.text);
+  return QUARTERS.map(([quarter, million], index) => {
+    const quote = quoteOf(quarter, million);
+    return {
+      marker: index + 1,
+      passage: shown.find((each) => each.text.includes(quote))?.id,
+      quote,
+    };
+  });
+}
+
+/** Searches, then adds `content` with `chart`, and records the Citations after it, in one step. */
+function writeThenCite(content: string) {
+  return scriptedModel((call): ScriptedReply => {
+    const search = call.results.find((each) => each.tool === "search_documents");
+    if (!search) return { calls: [{ tool: "search_documents", input: { query: "revenue" } }] };
+    if (called(call, "add_to_mind")) return { text: "" };
+    return {
+      calls: [
+        { tool: "add_to_mind", input: { chart: { kind: "bar", title: "Revenue" }, content } },
+        { tool: "cite", input: { citations: citationsIn(search) } },
+      ],
+    };
+  });
+}
+
+describe("A chart only draws what is cited (#1091 review)", { timeout: 60_000 }, () => {
+  // protects=a table written before cite records its markers, in the same step, gets its chart once the Citations are in, each value with its cell's checked Citation; fails_when=the chart is drawn first and its values keep no Citation; no_claim=how a real provider orders the calls.
+  test("cite after add_to_mind in the same step still gives the chart its Citations", async () => {
+    const model = writeThenCite(TABLE);
+    const { core, mind, client } = await setUp(model);
+
+    const answer = await askAssistant(core, {
+      text: "make a bar chart of revenue by quarter",
+      mindId: mind.id,
+    });
+    await client.settled();
+
+    const { types, charts } = blocksOf(readMind(client));
+    expect(types).toEqual(["paragraph", "table", "chart"]);
+    expect(charts[0]?.data.rows.map((row) => row.values[0]?.citation?.check)).toEqual(
+      QUARTERS.map(() => "found"),
+    );
+    expect(changesIn(answer).at(-1)).toMatchObject({ tables: 1, charts: 1 });
+  });
+
+  // protects=a column the model typed, with no Citation and no calculation (a growth rate), keeps the table and draws no chart, the model and the User told why; fails_when=a chart draws figures nothing backs; no_claim=what a real model then says.
+  test("a typed growth column keeps the table, draws no chart, and says why", async () => {
+    const growth = [
+      "| Quarter | Revenue | Growth |",
+      "|---|---|---|",
+      ...QUARTERS.map(
+        ([quarter, million], index) =>
+          `| ${quarter} | €${million} million [^${index + 1}] | ${index * 10}% |`,
+      ),
+    ].join("\n");
+    const model = scriptedModel((call): ScriptedReply => {
+      const search = call.results.find((each) => each.tool === "search_documents");
+      if (!search) return { calls: [{ tool: "search_documents", input: { query: "revenue" } }] };
+      if (!called(call, "cite")) {
+        return { calls: [{ tool: "cite", input: { citations: citationsIn(search) } }] };
+      }
+      if (!called(call, "add_to_mind")) {
+        return {
+          calls: [{ tool: "add_to_mind", input: { chart: { title: "Growth" }, content: growth } }],
+        };
+      }
+      return { text: "" };
+    });
+    const { core, mind, client } = await setUp(model);
+
+    const answer = await askAssistant(core, {
+      text: "make a chart of revenue growth by quarter",
+      mindId: mind.id,
+    });
+    await client.settled();
+
+    expect(blocksOf(readMind(client)).types).toEqual(["paragraph", "table"]);
+    expect(changesIn(answer)[0]).toMatchObject({ tables: 1, chartNotDrawn: "uncited" });
+    expect(lastResult(model)).toContain("no Citation and come from no calculation");
+  });
+
+  // protects=an uncited table of figures the model made up ("999, 888") draws no chart; fails_when=it charts them; no_claim=none beyond protects.
+  test("an uncited table draws no chart", async () => {
+    const made = ["| Quarter | Revenue |", "|---|---|", "| Q1 | 999 |", "| Q2 | 888 |"].join("\n");
+    const model = writeThenCite(made);
+    const { core, mind, client } = await setUp(model);
+
+    const answer = await askAssistant(core, {
+      text: "make a bar chart of revenue",
+      mindId: mind.id,
+    });
+    await client.settled();
+
+    expect(blocksOf(readMind(client)).types).toEqual(["paragraph", "table"]);
+    expect(changesIn(answer)[0]?.chartNotDrawn).toBe("uncited");
+  });
+});
+
+describe("A chart of a table already in the Mind (#1091 review)", { timeout: 60_000 }, () => {
+  // protects="chart this table" tells the model to give chart alone, and charts the table there, right after it, without writing it again, as a change of its own; fails_when=the table is written a second time, or the chart goes elsewhere; no_claim=that a real model gives chart alone.
+  test("“chart this table” charts the one there, without a second table", async () => {
+    const systems: string[] = [];
+    const first = charting({ kind: "bar", title: "Revenue" }, []);
+    const model = scriptedModel((call): ScriptedReply => {
+      if (!call.prompt.includes("chart this table")) return first(call);
+      systems.push(call.system);
+      return called(call, "add_to_mind")
+        ? { text: "" }
+        : {
+            calls: [{ tool: "add_to_mind", input: { chart: { kind: "line", title: "Revenue" } } }],
+          };
+    });
+    const { core, mind, client } = await setUp(model);
+    await askAssistant(core, { text: "make a bar chart of revenue by quarter", mindId: mind.id });
+    await resolveChanges(client, "accept");
+    client.doc.transact(() => client.blocks.delete(2, 1));
+    await client.settled();
+
+    const answer = await askAssistant(core, { text: "chart this table", mindId: mind.id });
+    await client.settled();
+
+    expect(systems.at(-1)).toContain("a chart of a table already in the Mind");
+    const { types, charts, ids } = blocksOf(readMind(client));
+    expect(types).toEqual(["paragraph", "table", "chart"]);
+    expect(charts[0]).toMatchObject({ kind: "line", source: { kind: "table", blockId: ids[1] } });
+    const [change] = changesIn(answer);
+    expect(change).toMatchObject({ charts: 1 });
+    expect(change?.tables).toBeUndefined();
+  });
+});
+
+describe("A figure from calculate backs a chart value (#1091 review)", () => {
+  // protects=a cell holding a figure calculate gave counts as backed, so a computed series charts, while the same figures typed draw nothing; fails_when=a checked calculation is refused, or a typed one drawn; no_claim=how calculate checks its figures (#439).
+  test("calculated cells chart, typed ones don't", () => {
+    const written = ["| Quarter | Growth |", "|---|---|", "| Q2 | [=1] |", "| Q3 | [=2] |"].join(
+      "\n",
+    );
+    const calculated = calculatedCells(written);
+    expect([calculated(1, 1), calculated(2, 1), calculated(0, 1), calculated(1, 0)]).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    const [table] = markdownToBlocks(
+      ["| Quarter | Growth |", "|---|---|", "| Q2 | 12.5% |", "| Q3 | 11.1% |"].join("\n"),
+    );
+    if (!table) throw new Error("No table.");
+    const asked = { kind: null, title: "Growth" };
+    expect(chartOfTable(table, "table", asked, "en", calculated)).toHaveProperty("chart");
+    expect(chartOfTable(table, "table", asked, "en")).toMatchObject({ problem: "uncited" });
   });
 });

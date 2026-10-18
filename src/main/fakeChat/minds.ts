@@ -195,7 +195,6 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
   return { tool: "create_mind", input: { title, content } };
 }
 
-/** Each quarter's revenue the search found, cited, as a table and its chart. */
 function revenueChart(prompt: Prompt, question: string): Reply {
   const added = lastResult(prompt, "add_to_mind");
   if (added !== undefined) return { text: firstSentence(added) };

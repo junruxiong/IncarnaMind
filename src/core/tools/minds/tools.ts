@@ -42,12 +42,19 @@ import {
   resolveProposals,
 } from "../../../shared/proposals";
 import { countFor, countText, mostlyCjk } from "../../../shared/wordCount";
-import { createElement, type NodeJSON, syncContent, topLevelBlocks } from "../../answers/blocks";
+import {
+  createElement,
+  type NodeJSON,
+  nodeOf,
+  syncContent,
+  topLevelBlocks,
+} from "../../answers/blocks";
 import type { ParagraphAsked } from "../../answers/paragraphAsked";
 import {
   BLOCK_ID_ATTRIBUTE,
   type BlockOrigin,
   CHART_NODE,
+  type ChartProblem,
   CITATION_NODE,
   type EditWithAiResult,
   type Effect,
@@ -78,7 +85,13 @@ import { layout, textBlocks } from "../../proposals/write";
 import type { PreparedChatModel } from "../../providers/chat";
 import { MIND_TOOLS, type Tool, type ToolProviderInfo } from "..";
 import { partialFields } from "../partialInput";
-import { type ChartAsked, chartAsked, chartOfTable, chartProperty } from "./charts";
+import {
+  type ChartAsked,
+  calculatedCells,
+  chartAsked,
+  chartOfTable,
+  chartProperty,
+} from "./charts";
 
 const PROVIDER: ToolProviderInfo = { kind: "minds", id: "minds", name: "Minds" };
 
@@ -1231,12 +1244,15 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     }
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
-    const charted = chart ? drawChart(writer, blocks, chart) : null;
+    // A chart drawn before `cite` records its table's markers would draw values with no Citation.
+    const later = chart !== null && unrecorded > 0 && markdown !== null;
+    const drawn = chart && !later ? drawChart(writer, blocks, chart, markdown) : null;
     // Markers `cite` may still record in this step count as left out only once the Run is done.
     const change = {
       ...changeOf(writer, made),
       ...citedIn({ cited, unrecorded: 0 }),
       ...someTableNotes(notes),
+      ...(drawn?.problem && { chartNotDrawn: drawn.problem }),
     };
     options.changed(toolCallId, change);
     if (unrecorded > 0 && markdown !== null) {
@@ -1245,28 +1261,78 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         ids: writer.ids,
         markdown,
         change: () => changeOf(writer, made),
+        chart: later && chart ? (settled) => drawChart(writer, settled, chart, markdown) : null,
       });
     }
+    const charted = later
+      ? "IncarnaMind draws the chart from the table, right after it, once cite has recorded its Citations."
+      : (drawn?.said ?? null);
     return { change, notFound, unrecorded, searchTalk, charted };
   };
 
-  /** Puts the chart asked for after its table, as part of the writer's change; what to tell the model. */
-  const drawChart = (writer: Writer, blocks: readonly NodeJSON[], asked: ChartAsked): string => {
-    const drawn = chartOfTable(blocks, writer.ids, asked, options.language);
-    if ("why" in drawn) return drawn.why;
+  const drawChart = (
+    writer: Writer,
+    blocks: readonly NodeJSON[],
+    asked: ChartAsked,
+    markdown: string | null,
+  ): { said: string; problem?: ChartProblem } => {
+    const at = blocks.findLastIndex((block) => block.type === "table");
+    const table = blocks[at];
+    const tableId = writer.ids[at];
+    if (!table || !tableId) {
+      return {
+        problem: "noTable",
+        said: "No chart was drawn: content holds no table. Say so in your reply; to chart figures, write them as a cited table with chart.",
+      };
+    }
+    const calculated = markdown === null ? undefined : calculatedCells(markdown);
+    const drawn = chartOfTable(table, tableId, asked, options.language, calculated);
+    if ("problem" in drawn) return { problem: drawn.problem, said: drawn.why };
     minds.edit(writer.mind.id, (note) => {
-      const table = topLevelBlocks(note).find((each) => idOf(each) === drawn.after) ?? null;
-      const ids = insertBlocks(note, [drawn.chart], { after: table, request: writer.request });
+      const after = topLevelBlocks(note).find((each) => idOf(each) === tableId) ?? null;
+      const ids = insertBlocks(note, [drawn.chart], { after, request: writer.request });
       const doc = note.doc;
       if (doc) setOrigins(doc, ids, writer.origin);
     });
-    return "IncarnaMind drew the chart from the table, right after it.";
+    return { said: "IncarnaMind drew the chart from the table, right after it." };
+  };
+
+  // The table the User's selection is in, or the Mind's only one.
+  const chartExisting = (toolCallId: string, mind: ChangeableMind, asked: ChartAsked): string => {
+    const table = minds.read(mind.id, (note) => {
+      const tables = topLevelBlocks(note).filter((each) => each.nodeName === "table");
+      const selected = new Set(focused?.mindId === mind.id ? focused.blockIds : []);
+      const picked =
+        tables.find((each) => selected.has(idOf(each))) ??
+        (tables.length === 1 ? tables[0] : undefined);
+      return picked ? { id: idOf(picked), node: nodeOf(picked) } : null;
+    });
+    if (!table) {
+      return `No chart was drawn: “${mind.name}” has ${minds.read(mind.id, (note) => topLevelBlocks(note).some((each) => each.nodeName === "table")) ? "more than one table, and the User's cursor is in none" : "no table"}. Say so, and ask them to put the cursor in the table to chart.`;
+    }
+    const drawn = chartOfTable(table.node, table.id, asked, options.language);
+    if ("problem" in drawn) {
+      return `${drawn.why} The User can still chart it with “Chart from table” in the table's menu.`;
+    }
+    const writer = writerFor(mind, null, false);
+    writer.anchor = table.id;
+    writeMore(writer, [drawn.chart]);
+    const change = changeOf(writer, false);
+    options.changed(toolCallId, change);
+    return `Proposed a chart of the table in “${mind.name}”, right after it. ${outcomeOf(mind, change.request)}`;
   };
 
   /** By call: text written with markers `cite` hadn't recorded yet. */
   const unsettled = new Map<
     string,
-    { mindId: string; ids: readonly string[]; markdown: string; change(): MindChange }
+    {
+      mindId: string;
+      ids: readonly string[];
+      markdown: string;
+      change(): MindChange;
+      /** The chart asked for, drawn once the table's Citations are in. */
+      chart?: ((settled: readonly NodeJSON[]) => { problem?: ChartProblem }) | null;
+    }
   >();
 
   const settle = (): void => {
@@ -1285,10 +1351,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           if (at >= 0 && block) syncContent(element, block.content ?? []);
         }
       });
+      const drawn = each.chart?.(blocks) ?? null;
       options.changed(toolCallId, {
         ...each.change(),
         ...citedIn({ cited, unrecorded }),
         ...someTableNotes(notes),
+        ...(drawn?.problem && { chartNotDrawn: drawn.problem }),
       });
     }
     unsettled.clear();
@@ -1608,7 +1676,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         content: contentProperty,
         ...answerProperty,
       },
-      required: options.lastAnswer ? [] : ["content"],
+      // Content is left out only for a chart of a table already in the Mind.
+      required: [],
       additionalProperties: false,
     },
     provider: PROVIDER,
@@ -1631,6 +1700,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       });
     },
     async call(input, { toolCallId, canCallAgain }) {
+      const asked = chartAsked(input.chart);
+      if (asked && input.content === undefined && input.answer !== true) {
+        return chartExisting(toolCallId, found(targetOf(input)), asked);
+      }
       const given = givenIn(input) ?? text(input.content, "content");
       const mind = found(targetOf(input));
       if (wantsNewMind(mind) && (canCallAgain?.() ?? true)) {
@@ -1650,7 +1723,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         given,
         false,
         canCallAgain?.() ?? true,
-        chartAsked(input.chart),
+        asked,
       );
       if (!written) throw noTable(mind);
       return added(

@@ -5,6 +5,7 @@
  * counts always agree (#880). Changes count by paragraph (#1028).
  */
 import type { MessageKey, MessageParams } from "../../shared/i18n";
+import type { ChangedMind } from "./changedMinds";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
@@ -21,13 +22,15 @@ export interface ChangeCounts {
 const counted = (t: Translate, count: number, what: "tables" | "paragraphs" | "charts") =>
   count === 1 ? t(`mindChanges.count.${what}.one`) : t(`mindChanges.count.${what}`, { count });
 
-/** The tables added, and the charts with them (#1091): "a table and a chart". */
+/** The tables added, and the charts with them (#1091): "a table and a chart", "a chart". */
 function tablesText(t: Translate, row: ChangeCounts): string {
-  const tables = counted(t, row.tables, "tables");
   const charts = row.charts ?? 0;
-  return charts > 0
-    ? t("mindChanges.count.tablesAndCharts", { tables, charts: counted(t, charts, "charts") })
-    : tables;
+  if (charts === 0) return counted(t, row.tables, "tables");
+  if (row.tables === 0) return counted(t, charts, "charts");
+  return t("mindChanges.count.tablesAndCharts", {
+    tables: counted(t, row.tables, "tables"),
+    charts: counted(t, charts, "charts"),
+  });
 }
 
 /** How many of what was done still wait, while that is known and there was something. */
@@ -43,7 +46,7 @@ export function leftText(
 
 export function changeFact(t: Translate, row: ChangeCounts, name: string | null): string {
   const count = row.wrote + row.changed;
-  if (row.tables > 0) return tablesFact(t, row, name);
+  if (row.tables > 0 || (row.charts ?? 0) > 0) return tablesFact(t, row, name);
   if (name === null) {
     if (row.changed === 0 && count > 0) {
       return count === 1 ? t("edit.wrote.one") : t("edit.wrote", { count });
@@ -85,4 +88,32 @@ function tablesFact(t: Translate, row: ChangeCounts, name: string | null): strin
   if (row.created) return t("mindChanges.created.wrote.tables", { mind: name, paragraphs, tables });
   if (row.changed === 0) return t("mindChanges.wrote.tables", { mind: name, paragraphs, tables });
   return t("mindChanges.changed.tables", { mind: name, paragraphs, tables });
+}
+
+/**
+ * What of its tables was kept as text, what sources were left out, and why a chart asked for
+ * wasn't drawn (#1091), after its count; null when nothing was.
+ */
+export function keptText(t: Translate, row: ChangedMind): string | null {
+  const notes = [
+    ...(row.unlinkedSources === 1
+      ? [t("mindChanges.unlinked.one")]
+      : row.unlinkedSources > 1
+        ? [t("mindChanges.unlinked", { count: row.unlinkedSources })]
+        : []),
+    ...(row.droppedSources === 1
+      ? [t("mindChanges.dropped.one")]
+      : row.droppedSources > 1
+        ? [t("mindChanges.dropped", { count: row.droppedSources })]
+        : []),
+    ...(row.extraCells === 1
+      ? [t("mindChanges.extraCells.one")]
+      : row.extraCells > 1
+        ? [t("mindChanges.extraCells", { count: row.extraCells })]
+        : []),
+    ...(row.chartNotDrawn
+      ? [t("mindChanges.noChart", { reason: t(`mindChanges.noChart.${row.chartNotDrawn}`) })]
+      : []),
+  ];
+  return notes.length > 0 ? notes.join(" ") : null;
 }

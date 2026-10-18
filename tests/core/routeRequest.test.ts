@@ -892,6 +892,15 @@ describe("Routing everyday requests", () => {
     });
   });
 
+  // protects=a chart of a table already in the Mind ("chart this table") is read as such, so the table isn't written again (#1091 review); fails_when=it reads as a new table to write; no_claim=none beyond protects.
+  test.each([
+    ["chart this table", null],
+    ["Make a bar chart of this table", "bar"],
+    ["把这个表格画成柱状图", "bar"],
+  ] as const)("%s charts the table there, of kind %s", (request, kind) => {
+    expect(routeRequest(request, FIRST).chart).toEqual({ kind, existing: true });
+  });
+
   // protects=a Question about a chart, or a change to one, isn't a request for a new chart (#1091); fails_when=one of them routes as a chart; no_claim=none beyond protects.
   test.each([
     "what does the chart show?",

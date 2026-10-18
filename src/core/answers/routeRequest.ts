@@ -32,8 +32,11 @@ export interface RequestRoute {
   fromAnswer?: true;
   /** A piece, or the last Answer, fills the empty Mind the User is in rather than making another. */
   fillsEmpty?: true;
-  /** A chart is asked for: of `kind`, or, null, of the kind a chart starts as. */
-  chart?: { kind: ChartKind | null };
+  /**
+   * A chart is asked for: of `kind`, or, null, of the kind a chart starts as; `existing`, of a
+   * table already in the Mind ("chart this table").
+   */
+  chart?: { kind: ChartKind | null; existing?: true };
 }
 
 // Never a doubt: "I mean write a summary…", "no, keep it shorter", "帮我润色一下这段".
@@ -222,6 +225,7 @@ const ZH_CHARTS = [
 // The kind named last wins: "a bar chart of revenue, as a line chart".
 const KIND_NAMED =
   /\b(bar|column|line|pie|scatter) (?:chart|graph|plot)\b|(柱状图|条形图|折线图|曲线图|饼图|饼状图|散点图)/gu;
+const EXISTING_TABLE = /\b(?:this|that|the|my) table\b|这个表格|这张表|这个表|该表格|上面的表格/u;
 const KINDS: Readonly<Record<string, ChartKind>> = {
   bar: "bar",
   column: "bar",
@@ -346,7 +350,10 @@ export function routeRequest(question: string, context: RequestContext): Request
     return {
       kind: "write",
       newMind: SAYS_NEW.test(question.toLocaleLowerCase()),
-      chart: { kind: chartKindOf(question) },
+      chart: {
+        kind: chartKindOf(question),
+        ...(EXISTING_TABLE.test(question.toLocaleLowerCase()) && { existing: true as const }),
+      },
     };
   }
   const kind = plain === "piece" ? "write" : (plain ?? "unclear");

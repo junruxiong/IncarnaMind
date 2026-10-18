@@ -2,7 +2,7 @@
  * The Minds an Answer in the assistant changed or made (#202), from its Tool
  * calls: what its card lists (`MindChangesCard`). Only data.
  */
-import type { ConversationAnswer } from "../../core/api";
+import type { ChartProblem, ConversationAnswer } from "../../core/api";
 
 /**
  * A Mind an Answer changed or made, the requests its changes there belong to,
@@ -18,6 +18,8 @@ export interface ChangedMind {
   changed: number;
   tables: number;
   charts: number;
+  /** Why the last chart asked for there wasn't drawn; null when none was refused. */
+  chartNotDrawn: ChartProblem | null;
   unlinkedSources: number;
   droppedSources: number;
   extraCells: number;
@@ -36,6 +38,7 @@ export function changedMinds(answer: Pick<ConversationAnswer, "toolCalls">): Cha
       changed: 0,
       tables: 0,
       charts: 0,
+      chartNotDrawn: null,
       unlinkedSources: 0,
       droppedSources: 0,
       extraCells: 0,
@@ -49,6 +52,7 @@ export function changedMinds(answer: Pick<ConversationAnswer, "toolCalls">): Cha
     } else row.wrote += change.paragraphs ?? 0;
     row.tables += tables;
     row.charts += change.charts ?? 0;
+    if (change.chartNotDrawn) row.chartNotDrawn = change.chartNotDrawn;
     row.unlinkedSources += change.unlinkedSources ?? 0;
     row.droppedSources += change.droppedSources ?? 0;
     row.extraCells += change.extraCells ?? 0;

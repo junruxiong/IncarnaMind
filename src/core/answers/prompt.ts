@@ -161,9 +161,12 @@ export function mindInstructions(offered: boolean, route: RequestRoute | null = 
     .join("\n");
 }
 
-function chartLine(newMind: boolean, kind: ChartKind | null): string {
+function chartLine(newMind: boolean, chart: { kind: ChartKind | null; existing?: true }): string {
+  const asked = chart.kind ? `kind "${chart.kind}"` : "no kind, as the User named none";
+  if (chart.existing) {
+    return `- This request asks for a chart of a table already in the Mind: call add_to_mind with chart alone, ${asked} and a short title from the User's words, and no content. IncarnaMind draws it from the table the User's cursor is in, or the Mind's only table, right after it: never write the table again.`;
+  }
   const tool = newMind ? "a new Mind with create_mind" : "the Mind with add_to_mind";
-  const asked = kind ? `kind "${kind}"` : "no kind, as the User named none";
   return `- This request asks for a chart: search and cite the figures, then write them as a table into ${tool}, each cell cited, and give chart with ${asked} and a short title from the User's words. IncarnaMind draws the chart from that table, right after it. Chart only figures the Documents state, or ones calculate gives: for a series they don't state, say you can chart only the figures the Documents state.`;
 }
 
@@ -175,7 +178,7 @@ function routeLine(route: RequestRoute | null): string {
           ? "- This request asks for your last Answer as a document: call create_mind with a short title and answer: true, and nothing else. It puts in that Answer as it is, with its Citations and every Document it covered: don't search again or write it anew."
           : "- This request asks for your last Answer as a document: the Mind in <mind> is empty, so call add_to_mind with answer: true, and nothing else. It puts in that Answer as it is, with its Citations and every Document it covered: don't search again or write it anew.";
       }
-      if (route.chart) return chartLine(route.newMind, route.chart.kind);
+      if (route.chart) return chartLine(route.newMind, route.chart);
       return route.newMind
         ? "- This request asks for a new page or note: write it into a new Mind with create_mind, not in your reply and not into the Mind in <mind>."
         : "- This request asks for text in a Mind: write it there with add_to_mind, not in your reply. If text of yours still waiting already covers it, revise that with edit_mind instead of writing it again.";
