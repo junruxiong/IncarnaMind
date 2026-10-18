@@ -476,7 +476,11 @@ test("PowerPoint patch spike", async () => {
   for (const entry of CORPUS.filter((each) =>
     each.has.some((feature) => feature.startsWith("workbooks")),
   )) {
-    survival = await citationSurvival(await fetchPinned(entry.url, entry.sha256, cache));
+    try {
+      survival = await citationSurvival(await fetchPinned(entry.url, entry.sha256, cache));
+    } catch (error) {
+      log(`${entry.id}: no Citation tag and note (${error instanceof Error ? error.message : String(error)})`);
+    }
     if (survival) {
       await writeFile(join(outputs, "citation-survival.pptx"), survival.saved);
       log(`Citation tag and note: ${entry.id}`);

@@ -48,7 +48,14 @@ async function notesMaster(deck: Deck): Promise<string> {
   const known =
     relationships.ofType(PRESENTATION_RELATIONSHIPS.notesMaster)?.target ?? madeMasters.get(deck);
   if (known) return known;
-  const theme = relationships.ofType(PRESENTATION_RELATIONSHIPS.theme);
+  // The presentation's theme, or its first master's: the notes master gets a copy of its own.
+  const firstMaster = relationships.ofType(PRESENTATION_RELATIONSHIPS.slideMaster);
+  const theme =
+    relationships.ofType(PRESENTATION_RELATIONSHIPS.theme) ??
+    (firstMaster &&
+      (await deck.pkg.relationshipsOf(firstMaster.target)).ofType(
+        PRESENTATION_RELATIONSHIPS.theme,
+      ));
   const themeBytes = theme && (await deck.pkg.bytes(theme.target));
   if (!theme || !themeBytes)
     throw new PackagePartError(presentationPart, "has no theme for a notes master.");

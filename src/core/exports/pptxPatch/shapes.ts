@@ -3,7 +3,7 @@
  * or its non-visual properties, are spliced; the rest of the slide keeps its
  * bytes, animations included.
  */
-import { child, descendants, elements, local, type XmlElement } from "../../documents/formats/xml";
+import { child, descendants, elements, local, walk, type XmlElement } from "../../documents/formats/xml";
 import { PackagePartError } from "../packagePatch/package";
 import {
   appendInside,
@@ -24,9 +24,14 @@ import {
   PRESENTATION_RELATIONSHIPS,
 } from "./deck";
 
-/** The `p:sp` with this id on a slide. */
+const SHAPE_KINDS = new Set(["p:sp", "p:pic", "p:graphicFrame", "p:grpSp", "p:cxnSp"]);
+
+/** The shape with this id on a slide: a text shape, picture, frame (chart, table), group or connector. */
 export function shapeById(root: XmlElement, id: string): XmlElement | undefined {
-  return descendants(root, "p:sp").find((shape) => nonVisualOf(shape)?.attrs.id === id);
+  for (const element of walk(root)) {
+    if (SHAPE_KINDS.has(element.name) && nonVisualOf(element)?.attrs.id === id) return element;
+  }
+  return undefined;
 }
 
 const prefixOf = (element: XmlElement) =>
