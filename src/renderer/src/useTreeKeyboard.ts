@@ -5,7 +5,7 @@ import { commands } from "./commands/registry";
 import type { ObjectKind } from "./objects";
 import { extendThroughRows, selectedOn } from "./selection";
 import { useAppStore } from "./store";
-import { isTreeDeleteKey, moveThroughRows } from "./treeKeys";
+import { isTreeDeleteKey, moveThroughRows, SHOWN_ROW_EVENT } from "./treeKeys";
 import { firstChildOf, jumpTo, parentOf, type TreeRow, typedAfter } from "./treeNavigation";
 
 /*
@@ -129,13 +129,22 @@ function useOneTabStop(tree: RefObject<HTMLElement | null>): void {
         }
       });
     };
+    const onShown = (event: Event) => {
+      const row = event.target;
+      if (!(row instanceof HTMLElement) || !row.matches(ROW)) return;
+      last = row;
+      lastAt = Math.max(rowsIn(root).indexOf(row), 0);
+      sync();
+    };
     root.addEventListener("focusin", onFocusIn);
     root.addEventListener("focusout", onFocusOut);
+    root.addEventListener(SHOWN_ROW_EVENT, onShown);
     sync();
     return () => {
       observer.disconnect();
       root.removeEventListener("focusin", onFocusIn);
       root.removeEventListener("focusout", onFocusOut);
+      root.removeEventListener(SHOWN_ROW_EVENT, onShown);
     };
   }, [tree]);
 }

@@ -9,7 +9,7 @@ import {
   useRef,
 } from "react";
 import { formatDate } from "../../../shared/dates";
-import { actOnAppliedEdit } from "../appliedEdits";
+import { actOnAppliedEdit, restoreChange } from "../appliedEdits";
 import { PencilLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
@@ -76,7 +76,7 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
     const buttonOf = (event: Event) =>
       event.target instanceof Element
         ? event.target.closest<HTMLElement>(
-            "[data-proposal-regenerate], [data-proposal-reject], [data-applied-action], [data-change-original]",
+            "[data-proposal-regenerate], [data-proposal-reject], [data-applied-action], [data-applied-restore], [data-change-original]",
           )
         : null;
     // The text keeps the focus and its selection.
@@ -96,6 +96,12 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       const applied = button.dataset.appliedAction;
       if (applied && isAppliedAction(applied)) {
         actOnAppliedEdit(editor, applied);
+        if (!editor.isDestroyed) editor.commands.focus();
+        return;
+      }
+      const restored = button.dataset.appliedRestore;
+      if (restored !== undefined) {
+        restoreChange(editor, Number(restored));
         if (!editor.isDestroyed) editor.commands.focus();
         return;
       }
@@ -305,7 +311,7 @@ interface Shown {
 }
 
 /** A change's bar sits over the first line of its change, following it as the Mind scrolls. */
-export function useBarOver(
+function useBarOver(
   editor: Editor,
   bar: RefObject<HTMLDivElement | null>,
   change: { from: number; to: number } | null,
