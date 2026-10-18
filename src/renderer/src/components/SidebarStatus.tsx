@@ -80,6 +80,8 @@ interface Status {
   wraps?: boolean;
   /** It asks the User's consent, which is never hidden (ADR-0022). */
   asks?: true;
+  /** The User's own Documents wait for them to act, so the quiet first open shows it too. */
+  needsYou?: true;
 }
 
 /**
@@ -106,10 +108,14 @@ export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean
   );
 }
 
-// A failure, a one-off the User dismisses (skipped files, a web page not added), or a consent
-// question: the quiet first open hides the footer's other news, never these (DESIGN.md, Problems).
+// A failure, a one-off the User dismisses (skipped files, a web page not added), a consent
+// question, or the User's own files waiting for a model: the quiet first open hides the footer's
+// other news, never these (DESIGN.md, Problems).
 const isProblem = (status: Status) =>
-  status.tone === "error" || status.dismiss !== undefined || status.asks === true;
+  status.tone === "error" ||
+  status.dismiss !== undefined ||
+  status.asks === true ||
+  status.needsYou === true;
 
 function StatusRow({ status, children }: { status: Status; children?: ReactNode }) {
   const t = useT();
@@ -596,6 +602,7 @@ function useStatuses(): Status[] {
       tone: "waiting",
       short: t("status.taggingWaiting"),
       full: t("jev.waiting.notice"),
+      needsYou: true,
       action: {
         label: t("status.choose"),
         testId: "tagging-waiting-setup",
