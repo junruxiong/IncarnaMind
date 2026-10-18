@@ -175,8 +175,12 @@ export interface CreateMindInput {
  *   would strip. A Word file's direct formatting is read into them (the look
  *   keeps what its styles give, `WORD_LOOK_VERSION` 6). Older content is
  *   version 24 content as it is.
+ * - 25: a check the User keeps as their own view (#1111): `kept` on the
+ *   `claimCheck` mark, and the `unsupported` reason a check gives (#1072),
+ *   which an older version's editor would strip, so the sentence would count
+ *   and be checked again. Older content is version 25 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 24;
+export const CONTENT_SCHEMA_VERSION = 25;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -970,6 +974,13 @@ export interface MindChange {
    * they land (#1111). Absent: none, or the check is over.
    */
   checking?: number;
+  /**
+   * The check of the sentences with Citations it wrote, once over: how many there were
+   * (`cited`), how many it checked (`sent`) and how many of those couldn't be checked
+   * (`failed`). Those it couldn't check, or didn't, are marked not checked, under `request`.
+   * Absent: none was checked.
+   */
+  selfCheck?: { request: string; cited: number; sent: number; failed: number };
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
@@ -4475,6 +4486,7 @@ export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
  * - "plan-limit": the plan's usage limit is reached.
  * - "failed": the model or its service failed otherwise (`detail` says how).
  * - "stopped": the User stopped the check, or IncarnaMind quit, before this sentence was checked.
+ * - "too-many": the assistant wrote more sentences with Citations than one write has checked (#1111).
  */
 export type ClaimCheckFailure =
   | "refused"
@@ -4485,7 +4497,8 @@ export type ClaimCheckFailure =
   | "cost-cap"
   | "plan-limit"
   | "failed"
-  | "stopped";
+  | "stopped"
+  | "too-many";
 
 /** Why a sentence was found unsupported, as the check gave it. */
 export interface UnsupportedReason {

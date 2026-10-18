@@ -40,6 +40,7 @@ const FAILURES: readonly ClaimCheckFailure[] = [
   "plan-limit",
   "failed",
   "stopped",
+  "too-many",
 ];
 
 const EXCLUSIONS: readonly EvidenceExclusion[] = ["own-file", "own-workings", "checked-document"];

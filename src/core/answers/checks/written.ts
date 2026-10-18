@@ -1,41 +1,57 @@
 /**
  * What the assistant writes into a Mind, checked before it lands (#1111).
  *
- * Each sentence it wrote that has Citations is checked as Check this Mind
- * would check it (./claimCheck: the Mind's Folder, the Citations' quotes
- * sent), a few at a time. The words are still the assistant's changes then,
- * not the Mind's.
+ * The sentences it wrote that have Citations, the first
+ * `SENTENCES_CHECKED_AT_MOST` of them, are checked as Check this Mind would
+ * check them (./claimCheck: the Mind's Folder, the Citations' quotes sent), a
+ * few at a time, each within a time limit. The words are still the
+ * assistant's changes then, not the Mind's.
  *
  * - A part its Citations don't support, as the check names it, is taken out
- *   with Edit with AI's own request (`cut-unsupported`), and the Citations
- *   stay on what is left. A cut that would lose every Citation, or add one,
- *   isn't used.
+ *   with Edit with AI's own request (`cut-unsupported`); the Citations stay on
+ *   what is left, each word keeps its own formatting, and the sentence shows
+ *   it needs a check again, as after the card's cut. A cut that would lose
+ *   every Citation, or add one, isn't used.
  * - A sentence still unsupported, or one a Document contradicts, lands with
  *   its check's mark, so Check this Mind doesn't find it again later.
+ * - One that couldn't be checked (a failure, a limit, the time limit, or past
+ *   the first `SENTENCES_CHECKED_AT_MOST`) lands marked not checked, with why.
  * - A supported sentence lands unmarked: its Citations' own checks stand for
  *   it, as after Add as Citation.
  *
+ * Only the sentences cut or marked are written, and only while each reads as
+ * it was written: one the User changed meanwhile keeps their words, marked to
+ * be checked again.
+ *
  * One check per sentence, and one edit per sentence it cuts, on the Answer's
- * model. Nothing is checked when the User has turned the checks flow off, or
- * on a model on this computer too small to judge reliably (#680).
+ * model, whose cost cap and plan limit stop the rest. Nothing is checked when
+ * the User has turned the checks flow off, or on a model on this computer too
+ * small to judge reliably (#680).
  */
 import { randomUUID } from "node:crypto";
+import * as Y from "yjs";
 import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import {
+  BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
   type CitedQuote,
   CLAIM_CHECK_MARK,
   type ClaimCheckAttributes,
+  type ClaimCheckFailure,
   type ClaimCheckResult,
   type EditAction,
   type RecordAiUseInput,
 } from "../../api";
 import type { PreparedChatModel } from "../../providers/chat";
 import { RunItemError, runItems } from "../../runs/stop";
-import type { MarkJSON, NodeJSON } from "../blocks";
+import { type MarkJSON, type NodeJSON, syncContent, topLevelBlocks } from "../blocks";
 import { type ClaimCheckRequest, recordJudged, runFailureOf } from "./claimCheck";
+import { markSentence } from "./sentences";
 import type { CheckScope } from "./verify";
+
+/** The most sentences one write has checked: past it, a long draft would wait minutes and cost dozens of requests. */
+export const SENTENCES_CHECKED_AT_MOST = 12;
 
 const CLOUD_SENTENCES_AT_ONCE = 3;
 
@@ -63,6 +79,8 @@ export interface WrittenCheckOptions {
     passage: { text: string; context: string; quotes: readonly string[] },
     signal: AbortSignal,
   ): Promise<string | null>;
+  /** How long one check may take, as contradiction watch gives one claim: a reply may never come. */
+  claimTimeLimitMs: number;
   now(): Date;
 }
 
@@ -70,17 +88,27 @@ export interface CheckWrittenInput {
   mindId: string;
   /** The Blocks as the assistant wrote them. */
   blocks: readonly NodeJSON[];
+  /** The ids of the top-level Blocks they were written as, in their order. */
+  ids: readonly string[];
   prepared: PreparedChatModel;
   signal: AbortSignal;
   /** How many sentences are being checked, as the check starts. */
   checking(count: number): void;
-  /** Puts the Blocks as they land, cut and marked, in place of those written; only when they changed. */
-  write(blocks: NodeJSON[]): void;
+  /** Changes the Mind's content, in one transaction. */
+  edit(change: (blocks: Y.XmlFragment) => void): void;
 }
 
-/** What the check did: how many sentences it checked, each part it cut as it named it, and how many land marked. */
+/**
+ * What the check did: of the sentences with Citations (`cited`), how many it
+ * sent, how many got a verdict and how many couldn't be checked; each part it
+ * cut, as it named it; how many land marked. Its marks share `request`.
+ */
 export interface WrittenCheck {
-  sentences: number;
+  request: string;
+  cited: number;
+  sent: number;
+  checked: number;
+  failed: number;
   cut: string[];
   unsupported: number;
   contradicted: number;
@@ -189,12 +217,60 @@ function asMarked(
   return { passage: passage.trim(), context, citations };
 }
 
+const sameMarks = (a: readonly MarkJSON[], b: readonly MarkJSON[]) =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+/** Each character of the sentence's words, with its own marks, but a check's. */
+function lettersOf(
+  content: readonly NodeJSON[],
+  from: number,
+  to: number,
+): { text: string; marks: MarkJSON[][] } {
+  let text = "";
+  const marks: MarkJSON[][] = [];
+  for (const { node, start } of inlineLayout(content)) {
+    if (node.type !== "text") continue;
+    const own = (node.marks ?? []).filter((mark) => mark.type !== CLAIM_CHECK_MARK);
+    const words = (node.text ?? "").slice(Math.max(0, from - start), Math.max(0, to - start));
+    text += words;
+    for (let index = 0; index < words.length; index++) marks.push(own);
+  }
+  return { text, marks };
+}
+
+// A run of letters or digits, one Chinese, Japanese or Korean character, a run of spaces, or one mark.
+const TOKEN =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[\p{L}\p{N}]+|\s+|[^\s]/gu;
+
+/**
+ * The cut's words as text nodes, each word with the marks it had in the
+ * sentence; a word the sentence didn't have takes the marks all its words share.
+ */
+function wordsWithMarks(words: string, letters: ReturnType<typeof lettersOf>): NodeJSON[] {
+  const [first, ...rest] = letters.marks;
+  const shared = (first ?? []).filter((mark) =>
+    rest.every((marks) => marks.some((each) => sameMarks([each], [mark]))),
+  );
+  const nodes: NodeJSON[] = [];
+  let cursor = 0;
+  for (const match of words.matchAll(TOKEN)) {
+    const token = match[0];
+    const at = letters.text.indexOf(token, cursor);
+    const marks = at < 0 ? shared : (letters.marks[at] ?? shared);
+    if (at >= 0) cursor = at + token.length;
+    const last = nodes.at(-1);
+    if (last && sameMarks(last.marks ?? [], marks)) last.text = `${last.text ?? ""}${token}`;
+    else nodes.push({ type: "text", text: token, ...(marks.length > 0 && { marks }) });
+  }
+  return nodes;
+}
+
 /** Null when the cut keeps no Citation, adds or repeats one, or says nothing. */
 function cutNodes(
   cut: string,
   sentence: readonly number[],
   citations: ReadonlyMap<number, NodeJSON>,
-  marks: MarkJSON[] | undefined,
+  letters: ReturnType<typeof lettersOf>,
 ): NodeJSON[] | null {
   const used = new Set<number>();
   const nodes: NodeJSON[] = [];
@@ -205,99 +281,142 @@ function cutNodes(
     if (!citation || !sentence.includes(number) || used.has(number)) return null;
     used.add(number);
     const at = match.index ?? 0;
-    const words = cut.slice(last, at);
-    if (words !== "") nodes.push({ type: "text", text: words, ...(marks && { marks }) });
-    nodes.push(citation);
+    nodes.push(...wordsWithMarks(cut.slice(last, at), letters), citation);
     last = at + match[0].length;
   }
-  const rest = cut.slice(last);
-  if (rest !== "") nodes.push({ type: "text", text: rest, ...(marks && { marks }) });
+  nodes.push(...wordsWithMarks(cut.slice(last), letters));
   const said = cut.replace(MARKER, "").trim();
   return used.size === 0 || !/[\p{L}\p{N}]/u.test(said) ? null : nodes;
 }
 
 interface Landing {
   sentence: Sentence;
-  /** In place of the sentence's own; null: it stays as written. */
+  /** The cut, in place of the sentence's own words; null: they stay. */
   nodes: NodeJSON[] | null;
-  mark: ClaimCheckAttributes | null;
+  mark: ClaimCheckAttributes;
 }
 
-function landParagraph(content: readonly NodeJSON[], landings: readonly Landing[]): NodeJSON[] {
-  const sorted = [...landings].sort((a, b) => a.sentence.from - b.sentence.from);
-  const landingAt = (offset: number) =>
-    sorted.find(({ sentence }) => sentence.from <= offset && offset < sentence.to);
+const withMark = (nodes: readonly NodeJSON[], mark: ClaimCheckAttributes): NodeJSON[] =>
+  nodes.map((node) =>
+    node.type === "text"
+      ? {
+          ...node,
+          marks: [
+            ...(node.marks ?? []).filter((each) => each.type !== CLAIM_CHECK_MARK),
+            { type: CLAIM_CHECK_MARK, attrs: { ...mark } },
+          ],
+        }
+      : node,
+  );
+
+/** A paragraph's content with the sentence `from`..`to` in it put as `nodes`. */
+function replaced(
+  content: readonly NodeJSON[],
+  from: number,
+  to: number,
+  nodes: readonly NodeJSON[],
+): NodeJSON[] {
   const out: NodeJSON[] = [];
-  const placed = new Set<Landing>();
+  let placed = false;
+  const place = () => {
+    if (placed) return;
+    placed = true;
+    out.push(...nodes);
+  };
   for (const { node, start } of inlineLayout(content)) {
     if (node.type !== "text") {
-      const landing = landingAt(start);
-      if (!landing?.nodes) out.push(node);
-      else if (!placed.has(landing)) {
-        placed.add(landing);
-        out.push(...landing.nodes);
-      }
+      if (start >= from && start < to) place();
+      else out.push(node);
       continue;
     }
     const text = node.text ?? "";
-    const cuts = new Set([0, text.length]);
-    for (const { sentence } of sorted) {
-      for (const edge of [sentence.from - start, sentence.to - start]) {
-        if (edge > 0 && edge < text.length) cuts.add(edge);
-      }
-    }
-    const edges = [...cuts].sort((a, b) => a - b);
-    for (let index = 0; index < edges.length - 1; index++) {
-      const begin = edges[index] ?? 0;
-      const end = edges[index + 1] ?? text.length;
-      const piece = text.slice(begin, end);
-      const landing = landingAt(start + begin);
-      if (landing?.nodes) {
-        if (!placed.has(landing)) {
-          placed.add(landing);
-          out.push(...landing.nodes);
-        }
-        continue;
-      }
-      const marks = landing?.mark
-        ? [
-            ...(node.marks ?? []).filter((mark) => mark.type !== CLAIM_CHECK_MARK),
-            { type: CLAIM_CHECK_MARK, attrs: { ...landing.mark } },
-          ]
-        : node.marks;
-      out.push({ ...node, text: piece, ...(marks && { marks }) });
-    }
+    const before = text.slice(0, Math.max(0, from - start));
+    const after = text.slice(Math.max(0, to - start));
+    if (before) out.push({ ...node, text: before });
+    if (start + text.length > from && start < to) place();
+    if (after && start + text.length > to) out.push({ ...node, text: after });
   }
+  place();
   return out;
 }
 
-function land(blocks: readonly NodeJSON[], landings: readonly Landing[]): NodeJSON[] {
-  const byPath = new Map<string, Landing[]>();
-  for (const landing of landings) {
-    const key = landing.sentence.path.join(".");
-    byPath.set(key, [...(byPath.get(key) ?? []), landing]);
-  }
-  const visit = (nodes: readonly NodeJSON[], path: number[]): NodeJSON[] =>
-    nodes.map((node, index) => {
-      const here = [...path, index];
-      const key = here.join(".");
-      const mine = byPath.get(key);
-      if (mine) return { ...node, content: landParagraph(node.content ?? [], mine) };
-      const deeper = [...byPath.keys()].some((each) => each.startsWith(`${key}.`));
-      return deeper && node.content ? { ...node, content: visit(node.content, here) } : node;
-    });
-  return visit(blocks, []);
+/** A paragraph's inline content as it is in the Mind now. */
+function inlineOf(parent: Y.XmlElement): NodeJSON[] {
+  return parent.toArray().flatMap((child): NodeJSON[] => {
+    if (child instanceof Y.XmlText) {
+      const runs = child.toDelta() as { insert: unknown; attributes?: Record<string, unknown> }[];
+      return runs.flatMap((run) => {
+        if (typeof run.insert !== "string") return [];
+        const marks = Object.entries(run.attributes ?? {}).map(([type, attrs]) => ({
+          type,
+          attrs: (attrs ?? {}) as Record<string, unknown>,
+        }));
+        return [{ type: "text", text: run.insert, ...(marks.length > 0 && { marks }) }];
+      });
+    }
+    if (!(child instanceof Y.XmlElement)) return [];
+    return [
+      {
+        type: child.nodeName,
+        attrs: child.getAttributes() as Record<string, unknown>,
+        ...(child.length > 0 && { content: inlineOf(child) }),
+      },
+    ];
+  });
 }
 
-function paragraphAt(blocks: readonly NodeJSON[], path: readonly number[]): NodeJSON | undefined {
-  let nodes: readonly NodeJSON[] | undefined = blocks;
-  let node: NodeJSON | undefined;
-  for (const index of path) {
-    node = nodes?.[index];
-    nodes = node?.content;
+/** The paragraph a written sentence is in, as the Mind holds it now; undefined once it's gone. */
+function paragraphIn(
+  blocks: Y.XmlFragment,
+  ids: readonly string[],
+  path: readonly number[],
+): Y.XmlElement | undefined {
+  const [top, ...inner] = path;
+  let element = topLevelBlocks(blocks).find(
+    (each) => top !== undefined && each.getAttribute(BLOCK_ID_ATTRIBUTE) === ids[top],
+  );
+  for (const index of inner) {
+    const children = element?.toArray().filter((each) => each instanceof Y.XmlElement) ?? [];
+    element = children[index];
   }
-  return node;
+  return element?.nodeName === "paragraph" ? element : undefined;
 }
+
+/**
+ * Lands one sentence in the Mind: cut or marked while it reads as it was
+ * written; once the User has changed it, only marked, so its words stay and
+ * its check shows it needs doing again.
+ */
+function land(blocks: Y.XmlFragment, ids: readonly string[], landing: Landing): void {
+  const { sentence } = landing;
+  const element = paragraphIn(blocks, ids, sentence.path);
+  if (!element) return;
+  const content = inlineOf(element);
+  const text = paragraphText(content);
+  const spans = sentenceSpans(text);
+  const same = spans
+    .filter((span) => text.slice(span.from, span.to) === sentence.text)
+    .sort((a, b) => Math.abs(a.from - sentence.from) - Math.abs(b.from - sentence.from))[0];
+  if (same && landing.nodes) {
+    syncContent(element, replaced(content, same.from, same.to, landing.nodes));
+    return;
+  }
+  if (same) {
+    markSentence(element, same.from, same.to, landing.mark);
+    return;
+  }
+  const written = sentenceSpans(sentence.context);
+  const index = written.findIndex((span) => span.from === sentence.from);
+  const now = spans.length === written.length ? spans[index] : undefined;
+  if (now) markSentence(element, now.from, now.to, landing.mark);
+}
+
+const notChecked = (
+  mark: ClaimCheckAttributes,
+  reason: ClaimCheckFailure,
+  detail: string | null,
+  at: string,
+): ClaimCheckAttributes => ({ ...mark, state: "not-checked", reason, detail, checkedAt: at });
 
 export function createWrittenCheck(options: WrittenCheckOptions) {
   async function cutOf(
@@ -324,13 +443,44 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
     if (cut === null || cut.replace(/\s+/g, " ") === marked.passage.replace(/\s+/g, " ")) {
       return null;
     }
-    const first = inlineLayout(content).find(
-      ({ node, start }) =>
-        node.type === "text" &&
-        start + (node.text ?? "").length > sentence.from &&
-        start < sentence.to,
+    const letters = lettersOf(content, sentence.from, sentence.to);
+    return cutNodes(cut.trim(), numbers, marked.citations, letters);
+  }
+
+  /** One sentence's check, given up on once it takes longer than the time limit. */
+  async function checkWithin(
+    sentence: Sentence,
+    mindId: string,
+    scope: CheckScope,
+    prepared: PreparedChatModel,
+    signal: AbortSignal,
+  ): Promise<ClaimCheckResult> {
+    const timedOut = AbortSignal.timeout(options.claimTimeLimitMs);
+    const ended = AbortSignal.any([signal, timedOut]);
+    // A reply that never comes, even once aborted, is given up on all the same.
+    const givenUp = new Promise<null>((resolve) =>
+      ended.addEventListener("abort", () => resolve(null), { once: true }),
     );
-    return cutNodes(cut.trim(), numbers, marked.citations, first?.node.marks);
+    const replied = await Promise.race([
+      options.claimCheck({
+        claim: sentence.text,
+        context: sentence.context,
+        cited: options.citedNow(sentence.cited),
+        scope: scope.scope,
+        model: prepared,
+        cacheKey: mindId,
+        signal: ended,
+      }),
+      givenUp,
+    ]);
+    if (replied !== null && !timedOut.aborted) return replied;
+    return {
+      verdict: "not-checked",
+      reason: "failed",
+      detail: `No reply within ${Math.round(options.claimTimeLimitMs / 1000)} seconds.`,
+      versions: [],
+      excluded: [],
+    };
   }
 
   /** Null when there was nothing to check, or it couldn't be checked here. */
@@ -341,21 +491,14 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
     if (sentences.length === 0) return null;
     const { searchable, check: scope } = options.scopeOf(mindId);
     if (searchable === 0) return null;
-    input.checking(sentences.length);
+    const sending = sentences.slice(0, SENTENCES_CHECKED_AT_MOST);
+    input.checking(sending.length);
     const request = randomUUID();
     const startedAt = options.now().toISOString();
     const { outcomes } = await runItems(
-      sentences,
+      sending,
       async (sentence) => {
-        const result = await options.claimCheck({
-          claim: sentence.text,
-          context: sentence.context,
-          cited: options.citedNow(sentence.cited),
-          scope: scope.scope,
-          model: prepared,
-          cacheKey: mindId,
-          signal,
-        });
+        const result = await checkWithin(sentence, mindId, scope, prepared, signal);
         const failure = runFailureOf(result);
         if (failure) throw new RunItemError(failure);
         const uncovered =
@@ -369,55 +512,107 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
     );
     if (signal.aborted) return null;
 
-    const checked: WrittenCheck = { sentences: 0, cut: [], unsupported: 0, contradicted: 0 };
+    const done: WrittenCheck = {
+      request,
+      cited: sentences.length,
+      sent: sending.length,
+      checked: 0,
+      failed: 0,
+      cut: [],
+      unsupported: 0,
+      contradicted: 0,
+    };
     const landings: Landing[] = [];
-    sentences.forEach((sentence, index) => {
+    const markOf = (sentence: Sentence): ClaimCheckAttributes => ({
+      id: randomUUID(),
+      request,
+      action: "check-against-documents",
+      state: "checking",
+      reason: null,
+      detail: null,
+      providerId: prepared.provider.id,
+      modelId: prepared.modelId,
+      text: sentence.text,
+      evidence: null,
+      says: null,
+      unsupported: null,
+      calculation: null,
+      citedCaseUnchecked: false,
+      citedCaseFound: false,
+      scope: scope.marked,
+      versions: [],
+      excluded: [],
+      checkedAt: startedAt,
+    });
+    const failed = (sentence: Sentence, reason: ClaimCheckFailure, detail: string | null) => {
+      done.failed++;
+      console.warn(
+        `A sentence the assistant wrote in Mind ${mindId} couldn't be checked before it landed: ${reason}${detail ? ` (${detail})` : ""}`,
+      );
+      landings.push({
+        sentence,
+        nodes: null,
+        mark: notChecked(markOf(sentence), reason, detail, options.now().toISOString()),
+      });
+    };
+    sending.forEach((sentence, index) => {
       const outcome = outcomes[index];
-      if (outcome?.status === "failed") {
-        console.warn(
-          `A sentence the assistant wrote in Mind ${mindId} couldn't be checked before it landed: ${outcome.error.message}`,
-        );
+      if (!outcome || outcome.status === "stopped") return;
+      if (outcome.status === "not-checked") {
+        failed(sentence, outcome.stop.reason, null);
+        return;
       }
-      if (outcome?.status !== "done") return;
+      if (outcome.status === "failed") {
+        const rateLimited = outcome.error.kind === "rate-limit";
+        failed(
+          sentence,
+          rateLimited ? "rate-limit" : "failed",
+          rateLimited ? null : outcome.error.message,
+        );
+        return;
+      }
       const { result, uncovered, nodes } = outcome.value;
       const at = options.now().toISOString();
       recordJudged(options.recordAiUse, mindId, prepared, result, at);
-      if (result.verdict === "not-checked") return;
-      checked.sentences++;
-      if (nodes && uncovered) {
-        checked.cut.push(uncovered);
-        landings.push({ sentence, nodes, mark: null });
+      if (result.verdict === "not-checked") {
+        failed(sentence, result.reason, result.detail);
         return;
       }
-      if (result.verdict !== "unsupported" && result.verdict !== "contradicted") return;
-      checked[result.verdict]++;
-      const mark: ClaimCheckAttributes = {
-        id: randomUUID(),
-        request,
-        action: "check-against-documents",
-        state: "checking",
-        reason: null,
-        detail: null,
-        providerId: prepared.provider.id,
-        modelId: prepared.modelId,
-        text: sentence.text,
-        evidence: null,
-        says: null,
-        unsupported: null,
-        calculation: null,
-        citedCaseUnchecked: false,
-        citedCaseFound: false,
-        scope: scope.marked,
-        versions: [],
-        excluded: [],
-        checkedAt: startedAt,
-      };
-      landings.push({ sentence, nodes: null, mark: options.withResult(mark, result, at) });
+      done.checked++;
+      if (result.verdict === "supported") return;
+      const mark = options.withResult(markOf(sentence), result, at);
+      if (nodes && uncovered) {
+        done.cut.push(uncovered);
+        landings.push({ sentence, nodes: withMark(nodes, mark), mark });
+        return;
+      }
+      done[result.verdict]++;
+      landings.push({ sentence, nodes: null, mark });
     });
-    if (landings.length > 0) {
-      input.write(land(blocks, landings));
-      if (landings.some((each) => each.mark)) options.retainEvidence(mindId);
+    const at = options.now().toISOString();
+    for (const sentence of sentences.slice(SENTENCES_CHECKED_AT_MOST)) {
+      landings.push({
+        sentence,
+        nodes: null,
+        mark: notChecked(markOf(sentence), "too-many", null, at),
+      });
     }
-    return checked;
+    if (landings.length > 0) {
+      input.edit((note) => {
+        for (const landing of landings) land(note, input.ids, landing);
+      });
+      options.retainEvidence(mindId);
+    }
+    return done;
   };
+}
+
+function paragraphAt(blocks: readonly NodeJSON[], path: readonly number[]): NodeJSON | undefined {
+  let nodes: readonly NodeJSON[] | undefined = blocks;
+  let node: NodeJSON | undefined;
+  for (const index of path) {
+    node = nodes?.[index];
+    nodes = node?.content;
+  }
+  return node;
 }
