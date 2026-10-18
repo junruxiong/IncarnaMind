@@ -76,7 +76,7 @@ test("“write a summary page” makes the page with the summary applied, “mak
   await screenshot(window, "asked-edit-en");
   await setLanguage(window, "zh-CN");
   await expect(line.getByTestId("applied-count")).toHaveText("修改了 2 个段落");
-  await expect(second.getByTestId("mind-changes-title")).toHaveText("在“Summary”中已修改 2 个段落");
+  await expect(second.getByTestId("mind-changes-title")).toHaveText("在“Summary”中修改了 2 个段落");
   await setLanguage(window, "en");
 
   // Review changes from the Answer shows what was added, the text still applied.
