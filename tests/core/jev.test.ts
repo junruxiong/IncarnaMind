@@ -11,8 +11,10 @@ import {
   type SaveChatProviderInput,
 } from "../../src/core";
 import { decisionsFromProbabilities } from "../../src/core/tags/jev";
+import { RATE_LIMIT_PAUSE } from "../../src/core/tags/rateLimit";
 import { createMemoryKeychain, createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import { heldClock } from "../helpers/heldClock";
 import { type FakeJev, JEV_KEY, startFakeJev } from "../helpers/jev";
 import { scriptedModels } from "../helpers/models";
 import { taggingModel, tagNamed, tagNamesOf, waitForTagging } from "../helpers/tags";
@@ -351,6 +353,28 @@ describe("Tagging with Jev", { timeout: 30_000 }, () => {
     jev.fail(null);
     await retag(core, [document.id]);
     expect(await tagNamesOf(core, document.id)).toEqual(["Paper"]);
+  });
+
+  test("a Jev rate limit is handed to Tagging's pause after one request, not retried", async () => {
+    const clock = heldClock();
+    const { core, jev } = await startWithJev({ paceTimers: clock.timers });
+    jev.answer({ Paper: 0.9 });
+    jev.fail({ status: 429, message: "Rate limit exceeded.", headers: { "retry-after": "0" } });
+    await useLocalJev(core, jev);
+    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
+
+    const [paused] = await waitForTagging(
+      core,
+      [document.id],
+      (each) => each.tagging === "waiting-for-provider",
+    );
+    expect(paused?.taggingError).toMatchObject({ kind: "rate-limit" });
+    expect(jev.requests).toHaveLength(1);
+
+    jev.fail(null);
+    clock.advance(RATE_LIMIT_PAUSE.shortestWaitMs);
+    await waitForTagging(core, [document.id]);
+    expect(jev.requests).toHaveLength(2);
   });
 
   test("Jev set up without a readable key: Documents wait rather than go to the chat model", async () => {

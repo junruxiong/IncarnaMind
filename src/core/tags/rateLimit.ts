@@ -8,6 +8,7 @@
  */
 import { APICallError, RetryError } from "ai";
 import type { ProviderError } from "../api";
+import { JevRequestError } from "../providers/jev";
 import { classifyProviderError, SignInRouteError } from "../providers/providerErrors";
 import { retryAfterMs } from "../providers/retryAfter";
 import type { PaceTimers } from "../sources/pace";
@@ -15,6 +16,8 @@ import type { PaceTimers } from "../sources/pace";
 export const RATE_LIMIT_PAUSE = {
   firstWaitMs: 30_000,
   longestWaitMs: 60 * 60_000,
+  /** The least a pause lasts, for a `Retry-After` of 0 or a few milliseconds. */
+  shortestWaitMs: 1_000,
 };
 
 export type RateLimitPause = ReturnType<typeof createRateLimitPause>;
@@ -31,7 +34,7 @@ export function rateLimitError(until: number, error?: unknown): ProviderError {
 
 export function createRateLimitPause(options: {
   timers: PaceTimers;
-  /** The wait is over: Documents that waited go on. */
+  /** The pause is over, or the User ended it: Documents that waited go on. */
   resumed(): void;
   signal: AbortSignal;
 }) {
@@ -45,10 +48,16 @@ export function createRateLimitPause(options: {
   /** How long a rate limit asks to wait (null: it doesn't say), or undefined when `error` isn't one. */
   function limitOf(error: unknown): number | null | undefined {
     if (classifyProviderError(error).kind !== "rate-limit") return undefined;
-    const cause = RetryError.isInstance(error) ? error.lastError : error;
+    const retried = RetryError.isInstance(error) ? error.lastError : error;
+    // The AI SDK wraps the error of a stream's route in its own.
+    const cause =
+      retried instanceof Error && retried.cause instanceof SignInRouteError
+        ? retried.cause
+        : retried;
     if (APICallError.isInstance(cause) && cause.responseHeaders) {
       return retryAfterMs(new Headers(cause.responseHeaders), timers.now());
     }
+    if (cause instanceof JevRequestError) return cause.retryAfterMs;
     if (cause instanceof SignInRouteError && cause.resetsAt !== null) {
       return Math.max(0, cause.resetsAt - timers.now());
     }
@@ -76,14 +85,19 @@ export function createRateLimitPause(options: {
     pausedUntil: (): number | null => (paused() ? until : null),
 
     /**
-     * Pauses after a request met a rate limit, for the longer of what the provider asked and the
-     * next backoff step. Returns when the pause ends, or null when `error` isn't a rate limit.
+     * Pauses after a request met a rate limit: for the provider's `Retry-After` when it gives one,
+     * otherwise for the next backoff step. Returns when the pause ends, or null when `error`
+     * isn't a rate limit.
      */
     pause(error: unknown): number | null {
       const asked = limitOf(error);
       if (asked === undefined) return null;
-      const wait = Math.min(Math.max(asked ?? 0, nextWait), RATE_LIMIT_PAUSE.longestWaitMs);
-      nextWait = Math.min(nextWait * 2, RATE_LIMIT_PAUSE.longestWaitMs);
+      const stated = asked !== null;
+      const wait = Math.min(
+        stated ? Math.max(asked, RATE_LIMIT_PAUSE.shortestWaitMs) : nextWait,
+        RATE_LIMIT_PAUSE.longestWaitMs,
+      );
+      if (!stated) nextWait = Math.min(nextWait * 2, RATE_LIMIT_PAUSE.longestWaitMs);
       const ends = timers.now() + wait;
       if (until !== null && until >= ends) return until;
       hold(ends);
@@ -95,11 +109,18 @@ export function createRateLimitPause(options: {
       nextWait = RATE_LIMIT_PAUSE.firstWaitMs;
     },
 
-    /** The User asked to try again: the pause ends now, and the backoff stays as it was. */
+    /** Picks up a pause a quit interrupted, so a limited key isn't asked again at once. */
+    restore(ends: number): void {
+      if (ends > timers.now()) hold(ends);
+    },
+
+    /** The pause ends now, for a new model or key or when the User asks, and Documents go on. */
     resumeNow(): void {
+      if (until === null) return;
       wake?.abort();
       wake = null;
       until = null;
+      options.resumed();
     },
   };
 }
