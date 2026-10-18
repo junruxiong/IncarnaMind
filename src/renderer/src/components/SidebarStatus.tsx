@@ -14,7 +14,7 @@ import { rerankingModelStatus } from "../rerankStatus";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { useTaggingAlert } from "../taggingAlert";
 import { useTaggingExplained } from "../taggingExplained";
-import { placesText, taggingPlaces } from "../taggingStop";
+import { placesText, resumeTagging, stoppedDocumentPlaces, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
 import { CloseLineIcon } from "./lineIcons";
@@ -365,6 +365,14 @@ function useStatuses(): Status[] {
       tagging || organizingNow ? taggingPlaces(state.documents, state.library) : [],
     ),
   );
+  const stoppedPlaces = useAppStore(
+    useShallow((state) =>
+      stoppedDocumentPlaces(
+        state.documents.filter((each) => isOwnDocument(each, allExamples(state))),
+        state.library,
+      ),
+    ),
+  );
   const service = taggingService?.service.name;
   const running = tagging || organizingNow;
   // A scan without text goes to Organize as pictures of its pages.
@@ -590,6 +598,24 @@ function useStatuses(): Status[] {
         label: t("status.choose"),
         testId: "tagging-waiting-setup",
         run: () => openSettings("models"),
+      },
+    });
+  }
+
+  if (stoppedPlaces.length > 0) {
+    statuses.push({
+      testId: "tagging-stopped",
+      tone: "waiting",
+      short: t("status.taggingStopped"),
+      full: t("tagging.stoppedIn", { places: placesText(stoppedPlaces, library, t, language) }),
+      needsYou: true,
+      action: {
+        label: t("tagging.resume"),
+        testId: "tagging-resume",
+        run: () =>
+          void resumeTagging(stoppedPlaces).catch((error: unknown) =>
+            useAppStore.getState().reportError(error),
+          ),
       },
     });
   }
