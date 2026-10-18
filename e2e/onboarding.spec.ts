@@ -7,6 +7,7 @@ import {
   acceptPlainTextKeys,
   addToNote,
   assistantAnswers,
+  continueSetup,
   createDataFolder,
   dismissChatSetup,
   expectReadyDocuments,
@@ -422,7 +423,7 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   await expect(window.getByTestId("model-setup")).toContainText("选择你的 AI");
   await useLocalChatModel(window);
   await expect(steps).toContainText("准备好了。");
-  await expect(window.getByTestId("model-setup")).toHaveCount(0);
+  await continueSetup(window);
 });
 
 test('"Ask a question" is ticked by an Answer that arrives, not by one that fails (#766)', async () => {
@@ -636,7 +637,7 @@ test("finishing the steps with no model asks for one in the card, never says You
   await useLocalChatModel(window);
   await expect(steps).toContainText("You're set up.");
   await expect(steps.getByTestId("first-open-next").first()).toBeVisible();
-  await expect(setup).toHaveCount(0);
+  await continueSetup(window);
   await expect(sidebar.getByTestId("tagging-waiting")).toHaveCount(0);
   await expect(window.getByTestId("composer-input")).toBeVisible();
   await app.close();
@@ -664,6 +665,9 @@ test("by keyboard alone: Choose a model takes the focus into the setup, and a sa
   await window.keyboard.press("Enter");
   await expect(setup.getByLabel(/^API key/)).toBeFocused();
   await window.keyboard.insertText("sk-ant-a-key-from-the-company");
+  await window.keyboard.press("Enter");
+  // The card lists what each job uses, with Continue under the focus: Enter goes on.
+  await expect(setup.getByTestId("setup-continue")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(setup).toHaveCount(0);
   await expect(window.getByTestId("first-open-steps")).toContainText("You're set up.");
