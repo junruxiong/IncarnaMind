@@ -149,9 +149,20 @@ export function textLength(blocks: readonly NodeJSON[]): number {
 const textOf = (node: NodeJSON): string =>
   node.type === "text" ? (node.text ?? "") : (node.content ?? []).map(textOf).join("");
 
-/** The first Block with any text, as the text of its first line: what an unnamed Mind is called once they are in it. */
+/** The first stretch of text in a Block: a list's first item or a table's first cell, not all of them run together. */
+function firstText(node: NodeJSON): string {
+  const children = node.content ?? [];
+  if (node.type === "text" || children.some((child) => child.type === "text")) return textOf(node);
+  for (const child of children) {
+    const text = firstText(child);
+    if (text.trim() !== "") return text;
+  }
+  return "";
+}
+
+/** The text of the first Block that has any: what an unnamed Mind is called once they are in it. */
 export const firstLineOfBlocks = (blocks: readonly NodeJSON[]): string =>
-  blocks.map(textOf).find((text) => text.trim() !== "") ?? "";
+  blocks.map(firstText).find((text) => text.trim() !== "") ?? "";
 
 const holdsCitation = (node: NodeJSON): boolean =>
   node.type === CITATION_NODE || (node.content ?? []).some(holdsCitation);

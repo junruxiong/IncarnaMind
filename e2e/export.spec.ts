@@ -715,3 +715,51 @@ for (const language of ["en", "zh-CN"] as const) {
     await app.close();
   });
 }
+
+for (const language of ["en", "zh-CN"] as const) {
+  const instruction =
+    language === "en" ? "Summarise this agreement for me." : "为这份协议写一份摘要。";
+
+  test(`a new Mind made from an Answer is named by its first line, not by the conversation's name from the first instruction; a name the User gave the conversation is kept (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await bridge(window).language(language);
+    await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
+    const core = await coreOf(window);
+    const minds = () => core.evaluate((each) => each.listMinds());
+
+    const answer = await askInAssistant(window, instruction);
+    const addToNew = async () => {
+      await pointAt(window, answer.getByTestId("assistant-answer-text"));
+      await pointAndClick(window, answer.getByTestId("answer-add-to"));
+      await pointAndClick(
+        window,
+        window.getByTestId("add-to-picker").getByTestId("add-to-option").last(),
+      );
+      await expect(answer.getByTestId("answer-added")).toBeVisible();
+    };
+
+    await addToNew();
+    await expect.poll(async () => (await minds()).length).toBe(1);
+    const [first] = await minds();
+    expect(first?.title).toBe("");
+    expect(first?.autoTitle).toMatch(/^This is a scripted Answer to/);
+    const preview = await core.evaluate(
+      (each, mindId) => each.previewMindExport(mindId, { format: "docx" }),
+      first?.id ?? "",
+    );
+    expect(preview.fileName).toMatch(/^This is a scripted Answer to/);
+    expect(preview.fileName).not.toMatch(/^Summarise this agreement|^为这份协议/);
+
+    const conversationId = (await core.evaluate((each) => each.listConversations()))[0]?.id ?? "";
+    await core.evaluate(
+      (each, id) => each.renameConversation(id, "Agreement review"),
+      conversationId,
+    );
+    await addToNew();
+    await expect.poll(async () => (await minds()).length).toBe(2);
+    expect((await minds()).map((each) => each.title)).toContain("Agreement review");
+    await app.close();
+  });
+}

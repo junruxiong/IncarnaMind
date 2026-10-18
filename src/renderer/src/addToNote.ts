@@ -10,8 +10,8 @@
  * - Into another Mind: at its end, through the core. With no Mind in focus
  *   (`openIt`), it is shown too, in a new tab beside the focused one if it isn't open,
  *   never replacing it.
- * - Into a new Mind: made from the Answer, named as the conversation, in its
- *   Folder, opened in a new tab beside the focused one, the Answer waiting
+ * - Into a new Mind: made from the Answer, in its conversation's Folder, named by
+ *   its first line, opened in a new tab beside the focused one, the Answer waiting
  *   there as changes to accept or reject.
  *
  * Each says what it did under the Answer, with Undo (and ⌘Z), and what went
@@ -39,7 +39,7 @@ import {
   withoutIds,
 } from "../../shared/noteBlocks";
 import { readMindHandle } from "./commands/handles";
-import { conversationLabel, questionOf } from "./conversations";
+import { questionOf } from "./conversations";
 import { core } from "./core";
 import { flashBlocks } from "./editor/blockOrigins";
 import { asOneStep, offerEditorUndo } from "./editor/editorUndo";
@@ -169,10 +169,14 @@ const openBeside = (mindId: string) =>
     where: { in: "place" },
   });
 
+/**
+ * A new Mind for an Answer, in the conversation's Folder. It is named by its first line, like
+ * any Mind; the conversation's name goes on it only when the User gave the conversation one,
+ * never the name it takes from the first Question, which is an instruction (#1174).
+ */
 async function newMindFor(added: AddedAnswer) {
-  const title = conversationLabel(added.conversation);
-  const mind = await core.createMind({ title, folderId: added.conversation?.folderId ?? null });
-  return { mind, title };
+  const title = added.conversation?.title ?? "";
+  return core.createMind({ title, folderId: added.conversation?.folderId ?? null });
 }
 
 const putIn = (mindId: string, added: AddedAnswer, proposed: boolean) =>
@@ -185,16 +189,15 @@ const putIn = (mindId: string, added: AddedAnswer, proposed: boolean) =>
   });
 
 /**
- * Into a new Mind: named as the conversation, in its Folder, the Answer in it
- * as changes to accept or reject, in a new tab beside the focused one. Undo
- * deletes it.
+ * Into a new Mind: in its conversation's Folder, the Answer in it as changes to
+ * accept or reject, in a new tab beside the focused one. Undo deletes it.
  */
 async function addToNewMind(added: AddedAnswer): Promise<void> {
-  const { mind, title } = await newMindFor(added);
+  const mind = await newMindFor(added);
   await putIn(mind.id, added, true);
   await openBeside(mind.id);
   useUndo.getState().push({
-    ...saidInLine(t, (t) => t("answer.addedToNew", { mind: mindName(mind) || title })),
+    ...saidInLine(t, (t) => t("answer.addedToNew", { mind: nameOfMind(mind.id, added.blocks) })),
     undo: () => core.deleteMind(mind.id),
     shownAt: answerUndoPlace(added.answer.id),
   });
@@ -212,7 +215,7 @@ export async function openTable(added: AddedAnswer): Promise<void> {
   if (openingTable) return;
   openingTable = true;
   try {
-    const { mind, title } = await newMindFor(added);
+    const mind = await newMindFor(added);
     await openBeside(mind.id);
     try {
       await putIn(mind.id, added, false);
@@ -222,7 +225,7 @@ export async function openTable(added: AddedAnswer): Promise<void> {
       return;
     }
     useUndo.getState().push({
-      ...saidInLine(t, (t) => t("answer.tableOpened", { mind: mindName(mind) || title })),
+      ...saidInLine(t, (t) => t("answer.tableOpened", { mind: nameOfMind(mind.id, added.blocks) })),
       undo: () => core.deleteMind(mind.id),
       shownAt: answerUndoPlace(added.answer.id),
     });
