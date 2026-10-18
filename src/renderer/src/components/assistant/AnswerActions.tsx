@@ -68,7 +68,7 @@ export function AnswerActions({
         className="assistant-answer-actions assistant-answer-actions--added"
       >
         <CheckLineIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-secondary" />
-        <span role="status" className="assistant-answer-added">
+        <span role="status" title={added.fullMessage} className="assistant-answer-added">
           {added.message}
         </span>
         <span aria-hidden="true">·</span>
@@ -76,7 +76,7 @@ export function AnswerActions({
           ref={undoButton}
           type="button"
           data-testid="answer-added-undo"
-          aria-label={t("move.undoLabel", { message: added.message })}
+          aria-label={t("move.undoLabel", { message: added.fullMessage ?? added.message })}
           onClick={() => {
             useUndo
               .getState()
