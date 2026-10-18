@@ -58,7 +58,8 @@ export type EditProblem =
         | "too-long"
         | "local-mode"
         | "cant-regenerate"
-        | "no-table";
+        | "no-table"
+        | "late";
     }
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   | { kind: "failed"; message: string; retry: () => void };
@@ -246,6 +247,10 @@ async function arrived(
     outcome = applying ? await finishApplying(applying, result) : null;
   } finally {
     if (mine) set("pending", mindId, null);
+  }
+  if (outcome === "late") {
+    set("problems", mindId, { kind: "late" });
+    return;
   }
   if (outcome !== null && outcome !== "held") {
     const { paragraphs, tables } = outcome.applied;

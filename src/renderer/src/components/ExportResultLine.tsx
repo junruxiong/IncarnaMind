@@ -1,5 +1,6 @@
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { displayName } from "../../../shared/documentNames";
+import { shortenMiddle } from "../../../shared/naming";
 import { core, files } from "../core";
 import { CheckStateIcon } from "../editor/icons";
 import { errorMessage } from "../errors";
@@ -34,7 +35,12 @@ import { WordExportReview } from "./WordExportReview";
 /** How long a plain "Saved …" stays, unless the pointer or the focus is on it. */
 const SAVED_SHOWN_MS = 10_000;
 
+/** Wide enough for a name that reads, narrow enough that the sentence stays in two lines in a group half the window wide. */
+const SAVED_NAME_COLUMNS = 40;
+
 type SavedResult = Extract<ExportResult, { state: "saved" }>;
+
+type SavedWithFile = readonly { testId: string; text: string }[];
 
 const isPlainSaved = (result: SavedResult, t: ReturnType<typeof useT>): boolean =>
   result.unverified === 0 &&
@@ -189,23 +195,7 @@ function ResultBody({
         ) : result.state === "saved" ? (
           <>
             <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
-              <p
-                role="status"
-                data-testid="export-done"
-                title={result.path}
-                className={`flex min-w-0 items-start gap-2 text-[14px] leading-5 text-ink-secondary ${
-                  withFile.length > 0 ? "grow basis-75" : ""
-                }`}
-              >
-                <CheckIcon />
-                <SavedName
-                  name={result.name}
-                  folder={
-                    result.inDefaultFolder ? defaultFolderLabel(t) : folderName(result.folder)
-                  }
-                  withFile={withFile}
-                />
-              </p>
+              <SavedSentence result={result} withFile={withFile} />
               <span className="flex shrink-0 gap-1">
                 <button
                   type="button"
@@ -372,11 +362,33 @@ function NeedsDetailsLine({ mindId, documentIds }: { mindId: string; documentIds
   );
 }
 
+function SavedSentence({ result, withFile }: { result: SavedResult; withFile: SavedWithFile }) {
+  const t = useT();
+  const folder = result.inDefaultFolder ? defaultFolderLabel(t) : folderName(result.folder);
+  const name = shortenMiddle(result.name, SAVED_NAME_COLUMNS);
+  return (
+    <p
+      role="status"
+      data-testid="export-done"
+      title={result.path}
+      aria-label={
+        name === result.name ? undefined : t("export.doneIn", { name: result.name, folder })
+      }
+      className={`flex min-w-0 items-start gap-2 text-[14px] leading-5 text-ink-secondary ${
+        withFile.length > 0 ? "grow basis-75" : ""
+      }`}
+    >
+      <CheckIcon />
+      <SavedName name={name} folder={folder} withFile={withFile} />
+    </p>
+  );
+}
+
 /**
- * "Saved “Tides.pdf” in Documents › IncarnaMind", the file's name in the ink,
- * wrapped rather than cut short so all of it shows; then what went into the
- * file, each part after a "·" that a wrapped line leaves off its start:
- * "Saved “Tides.docx” in Exports · 2 Contradicted, as comments".
+ * "Saved “Tides.pdf” in Documents › IncarnaMind", the file's name in the ink; then what went
+ * into the file, each part after a "·" that a wrapped line leaves off its start:
+ * "Saved “Tides.docx” in Exports · 2 Contradicted, as comments". The first part has no "·" and
+ * the room for it instead, so none of its wrapped lines starts in the clipped margin.
  */
 function SavedName({
   name,
@@ -385,13 +397,13 @@ function SavedName({
 }: {
   name: string;
   folder: string;
-  withFile: readonly { testId: string; text: string }[];
+  withFile: SavedWithFile;
 }) {
   const t = useT();
   const said = t("export.doneIn", { name: "\u0000", folder });
   const [before = "", after = ""] = said.split("\u0000");
   const saved = (
-    <span className="min-w-0 break-words">
+    <span data-testid="export-saved" className="min-w-0 break-words">
       {before}
       <span className="font-semibold text-ink">{name}</span>
       {after}
@@ -401,7 +413,7 @@ function SavedName({
   return (
     <span className="block min-w-0 grow overflow-hidden">
       <span className="-ml-4 flex flex-wrap">
-        <FilePart>{saved}</FilePart>
+        <span className="block max-w-full pl-4">{saved}</span>
         {withFile.map(({ testId, text }) => (
           <FilePart key={testId} testId={testId}>
             {text}
@@ -416,7 +428,7 @@ function FilePart({ children, testId }: { children: ReactNode; testId?: string }
   return (
     <span
       data-testid={testId}
-      className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap first:whitespace-normal"
+      className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap"
     >
       <span aria-hidden="true" className="inline-block w-4 text-center text-ink-placeholder">
         ·

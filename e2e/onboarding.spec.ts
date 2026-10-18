@@ -126,9 +126,7 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   await expect(pane.getByTestId("chat-readiness")).toHaveCount(0);
 
   const answer = pane.getByTestId("answer");
-  await expect(answer.getByTestId("answer-example")).toHaveText(
-    "Example Answer, written in advance: no model needed to try it",
-  );
+  await expect(answer.getByTestId("answer-example")).toHaveText("Example Answer · no model needed");
   // Both Citations are checked against the Documents' text: the quotes are found.
   const checks = pane.getByTestId("margin-check");
   await expect(checks).toHaveCount(2);
@@ -194,7 +192,7 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   const readyAnswer = assistantAnswers(window).last();
   await expect(readyAnswer).toHaveAttribute("data-status", "done");
   await expect(readyAnswer.getByTestId("answer-example")).toHaveText(
-    "Example Answer, written in advance: no model needed to try it",
+    "Example Answer · no model needed",
   );
   const chips = readyAnswer.getByTestId("citation-chip");
   await expect(chips).toHaveCount(2);
@@ -314,7 +312,7 @@ test("an empty Mind of one's own shows the three steps, the example's steps tick
   const guide = window.getByTestId("start-guide");
   await expect(guide).toBeVisible();
   await expect(guide.getByTestId("start-step")).toHaveCount(3);
-  await expect(guide).toContainText("Only your Documents get checked Citations.");
+  await expect(guide).toContainText("without checked Citations.");
 
   await window
     .getByTestId("add-documents-input")
@@ -399,12 +397,10 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   await newMind(window);
   await dismissChatSetup(window);
   const guide = window.getByTestId("start-guide");
-  await expect(guide).toContainText("回答会出现在助手里，一键加入笔记。");
+  await expect(guide).toContainText("向你的文档提问。");
   await expectPlainWords([guide]);
   await setLanguage(window, "en");
-  await expect(guide).toContainText(
-    "The Answer appears in the assistant; add it to your note with one click.",
-  );
+  await expect(guide).toContainText("and ask your Documents.");
   await expectPlainWords([guide, window.getByTestId("sidebar")]);
   await pointAndClick(
     window,
@@ -415,7 +411,7 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   await pointAndClick(window, files.getByRole("button").first());
   // Done with no model: one more step, in place of "You're set up." (#1027).
   const steps = pane.getByTestId("first-open-steps");
-  await expect(steps).toContainText("还差一步：选择 AI 模型，就能就你自己的文件提问。", {
+  await expect(steps).toContainText("选择 AI 模型，就能就你自己的文件提问。", {
     timeout: 15_000,
   });
   await expect(steps).not.toContainText("准备好了。");
@@ -478,9 +474,7 @@ test("in Chinese, the ready Question is the Chinese example's, answered with no 
   await pointAndClick(window, ready);
   const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done");
-  await expect(answer.getByTestId("answer-example")).toHaveText(
-    "预先写好的示例回答，无需模型即可体验",
-  );
+  await expect(answer.getByTestId("answer-example")).toHaveText("示例回答 · 无需模型");
   await expect(answer.getByTestId("citation-chip")).toHaveCount(2);
   await expect(step(window, "question")).toHaveAttribute("data-state", "done");
   await expect(step(window, "question")).toContainText("已提过问题");
@@ -617,9 +611,7 @@ test("finishing the steps with no model asks for one in the card, never says You
 
   const steps = pane.getByTestId("first-open-steps");
   await expect(step(window, "files")).toHaveAttribute("data-state", "done");
-  await expect(steps).toContainText(
-    "One more step: choose an AI model to ask about your own files.",
-  );
+  await expect(steps).toContainText("Choose an AI model to ask about your own files.");
   await expect(steps).not.toContainText("You're set up.");
   await expect(steps.getByTestId("first-open-next")).toHaveCount(0);
   // Each part of the shell still waits for its own moment, and one prompt asks for the model.

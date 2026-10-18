@@ -6,6 +6,7 @@ import {
   fitName,
   mindName,
   NAME_LENGTH,
+  shortenMiddle,
 } from "../../src/shared/naming";
 
 describe("cutting a title", () => {
@@ -160,6 +161,38 @@ describe("fitting a name on one line", () => {
 
   test("a word too long for the line is cut inside it", () => {
     expect(fitName("x".repeat(50), room(10))).toBe(`${"x".repeat(9)}…`);
+  });
+});
+
+describe("shortening in the middle", () => {
+  const ADDRESS =
+    "https://www.txcourts.example/opinions/2017/supreme-court/hallmark-builders-v-rio-grande-supply-512-sw3d-101.html";
+
+  test("keeps a text that fits whole", () => {
+    expect(shortenMiddle("https://example.com/a", 40)).toBe("https://example.com/a");
+  });
+
+  test("keeps the start and the end of a long address, to the length asked", () => {
+    const shortened = shortenMiddle(ADDRESS, 40);
+    expect(Array.from(shortened)).toHaveLength(40);
+    expect(shortened.startsWith("https://www.txcourts")).toBe(true);
+    expect(shortened.endsWith("sw3d-101.html")).toBe(true);
+    expect(shortened.match(/…/g)).toHaveLength(1);
+  });
+
+  test("keeps a file's extension", () => {
+    const name = "Summary for the manager of the quarterly review of harbour dues.docx";
+    expect(shortenMiddle(name, 40)).toBe("Summary for the mana…f harbour dues.docx");
+  });
+
+  test("counts characters, not code units", () => {
+    expect(shortenMiddle("🙂".repeat(30), 11)).toBe(`${"🙂".repeat(5)}…${"🙂".repeat(5)}`);
+  });
+
+  test("counts a Chinese character as two columns, as it is drawn", () => {
+    const name = `${"信贷委员会合同审阅笔记".repeat(4)}.docx`;
+    expect(shortenMiddle(name, 40)).toBe("信贷委员会合同审阅笔…会合同审阅笔记.docx");
+    expect(shortenMiddle("合同审阅笔记.docx", 40)).toBe("合同审阅笔记.docx");
   });
 });
 
