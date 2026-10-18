@@ -3960,8 +3960,7 @@ export const en = {
   "meetings.mindTitle": "Meeting, {date}",
   "settings.pages.meetings": "Meetings",
   "status.readingPaused": "Reading paused while recording",
-  "status.readingPaused.full":
-    "Documents are read and tagged once the meeting is paused or stopped: recording comes first.",
+  "status.readingPaused.full": "Paused while recording: Documents are read after the meeting.",
   "meetings.record": "Record a meeting",
   "meetings.hint.agenda": "Write the agenda, or anything you want to cover…",
   "meetings.audio.both": "Me and them",
@@ -3976,11 +3975,9 @@ export const en = {
     "I’m recording this meeting with IncarnaMind to take notes. The recording stays on my computer.",
   "meetings.start.dismiss": "Don’t record; keep this as a note (Esc)",
   "meetings.notice.title": "Before you record",
-  "meetings.notice.both":
-    "IncarnaMind records your microphone and the computer’s sound, which carries everyone else in the meeting.",
+  "meetings.notice.both": "Records your microphone and the computer’s sound: everyone in the call.",
   "meetings.notice.microphone": "IncarnaMind records your microphone.",
-  "meetings.notice.tell":
-    "In many places it’s against the law to record people without telling them. Tell everyone you’re recording before you start.",
+  "meetings.notice.tell": "Tell everyone you’re recording: in many places it’s the law.",
   "meetings.notice.cancel": "Cancel",
   "meetings.bar.label": "Meeting recording",
   "meetings.bar.recording": "Recording",
@@ -3998,10 +3995,8 @@ export const en = {
   "meetings.line.microphoneDenied": "IncarnaMind isn’t allowed to use the microphone.",
   "meetings.line.microphoneUnavailable": "No microphone was found.",
   "meetings.line.microphoneEnded": "The microphone stopped, and no other could be opened.",
-  "meetings.line.systemDenied":
-    "Only your microphone is recorded: IncarnaMind isn’t allowed to record the computer’s sound.",
-  "meetings.line.systemSilent":
-    "No sound from the computer for a minute. If the others are talking, IncarnaMind may not be allowed to record it.",
+  "meetings.line.systemDenied": "Only your microphone is recorded: computer sound isn’t allowed.",
+  "meetings.line.systemSilent": "No sound from the call for a minute: recording may be blocked.",
   "meetings.line.systemEnded": "The computer’s sound stopped. Your microphone is still recorded.",
   "meetings.line.systemUnavailable": "This computer records only your microphone.",
   "meetings.line.openSettings.mac": "Open System Settings",
@@ -4012,20 +4007,18 @@ export const en = {
   "meetings.bar.hideTranscript": "Hide transcript",
   "meetings.bar.transcriptSoon": "The transcript appears with its first line",
   "meetings.transcript.downloading":
-    "Getting the transcript ready: downloading the speech model, {percent}% of {size}. The meeting is recorded meanwhile.",
+    "Downloading the speech model: {percent}% of {size}. Still recording.",
   "meetings.transcript.starting": "Starting the transcript…",
   "meetings.transcript.behind":
     "Recording… Live text fell behind; the transcript catches up when you stop.",
-  "meetings.transcript.behindPaused":
-    "Part of the meeting isn’t transcribed yet; the transcript catches up when you stop.",
+  "meetings.transcript.behindPaused": "Not all transcribed yet; it catches up when you stop.",
   "meetings.transcript.finishing": "Finishing the transcript…",
   "meetings.transcript.finishingDownload":
     "Finishing the transcript: downloading the speech model, {percent}% of {size}…",
   "meetings.transcript.saved": "Transcript saved",
   "meetings.transcript.savedIn": "Transcript saved in {folder}",
   "meetings.transcript.open": "Open transcript",
-  "meetings.transcript.empty":
-    "Nothing was said that could be transcribed, so no transcript was saved.",
+  "meetings.transcript.empty": "Nothing to transcribe, so no transcript was saved.",
   "meetings.transcript.downloadFailed": "The speech model couldn’t be downloaded: {message}",
   "meetings.transcript.engineFailed": "Transcription stopped: {message}",
   "meetings.transcript.engineStopped": "Transcription stopped.",
@@ -4054,12 +4047,11 @@ export const en = {
   "meetings.duration.minutes": "{count} min",
   "meetings.duration.hours": "{hours} h {minutes} min",
   "meetings.audio.recorded": "Recorded {time}",
-  "meetings.audio.kept": "Audio stays on this computer, deleted within a day.",
+  "meetings.audio.kept": "Audio stays on this computer; deleted within a day.",
   "meetings.audio.keptUntil": "Audio stays on this computer until {time}",
-  "meetings.audio.keptWhile": "Audio stays on this computer until a day after the meeting",
+  "meetings.audio.keptWhile": "Audio stays on this computer; deleted within a day.",
   "meetings.audio.delete": "Delete audio now",
-  "meetings.audio.confirm":
-    "Delete this meeting’s audio? It can’t be brought back. Your notes stay.",
+  "meetings.audio.confirm": "Delete this meeting’s audio for good? Your notes stay.",
   "meetings.audio.deleteConfirm": "Delete audio",
   "meetings.audio.keep": "Keep it",
   "meetings.audio.deleted": "Audio deleted",
@@ -4070,8 +4062,7 @@ export const en = {
   "meetings.health.none": "Open a meeting’s Mind to see how its recording went",
   "meetings.health.details": "Details",
   "meetings.health.speed": "Transcribed on this computer at {speed}× real time",
-  "meetings.health.speedSlow":
-    "Transcribed on this computer at {speed}× real time, too slow to keep up live",
+  "meetings.health.speedSlow": "Transcribed here at {speed}× real time, too slow to keep up",
   "meetings.health.speedUnknown": "Transcription speed not measured yet",
   "meetings.health.noLoss": "No audio was lost",
   "meetings.health.lost.microphone": "{duration} of microphone audio lost: {cause}",
@@ -4094,12 +4085,11 @@ export const en = {
   "meetings.health.reason.cloudBehind": "the cloud fell behind",
   "meetings.health.reason.cloudFailed": "the cloud dropped",
   "meetings.health.reason.user": "you chose it",
-  "meetings.health.unsaved":
-    "{duration} of audio couldn’t be saved, so it isn’t in the transcript.",
+  "meetings.health.unsaved": "{duration} of audio couldn’t be saved, so it’s not transcribed.",
   "meetings.settings.title": "Recording",
   "meetings.settings.enabled": "Record meetings",
   "meetings.settings.enabledBody":
-    "Adds “Record a meeting” to the + menu. Transcribed on this computer; the speech model (about 1 GB) downloads once.",
+    "Adds “Record a meeting” to the + menu. Downloads a 1 GB speech model once.",
   "meetings.settings.cantRecord": "This copy of IncarnaMind can’t record audio.",
   "meetings.settings.what": "What is recorded",
   "meetings.settings.whatBoth": "Your microphone and the other people (the computer’s sound).",
@@ -4228,8 +4218,7 @@ export const en = {
   "meetings.command.pause": "Pause recording",
   "meetings.command.resume": "Resume recording",
   "meetings.command.stop": "Stop recording",
-  "meetings.command.stopConfirm":
-    "Stop recording? This meeting can’t be picked up again. What was recorded is kept.",
+  "meetings.command.stopConfirm": "Stop recording? You can’t resume it; the recording is kept.",
   "meetings.command.noneLive": "No meeting is being recorded",
   "meetings.command.mark": "Mark this moment",
   "meetings.command.markPaused": "Resume recording to leave a mark",
@@ -4469,11 +4458,10 @@ export const en = {
   "meetings.help.stillWriting": "The suggestion is still being written.",
   "meetings.level.label": "Sound level",
   "meetings.settings.panelBody":
-    "While a meeting records, a small panel with the help buttons floats above the meeting app.",
+    "While recording, a panel of help buttons floats above the meeting app.",
   "meetings.settings.hidden": "Keep the panel out of my screen share",
   "meetings.settings.keys": "Shortcuts",
-  "meetings.settings.keysBody":
-    "They work while the meeting app is in front, and only while a meeting records.",
+  "meetings.settings.keysBody": "They work over the meeting app, only while recording.",
   "meetings.settings.keysChange": "Change the shortcut for “{name}”",
   "meetings.settings.keysPress": "Press the new keys…",
   "meetings.settings.keysNone": "None",
