@@ -300,7 +300,7 @@ export const CASES: readonly EverydayCase[] = [
     mind: READING_GROUP,
     request: "Write a summary page of these documents",
     firstReply:
-      "Here is a summary of the two documents.\n\n## Summary\n\nThe first paper presents GraphST, a method for spatial transcriptomics. The second is a tutorial on random neural networks.",
+      "Here is a summary of the two documents.\n\n## Summary\n\nThe first document is the paper 2306.10683v1. The second is “A Tutorial about Random Neural Networks in Supervised Learning”.",
     expected: WRITE_ALL,
   },
   {
@@ -310,7 +310,7 @@ export const CASES: readonly EverydayCase[] = [
     mind: READING_GROUP_ZH,
     request: "写一个总结页面",
     firstReply:
-      "下面是这两份文档的总结。\n\n## 总结\n\n第一篇论文介绍了 GraphST，一种空间转录组学方法。第二篇是关于随机神经网络的教程。",
+      "下面是这两份文档的总结。\n\n## 总结\n\n第一份文档是论文 2306.10683v1，第二份是《A Tutorial about Random Neural Networks in Supervised Learning》。",
     expected: WRITE_ALL,
   },
   {
