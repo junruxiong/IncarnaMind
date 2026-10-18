@@ -321,7 +321,9 @@ test("every provider's line on what it does with the data is one line beside its
       }
       await card.getByTestId("setup-back").click();
 
+      await language(window, "en");
       const settings = await openSettings(window, "models");
+      await language(window, value);
       for (const provider of hosted) {
         const line = (await addProviderForm(settings, provider.id)).getByTestId(
           "provider-data-use",
@@ -332,6 +334,7 @@ test("every provider's line on what it does with the data is one line beside its
         checked += 1;
         await settings.getByTestId("models-back").click();
       }
+      await language(window, "en");
       await closeSettings(window);
     }
     expect(checked).toBeGreaterThan(40);

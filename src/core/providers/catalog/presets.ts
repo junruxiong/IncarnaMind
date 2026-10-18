@@ -149,7 +149,7 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "opt-out",
       summary: {
-        en: "May train on prompts and replies unless you opt out; logged ones are deleted after 30 days.",
+        en: "May train on prompts and replies unless you opt out; logs are deleted after 30 days.",
         zh: "可能用提示和回复训练，可选择退出；记录的内容 30 天后删除。",
       },
       url: "https://cohere.com/data-usage-policy",
