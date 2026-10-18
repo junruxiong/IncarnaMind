@@ -148,8 +148,8 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await expect(marks(window).and(window.locator('[data-check="checking"]'))).toHaveCount(0);
   await expect(marks(window).and(window.locator('[data-check="contradicted"]'))).toHaveCount(1);
   await expect(marks(window).and(window.locator('[data-check="supported"]'))).toHaveCount(3);
-  // Nothing changed since: nothing to check again.
-  await expect(health.getByTestId("health-check")).toHaveCount(0);
+  // Nothing changed since: no claim is one not checked yet.
+  await expect(health.getByTestId("health-unchecked")).toHaveCount(0);
   await expect(window.getByTestId("check-badge")).toContainText("1");
   await screenshot(window, "mind-check-done-en");
 
@@ -159,15 +159,16 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await slideSelect(window, first, "Penguins");
   await window.keyboard.type("Puffins");
   await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(1);
-  const again = (await checkCard(window)).getByTestId("health-check");
-  await expect(again).toHaveText("Check again");
+  // The card's one action checks what changed, here the edited claim alone, at once.
+  const again = (await checkCard(window)).getByTestId("badge-check-mind");
+  await expect(again).toHaveText("Check this Mind");
   await pointAndClick(window, again);
   await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(0);
   await expect(marks(window).and(window.locator('[data-check="unsupported"]'))).toHaveCount(11);
   await expect(marks(window)).toHaveCount(15);
 });
 
-test("In Chinese and a narrow window, from the Mind's tab menu: a model on this computer asks with the claims and no price; a Folder that holds too little offers all Documents; Check all checks a sentence written since", async () => {
+test("In Chinese and a narrow window, from the Mind's tab menu: a model on this computer asks with the claims and no price; a Folder that holds too little offers all Documents; Check this Mind checks a sentence written since", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await writeFile(
     join(sources, "Garden.pdf"),
@@ -221,7 +222,7 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await expect(health.getByTestId("health-unsupported")).toContainText("11 条无依据");
   await screenshot(window, "mind-check-done-zh-narrow");
 
-  // A sentence written since: "全部核对" checks it, and the rest stay as they were.
+  // A sentence written since: "核对整个 Mind" checks it, and the rest stay as they were.
   const editor = window.getByTestId("mind-editor");
   const last = editor.locator(":scope > p").last();
   const box = await last.boundingBox();
@@ -230,13 +231,13 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await last.click({ position: { x: box.width - 2, y: box.height - 4 } });
   await window.keyboard.type(" The harbour office opens at nine in the morning.");
   await expect(last).toContainText("worth building. The harbour office opens");
-  const all = (await checkCard(window)).getByTestId("health-check");
-  await expect(all).toHaveText("全部核对");
+  const all = (await checkCard(window)).getByTestId("badge-check-mind");
+  await expect(all).toHaveText("核对整个 Mind");
   await pointAndClick(window, all);
   await expect(ask).toContainText("要对照这个文件夹中的文档，核对这个 Mind 中的这条说法吗？");
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
   await expect(marks(window)).toHaveCount(16);
-  await expect(health.getByTestId("health-check")).toHaveCount(0);
+  await expect(health.getByTestId("health-unchecked")).toHaveCount(0);
 });
 
 test("when the provider can't be reached while the claims are named, Try again names them again and asks before it checks", async () => {

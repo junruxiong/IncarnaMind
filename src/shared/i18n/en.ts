@@ -659,13 +659,10 @@ export const en = {
   "badge.toCheck": "to check",
   "badge.checked": "{count} checked",
   "badge.checking": "Checking {done} of {total}",
-  "mindCheck.command.purpose": "Whether each claim has support in your Documents",
-  "contradictions.command.purpose": "Where your Documents disagree with this Mind's Citations",
   "badge.command.keywords":
     "checks citations health contradicted unsupported claims sentences badge",
   "health.checkedAll.one": "Checked 1 claim, {when}",
   "health.checkedAll": "Checked {count} claims, {when}",
-  "health.checkAll": "Check all",
   "health.next": "{part}: go to the next",
   "checks.smallModel": "Small model: its verdicts may be wrong. A larger one is more reliable.",
   "checks.running.find-support": "Finding support…",

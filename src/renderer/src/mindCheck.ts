@@ -161,3 +161,9 @@ export async function startMindCheck(
     },
   }));
 }
+
+/** The check card's one action: what changed since the last check, or, when nothing did, the whole Mind. */
+export async function startCardCheck(mindId: string): Promise<void> {
+  const changed = await core.planMindCheck(mindId, "changed", false);
+  return startMindCheck(mindId, changed.kind === "nothing" ? "all" : "changed");
+}

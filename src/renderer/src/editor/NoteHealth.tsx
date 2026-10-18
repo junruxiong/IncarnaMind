@@ -21,10 +21,11 @@ import { useAppStore } from "../store";
 import { useCheckUnread } from "../unreadFiles";
 import { AddedDocumentsLine } from "./AddedDocumentsLine";
 import { AnswerError } from "./AnswerView";
+import { originOf } from "./blockOrigins";
 import { coverageOf, keptSentences, sameCoverage, shownClaims } from "./claimChecks";
 import { type NoteHealth as Health, type HealthPart, noteHealth } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
-import { CheckedWhen, MindCheckAction } from "./MindCheckLine";
+import { CheckedWhen } from "./MindCheckLine";
 import { useRunModel } from "./ModelChip";
 import { UncoveredLine } from "./UncoveredLine";
 import { COUNT_IDLE_MS } from "./WordCount";
@@ -91,6 +92,7 @@ export function useHealth(editor: Editor, skipped: ReadonlySet<string>): Health 
           shownClaims(editor.state),
           (attributes: CitationAttributes) => citationState(attributes, documents, kept).check,
           new Set([...skipped, ...keptSentences(editor.state)]),
+          (blockId) => originOf(editor.state, blockId) !== null,
         ),
       );
     };
@@ -193,8 +195,6 @@ export function HealthCard({
   };
 
   const rows = ROWS.filter((part) => health[part].length > 0);
-  const canCheck =
-    !running && !asking && (health.unchecked.length > 0 || health.recheck.length > 0);
   const close = {
     label: t("checks.close"),
     testId: "checks-problem-close",
@@ -244,22 +244,6 @@ export function HealthCard({
                 count={format(health.unchecked.length)}
               />
             </span>
-            {canCheck && (
-              <MindCheckAction
-                unchecked={health.unchecked.length}
-                recheck={health.recheck.length}
-                onCheck={() => void startMindCheck(mindId, "changed")}
-              />
-            )}
-          </div>
-        )}
-        {health.unchecked.length === 0 && canCheck && (
-          <div className="check-card-actions">
-            <MindCheckAction
-              unchecked={0}
-              recheck={health.recheck.length}
-              onCheck={() => void startMindCheck(mindId, "changed")}
-            />
           </div>
         )}
         {health.noCitation.length > 0 && row("noCitation")}

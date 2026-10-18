@@ -10,7 +10,7 @@ import { buttonStyle } from "../components/ui";
 import { startContradictionCheck, useContradictions } from "../contradictions";
 import { useLanguage, useT } from "../i18n";
 import { frontTabOfMind } from "../layoutSlice";
-import { startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
+import { startCardCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useFade } from "../motion";
 import { useAppStore } from "../store";
 import { useGroupsMerged } from "../useWindowWidth";
@@ -160,37 +160,28 @@ function CheckActions({
   const t = useT();
   const running = useChecks((state) => state.running[mindId] !== undefined);
   const askingContradictions = useContradictions((state) => state.asking[mindId] !== undefined);
-  const action = (id: string, title: string, about: string, run: () => void) => (
-    <button
-      type="button"
-      data-testid={id}
-      className="check-card-action"
-      disabled={running}
-      onClick={run}
-    >
-      <span className="check-card-action-title">{title}</span>
-      <span className="check-card-action-about">{about}</span>
-    </button>
-  );
+  if (askingMind) return <MindCheckAsk mindId={mindId} />;
+  if (askingContradictions) return <ContradictionAsk doc={doc} mindId={mindId} />;
   return (
-    <div className="check-card-actions-list">
-      {askingMind ? (
-        <MindCheckAsk mindId={mindId} />
-      ) : (
-        action("badge-check-mind", t("mindCheck.command"), t("mindCheck.command.purpose"), () =>
-          startMindCheck(mindId, "all"),
-        )
-      )}
-      {askingContradictions ? (
-        <ContradictionAsk doc={doc} mindId={mindId} />
-      ) : (
-        action(
-          "badge-check-contradictions",
-          t("contradictions.command"),
-          t("contradictions.command.purpose"),
-          () => void startContradictionCheck(mindId),
-        )
-      )}
+    <div className="check-card-actions">
+      <button
+        type="button"
+        data-testid="badge-check-mind"
+        disabled={running}
+        className={buttonStyle("primary", "sm")}
+        onClick={() => void startCardCheck(mindId)}
+      >
+        {t("mindCheck.command")}
+      </button>
+      <button
+        type="button"
+        data-testid="badge-check-contradictions"
+        disabled={running}
+        className="check-card-link"
+        onClick={() => void startContradictionCheck(mindId)}
+      >
+        {t("contradictions.command")}
+      </button>
     </div>
   );
 }
@@ -341,18 +332,12 @@ function BadgeFrame({
           onKeyDown={stepThroughCard}
         >
           {children}
-          <div className="check-card-sep" />
-          <div className="check-card-foot">
-            {foot}
-            <button
-              type="button"
-              data-testid="check-card-close"
-              className={buttonStyle("secondary", "sm")}
-              onClick={() => close(true)}
-            >
-              {t("checks.close")}
-            </button>
-          </div>
+          {foot && (
+            <>
+              <div className="check-card-sep" />
+              <div className="check-card-foot">{foot}</div>
+            </>
+          )}
         </Popover>
       )}
     </div>
