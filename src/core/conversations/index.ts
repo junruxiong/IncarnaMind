@@ -225,6 +225,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
     example,
     withoutMindTools,
     coverage,
+    writtenFrom,
   } = parsed;
   const claimed = Array.isArray(unbackedClaims)
     ? unbackedClaims.filter((each): each is ClaimedChange =>
@@ -257,8 +258,16 @@ function storedSteps(value: string | null): AnswerSteps | null {
     ...(example === true && { example }),
     ...(withoutMindTools === true && { withoutMindTools }),
     ...(storedCoverage(coverage) ?? {}),
+    ...(isRecord(writtenFrom) &&
+      isCount(writtenFrom.documents) &&
+      isCount(writtenFrom.total) && {
+        writtenFrom: { documents: writtenFrom.documents, total: writtenFrom.total },
+      }),
   };
 }
+
+const isCount = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value > 0;
 
 function storedCoverage(value: unknown): { coverage: AnswerCoverage } | null {
   if (!isRecord(value) || (value.kind !== "main" && value.kind !== "largest")) return null;

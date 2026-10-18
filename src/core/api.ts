@@ -5054,6 +5054,11 @@ export interface AnswerSteps {
   withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
+  /**
+   * A request to write, written from a Search scope that holds `documents` of the User's
+   * `total` Documents (#1149). Absent: from all of them, or not a request to write.
+   */
+  writtenFrom?: { documents: number; total: number };
 }
 
 /**
