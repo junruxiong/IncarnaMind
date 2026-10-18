@@ -150,6 +150,86 @@ describe("What a write's check left to do", () => {
     expect(words("zh-CN", limited)[0]?.details[0]).toMatch(/ 恢复$/);
   });
 
+  // protects=sentences the User's own choice kept from being sent (sending turned off, Local mode) say so, each with its one form and no Check again, the others failed still offering it; fails_when=the line reads as a plain failure, offers Check again, or counts sentences that failed otherwise as blocked; no_claim=the words beyond the approved copy.
+  test("sentences kept from being sent say why in both languages, with no Check again", () => {
+    const lines = (
+      language: "en" | "zh-CN",
+      selfCheck: Omit<Parameters<typeof selfCheckLines>[0], "mindId">,
+    ) =>
+      selfCheckLines(
+        { mindId: "mind-1", ...selfCheck },
+        (key: MessageKey, params?: MessageParams) => translate(language, key, params),
+        language,
+      ).map(({ kind, text, action }) => ({ kind, text, action }));
+    const write = { request: "w", cited: 3, sent: 3, checked: 0 };
+
+    expect(
+      lines("en", { ...write, failed: 3, blocked: { reason: "consent-revoked", count: 3 } }),
+    ).toEqual([
+      {
+        kind: "consent-revoked",
+        text: "3 sentences couldn't be checked: you turned off sending to this service",
+        action: null,
+      },
+    ]);
+    expect(
+      lines("en", { ...write, failed: 1, blocked: { reason: "consent-revoked", count: 1 } })[0]
+        ?.text,
+    ).toBe("1 sentence couldn't be checked: you turned off sending to this service");
+    expect(
+      lines("zh-CN", { ...write, failed: 3, blocked: { reason: "consent-revoked", count: 3 } })[0]
+        ?.text,
+    ).toBe("3 句未能核对：你关闭了向此服务发送内容");
+    expect(
+      lines("zh-CN", { ...write, failed: 1, blocked: { reason: "consent-revoked", count: 1 } })[0]
+        ?.text,
+    ).toBe("1 句未能核对：你关闭了向此服务发送内容");
+
+    expect(
+      lines("en", { ...write, failed: 2, blocked: { reason: "local-mode", count: 2 } }),
+    ).toEqual([
+      {
+        kind: "local-mode",
+        text: "2 sentences couldn't be checked: everything stays on this computer",
+        action: null,
+      },
+    ]);
+    expect(
+      lines("en", { ...write, failed: 1, blocked: { reason: "local-mode", count: 1 } })[0]?.text,
+    ).toBe("1 sentence couldn't be checked: everything stays on this computer");
+    expect(
+      lines("zh-CN", { ...write, failed: 2, blocked: { reason: "local-mode", count: 2 } })[0]?.text,
+    ).toBe("2 句未能核对：所有内容都留在这台电脑上");
+    expect(
+      lines("zh-CN", { ...write, failed: 1, blocked: { reason: "local-mode", count: 1 } })[0]?.text,
+    ).toBe("1 句未能核对：所有内容都留在这台电脑上");
+
+    // Some failed for another reason: those still offer Check again, and are counted alone.
+    expect(
+      lines("en", { ...write, failed: 3, blocked: { reason: "consent-revoked", count: 2 } }),
+    ).toEqual([
+      {
+        kind: "consent-revoked",
+        text: "2 sentences couldn't be checked: you turned off sending to this service",
+        action: null,
+      },
+      {
+        kind: "failed",
+        text: "1 sentence couldn't be checked",
+        action: { label: "Check again", does: "check" },
+      },
+    ]);
+    // A cap or a plan's limit that stopped the run is the line, as before.
+    expect(
+      lines("en", {
+        ...write,
+        failed: 3,
+        stop: { reason: "cost-cap" },
+        blocked: { reason: "consent-revoked", count: 1 },
+      }).map(({ kind }) => kind),
+    ).toEqual(["cost-cap"]);
+  });
+
   // protects=Check again and Check the rest check only the sentences that write's check left not checked, as they are now; fails_when=another write's, a checked one, or one edited since is sent; no_claim=how the check runs.
   test("Check again and Check the rest check only the sentences that write left not checked", () => {
     const doc = schema.nodeFromJSON({

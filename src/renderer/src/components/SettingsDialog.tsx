@@ -14,17 +14,13 @@ import { MeetingsSettings } from "./MeetingsSettings";
 import { MotionSettings } from "./MotionSettings";
 import { OutputLocationSettings } from "./OutputLocationSettings";
 import { PrivacySettings } from "./PrivacySettings";
-import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
-import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
-import { OtherModelsSettings } from "./providers/OtherModelsSettings";
-import { PlansSettings } from "./providers/PlansSettings";
+import { ModelsSettings } from "./providers/ModelsSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { SavedWebPagesSettings } from "./SavedWebPagesSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
 import { SpendingCapSettings } from "./SpendingCapSettings";
 import { SuggestionSettings } from "./SuggestionSettings";
-import { TaggingSettings } from "./TaggingSettings";
 import {
   buttonClass,
   dialogFrameClass,
@@ -158,17 +154,7 @@ function PageContent({ page }: { page: SettingsPage }) {
         </Page>
       );
     case "models":
-      return (
-        <Page>
-          <Titled title="providers.settings.title">
-            <ChatModelSettings />
-          </Titled>
-          <OtherModelsSettings />
-          <PlansSettings />
-          <ChatGptPlanSettings />
-          <TaggingSettings />
-        </Page>
-      );
+      return <ModelsSettings />;
     case "search":
       return (
         <Page>

@@ -58,6 +58,8 @@ export interface Endpoint {
   field?: EndpointField;
   /** Where the User gets a key for this region, when it isn't the provider's `keyUrl` (keys are per region). */
   keyUrl?: string;
+  /** This region's prices, when they aren't on the provider's `pricingUrl`. */
+  pricingUrl?: string;
 }
 
 /**
@@ -164,6 +166,8 @@ export interface CatalogProvider {
    */
   keyGuide?: readonly Localized[];
   docsUrl?: string;
+  /** Its own page of prices ("Pricing ↗" beside a model's estimate), when `docsUrl` isn't it. */
+  pricingUrl?: string;
   request?: RequestQuirks;
   /** Model ids for the roles it offers. A provider whose models the User names has none. */
   roles: Partial<Record<Role, string>>;

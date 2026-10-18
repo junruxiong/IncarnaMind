@@ -44,3 +44,9 @@ A plan can also be reached through an experimental sign-in route, where the User
 
 - Under other ways, the User can sign in with a Claude plan or a GitHub Copilot plan, each an experimental sign-in route as the amendment above sets out.
 - With either plan, the setup and Settings say that Answers count toward the plan's usage limits.
+
+## Amendment: Add a provider (#179)
+
+- Settings → Models no longer splits the key providers into the first-class ones and "More providers". "Add a provider…" opens a directory of every provider in groups that follow the interface language: Popular, International, China, On this computer and Other in English, and 常用, 中国, 国际, 本机, 其他 in Chinese.
+- Popular holds what most Users of that language set up first, whatever its tier: Anthropic, OpenAI, Google, Ollama and OpenRouter in English; DeepSeek, Qwen, Kimi, GLM, SiliconFlow and Ollama in Chinese, where the best-effort Kimi and GLM are among the most used.
+- The tiers still decide what the first-run setup offers, which providers have a key guide, and which are tried by hand before a release.

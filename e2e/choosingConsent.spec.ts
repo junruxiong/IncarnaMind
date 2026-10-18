@@ -12,6 +12,7 @@ import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  addProviderForm,
   askInAssistant,
   closeSettings,
   createDataFolder,
@@ -215,18 +216,13 @@ test("Settings › Models says in one line what the ChatGPT plan sends, with the
   await app.close();
 });
 
-test("in Chinese, Settings › Models says what goes to the provider above its button", async () => {
+test("in Chinese, adding a provider in Settings › Models says what goes to it above its button", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const settings = await openSettings(window, "models");
   await setLanguage(window, "zh-CN");
 
-  await settings.getByTestId("chat-choice-api-key").check();
-  const form = settings.getByTestId("provider-form");
-  await form
-    .locator("label")
-    .filter({ hasText: /^OpenAI$/ })
-    .click();
+  const form = await addProviderForm(settings, "openai");
 
   const line = form.getByTestId("provider-sends");
   await expectSends(line, SENDS_ZH);

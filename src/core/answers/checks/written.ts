@@ -24,9 +24,10 @@
  * be checked again.
  *
  * One check per sentence, and one edit per sentence it cuts, on the Answer's
- * model, whose cost cap and plan limit stop the rest. Nothing is checked when
- * the User has turned the checks flow off, or on a model on this computer too
- * small to judge reliably (#680).
+ * model prepared for the checks flow: each request checks that flow's consent
+ * as it is sent, so turning it off stops the rest at once (#1206), as the cost
+ * cap and a plan's limit do. Nothing is checked when the flow is off as it
+ * starts, or on a model on this computer too small to judge reliably (#680).
  */
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
@@ -57,8 +58,11 @@ const CLOUD_SENTENCES_AT_ONCE = 3;
 const UNCHECKED: ReadonlySet<string> = new Set(["question", "codeBlock", "blockMath", "heading"]);
 
 export interface WrittenCheckOptions {
-  /** Whether the checks flow may send to the model's service: never once the User turned it off (ADR-0022). */
-  allowed(prepared: PreparedChatModel): boolean;
+  /**
+   * The Answer's model prepared for the checks flow, whose consent each request then checks
+   * as it is sent (ADR-0022); null when that flow may not send to it now. Never asks.
+   */
+  prepare(answer: PreparedChatModel): Promise<PreparedChatModel | null>;
   claimCheck(request: ClaimCheckRequest): Promise<ClaimCheckResult>;
   /** Where the Mind's sentences are checked, as Check this Mind checks them. */
   scopeOf(mindId: string): { searchable: number; check: CheckScope };
@@ -101,7 +105,8 @@ export interface CheckWrittenInput {
  * What the check did: of the sentences with Citations (`cited`), how many it
  * sent, how many got a verdict and how many couldn't be checked, and what
  * stopped it; each part it cut, as it named it; how many land marked. Its
- * marks share `request`.
+ * marks share `request`. `blocked`: the sentences the User's own choice kept
+ * from being sent, among those that couldn't be checked.
  */
 export interface WrittenCheck {
   request: string;
@@ -110,6 +115,7 @@ export interface WrittenCheck {
   checked: number;
   failed: number;
   stop: RunStop | null;
+  blocked: { reason: "consent-revoked" | "local-mode"; count: number } | null;
   cut: string[];
   unsupported: number;
   contradicted: number;
@@ -486,10 +492,12 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
 
   /** Null when there was nothing to check, or it couldn't be checked here. */
   return async function checkWritten(input: CheckWrittenInput): Promise<WrittenCheck | null> {
-    const { mindId, blocks, prepared, signal } = input;
-    if (judgesUnreliably(prepared) || !options.allowed(prepared)) return null;
+    const { mindId, blocks, signal } = input;
+    if (judgesUnreliably(input.prepared)) return null;
     const sentences = citedSentences(blocks);
     if (sentences.length === 0) return null;
+    const prepared = await options.prepare(input.prepared);
+    if (!prepared) return null;
     const { searchable, check: scope } = options.scopeOf(mindId);
     if (searchable === 0) return null;
     const sending = sentences.slice(0, SENTENCES_CHECKED_AT_MOST);
@@ -520,6 +528,7 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
       checked: 0,
       failed: 0,
       stop,
+      blocked: null,
       cut: [],
       unsupported: 0,
       contradicted: 0,
@@ -548,6 +557,12 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
     });
     const failed = (sentence: Sentence, reason: ClaimCheckFailure, detail: string | null) => {
       done.failed++;
+      if (reason === "consent-revoked" || reason === "local-mode") {
+        done.blocked = {
+          reason: done.blocked?.reason ?? reason,
+          count: (done.blocked?.count ?? 0) + 1,
+        };
+      }
       console.warn(
         `A sentence the assistant wrote in Mind ${mindId} couldn't be checked before it landed: ${reason}${detail ? ` (${detail})` : ""}`,
       );

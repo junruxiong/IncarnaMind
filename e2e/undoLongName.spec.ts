@@ -20,7 +20,9 @@ import {
  * Document with a 70-character name (#1122, #1154): the names are cut in the middle, shorter as
  * the room is less, so that the line takes two lines at most at the default sidebar width; the
  * line's own words and Undo stay whole, with the full names in the tooltip and in Undo's accessible
- * name. Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
+ * name. When the language switches while the line shows, the names are cut again for the new
+ * words, as a line made in that language is. Set INCARNAMIND_SCREENSHOTS to a folder to also save
+ * screenshots.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -81,6 +83,24 @@ function outsideSidebar(line: Locator): Promise<string[]> {
     }
     return outside;
   });
+}
+
+async function chooseFromRow(window: Page, command: string): Promise<void> {
+  const row = window.getByTestId("library-document");
+  await row.hover();
+  await pointAndClick(window, row.getByTestId("document-file-menu"));
+  await pointAndClick(
+    window,
+    window.getByTestId("document-file-actions").filter({ visible: true }).getByTestId(command),
+  );
+}
+
+async function moveRowTo(window: Page, folder: string): Promise<void> {
+  await chooseFromRow(window, "document.moveTo");
+  const picker = window.getByTestId("move-to-picker");
+  await expect(picker.getByTestId("move-to-search")).toBeFocused();
+  await pointAndClick(window, picker.getByTestId("move-to-option").filter({ hasText: folder }));
+  await expect(picker).toBeHidden();
 }
 
 async function boxOf(target: Locator) {
@@ -173,27 +193,14 @@ for (const language of ["en", "zh-CN"] as const) {
         await addDocuments(window, [join(sources, `${first}.txt`)]);
         await window.getByTestId("open-library").click();
         const row = window.getByTestId("library-document");
-        const actions = window.getByTestId("document-file-actions").filter({ visible: true });
         const label = `${language}-${width}`;
-        const choose = async (command: string) => {
-          await row.hover();
-          await pointAndClick(window, row.getByTestId("document-file-menu"));
-          await pointAndClick(window, actions.getByTestId(command));
-        };
 
-        await choose("document.moveTo");
-        const picker = window.getByTestId("move-to-picker");
-        await expect(picker.getByTestId("move-to-search")).toBeFocused();
-        await pointAndClick(
-          window,
-          picker.getByTestId("move-to-option").filter({ hasText: words.folder }),
-        );
-        await expect(picker).toBeHidden();
+        await moveRowTo(window, words.folder);
         await expect(window.getByTestId("undo-message")).toContainText(words.moved.start);
         await screenshot(window.getByTestId("sidebar"), `${label}-move`);
         await expectWholeLine(window, [first, words.folder], words.moved);
 
-        await choose("document.rename");
+        await chooseFromRow(window, "document.rename");
         const field = row.getByRole("textbox");
         await expect(field).toBeFocused();
         await field.fill(second);
@@ -202,7 +209,7 @@ for (const language of ["en", "zh-CN"] as const) {
         await screenshot(window.getByTestId("sidebar"), `${label}-rename`);
         await expectWholeLine(window, [second], words.renamed);
 
-        await choose("document.delete");
+        await chooseFromRow(window, "document.delete");
         await expect(row).toHaveCount(0);
         await expect(window.getByTestId("undo-message")).toContainText(words.deleted.end);
         await screenshot(window.getByTestId("sidebar"), `${label}-delete`);
@@ -213,3 +220,78 @@ for (const language of ["en", "zh-CN"] as const) {
     }
   });
 }
+
+/** The line fits its room: two lines at most, all of it inside the sidebar. */
+async function expectFits(line: Locator): Promise<void> {
+  const message = line.getByTestId("undo-message");
+  const { height, lineHeight } = await message.evaluate((element) => ({
+    height: element.getBoundingClientRect().height,
+    lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+  }));
+  expect(height).toBeLessThanOrEqual(lineHeight * 2 + 1);
+  expect(await outsideSidebar(message)).toEqual([]);
+  expect(await outsideSidebar(line.getByTestId("undo-action"))).toEqual([]);
+}
+
+/*
+ * Each language leaves its own room for the names (its words are of another length, and English
+ * breaks lines at spaces where Chinese breaks anywhere), so the same names are cut to different
+ * lengths. Which language leaves more depends on how long the names are.
+ */
+const SWITCHES = [
+  { from: "en", to: "zh-CN", length: 69 },
+  { from: "zh-CN", to: "en", length: 30 },
+] as const;
+
+const PHRASE = "Quarterly review of harbour dues and the wider coastal levy schedule";
+
+test("a language switch while the undo line shows cuts its names again for the new words, as a line made in that language is, at 900 and 1,440 px", async () => {
+  test.setTimeout(180_000);
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await dismissChatSetup(window);
+    const line = window.getByTestId("undo-line");
+    const message = line.getByTestId("undo-message");
+
+    for (const [widthIndex, width] of [900, 1440].entries()) {
+      await setWindowSize(app, window, width, 760);
+      for (const [index, { from, to, length }] of SWITCHES.entries()) {
+        const run = widthIndex * SWITCHES.length + index;
+        const name = `${PHRASE.slice(0, length - 1)}${"ABCD"[run]}`;
+        const folder = `${PHRASE.slice(0, length - 1)}${"WXYZ"[run]}`;
+        await setLanguage(window, from);
+        await (await coreOf(window)).evaluate(
+          (core, group) => core.createLibraryGroup({ name: group, description: "" }),
+          folder,
+        );
+        await writeFile(join(sources, `${name}.txt`), `${name} notes.\n`);
+        await addDocuments(window, [join(sources, `${name}.txt`)]);
+        await window.getByTestId("open-library").click();
+        const inFolder = window
+          .getByTestId("library-section")
+          .filter({ hasText: folder })
+          .getByTestId("library-document");
+
+        await moveRowTo(window, folder);
+        await expect(inFolder).toHaveCount(1);
+        await expect(message).toContainText(WORDS[from].moved.start);
+        await setLanguage(window, to);
+        await expect(message).toContainText(WORDS[to].moved.start);
+        const switched = await message.textContent();
+        await expectFits(line);
+
+        await pointAndClick(window, line.getByTestId("undo-action"));
+        await expect(inFolder).toHaveCount(0);
+        await moveRowTo(window, folder);
+        await expect(message).toContainText(WORDS[to].moved.start);
+        await expectFits(line);
+        expect(await message.textContent()).toBe(switched);
+
+        await chooseFromRow(window, "document.delete");
+        await expect(window.getByTestId("library-document")).toHaveCount(0);
+      }
+    }
+  } finally {
+    await app.close();
+  }
+});
