@@ -168,7 +168,7 @@ test("Shorten from the menu applies at once; Review changes shows what it did, s
   await pointAndClick(window, line.getByTestId("applied-review"));
   await expect(line.getByTestId("applied-count")).toHaveText("用 AI 编辑修改的 1 个段落");
   await expect(line.getByTestId("applied-done")).toHaveText("完成");
-  await expect(note.getByTestId("change-restore")).toHaveText(["恢复原文", "恢复原文"]);
+  await expect(note.getByTestId("change-restore")).toHaveText("恢复原文");
   await pointAndClick(window, line.getByTestId("applied-undo-all"));
   await expect(note).toHaveText("The tides here are very strong and regular.");
   await expect(line).toHaveCount(0);

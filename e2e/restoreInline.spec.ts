@@ -308,3 +308,46 @@ for (const { language, line: written, ask, old, added } of REPLACEMENTS) {
     await app.close();
   });
 }
+
+test("a paragraph an edit removed ends with its own Restore original, on a line of its own under it, which puts the paragraph back", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  const lines = [
+    "Tides rise twice a day along this coast.",
+    "It is a big harbour and a lot of boats do not leave at low water.",
+    "The harbour office posts the times each week.",
+  ];
+  await newMind(window);
+  const editor = frontMind(window).getByTestId("mind-editor");
+  await editor.click();
+  for (const [index, written] of lines.entries()) {
+    if (index > 0) await window.keyboard.press("Enter");
+    await window.keyboard.type(written);
+  }
+  const paragraphs = editor.locator(":scope > p");
+  await expect(paragraphs).toHaveText(lines);
+  const line = editor.getByTestId("applied-line");
+  const restore = editor.getByTestId("change-restore");
+
+  await window.keyboard.press("ControlOrMeta+a");
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("delete the second paragraph");
+  await window.keyboard.press("Enter");
+  await expect(paragraphs).toHaveText([lines[0] ?? "", lines[2] ?? ""]);
+  await pointAndClick(window, line.getByTestId("applied-review"));
+
+  const struck = editor.locator(".applied-old--block");
+  await expect(struck).toHaveText(lines[1] ?? "");
+  await expect(restore).toHaveCount(1);
+  const [struckBox, restoreBox] = await Promise.all([struck.boundingBox(), restore.boundingBox()]);
+  if (!struckBox || !restoreBox) throw new Error("The change isn't drawn.");
+  expect(restoreBox.y).toBeGreaterThanOrEqual(struckBox.y + struckBox.height - 1);
+  expect(await controlsOverText(editor)).toBe(0);
+  await pointAndClick(window, restore);
+  await expect(paragraphs).toHaveText(lines);
+  await expect(line).toHaveCount(0);
+  await app.close();
+});
