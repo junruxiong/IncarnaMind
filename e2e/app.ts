@@ -722,7 +722,7 @@ export async function moveAssistant(
   place: "right" | "left" | "bottom" | "float",
 ): Promise<void> {
   await openMoveAssistant(window);
-  await window.getByTestId(`assistant-menu-${place}`).click();
+  await pointAndClick(window, window.getByTestId(`assistant-menu-${place}`));
 }
 
 /** The result line's saved file, once it says it saved one. */
