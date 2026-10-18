@@ -22,10 +22,10 @@ import {
 
 /**
  * A cited sentence found unsupported offers three fixes in its card (#1111):
- * Cut the unsupported part (an Edit with AI applied at once), Find support
- * in every Document, and Keep as my view; each is also in ⌘K, and the ones
- * that change the Mind take one ⌘Z. A sentence with no Citation keeps its
- * card. The scripted model (src/main/fakeChat/checks.ts) finds the owner's
+ * Cut the unsupported part (an Edit with AI applied at once), Search all
+ * Documents while its check searched only the Mind's Folder, and Keep as my
+ * view; each is also in ⌘K, and the ones that change the Mind take one ⌘Z.
+ * A sentence with no Citation keeps its card. The scripted model (src/main/fakeChat/checks.ts) finds the owner's
  * sentence partly supported and cuts it as `PARTLY` says.
  */
 let dataDir: string;
@@ -50,7 +50,7 @@ const LANGUAGES = {
     cut: "Experiments usually show quasi-Newton methods are faster than gradient descent, and first-order methods are slower.",
     first: "The tutorial discusses",
     cutAction: "Cut the unsupported part",
-    findSupport: "Find support",
+    searchAll: "Search all Documents",
     keep: "Keep as my view",
     keepCommand: "Keep as my view",
     nothing: "Nothing in your Documents says this.",
@@ -61,7 +61,7 @@ const LANGUAGES = {
     cut: "已有实验通常显示，拟牛顿方法比梯度下降更快，一阶优化方法速度较慢。",
     first: "教程讨论了",
     cutAction: "删去无依据的部分",
-    findSupport: "查找出处",
+    searchAll: "搜索全部文档",
     keep: "保留为我的观点",
     keepCommand: "保留为我的观点",
     nothing: "你的文档中没有内容提到这一点。",
@@ -144,6 +144,16 @@ for (const language of ["en", "zh-CN"] as const) {
         { type: "paragraph", content: [text(UNCITED)] },
       ],
     );
+    // In a Folder, so its check searches the Folder and Search all Documents has more to search.
+    await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const folder = await core.createLibraryGroup({ name: "Tutorials", description: "" });
+      await core.moveToFolder({
+        documentIds: (await core.listDocuments()).map((each) => each.id),
+        mindIds: (await core.listMinds()).map((each) => each.id),
+        folderId: folder.id,
+      });
+    });
     const lines = editor.locator(":scope > p");
     const owner = lines.nth(0);
     const marks = window.getByTestId("claim-mark");
@@ -174,7 +184,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(card.getByTestId("claim-nothing")).toHaveText(words.nothing);
     await expect(card.getByTestId("claim-find-sources")).toBeVisible();
     await expect(card.getByTestId("claim-remove")).toBeVisible();
-    for (const fix of ["claim-cut", "claim-find-support", "claim-keep"]) {
+    for (const fix of ["claim-cut", "claim-keep"]) {
       await expect(card.getByTestId(fix)).toHaveCount(0);
     }
     await window.keyboard.press("Escape");
@@ -186,11 +196,11 @@ for (const language of ["en", "zh-CN"] as const) {
       await expect(card.getByTestId("claim-covers")).toBeVisible();
       const fixes = [
         card.getByTestId("claim-cut"),
-        card.getByTestId("claim-find-support"),
+        card.getByTestId("claim-search-all"),
         card.getByTestId("claim-keep"),
       ];
       await expect(fixes[0] as Locator).toHaveText(words.cutAction);
-      await expect(fixes[1] as Locator).toHaveText(words.findSupport);
+      await expect(fixes[1] as Locator).toHaveText(words.searchAll);
       await expect(fixes[2] as Locator).toHaveText(words.keep);
       await expect(fixes[0] as Locator).toHaveClass(/citation-card-action--primary/);
       for (const fix of fixes) expect(await inside(fix, card)).toBe(true);
@@ -220,12 +230,16 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(marks).toHaveCount(2);
     await expect(ownerMark()).toHaveAttribute("data-check", "unsupported");
 
-    // Find support: the sentence is checked again, in every Document.
+    // Search all Documents: the sentence is checked again in every Document, after which the card doesn't offer it.
     const before = await ownerMark().getAttribute("data-claim");
     await openCard(ownerMark());
-    await pointAndClick(window, card.getByTestId("claim-find-support"));
+    await pointAndClick(window, card.getByTestId("claim-search-all"));
     await expect(ownerMark()).not.toHaveAttribute("data-claim", before ?? "");
     await expect(ownerMark()).toHaveAttribute("data-check", "unsupported");
+    await openCard(ownerMark());
+    await expect(card.getByTestId("claim-keep")).toBeVisible();
+    await expect(card.getByTestId("claim-search-all")).toHaveCount(0);
+    await window.keyboard.press("Escape");
 
     // From ⌘K, with the cursor in the sentence.
     await clickEndOf(window, owner);

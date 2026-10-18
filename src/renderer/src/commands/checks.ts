@@ -5,9 +5,10 @@ import { selectionForEdit } from "../editor/editSelection";
 import { startMindCheck } from "../mindCheck";
 import {
   cutUnsupported,
-  findSupport,
   fixesFree,
   keepAsView,
+  searchAllDocuments,
+  searchedFolder,
   uncoveredOf,
   unsupportedAt,
 } from "../unsupportedFixes";
@@ -45,7 +46,6 @@ function withAdded(): string | null {
   return documentsAdded(added).length > 0 ? note.mindId : null;
 }
 
-/** The Mind last written in, with the cited sentence nothing backs that its cursor is in. */
 function withUnsupported() {
   const note = noteHandle.current;
   if (!note || note.editor.isDestroyed || !fixesFree(note.mindId)) return null;
@@ -83,15 +83,18 @@ export const checkCommands: readonly Command[] = [
     },
   },
   {
-    id: "check.findSupportEverywhere",
-    label: "claim.findSupport.command",
+    id: "check.searchAllDocuments",
+    label: "claim.searchAll",
     group: "main",
     // It changes no words, as Check against Documents.
     reversible: true,
-    when: () => withUnsupported() !== null,
+    when: () => {
+      const at = withUnsupported();
+      return at !== null && searchedFolder(at.claim);
+    },
     run() {
       const at = withUnsupported();
-      if (at) void findSupport(at.editor, at.mindId, at.doc, at.claim);
+      if (at) void searchAllDocuments(at.editor, at.mindId, at.doc, at.claim);
     },
   },
   {

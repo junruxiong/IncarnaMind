@@ -740,11 +740,15 @@ interface Written {
 const sentencesWord = (count: number) => (count === 1 ? "1 sentence" : `${count} sentences`);
 
 function checkedNotes(checked: WrittenCheck | null): string[] {
-  if (!checked || checked.sentences === 0) return [];
-  const { sentences, cut, unsupported, contradicted } = checked;
+  if (!checked) return [];
+  const { cited, sent, checked: judged, failed, cut, unsupported, contradicted } = checked;
   const are = (count: number) => (count === 1 ? "is" : "are");
   return [
-    `Before it went in, ${sentencesWord(sentences)} with Citations ${sentences === 1 ? "was" : "were"} checked against them.`,
+    ...(judged > 0
+      ? [
+          `Before it went in, ${sentencesWord(judged)} with Citations ${judged === 1 ? "was" : "were"} checked against them.`,
+        ]
+      : []),
     ...(cut.length > 0
       ? [
           `What their Citations don't support was taken out: ${cut.map((part) => `“${part}”`).join(", ")}. Don't state it in your reply.`,
@@ -758,6 +762,16 @@ function checkedNotes(checked: WrittenCheck | null): string[] {
     ...(contradicted > 0
       ? [
           `${sentencesWord(contradicted)} ${contradicted === 1 ? "contradicts" : "contradict"} a Document, and ${are(contradicted)} marked so in the Mind: say so.`,
+        ]
+      : []),
+    ...(failed > 0
+      ? [
+          `${sentencesWord(failed)} couldn't be checked, and ${are(failed)} marked so in the Mind: say so.`,
+        ]
+      : []),
+    ...(sent < cited
+      ? [
+          `Only the first ${sent} of its ${cited} sentences with Citations were checked; the rest are marked not checked in the Mind: say so.`,
         ]
       : []),
   ];
@@ -1282,23 +1296,19 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const { mindId, ids, blocks } = written.blocks;
     if (written.unrecorded > 0 || ids.length !== blocks.length) return null;
     let reported = false;
+    let checked: WrittenCheck | null = null;
     try {
-      return await minds.checkWritten({
+      checked = await minds.checkWritten({
         mindId,
         blocks,
+        ids,
         prepared: options.prepared,
         signal,
         checking: (count) => {
           reported = true;
           options.changed(toolCallId, { ...written.change, checking: count });
         },
-        write: (landing) =>
-          minds.edit(mindId, (note) => {
-            for (const element of topLevelBlocks(note)) {
-              const block = landing[ids.indexOf(idOf(element))];
-              if (block) syncContent(element, block.content ?? []);
-            }
-          }),
+        edit: (change) => minds.edit(mindId, change),
       });
     } catch (error) {
       // A check that fails never takes back what the call wrote: it stands, unchecked.
@@ -1306,10 +1316,13 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         `What the assistant wrote in Mind ${mindId} couldn't be checked before it landed:`,
         error,
       );
-      return null;
-    } finally {
-      if (reported) options.changed(toolCallId, written.change);
     }
+    if (checked) {
+      const { request, cited, sent, failed } = checked;
+      written.change = { ...written.change, selfCheck: { request, cited, sent, failed } };
+    }
+    if (reported || checked) options.changed(toolCallId, written.change);
+    return checked;
   };
 
   /** By call: text written with markers `cite` hadn't recorded yet. */

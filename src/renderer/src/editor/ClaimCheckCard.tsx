@@ -19,14 +19,7 @@ import { groupsMerged } from "../layoutSlice";
 import { firstOpenOf } from "../nudges";
 import { openCited } from "../openCited";
 import { useAppStore } from "../store";
-import {
-  citedIn,
-  cutUnsupported,
-  findSupport,
-  keepAsView,
-  offersFixes,
-  uncoveredOf,
-} from "../unsupportedFixes";
+import { citedIn, cutUnsupported, keepAsView, offersFixes, uncoveredOf } from "../unsupportedFixes";
 import type { NumberedCitation } from "./citationNumbers";
 import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
@@ -236,10 +229,6 @@ export function ClaimMark({
                 void cutUnsupported(editor, mindId, doc, claim);
                 done();
               }}
-              onFindSupport={() => {
-                void findSupport(editor, mindId, doc, claim);
-                done();
-              }}
               onKeep={() => {
                 keepAsView(editor, claim);
                 done();
@@ -322,7 +311,7 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * looked, with Search all Documents, or, for a court decision no Document
  * holds, that it can't be checked here, with Remove the mark only; for a
  * sentence with a Citation, the part the Citation doesn't cover, with its
- * quote, and Cut the unsupported part, Find support and Keep as my view
+ * quote, and Cut the unsupported part, Search all Documents and Keep as my view
  * (#1111); otherwise why, with Check again. A Passage from a saved web page
  * names the page. Documents IncarnaMind wrote that matched are named, with Count it.
  */
@@ -341,7 +330,6 @@ function ClaimCard({
   onTurnOnWebSearch,
   onRemove,
   onCut,
-  onFindSupport,
   onKeep,
 }: {
   claim: ShownClaim;
@@ -358,7 +346,6 @@ function ClaimCard({
   onTurnOnWebSearch(): void;
   onRemove(): void;
   onCut(): void;
-  onFindSupport(): void;
   onKeep(): void;
 }) {
   const t = useT();
@@ -585,44 +572,34 @@ function ClaimCard({
             {t("claim.fixSentence")}
           </button>
         )}
-        {fixes && (
-          <>
-            {cuttable && (
-              <button
-                type="button"
-                data-testid="claim-cut"
-                className="citation-card-action citation-card-action--primary"
-                onClick={onCut}
-              >
-                {t("claim.cutUnsupported")}
-              </button>
-            )}
-            <button
-              type="button"
-              data-testid="claim-find-support"
-              className={`citation-card-action ${cuttable ? "" : "citation-card-action--primary"}`}
-              onClick={onFindSupport}
-            >
-              {t("claim.findSupport")}
-            </button>
-            <button
-              type="button"
-              data-testid="claim-keep"
-              className="citation-card-action"
-              onClick={onKeep}
-            >
-              {t("claim.keepAsView")}
-            </button>
-          </>
+        {cuttable && (
+          <button
+            type="button"
+            data-testid="claim-cut"
+            className="citation-card-action citation-card-action--primary"
+            onClick={onCut}
+          >
+            {t("claim.cutUnsupported")}
+          </button>
         )}
-        {state === "unsupported" && searchedFolder && !decisionMissing && !fixes && (
+        {state === "unsupported" && searchedFolder && !decisionMissing && (
           <button
             type="button"
             data-testid="claim-search-all"
-            className="citation-card-action citation-card-action--primary"
+            className={`citation-card-action ${cuttable ? "" : "citation-card-action--primary"}`}
             onClick={() => onCheckAgain(true)}
           >
             {t("claim.searchAll")}
+          </button>
+        )}
+        {fixes && (
+          <button
+            type="button"
+            data-testid="claim-keep"
+            className="citation-card-action"
+            onClick={onKeep}
+          >
+            {t("claim.keepAsView")}
           </button>
         )}
         {/* Where the Documents say something different the card has Open the page and Fix the sentence already, so it offers no more ways to look. */}
