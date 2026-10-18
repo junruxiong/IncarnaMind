@@ -200,6 +200,11 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(card.getByTestId("claim-nothing")).toHaveCount(0);
     await expect(card.getByTestId("claim-covers")).toHaveCount(0);
     await expect(card.getByTestId("claim-cited-quote")).toHaveText(`“${QUOTE_TWO}”`);
+    // With no part named there is nothing to cut: Find support leads.
+    await expect(card.getByTestId("claim-cut")).toHaveCount(0);
+    await expect(card.getByTestId("claim-find-support")).toHaveClass(
+      /citation-card-action--primary/,
+    );
     expect(await fitsWithin(noReason, card)).toBe(true);
     const before = await marks.nth(2).getAttribute("data-claim");
     await pointAndClick(window, card.getByTestId("claim-no-reason-check"));
