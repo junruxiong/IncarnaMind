@@ -53,7 +53,7 @@ const LANGUAGES = {
     searchAll: "Search all Documents",
     keep: "Keep as my view",
     keepCommand: "Keep as my view",
-    nothing: "Nothing in your Documents says this.",
+    nothing: "Nothing in “Tutorials” says this.",
   },
   "zh-CN": {
     owner:
@@ -64,7 +64,7 @@ const LANGUAGES = {
     searchAll: "搜索全部文档",
     keep: "保留为我的观点",
     keepCommand: "保留为我的观点",
-    nothing: "你的文档中没有内容提到这一点。",
+    nothing: "“Tutorials”中没有内容提到这一点。",
   },
 } as const;
 
@@ -90,7 +90,7 @@ const wordsOf = (line: Locator) =>
 
 for (const language of ["en", "zh-CN"] as const) {
   const words = LANGUAGES[language];
-  test(`a cited unsupported sentence's card cuts the part, finds support and keeps it as the User's view, each with Undo and from ⌘K; one with no Citation keeps its card (${language})`, async () => {
+  test(`a cited unsupported sentence's card cuts the part, searches all Documents and keeps it as the User's view, each with Undo and from ⌘K; one with no Citation keeps its card (${language})`, async () => {
     test.setTimeout(180_000);
     await writeFile(join(sources, "Tutorial one.md"), `# One\n\n${QUOTE_ONE} in practice.\n`);
     await writeFile(join(sources, "Tutorial two.md"), `# Two\n\n${QUOTE_TWO} than QN methods.\n`);
