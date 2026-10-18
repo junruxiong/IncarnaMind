@@ -353,7 +353,13 @@ describe("What the assistant writes is checked before it lands", { timeout: 30_0
       ["not-checked", "consent-revoked"],
       ["not-checked", "consent-revoked"],
     ]);
-    expect(change?.selfCheck).toMatchObject({ cited: 3, sent: 3, checked: 0, failed: 3 });
+    expect(change?.selfCheck).toMatchObject({
+      cited: 3,
+      sent: 3,
+      checked: 0,
+      failed: 3,
+      blocked: { reason: "consent-revoked", count: 3 },
+    });
   });
 
   // protects=one write checks at most SENTENCES_CHECKED_AT_MOST sentences; the rest land marked not checked, and the reply says so; fails_when=a long draft sends a check for every sentence, or the rest land unmarked; no_claim=how long each check takes.

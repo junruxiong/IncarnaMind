@@ -331,6 +331,23 @@ export const CASES: readonly EverydayCase[] = [
     firstReply: "我已经在“读书会”里添加了教程的主要观点。",
     expected: WRITE,
   },
+  // In a new, empty Mind with no name yet, a piece asked for goes into it (#1212).
+  {
+    id: "write-empty",
+    language: "en",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    request: "Write a short summary of the GraphST paper.",
+    expected: WRITE,
+  },
+  {
+    id: "write-empty-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    request: "帮我写一份 GraphST 论文的简短摘要。",
+    expected: WRITE,
+  },
   // The User's own text, changed.
   {
     id: "edit-shorten",

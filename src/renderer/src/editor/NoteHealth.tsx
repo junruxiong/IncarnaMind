@@ -173,12 +173,16 @@ export function HealthCard({
     }
   };
 
-  /** Puts the cursor at the next such sentence or Citation after it, round to the first. */
+  /**
+   * Puts the cursor at the next such sentence after it, round to the first; for a Citation, just
+   * after its marker, where its state shows, so a key can't take the Citation away.
+   */
   const goToNext = (part: HealthPart) => {
     if (editor.isDestroyed) return;
-    const places = health[part];
+    const cited = part === "found" || part === "notFound";
+    const targets = health[part].map((pos) => (cited ? pos + 1 : pos));
     const head = editor.state.selection.head;
-    const next = places.find((pos) => pos > head) ?? places[0];
+    const next = targets.find((pos) => pos > head) ?? targets[0];
     if (next === undefined) return;
     const { doc } = editor.state;
     const at = Math.min(next, doc.content.size);
