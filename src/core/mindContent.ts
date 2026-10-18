@@ -7,7 +7,7 @@ import {
   MIND_CONTENT_FIELD,
   MIND_SETTINGS_FIELD,
 } from "./api";
-import { InvalidInputError, MindReadOnlyError } from "./errors";
+import { InvalidInputError, MindReadOnlyError, TranslatableError } from "./errors";
 import { readContentVersion } from "./mindAccess";
 import type { Database } from "./storage";
 
@@ -116,7 +116,11 @@ export function createMindContent(
     return mind;
   };
 
-  /** Stores and reports what the document emitted since the last flush. */
+  /**
+   * Stores and reports what the document emitted since the last flush. What can't be stored
+   * stays first in line, and the document keeps it, so the next flush stores it in order:
+   * the changes a client sends after it build on it (#1119).
+   */
   const flush = (mindId: string, mind: LoadedMind) => {
     if (mind.outbox.length === 0) return;
     const updates = mind.outbox.splice(0);
@@ -126,9 +130,14 @@ export function createMindContent(
         for (const { update } of updates) insert(mindId, update, at);
       });
     } catch (error) {
-      // Memory is now ahead of storage: drop the document, so the next use reloads what was stored.
-      unload(mindId);
-      throw error;
+      mind.outbox.unshift(...updates);
+      throw new TranslatableError(
+        {
+          key: "error.mind.notStored",
+          values: { reason: error instanceof Error ? error.message : String(error) },
+        },
+        { cause: error },
+      );
     }
     mind.storedRows += updates.length;
     for (const { update, cause } of updates) onStored(mindId, update, cause);
@@ -205,6 +214,10 @@ export function createMindContent(
       flush(mindId, mind);
       if (failure !== undefined) {
         throw new InvalidInputError("That isn't a valid Yjs update.", { cause: failure });
+      }
+      // Yjs holds back a change that builds on one it never got; acknowledging it would lose it.
+      if (mind.doc.store.pendingStructs !== null || mind.doc.store.pendingDs !== null) {
+        throw new InvalidInputError({ key: "error.mind.missedChange" });
       }
     },
 
@@ -286,10 +299,14 @@ export function createMindContent(
       return loaded.has(mindId);
     },
 
-    /** Compacts the Mind and drops its document from memory. Does nothing if it isn't loaded. */
+    /**
+     * Compacts the Mind and drops its document from memory. Does nothing if it isn't loaded.
+     * Changes that still can't be stored keep it in memory, and the error says why.
+     */
     close(mindId: string): void {
       const mind = loaded.get(mindId);
       if (!mind) return;
+      flush(mindId, mind);
       // A Mind a newer version wrote is left exactly as stored.
       if (contentVersionOf(mind.doc) <= CONTENT_SCHEMA_VERSION) compact(mindId, mind);
       unload(mindId);
@@ -312,9 +329,19 @@ export function createMindContent(
       );
     },
 
-    /** Drops every document from memory. Everything is stored already. */
+    /** Drops every document from memory, storing first what couldn't be stored before. */
     closeAll(): void {
-      for (const mindId of [...loaded.keys()]) unload(mindId);
+      for (const [mindId, mind] of [...loaded]) {
+        try {
+          flush(mindId, mind);
+        } catch (error) {
+          console.error(
+            `${mind.outbox.length} changes to Mind ${mindId} couldn't be stored before quitting, and are lost.`,
+            error,
+          );
+        }
+        unload(mindId);
+      }
     },
   };
 }

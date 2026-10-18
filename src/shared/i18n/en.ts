@@ -3383,6 +3383,9 @@ export const en = {
   "error.mind.notFromWord":
     "This Mind wasn’t imported from a Word file, so it has no original to add.",
   "error.mind.newerVersion": "A newer version of IncarnaMind made this. Update to open it.",
+  "error.mind.notStored":
+    "Couldn’t save your latest changes ({reason}). IncarnaMind keeps them and tries again with your next change.",
+  "error.mind.missedChange": "This change builds on one the Mind never got, so it wasn’t saved.",
   "error.mind.newerVersionEdit":
     "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",
   "error.conversation.notFound": "That conversation doesn't exist or has been deleted.",
