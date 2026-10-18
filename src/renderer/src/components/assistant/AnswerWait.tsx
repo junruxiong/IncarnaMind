@@ -36,7 +36,9 @@ export function AnswerWait({
       {after}
       <span className="inline-flex max-w-full items-baseline whitespace-nowrap">
         {endsWithName && name}
-        <span aria-hidden="true">{"\u00a0·\u00a0"}</span>
+        <span aria-hidden="true" className="mx-[3px]">
+          {"\u00a0·\u00a0"}
+        </span>
         <button
           type="button"
           data-testid="answer-stop"
