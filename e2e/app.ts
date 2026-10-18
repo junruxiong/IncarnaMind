@@ -1650,6 +1650,10 @@ export async function nameMind(window: Page, name: string): Promise<void> {
   await expect(frontMindName(window)).toHaveText(name);
 }
 
+/** Moves the cursor to the start of the text as the system does: ⌘↑ on macOS, where ⌘Home doesn't. */
+export const pressTextStart = (window: Page) =>
+  window.keyboard.press(process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home");
+
 /**
  * Puts the cursor at the end of a line of text as a person does: slides to
  * the right of its words and clicks there (Home and End don't move the
