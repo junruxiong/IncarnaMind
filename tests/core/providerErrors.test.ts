@@ -29,7 +29,7 @@ describe("A provider's refusal", () => {
     for (const key of ["answer.error.data-retention", "providers.test.data-retention"] as const) {
       expect(en[key], key).toContain("{model}");
       expect(zhCN[key], key).toContain("{model}");
-      expect(en[key], key).toContain("30-day data retention");
+      expect(en[key], key).toContain("30-day retention");
       expect(zhCN[key], key).toContain("30 天数据保留");
       expect(`${en[key]}${zhCN[key]}`, key).not.toMatch(/Console/);
     }

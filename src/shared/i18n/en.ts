@@ -379,11 +379,9 @@ export const en = {
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
   "mind.editor.label": "Mind content",
   "mind.update.title": "Update IncarnaMind to open this",
-  "mind.update.body":
-    "A newer version of IncarnaMind made this. Nothing has been changed, and it will open here once you update.",
+  "mind.update.body": "A newer IncarnaMind made this Mind. Update to open it.",
   "mind.readOnly.title": "Read-only",
-  "mind.readOnly.body":
-    "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it; nothing here has been changed.",
+  "mind.readOnly.body": "A newer IncarnaMind wrote this Mind. Update to edit it.",
   "mind.delete": "Delete Mind",
   "mind.rename": "Rename",
   "mind.renameLabel": "New title for {title}",
@@ -718,7 +716,7 @@ export const en = {
   "verify.pick.title": "Verify a document",
   "verify.pick.filter": "PDF documents",
   "verify.refused.unreadable": "Couldn't read that PDF.",
-  "verify.refused.no-text": "That PDF has no text to check. If it's a scan, it couldn't be read.",
+  "verify.refused.no-text": "No text to check in that PDF: its pages couldn't be read.",
   "verify.mindTitle": "Checking: {name}",
   "verify.from": "From {name}",
   "verify.from.title": "Someone else wrote this text. Open {name} beside it",
@@ -1854,12 +1852,12 @@ export const en = {
     "Nothing was sent, because you chose not to send data to this service.",
   "providers.test.too-long": "The model's context window is too small for even a short request.",
   "providers.test.cost-cap":
-    "Nothing was sent: this month's spending cap is reached. Change it in Settings → General.",
+    "Nothing sent: this month's spending cap is reached. Change it in Settings → General.",
   "providers.test.no-answer": "The model sent no reply.",
   "providers.test.ollama-not-running":
     "Ollama isn't running on this computer. Open it, then test again.",
   "providers.test.data-retention":
-    "The key works, but {model} needs your Anthropic organization to allow 30-day data retention. Choose another model.",
+    "The key works, but your organization disallows 30-day retention for {model}. Choose another model.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -2457,15 +2455,14 @@ export const en = {
   "answer.error.local-mode": "Stopped: “Keep everything on this computer” is on",
   "answer.error.useLocal": "Use a local model",
   "answer.error.ollama-not-running": "Ollama isn't running on this computer",
-  "answer.error.too-long":
-    "This Question is too long for the model’s context window, even with nothing before it. Shorten it, or choose another model",
+  "answer.error.too-long": "This Question is too long for the model. Shorten it.",
   "answer.error.no-answer": "The model sent no Answer",
   "answer.error.unknown": "This Answer couldn't be written",
   "answer.error.not-signed-in": "You're not signed in to ChatGPT",
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
   "answer.error.blocked": "OpenAI didn't let IncarnaMind use your ChatGPT plan",
   "answer.error.data-retention":
-    "Anthropic didn't run {model}: it needs your Anthropic organization to allow 30-day data retention. Choose another model, or use a key from an organization that allows it.",
+    "Anthropic refused {model}: your organization disallows 30-day retention. Choose another model.",
   "answer.error.checkKey": "Check the key",
   "answer.error.askAgain": "Ask again",
   "answer.error.removeFromMenu": "Remove from menu",
@@ -2865,8 +2862,7 @@ export const en = {
   "skills.error.too-large":
     "The Skill is too large: at most {size} in all, and {instructions} for SKILL.md.",
   "skills.error.too-many-files": "The Skill has too many files: {count} at most.",
-  "skills.error.built-in-name":
-    "A built-in Skill has this name. Rename it in SKILL.md, or duplicate the built-in Skill.",
+  "skills.error.built-in-name": "A built-in Skill has this name. Rename yours in its SKILL.md.",
   "skills.error.details": "Details",
   "skills.size.kb": "{size} KB",
   "skills.size.mb": "{size} MB",
@@ -3293,7 +3289,7 @@ export const en = {
   "error.startup.body": "Your data folder couldn't be opened.\n\n{message}",
   "error.startup.newer.title": "Update IncarnaMind to open your data",
   "error.startup.newer.body":
-    "A newer version of IncarnaMind saved this data folder, so this version can't open it. Your data is safe and unchanged.",
+    "A newer IncarnaMind saved this data. Update to open it; nothing changed.",
   "error.startup.newer.download": "Download the latest version",
   "error.startup.newer.quit": "Quit",
 
@@ -3348,8 +3344,7 @@ export const en = {
   "error.mind.notFromWord":
     "This Mind wasn’t imported from a Word file, so it has no original to add.",
   "error.mind.newerVersion": "A newer version of IncarnaMind made this. Update to open it.",
-  "error.mind.newerVersionEdit":
-    "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",
+  "error.mind.newerVersionEdit": "A newer IncarnaMind wrote this Mind. Update to edit it.",
   "error.conversation.notFound": "That conversation doesn't exist or has been deleted.",
   "error.question.empty": "Write the Question before asking it.",
   "error.estimate.searches": "An estimate counts from 0 to {max} web searches.",
@@ -3372,10 +3367,10 @@ export const en = {
   "error.path.noFolder": "There is no folder at that path.",
   "error.path.notFolder": "That path isn't a folder.",
   "error.files.outside":
-    "IncarnaMind saves new files only in the output location, or inside a Linked folder it may add files to.",
+    "IncarnaMind saves new files only in the output location or an allowed Linked folder.",
   "error.files.notChosen": "You didn't choose where to save new files, so nothing was saved.",
   "error.files.linkedFolderDeclined":
-    "You said IncarnaMind may not add files to this Linked folder, so nothing was saved.",
+    "You didn't allow new files in this Linked folder, so nothing was saved.",
   "error.files.notSaved.show": "Only a file IncarnaMind saved can be shown.",
   "error.files.notSaved.open": "Only a file IncarnaMind saved can be opened.",
   "error.provider.modelMissing": "Enter a model name.",
@@ -3390,19 +3385,18 @@ export const en = {
   "error.provider.urlInvalid": "“{url}” isn't a valid server URL.",
   "error.provider.urlScheme": "The server URL must start with http:// or https://.",
   "error.provider.urlExtras":
-    "The server URL can't contain a user name, password, query or fragment. Put an API key in the key field.",
+    "The server URL can't contain a user name, password, query or fragment. Use the key field.",
   "error.provider.ollamaNotRunning": "Ollama isn't running on this computer.",
   "error.provider.ollamaCantOpen":
     "This computer can't open Ollama from here. Get it from ollama.com.",
-  "error.provider.ollamaCloud":
-    "{model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.",
+  "error.provider.ollamaCloud": "{model} runs on ollama.com, not here. Choose a local model.",
   "error.provider.rerankLocalMode":
     "Cloud models unavailable: “Keep everything on this computer” is on.",
   "error.provider.embeddingLocalMode":
     "Cloud models unavailable: “Keep everything on this computer” is on.",
   "error.provider.embeddingsOff": "Search by meaning is off: turn it on in Settings → Search.",
   "error.secrets.plainText":
-    "No keyring is running, so API keys would be stored in plain text. Start GNOME Keyring or KWallet, or accept plain-text storage in Settings.",
+    "No keyring running, so keys would be unencrypted. Start GNOME Keyring or KWallet.",
   "error.secrets.unencrypted": "This system can't encrypt API keys, so they can't be saved.",
   "error.consent.declined": "You declined sending data to {service}, so nothing was sent.",
   "error.consent.needed": "Waiting until you allow sending data to {service}. Nothing was sent.",
@@ -3416,9 +3410,9 @@ export const en = {
   "error.connector.urlTooLong": "That URL is too long.",
   "error.connector.urlInvalid": "“{url}” isn't a valid URL.",
   "error.connector.urlInsecure":
-    "A remote Connector's URL must start with https:// (http:// only for a server on this computer).",
+    "A remote Connector's URL must start with https:// (http:// only on this computer).",
   "error.connector.urlCredentials":
-    "Leave the user name and password out of the URL: you sign in through your browser.",
+    "Leave the login out of the URL: you sign in through the browser.",
   "error.connector.clientIdMissing": "Enter the client ID.",
   "error.connector.clientIdInvalid": "That client ID isn't valid.",
   "error.connector.clientSecretInvalid": "That client secret isn't valid.",
@@ -3427,8 +3421,7 @@ export const en = {
   "error.connector.envNameInvalid": "“{name}” isn't a valid environment variable name.",
   "error.connector.envValueInvalid": "The value of {name} isn't valid.",
   "error.connector.jsonInvalid": "That isn't valid JSON: {reason}",
-  "error.connector.noServers":
-    "No MCP servers found: expected an “mcpServers” object, as Claude Desktop and Cursor write it.",
+  "error.connector.noServers": "No MCP servers found: expected an “mcpServers” object.",
   "error.restore.unknown": "That isn't in Recently deleted.",
   "error.restore.deletedPermanently": "“{name}” was deleted permanently, so it can't be restored.",
   "error.restore.expired":
@@ -3450,18 +3443,18 @@ export const en = {
   "error.restore.notDeleted": "“{name}” isn't deleted, so it can't be deleted permanently.",
   "error.history.gone": "That version is no longer kept.",
   "error.linkedFolder.notThis":
-    "None of the files in “{name}” are in that folder. Choose the folder that holds them now.",
+    "That folder doesn't hold “{name}”'s files. Choose the folder that does.",
   "error.linkedFolder.overlaps":
-    "That folder is inside a Linked folder, or holds one. Choose the folder “{name}” is in now.",
+    "That folder overlaps a Linked folder. Choose the one “{name}” is in now.",
   "error.linkedFolder.taken":
-    "“{file}” in that folder is in IncarnaMind already, added on its own. Delete it from IncarnaMind, then locate the folder again.",
+    "“{file}” is already in IncarnaMind. Delete it, then locate the folder again.",
   "error.agent.notConnected": "That agent isn't connected.",
   "error.agent.nameEmpty": "Give the agent a name.",
   "error.agent.nameTooLong": "An agent's name can be at most {max} characters.",
   "error.agent.nameTaken": "An agent named “{name}” is already connected.",
   "error.agent.noFolders": "Choose at least one Folder for the agent to read.",
   "error.agent.keyUnreadable":
-    "This agent's key can't be read on this computer. Disconnect it and connect it again.",
+    "This agent's key can't be read here. Disconnect it and connect it again.",
   "error.agent.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
   "error.library.noClassifier": "Choose a classification model first.",
   "error.library.noFolders": "Create or choose folders first.",
@@ -3479,8 +3472,7 @@ export const en = {
   "error.meeting.notPaused": "That Meeting isn't paused.",
   "error.meeting.notBeingRecorded": "That Meeting isn't being recorded.",
   "error.meeting.helpButton": "That isn't one of this meeting's help buttons.",
-  "error.meeting.template":
-    "A meeting's template is a sales call, a user interview or a team meeting.",
+  "error.meeting.template": "A meeting's template is a sales call, user interview or team meeting.",
   "error.comparison.noQuestion": "Add a Question to compare by.",
   "error.comparison.tooManyQuestions": "A comparison table has at most {max} Questions.",
   "error.comparison.noDocuments": "There are no Documents to compare.",
@@ -3503,8 +3495,7 @@ export const en = {
   "error.sources.keyLooksWrong": "That doesn't look like a key. Check it and paste it again.",
   "error.skill.notFound": "That Skill doesn't exist or has been removed.",
   "error.skill.previewExpired": "That Skill preview has expired: choose the Skill again.",
-  "error.skill.builtInName":
-    "“{name}” is the name of a built-in Skill, whose files can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill to make your own.",
+  "error.skill.builtInName": "A built-in Skill is named “{name}”. Rename yours in its SKILL.md.",
   "error.approval.riskNotAccepted":
     "Confirm the risk warning before always running a Skill's scripts.",
   "error.mindStyle.invalid": "That isn't a font and a text size IncarnaMind has.",
@@ -3523,9 +3514,9 @@ export const en = {
   "error.tagging.installModel":
     "Install {model} in Ollama, then classify again, or select a model manually.",
   "error.tagging.needsPageImages":
-    "This PDF needs page images. Install clef-flash in Ollama, then classify it again, or move it to a Folder yourself.",
+    "This scan needs Clef-Flash. Install it in Ollama, then try again.",
   "error.tagging.needsMemory":
-    "Clef-Flash needs more available memory for this PDF. Close other models and retry, or move it to a Folder yourself.",
+    "Clef-Flash needs more memory for this PDF. Close other models and retry.",
 
   // The application menu (src/main/menu.ts).
   "menu.about": "About IncarnaMind",
@@ -4661,23 +4652,22 @@ export const en = {
   "consent.flow.web-search.purpose": "search the web for your Questions",
   "consent.data.web-searches": "What an Answer searches the web for, written from your Question",
   "agents.problem.unpaired":
-    "This agent isn’t connected to IncarnaMind any more. Connect it again in IncarnaMind, in Settings → Agents.",
-  "agents.problem.off":
-    "Connecting agents is turned off in IncarnaMind. Turn it on in Settings → Agents.",
+    "This agent is no longer connected. Connect it again in Settings → Agents.",
+  "agents.problem.off": "Connecting agents is off. Turn it on in Settings → Agents.",
   "agents.problem.local-mode":
-    "Agents are paused: “Keep everything on this computer” is on in IncarnaMind. Turn it off in Settings → Search to go on.",
+    "Agents are paused: “Keep everything on this computer” is on. Turn it off in Settings → Search.",
   "agents.problem.consent":
-    "This agent isn’t allowed to read your Documents any more. Allow it again in IncarnaMind, in Settings → Privacy.",
+    "This agent can’t read your Documents now. Allow it again in Settings → Privacy.",
   "agents.problem.no-folders":
-    "This agent can’t read any Documents yet. Choose its folders in IncarnaMind, in Settings → Agents.",
+    "This agent can’t read any Documents yet. Choose its folders in Settings → Agents.",
   "agents.problem.outside-scope":
-    "That folder isn’t shared with this agent. Share more folders with it in IncarnaMind, in Settings → Agents.",
+    "That folder isn’t shared with this agent. Share more in Settings → Agents.",
   "agents.problem.not-found":
-    "There’s no such Passage, Document, Mind or Citation in the folders shared with this agent.",
+    "No such Passage, Document, Mind or Citation in the folders shared with this agent.",
   "agents.problem.chat-not-ready":
-    "IncarnaMind has no AI model ready to answer. Set one up in IncarnaMind, in Settings → Models, or search and cite instead.",
+    "No AI model is ready in IncarnaMind. Set one up in Settings → Models, or search and cite.",
   "agents.problem.chat-consent":
-    "IncarnaMind’s AI model isn’t allowed yet. Ask one Question in IncarnaMind to allow it, or search and cite instead.",
+    "IncarnaMind’s AI model isn’t allowed yet. Ask a Question in IncarnaMind to allow it.",
   "agents.problem.answer-failed": "IncarnaMind couldn’t answer: {message}",
   "agents.problem.invalid": "IncarnaMind couldn’t read that request.",
   "agents.problem.failed": "Something went wrong in IncarnaMind. Try again.",
@@ -4846,11 +4836,10 @@ export const en = {
   "wordImport.chooseAnother": "Choose another file…",
   "wordImport.refusal.legacy":
     "“{name}” is an older .doc file. Save it as .docx in Word, then import.",
-  "wordImport.refusal.macros":
-    "“{name}” has macros, which IncarnaMind never runs. Save it as .docx in Word, then import.",
+  "wordImport.refusal.macros": "“{name}” has macros. Save it as .docx in Word, then import.",
   "wordImport.refusal.encrypted": "“{name}” has a password. Remove it in Word, then import.",
   "wordImport.refusal.strict":
-    "“{name}” is Strict Open XML. Save it as a Word Document (.docx) in Word, then import.",
+    "“{name}” is Strict Open XML. Save it as .docx in Word, then import.",
   "wordImport.refusal.damaged": "“{name}” is damaged or isn’t a Word document.",
   "wordImport.refusal.too-large": "“{name}” is too large to import.",
   "wordImport.refusal.unreadable":

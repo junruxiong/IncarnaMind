@@ -582,7 +582,7 @@ test("a Linked folder that moved is located from its menu, and its Document and 
   await interceptOpenDialog(app, sources);
   await (await openLinkedFolderMenu(located)).getByTestId("linkedFolder.locate").click();
   await expect(window.getByRole("alert")).toHaveText(
-    /^That didn't work: None of the files in “Library 2026” are in that folder\. Choose the folder that holds them now\./,
+    /^That didn't work: That folder doesn't hold “Library 2026”'s files\. Choose the folder that does\./,
   );
   await expect(located).toHaveAttribute("data-state", "idle");
   await expect(item).toHaveAttribute("data-file-status", "available");
@@ -611,13 +611,13 @@ test("in Chinese a folder that doesn't hold the Linked folder's files is refused
     await (await openLinkedFolderMenu(row)).getByTestId("linkedFolder.locate").click();
     const notice = window.getByTestId("error-notice");
     await expect(notice.getByTestId("error-notice-message")).toHaveText(
-      "无法完成操作：这个文件夹中没有“Library”里的文件。选择现在存放这些文件的文件夹。",
+      "无法完成操作：这个文件夹中没有“Library”的文件。请选择存放这些文件的文件夹。",
     );
     const details = notice.getByTestId("error-notice-details");
     await details.getByText("详情").click();
     await expect(details).toContainText("core:locateLinkedFolder");
     await expect(details).toContainText(
-      "InvalidInputError: None of the files in “Library” are in that folder. Choose the folder that holds them now.",
+      "InvalidInputError: That folder doesn't hold “Library”'s files. Choose the folder that does.",
     );
     await screenshot(window, "locate-refused-zh-900");
     await setWindowSize(app, window, 1600, 900);

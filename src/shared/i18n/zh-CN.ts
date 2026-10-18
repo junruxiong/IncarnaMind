@@ -371,10 +371,9 @@ export const zhCN = {
   "mind.noneOpen.body": "Mind 就是一个笔记本，每个主题或项目一个。",
   "mind.editor.label": "Mind 内容",
   "mind.update.title": "更新 IncarnaMind 后即可打开",
-  "mind.update.body": "它由较新版本的 IncarnaMind 创建。内容没有任何改动，更新后即可在这里打开。",
+  "mind.update.body": "较新版本的 IncarnaMind 创建了这个 Mind。更新后即可打开。",
   "mind.readOnly.title": "只读",
-  "mind.readOnly.body":
-    "较新版本的 IncarnaMind 修改过这个 Mind。更新 IncarnaMind 后才能编辑，内容没有任何改动。",
+  "mind.readOnly.body": "较新版本的 IncarnaMind 修改过这个 Mind。更新后即可编辑。",
   "mind.delete": "删除 Mind",
   "mind.rename": "重命名",
   "mind.renameLabel": "“{title}”的新标题",
@@ -701,7 +700,7 @@ export const zhCN = {
   "verify.pick.title": "核对文档",
   "verify.pick.filter": "PDF 文档",
   "verify.refused.unreadable": "无法读取这个 PDF。",
-  "verify.refused.no-text": "这个 PDF 没有可核对的文字；如果是扫描件，说明无法识别。",
+  "verify.refused.no-text": "这个 PDF 中没有可核对的文字：页面无法识别。",
   "verify.mindTitle": "核对：{name}",
   "verify.from": "来自 {name}",
   "verify.from.title": "这段文字出自他人之手。在旁边打开 {name}",
@@ -1787,11 +1786,11 @@ export const zhCN = {
   "providers.test.local-mode": "未发送：已开启“所有内容都留在这台电脑上”。",
   "providers.test.consent-declined": "没有发送任何内容，因为你选择不向此服务发送数据。",
   "providers.test.too-long": "这个模型的上下文窗口太小，连很短的请求都放不下。",
-  "providers.test.cost-cap": "未发送任何内容：已达到本月花费上限。可在“设置 → 通用”中更改。",
+  "providers.test.cost-cap": "未发送：已达到本月花费上限。可在“设置 → 通用”中更改。",
   "providers.test.no-answer": "模型没有回复。",
   "providers.test.ollama-not-running": "Ollama 没有在这台电脑上运行。请先打开它，再测试一次。",
   "providers.test.data-retention":
-    "密钥可用，但 {model} 要求你的 Anthropic 组织开启 30 天数据保留。请换一个模型。",
+    "密钥可用，但你的组织未开启 {model} 所需的 30 天数据保留。请换一个模型。",
   "providers.test.unknown": "测试未通过。",
 
   "providers.secrets.plainText.title": "没有正在运行的密钥环",
@@ -2367,15 +2366,14 @@ export const zhCN = {
   "answer.error.local-mode": "已停止：已开启“所有内容都留在这台电脑上”",
   "answer.error.useLocal": "改用本地模型",
   "answer.error.ollama-not-running": "Ollama 没有在这台电脑上运行",
-  "answer.error.too-long":
-    "这个问题太长，即使不带前面的内容，也超出了模型的上下文窗口。请缩短问题，或换一个模型",
+  "answer.error.too-long": "这个问题太长，超出了模型的上限。请缩短问题。",
   "answer.error.no-answer": "模型没有给出回答",
   "answer.error.unknown": "无法生成这个回答",
   "answer.error.not-signed-in": "你还没有登录 ChatGPT",
   "answer.error.plan-limit": "ChatGPT 订阅的用量已达上限",
   "answer.error.blocked": "OpenAI 不允许 IncarnaMind 使用你的 ChatGPT 订阅",
   "answer.error.data-retention":
-    "Anthropic 没有运行 {model}：这个模型要求你的 Anthropic 组织开启 30 天数据保留。请换一个模型，或使用已开启此设置的组织的密钥。",
+    "Anthropic 拒绝运行 {model}：你的组织未开启 30 天数据保留。请换一个模型。",
   "answer.error.checkKey": "检查密钥",
   "answer.error.askAgain": "重新提问",
   "answer.error.removeFromMenu": "从菜单中移除",
@@ -2768,7 +2766,7 @@ export const zhCN = {
   "skills.error.link-outside": "技能中有链接指向技能之外：{path}",
   "skills.error.too-large": "技能太大：合计最多 {size}，SKILL.md 最多 {instructions}。",
   "skills.error.too-many-files": "技能的文件太多：最多 {count} 个。",
-  "skills.error.built-in-name": "已有同名的内置技能。请在 SKILL.md 中改名，或复制内置技能。",
+  "skills.error.built-in-name": "已有同名的内置技能。请在 SKILL.md 中改名。",
   "skills.error.details": "详情",
   "skills.size.kb": "{size} KB",
   "skills.size.mb": "{size} MB",
@@ -3181,8 +3179,7 @@ export const zhCN = {
   "error.startup.title": "IncarnaMind 无法启动",
   "error.startup.body": "无法打开你的数据文件夹。\n\n{message}",
   "error.startup.newer.title": "更新 IncarnaMind 才能打开你的数据",
-  "error.startup.newer.body":
-    "较新版本的 IncarnaMind 保存了这个数据文件夹，当前版本无法打开。你的数据完好无损，没有任何改动。",
+  "error.startup.newer.body": "较新版本的 IncarnaMind 保存了这些数据。更新后即可打开，数据未改动。",
   "error.startup.newer.download": "下载最新版本",
   "error.startup.newer.quit": "退出",
 
@@ -3233,8 +3230,7 @@ export const zhCN = {
   "error.layout.wordPlace": "无法打开 Word 文件中的这个位置。",
   "error.mind.notFromWord": "这个 Mind 不是从 Word 文件导入的，没有可添加的原文件。",
   "error.mind.newerVersion": "这是较新版本的 IncarnaMind 创建的。更新后才能打开。",
-  "error.mind.newerVersionEdit":
-    "较新版本的 IncarnaMind 修改过这个 Mind。更新 IncarnaMind 后才能编辑。",
+  "error.mind.newerVersionEdit": "较新版本的 IncarnaMind 修改过这个 Mind。更新后即可编辑。",
   "error.conversation.notFound": "这个对话不存在或已删除。",
   "error.question.empty": "先输入问题，再提问。",
   "error.estimate.searches": "估算的联网搜索次数应在 0 到 {max} 之间。",
@@ -3256,10 +3252,9 @@ export const zhCN = {
   "error.linkedFolder.notFound": "这个同步文件夹不存在或已移除。",
   "error.path.noFolder": "这个路径下没有文件夹。",
   "error.path.notFolder": "这个路径不是文件夹。",
-  "error.files.outside": "IncarnaMind 只会把新文件保存在保存位置，或允许添加文件的同步文件夹中。",
+  "error.files.outside": "IncarnaMind 只会把新文件保存在保存位置或允许添加文件的同步文件夹中。",
   "error.files.notChosen": "你没有选择新文件的保存位置，因此没有保存任何内容。",
-  "error.files.linkedFolderDeclined":
-    "你已设置不允许 IncarnaMind 向这个同步文件夹添加文件，因此没有保存任何内容。",
+  "error.files.linkedFolderDeclined": "你没有允许向这个同步文件夹添加文件，因此没有保存任何内容。",
   "error.files.notSaved.show": "只能显示 IncarnaMind 保存的文件。",
   "error.files.notSaved.open": "只能打开 IncarnaMind 保存的文件。",
   "error.provider.unknown": "无法识别服务商“{provider}”。",
@@ -3273,17 +3268,14 @@ export const zhCN = {
   "error.provider.urlMissing": "输入 API 地址。",
   "error.provider.urlInvalid": "“{url}”不是有效的 API 地址。",
   "error.provider.urlScheme": "API 地址必须以 http:// 或 https:// 开头。",
-  "error.provider.urlExtras":
-    "API 地址不能包含用户名、密码、查询参数或片段。API 密钥请填在密钥栏中。",
+  "error.provider.urlExtras": "API 地址不能包含用户名、密码、查询参数或片段。密钥请填在密钥栏。",
   "error.provider.ollamaNotRunning": "Ollama 没有在这台电脑上运行。",
   "error.provider.ollamaCantOpen": "无法从这里打开 Ollama。请到 ollama.com 下载。",
-  "error.provider.ollamaCloud":
-    "{model} 在 ollama.com 上运行，不在这台电脑上。选择一个本地模型，或到模型菜单中选择。",
+  "error.provider.ollamaCloud": "{model} 在 ollama.com 上运行，不在本机。请选择本地模型。",
   "error.provider.rerankLocalMode": "云端模型不可用：已开启“所有内容都留在这台电脑上”。",
   "error.provider.embeddingLocalMode": "云端模型不可用：已开启“所有内容都留在这台电脑上”。",
   "error.provider.embeddingsOff": "向量搜索需要嵌入，而嵌入已关闭：请在“设置 → 搜索”中开启。",
-  "error.secrets.plainText":
-    "当前没有运行任何密钥环，API 密钥会以明文形式保存。请启动 GNOME Keyring 或 KWallet，或在设置中允许以明文保存。",
+  "error.secrets.plainText": "没有运行密钥环，密钥会以明文保存。请启动 GNOME Keyring 或 KWallet。",
   "error.secrets.unencrypted": "此系统无法加密 API 密钥，因此无法保存密钥。",
   "error.consent.declined": "你已拒绝向 {service} 发送数据，因此没有发送任何内容。",
   "error.consent.needed": "等你允许向 {service} 发送数据后再继续，目前没有发送任何内容。",
@@ -3297,8 +3289,8 @@ export const zhCN = {
   "error.connector.urlTooLong": "URL 太长。",
   "error.connector.urlInvalid": "“{url}”不是有效的 URL。",
   "error.connector.urlInsecure":
-    "远程连接器的 URL 必须以 https:// 开头（只有这台电脑上的服务器可以用 http://）。",
-  "error.connector.urlCredentials": "URL 中不要包含用户名和密码：你会在浏览器中登录。",
+    "远程连接器的 URL 必须以 https:// 开头（仅本机服务器可用 http://）。",
+  "error.connector.urlCredentials": "URL 中不要包含用户名和密码：登录在浏览器中完成。",
   "error.connector.clientIdMissing": "输入客户端 ID。",
   "error.connector.clientIdInvalid": "客户端 ID 无效。",
   "error.connector.clientSecretInvalid": "客户端密钥无效。",
@@ -3307,8 +3299,7 @@ export const zhCN = {
   "error.connector.envNameInvalid": "“{name}”不是有效的环境变量名。",
   "error.connector.envValueInvalid": "{name} 的值无效。",
   "error.connector.jsonInvalid": "这不是有效的 JSON：{reason}",
-  "error.connector.noServers":
-    "未找到 MCP 服务器：需要一个“mcpServers”对象，与 Claude Desktop 和 Cursor 的写法相同。",
+  "error.connector.noServers": "未找到 MCP 服务器：需要一个“mcpServers”对象。",
   "error.restore.unknown": "回收站中没有这一项。",
   "error.restore.deletedPermanently": "“{name}”已彻底删除，无法恢复。",
   "error.restore.expired": "“{name}”已删除超过 {days} 天，无法恢复。",
@@ -3323,17 +3314,15 @@ export const zhCN = {
   "error.restore.folderLimit": "资料库最多可有 100 个文件夹，请先删除一个，再恢复。",
   "error.restore.notDeleted": "“{name}”尚未删除，无法彻底删除。",
   "error.history.gone": "该版本已不再保留。",
-  "error.linkedFolder.notThis": "这个文件夹中没有“{name}”里的文件。选择现在存放这些文件的文件夹。",
-  "error.linkedFolder.overlaps":
-    "这个文件夹位于某个同步文件夹中，或包含同步文件夹。选择“{name}”现在所在的文件夹。",
-  "error.linkedFolder.taken":
-    "这个文件夹中的“{file}”已单独添加到 IncarnaMind。先从 IncarnaMind 中删除它，再定位文件夹。",
+  "error.linkedFolder.notThis": "这个文件夹中没有“{name}”的文件。请选择存放这些文件的文件夹。",
+  "error.linkedFolder.overlaps": "这个文件夹与某个同步文件夹重叠。请选择“{name}”现在所在的文件夹。",
+  "error.linkedFolder.taken": "“{file}”已在 IncarnaMind 中。先删除它，再定位文件夹。",
   "error.agent.notConnected": "这个智能体尚未连接。",
   "error.agent.nameEmpty": "输入智能体的名称。",
   "error.agent.nameTooLong": "智能体名称不能超过 {max} 个字符。",
   "error.agent.nameTaken": "已有名为“{name}”的智能体。",
   "error.agent.noFolders": "至少选择一个文件夹，供智能体读取。",
-  "error.agent.keyUnreadable": "无法在这台电脑上读取这个智能体的密钥。先断开连接，再重新连接。",
+  "error.agent.keyUnreadable": "无法读取这个智能体的密钥。先断开连接，再重新连接。",
   "error.agent.undoChanged": "{path} 之后已有改动，IncarnaMind 未作更改。",
   "error.library.noClassifier": "先选择分类模型。",
   "error.library.noFolders": "先新建或选择文件夹。",
@@ -3373,8 +3362,7 @@ export const zhCN = {
   "error.sources.keyLooksWrong": "这看起来不像密钥。检查后重新粘贴。",
   "error.skill.notFound": "这个技能不存在或已移除。",
   "error.skill.previewExpired": "这个技能的预览已失效，请重新选择。",
-  "error.skill.builtInName":
-    "“{name}”是内置技能的名称，内置技能的文件无法替换。在 SKILL.md 中换一个名字，或将内置技能复制为你自己的技能。",
+  "error.skill.builtInName": "已有内置技能名为“{name}”。请在 SKILL.md 中换个名字。",
   "error.approval.riskNotAccepted": "总是运行技能脚本之前，先确认风险提示。",
   "error.mindStyle.invalid": "无法使用这个字体和字号。",
   "error.privacy.usageDataLocalMode": "使用数据保持关闭：已开启“所有内容都留在这台电脑上”。",
@@ -3388,10 +3376,8 @@ export const zhCN = {
   "error.tagging.jevKeyUnreadable": "无法在这台设备上读取 Jev 密钥。",
   "error.tagging.startOllama": "启动 Ollama 后，才能使用本地自动分类。",
   "error.tagging.installModel": "在 Ollama 中安装 {model} 后重新分类，或手动选择模型。",
-  "error.tagging.needsPageImages":
-    "这个 PDF 需要页面图片。在 Ollama 中安装 clef-flash 后重新分类，或自己将它移到某个文件夹。",
-  "error.tagging.needsMemory":
-    "Clef-Flash 处理这个 PDF 需要更多可用内存。关闭其他模型后重试，或自己将它移到某个文件夹。",
+  "error.tagging.needsPageImages": "这个扫描件需要 Clef-Flash。在 Ollama 中安装后重试。",
+  "error.tagging.needsMemory": "Clef-Flash 处理这个 PDF 需要更多内存。关闭其他模型后重试。",
 
   // The application menu (src/main/menu.ts).
   "menu.about": "关于 IncarnaMind",
@@ -4469,22 +4455,19 @@ export const zhCN = {
   "consent.flow.web-search": "联网搜索",
   "consent.flow.web-search.purpose": "为你的问题联网搜索",
   "consent.data.web-searches": "回答要联网搜索的内容，根据你的问题生成",
-  "agents.problem.unpaired":
-    "这个智能体已不再连接 IncarnaMind。在 IncarnaMind 的“设置 → 智能体”中重新连接它。",
-  "agents.problem.off": "IncarnaMind 已关闭智能体连接。在“设置 → 智能体”中开启。",
+  "agents.problem.unpaired": "这个智能体已断开连接。在“设置 → 智能体”中重新连接。",
+  "agents.problem.off": "已关闭智能体连接。在“设置 → 智能体”中开启。",
   "agents.problem.local-mode":
-    "智能体已暂停：IncarnaMind 已开启“所有内容都留在这台电脑上”。要继续使用，请在“设置 → 搜索”中关闭。",
-  "agents.problem.consent":
-    "这个智能体已无权读取你的文档。在 IncarnaMind 的“设置 → 隐私”中重新允许它。",
-  "agents.problem.no-folders":
-    "这个智能体还不能读取任何文档。在 IncarnaMind 的“设置 → 智能体”中为它选择文件夹。",
+    "智能体已暂停：已开启“所有内容都留在这台电脑上”。要继续，请在“设置 → 搜索”中关闭。",
+  "agents.problem.consent": "这个智能体已无权读取你的文档。在“设置 → 隐私”中重新允许它。",
+  "agents.problem.no-folders": "这个智能体还不能读取任何文档。在“设置 → 智能体”中为它选择文件夹。",
   "agents.problem.outside-scope":
-    "这个文件夹没有共享给此智能体。在 IncarnaMind 的“设置 → 智能体”中为它共享更多文件夹。",
+    "这个文件夹没有共享给此智能体。在“设置 → 智能体”中共享更多文件夹。",
   "agents.problem.not-found": "共享给此智能体的文件夹中没有这个段落、文档、Mind 或引用。",
   "agents.problem.chat-not-ready":
-    "IncarnaMind 还没有可用的 AI 模型。在 IncarnaMind 的“设置 → 模型”中设置一个，或改为搜索并引用。",
+    "IncarnaMind 还没有可用的 AI 模型。在“设置 → 模型”中设置一个，或改为搜索并引用。",
   "agents.problem.chat-consent":
-    "IncarnaMind 的 AI 模型尚未获得允许。先在 IncarnaMind 中提一个问题来允许它，或改为搜索并引用。",
+    "IncarnaMind 的 AI 模型尚未获得允许。在 IncarnaMind 中提一个问题即可允许。",
   "agents.problem.answer-failed": "IncarnaMind 无法回答：{message}",
   "agents.problem.invalid": "IncarnaMind 无法读取这个请求。",
   "agents.problem.failed": "IncarnaMind 出了点问题。再试一次。",
@@ -4646,11 +4629,9 @@ export const zhCN = {
   "wordImport.asDocument": "改为添加为文档",
   "wordImport.chooseAnother": "选择其他文件…",
   "wordImport.refusal.legacy": "“{name}”是旧版 .doc 文件。请在 Word 中另存为 .docx 再导入。",
-  "wordImport.refusal.macros":
-    "“{name}”包含宏，IncarnaMind 从不运行宏。请在 Word 中另存为 .docx 再导入。",
+  "wordImport.refusal.macros": "“{name}”包含宏。在 Word 中另存为 .docx，再导入。",
   "wordImport.refusal.encrypted": "“{name}”设有密码。请在 Word 中取消密码后再导入。",
-  "wordImport.refusal.strict":
-    "“{name}”是 Strict Open XML 格式。请在 Word 中另存为“Word 文档（.docx）”再导入。",
+  "wordImport.refusal.strict": "“{name}”是 Strict Open XML 格式。在 Word 中另存为 .docx，再导入。",
   "wordImport.refusal.damaged": "“{name}”已损坏或不是 Word 文档。",
   "wordImport.refusal.too-large": "“{name}”太大，无法导入。",
   "wordImport.refusal.unreadable": "无法读取“{name}”：可能已移动，或无权打开。",
