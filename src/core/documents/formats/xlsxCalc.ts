@@ -148,7 +148,7 @@ export class Calculator {
   readonly touched = new Set<number>();
   /** Shared formula groups whose first cell was edited: their other cells get their own formulas. */
   readonly unshared = new Set<string>();
-  /** The stored results were refreshed: once, before the first edit, in a file that doesn't keep results. */
+  /** The stored results were refreshed: once, before the first edit, in a file whose results are placeholders. */
   private refreshed = false;
 
   constructor(book: Book) {
@@ -485,9 +485,9 @@ export class Calculator {
     const sheet = this.sheetNamed(sheetName);
     const at = parseCellRef(ref);
     if (!sheet || !at) throw new Error(`No cell ${sheetName}!${ref}`);
-    // A file that asks Excel to recalculate everything stores placeholders (0), which the
-    // cells an edit doesn't reach would hand on to the ones it does: work them all out first.
-    const refreshed = this.book.fullCalcOnLoad && !this.refreshed ? this.recalculateAll() : null;
+    // A file with placeholders for results (0, or none) would hand them on, from the cells an
+    // edit doesn't reach to the ones it does: work every formula out first.
+    const refreshed = this.book.placeholders && !this.refreshed ? this.recalculateAll() : null;
     this.refreshed = true;
     const key = cellKey(at.row, at.column);
     const id = cellId(sheet.index, key);

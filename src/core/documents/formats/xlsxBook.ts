@@ -105,10 +105,11 @@ export interface Book {
   tables: Map<string, BookTable>;
   date1904: boolean;
   /**
-   * The file asks Excel to recalculate everything on opening (`calcPr fullCalcOnLoad`), as
-   * XlsxWriter, ExcelJS and openpyxl do: the values it stores are placeholders, not results.
+   * What the file stores for its formulas are placeholders, not results: it asks Excel to
+   * recalculate everything on opening (`calcPr fullCalcOnLoad`, as XlsxWriter does), or every
+   * stored result is empty or 0 (ExcelJS, openpyxl), as no workbook Excel saved has.
    */
-  fullCalcOnLoad: boolean;
+  placeholders: boolean;
   /** A cell's number format code, by style index. */
   formats: (string | undefined)[];
 }
@@ -128,7 +129,7 @@ export async function readBook(bytes: Uint8Array): Promise<Book> {
   }
   const workbook = parseXml(workbookXml);
   const date1904 = ["1", "true"].includes(child(workbook, "workbookPr")?.attrs.date1904 ?? "");
-  const fullCalcOnLoad = ["1", "true"].includes(
+  const asksToRecalculate = ["1", "true"].includes(
     child(workbook, "calcPr")?.attrs.fullCalcOnLoad ?? "",
   );
   const rels = await relationshipsOf(zip, "xl/workbook.xml");
@@ -220,7 +221,13 @@ export async function readBook(bytes: Uint8Array): Promise<Book> {
       else delete formula.problem;
     }
   }
-  return { sheets, names, tables, date1904, fullCalcOnLoad, formats };
+  const results = sheets.flatMap((sheet) =>
+    [...sheet.cells.values()].flatMap((cell) => (cell.formula ? [cell.value] : [])),
+  );
+  const placeholders =
+    asksToRecalculate ||
+    (results.length > 0 && results.every((value) => value === null || value === 0 || value === ""));
+  return { sheets, names, tables, date1904, placeholders, formats };
 }
 
 const stringItem = (si: XmlElement) =>
