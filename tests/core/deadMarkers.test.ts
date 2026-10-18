@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { withoutDeadMarkers } from "../../src/core/answers/citations";
 import { answerBlocks, markersWithoutCitation } from "../../src/shared/answerBlocks";
 import { askAssistant } from "../helpers/assistant";
 import { setUpWithDocuments, shownPassages } from "../helpers/citations";
@@ -160,6 +161,8 @@ describe("A Citation marker never shows without a Citation behind it", { timeout
 
     expect(requests).toBe(1);
     expect(answer.citations).toEqual([]);
+    expect(answer.text).not.toContain("[^");
+    expect(answer.text).toContain(each.phrase);
     const shown = JSON.stringify(answerBlocks({ ...answer, status: "done" }));
     expect(shown).not.toContain("[^");
     expect(shown).toContain(each.phrase);
@@ -179,6 +182,27 @@ describe("A Citation marker never shows without a Citation behind it", { timeout
     expect(requests).toBe(1);
     expect(answer.status).toBe("done");
     expect(answer.citations).toEqual([]);
+    expect(answer.text).not.toContain("[^");
     expect(JSON.stringify(answerBlocks({ ...answer, status: "done" }))).not.toContain("[^");
+  });
+});
+
+describe("The text without markers nothing backs", () => {
+  // protects=a marker no Citation backs goes with the space before it unless a word follows, in English and Chinese, while a backed marker, a marker in code and a footnote definition stay; fails_when=a backed marker goes, code changes, or a definition loses its marker; no_claim=none beyond protects.
+  test("goes with its space, and code, footnote definitions and backed markers stay", () => {
+    const backed = (marker: number) => marker === 1;
+    expect(withoutDeadMarkers("A claim [^2]. Another [^1][^3], then more.", backed)).toBe(
+      "A claim. Another [^1], then more.",
+    );
+    expect(withoutDeadMarkers("先说一点[^2]。再说一点[^1][^3]。", backed)).toBe(
+      "先说一点。再说一点[^1]。",
+    );
+    expect(withoutDeadMarkers("See [^2]word and a [^3] sign.", backed)).toBe(
+      "See word and a sign.",
+    );
+    const kept = ["Write `[^2]` for it.", "```", "[^2]", "```", "", "[^2]: Source, p. 1"].join(
+      "\n",
+    );
+    expect(withoutDeadMarkers(kept, backed)).toBe(kept);
   });
 });

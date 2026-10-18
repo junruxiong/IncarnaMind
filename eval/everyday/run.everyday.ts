@@ -117,6 +117,8 @@ interface CaseResult {
   error: string | null;
   /** The Answers' tokens, its earlier requests' included (not Edit with AI's or the judge's). */
   usage: AnswerUsage;
+  /** The markers the app took out of its Answers because no Citation backed them. */
+  droppedMarkers: number;
   /** A research request: each cited sentence of the reply, as the app's own check judged it; null for the others. */
   support: SentenceSupport[] | null;
 }
@@ -228,7 +230,9 @@ async function runCase(
     cachedInputTokens: 0,
     cacheWriteTokens: 0,
   };
+  let droppedMarkers = 0;
   const counting = core.on("answer.finished", (event) => {
+    droppedMarkers += event.droppedMarkers;
     usage.inputTokens += event.usage.inputTokens;
     usage.outputTokens += event.usage.outputTokens;
     usage.cachedInputTokens += event.usage.cachedInputTokens;
@@ -365,6 +369,7 @@ async function runCase(
     seconds: (Date.now() - started) / 1000,
     error: answer.status === "failed" ? `${answer.errorKind}: ${answer.errorMessage}` : null,
     usage,
+    droppedMarkers,
     support,
   };
 }
@@ -459,6 +464,7 @@ async function runModel(
             seconds: 0,
             error: error instanceof Error ? error.message : String(error),
             usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 },
+            droppedMarkers: 0,
             support: null,
           };
         }
@@ -560,7 +566,9 @@ function report(
     "",
     "## Citation markers",
     "",
-    `${dead} of ${results.length} Answers wrote a Citation marker that no Citation backs.`,
+    `${dead} of ${results.length} Answers keep a Citation marker that no Citation backs in their text.`,
+    "",
+    `The app took out ${results.reduce((total, each) => total + each.droppedMarkers, 0)} markers that nothing backed, in ${results.filter((each) => each.droppedMarkers > 0).length} Answers.`,
     "",
     "## Each run",
     "",
