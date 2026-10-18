@@ -5,9 +5,11 @@
 //   2. Each app.asar and each installer is within its size budget.
 //   3. Each app has the speech-to-text addon (#136) of its own platform and architecture, and no
 //      other, unpacked beside app.asar.
+//   4. Each app has what Analyses run with (ADR-0023) in python/ beside app.asar, as
+//      packages.json lists it.
 // Usage: node scripts/check-package.mjs [dist-folder]   (default: dist)
 // Exit code 1 when a check fails.
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { listPackage } from "@electron/asar";
 
@@ -102,6 +104,26 @@ for (const asar of asars) {
 	const others = found.filter((name) => name !== expected);
 	if (others.length > 0) {
 		failures.push(`${asar} carries another platform's speech package: ${others.join(", ")}`);
+	}
+}
+
+for (const asar of asars) {
+	const python = join(dirname(asar), "python");
+	let listed = [];
+	try {
+		listed = JSON.parse(readFileSync(join(python, "packages.json"), "utf8")).packages.map(
+			(each) => each.file,
+		);
+	} catch {
+		failures.push(`${asar} has no python/packages.json beside it`);
+		continue;
+	}
+	const pyodide = ["pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip"];
+	const missing = [...pyodide, "pyodide-lock.json", ...listed].filter(
+		(name) => !existsSync(join(python, name)),
+	);
+	if (missing.length > 0) {
+		failures.push(`${asar} is missing Python files beside it: ${missing.join(", ")}`);
 	}
 }
 
