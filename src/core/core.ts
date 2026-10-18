@@ -3623,9 +3623,17 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     retagDocuments: async (documentIds) => {
       rateLimit.resumeNow();
-      if (organizesNewDocuments()) return library.classify(documentIds);
-      await lookForTaggingModel();
-      tagger.retag(documentIds);
+      const byTagger = async (ids: unknown) => {
+        await lookForTaggingModel();
+        tagger.retag(ids);
+      };
+      if (!organizesNewDocuments()) return byTagger(documentIds);
+      // Organize re-tags the Documents it holds, and the tagger the rest.
+      if (!Array.isArray(documentIds)) return library.classify(documentIds);
+      const held = documentIds.filter((id) => typeof id === "string" && library.isOrganizing(id));
+      const rest = documentIds.filter((id) => !held.includes(id));
+      if (rest.length > 0) await byTagger(rest);
+      if (held.length > 0 || rest.length === 0) library.classify(held);
     },
     stopTagging: async () => {
       const places = library.taggingPlaces();
