@@ -23,11 +23,14 @@
  *   Mind, points to an earlier Answer ("covered in my earlier answer", "见上一条回答").
  * - **No word of the example unasked**: asked about the User's own Documents
  *   after the example's Answer, nothing it wrote mentions the example's.
+ * - **Only the text's dates**: every date the reply gives is one the
+ *   Documents' text writes, or is named as a file's (./dates).
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
 import { toolTextIn } from "../../src/core/answers/toolText";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
 import { markersWithoutCitation } from "../../src/shared/answerBlocks";
+import { datesNotInText } from "./dates";
 import type { ClaimVerdict } from "./judge";
 
 /** What a request expects of its Answer. */
@@ -46,6 +49,8 @@ export interface Expected {
   standsAlone?: true;
   /** Asked about the User's own Documents after the example's Answer: nothing it writes mentions the example's. */
   noExample?: true;
+  /** Every date its reply gives is one the Documents' text writes (`RequestOutcome.texts`), or a file's named as such. */
+  textDates?: boolean;
 }
 
 export interface RequestOutcome {
@@ -65,6 +70,8 @@ export interface RequestOutcome {
   /** The text of the Blocks it wrote or changed in Minds, once its changes are accepted. */
   writtenInMinds?: readonly string[];
   scoped: readonly { id: string; name: string }[];
+  /** The text of the Documents in scope, for `textDates`. */
+  texts?: readonly string[];
 }
 
 export type RequestFailure =
@@ -80,7 +87,8 @@ export type RequestFailure =
   | { kind: "untouched" }
   | { kind: "as-text"; sources: string[] }
   | { kind: "points-back"; said: string }
-  | { kind: "example"; said: string };
+  | { kind: "example"; said: string }
+  | { kind: "date-not-in-text"; dates: string[] };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
@@ -173,6 +181,8 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   if (pointer) failures.push({ kind: "points-back", said: pointer });
   const example = expected.noExample ? written.match(EXAMPLE)?.[0] : undefined;
   if (example) failures.push({ kind: "example", said: example });
+  const dates = expected.textDates ? datesNotInText(answer.text, outcome.texts ?? []) : [];
+  if (dates.length > 0) failures.push({ kind: "date-not-in-text", dates });
   return failures;
 }
 
@@ -203,5 +213,7 @@ export function failureLine(failure: RequestFailure): string {
       return `points to an earlier Answer: “${failure.said}”`;
     case "example":
       return `mentions the example unasked: “${failure.said}”`;
+    case "date-not-in-text":
+      return `gives a date the Documents' text doesn't: ${failure.dates.join(", ")}`;
   }
 }

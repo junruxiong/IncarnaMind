@@ -49,14 +49,17 @@ import type {
 import type { Consent } from "../consent";
 import {
   ConsentDeclinedError,
+  ConsentRevokedError,
   InvalidInputError,
   isRecord,
+  LocalModeError,
   NotFoundError,
   SecretStorageError,
 } from "../errors";
 import { DEFAULT_SIGN_IN_TIMEOUT_MS, type OAuthPage } from "../oauth";
 import { serviceForUrl } from "../providers/service";
 import type { Secrets } from "../secrets";
+import { createSendGate } from "../sendGate";
 import type { Database } from "../storage";
 import type { Tool } from "../tools";
 import { type ConnectorAuth, clientSecret, createConnectorAuth, manualClientRecord } from "./auth";
@@ -329,6 +332,7 @@ function awayFromHere(row: ConnectorRow): boolean {
 
 export function createConnectors(options: ConnectorsOptions) {
   const { db, now, secrets, processes, consent } = options;
+  const gate = createSendGate(consent, options.localOnly);
   const timing: ConnectorTiming = { ...CONNECTOR_TIMING, ...options.timing };
   const runtimes = new Map<string, Runtime>();
   const auths = new Map<string, ConnectorAuth>();
@@ -449,6 +453,8 @@ export function createConnectors(options: ConnectorsOptions) {
       }
       return [...services.values()];
     },
+    onThisComputer: (serviceId) =>
+      liveRows().some((row) => serviceOf(row).id === serviceId && !awayFromHere(row)),
   });
 
   const runtimeOf = (id: string): Runtime => {
@@ -884,15 +890,23 @@ export function createConnectors(options: ConnectorsOptions) {
             `The Connector "${row.name}" isn't used while everything stays on this computer, so ${tool.name} wasn't called. Go on without it.`,
           );
         }
-        try {
-          await untilAborted(consent.ensure("connectors", service), signal);
-        } catch (error) {
-          if (error instanceof ConsentDeclinedError) {
-            throw new Error(
+        const refusal = (error: unknown) => {
+          if (error instanceof ConsentDeclinedError || error instanceof ConsentRevokedError) {
+            return new Error(
               `The User didn't allow sending data to the Connector "${row.name}", so ${tool.name} wasn't called. Go on without it.`,
             );
           }
-          throw error;
+          if (error instanceof LocalModeError) {
+            return new Error(
+              `The Connector "${row.name}" isn't used while everything stays on this computer, so ${tool.name} wasn't called. Go on without it.`,
+            );
+          }
+          return error;
+        };
+        try {
+          await untilAborted(consent.ensure("connectors", service), signal);
+        } catch (error) {
+          throw refusal(error);
         }
         const runtime = runtimes.get(row.id);
         const client = runtime?.client;
@@ -903,6 +917,17 @@ export function createConnectors(options: ConnectorsOptions) {
         let result: Awaited<ReturnType<Client["callTool"]>>;
         try {
           if (config.transport === "http") await authOf(row.id, config.url).refreshIfStale();
+        } catch (error) {
+          if (config.transport === "http") remoteCallFailed(row, runtime, generation, error);
+          throw error;
+        }
+        // After the sign-in's refresh, which can wait on its server: the call is what sends.
+        try {
+          gate.check("connectors", service);
+        } catch (error) {
+          throw refusal(error);
+        }
+        try {
           result = await client.callTool({ name: tool.name, arguments: input }, undefined, {
             signal,
             timeout: timing.callTimeoutMs,

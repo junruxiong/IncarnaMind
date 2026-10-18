@@ -6,7 +6,8 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test, vi } from "vitest";
 import * as Y from "yjs";
@@ -39,6 +40,8 @@ import { createLog, type Log } from "../lib/log";
 import { createWorkerCrossEncoder } from "../lib/rerank";
 import { CASES, type EverydayCase, floorOf, type LibraryName } from "./cases";
 import { failureLine, type RequestFailure, requestFailures } from "./checks";
+import { DATED_TEXTS, writeDatedDocuments } from "./dated";
+import { citedClaims } from "./dates";
 import { judgeClaims } from "./judge";
 import { languageRates, type RequestRun, rowRates } from "./rates";
 import {
@@ -121,6 +124,8 @@ interface CaseResult {
   droppedMarkers: number;
   /** A research request: each cited sentence of the reply, as the app's own check judged it; null for the others. */
   support: SentenceSupport[] | null;
+  /** A summary: its sentences outside headings that make a claim, and how many carry a Citation; null for the others. */
+  claims: { claims: number; cited: number } | null;
 }
 
 /** Asks in the assistant and resolves with the Answer as stored once it has ended. */
@@ -361,6 +366,7 @@ async function runCase(
     sourcesAsText: sourcesAsTextIn,
     writtenInMinds,
     scoped,
+    texts: each.library === "dated" ? DATED_TEXTS : undefined,
   });
   return {
     id: each.id,
@@ -376,6 +382,7 @@ async function runCase(
     usage,
     droppedMarkers,
     support,
+    claims: each.summary ? citedClaims(answer.text) : null,
   };
 }
 
@@ -405,9 +412,11 @@ async function runModel(
   log: Log,
 ) {
   const config = readConfig(ROOT);
+  const datedFolder = await mkdtemp(join(tmpdir(), "incarnamind-everyday-dated-"));
   const sets: Record<LibraryName, EvalDocument[]> = {
     papers: await fetchPapers(config.cacheDir, log),
     reports: await reports(),
+    dated: await writeDatedDocuments(datedFolder),
   };
   const judge = createAiSdkChatModel({
     kind: judging.kind,
@@ -418,7 +427,7 @@ async function runModel(
   });
   const model = `${chat.kind}/${chat.modelId}`;
   const results: CaseResult[] = [];
-  for (const name of ["papers", "reports"] as const) {
+  for (const name of ["papers", "reports", "dated"] as const) {
     const wanted = cases.filter((each) => each.library === name);
     if (wanted.length === 0) continue;
     const library = await openLibrary({
@@ -471,6 +480,7 @@ async function runModel(
             usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 },
             droppedMarkers: 0,
             support: null,
+            claims: null,
           };
         }
         log(
@@ -487,6 +497,7 @@ async function runModel(
       await library.close();
     }
   }
+  await rm(datedFolder, { recursive: true, force: true });
   return results;
 }
 
@@ -519,6 +530,10 @@ function report(
   const researched = answered.filter((each) => each.support !== null);
   const averageLength = (some: readonly CaseResult[]) =>
     Math.round(some.reduce((total, each) => total + each.reply.length, 0) / (some.length || 1));
+  const dated = answered.filter(
+    (each) => CASES.find((request) => request.id === each.id)?.library === "dated",
+  );
+  const summaries = answered.flatMap((each) => (each.claims ? [each] : []));
   const checked = researched.flatMap((each) =>
     (each.support ?? []).map((sentence) => ({ id: each.id, model: each.model, ...sentence })),
   );
@@ -551,6 +566,34 @@ function report(
                 ...checked
                   .filter((each) => each.verdict !== "supported")
                   .map((each) => `- ${each.id} (${each.model}), ${each.verdict}: ${each.sentence}`),
+                "",
+              ]
+            : []),
+        ]
+      : []),
+    ...(dated.length > 0
+      ? [
+          "## Dates",
+          "",
+          "The contracts' and minutes' Answers: a date the Documents' text doesn't write, and isn't named as a file's, fails the request. Each file's own dates are none of its text's.",
+          "",
+          "| Model | Language | Answers that give a date not in the text |",
+          "|---|---|---|",
+          ...languageRates(
+            dated.map((each) => ({
+              id: each.id,
+              language: each.language,
+              model: each.model,
+              passed: !each.failures.some((failure) => failure.kind === "date-not-in-text"),
+            })),
+          ).map((group) => {
+            const wrong = group.runs - group.passed;
+            return `| ${group.model} | ${group.language} | ${wrong} of ${group.runs} (${percent(wrong, group.runs)}) |`;
+          }),
+          "",
+          ...(summaries.length > 0
+            ? [
+                `The summaries' sentences outside headings that make a claim: ${summaries.reduce((total, each) => total + (each.claims?.cited ?? 0), 0)} of ${summaries.reduce((total, each) => total + (each.claims?.claims ?? 0), 0)} carry a Citation (${summaries.length} summaries).`,
                 "",
               ]
             : []),
@@ -632,6 +675,7 @@ test("everyday requests", async () => {
     if (!only) return true;
     if (only === "hard") return each.hard === true;
     if (only === "research") return each.research === true;
+    if (only === "dates") return each.library === "dated";
     return only.split(",").includes(each.id);
   });
   const runs = Number(process.env.INCARNAMIND_EVAL_EVERYDAY_RUNS ?? "3") || 3;
