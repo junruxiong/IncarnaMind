@@ -550,7 +550,9 @@ export const useAppStore = create<AppState>()((set, get) => {
   const offerRename = (mind: Mind, before: string) => {
     if (before === mind.title) return;
     const rename = (name: string) => core.renameMind(mind.id, name);
-    push(renamed((t) => mindName(mind) || t("mind.untitled"), rename, { before, after: mind.title }));
+    push(
+      renamed((t) => mindName(mind) || t("mind.untitled"), rename, { before, after: mind.title }),
+    );
   };
 
   /** Puts a Folder's fields back as given. */

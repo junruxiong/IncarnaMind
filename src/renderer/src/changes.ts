@@ -88,7 +88,8 @@ export function linkedFolderPaused(
   setPaused: (paused: boolean) => Promise<unknown>,
 ): Undoable {
   return {
-    said: (t) => t(paused ? "undo.linkedFolderPaused" : "undo.linkedFolderResumed", { name: shown }),
+    said: (t) =>
+      t(paused ? "undo.linkedFolderPaused" : "undo.linkedFolderResumed", { name: shown }),
     name: (t) => t(paused ? "linkedFolders.pause" : "linkedFolders.resume"),
     undo: async () => {
       await setPaused(!paused);
