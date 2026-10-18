@@ -149,6 +149,10 @@ export function textLength(blocks: readonly NodeJSON[]): number {
 const textOf = (node: NodeJSON): string =>
   node.type === "text" ? (node.text ?? "") : (node.content ?? []).map(textOf).join("");
 
+/** The first Block with any text, as the text of its first line: what an unnamed Mind is called once they are in it. */
+export const firstLineOfBlocks = (blocks: readonly NodeJSON[]): string =>
+  blocks.map(textOf).find((text) => text.trim() !== "") ?? "";
+
 const holdsCitation = (node: NodeJSON): boolean =>
   node.type === CITATION_NODE || (node.content ?? []).some(holdsCitation);
 

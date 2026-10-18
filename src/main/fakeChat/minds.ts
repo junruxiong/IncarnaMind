@@ -19,7 +19,8 @@
  * came to; add_to_mind's and create_mind's input streams in word by word,
  * slowly for a Question asked "slowly", as does edit_mind's edit. "Write three
  * paragraphs" is `paragraphsReply`'s. "Write a summary page" (写一个总结页面)
- * calls create_mind with a short summary.
+ * calls create_mind with a short summary, and "Write a short summary of this
+ * agreement" (为这份协议写一份简短摘要) calls add_to_mind with it, for the Mind in focus.
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
@@ -83,6 +84,9 @@ const SUMMARY = [
   "Neap tides come in between, at the quarter moons.",
 ].join("\n\n");
 
+/** The newcomer's first request (#1174): a short summary of "this agreement", written into the Mind in focus. */
+const SUMMARY_HERE = /\bwrite a short summary of this agreement\b|为这份协议写一份简短摘要/i;
+
 /** A request to change the Mind so it has a table: "…, with a table" (加上表格). */
 const WITH_A_TABLE = /\bwith a table\b|加上?表格/i;
 
@@ -140,6 +144,11 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     if (made === undefined)
       return { tool: "create_mind", input: { title: "Summary", content: SUMMARY } };
     return { text: firstSentence(made) };
+  }
+  if (SUMMARY_HERE.test(question)) {
+    const added = lastResult(prompt, "add_to_mind");
+    if (added === undefined) return { tool: "add_to_mind", input: { content: SUMMARY } };
+    return { text: firstSentence(added) };
   }
   if (
     SHORTEN.test(question) ||

@@ -653,3 +653,64 @@ test("Settings opens the data folder in the file manager", async () => {
   expect(await realpath(opened ?? "")).toBe(await realpath(dataDir));
   await app.close();
 });
+
+const NEWCOMER = {
+  en: {
+    first: "Write a short summary of this agreement.",
+    second: "Make the summary longer.",
+  },
+  "zh-CN": {
+    first: "为这份协议写一份简短摘要。",
+    second: "把摘要写长一点。",
+  },
+} as const;
+
+for (const language of ["en", "zh-CN"] as const) {
+  const words = NEWCOMER[language];
+
+  test(`a Mind the User never named is named by its first line, not by the last instruction, and Export saves it so (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await bridge(window).language(language);
+    await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
+    await useOutputLocation(window, sources);
+    await newMind(window);
+
+    await askInAssistant(window, words.first);
+    await expect(window.getByTestId("mind-editor").locator("h2")).toHaveText("Summary");
+    await expect(frontMindName(window)).toHaveText("Summary");
+
+    const second = await askInAssistant(window, words.second);
+    await expect(second.getByTestId("mind-changes-title")).toContainText("“Summary”");
+    await expect(frontMindName(window)).toHaveText("Summary");
+
+    await exportFromMenu(window);
+    await expect(window.getByTestId("export-result").getByTestId("export-done")).toContainText(
+      savedLine("Summary.docx", sources, language),
+    );
+    await app.close();
+  });
+
+  test(`a Mind the User renamed keeps its name through both requests and Export (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await bridge(window).language(language);
+    await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
+    await useOutputLocation(window, sources);
+    await newMind(window);
+    await nameMind(window, "Agreement notes");
+
+    await askInAssistant(window, words.first);
+    const second = await askInAssistant(window, words.second);
+    await expect(second.getByTestId("mind-changes-title")).toContainText("“Agreement notes”");
+    await expect(frontMindName(window)).toHaveText("Agreement notes");
+
+    await exportFromMenu(window);
+    await expect(window.getByTestId("export-result").getByTestId("export-done")).toContainText(
+      savedLine("Agreement notes.docx", sources, language),
+    );
+    await app.close();
+  });
+}

@@ -31,7 +31,13 @@ import { asGenerated } from "../../shared/aiText";
 import type { NodeJSON } from "../../shared/blockJson";
 import { setOrigins } from "../../shared/blockOrigins";
 import { cutTitle, mindName } from "../../shared/naming";
-import { citedTables, recheckCitations, textLength, withoutIds } from "../../shared/noteBlocks";
+import {
+  citedTables,
+  firstLineOfBlocks,
+  recheckCitations,
+  textLength,
+  withoutIds,
+} from "../../shared/noteBlocks";
 import { readMindHandle } from "./commands/handles";
 import { conversationLabel, questionOf } from "./conversations";
 import { core } from "./core";
@@ -54,10 +60,10 @@ export interface AddedAnswer {
   blocks: NodeJSON[];
 }
 
-/** The Mind's name, which an unnamed Mind is about to take from the Question (the core names it a moment after the Note is in). */
-const nameOfMind = (mindId: string, question: string) => {
+/** The Mind's name, which an unnamed Mind is about to take from the first line of what goes in (the core names it a moment after the Note is in). */
+const nameOfMind = (mindId: string, blocks: readonly NodeJSON[]) => {
   const mind = useAppStore.getState().minds.find((each) => each.id === mindId);
-  return (mind && mindName(mind)) || cutTitle(question) || t("mind.untitled");
+  return (mind && mindName(mind)) || cutTitle(firstLineOfBlocks(blocks)) || t("mind.untitled");
 };
 
 const originOf = ({ answer }: AddedAnswer): BlockOrigin => ({
@@ -133,7 +139,7 @@ async function addToReadMind(added: AddedAnswer, mindId: string): Promise<boolea
     .catch(useAppStore.getState().reportError);
   offerEditorUndo(
     editor,
-    t("answer.added", { mind: nameOfMind(mindId, originOf(added).question) }),
+    t("answer.added", { mind: nameOfMind(mindId, added.blocks) }),
     answerUndoPlace(added.answer.id),
   );
   return true;
@@ -148,9 +154,7 @@ async function addToOtherMind(added: AddedAnswer, mindId: string, openIt: boolea
     model: added.answer.model,
   });
   useUndo.getState().push({
-    ...saidInLine(t, (t) =>
-      t("answer.added", { mind: nameOfMind(mindId, originOf(added).question) }),
-    ),
+    ...saidInLine(t, (t) => t("answer.added", { mind: nameOfMind(mindId, added.blocks) })),
     undo: () => core.undoAddToNote({ mindId, blockIds }),
     shownAt: answerUndoPlace(added.answer.id),
   });
