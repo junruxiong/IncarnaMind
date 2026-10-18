@@ -10,6 +10,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { Core, Document } from "../../src/core";
 import type { PaceTimers } from "../../src/core/sources/pace";
 import { RATE_LIMIT_PAUSE } from "../../src/core/tags/rateLimit";
+import { RETRY_WAIT_MS } from "../../src/core/tags/transient";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { scriptedModels } from "../helpers/models";
@@ -66,6 +67,16 @@ function rateLimit(retryAfter?: string) {
     statusCode: 429,
     responseHeaders: retryAfter ? { "retry-after": retryAfter } : {},
     isRetryable: true,
+  });
+}
+
+function refusal(statusCode: number) {
+  return new APICallError({
+    message: `The server answered ${statusCode}`,
+    url: "https://api.example.com/v1/messages",
+    requestBodyValues: {},
+    statusCode,
+    isRetryable: false,
   });
 }
 
@@ -187,6 +198,45 @@ describe("Tagging meets a rate limit", () => {
 
     await waitForTagging(second, ids);
     expect(chat.calls).toHaveLength(2);
+  });
+});
+
+describe("Tagging meets a passing error", () => {
+  test("one 502 is retried after a short wait, and the Document is tagged", async () => {
+    const { core, chat, clock } = await start();
+    chat.failNext(refusal(502));
+
+    const ids = idsOf(await add(core, ["One"]));
+    await vi.waitFor(() => expect(clock.waits()).toBe(1));
+    expect(chat.calls).toHaveLength(1);
+    clock.advance(RETRY_WAIT_MS.least + RETRY_WAIT_MS.jitter);
+
+    await waitForTagging(core, ids);
+    expect(chat.calls).toHaveLength(2);
+  });
+
+  test("a server that keeps failing is retried once, then the Document fails", async () => {
+    const { core, chat, clock } = await start();
+    chat.fail(refusal(503));
+
+    const ids = idsOf(await add(core, ["One"]));
+    await vi.waitFor(() => expect(clock.waits()).toBe(1));
+    clock.advance(RETRY_WAIT_MS.least + RETRY_WAIT_MS.jitter);
+
+    const [failed] = await waitForTagging(core, ids, (each) => each.tagging === "failed");
+    expect(failed?.taggingError).toMatchObject({ kind: "provider" });
+    expect(chat.calls).toHaveLength(2);
+  });
+
+  test("another 4xx, such as a bad request, fails at once, with no wait", async () => {
+    const { core, chat, clock } = await start();
+    chat.failNext(refusal(400));
+
+    const ids = idsOf(await add(core, ["One"]));
+    await waitForTagging(core, ids, (each) => each.tagging === "failed");
+
+    expect(chat.calls).toHaveLength(1);
+    expect(clock.waits()).toBe(0);
   });
 });
 

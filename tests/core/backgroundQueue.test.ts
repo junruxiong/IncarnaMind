@@ -303,6 +303,7 @@ describe("Automatic tagging in the background queue", () => {
         throw error;
       },
       rateLimit: { pausedUntil: () => null, pause: () => null, succeeded: () => {} },
+      timers: { now: () => 0, sleep: async () => {} },
     });
     /** A classification job, as Organize queues: one model call, which answers at once. */
     const classifying = (name: string): BackgroundJob => ({
