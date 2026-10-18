@@ -215,6 +215,7 @@ import {
   answerInstructions,
   connectorInstructions,
   documentInstructions,
+  emptyMindNote,
   exampleNote,
   LISTED_DOCUMENTS,
   type ListedDocuments,
@@ -377,6 +378,11 @@ const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
 const changesAMind = (change: MindChange) =>
   change.created || change.revised === true || change.proposals > 0;
+
+const blank = (blocks: Y.XmlFragment): boolean =>
+  blocks
+    .toArray()
+    .every((block) => !(block instanceof Y.XmlElement) || plainText(block).trim() === "");
 
 const holdsNothing = (blocks: Y.XmlFragment): boolean =>
   blocks
@@ -1668,6 +1674,8 @@ export function createAnswers(options: AnswersOptions) {
         routed?.fillsEmpty && minds && focusedId && minds.read(focusedId, holdsNothing)
           ? { ...routed, newMind: false }
           : routed;
+      const focusedBlank =
+        minds !== undefined && focusedId !== null && minds.read(focusedId, blank);
       const requested =
         route && (route.kind === "write" || route.kind === "edit")
           ? { change: route.kind, newMind: route.newMind }
@@ -1891,6 +1899,7 @@ export function createAnswers(options: AnswersOptions) {
             workingCopyNote(original?.name ?? null),
             exampleNote(exampleNames),
             mindInstructions(withMindTools, route),
+            emptyMindNote(withMindTools, focusedBlank),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             help

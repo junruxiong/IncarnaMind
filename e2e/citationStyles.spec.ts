@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import type { CoreBridge, ReferencePatch } from "../src/core/api";
 import { readPackIndex } from "../src/core/citationStyles/pack";
 import { paragraphsOf, part, unzip } from "../tests/helpers/docx";
@@ -117,9 +118,6 @@ async function ask(window: Page, text: string): Promise<Locator> {
   return editor;
 }
 
-/** The checks in the Mind's margin, not the assistant's. */
-const mindChecks = (window: Page) => window.getByTestId("card").getByTestId("margin-check");
-
 /** Chooses a style in the open picker, typing to find it and pressing Enter, as a person would. */
 async function chooseStyle(window: Page, search: string, label: string): Promise<void> {
   const picker = window.getByTestId("citation-style-picker");
@@ -160,9 +158,35 @@ test("a Mind citing a paper offers a citation style; chosen, its Citations and R
   await expect(styled.getByTestId("citation-chip")).toHaveText(
     /^\(Bowler & Buyung-Ali, 2010, p\. 2; Lease Agreement, n\.d\., Line 1\)$/,
   );
-  // The second Citation is drawn by the first, but keeps its own check in the margin.
+  // The second Citation is drawn by the first, with its own check on its words.
   await expect(answer.locator('[data-testid="citation"][data-styled="joined"]')).toHaveCount(1);
-  await expect(mindChecks(window)).toHaveCount(2);
+  await expect(styled.locator('[data-work="1"]').first()).toHaveAttribute("data-check", "found");
+  await expect(styled.locator(".citation-run-icon")).toHaveCount(0);
+  // A work whose quote isn't found has its mark before its words, so colour isn't the only cue.
+  const setSecondCheck = (check: string, checkReason: string | null) =>
+    answer.evaluate(
+      (dom, change) => {
+        const { view } = (dom as unknown as { editor: Editor }).editor;
+        const tr = view.state.tr;
+        let seen = 0;
+        view.state.doc.descendants((node, pos) => {
+          if (node.type.name === "citation" && ++seen === 2) {
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...change });
+          }
+        });
+        view.dispatch(tr);
+      },
+      { check, checkReason },
+    );
+  await setSecondCheck("not-found", "quote-not-on-pages");
+  await expect(styled.locator('[data-work="1"]').first()).toHaveAttribute(
+    "data-check",
+    "not-found",
+  );
+  await expect(styled.locator('[data-work="1"] .citation-run-icon')).toHaveCount(1);
+  await expect(styled.locator('[data-work="0"] .citation-run-icon')).toHaveCount(0);
+  await setSecondCheck("found", null);
+  await expect(styled.locator(".citation-run-icon")).toHaveCount(0);
 
   // Over a work's words, the pointer shows that Citation's card.
   const chip = styled.getByTestId("citation-chip");
@@ -521,7 +545,7 @@ test("a Mind citing files with no details isn't offered a style until one is a p
   const answer = await ask(window, "When is spring rent due?");
   await expect(answer.getByTestId("citation-chip")).toHaveText(["1"]);
   const prompt = window.getByTestId("citation-style-prompt");
-  await expect(mindChecks(window)).toHaveCount(1);
+  await expect(answer.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
   await expect(prompt).toHaveCount(0);
   await expect(window.getByTestId("references")).toHaveCount(0);
 

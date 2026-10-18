@@ -208,8 +208,10 @@ export function classifyProviderError(error: unknown): ProviderError {
     if (status === undefined) return { kind: "network", message };
     if (status === 401 || status === 403) return { kind: "auth", message };
     if (refusesWithoutRetention(cause)) return { kind: "data-retention", message };
-    // Google answers a bad key with 400 "API key not valid".
-    if (status === 400 && /api[ _-]?key/i.test(message)) return { kind: "auth", message };
+    // Google answers a bad key with 400 "API key not valid", in the body when the message is only the status.
+    if (status === 400 && /api[ _-]?key/i.test(`${message} ${cause.responseBody ?? ""}`)) {
+      return { kind: "auth", message };
+    }
     if (status === 404) return { kind: "model", message };
     if (status === 429) return { kind: "rate-limit", message };
     return { kind: "provider", message };

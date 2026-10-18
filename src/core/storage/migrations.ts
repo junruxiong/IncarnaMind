@@ -1779,6 +1779,15 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE documents ADD COLUMN tagging_error_resets_at TEXT;
     `,
   },
+  {
+    version: 101,
+    description: "A provider's own model can be taken out of the model menu (#179)",
+    // 1: the User put the id in the menu (as before); 0: the User took one the provider offers
+    // in the menu by default out of it, with Settings › Models' "In the menu".
+    sql: `
+      ALTER TABLE chat_menu_models ADD COLUMN in_menu INTEGER NOT NULL DEFAULT 1;
+    `,
+  },
 ];
 
 /**

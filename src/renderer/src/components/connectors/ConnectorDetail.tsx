@@ -13,8 +13,9 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
-import { CheckLineIcon, ChevronLeftLineIcon, PencilLineIcon, TrashLineIcon } from "../lineIcons";
+import { CheckLineIcon, PencilLineIcon, TrashLineIcon } from "../lineIcons";
 import { ProblemMark } from "../ProblemLine";
+import { SettingsBackLink } from "../SettingsBackLink";
 import { buttonStyle, errorTextClass, iconButtonClass, primaryButtonClass } from "../ui";
 import { ConnectorForm } from "./ConnectorForm";
 import { ConnectorTile } from "./ConnectorTile";
@@ -47,20 +48,12 @@ const locationOf = (connector: Connector) =>
 /** A page's way back to the list. */
 export function BackToConnectors({ onBack }: { onBack(): void }) {
   const t = useT();
-  const button = useRef<HTMLButtonElement>(null);
-  // The page opened from a card or a row: the keyboard's place starts at its top.
-  useEffect(() => button.current?.focus(), []);
   return (
-    <button
-      ref={button}
-      type="button"
-      data-testid="connectors-back"
-      onClick={onBack}
-      className="inline-flex items-center gap-1 self-start rounded-sm text-[12px] leading-[18px] text-ink-meta hover:text-ink"
-    >
-      <ChevronLeftLineIcon className="size-3" />
-      {t("connectors.directory.back")}
-    </button>
+    <SettingsBackLink
+      label={t("connectors.directory.back")}
+      testId="connectors-back"
+      onBack={onBack}
+    />
   );
 }
 
