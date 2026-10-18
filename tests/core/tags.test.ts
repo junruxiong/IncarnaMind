@@ -420,6 +420,40 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     expect(tagged?.tagging).toBe("tagged");
   });
 
+  test("when no Tag fits, the model has been asked and the Document is tagged with none", async () => {
+    const { core, tagging } = await startTagging([]);
+    await core.saveChatProvider(LOCAL);
+
+    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
+    const [tagged] = await waitForTagging(core, [document.id]);
+
+    expect(tagged).toMatchObject({ tagging: "tagged", tags: [] });
+    expect(tagging.requests).toHaveLength(1);
+  });
+
+  test("with no Tags to choose from, no model is asked and the Document is checked once a Tag exists", async () => {
+    const { core, tagging } = await startTagging(["Paper"]);
+    await core.saveChatProvider(LOCAL);
+    for (const tag of await core.listTags()) await core.deleteTag(tag.id);
+
+    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
+    const [waiting] = await waitForTagging(
+      core,
+      [document.id],
+      (each) => each.tagging === "no-tags",
+    );
+
+    expect(waiting).toMatchObject({ status: "ready", tags: [] });
+    expect(tagging.requests).toEqual([]);
+
+    await core.createTag({ name: "Paper", description: "A research paper." });
+    const [tagged] = await waitForTagging(core, [document.id]);
+
+    expect(tagged?.tagging).toBe("tagged");
+    expect(await tagNamesOf(core, document.id)).toEqual(["Paper"]);
+    expect(tagging.requests).toHaveLength(1);
+  });
+
   test("removing the chat model sends Documents not yet tagged back to waiting", async () => {
     const { core, tagging } = await startTagging(["Paper"]);
     tagging.fail(new Error("The model is down."));

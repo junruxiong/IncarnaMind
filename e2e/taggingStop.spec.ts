@@ -16,6 +16,7 @@ import {
   createDataFolder,
   launchApp,
   motionSettled,
+  openDocumentTags,
   openSettings,
   removeDataFolder,
   setLanguage,
@@ -262,6 +263,65 @@ test("⌘K stops Tagging, and turns it back on for Documents not in a Folder", a
     "Tagging Documents not in a Folder with AI again",
   );
   await expect(stoppedItems(window)).toHaveCount(0);
+  await app.close();
+});
+
+test("after Stop, the status row and a new Document's Tag picker say Tagging stopped, and Resume tags it, in English and Chinese (#1129)", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1280, 800);
+  await saveAnthropicKey(window);
+  await window
+    .getByTestId("add-documents-input")
+    .setInputFiles(
+      await Promise.all(["Field notes", "Site visit", "Interview", "Survey"].map(slowFile)),
+    );
+  const footer = window.getByTestId("sidebar-status");
+  await expect(footer.getByTestId("tagging-status")).toBeVisible();
+  await runFromPalette(window, "Stop Tagging");
+  await expect(window.getByTestId("undo-message")).toHaveText(
+    "Stopped Tagging Documents not in a Folder",
+  );
+
+  await window.getByTestId("add-documents-input").setInputFiles([await slowFile("Expert report")]);
+  const report = documentItem(window, "Expert report");
+  await expect(report).toHaveAttribute("data-tagging", "stopped");
+  const row = footer.getByTestId("tagging-stopped");
+  await expect(row.getByTestId("status-label")).toHaveText("Tagging stopped");
+  await expect(row.getByTestId("tagging-resume")).toHaveText("Resume");
+  await openDocumentTags(report);
+  const line = report.getByTestId("document-tagging-why");
+  await expect(line).toHaveText("Tagging stopped·Resume");
+  await setLanguage(window, "zh-CN");
+  await expect(row.getByTestId("status-label")).toHaveText("已停止打标签");
+  await expect(row.getByTestId("tagging-resume")).toHaveText("继续");
+  await expect(line).toHaveText("已停止打标签·继续");
+  await setLanguage(window, "en");
+  await window.keyboard.press("Escape");
+
+  // Resume from the row, with the keyboard.
+  await row.getByTestId("tagging-resume").focus();
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("undo-message")).toHaveText(
+    "Tagging Documents not in a Folder with AI again",
+  );
+  await expect(stoppedItems(window)).toHaveCount(0);
+  await expect(report).toHaveAttribute("data-tagging", "tagged", { timeout: 20_000 });
+  await expect(row).toHaveCount(0);
+
+  // Stopped again, a new Document's own picker resumes it, with Tab and Enter.
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await core.setTaggingWithAi(null, false);
+  });
+  await window.getByTestId("add-documents-input").setInputFiles([await slowFile("Witness list")]);
+  const witness = documentItem(window, "Witness list");
+  await expect(witness).toHaveAttribute("data-tagging", "stopped");
+  await openDocumentTags(witness);
+  await expect(witness.getByTestId("tag-picker-input")).toBeFocused();
+  await window.keyboard.press("Tab");
+  await expect(witness.getByTestId("document-tagging-resume")).toBeFocused();
+  await window.keyboard.press("Enter");
+  await expect(witness).toHaveAttribute("data-tagging", "tagged", { timeout: 20_000 });
   await app.close();
 });
 

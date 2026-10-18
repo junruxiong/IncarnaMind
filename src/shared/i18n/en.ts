@@ -1588,6 +1588,10 @@ export const en = {
   "tags.menu.manage": "Manage Tags…",
   "tags.state.pending": "Waiting to be tagged",
   "tags.state.tagging": "Tagging…",
+  "tags.state.stopped": "Tagging stopped",
+  "tags.state.noFit": "No Tag fits",
+  "tags.state.noTags": "No Tags yet",
+  "tags.state.addTag": "Add a Tag",
   "tags.state.failed": "Tagging failed. Re-tag to try again.",
   "tags.dialog.body":
     "Documents get their Tags, and once you have Folders a suggested Folder, going by these names and descriptions, from the model chosen in Settings → Models → Tagging: Automatic, unless you choose another. Tags you add to or remove from a Document are never changed automatically.",
@@ -1693,6 +1697,9 @@ export const en = {
   "tagging.stopped.notInFolder": "Stopped Tagging Documents {places}",
   "tagging.restarted": "Tagging Documents {places} with AI again",
   "tagging.stoppedIn": "Tagging with AI is stopped for Documents {places}.",
+  "tagging.resume": "Resume",
+  "tagging.resume.keywords": "resume restart turn on tagging stopped",
+  "status.taggingStopped": "Tagging stopped",
   "status.taggingPaused": "Tagging waits for your ChatGPT plan",
   "status.taggingPaused.full":
     "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
