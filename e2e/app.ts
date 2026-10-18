@@ -376,8 +376,13 @@ export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.
  * "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind
  * in no Folder. Returns once its first line has the cursor: keys a test
  * presses a millisecond apart can outrun the editor while frames are busy.
+ * That line starts as an empty title; unless `title`, Backspace makes
+ * it body text, as for someone who writes without one.
  */
-export async function newMind(window: Page): Promise<void> {
+export async function newMind(
+  window: Page,
+  { title = false }: { title?: boolean } = {},
+): Promise<void> {
   const before = await (await coreOf(window)).evaluate(async (core) =>
     (await core.listMinds()).map((mind) => mind.id),
   );
@@ -396,6 +401,11 @@ export async function newMind(window: Page): Promise<void> {
       return id !== null && !before.includes(id);
     })
     .toBe(true);
+  if (title) return;
+  const first = frontMind(window).locator(".mind-editor > :first-child");
+  await expect(first).toHaveJSProperty("tagName", "H1");
+  await window.keyboard.press("Backspace");
+  await expect(first).toHaveJSProperty("tagName", "P");
 }
 
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
@@ -1573,6 +1583,17 @@ export async function enterContent(window: Page): Promise<void> {
   await expect(frontMind(window).getByTestId("mind-editor")).toBeFocused();
 }
 
+/**
+ * Waits until a Mind's text has the focus and ProseMirror has finished taking
+ * it. 20 ms after the focus it puts its own selection back into the page if
+ * the page's differs, which undoes a key that moved the page's selection just
+ * before. A timer started now with the same delay runs after that check.
+ */
+export async function focusSettled(window: Page, editor: Locator): Promise<void> {
+  await expect(editor).toBeFocused();
+  await window.evaluate(() => new Promise((resolve) => setTimeout(resolve, 20)));
+}
+
 /** The page of the Mind the User is in, in the group they are in. */
 export const frontMind = (window: Page) =>
   window.locator('[data-testid="tab-group"][data-focused] [data-testid="mind-pane"]:visible');
@@ -1860,12 +1881,16 @@ export async function openSteps(window: Page, answer: Locator): Promise<Locator>
 
 /**
  * Adds an Answer in the assistant to the Mind in focus, at its cursor (or
- * end), with the mouse, as a person keeps one (#201), and waits until it is in.
+ * end), with the mouse, as a person keeps one (#201), and waits until it is in
+ * and its wash has ended: the redraw that ends it undoes a key or click that
+ * moved the selection a moment before, as ProseMirror rewrites the page's
+ * selection from its own.
  */
 export async function addToNote(window: Page, answer: Locator): Promise<void> {
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-add"));
   await expect(answer.getByTestId("answer-added")).toBeVisible();
+  await expect(window.locator(".block-just-added")).toHaveCount(0);
 }
 
 export type MindChild = Y.XmlElement | string;
