@@ -1670,8 +1670,7 @@ export const zhCN = {
   "setup.way.local.running": "Ollama 已运行 · 免费、较慢",
   "setup.way.local.notRunning": "需要免费的 Ollama 应用",
   "setup.claude.title": "已经在用 Claude 订阅？",
-  "setup.claude.line":
-    "Anthropic 不允许其他应用使用 Claude 订阅；你可以在 Claude 应用里问你的文档。",
+  "setup.claude.line": "在 Claude 应用里使用你的 Claude 订阅，连上 IncarnaMind 即可。",
   "setup.claude.connect": "连接 Claude 应用",
   "setup.claude.missing": "需要 Mac 或 Windows 版 Claude 应用，浏览器里的 claude.ai 不行。",
   "setup.claude.download": "下载 Claude",
@@ -1683,8 +1682,7 @@ export const zhCN = {
   "plans.chatgpt.title": "ChatGPT Plus 或 Pro",
   "plans.chatgpt.line": "用你的 ChatGPT 账号登录，无需密钥。",
   "plans.claude.title": "Claude Pro、Max 或 Team",
-  "plans.claude.line":
-    "在 Claude 应用里使用 IncarnaMind，由你的订阅付费。Max 和 Team 还含每月 API 额度。",
+  "plans.claude.line": "在 Claude 应用里使用 IncarnaMind，由你的订阅付费。",
   "plans.google.title": "Google AI Pro 或 Ultra",
   "plans.google.line": "在 Antigravity 里使用 IncarnaMind，由你的订阅付费。",
   "plans.google.connect": "连接 Antigravity",
@@ -2591,7 +2589,7 @@ export const zhCN = {
   "cost.estimate.month": "本月已用 {spent}，上限 {cap}",
   "cost.cap.title": "每月花费上限",
   "cost.cap.switch": "限制 API 密钥每月的花费",
-  "cost.cap.body": "按 token 计费的模型达到上限后停止。订阅按自身额度计算。",
+  "cost.cap.body": "按用量计费的模型达到上限后停止。订阅按自身额度计算。",
   "cost.cap.spent": "本月 API 密钥已花费：{spent}。",
   "cost.cap.spentOf": "本月 API 密钥已花费：{spent}，上限 {cap}。",
   "cost.cap.nothing": "本月 API 密钥尚无花费。",
@@ -3494,7 +3492,7 @@ export const zhCN = {
   "connectors.registry.title": "来自 MCP 注册表",
   "connectors.registry.badge": "社区 · 未审核",
   "connectors.registry.note":
-    "只因你输入了搜索词才查询。社区连接器未经审核，连接前先看看它能做什么。",
+    "只因你输入了搜索词，才查询了 MCP 注册表。社区连接器未经审核，连接前先看看它能做什么。",
   "connectors.registry.searching": "正在搜索 MCP 注册表…",
   "connectors.registry.none": "MCP 注册表里没有与“{query}”匹配的连接器。",
   "connectors.registry.failed.local-mode": "未搜索 MCP 注册表：已开启“所有内容都留在这台电脑上”。",

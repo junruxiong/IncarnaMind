@@ -339,7 +339,7 @@ test("the search asks the MCP Registry only once the User types and agrees, and 
     await expect(found.getByTestId("connectors-registry-badge")).toHaveText(
       "Community · not reviewed",
     );
-    await expect(found).toContainText("Searched only because you typed.");
+    await expect(found).toContainText("The Registry was searched only because you typed.");
     await expect(found.getByTestId("registry-server")).toHaveCount(3);
     expect(registry.requests).toEqual(["/v0.1/servers?search=zotero&version=latest&limit=20"]);
 
