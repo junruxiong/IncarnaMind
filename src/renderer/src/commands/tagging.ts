@@ -16,6 +16,7 @@ export const taggingCommands: readonly Command[] = [
   {
     id: "tagging.tagNotInFolder",
     label: "tagging.tagNotInFolder",
+    keywords: ["tagging.resume.keywords"],
     group: "main",
     when: () => stoppedPlaces(store().library).includes(null),
     reversible: true,

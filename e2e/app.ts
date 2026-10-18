@@ -25,7 +25,7 @@ import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
 import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
-import { homeEnv } from "../tests/helpers/home";
+import { APP_ARGS, homeEnv, KEYCHAIN_ARGS } from "../tests/helpers/home";
 
 const appDir = resolve(__dirname, "..");
 
@@ -276,7 +276,7 @@ export async function launchApp(
   env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
   if (transcriber) env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS = JSON.stringify(transcriber);
 
-  const app = await electron.launch({ args: [appDir], env });
+  const app = await electron.launch({ args: [...KEYCHAIN_ARGS, appDir, ...APP_ARGS], env });
   openApps.set(app, dataDir);
   app.on("close", () => {
     openApps.delete(app);
@@ -1228,6 +1228,16 @@ export function darkPixels(canvas: Locator): Promise<number> {
       if ((data[index] as number) < 128 && (data[index + 3] as number) > 0) dark++;
     }
     return dark;
+  });
+}
+
+/** The box of the words in an element, in CSS pixels: not of the element, which may be padded or overlap its neighbour. */
+export function textBoxOf(target: Locator) {
+  return target.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const { x, y, width, height } = range.getBoundingClientRect();
+    return { x, y, width, height };
   });
 }
 

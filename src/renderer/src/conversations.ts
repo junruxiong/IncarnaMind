@@ -13,6 +13,7 @@ import { watchMindsMadeBy } from "./assistantMinds";
 import { composerKey, useComposer } from "./composer";
 import { core } from "./core";
 import { translateNow } from "./i18n";
+import { saidInLine } from "./lineNames";
 import { useModelSetup, waitForModel } from "./modelSetup";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
@@ -324,7 +325,7 @@ export async function clearConversation(): Promise<void> {
   await core.deleteConversation(openId);
   startNewChat();
   useUndo.getState().push({
-    message: translateNow("assistant.cleared", { title: name }),
+    ...saidInLine(translateNow, (t) => t("assistant.cleared", { title: name })),
     undo: async () => {
       await core.restore([{ kind: "conversation", id: openId }]);
       await openConversation(openId);

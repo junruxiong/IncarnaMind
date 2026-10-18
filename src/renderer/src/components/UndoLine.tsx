@@ -1,10 +1,19 @@
-import { useEffect, useRef } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import { NAME_IN_LINE_COLUMNS } from "../../../shared/naming";
 import { shortcutLabel } from "../commands/keymap";
 import { useDismissOnEscape } from "../escapeDismiss";
 import { useT } from "../i18n";
 import { useFade } from "../motion";
 import { useAppStore } from "../store";
-import { UNDO_SHOWN_MS, type UndoLineState, useUndo } from "../undo";
+import { UNDO_SHOWN_MS, type Undoable, type UndoLineState, useUndo } from "../undo";
 
 const lineClass =
   "mx-2 flex min-w-0 shrink-0 gap-1 pt-0.5 pb-1 pl-2 text-[12px] leading-4 text-ink-secondary";
@@ -72,12 +81,12 @@ function Line({ line }: { line: UndoLineState }) {
     );
   }
 
-  const { message, also } = line.change;
+  const { message, fullMessage, also } = line.change;
   const undo = (
     <button
       type="button"
       data-testid="undo-action"
-      aria-label={t("move.undoLabel", { message })}
+      aria-label={t("move.undoLabel", { message: fullMessage ?? message })}
       title={t("undo.title", { shortcut: shortcutLabel("edit.undo") })}
       onClick={() => void useUndo.getState().undo()}
       className={actionClass}
@@ -110,13 +119,72 @@ function Line({ line }: { line: UndoLineState }) {
       </div>
     );
   }
+  return <ChangeLine change={line.change} undo={undo} line={shown} />;
+}
+
+const MAX_LINES = 2;
+const LEAST_NAME_COLUMNS = 8;
+
+/**
+ * The message takes two lines at most (DESIGN.md, Sidebar): a name in it is cut shorter, two
+ * columns at a time, until it does, and again when the sidebar changes width. Its words never are.
+ */
+function ChangeLine({
+  change,
+  undo,
+  line,
+}: {
+  change: Undoable;
+  undo: ReactNode;
+  line: RefObject<HTMLDivElement | null>;
+}) {
+  const { within } = change;
+  const message = useRef<HTMLSpanElement>(null);
+  const [columns, setColumns] = useState(NAME_IN_LINE_COLUMNS);
+  const [, measureAgain] = useReducer((times: number) => times + 1, 0);
+
+  // After every render, as the room can change without the columns.
+  useLayoutEffect(() => {
+    const element = message.current;
+    if (!within || !element || columns <= LEAST_NAME_COLUMNS) return;
+    const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+    if (element.getBoundingClientRect().height > lineHeight * MAX_LINES + 1) {
+      setColumns(columns - 2);
+    }
+  });
+
+  useEffect(() => {
+    const element = line.current;
+    if (!element) return;
+    let width: number | null = null;
+    const watch = new ResizeObserver(([entry]) => {
+      const next = entry?.contentRect.width ?? 0;
+      if (width !== null && next !== width) {
+        setColumns(NAME_IN_LINE_COLUMNS);
+        measureAgain();
+      }
+      width = next;
+    });
+    watch.observe(element);
+    return () => watch.disconnect();
+  }, [line]);
+
+  const shown = within ? within(columns) : change.message;
+  const whole = change.fullMessage ?? change.message;
   return (
-    <div ref={shown} className={`${lineClass} items-center`}>
-      <span data-testid="undo-message" title={message} className="min-w-0 truncate">
-        {message}
+    <div ref={line} className={`${lineClass} items-end`}>
+      <span
+        ref={message}
+        data-testid="undo-message"
+        title={shown === whole ? undefined : whole}
+        className="min-w-0 break-words"
+      >
+        {shown}
       </span>
-      <span aria-hidden="true">·</span>
-      {undo}
+      <span aria-hidden="true" className="shrink-0">
+        ·
+      </span>
+      <span className="-my-1 flex shrink-0">{undo}</span>
     </div>
   );
 }

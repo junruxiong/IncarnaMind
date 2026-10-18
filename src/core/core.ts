@@ -228,6 +228,7 @@ import { createSuggestions } from "./suggestions";
 import { createTags, tagsOfDocument } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging, decisionModelTagger } from "./tags/jev";
+import { createRateLimitPause } from "./tags/rateLimit";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
 import { createPublicFetch } from "./tools/web/fetcher";
@@ -496,7 +497,10 @@ export function createCore(adapters: CoreAdapters): Core {
   const tags = createTags(db, now);
   // First run: the preset Tags, in the interface language of the time.
   tags.seedPresets(settings.get().language);
-  const tagsChanged = () => events.emit("tags.changed", tags.list());
+  const tagsChanged = () => {
+    events.emit("tags.changed", tags.list());
+    tagger.tagsDefined();
+  };
   /** Set once automatic tagging exists: it hears about every Document that becomes ready. */
   let documentReady = (_documentId: string) => {};
   /** Set once rerank exists: a Document became ready, so the built-in reranking model is needed. */
@@ -1880,6 +1884,14 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     signal: lifetime.signal,
   });
+  const rateLimit = createRateLimitPause({
+    timers: paceTimers,
+    resumed: () => {
+      tagger.resume();
+      library.resume();
+    },
+    signal: lifetime.signal,
+  });
   // The one Tagging setting: the model automatic tagging uses, and Organize when picked by hand.
   const tagging = createTagging({
     setting: () => library.settings().classifier,
@@ -1932,13 +1944,14 @@ export function createCore(adapters: CoreAdapters): Core {
     if (changed.length > 0) events.emit("documents.tagged", documents.getMany(changed));
     return documents.getMany(ids);
   };
-  /**
-   * Until there are Folders and Organize has a model, automatic tagging decides
-   * Tags alone; then Organize does both. Automatic covers tagging only.
-   */
   const organizing = () =>
     organizeModelOf(library.settings()) !== null &&
     !!db.get("SELECT 1 FROM library_groups WHERE deleted_at IS NULL LIMIT 1");
+  /**
+   * Organize tags and files new Documents itself only while it does so automatically; otherwise
+   * automatic tagging tags them, and they wait for Organize to be moved. Automatic covers tagging only.
+   */
+  const organizesNewDocuments = () => organizing() && library.settings().automatic;
   // Ollama's decision models run only on this computer, as when one is picked by hand: elsewhere
   // they would get Document text with no consent asked.
   const decisionModelElsewhere = (classifier: TaggingClassifier) =>
@@ -1953,7 +1966,8 @@ export function createCore(adapters: CoreAdapters): Core {
     db,
     now,
     tags,
-    enabled: () => !organizing(),
+    enabled: () => !organizesNewDocuments(),
+    organizing: (id) => organizing() && library.isOrganizing(id),
     stopped: (id) => library.taggingStoppedFor(id),
     canRun: async () => {
       const classifier = await tagging.resolve();
@@ -2009,6 +2023,8 @@ export function createCore(adapters: CoreAdapters): Core {
     announce: announceTagged,
     reportError: (error) => console.error(error),
     background,
+    rateLimit,
+    timers: paceTimers,
   });
   const automaticClassifiers = new Map<string, ReturnType<typeof automaticGroupClassifier>>();
   const library = createLibrary({
@@ -2027,6 +2043,7 @@ export function createCore(adapters: CoreAdapters): Core {
       batches.changed(assignments.map((each) => each.documentId));
     },
     providerExists: (id) => chat.exists(id),
+    rateLimit,
     readsPages: (classifier) => {
       switch (classifier.kind) {
         case "auto":
@@ -2233,9 +2250,10 @@ export function createCore(adapters: CoreAdapters): Core {
 
   /**
    * What tagging may use changed (a model, a key, local mode): Automatic picks
-   * again, and Documents waiting may go on.
+   * again, and Documents waiting may go on, a rate-limit pause ended too, unless
+   * this is the start, which keeps the pause a quit interrupted.
    */
-  const taggingChanged = async () => {
+  const taggingChanged = async (endsPause = true) => {
     try {
       await tagging.resolve();
     } catch (error) {
@@ -2243,6 +2261,7 @@ export function createCore(adapters: CoreAdapters): Core {
       console.error("The model to tag with couldn't be worked out.", error);
     }
     if (lifetime.signal.aborted) return;
+    if (endsPause) rateLimit.resumeNow();
     tagger.resume();
     library.resume();
   };
@@ -2255,7 +2274,44 @@ export function createCore(adapters: CoreAdapters): Core {
     await taggingChanged();
     return status;
   };
-  documentReady = (documentId) => tagger.documentReady(documentId);
+  /**
+   * Automatic found no model to tag with: work it out again, asking Ollama afresh, so a model
+   * installed since is picked up without a restart. Waiting Documents then go on. One Ollama list
+   * call per lookup, never a model call. A lookup already under way may have asked before what
+   * the caller knows changed, so one more follows it, and later callers share that one.
+   */
+  let lookingForModel: Promise<void> | null = null;
+  let lookingAgain: Promise<void> | null = null;
+  const lookForTaggingModel = (): Promise<void> => {
+    if (tagsWith() !== null) return Promise.resolve();
+    if (lookingForModel) {
+      lookingAgain ??= lookingForModel.then(() => {
+        lookingAgain = null;
+        return lookForTaggingModel();
+      });
+      return lookingAgain;
+    }
+    lookingForModel = (async () => {
+      try {
+        await tagging.resolve(undefined, true);
+      } catch (error) {
+        if (!lifetime.signal.aborted) {
+          console.error("The model to tag with couldn't be worked out.", error);
+        }
+        return;
+      } finally {
+        lookingForModel = null;
+      }
+      if (lifetime.signal.aborted || tagsWith() === null) return;
+      tagger.resume();
+      library.resume();
+    })();
+    return lookingForModel;
+  };
+  documentReady = (documentId) => {
+    tagger.documentReady(documentId);
+    void lookForTaggingModel();
+  };
 
   const settingsChanged = () => events.emit("settings.changed", settings.get());
   const readinessChanged = async () => {
@@ -2316,7 +2372,13 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Tagging a quit interrupted starts again, once Automatic knows what it tags with;
   // Documents waiting for a model are checked.
-  void taggingChanged().then(() => {
+  const stillLimited = db.get<{ ends: string | null }>(
+    `SELECT max(tagging_error_resets_at) AS ends FROM documents
+     WHERE deleted_at IS NULL AND tagging_status = 'waiting-for-provider'
+       AND tagging_error_kind = 'rate-limit'`,
+  )?.ends;
+  if (stillLimited) rateLimit.restore(Date.parse(stillLimited));
+  void taggingChanged(false).then(() => {
     if (!lifetime.signal.aborted) tagger.start();
   });
 
@@ -3450,7 +3512,15 @@ export function createCore(adapters: CoreAdapters): Core {
       if (tagsAnew || organizesAnew) await dataFlowsChanged();
       await taggingChanged();
     },
-    getTaggingModels: () => tagging.models(),
+    getTaggingModels: async () => {
+      const hadModel = tagsWith() !== null;
+      const models = await tagging.models();
+      if (!hadModel && tagsWith() !== null && !lifetime.signal.aborted) {
+        tagger.resume();
+        library.resume();
+      }
+      return models;
+    },
     classifyDocuments: async (ids) => {
       library.classify(ids);
       const classifier = organizeModelOf(library.settings());
@@ -3552,7 +3622,9 @@ export function createCore(adapters: CoreAdapters): Core {
       return { tag: tags.get(intoTagId), merged: { kind: "tag", id: tagId, links } };
     },
     retagDocuments: async (documentIds) => {
-      if (organizing()) return library.classify(documentIds);
+      rateLimit.resumeNow();
+      if (organizesNewDocuments()) return library.classify(documentIds);
+      await lookForTaggingModel();
       tagger.retag(documentIds);
     },
     stopTagging: async () => {

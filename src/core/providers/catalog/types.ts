@@ -171,11 +171,11 @@ export interface CatalogProvider {
   /** Short notes shown under the key field. */
   notes?: readonly Localized[];
   /**
-   * Which of the provider's subscription plans include credits a key can
-   * spend, in the provider's own words, and the page that says so: shown
-   * under the key field. Left out where no plan does.
+   * One line under the key field: what to do in IncarnaMind, and the provider's own page
+   * for the rest. It never states the provider's prices, fees, credits or what its plans
+   * include, which change without notice.
    */
-  planCredits?: Localized & { url: string };
+  keyLine?: Localized & { url: string; link: "details" | "pricing" };
   /**
    * A preset only: the run of the citing evaluation (#185) its Answers model
    * passed. Until then it is labelled not yet tested and never recommended
