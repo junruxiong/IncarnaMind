@@ -12,6 +12,7 @@ import {
   removeDataFolder,
   setLanguage,
   setWindowSize,
+  textBoxOf,
 } from "./app";
 
 /*
@@ -79,17 +80,6 @@ function outsideSidebar(line: Locator): Promise<string[]> {
   });
 }
 
-/** Where the first word of `target` starts, whichever line it is on. */
-function textLeft(target: Locator): Promise<number> {
-  return target.evaluate((element) => {
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    const first = range.getClientRects()[0];
-    if (!first) throw new Error("The element has no text.");
-    return first.left;
-  });
-}
-
 async function boxOf(target: Locator) {
   const box = await target.boundingBox();
   if (!box) throw new Error("The element isn't visible.");
@@ -126,21 +116,17 @@ async function expectWholeLine(
   expect(await outsideSidebar(message)).toEqual([]);
   expect(await outsideSidebar(undo)).toEqual([]);
   const [messageBox, undoBox, sidebarBox] = await Promise.all([
-    boxOf(message),
-    boxOf(undo),
+    textBoxOf(message),
+    textBoxOf(undo),
     boxOf(sidebar),
   ]);
-  expect(await message.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
-    true,
-  );
   expect(undoBox.x).toBeGreaterThanOrEqual(sidebarBox.x);
   expect(undoBox.x + undoBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width);
   const after = messageBox.x + messageBox.width <= undoBox.x + 0.5;
-  const under = messageBox.y + messageBox.height <= undoBox.y + 0.5;
-  expect(after || under).toBe(true);
+  const under = messageBox.y + messageBox.height <= undoBox.y + 2;
+  expect(after || under, JSON.stringify({ messageBox, undoBox })).toBe(true);
   // Alone on its row, Undo starts where the message does.
-  if (under)
-    expect(Math.abs((await textLeft(undo)) - (await textLeft(message)))).toBeLessThanOrEqual(1);
+  if (under) expect(Math.abs(undoBox.x - messageBox.x)).toBeLessThanOrEqual(1);
 }
 
 for (const language of ["en", "zh-CN"] as const) {

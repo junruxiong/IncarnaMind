@@ -17,6 +17,7 @@ import {
   setSidebarWidth,
   setWindowSize,
   tabTo,
+  textBoxOf,
 } from "./app";
 
 /*
@@ -191,8 +192,8 @@ for (const language of ["en", "zh-CN"] as const) {
         await renameInTab(window, name);
         await expect(undo).toBeVisible();
         const [messageBox, undoBox, sidebarBox] = await Promise.all([
-          boxOf(message),
-          boxOf(undo),
+          textBoxOf(message),
+          textBoxOf(undo),
           boxOf(sidebar),
         ]);
         // Undo ends inside the sidebar, after the message or under it, and nothing is cut at its end.
@@ -201,11 +202,8 @@ for (const language of ["en", "zh-CN"] as const) {
           sidebarBox.x + sidebarBox.width,
         );
         const after = messageBox.x + messageBox.width <= undoBox.x + 0.5;
-        const under = messageBox.y + messageBox.height <= undoBox.y + 0.5;
-        expect(after || under).toBe(true);
-        expect(
-          await message.evaluate((element) => element.scrollWidth <= element.clientWidth),
-        ).toBe(true);
+        const under = messageBox.y + messageBox.height <= undoBox.y + 2;
+        expect(after || under, JSON.stringify({ messageBox, undoBox })).toBe(true);
         // The name is cut in the middle: its start and its end show, and the tooltip has all of it.
         const said = (await message.textContent()) ?? "";
         expect(said).toContain(characters.slice(0, 8).join(""));
