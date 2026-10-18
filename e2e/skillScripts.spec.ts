@@ -98,7 +98,9 @@ test("a Skill script asks first with an approval card: Allow once runs it, and t
   const reach = card.getByTestId("approval-sandbox");
   await expect(reach).toHaveAttribute("data-sandbox", sandbox);
   await expect(reach).toContainText(
-    sandbox === "os" ? "Runs in a sandbox: no internet, no home folder." : "No sandbox",
+    sandbox === "os"
+      ? "Runs in a sandbox: no internet, no home folder."
+      : "No sandbox: it can read, change or delete your files and use the internet.",
   );
   if (sandbox === "os") {
     const details = reach.getByTestId("approval-sandbox-reach-details");
@@ -149,8 +151,8 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   const sandboxed = (await scriptSandbox(window)) === "os";
   await expect(warning).toContainText(
     sandboxed
-      ? "They run in a sandbox, but can still read files on other drives."
-      : "With no sandbox, they can delete your files and send your data online.",
+      ? "From now on, greeter’s scripts run without asking. They run in a sandbox, but can still read files on other drives."
+      : "From now on, greeter’s scripts run without asking. With no sandbox, they can delete your files and send your data online.",
   );
   await expect(warning).toContainText("Only for a Skill you trust. Reset in Settings › Approvals.");
   if (sandboxed) {

@@ -2675,7 +2675,7 @@ export const en = {
   "task.action.details": "Details",
   "task.ask.count": "{number} of {total}",
   "task.unknown.title": "IncarnaMind was closed during this step",
-  "task.unknown.file": "Unsure this step finished: {name} isn’t what it wrote.",
+  "task.unknown.file": "Can’t tell if this step finished: {name} isn’t what it wrote.",
   "task.unknown.connector": "Unsure the change through {connector} ({tool}) was made.",
   "task.unknown.redo": "Do it again",
   "task.unknown.skip": "Skip it",
@@ -2953,7 +2953,8 @@ export const en = {
   "scripts.card.args": "Arguments",
   "scripts.card.wouldRun": "It would run",
   "scripts.card.noArgs": "No arguments.",
-  "scripts.card.noSandbox": "No sandbox: it can change or delete your files and use the internet.",
+  "scripts.card.noSandbox":
+    "No sandbox: it can read, change or delete your files and use the internet.",
   "scripts.card.sandboxed": "Runs in a sandbox: no internet, no home folder.",
   "scripts.card.sandboxed.details":
     "It can’t open your home folder or IncarnaMind’s data, can only write in its own working folder, and has no internet.",
@@ -2963,9 +2964,9 @@ export const en = {
   "scripts.card.deny": "Deny",
   "scripts.alwaysRun.title": "Always run the scripts of {skill}?",
   "scripts.alwaysRun.body":
-    "With no sandbox, they can delete your files and send your data online.",
+    "From now on, {skill}’s scripts run without asking. With no sandbox, they can delete your files and send your data online.",
   "scripts.alwaysRun.bodySandboxed":
-    "They run in a sandbox, but can still read files on other drives.",
+    "From now on, {skill}’s scripts run without asking. They run in a sandbox, but can still read files on other drives.",
   "scripts.alwaysRun.bodySandboxed.details":
     "They can’t open your home folder or IncarnaMind’s data, can only write in their own working folder, and have no internet.",
   "scripts.alwaysRun.trust": "Only for a Skill you trust. Reset in Settings › Approvals.",
@@ -3854,7 +3855,8 @@ export const en = {
 
   "approvals.answer.waiting": "Waiting for your approval",
   "approvals.card.title": "{connector} wants to run {tool}",
-  "approvals.card.changes": "This Tool may change something in {connector}.",
+  "approvals.card.changes":
+    "This Tool may change something in {connector}. Nothing is sent until you choose.",
   "approvals.card.readOnly": "{connector} says it only reads. You chose to ask every time.",
   "approvals.card.arguments": "It would send",
   "approvals.card.noArguments": "No arguments.",
@@ -4497,7 +4499,7 @@ export const en = {
   "steps.check.found": "found",
   "steps.check.notFound": "{count} not found",
   "steps.failed.search": "Couldn’t search {scope}",
-  "steps.failed.search.auth": "Couldn’t search {scope}: search model key refused",
+  "steps.failed.search.auth": "Couldn’t search {scope}: the search model’s key was refused",
   "steps.live.reading": "Reading {mind}…",
   "steps.live.searching": "Searching {scope}…",
   "steps.live.checking": "Checking {count} Citations…",
@@ -4612,9 +4614,10 @@ export const en = {
   "mindChanges.waiting": "{count} changes are waiting in “{mind}”. Accept or reject them first?",
   "mindChanges.waiting.one": "1 change is waiting in “{mind}”. Accept or reject it first?",
   "mindChanges.waiting.some": "Changes are waiting in “{mind}”. Accept or reject them first?",
-  "answer.unbacked.made": "It says it made a Mind, but none was made.",
-  "answer.unbacked.removed": "It says it removed text, but nothing was removed.",
-  "answer.unbacked.changed": "It says it changed a Mind, but nothing changed.",
+  "answer.unbacked.made": "This reply says it made a Mind, but none was made.",
+  "answer.unbacked.removed":
+    "This reply says it removed or replaced text, but nothing was removed.",
+  "answer.unbacked.changed": "This reply says it changed a Mind, but no change was made.",
   "answer.noMindTools": "This model can't write into your Mind itself.",
   "answer.noMindTools.add": "Add to Mind",
   "answer.added": "Added to “{mind}”",

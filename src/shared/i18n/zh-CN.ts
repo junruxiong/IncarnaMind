@@ -2832,7 +2832,7 @@ export const zhCN = {
   "scripts.card.args": "参数",
   "scripts.card.wouldRun": "它将运行",
   "scripts.card.noArgs": "没有参数。",
-  "scripts.card.noSandbox": "没有沙盒：它可以修改、删除你的文件，也能联网。",
+  "scripts.card.noSandbox": "没有沙盒：它可以读取、修改、删除你的文件，也能联网。",
   "scripts.card.sandboxed": "在沙盒中运行：不能联网，不能访问个人文件夹。",
   "scripts.card.sandboxed.details":
     "无法访问你的个人文件夹和 IncarnaMind 的数据，只能写入自己的工作文件夹，也不能访问互联网。",
@@ -2841,8 +2841,10 @@ export const zhCN = {
   "scripts.card.alwaysRunHint": "今后直接运行 {skill} 的脚本，不再询问",
   "scripts.card.deny": "拒绝",
   "scripts.alwaysRun.title": "始终运行 {skill} 的脚本？",
-  "scripts.alwaysRun.body": "没有沙盒时，脚本可以删除你的文件，并把数据发到网上。",
-  "scripts.alwaysRun.bodySandboxed": "脚本在沙盒中运行，但仍能读取其他磁盘上的文件。",
+  "scripts.alwaysRun.body":
+    "今后 {skill} 的脚本将直接运行，不再询问。没有沙盒时，脚本可以删除你的文件，并把数据发到网上。",
+  "scripts.alwaysRun.bodySandboxed":
+    "今后 {skill} 的脚本将直接运行，不再询问。脚本在沙盒中运行，但仍能读取其他磁盘上的文件。",
   "scripts.alwaysRun.bodySandboxed.details":
     "无法访问你的个人文件夹和 IncarnaMind 的数据，只能写入自己的工作文件夹，也不能访问互联网。",
   "scripts.alwaysRun.trust": "只对你信任的技能这样做。可在“设置 › 批准”中恢复默认。",
@@ -3676,8 +3678,9 @@ export const zhCN = {
 
   "approvals.answer.waiting": "等待你的批准",
   "approvals.card.title": "{connector} 想要运行 {tool}",
-  "approvals.card.changes": "这个工具可能会修改 {connector} 中的内容。",
-  "approvals.card.readOnly": "{connector} 声明它只读取内容。你设置了每次询问。",
+  "approvals.card.changes":
+    "这个工具可能会修改 {connector} 中的内容。在你选择之前不会发送任何内容。",
+  "approvals.card.readOnly": "{connector} 声明这个工具只读取内容。你设置了每次询问。",
   "approvals.card.arguments": "将发送",
   "approvals.card.noArguments": "没有参数。",
   "approvals.card.allowOnce": "允许一次",
@@ -4288,7 +4291,7 @@ export const zhCN = {
   "steps.check.found": "找到了",
   "steps.check.notFound": "{count} 处未找到",
   "steps.failed.search": "无法搜索{scope}",
-  "steps.failed.search.auth": "无法搜索{scope}：搜索模型密钥被拒绝",
+  "steps.failed.search.auth": "无法搜索{scope}：搜索模型的密钥被拒绝",
   "steps.live.reading": "正在读“{mind}”…",
   "steps.live.searching": "正在搜索{scope}…",
   "steps.live.checking": "正在核对 {count} 处引用…",
