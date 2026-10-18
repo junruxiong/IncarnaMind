@@ -6,9 +6,9 @@ IncarnaMind runs an Analysis in a sandbox that has no access to your files or th
 
 Some Linux distributions block the way Electron starts its sandbox. Ubuntu 24.04, for example, has an AppArmor rule that refuses unprivileged user namespaces to programs without a profile that allows them. When the sandbox can't start, the AppImage doesn't open at all, so people start it with `--no-sandbox`, which turns the sandbox off for the whole app.
 
-## The safe fix: an AppArmor profile for IncarnaMind
+## The safe fix: an AppArmor profile for the IncarnaMind AppImage's path
 
-This allows user namespaces for IncarnaMind alone. The AppImage runs its program from a temporary folder whose name starts with `.mount_`, so the profile names that path.
+This allows user namespaces for the program at the IncarnaMind AppImage's path. The AppImage runs its program from a temporary folder whose name starts with `.mount_`, so the profile names that path. Any program started from a folder of that name gets the same right, which is still far narrower than the last resort below.
 
 1. Save this as `/etc/apparmor.d/incarnamind`:
 
@@ -28,6 +28,15 @@ This allows user namespaces for IncarnaMind alone. The AppImage runs its program
    ```sh
    sudo apparmor_parser -r /etc/apparmor.d/incarnamind
    ```
+
+For a tighter profile, extract the AppImage to a fixed folder only an administrator can change, and name that path instead:
+
+```sh
+./IncarnaMind-*.AppImage --appimage-extract
+sudo mv squashfs-root /opt/incarnamind
+```
+
+Then use `profile incarnamind /opt/incarnamind/incarnamind flags=(unconfined) {` in the profile, load it again, and start IncarnaMind with `/opt/incarnamind/AppRun`.
 
 ## The last resort: allow user namespaces for every program
 
