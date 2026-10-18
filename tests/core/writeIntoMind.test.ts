@@ -100,6 +100,39 @@ describe("A request to write something (#1109)", { timeout: 60_000 }, () => {
     },
   );
 
+  // protects=asked for a piece of its own, text added to the User's Mind is refused once with how to make the new Mind, the User's Mind is left as it was, and the new Mind is made (#1109); fails_when=the piece lands in the User's Mind, or the model isn't told to use create_mind; no_claim=that a real model then does.
+  test("added to the User's Mind instead, it is refused once and made a new Mind", async () => {
+    const told: string[] = [];
+    const model = scriptedModel((call) =>
+      citingAll(call, () => {
+        if (!called(call, "add_to_mind")) {
+          return { calls: [{ tool: "add_to_mind", input: { content: CITED } }] };
+        }
+        if (!called(call, "create_mind")) {
+          told.push(call.results.find((each) => each.tool === "add_to_mind")?.text ?? "");
+          return { calls: [{ tool: "create_mind", input: { title: "Summary", content: CITED } }] };
+        }
+        return { text: "Done." };
+      }),
+    );
+    const { core, mind, client } = await setUpWithDocuments(model, LEASES);
+    writeMind(client, [note("Notes on the leases.")]);
+    await client.settled();
+
+    const answer = await askAssistant(core, {
+      text: "根据我现有的文件帮我写一份summary",
+      mindId: mind.id,
+    });
+
+    expect(told[0]).toContain("the User asked for a new Mind for this");
+    expect(told[0]).toContain("Call create_mind");
+    expect(mindCalls(answer)[0]?.mindProblem).toEqual({ kind: "new-mind", mindId: mind.id });
+    await client.settled();
+    expect(readMind(client).textContent).toBe("Notes on the leases.");
+    const made = await madeBy(core, answer);
+    expect(checks(made.doc)).toEqual(QUOTES.map(() => "found"));
+  });
+
   // protects=in an empty Mind, a request to write fills it rather than making another; fails_when=the model is told to make a new Mind; no_claim=none beyond protects.
   test("in an empty Mind, it fills that Mind", async () => {
     const systems: string[] = [];
