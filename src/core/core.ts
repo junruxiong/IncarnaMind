@@ -1932,7 +1932,6 @@ export function createCore(adapters: CoreAdapters): Core {
     if (changed.length > 0) events.emit("documents.tagged", documents.getMany(changed));
     return documents.getMany(ids);
   };
-  /** Organize has a model and there are Folders: it tags the Documents it is asked to organize. */
   const organizing = () =>
     organizeModelOf(library.settings()) !== null &&
     !!db.get("SELECT 1 FROM library_groups WHERE deleted_at IS NULL LIMIT 1");
