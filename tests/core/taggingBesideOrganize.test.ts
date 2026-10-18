@@ -5,7 +5,6 @@
  * with a scripted model: no network.
  */
 import { join } from "node:path";
-import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
 import { type Core, DATABASE_FILE, type Document } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
@@ -14,69 +13,11 @@ import { createSourceFolder, writeSourceFile } from "../helpers/documents";
 import { scriptedModels } from "../helpers/models";
 import { docxOf, xlsxOf } from "../helpers/office";
 import { buildPdf } from "../helpers/pdf";
+import { type ScriptedChat, scriptedChat } from "../helpers/scriptedChat";
 import { tagNamed, tagNamesOf, waitForTagging } from "../helpers/tags";
 
 const LOCAL = { kind: "ollama", modelId: "local-model" } as const;
-const USAGE = {
-  inputTokens: { total: 5, noCache: 5, cacheRead: undefined, cacheWrite: undefined },
-  outputTokens: { total: 1, text: 1, reasoning: undefined },
-};
-
-type CallOptions = Parameters<MockLanguageModelV4["doGenerate"]>[0];
-
-const textOf = (options: CallOptions) =>
-  options.prompt
-    .map((message) =>
-      typeof message.content === "string"
-        ? message.content
-        : message.content.map((part) => ("text" in part ? part.text : "")).join(""),
-    )
-    .join("\n");
-
-/** A model that tags every Document "Report", files it in the first Folder offered, and records each request. */
-function scriptedChat() {
-  const calls: { purpose: "tags" | "organize"; text: string }[] = [];
-  let organizeTags: string[] = [];
-  let gate: Promise<void> | null = null;
-  let open = () => {};
-  const model = new MockLanguageModelV4({
-    doGenerate: async (options) => {
-      const schema =
-        options.responseFormat?.type === "json" ? options.responseFormat.schema : undefined;
-      const group = (schema as { properties?: { groupId?: { enum: string[] } } } | undefined)
-        ?.properties?.groupId;
-      calls.push({ purpose: group ? "organize" : "tags", text: textOf(options) });
-      if (gate) await gate;
-      const reply = group ? { groupId: group.enum[0], tags: organizeTags } : { tags: ["Report"] };
-      return {
-        content: [{ type: "text", text: JSON.stringify(reply) }],
-        finishReason: { unified: "stop", raw: undefined },
-        usage: USAGE,
-        warnings: [],
-      };
-    },
-  });
-  return {
-    model,
-    calls,
-    purposesFor: (text: string) =>
-      calls.filter((call) => call.text.includes(text)).map((call) => call.purpose),
-    organizeTags(ids: string[]) {
-      organizeTags = ids;
-    },
-    hold() {
-      gate = new Promise((resolve) => {
-        open = resolve;
-      });
-    },
-    release() {
-      gate = null;
-      open();
-    },
-  };
-}
-
-const startOn = (dataDir: string, chat: ReturnType<typeof scriptedChat>) =>
+const startOn = (dataDir: string, chat: ScriptedChat) =>
   startCore(dataDir, { createChatModel: scriptedModels(chat.model).createChatModel });
 
 /** A core with a Folder and Organize allowed, filing new Documents by itself or not. */
