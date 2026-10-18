@@ -50,7 +50,7 @@ import {
   type QuotedWords,
   type RejectedRecord,
 } from "../api";
-import type { CitationSource } from "../documents";
+import type { CitationSource, DocumentDate } from "../documents";
 import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
 import { writtenInCjk } from "../documents/textLanguage";
@@ -321,7 +321,7 @@ export interface AnswerDocuments {
     to: number | null,
   ): PageText[];
   /** A live Document's date, shown with its Passages (see `documentDate` in ../documents); null if none is known. */
-  documentDate(documentId: string): string | null;
+  documentDate(documentId: string): DocumentDate | null;
   /** The id of the Document to search named `name`, as the instructions list it; null for none. */
   documentNamed?(name: string): string | null;
 }
@@ -548,7 +548,7 @@ interface ShownPassage {
   id: string;
   documentName: string;
   /** Its Document's date, when known: what tells the newer of two Documents that disagree (#548). */
-  date: string | null;
+  date: DocumentDate | null;
   range: PageRange;
   /** For every kind but PDF: the label of the Units it covers, e.g. "slides 3–4". */
   location: string | null;
@@ -566,7 +566,9 @@ function formatPassages(passages: readonly ShownPassage[]): string {
         : pages
           ? ` pages="${pages}"`
           : "";
-      const dated = date ? ` date="${attribute(date)}"` : "";
+      const dated = date
+        ? ` ${date.of === "document" ? "date" : date.of}="${attribute(date.date)}"`
+        : "";
       const never = notCited ? NOT_CITED_ATTRIBUTE : "";
       return `<passage id="${id}" document="${attribute(documentName)}"${dated}${where}${never}>\n${text}\n</passage>`;
     })
@@ -959,7 +961,7 @@ export function createCitationSession(
    */
   function show(found: readonly WindowedPassage[], measuring = false): string {
     let unseen = 0;
-    const dates = new Map<string, string | null>();
+    const dates = new Map<string, DocumentDate | null>();
     const dateOf = (documentId: string) => {
       if (!dates.has(documentId)) dates.set(documentId, documents.documentDate(documentId));
       return dates.get(documentId) ?? null;
