@@ -13,6 +13,7 @@ import {
 } from "../../../shared/charts";
 import { FIGURE_MARKER, numberBefore, type PlacedFigure } from "../../../shared/figureMarkers";
 import { translate } from "../../../shared/i18n";
+import { delimiterRow } from "../../../shared/markdownTables";
 import type { NodeJSON } from "../../answers/blocks";
 import { CHART_NODE, type ChartProblem } from "../../api";
 import { isRecord } from "../../errors";
@@ -76,7 +77,7 @@ export function calculatedCells(
   }
   if (open.length > 0) table = open;
   const rows = table
-    .filter((line) => !/^\|?\s*:?-{3,}/.test(line))
+    .filter((line) => delimiterRow(line) === null)
     .map((line) => line.replace(/^\|/, "").replace(/\|$/, "").split("|"));
   const calculated = (cell: string): boolean => {
     const markers = [...cell.matchAll(FIGURE_MARKER)];

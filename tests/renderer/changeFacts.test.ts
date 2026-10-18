@@ -57,11 +57,11 @@ describe("What an Answer did in a Mind, in words (#880), counted by paragraph (#
 
 describe("Why a chart asked for wasn't drawn (#1091)", () => {
   test.each([
-    ["uncited", "· No chart: some figures have no Citation", "· 没有画图表：有些数字没有引用"],
+    ["uncited", "· No chart: some figures have no Citation", "· 没有生成图表：有些数字没有引用"],
     [
       "needsTwo",
       "· No chart: a scatter chart needs two columns of numbers",
-      "· 没有画图表：散点图需要两列数字",
+      "· 没有生成图表：散点图需要两列数字",
     ],
   ] as const)("%s is said after the count", (problem, english, chinese) => {
     const kept = {

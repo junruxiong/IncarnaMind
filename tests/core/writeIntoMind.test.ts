@@ -451,7 +451,7 @@ function chartRows(doc: ProseMirrorNode): string[][] {
   return charts;
 }
 
-describe("Use all of a chart asked for (#1091 review)", { timeout: 60_000 }, () => {
+describe("Use all of a chart asked for", { timeout: 60_000 }, () => {
   // protects=a chart asked for over 2 of 7 Documents, written again from all 7 with Use all, gets its chart drawn again from the new cited table, the table and the chart one change the User asked for, so it applies at once; rejecting it brings back both as they were; fails_when=Use all leaves the old chart, drops it, waits as the User's edited text would, or Undo can't bring back the 2-Document table and chart; no_claim=the window's own Undo step.
   test("Use all redraws the chart from the rewritten table, and rejecting brings both back", async () => {
     const model = scriptedModel(chartOfShown);

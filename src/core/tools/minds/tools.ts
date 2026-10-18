@@ -1327,6 +1327,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         ids: writer.ids,
         markdown,
         change: () => changeOf(writer, made),
+        sent: change,
         chart: later && chart ? (settled) => drawChart(writer, settled, chart, markdown) : null,
       });
     }
@@ -1488,7 +1489,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       ids: readonly string[];
       markdown: string;
       change(): MindChange;
-      /** The chart asked for, drawn once the table's Citations are in. */
+      /** What the call's card said as it was written, its notes among it. */
+      sent: MindChange;
       chart?: ((settled: readonly NodeJSON[]) => { problem?: ChartProblem }) | null;
     }
   >();
@@ -1501,7 +1503,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           `Citations recorded after a Mind was written couldn't go in: the text reads as ${blocks.length} Blocks, ${each.ids.length} were written (Mind ${each.mindId}, call ${toolCallId}).`,
         );
         // Its chart would draw figures whose Citations never went in.
-        if (each.chart) options.changed(toolCallId, { ...each.change(), chartNotDrawn: "uncited" });
+        if (each.chart) options.changed(toolCallId, { ...each.sent, chartNotDrawn: "uncited" });
         continue;
       }
       minds.edit(each.mindId, (note) => {
@@ -1655,7 +1657,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     };
     options.changed(toolCallId, change);
     if (unrecorded > 0) {
-      unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision });
+      unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision, sent: change });
     }
     return {
       change,
@@ -1952,7 +1954,6 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     });
     remake = null;
     madeHere.add(mind.id);
-    // Its chart, if one was asked for, is drawn again from the new table, in the same change.
     const target = {
       mind,
       request: written.change.request,

@@ -7,8 +7,17 @@ import type { PlacedFigure } from "../../src/shared/figureMarkers";
 import { pendingProposals } from "../../src/shared/proposals";
 import { askAssistant, changesIn, lastResult } from "../helpers/assistant";
 import { setUpWithDocuments, shownPassages } from "../helpers/citations";
+import { createTempDataFolder, startCore } from "../helpers/core";
+import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import { connectToMind } from "../helpers/mindClient";
 import { note, readMind, resolveChanges, writeMind } from "../helpers/minds";
-import { type ModelCall, type ScriptedReply, scriptedModel } from "../helpers/models";
+import {
+  type ModelCall,
+  type ScriptedReply,
+  scriptedModel,
+  scriptedModels,
+} from "../helpers/models";
+import { buildPdf } from "../helpers/pdf";
 
 /**
  * "Make a bar chart of revenue by quarter" (#1091), through the core's public
@@ -198,7 +207,7 @@ function writeThenCite(content: string) {
   });
 }
 
-describe("A chart only draws what is cited (#1091 review)", { timeout: 60_000 }, () => {
+describe("A chart only draws what is cited", { timeout: 60_000 }, () => {
   // protects=a table written before cite records its markers, in the same step, gets its chart once the Citations are in, each value with its cell's checked Citation; fails_when=the chart is drawn first and its values keep no Citation; no_claim=how a real provider orders the calls.
   test("cite after add_to_mind in the same step still gives the chart its Citations", async () => {
     const model = writeThenCite(TABLE);
@@ -271,7 +280,7 @@ describe("A chart only draws what is cited (#1091 review)", { timeout: 60_000 },
   });
 });
 
-describe("A chart of a table already in the Mind (#1091 review)", { timeout: 60_000 }, () => {
+describe("A chart of a table already in the Mind", { timeout: 60_000 }, () => {
   // protects="chart this table" tells the model to give chart with no content, and charts the table there, right after it, without writing it again, as a change of its own; fails_when=the table is written a second time, or the chart goes elsewhere; no_claim=that a real model gives chart that way.
   test("“chart this table” charts the one there, without a second table", async () => {
     const systems: string[] = [];
@@ -309,7 +318,7 @@ describe("A chart of a table already in the Mind (#1091 review)", { timeout: 60_
   });
 });
 
-describe("A chart of the User's own table (#1182 review)", { timeout: 60_000 }, () => {
+describe("A chart of the User's own table", { timeout: 60_000 }, () => {
   const OWN_TABLE = ["| Quarter | Revenue |", "|---|---|", "| Q1 | 10 |", "| Q2 | 12 |"].join("\n");
   const chartThisTable = scriptedModel(
     (call): ScriptedReply =>
@@ -320,7 +329,7 @@ describe("A chart of the User's own table (#1182 review)", { timeout: 60_000 }, 
           },
   );
 
-  // protects="chart this table" charts the User's own uncited table, as "Chart from table" would (CTO decision); fails_when=it is refused for want of Citations; no_claim=tables the assistant writes, which stay held to their Citations.
+  // protects="chart this table" charts the User's own uncited table, as "Chart from table" would: the User can chart any table of theirs; fails_when=it is refused for want of Citations; no_claim=tables the assistant writes, which stay held to their Citations.
   test("charts the User's own table, uncited", async () => {
     const { core, mind, client } = await setUpWithDocuments(chartThisTable, [REVENUE]);
     writeMind(client, [note("Notes."), ...markdownToBlocks(OWN_TABLE)]);
@@ -353,7 +362,7 @@ describe("A chart of the User's own table (#1182 review)", { timeout: 60_000 }, 
   });
 });
 
-describe("A figure from calculate backs a chart value (#1091 review)", () => {
+describe("A figure from calculate backs a chart value", () => {
   const figure = (value: number, shown: string): PlacedFigure => ({
     value,
     shown,
@@ -417,7 +426,7 @@ describe("A figure from calculate backs a chart value (#1091 review)", () => {
     ).toMatchObject({ problem: "uncited" });
   });
 
-  // protects="chart this table" charts a table already in the Mind as "Chart from table" does, cited or not (#1182 review, CTO); fails_when=the User's own uncited table is refused; no_claim=the assistant's own tables, which stay held to their Citations.
+  // protects="chart this table" charts a table already in the Mind as "Chart from table" does, cited or not; fails_when=the User's own uncited table is refused; no_claim=the assistant's own tables, which stay held to their Citations.
   test("a table already in the Mind charts uncited", () => {
     const [table] = markdownToBlocks(
       ["| Quarter | Revenue |", "|---|---|", "| Q1 | 10 |", "| Q2 | 12 |"].join("\n"),
@@ -428,5 +437,122 @@ describe("A figure from calculate backs a chart value (#1091 review)", () => {
     expect(chartOfTable(table, "table", asked, "en", () => false)).toMatchObject({
       problem: "uncited",
     });
+  });
+});
+
+describe("A chart of figures calculate worked out, with a model that calculates", {
+  timeout: 120_000,
+}, () => {
+  const GROWTH = "Revenue was $1,482.6 million in 2025, compared with $1,231.0 million in 2024.";
+  const REPORT = {
+    name: "Acme Annual Report 2025.pdf",
+    contents: buildPdf([{ lines: ["Acme Annual Report 2025", GROWTH] }]),
+  };
+  const FIGURES = [1, 2].map((marker) => ({
+    marker,
+    label: `Revenue growth ${marker}`,
+    formula: "rev2025 / rev2024 - 1",
+    as: "percent",
+    inputs: [
+      { name: "rev2025", label: "Revenue 2025", citation: 1, number: "$1,482.6 million" },
+      { name: "rev2024", label: "Revenue 2024", citation: 1, number: "$1,231.0 million" },
+    ],
+  }));
+  const growthTable = (delimiter: string, cells: readonly [string, string]) =>
+    ["| Year | Growth |", delimiter, `| 2025 | ${cells[0]} |`, `| 2026 | ${cells[1]} |`].join("\n");
+
+  /** Searches, cites the revenue, calculates growth when `calculating`, then adds `table` with chart. */
+  const growthModel = (table: string, calculating: boolean) =>
+    scriptedModel((call: ModelCall): ScriptedReply => {
+      const searches = call.results.filter((each) => each.tool === "search_documents");
+      if (searches.length === 0) {
+        return { calls: [{ tool: "search_documents", input: { query: "revenue" } }] };
+      }
+      if (!called(call, "cite")) {
+        const passage =
+          searches
+            .flatMap((each) => shownPassages(each.text))
+            .find((each) => each.document.startsWith("Acme"))?.id ?? "";
+        return {
+          calls: [
+            {
+              tool: "cite",
+              input: { citations: [{ marker: 1, passage, location: "p. 1", quote: GROWTH }] },
+            },
+            ...(calculating ? [{ tool: "calculate", input: { figures: FIGURES } }] : []),
+          ],
+        };
+      }
+      if (!called(call, "add_to_mind")) {
+        return {
+          calls: [
+            {
+              tool: "add_to_mind",
+              input: { chart: { kind: "bar", title: "Growth" }, content: table },
+            },
+          ],
+        };
+      }
+      return { text: "" };
+    });
+
+  /** A model that calculates, as Claude Haiku 5.5 does: calculate is offered. */
+  async function withCalculate(model: ReturnType<typeof scriptedModel>) {
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: scriptedModels(model).createChatModel,
+    });
+    const saved = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (saved.service) await core.allowDataFlow("chat", saved.service.id);
+    const sources = await createTempDataFolder();
+    await addAndProcess(core, [await writeSourceFile(sources, REPORT.name, REPORT.contents)]);
+    const mind = await core.createMind({ title: "Tides" });
+    const client = await connectToMind(core, mind.id);
+    writeMind(client, [note("Notes.")]);
+    await client.settled();
+    return { core, mind, client };
+  }
+
+  // protects=figures calculate recorded chart, whatever delimiter row the table has ("|---|", "|:--|--:|", "|--|"), through the engine that records them; fails_when=a calculated figure is refused as uncited, or the wiring from calculate to the chart breaks; no_claim=how calculate works a figure out (#439).
+  test.each(["|---|---|", "|:--|--:|", "|--|--|"])(
+    "recorded figures chart, with the delimiter row %s",
+    async (delimiter) => {
+      const { core, mind, client } = await withCalculate(
+        growthModel(growthTable(delimiter, ["[=1]", "[=2]"]), true),
+      );
+
+      const answer = await askAssistant(core, {
+        text: "make a bar chart of revenue growth",
+        mindId: mind.id,
+      });
+      await client.settled();
+
+      const { types, charts } = blocksOf(readMind(client));
+      expect(types).toEqual(["paragraph", "table", "chart"]);
+      expect(charts[0]?.data.rows.map((row) => row.values[0]?.value)).toEqual([
+        expect.closeTo(0.204, 3),
+        expect.closeTo(0.204, 3),
+      ]);
+      expect(changesIn(answer).at(-1)?.chartNotDrawn).toBeUndefined();
+    },
+  );
+
+  // protects=a figure typed with a marker calculate never recorded ("20.4% [=9]") draws no chart, and the card says why; fails_when=it is charted as calculated; no_claim=the reply's words.
+  test("a typed figure with a marker nothing recorded draws no chart", async () => {
+    const { core, mind, client } = await withCalculate(
+      growthModel(growthTable("|:--|--:|", ["20.4% [=9]", "20.4% [=9]"]), false),
+    );
+
+    const answer = await askAssistant(core, {
+      text: "make a bar chart of revenue growth",
+      mindId: mind.id,
+    });
+    await client.settled();
+
+    expect(blocksOf(readMind(client)).types).toEqual(["paragraph", "table"]);
+    expect(changesIn(answer).at(-1)?.chartNotDrawn).toBe("uncited");
   });
 });
