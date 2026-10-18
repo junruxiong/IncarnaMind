@@ -510,13 +510,12 @@ test("Manage Tags shows how many Documents carry each, edits, merges and deletes
     await expect(row("Notes").getByTestId("tag-count")).toHaveText("2 Documents");
     await expect(row("Report").getByTestId("tag-count")).toHaveText("1 Document");
 
-    // The explanation says where the model is chosen: the one Tagging setting.
-    await expect(dialog).toContainText("from the model chosen in Settings → Models → Tagging");
+    await expect(dialog).toContainText("Tagging goes by these names and descriptions.");
     // Each Tag has its colour; editing says the description guides automatic tagging, and
     // offers the palette.
     await expect(row("Report").getByTestId("tag-row-name")).toHaveAttribute("data-colour", "blue");
     await slideAndClick(window, row("Report").getByTestId("edit-tag"));
-    await expect(dialog).toContainText("Automatic tagging goes by the name and description");
+    await expect(dialog).toContainText("Clear descriptions make tagging more accurate");
     const swatches = row("Report").getByTestId("tag-colour");
     await expect(swatches).toHaveCount(8);
     await slideAndClick(window, row("Report").locator('label:has([data-colour="teal"])'));
@@ -537,7 +536,7 @@ test("Manage Tags shows how many Documents carry each, edits, merges and deletes
     // Merging Report into Notes: its Document keeps one Tag, Notes.
     await slideAndClick(window, row("Report").getByTestId("merge-tag"));
     await row("Report").getByTestId("merge-target").selectOption({ label: "Notes" });
-    await expect(row("Report")).toContainText("Its Documents get “Notes” instead");
+    await expect(row("Report")).toContainText("Its Documents get “Notes”");
     await slideAndClick(window, row("Report").getByTestId("confirm-merge-tag"));
     await expect(row("Report")).toHaveCount(0);
     await expect(row("Notes").getByTestId("tag-count")).toHaveText("2 Documents");
