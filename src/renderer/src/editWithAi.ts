@@ -34,6 +34,7 @@ import {
 } from "./editor/proposalReview";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
+import type { Words } from "./lineNames";
 import { useAppStore } from "./store";
 
 /** The languages Translate… offers: each in its own name, and as the model is told it. */
@@ -451,7 +452,7 @@ export function resolveProposalsIn(
     }
   }
   const count = resolved.length;
-  const message =
+  const said: Words = (t) =>
     outcome === "accept"
       ? count === 1
         ? t("proposal.accepted.one")
@@ -459,6 +460,6 @@ export function resolveProposalsIn(
       : count === 1
         ? t("proposal.rejected.one")
         : t("proposal.rejected", { count });
-  speak(mindId, message);
-  offerEditorUndo(editor, message);
+  speak(mindId, said(t));
+  offerEditorUndo(editor, said);
 }

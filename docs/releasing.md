@@ -16,7 +16,7 @@ npm run dist         # the installers for the current system; never published
 3. The tag starts the **Release** workflow (`.github/workflows/release.yml`). It checks that the tag matches `package.json`, creates a draft GitHub Release, builds, checks each package's contents and size (`npm run check:package`), and only then uploads:
    - for macOS, a dmg and a zip, each for Apple silicon and Intel;
    - for Windows, an NSIS installer, signed once SignPath is set up (see Windows signing);
-   - for Linux, an AppImage;
+   - for Linux, an AppImage and a .deb. The .deb is the one that runs with Chromium's sandbox on Ubuntu 24.04 and later. It can't update itself: like the unsigned macOS build, it tells the user a new version is out;
    - the `latest*.yml` files that auto-update reads.
 4. Review the draft, edit its notes (ending with the code signing policy line, see below), try the installers, and click **Publish release**. Installed apps only see an update once its release is published.
 

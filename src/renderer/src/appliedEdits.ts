@@ -346,7 +346,7 @@ function apply(edit: Applying, request: string): ChangedBlocks {
     changes,
     kept: keptLineOf(edit.leftOut.filter((part) => blockAt(doc, part.blockId) !== null)),
   });
-  offerEditorUndo(editor, appliedMessage(changed));
+  offerEditorUndo(editor, (t) => appliedText(t, changed));
   return changed;
 }
 
@@ -418,7 +418,6 @@ export function applyArrived(
     for (const listener of applied) listener(mindId, requests, asked);
   }
   if (editor.isDestroyed) return "applied";
-  const message = changeFact(t, facts, null);
   setAppliedLine(editor, {
     kind: "applied",
     blockId: firstBlockOf(editor.state, changes),
@@ -428,7 +427,7 @@ export function applyArrived(
     changes,
     kept: null,
   });
-  offerEditorUndo(editor, message);
+  offerEditorUndo(editor, (t) => changeFact(t, facts, null));
   return "applied";
 }
 
@@ -555,7 +554,7 @@ export function restoreChange(editor: Editor, index: number): void {
   // Placed again now that the change has reached the Mind's document.
   const now = appliedLineIn(editor.state);
   if (now) setAppliedLine(editor, { ...now });
-  offerEditorUndo(editor, t("edit.review.restored.one"));
+  offerEditorUndo(editor, (t) => t("edit.review.restored.one"));
 }
 
 function resolveHeld(editor: Editor, outcome: "accept" | "reject"): void {
@@ -581,8 +580,7 @@ function resolveHeld(editor: Editor, outcome: "accept" | "reject"): void {
   const count = resolveInEditor(editor, ids, outcome).length;
   setAppliedLine(editor, null);
   if (count > 0) {
-    offerEditorUndo(
-      editor,
+    offerEditorUndo(editor, (t) =>
       count === 1 ? t("proposal.rejected.one") : t("proposal.rejected", { count }),
     );
   }
@@ -611,7 +609,7 @@ function removeKept(editor: Editor): void {
     edit.more.push(top);
     edit.followed?.add(top);
   }
-  offerEditorUndo(editor, t("edit.kept.removed"));
+  offerEditorUndo(editor, (t) => t("edit.kept.removed"));
 }
 
 export function actOnAppliedEdit(editor: Editor, action: AppliedAction): void {
