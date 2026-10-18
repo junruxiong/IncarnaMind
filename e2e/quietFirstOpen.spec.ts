@@ -57,7 +57,7 @@ test("a first open shows only the example page: no tab strip, no assistant, a sl
 test("the quiet first open keeps the example's marks to its margin, but a check the User asks for shows the badge and its card (#909)", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true });
   await setWindowSize(app, window, 1440, 900);
-  await expect(window.getByTestId("margin-check")).toHaveCount(2, { timeout: 30_000 });
+  await expect(window.getByTestId("claim-mark")).toHaveCount(1, { timeout: 30_000 });
   await expect(window.getByTestId("check-badge")).toHaveCount(0);
 
   // No model yet: Check this Mind can't run, and says so where the User asked.

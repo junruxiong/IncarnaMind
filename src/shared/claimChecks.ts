@@ -45,6 +45,7 @@ const FAILURES: readonly ClaimCheckFailure[] = [
   "stopped",
   "too-many",
   "consent-revoked",
+  "local-mode",
 ];
 
 const EXCLUSIONS: readonly EvidenceExclusion[] = ["own-file", "own-workings", "checked-document"];

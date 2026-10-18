@@ -30,8 +30,10 @@ import { citationHandle } from "../commands/handles";
 import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
+import { useAnswerBeingWritten } from "../conversations";
 import { useGap, useLanguage, useT } from "../i18n";
 import { currentTabOf, groupsMerged } from "../layoutSlice";
+import { useBreathing } from "../motion";
 import type { ObjectRef } from "../objects";
 import { openCited as openCitedPlace, quoteSaysSo } from "../openCited";
 import {
@@ -92,17 +94,17 @@ function answerAround(
  * style's words, "(Bowler et al., 2010, p. 4)" or "[1]", which the first of
  * Citations side by side draws for all of them (see `CitationClusters`); in a
  * note style, or in Numbered, an 18px marker with its number, its place among
- * the Mind's footnotes (see `CitationNumbers`). It stays neutral unless the
- * quote wasn't found; the check itself shows in the margin (`MarginChecks`),
- * or, in a narrow Mind and in an Answer in the assistant, as an icon inside the marker. In a footnote's text
- * it is part of the footnote: the marker shows where it points and its
- * check's icon instead of a number. Hovering or focusing it (or its mark in
- * the margin) shows its card: the check in words, the quote, and Open; Esc
- * closes it. Clicking it opens the cited page and keeps the card; where the
- * window shows one group, the page would cover the Mind, so the click keeps
- * the card alone and its Open brings the page (#963). When the quote wasn't
- * found, the card offers ways on: open the page anyway, remove the Citation,
- * or regenerate the Answer.
+ * the Mind's footnotes (see `CitationNumbers`). It stays neutral while the
+ * quote is found, turns amber when it wasn't and red when the Document now
+ * says otherwise; an Answer in the assistant shows the check as an icon inside
+ * the marker. The margin holds the sentences' own checks (`MarginChecks`). In a
+ * footnote's text it is part of the footnote: the marker shows where it points
+ * and its check's icon instead of a number. Hovering or focusing it shows its
+ * card: the check in words, the quote, and Open; Esc closes it. Clicking it
+ * opens the cited page and keeps the card; where the window shows one group,
+ * the page would cover the Mind, so the click keeps the card alone and its
+ * Open brings the page (#963). When the quote wasn't found, the card offers
+ * ways on: open the page anyway, remove the Citation, or regenerate the Answer.
  */
 export function CitationView({
   node,
@@ -139,6 +141,11 @@ export function CitationView({
   const [peeking, setPeeking] = useState(false);
   const open = pinned || peeking;
   const marker = useRef<HTMLButtonElement>(null);
+  // Its dot breathes only while a check the User started runs: an Answer is being written.
+  const writing = useAnswers((store) => store.writing.size > 0);
+  const answering = useAnswerBeingWritten() !== null;
+  const dot = useRef<SVGSVGElement>(null);
+  useBreathing(dot, state.check === "checking" && (writing || answering));
   /** The marker whose card the pointer over this one asks for: its own, or a neighbour's. */
   const pointed = useRef<HTMLElement | null>(null);
   const formatting = useMindFormatting(mindId);
@@ -320,7 +327,7 @@ export function CitationView({
           else onClick();
         }}
       >
-        <CheckMarkIcon check={state.check} className="citation-marker-icon" />
+        <CheckMarkIcon ref={dot} check={state.check} className="citation-marker-icon" />
         {inFootnote ? (
           <span>{pointsTo}</span>
         ) : styled.kind === "runs" ? (
@@ -464,8 +471,9 @@ function workAt(target: EventTarget | null, place: ClusterPlace | null): number 
 }
 
 /**
- * A cluster in the style's words, each work's words in its own Citation's colours (a quote
- * not found turns amber), and no links: a click here opens the Citation, not an address.
+ * A cluster in the style's words, each work's words in its own Citation's colours and, when
+ * its quote isn't found, with its mark (not found turns amber), and no links: a click here
+ * opens the Citation, not an address.
  */
 function ClusterRuns({
   runs,
@@ -475,17 +483,26 @@ function ClusterRuns({
   /** Each member's check, by its place in the cluster. */
   checks: readonly CitationCheck[];
 }) {
-  return runs.map(({ work, link: _, ...run }, index) => (
-    <span
-      // biome-ignore lint/suspicious/noArrayIndexKey: runs have no identity but their place.
-      key={index}
-      data-work={work}
-      data-check={work === undefined ? undefined : checks[work]}
-      className="citation-run"
-    >
-      <StyledRunView run={run} />
-    </span>
-  ));
+  let marked: number | undefined;
+  return runs.map(({ work, link: _, ...run }, index) => {
+    const check = work === undefined ? undefined : checks[work];
+    const first = work !== undefined && work !== marked;
+    if (work !== undefined) marked = work;
+    return (
+      <span
+        // biome-ignore lint/suspicious/noArrayIndexKey: runs have no identity but their place.
+        key={index}
+        data-work={work}
+        data-check={check}
+        className="citation-run"
+      >
+        {first && check !== undefined && check !== "found" && (
+          <CheckMarkIcon check={check} className="citation-run-icon" />
+        )}
+        <StyledRunView run={run} />
+      </span>
+    );
+  });
 }
 
 /**
