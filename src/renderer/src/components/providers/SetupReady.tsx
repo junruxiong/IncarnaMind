@@ -45,7 +45,7 @@ export function SetupReady() {
       .then(setProviders, (error: unknown) =>
         console.error("The saved chat providers couldn't be listed for the setup card.", error),
       );
-    next.current?.focus();
+    next.current?.focus({ preventScroll: true });
   }, []);
 
   const chosen = user?.chatModel;
@@ -84,7 +84,7 @@ export function SetupReady() {
             label={t(row.label)}
             tip={t(row.tip)}
             summary={<RoleSummary role={row.role} groups={groups} roles={roles} />}
-            editor={(done) => (
+            editor={(done, left) => (
               <RoleSelect
                 id={`${id}-${row.role}`}
                 role={row.role}
@@ -94,7 +94,7 @@ export function SetupReady() {
                 className={jobSelectClass}
                 autoFocus
                 onChosen={done}
-                onBlur={done}
+                onBlur={left}
                 onEscape={done}
               />
             )}
@@ -106,13 +106,13 @@ export function SetupReady() {
           label={t("models.defaults.meetings")}
           tip={t("models.defaults.meetings.tip")}
           summary={<RouteSummary />}
-          editor={(done) => (
+          editor={(done, left) => (
             <TranscriptionRouteSelect
               id={`${id}-meetings`}
               className={jobSelectClass}
               autoFocus
               onChosen={done}
-              onBlur={done}
+              onBlur={left}
               onEscape={done}
             />
           )}
@@ -166,38 +166,36 @@ function Job({
   label: string;
   tip: string;
   summary: ReactNode;
-  editor(done: () => void): ReactNode;
+  /** `done` after a choice or Esc, with the focus back on Change; `left` once the focus went elsewhere. */
+  editor(done: () => void, left: () => void): ReactNode;
 }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
   const change = useRef<HTMLButtonElement>(null);
+  const left = () => setEditing(false);
   const done = () => {
-    setEditing(false);
+    left();
     // Back on the words, the focus on the button that opened the choice.
     requestAnimationFrame(() => change.current?.focus());
   };
   return (
     <div
       data-testid={`setup-job-${testId}`}
-      className="flex min-h-9 flex-wrap items-center gap-x-4 gap-y-1 py-1"
+      className="grid min-h-9 grid-cols-[minmax(5rem,7rem)_minmax(0,1fr)_auto] items-start gap-x-3 py-1.5"
     >
-      <span
-        title={tip}
-        id={`${id}-label`}
-        className="w-28 shrink-0 text-[13px] leading-5 font-semibold text-ink"
-      >
+      <span title={tip} id={`${id}-label`} className="text-[13px] leading-5 font-semibold text-ink">
         {label}
       </span>
       <span id={`${id}-tip`} className="sr-only">
         {tip}
       </span>
       {editing ? (
-        editor(done)
+        <span className="col-span-2 min-w-0">{editor(done, left)}</span>
       ) : (
         <>
           <span
             data-testid={`setup-job-${testId}-value`}
-            className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-secondary"
+            className="min-w-0 text-[13px] leading-5 break-words text-ink-secondary"
           >
             {summary}
           </span>
