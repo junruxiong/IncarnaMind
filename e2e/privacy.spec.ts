@@ -82,9 +82,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(privacy.locator('[data-traffic-id="ollama-pull"]')).toContainText("Ollama");
 
   // Skill scripts are their own matter.
-  await expect(privacy.getByTestId("skill-scripts-note")).toContainText(
-    "each run asks first",
-  );
+  await expect(privacy.getByTestId("skill-scripts-note")).toContainText("each run asks first");
 
   // A copy built without a crash-report address doesn't offer crash reports.
   await expect(privacy.getByTestId("crash-reports")).toHaveCount(0);
