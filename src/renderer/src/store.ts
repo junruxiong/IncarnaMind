@@ -58,6 +58,7 @@ import {
 } from "./layoutSlice";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
+import { saidInLine } from "./lineNames";
 import { folderName as linkedFolderName } from "./linkedFolders";
 import {
   foldersMovedFrom,
@@ -899,11 +900,11 @@ export const useAppStore = create<AppState>()((set, get) => {
           folderId === null
             ? t("library.unsorted")
             : (library?.groups.find((group) => group.id === folderId)?.name ?? "");
-        const message = moveMessage(t, moving, folderName, { minds, documents });
+        const said = saidInLine(t, (t) => moveMessage(t, moving, folderName, { minds, documents }));
         const names = new Map(library?.groups.map((group) => [group.id, group.name]));
         let done = await move(moving, folderId);
         push({
-          message,
+          ...said,
           name: moveName(t, moving, { minds, documents }),
           undo: () => putBack(done, names),
           redo: async () => {
@@ -929,7 +930,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         let done = going ? await move(going, folder.id) : null;
         const names = new Map(library?.groups.map((group) => [group.id, group.name]));
         const stepNamed = (shown: string): Undoable => ({
-          message: madeMessage(t, shown, going, { minds, documents }),
+          ...saidInLine(t, (t) => madeMessage(t, shown, going, { minds, documents })),
           name: t("undo.name.newFolder"),
           undo: async () => {
             if (done) await putBack(done, names);
@@ -991,7 +992,9 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (JSON.stringify(before) === JSON.stringify(after)) return;
       const rename = before.name !== after.name;
       push({
-        message: t(rename ? "object.renamed" : "undo.folderEdited", { name: after.name }),
+        ...saidInLine(t, (t) =>
+          t(rename ? "object.renamed" : "undo.folderEdited", { name: after.name }),
+        ),
         name: t(rename ? "undo.name.rename" : "undo.name.editFolder"),
         undo: folderFields(folderId, before),
         redo: folderFields(folderId, after),
