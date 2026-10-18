@@ -494,6 +494,9 @@ function report(
   }));
   const percent = (passed: number, total: number) => `${Math.round((100 * passed) / total)}%`;
   const under = rows.filter((row) => row.under);
+  const dead = results.filter((each) =>
+    each.failures.some((failure) => failure.kind === "dead-markers"),
+  ).length;
   const sum = (key: keyof AnswerUsage) =>
     results.reduce((total, each) => total + each.usage[key], 0).toLocaleString("en");
   const answered = results.filter((each) => !each.error && each.reply !== "");
@@ -554,6 +557,10 @@ function report(
       (row) =>
         `| ${row.id} | ${row.language} | ${row.model} | ${row.passed} of ${row.runs}${row.under ? " **under its floor**" : ""} | ${percent(row.floor * 100, 100)} |`,
     ),
+    "",
+    "## Citation markers",
+    "",
+    `${dead} of ${results.length} Answers wrote a Citation marker that no Citation backs.`,
     "",
     "## Each run",
     "",
