@@ -40,7 +40,6 @@ const TIDES = buildPdf([
   { lines: ["Spring and neap tides", "Spring tides happen at new moon and at full moon."] },
 ]);
 const SUPPORTED = "Spring tides happen at new and full moon.";
-const UNSUPPORTED = "Penguins nest on the harbour cliffs.";
 
 let dataDir: string;
 let sources: string;
