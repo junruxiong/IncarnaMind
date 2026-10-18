@@ -223,8 +223,12 @@ test("nothing is sent or kept to send before Send; after it, an example opened c
 
   await card.getByTestId("usage-data-send").click();
   await expect(card).toBeHidden();
-  const other = await examplesMenu(window);
-  await pointAndClick(window, other.locator('[data-group="contracts"]'));
+  // The Examples row is only in the quiet first open; the example Mind's banner has the others.
+  await leaveFirstOpen(window);
+  await pointAndClick(
+    window,
+    window.locator('[data-testid="example-more-link"][data-group="contracts"]').first(),
+  );
   await expect
     .poll(() => posthog.events().map((each) => each.event), { timeout: 10_000 })
     .toContain("example_opened");
