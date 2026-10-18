@@ -2624,7 +2624,6 @@ export const zhCN = {
   "cost.provider.unpriced": "本月：{tokens} token，价格未知",
 
   "citation.label": "引用 {number}：{document}。{badge}",
-  "citation.mark.label": "引用 {number}：{badge}",
   "citation.inFootnote.label": "引用：{document}。{badge}",
   "citation.badge.checking": "核对中…",
   "citation.badge.found.on": "已在{location}找到引文",

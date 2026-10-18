@@ -3509,8 +3509,9 @@
   }
 
   /*
-   * A Citation in the text: an 18px numbered marker, neutral; amber when its
-   * quote wasn't found. Its check shows in the margin (`.margin-check`).
+   * A Citation in the text: an 18px numbered marker. It is neutral when its quote was found, amber
+   * when it wasn't and red when the Document now says otherwise, so the margin holds only the
+   * sentences' own marks (`.margin-check`).
    */
   .citation {
     position: relative;
@@ -3575,8 +3576,7 @@
       color: var(--color-warning);
     }
     &[data-check="contradicted"] {
-      background: var(--color-sheet);
-      box-shadow: inset 0 0 0 1.5px var(--color-danger);
+      background: var(--color-danger-wash);
       font-weight: 700;
       color: var(--color-danger);
     }
@@ -3644,10 +3644,6 @@
   .citation-marker--joined {
     width: 0;
     min-width: 0;
-    /*
-     * A pixel high, on the baseline: measured, so it keeps its mark in the margin, which then
-     * comes after the cluster's first one, whose middle is higher.
-     */
     height: 1px;
     min-height: 1px;
     vertical-align: baseline;
@@ -4043,7 +4039,7 @@
     white-space: nowrap;
   }
 
-  /* The check's icon shows in the marker only when the margin has folded away. */
+  /* The check's icon shows only in the markers that carry it: an Answer's, a cell's, a footnote's. */
   .citation-marker-icon {
     display: none;
     width: 11px;
@@ -4051,8 +4047,8 @@
     flex-shrink: 0;
   }
   /*
-   * A Citation in a footnote's text: no number and no mark in the margin, so
-   * the marker says where it points, with its check's icon and colour.
+   * A Citation in a footnote's text has no number, so the marker says where
+   * it points, with its check's icon and colour.
    */
   .citation-marker--source {
     max-width: 100%;
@@ -4389,8 +4385,8 @@
   }
 
   /*
-   * The margin column of checks (`MarginChecks`): for each Citation an 18px
-   * mark with its state's icon and number, level with its marker's line.
+   * The margin column of checks (`MarginChecks`): for each checked sentence an 18px
+   * mark with its verdict's icon, level with the sentence's first line.
    */
   .margin-checks {
     position: absolute;
@@ -4433,13 +4429,11 @@
     flex-shrink: 0;
   }
   /* Each check's colours: on its mark, and on its card's state line and quote. */
-  .margin-check[data-check="found"],
   .citation-marker[data-check="found"],
   .citation-card--found {
     --check-ink: var(--color-success);
     --check-wash: var(--color-success-wash);
   }
-  .margin-check[data-check="not-found"],
   .margin-check[data-check="unsupported"],
   .citation-marker[data-check="not-found"],
   .citation-marker[data-check="unsupported"],
@@ -4454,7 +4448,6 @@
     --check-ink: var(--color-danger);
     --check-wash: var(--color-danger-wash);
   }
-  .margin-check[data-check="cant-check"],
   .citation-marker[data-check="cant-check"],
   .citation-card--cant-check {
     --check-ink: var(--color-ink-secondary);
@@ -4474,16 +4467,7 @@
     background: var(--check-wash);
     color: var(--check-ink);
 
-    /* Found stays quiet: a tick with its number, no fill. */
-    &[data-check="found"] {
-      background: none;
-      color: var(--color-ink-meta);
-
-      .margin-check-icon {
-        color: var(--color-success);
-      }
-    }
-    /* A sentence found supported is as quiet as a Citation found: its "+" says the Passage can be cited. */
+    /* A sentence found supported stays quiet: its "+" says the Passage can be cited. */
     &[data-check="supported"] {
       --check-wash: none;
       color: var(--color-success);
@@ -4501,7 +4485,6 @@
         0 0 0 3px var(--color-accent);
     }
 
-    /* Only the dot pulses while it is checked: the number keeps its contrast. */
     &[data-check="checking"] .margin-check-icon {
       animation: mind-pulse 1.6s ease-in-out infinite;
     }
@@ -5511,10 +5494,7 @@
     }
   }
 
-  /*
-   * A folded Mind (under 760px): the right margin's checks move into the text, as each marker's
-   * check, and both sides keep a 40px gutter, so the text edge stays where it was at 760px.
-   */
+  /* A folded Mind (under 760px): both sides keep a 40px gutter, so the text edge holds at 760px's. */
   @container mind (width < 760px) {
     .mind-measure {
       width: auto;
@@ -5523,13 +5503,8 @@
     .mind-editor {
       --editor-gutter: 40px;
     }
-    /* A Citation's check shows in its marker; a sentence check's mark keeps to the 40px gutter. */
     .margin-checks {
       width: 40px;
-    }
-    .margin-checks:not(:has(.claim-mark)),
-    .margin-check:not(.claim-mark) {
-      display: none;
     }
     .claim-mark {
       left: 8px;
@@ -5537,26 +5512,6 @@
     /* No margin to hang the footnotes' numbers in. */
     .footnote-area-row {
       margin-left: 0;
-    }
-    .citation-marker {
-      padding: 0 5px 0 3px;
-
-      &[data-check="found"] {
-        background: var(--color-success-wash);
-        color: var(--color-success);
-      }
-      &[data-check="checking"] .citation-marker-icon {
-        animation: mind-pulse 1.6s ease-in-out infinite;
-      }
-    }
-    .citation-marker-icon {
-      display: block;
-    }
-    /* In a style's words, the check goes in the line, before them. */
-    .citation-marker--styled .citation-marker-icon {
-      display: inline-block;
-      margin-right: 2px;
-      vertical-align: -1px;
     }
   }
 
@@ -8971,7 +8926,7 @@
     font-weight: 700;
     color: var(--color-warning);
   }
-  /* In a cell, a Citation's check shows in its marker, as when the margin folds away. */
+  /* In a cell, a Citation not found shows its icon in its marker, as in an Answer. */
   .comparison-cell
     .citation-marker:is([data-check="not-found"], [data-check="unsupported"])
     .citation-marker-icon {

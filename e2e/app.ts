@@ -1132,6 +1132,26 @@ export async function motionSettled(window: Page): Promise<void> {
     .toBe(0);
 }
 
+/** A design token (`--color-warning-wash`) as the colour the browser draws it in. */
+export function tokenColor(window: Page, token: string): Promise<string> {
+  return window.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  }, token);
+}
+
+/** The colours an element is drawn in: its text and its background. */
+export function paintOf(target: Locator): Promise<{ color: string; background: string }> {
+  return target.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, background: style.backgroundColor };
+  });
+}
+
 /**
  * Clicks `target` where it is now, as a person does, without waiting for it to
  * stop moving (a menu still growing from its button): the app takes a click

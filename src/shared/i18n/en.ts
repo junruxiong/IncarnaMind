@@ -2738,7 +2738,6 @@ export const en = {
   "cost.provider.unpriced": "This month: {tokens} tokens, price unknown",
 
   "citation.label": "Citation {number}: {document}. {badge}",
-  "citation.mark.label": "Citation {number}: {badge}",
   "citation.inFootnote.label": "Citation: {document}. {badge}",
   "citation.badge.checking": "checking…",
   "citation.badge.found.on": "Quote found on {location}",

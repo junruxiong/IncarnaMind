@@ -117,9 +117,6 @@ async function ask(window: Page, text: string): Promise<Locator> {
   return editor;
 }
 
-/** The checks in the Mind's margin, not the assistant's. */
-const mindChecks = (window: Page) => window.getByTestId("card").getByTestId("margin-check");
-
 /** Chooses a style in the open picker, typing to find it and pressing Enter, as a person would. */
 async function chooseStyle(window: Page, search: string, label: string): Promise<void> {
   const picker = window.getByTestId("citation-style-picker");
@@ -160,9 +157,9 @@ test("a Mind citing a paper offers a citation style; chosen, its Citations and R
   await expect(styled.getByTestId("citation-chip")).toHaveText(
     /^\(Bowler & Buyung-Ali, 2010, p\. 2; Lease Agreement, n\.d\., Line 1\)$/,
   );
-  // The second Citation is drawn by the first, but keeps its own check in the margin.
+  // The second Citation is drawn by the first, with its own check on its words.
   await expect(answer.locator('[data-testid="citation"][data-styled="joined"]')).toHaveCount(1);
-  await expect(mindChecks(window)).toHaveCount(2);
+  await expect(styled.locator('[data-work="1"]').first()).toHaveAttribute("data-check", "found");
 
   // Over a work's words, the pointer shows that Citation's card.
   const chip = styled.getByTestId("citation-chip");
@@ -521,7 +518,7 @@ test("a Mind citing files with no details isn't offered a style until one is a p
   const answer = await ask(window, "When is spring rent due?");
   await expect(answer.getByTestId("citation-chip")).toHaveText(["1"]);
   const prompt = window.getByTestId("citation-style-prompt");
-  await expect(mindChecks(window)).toHaveCount(1);
+  await expect(answer.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
   await expect(prompt).toHaveCount(0);
   await expect(window.getByTestId("references")).toHaveCount(0);
 
