@@ -815,8 +815,26 @@ describe("Routing everyday requests", () => {
     expect(routeRequest(request, NO_CHANGE).fromAnswer).toBeUndefined();
   });
 
+  // protects=a request for a document phrased as a question, for the User, puts the last Answer in a new Mind, the owner's "你不给我建一份文档吗" among them (#1109); fails_when=one of them stays in the panel; no_claim=none beyond protects.
+  test.each([
+    "你不给我建一份文档吗",
+    "能不能帮我做成文档",
+    "can you make me a document of this?",
+    "why didn't you make a document?",
+  ])("%s, asked as a question, puts the last Answer in a new Mind", (request) => {
+    expect(routeRequest(request, WITH_TEXT)).toEqual({
+      kind: "write",
+      newMind: true,
+      fromAnswer: true,
+      fillsEmpty: true,
+    });
+    expect(routeRequest(request, NO_CHANGE).fromAnswer).toBeUndefined();
+  });
+
   // protects=a question, or a request to organize files, after an Answer is never read as putting the Answer in a Mind (#1133 review); fails_when=one of them makes a Mind of the last Answer; no_claim=none beyond protects.
   test.each([
+    "how do I make a document?",
+    "can you make a document?",
     "你能写文档吗",
     "你可以整理文件吗",
     "帮我整理文件",
