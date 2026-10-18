@@ -6,6 +6,7 @@
  */
 
 import { cssString } from "../../shared/mindStyle";
+import { lineHeightCss } from "../../shared/paragraphFormat";
 import type { Language } from "../language";
 import type { Block } from "../mindText";
 import type { ExportLabels } from "./labels";
@@ -70,6 +71,12 @@ export const bodyFamily = (family: string) => `${cssString(family)},var(--serif)
 export const bodyFontStyle = (family: string | null) =>
   family === null ? "" : `body{font-family:${bodyFamily(family)}}`;
 
+/** The Mind's line spacing, a multiple of a single line, over the export's. */
+export const bodyLineStyle = (multiple: number | null) =>
+  multiple === null
+    ? ""
+    : `body{line-height:${lineHeightCss({ rule: "auto", value: multiple }, String)}}`;
+
 /** The print page lays tables out itself; a browser's tables, and the validator, want a body. */
 export const withTableBodies = (body: string) =>
   body.replaceAll("<table>", "<table><tbody>").replaceAll("</table>", "</tbody></table>");
@@ -120,14 +127,19 @@ export function htmlFile({
 export function renderHtml(
   blocks: readonly Block[],
   labels: ExportLabels,
-  { language, name, font }: { language: Language; name: string; font: string | null },
+  {
+    language,
+    name,
+    font,
+    lineSpacing,
+  }: { language: Language; name: string; font: string | null; lineSpacing: number | null },
 ): string {
   const printed = renderPrintHtml(blocks, labels, { linkNotes: true });
   return htmlFile({
     language,
     name,
     policy: "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
-    styles: HTML_STYLES + bodyFontStyle(font),
+    styles: HTML_STYLES + bodyFontStyle(font) + bodyLineStyle(lineSpacing),
     body: `<main>${withTableBodies(printed.body)}</main>\n${notesSection(printed.notes, labels)}`,
   });
 }
