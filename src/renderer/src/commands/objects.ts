@@ -361,6 +361,7 @@ export const folderCommands: readonly Command[] = [
   {
     id: "folder.tagWithAi",
     label: "folder.tagWithAi",
+    keywords: ["tagging.resume.keywords"],
     group: "main",
     appliesTo: ["folder"],
     when: (ctx) => {
