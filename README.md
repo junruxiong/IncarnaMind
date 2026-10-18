@@ -33,7 +33,7 @@
 
 <p align="center"><sub>Everything shown is in the app today.</sub></p>
 
-**IncarnaMind** is a free, open-source desktop app for macOS, Windows and Linux where you write with AI and ask questions about your own documents (PDF, Word, PowerPoint, Excel and more). It can check every sentence and figure in a draft against those documents, whoever wrote it, and every answer cites the exact page it comes from. It works with the AI you already use: your ChatGPT plan or your own API key.
+**IncarnaMind** is a free, open-source desktop app for macOS, Windows and Linux where you write with AI and ask questions about your own documents (PDF, Word, PowerPoint, Excel and more). It can check every sentence and figure in a draft against those documents, whoever wrote it, and every answer cites the exact page it comes from. It works with the AI you already use: your ChatGPT, Claude or Copilot plan, or your own API key.
 
 ## Download
 
@@ -94,10 +94,11 @@ You don't need an account. Your Minds and the search index stay in one data fold
 <details>
 <summary><b>Questions</b></summary>
 
-- **Is it free?** Yes: it's open source under the Apache 2.0 licence. The AI model is billed by its provider: use the ChatGPT plan you already pay for, or your own API key and pay for what you use.
+- **Is it free?** Yes: it's open source under the Apache 2.0 licence. The AI model is billed by its provider: use the ChatGPT, Claude or Copilot plan you already pay for, or your own API key and pay for what you use.
 - **Do I need an API key?** Not if you have ChatGPT Plus or Pro: choose Continue with ChatGPT and ask on your plan. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more in Settings, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server.
-- **Is it an alternative to NotebookLM (now Gemini Notebook)?** Yes. IncarnaMind runs on your computer and reads your files where they are, and no account is needed. It works with the model you choose (your ChatGPT plan or your own key), every citation is checked against the page it quotes, your own sentences can be checked too, and a Mind exports to Word with its citations.
+- **Is it an alternative to NotebookLM (now Gemini Notebook)?** Yes. IncarnaMind runs on your computer and reads your files where they are, and no account is needed. It works with the model you choose (your ChatGPT, Claude or Copilot plan, or your own key), every citation is checked against the page it quotes, your own sentences can be checked too, and a Mind exports to Word with its citations.
 - **Can I use my ChatGPT plan?** Yes, with ChatGPT Plus or Pro. In **Settings → Models**, choose **Continue with ChatGPT** and sign in in your browser: Questions then go to OpenAI under your account and count against your plan's limits, with no key.
+- **Can I use my Claude or GitHub Copilot plan?** Yes. Under **Other ways**, or in **Settings → Models**, sign in with your Claude or GitHub account; each stays off until you do. Answers count toward your plan's usage limits. The Copilot sign-in is experimental.
 - **Does it work offline?** Reading your files and search do. Answers and checks need an AI model, which for most people means the internet. A local model through [Ollama](https://ollama.com) can answer offline, but more slowly and less reliably than a cloud model. Meaning-based search (embeddings) is optional and off by default.
 - **Will it change my files?** No. It reads them where they are, and writes only to its own data folder and the files you export.
 - **What does "Quote found" mean?** That the quoted words are in the place the citation names, not that they prove your sentence, which is why the page is one click away. "Can't check" means there's no text to compare against, as on a scanned page.
