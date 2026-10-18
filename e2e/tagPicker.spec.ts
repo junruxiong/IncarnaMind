@@ -9,6 +9,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  openManageTags,
   removeDataFolder,
   setWindowSize,
   tabTo,
@@ -96,18 +97,6 @@ async function addTextDocuments(window: Page, files: Record<string, string>): Pr
   await expect(
     window.locator('[data-testid="document-list-item"][data-status="ready"]'),
   ).toHaveCount(paths.length, { timeout: 20_000 });
-}
-
-/** Manage Tags, from ⌘K. */
-async function openManageTags(window: Page): Promise<void> {
-  await window.keyboard.press("ControlOrMeta+k");
-  await expect(window.getByTestId("palette-search")).toBeFocused();
-  await window.keyboard.type("Manage Tags");
-  await slideAndClick(
-    window,
-    window.getByTestId("palette-item").filter({ hasText: "Manage Tags…" }).first(),
-  );
-  await expect(window.getByTestId("tags-dialog")).toBeVisible();
 }
 
 /** The Library's row of the Document with this name. */
@@ -564,7 +553,7 @@ test("Manage Tags shows how many Documents carry each, edits, merges and deletes
     await (await bridge(window)).evaluate((core) =>
       core.updateSettings({ user: { language: "zh-CN" } }),
     );
-    await openManageTags(window);
+    await openManageTags(window, "zh-CN");
     await expect(dialog.getByTestId("tag-row").first().getByTestId("tag-count")).toHaveText(
       "0 个文档",
     );

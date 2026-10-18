@@ -23,6 +23,7 @@ import {
 } from "../src/core/api";
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
+import { translate } from "../src/shared/i18n";
 import type { TestHooks } from "../src/shared/testHooks";
 import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
 import { APP_ARGS, homeEnv, KEYCHAIN_ARGS } from "../tests/helpers/home";
@@ -509,12 +510,15 @@ export async function tagDocument(window: Page, documentName: string, tagName: s
   ).toBeAttached();
 }
 
-/** Manage Tags, from ⌘K. */
-export async function openManageTags(window: Page): Promise<void> {
+/** Manage Tags, from ⌘K, in the interface's language. */
+export async function openManageTags(window: Page, language: "en" | "zh-CN" = "en"): Promise<void> {
+  const label = translate(language, "tags.menu.manage");
   await window.keyboard.press("ControlOrMeta+k");
   await expect(window.getByTestId("palette-search")).toBeFocused();
-  await window.keyboard.type("Manage Tags");
-  await window.getByTestId("palette-item").filter({ hasText: "Manage Tags…" }).first().click();
+  await window.keyboard.type(label.replace(/…$/, ""));
+  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
+  await pointAt(window, item);
+  await item.click();
   await expect(window.getByTestId("tags-dialog")).toBeVisible();
 }
 
