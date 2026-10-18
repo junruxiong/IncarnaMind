@@ -43,13 +43,19 @@ export const tagsSlowly = (options: GenerateOptions): boolean => {
   return SLOWLY.test(taggingExcerpt(options) ?? "");
 };
 
-const unreachedOnce = new Set<string>();
+/** How many times each Document has found the model unreachable. */
+const unreached = new Map<string, number>();
 
-/** A Document whose text says "unreachable" finds the model unreachable the first time it is tagged, as offline. */
+/**
+ * A Document whose text says "unreachable" finds the model unreachable the first time it is
+ * tagged, and again on the quick retry that follows, as offline.
+ */
 export function tagsUnreachable(options: GenerateOptions): boolean {
   const excerpt = taggingExcerpt(options);
-  if (!excerpt || !/\bunreachable\b/i.test(excerpt) || unreachedOnce.has(excerpt)) return false;
-  unreachedOnce.add(excerpt);
+  if (!excerpt || !/\bunreachable\b/i.test(excerpt)) return false;
+  const times = unreached.get(excerpt) ?? 0;
+  if (times >= 2) return false;
+  unreached.set(excerpt, times + 1);
   return true;
 }
 

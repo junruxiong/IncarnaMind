@@ -10,7 +10,8 @@
  * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
  * Tools and structured output, as a small server model does, so its Answers have no Citations.
  * A Document whose text says "slowly" takes a moment to tag or organize; one whose text says "unreachable"
- * can't reach the model the first time it is tagged, and one that says "rate-limited" meets its rate limit.
+ * can't reach the model the first time it is tagged (nor on the retry that follows), and one that says
+ * "rate-limited" meets its rate limit.
  */
 
 import { APICallError } from "ai";
