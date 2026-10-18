@@ -7,13 +7,12 @@
  * are written by the native writer (../docx) into the document's own styles,
  * lists and footnotes (./parts). Every part written is parsed again with
  * xmldom before anything is saved: a part that isn't well-formed XML with
- * every prefix bound stops the export, naming the part (WordPartError).
+ * every prefix bound stops the export, naming the part (PackagePartError).
  * What can't be kept is reported (`WordExportReport`), never dropped silently.
  * Changes still waiting, the User's edits and IncarnaMind's comments go in
  * for review as the export was asked (../wordReview, #107).
  */
 import { deflateRawSync } from "node:zlib";
-import { DOMParser } from "@xmldom/xmldom";
 import * as Y from "yjs";
 import type { NodeJSON } from "../../../shared/blockJson";
 import type { ResolvedCitationStyle } from "../../../shared/citationStyles";
@@ -44,6 +43,7 @@ import {
 } from "../../mindText";
 import { DocxWriter } from "../docx";
 import type { ExportLabels } from "../labels";
+import { checkWellFormed, PackagePartError, PackageWriter } from "../packagePatch/package";
 import { Review, type ReviewChoices } from "../wordReview";
 import { AtomPlan } from "./atoms";
 import { styleWritten, type Written } from "./citations";
@@ -56,7 +56,6 @@ import {
   isFurniture,
   mindJson,
 } from "./mind";
-import { WordPackageWriter, WordPartError } from "./package";
 import { currentTokens, type Token } from "./paragraph";
 import {
   DocumentComments,
@@ -108,7 +107,7 @@ const KNOWN_TYPES = [
 export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchResult> {
   const pkg = await openWordPackage(input.bytes);
   const base = await readWordDocument(pkg, await reviewOf(pkg));
-  const writer = new WordPackageWriter(pkg.zip);
+  const writer = new PackageWriter(pkg.zip);
   // Checks the part can be spliced: it encodes back to the same bytes.
   await writer.text(pkg.part);
 
@@ -297,7 +296,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
   try {
     text = patch.write();
   } catch (error) {
-    throw new WordPartError(
+    throw new PackagePartError(
       pkg.part,
       `couldn't be written: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -361,7 +360,7 @@ function keptFurniture(
 }
 
 /** Parts whose content type IncarnaMind doesn't know: copied as they are, and listed. */
-async function unknownParts(writer: WordPackageWriter): Promise<string[]> {
+async function unknownParts(writer: PackageWriter): Promise<string[]> {
   const types = await writer.part("[Content_Types].xml");
   if (!types) return [];
   const overrides = new Map<string, string>();
@@ -379,24 +378,4 @@ async function unknownParts(writer: WordPackageWriter): Promise<string[]> {
       overrides.get(name) ?? defaults.get(name.slice(name.lastIndexOf(".") + 1).toLowerCase());
     return type !== undefined && !KNOWN_TYPES.some((known) => known.test(type));
   });
-}
-
-/**
- * Throws unless a part written is well-formed XML with every prefix bound,
- * as xmldom (a conforming parser, unlike the reader's own) reads it.
- */
-function checkWellFormed(name: string, text: string): void {
-  if (!/\.(xml|rels)$/i.test(name)) return;
-  const problems: string[] = [];
-  try {
-    new DOMParser({ onError: (_level, message) => problems.push(message) }).parseFromString(
-      text.replace(/^\uFEFF/, ""),
-      "text/xml",
-    );
-  } catch (error) {
-    problems.push(error instanceof Error ? error.message : String(error));
-  }
-  if (problems.length > 0) {
-    throw new WordPartError(name, `couldn't be written as well-formed XML: ${problems[0]}`);
-  }
 }
