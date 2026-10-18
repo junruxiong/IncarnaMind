@@ -141,7 +141,8 @@ A figure in an Answer is written as reports write it, with no space between the 
 | Input (of a calculation) | 所用数据 | "所用数据均已找到". |
 | Calculation check | 核对计算 | The verb is 核对, as for a Citation: "正在核对数字…". |
 | Unchecked figure | 未核对的数字 | |
-| Analysis | 数据分析 | |
+| Analysis | 数据分析 | Can't run: "这台电脑上无法运行数据分析：…". |
+| Sandbox (where Skill scripts and Analyses run) | 沙盒 | Never 沙箱. |
 | Recalculate | 重新计算 | |
 | Run again | 重新运行 | |
 | percentage points | 个百分点 | A difference of two percents: "2.3个百分点", never "2.3%". |

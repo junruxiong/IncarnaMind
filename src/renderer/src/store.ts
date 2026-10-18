@@ -67,6 +67,9 @@ import {
   movedLocally,
   moveMessage,
   moveName,
+  type Names,
+  namesOfFolders,
+  namesOfMoving,
   undoMoves,
 } from "./moves";
 import { untitledFolderName } from "./newFolder";
@@ -541,6 +544,58 @@ export const useAppStore = create<AppState>()((set, get) => {
   };
 
   /**
+   * Built here, not in the action that reads the Minds, Documents and Library: closures made in
+   * one scope all keep what any of them uses, and the undo stack keeps these as long as the session.
+   * `named` and `names` are cut to what the line and the refusal say.
+   */
+  const moveChange = (made: {
+    moving: MoveItems;
+    folderId: string | null;
+    folderName: string;
+    named: Names;
+    names: ReadonlyMap<string, string>;
+    done: FolderMove;
+  }): Undoable => {
+    const { moving, folderId, folderName, named, names } = made;
+    let { done } = made;
+    return {
+      said: (t) =>
+        moveMessage(t, moving, folderId === null ? t("library.unsorted") : folderName, named),
+      name: (t) => moveName(t, moving, named),
+      undo: () => putBack(done, names),
+      redo: async () => {
+        if (folderId !== null) refuseIfDeleted([folderId], names);
+        done = await move(moving, folderId);
+      },
+    };
+  };
+
+  const folderMade = (made: {
+    folderId: string;
+    going: MoveItems | null;
+    named: Names;
+    names: ReadonlyMap<string, string>;
+    done: FolderMove | null;
+  }) => {
+    const { folderId, going, named, names } = made;
+    let { done } = made;
+    return (folderName: string): Undoable => ({
+      said: (t) => madeMessage(t, folderName, going, named),
+      name: (t) => t("undo.name.newFolder"),
+      undo: async () => {
+        if (done) await putBack(done, names);
+        await core.deleteLibraryGroup(folderId);
+        await get().refreshLibrary();
+      },
+      redo: async () => {
+        await core.restore([{ kind: "folder", id: folderId }]);
+        await get().refreshLibrary();
+        if (going) done = await move(going, folderId);
+      },
+    });
+  };
+
+  /**
    * The Folder made last, until it is named: its first name is part of making
    * it, so that replaces its step and one Undo takes both back.
    */
@@ -895,22 +950,17 @@ export const useAppStore = create<AppState>()((set, get) => {
         );
         if (mindIds.length + documentIds.length === 0) return;
         const moving = { mindIds, documentIds };
-        const groupName = library?.groups.find((group) => group.id === folderId)?.name ?? "";
-        const names = new Map(library?.groups.map((group) => [group.id, group.name]));
-        let done = await move(moving, folderId);
-        push({
-          said: (t) =>
-            moveMessage(t, moving, folderId === null ? t("library.unsorted") : groupName, {
-              minds,
-              documents,
-            }),
-          name: (t) => moveName(t, moving, { minds, documents }),
-          undo: () => putBack(done, names),
-          redo: async () => {
-            if (folderId !== null) refuseIfDeleted([folderId], names);
-            done = await move(moving, folderId);
-          },
-        });
+        const done = await move(moving, folderId);
+        push(
+          moveChange({
+            moving,
+            folderId,
+            folderName: library?.groups.find((group) => group.id === folderId)?.name ?? "",
+            named: namesOfMoving(moving, { minds, documents }),
+            names: namesOfFolders(library, [folderId, ...foldersMovedFrom(done)]),
+            done,
+          }),
+        );
       }),
 
     createFolder: async (items) => {
@@ -926,21 +976,13 @@ export const useAppStore = create<AppState>()((set, get) => {
         const chosen = items ? itemsOf(items) : null;
         const going =
           chosen && chosen.mindIds.length + chosen.documentIds.length > 0 ? chosen : null;
-        let done = going ? await move(going, folder.id) : null;
-        const names = new Map(library?.groups.map((group) => [group.id, group.name]));
-        const stepNamed = (shown: string): Undoable => ({
-          said: (t) => madeMessage(t, shown, going, { minds, documents }),
-          name: (t) => t("undo.name.newFolder"),
-          undo: async () => {
-            if (done) await putBack(done, names);
-            await core.deleteLibraryGroup(folder.id);
-            await get().refreshLibrary();
-          },
-          redo: async () => {
-            await core.restore([{ kind: "folder", id: folder.id }]);
-            await get().refreshLibrary();
-            if (going) done = await move(going, folder.id);
-          },
+        const done = going ? await move(going, folder.id) : null;
+        const stepNamed = folderMade({
+          folderId: folder.id,
+          going,
+          named: namesOfMoving(going ?? {}, { minds, documents }),
+          names: namesOfFolders(library, done ? foldersMovedFrom(done) : []),
+          done,
         });
         const step = stepNamed(name);
         justMade = { id: folder.id, step, stepNamed };

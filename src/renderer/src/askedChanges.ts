@@ -75,17 +75,19 @@ export const useAskedFacts = (answerId: string, mindId: string): ChangedMind | u
 /**
  * An Answer this window asked for, or asks for again: what it was asked to write or change
  * applies here. Asked again, what it applied before makes way for what it writes now, while
- * nothing was done in the Mind since.
+ * nothing was done in the Mind since. `keepWritten`: asked again from every Document, the text it
+ * wrote stays, which the core writes over as one change, so Undo brings it back (#1149).
  */
-export function applyWhatWasAsked(answerId: string): void {
+export function applyWhatWasAsked(answerId: string, { keepWritten = false } = {}): void {
   askedHere.add(answerId);
   const stayed: string[] = [];
   for (const [key, each] of asked) {
     if (each.answerId !== answerId) continue;
+    asked.delete(key);
+    if (keepWritten && (each.facts.created || each.facts.wrote > 0)) continue;
     const followed = each.applied?.followed;
     if (followed?.onTop()) followed.undo();
     else if (followed && followed.state() !== "undone") stayed.push(key);
-    asked.delete(key);
   }
   for (const key of seen) if (key.startsWith(`${answerId} `)) seen.delete(key);
   useAskedChanges.setState((state) => {

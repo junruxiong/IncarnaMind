@@ -361,6 +361,17 @@ export interface CitationSource {
   notCited: boolean;
 }
 
+/**
+ * A Document's date as Answers see it beside its Passages, and where it comes from:
+ * the Document ("document"), or its file's information ("file-created", "file-modified"),
+ * which says when the file was made or changed, never what the Document is dated (#1173).
+ */
+export interface DocumentDate {
+  /** ISO 8601 at the precision known: "2025-05-14", "2024-03" or "2019". */
+  date: string;
+  of: "document" | "file-created" | "file-modified";
+}
+
 /** A live Document's file, opened for reading. */
 export interface DocumentFile {
   document: Document;
@@ -1982,22 +1993,27 @@ export function createDocuments(options: DocumentsOptions) {
     /**
      * A live Document's date, as Answers see it beside its Passages (#548):
      * the date it states (its reference record's, else its creation date),
-     * else the day its file was last modified, in UTC. ISO 8601 at the
-     * precision known: "2025-05-14", "2024-03" or "2019". Null when nothing
+     * else the day its file was last modified, in UTC. Null when nothing
      * gives one, or the Document was deleted.
      */
-    documentDate(documentId: string): string | null {
+    documentDate(documentId: string): DocumentDate | null {
       const row = find(documentId);
       if (!row) return null;
       const issued = referenceOf(db, documentId)?.fields.issued;
-      if (issued) return issued;
+      if (issued) return { date: issued, of: "document" };
       // A date stored before it was known to be a placeholder (2000-01-01) isn't shown either.
       if (row.creation_date && !isPlaceholderDate(row.creation_date)) {
-        return row.creation_date.slice(0, 10);
+        // A year alone is the one written in the first Unit (see ./creationDate): file metadata
+        // gives a day. A web page's date is the one it says it was published on.
+        const stated = row.creation_date.length === 4 || row.kind === "web";
+        return {
+          date: row.creation_date.slice(0, 10),
+          of: stated ? "document" : "file-created",
+        };
       }
       if (row.file_mtime_ms === null) return null;
       const modified = new Date(row.file_mtime_ms).toISOString().slice(0, 10);
-      return isPlaceholderDate(modified) ? null : modified;
+      return isPlaceholderDate(modified) ? null : { date: modified, of: "file-modified" };
     },
 
     /**

@@ -1,10 +1,12 @@
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { describe, expect, test } from "vitest";
-import type { Core } from "../../src/core";
-import { askAssistant, changesIn, mindCalls } from "../helpers/assistant";
+import * as Y from "yjs";
+import { type Core, GENERATED_MARK } from "../../src/core";
+import { proposalRequestOf } from "../../src/shared/proposals";
+import { askAssistant, changesIn, lastResult, mindCalls } from "../helpers/assistant";
 import { answerEnded, setUpWithDocuments, shownPassages } from "../helpers/citations";
 import { connectToMind } from "../helpers/mindClient";
-import { note, readMind, writeMind } from "../helpers/minds";
+import { note, readMind, resolveChanges, shownWithChanges, writeMind } from "../helpers/minds";
 import { type ModelCall, type ScriptedReply, scriptedModel } from "../helpers/models";
 
 /**
@@ -205,36 +207,209 @@ describe("“Make it a document” after an Answer (#1109)", { timeout: 60_000 }
   );
 });
 
-describe("“Make it a document” after an Answer with no words (#1133 review)", {
-  timeout: 60_000,
-}, () => {
-  // protects=after an Answer that failed, or came back empty, "make it a document" isn't read as putting that Answer in a Mind, and no Mind holding only its title is made; fails_when=the model is told to call create_mind with answer: true, or a title-only Mind appears; no_claim=what a real model then says.
-  test.each([
-    ["after a failed Answer", { error: { status: 500, message: "The server failed." } }],
-    ["after an empty Answer", { text: "" }],
-  ] as const)("%s, nothing is put in a Mind", async (_, first) => {
-    const systems: string[] = [];
-    const model = scriptedModel((call) => {
-      if (!call.prompt.includes("Make it a document")) return first;
-      systems.push(call.system);
-      if (call.system.includes(AS_A_DOCUMENT) && !called(call, "create_mind")) {
-        return { calls: [{ tool: "create_mind", input: { title: "Leases", answer: true } }] };
-      }
-      return { text: "There's no Answer to put in a document yet." };
-    });
-    const { core, mind } = await setUpWithDocuments(model, LEASES.slice(0, 1));
-    const before = (await core.listMinds()).length;
+/** Searches for every lease, cites the rents it was shown, and writes those into a new Mind. */
+function summaryOfShown(call: ModelCall): ScriptedReply {
+  if (!called(call, "search_documents")) return citingAll(call, () => ({ text: "" }));
+  const shown = call.results
+    .filter((each) => each.tool === "search_documents")
+    .flatMap((each) => shownPassages(each.text));
+  const citations = QUOTES.flatMap((quote, index) => {
+    const passage = shown.find((each) => each.text.includes(quote));
+    return passage ? [{ marker: index + 1, passage: passage.id, quote }] : [];
+  });
+  if (!called(call, "cite")) return { calls: [{ tool: "cite", input: { citations } }] };
+  if (called(call, "create_mind") || called(call, "add_to_mind")) return { text: "Done." };
+  const content = citations.map((each) => `${each.quote} [^${each.marker}].`).join("\n\n");
+  // As a model does, it writes where it is told: there, or into a new Mind.
+  return call.system.includes("write it there with add_to_mind")
+    ? { calls: [{ tool: "add_to_mind", input: { content } }] }
+    : { calls: [{ tool: "create_mind", input: { title: "Summary", content } }] };
+}
 
-    const result = await core.askInConversation({ text: "What are the rents?", mindId: mind.id });
-    if (!result.asked) throw new Error("Not asked.");
-    await answerEnded(core, result.answerId);
-    await askAssistant(core, {
-      text: "Make it a document",
+/** Two of the seven leases in a Folder, and a Mind there whose scope that Folder is. */
+async function inAFolderOfTwo(model: ReturnType<typeof scriptedModel>, { empty = false } = {}) {
+  const { core, documents } = await setUpWithDocuments(model, LEASES);
+  const folder = await core.createLibraryGroup({ name: "Two leases", description: "" });
+  await core.moveToFolder({
+    documentIds: documents.slice(0, 2).map((document) => document.id),
+    folderId: folder.id,
+  });
+  const mind = await core.createMind({ title: "Lease notes", folderId: folder.id });
+  const client = await connectToMind(core, mind.id);
+  if (!empty) writeMind(client, [note("Notes on the leases.")]);
+  await client.settled();
+  const scope = { folderIds: [folder.id], tagIds: [], documentIds: [] };
+  return { core, mind, folder, scope, client };
+}
+
+describe("A request to write from part of the Documents (#1149)", { timeout: 60_000 }, () => {
+  // protects=from a Mind whose scope holds 2 of 7 Documents, a request to write, in English or the owner's Chinese, writes from those 2 and says 2 of 7; Use all writes that same Mind again from all 7 as one change, applied as asked, which rejected leaves the 2-Document text; the Mind keeps its Folder; fails_when=no count, the text covers more than the scope, Use all makes a second Mind, the rewrite isn't one asked change, or Undo can't get the 2-Document text back; no_claim=the window's own Undo step, which the e2e checks.
+  test.each(["Based on my files, write a summary", "根据我现有的文件帮我写一份summary"])(
+    "“%s” from 2 of 7 says so, and Use all writes the same Mind again from all 7",
+    async (request) => {
+      const model = scriptedModel(summaryOfShown);
+      const { core, mind, folder, scope } = await inAFolderOfTwo(model);
+
+      const first = await askAssistant(core, { text: request, mindId: mind.id, scope });
+
+      expect(first.steps?.writtenFrom).toEqual({ documents: 2, total: 7 });
+      const made = changesIn(first).find((change) => change.created);
+      const summary = await connectToMind(core, made?.mindId ?? "");
+      await resolveChanges(summary, "accept");
+      await summary.settled();
+      expect(checks(readMind(summary))).toEqual(["found", "found"]);
+
+      const again = await core.regenerateConversationAnswer({
+        conversationId: first.conversationId,
+        answerId: first.id,
+        clearScope: true,
+      });
+      if (!again.asked) throw new Error("Not asked again.");
+      expect((await answerEnded(core, again.answerId)).event).toBe("finished");
+      const { messages } = await core.getConversation(first.conversationId);
+      const rewritten = messages.find((message) => message.id === again.answerId);
+      if (rewritten?.kind !== "answer") throw new Error("No Answer.");
+
+      expect(rewritten.steps?.writtenFrom).toBeUndefined();
+      const changes = changesIn(rewritten);
+      expect(changes).toHaveLength(1);
+      expect(changes[0]).toMatchObject({ mindId: made?.mindId, created: false });
+      await summary.settled();
+      expect(proposalRequestOf(summary.doc, changes[0]?.request ?? "")).toMatchObject({
+        requested: "write",
+      });
+      expect(lastResult(model)).toContain("applies in the Mind at once");
+      const summaries = (await core.listMinds()).filter((each) => each.title === "Summary");
+      expect(summaries.map((each) => each.id)).toEqual([made?.mindId]);
+      await resolveChanges(summary, "accept");
+      expect(checks(readMind(summary))).toEqual(QUOTES.map(() => "found"));
+      expect(shownWithChanges(summary)[0]).toBe("Summary");
+      expect((await core.listMinds()).find((each) => each.id === mind.id)?.folderId).toBe(
+        folder.id,
+      );
+    },
+  );
+
+  // protects=the rewrite from all Documents is one change: rejecting it leaves the 2-Document text exactly; fails_when=any of the old text is lost or the new text stays; no_claim=none beyond protects.
+  test("rejected, the rewrite leaves the 2-Document text as it was", async () => {
+    const model = scriptedModel(summaryOfShown);
+    const { core, mind, scope } = await inAFolderOfTwo(model);
+    const first = await askAssistant(core, {
+      text: "Based on my files, write a summary",
       mindId: mind.id,
-      conversationId: result.conversation.id,
+      scope,
+    });
+    const made = changesIn(first).find((change) => change.created);
+    const summary = await connectToMind(core, made?.mindId ?? "");
+    await resolveChanges(summary, "accept");
+    await summary.settled();
+    const fromTwo = shownWithChanges(summary);
+
+    const again = await core.regenerateConversationAnswer({
+      conversationId: first.conversationId,
+      answerId: first.id,
+      clearScope: true,
+    });
+    if (!again.asked) throw new Error("Not asked again.");
+    await answerEnded(core, again.answerId);
+    await summary.settled();
+    expect(shownWithChanges(summary)).not.toEqual(fromTwo);
+    await resolveChanges(summary, "reject");
+
+    expect(shownWithChanges(summary)).toEqual(fromTwo);
+  });
+
+  // protects=with every Document in scope, or for a Question that writes nothing, no count is given; fails_when=the line shows when nothing was left out, or on an ordinary Question; no_claim=none beyond protects.
+  test("with every Document in scope, or for a Question, no line", async () => {
+    const model = scriptedModel((call) =>
+      call.prompt.includes("What is the rent") ? { text: "1000 euros." } : summaryOfShown(call),
+    );
+    const { core, mind, scope } = await inAFolderOfTwo(model);
+
+    const everything = await askAssistant(core, {
+      text: "Based on my files, write a summary",
+      mindId: mind.id,
+    });
+    const question = await askAssistant(core, {
+      text: "What is the rent for unit 1?",
+      mindId: mind.id,
+      scope,
     });
 
-    expect(withMindTools(systems)).not.toContain(AS_A_DOCUMENT);
-    expect(await core.listMinds()).toHaveLength(before);
+    expect(everything.steps?.writtenFrom).toBeUndefined();
+    expect(question.steps?.writtenFrom).toBeUndefined();
+  });
+});
+
+/** Writes the Answer again from every Document, as Use all does, and gives it once it has ended. */
+async function useAll(core: Core, answer: Awaited<ReturnType<typeof askAssistant>>) {
+  const again = await core.regenerateConversationAnswer({
+    conversationId: answer.conversationId,
+    answerId: answer.id,
+    clearScope: true,
+  });
+  if (!again.asked) throw new Error("Not asked again.");
+  expect((await answerEnded(core, again.answerId)).event).toBe("finished");
+  const { messages } = await core.getConversation(answer.conversationId);
+  const rewritten = messages.find((message) => message.id === again.answerId);
+  if (rewritten?.kind !== "answer") throw new Error("No Answer.");
+  return rewritten;
+}
+
+describe("Use all, where the text went (#1171 review)", { timeout: 60_000 }, () => {
+  // protects=in an empty Mind, a request to write fills it, and Use all writes that same text again from every Document in its place, as one asked change, with no new Mind; rejected, it leaves the 2-Document text; fails_when=Use all makes a new Mind, or Undo leaves an empty Mind; no_claim=the window's own Undo step.
+  test("in an empty Mind the request filled, Use all writes it again there", async () => {
+    const model = scriptedModel(summaryOfShown);
+    const { core, mind, scope, client } = await inAFolderOfTwo(model, { empty: true });
+    const minds = (await core.listMinds()).length;
+    const first = await askAssistant(core, {
+      text: "Based on my files, write a summary",
+      mindId: mind.id,
+      scope,
+    });
+    expect(changesIn(first)[0]).toMatchObject({ mindId: mind.id, created: false });
+    await resolveChanges(client, "accept");
+    await client.settled();
+    const fromTwo = shownWithChanges(client);
+
+    const rewritten = await useAll(core, first);
+    await client.settled();
+
+    expect(changesIn(rewritten)).toEqual([
+      expect.objectContaining({ mindId: mind.id, created: false }),
+    ]);
+    expect((await core.listMinds()).length).toBe(minds);
+    expect(shownWithChanges(client)).not.toEqual(fromTwo);
+    await resolveChanges(client, "reject");
+    expect(shownWithChanges(client)).toEqual(fromTwo);
+  });
+
+  // protects=text the User typed in since isn't taken away at once by Use all: the rewrite waits for them, as changes that would remove their words wait (#880), and the model is told it waits; fails_when=the rewrite applies at once over their words; no_claim=the window's line, which shows what waits.
+  test("text the User typed in since makes the rewrite wait", async () => {
+    const model = scriptedModel(summaryOfShown);
+    const { core, mind, scope } = await inAFolderOfTwo(model);
+    const first = await askAssistant(core, {
+      text: "Based on my files, write a summary",
+      mindId: mind.id,
+      scope,
+    });
+    const made = changesIn(first).find((change) => change.created);
+    const summary = await connectToMind(core, made?.mindId ?? "");
+    await resolveChanges(summary, "accept");
+    await summary.settled();
+    const [, paragraph] = summary.blocks.toArray();
+    const words = paragraph instanceof Y.XmlElement ? paragraph.get(0) : null;
+    if (!(words instanceof Y.XmlText)) throw new Error("No paragraph.");
+    // Typed, as the editor writes it: not marked as AI text.
+    words.insert(words.length, " My own words.", { [GENERATED_MARK]: null });
+    await summary.settled();
+
+    const rewritten = await useAll(core, first);
+    await summary.settled();
+
+    const [change] = changesIn(rewritten);
+    expect(proposalRequestOf(summary.doc, change?.request ?? "")).not.toHaveProperty("requested");
+    expect(lastResult(model)).toContain("wait");
+    expect(shownWithChanges(summary).join("\n")).toContain("My own words.");
   });
 });

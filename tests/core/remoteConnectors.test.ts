@@ -208,7 +208,7 @@ describe("Adding a remote Connector", { timeout: 30_000 }, () => {
     await expect(add("http://mcp.example.com/mcp")).rejects.toThrow(/must start with https/);
     await expect(add("ftp://mcp.example.com/mcp")).rejects.toThrow(/must start with https/);
     await expect(add("mcp.example.com")).rejects.toThrow(/isn't a valid URL/);
-    await expect(add("https://me:secret@mcp.example.com/mcp")).rejects.toThrow(/user name/);
+    await expect(add("https://me:secret@mcp.example.com/mcp")).rejects.toThrow(/login/);
     await expect(add("  ")).rejects.toThrow(/Enter the server's URL/);
     await expect(
       core.addConnector({ name: "Both", url: "https://a.example", command: "npx" } as never),

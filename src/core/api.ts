@@ -175,8 +175,12 @@ export interface CreateMindInput {
  *   would strip. A Word file's direct formatting is read into them (the look
  *   keeps what its styles give, `WORD_LOOK_VERSION` 6). Older content is
  *   version 24 content as it is.
+ * - 25: a check the User keeps as their own view (#1111): `kept` on the
+ *   `claimCheck` mark, and the `unsupported` reason a check gives (#1072),
+ *   which an older version's editor would strip, so the sentence would count
+ *   and be checked again. Older content is version 25 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 24;
+export const CONTENT_SCHEMA_VERSION = 25;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -966,6 +970,26 @@ export interface MindChange {
   cited?: number;
   /** How many of its text's markers had no Citation recorded, and were left out. Absent: none. */
   unrecorded?: number;
+  /**
+   * How many of the sentences it wrote are being checked against their Citations now, before
+   * they land (#1111). Absent: none, or the check is over.
+   */
+  checking?: number;
+  /**
+   * The check of the sentences with Citations it wrote, once over: how many there were
+   * (`cited`), how many it sent to be checked (`sent`), how many got a verdict
+   * (`checked`) and how many couldn't be checked (`failed`), and what stopped it, if
+   * anything did. Those it couldn't check, or didn't, are marked not checked, under
+   * `request`. Absent: none was checked.
+   */
+  selfCheck?: {
+    request: string;
+    cited: number;
+    sent: number;
+    checked: number;
+    failed: number;
+    stop?: RunStop;
+  };
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */
@@ -3780,6 +3804,8 @@ export type ProviderErrorKind =
   | "network"
   | "provider"
   | "consent-declined"
+  /** The User turned off the flow to the model's service while the work was under way: nothing more was sent. */
+  | "consent-revoked"
   /** "Keep everything on this computer" is on and the model isn't on this computer: nothing was sent, or the Answer was stopped. */
   | "local-mode"
   /** The model is in Ollama on this computer, and Ollama isn't running: found before anything was sent. */
@@ -4339,10 +4365,18 @@ export interface TextPlace {
 
 /**
  * What Edit with AI does with the selected text (#93): improve the writing,
- * shorten it, translate it, explain it in a new paragraph under it, or what
- * the User asked for in their own words.
+ * shorten it, translate it, explain it in a new paragraph under it, what the
+ * User asked for in their own words, or take out the part of a cited sentence
+ * its Citations don't support (#1111).
  */
-export const editActions = ["improve", "shorten", "translate", "explain", "instruction"] as const;
+export const editActions = [
+  "improve",
+  "shorten",
+  "translate",
+  "explain",
+  "instruction",
+  "cut-unsupported",
+] as const;
 export type EditAction = (typeof editActions)[number];
 
 export interface EditWithAiInput {
@@ -4361,7 +4395,9 @@ export interface EditWithAiInput {
   action: EditAction;
   /**
    * For "translate", the language to translate into, as the User would name
-   * it ("English", "简体中文"); for "instruction", what the User asked for.
+   * it ("English", "简体中文"); for "instruction", what the User asked for;
+   * for "cut-unsupported", the part the check found unsupported
+   * (`UnsupportedReason.uncovered`).
    */
   instruction?: string;
   /** The model to use: the Mind's own; none, or null, the default chat model. */
@@ -4469,6 +4505,8 @@ export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
  * - "plan-limit": the plan's usage limit is reached.
  * - "failed": the model or its service failed otherwise (`detail` says how).
  * - "stopped": the User stopped the check, or IncarnaMind quit, before this sentence was checked.
+ * - "too-many": the assistant wrote more sentences with Citations than one write has checked (#1111).
+ * - "consent-revoked": the User turned off sending checks to the model's service while it ran.
  */
 export type ClaimCheckFailure =
   | "refused"
@@ -4479,7 +4517,9 @@ export type ClaimCheckFailure =
   | "cost-cap"
   | "plan-limit"
   | "failed"
-  | "stopped";
+  | "stopped"
+  | "too-many"
+  | "consent-revoked";
 
 /** Why a sentence was found unsupported, as the check gave it. */
 export interface UnsupportedReason {
@@ -4644,6 +4684,11 @@ export interface ClaimCheckAttributes {
   excluded: LeftOutDocument[];
   /** When it was checked, or started. ISO 8601, UTC. */
   checkedAt: string;
+  /**
+   * The User keeps the sentence as their own view (#1111): while its words
+   * stay as they were checked, it isn't shown, counted or checked again.
+   */
+  kept?: true;
 }
 
 export interface CheckSentencesInput {
@@ -5011,6 +5056,11 @@ export interface AnswerSteps {
   withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
+  /**
+   * A request to write, written from a Search scope that holds `documents` of the User's
+   * `total` Documents (#1149). Absent: from all of them, or not a request to write.
+   */
+  writtenFrom?: { documents: number; total: number };
 }
 
 /**

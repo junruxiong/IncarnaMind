@@ -124,6 +124,7 @@
     "html-validate": "11.16.2",
     "opencc-data": "1.4.2",
     "posthog-node": "5.54.1",
+    "pyodide": "314.0.7",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
     "vite": "7.3.7",

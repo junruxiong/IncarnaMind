@@ -10,6 +10,9 @@ test-results/
 playwright-report/
 blob-report/
 coverage/
+# What Analyses run with, fetched by the build (scripts/pythonRuntime.ts)
+resources/python/
+
 # Evaluation reports (npm run eval)
 eval/results/
 

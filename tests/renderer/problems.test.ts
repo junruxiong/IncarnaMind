@@ -18,6 +18,7 @@ const KINDS: ProviderErrorKind[] = [
   "network",
   "provider",
   "consent-declined",
+  "consent-revoked",
   "local-mode",
   "ollama-not-running",
   "data-retention",
@@ -51,6 +52,23 @@ describe("a failed Answer's problem line", () => {
       kind: "local-model",
       label: "answer.error.useLocal",
     });
+  });
+
+  test("local mode stopping an Answer says everything stays on this computer, in both languages", () => {
+    const { line } = ANSWER_PROBLEMS["local-mode"];
+    expect(translate("en", line)).toBe("Stopped: everything stays on this computer");
+    expect(translate("zh-CN", line)).toBe("已停止：所有内容都留在这台电脑上");
+  });
+
+  test("turning off sending while an Answer is written says so, naming the service, in both languages, with nothing to press", () => {
+    const { line, fix } = ANSWER_PROBLEMS["consent-revoked"];
+    expect(fix).toEqual({ kind: "none" });
+    expect(translate("en", line, { service: "OpenAI" })).toBe(
+      "Stopped: you turned off sending to OpenAI",
+    );
+    expect(translate("zh-CN", line, { service: "OpenAI" })).toBe(
+      "已停止：你关闭了向 OpenAI 发送内容",
+    );
   });
 
   test("Ollama not running says so in both languages, and its fix is Ollama's own (open it or get it)", () => {
@@ -175,8 +193,10 @@ describe("a failed Answer's problem line", () => {
     for (const language of ["en", "zh-CN"] as const) {
       for (const { kind, words, label } of labels(language)) {
         expect(words, `${language} ${kind}`).not.toMatch(/\{/);
-        // No full stop, so the action follows on the same line; but data retention is two sentences, the second a way on.
-        if (kind !== "data-retention") expect(words, `${language} ${kind}`).not.toMatch(/[.。]$/);
+        // No full stop, so the action follows on the same line; but data retention and too long are two sentences, the second what to do.
+        if (kind !== "data-retention" && kind !== "too-long") {
+          expect(words, `${language} ${kind}`).not.toMatch(/[.。]$/);
+        }
         if (ANSWER_PROBLEMS[kind].fix.kind !== "none") expect(label).not.toBe("");
       }
     }

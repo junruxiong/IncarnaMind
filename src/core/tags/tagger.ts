@@ -35,11 +35,13 @@ import {
   ConsentDeclinedError,
   ConsentNeededError,
   InvalidInputError,
+  LocalModeError,
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
 import { isPlanLimit } from "../providers/chatgpt/errors";
 import { classifyProviderError } from "../providers/providerErrors";
+import { gateStop } from "../sendGate";
 import type { PaceTimers } from "../sources/pace";
 import type { Database } from "../storage";
 import {
@@ -222,6 +224,7 @@ export function createTagger(options: TaggerOptions) {
           error instanceof ChatNotReadyError ||
           error instanceof ConsentDeclinedError ||
           error instanceof ConsentNeededError ||
+          error instanceof LocalModeError ||
           error instanceof TaggingNotReadyError
         ) {
           // Not allowed, or the tagger went away while this waited: this and the rest wait.
@@ -251,8 +254,13 @@ export function createTagger(options: TaggerOptions) {
         }
       } catch (error) {
         if (stale()) return;
-        const limitedUntil = options.rateLimit.pause(error);
-        if (limitedUntil !== null) {
+        const stopped = gateStop(error);
+        const limitedUntil = stopped ? null : options.rateLimit.pause(error);
+        if (stopped instanceof ConsentNeededError || stopped instanceof LocalModeError) {
+          // Turned off, or Local mode on, as it was sent (../sendGate): this and the rest wait.
+          if (setState(id, "waiting-for-provider")) announce([id]);
+          park();
+        } else if (limitedUntil !== null) {
           const why = rateLimitError(limitedUntil, error);
           if (setState(id, "waiting-for-provider", why)) announce([id]);
           park(why);
