@@ -12,11 +12,6 @@ import { keyProviderName } from "./shared";
 /** Where an undo line of a change made in Settings › Models shows: the sidebar's is behind it. */
 export const MODELS_UNDO_PLACE = "settings:models";
 
-/**
- * Adding a provider from Settings › Models' directory (#179): its key form,
- * or Ollama's setup, on its own page. What is added leaves the default model
- * as it is, unless there is none.
- */
 export function AddProvider({
   catalogId,
   endpoint,
@@ -69,7 +64,6 @@ export function AddProvider({
   );
 }
 
-/** Ollama on this computer: whether it runs, then one button that gets its recommended model. */
 function AddOllama({ onAdded }: { onAdded(provider: ChatProvider): void }) {
   const t = useT();
   const ollama = useOllama(onAdded, MODELS_UNDO_PLACE, { keepDefault: true });

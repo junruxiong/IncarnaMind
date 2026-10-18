@@ -6,12 +6,20 @@ import { core } from "../../core";
 import { joinMeta } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
 import { useKeyRefusals } from "../../keyRefusals";
+import { useModelNames } from "../../modelNames";
 import { useSettingsTarget } from "../../settingsTarget";
 import { useAppStore } from "../../store";
 import { ChevronRightLineIcon, PlusLineIcon } from "../lineIcons";
 import { TaggingSettings } from "../TaggingSettings";
 import { UndoLineAt } from "../UndoLine";
-import { buttonClass, noticeClass, pageIntroClass, ruledListClass, sectionTitleClass } from "../ui";
+import {
+  buttonClass,
+  noticeClass,
+  pageIntroClass,
+  rowTextClass,
+  ruledListClass,
+  sectionTitleClass,
+} from "../ui";
 import { AddProvider, MODELS_UNDO_PLACE } from "./AddProvider";
 import { ChatGptPlanSettings } from "./ChatGptPlanSettings";
 import { ReadinessExplanation } from "./ChatReadinessNotice";
@@ -19,9 +27,8 @@ import { ModelDefaults } from "./ModelDefaults";
 import { PlansSettings } from "./PlansSettings";
 import { ProviderDirectory } from "./ProviderDirectory";
 import { logoIdOf, ProviderLogo } from "./ProviderLogo";
-import { ProviderPage, providerName } from "./ProviderPage";
+import { ProviderPage, providerName, type RemovedProvider } from "./ProviderPage";
 
-/** Which page of Settings › Models shows: the defaults and providers, Add a provider, or one provider's. */
 type View =
   | { page: "list" }
   | { page: "directory" }
@@ -31,23 +38,16 @@ type View =
 const ANSWERS_TARGET = ["chat-model"] as const;
 const DIRECTORY_TARGET = ["add-provider"] as const;
 
-/** The catalog provider a saved one is, by its catalog id. */
 const catalogIdOf = (provider: ChatProvider) => provider.catalogId ?? provider.kind;
 
-/**
- * Settings › Models (#179): Defaults (the model for Answers, for quick tasks and
- * for images), Your providers as rows, each opening its page, and "Add a
- * provider…", which opens the directory; then the plans already paid for, and
- * Tagging. Opened from a refused key, it goes to that provider's key.
- */
 export function ModelsSettings() {
   const readiness = useAppStore((state) => state.chatReadiness);
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
   const [providers, setProviders] = useState<ChatProvider[] | null>(null);
   const [view, setView] = useState<View>({ page: "list" });
+  const [removed, setRemoved] = useState<RemovedProvider | null>(null);
   const section = useRef<HTMLDivElement>(null);
-  /** What opened the page now showing, to give the focus back to on the way back. */
   const opener = useRef<string | null>(null);
   const refused = useKeyRefusals((state) => state.showing);
 
@@ -102,6 +102,7 @@ export function ModelsSettings() {
 
   const open = (next: View, from: string) => {
     opener.current = from;
+    setRemoved(null);
     setView(next);
   };
   const back = () => {
@@ -111,7 +112,6 @@ export function ModelsSettings() {
   const groupOf = (providerId: string): ChatModelGroup | undefined =>
     groups?.find((each) => each.provider.id === providerId);
 
-  /** A provider in the directory or another region: its page if it is added, else the page that adds it. */
   const pageFor = (catalogId: string, endpoint: string | null): View => {
     const catalog = catalogProvider(catalogId);
     const region = catalog ? (endpointOf(catalog, endpoint)?.id ?? null) : null;
@@ -165,8 +165,9 @@ export function ModelsSettings() {
         refused={refused && refused.catalogId === catalogIdOf(provider) ? refused : null}
         onBack={back}
         onRegion={(endpoint) => setView(pageFor(catalogIdOf(provider), endpoint))}
-        onRemoved={() => {
+        onRemoved={(what) => {
           refresh();
+          setRemoved(what);
           back();
         }}
       />
@@ -183,8 +184,9 @@ export function ModelsSettings() {
               <ReadinessExplanation readiness={readiness} />
             </p>
           )}
+          {removed && <RemovedLine removed={removed} providers={providers} />}
           <div ref={answers}>
-            <ModelDefaults groups={groups ?? []} />
+            <ModelDefaults groups={groups ?? []} providers={providers} />
           </div>
           <YourProviders
             providers={providers}
@@ -203,7 +205,6 @@ export function ModelsSettings() {
   );
 }
 
-/** Your providers: a row each, opening its page, then "Add a provider…". */
 function YourProviders({
   providers,
   groups,
@@ -304,5 +305,35 @@ function ProviderRow({
         <ChevronRightLineIcon aria-hidden="true" className="size-4 shrink-0 text-ink-meta" />
       </button>
     </li>
+  );
+}
+
+function RemovedLine({
+  removed,
+  providers,
+}: {
+  removed: RemovedProvider;
+  providers: readonly ChatProvider[];
+}) {
+  const t = useT();
+  const language = useLanguage();
+  const nameOf = useModelNames();
+  const { provider, answers, automatic } = removed;
+  const movedTo = answers && providers.find((each) => each.id === answers.providerId);
+  const text =
+    answers && movedTo
+      ? t("models.removed.answers", {
+          provider,
+          model: `${nameOf(answers.modelId, answers.providerId).name} · ${providerName(movedTo, t, language)}`,
+        })
+      : answers === null && providers.length > 0
+        ? t("models.removed.noAnswers", { provider })
+        : automatic
+          ? t("models.removed.automatic", { provider })
+          : t("models.removed", { provider });
+  return (
+    <p data-testid="models-removed" role="status" className={rowTextClass}>
+      {text}
+    </p>
   );
 }

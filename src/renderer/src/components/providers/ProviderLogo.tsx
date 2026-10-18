@@ -2,7 +2,7 @@ import type { ChatProvider } from "../../../../core/api";
 import { ComputerLineIcon } from "../lineIcons";
 import { PROVIDER_LOGOS } from "./providerLogos";
 
-/** Whose logo a saved provider shows: a plan's is its company's. */
+/** A plan shows its company's logo. */
 export const logoIdOf = (provider: ChatProvider): string | null =>
   provider.kind === "chatgpt"
     ? "openai"
@@ -12,10 +12,6 @@ export const logoIdOf = (provider: ChatProvider): string | null =>
         ? "copilot"
         : (provider.catalogId ?? provider.kind);
 
-/**
- * A model provider's tile: its logo in one colour on a neutral square (D119), 32px in a list,
- * 44px at the head of its page. A server the User gives has a computer instead.
- */
 export function ProviderLogo({ id, large = false }: { id: string | null; large?: boolean }) {
   const paths = id ? PROVIDER_LOGOS[id] : undefined;
   return (

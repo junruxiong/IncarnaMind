@@ -25,11 +25,7 @@ const matches = (provider: CatalogProvider, query: string): boolean => {
   );
 };
 
-/**
- * Settings › Models › Add a provider: the catalog's providers in the language's groups and
- * order, each once (under Popular when it is popular there), those `query` matches in
- * English or Chinese; a group with none is left out.
- */
+/** Each provider once: under Popular where it is popular, else in its own group. Empty groups are left out. */
 export function directoryGroups(
   language: Language,
   query = "",

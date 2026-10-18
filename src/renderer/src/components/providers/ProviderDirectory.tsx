@@ -15,11 +15,6 @@ import { keyProviderName } from "./shared";
 
 const headClass = "text-[13px] leading-5 font-semibold text-ink";
 
-/**
- * Settings › Models › Add a provider (#179): a search field, then the catalog's
- * providers in the language's groups, each a tile with its logo. A tile opens
- * the provider's page: the one already added, or the one that adds it.
- */
 export function ProviderDirectory({
   providers,
   onBack,

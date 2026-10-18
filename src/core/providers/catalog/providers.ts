@@ -798,7 +798,6 @@ export function fieldValueOf(endpoint: Endpoint, baseUrl: string | null): string
   return fieldAccepts(endpoint.field, value) ? value : null;
 }
 
-/** Where a provider's prices are, for its region: the region's own page, its own, else its models' page. */
 export const pricingUrlOf = (
   provider: CatalogProvider,
   endpointId: string | null | undefined,

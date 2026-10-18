@@ -29,7 +29,7 @@ import type { Meter, MeteredModel } from "../cost/meter";
 import { typicalAnswerCost } from "../cost/price";
 import { ChatNotReadyError, InvalidInputError, isRecord, LocalModeError } from "../errors";
 import type { Secrets } from "../secrets";
-import { createSendGate } from "../sendGate";
+import { createSendGate, gateStop } from "../sendGate";
 import type { SettingsStore } from "../settings";
 import type { Database } from "../storage";
 import {
@@ -97,7 +97,6 @@ const TEST_TIMEOUT_MS = 30_000;
 /** Room for a test's one word, and for a model that thinks a little first. */
 const TEST_OUTPUT_TOKENS = 64;
 
-/** Why a provider can't take a request yet, as a failed request's reason. */
 function notReadyError(error: ChatNotReadyError): ProviderError {
   const { reason } = error.readiness;
   const kind: ProviderErrorKind =
@@ -349,6 +348,16 @@ export function createChat(options: {
   } = options;
   const gate = createSendGate(consent, options.localOnly);
 
+  const gateAllows = (flowId: DataFlowId, service: ExternalService): boolean => {
+    try {
+      gate.check(flowId, service);
+      return true;
+    } catch (error) {
+      if (gateStop(error)) return false;
+      throw error;
+    }
+  };
+
   const needsSignIn = async (kind: ChatProviderKind) =>
     (kind === "chatgpt" && !(await chatGpt.hasSignIn())) ||
     (kind === "claude-account" && !(await claudeAccount.hasSignIn())) ||
@@ -433,8 +442,9 @@ export function createChat(options: {
 
   /** The models a saved provider lists, kept for a few minutes; none for a cloud service the User hasn't allowed yet. */
   const listedModels = async (row: ProviderRow, provider: ChatProvider): Promise<ListedModel[]> => {
-    // A cloud service isn't asked for its list before the User allows the chat flow to it.
-    const mayAsk = !provider.service || consent.status("chat", provider.service) === "accepted";
+    // The list request carries the key, so it goes only where a Question could: never in Local
+    // mode, and only once the User allows the chat flow to the service.
+    const mayAsk = !provider.service || gateAllows("chat", provider.service);
     const cacheKey = listKey(row);
     const cached = modelLists.get(cacheKey);
     let listed = cached && Date.now() - cached.at < MODEL_LIST_TTL_MS ? cached.models : null;
@@ -643,7 +653,6 @@ export function createChat(options: {
     };
   }
 
-  /** What a typical Answer with a model costs: an Ollama model in the cloud at Ollama's price. */
   const costOf = (row: ProviderRow, price: Price | undefined, cloud: boolean): ModelCost | null => {
     const billing = billingOf(row.kind as ChatProviderKind, cloud ? OLLAMA_CLOUD : rowService(row));
     if (billing !== "per-token") return { kind: billing };
@@ -652,7 +661,6 @@ export function createChat(options: {
       : null;
   };
 
-  /** What Settings › Models says of a model on a saved provider (`ChatModelGroup.about`). */
   const aboutOf = (row: ProviderRow, modelId: string, cloud: boolean): ModelAbout => {
     const { facts } = capabilitiesOf(row, modelId);
     return {
@@ -664,7 +672,6 @@ export function createChat(options: {
     };
   };
 
-  /** Where a provider's prices are, and when they were checked (`ChatModelGroup.prices`). */
   const pricesOf = (row: ProviderRow, provider: ChatProvider): ChatModelGroup["prices"] => {
     const catalog = catalogProviderOf(provider.kind, row.catalog_id);
     if (provider.kind === "ollama") {
@@ -676,11 +683,19 @@ export function createChat(options: {
     return url ? { url, checked: catalog.checked } : null;
   };
 
-  /**
-   * The model a provider's Test sends its word to: its quick-tasks model, the one
-   * the User set on it, else the catalog's for a cloud provider (a model server the
-   * User runs does its own small calls), else its Answers model or its first.
-   */
+  const answersModelOf = async (row: ProviderRow): Promise<string | undefined> => {
+    const kind = row.kind as ChatProviderKind;
+    const catalog =
+      kind === "claude-account"
+        ? catalogProvider("anthropic")
+        : catalogProviderOf(kind, row.catalog_id);
+    const role = kind === "ollama" ? undefined : catalog?.roles.answers;
+    if (role) return role;
+    const listed = await listedModels(row, await toProvider(row));
+    return listed.find((each) => !each.other)?.id ?? menuModelsOf(row.id)[0];
+  };
+
+  // A model server the User runs does its own small calls, so it has no quick-tasks model of its own.
   const testModelOf = (row: ProviderRow, listed: readonly ListedModel[]): string | undefined => {
     const { quickTasksModel, chatModel } = settings.get().user;
     if (quickTasksModel?.providerId === row.id) return quickTasksModel.modelId;
@@ -840,22 +855,38 @@ export function createChat(options: {
       return toProvider(row);
     },
 
-    /** Soft-deletes the provider and deletes its key. Deleting one that doesn't exist does nothing. */
+    /**
+     * Soft-deletes the provider and deletes its key. The quick-tasks and image models it held
+     * go back to Automatic; the default model it held moves to another provider's, when one is
+     * left. Deleting one that doesn't exist does nothing.
+     */
     async delete(id: unknown): Promise<void> {
       if (typeof id !== "string") throw new InvalidInputError("A provider id must be text.");
       if (!rowById(id)) return;
       const at = now();
+      const { chatModel, quickTasksModel, imageModel } = settings.get().user;
       db.transaction(() => {
         db.run("UPDATE chat_providers SET deleted_at = ?, updated_at = ? WHERE id = ?", [
           at,
           at,
           id,
         ]);
-        if (settings.get().user.chatModel?.providerId === id) {
-          settings.update({ user: { chatModel: null } });
-        }
+        const held = {
+          ...(chatModel?.providerId === id && { chatModel: null }),
+          ...(quickTasksModel?.providerId === id && { quickTasksModel: null }),
+          ...(imageModel?.providerId === id && { imageModel: null }),
+        };
+        if (Object.keys(held).length > 0) settings.update({ user: held });
       });
       await secrets.delete(keyName(id));
+      if (chatModel?.providerId !== id) return;
+      for (const row of knownRows()) {
+        const modelId = await answersModelOf(row);
+        if (modelId) {
+          settings.update({ user: { chatModel: { providerId: row.id, modelId } } });
+          return;
+        }
+      }
     },
 
     exists: (id: string) => rowById(id) !== undefined,
@@ -1163,12 +1194,6 @@ export function createChat(options: {
       }
     },
 
-    /**
-     * A saved provider's Test (#179): its model list, then one word from its
-     * quick-tasks model (`testModelOf`). Both go as any request to its service
-     * does: never in Local mode, and only with the chat flow allowed, which the
-     * User is asked for here, as they asked for the Test.
-     */
     async testProvider(providerId: unknown): Promise<ProviderTestResult> {
       const row = typeof providerId === "string" ? rowById(providerId) : undefined;
       if (!row || !isKnownRow(row)) {

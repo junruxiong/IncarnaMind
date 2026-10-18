@@ -1,7 +1,12 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { join } from "node:path";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
-import type { Core } from "../../src/core";
+import { type Core, DATABASE_FILE } from "../../src/core";
 import { TYPICAL_ANSWER, typicalAnswerCost } from "../../src/core/cost/price";
 import { catalogFacts } from "../../src/core/providers/catalog";
+import { migrate, openDatabase } from "../../src/core/storage";
+import { migrations } from "../../src/core/storage/migrations";
 import { createMemoryKeychain, createTempDataFolder, startCore } from "../helpers/core";
 import { failingModel, replyingModel, scriptedModels } from "../helpers/models";
 
@@ -34,6 +39,19 @@ function answerFetch(answers: Record<string, unknown>) {
 const OPENAI_MODELS = "https://api.openai.com/v1/models";
 const ANTHROPIC_MODELS = "https://api.anthropic.com/v1/models?limit=100";
 const DEEPSEEK_MODELS = "https://api.deepseek.com/models";
+
+/** An OpenAI-compatible server on this computer that lists `models`. */
+async function modelServer(models: string[]): Promise<string> {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ data: models.map((id) => ({ id })) }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  onTestFinished(() => {
+    server.close();
+  });
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
+}
 
 /** Accepts every consent request, and counts them. */
 function acceptConsent(core: Core) {
@@ -344,5 +362,118 @@ describe("The models for the other jobs", () => {
       providerId: provider.id,
       modelId: "claude-sonnet-5-5",
     });
+  });
+});
+
+describe("The model menu's list in the background", () => {
+  test("isn't asked for in Local mode: its request carries the key", async () => {
+    const core = startCore(await createTempDataFolder(), { keychain: createMemoryKeychain() });
+    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-6.1-sol" });
+    await core.setLocalOnly(true);
+    const fetched = answerFetch({ [OPENAI_MODELS]: { data: [{ id: "gpt-6.1-sol" }] } });
+
+    const [group] = await core.listChatModels();
+
+    expect(fetched.asked(OPENAI_MODELS)).toBe(0);
+    expect(group?.models).toEqual(["gpt-6.1-sol"]);
+  });
+});
+
+describe("Removing a provider", () => {
+  test("puts the quick-tasks and image models it held back to Automatic", async () => {
+    const core = startCore(await createTempDataFolder(), { keychain: createMemoryKeychain() });
+    const answers = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+    });
+    const other = await core.saveChatProvider({
+      kind: "openai",
+      apiKey: "sk-test",
+      modelId: "gpt-6-luna",
+      keepDefault: true,
+    });
+    await core.updateSettings({
+      user: {
+        quickTasksModel: { providerId: other.id, modelId: "gpt-6-luna" },
+        imageModel: { providerId: other.id, modelId: "gpt-6.1-sol" },
+      },
+    });
+
+    await core.deleteChatProvider(other.id);
+
+    const { user } = await core.getSettings();
+    expect(user.quickTasksModel).toBeNull();
+    expect(user.imageModel).toBeNull();
+    expect(user.chatModel).toEqual({ providerId: answers.id, modelId: "claude-haiku-5-5" });
+  });
+
+  test("that held the Answers model moves Answers to a provider that is left, or to none", async () => {
+    const core = startCore(await createTempDataFolder(), { keychain: createMemoryKeychain() });
+    const server = await core.saveChatProvider({
+      kind: "openai-compatible",
+      baseUrl: await modelServer(["first-model", "second-model"]),
+      modelId: "first-model",
+    });
+    const anthropic = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+    });
+
+    await core.deleteChatProvider(anthropic.id);
+    expect((await core.getSettings()).user.chatModel).toEqual({
+      providerId: server.id,
+      modelId: "first-model",
+    });
+
+    await core.deleteChatProvider(server.id);
+    expect((await core.getSettings()).user.chatModel).toBeNull();
+  });
+});
+
+describe("Data from before migration 101", () => {
+  test("keeps its providers as rows, the model the User added and the one taken back out, which can be put back", async () => {
+    const dataDir = await createTempDataFolder();
+    const baseUrl = await modelServer(["listed-a", "listed-b"]);
+    const providerId = "3f2a1b0c-9d8e-4f7a-8b6c-5d4e3f2a1b0c";
+    const at = "2026-10-01T09:00:00.000Z";
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      migrate(
+        db,
+        migrations.filter((migration) => migration.version <= 99),
+      );
+      db.run(
+        `INSERT INTO chat_providers (id, kind, base_url, catalog_id, endpoint, created_at, updated_at)
+         VALUES (?, 'openai-compatible', ?, 'openai-compatible', NULL, ?, ?)`,
+        [providerId, baseUrl, at, at],
+      );
+      db.run(
+        `INSERT INTO chat_menu_models (id, provider_id, model_id, created_at, updated_at)
+         VALUES ('a1b2c3d4-0000-4000-8000-000000000001', ?, 'my-model', ?, ?)`,
+        [providerId, at, at],
+      );
+      db.run(
+        `INSERT INTO chat_menu_models (id, provider_id, model_id, created_at, updated_at, deleted_at)
+         VALUES ('a1b2c3d4-0000-4000-8000-000000000002', ?, 'taken-out-model', ?, ?, ?)`,
+        [providerId, at, at, at],
+      );
+    } finally {
+      db.close();
+    }
+
+    const core = startCore(dataDir);
+    expect((await core.listChatProviders()).map((each) => each.id)).toEqual([providerId]);
+    const [group] = await core.listChatModels();
+    expect(group?.models).toEqual(["listed-a", "listed-b", "my-model"]);
+    expect(group?.added).toEqual(["my-model"]);
+    expect(group?.hidden).toEqual([]);
+
+    await core.setChatModelInMenu({ providerId, modelId: "taken-out-model", inMenu: true });
+    await core.setChatModelInMenu({ providerId, modelId: "listed-b", inMenu: false });
+    const [after] = await core.listChatModels();
+    expect(after?.models).toEqual(["listed-a", "my-model", "taken-out-model"]);
+    expect(after?.hidden).toEqual(["listed-b"]);
   });
 });

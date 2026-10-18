@@ -136,12 +136,8 @@ export function ProviderForm({
   refused?: KeyRefusal | null;
   /** The setup card's key step: the form is titled with the company picked, and opens on the key. */
   standalone?: boolean;
-  /**
-   * Settings › Models' Add a provider (#179): the default model stays as it is, so while
-   * there is one the form asks for no model and tries the key with the provider's own.
-   */
+  /** The default model stays as it is, so while there is one the form asks for no model. */
   keepDefault?: boolean;
-  /** The region the form opens on, when the provider has several. */
   initialEndpoint?: string | null;
 }) {
   const t = useT();

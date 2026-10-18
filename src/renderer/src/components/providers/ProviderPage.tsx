@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import type {
+  ChatModelChoice,
   ChatModelGroup,
   ChatProvider,
   ModelAbout,
@@ -41,7 +42,13 @@ import { keyProviderName, useProviderKey } from "./shared";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-/** A provider's name, without its region or address, which its page shows apart. */
+/** `answers`: where Answers went, null for nowhere; left out when they didn't use the provider. */
+export interface RemovedProvider {
+  provider: string;
+  answers?: ChatModelChoice | null;
+  automatic: boolean;
+}
+
 export function providerName(provider: ChatProvider, t: Translate, language: Language): string {
   if (provider.kind === "chatgpt") return t("chatgpt.title");
   if (provider.kind === "claude-account" || provider.kind === "copilot") {
@@ -58,13 +65,11 @@ export function providerName(provider: ChatProvider, t: Translate, language: Lan
   return keyProviderName(provider.catalogId ?? provider.kind, t, language);
 }
 
-/** A context window as people write it: "1M", "200K". */
 const contextSize = (tokens: number) =>
   tokens >= 1_000_000
     ? `${Number((tokens / 1_000_000).toFixed(1))}M`
     : `${Math.round(tokens / 1_000)}K`;
 
-/** What a model can do, in plain words: "Uses Tools · reads images · thinks first · 1M context". */
 function abilitiesOf(about: ModelAbout | undefined, t: Translate): string {
   if (!about) return "";
   const line = joinMeta([
@@ -76,12 +81,6 @@ function abilitiesOf(about: ModelAbout | undefined, t: Translate): string {
   return line.charAt(0).toLocaleUpperCase() + line.slice(1);
 }
 
-/**
- * A saved provider's page in Settings › Models (#179): where its data goes and
- * what it does with it, its region, its key with Test and "Get a key ↗", and
- * its models, each with what it can do, about what an Answer costs and "In the
- * menu"; then its Other models, "Add a model ID…" and Remove.
- */
 export function ProviderPage({
   provider,
   group,
@@ -92,12 +91,11 @@ export function ProviderPage({
 }: {
   provider: ChatProvider;
   group: ChatModelGroup | undefined;
-  /** A key its provider refused, from "Check the key": said by the key field, which has the focus. */
+  /** From "Check the key": said by the key field, which takes the focus. */
   refused: KeyRefusal | null;
   onBack(): void;
-  /** Another region of the provider: its own page, added or not. */
   onRegion(endpoint: string): void;
-  onRemoved(): void;
+  onRemoved(removed: RemovedProvider): void;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -143,7 +141,7 @@ export function ProviderPage({
   };
 
   const chatModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
-  /** Any model of the provider, which saving a key needs; the default stays as it is. */
+  // Saving a key needs a model id; with `keepDefault` it changes nothing.
   const someModel =
     (chatModel?.providerId === provider.id ? chatModel.modelId : undefined) ??
     group?.models[0] ??
@@ -179,9 +177,16 @@ export function ProviderPage({
   };
 
   const remove = async () => {
+    const before = useAppStore.getState().settings?.user;
+    const held = (choice: ChatModelChoice | null | undefined) => choice?.providerId === provider.id;
     try {
       await core.deleteChatProvider(provider.id);
-      onRemoved();
+      const after = (await core.getSettings()).user;
+      onRemoved({
+        provider: name,
+        ...(held(before?.chatModel) && { answers: after.chatModel }),
+        automatic: held(before?.quickTasksModel) || held(before?.imageModel),
+      });
     } catch (failure) {
       useAppStore.getState().reportError(failure);
     }
@@ -367,7 +372,6 @@ export function ProviderPage({
   );
 }
 
-/** What the Test found: the model that answered and how fast, or what went wrong, in plain words. */
 function TestLine({
   provider,
   name,
@@ -407,11 +411,6 @@ function TestLine({
   );
 }
 
-/**
- * The models the provider offers in its menu, in the menu's order: each with
- * what it can do, about what a typical Answer costs, and "In the menu". The
- * Answers model stays in the menu. "Pricing ↗" heads the costs.
- */
 function ModelsList({
   group,
   name,
@@ -431,27 +430,30 @@ function ModelsList({
   if (group.offered.length === 0) return null;
   return (
     <section data-testid="provider-models" className="flex flex-col gap-1">
-      <div className="flex items-baseline justify-between gap-3">
-        <h5 className="text-[13px] leading-5 font-semibold text-ink">
-          {t("models.provider.models")}
-        </h5>
-        {prices && priced && (
-          <a
-            href={prices.url}
-            target="_blank"
-            rel="noreferrer"
-            data-testid="provider-pricing"
-            className="text-[12px] leading-5 text-ink-meta underline underline-offset-2 hover:text-ink"
-          >
-            {t("models.provider.pricing")} ↗
-          </a>
-        )}
-      </div>
+      <h5 className="text-[13px] leading-5 font-semibold text-ink">
+        {t("models.provider.models")}
+      </h5>
       <table className="w-full table-fixed border-collapse text-left">
         <thead>
           <tr className="text-[12px] leading-4 text-ink-meta">
             <th className="pb-1 font-normal">{t("models.provider.model")}</th>
-            <th className="w-[38%] pb-1 font-normal" aria-label={t("models.provider.cost")} />
+            <th data-testid="provider-cost-head" className="w-[38%] pb-1 font-normal">
+              {t("models.provider.cost")}
+              {prices && priced && (
+                <>
+                  {" · "}
+                  <a
+                    href={prices.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="provider-pricing"
+                    className="underline underline-offset-2 hover:text-ink"
+                  >
+                    {t("models.provider.pricing")} ↗
+                  </a>
+                </>
+              )}
+            </th>
             <th className="w-[5.5rem] pb-1 text-right font-normal">
               {t("models.provider.inMenu")}
             </th>
@@ -516,7 +518,6 @@ function ModelsList({
   );
 }
 
-/** About what a typical Answer costs, marked as our estimate: in the provider's currency, free here, or the plan's. */
 function CostText({
   cost,
   provider,
@@ -529,29 +530,39 @@ function CostText({
   language: Language;
 }) {
   const t = useT();
+  const tipId = useId();
   if (!cost) return null;
   if (cost.kind === "free")
     return <span data-testid="provider-model-cost">{t("models.provider.cost.free")}</span>;
   if (cost.kind === "plan")
     return <span data-testid="provider-model-cost">{t("models.provider.cost.plan")}</span>;
+  const tip =
+    checked &&
+    t("models.provider.cost.tip", {
+      provider,
+      date: formatDate(checked, language, { timeZone: "UTC" }),
+    });
   return (
-    <span
-      data-testid="provider-model-cost"
-      title={
-        checked
-          ? t("models.provider.cost.tip", {
-              provider,
-              date: formatDate(checked, language, { timeZone: "UTC" }),
-            })
-          : undefined
-      }
-    >
-      {t("models.provider.cost.estimate", { amount: formatMoney(cost, language) })}
-    </span>
+    <>
+      <span
+        data-testid="provider-model-cost"
+        title={tip || undefined}
+        // Reached by Tab too, so where the estimate comes from isn't for the mouse alone.
+        tabIndex={tip ? 0 : undefined}
+        aria-describedby={tip ? tipId : undefined}
+        className="rounded-sm"
+      >
+        {t("models.provider.cost.estimate", { amount: formatMoney(cost, language) })}
+      </span>
+      {tip && (
+        <span id={tipId} className="sr-only">
+          {tip}
+        </span>
+      )}
+    </>
   );
 }
 
-/** "Add a model ID…": a field for an id the provider doesn't list, which goes into the menu. */
 function AddModelId({
   onAdd,
   taken,

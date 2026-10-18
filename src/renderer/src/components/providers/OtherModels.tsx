@@ -33,12 +33,6 @@ export const otherRowsOf = (group: ChatModelGroup): OtherModel[] => [
     .map((id): OtherModel => ({ id, why: "unknown" })),
 ];
 
-/**
- * A provider's Other models, on its page in Settings › Models: a disclosure of
- * what it lists that its model menu leaves out, and the ids the User added,
- * grouped by why. Ticking a row puts it in the menu; one that can't answer
- * Questions here has no box. Not shown while the provider has none.
- */
 export function OtherModels({
   group,
   open,

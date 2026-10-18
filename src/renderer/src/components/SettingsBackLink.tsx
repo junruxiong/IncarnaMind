@@ -1,11 +1,7 @@
 import { useEffect, useRef } from "react";
 import { ChevronLeftLineIcon } from "./lineIcons";
 
-/**
- * A Settings sub-page's way up to its page, named by that page ("‹ Connectors"), as interaction
- * rule 3 asks. The page opened from a card or a row, so the keyboard's
- * place starts here, unless the page puts it where the User acts first (`focused` false).
- */
+/** Named by the page it goes up to (interaction rule 3). */
 export function SettingsBackLink({
   label,
   testId,
@@ -18,6 +14,7 @@ export function SettingsBackLink({
   focused?: boolean;
 }) {
   const button = useRef<HTMLButtonElement>(null);
+  // The page opened from a card or a row: the keyboard's place starts here.
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, as the page opens.
   useEffect(() => {
     if (focused) button.current?.focus();

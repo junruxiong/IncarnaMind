@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react";
 import type {
   ChatModelChoice,
   ChatModelGroup,
+  ChatProvider,
   ModelRoles,
   UserSettings,
 } from "../../../../core/api";
@@ -25,7 +26,7 @@ const ROWS: readonly { role: Role; label: MessageKey; tip: MessageKey }[] = [
   { role: "imageModel", label: "models.defaults.images", tip: "models.defaults.images.tip" },
 ];
 
-/** A choice as a select's value; "" is Automatic, the setting left to be worked out. */
+/** "" is Automatic: the setting left for the core to work out. */
 const keyOf = (choice: ChatModelChoice | null | undefined): string =>
   choice ? `${choice.providerId}\n${choice.modelId}` : "";
 
@@ -34,13 +35,13 @@ const choiceOf = (value: string): ChatModelChoice | null => {
   return providerId && modelId ? { providerId, modelId } : null;
 };
 
-/**
- * Settings › Models › Defaults (#179): the model for Answers, the quick-tasks
- * model and the model that reads images, each from the models in the menu of
- * every provider. The two others start as Automatic, which names the model it
- * comes to now; a model chosen for images is one that reads them.
- */
-export function ModelDefaults({ groups }: { groups: readonly ChatModelGroup[] }) {
+export function ModelDefaults({
+  groups,
+  providers,
+}: {
+  groups: readonly ChatModelGroup[];
+  providers: readonly ChatProvider[];
+}) {
   const t = useT();
   const id = useId();
   const user = useAppStore((state) => state.settings?.user);
@@ -64,6 +65,7 @@ export function ModelDefaults({ groups }: { groups: readonly ChatModelGroup[] })
             id={`${id}-${row.role}`}
             row={row}
             groups={groups}
+            providers={providers}
             user={user}
             roles={roles}
           />
@@ -77,12 +79,14 @@ function DefaultRow({
   id,
   row,
   groups,
+  providers,
   user,
   roles,
 }: {
   id: string;
   row: (typeof ROWS)[number];
   groups: readonly ChatModelGroup[];
+  providers: readonly ChatProvider[];
   user: UserSettings | undefined;
   roles: ModelRoles | null;
 }) {
@@ -108,8 +112,14 @@ function DefaultRow({
       .map((modelId) => ({ providerId: group.provider.id, modelId })),
   );
   const current = choiceOf(value);
-  // The model in use stays shown even when no menu lists it now.
-  if (current && !options.some((each) => keyOf(each) === value)) options.unshift(current);
+  // A provider's menu may not list the model in use, or not have loaded yet.
+  if (
+    current &&
+    providers.some((each) => each.id === current.providerId) &&
+    !options.some((each) => keyOf(each) === value)
+  ) {
+    options.unshift(current);
+  }
   const automatic =
     row.role === "chatModel"
       ? null

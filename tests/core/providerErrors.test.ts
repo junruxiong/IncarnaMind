@@ -38,4 +38,17 @@ describe("A provider's refusal", () => {
   test("with another 400 stays the provider's own error", () => {
     expect(classifyProviderError(refused("messages: field required")).kind).toBe("provider");
   });
+
+  test("of a key, said only in the body of a 400 (Google's model list), is a refused key", () => {
+    const listRefused = new APICallError({
+      message: "HTTP 400",
+      url: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
+      requestBodyValues: undefined,
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: { code: 400, message: "API key not valid. Please pass a valid API key." },
+      }),
+    });
+    expect(classifyProviderError(listRefused).kind).toBe("auth");
+  });
 });

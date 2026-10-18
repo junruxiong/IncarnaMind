@@ -338,7 +338,7 @@ export async function fetchProviderModels(spec: ModelListSpec): Promise<ListedMo
   ];
 }
 
-/** As `fetchProviderModels`, but empty when it can't be reached. */
+/** Empty when it can't be reached. */
 export async function listProviderModels(spec: ModelListSpec): Promise<ListedModel[]> {
   try {
     return await fetchProviderModels(spec);

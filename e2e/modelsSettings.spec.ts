@@ -154,6 +154,19 @@ test("adds a provider from the directory with a fake endpoint, tests it, and pic
     await expect(settings.getByTestId("models-add-provider")).toBeFocused();
     await answers.selectOption(`${added}\nb-strong`);
     await expect.poll(() => chatModel(window)).toEqual({ providerId: added, modelId: "b-strong" });
+    const quick = settings.getByTestId("model-default-quickTasksModel");
+    await quick.selectOption(`${added}\nb-fast`);
+    await expect(quick).toHaveValue(`${added}\nb-fast`);
+
+    // Removed, it leaves no default pointing at it, and one line says where Answers went.
+    await settings.getByTestId("provider-row").filter({ hasText: second.host }).click();
+    await settings.getByTestId("provider-remove").click();
+    await expect(settings.getByTestId("models-removed")).toHaveText(
+      `Removed ${second.host}. Answers now use first-model · ${first.host}.`,
+    );
+    await expect(answers).toHaveValue(`${existing.id}\nfirst-model`);
+    await expect(quick).toHaveValue("");
+    await expect(settings.getByTestId("provider-row")).toHaveCount(1);
   } finally {
     await app.close();
   }
@@ -266,7 +279,13 @@ test("a key provider's page: where its data goes, its key with Test, and each mo
             ? /^按 DeepSeek 深度求索的价格估算，核对于 \d{4}年\d{1,2}月\d{1,2}日$/
             : /^Estimate from DeepSeek’s price, checked \d{1,2} \w+ \d{4}$/,
         );
-        await expect(page.getByTestId("provider-pricing")).toHaveText(zh ? "价格 ↗" : "Pricing ↗");
+        await expect(page.getByTestId("provider-cost-head")).toHaveText(
+          zh ? "每个回答的费用 · 价格 ↗" : "Cost per Answer · Pricing ↗",
+        );
+        // Where the estimate comes from is reached by the keyboard too.
+        await cost.focus();
+        await expect(cost).toBeFocused();
+        await expect(cost).toHaveAccessibleDescription(/DeepSeek/);
         // The Answers model stays in the menu.
         await expect(flash.getByTestId("provider-model-in-menu")).toBeDisabled();
         // Nothing runs past the page's edge.

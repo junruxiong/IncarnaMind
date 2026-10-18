@@ -1,14 +1,11 @@
-/**
- * Model providers' logos in one colour (D119), drawn in the text's colour on a 24-unit grid.
- * The drawings are Lobe Icons' monochrome ones (MIT, Copyright (c) 2023 LobeHub,
- * resources/notices/provider-logos.txt). The logos are their companies' trademarks, shown to
- * name each provider; they don't mean any of them sponsors or endorses IncarnaMind.
+/*
+ * Lobe Icons' monochrome drawings (MIT, Copyright (c) 2023 LobeHub; resources/notices/provider-logos.txt).
+ * The logos are their companies' trademarks, shown only to name each provider.
  */
 
-/** One path of a logo; a part drawn lighter keeps its opacity. */
 export type LogoPath = string | { d: string; opacity: number };
 
-/** By catalog id, and Copilot's by its kind. A server the User gives (an OpenAI-compatible one) has none. */
+/** By catalog id; Copilot's by its kind. */
 export const PROVIDER_LOGOS: Readonly<Record<string, readonly LogoPath[]>> = {
   anthropic: [
     "M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017l-1.344 3.46H0L6.57 3.522zm4.132 9.959L8.453 7.687 6.205 13.48H10.7z",
