@@ -8304,7 +8304,7 @@ export interface CoreApi {
   /**
    * The files in a Search scope that couldn't be read, and why (#740): its
    * Documents with no text, password-protected or damaged, and the files in
-   * its Linked folders in a format not read. A scope of none (null) is every
+   * its Linked folders in a format not read, by file name. A scope of none (null) is every
    * Document. Empty when everything in it was read.
    */
   listUnreadFiles(scope?: SearchScope | null): Promise<UnreadFile[]>;
