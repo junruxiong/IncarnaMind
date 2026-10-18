@@ -639,7 +639,7 @@ function report(
     "",
     "## Standing on its own",
     "",
-    `${failing("points-back")} of ${expecting("standsAlone")} Answers held to it point to an earlier Answer in what goes into a page: the reply as Add to note puts it, or what they wrote into a Mind. In the panel, where the reply stays as the model wrote it, ${pointingInPanel} of them do. ${failing("example")} of ${expecting("noExample")} mention the example unasked.`,
+    `${failing("points-back")} of ${expecting("standsAlone")} Answers held to it point to an earlier Answer in what goes into a page: the reply as Add to note puts it, or what they wrote into a Mind. Counting the replies in the panel, where they stay as the model wrote them: ${pointingInPanel}. ${failing("example")} of ${expecting("noExample")} mention the example unasked.`,
     "",
     `Taking pointers out of the replies, as Add to note puts them in a page, left out ${markersLeftOut} Citation markers, over all ${results.length} Answers.`,
     "",
