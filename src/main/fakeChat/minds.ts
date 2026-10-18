@@ -73,8 +73,12 @@ export function mindRead(prompt: Prompt): string | null {
   ].join("\n\n");
 }
 
-/** The owner's two requests (#880): a summary page, then the same made longer (写一个总结页面, 再长一点). */
-const SUMMARY_PAGE = /\bwrite a summary page\b|写一个总结页面/i;
+/**
+ * The owner's two requests (#880): a summary page, then the same made longer (写一个总结页面, 再长一点);
+ * and the owner's request for a written piece (#1109): 根据我现有的文件帮我写一份summary.
+ */
+const SUMMARY_PAGE =
+  /\bwrite a summary page\b|写一个总结页面|\bwrite a summary of my documents\b|根据我现有的文件帮我写一份summary/i;
 const LONGER = /\blonger\b|长一点|更长/i;
 /** A rewrite of the User's text (改写), which Edit with AI's scripted model writes anew. */
 const REWRITE = /\brewrite\b|改写/i;

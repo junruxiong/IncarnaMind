@@ -19,7 +19,13 @@ import { fileStatusLabel, formatCount } from "../linkedFolders";
 import { usePeekKey } from "../peek";
 import { useRequests } from "../requests";
 import { scanningStatus } from "../scanStatus";
-import { rowsIn, selectedOn, useSelectable, useSelectionOrder } from "../selection";
+import {
+  rowsIn,
+  selectedOn,
+  useSelectable,
+  useSelectionFollowsShown,
+  useSelectionOrder,
+} from "../selection";
 import { useSortMenu } from "../sortMenu";
 import { allExamples, isOwnDocument, selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
@@ -121,6 +127,7 @@ export function DocumentsSection() {
   const treeKeys = useTreeKeyboard(tree);
   // ⌘A and Shift-click reach the rows in view: every Mind and Document the tree draws.
   useSelectionOrder("sidebar", () => rowsIn(tree.current));
+  useSelectionFollowsShown(tree);
   const tags = useAppStore((state) => state.tags);
   // Built once per change to the Tags, so each row only looks its own up.
   const tagsById = useMemo(() => tagIndex(tags), [tags]);
@@ -360,7 +367,7 @@ const DocumentRow = memo(function DocumentRow({
     openDocument({ documentId: item.id }),
   );
   const peek = usePeekKey(item.id, "sidebar");
-  const lit = isOpen || select.selected;
+  const lit = select.selected;
   const muted = !lit && (isProcessing(item.status) || item.fileStatus !== "available");
   const treeItem = useTreeItem({ depth, selected: select.selected });
 
