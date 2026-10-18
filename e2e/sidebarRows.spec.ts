@@ -196,19 +196,14 @@ for (const language of ["en", "zh-CN"] as const) {
           textBoxOf(undo),
           boxOf(sidebar),
         ]);
-        // Undo ends inside the sidebar, after the message or under it, and nothing is cut at its end.
+        // Undo ends inside the sidebar, after the message, and nothing is cut at its end.
         expect(undoBox.x + undoBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width);
-        expect(messageBox.x + messageBox.width).toBeLessThanOrEqual(
-          sidebarBox.x + sidebarBox.width,
-        );
-        const after = messageBox.x + messageBox.width <= undoBox.x + 0.5;
-        const under = messageBox.y + messageBox.height <= undoBox.y + 2;
-        expect(after || under, JSON.stringify({ messageBox, undoBox })).toBe(true);
+        expect(undoBox.x).toBeGreaterThanOrEqual(messageBox.x + messageBox.width - 0.5);
         // The name is cut in the middle: its start and its end show, and the tooltip has all of it.
         const said = (await message.textContent()) ?? "";
-        expect(said).toContain(characters.slice(0, 8).join(""));
+        expect(said).toContain(characters.slice(0, 3).join(""));
         expect(said).toContain("…");
-        expect(said).toContain(characters.slice(-8).join(""));
+        expect(said).toContain(characters.slice(-3).join(""));
         expect(said).not.toContain(name);
         expect(await message.getAttribute("title")).toContain(name);
       }

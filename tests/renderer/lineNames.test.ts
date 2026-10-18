@@ -16,9 +16,9 @@ const LONG = "Quarterly review of harbour dues and the wider coastal levy schedu
 
 describe("a name in a line", () => {
   test("a short name is said whole, with no second message", () => {
-    expect(saidInLine(en, (t) => t("object.renamed", { name: "Tides" }))).toEqual({
-      message: "Renamed to “Tides”",
-    });
+    const said = saidInLine(en, (t) => t("object.renamed", { name: "Tides" }));
+    expect(said.message).toBe("Renamed to “Tides”");
+    expect(said.fullMessage).toBeUndefined();
   });
 
   test("a long name is cut in the middle, and the whole one is kept for the tooltip", () => {
@@ -59,6 +59,24 @@ describe("a name in a line", () => {
     expect(message).toContain("…");
     expect(message).toContain("“Report”");
     expect(fullMessage).toContain(LONG);
+  });
+
+  test("a line with less room cuts each name shorter, never the words around it", () => {
+    const { within } = saidInLine(en, (t) => t("move.done", { name: LONG, folder: LONG }));
+    expect(within(40)).toBe(
+      "Moved “Quarterly review of … levy schedule 2026” to Quarterly review of … levy schedule 2026",
+    );
+    expect(within(20)).toBe("Moved “Quarterly …dule 2026” to Quarterly …dule 2026");
+    expect(within(8)).toBe("Moved “Quar…026” to Quar…026");
+    expect(within(100)).toBe(`Moved “${LONG}” to ${LONG}`);
+  });
+
+  test("a name under the room is cut shorter all the same, when the line needs it", () => {
+    const { message, fullMessage, within } = saidInLine(en, (t) =>
+      t("object.renamed", { name: "Tide tables of the east basin" }),
+    );
+    expect(message).toBe(fullMessage ?? message);
+    expect(within(16)).toBe("Renamed to “Tide tab…t basin”");
   });
 
   test("a move says its name and its Folder cut, and the Edit menu's name is left alone", () => {

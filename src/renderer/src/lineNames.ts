@@ -1,4 +1,4 @@
-import { nameInLine } from "../../shared/naming";
+import { NAME_IN_LINE_COLUMNS, shortenMiddle } from "../../shared/naming";
 import type { Translate } from "./objects";
 
 /** The placeholders of the dictionary that hold something the User named. */
@@ -14,7 +14,7 @@ const NAME_PARAMS: ReadonlySet<string> = new Set([
 ]);
 
 const cutting =
-  (t: Translate): Translate =>
+  (t: Translate, columns: number): Translate =>
   (key, params) =>
     t(
       key,
@@ -22,7 +22,9 @@ const cutting =
         Object.fromEntries(
           Object.entries(params).map(([each, value]) => [
             each,
-            typeof value === "string" && NAME_PARAMS.has(each) ? nameInLine(value) : value,
+            typeof value === "string" && NAME_PARAMS.has(each)
+              ? shortenMiddle(value, columns)
+              : value,
           ]),
         ),
     );
@@ -31,6 +33,8 @@ export interface Said {
   message: string;
   /** `message` with every name whole, for the tooltip and the accessible name; absent when none was cut. */
   fullMessage?: string;
+  /** The message with each name cut to at most `columns`, for a line with less room than `message` needs. */
+  within(columns: number): string;
 }
 
 /**
@@ -42,7 +46,9 @@ export function saidInLine(
   t: Translate,
   build: (t: Translate, cut: (name: string) => string) => string,
 ): Said {
-  const message = build(cutting(t), nameInLine);
+  const within = (columns: number) =>
+    build(cutting(t, columns), (name) => shortenMiddle(name, columns));
+  const message = within(NAME_IN_LINE_COLUMNS);
   const fullMessage = build(t, (name) => name);
-  return message === fullMessage ? { message } : { message, fullMessage };
+  return message === fullMessage ? { message, within } : { message, fullMessage, within };
 }
