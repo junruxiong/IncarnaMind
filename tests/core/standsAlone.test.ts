@@ -148,17 +148,18 @@ describe("Through the assistant", { timeout: 30_000 }, () => {
     expect(answer.text).toBe(reply);
   });
 
-  // protects=text the assistant writes into a Mind has no pointer to an earlier Answer, and the model is told one was cut, so it can write what it pointed to; fails_when=the pointer lands in the page or the model isn't told; no_claim=none beyond protects.
-  test("a pointer written into a Mind is cut, and the model is told", async () => {
+  // protects=text the assistant writes into a Mind has no pointer to an earlier Answer, and the model is told one was cut, so it can write what it pointed to; its reply, which only reports on the change, is kept as written; fails_when=the pointer lands in the page, the model isn't told, or the reply is cut; no_claim=none beyond protects.
+  test("a pointer written into a Mind is cut, the model is told, and its reply on the change stays", async () => {
+    const reply = "Added a summary. I left out what my earlier answer covered.";
     const content =
       "## Summary\n\nThe agreement employs D. Reyes as a software engineer. Notice and holiday are covered in my earlier answer.";
     const { core, model, mind } = await setUp(({ results }) =>
       results.length === 0
         ? { calls: [{ tool: "add_to_mind", input: { content } }] }
-        : { text: "Added a summary." },
+        : { text: reply },
     );
 
-    await askAssistant(core, { text: "Add a summary to my notes", mindId: mind.id });
+    const answer = await askAssistant(core, { text: "Add a summary to my notes", mindId: mind.id });
 
     const client = await connectToMind(core, mind.id);
     await client.settled();
@@ -166,5 +167,6 @@ describe("Through the assistant", { timeout: 30_000 }, () => {
     expect(text).toContain("The agreement employs D. Reyes as a software engineer.");
     expect(text).not.toContain("earlier answer");
     expect(lastResult(model)).toContain("pointing to an earlier Answer");
+    expect(answer.text).toBe(reply);
   });
 });

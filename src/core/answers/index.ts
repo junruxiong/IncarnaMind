@@ -1116,7 +1116,13 @@ export function createAnswers(options: AnswersOptions) {
       }
       // A marker no Citation backs is not kept in the text, and each is counted for the summary.
       markdown = withoutDeadMarkers(markdown, (marker) => session.finalCitation(marker) !== null);
-      if (!asksAboutEarlier(context.question)) markdown = withoutPointersBack(markdown).markdown;
+      // A reply after a change to a Mind only reports on it; the text written there was already cleaned.
+      const reportsAChange = toolCalls.some(
+        (call) => call.mindChange !== undefined && changesAMind(call.mindChange),
+      );
+      if (!reportsAChange && !asksAboutEarlier(context.question)) {
+        markdown = withoutPointersBack(markdown).markdown;
+      }
       // Its steps say how many figures it shows, and its end how many it couldn't calculate.
       const placed = placedFigures(withoutFootnoteDefinitions(markdown), true);
       if (placed.figures.length > 0 || placed.missing > 0) {

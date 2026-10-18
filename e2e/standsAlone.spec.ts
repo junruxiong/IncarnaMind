@@ -69,6 +69,10 @@ for (const walk of WALKS) {
     await expect(frontMind(window).locator(".mind-editor h1")).toHaveText(walk.example, {
       timeout: 30_000,
     });
+    // The ready Question waits for the example's Documents to be read, as its Citations show.
+    const checks = frontMind(window).getByTestId("margin-check");
+    await expect(checks).toHaveCount(2);
+    await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 60_000 });
     await markSteps(window, { citationChecked: true });
     await pointAndClick(
       window,
