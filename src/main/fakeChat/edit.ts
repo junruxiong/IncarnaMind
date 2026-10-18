@@ -76,7 +76,9 @@ export function fakeEdit(prompt: Prompt): { text: string; slow: boolean } | null
   const text = editedText(action, passage, asked.replace(/\s+slowly\.?$/i, ""));
   // In the passage's language, as the instructions ask.
   const why = EDIT_REASONS[action]?.[/\p{Script=Han}/u.test(passage) ? 1 : 0];
-  return { text: why ? `${text}\n\n<why>${why}</why>` : text, slow: SLOWLY.test(asked) };
+  // A cut's task quotes the sentence's sources, which may say "slowly" themselves.
+  const slow = action !== "cut-unsupported" && SLOWLY.test(asked);
+  return { text: why ? `${text}\n\n<why>${why}</why>` : text, slow };
 }
 
 /** The scripted Edit with AI's new text for `passage`, or its explanation. */
