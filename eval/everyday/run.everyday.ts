@@ -41,6 +41,13 @@ import { CASES, type EverydayCase, floorOf, type LibraryName } from "./cases";
 import { failureLine, type RequestFailure, requestFailures } from "./checks";
 import { judgeClaims } from "./judge";
 import { languageRates, type RequestRun, rowRates } from "./rates";
+import {
+  checkCitedSentences,
+  type SentenceSupport,
+  SUPPORTED_TARGET,
+  supportedShare,
+  supportRates,
+} from "./support";
 
 const ROOT = resolve(__dirname, "../..");
 
@@ -110,6 +117,8 @@ interface CaseResult {
   error: string | null;
   /** The Answers' tokens, its earlier requests' included (not Edit with AI's or the judge's). */
   usage: AnswerUsage;
+  /** A research request: each cited sentence of the reply, as the app's own check judged it; null for the others. */
+  support: SentenceSupport[] | null;
 }
 
 /** Asks in the assistant and resolves with the Answer as stored once it has ended. */
@@ -297,6 +306,7 @@ async function runCase(
   const minds = await core.listMinds();
   const names = (id: string) => minds.find((each) => each.id === id)?.title ?? null;
   const record = toolRecordLines(answer.toolCalls, names);
+  const support = each.research ? await checkCitedSentences(core, answer) : null;
   const verdict = await judgeClaims(
     judge,
     answer.text,
@@ -355,6 +365,7 @@ async function runCase(
     seconds: (Date.now() - started) / 1000,
     error: answer.status === "failed" ? `${answer.errorKind}: ${answer.errorMessage}` : null,
     usage,
+    support,
   };
 }
 
@@ -415,7 +426,10 @@ async function runModel(
       const { core } = library;
       // Setting the variables is the consent to send the requests and Passages to the model.
       core.on("consent.requested", (request) => {
-        void core.respondToConsent(request.requestId, request.flow.id === "chat");
+        void core.respondToConsent(
+          request.requestId,
+          request.flow.id === "chat" || request.flow.id === "checks",
+        );
       });
       await core.saveChatProvider({
         kind: chat.kind,
@@ -445,6 +459,7 @@ async function runModel(
             seconds: 0,
             error: error instanceof Error ? error.message : String(error),
             usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 },
+            support: null,
           };
         }
         log(
@@ -481,13 +496,47 @@ function report(
   const under = rows.filter((row) => row.under);
   const sum = (key: keyof AnswerUsage) =>
     results.reduce((total, each) => total + each.usage[key], 0).toLocaleString("en");
+  const answered = results.filter((each) => !each.error && each.reply !== "");
+  const researched = answered.filter((each) => each.support !== null);
+  const averageLength = (some: readonly CaseResult[]) =>
+    Math.round(some.reduce((total, each) => total + each.reply.length, 0) / (some.length || 1));
+  const checked = researched.flatMap((each) =>
+    (each.support ?? []).map((sentence) => ({ id: each.id, model: each.model, ...sentence })),
+  );
   return [
     "# Everyday requests",
     "",
     `${rows.length - under.length} of ${rows.length} requests at or above their floor; ${runs.filter((run) => run.passed).length} of ${runs.length} runs passed. Claims judged by ${judge}.`,
     "",
-    `The Answers' tokens: ${sum("inputTokens")} in (${sum("cachedInputTokens")} of them from the cache), ${sum("outputTokens")} out. Edit with AI's and the judge's aren't counted.`,
+    `The Answers' tokens: ${sum("inputTokens")} in (${sum("cachedInputTokens")} of them from the cache), ${sum("outputTokens")} out. Edit with AI's, the judge's and the cited sentences' checks aren't counted.`,
     "",
+    `An Answer is ${averageLength(answered).toLocaleString("en")} characters long on average (${answered.length} Answers)${researched.length > 0 ? `, ${averageLength(researched).toLocaleString("en")} for the research questions (${researched.length})` : ""}.`,
+    "",
+    ...(researched.length > 0
+      ? [
+          "## Cited sentences",
+          "",
+          `The research questions' Answers, each cited sentence checked against the Documents by the app's own Check against Documents, run by the model asked. The target is ${percent(SUPPORTED_TARGET * 100, 100)} Supported.`,
+          "",
+          "| Model | Language | Supported | Not checked |",
+          "|---|---|---|---|",
+          ...supportRates(researched.map((each) => ({ ...each, support: each.support ?? [] }))).map(
+            (group) =>
+              `| ${group.model} | ${group.language} | ${group.supported} of ${group.judged}${group.judged > 0 ? ` (${percent(group.supported, group.judged)})` : ""} | ${group.notChecked} |`,
+          ),
+          "",
+          ...(checked.some((each) => each.verdict !== "supported")
+            ? [
+                "Not Supported:",
+                "",
+                ...checked
+                  .filter((each) => each.verdict !== "supported")
+                  .map((each) => `- ${each.id} (${each.model}), ${each.verdict}: ${each.sentence}`),
+                "",
+              ]
+            : []),
+        ]
+      : []),
     "## By language",
     "",
     "| Model | Language | Passed |",
@@ -574,10 +623,16 @@ test("everyday requests", async () => {
   );
   await writeFile(join(folder, "report.json"), JSON.stringify({ rows, results }, null, 2));
   const under = rows.filter((row) => row.under);
+  const supported = supportedShare(results.flatMap((each) => each.support ?? []));
   log(
     `${rows.length - under.length} of ${rows.length} requests at or above their floor; report in ${folder}`,
   );
   if (under.length > 0) {
     throw new Error(`Under their floor: ${under.map((row) => row.id).join(", ")}`);
+  }
+  if (supported < SUPPORTED_TARGET) {
+    throw new Error(
+      `${Math.round(supported * 100)}% of the cited sentences are Supported, under the target of ${SUPPORTED_TARGET * 100}%.`,
+    );
   }
 });
