@@ -70,15 +70,15 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
     const height = await window.evaluate(() => globalThis.innerHeight);
 
     // The sidebar is exactly 248px; the card follows after an 8px gap, 8px from the top and
-    // the bottom, and ends 8px before the assistant docked on the right (#253), which ends 8px
-    // short of the window.
+    // the bottom, and ends 4px before the assistant docked on the right (#253, #1099), which ends
+    // 8px short of the window.
     const sidebar = await boxOf(window.getByTestId("sidebar"));
     expect(sidebar.width).toBe(248);
     const card = await boxOf(window.getByTestId("card"));
     const assistant = await boxOf(window.getByTestId("assistant"));
     expect(assistant).toMatchObject({ y: 8, height: height - 16 });
     expect(assistant.x + assistant.width).toBe(width - 8);
-    expect(card).toEqual({ x: 256, y: 8, width: assistant.x - 8 - 256, height: height - 16 });
+    expect(card).toEqual({ x: 256, y: 8, width: assistant.x - 4 - 256, height: height - 16 });
     const style = await window
       .getByTestId("card")
       .evaluate((element) => getComputedStyle(element).borderTopLeftRadius);
