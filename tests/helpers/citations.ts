@@ -14,6 +14,7 @@ import { turnOnEmbeddings } from "./embedding";
 import { connectToMind, type MindClient } from "./mindClient";
 import { answerIn, editMind, question, writeMind } from "./minds";
 import {
+  lastAnswerCall,
   type ModelCall,
   promptOf,
   type ScriptedReply,
@@ -101,7 +102,7 @@ export const unaskedModel = () => scriptedModel(() => ({ text: "No Answer was as
 
 /** What the model was told about its records: the result of its last `cite` call. */
 export function citeFeedback(model: MockLanguageModelV4): string {
-  const last = model.doStreamCalls.at(-1);
+  const last = model.doStreamCalls[lastAnswerCall(model)];
   if (!last) throw new Error("The model wasn't asked anything.");
   const texts: string[] = [];
   for (const message of last.prompt) {
