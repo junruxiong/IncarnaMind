@@ -3722,9 +3722,15 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     exportMind: async (mindId, options) => {
       const exported = await mindExports.export(mindId, options);
-      // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
-      recordOwnFile(exported.data, ownFileOf(options));
-      recordExport(options);
+      // The host saves these bytes as a file: IncarnaMind's, wherever it goes. Noting so is
+      // never needed for the file itself: a copy saved while storage refuses every write (#1119)
+      // still goes out.
+      try {
+        recordOwnFile(exported.data, ownFileOf(options));
+        recordExport(options);
+      } catch (error) {
+        console.error("export: the file couldn't be noted as IncarnaMind's", error);
+      }
       return exported;
     },
     saveMindExport: async (mindId, options) => {

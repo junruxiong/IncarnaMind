@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
-import { openDatabase } from "../src/core/storage";
+import { part, unzip } from "../tests/helpers/docx";
+import { refuseWrites } from "../tests/helpers/failingStorage";
 import {
   createDataFolder,
   launchApp,
@@ -30,17 +31,7 @@ test.afterEach(async () => {
   await removeDataFolder(elsewhere);
 });
 
-/** Makes storing Mind content fail as a full disk does, until the returned function is called. */
-function failWrites(): () => void {
-  const db = openDatabase(join(dataDir, "incarnamind.db"));
-  db.exec(
-    "CREATE TRIGGER fail_writes BEFORE INSERT ON mind_updates BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END",
-  );
-  return () => {
-    db.exec("DROP TRIGGER fail_writes");
-    db.close();
-  };
-}
+const failWrites = () => refuseWrites(dataDir);
 
 async function start(language: "en" | "zh-CN") {
   const { app, window } = await launchApp(dataDir);
@@ -85,16 +76,29 @@ for (const [language, line] of [
   });
 }
 
-/** Answers the system's message box with `response`, and keeps what it was asked. */
-async function answerSheet(app: ElectronApplication, response: number) {
-  await app.evaluate(({ dialog }, answer) => {
+/** Answers the system's message boxes with `responses` in turn, and keeps what each asked. */
+async function answerSheets(app: ElectronApplication, responses: readonly number[]) {
+  await app.evaluate(({ dialog }, answers) => {
     const asked: unknown[] = [];
     (globalThis as { sheetsAsked?: unknown[] }).sheetsAsked = asked;
     dialog.showMessageBox = (async (...args: unknown[]) => {
       asked.push(args.at(-1));
-      return { response: answer, checkboxChecked: false };
+      return { response: answers[asked.length - 1] ?? 2, checkboxChecked: false };
     }) as unknown as typeof dialog.showMessageBox;
-  }, response);
+  }, responses);
+}
+
+const sheetsAsked = (app: ElectronApplication) =>
+  app.evaluate(() => (globalThis as { sheetsAsked?: unknown[] }).sheetsAsked ?? []);
+
+/** From now on the system's save dialog answers `path`. */
+async function chooseSavePath(app: ElectronApplication, path: string) {
+  await app.evaluate(({ dialog }, chosen) => {
+    dialog.showSaveDialog = (async () => ({
+      canceled: false,
+      filePath: chosen,
+    })) as unknown as typeof dialog.showSaveDialog;
+  }, path);
 }
 
 test("quitting while changes wait asks first, and Keep open keeps them", async () => {
@@ -102,18 +106,12 @@ test("quitting while changes wait asks first, and Keep open keeps them", async (
   const restore = failWrites();
   await window.keyboard.type(" LOST");
   await expect(notice(window)).toBeVisible();
-  await answerSheet(app, 2);
+  await answerSheets(app, [2]);
 
   await app.evaluate(({ app: electron }) => electron.quit());
 
-  await expect
-    .poll(() =>
-      app.evaluate(() => (globalThis as { sheetsAsked?: unknown[] }).sheetsAsked?.length ?? 0),
-    )
-    .toBe(1);
-  const [asked] = await app.evaluate(
-    () => (globalThis as { sheetsAsked?: unknown[] }).sheetsAsked ?? [],
-  );
+  await expect.poll(async () => (await sheetsAsked(app)).length).toBe(1);
+  const [asked] = await sheetsAsked(app);
   expect(asked).toMatchObject({
     message: expect.stringMatching(/^\d+ changes aren’t saved$/),
     buttons: ["Save a copy…", "Quit anyway", "Keep open"],
@@ -126,25 +124,43 @@ test("quitting while changes wait asks first, and Keep open keeps them", async (
   await expect(notice(window)).toHaveCount(0);
 });
 
-test("Save a copy… writes the Mind as a Word file where the User chooses", async () => {
+test("Save a copy… writes the Mind as a Word file where the User chooses, though every write fails", async () => {
   const { app, window } = await start("en");
-  const restore = failWrites();
+  const restore = refuseWrites(dataDir, { every: true });
   await window.keyboard.type(" LOST");
+  await expect(notice(window)).toBeVisible();
   const copy = join(elsewhere, "Notes.docx");
-  await app.evaluate(({ dialog }, path) => {
-    dialog.showSaveDialog = (async () => ({
-      canceled: false,
-      filePath: path,
-    })) as unknown as typeof dialog.showSaveDialog;
-  }, copy);
+  await chooseSavePath(app, copy);
 
   await notice(window).getByTestId("unsaved-save-copy").click();
 
   await expect
     .poll(async () => (await readFile(copy).catch(() => null))?.byteLength ?? 0)
     .not.toBe(0);
-  const zip = await readFile(copy);
-  expect(zip.subarray(0, 2).toString()).toBe("PK");
+  expect(part(unzip(await readFile(copy)), "word/document.xml")).toContain("BASE LOST");
+  restore();
+  await notice(window).getByTestId("unsaved-try-again").click();
+  await expect(notice(window)).toHaveCount(0);
+});
+
+test("quitting, a copy that can't be saved keeps IncarnaMind open and asks again, saying why", async () => {
+  const { app, window, editor } = await start("en");
+  const restore = failWrites();
+  await window.keyboard.type(" LOST");
+  await expect(notice(window)).toBeVisible();
+  await chooseSavePath(app, join(elsewhere, "missing folder", "Notes.docx"));
+  await answerSheets(app, [0, 2]);
+
+  await app.evaluate(({ app: electron }) => electron.quit());
+
+  await expect.poll(async () => (await sheetsAsked(app)).length).toBe(2);
+  const [, again] = await sheetsAsked(app);
+  expect(again).toMatchObject({
+    detail: expect.stringMatching(/^The copy couldn’t be saved: .*ENOENT/),
+    defaultId: 2,
+    cancelId: 2,
+  });
+  await expect(editor).toHaveText("BASE LOST");
   restore();
   await notice(window).getByTestId("unsaved-try-again").click();
   await expect(notice(window)).toHaveCount(0);
