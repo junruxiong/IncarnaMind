@@ -13,12 +13,19 @@
  * conversation's last Answer changed a Mind (`followsAChange`). An unclear
  * request is answered as before: the model chooses, and its changes wait for
  * the User.
+ *
+ * A request to write a piece ("write a summary of my documents",
+ * "根据我现有的文件帮我写一份summary") goes into a new Mind (#1109). After an
+ * Answer, "make it a document" or "你不给我建一份文档吗" puts that Answer in a
+ * new Mind as it is (`fromAnswer`), a question in form but not in meaning.
  */
 export type RequestKind = "edit" | "write" | "unclear";
 
 export interface RequestRoute {
   kind: RequestKind;
   newMind: boolean;
+  /** The last Answer goes into a new Mind as it is: its text, Citations and scope. */
+  fromAnswer?: true;
 }
 
 // Never a doubt: "I mean write a summary…", "no, keep it shorter", "帮我润色一下这段".
@@ -99,6 +106,19 @@ const WRITES = [
   ),
 ];
 
+const PIECE_NOUN =
+  "(?:summary|report|memo|review|brief|briefing|plan|overview|outline|proposal|analysis|write-up)";
+// A piece of writing: what goes into a Mind of its own, as a document does (#1109).
+const PIECES = [
+  new RegExp(
+    `^(?:(?:based on|from|using) ${WORDS},? )?(?:write|draft|prepare|create|put together)(?: me)? (?:a|an)(?: (?:short|brief|one-page|full|detailed|quick|new))?(?: [\\p{L}-]+){0,2} ${PIECE_NOUN}(?: (?:of|about|on|for|from|to|based on) ${WORDS})?(?: in ${LANGUAGE})?$`,
+    "u",
+  ),
+];
+// The last Answer, as a Mind of its own: "make it a document", "can you put this in a new note?".
+const AS_A_MIND =
+  /^(?:(?:can|could|would|will|won't) you |please |why not )?(?:make|turn|put|save|write|create|copy) (?:it|this|that|these|them|the answer|your answer|that answer|this answer)(?: up)? (?:in|into|as|to) (?:(?:a |an )?(?:new |separate )?(?:document|doc|file|mind)|(?:a |an )?(?:new|separate) (?:note|page)|a (?:note|page))(?: for me)?\??$|^(?:make|create) (?:a |an )?(?:new )?(?:document|doc|mind) (?:of|from|with) (?:it|this|that|the answer|your answer)\??$|^(?:(?:can|could|would|will) you )?make (?:it|this|that|the answer|your answer) (?:a|an) (?:new )?(?:document|doc|file|mind)\??$/;
+
 const FOLLOW_UPS = [
   new RegExp(
     `^(?:(?:make|keep) it )?(?:(?:a bit|a little|much|even) )?(?:${COMPARED}|${MORE}|short|simple|formal|concise|(?:about )?\\d+ words)$`,
@@ -163,6 +183,21 @@ const ZH_FOLLOW_UPS = [
   /^(?:翻译成|改成)(?:中文|英文)$/,
 ];
 const ZH_CONTINUE = /^(?:继续|接着写|继续写)$/;
+const ZH_PIECE_NOUN =
+  "(?:总结|摘要|报告|备忘录|综述|简报|计划|概述|方案|纪要|summary|report|memo|review|brief|plan|overview)";
+const ZH_PIECES = [
+  new RegExp(
+    `^(?:(?:根据|基于|按照|结合|参考)${ZH_FREE}，?)?(?:帮我)?(?:写|起草|整理|做|出)一[份篇个][^，。？！?吗呢吧么]{0,20}?${ZH_PIECE_NOUN}$`,
+    "iu",
+  ),
+  new RegExp(
+    `^(?:(?:根据|基于)${ZH_FREE}，?)?(?:帮我)?(?:把${ZH_FREE})?整理成一?[份篇个]?(?:文档|报告|总结)$`,
+    "u",
+  ),
+];
+// "你不给我建一份文档吗", "做成文档", "把这个放进一个新笔记": the last Answer, as a Mind of its own.
+const ZH_AS_A_MIND =
+  /^你?(?:能不能|可以|能|不|要不要)?(?:给我|帮我)?(?:把(?:它|这个|这些|刚才的回答|这个回答|上面的内容|你的回答))?(?:建|做|整理|写|存|放|生成|弄)(?:成|进)?(?:一[份个篇])?(?:新的?)?(?:(?:文档|文件)|(?:(?<=一[份个篇]新?的?)|新的?)(?:笔记|页面))(?:吧|吗|呢)?[？?]?$/u;
 
 const NEW_MIND =
   /\b(?:new|separate|another|fresh|an?)\s+(?:[\p{L}-]+\s+){0,2}(?:page|note|handout)\b|\b(?:make|take) notes\b|新建|创建|一[个份篇](?:总结|概述)?(?:页面|页)$/u;
@@ -180,7 +215,12 @@ export interface RequestContext {
   followsAnAnswer: boolean;
 }
 
-function plainKind(question: string, { followsAChange, followsAnAnswer }: RequestContext) {
+type PlainKind = "edit" | "write" | "piece" | "as-a-mind";
+
+function plainKind(
+  question: string,
+  { followsAChange, followsAnAnswer }: RequestContext,
+): PlainKind | null {
   const trimmed = question.trim();
   // "Make my summary shorter..." trails off.
   if (/(?:\.{2,}|…|。{2,})$/.test(trimmed)) return null;
@@ -189,9 +229,11 @@ function plainKind(question: string, { followsAChange, followsAnAnswer }: Reques
       .replace(/[。！]+$/, "")
       .replace(/，?谢谢$/, "")
       .replace(ZH_FILLER, "");
+    if (followsAnAnswer && ZH_AS_A_MIND.test(chinese)) return "as-a-mind";
     if (ZH_ASKS.test(chinese)) return null;
     if (matches(ZH_EDITS, chinese)) return "edit";
     if (ZH_ADD_IT.test(chinese)) return followsAnAnswer ? "write" : null;
+    if (matches(ZH_PIECES, chinese)) return "piece";
     if (matches(ZH_WRITES, chinese)) return "write";
     if (!followsAChange) return null;
     if (matches(ZH_FOLLOW_UPS, chinese)) return "edit";
@@ -204,9 +246,11 @@ function plainKind(question: string, { followsAChange, followsAnAnswer }: Reques
     .replace(/,? (?:thanks|thank you|then)$/, "")
     .replace(/,? (?:please|pls)$/, "")
     .replace(FILLER, "");
+  if (followsAnAnswer && AS_A_MIND.test(english)) return "as-a-mind";
   if (ASKS.test(english)) return null;
   if (matches(EDITS, english)) return WHOLE_MIND.test(english) ? null : "edit";
   if (ADD_IT.test(english)) return followsAnAnswer ? "write" : null;
+  if (matches(PIECES, english)) return "piece";
   if (matches(WRITES, english)) return "write";
   if (!followsAChange) return null;
   if (matches(FOLLOW_UPS, english)) return "edit";
@@ -214,8 +258,12 @@ function plainKind(question: string, { followsAChange, followsAnAnswer }: Reques
 }
 
 export function routeRequest(question: string, context: RequestContext): RequestRoute {
-  const kind = plainKind(question, context) ?? "unclear";
+  const plain = plainKind(question, context);
+  if (plain === "as-a-mind") return { kind: "write", newMind: true, fromAnswer: true };
+  const kind = plain === "piece" ? "write" : (plain ?? "unclear");
   const newMind =
-    kind === "write" && !NAMES_A_MIND.test(question) && NEW_MIND.test(question.toLocaleLowerCase());
+    kind === "write" &&
+    !NAMES_A_MIND.test(question) &&
+    (plain === "piece" || NEW_MIND.test(question.toLocaleLowerCase()));
   return { kind, newMind };
 }

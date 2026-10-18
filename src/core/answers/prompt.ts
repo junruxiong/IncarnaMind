@@ -163,6 +163,11 @@ export function mindInstructions(offered: boolean, route: RequestRoute | null = 
 function routeLine(route: RequestRoute | null): string {
   switch (route?.kind) {
     case "write":
+      if (route.fromAnswer) {
+        return route.newMind
+          ? "- This request asks for your last Answer as a document: call create_mind with a short title and answer: true, and nothing else. It puts in that Answer as it is, with its Citations and every Document it covered: don't search again or write it anew."
+          : "- This request asks for your last Answer as a document: the Mind in <mind> is empty, so call add_to_mind with answer: true, and nothing else. It puts in that Answer as it is, with its Citations and every Document it covered: don't search again or write it anew.";
+      }
       return route.newMind
         ? "- This request asks for a new page or note: write it into a new Mind with create_mind, not in your reply."
         : "- This request asks for text in a Mind: write it there with add_to_mind, not in your reply. If text of yours still waiting already covers it, revise that with edit_mind instead of writing it again.";

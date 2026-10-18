@@ -152,10 +152,11 @@ export interface MindToolsOptions {
   origin: BlockOrigin;
   /**
    * The conversation's last Answer before this one, as Add to note puts it
-   * in a Mind, with its Citations, and the Answer its Blocks link back to:
+   * in a Mind, with its Citations, the Answer its Blocks link back to, and
+   * the Folder of its Question's Search scope, where a Mind made of it goes:
    * what `answer: true` writes. Null: there is none.
    */
-  lastAnswer: { blocks: NodeJSON[]; origin: BlockOrigin } | null;
+  lastAnswer: { blocks: NodeJSON[]; origin: BlockOrigin; folderId: string | null } | null;
   /** The language the Answer is written in, which the model is told to ask the User in. */
   language: Language;
   /**
@@ -1616,8 +1617,11 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   // A model that began with a heading of its own keeps that one alone.
   const headed = (content: string) => /^\s*#{1,6}\s/.test(content);
 
-  const make = (title: string, startsWithHeading: boolean): ChangeableMind =>
-    minds.create(title, options.folderId, !startsWithHeading);
+  const make = (
+    title: string,
+    startsWithHeading: boolean,
+    folderId = options.folderId,
+  ): ChangeableMind => minds.create(title, folderId, !startsWithHeading);
 
   const create: Tool = {
     name: MIND_TOOLS.create,
@@ -1655,13 +1659,17 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const given = givenIn(input);
       // Made already, as its content came in.
       const streamed = streams.get(toolCallId)?.writer?.mind;
+      // A Mind made of the last Answer goes where that Answer searched, not where this Question does.
+      const folderId =
+        given !== null && typeof given !== "string" ? given.folderId : options.folderId;
       const mind =
         streamed ??
         make(
           title,
           typeof given === "string" ? headed(given) : given?.blocks[0]?.type === "heading",
+          folderId,
         );
-      const folder = options.folderId === null ? null : minds.folderName(options.folderId);
+      const folder = folderId === null ? null : minds.folderName(folderId);
       const made = `Made the Mind “${mind.name}”${folder ? ` in the Folder “${folder}”` : ""}, open beside the User's Mind`;
       const empty = () =>
         options.changed(toolCallId, { mindId: mind.id, created: true, request: "", proposals: 0 });
