@@ -5,7 +5,7 @@
  * ProposalBars handles their buttons, by `data-applied-action` and
  * `data-applied-restore`. They go once the User edits.
  */
-import { type Editor, Extension } from "@tiptap/core";
+import { type Editor, Extension, isMacOS } from "@tiptap/core";
 import type { Fragment, Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { type EditorState, Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
@@ -135,7 +135,8 @@ function restoreButton(index: number, count: number, t: Translate): HTMLButtonEl
   each.className = "proposal-action applied-restore";
   each.dataset.appliedRestore = String(index);
   each.dataset.testid = "change-restore";
-  each.title = t("proposal.position", { index: index + 1, count });
+  each.title = `${t("proposal.position", { index: index + 1, count })} · ${isMacOS() ? "⌘⌫" : "Ctrl+Backspace"}`;
+  each.setAttribute("aria-keyshortcuts", isMacOS() ? "Meta+Backspace" : "Control+Backspace");
   each.textContent = t("edit.review.restore");
   return each;
 }

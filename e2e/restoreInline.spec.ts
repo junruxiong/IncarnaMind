@@ -180,6 +180,14 @@ for (const { language, lines, ask, shortened, veryBack, reallyBack, restore } of
       await expect(line.getByTestId("applied-done")).toHaveCSS("font-weight", "600");
       await expect(line.getByTestId("applied-done")).toHaveCSS("color", "rgb(23, 25, 28)");
       await expect(restores.first()).toHaveCSS("font-size", "12px");
+      await expect(restores.first()).toHaveAttribute(
+        "aria-keyshortcuts",
+        process.platform === "darwin" ? "Meta+Backspace" : "Control+Backspace",
+      );
+      await expect(restores.first()).toHaveAttribute(
+        "title",
+        process.platform === "darwin" ? /·\s⌘⌫$/ : /·\sCtrl\+Backspace$/,
+      );
       await expect(restores.first()).toHaveCSS("color", "rgb(101, 107, 116)");
 
       await expect(window.getByTestId("applied-change-bar")).toHaveCount(0);
