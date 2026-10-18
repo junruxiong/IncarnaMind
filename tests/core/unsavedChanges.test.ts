@@ -281,3 +281,59 @@ describe("Changes storage refuses (#1119)", () => {
     expect(await afterRestart(dataDir, copy.mindId)).toBe("<paragraph>BASE</paragraph>");
   });
 });
+
+describe("Changes waiting when their Mind is deleted (#1202)", () => {
+  // protects=a Mind deleted while its changes wait keeps them: they are stored, deleted with it, once storage is back, and Restore brings back everything typed; fails_when=deleting drops them, and the restored Mind lacks the typing; no_claim=none beyond protects.
+  test.each(["after", "before"] as const)(
+    "restored %s storage is back, the Mind holds what was typed",
+    async (when) => {
+      const dataDir = await createTempDataFolder();
+      const core = startCore(dataDir);
+      const copy = await typingIn(core);
+      const restore = failWrites(dataDir);
+      await copy.type(" LOST");
+
+      await core.deleteMind(copy.mindId);
+      if (when === "before") await core.restore([{ kind: "mind", id: copy.mindId }]);
+      restore();
+      expect(await core.saveChangesAgain()).toBeNull();
+      if (when === "after") await core.restore([{ kind: "mind", id: copy.mindId }]);
+      core.close();
+
+      expect(await afterRestart(dataDir, copy.mindId)).toBe("<paragraph>BASE LOST</paragraph>");
+    },
+  );
+
+  // protects=what waits in a deleted Mind still counts, for the notice and the quit sheet, but no copy of it is offered; fails_when=the count leaves it out, so quitting says nothing of it; no_claim=the sheet's look, which the e2e checks.
+  test("a deleted Mind's waiting changes count, with no copy offered", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const copy = await typingIn(core);
+    const restore = failWrites(dataDir);
+    await copy.type(" ONE");
+    await copy.type(" TWO");
+
+    await core.deleteMind(copy.mindId);
+
+    expect(await core.unsavedChanges()).toMatchObject({ count: 2, mindIds: [] });
+    restore();
+  });
+
+  // protects=deleting a Mind for good drops what of it waits, and says so in the log; fails_when=it keeps being tried, or the notice never goes; no_claim=none beyond protects.
+  test("deleted for good, what waits goes, and the log says so", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const copy = await typingIn(core);
+    const restore = failWrites(dataDir);
+    await copy.type(" LOST");
+    await core.deleteMind(copy.mindId);
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await core.deletePermanently([{ kind: "mind", id: copy.mindId }]);
+
+    expect(await core.unsavedChanges()).toBeNull();
+    expect(logged.mock.calls.flat().join(" ")).toContain(copy.mindId);
+    logged.mockRestore();
+    restore();
+  });
+});

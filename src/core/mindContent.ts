@@ -48,6 +48,11 @@ interface LoadedMind {
   outbox: { update: Uint8Array; cause: EditCause | undefined }[];
   cause: EditCause | undefined;
   unsaved: Unsaved | null;
+  /**
+   * When the Mind was deleted, while changes to it wait (#1202): they stay until it is deleted
+   * for good, and are stored deleted with it, so Restore brings them back.
+   */
+  deletedAt: string | null;
 }
 
 /** A Mind's changes storage refused (#1119): kept in memory as one update, and tried again. */
@@ -64,7 +69,10 @@ interface Unsaved {
 /** What the core hears of changes that couldn't be stored. */
 export interface MindContentOptions {
   /** Some of the Mind's changes couldn't be stored, or (null) all of them are now. */
-  unsaved?(mindId: string, state: { count: number; failure: unknown } | null): void;
+  unsaved?(
+    mindId: string,
+    state: { count: number; failure: unknown; deleted: boolean } | null,
+  ): void;
 }
 
 /** How long to wait before storing again after each failed try; the last repeats. */
@@ -98,16 +106,21 @@ export function createMindContent(
 ) {
   const loaded = new Map<string, LoadedMind>();
 
-  const insert = (mindId: string, data: Uint8Array, at: string) => {
+  const insert = (
+    mindId: string,
+    data: Uint8Array,
+    at: string,
+    deletedAt: string | null = null,
+  ) => {
     db.run(
-      "INSERT INTO mind_updates (id, mind_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-      [randomUUID(), mindId, data, at, at],
+      "INSERT INTO mind_updates (id, mind_id, data, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?)",
+      [randomUUID(), mindId, data, at, at, deletedAt],
     );
   };
 
   /** Replaces the Mind's stored rows with one row holding the document's whole state. */
   const compact = (mindId: string, mind: LoadedMind) => {
-    if (mind.storedRows <= 1) return;
+    if (mind.storedRows <= 1 || mind.deletedAt !== null) return;
     const state = Y.encodeStateAsUpdate(mind.doc);
     db.transaction(() => {
       db.run("DELETE FROM mind_updates WHERE mind_id = ? AND deleted_at IS NULL", [mindId]);
@@ -147,6 +160,7 @@ export function createMindContent(
       outbox: [],
       cause: undefined,
       unsaved: null,
+      deletedAt: null,
     };
     // Listening only after loading, so the stored rows aren't stored again. The
     // listener must not throw: Yjs calls it while finishing a transaction.
@@ -189,7 +203,7 @@ export function createMindContent(
     try {
       const at = now();
       db.transaction(() => {
-        for (const row of rows) insert(mindId, row, at);
+        for (const row of rows) insert(mindId, row, at, mind.deletedAt);
       });
     } catch (failure) {
       if (waiting?.timer) clearTimeout(waiting.timer);
@@ -202,7 +216,11 @@ export function createMindContent(
       };
       mind.unsaved = unsaved;
       unsaved.timer = retryLater(mindId, mind, unsaved.tries);
-      options.unsaved?.(mindId, { count: unsaved.count, failure });
+      options.unsaved?.(mindId, {
+        count: unsaved.count,
+        failure,
+        deleted: mind.deletedAt !== null,
+      });
       return false;
     }
     mind.storedRows += rows.length;
@@ -210,6 +228,8 @@ export function createMindContent(
       if (waiting.timer) clearTimeout(waiting.timer);
       mind.unsaved = null;
       options.unsaved?.(mindId, null);
+      // A deleted Mind stays in memory only while its changes wait.
+      if (mind.deletedAt !== null) unload(mindId);
     }
     if (mind.storedRows >= COMPACT_AFTER_UPDATES) compact(mindId, mind);
     return true;
@@ -393,7 +413,7 @@ export function createMindContent(
      */
     close(mindId: string): void {
       const mind = loaded.get(mindId);
-      if (!mind) return;
+      if (!mind || mind.deletedAt !== null) return;
       flush(mindId, mind);
       if (!store(mindId, mind, [])) return;
       // A Mind a newer version wrote is left exactly as stored.
@@ -405,33 +425,55 @@ export function createMindContent(
     remove(mindId: string, at: string): void {
       const mind = loaded.get(mindId);
       if (mind?.unsaved && !store(mindId, mind, [])) {
-        console.error(
-          `${mind.unsaved.count} changes to Mind ${mindId} couldn't be stored before it was deleted.`,
-          mind.unsaved.failure,
-        );
-        options.unsaved?.(mindId, null);
-      }
-      unload(mindId);
+        const { unsaved } = mind;
+        mind.deletedAt = at;
+        options.unsaved?.(mindId, {
+          count: unsaved.count,
+          failure: unsaved.failure,
+          deleted: true,
+        });
+      } else unload(mindId);
       db.run(
         "UPDATE mind_updates SET deleted_at = ?, updated_at = ? WHERE mind_id = ? AND deleted_at IS NULL",
         [at, at, mindId],
       );
     },
 
-    /** Brings back the content `remove` marked deleted at `deletedAt`. */
+    /** Brings back the content `remove` marked deleted at `deletedAt`, what still waits included. */
     restore(mindId: string, deletedAt: string): void {
       db.run(
         "UPDATE mind_updates SET deleted_at = NULL, updated_at = ? WHERE mind_id = ? AND deleted_at = ?",
         [now(), mindId, deletedAt],
       );
+      const mind = loaded.get(mindId);
+      if (mind?.deletedAt !== deletedAt) return;
+      mind.deletedAt = null;
+      const { unsaved } = mind;
+      if (unsaved) {
+        options.unsaved?.(mindId, {
+          count: unsaved.count,
+          failure: unsaved.failure,
+          deleted: false,
+        });
+      }
     },
 
-    /** Tries once more to store what is waiting; the Minds whose changes still wait. */
-    storeWaiting(): { mindId: string; count: number; failure: unknown }[] {
-      for (const [mindId, mind] of loaded) if (mind.unsaved) store(mindId, mind, []);
-      return [...loaded].flatMap(([mindId, { unsaved }]) =>
-        unsaved ? [{ mindId, count: unsaved.count, failure: unsaved.failure }] : [],
-      );
+    /** Drops a Mind deleted for good from memory, with what of it still waits. */
+    forget(mindId: string): void {
+      const mind = loaded.get(mindId);
+      if (mind?.unsaved) {
+        console.error(
+          `${mind.unsaved.count} changes to Mind ${mindId} couldn't be stored before it was deleted for good.`,
+          mind.unsaved.failure,
+        );
+        options.unsaved?.(mindId, null);
+      }
+      unload(mindId);
+    },
+
+    /** Tries once more to store what is waiting. */
+    storeWaiting(): void {
+      for (const [mindId, mind] of [...loaded]) if (mind.unsaved) store(mindId, mind, []);
     },
 
     /** Drops every document from memory, storing first what couldn't be stored before. */

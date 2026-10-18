@@ -39,18 +39,20 @@ export function UnsavedNotices() {
                     onClick: saveChangesAgain,
                   }}
                 />,
-                <LineAction
-                  key="copy"
-                  action={{
-                    label: t("unsaved.saveCopy"),
-                    testId: "unsaved-save-copy",
-                    onClick: () => {
-                      saveCopies(unsaved.mindIds).catch((error: unknown) =>
-                        useNotices.getState().showError(error),
-                      );
-                    },
-                  }}
-                />,
+                unsaved.mindIds.length > 0 && (
+                  <LineAction
+                    key="copy"
+                    action={{
+                      label: t("unsaved.saveCopy"),
+                      testId: "unsaved-save-copy",
+                      onClick: () => {
+                        saveCopies(unsaved.mindIds).catch((error: unknown) =>
+                          useNotices.getState().showError(error),
+                        );
+                      },
+                    }}
+                  />
+                ),
               ]}
             />
             <details data-testid="unsaved-notice-details" className="mt-1 text-ink-meta">

@@ -390,6 +390,7 @@ export function createRecentlyDeleted(options: {
               values: { name: nameOf(kind, row) },
             });
           purge(db, kind, [id], at, documentText);
+          if (kind === "mind") content.forget(id);
         }
       });
     },

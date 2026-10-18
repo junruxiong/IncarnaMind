@@ -49,7 +49,7 @@ export function createUnsavedChanges({
   );
   let lost = readLost(marker);
   forget(marker);
-  const waiting = new Map<string, { count: number; failure: unknown }>();
+  const waiting = new Map<string, { count: number; failure: unknown; deleted: boolean }>();
 
   const summary = (): UnsavedChanges | null => {
     const minds = [...waiting];
@@ -57,7 +57,8 @@ export function createUnsavedChanges({
     if (!last) return null;
     return {
       count: minds.reduce((sum, [, each]) => sum + each.count, 0),
-      mindIds: minds.map(([mindId]) => mindId),
+      // A deleted Mind's changes count, but no copy of it is offered: Restore brings it back.
+      mindIds: minds.flatMap(([mindId, each]) => (each.deleted ? [] : [mindId])),
       reason: saveFailureReason(last.failure),
       detail: last.failure instanceof Error ? last.failure.message : String(last.failure),
     };
@@ -65,7 +66,10 @@ export function createUnsavedChanges({
 
   return {
     /** What `MindContentOptions.unsaved` hears. */
-    mindUnsaved(mindId: string, state: { count: number; failure: unknown } | null): void {
+    mindUnsaved(
+      mindId: string,
+      state: { count: number; failure: unknown; deleted: boolean } | null,
+    ): void {
       if (state) waiting.set(mindId, state);
       else waiting.delete(mindId);
       const now = summary();

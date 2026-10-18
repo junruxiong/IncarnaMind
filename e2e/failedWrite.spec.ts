@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import { part, unzip } from "../tests/helpers/docx";
 import { refuseWrites } from "../tests/helpers/failingStorage";
 import {
@@ -119,6 +120,34 @@ test("quitting while changes wait asks first, and Keep open keeps them", async (
     cancelId: 2,
   });
   await expect(editor).toHaveText("BASE LOST");
+  restore();
+  await notice(window).getByTestId("unsaved-try-again").click();
+  await expect(notice(window)).toHaveCount(0);
+});
+
+test("quitting counts what waits in a deleted Mind, with no copy offered", async () => {
+  const { app, window } = await start("en");
+  const restore = failWrites();
+  await window.keyboard.type(" LOST");
+  await expect(notice(window)).toBeVisible();
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const mind = (await core.listMinds()).find((each) => each.title === "Notes");
+    if (mind) await core.deleteMind(mind.id);
+  });
+  await expect(notice(window).getByTestId("unsaved-save-copy")).toHaveCount(0);
+  await answerSheets(app, [1]);
+
+  await app.evaluate(({ app: electron }) => electron.quit());
+
+  await expect.poll(async () => (await sheetsAsked(app)).length).toBe(1);
+  const [asked] = await sheetsAsked(app);
+  expect(asked).toMatchObject({
+    message: expect.stringMatching(/^\d+ changes aren’t saved$/),
+    buttons: ["Quit anyway", "Keep open"],
+    defaultId: 1,
+    cancelId: 1,
+  });
   restore();
   await notice(window).getByTestId("unsaved-try-again").click();
   await expect(notice(window)).toHaveCount(0);
