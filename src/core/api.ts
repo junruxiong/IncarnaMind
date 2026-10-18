@@ -84,7 +84,10 @@ export const DEFAULT_MIND_KIND: MindKind = "mind";
 
 export interface CreateMindInput {
   title?: string;
-  /** Its text starts with its title as a Heading 1, as a Mind made with its name does (#908). */
+  /**
+   * Its text starts with its title as a Heading 1, as a Mind made with its
+   * name does (#908); with no title, an empty one, its title to be typed.
+   */
   headed?: boolean;
   /** Defaults to `"mind"`. */
   kind?: MindKind;
@@ -896,7 +899,14 @@ export type MindProblem =
   | { kind: "no-place"; mindId: string; place: string }
   | { kind: "several-places"; mindId: string; name: string; adding: boolean }
   | {
-      kind: "no-text" | "too-long" | "changed" | "content-not-own" | "stopped" | "no-table";
+      kind:
+        | "no-text"
+        | "too-long"
+        | "changed"
+        | "content-not-own"
+        | "stopped"
+        | "no-table"
+        | "uncited";
       mindId: string;
     }
   | { kind: "local-mode" | "not-ready" }
@@ -934,6 +944,8 @@ export interface MindChange {
   tables?: number;
   /** Sources in its tables' cells written as a name in brackets that matched no Citation, kept as text. Absent: none. */
   unlinkedSources?: number;
+  /** Sources the assistant wrote as a name in brackets that matched no Citation it recorded, so left out. Absent: none. */
+  droppedSources?: number;
   /** Cells beyond its tables' columns, their text kept in their row's last cell. Absent: none. */
   extraCells?: number;
   /**

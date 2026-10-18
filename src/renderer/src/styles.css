@@ -2690,8 +2690,9 @@
       opacity: 0.45;
     }
 
-    /* The hint on the empty line being written in. An empty Mind's has its own (.end-hint). */
-    &.ProseMirror-focused > p.is-empty:not(.is-editor-empty)::before {
+    /* The hint on the empty line being written in, and "Title" on a new Mind's first line. An empty Mind's line has its own (.end-hint). */
+    &.ProseMirror-focused > p.is-empty:not(.is-editor-empty)::before,
+    &.ProseMirror-focused > h1.is-empty:first-child::before {
       content: attr(data-placeholder);
       float: left;
       height: 0;
@@ -7001,6 +7002,71 @@
 
     &:empty {
       display: none;
+    }
+  }
+  /*
+   * The title and a form's action row stay in view as the short setup card scrolls. Their
+   * margins undo their padding, so nothing moves until the card does, and the padding covers
+   * the card's own, so no content shows past them. A row's side padding holds a focus ring. The
+   * title is above the rows: a row that scrolled up to the top passes under it. A rule shows only
+   * while content is under a part.
+   */
+  .setup-card {
+    --pad: 10px;
+    padding-block: var(--pad);
+
+    /* Room for the title and for the tallest action row (it wraps) with its focus ring, so Tab never lands a control under them. */
+    &:has([data-setup-title]) {
+      scroll-padding-top: 3rem;
+    }
+    &:has([data-setup-foot]) {
+      scroll-padding-bottom: 6rem;
+    }
+    [data-setup-title],
+    [data-setup-foot] {
+      position: sticky;
+      z-index: 1;
+      background: var(--color-sheet);
+      container-type: scroll-state;
+
+      &::before {
+        content: "";
+        position: absolute;
+        inset-inline: -16px;
+        height: 1px;
+        background: var(--color-rule);
+        display: none;
+      }
+    }
+    [data-setup-title] {
+      z-index: 2;
+      top: calc(-1 * var(--pad));
+      margin-block: calc(-1 * var(--pad)) -6px;
+      padding-block: var(--pad) 6px;
+
+      &::before {
+        bottom: 0;
+      }
+    }
+    [data-setup-foot] {
+      bottom: calc(-1 * var(--pad));
+      margin: -8px -4px calc(-1 * var(--pad));
+      padding: 8px 4px var(--pad);
+
+      &::before {
+        top: 0;
+        inset-inline: -12px;
+      }
+    }
+    @container scroll-state(stuck: top) {
+      [data-setup-title]::before {
+        display: block;
+      }
+    }
+    @container scroll-state(stuck: bottom) {
+      [data-setup-foot]::before {
+        display: block;
+      }
     }
   }
   /*
