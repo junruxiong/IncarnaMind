@@ -98,21 +98,6 @@ const appCommands: readonly Command[] = [
     run: () => useAppStore.getState().createMind({ titled: true }),
   },
   {
-    id: "documents.add",
-    label: "sidebar.plus.addDocuments",
-    shortcut: { keys: "CmdOrCtrl+O" },
-    group: "main",
-    reversible: true,
-    run: () => useAppStore.getState().pickDocuments(),
-  },
-  {
-    id: "linkedFolder.add",
-    label: "sidebar.plus.linkFolder",
-    group: "main",
-    reversible: true,
-    run: () => useAppStore.getState().addLinkedFolder(),
-  },
-  {
     id: "word.import",
     label: "wordImport.command",
     group: "main",

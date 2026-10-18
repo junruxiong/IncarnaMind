@@ -323,6 +323,7 @@ test("typing while a closed menu is still fading is one step, though its copy wo
   await dismissChatSetup(window);
   await setMotionSpeed(window, 0.2);
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const addresses = window.getByTestId("add-web-page-dialog").getByTestId("add-web-page-addresses");
   await pointAndClick(window, addresses);

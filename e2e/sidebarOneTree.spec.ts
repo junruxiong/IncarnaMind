@@ -579,20 +579,31 @@ for (const [language, width] of [
   });
 }
 
-/** The New menu's four rows, then what is under More, each as ⌘K names its command; Record a meeting is off until turned on. */
+/** The + menu's four rows, then More's, in order (#1245); Record a meeting is off until turned on. */
 const NEW_MENU_ROWS: readonly MessageKey[] = [
   "menu.newMind",
   "sidebar.plus.addDocuments",
   "menu.newFolder",
   "sidebar.plus.more",
 ];
-const MORE_COMMANDS: readonly MessageKey[] = [
-  "sidebar.plus.linkFolder",
+const MORE_ROWS: readonly MessageKey[] = [
+  "wordImport.command",
   "command.compareDocuments",
   "verify.command",
+  "folder.fromStarters",
   "sidebar.plus.addWebPage",
+  "sidebar.plus.findSources",
+  "sidebar.plus.linkFolder",
+];
+/** Each as ⌘K names it. Add Documents… and Link a folder… join ⌘K with #1245. */
+const IN_PALETTE: readonly MessageKey[] = [
+  "menu.newMind",
+  "menu.newFolder",
   "wordImport.command",
+  "command.compareDocuments",
+  "verify.command",
   "library.chooseStarters",
+  "sidebar.plus.addWebPage",
   "command.sources.find",
 ];
 
@@ -618,8 +629,14 @@ for (const [language, width] of [
       for (const [index, key] of NEW_MENU_ROWS.entries()) {
         await expect(rows.nth(index)).toContainText(t(key));
       }
+      await expect(window.getByTestId("plus-add-documents")).toContainText(
+        process.platform === "darwin" ? "⌘O" : "Ctrl+O",
+      );
       await pointAt(window, window.getByTestId("plus-more"));
-      await expect(more).toHaveCount(MORE_COMMANDS.length);
+      await expect(more).toHaveCount(MORE_ROWS.length);
+      for (const [index, key] of MORE_ROWS.entries()) {
+        await expect(more.nth(index)).toContainText(t(key));
+      }
       await window.keyboard.press("Escape");
       await window.keyboard.press("Escape");
       await expect(rows).toHaveCount(0);
@@ -633,12 +650,13 @@ for (const [language, width] of [
       await expect(window.getByTestId("plus-more")).toBeFocused();
       await window.keyboard.press("ArrowRight");
       await expect(more.first()).toBeFocused();
-      await window.keyboard.press("Escape");
+      await window.keyboard.press("ArrowLeft");
       await expect(window.getByTestId("plus-more")).toBeFocused();
+      await expect(more.first()).toBeHidden();
       await window.keyboard.press("Escape");
       await expect(plus).toBeFocused();
 
-      for (const key of [...NEW_MENU_ROWS.slice(0, -1), ...MORE_COMMANDS]) {
+      for (const key of IN_PALETTE) {
         const label = t(key).replace(/…$/, "");
         await window.keyboard.press("ControlOrMeta+k");
         const search = window.getByTestId("palette-search");
