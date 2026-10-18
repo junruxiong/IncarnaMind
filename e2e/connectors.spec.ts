@@ -81,9 +81,7 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   // Privacy page lists, and revoking it there goes back to the default.
   const approvals = window.getByTestId("approvals-settings");
   await showSettingsPage(window, "privacy");
-  await expect(approvals).toContainText(
-    "No Tool is set to always allow, to ask every time or to stay off.",
-  );
+  await expect(approvals).toContainText("Nothing is set to always allow, always ask or stay off.");
   await showSettingsPage(window, "connectors");
   await lookup.getByText("Ask every time").click();
   await expect(lookup).toHaveAttribute("data-asks", "true");
@@ -274,7 +272,7 @@ test("a reviewed Connector in the directory connects in one click, signing in in
       "By Wiki Inc. · Reviewed by IncarnaMind · Needs your Wiki Pro subscription",
     );
     await expect(detail).toContainText(
-      "Sign in with Wiki in your browser; you need a Wiki Pro subscription.",
+      "Sign in with Wiki in your browser. Needs a Wiki Pro subscription.",
     );
     await expect(page.getByTestId("connectors-back")).toBeFocused();
     // Its Tools as reviewed, before connecting: what each does, with no choice yet.

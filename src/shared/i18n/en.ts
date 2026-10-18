@@ -1154,8 +1154,9 @@ export const en = {
   "evidence.citeAgain.doneMany": "{count} Documents can be cited again",
   "evidence.settings.title": "Checks",
   "evidence.settings.switch": "Leave out files IncarnaMind wrote",
-  "evidence.settings.body":
-    "While this is on, the exports and source packs IncarnaMind saved aren't used as evidence when it checks your writing or compares Documents, so a note can't support itself. A folder, or one Document, can still count them. Copies of the document being checked are always left out. Transcripts and saved web pages count as usual.",
+  "evidence.settings.body": "Exports don't count as evidence, so a note can't back itself.",
+  "evidence.settings.body.details":
+    "This covers the exports and source packs IncarnaMind saved, when it checks your writing or compares Documents. A folder, or one Document, can still count them. Copies of the document being checked are always left out. Transcripts and saved web pages count as usual.",
   "documents.skipped":
     "Only PDF, Word, PowerPoint, Excel, CSV, TXT and Markdown files can be added. Skipped: {names}",
   "documents.alreadyAdded": "Already in IncarnaMind, so nothing new was added: {names}",
@@ -1366,7 +1367,7 @@ export const en = {
   "webPages.tryAgain": "Try again",
   "webPages.add.keepLook": "Keep the page as it looks",
   "webPages.keepLook.body":
-    "Also keeps a PDF of the page as you saw it. Making it loads the page again, so the sites it draws from see a visit.",
+    "Also keeps a PDF of the page. It loads the page again, so its sites see a visit.",
   "webPages.reason.invalid-address": "it isn't a web address",
   "webPages.reason.unreachable": "the site can't be reached",
   "webPages.reason.timed-out": "the site took too long to answer",
@@ -1404,8 +1405,7 @@ export const en = {
   "embedding.model.failure.storage": "it couldn't be saved to the data folder",
 
   "embeddingProviders.settings.title": "Document search",
-  "embeddingProviders.settings.body":
-    "Documents are searched by their words, with the best matches first. A search model also finds meaning: passages worded differently from your Question, but reading Documents takes longer, and the built-in model is a 135 MB download. A cloud model may find more, but it receives the text of every Document.",
+  "embeddingProviders.settings.body": "Search by meaning also finds passages worded differently.",
   "embeddingProviders.settings.current": "Search model: ",
   "embeddingProviders.settings.off": "Off",
   "embeddingProviders.settings.offNote":
@@ -1427,9 +1427,9 @@ export const en = {
   "embeddingProviders.kind.ollama": "Ollama",
   "embeddingProviders.form.label": "Search model",
   "embeddingProviders.form.tradeOff":
-    "A search model also finds passages worded differently from your Question, at the cost of slower reading and, for the built-in model, a 135 MB download.",
+    "Finds passages worded differently, but reads slower; the built-in model is a 135 MB download.",
   "embeddingProviders.form.offHint":
-    "Documents are searched by their words, best matches first, as soon as they are read. Nothing is downloaded.",
+    "Documents are searched by their words, best matches first. Nothing is downloaded.",
   "embeddingProviders.form.localOnly":
     "Cloud models unavailable: “Keep everything on this computer” is on.",
   "embeddingProviders.form.localOnlyServer":
@@ -1438,7 +1438,7 @@ export const en = {
     "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
   "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
   "embeddingProviders.form.ollamaHint":
-    "Leave it empty for Ollama on this computer. Pull the model in Ollama first, e.g. ollama pull bge-m3.",
+    "Leave empty for Ollama on this computer. Pull the model first, e.g. ollama pull bge-m3.",
   "embeddingProviders.form.model": "Model name",
   "embeddingProviders.form.switch": "Switch…",
   "embeddingProviders.form.turnOn": "Turn on…",
@@ -1446,7 +1446,7 @@ export const en = {
   "embeddingProviders.test.ok": "Connected: the model made a vector of {dimensions} numbers.",
   "embeddingProviders.confirm.title": "Switch to {provider}?",
   "embeddingProviders.confirm.reprocess":
-    "Every Document ({count} in all) will be processed again with the new model, which can take a while. Until each one is done, search finds its passages by their words only.",
+    "Reads every Document ({count}) again; until then search matches words.",
   "embeddingProviders.confirm.cloud":
     "{service} will receive the full text of all your Documents, and every search you make.",
   "embeddingProviders.confirm.local": "Everything stays on this computer.",
@@ -1454,17 +1454,19 @@ export const en = {
   "embeddingProviders.confirm.switch": "Switch and process again",
   "embeddingProviders.confirm.onTitle": "Turn on {provider}?",
   "embeddingProviders.confirm.embed":
-    "Every Document ({count} in all) will be read for search in the background, which can take a while. Until each one is done, search finds its passages by their words.",
+    "Reads every Document ({count}) for search; until then search matches words.",
   "embeddingProviders.confirm.turnOn": "Turn on",
   "embeddingProviders.confirm.offTitle": "Turn off search by meaning?",
   "embeddingProviders.confirm.off":
-    "Search will find passages by their words, best matches first, and new Documents are ready as soon as they are read. What the search model has read so far is kept, should you turn it on again.",
+    "Search goes back to matching words. What the search model read is kept.",
   "embeddingProviders.confirm.turnOff": "Turn off",
   "embeddingProviders.localOnly.label": "Keep everything on this computer",
   "embeddingProviders.localOnly.body":
+    "Nothing of yours leaves this computer: only local models answer.",
+  "embeddingProviders.localOnly.body.details":
     "Search by meaning uses the built-in model or Ollama, search results aren't sent anywhere to be ordered, Questions are asked only of a model on this computer, and no usage data is sent. Turning it on switches a cloud search model back to the built-in one, and reads your Documents again.",
   "embeddingProviders.localOnly.cloudChat":
-    "Your AI model is on {service}, so Questions aren't sent while this is on: choose a local model under AI model to ask them.",
+    "Your AI model is on {service}, so Questions aren't sent while this is on. Choose a local model to ask.",
   "embeddingProviders.rebuild.title": "Reading Documents for search: {done} of {total}",
   "embeddingProviders.rebuild.localMode":
     "Search uses the built-in model: “Keep everything on this computer” is on.",
@@ -1473,19 +1475,20 @@ export const en = {
   "embeddingProviders.error.notice": "Search can't use {provider}. {reason}",
 
   "rerank.settings.title": "Best results first",
-  "rerank.settings.body":
-    "Search puts the most relevant passages first, using a small model. It is on by default, with the built-in model, which runs on this computer; Cohere and Voyage AI need a key. You can turn it off. It applies to an Answer from a model that searches once, to Suggest as I write, and to checks and comparison tables. A model that searches by itself doesn't use it, and searches again when the passages don't answer.",
+  "rerank.settings.body": "Puts the most relevant passages first, with a small built-in model.",
+  "rerank.settings.body.details":
+    "On by default, with the built-in model, which runs on this computer; Cohere and Voyage AI need a key. You can turn it off. It applies to an Answer from a model that searches once, to Suggest as I write, and to checks and comparison tables. A model that searches by itself doesn't use it, and searches again when the passages don't answer.",
   "rerank.settings.inUse": "{service} puts the best search results first ({model}).",
   "rerank.settings.sends": "Each search and the passages it found are sent to {service}.",
   "rerank.settings.builtInUse": "The built-in model puts the best search results first ({model}).",
   "rerank.settings.builtInDefault":
     "By default, the built-in model puts the best search results first ({model}).",
   "rerank.settings.notDownloaded":
-    "It downloads once ({total} MB) when there are Documents to search. Until then, search keeps its own order.",
+    "Downloads once ({total} MB) when there are Documents to search; until then, search keeps its order.",
   "rerank.settings.builtInNote": "Nothing leaves this computer. Each search takes a little longer.",
   "rerank.settings.runsOn": "On this computer · {device}",
   "rerank.settings.downloading":
-    "Downloading the model that orders search results: {downloaded} of {total} MB. Until it's ready, search keeps its own order.",
+    "Downloading the ordering model: {downloaded} of {total} MB. Search keeps its own order until then.",
   "rerank.settings.failed":
     "The model that orders search results couldn't be downloaded: {reason}.",
   "rerank.settings.loadFailed":
@@ -1493,7 +1496,7 @@ export const en = {
   "rerank.settings.retry": "Try again",
   "rerank.settings.paused": "Paused: “Keep everything on this computer” is on.",
   "rerank.settings.keyMissing":
-    "No key for {service} can be read on this device, so results aren't reordered. Enter the key again.",
+    "No key for {service} on this device, so results aren't reordered. Enter it again.",
   "rerank.settings.setUp": "Set up…",
   "rerank.settings.localOnly":
     "Cloud models unavailable: “Keep everything on this computer” is on.",
@@ -1609,12 +1612,11 @@ export const en = {
   "jev.chip.confirm": "Confirm {tag} on {name}",
   "jev.settings.title": "TypeSafe Jev",
   "jev.settings.body":
-    "With a TypeSafe Jev key, Jev can tag your Documents: it says how likely each Tag is, and marks the ones it isn't sure of for you to review. Automatic uses it first.",
+    "Tags with a TypeSafe Jev key, marking uncertain ones for review. Automatic uses it first.",
   "jev.settings.inUse": "Your Jev key is saved.",
   "jev.settings.server": "Server: {server}",
   "jev.settings.hosted": "TypeSafe",
-  "jev.settings.keyMissing":
-    "The Jev key isn't saved on this device, so Documents wait to be tagged. Enter the key again.",
+  "jev.settings.keyMissing": "No Jev key on this device, so Documents wait. Enter it again.",
   "jev.settings.setUp": "Use TypeSafe Jev…",
   "jev.settings.change": "Change",
   "jev.settings.remove": "Stop using Jev",
@@ -1622,16 +1624,14 @@ export const en = {
   "jev.form.advanced": "Server, model and review",
   "jev.form.endpoint": "Server URL (optional)",
   "jev.form.endpointHint":
-    "Leave it empty for TypeSafe's Jev. For a Jev-compatible model, enter its server, e.g. https://jev.example.com.",
+    "Leave empty for TypeSafe's Jev, or enter a compatible server, e.g. https://jev.example.com.",
   "jev.form.model": "Model (optional)",
   "jev.form.reviewFrom": "Needs review from (%)",
   "jev.form.reviewTo": "to (%)",
-  "jev.form.reviewHint":
-    "Below the first number a Tag isn't applied; from the second it is applied without a mark.",
+  "jev.form.reviewHint": "Below the first number: not applied. From the second: applied, unmarked.",
   "jev.form.save": "Use Jev for tagging",
   "tagging.title": "Tagging",
-  "tagging.intro":
-    "Tags each Document you add and, once you have Folders, suggests its Folder. Tags and Folders you set yourself are never changed.",
+  "tagging.intro": "Tags each new Document and suggests its Folder. Yours never change.",
   "tagging.model": "Model for tagging",
   "tagging.automatic": "Automatic",
   "tagging.using.jev": "Using {model}, with your Jev key",
@@ -1641,8 +1641,7 @@ export const en = {
   "tagging.using.plan": "Using {model}, through your ChatGPT plan",
   "tagging.using.decision-models": "Using the local decision models on this computer ({model})",
   "tagging.using.local-chat": "Using {model}, on this computer",
-  "tagging.using.none":
-    "No model to tag with yet: set up an AI model, or install Tev1 in Ollama. Documents wait until then.",
+  "tagging.using.none": "No model to tag with yet: set up an AI model, or install Tev1 in Ollama.",
   "tagging.group.plan": "ChatGPT plan",
   "tagging.group.local": "On this computer",
   "tagging.label.good": "Good for tagging",
@@ -1665,15 +1664,12 @@ export const en = {
   "tagging.organize.with": "Organize uses {model}, as you chose in the Library.",
   "tagging.organize.same": "Organize uses this model too.",
   "tagging.localMode": "Cloud models can't tag: “Keep everything on this computer” is on.",
-  "tagging.plan":
-    "Uses your ChatGPT plan, one Document at a time, so it doesn't use up what you chat with. If the plan's limit is reached, tagging waits for it to reset.",
+  "tagging.plan": "Uses your ChatGPT plan, one Document at a time.",
   "tagging.plan.local": "To keep your plan for chatting, tag on this computer instead.",
   "tagging.plan.useLocal": "Use {model}",
   "tagging.plan.paused": "Your ChatGPT plan's limit is reached: tagging goes on at {time}.",
-  "tagging.review.marked":
-    "This model says how likely each Tag is, and marks the ones it isn't sure of for you to review.",
-  "tagging.review.kept":
-    "This model doesn't say how sure it is, so every Tag it adds is kept. Remove any you don't want.",
+  "tagging.review.marked": "This model says how sure it is, and marks uncertain Tags for review.",
+  "tagging.review.kept": "Every Tag it adds is kept; remove any you don't want.",
   "tagging.stop": "Stop",
   "tagging.stop.command": "Stop Tagging",
   "tagging.tagNotInFolder": "Tag Documents not in a Folder with AI",
@@ -1698,11 +1694,9 @@ export const en = {
   "settings.language.en": "English",
   "settings.language.zh-CN": "简体中文",
   "settings.authorName": "Your name",
-  "settings.authorName.body":
-    "Your edits in a Word file go under this name when the file shows them as tracked changes.",
+  "settings.authorName.body": "Your edits in a Word file go under this name, as tracked changes.",
   "settings.motion": "Motion",
-  "settings.motion.body":
-    "How things move as they open, close and change place. Reduced turns movement into short fades; Off shows every change at once.",
+  "settings.motion.body": "Reduced uses short fades; Off changes everything at once.",
   "settings.motion.on": "On",
   "settings.motion.reduced": "Reduced",
   "settings.motion.off": "Off",
@@ -1724,7 +1718,7 @@ export const en = {
   "outputLocation.pick.button": "Choose",
   "outputLocation.linked.title": "New files in Linked folders",
   "outputLocation.linked.body":
-    "IncarnaMind only reads a Linked folder unless you allow it to add new files there. It never changes or deletes your files.",
+    "Only reads a Linked folder, unless you allow new files there. It never changes or deletes yours.",
   "outputLocation.linked.allow": "Allow new files in {name}",
   "fileWrite.location.title": "Where should new files go?",
   "fileWrite.location.missing":
@@ -1760,22 +1754,20 @@ export const en = {
   "setup.way.local.notRunning": "Needs the free Ollama app",
   "setup.claude.title": "Already pay for Claude?",
   "setup.claude.line":
-    "Anthropic doesn’t let other apps use a Claude plan. You can ask your Documents in the Claude app instead.",
+    "Anthropic doesn’t let other apps use a Claude plan. Ask your Documents in the Claude app.",
   "setup.claude.connect": "Connect the Claude app",
-  "setup.claude.missing":
-    "Needs the Claude app for Mac or Windows; claude.ai in a browser can’t reach this computer.",
+  "setup.claude.missing": "Needs the Claude app for Mac or Windows, not claude.ai in a browser.",
   "setup.claude.download": "Download Claude",
   "setup.claude.copied": "Copied. Paste it into the Claude app, then ask your Documents there.",
   "setup.claude.connected": "Connected. Open the Claude app and ask your Documents there.",
-  "setup.claude.noFolder":
-    "Claude reads one Folder. Put this Mind in a Folder first, or set it up in Settings.",
+  "setup.claude.noFolder": "Claude reads one Folder. Put this Mind in one first.",
   "setup.claude.openAgents": "Open Agents settings",
   "plans.title": "Already pay for a plan?",
   "plans.chatgpt.title": "ChatGPT Plus or Pro",
   "plans.chatgpt.line": "Sign in with your ChatGPT account. No key needed.",
   "plans.claude.title": "Claude Pro, Max or Team",
   "plans.claude.line":
-    "Use IncarnaMind in the Claude app, where your plan pays. Max and Team also include monthly API credits for a key.",
+    "Use IncarnaMind in the Claude app. Max and Team include monthly API credits.",
   "plans.google.title": "Google AI Pro or Ultra",
   "plans.google.line": "Use IncarnaMind in Antigravity, where your plan pays.",
   "plans.google.connect": "Connect Antigravity",
@@ -1882,16 +1874,16 @@ export const en = {
   "providers.test.ollama-not-running":
     "Ollama isn't running on this computer. Open it, then test again.",
   "providers.test.data-retention":
-    "The key works, but {model} needs your Anthropic organization to allow 30-day data retention. Choose another model, or use a key from an organization that allows it.",
+    "The key works, but {model} needs your Anthropic organization to allow 30-day data retention. Choose another model.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
   "providers.secrets.plainText.body":
-    "IncarnaMind encrypts API keys with your system's keyring, and none is running, so a key would be stored as plain text in your data folder. Start GNOME Keyring or KWallet (for example, install gnome-keyring, then sign out and back in), and restart IncarnaMind.",
+    "No keyring is running: keys would be saved as plain text. Start GNOME Keyring or KWallet, then restart IncarnaMind.",
   "providers.secrets.plainText.accept":
     "Store keys without a keyring anyway. Anyone who can read my files could read them.",
   "providers.secrets.unavailable":
-    "This system can't encrypt API keys, so they can't be saved. You can still use Ollama, or a server that needs no key.",
+    "This system can't encrypt API keys, so they can't be saved. Use Ollama or a server that needs no key.",
 
   "providers.ollama.title": "On this computer (free)",
   "providers.ollama.checking": "Looking for Ollama on this computer…",
@@ -1947,8 +1939,7 @@ export const en = {
   "providers.settings.remove": "Remove",
 
   "chatgpt.title": "ChatGPT plan",
-  "chatgpt.description":
-    "Use your ChatGPT Plus or Pro plan instead of an API key. It counts against your plan's limits.",
+  "chatgpt.description": "Plus or Pro, no key needed. Answers count toward your plan's limits.",
   "chatgpt.continue": "Continue with ChatGPT",
   "chatgpt.account.signedOut": "Not signed in.",
   "chatgpt.account.expired": "Your ChatGPT sign-in ended. Sign in again to use your plan.",
@@ -2257,10 +2248,11 @@ export const en = {
 
   "privacy.tabs.general": "General",
   "privacy.tabs.privacy": "Privacy",
-  "privacy.intro":
-    "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
+  "privacy.intro": "IncarnaMind collects no usage data.",
   "privacy.flows.intro":
-    "These send your content outside this computer. Choosing a service allows them; nothing goes to one you haven't allowed, or at all while “Keep everything on this computer” is on. Where a provider offers it, IncarnaMind asks it not to store your requests.",
+    "These send your content off this computer. Choosing a service allows its flow.",
+  "privacy.flows.intro.details":
+    "Nothing goes to a service you haven't allowed, or at all while “Keep everything on this computer” is on. Where a provider offers it, IncarnaMind asks it not to store your requests.",
   "privacy.flows.service": "to {service}",
   "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
@@ -2270,61 +2262,62 @@ export const en = {
   "privacy.flows.allow": "Allow",
   "privacy.traffic.title": "Other network traffic",
   "privacy.traffic.intro":
-    "IncarnaMind also connects to these services. They receive nothing of yours: no Documents, Minds, Questions or Answers.",
+    "These services receive nothing of yours: no Documents, Minds, Questions or Answers.",
   "privacy.traffic.on": "On",
   "privacy.traffic.off": "Off",
   "privacy.traffic.update-check": "Update checks",
   "privacy.traffic.update-check.description":
-    "When IncarnaMind starts, it asks GitHub Releases whether a new version is out. The request says which version you have and your operating system.",
+    "On start, asks GitHub Releases for a new version, sending your version and operating system.",
   "privacy.traffic.update-check.toggle": "Check for updates automatically",
   "privacy.traffic.embedding-model": "Search model download",
   "privacy.traffic.embedding-model.description":
     "The built-in search model is downloaded once, the first time a Document needs it.",
   "privacy.traffic.text-recognition-model": "Text recognition model download",
   "privacy.traffic.text-recognition-model.description":
-    "The built-in text recognition model is downloaded once, the first time a scanned page needs reading. Scans are read on this computer: nothing of them is sent.",
+    "The built-in text recognition model is downloaded once, when a scan first needs reading. Scans are read here; nothing is sent.",
   "privacy.traffic.reranking-model": "Result-ordering model download",
   "privacy.traffic.reranking-model.description":
-    "The built-in model that puts the best search results first is downloaded once, when there are Documents to search, unless that is off or uses a service. On a computer with a GPU it can use, its GPU version is downloaded too.",
+    "Downloads the built-in ordering model once, when there are Documents to search, and its GPU version if your computer can use it.",
   "privacy.traffic.transcription-model": "Speech model download",
   "privacy.traffic.transcription-model.description":
-    "The speech model that transcribes meetings on this computer is downloaded once, when a meeting is first transcribed. Nothing you say is sent.",
+    "The speech model for meetings is downloaded once, the first time a meeting is transcribed. Nothing you say is sent.",
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.description":
     "When you choose a local model, Ollama downloads it from its library.",
   "privacy.traffic.chatgpt-sign-in": "Sign in with ChatGPT",
   "privacy.traffic.chatgpt-sign-in.description":
-    "When you continue with ChatGPT, IncarnaMind signs you in with OpenAI, renews and ends the sign-in, and reads OpenAI's signing keys and the models your plan offers. Questions asked with your plan are the chat flow above.",
+    "Signs you in with OpenAI, renews and ends the sign-in, and reads OpenAI's signing keys and the models your plan offers. Questions are the chat flow above.",
   "privacy.traffic.claude-sign-in": "Sign in with Claude",
   "privacy.traffic.claude-sign-in.description":
-    "When you sign in with your Claude account, IncarnaMind signs you in with Anthropic and renews the sign-in. Questions asked with your plan are the chat flow above.",
+    "Signs you in with Anthropic and renews the sign-in. Questions are the chat flow above.",
   "privacy.traffic.copilot-sign-in": "Sign in with GitHub for Copilot",
   "privacy.traffic.copilot-sign-in.description":
-    "When you sign in with GitHub for Copilot, IncarnaMind signs you in with GitHub, renews the sign-in, and reads your account's name and the models your plan offers. Questions asked with your plan are the chat flow above.",
+    "Signs you in with GitHub, renews the sign-in, and reads your account name and the models your plan offers. Questions are the chat flow above.",
   "privacy.traffic.remote-connectors": "Remote Connectors and their sign-in",
   "privacy.traffic.remote-connectors.description":
-    "IncarnaMind connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name to sign you in and renew the sign-in. What their Tools are sent is the Connectors flow above.",
+    "Connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name. What their Tools are sent is the Connectors flow above.",
   "privacy.skills.title": "Skill scripts",
   "privacy.skills.body":
-    "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does, and you can turn them off in Settings, under Skills.",
+    "Skill scripts run on this computer and can send anything they can read over the network. This page doesn't control them: each run asks first, and Settings › Skills turns them off.",
   "privacy.aiUse.title": "AI use record",
-  "privacy.aiUse.body":
-    "IncarnaMind keeps a record of what the AI wrote into your Minds, how many sentences it checked, and whether you kept, edited or deleted what it wrote, so you can say how you used AI. It holds no text of yours or the AI's, stays on this computer, and is never sent anywhere, whatever you choose about usage data.",
+  "privacy.aiUse.body": "Records what AI wrote and checked, so you can declare it.",
+  "privacy.aiUse.private": "No text, and never sent.",
   "privacy.aiUse.entries": "Entries: {count}",
   "privacy.aiUse.clear": "Clear record",
   "privacy.aiUse.cleared": "Cleared the AI use record.",
   "privacy.crashReports.title": "Crash reports",
   "privacy.crashReports.toggle": "Send crash reports",
   "privacy.crashReports.body":
-    "Off unless you turn it on. When IncarnaMind crashes or hits an error, it sends a report to its developers through Sentry: the error, where in IncarnaMind's code it happened, the app version and your operating system. File paths, your Documents' text, your Minds, Questions and Answers are removed first, and no IP address is stored with it.",
-  "privacy.intro.usageData":
-    "IncarnaMind collects usage data only if you agree. This page lists everything it sends from this computer, and lets you change it.",
+    "Off unless you turn it on. Sends crash reports through Sentry, without your text or files.",
+  "privacy.crashReports.body.details":
+    "The report holds the error, where in IncarnaMind's code it happened, the app version and your operating system. File paths, your Documents' text, your Minds, Questions and Answers are removed first, and no IP address is stored with it.",
+  "privacy.intro.usageData": "IncarnaMind collects usage data only if you agree.",
   "privacy.traffic.usage-data": "Usage data",
   "privacy.traffic.usage-data.description":
-    "Anonymous events, only while this is on: which features are used and where people get stuck, under a random ID for this install. Never your Documents or their names, your Questions, Answers or anything you type.",
+    "Anonymous events, only while this is on: which features are used and where people get stuck, with a random install ID. Never your Documents, names, Questions, Answers or typing.",
   "privacy.traffic.usage-data.toggle": "Send anonymous usage data",
   "privacy.usageData.tester":
-    "On unless you turn it off in this test version, as agreed when you joined as a tester.",
+    "On in this test version, as agreed when you joined. Turn it off any time.",
   "privacy.usageData.localMode":
     "Off while “Keep everything on this computer” is on · Settings › Search",
   "privacy.usageData.details": "Every event and field",
@@ -2712,8 +2705,7 @@ export const en = {
   "cost.estimate.month": "{spent} of {cap} used this month",
   "cost.cap.title": "Monthly spending cap",
   "cost.cap.switch": "Cap what your keys spend each month",
-  "cost.cap.body":
-    "Answers and other requests to models billed per token stop at the cap, with one line saying so. Plans you sign in with, like ChatGPT, keep their own limits.",
+  "cost.cap.body": "Per-token models stop at this cap. Plans keep their own limits.",
   "cost.cap.spent": "Spent this month: {spent} on your keys.",
   "cost.cap.spentOf": "Spent this month: {spent} of {cap} on your keys.",
   "cost.cap.nothing": "Nothing spent on your keys this month.",
@@ -2807,8 +2799,7 @@ export const en = {
   "search.details": "What was searched",
 
   "skills.settings.title": "Skills",
-  "skills.settings.body":
-    "Steps the AI follows for a kind of task, in the standard SKILL.md format. It picks one when a Question calls for it; to choose one yourself, type / in the composer.",
+  "skills.settings.body": "Steps the AI follows for a kind of task. Type / to pick one.",
   "skills.settings.enabled": "Use {name}",
   "skills.settings.remove": "Remove",
   "skills.settings.removeLabel": "Remove {name}",
@@ -2823,15 +2814,14 @@ export const en = {
     "Turns this Mind (the Notes, Questions and Answers above the Question) into a structured report draft with a title, a summary, sections and a conclusion, keeping their Citations and inventing no sources.",
   "skills.builtIn.summarise-document":
     "Writes a structured summary of a Document, or of each one in the Question's Search scope: its key claims (each cited), its methods, its limitations and the questions it leaves open.",
-  "skills.settings.builtIn.hint":
-    "Comes with IncarnaMind and is updated with it. To change it, duplicate it as your own.",
+  "skills.settings.builtIn.hint": "Comes with IncarnaMind. To change it, duplicate it as your own.",
   "skills.settings.duplicate": "Duplicate as my own",
   "skills.settings.duplicateLabel": "Duplicate {name} as my own",
   "skills.settings.restoreBuiltIns": "Restore built-in Skills",
   "skills.settings.restoreBuiltIns.hint": "Removed: {names}",
   "skills.settings.yours": "Yours",
   "skills.settings.yours.empty":
-    "You haven't made a Skill yet. Make one from what you just did in a Mind (its ⋯ menu), write one, or import one.",
+    "No Skills yet. Make one from a Mind's ⋯ menu, write one, or import one.",
   "skills.settings.new": "New Skill…",
   "skills.settings.import": "Import…",
   "skills.settings.actions": "Actions for {name}",
@@ -2890,18 +2880,17 @@ export const en = {
   "skills.preview.importing": "Importing…",
   "skills.preview.cancel": "Cancel",
   "skills.error.unreadable": "This folder or file couldn't be read.",
-  "skills.error.not-a-skill":
-    "This isn't a Skill: there's no SKILL.md at the top of the folder or zip.",
+  "skills.error.not-a-skill": "Not a Skill: no SKILL.md at the top of the folder or zip.",
   "skills.error.invalid-zip": "This isn't a zip file IncarnaMind can read.",
   "skills.error.invalid-frontmatter":
-    "SKILL.md's frontmatter isn't valid: it needs a name (lowercase letters, digits and hyphens) and a description.",
+    "SKILL.md needs a name (lowercase letters, digits, hyphens) and a description.",
   "skills.error.path-traversal": "A file in the zip would be written outside the Skill: {path}",
   "skills.error.link-outside": "A link in the Skill points outside it: {path}",
   "skills.error.too-large":
-    "The Skill is too large: its files can add up to {size} at most, and SKILL.md to {instructions}.",
+    "The Skill is too large: at most {size} in all, and {instructions} for SKILL.md.",
   "skills.error.too-many-files": "The Skill has too many files: {count} at most.",
   "skills.error.built-in-name":
-    "A built-in Skill already has this name, and built-in Skills can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill as your own.",
+    "A built-in Skill has this name. Rename it in SKILL.md, or duplicate the built-in Skill.",
   "skills.error.details": "Details",
   "skills.size.kb": "{size} KB",
   "skills.size.mb": "{size} MB",
@@ -2922,10 +2911,10 @@ export const en = {
 
   "scripts.settings.title": "Skill scripts",
   "scripts.settings.enabled": "Let Skills run their scripts",
-  "scripts.settings.body":
-    "Scripts run on this computer, with no sandbox. Each run asks you first, unless you chose “Always run” for its Skill. Turned off, no Skill script runs at all.",
-  "scripts.settings.bodySandboxed":
-    "Scripts run on this computer in a sandbox: they can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. Each run asks you first, unless you chose “Always run” for its Skill. Turned off, no Skill script runs at all.",
+  "scripts.settings.body": "Scripts run on this computer with no sandbox, and ask before each run.",
+  "scripts.settings.bodySandboxed": "Scripts run in a sandbox and ask before each run.",
+  "scripts.settings.bodySandboxed.details":
+    "They can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. Unless you chose “Always run” for a Skill, each run asks first.",
   "scripts.settings.timeout": "Stop a script that runs longer than",
   "scripts.settings.seconds": "seconds",
 
@@ -2942,7 +2931,7 @@ export const en = {
   "suggestions.settings.title": "Writing",
   "suggestions.settings.switch": "Suggest as I write, from my Documents",
   "suggestions.settings.body":
-    "When you pause at the end of a paragraph, grey text shows how it could go on: only when your Documents support it, always with a Citation. Tab accepts, Esc dismisses.",
+    "Grey text suggests the next sentence, always with a Citation. Tab accepts.",
   "suggestions.settings.today": "Today: {shown} suggested, {accepted} accepted",
   "suggestions.settings.paused.no-model": "Paused until an AI model is set up, in Models.",
   "suggestions.settings.paused.consent":
@@ -3315,12 +3304,12 @@ export const en = {
   "export.change.replaced": "Replaced by {author}, {date}",
   "export.change.replaced.noDate": "Replaced by {author}",
   "export.dataFolder.title": "Data folder",
-  "export.dataFolder.body":
-    "Your Minds, conversations, Documents and settings are all kept in one folder on this computer. To back them up, copy it while IncarnaMind is closed.",
+  "export.dataFolder.body": "Everything you keep in IncarnaMind is in this folder.",
+  "export.dataFolder.backup": "To back up, quit IncarnaMind and copy it.",
   "export.dataFolder.open": "Open data folder",
   "export.dataFolder.openLogs": "Open logs folder",
   "export.dataFolder.logs":
-    "The logs folder records what IncarnaMind did, such as Documents processed and errors, to help with a problem. It never holds your Documents' text, your Minds, Questions or Answers, or your keys.",
+    "The logs folder records what IncarnaMind did, to help with a problem. Never your Documents' text, Minds, Questions, Answers or keys.",
 
   "error.load": "IncarnaMind couldn't load your data: {message}",
   "error.action": "That didn't work: {message}",
@@ -3670,18 +3659,18 @@ export const en = {
 
   "connectors.settings.title": "Connectors",
   "connectors.directory.intro":
-    "Services the assistant can look things up in. Nothing of yours goes to one until you agree, and it asks before it changes anything there.",
+    "Services the assistant can look things up in. Nothing goes to one until you agree.",
   "connectors.directory.search": "Search connectors and the MCP Registry",
   "connectors.registry.title": "From the MCP Registry",
   "connectors.registry.badge": "Community · not reviewed",
   "connectors.registry.note":
-    "Searched only because you typed. Community connectors haven't been reviewed; check what they can do before you connect one.",
+    "Searched only because you typed. Community connectors aren't reviewed; check what one can do first.",
   "connectors.registry.searching": "Searching the MCP Registry…",
   "connectors.registry.none": "Nothing in the MCP Registry matches “{query}”.",
   "connectors.registry.failed.local-mode":
     "MCP Registry not searched: “Keep everything on this computer” is on.",
   "connectors.registry.failed.declined":
-    "You chose not to send your search to the MCP Registry. You can change that in Privacy.",
+    "Not sent: you chose not to send searches to the MCP Registry · Settings › Privacy",
   "connectors.registry.failed.unreachable":
     "The MCP Registry can't be reached. Check your connection and try again.",
   "connectors.registry.failed.service-error":
@@ -3694,8 +3683,7 @@ export const en = {
   "connectors.registry.add": "Add",
   "connectors.registry.setUp": "Set up…",
   "connectors.registry.link": "Read about it",
-  "connectors.registry.cannot":
-    "IncarnaMind can't run this one by itself. Read about it to see how it's set up.",
+  "connectors.registry.cannot": "IncarnaMind can't run this one. Read how to set it up.",
   "connectors.directory.connected": "Connected",
   "connectors.directory.browse": "Browse",
   "connectors.directory.group.files": "Where your files are",
@@ -3723,19 +3711,18 @@ export const en = {
   "connectors.directory.what.before":
     "Its Tools show here once it's connected, each with whether it asks before it runs.",
   "connectors.directory.what.listed":
-    "These are its Tools as IncarnaMind reviewed them. Once it's connected, you choose which of them ask first or are off.",
+    "Its Tools, as IncarnaMind reviewed them. Once connected, choose which ask first or are off.",
   "connectors.directory.tool.reads": "Reads",
   "connectors.directory.tool.changes": "May change things",
   "connectors.directory.where": "Where your data goes",
   "connectors.directory.where.body":
-    "Once you connect it, what the assistant asks {name} for, such as words from your Question, goes to {name}. What it returns goes to your AI model, as your Documents do.",
+    "What the assistant asks {name} for goes to {name}; what it returns goes to your AI model.",
   "connectors.directory.how": "How it signs in",
-  "connectors.directory.how.browser":
-    "Sign in with {name} in your browser. Your sign-in is kept in your keychain.",
+  "connectors.directory.how.browser": "Sign in with {name} in your browser.",
   "connectors.directory.how.browser.subscription":
-    "Sign in with {name} in your browser; you need a {product} subscription. Your sign-in is kept in your keychain.",
+    "Sign in with {name} in your browser. Needs a {product} subscription.",
   "connectors.directory.how.own-app":
-    "{name} lets only the apps it knows sign in: register an app with {name}, enter its client ID here, then sign in in your browser. Your sign-in is kept in your keychain.",
+    "{name} only accepts apps it knows: register one, enter its client ID here, then sign in.",
   "connectors.directory.how.none": "It needs no sign-in.",
   "connectors.custom.title": "Add custom connector",
   "connectors.custom.remote": "Server URL",
@@ -3763,27 +3750,26 @@ export const en = {
   "connectors.error.failed": "It couldn't be connected.",
   "connectors.tools.none": "No Tools",
   "connectors.tools.note":
-    "A Connector says which of its Tools only read; IncarnaMind can't check that. Those run without asking, and the others ask before each call. Change either here, or turn a Tool off so Answers don't use it.",
+    "Tools marked read-only run without asking; IncarnaMind can't verify that.",
   "connectors.form.name": "Name",
   "connectors.form.command": "Command",
-  "connectors.form.commandHint":
-    "The program that starts the MCP server, e.g. npx or uvx. It's found the way your terminal finds it.",
+  "connectors.form.commandHint": "The program that starts the MCP server, e.g. npx or uvx.",
   "connectors.form.args": "Arguments, one per line",
   "connectors.form.argsMoved": "The rest of what you pasted went into Arguments, one per line.",
   "connectors.form.env": "Environment variables, NAME=value, one per line",
   "connectors.form.envHint":
-    "For API keys and the like. The values are kept in your keychain, never in IncarnaMind's database.",
+    "For API keys and the like. Kept in your keychain, not in IncarnaMind's database.",
   "connectors.form.envInvalid": "Write each environment variable as NAME=value.",
   "connectors.form.add": "Add Connector",
   "connectors.form.sends":
-    "What Answers ask this Connector's Tools goes to it, and it may send that over the internet.",
+    "What Answers ask this Connector's Tools goes to it; it may send that online.",
   "connectors.form.adding": "Adding…",
   "connectors.form.cancel": "Cancel",
   "connectors.form.save": "Save and restart",
   "connectors.form.saving": "Saving…",
   "connectors.form.envKeep": "Leave empty to keep the saved values of {names}.",
   "connectors.import.body":
-    "Paste the mcpServers JSON from Claude Desktop (claude_desktop_config.json) or Cursor (mcp.json), or choose the file. You'll see what will be added first.",
+    "Paste the mcpServers JSON from Claude Desktop or Cursor, or choose the file. You review it first.",
   "connectors.import.json": "Configuration",
   "connectors.import.file": "Choose file…",
   "connectors.import.preview": "Show what will be added",
@@ -3796,7 +3782,7 @@ export const en = {
   "connectors.import.confirm": "Add {count} Connectors",
   "connectors.import.confirm.one": "Add 1 Connector",
   "connectors.import.sends":
-    "What Answers ask these Connectors' Tools goes to them, and they may send that over the internet.",
+    "What Answers ask these Connectors' Tools goes to them; they may send that online.",
   "connectors.import.nothing": "Nothing here can be added.",
   "connectors.import.adding": "Adding…",
   "connectors.consent.note":
@@ -3812,10 +3798,10 @@ export const en = {
   "remoteConnectors.form.kind.remote": "Remote server (URL)",
   "remoteConnectors.form.url": "Server URL",
   "remoteConnectors.form.urlHint":
-    "Its MCP endpoint, e.g. https://mcp.example.com/mcp. If it needs you to sign in, you'll do that in your browser.",
+    "Its MCP endpoint, e.g. https://mcp.example.com/mcp. Sign-in, if needed, is in your browser.",
   "remoteConnectors.form.client": "Use my own OAuth app",
   "remoteConnectors.client.hint":
-    "Only for a service that can't register IncarnaMind by itself. Register an OAuth app with it whose redirect URI is http://127.0.0.1/callback (any port).",
+    "Only for a service that can't register IncarnaMind itself. Register an OAuth app with redirect URI http://127.0.0.1/callback (any port).",
   "remoteConnectors.client.id": "Client ID",
   "remoteConnectors.client.secret": "Client secret (if it has one)",
   "remoteConnectors.client.secretHint": "Kept in your keychain, never in IncarnaMind's database.",
@@ -3838,7 +3824,7 @@ export const en = {
   "remoteConnectors.signIn.error.cancelled": "The sign-in was cancelled.",
   "remoteConnectors.signIn.error.denied": "The service didn't complete the sign-in. Try again.",
   "remoteConnectors.signIn.error.client-id-required":
-    "This service can't register IncarnaMind by itself. Enter the client ID of an OAuth app you registered with it.",
+    "This service can't register IncarnaMind itself. Enter the client ID of an OAuth app you registered.",
   "remoteConnectors.signIn.error.secret-storage":
     "IncarnaMind can't store your sign-in securely on this system, because no keyring is available.",
   "remoteConnectors.signIn.error.failed": "The sign-in didn't work.",
@@ -3889,10 +3875,8 @@ export const en = {
   "approvals.tools.always": "Always allow",
   "approvals.tools.off": "Off",
   "approvals.settings.title": "Approvals",
-  "approvals.settings.body":
-    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow, set to ask every time or turned off, and every Skill whose scripts always run. Reset one to go back to its default.",
-  "approvals.settings.empty":
-    "No Tool is set to always allow, to ask every time or to stay off. No Skill's scripts always run.",
+  "approvals.settings.body": "Tools and Skills you set to always run, always ask or stay off.",
+  "approvals.settings.empty": "Nothing is set to always allow, always ask or stay off.",
   "approvals.settings.revoke": "Reset",
   "approvals.settings.revokeLabel": "Reset {name} to its default",
   "approvals.settings.skillScripts": "Scripts of {skill}",
@@ -4114,7 +4098,7 @@ export const en = {
   "meetings.settings.title": "Recording",
   "meetings.settings.enabled": "Record meetings",
   "meetings.settings.enabledBody":
-    "Adds “Record a meeting” to the + menu. A meeting is transcribed on this computer as it records; the speech model (about 1 GB) downloads once, the first time.",
+    "Adds “Record a meeting” to the + menu. Transcribed on this computer; the speech model (about 1 GB) downloads once.",
   "meetings.settings.cantRecord": "This copy of IncarnaMind can’t record audio.",
   "meetings.settings.what": "What is recorded",
   "meetings.settings.whatBoth": "Your microphone and the other people (the computer’s sound).",
@@ -4231,15 +4215,14 @@ export const en = {
   "web.settings.pages.title": "Saved web pages",
   "web.settings.keepLook": "Keep pages as they look",
   "web.settings.switch": "Let Answers search the web",
-  "web.settings.body":
-    "Only when a Question asks for it. Each web page an Answer uses is saved as a Document, so its Citation can be checked.",
+  "web.settings.body": "Only when a Question needs it. Pages used are saved as Documents.",
   "web.settings.route": "Search with",
   "web.settings.route.model": "The model's own search",
   "web.settings.route.hint":
-    "Your model's own web search, through its provider. You're asked before the first search is sent.",
+    "Your model's own web search, via its provider. Asks before the first search.",
   "web.settings.supported": "{model} searches the web through {provider}.",
   "web.settings.unsupported":
-    "{provider} has no web search of its own, so Questions asked with {model} don't search the web. Claude, OpenAI and ChatGPT models do.",
+    "{provider} has no web search: {model} won't search. Claude, OpenAI and ChatGPT models do.",
   "web.settings.localMode": "Unavailable: “Keep everything on this computer” is on.",
   "meetings.command.pause": "Pause recording",
   "meetings.command.resume": "Resume recording",
@@ -4442,7 +4425,7 @@ export const en = {
   "meetings.help.stillWriting": "The suggestion is still being written.",
   "meetings.level.label": "Sound level",
   "meetings.settings.panelBody":
-    "While a meeting records, a small panel stays above the meeting app with the help buttons. It never takes the focus from the call.",
+    "While a meeting records, a small panel with the help buttons floats above the meeting app.",
   "meetings.settings.hidden": "Keep the panel out of my screen share",
   "meetings.settings.keys": "Shortcuts",
   "meetings.settings.keysBody":
@@ -4701,7 +4684,7 @@ export const en = {
   "agents.settings.experimental": "Experimental",
   "agents.settings.lead": "Ask Claude, Codex or Cursor about your Documents.",
   "agents.settings.intro":
-    "Connect the AI tool you already use and choose which folders it may read. Its answers will cite those Documents, and IncarnaMind checks every quote.",
+    "Connect the AI tool you already use and choose which folders it may read. IncarnaMind checks every quote.",
   "agents.settings.switch": "Connect AI agents",
   "agents.settings.switch.off": "Off: no agent can reach your Documents.",
   "agents.settings.switch.on":
@@ -4712,7 +4695,7 @@ export const en = {
   "agents.settings.connect": "Connect an agent",
   "agents.settings.connect.note": "Agents found on this computer come first.",
   "agents.settings.web":
-    "Chat apps that only work on the internet, such as ChatGPT and Claude on the web, Gemini, Le Chat and Grok, can’t reach IncarnaMind, which serves only this computer.",
+    "Chat apps that only work online, such as ChatGPT and Claude on the web, Gemini, Le Chat and Grok, can’t reach IncarnaMind.",
   "agents.settings.connectButton": "Connect",
   "agents.settings.help": "Step-by-step help",
   "agents.setup.bundle": "One click: Claude opens to install it",
@@ -4740,7 +4723,7 @@ export const en = {
   "agents.pairing.copySettings": "Copy settings",
   "agents.pairing.copySkill": "Copy Skill",
   "agents.pairing.copySkill.hint":
-    "Save it as SKILL.md in a folder named incarnamind, inside your agent’s skills folder, so it knows when to use IncarnaMind.",
+    "Save it as SKILL.md in a folder named incarnamind, in your agent’s skills folder.",
   "agents.pairing.copied": "Copied",
   "agents.pairing.copy": "Copy",
   "agents.pairing.command": "Command",
@@ -4771,12 +4754,12 @@ export const en = {
   "agents.reason.failed": "something went wrong",
   "agents.connect.title": "Let {agent} read your Documents?",
   "agents.connect.body":
-    "It will be able to search and read the Documents in the folders you choose, and your Minds in them. What it reads goes to the AI model used by {agent}, under that service’s terms, not IncarnaMind’s. Some plans may use it to train their models.",
+    "It can read your chosen folders and the Minds in them. What it reads goes to the AI model {agent} uses, under that service’s terms; some plans may train on it.",
   "agents.connect.name": "Name",
   "agents.connect.namePlaceholder": "My agent",
   "agents.connect.folders": "Folders it may read",
   "agents.connect.allUnfiled":
-    "Your Documents aren’t in Folders yet, so these are all of them. To share only some, put them in a Folder in the Library first.",
+    "Your Documents aren’t in Folders yet, so these are all of them. To share some, put them in a Folder first.",
   "agents.connect.empty.title": "Nothing to read yet",
   "agents.connect.empty.body":
     "Add the Documents you want {agent} to read. They’ll appear here, ready to choose.",
@@ -4794,9 +4777,9 @@ export const en = {
   "agents.done.command": "Copied. Paste it into a terminal and run it.",
   "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart it.",
   "agents.done.settings.other":
-    "Copied. Paste it where your agent adds a new server, then restart the agent. If it asks for a command, arguments and environment instead, Details for technical users shows each, ready to copy.",
+    "Copied. Paste it where your agent adds a server, then restart the agent. Details shows each part, if it asks for them separately.",
   "agents.done.unreadable":
-    "The settings file of {agent} couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
+    "The settings file of {agent} couldn’t be read, so it was left alone. The settings are copied: paste them into {path}.",
   "agents.done.undo": "Undo",
   "agents.bundle.description":
     "Search your IncarnaMind Documents and cite them, with every quote checked.",
