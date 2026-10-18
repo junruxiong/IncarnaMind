@@ -4050,7 +4050,6 @@ export const en = {
   "meetings.transcript.open": "Open transcript",
   "meetings.transcript.empty": "Nothing to transcribe, so no transcript was saved.",
   "meetings.transcript.downloadFailed": "The speech model couldn’t be downloaded: {message}",
-  "meetings.transcript.engineFailed": "Transcription stopped: {message}",
   "meetings.transcript.engineStopped": "Transcription stopped.",
   "meetings.transcript.saveFailed": "The transcript couldn’t be saved: {message}",
   "meetings.transcript.notSaved":

@@ -9398,8 +9398,9 @@ export type SaveFailureReason = "full" | "io" | "readOnly" | "busy" | "other";
 
 /** Changes to Minds storage refused (#1119): kept in memory while the app runs, tried again. */
 export interface UnsavedChanges {
-  /** How many changes wait, in all the Minds. */
+  /** How many changes wait, in all the Minds, deleted ones included (#1202). */
   count: number;
+  /** The Minds they wait in, but deleted ones: a copy of those isn't offered. */
   mindIds: string[];
   reason: SaveFailureReason;
   /** The database's own words, for Details. */
