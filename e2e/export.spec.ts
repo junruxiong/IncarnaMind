@@ -323,7 +323,7 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
   await expect(ask).toHaveAttribute("data-kind", "output-location");
   await expect(ask.getByRole("heading")).toHaveText("Where should new files go?");
   await expect(ask.getByTestId("file-write-unusable")).toHaveText(
-    `Couldn't save “${title}.docx” in Documents › IncarnaMind: IncarnaMind couldn't make that folder.`,
+    `Couldn’t save “${title}.docx” in Documents › IncarnaMind: IncarnaMind couldn’t make that folder.`,
   );
   await expect(ask.getByRole("button")).toHaveText(["Cancel", "Choose another folder…"]);
   await screenshot(ask, "file-write-output-location-en");
@@ -493,7 +493,7 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
   await exportOnce();
   const problem = result.getByTestId("export-problem");
   await expect(problem).toHaveText(
-    "Couldn't save: you haven't allowed new files in “Papers”, a Linked folder · Allow",
+    "Couldn’t save: you haven’t allowed new files in “Papers”, a Linked folder · Allow",
   );
   await expect(ask).toBeHidden();
   await screenshot(result, "export-not-allowed-en");
@@ -558,7 +558,7 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await exported.getByTestId("open-document").click();
   await expect(viewer.getByTestId("viewer-title")).toHaveText("Tides");
   await expect(line).toHaveText(
-    "IncarnaMind wrote this file, so checks don't count it as evidence · Count it",
+    "IncarnaMind wrote this file, so checks don’t count it as evidence · Count it",
   );
   await screenshot(viewer, "own-file-viewer-en");
 
@@ -578,7 +578,7 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await countItem.click();
   await expect(line).toHaveCount(0);
   await openDocumentMenu(exported);
-  await expect(leaveOutItem).toHaveText("Don't count as evidence");
+  await expect(leaveOutItem).toHaveText("Don’t count as evidence");
   await leaveOutItem.click();
   await expect(line).toBeVisible();
   await expect(undo.getByTestId("undo-message")).toHaveText("“Tides” no longer counts as evidence");

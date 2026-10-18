@@ -110,7 +110,7 @@ test("Make this a Skill: the model drafts it from the Mind, the User edits it in
   await shot(window, "skill-picker");
   await window.keyboard.press("Enter");
   const composer = window.getByTestId("composer");
-  await expect(composer.getByTestId("composer-skill")).toHaveText("liability-cap-review");
+  await expect(composer.getByTestId("composer-skill")).toHaveText("Liability cap review");
   await window.keyboard.type("Check the cap in the Halvard draft");
   await shot(window, "skill-chip");
   await window.keyboard.press("Enter");
@@ -219,7 +219,7 @@ test("a Skill name that is taken, an empty field and a too-long description are 
   await section.getByTestId("skill-import").click();
   await section.getByTestId("skill-import-zip").click();
   const preview = section.getByTestId("skill-preview");
-  await expect(preview.getByTestId("skill-preview-name")).toHaveText("harbour-notes");
+  await expect(preview.getByTestId("skill-preview-name")).toHaveText("Harbour notes");
   await expect(preview.getByTestId("skill-preview-description")).toHaveText(
     "When I ask about harbour notes.",
   );

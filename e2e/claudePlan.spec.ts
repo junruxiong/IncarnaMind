@@ -28,7 +28,7 @@ import {
  * the User pastes the code Anthropic's page shows, as they do.
  */
 
-const USAGE = "Answers count toward your Claude plan's usage limits.";
+const USAGE = "Answers count toward your Claude plan’s usage limits.";
 
 let dataDir: string;
 let fake: FakeAnthropic;
@@ -139,14 +139,14 @@ test("first run: the row is first under Other ways, says the usage limits first 
     );
     await expect(waiting.getByTestId("claude-plan-usage")).toHaveText(USAGE);
     // The code is the way on, so its field is open, focused and named for what goes in it.
-    const field = waiting.getByLabel("Code from Claude's page");
+    const field = waiting.getByLabel("Code from Claude’s page");
     await expect(field).toBeFocused();
     await expect(waiting.getByTestId("claude-paste-continue")).toHaveText("Finish signing in");
 
     await field.fill("not a code");
     await field.press("Enter");
     await expect(waiting.getByTestId("claude-paste-problem")).toHaveText(
-      "That isn't the code from Claude's page.",
+      "That isn’t the code from Claude’s page.",
     );
     await field.fill(code);
     await waiting.getByTestId("claude-paste-continue").click();
@@ -179,7 +179,7 @@ test("first run: a code Anthropic refuses says so in the row, with a key as the 
     await row.getByTestId("claude-paste-continue").click();
 
     const error = row.getByTestId("claude-plan-error");
-    await expect(error).toContainText("The Claude sign-in didn't work · Use an API key instead");
+    await expect(error).toContainText("The Claude sign-in didn’t work · Use an API key instead");
     await expect(row.getByTestId("claude-plan-sign-in")).toBeVisible();
     await row.getByTestId("claude-plan-use-key").click();
     await expect(card.getByTestId("setup-back")).toBeVisible();
@@ -247,7 +247,7 @@ test("Settings: Cancel keeps nothing; signed in, the row names the account and S
     await expired.getByTestId("claude-paste-continue").click();
     // A sign-in again that fails says so in the row, which stays open for another try.
     await expect(expired.getByTestId("claude-plan-error")).toContainText(
-      "The Claude sign-in didn't work",
+      "The Claude sign-in didn’t work",
     );
     await expired.getByTestId("claude-plan-sign-in").click();
     const third = await codeAfterApproving(app, 4);
@@ -277,7 +277,7 @@ test("a sign-in not finished in time says so in the row, in English and Chinese"
 
     const error = row.getByTestId("claude-plan-error");
     await expect(error).toContainText(
-      "The Claude sign-in wasn't finished in time: nothing was kept",
+      "The Claude sign-in wasn’t finished in time: nothing was kept",
     );
     await expect(row.getByTestId("claude-plan-sign-in")).toBeVisible();
     expect((await account(window)).account).toEqual({ state: "signed-out" });
@@ -403,7 +403,7 @@ test("an Answer the Claude plan stopped says why in Claude's words, in English a
     fake.replies = [limit, limit, limit];
     const limited = await askAndFail(window, "What does the lease say about rent?");
     await expect(limited).toHaveText(
-      "Your Claude plan's usage limit is reached · Use another model",
+      "Your Claude plan’s usage limit is reached · Use another model",
     );
 
     fake.replies = [refusal(403), refusal(403), refusal(403)];

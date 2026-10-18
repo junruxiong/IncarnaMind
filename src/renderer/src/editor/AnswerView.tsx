@@ -42,6 +42,7 @@ import { useStoppedByPlanLimit } from "../planLimits";
 import { ANSWER_PROBLEMS, failedAnswerLine } from "../problems";
 import { useRouteOffered } from "../routeSignIn";
 import type { SettingsPage } from "../settingsPages";
+import { skillTitle } from "../skills";
 import { useAppStore } from "../store";
 import { reasonKey } from "../webPages";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
@@ -601,7 +602,7 @@ function ScriptApprovalCard({
   const [warning, setWarning] = useState(false);
   const titleId = useId();
   const warningId = useId();
-  const params = { skill: request.skill.name, script: request.script };
+  const params = { skill: skillTitle(request.skill.name, t), script: request.script };
   return (
     <div
       contentEditable={false}
@@ -642,7 +643,7 @@ function ScriptApprovalCard({
         <p className="approval-label">{t("scripts.card.wouldRun")}</p>
         <dl data-testid="approval-script" className="approval-args">
           <dt>{t("scripts.card.skill")}</dt>
-          <dd data-testid="approval-script-skill">{request.skill.name}</dd>
+          <dd data-testid="approval-script-skill">{skillTitle(request.skill.name, t)}</dd>
           <dt>{t("scripts.card.script")}</dt>
           <dd data-testid="approval-script-path" className="font-mono">
             {request.script}
@@ -783,7 +784,7 @@ function ApprovalArguments({ input }: { input: Record<string, unknown> }) {
 function ScriptCall({ call }: { call: AnswerToolCall }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
-  const params = { skill: field(call, "skill"), script: field(call, "script") };
+  const params = { skill: skillTitle(field(call, "skill"), t), script: field(call, "script") };
   const args = Array.isArray(call.input.args) ? call.input.args.map(String) : [];
   const run = call.script;
   const running = call.status === "running";
@@ -1087,12 +1088,13 @@ function skillRows(calls: AnswerToolCall[]): SkillUse[] {
 export function SkillRow({ name, use, reads }: SkillUse) {
   const t = useT();
   const status = use?.status ?? "done";
+  const title = skillTitle(name, t);
   const summary =
     status === "running"
-      ? t("skills.answer.loading", { name })
+      ? t("skills.answer.loading", { name: title })
       : status === "failed"
-        ? t("skills.answer.failed", { name })
-        : t("skills.answer.used", { name });
+        ? t("skills.answer.failed", { name: title })
+        : t("skills.answer.used", { name: title });
   return (
     <div
       data-testid="answer-skill"

@@ -2736,6 +2736,9 @@ export const zhCN = {
   "skills.settings.scripts": "{count} 个脚本",
   "skills.settings.builtIn": "内置",
   // The Built-in Skills, as Settings and the slash menu describe them; their SKILL.md, which Answers read, stays as written.
+  "skills.builtIn.literature-review.title": "文献综述",
+  "skills.builtIn.mind-to-report.title": "整理成报告",
+  "skills.builtIn.summarise-document.title": "文档摘要",
   "skills.builtIn.literature-review":
     "围绕问题的主题，跨你的文档撰写文献综述：按主题综合，而不是逐篇罗列，写出各文档的一致与分歧以及遗漏之处，每个说法都附引用。",
   "skills.builtIn.mind-to-report":

@@ -790,7 +790,7 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await screenshot(window, "composer-skill-picker-zh");
   await window.keyboard.type("lit");
   await window.keyboard.press("Enter");
-  await expect(composer.getByTestId("composer-skill")).toHaveText("literature-review");
+  await expect(composer.getByTestId("composer-skill")).toHaveText("Literature review");
   await window.keyboard.type("大潮什么时候出现？");
   await screenshot(window, "composer-chips-zh");
 
@@ -800,7 +800,7 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(composer.getByTestId("composer-live")).toContainText("回答已生成。");
   const question = window.getByTestId("assistant-question");
-  await expect(question.getByTestId("assistant-question-skill")).toHaveText("literature-review");
+  await expect(question.getByTestId("assistant-question-skill")).toHaveText("Literature review");
   await expect(answer.getByTestId("answer-steps")).toContainText("已搜索“Tides”");
   await openSteps(window, answer);
   await expect(answer.getByTestId("answer-regenerate")).toHaveText("重新生成");

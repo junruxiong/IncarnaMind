@@ -457,7 +457,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   );
   // Word's review choices (#107), on to begin with; a Mind made here has no import to track edits since.
   await expect(sheet.getByTestId("export-pending-note")).toHaveText(
-    "Changes waiting for you go in as IncarnaMind's tracked changes.",
+    "Changes waiting for you go in as IncarnaMind’s tracked changes.",
   );
   await expect(sheet.getByTestId("export-mark-ai-text")).toBeChecked();
   await expect(sheet.getByTestId("export-comment-failed-checks")).toBeChecked();
@@ -510,7 +510,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   await exportFromMenu(window);
   const problem = result.getByTestId("export-problem");
   await expect(problem).toHaveText(
-    "Couldn't save: the folder isn't there any more · Change output location…",
+    "Couldn’t save: the folder isn’t there any more · Change output location…",
   );
   await interceptOpenDialog(app, out);
   await pointAndClick(window, problem.getByTestId("export-change-location"));

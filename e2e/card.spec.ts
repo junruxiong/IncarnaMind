@@ -221,7 +221,7 @@ test("the + menu in the sidebar header offers New Mind, Import a Word file…, C
     /Compare Documents…/,
     /Verify a document…/,
     /New Folder/,
-    /From starter folders…/,
+    /From starter Folders…/,
     /Add Documents…/,
     /Add a web page…/,
     /Find sources…/,

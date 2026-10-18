@@ -153,6 +153,6 @@ test("a page with more pictures than a page keeps says while their text is read,
   const leftOut = window.getByTestId("viewer-web-left-out");
   await expect(leftOut).toHaveText("有 1 张图片超出单页上限，未保存");
   await setLanguage(window, "en");
-  await expect(leftOut).toHaveText("1 picture wasn't saved: over the limit for a page");
+  await expect(leftOut).toHaveText("1 picture wasn’t saved: over the limit for a page");
   await app.close();
 });

@@ -251,7 +251,7 @@ test("Copy path puts a Document's full path, and a Linked folder's, on the clipb
   await expect(row).toHaveAttribute("data-state", "unavailable", { timeout: 15_000 });
   await row.getByTestId("row-text").focus();
   await window.keyboard.press(`${PRIMARY}+i`);
-  await expect(panel.getByTestId("info-status")).toContainText("Can't reach this folder");
+  await expect(panel.getByTestId("info-status")).toContainText("Can’t reach this folder");
   await expect(panel.getByTestId("info-show")).toHaveCount(0);
   await app.close();
 });

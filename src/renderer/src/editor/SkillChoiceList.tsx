@@ -2,6 +2,7 @@ import { Fragment, type Ref, useEffect, useImperativeHandle, useRef, useState } 
 import type { Skill } from "../../../core/api";
 import { menuTitleClass } from "../components/ui";
 import { useT } from "../i18n";
+import { skillTitle } from "../skills";
 import type { ChoiceListHandle } from "./ScopePicker";
 import { matchSlashItems, type SlashItem, skillSlashItems } from "./slashItems";
 
@@ -53,7 +54,10 @@ export function SkillChoiceList({
         },
       ]
     : [];
-  const items = [...research, ...skillSlashItems(skills, describe)];
+  const items = [
+    ...research,
+    ...skillSlashItems(skills, describe, undefined, (skill) => skillTitle(skill.name, t)),
+  ];
   const isBuiltIn = (item: SlashItem) =>
     skills.some((skill) => `skill-${skill.name}` === item.id && skill.builtIn);
   // The User's own first, then the built-in ones, as Settings lists them.

@@ -146,7 +146,7 @@ test("folders, tags, search, edits and removal update the index while originals 
     // The Folder's name and description edit under its section, from its menu.
     const form = await editFolderInLibrary(window, "Client work");
     await form.getByLabel("Folder name", { exact: true }).fill("Client reports");
-    await form.getByRole("button", { name: "Save folder" }).click();
+    await form.getByRole("button", { name: "Save Folder" }).click();
     await expect(section(library, "Client reports")).toHaveCount(1);
     await expect(form).toHaveCount(0);
 
@@ -288,7 +288,7 @@ test("onboarding offers starter folders, and Organize with no model chosen opens
   const { app, window } = await launchApp(dataDir, { examples: true });
   try {
     await window.keyboard.press("ControlOrMeta+k");
-    await window.keyboard.type("Starter folders");
+    await window.keyboard.type("Starter Folders");
     await window.keyboard.press("Enter");
     await expect(window.getByTestId("library")).toBeVisible();
     await window.evaluate(async () =>
@@ -318,10 +318,10 @@ test("the + menu offers New Folder, then From starter folders…, which opens th
   const items = window.getByRole("menuitem");
   const names = await items.allInnerTexts();
   const folder = names.findIndex((name) => name.startsWith("New Folder"));
-  expect(names[folder + 1]).toBe("From starter folders…");
+  expect(names[folder + 1]).toBe("From starter Folders…");
   await window.getByTestId("plus-starter-folders").click();
   await expect(window.getByTestId("library")).toBeVisible();
-  await expect(window.getByRole("region", { name: "Starter folders" })).toBeVisible();
+  await expect(window.getByRole("region", { name: "Starter Folders" })).toBeVisible();
 });
 
 test("a Document waiting for Ollama says why in the interface language, in its info", async () => {
@@ -462,7 +462,7 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     fail = true;
     await pointAndClick(window, organize(library));
     await expect(library.getByTestId("library-organize-failed")).toHaveText(
-      /^Organize couldn't sort (1 Document|2 Documents) · Try again$/,
+      /^Organize couldn’t sort (1 Document|2 Documents) · Try again$/,
     );
     await expect(notes.getByTestId("library-not-sorted")).toHaveAttribute(
       "title",

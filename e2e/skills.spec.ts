@@ -61,9 +61,9 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await section.getByTestId("skill-import").click();
   await section.getByTestId("skill-import-folder").click();
   const preview = section.getByTestId("skill-preview");
-  await expect(preview.getByTestId("skill-preview-name")).toHaveText("tide-tables");
+  await expect(preview.getByTestId("skill-preview-name")).toHaveText("Tide tables");
   await expect(preview.getByTestId("skill-preview-description")).toHaveText(DESCRIPTION);
-  await expect(preview).toContainText("Licence: MIT");
+  await expect(preview).toContainText("License: MIT");
   await preview.getByText(/^3 files/).click();
   const files = preview.getByTestId("skill-preview-file");
   await expect(files).toHaveCount(3);
@@ -78,7 +78,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(section.getByTestId("skills-yours").getByTestId("skill-item")).toHaveCount(1);
   await expect(item.getByTestId("skill-enabled")).toBeChecked();
   await expect(item).toContainText(DESCRIPTION);
-  await expect(item).toContainText("Licence: MIT · 1 script");
+  await expect(item).toContainText("License: MIT · 1 script");
   await expect(section.getByTestId("skill-preview")).toHaveCount(0);
   await closeSettings(window);
 
@@ -96,7 +96,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(menu.getByTestId("slash-item-heading-1")).toHaveCount(0);
   await window.keyboard.press("Enter");
   const composer = window.getByTestId("composer");
-  await expect(composer.getByTestId("composer-skill")).toHaveText("tide-tables");
+  await expect(composer.getByTestId("composer-skill")).toHaveText("Tide tables");
   await expect(composer.getByTestId("composer-skill")).toHaveAttribute("data-state", "enabled");
   await expect(composer.getByTestId("composer-input")).toHaveValue("");
 
@@ -106,14 +106,14 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await window.keyboard.press("Enter");
   const questions = window.getByTestId("assistant").getByTestId("assistant-question");
   await expect(questions.last()).toContainText("When is high water in Brest?");
-  await expect(questions.last().getByTestId("assistant-question-skill")).toHaveText("tide-tables");
+  await expect(questions.last().getByTestId("assistant-question-skill")).toHaveText("Tide tables");
   await expect(composer.getByTestId("composer-skill")).toHaveCount(0);
   const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   const card = (await openSteps(window, answer)).getByTestId("answer-skill");
   await expect(card).toHaveAttribute("data-skill-name", "tide-tables");
   await expect(card).toHaveAttribute("data-forced", "true");
-  await expect(card).toContainText("Used the Skill tide-tables · chosen for this Question");
+  await expect(card).toContainText("Used the Skill “Tide tables” · chosen for this Question");
   await expect(answer).toContainText("Following the Skill tide-tables.");
 
   // A Skill chosen in the composer for the next Question, before it was turned off.
@@ -185,7 +185,7 @@ test("a Question can force a Skill and limit its Search scope at once: both chip
   await window.keyboard.type("When is high water in Brest?");
 
   const composer = window.getByTestId("composer");
-  await expect(composer.getByTestId("composer-skill")).toHaveText("tide-tables");
+  await expect(composer.getByTestId("composer-skill")).toHaveText("Tide tables");
   await expect(composer.getByTestId("scope-chip")).toContainText("Harbour");
   await expect(composer.getByTestId("composer-input")).toHaveValue("When is high water in Brest?");
 
@@ -193,7 +193,7 @@ test("a Question can force a Skill and limit its Search scope at once: both chip
   // steps; the Skill was loaded up front, and the search found only the Document in scope.
   await window.keyboard.press("Enter");
   const question = window.getByTestId("assistant").getByTestId("assistant-question");
-  await expect(question.getByTestId("assistant-question-skill")).toHaveText("tide-tables");
+  await expect(question.getByTestId("assistant-question-skill")).toHaveText("Tide tables");
   await expect(question).toContainText("When is high water in Brest?");
   const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });

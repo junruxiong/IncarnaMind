@@ -87,8 +87,8 @@ test("a Skill script asks first with an approval card: Allow once runs it, and t
   const card = answer.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(card).toHaveAttribute("data-kind", "skill-script");
-  await expect(card).toContainText("greeter wants to run scripts/hello.js");
-  await expect(card.getByTestId("approval-script-skill")).toHaveText("greeter");
+  await expect(card).toContainText("Greeter wants to run scripts/hello.js");
+  await expect(card.getByTestId("approval-script-skill")).toHaveText("Greeter");
   await expect(card.getByTestId("approval-script-path")).toHaveText("scripts/hello.js");
   await expect(card.getByTestId("approval-argument")).toHaveText(["Dover"]);
   // What the script can reach, as it runs here: in the OS sandbox on macOS (and Linux with
@@ -181,9 +181,9 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   await openSettings(window, "privacy");
   const policy = window.getByTestId("approvals-settings").getByTestId("approval-policy");
   await expect(policy).toHaveCount(1);
-  await expect(policy).toContainText("Scripts of greeter");
+  await expect(policy).toContainText("Scripts of Greeter");
   await expect(policy.getByTestId("approval-policy-value")).toHaveText("Always run");
-  await policy.getByRole("button", { name: "Reset Scripts of greeter to its default" }).click();
+  await policy.getByRole("button", { name: "Reset Scripts of Greeter to its default" }).click();
   await expect(policy).toHaveCount(0);
   await showSettingsPage(window, "skills");
   const scripts = window.getByTestId("skill-scripts-settings");

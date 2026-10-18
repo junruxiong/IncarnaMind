@@ -35,11 +35,11 @@ const SENDS_EN = {
   lead: "Sends your questions and document text to OpenAI. · Details",
   after: "Tagging starts when you save the key.",
   items: [
-    "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
+    "your Questions, the Mind you’re in, matching passages with their Document names and pages, and the names of other Documents in scope",
     "each sentence you check",
     "the paragraph you pause on, for writing suggestions",
     "the text you ask the assistant to change",
-    "each Document's name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
+    "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
   ],
 };
 const SENDS_ZH = {
@@ -203,7 +203,7 @@ test("Settings › Models says in one line what the ChatGPT plan sends, with the
 
   const plan = settings.getByTestId("chatgpt-settings");
   await expect(plan).toContainText(
-    "Plus or Pro, no key needed. Answers count toward your plan's limits.",
+    "Plus or Pro, no key needed. Answers count toward your plan’s limits.",
   );
   const sends = plan.getByTestId("provider-sends");
   await expect(sends.locator("p")).toHaveText(

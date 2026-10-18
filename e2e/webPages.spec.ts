@@ -114,7 +114,7 @@ test("a web page added from the + menu is a Document named by its title, opened 
   const results = dialog.getByTestId("add-web-page-result");
   await expect(results.filter({ hasText: `${site}/tea` })).toContainText("Added");
   await expect(dialog.getByTestId("add-web-page-problem")).toHaveText(
-    "Couldn't fetch: the page doesn't exist · Try again",
+    "Couldn’t fetch: the page doesn’t exist · Try again",
   );
   await screenshot(window, "add-web-page-results");
   await dialog.getByTestId("add-web-page-done").click();
@@ -181,7 +181,7 @@ test("a link pasted or dropped on a Folder in the sidebar is saved there; one th
 
   await paste(window, `${site}/gone`);
   const problem = window.locator('[data-testid^="web-page-problem"]');
-  await expect(problem).toContainText("Couldn't fetch: the page doesn't exist");
+  await expect(problem).toContainText("Couldn’t fetch: the page doesn’t exist");
   await expect(problem.getByTestId("web-page-try-again")).toBeVisible();
   await screenshot(window, "web-page-pasted");
   await app.close();

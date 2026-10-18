@@ -18,6 +18,7 @@ import { isLive, useMeetings } from "../../meetings";
 import { useModelSetup } from "../../modelSetup";
 import { togglePlanView, useResearch } from "../../research";
 import { type ScopeChip, scopeChips } from "../../scope";
+import { skillTitle } from "../../skills";
 import { useAppStore } from "../../store";
 import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
 import { loadTasks, useTasks } from "../../tasks";
@@ -317,7 +318,7 @@ function QuestionBubble({
         {skill && (
           <span data-testid="assistant-question-skill" className="assistant-question-skill">
             <SparkLineIcon aria-hidden="true" className="size-3" />
-            {skill}
+            {skillTitle(skill, t)}
           </span>
         )}
         {research && (
