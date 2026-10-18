@@ -1245,6 +1245,11 @@ export function createCore(adapters: CoreAdapters): Core {
         const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }, { headed });
         return { id: mind.id, name: mindName(mind) || title };
       },
+      discard: (mindId) => {
+        if (!mindExists(mindId)) return;
+        const { title } = minds.get(mindId);
+        if (content.read(mindId, (blocks) => holdsOnlyItsTitle(blocks, title))) removeMind(mindId);
+      },
       folderName: (folderId) =>
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
       writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
@@ -1592,12 +1597,21 @@ export function createCore(adapters: CoreAdapters): Core {
   const makeMind = (input: NewMind, { headed = false } = {}): Mind => {
     if (input.folderId !== null) library.folder(input.folderId);
     const mind = minds.create(input);
-    if (headed && mind.title !== "") {
+    if (headed) {
       content.edit(mind.id, (note) =>
-        insertBlocks(note, [
-          { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: mind.title }] },
-          { type: "paragraph" },
-        ]),
+        insertBlocks(
+          note,
+          mind.title === ""
+            ? [{ type: "heading", attrs: { level: 1 } }]
+            : [
+                {
+                  type: "heading",
+                  attrs: { level: 1 },
+                  content: [{ type: "text", text: mind.title }],
+                },
+                { type: "paragraph" },
+              ],
+        ),
       );
     }
     const style = input.folderId === null ? null : library.citationStyle(input.folderId);

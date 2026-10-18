@@ -113,6 +113,19 @@ describe("The everyday request guards", () => {
     expect(failures([3])).toEqual([]);
   });
 
+  // protects=a Mind written with a source as text fails, naming it, and one with none passes (#1075); fails_when=bracketed sources in a Mind go unnoticed; no_claim=how the sources are found (tests/shared/namedSources.test.ts).
+  test("a Mind holding a source written as text fails", () => {
+    const kinds = (sourcesAsText: string[]) =>
+      requestFailures(
+        outcome({
+          answer: { text: "", citations: [], toolCalls: [created], steps: null },
+          sourcesAsText,
+        }),
+      ).map((failure) => failure.kind);
+    expect(kinds(["[5_Rue_Berryer_Paris, slide 3]"])).toEqual(["as-text"]);
+    expect(kinds([])).toEqual([]);
+  });
+
   // protects=a page made with no Citations in it fails, whatever the reply cites; fails_when=the reply's Citations count for the page's; no_claim=none beyond protects.
   test("a page whose Citations were lost fails, whatever the reply cites", () => {
     const failures = requestFailures(
@@ -199,6 +212,28 @@ describe("Only what was asked changes", () => {
       );
     expect(edit([1])).toEqual([]);
     expect(edit([0, 1])).toEqual([{ kind: "outside", blocks: [0] }]);
+  });
+});
+
+describe("Asked after the example's Answer", () => {
+  const reply = (text: string) =>
+    requestFailures(
+      outcome({
+        expected: { write: false, cite: false, coverAll: false, noEarlier: true },
+        answer: { text, citations: [], toolCalls: [], steps: null },
+      }),
+    ).map((failure) => failure.kind);
+
+  // protects=a reply that goes back to an earlier Answer or the example fails, in English and in Chinese, and one about the Question doesn't; fails_when=it passes, or an ordinary reply that says "leverages" or "忽略" fails; no_claim=none beyond protects.
+  test("a reply about an earlier Answer or the example fails", () => {
+    expect(reply("GraphST leverages spatial information to ignore the noise. [^1]")).toEqual([]);
+    expect(reply("GraphST 利用空间信息，忽略了噪声。")).toEqual([]);
+    expect(reply("It claims this. My first answer cited a facilities agreement.")).toEqual([
+      "earlier",
+    ]);
+    expect(reply("It claims this. Please disregard the 3.5x leverage limit.")).toEqual(["earlier"]);
+    expect(reply("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual(["earlier"]);
+    expect(reply("它的主张是这样。请忽略之前的杠杆率数字。")).toEqual(["earlier"]);
   });
 });
 
