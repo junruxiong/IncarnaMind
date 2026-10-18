@@ -12,6 +12,7 @@ import {
   launchApp,
   newMind,
   pointAndClick,
+  pressTextStart,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -226,7 +227,7 @@ async function writeSections(window: Page, titles: readonly string[]) {
       await window.keyboard.press("Enter");
     }
   }
-  await window.keyboard.press("ControlOrMeta+Home");
+  await pressTextStart(window);
 }
 
 /** Whether the heading shows in the window. */

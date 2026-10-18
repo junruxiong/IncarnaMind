@@ -328,6 +328,7 @@ export function createMindCheck(options: MindCheckOptions) {
           text: sentence.text,
           evidence: null,
           says: null,
+          unsupported: null,
           calculation: null,
           citedCaseUnchecked: false,
           citedCaseFound: false,
