@@ -219,11 +219,11 @@ test("a Skill name that is taken, an empty field and a too-long description are 
   await section.getByTestId("skill-import").click();
   await section.getByTestId("skill-import-zip").click();
   const preview = section.getByTestId("skill-preview");
-  await expect(preview.getByTestId("skill-preview-name")).toHaveText("harbour-notes");
+  await expect(preview.getByTestId("skill-preview-name")).toHaveText("Harbour notes");
   await expect(preview.getByTestId("skill-preview-description")).toHaveText(
     "When I ask about harbour notes.",
   );
-  await expect(preview.getByTestId("skill-preview-replaces")).toContainText("harbour-notes");
+  await expect(preview.getByTestId("skill-preview-replaces")).toContainText("Harbour notes");
   await preview.getByText(/^1 file/).click();
   await expect(preview.getByTestId("skill-preview-file")).toHaveText([/SKILL\.md/]);
   await preview.getByTestId("skill-import-confirm").click();
@@ -280,7 +280,7 @@ test("in Chinese and in a narrow window: the Skills page, the draft and the pick
 
   await window.getByRole("button", { name: "设置" }).click();
   await window.getByTestId("settings-nav-skills").click();
-  await expect(window.getByTestId("skills-yours")).toContainText("scripted-review");
+  await expect(window.getByTestId("skills-yours")).toContainText("Scripted review");
   await shot(window, "skills-page-zh-narrow");
   await window.getByRole("button", { name: "关闭设置" }).click();
   await window.keyboard.press("ControlOrMeta+j");

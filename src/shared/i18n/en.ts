@@ -2814,6 +2814,9 @@ export const en = {
   // The Built-in Skills, as Settings and the slash menu describe them; their SKILL.md, which Answers read, stays as written.
   "skills.builtIn.literature-review":
     "Writes a literature review across your Documents on the Question's topic, by theme rather than one Document after another: where they agree and disagree and what they leave out, with every claim cited.",
+  "skills.builtIn.literature-review.title": "Literature review",
+  "skills.builtIn.mind-to-report.title": "Mind to report",
+  "skills.builtIn.summarise-document.title": "Summarize document",
   "skills.builtIn.literature-review.short": "Writes a themed literature review, every claim cited.",
   "skills.builtIn.mind-to-report":
     "Turns this Mind (the Notes, Questions and Answers above the Question) into a structured report draft with a title, a summary, sections and a conclusion, keeping their Citations and inventing no sources.",
