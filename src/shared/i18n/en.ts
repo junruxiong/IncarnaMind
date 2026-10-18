@@ -3397,6 +3397,7 @@ export const en = {
     "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",
   "error.conversation.notFound": "That conversation doesn't exist or has been deleted.",
   "error.question.empty": "Write the Question before asking it.",
+  "error.question.analyseChoice": "Whether a Question may analyse data must be true or false.",
   "error.estimate.searches": "An estimate counts from 0 to {max} web searches.",
   "error.estimate.each": "An estimate is for Answers or for checks.",
   "error.task.tell": "This Task can't be told anything now.",

@@ -3249,6 +3249,7 @@ export const zhCN = {
     "较新版本的 IncarnaMind 修改过这个 Mind。更新 IncarnaMind 后才能编辑。",
   "error.conversation.notFound": "这个对话不存在或已删除。",
   "error.question.empty": "先输入问题，再提问。",
+  "error.question.analyseChoice": "问题是否可以分析数据只能是 true 或 false。",
   "error.estimate.searches": "估算的联网搜索次数应在 0 到 {max} 之间。",
   "error.estimate.each": "估算只能针对回答或核对。",
   "error.task.tell": "这个任务现在无法接收消息。",
