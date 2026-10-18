@@ -120,16 +120,11 @@ test("Shorten applies at once; Review changes shows its two changes over the app
   const removed = note.locator("del.applied-old");
   await expect(removed).toHaveText(["very ", "really "]);
   await expect(removed.first()).toHaveCSS("text-decoration-line", "line-through");
-  const changeBar = window.getByTestId("applied-change-bar");
-  await expect(changeBar).toBeVisible();
-  await expect(changeBar).toContainText("Change 1 of 2");
+  const restores = note.getByTestId("change-restore");
+  await expect(restores).toHaveCount(2);
   await screenshot(window, "edit-changes-en");
-  // Its bar keeps clear of the edit's own line over the paragraph.
-  const barBox = await changeBar.boundingBox();
-  const lineBox = await line.boundingBox();
-  expect(barBox?.y ?? 0).toBeGreaterThanOrEqual((lineBox?.y ?? 0) + (lineBox?.height ?? 0) - 1);
 
-  await pointAndClick(window, changeBar.getByTestId("change-restore"));
+  await pointAndClick(window, restores.first());
   await expect(removed).toHaveText(["really "]);
   await expect(note).toContainText("The tides here are very strong and");
   await expect(line.getByTestId("applied-count")).toHaveText("1 paragraph changed by Edit with AI");
@@ -137,7 +132,7 @@ test("Shorten applies at once; Review changes shows its two changes over the app
 
   // Restore by keyboard, with the cursor at the other change: then none is left to show.
   await pointAndClick(window, removed.first());
-  await expect(changeBar).toContainText("Change 1 of 1");
+  await expect(restores).toHaveCount(1);
   await window.keyboard.press("ControlOrMeta+Backspace");
   await expect(removed).toHaveCount(0);
   await expect(line).toHaveCount(0);

@@ -17,6 +17,7 @@ import {
 import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
+import { saidInLine } from "../lineNames";
 import {
   fieldInSentence,
   fieldLabel,
@@ -88,10 +89,12 @@ export function CiteAsPanel({
     try {
       await core.updateReference(document.id, { [field]: value });
       useUndo.getState().push({
-        message: t("reference.undo.edit", {
-          field: fieldInSentence(language, field, fields.type),
-          name,
-        }),
+        ...saidInLine(t, (t) =>
+          t("reference.undo.edit", {
+            field: fieldInSentence(language, field, fields.type),
+            name,
+          }),
+        ),
         undo: async () => {
           await core.restoreReference(document.id, before, [field]);
         },
@@ -111,7 +114,7 @@ export function CiteAsPanel({
     try {
       await core.confirmReference(document.id);
       useUndo.getState().push({
-        message: t("reference.undo.confirm", { name }),
+        ...saidInLine(t, (t) => t("reference.undo.confirm", { name })),
         undo: async () => {
           await core.restoreReference(document.id, before, checked);
         },
@@ -141,7 +144,7 @@ export function CiteAsPanel({
     if (result.outcome === "filled" && result.filled.length > 0) {
       const filled = result.filled;
       useUndo.getState().push({
-        message: t("reference.undo.lookUp", { name, service: result.service.name }),
+        ...saidInLine(t, (t) => t("reference.undo.lookUp", { name, service: result.service.name })),
         undo: async () => {
           await core.restoreReference(document.id, before, filled);
         },

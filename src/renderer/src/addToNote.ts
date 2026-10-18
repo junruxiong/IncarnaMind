@@ -39,6 +39,7 @@ import { flashBlocks } from "./editor/blockOrigins";
 import { asOneStep, offerEditorUndo } from "./editor/editorUndo";
 import { notePlace } from "./editor/notePlace";
 import { translateNow as t } from "./i18n";
+import { saidInLine } from "./lineNames";
 import { useAppStore } from "./store";
 import { answerUndoPlace, useUndo } from "./undo";
 
@@ -147,7 +148,9 @@ async function addToOtherMind(added: AddedAnswer, mindId: string, openIt: boolea
     model: added.answer.model,
   });
   useUndo.getState().push({
-    message: t("answer.added", { mind: nameOfMind(mindId, originOf(added).question) }),
+    ...saidInLine(t, (t) =>
+      t("answer.added", { mind: nameOfMind(mindId, originOf(added).question) }),
+    ),
     undo: () => core.undoAddToNote({ mindId, blockIds }),
     shownAt: answerUndoPlace(added.answer.id),
   });
@@ -187,7 +190,7 @@ async function addToNewMind(added: AddedAnswer): Promise<void> {
   await putIn(mind.id, added, true);
   await openBeside(mind.id);
   useUndo.getState().push({
-    message: t("answer.addedToNew", { mind: mindName(mind) || title }),
+    ...saidInLine(t, (t) => t("answer.addedToNew", { mind: mindName(mind) || title })),
     undo: () => core.deleteMind(mind.id),
     shownAt: answerUndoPlace(added.answer.id),
   });
@@ -215,7 +218,7 @@ export async function openTable(added: AddedAnswer): Promise<void> {
       return;
     }
     useUndo.getState().push({
-      message: t("answer.tableOpened", { mind: mindName(mind) || title }),
+      ...saidInLine(t, (t) => t("answer.tableOpened", { mind: mindName(mind) || title })),
       undo: () => core.deleteMind(mind.id),
       shownAt: answerUndoPlace(added.answer.id),
     });

@@ -367,7 +367,7 @@ test("a file that can't be imported says why, and no Mind is made", async () => 
 
   const dialog = await importWordFromMenu(window);
   await expect(dialog.getByTestId("word-import-refusal")).toContainText(
-    "“Old minutes.doc” is an older Word file (.doc). Save it as .docx in Word, then import that.",
+    "“Old minutes.doc” is an older .doc file. Save it as .docx in Word, then import.",
   );
   await expect(dialog.getByTestId("word-import-confirm")).toHaveCount(0);
   await screenshot(dialog, "word-import-refused");
@@ -469,9 +469,14 @@ test("Export writes back into the Word file: the User's edits tracked under thei
   const sheet = window.getByTestId("export-dialog");
   const track = sheet.getByTestId("export-track-changes");
   await expect(track).toBeChecked();
-  await expect(sheet).toContainText(
-    "Your edits since the import, as tracked changes by Priya Raman. Your name is in Settings › General.",
-  );
+  await expect(sheet).toContainText("Your edits since import, tracked as Priya Raman.");
+  // The name is a link to where it is changed, over the sheet.
+  await sheet.getByTestId("export-author-name").click();
+  await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "general");
+  await expect(window.getByTestId("author-name")).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("settings")).toBeHidden();
+  await expect(sheet).toBeVisible();
   await motionSettled(window);
   await screenshot(window, "word-export-options");
   await window.keyboard.press("Escape");

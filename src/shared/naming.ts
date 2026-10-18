@@ -151,6 +151,12 @@ export function shortenMiddle(text: string, max: number): string {
   return `${kept(characters, head).join("")}…${kept(characters.toReversed(), tail).toReversed().join("")}`;
 }
 
+/** Wide enough for a name that reads, narrow enough that a sentence holding it stays in a few lines in a half-width group or the sidebar. */
+export const NAME_IN_LINE_COLUMNS = 40;
+
+/** A name inside a line or sentence, cut in the middle; the line's own words are never cut. */
+export const nameInLine = (name: string): string => shortenMiddle(name, NAME_IN_LINE_COLUMNS);
+
 /** What a Mind is called: the title the User typed, else its first line of text. Empty when it has neither. */
 export const mindName = (mind: { title: string; autoTitle: string }): string =>
   mind.title || mind.autoTitle;
