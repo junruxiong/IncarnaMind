@@ -37,7 +37,7 @@ describe("Dates an Answer gives", () => {
     expect(datesNotInText("董事会于 2024 年 3 月 12 日开会。", texts)).toEqual([]);
     expect(
       datesNotInText(
-        "The contract gives no signing date. Its file was created on 2026-10-18. 文件创建于 2026-10-18。",
+        "The contract gives no signing date. Its file was created on 2026-10-18. Both files show the same creation date (2026-10-18). 文件创建于 2026-10-18。",
         texts,
       ),
     ).toEqual([]);

@@ -158,7 +158,6 @@ function contractReader(walk: Walk) {
   });
 }
 
-/** Whether the model has called `cite` for the Question it answers now. */
 const citedSince = (call: ModelCall) => call.results.some((result) => result.tool === "cite");
 
 const record = (passage: ShownPassage, marker: number, quote: string) => ({
@@ -183,7 +182,6 @@ async function setUp(language: Language) {
   return { walk, core, model };
 }
 
-/** The Answer's sentences outside its headings, each with the markers it carries. */
 function sentencesOf(answer: ConversationAnswer): { text: string; markers: number[] }[] {
   return answer.text
     .split("\n")

@@ -16,7 +16,6 @@ interface DatedDocument {
   lines: readonly string[];
   /** A PDF's creation date in its Info dictionary; null for a text file. */
   created: string | null;
-  /** The file's modified time. */
   modified: Date;
 }
 
