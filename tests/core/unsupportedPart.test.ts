@@ -38,19 +38,25 @@ describe("What a reply says its Citations cover and don't", () => {
     ).toMatchObject({ says: "Nothing here is covered.", covered: null, uncovered: "memory" });
   });
 
-  test("read as phrases: no quotes or closing stop, a capital that only starts the phrase made small", () => {
+  test("read as phrases: no quotes or closing stop, and capitals as written", () => {
     expect(
       readVerdict(
-        "Verdict: unsupported\nCovered: “The speed comparison.”\nNot covered: Memory, and GD runs;",
+        "Verdict: unsupported\nCovered: “The speed comparison.”\nNot covered: GraphST's memory, TensorFlow and Python runs;",
       ),
-    ).toMatchObject({ covered: "the speed comparison", uncovered: "memory, and GD runs" });
-    expect(readVerdict("Verdict: unsupported\nCovered: QN methods\nNot covered: GD")).toMatchObject(
-      {
-        covered: "QN methods",
-        uncovered: "GD",
-      },
-    );
+    ).toMatchObject({
+      covered: "The speed comparison",
+      uncovered: "GraphST's memory, TensorFlow and Python runs",
+    });
   });
+
+  test.each(["none", "None.", "NOTHING", "N/A", "n/a", "无", "“无。”"])(
+    "are none for a side the reply says %j of",
+    (said) => {
+      expect(
+        readVerdict(`Verdict: unsupported\nCovered: ${said}\nNot covered: memory`),
+      ).toMatchObject({ covered: null, uncovered: "memory" });
+    },
+  );
 
   test("are none when the reply gives none, or one too long to be a phrase", () => {
     expect(readVerdict("Verdict: unsupported")).toEqual({
@@ -78,6 +84,25 @@ describe("What a reply says its Citations cover and don't", () => {
     });
   });
 
+  test("are none for a run of stops and spaces far too long to be a phrase", () => {
+    const run = `${".  ".repeat(100_000)}x`;
+    expect(readVerdict(`Verdict: unsupported\nCovered: ${run}\nNot covered: memory`)).toMatchObject(
+      {
+        covered: null,
+        uncovered: "memory",
+      },
+    );
+  });
+
+  test("keep the reason only while it is one sentence long", () => {
+    expect(
+      readVerdict(`Verdict: unsupported\n${"The Documents say little. ".repeat(40)}`),
+    ).toMatchObject({
+      says: null,
+    });
+    expect(readVerdict(`Verdict: unsupported\n${"x".repeat(250)}`)?.says).toHaveLength(250);
+  });
+
   test("come with a JSON reply's verdict", () => {
     expect(
       readVerdict(
@@ -87,7 +112,7 @@ describe("What a reply says its Citations cover and don't", () => {
       verdict: "unsupported",
       says: "Not stated.",
       covered: "speed",
-      uncovered: "memory",
+      uncovered: "Memory",
     });
   });
 
