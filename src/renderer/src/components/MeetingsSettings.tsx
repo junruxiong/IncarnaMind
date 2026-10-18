@@ -1,6 +1,7 @@
 import { useId } from "react";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
+import { InfoTip } from "./InfoTip";
 import { HelpSettings } from "./meetings/HelpSettings";
 import {
   hintClass,
@@ -35,16 +36,22 @@ export function MeetingsSettings() {
         <div className={ruledListClass}>
           <div className={ruledRowClass}>
             <div className="flex min-w-0 flex-col gap-0.5">
-              <label htmlFor={enabledId} className={rowTitleClass}>
-                {t("meetings.settings.enabled")}
-              </label>
-              <p id={`${enabledId}-description`} className={rowTextClass}>
-                {t(
-                  canRecord === "none"
-                    ? "meetings.settings.cantRecord"
-                    : "meetings.settings.enabledBody",
+              <div className="flex items-center">
+                <label htmlFor={enabledId} className={rowTitleClass}>
+                  {t("meetings.settings.enabled")}
+                </label>
+                {canRecord !== "none" && (
+                  <InfoTip
+                    id={`${enabledId}-description`}
+                    text={t("meetings.settings.enabled.tip")}
+                  />
                 )}
-              </p>
+              </div>
+              {canRecord === "none" && (
+                <p id={`${enabledId}-description`} className={rowTextClass}>
+                  {t("meetings.settings.cantRecord")}
+                </p>
+              )}
             </div>
             <input
               id={enabledId}

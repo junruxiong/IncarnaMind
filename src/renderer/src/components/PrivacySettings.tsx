@@ -14,7 +14,7 @@ import { useAppStore } from "../store";
 import { AiUseSettings } from "./AiUseSettings";
 import { ApprovalsSettings } from "./ApprovalsSettings";
 import { DetailsLine } from "./DetailsLine";
-import { OnThisComputer } from "./OnThisComputer";
+import { InfoTip } from "./InfoTip";
 import { ProblemLine } from "./ProblemLine";
 import { USAGE_DATA_DETAILS_URL } from "./UsageDataCard";
 import {
@@ -24,7 +24,6 @@ import {
   rowTextClass,
   rowTitleClass,
   ruledListClass,
-  ruledRow,
   ruledRowClass,
   sectionNoteClass,
   sectionTitleClass,
@@ -116,6 +115,8 @@ export function PrivacySettings() {
     refreshTraffic();
   };
 
+  const inUse = flows?.filter((flow) => flow.services.length > 0) ?? [];
+
   return (
     <div data-testid="privacy-settings" className="flex flex-col gap-7">
       <p className={pageIntroClass}>
@@ -145,11 +146,22 @@ export function PrivacySettings() {
         >
           {t("privacy.flows.intro")}
         </DetailsLine>
-        <ul className={ruledListClass}>
-          {flows?.map((flow) => (
-            <DataFlowItem key={flow.id} flow={flow} />
-          ))}
-        </ul>
+        {inUse.length > 0 ? (
+          <ul className={ruledListClass}>
+            {inUse.map((flow) => (
+              <DataFlowItem key={flow.id} flow={flow} />
+            ))}
+          </ul>
+        ) : (
+          flows && (
+            <p
+              data-testid="data-flows-none"
+              className={`${rowStatusClass} border-y border-rule py-3.5`}
+            >
+              {t("privacy.flows.none")}
+            </p>
+          )
+        )}
       </section>
 
       <section data-testid="network-traffic" className="flex flex-col">
@@ -199,10 +211,7 @@ export function PrivacySettings() {
   );
 }
 
-/**
- * A data flow: a row for each service it goes to (what it sends, and the
- * User's decision on the right), or one row saying it stays on this computer.
- */
+/** A data flow in use: a row for each service it goes to, what it sends, and the User's decision on the right. */
 function DataFlowItem({ flow }: { flow: RegisteredDataFlow }) {
   const t = useT();
   const name = t(`consent.flow.${flow.id}`);
@@ -212,27 +221,14 @@ function DataFlowItem({ flow }: { flow: RegisteredDataFlow }) {
       data-flow-id={flow.id}
       className="flex flex-col [&>*+*]:border-t [&>*+*]:border-rule"
     >
-      {flow.services.length === 0 ? (
-        <div className={ruledRow("center", true)}>
-          <span className="text-ui text-ink">{name}</span>
-          <span
-            data-testid="data-flow-not-in-use"
-            title={t("privacy.flows.notInUse")}
-            className={rowStatusClass}
-          >
-            <OnThisComputer>{t("privacy.flows.local")}</OnThisComputer>
-          </span>
-        </div>
-      ) : (
-        flow.services.map((status) => (
-          <ServiceDecision
-            key={status.flow.service.id}
-            name={name}
-            sends={flow.sends}
-            status={status}
-          />
-        ))
-      )}
+      {flow.services.map((status) => (
+        <ServiceDecision
+          key={status.flow.service.id}
+          name={name}
+          sends={flow.sends}
+          status={status}
+        />
+      ))}
     </li>
   );
 }
@@ -388,11 +384,9 @@ function UsageDataItem({
             {t("privacy.traffic.usage-data")}
           </label>
           <span className="text-ink-meta"> · {traffic.service.name}</span>
+          <InfoTip text={t("privacy.traffic.usage-data.tip")} />
         </p>
-        <p id={`${id}-description`} className={rowTextClass}>
-          {t("privacy.traffic.usage-data.description")}
-          {usageData.testerBuild && ` ${t("privacy.usageData.tester")}`}
-        </p>
+        {usageData.testerBuild && <p className={rowTextClass}>{t("privacy.usageData.tester")}</p>}
         {usageData.localMode && (
           <p data-testid="usage-data-local-mode" className={rowTextClass}>
             {t("privacy.usageData.localMode")}
@@ -427,7 +421,6 @@ function UsageDataItem({
         type="checkbox"
         role="switch"
         data-testid="usage-data-switch"
-        aria-describedby={`${id}-description`}
         disabled={usageData.localMode}
         checked={usageData.enabled}
         aria-checked={usageData.enabled}
@@ -464,9 +457,7 @@ function TrafficItem({
             {t(`privacy.traffic.${traffic.id}`)}
           </span>
           <span className="text-ink-meta"> · {traffic.service.name}</span>
-        </p>
-        <p id={`${id}-description`} className={rowTextClass}>
-          {t(`privacy.traffic.${traffic.id}.description`)}
+          <InfoTip text={t(`privacy.traffic.${traffic.id}.tip`)} />
         </p>
       </div>
       {switchable ? (
@@ -475,7 +466,6 @@ function TrafficItem({
           role="switch"
           data-testid="automatic-update-checks"
           aria-label={t("privacy.traffic.update-check.toggle")}
-          aria-describedby={`${id}-description`}
           checked={choices.automaticUpdateChecks}
           aria-checked={choices.automaticUpdateChecks}
           onChange={(event) => onChange({ automaticUpdateChecks: event.target.checked })}

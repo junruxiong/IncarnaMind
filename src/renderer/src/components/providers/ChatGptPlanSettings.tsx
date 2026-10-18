@@ -12,7 +12,7 @@ import {
   noticeClass,
   primaryButtonClass,
   rowTextClass,
-  sectionTitleClass,
+  rowTitleClass,
 } from "../ui";
 import {
   CHATGPT_RECIPIENT,
@@ -28,13 +28,13 @@ import { TestResult } from "./ProviderForm";
 import { SendsLine } from "./SendsLine";
 
 /**
- * Settings → Models → ChatGPT plan: "Continue with ChatGPT" (Sign in with
- * ChatGPT), then the account, whether Questions use the plan, a test, and
- * Sign out. The plan's model is chosen in Chat model above, the one place the
- * default model is chosen. Signing in here doesn't change the default model
- * unless there is none yet.
+ * Settings → Models → the first plan row, ChatGPT: "Continue with ChatGPT"
+ * (Sign in with ChatGPT), then the account, whether Questions use the plan, a
+ * test, and Sign out. It is the one place ChatGPT signs in. The plan's model
+ * is chosen in Chat model above, the one place the default model is chosen.
+ * Signing in here doesn't change the default model unless there is none yet.
  */
-export function ChatGptPlanSettings() {
+export function ChatGptPlanRow() {
   const t = useT();
   const [status, setStatus] = useChatGptPlan();
   const readiness = useAppStore((state) => state.chatReadiness);
@@ -91,9 +91,9 @@ export function ChatGptPlanSettings() {
     });
 
   return (
-    <section data-testid="chatgpt-settings" className="flex flex-col gap-3">
+    <li data-testid="chatgpt-settings" className="flex flex-col gap-3 py-3.5">
       <div className="flex flex-col gap-1">
-        <h4 className={sectionTitleClass}>{t("chatgpt.title")}</h4>
+        <span className={rowTitleClass}>{t("plans.chatgpt.title")}</span>
         <p className={rowTextClass}>{t("chatgpt.description")}</p>
         <SendsLine provider={CHATGPT_RECIPIENT} />
       </div>
@@ -170,7 +170,7 @@ export function ChatGptPlanSettings() {
           {error}
         </p>
       )}
-    </section>
+    </li>
   );
 }
 

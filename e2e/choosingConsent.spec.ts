@@ -202,9 +202,7 @@ test("Settings › Models says in one line what the ChatGPT plan sends, with the
   const settings = await openSettings(window, "models");
 
   const plan = settings.getByTestId("chatgpt-settings");
-  await expect(plan).toContainText(
-    "Plus or Pro, no key needed. Answers count toward your plan's limits.",
-  );
+  await expect(plan).toContainText("No key needed. Counts toward your plan’s limits.");
   const sends = plan.getByTestId("provider-sends");
   await expect(sends.locator("p")).toHaveText(
     "Sends your questions and document text to OpenAI. · Details",

@@ -449,7 +449,7 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
     join(dataDir, "Documents", "IncarnaMind"),
   );
   await expect(output.getByTestId("output-location-default")).toHaveText(
-    "The default: new files go here until you choose another folder.",
+    "Default: new files go here.",
   );
   await interceptOpenDialog(app, join(papers, "Exports"));
   await output.getByTestId("output-location-change").click();

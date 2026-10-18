@@ -12,7 +12,7 @@ import { core, files } from "../core";
 import { errorMessage } from "../errors";
 import { showFileLabelKey } from "../fileInfo";
 import { useT } from "../i18n";
-import { formatSize, pickSkill, skillDescription } from "../skills";
+import { formatSize, pickSkill, skillDescription, skillShortLine } from "../skills";
 import { useAppStore } from "../store";
 import { DetailsLine } from "./DetailsLine";
 import { ExportLineIcon, MoreLineIcon, PlusLineIcon } from "./lineIcons";
@@ -499,6 +499,7 @@ function SkillRow({
         ? t("skills.settings.scripts", { count: scripts })
         : null,
   ].filter(Boolean);
+  const short = skillShortLine(skill, t);
   const label = t("skills.settings.actions", { name: skill.name });
   const choose = (action: () => void) => () => {
     menu.close();
@@ -526,9 +527,19 @@ function SkillRow({
     >
       <div className={`flex min-w-0 flex-col gap-0.5 ${skill.enabled ? "" : "opacity-60"}`}>
         <p className={`truncate ${rowTitleClass}`}>{skill.name}</p>
-        <p className={`line-clamp-2 ${rowTextClass}`} title={skillDescription(skill, t)}>
-          {skillDescription(skill, t)}
-        </p>
+        {short ? (
+          <DetailsLine
+            testId={`skill-description-${skill.name}`}
+            className={rowTextClass}
+            details={<p>{skillDescription(skill, t)}</p>}
+          >
+            {short}
+          </DetailsLine>
+        ) : (
+          <p className={`line-clamp-1 ${rowTextClass}`} title={skillDescription(skill, t)}>
+            {skillDescription(skill, t)}
+          </p>
+        )}
         {details.length > 0 && (
           <MetaLine parts={details} className="text-[12px] leading-[18px] text-ink-meta" />
         )}

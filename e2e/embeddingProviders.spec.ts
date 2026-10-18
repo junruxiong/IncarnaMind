@@ -38,16 +38,14 @@ test("embeddings are off by default; turning them on with a cloud provider warns
   const section = window.getByTestId("embedding-settings");
   const current = section.getByTestId("embedding-current");
   await expect(current).toHaveText("Search model: Off");
-  await expect(section).toContainText(
-    "Documents are searched by their words, with the best matches first. Nothing leaves this computer.",
-  );
+  await expect(section).toContainText("Documents are searched by their words.");
 
   // "Turn on…": Off is chosen, and the line says what an embedding model adds and costs.
   await section.getByTestId("embedding-change").click();
   const form = section.getByTestId("embedding-form");
   await expect(form.getByLabel("Off", { exact: true })).toBeChecked();
   await expect(form.getByTestId("embedding-trade-off")).toHaveText(
-    "Finds passages worded differently, but reads slower; the built-in model is a 135 MB download.",
+    "Finds passages worded differently, but reads slower.",
   );
   // Choose OpenAI, with a key; its suggested model is filled in.
   await form.getByLabel("OpenAI", { exact: true }).check();
@@ -113,7 +111,7 @@ test("turned on with the built-in model, Documents are embedded; turned off agai
   await expect(confirm).toContainText("Everything stays on this computer.");
   await confirm.getByTestId("embedding-confirm-switch").click();
 
-  await expect(current).toHaveText("Search model: Built-in (multilingual-e5-small)");
+  await expect(current).toHaveText("Search model: Built-in model");
   const vector = () =>
     window.evaluate(() =>
       (globalThis as Page).incarnamind.searchPassages("light into energy", { mode: "vector" }),
@@ -122,12 +120,10 @@ test("turned on with the built-in model, Documents are embedded; turned off agai
 
   await section.getByTestId("embedding-change").click();
   await form.getByLabel("Off", { exact: true }).check();
-  await expect(form).toContainText(
-    "Documents are searched by their words, best matches first. Nothing is downloaded.",
-  );
+  await expect(form).toContainText("Searches words only. Nothing is downloaded.");
   await form.getByTestId("embedding-switch").click();
   await expect(confirm).toContainText("Turn off search by meaning?");
-  await expect(confirm).toContainText("What the search model read is kept");
+  await expect(confirm).toContainText("What it read is kept");
   await confirm.getByTestId("embedding-confirm-switch").click();
 
   await expect(current).toHaveText("Search model: Off");
@@ -180,9 +176,9 @@ test("reranking is on by default with the built-in model, can be turned off, and
 
   // The smoke tests' fake model has nothing to download: it is ready at once.
   await expect(current().getByTestId("rerank-current")).toHaveText(
-    /^By default, the built-in model puts the best search results first \(.+\)\.$/,
+    "By default, the built-in model puts the best results first.",
   );
-  await expect(current()).toContainText("Nothing leaves this computer.");
+  await expect(current()).toContainText("Each search takes a little longer.");
   await expect(current().getByTestId("rerank-model-state")).toHaveCount(0);
   expect(
     await launched.window.evaluate(() => (globalThis as Page).incarnamind.getRerankSettings()),

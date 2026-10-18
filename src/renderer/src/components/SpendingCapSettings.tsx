@@ -5,10 +5,10 @@ import { formatMoney, formatSpent, setAsideText } from "../cost";
 import { useLanguage, useT } from "../i18n";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
+import { InfoTip } from "./InfoTip";
 import {
   fieldClass,
   hintClass,
-  rowTextClass,
   rowTitleClass,
   ruledListClass,
   ruledRowClass,
@@ -92,12 +92,12 @@ export function SpendingCapSettings() {
       <div className={ruledListClass}>
         <div className={ruledRowClass}>
           <div className="flex min-w-0 flex-col gap-0.5">
-            <label htmlFor={id} className={rowTitleClass}>
-              {t("cost.cap.switch")}
-            </label>
-            <p id={`${id}-description`} className={rowTextClass}>
-              {t("cost.cap.body")}
-            </p>
+            <div className="flex items-center">
+              <label htmlFor={id} className={rowTitleClass}>
+                {t("cost.cap.switch")}
+              </label>
+              <InfoTip id={`${id}-description`} text={t("cost.cap.tip")} />
+            </div>
             {spentLine && (
               <p data-testid="spending-cap-spent" className={hintClass}>
                 {spentLine}
@@ -106,7 +106,7 @@ export function SpendingCapSettings() {
             {setAside && (
               <p
                 data-testid="spending-cap-set-aside"
-                title={t("cost.setAside.hint")}
+                title={t("cost.setAside.tip")}
                 className={hintClass}
               >
                 {setAside}

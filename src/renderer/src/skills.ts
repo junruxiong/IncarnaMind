@@ -46,6 +46,22 @@ const BUILT_IN_DESCRIPTIONS: Readonly<Record<string, MessageKey>> = {
   "summarise-document": "skills.builtIn.summarise-document",
 };
 
+/** The one short line Settings shows for each Built-in Skill; the longer description is behind Details. */
+const BUILT_IN_SHORT_LINES: Readonly<Record<string, MessageKey>> = {
+  "literature-review": "skills.builtIn.literature-review.short",
+  "mind-to-report": "skills.builtIn.mind-to-report.short",
+  "summarise-document": "skills.builtIn.summarise-document.short",
+};
+
+/** A Built-in Skill's short line in the interface's language; null for any other Skill. */
+export function skillShortLine(
+  skill: { name: string; builtIn: boolean },
+  t: (key: MessageKey, params?: MessageParams) => string,
+): string | null {
+  const key = skill.builtIn ? BUILT_IN_SHORT_LINES[skill.name] : undefined;
+  return key ? t(key) : null;
+}
+
 /**
  * What a Skill does, for people: a Built-in Skill's in the interface's
  * language, any other's as its SKILL.md says (which is also what Answers read).

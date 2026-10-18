@@ -81,7 +81,7 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   // Privacy page lists, and revoking it there goes back to the default.
   const approvals = window.getByTestId("approvals-settings");
   await showSettingsPage(window, "privacy");
-  await expect(approvals).toContainText("Nothing is set to always allow, always ask or stay off.");
+  await expect(approvals).toContainText("Nothing changed from the default.");
   await showSettingsPage(window, "connectors");
   await lookup.getByText("Ask every time").click();
   await expect(lookup).toHaveAttribute("data-asks", "true");
