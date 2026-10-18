@@ -1881,7 +1881,6 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     signal: lifetime.signal,
   });
-  // A rate limit pauses automatic tagging and Organize together, and they go on when it ends.
   const rateLimit = createRateLimitPause({
     timers: paceTimers,
     resumed: () => {
@@ -2248,9 +2247,10 @@ export function createCore(adapters: CoreAdapters): Core {
 
   /**
    * What tagging may use changed (a model, a key, local mode): Automatic picks
-   * again, and Documents waiting may go on.
+   * again, and Documents waiting may go on, a rate-limit pause ended too, unless
+   * this is the start, which keeps the pause a quit interrupted.
    */
-  const taggingChanged = async () => {
+  const taggingChanged = async (endsPause = true) => {
     try {
       await tagging.resolve();
     } catch (error) {
@@ -2258,6 +2258,7 @@ export function createCore(adapters: CoreAdapters): Core {
       console.error("The model to tag with couldn't be worked out.", error);
     }
     if (lifetime.signal.aborted) return;
+    if (endsPause) rateLimit.resumeNow();
     tagger.resume();
     library.resume();
   };
@@ -2368,7 +2369,13 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Tagging a quit interrupted starts again, once Automatic knows what it tags with;
   // Documents waiting for a model are checked.
-  void taggingChanged().then(() => {
+  const stillLimited = db.get<{ ends: string | null }>(
+    `SELECT max(tagging_error_resets_at) AS ends FROM documents
+     WHERE deleted_at IS NULL AND tagging_status = 'waiting-for-provider'
+       AND tagging_error_kind = 'rate-limit'`,
+  )?.ends;
+  if (stillLimited) rateLimit.restore(Date.parse(stillLimited));
+  void taggingChanged(false).then(() => {
     if (!lifetime.signal.aborted) tagger.start();
   });
 

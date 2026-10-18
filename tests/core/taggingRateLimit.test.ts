@@ -8,56 +8,16 @@
 import { APICallError } from "ai";
 import { describe, expect, test, vi } from "vitest";
 import type { Core, Document } from "../../src/core";
-import type { PaceTimers } from "../../src/core/sources/pace";
 import { RATE_LIMIT_PAUSE } from "../../src/core/tags/rateLimit";
 import { RETRY_WAIT_MS } from "../../src/core/tags/transient";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import { type Clock, heldClock } from "../helpers/heldClock";
 import { scriptedModels } from "../helpers/models";
 import { type ScriptedChat, scriptedChat } from "../helpers/scriptedChat";
 import { waitForTagging } from "../helpers/tags";
 
 const LOCAL = { kind: "ollama", modelId: "local-model" } as const;
-
-/** A clock for the core's waits that only moves when the test moves it. */
-function heldClock() {
-  let time = Date.parse("2026-10-18T09:00:00.000Z");
-  const held: { until: number; resolve(): void }[] = [];
-  const timers: PaceTimers = {
-    now: () => time,
-    sleep: (ms, signal) =>
-      new Promise((resolve, reject) => {
-        if (signal.aborted) return reject(signal.reason);
-        if (ms <= 0) return resolve();
-        const wait = { until: time + ms, resolve };
-        held.push(wait);
-        signal.addEventListener(
-          "abort",
-          () => {
-            held.splice(held.indexOf(wait), 1);
-            reject(signal.reason);
-          },
-          { once: true },
-        );
-      }),
-  };
-  return {
-    timers,
-    now: () => time,
-    /** How many waits are held. */
-    waits: () => held.length,
-    /** Moves the clock on, ending the waits that are over. */
-    advance(ms: number) {
-      time += ms;
-      for (const wait of held.filter((each) => each.until <= time)) {
-        held.splice(held.indexOf(wait), 1);
-        wait.resolve();
-      }
-    },
-  };
-}
-
-type Clock = ReturnType<typeof heldClock>;
 
 function rateLimit(retryAfter?: string) {
   return new APICallError({
@@ -186,7 +146,21 @@ describe("Tagging meets a rate limit", () => {
     expect(paused?.taggingError?.resetsAt).toBe(endsAt(clock, RATE_LIMIT_PAUSE.longestWaitMs));
   });
 
-  test("quitting during the pause and relaunching goes on", async () => {
+  test("a short Retry-After is used as it is given, not stretched to the backoff", async () => {
+    const { core, chat, clock } = await start();
+    chat.fail(rateLimit("2"));
+
+    const ids = idsOf(await add(core, ["One"]));
+    const [paused] = await waitForTagging(core, ids, waiting);
+    expect(paused?.taggingError?.resetsAt).toBe(endsAt(clock, 2_000));
+
+    chat.fail(null);
+    clock.advance(2_000);
+    await waitForTagging(core, ids);
+    expect(chat.calls).toHaveLength(2);
+  });
+
+  test("quitting during the pause and relaunching keeps the pause until it ends", async () => {
     const first = await start();
     first.chat.fail(rateLimit("45"));
     const ids = idsOf(await add(first.core, ["One", "Two"]));
@@ -194,10 +168,41 @@ describe("Tagging meets a rate limit", () => {
     first.core.close();
 
     const chat = scriptedChat();
-    const second = startOn(first.dataDir, chat, heldClock());
+    const clock = heldClock();
+    const second = startOn(first.dataDir, chat, clock);
+    await vi.waitFor(() => expect(clock.waits()).toBe(1));
+    expect(chat.calls).toEqual([]);
 
+    clock.advance(45_000);
     await waitForTagging(second, ids);
     expect(chat.calls).toHaveLength(2);
+  });
+
+  test("a new model or key ends the pause at once", async () => {
+    const { core, chat, clock } = await start();
+    chat.fail(rateLimit("600"));
+    const ids = idsOf(await add(core, ["One", "Two"]));
+    await waitForTagging(core, ids, waiting);
+    expect(chat.calls).toHaveLength(1);
+
+    chat.fail(null);
+    await core.saveChatProvider({ kind: "ollama", modelId: "another-model" });
+
+    await waitForTagging(core, ids);
+    expect(clock.waits()).toBe(0);
+  });
+
+  test("Tag again on one Document ends the pause for the rest too", async () => {
+    const { core, chat } = await start();
+    chat.fail(rateLimit("600"));
+    const ids = idsOf(await add(core, ["One", "Two", "Three"]));
+    await waitForTagging(core, ids, waiting);
+
+    chat.fail(null);
+    await core.retagDocuments([ids[0] as string]);
+
+    await waitForTagging(core, ids);
+    expect(chat.calls).toHaveLength(4);
   });
 });
 
