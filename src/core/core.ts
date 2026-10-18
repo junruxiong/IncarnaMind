@@ -2022,6 +2022,7 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
     background,
     rateLimit,
+    timers: paceTimers,
   });
   const automaticClassifiers = new Map<string, ReturnType<typeof automaticGroupClassifier>>();
   const library = createLibrary({

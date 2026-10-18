@@ -21,7 +21,7 @@ export type ScriptedChat = ReturnType<typeof scriptedChat>;
 /**
  * A chat model for automatic tagging and Organize together: it tags every Document "Report",
  * files it in the first Folder offered, and records each request. `hold` keeps its answers
- * back until `release`; `fail` makes the requests that follow throw.
+ * back until `release`; `fail` makes the requests that follow throw, `failNext` only the next.
  */
 export function scriptedChat() {
   const calls: { purpose: "tags" | "organize"; text: string }[] = [];
@@ -29,6 +29,7 @@ export function scriptedChat() {
   let gate: Promise<void> | null = null;
   let open = () => {};
   let failure: Error | null = null;
+  const failures: Error[] = [];
   const model = new MockLanguageModelV4({
     doGenerate: async (options) => {
       const schema =
@@ -38,6 +39,8 @@ export function scriptedChat() {
       calls.push({ purpose: group ? "organize" : "tags", text: textOf(options) });
       if (gate) await gate;
       if (failure) throw failure;
+      const once = failures.shift();
+      if (once) throw once;
       const reply = group ? { groupId: group.enum[0], tags: organizeTags } : { tags: ["Report"] };
       return {
         content: [{ type: "text", text: JSON.stringify(reply) }],
@@ -67,6 +70,9 @@ export function scriptedChat() {
     },
     fail(error: Error | null) {
       failure = error;
+    },
+    failNext(error: Error) {
+      failures.push(error);
     },
   };
 }
