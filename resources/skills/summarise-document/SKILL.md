@@ -52,5 +52,5 @@ Keep it short: a summary, not a rewrite. Bullet points are fine; don't use table
 - Cite every statement you take from a Document, the way your instructions for citing say: markers that point to the Passages you found. Don't write a list of sources or a bibliography, and never cite a Passage for something it doesn't say.
 - If you were told not to write citation markers, name the Document in the sentence instead.
 - Don't add details the Passages don't give: no names, numbers, dates or sample sizes from memory.
-- If a search for something the kind of Document turns on (an agreement's term, a paper's method) finds nothing, search again with the Document's own words before you leave that section out; never guess it. If the Documents don't support what the Question assumes, say that too.
+- If a search for something the kind of Document turns on (an agreement's term, a paper's method) finds nothing, search again with the Document's own words before you leave that section out; never guess it. If the Documents don't support what the Question assumes, say so plainly.
 - Report the Document's views as the Document's. Keep your own views out, apart from the labelled assessment of a paper's limitations.
