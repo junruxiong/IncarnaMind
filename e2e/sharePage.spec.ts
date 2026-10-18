@@ -360,7 +360,7 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
   await sheet.getByTestId("export-format").selectOption("share-page");
   const contents = sheet.getByTestId("share-contents");
   await expect(contents.locator("p").first()).toHaveText(
-    "In the file: 5 quotes and 2 page pictures from 5 Documents. Anyone you send it to can read them. The Documents themselves aren't included.",
+    "In the file: 5 quotes and 2 page pictures from 5 Documents. Anyone with the file can read these; Documents aren't included.",
   );
   await expect(contents.getByTestId("share-document")).toHaveCount(5);
   await expect(contents.getByTestId("share-size")).toHaveText(/^The file will be about \d/);
@@ -422,7 +422,7 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
   await setLanguage(window, "zh-CN");
   await openOptions(window, "导出选项");
   await expect(sheet.getByTestId("share-contents").locator("p").first()).toHaveText(
-    "文件中包含：来自 5 个文档的 5 处引文和 2 张页面截图。收到文件的人都能看到这些内容；文档本身不会包含在内。",
+    "文件中包含：来自 5 个文档的 5 处引文和 2 张页面截图。收到文件的人都能看到这些，文档本身不包含在内。",
   );
   await app.close();
 });

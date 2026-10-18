@@ -25,6 +25,8 @@
  * - While Organize files new Documents by itself, the Documents it holds are
  *   its own. One it doesn't hold, such as one this tagger had when Organize
  *   began filing new Documents, is still tagged here.
+ * - With no Tags defined the model is skipped and a Document is "no-tags", not
+ *   "tagged", so it is checked once a Tag exists (see `tagsDefined`).
  */
 import type { DocumentKind, ProviderError } from "../api";
 import type { BackgroundCall, BackgroundJob, BackgroundQueue } from "../backgroundQueue";
@@ -59,6 +61,7 @@ export type StoredTaggingState =
   | "waiting-for-provider"
   | "tagging"
   | "tagged"
+  | "no-tags"
   | "failed"
   | "stopped";
 
@@ -270,7 +273,7 @@ export function createTagger(options: TaggerOptions) {
     const changed = db.transaction(() => {
       if (rowOf(id)?.status !== "ready") return false; // deleted, or processed again, meanwhile
       const tagsChanged = tags.applyAutomatic(id, decisions);
-      return setState(id, "tagged") || tagsChanged;
+      return setState(id, definitions.length === 0 ? "no-tags" : "tagged") || tagsChanged;
     });
     if (changed) announce([id]);
   }
@@ -356,14 +359,20 @@ export function createTagger(options: TaggerOptions) {
    * waiting if no tagger can be used. Those where Tagging is stopped are
    * "stopped", and those where it was turned back on are queued again.
    */
-  function resume(): void {
+  function resume(only?: "no-tags"): void {
     if (lifetime.signal.aborted) return;
+    const checkable = tags.list().length > 0;
+    if (only && !checkable) return;
+    const statuses = only
+      ? [only]
+      : ["pending", "waiting-for-provider", "failed", "stopped", ...(checkable ? ["no-tags"] : [])];
     const rows = db
       .all<{ id: string; tagging_status: string; tagging_error_kind: string | null }>(
         `SELECT id, tagging_status, tagging_error_kind FROM documents
          WHERE deleted_at IS NULL AND status = 'ready'
-           AND tagging_status IN ('pending', 'waiting-for-provider', 'failed', 'stopped')
+           AND tagging_status IN (${statuses.map(() => "?").join(", ")})
          ORDER BY created_at, rowid`,
+        statuses,
       )
       .filter((row) => !organized(row.id));
     const stopped = rows.filter((row) => options.stopped(row.id) && !asked.has(row.id));
@@ -387,6 +396,7 @@ export function createTagger(options: TaggerOptions) {
         .filter(
           (row) =>
             row.tagging_status === "stopped" ||
+            row.tagging_status === "no-tags" ||
             (row.tagging_status === "waiting-for-provider" &&
               (row.tagging_error_kind === null ||
                 (row.tagging_error_kind === "rate-limit" && !limited))),
@@ -394,7 +404,8 @@ export function createTagger(options: TaggerOptions) {
         .map((row) => row.id),
       "pending",
     );
-    for (const row of rest) enqueue(row.id);
+    // Fresh for "no-tags": the run that marked it may not have let go of it yet.
+    for (const row of rest) enqueue(row.id, row.tagging_status === "no-tags");
   }
 
   return {
@@ -429,8 +440,11 @@ export function createTagger(options: TaggerOptions) {
       enqueue(id);
     },
 
+    /** A Tag may exist now: the Documents checked while there were none are tagged. */
+    tagsDefined: () => resume("no-tags"),
+
     /** The tagger, or whether it can run, may have changed: Documents waiting, or failed, are tried again. */
-    resume,
+    resume: () => resume(),
 
     /**
      * Re-tags Documents (all of them without ids): their automatic Tags are
