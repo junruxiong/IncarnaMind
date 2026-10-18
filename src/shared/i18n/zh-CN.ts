@@ -1659,7 +1659,8 @@ export const zhCN = {
   "fileWrite.location.cancel": "取消",
   "fileWrite.location.failed": "无法使用这个文件夹：{reason}",
   "fileWrite.linked.title": "在“{folder}”中添加文件？",
-  "fileWrite.linked.body": "把“{name}”保存到“{folder}”，并允许今后在其中添加新文件？",
+  "fileWrite.linked.body":
+    "IncarnaMind 只读取“{folder}”。要把“{name}”保存到这里，并允许今后添加新文件吗？",
   "fileWrite.linked.safe": "IncarnaMind 不会修改或删除你的文件。",
   "fileWrite.linked.note": "你可以在设置 › 通用中更改。",
   "fileWrite.linked.allow": "允许",
