@@ -1658,7 +1658,8 @@ export function createAnswers(options: AnswersOptions) {
         routed?.fillsEmpty && minds && focusedId && minds.read(focusedId, holdsNothing)
           ? { ...routed, newMind: false }
           : routed;
-      const focusedBlank = minds !== undefined && focusedId !== null && minds.read(focusedId, blank);
+      const focusedBlank =
+        minds !== undefined && focusedId !== null && minds.read(focusedId, blank);
       const requested =
         route && (route.kind === "write" || route.kind === "edit")
           ? { change: route.kind, newMind: route.newMind }
