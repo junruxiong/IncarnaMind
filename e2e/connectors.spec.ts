@@ -271,9 +271,7 @@ test("a reviewed Connector in the directory connects in one click, signing in in
     await expect(detail).toContainText(
       "By Wiki Inc. · Reviewed by IncarnaMind · Needs your Wiki Pro subscription",
     );
-    await expect(detail).toContainText(
-      "Sign in with Wiki in your browser. Needs a Wiki Pro subscription.",
-    );
+    await expect(detail).toContainText("Browser sign-in. Needs a Wiki Pro subscription.");
     await expect(page.getByTestId("connectors-back")).toBeFocused();
     // Its Tools as reviewed, before connecting: what each does, with no choice yet.
     const reviewed = page.getByTestId("connector-reviewed-tool");

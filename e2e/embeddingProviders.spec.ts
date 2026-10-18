@@ -58,9 +58,7 @@ test("embeddings are off by default; turning them on with a cloud provider warns
   const confirm = window.getByTestId("embedding-confirm");
   await expect(confirm).toBeVisible();
   await expect(confirm).toContainText("Turn on OpenAI · text-embedding-3-small?");
-  await expect(confirm).toContainText(
-    "Reads every Document (1) for search; until then search matches words.",
-  );
+  await expect(confirm).toContainText("Reads all 1 Documents; search matches words until then.");
   await expect(confirm.getByTestId("embedding-confirm-cloud")).toHaveText(
     "OpenAI will receive the full text of all your Documents, and every search you make.",
   );
@@ -157,7 +155,7 @@ test("in local mode, a server elsewhere and reranking are turned down as they're
   // Reranking: only the built-in model, on this computer, can be chosen, and it stays on.
   const rerank = window.getByTestId("rerank-settings");
   await expect(rerank.getByTestId("rerank-current")).toContainText(
-    "the built-in model puts the best search results first",
+    "the built-in model puts the best results first",
   );
   await rerank.getByTestId("rerank-change").click();
   const rerankForm = rerank.getByTestId("rerank-form");
