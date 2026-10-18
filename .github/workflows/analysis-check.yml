@@ -1,0 +1,67 @@
+name: Analysis check (temporary)
+
+on:
+  push:
+    branches: [feat/446-analysis-runtime]
+
+permissions:
+  contents: read
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
+jobs:
+  check:
+    name: Analysis on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Make sure Electron is installed
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            node node_modules/electron/install.js && exit 0
+            sleep 20
+          done
+          exit 1
+      - run: npx electron-vite build --mode test
+      - name: Smoke (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npx playwright test e2e/analysis.spec.ts e2e/zzAnalysisTimes.spec.ts
+      - name: Smoke
+        if: runner.os != 'Linux'
+        run: npx playwright test e2e/analysis.spec.ts e2e/zzAnalysisTimes.spec.ts
+      - name: Installer, this branch
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          TARGET: ${{ runner.os == 'macOS' && '--mac dmg --arm64' || runner.os == 'Windows' && '--win nsis --x64' || '--linux AppImage --x64' }}
+        run: |
+          npx electron-vite build
+          npx electron-builder --publish never $TARGET
+          ls -l dist | grep -E "\.(dmg|exe|AppImage)$"
+          du -sk resources/python
+      - name: Installer, main
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          TARGET: ${{ runner.os == 'macOS' && '--mac dmg --arm64' || runner.os == 'Windows' && '--win nsis --x64' || '--linux AppImage --x64' }}
+        run: |
+          git worktree add ../on-main origin/main
+          cd ../on-main
+          npm ci
+          npx electron-vite build
+          npx electron-builder --publish never $TARGET
+          ls -l dist | grep -E "\.(dmg|exe|AppImage)$"
