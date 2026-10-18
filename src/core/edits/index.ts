@@ -204,7 +204,10 @@ function parseInput(input: unknown): ParsedInput {
     throw new InvalidInputError(`Unknown Edit with AI action "${String(action)}".`);
   }
   const words = typeof instruction === "string" ? instruction.trim() : "";
-  if ((action === "translate" || action === "instruction" || action === "cut-unsupported") && words === "") {
+  if (
+    (action === "translate" || action === "instruction" || action === "cut-unsupported") &&
+    words === ""
+  ) {
     throw new InvalidInputError({ key: "error.edit.noInstruction" });
   }
   if (words.length > MAX_INSTRUCTION_CHARACTERS) {

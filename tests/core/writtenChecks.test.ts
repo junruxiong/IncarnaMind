@@ -8,7 +8,12 @@ import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind } from "../helpers/mindClient";
 import { readMind, resolveChanges, shownWithChanges } from "../helpers/minds";
-import { type ModelCall, type ScriptedReply, scriptedModel, scriptedModels } from "../helpers/models";
+import {
+  type ModelCall,
+  type ScriptedReply,
+  scriptedModel,
+  scriptedModels,
+} from "../helpers/models";
 
 /**
  * What the assistant writes into a Mind is checked against its own Citations
@@ -48,7 +53,9 @@ function writingModel(content: string, calls: ModelCall[]) {
     calls.push(call);
     if (isCheckRun(call)) return checkReply(call, PLANS);
     if (CUT.test(call.prompt)) {
-      return { text: "Spring tides come at new and full moon [1].\n<why>Only what the source says.</why>" };
+      return {
+        text: "Spring tides come at new and full moon [1].\n<why>Only what the source says.</why>",
+      };
     }
     const { results } = call;
     const search = results.find((result) => result.tool === "search_documents");
@@ -91,9 +98,7 @@ async function setUp(content: string) {
 describe("What the assistant writes is checked before it lands", { timeout: 30_000 }, () => {
   // protects=a written sentence that overstates its Citations lands with that part cut, its Citation kept, and nothing in the Mind marked unsupported (#1111's acceptance); fails_when=the overstated words land, the Citation goes, a mark is left, or the model isn't told; no_claim=how well a real model cuts.
   test("a part its Citations don't support is cut before it lands, the Citation kept", async () => {
-    const { model, calls, change, client } = await setUp(
-      `## Tides\n\n${OVERSTATED} [^1].`,
-    );
+    const { model, calls, change, client } = await setUp(`## Tides\n\n${OVERSTATED} [^1].`);
 
     expect(shownWithChanges(client)).toEqual([
       "+ Tides",
@@ -113,9 +118,7 @@ describe("What the assistant writes is checked before it lands", { timeout: 30_0
 
   // protects=a written sentence its Citations don't support at all lands marked unsupported, with the check's reason, so Check this Mind has nothing more to find; fails_when=it lands unmarked, is cut, or Check this Mind sends it again; no_claim=none beyond protects.
   test("a sentence still unsupported lands marked, and Check this Mind leaves it", async () => {
-    const { core, model, calls, change, client } = await setUp(
-      `## Tides\n\n${UNBACKED} [^1].`,
-    );
+    const { core, model, calls, change, client } = await setUp(`## Tides\n\n${UNBACKED} [^1].`);
 
     expect(shownWithChanges(client)).toEqual([
       "+ Tides",
@@ -134,7 +137,7 @@ describe("What the assistant writes is checked before it lands", { timeout: 30_0
     );
     await resolveChanges(client, "accept");
     expect(claimSpans(readMind(client))).toHaveLength(1);
-    expect(await core.planMindCheck(change?.mindId, "changed")).toEqual({ kind: "nothing" });
+    expect(await core.planMindCheck(change?.mindId ?? "", "changed")).toEqual({ kind: "nothing" });
   });
 
   // protects=text with no Citation isn't checked as it lands: nothing to check it against; fails_when=a check Run is made; no_claim=none beyond protects.
