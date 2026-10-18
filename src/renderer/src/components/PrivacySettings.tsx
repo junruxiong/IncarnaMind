@@ -16,6 +16,7 @@ import { ApprovalsSettings } from "./ApprovalsSettings";
 import { DetailsLine } from "./DetailsLine";
 import { InfoTip } from "./InfoTip";
 import { ProblemLine } from "./ProblemLine";
+import { LocalOnlySetting } from "./providers/LocalOnlySetting";
 import { USAGE_DATA_DETAILS_URL } from "./UsageDataCard";
 import {
   buttonStyle,
@@ -136,6 +137,8 @@ export function PrivacySettings() {
           {t("sandbox.off")}
         </ProblemLine>
       )}
+
+      <LocalOnlySetting />
 
       <section data-testid="consent-settings" className="flex flex-col">
         <h4 className={sectionTitleClass}>{t("consent.settings.title")}</h4>

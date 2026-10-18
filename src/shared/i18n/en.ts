@@ -187,6 +187,7 @@ export const en = {
   "command.palette.open": "Search…",
   "command.settings.page": "Settings: {page}",
   "command.settings.addProvider": "Add a model provider…",
+  "command.settings.localMode.keywords": "local offline private cloud off settings privacy",
   "palette.label": "Search",
   "palette.placeholder": "Search Minds, conversations, Documents, Folders, Tags and actions…",
   "palette.results": "Results",
@@ -4709,7 +4710,7 @@ export const en = {
     "This agent is no longer connected. Connect it again in Settings → Agents.",
   "agents.problem.off": "Connecting agents is off. Turn it on in Settings → Agents.",
   "agents.problem.local-mode":
-    "Agents are paused: “Keep everything on this computer” is on. Turn it off in Settings → Search.",
+    "Agents are paused: “Keep everything on this computer” is on. Turn it off in Settings → Privacy.",
   "agents.problem.consent":
     "This agent can’t read your Documents now. Allow it again in Settings → Privacy.",
   "agents.problem.no-folders":

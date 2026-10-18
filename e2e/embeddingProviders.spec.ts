@@ -11,6 +11,7 @@ import {
   launchApp,
   openSettings,
   removeDataFolder,
+  showSettingsPage,
 } from "./app";
 
 type Page = typeof globalThis & { incarnamind: CoreBridge };
@@ -132,9 +133,11 @@ test("turned on with the built-in model, Documents are embedded; turned off agai
 test("in local mode, a server elsewhere and reranking are turned down as they're chosen, saying why", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await openSettings(window, "search");
+  const settings = await openSettings(window, "privacy");
+  await settings.getByTestId("local-only").check();
+  await showSettingsPage(window, "search");
   const section = window.getByTestId("embedding-settings");
-  await section.getByTestId("local-only").check();
+  await expect(section.getByTestId("local-only")).toHaveCount(0);
 
   await section.getByTestId("embedding-change").click();
   const form = section.getByTestId("embedding-form");

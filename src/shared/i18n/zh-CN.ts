@@ -180,6 +180,7 @@ export const zhCN = {
   "command.palette.open": "搜索…",
   "command.settings.page": "设置：{page}",
   "command.settings.addProvider": "添加 AI 模型服务…",
+  "command.settings.localMode.keywords": "本地 离线 隐私 云端 关闭 设置",
   "palette.label": "搜索",
   "palette.placeholder": "搜索 Mind、对话、文档、文件夹、标签和操作…",
   "palette.results": "搜索结果",
@@ -4524,7 +4525,7 @@ export const zhCN = {
   "agents.problem.unpaired": "这个智能体已断开连接。在“设置 → 智能体”中重新连接。",
   "agents.problem.off": "已关闭智能体连接。在“设置 → 智能体”中开启。",
   "agents.problem.local-mode":
-    "智能体已暂停：已开启“所有内容都留在这台电脑上”。要继续，请在“设置 → 搜索”中关闭。",
+    "智能体已暂停：已开启“所有内容都留在这台电脑上”。要继续，请在“设置 → 隐私”中关闭。",
   "agents.problem.consent": "这个智能体已无权读取你的文档。在“设置 → 隐私”中重新允许它。",
   "agents.problem.no-folders": "这个智能体还不能读取任何文档。在“设置 → 智能体”中为它选择文件夹。",
   "agents.problem.outside-scope":
