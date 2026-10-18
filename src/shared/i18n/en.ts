@@ -1630,7 +1630,7 @@ export const en = {
   "jev.form.model": "Model (optional)",
   "jev.form.reviewFrom": "Needs review from (%)",
   "jev.form.reviewTo": "to (%)",
-  "jev.form.reviewHint": "Below the first number: not applied. From the second: applied, unmarked.",
+  "jev.form.reviewHint": "Below the first: not added. From the second: added, with no review mark.",
   "jev.form.save": "Use Jev for tagging",
   "tagging.title": "Tagging",
   "tagging.intro": "Tags each new Document and suggests its Folder. Yours never change.",
@@ -1755,8 +1755,7 @@ export const en = {
   "setup.way.local.running": "Ollama is running \u00b7 free, slower",
   "setup.way.local.notRunning": "Needs the free Ollama app",
   "setup.claude.title": "Already pay for Claude?",
-  "setup.claude.line":
-    "Anthropic doesn’t let other apps use a Claude plan. Ask your Documents in the Claude app.",
+  "setup.claude.line": "Use your Claude plan in the Claude app, with IncarnaMind connected.",
   "setup.claude.connect": "Connect the Claude app",
   "setup.claude.missing": "Needs the Claude app for Mac or Windows, not claude.ai in a browser.",
   "setup.claude.download": "Download Claude",
@@ -1768,8 +1767,7 @@ export const en = {
   "plans.chatgpt.title": "ChatGPT Plus or Pro",
   "plans.chatgpt.line": "Sign in with your ChatGPT account. No key needed.",
   "plans.claude.title": "Claude Pro, Max or Team",
-  "plans.claude.line":
-    "Use IncarnaMind in the Claude app. Max and Team include monthly API credits.",
+  "plans.claude.line": "Use IncarnaMind from the Claude app; your plan pays.",
   "plans.google.title": "Google AI Pro or Ultra",
   "plans.google.line": "Use IncarnaMind in Antigravity, where your plan pays.",
   "plans.google.connect": "Connect Antigravity",
@@ -2703,7 +2701,7 @@ export const en = {
   "cost.estimate.month": "{spent} of {cap} used this month",
   "cost.cap.title": "Monthly spending cap",
   "cost.cap.switch": "Cap what your keys spend each month",
-  "cost.cap.body": "Per-token models stop at this cap. Plans keep their own limits.",
+  "cost.cap.body": "Pay-per-use models stop at this cap. Plans keep their own limits.",
   "cost.cap.spent": "Spent this month: {spent} on your keys.",
   "cost.cap.spentOf": "Spent this month: {spent} of {cap} on your keys.",
   "cost.cap.nothing": "Nothing spent on your keys this month.",
@@ -3663,7 +3661,7 @@ export const en = {
   "connectors.registry.title": "From the MCP Registry",
   "connectors.registry.badge": "Community · not reviewed",
   "connectors.registry.note":
-    "Searched only because you typed. Community connectors aren't reviewed; check what one can do first.",
+    "The Registry was searched only because you typed. Community connectors aren't reviewed; check what one can do first.",
   "connectors.registry.searching": "Searching the MCP Registry…",
   "connectors.registry.none": "Nothing in the MCP Registry matches “{query}”.",
   "connectors.registry.failed.local-mode":
