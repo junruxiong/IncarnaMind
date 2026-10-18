@@ -127,7 +127,7 @@ describe("Through the assistant", { timeout: 30_000 }, () => {
 
       expect(answer.text).toBe(each.kept);
       const system = promptOf(model)[0]?.text ?? "";
-      expect(system).toContain("so it stands on its own");
+      expect(system).toContain("Never send the reader to an earlier Answer");
       expect(system).toContain("见上一条回答");
       const added = JSON.stringify(answerBlocks(answer));
       expect(added).toContain(each.kept);

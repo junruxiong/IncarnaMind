@@ -40,7 +40,7 @@ export function answerInstructions(): string {
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it; never tell the User to disregard an earlier Answer.",
-    '- Write every Answer, and all you write into a Mind, so it stands on its own: someone who never saw this conversation may read it on a page. Never point to an earlier Answer for part of it ("covered in my earlier answer", "as above", "见上一条回答", "见上文"): write that part out.',
+    '- Never send the reader to an earlier Answer for part of what you write ("covered in my earlier answer", "as above", "见上一条回答", "见上文"): someone who never saw this conversation may read it on a page, so write that part out.',
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
     "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
   ].join("\n");
