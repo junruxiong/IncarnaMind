@@ -164,6 +164,16 @@ for (const language of ["en", "zh-CN"] as const) {
       await pointAndClick(window, mark);
       await expect(card).toBeVisible();
     };
+    // The sentence's verdict never changes its Citations' markers: two found Citations stay bare
+    // and neutral through every fix, and the margin holds the one mark per sentence.
+    const markers = tutorial.getByTestId("citation-chip");
+    const expectFoundMarkers = async () => {
+      await expect(markers).toHaveCount(2);
+      for (const marker of await markers.all()) {
+        await expect(marker).toHaveAttribute("data-check", "found");
+        await expect(marker.locator(".citation-marker-icon")).toBeHidden();
+      }
+    };
     // ⌘Z in the Mind, where each fix leaves the focus.
     const undo = async () => {
       await focusSettled(window, editor);
@@ -178,6 +188,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(marks).toHaveCount(2);
     await expect(marks.nth(0)).toHaveAttribute("data-check", "unsupported");
     await expect(marks.nth(1)).toHaveAttribute("data-check", "unsupported");
+    await expectFoundMarkers();
 
     // No Citation: today's card, with no fixes.
     await openCard(marks.nth(1));
@@ -218,17 +229,21 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect.poll(() => wordsOf(tutorial)).toBe(words.cut);
     await expect(tutorial.getByTestId("citation")).toHaveCount(2);
     await expect(tutorialMark()).toHaveAttribute("data-check", "needs-recheck");
+    await expectFoundMarkers();
     await undo();
     await expect.poll(() => wordsOf(tutorial)).toBe(words.tutorial);
     await expect(tutorialMark()).toHaveAttribute("data-check", "unsupported");
+    await expectFoundMarkers();
 
     // Keep as my view: the mark goes, and ⌘Z brings it back.
     await openCard(tutorialMark());
     await pointAndClick(window, card.getByTestId("claim-keep"));
     await expect(marks).toHaveCount(1);
+    await expectFoundMarkers();
     await undo();
     await expect(marks).toHaveCount(2);
     await expect(tutorialMark()).toHaveAttribute("data-check", "unsupported");
+    await expectFoundMarkers();
 
     // Search all Documents: the sentence is checked again in every Document, after which the card doesn't offer it.
     const before = await tutorialMark().getAttribute("data-claim");
@@ -236,6 +251,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await pointAndClick(window, card.getByTestId("claim-search-all"));
     await expect(tutorialMark()).not.toHaveAttribute("data-claim", before ?? "");
     await expect(tutorialMark()).toHaveAttribute("data-check", "unsupported");
+    await expectFoundMarkers();
     await openCard(tutorialMark());
     await expect(card.getByTestId("claim-keep")).toBeVisible();
     await expect(card.getByTestId("claim-search-all")).toHaveCount(0);
@@ -272,10 +288,15 @@ test("a sentence past the most one write checks says why, in English and Chinese
   await useLocalChatModel(window);
   await setWindowSize(app, window, 1600, 900);
   await addDocuments(window, [join(sources, "Tutorial one.md")]);
+  const documentIds = await window.evaluate(async () =>
+    (await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listDocuments()).map(
+      (each) => each.id,
+    ),
+  );
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
   // As a write of the assistant's leaves the sentences past the most it checks.
-  const pastCap = (id: string, text: string) => ({
+  const pastCap = (id: string, text: string, ...citations: object[]) => ({
     type: "paragraph",
     content: [
       {
@@ -299,17 +320,37 @@ test("a sentence past the most one write checks says why, in English and Chinese
           },
         ],
       },
+      ...citations,
     ],
   });
+  const missing = {
+    type: "citation",
+    attrs: {
+      passageId: "passage-1",
+      documentId: documentIds[0],
+      documentName: "Tutorial one",
+      pageFrom: 1,
+      pageTo: 1,
+      quote: "A quote the page doesn't hold.",
+      check: "not-found",
+      checkReason: "quote-not-on-pages",
+    },
+  };
   await editor.evaluate(
     (dom, content) => {
       (dom as unknown as { editor: Editor }).editor.commands.insertContentAt(0, content);
     },
-    [pastCap("past-1", UNCITED), pastCap("past-2", "Gulls nest on the harbour walls.")],
+    [pastCap("past-1", UNCITED), pastCap("past-2", "Gulls nest on the harbour walls.", missing)],
   );
   const marks = window.getByTestId("claim-mark");
   const card = window.getByTestId("claim-card");
   await expect(marks).toHaveCount(2);
+  // A sentence the write left unchecked has its grey ring in the margin, and its Citation that
+  // isn't found has its own state on its marker: the two never disagree.
+  await expect(marks.last()).toHaveAttribute("data-check", "not-checked");
+  const marker = editor.getByTestId("citation-chip");
+  await expect(marker).toHaveAttribute("data-check", "not-found");
+  await expect(marker.locator(".citation-marker-icon")).toBeVisible();
   for (const [language, reason, now] of [
     [
       "en",

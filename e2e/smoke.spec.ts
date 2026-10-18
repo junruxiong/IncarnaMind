@@ -6,6 +6,7 @@ import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  addProviderForm,
   createDataFolder,
   dismissChatSetup,
   enterContent,
@@ -258,13 +259,10 @@ test("first run asks for no model; the first own Question waits while the setup 
   await first.app.close();
 });
 
-test("Settings → Models lists the key providers, and “Already pay for a plan?” with the ChatGPT plan", async () => {
+test("Settings → Models offers Add a provider, and “Already pay for a plan?” with the ChatGPT plan", async () => {
   const { app, window } = await launchApp(dataDir);
   const settings = await openSettings(window, "models");
-  await expect(settings.getByTestId("chat-choice-api-key")).toBeVisible();
-  await expect(
-    settings.locator("label").filter({ has: window.getByTestId("chat-choice-api-key") }),
-  ).toContainText("OpenAI, Anthropic, Google, DeepSeek and more");
+  await expect(settings.getByTestId("models-add-provider")).toHaveText("Add a provider…");
   const plans = settings.getByTestId("plans-settings");
   await expect(plans).toContainText("Already pay for a plan?");
   await expect(plans).toContainText("ChatGPT Plus or Pro");
@@ -328,38 +326,29 @@ test("the window opens at the size and place it was left at", async () => {
 test("an API key typed for one chat provider is cleared when another is chosen, or when the server changes", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  // A server the User gives is among the "More providers" in Settings.
   const settings = await openSettings(window, "models");
-  const form = settings.getByTestId("provider-form");
-  await settings.getByTestId("chat-choice-api-key").check();
-  const key = form.getByLabel(/^API key/);
-  const useKey = form.getByTestId("provider-use-key");
 
   // Typed for OpenAI, the key isn't kept for Anthropic: there is nothing to test or use with it.
-  await form
-    .locator("label")
-    .filter({ hasText: /^OpenAI$/ })
-    .click();
-  await key.fill("sk-typed-for-openai");
-  await form
-    .locator("label")
-    .filter({ hasText: /^Anthropic$/ })
-    .click();
-  await expect(key).toHaveValue("");
-  await expect(useKey).toBeDisabled();
+  let form = await addProviderForm(settings, "openai");
+  await form.getByLabel(/^API key/).fill("sk-typed-for-openai");
+  await settings.getByTestId("models-back").click();
+  form = await addProviderForm(settings, "anthropic");
+  const key = () => form.getByLabel(/^API key/);
+  await expect(key()).toHaveValue("");
+  await expect(form.getByTestId("provider-use-key")).toBeDisabled();
+  await settings.getByTestId("models-back").click();
 
   // For a server, the key stays while the address is fixed, and goes once it names another host.
-  await form.getByTestId("provider-more-toggle").click();
-  await form.locator("label").filter({ hasText: "OpenAI-compatible server" }).click();
+  form = await addProviderForm(settings, "openai-compatible");
   const server = form.getByLabel("Server URL");
   await server.fill("https://api.example.com/v1");
-  await key.fill("sk-typed-for-example");
+  await key().fill("sk-typed-for-example");
   await server.fill("https://api.example.com/v2");
   await server.blur();
-  await expect(key).toHaveValue("sk-typed-for-example");
+  await expect(key()).toHaveValue("sk-typed-for-example");
   await server.fill("https://other.example.net/v1");
   await server.blur();
-  await expect(key).toHaveValue("");
+  await expect(key()).toHaveValue("");
   await app.close();
 });
 

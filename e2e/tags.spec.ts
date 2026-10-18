@@ -132,7 +132,7 @@ test("without a model, Documents are ready to search, and one notice, not one pe
   const settings = window.getByTestId("settings");
   await expect(settings).toBeVisible();
   await expect(settings).toHaveAttribute("data-page", "models");
-  await expect(settings.getByTestId("chat-model-settings")).toBeVisible();
+  await expect(settings.getByTestId("model-defaults")).toBeVisible();
   await expect(settings.getByTestId("tagging-automatic-line")).toHaveText(
     "No model to tag with yet: set up an AI model, or install Tev1 in Ollama.",
   );

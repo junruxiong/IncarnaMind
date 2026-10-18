@@ -171,7 +171,7 @@ test("Compare Documents from “/”: 3 Documents × 2 Questions fill as a chang
   await expect(table.getByTestId("comparison-row").first()).toContainText("Corvane Agreement");
   // Each cell's Citation is checked, as any Answer's, and none is drawn in the margin.
   await expect(table.locator('.citation-marker[data-check="found"]')).toHaveCount(5);
-  await expect(window.getByTestId("margin-check")).toHaveCount(0);
+  await expect(window.getByTestId("margin-checks").getByRole("button")).toHaveCount(0);
   await screenshot(window, "compare-filled-en-1440");
 
   // Accept all keeps it; ⌘Z takes that back; Reject all takes it out; ⌘Z brings it back.

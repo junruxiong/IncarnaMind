@@ -57,23 +57,23 @@ Windows releases will be signed through the SignPath Foundation's free signing f
 
 ## What you can do
 
-**Check your draft before you send it.** Select sentences in a Mind and choose **Check against Documents**: each one comes back supported, unsupported or contradicted by your Documents, with the page one click away, and the line under the title counts what still needs a look. A PDF someone else wrote can be checked the same way, claim by claim: **+ → Verify a document…**.
+**Check your draft before you send it.** Select sentences in a Mind and choose **Check against Documents**: each one comes back supported, unsupported or contradicted by your Documents, with the page one click away, and the check badge in the page's corner counts what still needs a look. A PDF someone else wrote can be checked the same way, claim by claim: **+ → Verify a document…**.
 
 **Write and ask in one place.** A Mind is a notebook for one topic. Beside it sits the assistant: ask it about the Mind you're in or your files, and the Answer comes back there, in a conversation, with its citations checked. Your draft stays as you wrote it until you pick **Add to note**, which puts the Answer at your cursor as text you can edit, citations and all.
 
 **Check every answer.** Answers cite where each claim came from and carry the quote, which is checked against that place: a green check if it's there, an amber mark if it isn't, and a click opens the page with the quote highlighted. Unfold an Answer's steps to see what it searched and which sources it used.
 
-**Take notes in a meeting.** Start recording and a live transcript runs beside your Mind, transcribed on this computer. When the call ends, save it as a Document, and your notes can cite what was said.
+**Take notes in a meeting.** Start recording and a live transcript runs beside your Mind, transcribed on this computer. When the call ends, save it as a Document, and your notes can cite what was said. During the call, a small panel can suggest what to say and answer their question from your Documents.
 
 **Use the files you already have.** Link the folders you already use, even Zotero's storage folder: IncarnaMind reads the PDF, Word (comments included), PowerPoint, Excel, CSV, Markdown and plain-text files in them where they are, never moves or changes them, and keeps up as they change.
 
 **Find and add sources.** Search OpenAlex, arXiv and PubMed and add open-access papers as Documents, save a web page by its address so it can be cited and checked like a file, and import your references from Zotero or any CSL JSON, BibTeX or RIS file.
 
-**Write with AI you can check.** Tell the assistant what to change ("shorten the summary", "add today's decision to the project plan", "summarise these papers into a new note") and it changes the Mind, or makes a new one, as changes waiting for you to accept or reject, coming in paragraph by paragraph as it writes; a question still gets an answer. Or select text and choose Edit with AI, and each change says why it was made. Turn on suggestions as you write, and when you pause, grey text offers how the paragraph could go on, only where your Documents support it and always with a citation; Tab accepts.
+**Write with AI you can check.** Tell the assistant what to change ("shorten the summary", "add today's decision to the project plan", "summarise these papers into a new note") and it changes the Mind, or makes a new one, at once: its text is grey until you edit it, one Undo takes the change back, and Review changes shows what changed. A question still gets an answer. Or select text and choose Edit with AI, and each change says why it was made. Turn on suggestions as you write, and when you pause, grey text offers how the paragraph could go on, only where your Documents support it and always with a citation; Tab accepts.
 
 **Keep a big library tidy.** Tags are added for you, IncarnaMind suggests a Folder for each Document for you to accept, and the choices you make yourself are kept.
 
-**Choose your AI.** Already pay for ChatGPT Plus or Pro? Continue with ChatGPT and ask on your plan, no key needed. Or use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server.
+**Choose your AI.** Already pay for ChatGPT Plus or Pro, Claude, or GitHub Copilot? Sign in and ask on your plan, no key needed (the Copilot sign-in is experimental). Or use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server.
 
 **Hand it in.** Export a Mind to Word or Markdown, with its citations and bibliography in the style you pick: APA, MLA, Chicago, Harvard, IEEE, Vancouver, GB/T 7714 or IncarnaMind's numbered style. A citation that didn't pass the check is marked "[unverified]". Open a Word file as a Mind and export it back into the same file: the parts you didn't touch stay exactly as they were, and your edits can go in as tracked changes.
 

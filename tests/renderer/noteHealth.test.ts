@@ -145,6 +145,34 @@ describe("A Mind's health", () => {
     expect(healthOf(doc)).toEqual({ ...NOTHING, notFound: 1, notChecked: 1, recheck: 1 });
   });
 
+  // protects=a Citation's state shows only on its marker, so every Citation is counted and reachable, in sentences with a verdict too; fails_when=a Citation in an unsupported, contradicted or unchecked sentence stops counting, or such a sentence also counts as having no Citation; no_claim=how the card sets it.
+  test("counts every Citation, also those in a sentence with a verdict of its own", () => {
+    const doc = docOf(
+      paragraph(
+        checked("Online sales grew 12% in the quarter.", "unsupported"),
+        citation("not-found"),
+        citation("not-found"),
+        citation("found"),
+        text(" "),
+        checked("The facilities end in 2027, so refinancing is the first risk.", "contradicted"),
+        citation("not-found"),
+      ),
+      paragraph(
+        checked("The rate limit stopped this sentence's check.", "not-checked", "rate-limit"),
+        citation("found"),
+      ),
+    );
+
+    expect(healthOf(doc)).toEqual({
+      ...NOTHING,
+      found: 2,
+      notFound: 3,
+      unsupported: 1,
+      contradicted: 1,
+      notChecked: 1,
+    });
+  });
+
   test("leaves out changes still waiting, Questions, headings and short lines", () => {
     const change = { id: "c1", request: "r1", target: "x" };
     const doc = docOf(

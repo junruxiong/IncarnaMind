@@ -14,6 +14,7 @@ import {
   type ChatReadiness,
   type EditAction,
   type EditWithAiResult,
+  type ProviderError,
 } from "../../core/api";
 import { mindModelOf } from "../../shared/mindModel";
 import { aiUseOfAccepted, proposalRequestOf } from "../../shared/proposals";
@@ -32,6 +33,7 @@ import {
   setEditTarget,
   watchMovedOn,
 } from "./editor/proposalReview";
+import { failedEdit } from "./editProblems";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import type { Words } from "./lineNames";
@@ -63,7 +65,8 @@ export type EditProblem =
         | "late";
     }
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
-  | { kind: "failed"; message: string; retry: () => void };
+  | { kind: "failed"; message: string; retry: () => void }
+  | { kind: "consent-revoked"; error: ProviderError };
 
 interface Pending {
   requestId: string;
@@ -288,9 +291,7 @@ async function arrived(
   set(
     "problems",
     mindId,
-    result.kind === "failed"
-      ? { kind: "failed", message: result.error.message, retry: () => void retry() }
-      : result,
+    result.kind === "failed" ? failedEdit(result.error, () => void retry()) : result,
   );
 }
 
