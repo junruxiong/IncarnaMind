@@ -7,20 +7,24 @@
  */
 import type { Document, LinkedFolderLayout, RestoreRef, TagLinkState } from "../../core/api";
 import { core } from "./core";
-import { saidInLine } from "./lineNames";
+import type { Words } from "./lineNames";
 import type { Translate } from "./objects";
 import type { Undoable } from "./undo";
 
+/** A name the User gave, or the words for what it is called when it has none. */
+type Shown = string | Words;
+
+const shownIn = (t: Translate, shown: Shown) => (typeof shown === "string" ? shown : shown(t));
+
 /** Renamed: undone by the old name, done again by the new one. */
 export function renamed(
-  t: Translate,
-  shown: string,
+  shown: Shown,
   rename: (name: string) => Promise<unknown>,
   { before, after }: { before: string; after: string },
 ): Undoable {
   return {
-    ...saidInLine(t, (t) => t("object.renamed", { name: shown })),
-    name: t("undo.name.rename"),
+    said: (t) => t("object.renamed", { name: shownIn(t, shown) }),
+    name: (t) => t("undo.name.rename"),
     undo: async () => {
       await rename(before);
     },
@@ -35,20 +39,20 @@ export function renamed(
  * Several are Documents, and are said by their count; one by its name.
  */
 export function deleted(
-  t: Translate,
-  shown: string,
+  shown: Shown,
   refs: RestoreRef[],
   remove: () => Promise<unknown>,
 ): Undoable {
   const count = refs.length;
   return {
-    ...saidInLine(t, (t) =>
-      count > 1 ? t("object.deleted.documents", { count }) : t("object.deleted", { name: shown }),
-    ),
-    name:
+    said: (t) =>
+      count > 1
+        ? t("object.deleted.documents", { count })
+        : t("object.deleted", { name: shownIn(t, shown) }),
+    name: (t) =>
       count > 1
         ? t("undo.name.delete.documents", { count })
-        : t("undo.name.delete", { name: shown }),
+        : t("undo.name.delete", { name: shownIn(t, shown) }),
     undo: () => core.restore(refs),
     redo: async () => {
       await remove();
@@ -61,14 +65,13 @@ export function deleted(
  * bringing it back as it is, with what was written in it since. One with a title is said by its name.
  */
 export function mindMade(
-  t: Translate,
   shown: string,
   remove: () => Promise<unknown>,
   bringBack: () => Promise<unknown>,
 ): Undoable {
   return {
-    ...saidInLine(t, (t) => (shown ? t("undo.mindStarted", { name: shown }) : t("undo.mindMade"))),
-    name: t("menu.newMind"),
+    said: (t) => (shown ? t("undo.mindStarted", { name: shown }) : t("undo.mindMade")),
+    name: (t) => t("menu.newMind"),
     undo: async () => {
       await remove();
     },
@@ -80,16 +83,13 @@ export function mindMade(
 
 /** A Linked folder paused or resumed: undone and done again by setting it as it was and as it is. */
 export function linkedFolderPaused(
-  t: Translate,
   shown: string,
   paused: boolean,
   setPaused: (paused: boolean) => Promise<unknown>,
 ): Undoable {
   return {
-    ...saidInLine(t, (t) =>
-      t(paused ? "undo.linkedFolderPaused" : "undo.linkedFolderResumed", { name: shown }),
-    ),
-    name: t(paused ? "linkedFolders.pause" : "linkedFolders.resume"),
+    said: (t) => t(paused ? "undo.linkedFolderPaused" : "undo.linkedFolderResumed", { name: shown }),
+    name: (t) => t(paused ? "linkedFolders.pause" : "linkedFolders.resume"),
     undo: async () => {
       await setPaused(!paused);
     },
@@ -101,7 +101,6 @@ export function linkedFolderPaused(
 
 /** A Linked folder shown as Folders or as a flat list: undone by the layout it had, done again by the new one. */
 export function linkedFolderShown(
-  t: Translate,
   shown: string,
   layouts: { before: LinkedFolderLayout; after: LinkedFolderLayout },
   setLayout: (layout: LinkedFolderLayout) => Promise<unknown>,
@@ -109,10 +108,8 @@ export function linkedFolderShown(
   const { before, after } = layouts;
   const flat = after === "flat";
   return {
-    ...saidInLine(t, (t) =>
-      t(flat ? "undo.linkedFolderFlat" : "undo.linkedFolderTree", { name: shown }),
-    ),
-    name: t(flat ? "linkedFolders.layout.flat" : "linkedFolders.layout.tree"),
+    said: (t) => t(flat ? "undo.linkedFolderFlat" : "undo.linkedFolderTree", { name: shown }),
+    name: (t) => t(flat ? "linkedFolders.layout.flat" : "linkedFolders.layout.tree"),
     undo: async () => {
       await setLayout(before);
     },
@@ -148,7 +145,6 @@ export function tagLinks(
  * as before; done again as the User did it.
  */
 export function retagged(
-  t: Translate,
   change: { added: boolean; tag: string; names: readonly string[] },
   before: TagLinkState[],
   again: () => Promise<unknown>,
@@ -156,12 +152,11 @@ export function retagged(
   const { added, tag, names } = change;
   const [only] = names;
   return {
-    ...saidInLine(t, (t) =>
+    said: (t) =>
       only !== undefined && names.length === 1
         ? t(added ? "undo.tagAdded.one" : "undo.tagRemoved.one", { name: only, tag })
         : t(added ? "undo.tagAdded" : "undo.tagRemoved", { count: names.length, tag }),
-    ),
-    name: t(added ? "undo.name.tagAdded" : "undo.name.tagRemoved"),
+    name: (t) => t(added ? "undo.name.tagAdded" : "undo.name.tagRemoved"),
     undo: async () => {
       await core.revertDocumentTags(before);
     },

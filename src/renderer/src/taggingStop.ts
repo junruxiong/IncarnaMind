@@ -2,7 +2,7 @@ import type { Document, LibrarySnapshot } from "../../core/api";
 import type { Language } from "../../core/language";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { core } from "./core";
-import { languageNow, translateNow } from "./i18n";
+import { languageNow } from "./i18n";
 import type { Undoable } from "./objects";
 import { useAppStore } from "./store";
 
@@ -59,8 +59,10 @@ export function placesText(
   ]);
 }
 
-const placesNow = (places: readonly TaggingPlace[]) =>
-  placesText(places, useAppStore.getState().library, translateNow, languageNow());
+const placesIn = (places: readonly TaggingPlace[]) => {
+  const { library } = useAppStore.getState();
+  return (t: Translate) => placesText(places, library, t, languageNow());
+};
 
 const setTagging = (places: readonly TaggingPlace[], on: boolean) => async () => {
   for (const place of places) await core.setTaggingWithAi(place, on);
@@ -69,11 +71,12 @@ const setTagging = (places: readonly TaggingPlace[], on: boolean) => async () =>
 export async function stopTagging(): Promise<Undoable | undefined> {
   const places = await core.stopTagging();
   if (places.length === 0) return undefined;
+  const named = placesIn(places);
   return {
-    message: translateNow(
-      places.includes(null) ? "tagging.stopped.notInFolder" : "tagging.stopped",
-      { places: placesNow(places) },
-    ),
+    said: (t) =>
+      t(places.includes(null) ? "tagging.stopped.notInFolder" : "tagging.stopped", {
+        places: named(t),
+      }),
     undo: setTagging(places, true),
     redo: setTagging(places, false),
   };
@@ -81,8 +84,9 @@ export async function stopTagging(): Promise<Undoable | undefined> {
 
 export async function tagWithAi(places: readonly TaggingPlace[]): Promise<Undoable> {
   await setTagging(places, true)();
+  const named = placesIn(places);
   return {
-    message: translateNow("tagging.restarted", { places: placesNow(places) }),
+    said: (t) => t("tagging.restarted", { places: named(t) }),
     undo: setTagging(places, false),
     redo: setTagging(places, true),
   };
