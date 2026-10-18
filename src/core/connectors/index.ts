@@ -49,14 +49,17 @@ import type {
 import type { Consent } from "../consent";
 import {
   ConsentDeclinedError,
+  ConsentRevokedError,
   InvalidInputError,
   isRecord,
+  LocalModeError,
   NotFoundError,
   SecretStorageError,
 } from "../errors";
 import { DEFAULT_SIGN_IN_TIMEOUT_MS, type OAuthPage } from "../oauth";
 import { serviceForUrl } from "../providers/service";
 import type { Secrets } from "../secrets";
+import { createSendGate } from "../sendGate";
 import type { Database } from "../storage";
 import type { Tool } from "../tools";
 import { type ConnectorAuth, clientSecret, createConnectorAuth, manualClientRecord } from "./auth";
@@ -329,6 +332,7 @@ function awayFromHere(row: ConnectorRow): boolean {
 
 export function createConnectors(options: ConnectorsOptions) {
   const { db, now, secrets, processes, consent } = options;
+  const gate = createSendGate(consent, options.localOnly);
   const timing: ConnectorTiming = { ...CONNECTOR_TIMING, ...options.timing };
   const runtimes = new Map<string, Runtime>();
   const auths = new Map<string, ConnectorAuth>();
@@ -449,6 +453,8 @@ export function createConnectors(options: ConnectorsOptions) {
       }
       return [...services.values()];
     },
+    onThisComputer: (serviceId) =>
+      liveRows().some((row) => serviceOf(row).id === serviceId && !awayFromHere(row)),
   });
 
   const runtimeOf = (id: string): Runtime => {
@@ -886,10 +892,16 @@ export function createConnectors(options: ConnectorsOptions) {
         }
         try {
           await untilAborted(consent.ensure("connectors", service), signal);
+          gate.check("connectors", service);
         } catch (error) {
-          if (error instanceof ConsentDeclinedError) {
+          if (error instanceof ConsentDeclinedError || error instanceof ConsentRevokedError) {
             throw new Error(
               `The User didn't allow sending data to the Connector "${row.name}", so ${tool.name} wasn't called. Go on without it.`,
+            );
+          }
+          if (error instanceof LocalModeError) {
+            throw new Error(
+              `The Connector "${row.name}" isn't used while everything stays on this computer, so ${tool.name} wasn't called. Go on without it.`,
             );
           }
           throw error;

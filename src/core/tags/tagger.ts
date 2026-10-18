@@ -33,6 +33,7 @@ import {
   ConsentDeclinedError,
   ConsentNeededError,
   InvalidInputError,
+  LocalModeError,
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
@@ -209,6 +210,7 @@ export function createTagger(options: TaggerOptions) {
           error instanceof ChatNotReadyError ||
           error instanceof ConsentDeclinedError ||
           error instanceof ConsentNeededError ||
+          error instanceof LocalModeError ||
           error instanceof TaggingNotReadyError
         ) {
           // Not allowed, or the tagger went away while this waited: this and the rest wait.
@@ -230,7 +232,11 @@ export function createTagger(options: TaggerOptions) {
         });
       } catch (error) {
         if (stale()) return;
-        if (isPlanLimit(error)) {
+        if (error instanceof ConsentNeededError || error instanceof LocalModeError) {
+          // Turned off, or Local mode on, as it was sent (../sendGate): this and the rest wait.
+          if (setState(id, "waiting-for-provider")) announce([id]);
+          park();
+        } else if (isPlanLimit(error)) {
           // The ChatGPT plan's limit: this and the rest wait for it to reset (see ../library/planPace).
           const why = classifyProviderError(error);
           if (setState(id, "waiting-for-provider", why)) announce([id]);

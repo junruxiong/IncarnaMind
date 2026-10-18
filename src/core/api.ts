@@ -3774,6 +3774,8 @@ export type ProviderErrorKind =
   | "network"
   | "provider"
   | "consent-declined"
+  /** The User turned off the flow to the model's service while the work was under way: nothing more was sent. */
+  | "consent-revoked"
   /** "Keep everything on this computer" is on and the model isn't on this computer: nothing was sent, or the Answer was stopped. */
   | "local-mode"
   /** The model is in Ollama on this computer, and Ollama isn't running: found before anything was sent. */

@@ -12,6 +12,7 @@ import {
   ConsentNeededError,
   InvalidInputError,
   isRecord,
+  LocalModeError,
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
@@ -559,6 +560,7 @@ export function createLibrary(options: {
               error instanceof ChatNotReadyError ||
               error instanceof ConsentDeclinedError ||
               error instanceof ConsentNeededError ||
+              error instanceof LocalModeError ||
               error instanceof TaggingNotReadyError ||
               isPlanLimit(error);
             state(id, waiting ? "waiting" : "failed", classifyProviderError(error));

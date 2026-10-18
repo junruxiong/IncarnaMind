@@ -2674,7 +2674,7 @@ export function createAnswers(options: AnswersOptions) {
           status: "failed",
           error: {
             kind: "local-mode",
-            message: "Stopped: “Keep everything on this computer” is on.",
+            message: "Stopped: everything stays on this computer.",
           },
         });
       }
