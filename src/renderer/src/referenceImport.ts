@@ -10,6 +10,7 @@ import { type MessageKey, type MessageParams, translate } from "../../shared/i18
 import { core, files } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
+import { saidInLine } from "./lineNames";
 import { useAppStore } from "./store";
 import { type Undoable, useUndo } from "./undo";
 
@@ -79,10 +80,9 @@ export const useReferenceImport = create<ReferenceImportState>()((set, get) => {
       await refreshUnmatched();
       if (result.changed === 0) return undefined;
       return {
-        message: words("references.import.undo", {
-          count: result.total,
-          name: get().fileName,
-        }),
+        ...saidInLine(words, (t) =>
+          t("references.import.undo", { count: result.total, name: get().fileName }),
+        ),
         undo: async () => {
           await core.undoReferenceImport(result.importId);
           set({ phase: "idle", result: null });

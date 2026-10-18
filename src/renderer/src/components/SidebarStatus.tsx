@@ -6,11 +6,13 @@ import { organizes, organizesNewDocuments } from "../../../shared/libraryModels"
 import { commands } from "../commands/registry";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
+import { saidInLine } from "../lineNames";
 import { useCapturing } from "../meetings";
 import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
+import { useTaggingAlert } from "../taggingAlert";
 import { useTaggingExplained } from "../taggingExplained";
 import { placesText, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
@@ -81,6 +83,8 @@ interface Status {
   asks?: true;
   /** The User's own Documents wait for them to act, so the quiet first open shows it too. */
   needsYou?: true;
+  /** Tagging needs the User: a hidden sidebar's toggle shows a dot for it. Progress never does. */
+  alerts?: true;
 }
 
 /**
@@ -94,7 +98,18 @@ interface Status {
  * above moves only for a status that takes two lines.
  */
 export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean }) {
-  const [first, ...others] = useStatuses().filter((status) => !problemsOnly || isProblem(status));
+  const statuses = useStatuses();
+  const alerting = statuses.some((status) => status.alerts === true);
+  useEffect(() => {
+    useTaggingAlert.setState({ needsYou: alerting });
+  }, [alerting]);
+  useEffect(
+    () => () => {
+      useTaggingAlert.setState({ needsYou: false });
+    },
+    [],
+  );
+  const [first, ...others] = statuses.filter((status) => !problemsOnly || isProblem(status));
   if (problemsOnly && !first) return null;
   return (
     <div data-testid="sidebar-status" className="flex min-h-7 shrink-0 flex-col">
@@ -463,6 +478,7 @@ function useStatuses(): Status[] {
     statuses.push({
       testId: "tagging-failed",
       tone: "error",
+      alerts: true,
       short:
         counts.failedTagging === 1
           ? t("status.taggingFailed.one")
@@ -488,15 +504,17 @@ function useStatuses(): Status[] {
   for (const problem of pageProblems) {
     const refused = !canTryAgain(problem);
     const reason = t(reasonKey(problem.reason));
-    const short = problem.document
-      ? t("webPages.fetchAgainFailed", { name: problem.document.name, reason })
-      : t(refused ? "webPages.notAdded" : "webPages.couldNotFetch", { reason });
+    const { message: short, fullMessage = short } = saidInLine(t, (t) =>
+      problem.document
+        ? t("webPages.fetchAgainFailed", { name: problem.document.name, reason })
+        : t(refused ? "webPages.notAdded" : "webPages.couldNotFetch", { reason }),
+    );
     const { tryAgain, dismiss } = useWebPages.getState();
     statuses.push({
       testId: `web-page-problem:${problem.key}`,
       tone: refused ? "waiting" : "error",
       short,
-      full: `${short}\n${problem.address}\n${problem.message}`,
+      full: `${fullMessage}\n${problem.address}\n${problem.message}`,
       ...(refused
         ? {}
         : {
@@ -550,6 +568,7 @@ function useStatuses(): Status[] {
       short: t("status.taggingPermission"),
       full: t("jev.waiting.permission", { service: taggingNeedsOk.name }),
       asks: true,
+      alerts: true,
       action: {
         label: t("privacy.flows.allow"),
         testId: "tagging-waiting-allow",
@@ -566,6 +585,7 @@ function useStatuses(): Status[] {
       short: t("status.taggingWaiting"),
       full: t("jev.waiting.notice"),
       needsYou: true,
+      alerts: true,
       action: {
         label: t("status.choose"),
         testId: "tagging-waiting-setup",
@@ -674,6 +694,7 @@ function useStatuses(): Status[] {
       statuses.push({
         testId: "organization-attention",
         tone: "waiting",
+        alerts: true,
         short: t("library.needsAttention"),
         full: t("library.waiting", { count: attention }),
         action: { label: t("library.review"), run: () => useAppStore.getState().openLibrary() },

@@ -6,6 +6,7 @@ import { useApprovals } from "../approvals";
 import { keysLabel } from "../commands/keys";
 import { ApprovalCard, withShortcut } from "../editor/AnswerView";
 import { useT } from "../i18n";
+import { saidInLine } from "../lineNames";
 import type { Translate } from "../objects";
 import { useResearch } from "../research";
 import { answerTaskAsk, loadTasks, useTasks } from "../tasks";
@@ -39,6 +40,7 @@ function effectText(effect: TaskEffect, t: Translate): string {
 /** IncarnaMind can't tell whether an Effect happened: do it again, or go on without it. */
 function UnknownOutcomeCard({ task, effect }: { task: Task; effect: TaskEffect }) {
   const t = useT();
+  const explained = saidInLine(t, (t) => effectText(effect, t));
   const titleId = useId();
   const mac = isMacOS();
   return (
@@ -53,7 +55,9 @@ function UnknownOutcomeCard({ task, effect }: { task: Task; effect: TaskEffect }
           <span aria-hidden="true" className="approval-dot" />
           <span className="approval-title-text">{t("task.unknown.title")}</span>
         </p>
-        <p className="approval-explanation">{effectText(effect, t)}</p>
+        <p title={explained.fullMessage} className="approval-explanation">
+          {explained.message}
+        </p>
       </div>
       <div className="approval-actions task-ask-actions">
         <button
