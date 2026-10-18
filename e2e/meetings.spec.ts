@@ -18,6 +18,7 @@ import {
   pointAndClick,
   recordMeeting,
   removeDataFolder,
+  setLanguage,
   setWindowSize,
   showSettingsPage,
   startRecording,
@@ -273,6 +274,25 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   // The notice comes once on a device: the next meeting records at once.
   await startRecording(window, await recordMeeting(window));
   await expect(window.getByTestId("meeting-notice")).toBeHidden();
+});
+
+test("an engine that can't start says so in plain words, never in its JavaScript error, in English and Chinese", async () => {
+  const error = "Cannot read properties of undefined (reading 'createAsync')";
+  const { app, window } = await launchApp(dataDir, { transcriber: { failToLoad: error } });
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await turnOnMeetings(window);
+  await startRecording(window, await recordMeeting(window), { notice: true });
+
+  const line = window.getByTestId("meeting-transcript-line");
+  await expect(line).toHaveText("Transcription stopped. · Try again", { timeout: 30_000 });
+  await expect(line).not.toContainText("createAsync");
+  await shot(window, "meeting-transcript-engine-stopped-en");
+  await setLanguage(window, "zh-CN");
+  await expect(line).toHaveText("转写已停止。· 重试");
+  await shot(window, "meeting-transcript-engine-stopped-zh");
+  const [meeting] = await bridge(window);
+  expect(meeting?.status).toBe("recording");
 });
 
 test("Show transcript opens the live Transcript beside the meeting, Hide transcript closes it, and at Stop it is saved", async () => {
