@@ -18,6 +18,8 @@ import {
   useOutputLocation,
 } from "./app";
 
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 let dataDir: string;
 let saved: string;
 test.beforeEach(async () => {
@@ -153,11 +155,17 @@ for (const { language, width, question, name } of FROM_QUESTION) {
     expect(answerText).not.toBe("");
 
     // The Mind's name is the Question's, cut cleanly: not the Answer's first line, and not typed.
+    // The line cuts it in the middle, its tooltip has the whole name.
     const added = answer.getByTestId("answer-added");
-    await expect(added).toContainText(name);
+    const status = added.locator('[role="status"]');
+    const characters = [...name];
+    await expect(added).toContainText(characters.slice(0, 4).join(""));
+    await expect(added).toContainText(characters.slice(-4).join(""));
+    await expect(added).not.toContainText(name);
+    await expect(status).toHaveAttribute("title", new RegExp(escaped(name)));
     // However long the name, the line keeps its words and its Undo on one row.
     const [words, undo] = await Promise.all([
-      added.locator('[role="status"]').boundingBox(),
+      status.boundingBox(),
       added.getByTestId("answer-added-undo").boundingBox(),
     ]);
     expect(Math.abs((undo?.y ?? 0) - (words?.y ?? 100))).toBeLessThan(8);

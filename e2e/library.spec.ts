@@ -491,7 +491,7 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     settings = await taggingSettings(window);
     const form = settings.getByTestId("tagging-other-form");
     await expect(form.getByLabel("Connection", { exact: true })).toHaveValue("auto");
-    const images = form.getByRole("checkbox", { name: /Include up to 3 PDF page images/ });
+    const images = form.getByRole("checkbox", { name: /Up to 3 PDF page images/ });
     await chooseOtherModel(settings, async () => {
       await form.getByLabel("Connection", { exact: true }).selectOption("ollama");
       await form.getByLabel("Model name", { exact: true }).fill("clef-flash");

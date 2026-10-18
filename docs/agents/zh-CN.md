@@ -47,7 +47,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Question context | 上下文 | |
 | Search scope | 搜索范围 | "仅搜索", "缩小范围". |
 | Document | 文档 | Counted with 个. |
-| Missing Document | (status) 文件缺失 | Long form: "找不到文件：它已从所在文件夹中移除。" |
+| Missing Document | (status) 文件缺失 | Long form: "找不到文件：引用保留原文，搜索不再包含它。" |
 | Unavailable Document | (status) 无法访问 | |
 | Linked folder | 同步文件夹 | "添加同步文件夹…", "移除同步文件夹…". As Tencent Docs does. Say IncarnaMind only reads it wherever a Linked folder is added. |
 | Other Documents | 其他文档 | |
