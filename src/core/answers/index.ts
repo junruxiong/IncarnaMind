@@ -210,10 +210,12 @@ import {
   withFound,
 } from "./meetingHelp";
 import { paragraphAsked } from "./paragraphAsked";
+import { asksAboutEarlier, withoutPointersBack } from "./pointersBack";
 import {
   answerInstructions,
   connectorInstructions,
   documentInstructions,
+  exampleNote,
   LISTED_DOCUMENTS,
   type ListedDocuments,
   languageInstruction,
@@ -466,6 +468,8 @@ export interface AnswersOptions {
   unscopedDocuments?(mindId: string | null): string[] | null;
   /** The Document a Mind imported from Word was also added as (#720); null for none. */
   workingCopyOf?(mindId: string): string | null;
+  /** An example Mind's own Documents, by id; null for a Mind that isn't an example's. */
+  exampleDocuments?(mindId: string): string[] | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
   emptyScopeAnswer(): string;
   /** The User's Skills. */
@@ -958,6 +962,11 @@ export function createAnswers(options: AnswersOptions) {
       originalId !== null && (documentIds === null || documentIds.includes(originalId))
         ? options.documents.searchableBySize([originalId])
         : [];
+    const exampleIds =
+      inAssistant && mindIn !== null ? (options.exampleDocuments?.(mindIn) ?? null) : null;
+    const exampleNames = exampleIds
+      ? options.documents.searchableBySize(exampleIds).map((each) => each.name)
+      : null;
     const passagesOf = (documentId: string) =>
       options.documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
     const session = createCitationSession(
@@ -1107,6 +1116,7 @@ export function createAnswers(options: AnswersOptions) {
       }
       // A marker no Citation backs is not kept in the text, and each is counted for the summary.
       markdown = withoutDeadMarkers(markdown, (marker) => session.finalCitation(marker) !== null);
+      if (!asksAboutEarlier(context.question)) markdown = withoutPointersBack(markdown).markdown;
       // Its steps say how many figures it shows, and its end how many it couldn't calculate.
       const placed = placedFigures(withoutFootnoteDefinitions(markdown), true);
       if (placed.figures.length > 0 || placed.missing > 0) {
@@ -1661,7 +1671,8 @@ export function createAnswers(options: AnswersOptions) {
                 let notFound = 0;
                 let unrecorded = 0;
                 let firstUnrecorded = -1;
-                const written = withoutSearchTalk(withoutFootnoteDefinitions(text));
+                const alone = withoutPointersBack(withoutFootnoteDefinitions(text));
+                const written = withoutSearchTalk(alone.markdown);
                 const link = (source: NamedSource) => {
                   const marker = session.markerFor(source);
                   return marker === null ? null : `[^${marker}]`;
@@ -1706,6 +1717,7 @@ export function createAnswers(options: AnswersOptions) {
                   unlinkedSources: tables.unlinked,
                   extraCells: tables.extraCells,
                   searchTalk: written.left,
+                  pointersBack: alone.left,
                 };
               },
               changed: (toolCallId, change) => {
@@ -1861,6 +1873,7 @@ export function createAnswers(options: AnswersOptions) {
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
             workingCopyNote(original?.name ?? null),
+            exampleNote(exampleNames),
             mindInstructions(withMindTools, route),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),

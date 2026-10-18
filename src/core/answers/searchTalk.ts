@@ -9,6 +9,8 @@
  * User's own ("I found three issues in the lease").
  */
 
+import { rewriteSentences } from "./proseSentences";
+
 // The first person singular: a Document's "we" is its authors.
 const SELF = /\bI\b|\b[Mm](?:y|e)\b/;
 const SEARCHING = /\bsearch(?:es|ed|ing)?\b|\bpassages?\b|\bretriev(?:e|es|ed|al|ing)\b/i;
@@ -19,8 +21,6 @@ const CHINESE =
   /我(?!们)[^，。！？]{0,6}?(?:搜索|检索)|我的(?:搜索|检索)|检索到的?段落|段落中(?:没有|未)/;
 // A cited sentence is the Document's.
 const CITED = /\[\^?\d+\]/;
-
-const SENTENCE = /[^.!?。！？\n]+(?:[.!?。！？]+["”’)]*|$)\s*/g;
 
 const aboutSearching = (sentence: string) =>
   !CITED.test(sentence) &&
@@ -33,23 +33,6 @@ const aboutSearching = (sentence: string) =>
  * how many were left out. A paragraph left with nothing goes too.
  */
 export function withoutSearchTalk(markdown: string): { markdown: string; left: number } {
-  let left = 0;
-  const kept = markdown.split(/\n{2,}/).flatMap((paragraph) => {
-    if (/^\s*(?:#{1,6}\s|```|\||>)/.test(paragraph)) return [paragraph];
-    const lines = paragraph.split("\n").map((line) => {
-      const lead = /^\s*(?:[-*+]|\d{1,3}[.)])\s+/.exec(line)?.[0] ?? "";
-      const sentences = line.slice(lead.length).match(SENTENCE) ?? [];
-      const staying = sentences.filter((sentence) => {
-        const out = aboutSearching(sentence);
-        if (out) left++;
-        return !out;
-      });
-      if (staying.length === sentences.length) return line;
-      const rest = staying.join("").trim();
-      return rest ? `${lead}${rest}` : null;
-    });
-    const remaining = lines.filter((line): line is string => line !== null);
-    return remaining.length > 0 ? [remaining.join("\n")] : [];
-  });
-  return { markdown: kept.join("\n\n"), left };
+  const kept = rewriteSentences(markdown, (sentence) => (aboutSearching(sentence) ? "" : sentence));
+  return { markdown: kept.markdown, left: kept.changed };
 }

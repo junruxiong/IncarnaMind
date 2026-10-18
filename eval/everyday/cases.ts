@@ -591,6 +591,17 @@ export const CASES: readonly EverydayCase[] = [
     expected: { ...ANSWER, standsAlone: true, noExample: true },
   },
   {
+    id: "page-summary-panel",
+    language: "en",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    beforeInExample: true,
+    before: ["What data does the GraphST paper use, and what are its main results?"],
+    request: "Summarise the GraphST paper for my manager.",
+    expected: { ...ANSWER, standsAlone: true, noExample: true },
+  },
+  {
     id: "page-summary-zh",
     language: "zh-CN",
     library: "papers",

@@ -184,6 +184,7 @@ export interface MindToolsOptions {
     /** Cells beyond its tables' columns, their text kept in the row's last cell. */
     extraCells: number;
     searchTalk: number;
+    pointersBack: number;
   };
   /**
    * What the User's words asked for (../../answers/routeRequest), which the
@@ -727,9 +728,10 @@ interface Written {
   notFound: number;
   unrecorded: number;
   searchTalk: number;
+  pointersBack: number;
 }
 
-function writtenNotes({ notFound, unrecorded, searchTalk }: Written) {
+function writtenNotes({ notFound, unrecorded, searchTalk, pointersBack }: Written) {
   return [
     ...(notFound > 0
       ? [
@@ -744,6 +746,11 @@ function writtenNotes({ notFound, unrecorded, searchTalk }: Written) {
     ...(searchTalk > 0
       ? [
           `${searchTalk === 1 ? "1 sentence" : `${searchTalk} sentences`} about your searching ${searchTalk === 1 ? "was" : "were"} left out of the Mind: say in your reply what isn't covered.`,
+        ]
+      : []),
+    ...(pointersBack > 0
+      ? [
+          `${pointersBack === 1 ? "1 sentence" : `${pointersBack} sentences`} pointing to an earlier Answer ${pointersBack === 1 ? "was" : "were"} cut: the Mind is read without this conversation, so if it needs what ${pointersBack === 1 ? "that sentence" : "they"} pointed to, write that into it.`,
         ]
       : []),
   ];
@@ -1150,6 +1157,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       unlinkedSources: 0,
       extraCells: 0,
       searchTalk: 0,
+      pointersBack: 0,
     };
   };
 
@@ -1201,7 +1209,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const markdown = typeof given === "string" ? given : null;
     const content =
       typeof given === "string" ? options.blocksOf(given) : answerContent(given.blocks);
-    const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
+    const { blocks, cited, notFound, unrecorded, searchTalk, pointersBack, ...notes } = content;
     let writer = stream?.writer ?? null;
     const unmade = blocks.some(unmadeTable);
     const again = made ? "call create_mind again" : "call add_to_mind again";
@@ -1238,7 +1246,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         change: () => changeOf(writer, made),
       });
     }
-    return { change, notFound, unrecorded, searchTalk };
+    return { change, notFound, unrecorded, searchTalk, pointersBack };
   };
 
   /** By call: text written with markers `cite` hadn't recorded yet. */
@@ -1355,7 +1363,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     retry: boolean,
   ): Written & { change: MindChange; dropped: number } => {
     const content = options.blocksOf(markdown);
-    const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
+    const { blocks, cited, notFound, unrecorded, searchTalk, pointersBack, ...notes } = content;
     if (blocks.some(unmadeTable)) throw noTable(mind);
     const uncited = uncitedIn(mind, content, "call edit_mind again", { answer: false, retry });
     if (uncited) throw uncited;
@@ -1403,7 +1411,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if (unrecorded > 0) {
       unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision });
     }
-    return { change, notFound, unrecorded, searchTalk, dropped };
+    return { change, notFound, unrecorded, searchTalk, pointersBack, dropped };
   };
 
   const unmadeSaid = (name: string) =>

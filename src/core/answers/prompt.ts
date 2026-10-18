@@ -40,6 +40,7 @@ export function answerInstructions(): string {
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it; never tell the User to disregard an earlier Answer.",
+    '- Write every Answer, and all you write into a Mind, so it stands on its own: someone who never saw this conversation may read it on a page. Never point to an earlier Answer for part of it ("covered in my earlier answer", "as above", "见上一条回答", "见上文"): write that part out.',
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
     "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
   ].join("\n");
@@ -114,6 +115,17 @@ export function webInstructions(offered: boolean): string {
 export function workingCopyNote(original: string | null): string {
   if (original === null) return "";
   return `The Mind in <mind> is the User's working copy of the Document "${listedName(original)}", imported from it: "this document", "the file", "this résumé" ("这份文档", "这份简历") and the like mean that Document. It is among the User's Documents: never say it isn't there or couldn't be found.`;
+}
+
+/**
+ * The example's Documents, by name, when the Mind in focus is an example's;
+ * empty for any other. Asked beside it about their own file, a model told the
+ * User it "has nothing to do with Northwind" (#1172).
+ */
+export function exampleNote(documents: readonly string[] | null): string {
+  if (documents === null) return "";
+  const names = documents.map((name) => `"${listedName(name)}"`).join(", ");
+  return `The Mind in <mind> is an example IncarnaMind made${names ? `, with Documents of its own (${names})` : ""}: none of it is the User's own work. Mention the example only when the Question is about it, never to say the User's Documents have nothing to do with it.`;
 }
 
 /**
