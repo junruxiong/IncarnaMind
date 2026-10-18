@@ -15,7 +15,6 @@ import { type NumberedCitation, numberedCitations } from "./editor/citationNumbe
 import { type ShownClaim, shownClaims } from "./editor/claimChecks";
 import { asOneStep, offerEditorUndo } from "./editor/editorUndo";
 import { requestEdit, useEdits } from "./editWithAi";
-import { translateNow } from "./i18n";
 
 /** The Citations a check's sentence holds, with their numbers in the Mind. */
 export const citedIn = (editor: Editor, claim: ShownClaim): NumberedCitation[] =>
@@ -96,5 +95,5 @@ export function keepAsView(editor: Editor, claim: ShownClaim): void {
   });
   makeMine(state, tr, claim.sentence.from, claim.sentence.to);
   asOneStep(editor, () => editor.view.dispatch(tr));
-  offerEditorUndo(editor, translateNow("claim.keptAsView"));
+  offerEditorUndo(editor, (t) => t("claim.keptAsView"));
 }
