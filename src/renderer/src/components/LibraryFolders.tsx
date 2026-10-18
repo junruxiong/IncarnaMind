@@ -11,6 +11,7 @@ import { documentFields, folderFields, mindFields } from "../sortFields";
 import { allExamples, useAppStore } from "../store";
 import { foldKeys, TreeLevelOffset, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
+import { ExamplesMenu } from "./ExamplesMenu";
 import { InlineName } from "./InlineName";
 import { ChevronDownLineIcon, ChevronRightLineIcon, FolderLineIcon } from "./lineIcons";
 import { MindRow } from "./MindRow";
@@ -442,7 +443,7 @@ function NotInAFolder({
       data-drop-target={drop.active ? "true" : undefined}
       className={`mt-3 rounded-md ${drop.active ? dropLit : ""}`}
     >
-      <div className="flex h-7 items-end gap-2 pr-2 pb-1 pl-2 text-label">
+      <div className="group relative flex h-7 items-end gap-2 pr-2 pb-1 pl-2 text-label">
         <div className="min-w-0 font-semibold text-ink-meta">
           <button
             type="button"
@@ -458,6 +459,7 @@ function NotInAFolder({
             <Chevron className="size-3 shrink-0" />
           </button>
         </div>
+        {examplesOnly && <ExamplesMenu />}
         {!examplesOnly && (
           <span
             data-testid="not-in-a-folder-hint"

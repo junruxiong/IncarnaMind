@@ -10,7 +10,7 @@ import { openModelSetup } from "../modelSetup";
 import { stepsShownOf } from "../nudges";
 import { revealAssistant } from "../quietAssistant";
 import { useAppStore } from "../store";
-import { ExampleBanner, OtherExamples } from "./GettingStarted";
+import { ExampleBanner } from "./GettingStarted";
 import { CloseLineIcon } from "./lineIcons";
 import { ProblemLine } from "./ProblemLine";
 import { SLOT, Slotted } from "./Slotted";
@@ -87,7 +87,6 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
   const pickDocuments = useAppStore((state) => state.pickDocuments);
   const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
   const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
-  const removeExamples = useAppStore((state) => state.removeExamples);
   const ready = useAppStore((state) => state.examples?.ready ?? null);
   const modelReady = useAppStore((state) => state.chatReadiness?.ready === true);
   const placeAssistant = useAppStore((state) => state.placeAssistant);
@@ -129,7 +128,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
     <section
       aria-labelledby={`first-open-${mindId}`}
       data-testid="first-open-steps"
-      className="mb-6 rounded-[10px] bg-sheet px-3.5 pt-3.5 pb-2.5 font-sans shadow-[inset_0_0_0_1px_var(--color-rule)]"
+      className="mb-6 min-h-[208px] rounded-[10px] bg-sheet px-3.5 pt-3.5 pb-2.5 font-sans shadow-[inset_0_0_0_1px_var(--color-rule)]"
     >
       <div className="flex items-start justify-between gap-2">
         <h2 id={`first-open-${mindId}`} className="text-[16px] leading-6 font-semibold text-ink">
@@ -146,9 +145,6 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
           <CloseLineIcon strokeWidth={2.5} className="size-3" />
         </button>
       </div>
-      {!allDone && (
-        <p className="pb-3 text-[13px] leading-5 text-ink-secondary">{t("firstOpen.lead")}</p>
-      )}
       <ol className={`flex flex-col gap-3 ${allDone ? "pt-2" : ""}`}>
         <Step step="citation" number={1} state={stateOf("citation")}>
           <p className="text-[13px] leading-5 text-ink-secondary">
@@ -249,17 +245,6 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
           ))}
         </p>
       )}
-      <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-rule pt-1">
-        <OtherExamples mindId={mindId} />
-        <button
-          type="button"
-          data-testid="first-open-remove"
-          onClick={() => void removeExamples()}
-          className="shrink-0 rounded-sm text-[13px] leading-5 text-ink-meta underline-offset-2 hover:text-ink hover:underline focus-visible:outline-offset-0"
-        >
-          {t("firstOpen.remove")}
-        </button>
-      </div>
     </section>
   );
 }
