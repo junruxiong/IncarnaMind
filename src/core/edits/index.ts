@@ -109,7 +109,7 @@ const REQUEST_TIMEOUT_MS = 180_000;
 type Attributes = Record<string, unknown>;
 
 export interface EditsOptions {
-  content: Pick<MindContent, "read" | "edit" | "state" | "apply">;
+  content: Pick<MindContent, "read" | "edit" | "state" | "stateVector" | "apply">;
   /** Throws unless the Mind exists and this version may write to it. */
   requireMind(mindId: string): void;
   /** The default chat model, used when the Mind has none of its own. */
@@ -529,6 +529,7 @@ export function createEdits(options: EditsOptions) {
         ...(stream && someNotes(stream.written().notes)),
         ...(held && { held: true as const }),
         ...(leftOut.length > 0 && { leftOut }),
+        stateVector: content.stateVector(mindId),
       };
     };
     const holdsBack = (written: RewriteStream) =>
@@ -834,6 +835,7 @@ export function createEdits(options: EditsOptions) {
           droppedCitations,
           outOfDate: 0,
           ...someNotes(notes),
+          stateVector: content.stateVector(input.mindId),
         },
         length: { before: selection.text, after: reply },
         reason: reasonOf(streamed.raw),
