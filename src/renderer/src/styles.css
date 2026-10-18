@@ -3828,7 +3828,7 @@
   .mind-editor > * + .change-section {
     margin-top: 32px;
   }
-  /* The applied line is 16px under the Block above, as any Block is, and 6px over the Block it is about. */
+  /* The line's own margin-bottom is all the space under it. */
   .mind-editor > .applied-line + * {
     margin-top: 0;
   }
@@ -3898,7 +3898,6 @@
       color: var(--color-ink);
     }
   }
-  /* Review changes: each change ends with its own Restore original, after its new words. */
   .mind-editor .applied-restore-holder {
     margin-inline-start: 6px;
     font-family: var(--font-sans);

@@ -140,11 +140,10 @@ function restoreButton(index: number, count: number, t: Translate): HTMLButtonEl
   return each;
 }
 
-/** A change's Restore original, drawn after its words: in the line, or on a line of its own after whole Blocks. */
-function restoreHolder(button: HTMLButtonElement, block: boolean): HTMLElement {
-  const holder = document.createElement(block ? "div" : "span");
+function restoreHolder(button: HTMLButtonElement, ownLine: boolean): HTMLElement {
+  const holder = document.createElement(ownLine ? "div" : "span");
   holder.contentEditable = "false";
-  holder.className = block
+  holder.className = ownLine
     ? "applied-restore-holder applied-restore-holder--block"
     : "applied-restore-holder";
   holder.append(button);
@@ -512,8 +511,8 @@ function changeMarks(
             place.to,
             () => restoreHolder(restoreButton(index, changes.length, t), change.block !== null),
             {
-              // At one position, widgets draw by side: after the change's new words and before the
-              // next change's old ones (-1), or, with no new words, after its own old ones.
+              // Widgets at one position draw in order of side: after this change's new words but
+              // before the next change's old ones (-1), or, with no new words, after its own old ones.
               side: newDrawn ? -3 : -0.9,
               ignoreSelection: true,
               stopEvent: () => true,
