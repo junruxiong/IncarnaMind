@@ -259,10 +259,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     ]);
     await window.keyboard.type("fin");
     // A name no Folder has exactly is offered as a new Folder too, after those it finds.
-    await expect(picker.getByTestId("move-to-option")).toHaveText([
-      "Finance",
-      "New Folder “fin”",
-    ]);
+    await expect(picker.getByTestId("move-to-option")).toHaveText(["Finance", "New Folder “fin”"]);
     await window.keyboard.press("Enter");
     await expect(picker).toBeHidden();
     // In Finance, which opens to show it, and a line to take it back.
