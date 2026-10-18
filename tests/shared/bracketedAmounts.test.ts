@@ -74,14 +74,6 @@ const NEGATIVE_EN: Case[] = [
   ],
   ["a whole number in a cell of accounts", "Rent\t(250)", [["(250)", -250]], EN_ACCOUNTS],
   ["a whole number under a unit header", "£'000\nRent\t(250)", [["(250)", -250, ["scale"]]]],
-  ["a scale on a statement line", "Impairment (£1.2m)", [["(£1.2m)", -1200000]]],
-  [
-    "a scale on a statement line, spelled out",
-    "Impairment ($1.2 million)",
-    [["($1.2 million)", -1200000]],
-  ],
-  ["a currency code with a scale", "Impairment (USD 1.2bn)", [["(USD 1.2bn)", -1200000000]]],
-  ["the currency outside, the scale inside", "Impairment £(1.2m)", [["£(1.2m)", -1200000]]],
   [
     "a scale on a statement line of accounts",
     "Impairment (£1.2m)",
@@ -89,11 +81,55 @@ const NEGATIVE_EN: Case[] = [
     EN_ACCOUNTS,
   ],
   [
+    "a scale on a statement line, spelled out",
+    "Impairment ($1.2 million)",
+    [["($1.2 million)", -1200000]],
+    EN_ACCOUNTS,
+  ],
+  [
+    "a currency code with a scale",
+    "Impairment (USD 1.2bn)",
+    [["(USD 1.2bn)", -1200000000]],
+    EN_ACCOUNTS,
+  ],
+  [
+    "the currency outside, the scale inside",
+    "Impairment £(1.2m)",
+    [["£(1.2m)", -1200000]],
+    EN_ACCOUNTS,
+  ],
+  [
+    "a scale on a statement line under a unit header",
+    "£'000\nImpairment (£1.2m)",
+    [["(£1.2m)", -1200000]],
+  ],
+  ["a scale in a statement table's row", "Impairment\t(£1.2m)", [["(£1.2m)", -1200000]]],
+  [
     "a figure of a statement line that isn't a count of people",
     "Staff costs (1,250)",
     [["(1,250)", -1250]],
   ],
   ["a count label with an amount's currency", "Staff (£1,250)", [["(£1,250)", -1250]]],
+  ["a count label with the currency outside", "Staff £(1,250)", [["£(1,250)", -1250]]],
+  ["employees with a dollar outside", "Employees $(1,250)", [["$(1,250)", -1250]]],
+  ["a headcount's size with the currency outside", "Headcount £(250)", [["£(250)", -250]]],
+  ["cash paid to people", "Cash paid to suppliers and employees (12,500)", [["(12,500)", -12500]]],
+  ["payments to people", "Payments to employees (12,500)", [["(12,500)", -12500]]],
+  ["amounts owed to people", "Amounts owed to staff (12,500)", [["(12,500)", -12500]]],
+  ["loans from people", "Loans from employees (1,250)", [["(1,250)", -1250]]],
+  ["the cost of people", "Cost of staff (1,250)", [["(1,250)", -1250]]],
+  ["money per person", "Revenue per employee (125)", [["(125)", -125]], EN_ACCOUNTS],
+  [
+    "money per person under a unit header",
+    "£'000\nRevenue per employee (125)",
+    [["(125)", -125, ["scale"]]],
+  ],
+  [
+    "money paid to people, in a table's cell",
+    "Payments to staff\t(250)",
+    [["(250)", -250]],
+    EN_ACCOUNTS,
+  ],
   [
     "a cost of staff under a unit header",
     "£'000\nStaff costs (1,250)",
@@ -132,11 +168,6 @@ const NEGATIVE_ZH: Case[] = [
     ],
   ],
   [
-    "a yuan sign and a scale on a statement line",
-    "减值损失（¥1.2亿）",
-    [["（¥1.2亿）", -120000000]],
-  ],
-  [
     "a yuan sign and a scale on a statement line of accounts",
     "减值损失（¥1.2亿）",
     [["（¥1.2亿）", -120000000]],
@@ -146,7 +177,17 @@ const NEGATIVE_ZH: Case[] = [
     "a currency word before the scale",
     "减值损失（人民币1.2亿元）",
     [["（人民币1.2亿元）", -120000000]],
+    ZH_ACCOUNTS,
   ],
+  [
+    "a yuan sign and a scale on a statement line under a unit header",
+    "单位：万元\n减值损失（¥1.2亿）",
+    [["（¥1.2亿）", -120000000]],
+  ],
+  ["a count label with the yuan sign outside", "员工 ¥（1,250）", [["¥（1,250）", -1250]]],
+  ["cash paid to people", "支付给员工（12,500）", [["（12,500）", -12500]]],
+  ["money per person", "每名员工（125）", [["（125）", -125]], ZH_ACCOUNTS],
+  ["amounts owed to people", "应付员工（1,250）", [["（1,250）", -1250]]],
   ["a cost of staff, not a count", "员工成本（1,250）", [["（1,250）", -1250]]],
 ];
 
@@ -232,7 +273,24 @@ const POSITIVE_EN: Case[] = [
       ["US$170 million", 170000000],
     ],
   ],
-  ["a scale with no currency sign on a statement line", "Impairment (1.2m)", [["1.2m", 1200000]]],
+  [
+    "a scale with no currency sign on a statement line",
+    "Impairment (1.2m)",
+    [["1.2m", 1200000]],
+    EN_ACCOUNTS,
+  ],
+  ["a fund's size on a label line", "Fund (£2.1bn)", [["£2.1bn", 2100000000]]],
+  ["assets under management", "AUM (US$2.1bn)", [["US$2.1bn", 2100000000]]],
+  ["a company's size", "Acme Ltd (US$1.2bn)", [["US$1.2bn", 1200000000]]],
+  ["a scale on a label line outside accounts", "Impairment (£1.2m)", [["£1.2m", 1200000]]],
+  [
+    "a label line of a deck",
+    "Total assets (£4.5m)\nNet loss (£1.2m)",
+    [
+      ["£4.5m", 4500000],
+      ["£1.2m", 1200000],
+    ],
+  ],
 ];
 
 const COUNTS_EN: Case[] = [
@@ -244,6 +302,14 @@ const COUNTS_EN: Case[] = [
   ["people", "People (1,250)", [["(1,250)", 1250]], EN_ACCOUNTS],
   ["a label in capitals", "HEADCOUNT (250)", [["(250)", 250]], EN_ACCOUNTS],
   ["a label of several words", "Average number of employees (1,250)", [["(1,250)", 1250]]],
+  ["a total", "Total number of staff (250)", [["(250)", 250]], EN_ACCOUNTS],
+  [
+    "a number of full-time staff",
+    "Number of full-time employees (250)",
+    [["(250)", 250]],
+    EN_ACCOUNTS,
+  ],
+  ["an average headcount", "Average headcount (1,250)", [["(1,250)", 1250]]],
   ["a count after a year", "In 2025 headcount (250) rose.", [["(250)", 250]], EN_ACCOUNTS],
   ["a count with its unit", "Employees (1,250 staff)", [["1,250 staff", 1250]]],
   ["a count under a unit header", "£'000\nHeadcount (250)", [["(250)", 250]]],
@@ -303,6 +369,9 @@ const POSITIVE_ZH: Case[] = [
     ZH_ACCOUNTS,
   ],
   ["a yuan sign in a statement's sentence", "减值损失（¥1.2亿）已确认。", [["¥1.2亿", 120000000]]],
+  ["a fund's size on a label line", "基金规模（¥2.1亿）", [["¥2.1亿", 210000000]]],
+  ["a yuan sign on a label line outside accounts", "减值损失（¥1.2亿）", [["¥1.2亿", 120000000]]],
+  ["a currency word on a label line", "减值损失（人民币1.2亿元）", [["人民币1.2亿元", 120000000]]],
 ];
 
 const COUNTS_ZH: Case[] = [
@@ -312,6 +381,7 @@ const COUNTS_ZH: Case[] = [
   ["人员", "技术人员（1,250）", [["（1,250）", 1250]], ZH_ACCOUNTS],
   ["职工", "职工（1,250）", [["（1,250）", 1250]]],
   ["a count with its unit", "员工（1,250人）", [["1,250人", 1250]]],
+  ["a count at the end of the year", "期末员工人数（250）", [["（250）", 250]], ZH_ACCOUNTS],
   ["a count under a unit header", "单位：万元\n员工人数（250）", [["（250）", 250]]],
   [
     "a count in the cells of a row",
