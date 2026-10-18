@@ -1,8 +1,10 @@
 /**
- * Automatic tagging (spec #20, "Tagging"), while there are no Folders: once a
- * Document is ready (embedded, so already searchable), its Tags are decided
- * by the model the Tagging setting picks (Automatic, or one chosen by hand,
- * see ../library/tagging), the one Organize uses once there are Folders. One
+ * Automatic tagging (spec #20, "Tagging"), unless Organize tags and files new
+ * Documents by itself: once a Document is ready (embedded, so already
+ * searchable), its Tags are decided by the model the Tagging setting picks
+ * (Automatic, or one chosen by hand, see ../library/tagging), the one Organize
+ * uses once there are Folders. With Organize not moving new Documents by
+ * itself, this still tags them, and Organize only moves them when asked. One
  * Document at a time, in the order they became ready.
  *
  * - Each Document takes one turn in the background model queue (see
@@ -20,6 +22,9 @@
  *   Document stay as they are (see `TagsStore.applyAutomatic`).
  * - Where the User stopped Tagging with AI, Documents are "stopped"
  *   and nothing is sent, unless the User asks to re-tag one.
+ * - While Organize files new Documents by itself, the Documents it holds are
+ *   its own. One it doesn't hold, such as one this tagger had when Organize
+ *   began filing new Documents, is still tagged here.
  */
 import type { DocumentKind, ProviderError } from "../api";
 import type { BackgroundCall, BackgroundJob, BackgroundQueue } from "../backgroundQueue";
@@ -59,8 +64,9 @@ const EXCERPT_ROWS = 6;
 
 export interface TaggerOptions {
   db: Database;
-  /** The folder organizer owns tagging while it is configured. */
+  /** Organize tags new Documents itself while it files them by itself; those it has no hold of yet stay with this tagger. */
   enabled?(): boolean;
+  organizing?(id: string): boolean;
   stopped(id: string): boolean;
   now: () => string;
   tags: TagsStore;
@@ -109,6 +115,7 @@ export function createTagger(options: TaggerOptions) {
    */
   const requests = new Map<string, number>();
   const asked = new Set<string>();
+  const organized = (id: string) => options.organizing?.(id) === true;
 
   const rowOf = (id: string) =>
     db.get<DocumentRow>(
@@ -181,12 +188,13 @@ export function createTagger(options: TaggerOptions) {
      * meanwhile: the run that comes next decides instead.
      */
     const stale = () =>
-      options.enabled?.() === false ||
+      organized(id) ||
       lifetime.signal.aborted ||
       call.signal.aborted ||
       (requests.get(id) ?? 0) !== request;
     const row = rowOf(id);
-    if (row?.status !== "ready") return;
+    // Tagged meanwhile: Organize did it, in its own turn.
+    if (row?.status !== "ready" || row.tagging_status === "tagged") return;
     const definitions = tags.list();
     if (setState(id, "tagging")) announce([id]);
 
@@ -247,10 +255,6 @@ export function createTagger(options: TaggerOptions) {
   async function tagNext(call: BackgroundCall): Promise<void> {
     try {
       if (queue.length === 0 || lifetime.signal.aborted) return;
-      if (options.enabled?.() === false) {
-        queue.length = 0;
-        return;
-      }
       const ready = await options.canRun();
       if (lifetime.signal.aborted) return;
       if (!ready) {
@@ -258,7 +262,7 @@ export function createTagger(options: TaggerOptions) {
         return;
       }
       const id = queue.shift();
-      if (id === undefined) return;
+      if (id === undefined || organized(id)) return;
       if (options.stopped(id) && !asked.has(id)) {
         if (setState(id, "stopped")) announce([id]);
         return;
@@ -324,13 +328,15 @@ export function createTagger(options: TaggerOptions) {
    * "stopped", and those where it was turned back on are queued again.
    */
   function resume(): void {
-    if (lifetime.signal.aborted || options.enabled?.() === false) return;
-    const rows = db.all<{ id: string; tagging_status: string; tagging_error_kind: string | null }>(
-      `SELECT id, tagging_status, tagging_error_kind FROM documents
-       WHERE deleted_at IS NULL AND status = 'ready'
-         AND tagging_status IN ('pending', 'waiting-for-provider', 'failed', 'stopped')
-       ORDER BY created_at, rowid`,
-    );
+    if (lifetime.signal.aborted) return;
+    const rows = db
+      .all<{ id: string; tagging_status: string; tagging_error_kind: string | null }>(
+        `SELECT id, tagging_status, tagging_error_kind FROM documents
+         WHERE deleted_at IS NULL AND status = 'ready'
+           AND tagging_status IN ('pending', 'waiting-for-provider', 'failed', 'stopped')
+         ORDER BY created_at, rowid`,
+      )
+      .filter((row) => !organized(row.id));
     const stopped = rows.filter((row) => options.stopped(row.id) && !asked.has(row.id));
     setStates(
       stopped.map((row) => row.id),
@@ -374,7 +380,7 @@ export function createTagger(options: TaggerOptions) {
      * so that event already says whether it waits for a tagger.
      */
     documentReady(id: string): void {
-      if (options.enabled?.() === false) return;
+      if (options.enabled?.() === false || organized(id)) return;
       const row = rowOf(id);
       // Processed again (e.g. by a newer pipeline): the same file keeps its Tags.
       if (!row || row.tagging_status === "tagged") return;
