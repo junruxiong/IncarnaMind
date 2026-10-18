@@ -29,6 +29,7 @@ import {
   appliedText,
   type ChangedBlocks,
   changedBlocksOf,
+  changeGroupsOf,
   type KeptLine,
   placeOfChange,
   setAppliedLine,
@@ -522,28 +523,33 @@ function reviewEdit(edit: Applying, changes: readonly AppliedChange[], byAssista
   if (first) editor.chain().setTextSelection(first.from).scrollIntoView().run();
 }
 
-/** The change shown again whose words the cursor is in, by its place in the line's list. */
+/** The group of changes shown again whose words the cursor is in, by its place among the line's groups. */
 export function reviewedChangeAt(state: EditorState): number | null {
   const line = appliedLineIn(state);
   if (line?.kind !== "review") return null;
   const { from } = state.selection;
-  const index = line.changes.findIndex((change) => {
-    const place = placeOfChange(state, change);
-    return place !== null && place.from <= from && from <= place.to;
-  });
+  const index = changeGroupsOf(state, line.changes).findIndex(
+    (group) => group.from <= from && from <= group.to,
+  );
   return index >= 0 ? index : null;
 }
 
-/** Restore original: one change's old words back in place of its new ones, one step of Undo. */
+/** Restore original: a group's old words back in place of its new ones, one step of Undo. */
 export function restoreChange(editor: Editor, index: number): void {
   const line = appliedLineIn(editor.state);
-  const change = line?.kind === "review" ? line.changes[index] : undefined;
-  const place = change ? placeOfChange(editor.state, change) : null;
-  if (line?.kind !== "review" || !change || !place || editor.isDestroyed) return;
-  const tr = editor.state.tr.replaceWith(place.from, place.to, change.removed);
+  const group =
+    line?.kind === "review" ? changeGroupsOf(editor.state, line.changes)[index] : undefined;
+  if (line?.kind !== "review" || !group || editor.isDestroyed) return;
+  const tr = editor.state.tr;
+  // Last first, so the places of the ones before it hold.
+  const lastFirst = [...group.members].sort(
+    (a, b) => b.place.from - a.place.from || b.index - a.index,
+  );
+  for (const { change, place } of lastFirst) tr.replaceWith(place.from, place.to, change.removed);
+  const restored = new Set(group.members.map((member) => member.index));
   tr.setMeta(appliedLineKey, {
     ...line,
-    changes: line.changes.filter((_, each) => each !== index),
+    changes: line.changes.filter((_, each) => !restored.has(each)),
   });
   asOneStep(editor, () => editor.view.dispatch(tr));
   const top = undoStackOf(editor)?.undoStack.at(-1);
