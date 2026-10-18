@@ -650,11 +650,18 @@ const LABEL_REFERENCE =
 const COUNT_LABEL =
   /(?:(?<![A-Za-z])(?:head ?count|employees?|staff|FTEs?|people)|人数|员工|人员|职工)$/i;
 
+/** "Payments to employees", "Revenue per employee": the people are who the money is for, not what is counted. */
+const MONEY_FOR_PEOPLE =
+  /\b(?:of|to|for|from|per|by|with|among|between|towards?|against|owed|paid)\b|[给向每付欠借对为]/i;
+
 function namesCount(prepared: Prepared, at: number): boolean {
   const { s } = prepared;
   const lead = s.slice(s.lastIndexOf("\n", at - 1) + 1, at);
   const label = /^[^\d(\p{Sc}]*/u.exec(lead)?.[0] ?? "";
-  return [label, lead].some((words) => COUNT_LABEL.test(words.slice(-100).replace(/[\s|]+$/, "")));
+  return [label, lead].some((words) => {
+    const end = words.slice(-100).replace(/[\s|]+$/, "");
+    return COUNT_LABEL.test(end) && !MONEY_FOR_PEOPLE.test(end.replace(/\bnumbers? of\b/gi, ""));
+  });
 }
 
 function rowOf(prepared: Prepared, from: number, to: number): "table" | "statement" | null {
@@ -1557,7 +1564,7 @@ function readAround(
   // "（+2.1pct）": a sign written inside brackets makes them an aside, not an accounting negative.
   if (bracket !== null && s[close] === ")" && !signed) {
     const outer = draft.currencies.length === 0 ? currencyBefore(bracket) : null;
-    const count = draft.unit.kind === "plain" && namesCount(prepared, bracket);
+    const count = draft.unit.kind === "plain" && outer === null && namesCount(prepared, bracket);
     const reference =
       !count &&
       (REFERENCE_BEFORE.test(s.slice(Math.max(floor, bracket - 24), bracket)) ||
@@ -1616,9 +1623,9 @@ function readAround(
     } else if (
       row === "table"
         ? draft.unit.kind === "plain" || draft.unit.kind === "currency"
-        : row === "statement" && currencySigned
+        : row === "statement" && currencySigned && settled.accounts
     ) {
-      // "(US$170 million)" after an amount in another currency restates it; in a cell of its own, or beside a statement's label ("Impairment (£1.2m)"), it is a minus.
+      // "(US$170 million)" after an amount in another currency restates it; in a cell of its own, or in accounts beside a statement's label ("Impairment (£1.2m)"), it is a minus.
       const codes = outer?.codes ?? draft.currencies;
       const before = codes.length > 0 ? amountBefore(s, outer?.from ?? bracket, settled) : null;
       if (!before?.length || before.some((code) => codes.includes(code))) negate();
