@@ -12,6 +12,7 @@ import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { AiUseSettings } from "./AiUseSettings";
 import { ApprovalsSettings } from "./ApprovalsSettings";
+import { DetailsLine } from "./DetailsLine";
 import { OnThisComputer } from "./OnThisComputer";
 import { USAGE_DATA_DETAILS_URL } from "./UsageDataCard";
 import {
@@ -120,7 +121,13 @@ export function PrivacySettings() {
 
       <section data-testid="consent-settings" className="flex flex-col">
         <h4 className={sectionTitleClass}>{t("consent.settings.title")}</h4>
-        <p className={sectionNoteClass}>{t("privacy.flows.intro")}</p>
+        <DetailsLine
+          testId="privacy-flows-intro"
+          className={sectionNoteClass}
+          details={t("privacy.flows.intro.details")}
+        >
+          {t("privacy.flows.intro")}
+        </DetailsLine>
         <ul className={ruledListClass}>
           {flows?.map((flow) => (
             <DataFlowItem key={flow.id} flow={flow} />
@@ -484,9 +491,14 @@ function CrashReports({
             <label htmlFor={id} className={rowTitleClass}>
               {t("privacy.crashReports.toggle")}
             </label>
-            <p id={`${id}-description`} className={rowTextClass}>
+            <DetailsLine
+              id={`${id}-description`}
+              testId="crash-reports-description"
+              className={rowTextClass}
+              details={t("privacy.crashReports.body.details")}
+            >
               {t("privacy.crashReports.body")}
-            </p>
+            </DetailsLine>
           </div>
           <input
             id={id}
