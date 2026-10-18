@@ -3301,6 +3301,8 @@ export function createCore(adapters: CoreAdapters): Core {
       await readinessChanged();
     },
     testChatConnection: (input) => loggingTest("chat")(chat.test(input)),
+    testChatProvider: (providerId) => loggingTest("chat")(chat.testProvider(providerId)),
+    getModelRoles: async () => ({ quickTasks: chat.quickTasksModel(), images: chat.imageModel() }),
     getChatReadiness: () => chat.readiness(),
     listChatModels: () => chat.listModels(),
     setChatModelInMenu: async (input) => chat.setInMenu(input),
@@ -3417,7 +3419,13 @@ export function createCore(adapters: CoreAdapters): Core {
           lifetime.signal,
         );
       }
-      const provider = await chat.save({ kind: "ollama", baseUrl, modelId: model });
+      const provider = await chat.save({
+        kind: "ollama",
+        baseUrl,
+        modelId: model,
+        // Local mode leaves only a model on this computer to answer.
+        keepDefault: input?.keepDefault === true && input.localOnly !== true,
+      });
       settingsChanged();
       await readinessChanged();
       // Local mode is the User's choice here (#545), made in the box under the button.

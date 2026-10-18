@@ -51,7 +51,7 @@ import { searchFee, searchFeeOf } from "../providers/webSearch";
 import { currentTask } from "../runs/current";
 import type { TokenUsage } from "../runs/engine";
 import type { Database } from "../storage";
-import { costOf, inCurrency, promptTokensOf, reservationOf } from "./price";
+import { costOf, inCurrency, promptTokensOf, reservationOf, TYPICAL_ANSWER } from "./price";
 
 type Wrapped = Parameters<NonNullable<LanguageModelMiddleware["wrapStream"]>>[0];
 type CallOptions = Wrapped["params"];
@@ -88,10 +88,15 @@ interface ItemCost {
 }
 
 const ITEM_COSTS: Record<NonNullable<RunEstimateInput["each"]>, ItemCost> = {
-  /** An Answer searches, then writes: a third of an average Answer's 12,000 input and 750 output tokens, none cached. */
+  /** An Answer searches, then writes: a third of a typical Answer's tokens each, none cached. */
   answer: {
     calls: 3,
-    call: { inputTokens: 4_000, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 250 },
+    call: {
+      inputTokens: TYPICAL_ANSWER.inputTokens / 3,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: TYPICAL_ANSWER.outputTokens / 3,
+    },
     flow: "chat",
   },
   /**

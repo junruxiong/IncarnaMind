@@ -3782,6 +3782,11 @@ export interface SaveChatProviderInput {
   apiKey?: string | null;
   /** The model to make the default, e.g. "gpt-5.4-mini". */
   modelId: string;
+  /**
+   * Adding a provider in Settings › Models (#179): the default model stays as it is when
+   * there is one, and `modelId` becomes the default only when there is none.
+   */
+  keepDefault?: boolean;
 }
 
 export interface TestChatConnectionInput {
@@ -4225,6 +4230,45 @@ export interface OtherModel {
 /** Which API, other than chat, a model needs. */
 export type CannotAnswerReason = "completion" | "audio" | "deep-research" | "computer-use";
 
+/**
+ * What a typical Answer costs with a model: our estimate from its price, in the
+ * provider's own currency (`TYPICAL_ANSWER`); nothing for a model on this
+ * computer; or a share of the User's plan.
+ */
+export type ModelCost =
+  | { kind: "estimate"; currency: Currency; amount: number }
+  | { kind: "free" }
+  | { kind: "plan" };
+
+/** What a model can do and costs, as known now (see `ChatModelGroup.about`). */
+export interface ModelAbout {
+  /** It calls Tools; null when nothing says. */
+  tools: boolean | null;
+  readsImages: boolean;
+  /** It reasons before it answers; null when nothing says. */
+  reasoning: boolean | null;
+  /** Its context window, in tokens; null when unknown. */
+  context: number | null;
+  /** Null when its price isn't known. */
+  cost: ModelCost | null;
+}
+
+/**
+ * A saved provider's Test (#179): its model list, then one word from `modelId`, its
+ * quick-tasks model. `step` says which failed; `error` why, as a connection test's does.
+ */
+export type ProviderTestResult =
+  | { ok: true; modelId: string; ms: number }
+  | { ok: false; step: "list" | "answer"; modelId: string | null; error: ProviderError };
+
+/** The models the calls that don't write the Answer use now, as `UserSettings` leaves them to be worked out. */
+export interface ModelRoles {
+  /** See `UserSettings.quickTasksModel`; null with no Answers model. */
+  quickTasks: ChatModelChoice | null;
+  /** See `UserSettings.imageModel`; null when no model reads images. */
+  images: ChatModelChoice | null;
+}
+
 export interface SetChatModelInMenuInput {
   providerId: string;
   modelId: string;
@@ -4250,6 +4294,20 @@ export interface ChatModelGroup {
   other: OtherModel[];
   /** The ids in `models` that the User added from `other`; "In the menu" is on for them. */
   added: string[];
+  /**
+   * The ids in the menu unless the User takes them out: the default model, then the
+   * provider's, in the menu's order, those taken out (`hidden`) still in their place.
+   */
+  offered: string[];
+  /** The ids of `offered` the User took out of the menu. The default model is never one of them. */
+  hidden: string[];
+  /** What is known of each id in `models`, `hidden` and `other`, for its row in Settings › Models. */
+  about: Record<string, ModelAbout>;
+  /**
+   * The provider's own page of its prices, and when the prices the estimates come from
+   * were checked (YYYY-MM-DD); null where nothing is priced (a plan, a model on this computer).
+   */
+  prices: { url: string; checked: string } | null;
   /**
    * The ids in `models` whose capabilities are unknown: neither the catalog
    * nor the provider says what they can do. They still work; an Answer finds
@@ -5927,6 +5985,8 @@ export interface SelectOllamaInput {
    * to match. Left out, Local mode stays as it was.
    */
   localOnly?: boolean;
+  /** As `SaveChatProviderInput.keepDefault`. */
+  keepDefault?: boolean;
 }
 
 export interface OllamaPullProgress {
@@ -8521,6 +8581,14 @@ export interface CoreApi {
   deleteChatProvider(id: string): Promise<void>;
   /** Makes one small real request. A cloud provider's data flow needs consent first. */
   testChatConnection(input: TestChatConnectionInput): Promise<ConnectionTestResult>;
+  /**
+   * Settings › Models' Test (#179): asks a saved provider for its model list, then sends
+   * one word to its quick-tasks model, each as any request is sent: not in Local mode to a
+   * service, and only with the chat flow allowed, which the User is asked for when it isn't.
+   */
+  testChatProvider(providerId: string): Promise<ProviderTestResult>;
+  /** The quick-tasks and image models as they are worked out now, for Settings › Models' defaults. */
+  getModelRoles(): Promise<ModelRoles>;
   getChatReadiness(): Promise<ChatReadiness>;
   /**
    * The models a Question's model picker offers: for each saved provider, the
@@ -8530,8 +8598,8 @@ export interface CoreApi {
    */
   listChatModels(): Promise<ChatModelGroup[]>;
   /**
-   * Puts a model id in a provider's model menu, or takes an id the User added
-   * back out. Any id can be added, listed by the provider or not.
+   * Puts a model id in a provider's model menu, or takes one out of it, the
+   * provider's own included. Any id can be added, listed by the provider or not.
    */
   setChatModelInMenu(input: SetChatModelInMenuInput): Promise<void>;
   /**
@@ -9655,6 +9723,8 @@ const methods: Record<CoreApiMethod, true> = {
   saveChatProvider: true,
   deleteChatProvider: true,
   testChatConnection: true,
+  testChatProvider: true,
+  getModelRoles: true,
   getChatReadiness: true,
   listChatModels: true,
   setChatModelInMenu: true,

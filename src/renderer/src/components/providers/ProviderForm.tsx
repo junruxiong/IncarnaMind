@@ -120,6 +120,8 @@ export function ProviderForm({
   only,
   refused = null,
   standalone = false,
+  keepDefault = false,
+  initialEndpoint = null,
 }: {
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
@@ -134,6 +136,13 @@ export function ProviderForm({
   refused?: KeyRefusal | null;
   /** The setup card's key step: the form is titled with the company picked, and opens on the key. */
   standalone?: boolean;
+  /**
+   * Settings › Models' Add a provider (#179): the default model stays as it is, so while
+   * there is one the form asks for no model and tries the key with the provider's own.
+   */
+  keepDefault?: boolean;
+  /** The region the form opens on, when the provider has several. */
+  initialEndpoint?: string | null;
 }) {
   const t = useT();
   const id = useId();
@@ -146,7 +155,7 @@ export function ProviderForm({
   );
   const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
-  const [endpointId, setEndpointId] = useState(refused?.endpoint ?? "");
+  const [endpointId, setEndpointId] = useState(refused?.endpoint ?? initialEndpoint ?? "");
   const key = useProviderKey();
   const { apiKey } = key;
   const [fieldValue, setFieldValue] = useState(() => fieldDefault(first));
@@ -155,6 +164,7 @@ export function ProviderForm({
   const [busy, setBusy] = useState<"saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
   const [jev] = useJevSettings();
+  const hasDefault = useAppStore((state) => (state.settings?.user.chatModel ?? null) !== null);
   // Automatic tags with this key's provider unless a Jev key comes first, or nothing may leave the computer.
   const tagsAutomatically =
     useAppStore(
@@ -311,7 +321,9 @@ export function ProviderForm({
         setTest(result);
         return;
       }
-      const provider = await core.saveChatProvider(request);
+      const provider = await core.saveChatProvider(
+        keepDefault ? { ...request, keepDefault } : request,
+      );
       key.clear();
       onSaved(provider);
     } catch (failure) {
@@ -533,7 +545,7 @@ export function ProviderForm({
             <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
           )}
 
-          {choices.length === 0 ? (
+          {keepDefault && hasDefault && choices.length > 0 ? null : choices.length === 0 ? (
             <div>
               <label htmlFor={`${id}-model-id`} className={fieldLabelClass}>
                 {t("providers.form.model")}
@@ -636,7 +648,7 @@ export function ProviderForm({
                   result={test}
                   model={shownName(modelId)}
                   {...(test.error.kind === "auth" && site
-                    ? { authLine: t("providers.form.badKey", { provider: providerName, site }) }
+                    ? { line: t("providers.form.badKey", { provider: providerName, site }) }
                     : {})}
                   {...(test.error.kind === "data-retention" && {
                     action: {
@@ -662,7 +674,7 @@ export function ProviderForm({
 }
 
 /** Beside a refused key: who refused it, and when. */
-function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
+export function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusal }) {
   const t = useT();
   const language = useLanguage();
   const provider = keyProviderName(refused.catalogId, t, language);
@@ -745,13 +757,13 @@ function readableMessage(message: string): string {
 /** A connection test's outcome. A test sends nothing of the User's, so it asks nothing (ADR-0022). */
 export function TestResult({
   result,
-  authLine,
+  line: ownLine,
   model,
   action,
 }: {
   result: ConnectionTestResult;
-  /** Says a refused key in the provider's own terms, in place of the general line. */
-  authLine?: string;
+  /** Says it in the provider's own terms (a refused key), in place of the general line. */
+  line?: string;
   /** The model that was tried, for a line that names it. */
   model?: string;
   /** What the User can do about it, after the line. */
@@ -765,7 +777,7 @@ export function TestResult({
       </p>
     );
   }
-  const line = authLine ?? t(testErrorKey(result.error.kind), { model: model ?? "" });
+  const line = ownLine ?? t(testErrorKey(result.error.kind), { model: model ?? "" });
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
       <div className="flex items-baseline">

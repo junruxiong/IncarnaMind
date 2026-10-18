@@ -51,6 +51,7 @@ const PROVIDERS = [
       },
     ],
     docsUrl: "https://platform.claude.com/docs/en/about-claude/models/overview",
+    pricingUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
     request: {
       // Claude 5.5 thinks by default (adaptively): a small call with a short reply runs out of room
       // before it writes anything (#282). The newest refuse `disabled`, and their refusal names
@@ -134,6 +135,7 @@ const PROVIDERS = [
       },
     ],
     docsUrl: "https://developers.openai.com/api/docs/models",
+    pricingUrl: "https://developers.openai.com/api/docs/pricing",
     // The Responses API keeps each request on OpenAI's servers unless it says not to. Small
     // calls run with reasoning off: on the Organize evaluation GPT-6 Luna tagged as well with it
     // off, writing a quarter of the output tokens. These models refuse "none" (GPT-6.1 Sol and
@@ -223,6 +225,7 @@ const PROVIDERS = [
       },
     ],
     docsUrl: "https://ai.google.dev/gemini-api/docs/models",
+    pricingUrl: "https://ai.google.dev/gemini-api/docs/pricing",
     roles: {
       answers: "gemini-3.8-flash",
       strongest: "gemini-3.1-pro-preview",
@@ -313,6 +316,7 @@ const PROVIDERS = [
     apiKey: "required",
     keyUrl: "https://console.mistral.ai/api-keys",
     docsUrl: "https://docs.mistral.ai/getting-started/models/models_overview/",
+    pricingUrl: "https://mistral.ai/pricing",
     request: { thinkingOff: { options: { mistral: { reasoningEffort: "none" } } } },
     roles: {
       answers: "mistral-small-2603",
@@ -418,12 +422,14 @@ const PROVIDERS = [
         label: { en: "China (Beijing)", zh: "中国内地（北京）" },
         baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         keyUrl: "https://bailian.console.aliyun.com/?tab=model#/api-key",
+        pricingUrl: "https://help.aliyun.com/zh/model-studio/model-pricing",
       },
       {
         id: "intl",
         label: { en: "International (Singapore)", zh: "国际（新加坡）" },
         baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
         keyUrl: "https://modelstudio.console.alibabacloud.com/?tab=playground#/api-key",
+        pricingUrl: "https://www.alibabacloud.com/help/en/model-studio/model-pricing",
       },
     ],
     apiKey: "required",
@@ -478,6 +484,7 @@ const PROVIDERS = [
         label: { en: "China", zh: "中国" },
         baseUrl: "https://api.moonshot.cn/v1",
         keyUrl: "https://platform.kimi.com/console/api-keys",
+        pricingUrl: "https://platform.moonshot.cn/docs/pricing/chat",
       },
       {
         id: "intl",
@@ -532,6 +539,7 @@ const PROVIDERS = [
         label: { en: "International (Z.ai)", zh: "国际（Z.ai）" },
         baseUrl: "https://api.z.ai/api/paas/v4",
         keyUrl: "https://z.ai/manage-apikey/apikey-list",
+        pricingUrl: "https://docs.z.ai/guides/overview/pricing",
       },
     ],
     apiKey: "required",
@@ -578,12 +586,14 @@ const PROVIDERS = [
         label: { en: "China", zh: "中国" },
         baseUrl: "https://api.siliconflow.cn/v1",
         keyUrl: "https://cloud.siliconflow.cn/account/ak",
+        pricingUrl: "https://siliconflow.cn/pricing",
       },
       {
         id: "intl",
         label: { en: "International", zh: "国际" },
         baseUrl: "https://api.siliconflow.com/v1",
         keyUrl: "https://cloud.siliconflow.com/account/ak",
+        pricingUrl: "https://www.siliconflow.com/pricing",
       },
     ],
     apiKey: "required",
@@ -639,6 +649,7 @@ const PROVIDERS = [
     serverUrl: "optional",
     apiKey: "none",
     docsUrl: "https://ollama.com/library",
+    pricingUrl: "https://ollama.com/pricing",
     // The model measured with IncarnaMind (#67); the loaded model also does the small jobs,
     // as a second local model would push it out of memory. Others by this computer's
     // memory are in ./local.
@@ -786,6 +797,13 @@ export function fieldValueOf(endpoint: Endpoint, baseUrl: string | null): string
   const value = baseUrl.slice(before.length, baseUrl.length - after.length);
   return fieldAccepts(endpoint.field, value) ? value : null;
 }
+
+/** Where a provider's prices are, for its region: the region's own page, its own, else its models' page. */
+export const pricingUrlOf = (
+  provider: CatalogProvider,
+  endpointId: string | null | undefined,
+): string | undefined =>
+  endpointOf(provider, endpointId)?.pricingUrl ?? provider.pricingUrl ?? provider.docsUrl;
 
 /** The provider's endpoint with this id, else its first (the default); none for a server the User gives. */
 export const endpointOf = (

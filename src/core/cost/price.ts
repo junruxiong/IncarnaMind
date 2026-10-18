@@ -8,6 +8,13 @@ import { CNY_PER_USD } from "../providers/catalog/billing";
 import type { Price } from "../providers/catalog/types";
 import type { TokenUsage } from "../runs/engine";
 
+/**
+ * The tokens of a typical Answer, which searches, then writes, over about three calls:
+ * the one assumption behind every estimate of what Answers cost, Settings › Models'
+ * "About $0.02 per Answer" (#179) and the estimate before a run of them (./meter).
+ */
+export const TYPICAL_ANSWER = { inputTokens: 12_000, outputTokens: 750 } as const;
+
 /** Anthropic bills a 5-minute prompt-cache write at 1.25 times the input price. */
 const CACHE_WRITE_FACTOR = 1.25;
 
@@ -95,4 +102,10 @@ export function promptTokensOf(
     }
   }
   return Math.ceil(bytes / 3) + files * FILE_TOKENS + prompt.length * MESSAGE_TOKENS;
+}
+
+/** What a typical Answer costs at `price`, in its currency, at its full rate: an estimate holds at any hour. */
+export function typicalAnswerCost(price: Price): number {
+  const { offPeak: _offPeak, ...full } = price;
+  return costOf(TYPICAL_ANSWER, full, new Date());
 }
