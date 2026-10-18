@@ -1,11 +1,12 @@
 /**
  * Text written for a page stands on its own (#1172): it may be added to the
  * User's page and read by someone who never saw the conversation. A sentence
- * that only sends the reader to an earlier Answer ("Notice and holiday are
- * covered in my earlier answer.", "居家办公的规定见上一条回答。") goes, and a
- * clause or bracket that does ("As I said in my earlier answer, …",
- * "…，详见上文。", "(see above)") is cut from its sentence, which keeps its
- * words. A sentence with a Citation is never taken out: its claim stays.
+ * that sends the reader to an earlier Answer ("Notice and holiday are covered
+ * in my earlier answer.", "居家办公的规定见上一条回答。") or speaks of one
+ * ("I didn't recheck the figures in my earlier answer.") goes, and a clause or
+ * bracket that points back ("As I said in my earlier answer, …", "…，详见上文。",
+ * "(see above)") is cut from its sentence, which keeps its words. A sentence
+ * with a Citation is never taken out: its claim stays.
  */
 
 import { rewriteSentences } from "./proseSentences";
@@ -46,8 +47,10 @@ const BRACKETED = new RegExp(
   ].join("|"),
   "gi",
 );
-const ONLY_POINTS = new RegExp(
+const POINTS_BACK = new RegExp(
   [
+    String.raw`\b(?:my|our) (?:earlier|previous|prior|last|first|original) (?:answer|reply|response)s?\b`,
+    "(?:上一条|上条|前一条|上一个|上一次|之前|先前|前面|刚才|上面)的?(?:回答|回复|答复)",
     `^(?:please )?(?:see|refer to)(?: also)? (?:${EARLIER}|${ABOVE}|${IN_CONVERSATION})`,
     String.raw`\b(?:is|are|was|were|has been|have been)(?: already| all| both)? ${SET_OUT} ${THERE}`,
     String.raw`\bI (?:have )?(?:already )?(?:covered|set out|described|explained|discussed|listed|gave|summari[sz]ed|detailed|addressed|answered|outlined|showed|noted|mentioned)\b[^.!?]* ${THERE}`,
@@ -78,7 +81,7 @@ function standingAlone(sentence: string): string {
   const lead = LEADING.exec(cut)?.[0] ?? "";
   const rest = cut.slice(lead.length);
   const kept = lead ? rest.charAt(0).toLocaleUpperCase() + rest.slice(1) : rest;
-  return ONLY_POINTS.test(kept) && !CITED.test(kept) ? "" : kept;
+  return POINTS_BACK.test(kept) && !CITED.test(kept) ? "" : kept;
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   leaveFirstOpen,
   leaveText,
   linkedFolderRow,
+  markSteps,
   newMind,
   removeDataFolder,
   setLanguage,
@@ -70,16 +71,6 @@ const gettingStarted = (window: Page) =>
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     return (await bridge.getSettings()).device.gettingStarted;
   });
-
-async function markSteps(window: Page, done: object): Promise<void> {
-  await window.evaluate(async (patch) => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const { device } = await bridge.getSettings();
-    await bridge.updateSettings({
-      device: { gettingStarted: { ...device.gettingStarted, ...patch } },
-    });
-  }, done);
-}
 
 /** Words a newcomer shouldn't meet on the first screens: the left column of #763's glossary. */
 const JARGON = [

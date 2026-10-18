@@ -15,7 +15,7 @@ import { promptOf, type ScriptedReply, scriptedModel, scriptedModels } from "../
  */
 
 describe("Text without pointers to an earlier Answer", () => {
-  // protects=a sentence that only sends the reader to an earlier Answer goes, in English and Chinese, from a paragraph or a list; fails_when=it stays in the text; no_claim=every wording a model may use.
+  // protects=a sentence that sends the reader to an earlier Answer, or speaks of one, goes, in English and Chinese, from a paragraph or a list; fails_when=it stays in the text; no_claim=every wording a model may use.
   test.each([
     [
       "## Summary\n\nRole: software engineer [^1]. Notice, holiday and home working are covered in my earlier answer.",
@@ -35,6 +35,14 @@ describe("Text without pointers to an earlier Answer", () => {
     ],
     ["合同期三年[^1]。居家办公的规定见上一条回答。", "合同期三年[^1]。"],
     ["月薪 18,000 元[^1]。这些内容在上一条回答中已经说明。", "月薪 18,000 元[^1]。"],
+    [
+      "GraphST 在三项任务中都优于基线[^4]。我这次没有重新核对前面回答中的犯罪记录条数（321,876 和 108,575）。",
+      "GraphST 在三项任务中都优于基线[^4]。",
+    ],
+    [
+      "It outperforms the baselines [^2]. This summary leaves out what my earlier answer said about the datasets.",
+      "It outperforms the baselines [^2].",
+    ],
   ])("%s", (text, kept) => {
     expect(withoutPointersBack(text)).toEqual({ markdown: kept, left: 1 });
   });
