@@ -210,7 +210,7 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
     });
     // On by default; turned off here, so the Document waits for Organize.
     const automatic = settings.getByRole("checkbox", {
-      name: /^Organize new and changed Documents automatically/,
+      name: /^Move new Documents into Folders automatically/,
     });
     await expect(automatic).toBeChecked();
     await automatic.uncheck();
