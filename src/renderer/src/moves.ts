@@ -97,12 +97,47 @@ export function foldersMovedFrom(move: FolderMove): string[] {
   return [...new Set(from.filter((id): id is string => id !== null && id !== move.folderId))];
 }
 
+/** The names of these Folders, for the refusal when one is gone by the time an undo puts something back in it. */
+export function namesOfFolders(
+  library: LibrarySnapshot | null,
+  ids: readonly (string | null)[],
+): Map<string, string> {
+  const wanted = new Set(ids);
+  return new Map(
+    (library?.groups ?? [])
+      .filter((group) => wanted.has(group.id))
+      .map((group) => [group.id, group.name]),
+  );
+}
+
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-interface Names {
-  minds: readonly Mind[];
-  documents: readonly Document[];
-  conversations?: readonly Conversation[];
+export interface Names {
+  minds: readonly Pick<Mind, "id" | "title" | "autoTitle">[];
+  documents: readonly Pick<Document, "id" | "name">[];
+  conversations?: readonly Pick<Conversation, "id" | "title" | "autoTitle">[];
+}
+
+/**
+ * `names` kept to what a line about these items says: the one item, by the fields its name is
+ * made from, when there is one, and none when it says only how many. A line made from the result
+ * holds nothing of the lists the names were found in.
+ */
+export function namesOfMoving(items: MoveItems, names: Names): Names {
+  const { mindIds, documentIds, conversationIds } = itemsOf(items);
+  const one = mindIds.length + documentIds.length + conversationIds.length === 1;
+  const mind = one ? names.minds.find((each) => each.id === mindIds[0]) : undefined;
+  const document = one ? names.documents.find((each) => each.id === documentIds[0]) : undefined;
+  const conversation = one
+    ? names.conversations?.find((each) => each.id === conversationIds[0])
+    : undefined;
+  return {
+    minds: mind ? [{ id: mind.id, title: mind.title, autoTitle: mind.autoTitle }] : [],
+    documents: document ? [{ id: document.id, name: document.name }] : [],
+    conversations: conversation
+      ? [{ id: conversation.id, title: conversation.title, autoTitle: conversation.autoTitle }]
+      : [],
+  };
 }
 
 /** What moves, as the line and the Edit menu say it: one by its name, several by how many of what. */
