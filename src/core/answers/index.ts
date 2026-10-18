@@ -1636,7 +1636,7 @@ export function createAnswers(options: AnswersOptions) {
       const focusedId = input.assistant?.focused?.mindId ?? null;
       // A new piece fills the empty Mind the User is in rather than making another (#1109).
       const route =
-        routed?.newMind && minds && focusedId && minds.read(focusedId, holdsNothing)
+        routed?.fillsEmpty && minds && focusedId && minds.read(focusedId, holdsNothing)
           ? { ...routed, newMind: false }
           : routed;
       const requested =

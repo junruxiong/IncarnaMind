@@ -26,6 +26,8 @@ export interface RequestRoute {
   newMind: boolean;
   /** The last Answer goes into a new Mind as it is: its text, Citations and scope. */
   fromAnswer?: true;
+  /** A piece, or the last Answer, fills the empty Mind the User is in rather than making another. */
+  fillsEmpty?: true;
 }
 
 // Never a doubt: "I mean write a summary…", "no, keep it shorter", "帮我润色一下这段".
@@ -259,11 +261,13 @@ function plainKind(
 
 export function routeRequest(question: string, context: RequestContext): RequestRoute {
   const plain = plainKind(question, context);
-  if (plain === "as-a-mind") return { kind: "write", newMind: true, fromAnswer: true };
+  if (plain === "as-a-mind") {
+    return { kind: "write", newMind: true, fromAnswer: true, fillsEmpty: true };
+  }
   const kind = plain === "piece" ? "write" : (plain ?? "unclear");
   const newMind =
     kind === "write" &&
     !NAMES_A_MIND.test(question) &&
     (plain === "piece" || NEW_MIND.test(question.toLocaleLowerCase()));
-  return { kind, newMind };
+  return newMind && plain === "piece" ? { kind, newMind, fillsEmpty: true } : { kind, newMind };
 }
