@@ -564,31 +564,23 @@ describe("exporting a Mind", () => {
       expect(name.length).toBeLessThanOrEqual(123);
     });
 
-    test("a Mind of Notes added from an Answer is named by the Question, not the Answer's first line (#769)", async () => {
+    test("a Mind of Notes added from an Answer is named by their first line, never by the instruction that gave them (#1174)", async () => {
       const { core, mind } = await setUp("");
       await core.addToNote({
         mindId: mind.id,
         blocks: [
-          {
-            type: "paragraph",
-            content: [
-              {
-                type: "text",
-                text: "The employee gets 27 days of paid holiday per year, plus bank holidays.",
-              },
-            ],
-          },
+          { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Summary" }] },
+          { type: "paragraph", content: [{ type: "text", text: "The parties agree to terms." }] },
         ],
         origin: {
           from: messageReference("conversation-1", "answer-1"),
-          question:
-            "How many days of holiday does the employee get, and how much notice after probation?",
+          question: "Make the summary longer.",
         },
         model: null,
       });
 
       expect((await core.previewMindExport(mind.id, { format: "docx" })).fileName).toBe(
-        "How many days of holiday does the employee get.docx",
+        "Summary.docx",
       );
     });
   });

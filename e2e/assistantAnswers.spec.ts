@@ -278,9 +278,9 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   await pointAndClick(window, shown.getByTestId("answer-add-to"));
   await pointAndClick(window, window.getByTestId("add-to-option").last());
   await expect(shown.getByTestId("answer-added")).toContainText(
-    "Made the Mind “When do spring tides happen” from this Answer",
+    "Made the Mind “Your Documents answer this” from this Answer",
   );
-  const tab = window.getByTestId("mind-tab").filter({ hasText: "When do spring tides happen" });
+  const tab = window.getByTestId("mind-tab").filter({ hasText: "Your Documents answer this" });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   const made = window.getByTestId("mind-editor");
   await expect(made.locator('[data-proposal="insert"]')).toHaveCount(2);
@@ -485,7 +485,7 @@ test("the ⋯ menu adds the last Answer to a new Mind and clears the conversatio
   await askInAssistant(window, "When do spring tides happen?");
   await pointAndClick(window, more);
   await pointAndClick(window, window.getByTestId("assistant-menu-last-to-new-mind"));
-  const tab = window.getByTestId("mind-tab").filter({ hasText: "When do spring tides happen" });
+  const tab = window.getByTestId("mind-tab").filter({ hasText: "Your Documents answer this" });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   await expect(window.getByTestId("mind-editor").locator('[data-proposal="insert"]')).toHaveCount(
     2,

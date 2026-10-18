@@ -537,9 +537,8 @@ export function createChecks(options: ChecksOptions) {
 
   const checkWritten = createWrittenCheck({
     ...options,
-    allowed: ({ provider }) =>
-      provider.service === null ||
-      options.consent.status("checks", provider.service) === "accepted",
+    prepare: (answer) =>
+      prepareQuietly({ providerId: answer.provider.id, modelId: answer.modelId }),
     claimCheck,
     scopeOf: (mindId) => scopeOf(mindId, false, options.originalOf(mindId) ?? undefined),
     citedNow,
