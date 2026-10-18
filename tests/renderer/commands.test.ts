@@ -386,7 +386,7 @@ describe("the registry", () => {
   });
 
   test("doesn't run a command that isn't enabled, and returns what can undo one that ran", async () => {
-    const undo = { message: "Did it", undo: async () => undefined };
+    const undo = { said: () => "Did it", undo: async () => undefined };
     const stops = [
       commands.register({
         ...base,

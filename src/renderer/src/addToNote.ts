@@ -44,8 +44,6 @@ import { core } from "./core";
 import { flashBlocks } from "./editor/blockOrigins";
 import { asOneStep, offerEditorUndo } from "./editor/editorUndo";
 import { notePlace } from "./editor/notePlace";
-import { translateNow as t } from "./i18n";
-import { saidInLine } from "./lineNames";
 import { useAppStore } from "./store";
 import { answerUndoPlace, useUndo } from "./undo";
 
@@ -63,7 +61,7 @@ export interface AddedAnswer {
 /** The Mind's name, which an unnamed Mind is about to take from the first line of what goes in (the core names it a moment after the Note is in). */
 const nameOfMind = (mindId: string, blocks: readonly NodeJSON[]) => {
   const mind = useAppStore.getState().minds.find((each) => each.id === mindId);
-  return (mind && mindName(mind)) || cutTitle(firstLineOfBlocks(blocks)) || t("mind.untitled");
+  return (mind && mindName(mind)) || cutTitle(firstLineOfBlocks(blocks));
 };
 
 const originOf = ({ answer }: AddedAnswer): BlockOrigin => ({
@@ -137,9 +135,10 @@ async function addToReadMind(added: AddedAnswer, mindId: string): Promise<boolea
       },
     ])
     .catch(useAppStore.getState().reportError);
+  const mind = nameOfMind(mindId, added.blocks);
   offerEditorUndo(
     editor,
-    t("answer.added", { mind: nameOfMind(mindId, added.blocks) }),
+    (t) => t("answer.added", { mind: mind || t("mind.untitled") }),
     answerUndoPlace(added.answer.id),
   );
   return true;
@@ -153,8 +152,9 @@ async function addToOtherMind(added: AddedAnswer, mindId: string, openIt: boolea
     origin: originOf(added),
     model: added.answer.model,
   });
+  const mind = nameOfMind(mindId, added.blocks);
   useUndo.getState().push({
-    ...saidInLine(t, (t) => t("answer.added", { mind: nameOfMind(mindId, added.blocks) })),
+    said: (t) => t("answer.added", { mind: mind || t("mind.untitled") }),
     undo: () => core.undoAddToNote({ mindId, blockIds }),
     shownAt: answerUndoPlace(added.answer.id),
   });
@@ -196,8 +196,9 @@ async function addToNewMind(added: AddedAnswer): Promise<void> {
   const mind = await newMindFor(added);
   await putIn(mind.id, added, true);
   await openBeside(mind.id);
+  const name = nameOfMind(mind.id, added.blocks);
   useUndo.getState().push({
-    ...saidInLine(t, (t) => t("answer.addedToNew", { mind: nameOfMind(mind.id, added.blocks) })),
+    said: (t) => t("answer.addedToNew", { mind: name || t("mind.untitled") }),
     undo: () => core.deleteMind(mind.id),
     shownAt: answerUndoPlace(added.answer.id),
   });
@@ -224,8 +225,9 @@ export async function openTable(added: AddedAnswer): Promise<void> {
       await core.deleteMind(mind.id);
       return;
     }
+    const name = nameOfMind(mind.id, added.blocks);
     useUndo.getState().push({
-      ...saidInLine(t, (t) => t("answer.tableOpened", { mind: nameOfMind(mind.id, added.blocks) })),
+      said: (t) => t("answer.tableOpened", { mind: name || t("mind.untitled") }),
       undo: () => core.deleteMind(mind.id),
       shownAt: answerUndoPlace(added.answer.id),
     });
