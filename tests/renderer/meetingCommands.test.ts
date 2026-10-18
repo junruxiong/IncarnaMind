@@ -263,8 +263,8 @@ describe("Delete audio (#609)", () => {
     expect(labelOf(deleteAudio(), IN_MIND, en)).toBe("Delete audio");
     expect(labelOf(deleteAudio(), IN_MIND, zh)).toBe("删除音频");
     expect(deleteAudio().reversible).toEqual({ confirm: "meetings.audio.confirm" });
-    expect(en("meetings.audio.confirm")).toContain("It can’t be brought back");
-    expect(zh("meetings.audio.confirm")).toContain("无法恢复");
+    expect(en("meetings.audio.confirm")).toContain("for good");
+    expect(zh("meetings.audio.confirm")).toContain("永久删除");
   });
 
   test("is offered while Meetings are on, or in a Meeting's Mind once they are off", () => {
