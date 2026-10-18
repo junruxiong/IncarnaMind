@@ -922,7 +922,9 @@ export type MindProblem =
     }
   | { kind: "local-mode" | "not-ready" }
   | { kind: "model"; mindId: string; message: string }
-  | { kind: "copy" | "new-version"; mindId: string; text: string };
+  | { kind: "copy" | "new-version"; mindId: string; text: string }
+  /** A chart of a table already in the Mind (#1091): "several" tables, and the cursor in none. */
+  | { kind: "no-chart"; mindId: string; problem: ChartProblem | "several" };
 
 /**
  * Where the assistant writes next in a Mind, as its changes come in (#202):
@@ -938,16 +940,16 @@ export interface MindWriting {
 }
 
 /**
- * What a call of a Minds' Tool did (#202): the changes it proposed in one
- * Mind, which wait there for the User to accept or reject them.
- */
-/**
  * Why a chart the User asked the assistant for wasn't drawn (#1091): no table to draw it from,
  * no column of numbers, one column for a scatter chart, or figures with no Citation and no
  * calculation.
  */
 export type ChartProblem = "noTable" | "noNumbers" | "needsTwo" | "uncited";
 
+/**
+ * What a call of a Minds' Tool did (#202): the changes it proposed in one
+ * Mind, which wait there for the User to accept or reject them.
+ */
 export interface MindChange {
   mindId: string;
   /** The call made the Mind. */

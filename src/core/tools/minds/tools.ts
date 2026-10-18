@@ -36,6 +36,14 @@ import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { askedFor, waitsForUser } from "../../../shared/askedChanges";
 import { setOrigins } from "../../../shared/blockOrigins";
+import {
+  type ChartData,
+  chartFromTable,
+  gridOfTable,
+  readChart,
+  sameChartData,
+} from "../../../shared/charts";
+import type { PlacedFigure } from "../../../shared/figureMarkers";
 import { translate } from "../../../shared/i18n";
 import { looksLikeTable } from "../../../shared/markdownTables";
 import {
@@ -183,6 +191,8 @@ export interface MindToolsOptions {
   lastAnswer: { blocks: NodeJSON[]; origin: BlockOrigin; folderId: string | null } | null;
   /** The language the Answer is written in, which the model is told to ask the User in. */
   language: Language;
+  /** The figure calculate recorded for a marker of this Answer ("[=2]"); null for none. */
+  figure(marker: number): PlacedFigure | null;
   /**
    * The Mind this Answer wrote when first written, written again from every Document (#1149):
    * create_mind or add_to_mind puts its new text in place of what it wrote there, as one change,
@@ -1348,7 +1358,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         said: "No chart was drawn: content holds no table. Say so in your reply; to chart figures, write them as a cited table with chart.",
       };
     }
-    const calculated = markdown === null ? undefined : calculatedCells(markdown);
+    const calculated =
+      markdown === null
+        ? () => false
+        : calculatedCells(markdown, (marker) => options.figure(marker));
     const drawn = chartOfTable(table, tableId, asked, options.language, calculated);
     if ("problem" in drawn) return { problem: drawn.problem, said: drawn.why };
     minds.edit(writer.mind.id, (note) => {
@@ -1360,7 +1373,6 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     return { said: "IncarnaMind drew the chart from the table, right after it." };
   };
 
-  // The table the User's selection is in, or the Mind's only one.
   const chartExisting = (toolCallId: string, mind: ChangeableMind, asked: ChartAsked): string => {
     const table = minds.read(mind.id, (note) => {
       const tables = topLevelBlocks(note).filter((each) => each.nodeName === "table");
@@ -1368,22 +1380,55 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const picked =
         tables.find((each) => selected.has(idOf(each))) ??
         (tables.length === 1 ? tables[0] : undefined);
-      return picked ? { id: idOf(picked), node: nodeOf(picked) } : null;
+      return { picked: picked ? { id: idOf(picked), node: nodeOf(picked) } : null, tables };
     });
-    if (!table) {
-      return `No chart was drawn: “${mind.name}” has ${minds.read(mind.id, (note) => topLevelBlocks(note).some((each) => each.nodeName === "table")) ? "more than one table, and the User's cursor is in none" : "no table"}. Say so, and ask them to put the cursor in the table to chart.`;
+    if (!table.picked) {
+      const several = table.tables.length > 1;
+      throw new Refusal(
+        { kind: "no-chart", mindId: mind.id, problem: several ? "several" : "noTable" },
+        `No chart was drawn: “${mind.name}” has ${several ? "more than one table, and the User's cursor is in none" : "no table"}. Say so, and ask them to put the cursor in the table to chart.`,
+      );
     }
-    const drawn = chartOfTable(table.node, table.id, asked, options.language);
+    const drawn = chartOfTable(table.picked.node, table.picked.id, asked, options.language, null);
     if ("problem" in drawn) {
-      return `${drawn.why} The User can still chart it with “Chart from table” in the table's menu.`;
+      throw new Refusal({ kind: "no-chart", mindId: mind.id, problem: drawn.problem }, drawn.why);
     }
     const writer = writerFor(mind, null, false);
-    writer.anchor = table.id;
+    writer.anchor = table.picked.id;
     writeMore(writer, [drawn.chart]);
     const change = changeOf(writer, false);
     options.changed(toolCallId, change);
     return `Proposed a chart of the table in “${mind.name}”, right after it. ${outcomeOf(mind, change.request)}`;
   };
+
+  // The check marks the Citations of the tables it read: their charts, drawn before, would read
+  // as made from another table.
+  const redrawCharts = (mindId: string, tableIds: readonly string[]) =>
+    minds.edit(mindId, (note) => {
+      const blocks = topLevelBlocks(note);
+      for (const element of blocks) {
+        if (element.nodeName !== CHART_NODE) continue;
+        const chart = readChart(element.getAttributes());
+        const { source } = chart;
+        if (source.kind !== "table" || !source.blockId || !tableIds.includes(source.blockId)) {
+          continue;
+        }
+        const table = blocks.find((each) => idOf(each) === source.blockId);
+        const fresh =
+          table &&
+          chartFromTable(gridOfTable(nodeOf(table)), {
+            blockId: source.blockId,
+            title: chart.title,
+            language: options.language,
+          });
+        if (fresh && !sameChartData(fresh.data, chart.data)) {
+          (element as unknown as Y.XmlElement<{ data: ChartData }>).setAttribute(
+            "data",
+            fresh.data,
+          );
+        }
+      }
+    });
 
   // Not while markers `cite` hadn't recorded are still to get their Citations: `settle` writes the Blocks again.
   const checkWritten = async (
@@ -1416,6 +1461,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       );
     }
     if (checked) {
+      redrawCharts(mindId, ids);
       const { request, cited, sent, failed, stop } = checked;
       written.change = {
         ...written.change,
@@ -1453,6 +1499,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         console.warn(
           `Citations recorded after a Mind was written couldn't go in: the text reads as ${blocks.length} Blocks, ${each.ids.length} were written (Mind ${each.mindId}, call ${toolCallId}).`,
         );
+        // Its chart would draw figures whose Citations never went in.
+        if (each.chart) options.changed(toolCallId, { ...each.change(), chartNotDrawn: "uncited" });
         continue;
       }
       minds.edit(each.mindId, (note) => {
@@ -1799,8 +1847,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         content: contentProperty,
         ...answerProperty,
       },
-      // Content is left out only for a chart of a table already in the Mind.
-      required: [],
+      required: options.lastAnswer ? [] : ["content"],
       additionalProperties: false,
     },
     provider: PROVIDER,
@@ -1824,7 +1871,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     },
     async call(input, { toolCallId, signal, canCallAgain }) {
       const asked = chartAsked(input.chart);
-      if (asked && input.content === undefined && input.answer !== true) {
+      if (asked && (input.content === undefined || input.content === "") && input.answer !== true) {
         return chartExisting(toolCallId, found(targetOf(input)), asked);
       }
       const given = givenIn(input) ?? text(input.content, "content");

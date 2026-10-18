@@ -22,7 +22,6 @@ export interface ChangeCounts {
 const counted = (t: Translate, count: number, what: "tables" | "paragraphs" | "charts") =>
   count === 1 ? t(`mindChanges.count.${what}.one`) : t(`mindChanges.count.${what}`, { count });
 
-/** The tables added, and the charts with them (#1091): "a table and a chart", "a chart". */
 function tablesText(t: Translate, row: ChangeCounts): string {
   const charts = row.charts ?? 0;
   if (charts === 0) return counted(t, row.tables, "tables");

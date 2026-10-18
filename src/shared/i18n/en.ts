@@ -4629,6 +4629,13 @@ export const en = {
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
   "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
   "mindCall.failed.uncited": "Didn't add to “{mind}”: its sources weren't cited",
+  "mindCall.failed.noChart.noTable": "No chart: “{mind}” has no table",
+  "mindCall.failed.noChart.several":
+    "No chart: “{mind}” has more than one table, and your cursor is in none",
+  "mindCall.failed.noChart.noNumbers": "No chart: the table in “{mind}” has no column of numbers",
+  "mindCall.failed.noChart.needsTwo": "No chart: a scatter chart needs two columns of numbers",
+  "mindCall.failed.noChart.uncited":
+    "No chart: some figures in the table in “{mind}” have no Citation",
   "mindCall.failed.newMind": "Didn't add to “{mind}”: a new Mind was asked for",
   "answer.writtenFrom": "From {count} of your {total} Documents (this Mind's scope)",
   "answer.writtenFrom.useAll": "Use all",

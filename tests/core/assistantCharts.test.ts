@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { markdownToBlocks } from "../../src/core/answers/markdown";
 import { calculatedCells, chartOfTable } from "../../src/core/tools/minds/charts";
 import { type ChartAttributes, readChart } from "../../src/shared/charts";
+import type { PlacedFigure } from "../../src/shared/figureMarkers";
 import { pendingProposals } from "../../src/shared/proposals";
 import { askAssistant, changesIn, lastResult } from "../helpers/assistant";
 import { setUpWithDocuments, shownPassages } from "../helpers/citations";
@@ -271,7 +272,7 @@ describe("A chart only draws what is cited (#1091 review)", { timeout: 60_000 },
 });
 
 describe("A chart of a table already in the Mind (#1091 review)", { timeout: 60_000 }, () => {
-  // protects="chart this table" tells the model to give chart alone, and charts the table there, right after it, without writing it again, as a change of its own; fails_when=the table is written a second time, or the chart goes elsewhere; no_claim=that a real model gives chart alone.
+  // protects="chart this table" tells the model to give chart with no content, and charts the table there, right after it, without writing it again, as a change of its own; fails_when=the table is written a second time, or the chart goes elsewhere; no_claim=that a real model gives chart that way.
   test("“chart this table” charts the one there, without a second table", async () => {
     const systems: string[] = [];
     const first = charting({ kind: "bar", title: "Revenue" }, []);
@@ -281,7 +282,12 @@ describe("A chart of a table already in the Mind (#1091 review)", { timeout: 60_
       return called(call, "add_to_mind")
         ? { text: "" }
         : {
-            calls: [{ tool: "add_to_mind", input: { chart: { kind: "line", title: "Revenue" } } }],
+            calls: [
+              {
+                tool: "add_to_mind",
+                input: { chart: { kind: "line", title: "Revenue" }, content: "" },
+              },
+            ],
           };
     });
     const { core, mind, client } = await setUp(model);
@@ -303,25 +309,124 @@ describe("A chart of a table already in the Mind (#1091 review)", { timeout: 60_
   });
 });
 
-describe("A figure from calculate backs a chart value (#1091 review)", () => {
-  // protects=a cell holding a figure calculate gave counts as backed, so a computed series charts, while the same figures typed draw nothing; fails_when=a checked calculation is refused, or a typed one drawn; no_claim=how calculate checks its figures (#439).
-  test("calculated cells chart, typed ones don't", () => {
-    const written = ["| Quarter | Growth |", "|---|---|", "| Q2 | [=1] |", "| Q3 | [=2] |"].join(
-      "\n",
-    );
-    const calculated = calculatedCells(written);
-    expect([calculated(1, 1), calculated(2, 1), calculated(0, 1), calculated(1, 0)]).toEqual([
-      true,
-      true,
-      false,
-      false,
+describe("A chart of the User's own table (#1182 review)", { timeout: 60_000 }, () => {
+  const OWN_TABLE = ["| Quarter | Revenue |", "|---|---|", "| Q1 | 10 |", "| Q2 | 12 |"].join("\n");
+  const chartThisTable = scriptedModel(
+    (call): ScriptedReply =>
+      called(call, "add_to_mind")
+        ? { text: "Here it is." }
+        : {
+            calls: [{ tool: "add_to_mind", input: { chart: { title: "Revenue" }, content: "" } }],
+          },
+  );
+
+  // protects="chart this table" charts the User's own uncited table, as "Chart from table" would (CTO decision); fails_when=it is refused for want of Citations; no_claim=tables the assistant writes, which stay held to their Citations.
+  test("charts the User's own table, uncited", async () => {
+    const { core, mind, client } = await setUpWithDocuments(chartThisTable, [REVENUE]);
+    writeMind(client, [note("Notes."), ...markdownToBlocks(OWN_TABLE)]);
+    await client.settled();
+
+    await askAssistant(core, { text: "chart this table", mindId: mind.id });
+    await client.settled();
+
+    expect(blocksOf(readMind(client)).types).toEqual(["paragraph", "table", "chart"]);
+  });
+
+  // protects=a "chart this table" that can't chart says why on its card, not only to the model; fails_when=the card shows nothing of the refusal; no_claim=the card's look, which the renderer's tests check.
+  test("with two tables and the cursor in neither, its card says so", async () => {
+    const { core, mind, client } = await setUpWithDocuments(chartThisTable, [REVENUE]);
+    writeMind(client, [
+      ...markdownToBlocks(OWN_TABLE),
+      note("Then."),
+      ...markdownToBlocks(OWN_TABLE),
     ]);
+    await client.settled();
+
+    const answer = await askAssistant(core, { text: "chart this table", mindId: mind.id });
+
+    const call = answer.toolCalls.find((each) => each.tool === "add_to_mind");
+    expect(call).toMatchObject({
+      status: "failed",
+      mindProblem: { kind: "no-chart", mindId: mind.id, problem: "several" },
+    });
+    expect(blocksOf(readMind(client)).types).toEqual(["table", "paragraph", "table"]);
+  });
+});
+
+describe("A figure from calculate backs a chart value (#1091 review)", () => {
+  const figure = (value: number, shown: string): PlacedFigure => ({
+    value,
+    shown,
+    show: { language: "en", as: null, decimals: null, scale: null },
+  });
+  const recorded = new Map([
+    [1, figure(0.125, "12.5%")],
+    [2, figure(0.111, "11.1%")],
+  ]);
+  const figureOf = (marker: number) => recorded.get(marker) ?? null;
+
+  // protects=a cell holding a figure calculate recorded counts as backed, so a computed series charts, while a figure typed with a marker calculate never recorded, or with another number beside its marker, draws nothing; fails_when=a checked calculation is refused, or a typed one drawn; no_claim=how calculate checks its figures (#439).
+  test("recorded calculations chart, typed ones don't", () => {
+    const written = [
+      "| Quarter | Growth |",
+      "|---|---|",
+      "| Q2 | [=1] |",
+      "| Q3 | 11.1% [=2] |",
+      "| Q4 | 20.4% [=9] |",
+      "| Q5 | 15% [=1] |",
+    ].join("\n");
+    const calculated = calculatedCells(written, figureOf);
+    expect([1, 2, 3, 4].map((row) => calculated(row, 1))).toEqual([true, true, false, false]);
+    expect([calculated(0, 1), calculated(1, 0)]).toEqual([false, false]);
+
+    const tableOf = (cells: readonly string[]) => {
+      const [table] = markdownToBlocks(
+        [
+          "| Quarter | Growth |",
+          "|---|---|",
+          ...cells.map((cell, at) => `| Q${at + 2} | ${cell} |`),
+        ].join("\n"),
+      );
+      if (!table) throw new Error("No table.");
+      return table;
+    };
+    const asked = { kind: null, title: "Growth" };
+    expect(
+      chartOfTable(
+        tableOf(["12.5%", "11.1%"]),
+        "table",
+        asked,
+        "en",
+        calculatedCells(
+          ["| Quarter | Growth |", "|---|---|", "| Q2 | [=1] |", "| Q3 | [=2] |"].join("\n"),
+          figureOf,
+        ),
+      ),
+    ).toHaveProperty("chart");
+    expect(
+      chartOfTable(
+        tableOf(["20.4%"]),
+        "table",
+        asked,
+        "en",
+        calculatedCells(
+          ["| Quarter | Growth |", "|---|---|", "| Q2 | 20.4% [=9] |"].join("\n"),
+          figureOf,
+        ),
+      ),
+    ).toMatchObject({ problem: "uncited" });
+  });
+
+  // protects="chart this table" charts a table already in the Mind as "Chart from table" does, cited or not (#1182 review, CTO); fails_when=the User's own uncited table is refused; no_claim=the assistant's own tables, which stay held to their Citations.
+  test("a table already in the Mind charts uncited", () => {
     const [table] = markdownToBlocks(
-      ["| Quarter | Growth |", "|---|---|", "| Q2 | 12.5% |", "| Q3 | 11.1% |"].join("\n"),
+      ["| Quarter | Revenue |", "|---|---|", "| Q1 | 10 |", "| Q2 | 12 |"].join("\n"),
     );
     if (!table) throw new Error("No table.");
-    const asked = { kind: null, title: "Growth" };
-    expect(chartOfTable(table, "table", asked, "en", calculated)).toHaveProperty("chart");
-    expect(chartOfTable(table, "table", asked, "en")).toMatchObject({ problem: "uncited" });
+    const asked = { kind: null, title: "Revenue" };
+    expect(chartOfTable(table, "table", asked, "en", null)).toHaveProperty("chart");
+    expect(chartOfTable(table, "table", asked, "en", () => false)).toMatchObject({
+      problem: "uncited",
+    });
   });
 });

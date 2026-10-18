@@ -745,7 +745,6 @@ export interface SourceLine {
   citation: CitationAttributes | null;
 }
 
-/** A Citation's attributes, as a chart keeps them: none of the editor's own (`proposal`). */
 const CITATION_KEYS: readonly (keyof CitationAttributes)[] = [
   "passageId",
   "documentId",
@@ -899,5 +898,11 @@ export function chartFromFigures(
 
 /** Compares what is drawn and where it came from, not how it was stored. */
 export function sameChartData(a: ChartData, b: ChartData): boolean {
-  return JSON.stringify(readChartData(a)) === JSON.stringify(readChartData(b));
+  // The core writes a Citation without the attributes left null, the editor with them: a chart
+  // the assistant drew from a table reads the same as one the User draws from it.
+  const asCompared = (data: ChartData) =>
+    JSON.stringify(readChartData(data), (_, value: unknown) =>
+      value === null ? undefined : value,
+    );
+  return asCompared(a) === asCompared(b);
 }

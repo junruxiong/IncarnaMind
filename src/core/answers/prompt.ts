@@ -165,7 +165,7 @@ export function mindInstructions(offered: boolean, route: RequestRoute | null = 
 function chartLine(newMind: boolean, chart: { kind: ChartKind | null; existing?: true }): string {
   const asked = chart.kind ? `kind "${chart.kind}"` : "no kind, as the User named none";
   if (chart.existing) {
-    return `- This request asks for a chart of a table already in the Mind: call add_to_mind with chart alone, ${asked} and a short title from the User's words, and no content. IncarnaMind draws it from the table the User's cursor is in, or the Mind's only table, right after it: never write the table again.`;
+    return `- This request asks for a chart of a table already in the Mind: call add_to_mind with chart, ${asked} and a short title from the User's words, and content empty. IncarnaMind draws it from the table the User's cursor is in, or the Mind's only table, right after it: never write the table again.`;
   }
   const tool = newMind ? "a new Mind with create_mind" : "the Mind with add_to_mind";
   return `- This request asks for a chart: search and cite the figures, then write them as a table into ${tool}, each cell cited, and give chart with ${asked} and a short title from the User's words. IncarnaMind draws the chart from that table, right after it. Chart only figures the Documents state, or ones calculate gives: for a series they don't state, say you can chart only the figures the Documents state.`;

@@ -81,6 +81,7 @@ for (const [language, request, kind, title, fact] of [
     await expect(chart.getByTestId("chart-plot")).toHaveAttribute("data-kind", kind);
     await expect(chart.getByTestId("chart-point")).toHaveCount(4);
     await expect(chart.getByTestId("chart-source")).toContainText("Annual report");
+    await expect(chart.getByTestId("chart-changed")).toHaveCount(0);
     await expect(editor.getByTestId("applied-line").getByTestId("applied-count")).toHaveText(fact);
 
     await editor.focus();

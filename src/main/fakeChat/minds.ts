@@ -24,7 +24,8 @@
  * Mind, or the empty one it is asked from, so what it was written from shows (#1149).
  * "Make a bar chart of revenue by quarter" (画一个各季度收入的柱状图; "line chart",
  * 折线图) searches, cites each quarter's revenue, and adds them as a table with its
- * chart (#1091).
+ * chart (#1091); "Make a bar chart of rent by lease" does the same with each unit's
+ * monthly rent, so Use all can draw it again from every lease.
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
@@ -88,6 +89,8 @@ const SUMMARY_PAGE =
 const LONGER = /\blonger\b|长一点|更长/i;
 const REVENUE_CHART = /\bchart of revenue by quarter\b|各季度收入的(?:柱状图|折线图)/i;
 const QUARTER_REVENUE = /Revenue in (Q\d) was (€\d+ million)/g;
+const RENT_CHART = /\bchart of rent by lease\b/i;
+const UNIT_RENT = /The monthly rent for (unit \d+) is (€[\d,]+)/g;
 const LEASES_SUMMARY = /\bwrite a summary of my leases\b|根据我的租约写一份总结/i;
 /** A rewrite of the User's text (改写), which Edit with AI's scripted model writes anew. */
 const REWRITE = /\brewrite\b|改写/i;
@@ -150,6 +153,7 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     return { text: firstSentence(added) };
   }
   if (REVENUE_CHART.test(question)) return revenueChart(prompt, question);
+  if (RENT_CHART.test(question)) return tableChart(prompt, RENT);
   if (LEASES_SUMMARY.test(question)) {
     const made = lastResult(prompt, "create_mind") ?? lastResult(prompt, "add_to_mind");
     if (made !== undefined) return { text: firstSentence(made) };
@@ -211,21 +215,48 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
   return { tool: "create_mind", input: { title, content } };
 }
 
+interface ChartedFigures {
+  query: string;
+  pattern: RegExp;
+  header: string;
+  title: string;
+  kind: "bar" | "line";
+}
+
+const RENT: ChartedFigures = {
+  query: "monthly rent",
+  pattern: UNIT_RENT,
+  header: "| Lease | Rent |",
+  title: "Rent by lease",
+  kind: "bar",
+};
+
 function revenueChart(prompt: Prompt, question: string): Reply {
+  const chinese = /\p{Script=Han}/u.test(question);
+  return tableChart(prompt, {
+    query: "revenue by quarter",
+    pattern: QUARTER_REVENUE,
+    header: chinese ? "| 季度 | 收入 |" : "| Quarter | Revenue |",
+    title: chinese ? "各季度收入" : "Revenue by quarter",
+    kind: /\bline chart\b|折线图/i.test(question) ? "line" : "bar",
+  });
+}
+
+function tableChart(prompt: Prompt, figures: ChartedFigures): Reply {
   const added = lastResult(prompt, "add_to_mind");
   if (added !== undefined) return { text: firstSentence(added) };
   const [searched] = toolResults(prompt, "search_documents");
-  if (searched === undefined) {
-    return { tool: "search_documents", input: { query: "revenue by quarter" } };
-  }
-  const found = passagesIn(searched).flatMap((passage) =>
-    [...passage.text.matchAll(QUARTER_REVENUE)].map((match) => ({
-      passage: passage.id,
-      quarter: match[1] ?? "",
-      revenue: match[2] ?? "",
-      quote: match[0],
-    })),
-  );
+  if (searched === undefined) return { tool: "search_documents", input: { query: figures.query } };
+  const found = passagesIn(searched)
+    .flatMap((passage) =>
+      [...passage.text.matchAll(figures.pattern)].map((match) => ({
+        passage: passage.id,
+        label: match[1] ?? "",
+        figure: match[2] ?? "",
+        quote: match[0],
+      })),
+    )
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
   if (toolResults(prompt, "cite").length === 0) {
     const citations = found.map((each, index) => ({
       marker: index + 1,
@@ -234,20 +265,13 @@ function revenueChart(prompt: Prompt, question: string): Reply {
     }));
     return { tool: "cite", input: { citations } };
   }
-  const chinese = /\p{Script=Han}/u.test(question);
   const table = [
-    chinese ? "| 季度 | 收入 |" : "| Quarter | Revenue |",
+    figures.header,
     "|---|---|",
-    ...found.map((each, index) => `| ${each.quarter} | ${each.revenue} [^${index + 1}] |`),
+    ...found.map((each, index) => `| ${each.label} | ${each.figure} [^${index + 1}] |`),
   ].join("\n");
   return {
     tool: "add_to_mind",
-    input: {
-      chart: {
-        kind: /\bline chart\b|折线图/i.test(question) ? "line" : "bar",
-        title: chinese ? "各季度收入" : "Revenue by quarter",
-      },
-      content: table,
-    },
+    input: { chart: { kind: figures.kind, title: figures.title }, content: table },
   };
 }

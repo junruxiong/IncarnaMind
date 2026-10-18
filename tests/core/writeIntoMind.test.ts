@@ -2,6 +2,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
 import { type Core, GENERATED_MARK } from "../../src/core";
+import { askedFor } from "../../src/shared/askedChanges";
 import { readChart } from "../../src/shared/charts";
 import { pendingProposals, proposalRequestOf } from "../../src/shared/proposals";
 import { askAssistant, changesIn, lastResult, mindCalls } from "../helpers/assistant";
@@ -451,7 +452,7 @@ function chartRows(doc: ProseMirrorNode): string[][] {
 }
 
 describe("Use all of a chart asked for (#1091 review)", { timeout: 60_000 }, () => {
-  // protects=a chart asked for over 2 of 7 Documents, written again from all 7 with Use all, gets its chart drawn again from the new cited table, the table and the chart one change; rejecting it brings back both as they were; fails_when=Use all leaves the old chart, drops it, or Undo can't bring back the 2-Document table and chart; no_claim=the window's own Undo step.
+  // protects=a chart asked for over 2 of 7 Documents, written again from all 7 with Use all, gets its chart drawn again from the new cited table, the table and the chart one change the User asked for, so it applies at once; rejecting it brings back both as they were; fails_when=Use all leaves the old chart, drops it, waits as the User's edited text would, or Undo can't bring back the 2-Document table and chart; no_claim=the window's own Undo step.
   test("Use all redraws the chart from the rewritten table, and rejecting brings both back", async () => {
     const model = scriptedModel(chartOfShown);
     const { core, mind, scope, client } = await inAFolderOfTwo(model);
@@ -474,6 +475,7 @@ describe("Use all of a chart asked for (#1091 review)", { timeout: 60_000 }, () 
     expect(new Set(pendingProposals(client.blocks).map((each) => each.request))).toEqual(
       new Set([changes[0]?.request]),
     );
+    expect(askedFor(client.doc, changes[0]?.request ?? "")).toBe(true);
     await resolveChanges(client, "reject");
     expect(shownWithChanges(client)).toEqual(fromTwo);
     expect(chartRows(readMind(client))).toEqual([["Unit 1", "Unit 2"]]);

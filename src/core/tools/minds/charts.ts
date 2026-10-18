@@ -11,6 +11,7 @@ import {
   gridOfTable,
   kindFits,
 } from "../../../shared/charts";
+import { FIGURE_MARKER, numberBefore, type PlacedFigure } from "../../../shared/figureMarkers";
 import { translate } from "../../../shared/i18n";
 import type { NodeJSON } from "../../answers/blocks";
 import { CHART_NODE, type ChartProblem } from "../../api";
@@ -27,7 +28,7 @@ export const chartProperty = {
   chart: {
     type: "object",
     description:
-      "Only when the User asks for a chart: IncarnaMind draws it from the last table in content and puts it right after that table, in the same change. Write the figures as that table, each cell cited; chart only figures the Documents state, or ones calculate gives. Give it before content. To chart a table already in the Mind, give chart alone, with no content: IncarnaMind charts the table the User's cursor is in, or the Mind's only table.",
+      "Only when the User asks for a chart: drawn from the last table in content, right after it. Give it before content. For a table already in the Mind, give it with content empty.",
     properties: {
       kind: {
         type: "string",
@@ -55,14 +56,15 @@ export function chartAsked(value: unknown): ChartAsked | null {
   };
 }
 
-// A figure calculate gave, as content writes it: "[=2]".
-const CALCULATED = /\[=\d+\]/;
-
 /**
  * Which slots of the last table in `markdown` hold a figure from calculate, by row and column on
- * its grid, the heading row 0.
+ * its grid, the heading row 0: each of its markers ("[=2]") is one `figureOf` recorded, with no
+ * other number written beside it.
  */
-export function calculatedCells(markdown: string): (row: number, column: number) => boolean {
+export function calculatedCells(
+  markdown: string,
+  figureOf: (marker: number) => PlacedFigure | null,
+): (row: number, column: number) => boolean {
   let table: string[] = [];
   let open: string[] = [];
   for (const line of markdown.split("\n")) {
@@ -76,20 +78,31 @@ export function calculatedCells(markdown: string): (row: number, column: number)
   const rows = table
     .filter((line) => !/^\|?\s*:?-{3,}/.test(line))
     .map((line) => line.replace(/^\|/, "").replace(/\|$/, "").split("|"));
-  return (row, column) => CALCULATED.test(rows[row]?.[column] ?? "");
+  const calculated = (cell: string): boolean => {
+    const markers = [...cell.matchAll(FIGURE_MARKER)];
+    return (
+      markers.length > 0 &&
+      markers.every((match) => {
+        const figure = figureOf(Number(match[1]));
+        return figure !== null && numberBefore(cell.slice(0, match.index), figure)?.same !== false;
+      })
+    );
+  };
+  return (row, column) => calculated(rows[row]?.[column] ?? "");
 }
 
 /**
  * The chart Block of `table`, whose id is `tableId`; or, when none may be drawn, why, and what
- * to tell the model, which keeps the table. Every value it draws must be cited, or come from
- * calculate (`calculated`): a figure the model wrote with neither isn't drawn.
+ * to tell the model, which keeps the table. A table the model writes (`calculated` given) draws
+ * only values that are cited or come from calculate; a table already in the Mind is charted as
+ * "Chart from table" charts it.
  */
 export function chartOfTable(
   table: NodeJSON,
   tableId: string,
   asked: ChartAsked,
   language: Language,
-  calculated: (row: number, column: number) => boolean = () => false,
+  calculated: ((row: number, column: number) => boolean) | null,
 ): { chart: NodeJSON } | { problem: ChartProblem; why: string } {
   const chart = chartFromTable(gridOfTable(table), {
     blockId: tableId,
@@ -109,14 +122,16 @@ export function chartOfTable(
       why: `No chart was drawn: ${translate(language, "chart.scatter.needsTwo")}. The table stays; say that in your reply, in those words.`,
     };
   }
-  const unbacked = [...chart.data.rows, ...chart.data.cutRows]
-    .flatMap((row) => row.values)
-    .filter(
-      (value) =>
-        value?.value != null &&
-        !value.citation &&
-        !(value.from.kind === "cell" && calculated(value.from.row, value.from.column)),
-    ).length;
+  const unbacked = calculated
+    ? [...chart.data.rows, ...chart.data.cutRows]
+        .flatMap((row) => row.values)
+        .filter(
+          (value) =>
+            value?.value != null &&
+            !value.citation &&
+            !(value.from.kind === "cell" && calculated(value.from.row, value.from.column)),
+        ).length
+    : 0;
   if (unbacked > 0) {
     return {
       problem: "uncited",

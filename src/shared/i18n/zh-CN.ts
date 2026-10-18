@@ -4452,6 +4452,12 @@ export const zhCN = {
   "mindCall.failed.stopped": "已停止，“{mind}”没有改动",
   "mindCall.failed.noTable": "未能生成表格，因此没有向“{mind}”添加内容",
   "mindCall.failed.uncited": "未添加到“{mind}”：出处没有引用",
+  "mindCall.failed.noChart.noTable": "没有画图表：“{mind}”里没有表格",
+  "mindCall.failed.noChart.several":
+    "没有画图表：“{mind}”里有不止一个表格，而光标不在任何一个表格里",
+  "mindCall.failed.noChart.noNumbers": "没有画图表：“{mind}”里的表格没有数字列",
+  "mindCall.failed.noChart.needsTwo": "没有画图表：散点图需要两列数字",
+  "mindCall.failed.noChart.uncited": "没有画图表：“{mind}”里的表格有些数字没有引用",
   "mindCall.failed.newMind": "未添加到“{mind}”：要的是新的 Mind",
   "answer.writtenFrom": "来自 {count} 个文档（此 Mind 的范围，共 {total} 个）",
   "answer.writtenFrom.useAll": "改用全部",
