@@ -558,7 +558,7 @@ describe("problems", () => {
       ok: false,
       kind: "function",
       message:
-        "VLOOKUP isn’t available; use + - * / ^, SUM, AVERAGE, MIN, MAX, ABS, ROUND, RRI, SQRT.",
+        "VLOOKUP isn't available; use + - * / ^, SUM, AVERAGE, MIN, MAX, ABS, ROUND, RRI, SQRT.",
     });
   });
 
