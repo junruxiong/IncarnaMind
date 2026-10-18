@@ -372,13 +372,13 @@ test("a model that needs 30-day data retention says so with the model's name, an
     await form.getByTestId("provider-use-key").click();
     const result = form.getByTestId("connection-test");
     await expect(result).toContainText(
-      "The key works, but claude-fable-5-1 needs your Anthropic organization to allow 30-day data retention. Choose another model, or use a key from an organization that allows it. · Choose another model",
+      "The key works, but claude-fable-5-1 needs your Anthropic organization to allow 30-day data retention. Choose another model. · Choose another model",
       { timeout: 20_000 },
     );
     await expect(result).not.toContainText("Console");
     await language(window, "zh-CN");
     await expect(result).toContainText(
-      "密钥可用，但 claude-fable-5-1 要求你的 Anthropic 组织开启 30 天数据保留。请换一个模型，或使用已开启此设置的组织的密钥。· 换一个模型",
+      "密钥可用，但 claude-fable-5-1 要求你的 Anthropic 组织开启 30 天数据保留。请换一个模型。· 换一个模型",
     );
     await result.getByTestId("connection-test-choose-model").click();
     await expect(form.getByTestId("provider-model-text")).toBeFocused();
