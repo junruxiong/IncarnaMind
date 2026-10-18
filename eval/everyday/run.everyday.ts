@@ -44,6 +44,7 @@ import { DATED_TEXTS, writeDatedDocuments } from "./dated";
 import { citedClaims } from "./dates";
 import { judgeClaims } from "./judge";
 import { languageRates, type RequestRun, rowRates } from "./rates";
+import { type Asks, type ReaskWatch, watchReasks } from "./reasks";
 import {
   checkCitedSentences,
   type SentenceSupport,
@@ -122,6 +123,8 @@ interface CaseResult {
   usage: AnswerUsage;
   /** The markers the app took out of its Answers because no Citation backed them. */
   droppedMarkers: number;
+  /** How often the app asked the model inside this Answer: again, and once for Citations. */
+  asks: Asks;
   /** A research request: each cited sentence of the reply, as the app's own check judged it; null for the others. */
   support: SentenceSupport[] | null;
   /** A summary: its sentences outside headings that make a claim, and how many carry a Citation; null for the others. */
@@ -226,6 +229,7 @@ async function runCase(
   judge: ReturnType<typeof createAiSdkChatModel>,
   model: string,
   each: EverydayCase,
+  watch: ReaskWatch,
 ): Promise<CaseResult> {
   const { core } = library;
   const started = Date.now();
@@ -305,12 +309,14 @@ async function runCase(
     addedBlocks = ids.flatMap((id, block) => (earlier.has(id) ? [] : [block]));
     before = acceptedTexts(client.doc, new Set());
   }
+  watch.begin(each.firstReply ?? null);
   const answer = await ask(core, {
     text: each.request,
     mindId: mind?.id ?? null,
     conversationId,
     focus,
   });
+  const asks = { ...watch.end() };
   counting();
   const minds = await core.listMinds();
   const names = (id: string) => minds.find((each) => each.id === id)?.title ?? null;
@@ -376,6 +382,7 @@ async function runCase(
     error: answer.status === "failed" ? `${answer.errorKind}: ${answer.errorMessage}` : null,
     usage,
     droppedMarkers,
+    asks,
     support,
     claims: each.summary ? citedClaims(answer.text) : null,
   };
@@ -425,8 +432,10 @@ async function runModel(
   for (const name of ["papers", "reports", "dated"] as const) {
     const wanted = cases.filter((each) => each.library === name);
     if (wanted.length === 0) continue;
+    const watch = watchReasks();
     const library = await openLibrary({
       name: `everyday-${name}`,
+      chatModels: watch.chatModels,
       embedder: createWorkerEmbedder(),
       modelCache: join(config.cacheDir, "models"),
       reranker: createWorkerCrossEncoder(config.rerankOnCpu),
@@ -459,7 +468,7 @@ async function runModel(
         log(`${model} · ${each.id}: ${each.request}`);
         let result: CaseResult;
         try {
-          result = await runCase(library, scoped, judge, model, each);
+          result = await runCase(library, scoped, judge, model, each, watch);
         } catch (error) {
           result = {
             id: each.id,
@@ -474,6 +483,7 @@ async function runModel(
             error: error instanceof Error ? error.message : String(error),
             usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 },
             droppedMarkers: 0,
+            asks: { again: 0, citations: 0 },
             support: null,
             claims: null,
           };
@@ -497,6 +507,37 @@ async function runModel(
 }
 
 const passedRun = (result: CaseResult) => !result.error && result.failures.length === 0;
+
+function asksByGroup(results: readonly CaseResult[]) {
+  const groups = new Map<
+    string,
+    {
+      model: string;
+      language: string;
+      answers: number;
+      again: number;
+      citations: number;
+      unseen: number;
+    }
+  >();
+  for (const each of results) {
+    const key = `${each.model} ${each.language}`;
+    const group = groups.get(key) ?? {
+      model: each.model,
+      language: each.language,
+      answers: 0,
+      again: 0,
+      citations: 0,
+      unseen: 0,
+    };
+    group.answers++;
+    if (each.asks.again > 0) group.again++;
+    if (each.asks.citations > 0) group.citations++;
+    if (each.failures.some((failure) => failure.kind === "unseen-attempt")) group.unseen++;
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
 
 function report(
   results: readonly CaseResult[],
@@ -617,6 +658,17 @@ function report(
     `The app took out ${results.reduce((total, each) => total + each.droppedMarkers, 0)} markers that nothing backed, in ${results.filter((each) => each.droppedMarkers > 0).length} Answers.`,
     "",
     `${shaped} of ${results.length} Answers show a Tool's call written as text.`,
+    "",
+    "## Asked again inside the turn",
+    "",
+    "The app asks the model again when a reply claims a change no Tool made or a request to write wrote nothing, and once for the Citations of an Answer. The User reads none of those tries: the Answer says nothing of an earlier try. The `reask-` requests put a reply of their own in place of the model's first, so each of them is asked again.",
+    "",
+    "| Model | Language | Answers | Asked again | Asked for Citations | Say something of an earlier try |",
+    "|---|---|---|---|---|---|",
+    ...asksByGroup(results).map(
+      (group) =>
+        `| ${group.model} | ${group.language} | ${group.answers} | ${group.again} | ${group.citations} | ${group.unseen} |`,
+    ),
     "",
     "## Each run",
     "",

@@ -21,6 +21,8 @@
  *   was (#1061).
  * - **The Question asked is the Answer's subject**: asked after the example's
  *   Answer, nothing in the reply is about an earlier Answer or the example.
+ * - **No word of an attempt the User never saw**: when the app asks the model
+ *   again inside a turn, the reply says nothing of the earlier try (#1226).
  * - **Only the text's dates**: every date the reply gives is one the
  *   Documents' text writes, or is named as a file's (./dates).
  */
@@ -81,6 +83,7 @@ export type RequestFailure =
   | { kind: "untouched" }
   | { kind: "as-text"; sources: string[] }
   | { kind: "earlier"; said: string }
+  | { kind: "unseen-attempt"; said: string }
   | { kind: "date-not-in-text"; dates: string[] };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
@@ -95,6 +98,29 @@ const EARLIER = new RegExp(
   ].join("|"),
   "i",
 );
+
+const UNSEEN_ATTEMPT = new RegExp(
+  [
+    String.raw`\b(?:sorry|apolog(?:y|ies|ise|ize)|my (?:mistake|bad))\b[^.!?\n]*\b(?:previous|earlier|prior|a moment ago|just now|last (?:reply|response|answer|message|time|attempt))\b`,
+    String.raw`\b(?:my|the|that|your) (?:previous|earlier|prior|last) (?:reply|response|answer|message|attempt)\b`,
+    String.raw`\bas I (?:said|mentioned|noted|stated) (?:before|earlier|previously|above)\b`,
+    String.raw`\b(?:let me|I'll|I will) (?:try again|redo|correct (?:that|this|myself))\b`,
+    "(?:抱歉|对不起|不好意思|很抱歉|道歉)[^。！？\\n]*(?:上一|前一|之前|先前|刚才|上次|前面)",
+    "(?:上一|前一|之前|先前|刚才|上次|前面)(?:条|次|个)?的?(?:回复|回答|答复|答案|消息|尝试)",
+    "如我(?:之前|刚才|前面|上面)所说",
+  ].join("|"),
+  "iu",
+);
+
+/** The first sentence that apologises for, or refers to, an earlier reply or try of the model's. */
+export function aboutAnUnseenAttempt(reply: string): string | null {
+  return (
+    reply
+      .split(/(?<=[.!?])\s+|(?<=[。！？])|\n+/)
+      .map((sentence) => sentence.trim())
+      .find((sentence) => UNSEEN_ATTEMPT.test(sentence)) ?? null
+  );
+}
 
 const NOT_COVERED =
   /\b(?:couldn't|could not|can't|cannot|didn't|did not|wasn't|weren't|isn't|aren't|not|no|unable|left out|missing|skipped)\b|没有|未能|未|无法|不能|缺少|略去/i;
@@ -164,6 +190,8 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   }
   const said = expected.noEarlier ? answer.text.match(EARLIER)?.[0] : undefined;
   if (said) failures.push({ kind: "earlier", said });
+  const unseen = aboutAnUnseenAttempt(answer.text);
+  if (unseen) failures.push({ kind: "unseen-attempt", said: unseen });
   const dates = expected.textDates ? datesNotInText(answer.text, outcome.texts ?? []) : [];
   if (dates.length > 0) failures.push({ kind: "date-not-in-text", dates });
   return failures;
@@ -194,6 +222,8 @@ export function failureLine(failure: RequestFailure): string {
       return `wrote sources into a Mind as text: ${failure.sources.map((source) => `“${source}”`).join(", ")}`;
     case "earlier":
       return `talks about an earlier Answer or the example: “${failure.said}”`;
+    case "unseen-attempt":
+      return `says something of an earlier try the User never saw: “${failure.said}”`;
     case "date-not-in-text":
       return `gives a date the Documents' text doesn't: ${failure.dates.join(", ")}`;
   }
