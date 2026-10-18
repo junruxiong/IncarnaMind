@@ -54,6 +54,7 @@ import {
 } from "../providers/embeddings";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { Secrets } from "../secrets";
+import { createSendGate } from "../sendGate";
 import type { SettingsStore } from "../settings";
 import type { EmbeddingModel } from "./index";
 
@@ -218,6 +219,7 @@ export function createActiveEmbedding(options: {
 
   const stored = () => parseStored(settings.readDeviceValue(PROVIDER_VALUE));
   const localOnly = () => settings.readDeviceValue(LOCAL_ONLY_VALUE) === true;
+  const gate = createSendGate(consent, localOnly);
   // No choice stored, on a new install or one from before embeddings could be off: on only
   // for a provider the User chose (see above), and stored, so it holds from now on.
   if (typeof settings.readDeviceValue(ENABLED_VALUE) !== "boolean") {
@@ -289,7 +291,10 @@ export function createActiveEmbedding(options: {
     const request = async <T>(send: (apiKey: string | null) => Promise<T>): Promise<T> => {
       try {
         const apiKey = await key();
-        if (service) await consent.ensure("embeddings", service);
+        if (service) {
+          await consent.ensure("embeddings", service);
+          gate.check("embeddings", service);
+        }
         const result = await send(apiKey);
         if (current === provider && error !== null) setError(null);
         return result;

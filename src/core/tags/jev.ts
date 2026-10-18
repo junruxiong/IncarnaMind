@@ -32,6 +32,7 @@ import {
 import { normalizeBaseUrl, serviceForUrl } from "../providers/kinds";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { Secrets } from "../secrets";
+import { createSendGate } from "../sendGate";
 import type { SettingsStore } from "../settings";
 import {
   type DocumentExcerpt,
@@ -190,8 +191,10 @@ export function createJevTagging(options: {
   hostedUrl?: string;
   /** Aborts requests when the core closes. */
   signal: AbortSignal;
+  localOnly(): boolean;
 }) {
   const { settings, secrets, consent, signal } = options;
+  const gate = createSendGate(consent, options.localOnly);
   const hostedUrl = options.hostedUrl ?? JEV_HOSTED_URL;
 
   const stored = () => parseStored(settings.readDeviceValue(SETTINGS_KEY));
@@ -300,6 +303,7 @@ export function createJevTagging(options: {
         // No service to send to: a Jev-compatible server on this computer.
         local: service === null,
         async decide({ tags, excerpt, signal: stop }) {
+          if (service) gate.check("tagging", service);
           const probabilities = await askJev({
             baseUrl: baseUrlOf(jev.endpoint),
             apiKey,
@@ -323,7 +327,7 @@ export function createJevTagging(options: {
       if (!apiKey) throw new TaggingNotReadyError({ key: "error.tagging.jevKeyUnreadable" });
       const service = serviceOf(jev.endpoint);
       if (service) await consent.ensure("classification", service);
-      return decisionGroupClassifier({
+      const classifier = decisionGroupClassifier({
         baseUrl: baseUrlOf(jev.endpoint),
         apiKey,
         model: jev.model ?? JEV_DEFAULT_MODEL,
@@ -332,6 +336,14 @@ export function createJevTagging(options: {
         usePageImages: false,
         reviewBand: jev.reviewBand,
       });
+      if (!service) return classifier;
+      return {
+        ...classifier,
+        organize: (...args: Parameters<typeof classifier.organize>) => {
+          gate.check("classification", service);
+          return classifier.organize(...args);
+        },
+      };
     },
 
     /**

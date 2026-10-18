@@ -33,6 +33,7 @@ import type { Reranker, SearchCandidate } from "../documents/searchTool";
 import { InvalidInputError, isRecord } from "../errors";
 import type { RerankingModel } from "../reranking";
 import type { Secrets } from "../secrets";
+import { createSendGate } from "../sendGate";
 import type { SettingsStore } from "../settings";
 import { classifyProviderError } from "./providerErrors";
 
@@ -136,6 +137,7 @@ export function createRerank(options: {
   reportError?: (error: unknown) => void;
 }) {
   const { settings, secrets, consent, createModel, builtIn, signal } = options;
+  const gate = createSendGate(consent, options.localOnly);
   const reportError = options.reportError ?? ((error) => console.error(error));
 
   const stored = () => parseStored(settings.readDeviceValue(SETTINGS_VALUE));
@@ -209,6 +211,7 @@ export function createRerank(options: {
     if (!apiKey) return [...candidates];
     try {
       await consent.ensure("rerank", RERANK_SERVICES[kind]);
+      gate.check("rerank", RERANK_SERVICES[kind]);
       const { ranking } = await rerank({
         model: createModel({ kind, apiKey, modelId }),
         documents: candidates.map(candidateText),

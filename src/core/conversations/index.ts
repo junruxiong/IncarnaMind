@@ -174,6 +174,7 @@ const ERROR_KINDS: Record<ProviderErrorKind, true> = {
   network: true,
   provider: true,
   "consent-declined": true,
+  "consent-revoked": true,
   "local-mode": true,
   "ollama-not-running": true,
   "data-retention": true,
