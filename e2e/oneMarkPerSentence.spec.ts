@@ -260,10 +260,15 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(card.getByTestId("health-found")).toContainText(words.health.found);
     await expect(card.getByTestId("health-notFound")).toContainText(words.health.notFound);
     await pointAndClick(window, card.getByTestId("health-notFound"));
-    await expect(notFound.getByTestId("citation")).toHaveClass(/ProseMirror-selectednode/);
-    await expect(notFound.getByTestId("citation-chip")).toBeInViewport();
+    await expect(
+      notFound.locator(".ProseMirror-selectednode").getByTestId("citation-chip"),
+    ).toBeVisible();
+    await expect(notFound.getByTestId("citation-chip")).toHaveCSS("outline-style", "solid");
     await pointAndClick(window, (await checkCard(window)).getByTestId("health-found"));
-    await expect(supported.getByTestId("citation")).toHaveClass(/ProseMirror-selectednode/);
+    await expect(
+      supported.locator(".ProseMirror-selectednode").getByTestId("citation-chip"),
+    ).toBeVisible();
+    await expect(notFound.locator(".ProseMirror-selectednode")).toHaveCount(0);
     await app.close();
   });
 }
