@@ -56,9 +56,7 @@ async function deleteAgain(items: readonly DeletedItem[]): Promise<void> {
 function restoredMessage(items: readonly DeletedItem[]): WordsInLine {
   const [only] = items;
   if (!only || items.length > 1) return (t) => t("object.restored.count", { count: items.length });
-  const folder = useAppStore
-    .getState()
-    .library?.groups.find((group) => group.id === only.groupId);
+  const folder = useAppStore.getState().library?.groups.find((group) => group.id === only.groupId);
   return (t) => {
     const name = deletedName(only);
     return folder
