@@ -15,11 +15,13 @@ import {
 } from "./app";
 
 /*
- * Review changes puts each change's own Restore original after its new words,
- * never over the text, and the applied line sits with the paragraph it
- * changed (#1018). The scripted model's "shorten" drops "very" and "really"
- * (非常 and 真的): two changes in one paragraph. Set INCARNAMIND_SCREENSHOTS to
- * a folder to also save screenshots.
+ * Review changes puts a Restore original after the new words of each group of
+ * changes, never over the text, and the applied line sits with the paragraph
+ * it changed (#1018). A group is a section rewritten as a whole, a paragraph
+ * rewritten whole, or one word-level change (#1177, as #1028 draws them). The
+ * scripted model's "shorten" drops "very" and "really" (非常 and 真的): two
+ * changes in one paragraph. Set INCARNAMIND_SCREENSHOTS to a folder to also
+ * save screenshots.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -351,3 +353,207 @@ test("a paragraph an edit removed ends with its own Restore original, on a line 
   await expect(line).toHaveCount(0);
   await app.close();
 });
+
+interface SectionCase {
+  language: "en" | "zh-CN";
+  heading: string;
+  lines: readonly string[];
+  ask: string;
+  rewrote: string;
+  position: string;
+  restore: string;
+}
+
+const SECTIONS: readonly SectionCase[] = [
+  {
+    language: "en",
+    heading: "Highlights and open items",
+    lines: [
+      "Data analysis across health and finance.",
+      "Financial modelling and valuation.",
+      "English, IELTS 7.5.",
+    ],
+    ask: "rewrite the section",
+    rewrote: "Key strengths",
+    position: "Change 1 of 1",
+    restore: "Restore original",
+  },
+  {
+    language: "zh-CN",
+    heading: "履历亮点与待核实事项",
+    lines: [
+      "跨医疗、金融两个行业的数据分析经验。",
+      "熟悉财务建模与估值。",
+      "英语 CET-6，雅思 7.5。",
+    ],
+    ask: "重写这一节",
+    rewrote: "核心优势",
+    position: "第 1 处修订，共 1 处",
+    restore: "恢复原文",
+  },
+];
+
+for (const { language, heading, lines, ask, rewrote, position, restore } of SECTIONS) {
+  test(`a section rewritten as a whole shows one Restore original after its last new words, which restores the whole section with one Undo, and never overlaps the text (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+
+    for (const [round, { width, height }] of SIZES.entries()) {
+      await setWindowSize(app, window, width, height);
+      await newMind(window);
+      const editor = frontMind(window).getByTestId("mind-editor");
+      await editor.click();
+      await window.keyboard.type(`## ${heading}`);
+      for (const written of lines) {
+        await window.keyboard.press("Enter");
+        await window.keyboard.type(written);
+      }
+      const title = editor.locator(":scope > h2");
+      const paragraphs = editor.locator(":scope > p");
+      await expect(title).toHaveText(heading);
+      await expect(paragraphs).toHaveText([...lines]);
+
+      await window.keyboard.press("ControlOrMeta+a");
+      await window.keyboard.press("ControlOrMeta+j");
+      await expect(window.getByTestId("composer-input")).toBeFocused();
+      await window.keyboard.type(ask);
+      await window.keyboard.press("Enter");
+      await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+      await expect(title).toHaveText(rewrote);
+      const line = editor.getByTestId("applied-line");
+      const written = await paragraphs.allTextContents();
+      await pointAndClick(window, line.getByTestId("applied-review"));
+
+      await expect(editor.getByTestId("change-section-line")).toHaveCount(1);
+      const restores = editor.getByTestId("change-restore");
+      await expect(restores).toHaveCount(1);
+      await expect(restores).toHaveText(restore);
+      await expect(restores).toHaveAttribute("title", new RegExp(`^${position} · `));
+      await expect(restores).toHaveCSS("font-size", "12px");
+      await expect(restores).toHaveCSS("color", "rgb(101, 107, 116)");
+      expect(await controlsOverText(editor)).toBe(0);
+      const [lastWords, restoreBox, editorBox] = await Promise.all([
+        editor.locator(".applied-new").last().boundingBox(),
+        restores.boundingBox(),
+        editor.boundingBox(),
+      ]);
+      if (!lastWords || !restoreBox || !editorBox) throw new Error("The section isn't drawn.");
+      expect(readsBefore(lastWords, restoreBox)).toBe(true);
+      expect(restoreBox.x + restoreBox.width).toBeLessThanOrEqual(
+        editorBox.x + editorBox.width + 1,
+      );
+      await motionSettled(window);
+      await screenshot(window, `restore-section-${language}-${width}`);
+
+      // By mouse, then by keyboard: ⌘⌫ with the cursor anywhere in the section.
+      if (round === 0) {
+        await pointAndClick(window, restores);
+      } else {
+        await pointAndClick(window, paragraphs.last());
+        await window.keyboard.press("ControlOrMeta+Backspace");
+      }
+      await expect(title).toHaveText(heading);
+      await expect(paragraphs).toHaveText([...lines]);
+      await expect(line).toHaveCount(0);
+      await expect(window.getByTestId("undo-message")).toBeVisible();
+
+      await window.keyboard.press("ControlOrMeta+z");
+      await expect(title).toHaveText(rewrote);
+      await expect(paragraphs).toHaveText(written);
+    }
+    await app.close();
+  });
+}
+
+interface MixedCase {
+  language: "en" | "zh-CN";
+  lines: readonly [string, string];
+  ask: string;
+  anew: string;
+  position: (index: number) => string;
+}
+
+const MIXED: readonly MixedCase[] = [
+  {
+    language: "en",
+    lines: [
+      "The harbour office",
+      "Tides rise twice a day along this coast, and in the long summer months the harbour office posts the times each week, while the harbour office also lists the ferries.",
+    ],
+    ask: "replace harbour office with port authority",
+    anew: "The port authority",
+    position: (index) => `Change ${index} of 3`,
+  },
+  {
+    language: "zh-CN",
+    lines: [
+      "海港办公室",
+      "潮水每天涨落两次，夏季海港办公室每周公布潮汐时间，海港办公室还会公布渡轮时刻。",
+    ],
+    ask: "把海港办公室换成港务局",
+    anew: "港务局",
+    position: (index) => `第 ${index} 处修订，共 3 处`,
+  },
+];
+
+for (const { language, lines, ask, anew, position } of MIXED) {
+  test(`a paragraph rewritten whole shows one Restore original, and each word-level change keeps its own, clear of the text (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+
+    for (const { width, height } of SIZES) {
+      await setWindowSize(app, window, width, height);
+      await newMind(window);
+      const editor = frontMind(window).getByTestId("mind-editor");
+      await editor.click();
+      await window.keyboard.type(lines[0]);
+      await window.keyboard.press("Enter");
+      await window.keyboard.type(lines[1]);
+      const paragraphs = editor.locator(":scope > p");
+      await expect(paragraphs).toHaveText([...lines]);
+      const [whole, words] = [paragraphs.first(), paragraphs.nth(1)];
+
+      await window.keyboard.press("ControlOrMeta+a");
+      await window.keyboard.press("ControlOrMeta+j");
+      await expect(window.getByTestId("composer-input")).toBeFocused();
+      await window.keyboard.type(ask);
+      await window.keyboard.press("Enter");
+      await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+      await expect.poll(() => wordsOf(whole)).toBe(anew);
+      const written = await wordsOf(words);
+      await pointAndClick(window, editor.getByTestId("applied-line").getByTestId("applied-review"));
+
+      const restores = editor.getByTestId("change-restore");
+      await expect(editor.getByTestId("change-was-line")).toHaveCount(1);
+      await expect(whole.getByTestId("change-restore")).toHaveCount(1);
+      await expect(words.getByTestId("change-restore")).toHaveCount(2);
+      await expect(restores).toHaveCount(3);
+      for (const index of [1, 2, 3]) {
+        await expect(restores.nth(index - 1)).toHaveAttribute(
+          "title",
+          new RegExp(`^${position(index)} · `),
+        );
+      }
+      expect(await controlsOverText(editor)).toBe(0);
+      await motionSettled(window);
+      await screenshot(window, `restore-mixed-${language}-${width}`);
+
+      await pointAndClick(window, restores.first());
+      await expect.poll(() => wordsOf(whole)).toBe(lines[0]);
+      await expect(restores).toHaveCount(2);
+      expect(await wordsOf(words)).toBe(written);
+      await window.keyboard.press("ControlOrMeta+z");
+      await expect.poll(() => wordsOf(whole)).toBe(anew);
+
+      await pointAndClick(window, restores.last());
+      await expect(restores).toHaveCount(1);
+      await expect(words.locator("del.applied-old")).toHaveCount(1);
+      expect(await wordsOf(whole)).toBe(anew);
+    }
+    await app.close();
+  });
+}
