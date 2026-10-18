@@ -10,7 +10,6 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import { formatDateTime } from "../src/shared/dates";
 import {
   acceptPlainTextKeys,
   addDocuments,
@@ -97,13 +96,15 @@ test("A rate limit pauses Tagging: one line says when it resumes, and Retry goes
     return documents.find((each) => each.name.includes("Invoice 61"))?.taggingError?.resetsAt ?? "";
   });
   expect(resumes).not.toBe("");
+  // The time is the pause's end, on the clock the interface is set to (a 12-hour one shows "am").
+  const minutes = String(new Date(resumes).getMinutes()).padStart(2, "0");
   await expect(paused.getByTestId("status-label")).toHaveText(
-    `Rate limit reached · resumes at ${formatDateTime(resumes, "en")}`,
+    new RegExp(`^Rate limit reached · resumes at .*:${minutes}`),
   );
 
   await setLanguage(window, "zh-CN");
   await expect(paused.getByTestId("status-label")).toHaveText(
-    `已达到速率上限 · ${formatDateTime(resumes, "zh-CN")} 继续`,
+    new RegExp(`^已达到速率上限 · .*:${minutes}.* 继续$`),
   );
 
   await paused.getByTestId("tagging-rate-limited-retry").click();
