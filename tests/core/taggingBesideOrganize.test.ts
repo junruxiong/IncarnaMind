@@ -67,7 +67,9 @@ describe("with Organize not moving new Documents by itself", () => {
     const { core, chat } = await start(false);
 
     const added = await add(core, {
-      "Annual report.pdf": buildPdf([{ lines: ["Annual report", "Revenue grew in every region."] }]),
+      "Annual report.pdf": buildPdf([
+        { lines: ["Annual report", "Revenue grew in every region."] },
+      ]),
       "Board minutes.docx": docxOf([{ text: "Minutes of the board meeting in March." }]),
       "Sales.xlsx": xlsxOf([
         {
