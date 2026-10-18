@@ -28,9 +28,9 @@ import { child, descendants, elements, local, onOff, parseXml, type XmlElement }
 /**
  * How the look was read. A Mind whose look an earlier version read has it
  * cleared (attributes, marks and map) and given again at the next start.
- * From 5 the look keeps only what styles and lists give (`splitDirect`).
+ * From 6 the look keeps only what styles and lists give (`splitDirect`).
  */
-export const WORD_LOOK_VERSION = 5;
+export const WORD_LOOK_VERSION = 6;
 
 /** The first version that read table styles' conditional formatting. */
 export const CONDITIONAL_FORMATTING_VERSION = 3;

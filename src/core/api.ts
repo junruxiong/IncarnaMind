@@ -173,7 +173,7 @@ export interface CreateMindInput {
  *   (`ParagraphFormat`), and the `textColor`, `textFont`, `textSize`,
  *   `superscript` and `subscript` marks, which an older version's editor
  *   would strip. A Word file's direct formatting is read into them (the look
- *   keeps what its styles give, `WORD_LOOK_VERSION` 5). Older content is
+ *   keeps what its styles give, `WORD_LOOK_VERSION` 6). Older content is
  *   version 24 content as it is.
  */
 export const CONTENT_SCHEMA_VERSION = 24;

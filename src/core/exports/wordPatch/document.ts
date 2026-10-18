@@ -102,6 +102,11 @@ export interface DocumentPatchInput {
   /** IncarnaMind's tracked changes and comments, and the User's tracked edits. */
   review: Review;
   ids: WordIds;
+  /**
+   * Whether this version read the Mind's Word look. Until it reads it again, the Mind lacks
+   * the file's direct formatting, which is then kept as the file has it rather than removed.
+   */
+  lookCurrent: boolean;
 }
 
 /** A counterpart as imported, and the element its XML is. */
@@ -243,6 +248,7 @@ export class DocumentPatch {
       ids: input.ids,
       review: input.review,
       removedHere: (source) => !input.plan.writtenElsewhere(source),
+      lookCurrent: input.lookCurrent,
     };
   }
 
@@ -875,7 +881,12 @@ export class DocumentPatch {
       formatBefore = reference?.format ?? {};
       rPr = reference?.rPr ?? "";
     }
-    writeFormat(properties, formatOf(counterpart.node), formatBefore);
+    const format = formatOf(counterpart.node);
+    writeFormat(
+      properties,
+      this.input.lookCurrent ? format : { ...formatBefore, ...format },
+      formatBefore,
+    );
 
     // A section break goes with the paragraph that holds it now.
     const sections = this.sectionSources(counterpart);

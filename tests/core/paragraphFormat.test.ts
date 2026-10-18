@@ -417,4 +417,42 @@ describe("a Mind whose look version 4 read is read again", () => {
     expect(document).toContain("w:commentReference");
     restarted.close();
   });
+
+  test("until it is read again, an edited paragraph exports with the file's formatting", async () => {
+    const bytes = await readFile(join(FIXTURES, "direct-before.docx"));
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const { mindId } = await importWordBytes(core, dataDir, bytes, { origin: "own" });
+    core.close();
+    const at = new Date().toISOString();
+    queryDatabase(dataDir, "DELETE FROM mind_updates WHERE mind_id = ?", [mindId]);
+    queryDatabase(
+      dataDir,
+      "INSERT INTO mind_updates (id, mind_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      [randomUUID(), mindId, await readFile(join(FIXTURES, "direct-before.yjs")), at, at],
+    );
+
+    const restarted = startCore(dataDir);
+    const client = await connectToMind(restarted, mindId);
+    expect(wordLookOf(client.doc)?.version).toBe(4);
+    const rent = textIn(elementWith(client.blocks, "The rent is"));
+    client.doc.transact(() => {
+      const from = rent.toString().indexOf("£1,200") + "£1,2".length;
+      rent.delete(from, 1);
+      rent.insert(from, "5");
+    });
+    await client.settled();
+
+    const result = await restarted.exportMind(mindId, { format: "docx" });
+    const exported = paragraphXml(
+      unzip(result.data).get("word/document.xml")?.toString("utf8") ?? "",
+      "The rent is",
+    );
+    expect(textOf(exported)).toContain("£1,250");
+    expect(exported).toContain('<w:jc w:val="both"/>');
+    expect(exported).toContain('w:line="360"');
+    expect(exported).toContain('<w:vertAlign w:val="superscript"/>');
+    expect(wordLookOf(client.doc)?.version).toBe(4);
+    restarted.close();
+  });
 });

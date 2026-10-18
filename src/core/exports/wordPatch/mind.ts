@@ -87,6 +87,15 @@ export const sameMarks = (a: TextMarks, b: TextMarks): boolean =>
   a.size === b.size &&
   a.vertical === b.vertical;
 
+/** Text's marks with the file's colour, font, size and raise where they have none. */
+export const withFileFormat = (marks: TextMarks, file: TextMarks): TextMarks => ({
+  ...marks,
+  color: marks.color ?? file.color,
+  font: marks.font ?? file.font,
+  size: marks.size ?? file.size,
+  vertical: marks.vertical ?? file.vertical,
+});
+
 /** What changes still waiting do to a node as a whole: its `proposal` attribute. */
 export function nodePendings(node: NodeJSON, review: ReviewReading | undefined): Pendings {
   const attribute = readProposalAttribute(node.attrs?.[PROPOSAL_ATTRIBUTE]);
