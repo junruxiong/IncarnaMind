@@ -1803,6 +1803,28 @@ export async function pointAt(window: Page, target: Locator): Promise<{ x: numbe
   return point;
 }
 
+/**
+ * Drags `from` onto `to` as a person does: slides onto it, presses, slides onto `to` and rests
+ * there while `whileOver` looks at what the drag shows, then lets go.
+ */
+export async function dragOnto(
+  window: Page,
+  from: Locator,
+  to: Locator,
+  whileOver?: () => Promise<void>,
+): Promise<void> {
+  await pointAt(window, from);
+  await window.mouse.down();
+  try {
+    const point = await pointAt(window, to);
+    // A hand never rests quite still: during a drag the page hears where it is at the next move.
+    await window.mouse.move(point.x + 2, point.y);
+    await whileOver?.();
+  } finally {
+    await window.mouse.up();
+  }
+}
+
 /** Presses Tab, or Shift+Tab if `target` comes before the focus, until `target` has the focus. */
 export async function tabTo(window: Page, target: Locator, max = 40): Promise<void> {
   const key = (await target.evaluate((element) => {

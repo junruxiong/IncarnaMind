@@ -13,12 +13,9 @@ interface DropTarget {
 }
 
 /**
- * A section of the sidebar's tree (Folders, Not in a Folder, Linked folders,
- * Tags): its heading in 12px `ink-meta` on the icon column, 12px below what
- * is above, then its rows as a tree of their own. A heading that folds says
- * so with its chevron; its actions (a +) show only while the heading is
- * pointed at or one of them has the focus, as in Notion. A section with
- * nothing in it isn't drawn at all (its caller leaves it out).
+ * A section of the sidebar's tree. Its `actions` show only while the heading
+ * is pointed at or one of them has the focus, as in Notion. A section with
+ * nothing in it is left out by its caller rather than drawn empty.
  */
 export function SidebarSection({
   testId,

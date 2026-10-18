@@ -36,14 +36,12 @@ const WebPageIcon = ({ className }: { className?: string }) => (
   <DocumentLineIcon kind="web" className={className} />
 );
 
-/** The New menu's four rows: what most people start with. */
 const NEW_ITEMS: readonly NewItem[] = [
   { id: "mind.new", testId: "plus-new-mind", icon: MindLineIcon },
   { id: "documents.add", testId: "plus-add-documents", icon: PlusLineIcon },
   { id: "folder.new", testId: "plus-new-folder", icon: FolderLineIcon },
 ];
 
-/** Under More: the rest, each also in ⌘K; one whose feature is off isn't offered. */
 const MORE_ITEMS: readonly NewItem[] = [
   { id: "linkedFolder.add", testId: "plus-link-folder", icon: FolderPlusLineIcon },
   { id: "meeting.record", testId: "plus-record-meeting", icon: RecordingLineIcon },
@@ -67,12 +65,7 @@ const MORE_ITEMS: readonly NewItem[] = [
 
 const WINDOW: CommandContext = { selection: [], focus: null, surface: "sidebar" };
 
-/**
- * The sidebar header's +, the one place to start something: New Mind, Add
- * Documents…, New Folder, and More for the rest. Each item is the command ⌘K
- * lists, with its keys. Opened by keyboard or mouse, its items are menu items
- * reached with the arrow keys.
- */
+/** Each item runs the command ⌘K lists, so the two can't drift apart. */
 export function NewMenu() {
   const t = useT();
   const menu = usePopoverMenu();

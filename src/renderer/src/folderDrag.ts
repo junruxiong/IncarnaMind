@@ -17,13 +17,11 @@ import { carriesLinks, linksIn, useWebPages } from "./webPages";
  */
 export const MOVE_TYPE = "application/x-incarnamind-move";
 
-/** How long a folded Folder is held under a drag before it opens, as in Finder. */
 const OPENS_AFTER_MS = 700;
 
-/** What is dragged now, read while it is over a target: a drag's data can only be read on the drop. */
+// A drag's data can only be read on the drop, so what is dragged is kept here for the targets it passes over.
 let dragging: { mindIds: string[]; documentIds: string[] } | null = null;
 
-/** Starts dragging these Minds and Documents, under a picture of what is dragged. */
 export function startMoveDrag(
   event: DragEvent<HTMLElement>,
   items: MoveItems,
@@ -38,10 +36,6 @@ export function startMoveDrag(
   setPicture(event, label, count);
 }
 
-/**
- * The row's icon and what is dragged ("Shortlist", or "3 Documents" with its
- * count), on the sheet like a menu, in place of the browser's copy of the row.
- */
 function setPicture(event: DragEvent<HTMLElement>, label: string, count: number): void {
   const picture = document.createElement("div");
   picture.className =
@@ -84,7 +78,6 @@ export function droppedItems(event: DragEvent): MoveItems | null {
   }
 }
 
-/** Whether dropping what is dragged now into a Folder (null: out of every Folder) would move any of it. */
 function wouldMove(folderId: string | null): boolean {
   if (!dragging) return false;
   const { minds, library } = useAppStore.getState();

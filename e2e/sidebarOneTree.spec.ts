@@ -7,7 +7,9 @@ import type { MessageKey, MessageParams } from "../src/shared/i18n/types";
 import {
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
+  dragOnto,
   launchApp,
+  pointAt,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -143,34 +145,6 @@ async function expectCountsOfCore(window: Page): Promise<void> {
   }
 }
 
-/** Moves the mouse onto an element in small steps, as a person does, and rests there. */
-async function slideTo(window: Page, target: Locator): Promise<void> {
-  const box = await target.boundingBox();
-  if (!box) throw new Error("The element isn't visible.");
-  const x = box.x + Math.min(40, box.width / 2);
-  const y = box.y + box.height / 2;
-  await window.mouse.move(x, y, { steps: 10 });
-  // A hand never rests quite still; during a drag the page hears where it is at the next move.
-  await window.mouse.move(x + 2, y);
-}
-
-/** Drags as a person does: slide onto `from`, press, slide onto `to`, let `whileOver` look, let go. */
-async function drag(
-  window: Page,
-  from: Locator,
-  to: Locator,
-  whileOver?: () => Promise<void>,
-): Promise<void> {
-  await slideTo(window, from);
-  await window.mouse.down();
-  try {
-    await slideTo(window, to);
-    await whileOver?.();
-  } finally {
-    await window.mouse.up();
-  }
-}
-
 /** Clicks the empty foot of the sidebar's tree, where ⌘Z goes to the app's changes. */
 async function leaveText(window: Page): Promise<void> {
   const box = await window.getByTestId("sidebar-tree").boundingBox();
@@ -291,7 +265,7 @@ for (const [language, width] of [
       const add = folders.getByTestId("folders-add");
       await window.mouse.move(width - 40, 300);
       await expect.poll(() => opacityOf(add)).toBe("0");
-      await slideTo(window, folders.getByTestId("folders-section-heading"));
+      await pointAt(window, folders.getByTestId("folders-section-heading"));
       await expect.poll(() => opacityOf(add)).toBe("1");
       await expect(add).toHaveAccessibleName(
         t("sidebar.newFolderKeys", {
@@ -360,7 +334,7 @@ for (const [language, width] of [
 
       // One Mind dragged onto a folded Folder: only it lights, with the "into" box and no line between
       // rows, and held there it opens; let go, the Mind is in it.
-      await drag(
+      await dragOnto(
         window,
         mindRow(window, "Shortlist"),
         financeFolder.getByTestId("folder-row"),
@@ -399,7 +373,7 @@ for (const [language, width] of [
       await expect(window.getByTestId("sidebar-selection")).toHaveText(
         t("sidebar.selected", { count: 3 }),
       );
-      await drag(
+      await dragOnto(
         window,
         documentRow(researchFolder, "Ledger"),
         financeFolder.getByTestId("folder-row"),
@@ -426,10 +400,15 @@ for (const [language, width] of [
       await financeFolder.getByTestId("mind-list-item").click();
       await expect(window.getByTestId("sidebar-selection")).toHaveText("");
       await expectScope(window, "Finance");
-      await drag(window, mindRow(window, "Shortlist"), notInAFolderHeading(window), async () => {
-        await expect(notInAFolderHeading(window)).toHaveAttribute("data-drop-target", "true");
-        await expect(notInAFolderHeading(window)).toHaveCSS("box-shadow", /inset/);
-      });
+      await dragOnto(
+        window,
+        mindRow(window, "Shortlist"),
+        notInAFolderHeading(window),
+        async () => {
+          await expect(notInAFolderHeading(window)).toHaveAttribute("data-drop-target", "true");
+          await expect(notInAFolderHeading(window)).toHaveCSS("box-shadow", /inset/);
+        },
+      );
       await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
       await expect(undoLine).toHaveText(
         t("move.done", { name: "Shortlist", folder: t("library.unsorted") }),
@@ -489,84 +468,95 @@ for (const [language, width] of [
   });
 }
 
-test("every row kind in the tree has the shared menu, renames in place and selects the shared way", async () => {
-  await writeFile(join(sources, "Budget.txt"), "Budget for the harbour project.\n");
-  const { app, window } = await launchApp(dataDir);
-  try {
-    await setWindowSize(app, window, 1440, 660);
-    await makeFolder(window, "Finance");
-    await makeMind(window, "Shortlist");
-    await addFiles(window, [join(sources, "Budget.txt")]);
-    const budget = documentRow(window, "Budget");
-    await expect(budget).toHaveAttribute("data-status", "ready");
-    const folder = sidebarFolder(window, "Finance");
-    const rows: { row: Locator; look: Locator; main: Locator; actions: string }[] = [
-      {
-        row: folder,
-        look: folder.locator(":scope > div"),
-        main: folder.getByTestId("folder-row"),
-        actions: "folder-actions",
-      },
-      {
-        row: mindRow(window, "Shortlist"),
-        look: mindRow(window, "Shortlist"),
-        main: mindRow(window, "Shortlist").getByTestId("mind-list-item"),
-        actions: "mind-actions",
-      },
-      {
-        row: budget,
-        look: budget,
-        main: budget.getByTestId("open-document"),
-        actions: "document-file-actions",
-      },
-    ];
-    for (const { row, main, actions } of rows) {
-      // The shared menu, by a right-click and by Shift+F10, with Rename and Delete in it.
-      await main.click({ button: "right" });
-      const menu = row.getByTestId(actions);
-      await expect(menu).toBeVisible();
-      await expect(menu.getByRole("menuitem").last()).toContainText("Delete");
+for (const [language, width] of [
+  ["en", 1440],
+  ["zh-CN", 900],
+] as const) {
+  test(`every row kind in the tree has the shared menu, renames in place and selects the shared way (${language}, ${width}px)`, async () => {
+    await writeFile(join(sources, "Budget.txt"), "Budget for the harbour project.\n");
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, width, 660);
+      await setLanguage(window, language);
+      await makeFolder(window, "Finance");
+      await makeMind(window, "Shortlist");
+      await addFiles(window, [join(sources, "Budget.txt")]);
+      const budget = documentRow(window, "Budget");
+      await expect(budget).toHaveAttribute("data-status", "ready");
+      const folder = sidebarFolder(window, "Finance");
+      const rows: { row: Locator; look: Locator; main: Locator; actions: string }[] = [
+        {
+          row: folder,
+          look: folder.locator(":scope > div"),
+          main: folder.getByTestId("folder-row"),
+          actions: "folder-actions",
+        },
+        {
+          row: mindRow(window, "Shortlist"),
+          look: mindRow(window, "Shortlist"),
+          main: mindRow(window, "Shortlist").getByTestId("mind-list-item"),
+          actions: "mind-actions",
+        },
+        {
+          row: budget,
+          look: budget,
+          main: budget.getByTestId("open-document"),
+          actions: "document-file-actions",
+        },
+      ];
+      for (const { row, main, actions } of rows) {
+        // The shared menu, by a right-click and by Shift+F10, Delete last.
+        await main.click({ button: "right" });
+        const menu = row.getByTestId(actions);
+        await expect(menu).toBeVisible();
+        await expect(menu.getByRole("menuitem").last()).toHaveAttribute("data-testid", /\.delete$/);
+        await window.keyboard.press("Escape");
+        await main.focus();
+        await window.keyboard.press("Shift+F10");
+        await expect(menu).toBeVisible();
+        await window.keyboard.press("Escape");
+        // F2 renames in place; Esc leaves the name as it was.
+        await main.focus();
+        await window.keyboard.press("F2");
+        const field = window.getByTestId("sidebar").locator("input:not([type=file])");
+        await expect(field).toBeFocused();
+        await window.keyboard.press("Escape");
+        await expect(field).toHaveCount(0);
+        // ⌘-click selects it with the rest, without opening it.
+        await main.click({ modifiers: ["ControlOrMeta"] });
+        await expect(main).toHaveAttribute("aria-selected", "true");
+      }
+      await expect(window.getByTestId("sidebar-selection")).toHaveText(
+        translate(language, "sidebar.selected", { count: 3 }),
+      );
+      // Several selected look alike, on the accent's wash.
+      for (const { look } of rows)
+        await expect(look).toHaveCSS("background-color", "rgb(231, 237, 251)");
       await window.keyboard.press("Escape");
-      await main.focus();
-      await window.keyboard.press("Shift+F10");
-      await expect(menu).toBeVisible();
-      await window.keyboard.press("Escape");
-      // F2 renames in place; Esc leaves the name as it was.
-      await main.focus();
-      await window.keyboard.press("F2");
-      const field = window.getByTestId("sidebar").locator("input:not([type=file])");
-      await expect(field).toBeFocused();
-      await window.keyboard.press("Escape");
-      await expect(field).toHaveCount(0);
-      // ⌘-click selects it with the rest, without opening it.
-      await main.click({ modifiers: ["ControlOrMeta"] });
-      await expect(main).toHaveAttribute("aria-selected", "true");
+      await expect(window.getByTestId("sidebar-selection")).toHaveText("");
+      // Enter on a focused row opens it: a Mind in its tab, a Folder in place.
+      await mindRow(window, "Shortlist").getByTestId("mind-list-item").focus();
+      await window.keyboard.press("Enter");
+      await expect(window.getByTestId("mind-tab").getByTestId("tab-title")).toHaveText([
+        "Shortlist",
+      ]);
+      await folder.getByTestId("folder-row").focus();
+      await window.keyboard.press("Enter");
+      await expect(folder).toHaveAttribute("data-expanded", "true");
+    } finally {
+      await app.close();
     }
-    await expect(window.getByTestId("sidebar-selection")).toHaveText(
-      translate("en", "sidebar.selected", { count: 3 }),
-    );
-    // Several selected look alike, on the accent's wash.
-    for (const { look } of rows)
-      await expect(look).toHaveCSS("background-color", "rgb(231, 237, 251)");
-    await window.keyboard.press("Escape");
-    await expect(window.getByTestId("sidebar-selection")).toHaveText("");
-    // Enter on a focused row opens it: a Mind in its tab, a Folder in place.
-    await mindRow(window, "Shortlist").getByTestId("mind-list-item").focus();
-    await window.keyboard.press("Enter");
-    await expect(window.getByTestId("mind-tab").getByTestId("tab-title")).toHaveText(["Shortlist"]);
-    await folder.getByTestId("folder-row").focus();
-    await window.keyboard.press("Enter");
-    await expect(folder).toHaveAttribute("data-expanded", "true");
-  } finally {
-    await app.close();
-  }
-});
+  });
+}
 
-/** The New menu's items, each as ⌘K names its command; Record a meeting is off until turned on. */
-const NEW_MENU_COMMANDS: readonly MessageKey[] = [
+/** The New menu's four rows, then what is under More, each as ⌘K names its command; Record a meeting is off until turned on. */
+const NEW_MENU_ROWS: readonly MessageKey[] = [
   "menu.newMind",
   "sidebar.plus.addDocuments",
   "menu.newFolder",
+  "sidebar.plus.more",
+];
+const MORE_COMMANDS: readonly MessageKey[] = [
   "sidebar.plus.linkFolder",
   "command.compareDocuments",
   "verify.command",
@@ -576,23 +566,49 @@ const NEW_MENU_COMMANDS: readonly MessageKey[] = [
   "command.sources.find",
 ];
 
-for (const language of ["en", "zh-CN"] as const) {
-  test(`the New menu's four rows and what is under More are each in ⌘K too (${language})`, async () => {
+for (const [language, width] of [
+  ["en", 1440],
+  ["zh-CN", 900],
+] as const) {
+  test(`the New menu's four rows and what is under More open by mouse and keyboard, and each is in ⌘K too (${language}, ${width}px)`, async () => {
     const t = (key: MessageKey) => translate(language, key);
     const { app, window } = await launchApp(dataDir);
     try {
-      await setWindowSize(app, window, 1440, 660);
+      await setWindowSize(app, window, width, 660);
       await setLanguage(window, language);
-      await window.getByTestId("plus-menu").click();
+      const plus = window.getByTestId("plus-menu");
       const rows = window.getByTestId("plus-menu-items").getByRole("menuitem");
-      await expect(rows).toHaveCount(4);
-      await expect(rows.nth(3)).toContainText(t("sidebar.plus.more"));
-      await window.getByTestId("plus-more").hover();
       const more = window.getByTestId("plus-more-menu").getByRole("menuitem");
-      await expect(more).toHaveCount(NEW_MENU_COMMANDS.length - 3);
+
+      // By mouse: four rows in order, and More lists the rest.
+      await pointAt(window, plus);
+      await window.mouse.down();
+      await window.mouse.up();
+      await expect(rows).toHaveCount(NEW_MENU_ROWS.length);
+      for (const [index, key] of NEW_MENU_ROWS.entries()) {
+        await expect(rows.nth(index)).toContainText(t(key));
+      }
+      await pointAt(window, window.getByTestId("plus-more"));
+      await expect(more).toHaveCount(MORE_COMMANDS.length);
       await window.keyboard.press("Escape");
       await window.keyboard.press("Escape");
-      for (const key of NEW_MENU_COMMANDS) {
+      await expect(rows).toHaveCount(0);
+
+      // By keyboard: Enter opens it on its first row, ↓ walks to More, → opens it, Esc closes each.
+      await plus.focus();
+      await window.keyboard.press("Enter");
+      await expect(window.getByTestId("plus-new-mind")).toBeFocused();
+      for (let step = 1; step < NEW_MENU_ROWS.length; step++)
+        await window.keyboard.press("ArrowDown");
+      await expect(window.getByTestId("plus-more")).toBeFocused();
+      await window.keyboard.press("ArrowRight");
+      await expect(more.first()).toBeFocused();
+      await window.keyboard.press("Escape");
+      await expect(window.getByTestId("plus-more")).toBeFocused();
+      await window.keyboard.press("Escape");
+      await expect(plus).toBeFocused();
+
+      for (const key of [...NEW_MENU_ROWS.slice(0, -1), ...MORE_COMMANDS]) {
         const label = t(key).replace(/…$/, "");
         await window.keyboard.press("ControlOrMeta+k");
         const search = window.getByTestId("palette-search");

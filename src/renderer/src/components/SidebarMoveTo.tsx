@@ -3,11 +3,6 @@ import { nameOfMoved, useSidebarMove } from "../sidebarMoves";
 import { useAppStore } from "../store";
 import { MoveToPicker } from "./MoveToPicker";
 
-/**
- * The sidebar's "Move to…" (⇧⌘M on a row, or its menu): the shared Folder
- * picker beside the row, for the row or the Minds and Documents selected with
- * it. Choosing a Folder moves them all, with the undo line.
- */
 export function SidebarMoveTo() {
   const request = useSidebarMove((state) => state.request);
   const minds = useAppStore((state) => state.minds);

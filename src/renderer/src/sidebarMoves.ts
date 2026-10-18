@@ -7,11 +7,7 @@ import type { ObjectRef } from "./objects";
 import { selectedOn } from "./selection";
 import { useAppStore } from "./store";
 
-/**
- * What a drag or "Move to…" from a sidebar row takes: every Mind and Document
- * selected, when the row is one of them, else the row alone.
- */
-export function movedFrom(row: ObjectRef): MoveItems {
+function movedFrom(row: ObjectRef): MoveItems {
   const chosen = selectedOn("sidebar");
   const held = chosen.some((each) => each.kind === row.kind && each.id === row.id);
   const items = held ? chosen : [row];
@@ -26,7 +22,6 @@ export function nameOfMoved(items: MoveItems): string {
   return movingName(translateNow, items, { minds, documents });
 }
 
-/** Starts dragging a row: it, or the selection it is part of. */
 export function dragFromRow(event: DragEvent<HTMLElement>, row: ObjectRef): void {
   const items = movedFrom(row);
   startMoveDrag(event, items, nameOfMoved(items));
@@ -38,7 +33,7 @@ interface MoveRequest {
   items: MoveItems;
 }
 
-/** The sidebar's one "Move to…", open for these, if it is. */
+// One picker for the whole sidebar: each row opening its own would leave several open at once.
 export const useSidebarMove = create<{
   request: MoveRequest | null;
   show(anchor: HTMLElement | null, row: ObjectRef): void;
