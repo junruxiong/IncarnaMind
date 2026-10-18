@@ -208,6 +208,7 @@ export const zhCN = {
   "sidebar.resize": "调整侧边栏宽度",
   "sidebar.hide": "隐藏侧边栏",
   "sidebar.show": "显示侧边栏",
+  "sidebar.show.taggingNeedsYou": "显示侧边栏 · 打标签需要你处理",
   "sidebar.hidden.announce": "侧边栏已隐藏",
   "sidebar.shown.announce": "侧边栏已显示",
   "sidebar.tree": "文件夹、Mind 和文档",
