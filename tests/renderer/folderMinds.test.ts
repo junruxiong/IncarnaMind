@@ -7,7 +7,14 @@ import type {
   Mind,
 } from "../../src/core/api";
 import { chosenScope, composerScope, NO_SCOPE } from "../../src/renderer/src/composer";
-import { movedLocally, moveMessage, moveName, undoMoves } from "../../src/renderer/src/moves";
+import {
+  movedLocally,
+  moveMessage,
+  moveName,
+  namesOfFolders,
+  namesOfMoving,
+  undoMoves,
+} from "../../src/renderer/src/moves";
 import { scopeChips, scopeCounts } from "../../src/renderer/src/scope";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 import { hasSearchScope } from "../../src/shared/searchScope";
@@ -196,6 +203,48 @@ describe("moving Minds and Documents", () => {
         names,
       ),
     ).toBe("移动 2 个 Mind");
+  });
+
+  test("what a line is made from is cut to the one item it names, and to the fields its name is made from", () => {
+    const names = {
+      minds,
+      documents: [
+        { id: "a", name: "Tides.pdf", kind: "pdf" },
+        { id: "b", name: "Harbours.pdf", kind: "pdf" },
+      ] as never,
+    };
+    expect(namesOfMoving({ mindIds: ["shortlist"] }, names)).toEqual({
+      minds: [{ id: "shortlist", title: "Shortlist", autoTitle: "" }],
+      documents: [],
+      conversations: [],
+    });
+    expect(namesOfMoving({ documentIds: ["a"] }, names)).toEqual({
+      minds: [],
+      documents: [{ id: "a", name: "Tides.pdf" }],
+      conversations: [],
+    });
+    expect(namesOfMoving({ documentIds: ["a", "b"] }, names)).toEqual({
+      minds: [],
+      documents: [],
+      conversations: [],
+    });
+    const cut = namesOfMoving({ mindIds: ["shortlist"] }, names);
+    expect(moveMessage(t, { mindIds: ["shortlist"] }, "Finance", cut)).toBe(
+      moveMessage(t, { mindIds: ["shortlist"] }, "Finance", names),
+    );
+  });
+
+  test("the Folders an undo may find gone are kept by name, and no others", () => {
+    const library = {
+      groups: [group("finance", "Finance"), group("research", "Research"), group("a", "A")],
+    } as LibrarySnapshot;
+    expect(namesOfFolders(library, ["finance", null, "research"])).toEqual(
+      new Map([
+        ["finance", "Finance"],
+        ["research", "Research"],
+      ]),
+    );
+    expect(namesOfFolders(null, ["finance"])).toEqual(new Map());
   });
 
   test("the line names a conversation moved, or counts them", () => {
