@@ -161,6 +161,8 @@ export interface LaunchOptions {
    * its sandbox, where the line must not show. The sandbox is on in the last two on Linux too.
    */
   sandboxNotice?: "switch" | "environment" | "on";
+  /** A folder to keep a video of the window in, at the window's size (the feel check, #1242). */
+  recordVideo?: string;
 }
 
 /**
@@ -222,6 +224,7 @@ export async function launchApp(
     contradictionWatchDelayMs,
     sandboxed = false,
     sandboxNotice,
+    recordVideo,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -303,6 +306,7 @@ export async function launchApp(
     ],
     env,
     chromiumSandbox: sandboxed || sandboxNotice === "environment" || sandboxNotice === "on",
+    ...(recordVideo && { recordVideo: { dir: recordVideo } }),
   });
   openApps.set(app, dataDir);
   app.on("close", () => {
