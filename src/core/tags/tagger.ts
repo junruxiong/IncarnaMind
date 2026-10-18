@@ -20,6 +20,8 @@
  *   Document stay as they are (see `TagsStore.applyAutomatic`).
  * - Where the User stopped Tagging with AI, Documents are "stopped"
  *   and nothing is sent, unless the User asks to re-tag one.
+ * - With no Tags defined the model is skipped and a Document is "no-tags", not
+ *   "tagged", so it is checked once a Tag exists (see `tagsDefined`).
  */
 import type { DocumentKind, ProviderError } from "../api";
 import type { BackgroundCall, BackgroundJob, BackgroundQueue } from "../backgroundQueue";
@@ -51,6 +53,7 @@ export type StoredTaggingState =
   | "waiting-for-provider"
   | "tagging"
   | "tagged"
+  | "no-tags"
   | "failed"
   | "stopped";
 
@@ -238,7 +241,7 @@ export function createTagger(options: TaggerOptions) {
     const changed = db.transaction(() => {
       if (rowOf(id)?.status !== "ready") return false; // deleted, or processed again, meanwhile
       const tagsChanged = tags.applyAutomatic(id, decisions);
-      return setState(id, "tagged") || tagsChanged;
+      return setState(id, definitions.length === 0 ? "no-tags" : "tagged") || tagsChanged;
     });
     if (changed) announce([id]);
   }
@@ -358,7 +361,7 @@ export function createTagger(options: TaggerOptions) {
     for (const row of rest) enqueue(row.id);
   }
 
-  return {
+  const tagger = {
     /** Picks up after a quit: Documents being tagged start again, and those waiting are queued. */
     start(): void {
       db.run(
@@ -373,7 +376,7 @@ export function createTagger(options: TaggerOptions) {
      * A Document just became ready. Called before its new status is pushed,
      * so that event already says whether it waits for a tagger.
      */
-    documentReady(id: string): void {
+    documentReady(id: string, fresh = false): void {
       if (options.enabled?.() === false) return;
       const row = rowOf(id);
       // Processed again (e.g. by a newer pipeline): the same file keeps its Tags.
@@ -387,7 +390,24 @@ export function createTagger(options: TaggerOptions) {
         return;
       }
       setState(id, "pending");
-      enqueue(id);
+      enqueue(id, fresh);
+    },
+
+    /** A Tag may exist now: the Documents checked while there were none are tagged. */
+    tagsDefined(): void {
+      if (lifetime.signal.aborted || options.enabled?.() === false || tags.list().length === 0) {
+        return;
+      }
+      const ids = db
+        .all<{ id: string }>(
+          `SELECT id FROM documents
+           WHERE deleted_at IS NULL AND status = 'ready' AND tagging_status = 'no-tags'
+           ORDER BY created_at, rowid`,
+        )
+        .map((row) => row.id);
+      // Fresh: the run that just marked one "no-tags" may not have let go of it yet.
+      for (const id of ids) tagger.documentReady(id, true);
+      if (ids.length > 0) announce(ids);
     },
 
     /** The tagger, or whether it can run, may have changed: Documents waiting, or failed, are tried again. */
@@ -439,4 +459,5 @@ export function createTagger(options: TaggerOptions) {
       queue.length = 0;
     },
   };
+  return tagger;
 }
