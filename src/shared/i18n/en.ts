@@ -468,6 +468,7 @@ export const en = {
   "wordCount.target.invalid": "Enter a number, like 8,000 or 3万.",
   "wordCount.progress": "{percent}% of the target",
   "editor.placeholder": "Type / for headings, tables, code and math",
+  "editor.title": "Title",
   "editor.slash.label": "Insert",
   "editor.slash.empty": "No matches",
   "editor.slash.text": "Text",
@@ -800,8 +801,7 @@ export const en = {
   "references.localMode.turnOff": "Turn it off",
   "references.problem": "The references couldn't be checked: {message}",
   "consent.flow.checks": "Find support and Verify",
-  "consent.flow.checks.purpose":
-    "check the sentences you select, a whole Mind you check, and the documents you verify, against your Documents",
+  "consent.flow.checks.purpose": "check sentences, Minds and documents against your Documents",
   "aiText.markedAsMine": "Marked as yours",
   "edit.pending.improve": "Improving the writing…",
   "edit.pending.shorten": "Shortening…",
@@ -823,6 +823,8 @@ export const en = {
     "This change can't be made again. Reject it, then select the text and edit it with AI.",
   "edit.problem.no-table":
     "The AI's table wasn't complete, so nothing was changed. Try again, or ask for a list instead.",
+  "edit.problem.late":
+    "This edit took too long to arrive, so it wasn't applied. Accept or reject its changes.",
   "composer.edit.placeholder": "Say what to change…",
   "composer.edit.label": "Say what to change in the selected text",
   "composer.edit.quote": "Editing “{text}”",
@@ -1793,8 +1795,7 @@ export const en = {
   "providers.choice.label": "AI model",
   "providers.choice.local": "Stays on this computer",
   "providers.choice.apiKey": "An API key",
-  "providers.choice.apiKey.body":
-    "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server.",
+  "providers.choice.apiKey.body": "OpenAI, Anthropic, Google, DeepSeek and more.",
   "providers.choice.apiKey.firstRun.body": "{providers}. More providers are in Settings.",
   "providers.list.separator": ", ",
   "providers.list.last": "{rest} or {last}",
@@ -1906,18 +1907,16 @@ export const en = {
 
   "providers.ollama.title": "On this computer (free)",
   "providers.ollama.checking": "Looking for Ollama on this computer…",
-  "providers.ollama.detected":
-    "Ollama is running on this computer. With a local model, your Questions and Documents stay on it.",
-  "providers.ollama.notDetected":
-    "To run models on this computer, install Ollama from ollama.com and start it.",
+  "providers.ollama.detected": "Ollama is running. Questions and Documents stay on this computer.",
+  "providers.ollama.notDetected": "Install and start Ollama from ollama.com to run models here.",
   "providers.ollama.use": "Use local models ({model}, 3.3 GB)",
   "providers.ollama.pulling": "Downloading {model} (3.3 GB)… This can take a while.",
   "providers.ollama.checkAgain": "Check again",
   "providers.local.checking": "Looking for {provider} on this computer…",
   "providers.local.running":
-    "{provider} is running on this computer. Your Questions and Documents stay on it.",
+    "{provider} is running. Questions and Documents stay on this computer.",
   "providers.local.notRunning":
-    "Nothing answers at {address}. Start {provider} and its local server, or change the address.",
+    "Nothing answers at {address}. Start {provider}, or change the address.",
   "providers.local.runningAway": "{provider} answers at {address}.",
   "providers.local.also": "Also works with",
   "providers.local.rowRunning": "Running on this computer.",
@@ -1926,13 +1925,11 @@ export const en = {
 
   "providers.readiness.no-provider": "Asking needs an AI model. Notes work without one.",
   "providers.readiness.missing-api-key":
-    "The API key for {service} isn't saved on this device. Add it in Settings to ask Questions.",
-  "providers.readiness.consent-declined":
-    "You chose not to send data to {service}, so Questions are off. Choose another provider or a local model, or allow it in Settings.",
+    "No API key for {service} on this device. Add it in Settings.",
+  "providers.readiness.consent-declined": "Questions are off: you chose not to send to {service}.",
   "providers.readiness.local-mode":
     "Not sent to {service}: “Keep everything on this computer” is on.",
   "providers.readiness.setUp": "Set up",
-  "localMode.refused": "Not sent to {service}: “Keep everything on this computer” is on",
   "localMode.useLocal": "Use a local model",
   "localMode.turnOff": "Allow cloud models",
   "localMode.turnedOff": "Turned off “Keep everything on this computer”",
@@ -1966,15 +1963,13 @@ export const en = {
     "Use your ChatGPT Plus or Pro plan instead of an API key. It counts against your plan's limits.",
   "chatgpt.continue": "Continue with ChatGPT",
   "chatgpt.account.signedOut": "Not signed in.",
-  "chatgpt.account.expired":
-    "Your ChatGPT sign-in has ended. Sign in again to keep using your plan.",
+  "chatgpt.account.expired": "Your ChatGPT sign-in ended. Sign in again to use your plan.",
   "chatgpt.account.signedIn": "Signed in as {account}.",
   "chatgpt.account.unknown": "your ChatGPT account",
   "chatgpt.signingIn": "Finish signing in in your browser…",
   "chatgpt.cancel": "Cancel",
   "chatgpt.reopen": "Open the sign-in page again",
-  "chatgpt.nothingExtra":
-    "It uses your ChatGPT plan; there’s nothing extra to pay. OpenAI may ask to let IncarnaMind use the plan.",
+  "chatgpt.nothingExtra": "Nothing extra to pay. OpenAI may ask you to allow IncarnaMind.",
   "chatgpt.late": "Didn’t finish? Open the sign-in page again.",
   "chatgpt.signOut": "Sign out",
   "chatgpt.anotherAccount": "Use another account",
@@ -1984,23 +1979,21 @@ export const en = {
   "chatgpt.inUse": "Using ChatGPT plan",
   "chatgpt.manageUsage": "Manage usage",
   "chatgpt.signedOut.unconfirmed":
-    "Signed out on this computer, but OpenAI didn't confirm it. You can disconnect IncarnaMind in ChatGPT's settings.",
+    "Signed out here, but OpenAI didn't confirm. Disconnect IncarnaMind in ChatGPT.",
   "chatgpt.signIn.error.timed-out": "The sign-in took too long. Try again.",
   "chatgpt.signIn.error.cancelled": "The sign-in was cancelled.",
   "chatgpt.signIn.error.denied": "The sign-in wasn't completed. Try again.",
   "chatgpt.signIn.error.secret-storage":
-    "IncarnaMind can't store your sign-in securely on this system, because no keyring is available.",
+    "No keyring: IncarnaMind can't store the sign-in securely here.",
   "chatgpt.signIn.error.plan-not-allowed":
-    "IncarnaMind needs your permission to use your ChatGPT plan. Sign in again and allow it.",
+    "Allow IncarnaMind to use your ChatGPT plan: sign in again.",
   "chatgpt.signIn.error.other-account":
-    "That's another ChatGPT account than this computer used before. Sign in with the same one, or use another account.",
+    "That's not the ChatGPT account used here before. Sign in with that one.",
   "chatgpt.signIn.error.failed": "The sign-in didn't work. Try again.",
   "chatgpt.test.not-signed-in":
     "You're not signed in to ChatGPT. Continue with ChatGPT, then try again.",
-  "chatgpt.test.plan-limit":
-    "The usage limit of your ChatGPT plan, or the one you set for IncarnaMind, is reached.",
-  "chatgpt.test.blocked":
-    "OpenAI didn't let IncarnaMind use your ChatGPT plan. Choose another model, or check your plan in ChatGPT.",
+  "chatgpt.test.plan-limit": "Your plan's limit, or your IncarnaMind limit, is reached.",
+  "chatgpt.test.blocked": "OpenAI didn't let IncarnaMind use your plan. Choose another model.",
   "chatgpt.readiness.sign-in-required": "You're signed out of ChatGPT.",
   "chatgpt.page.success.title": "Signed in with ChatGPT",
   "chatgpt.page.success.body": "You can close this tab and go back to IncarnaMind.",
@@ -2015,13 +2008,10 @@ export const en = {
   "copilot.experimental": "Experimental",
   "copilot.notice.title": "Use your Copilot plan",
   "copilot.notice.usage": "Answers count toward your Copilot plan's usage limits.",
-  "copilot.notice.experimental":
-    "This way of signing in is experimental: GitHub may refuse or block it.",
+  "copilot.notice.experimental": "Experimental: GitHub may block this sign-in.",
   "copilot.notice.sends": "Sends your questions and document text to GitHub.",
   "copilot.notice.sends.details":
     "Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to GitHub under your account.",
-  "copilot.notice.off":
-    "It stays off until you sign in here, and you can sign out any time in Settings › Models.",
   "copilot.cancel": "Cancel",
   "copilot.code.asking": "Asking GitHub for a code…",
   "copilot.code.title": "Enter this code on GitHub's page",
@@ -2030,7 +2020,7 @@ export const en = {
   "copilot.code.reopen": "Open the page again",
   "copilot.signIn.noModels": "GitHub Copilot listed no models for this account",
   "copilot.policyBlocked.body":
-    "Your organization's Copilot policy blocks IncarnaMind. Ask an admin to allow it, or choose another way.",
+    "Your organization's Copilot policy blocks IncarnaMind. Ask an admin.",
   "copilot.chooseAnotherWay": "Choose another way",
   "copilot.plan.free": "Copilot Free",
   "copilot.plan.pro": "Copilot Pro",
@@ -2081,7 +2071,7 @@ export const en = {
   "claudePlan.paste.continue": "Finish signing in",
   "claudePlan.paste.problem.not-sign-in-address": "That isn't the code from Claude's page.",
   "claudePlan.paste.problem.other-sign-in":
-    "That code is from an earlier sign-in. Sign in on the page just opened, then paste its code.",
+    "Earlier sign-in. Sign in on the new page, then paste its code.",
   "claudePlan.failed": "The Claude sign-in didn't work",
   "claudePlan.failure.timedOut": "The Claude sign-in wasn't finished in time: nothing was kept",
   "claudePlan.failure.secretStorage": "Can't keep the Claude sign-in safely: no keyring",
@@ -2094,47 +2084,41 @@ export const en = {
   "signInRoute.wayBack.useAnotherModel": "Use another model",
   "signInRoute.wayBack.pasteApiKey": "Use an API key instead",
   "chatgpt.welcome.title": "You're using your ChatGPT plan",
-  "chatgpt.welcome.body":
-    "Questions you ask in IncarnaMind with a ChatGPT model now use your ChatGPT plan. You can see and limit this in ChatGPT's settings.",
+  "chatgpt.welcome.body": "Questions with ChatGPT models now use your ChatGPT plan.",
   "chatgpt.welcome.ok": "Got it",
-  "chatgpt.consent.note":
-    "It goes to OpenAI under your ChatGPT account, and counts against your plan's limits.",
+  "chatgpt.consent.note": "Goes to OpenAI under your ChatGPT account; counts toward its limits.",
   "chatgpt.menu.hint": "Use your Plus or Pro plan",
   "chatgpt.paste.question": "Didn't come back?",
   "chatgpt.paste.open": "Paste the address the browser shows",
   "chatgpt.paste.continue": "Continue",
   "chatgpt.paste.problem.not-sign-in-address": "That isn't the sign-in address.",
   "chatgpt.paste.problem.other-sign-in":
-    "That address is from an earlier sign-in. Sign in on the page just opened, then paste its address.",
+    "Earlier sign-in. Sign in on the new page, then paste its address.",
   "chatgpt.paste.problem.finished": "This sign-in has already finished.",
 
   "consent.dialog.title": "Send data to {service}?",
   "consent.dialog.body": "To {purpose}, IncarnaMind sends this to {service}:",
   "consent.dialog.bodyMore": "To {purpose}, IncarnaMind will now also send this to {service}:",
-  "consent.dialog.note":
-    "Nothing is sent until you allow it. You can change your mind in Settings.",
+  "consent.dialog.note": "Nothing is sent unless you allow it.",
+  "privacy.changeAnyTime": "Change it any time in Settings → Privacy.",
   "consent.dialog.allow": "Allow",
   "consent.dialog.decline": "Don't allow",
 
   "consent.flow.chat": "Chat",
   "consent.flow.chat.purpose": "answer your Questions",
-  "consent.data.blocks":
-    "The Mind you're in: its text, your Notes and earlier Answers, except Notes you've excluded",
+  "consent.data.blocks": "This Mind's text, Notes and earlier Answers, minus excluded Notes",
   "consent.data.passages": "passages from your Documents that match the Question",
-  "consent.data.tool-results":
-    "Results of the Tools an Answer uses, such as Connectors and Skill scripts",
+  "consent.data.tool-results": "Results of Connectors and Skill scripts an Answer uses",
   "consent.flow.tagging": "Automatic Tags",
   "consent.flow.tagging.purpose": "tag your Documents automatically",
   "consent.data.tags": "The names and descriptions of your Tags",
   "consent.data.document-excerpts":
-    "The name and type of each Document being tagged, and a short excerpt from its beginning",
-  "consent.data.page-images":
-    "For a scanned PDF with no text, images of up to 3 of its first pages, if the model can read images",
+    "Each tagged Document's name, type and a short excerpt of its start",
+  "consent.data.page-images": "A scan with no text: up to 3 page images, if the model reads images",
   "consent.flow.embeddings": "Document search",
   "consent.flow.embeddings.purpose": "search your Documents by their meaning",
   "consent.data.document-text": "The full text of every Document, as it is processed",
-  "consent.data.verified-document":
-    "The sentences of a document you verify, to find the claims to check",
+  "consent.data.verified-document": "The sentences of a document you verify, to find claims",
   "consent.data.queries": "Your searches: each Question's words, or what an Answer searches for",
   "consent.flow.suggestions": "Writing suggestions",
   "consent.flow.suggestions.purpose": "suggest how your writing goes on",
@@ -2144,15 +2128,13 @@ export const en = {
   "consent.flow.rerank.purpose": "put the best search results first",
   "consent.flow.connectors": "Connectors",
   "consent.flow.connectors.purpose": "use its Tools in your Answers",
-  "consent.data.tool-arguments":
-    "What an Answer asks its Tools: the arguments of each Tool call, such as what to look up",
+  "consent.data.tool-arguments": "What an Answer asks its Tools, such as what to look up",
   "consent.flow.reference-lookup": "Reference look-up",
   "consent.flow.reference-lookup.purpose": "fill in a Document's details for citing it",
   "consent.data.identifiers": "The Document's DOI or arXiv ID, and nothing else of it",
   "consent.flow.reference-check": "Reference check",
   "consent.flow.reference-check.purpose": "check that the works a reference list names exist",
-  "consent.data.references":
-    "Each reference in the list, as written: its authors, title, year and DOI, and nothing else of the Mind",
+  "consent.data.references": "Each reference as written (authors, title, year, DOI), nothing else",
   "consent.flow.connector-registry": "Connector search",
   "consent.flow.connector-registry.purpose": "find community connectors in the MCP Registry",
   "consent.data.connector-search": "What you type in the Connectors search, and nothing else",
@@ -2160,11 +2142,11 @@ export const en = {
   "consent.flow.find-sources.purpose": "find papers and other sources, and add the ones you choose",
   "consent.data.search-terms": "What you search for: the words and filters, such as years",
   "consent.data.work-ids":
-    "The DOI, arXiv ID, PubMed ID, label set ID, NCT number or citation of each work you add",
+    "The ID of each work you add: DOI, arXiv, PubMed, label set, NCT or citation",
   "consent.data.provider-key": "Your own key for this service, which it needs to answer",
   "consent.flow.edits": "Edit with AI",
   "consent.flow.edits.purpose": "change the text you select as you ask",
-  "consent.data.selection": "The text you select, with the paragraphs it is in, each time you ask",
+  "consent.data.selection": "The selected text and its paragraphs, each time you ask",
 
   "reference.citeAs": "Cite as",
   "reference.citeAs.label": "Cite as: {name}",
@@ -2363,7 +2345,7 @@ export const en = {
 
   "usageData.card.title": "Help improve IncarnaMind?",
   "usageData.card.body":
-    "Send anonymous usage data, like which features you use. Never your files, their names or your Questions.",
+    "Anonymous, like which features you use. Never your files, their names or Questions.",
   "usageData.card.send": "Send",
   "usageData.card.decline": "Don't send",
   "usageData.card.what": "What's sent",
@@ -2371,11 +2353,10 @@ export const en = {
   "usageData.example.question": "A Question was asked with a cloud model from Anthropic",
   "usageData.example.answer": "An Answer took 6 seconds and has 3 Citations, each quote found",
   "usageData.example.documents": "2 Documents were added: a PDF and a Word file",
-  "usageData.card.change": "Change it any time in Settings → Privacy.",
   "usageData.card.details": "See every event",
   "usageData.card.tester.title": "This test version sends usage data",
   "usageData.card.tester.body":
-    "As you agreed when you joined: anonymous, like which features you use. Never your files, their names or your Questions.",
+    "Anonymous, as agreed when you joined. Never your files, their names or Questions.",
   "usageData.card.tester.switch": "Send usage data",
   "usageData.card.tester.hide": "Hide this notice",
 
@@ -2415,9 +2396,9 @@ export const en = {
   "composer.model.standIn.title":
     "{chosen}’s limit is used up until {time}. Questions go to {model} until then.",
   "composer.model.standIn.titleForNow":
-    "{chosen}’s limit is used up for now. Questions go to {model} until it’s back.",
+    "{chosen}’s limit is used up. Questions go to {model} until it’s back.",
   "composer.model.menu": "Model for this Mind",
-  "composer.model.intro": "For this Mind’s next Questions. It’s remembered for the Mind.",
+  "composer.model.intro": "For this Mind’s Questions.",
   "composer.model.group.keys": "Your keys",
   "composer.model.group.plan": "ChatGPT plan",
   "composer.model.group.local": "On this computer",
@@ -2460,7 +2441,7 @@ export const en = {
   "scope.picker.tags": "Tags",
   "scope.picker.documents": "Documents",
   "scope.picker.empty": "No Folders, Tags or Documents match",
-  "scope.picker.none": "Add Documents, Folders or Tags to choose what a Question searches.",
+  "scope.picker.none": "No Documents yet. Add some to choose what to search.",
   "scope.chip.folder": "Folder “{name}”, with its sub-Folders",
   "scope.chip.tag": "Documents tagged “{name}”",
   "scope.chip.document": "Document “{name}”",
@@ -2470,16 +2451,14 @@ export const en = {
   "scope.picker.empty.hint": "(empty)",
   "scope.chip.empty": "· empty",
   "scope.chip.deleted": "It has been deleted, so the search ignores it.",
-  "scope.chip.own":
-    "Searches the {count} Documents in this Folder. Remove it to search everything.",
-  "scope.chip.own.one": "Searches the 1 Document in this Folder. Remove it to search everything.",
+  "scope.chip.own": "Searches this Folder’s {count} Documents. Remove it to search every Document.",
+  "scope.chip.own.one": "Searches this Folder’s 1 Document. Remove it to search every Document.",
   "scope.chip.remove": "Remove {name} from the Search scope",
   "scope.chip.more": "+{count} more",
   "scope.chip.moreLabel": "Show the other {count} Documents in the Search scope",
   "scope.chip.fewer": "Show fewer",
   "scope.empty.line": "{scope} has no Documents",
-  "scope.answer.empty":
-    "This Question's Search scope has no Documents to search, so nothing was searched. Add Documents to its Folders or Tags, or remove the scope to search all your Documents.",
+  "scope.answer.empty": "The Search scope has no Documents. Remove it to search every Document.",
 
   "answer.label": "Answer",
   "answer.status.streaming": "Writing…",
@@ -2616,7 +2595,7 @@ export const en = {
   "research.plan.view": "Research plan, as it runs",
   "research.plan.close": "Close",
   "task.tell.chip": "→ {task}",
-  "task.tell.hint": "Enter sends this to {task}, which reads it when its next step starts",
+  "task.tell.hint": "Enter sends this to {task} for its next step",
   "task.tell.remove": "Ask instead",
   "task.tell.placeholder": "Tell it what to change…",
   "task.tell.send": "Send to {task}",
@@ -2638,7 +2617,7 @@ export const en = {
   "research.step.wrote.one": "Wrote a cited draft as 1 change in “{mind}”",
   "research.step.wrote.other": "Wrote a cited draft as {count} changes in “{mind}”",
   "research.command": "Research…",
-  "research.command.hint": "Plans, searches the web and the Library, then writes a cited draft",
+  "research.command.hint": "Searches the web and the Library, then drafts with Citations",
   "research.command.keywords": "deep research web sources",
   "research.needsMind": "Open a Mind to research for",
   "research.chip": "Research",
@@ -2706,10 +2685,8 @@ export const en = {
   "task.action.details": "Details",
   "task.ask.count": "{number} of {total}",
   "task.unknown.title": "IncarnaMind was closed during this step",
-  "task.unknown.file":
-    "It was writing {name}. The file there now isn't what it wrote, so it can't tell whether this step finished.",
-  "task.unknown.connector":
-    "It was making a change through {connector} ({tool}). It can't tell whether the change was made.",
+  "task.unknown.file": "Can’t tell if this step finished: {name} isn’t what it wrote.",
+  "task.unknown.connector": "Unsure the change through {connector} ({tool}) was made.",
   "task.unknown.redo": "Do it again",
   "task.unknown.skip": "Skip it",
   "task.details.cells": "{done} of {total} cells written",
@@ -2824,7 +2801,7 @@ export const en = {
   "citation.regenerate": "Regenerate the Answer",
   "citation.changedAfterCited": "The Document changed after this was cited.",
   "citation.recheck": "Check against the current version",
-  "citation.unsupported": "{model} can’t add Citations, so nothing in this Answer is checked",
+  "citation.unsupported": "{model} can’t add Citations: nothing here is checked",
   "citation.unsupported.choose": "Choose another model",
 
   "search.running": "Searching your Documents…",
@@ -2964,12 +2941,10 @@ export const en = {
   "suggestion.citation": "From {document}, {location}: “{quote}”",
   "suggestion.citationNoLocation": "From {document}: “{quote}”",
   "suggestion.key": "Tab",
-  "suggestion.offer":
-    "IncarnaMind can suggest the next sentence from your Documents, with a Citation.",
+  "suggestion.offer": "Suggest the next sentence, cited from your Documents?",
   "suggestion.offer.turnOn": "Turn on",
   "suggestion.offer.notNow": "Not now",
-  "suggestion.offer.on":
-    "Suggestions are on: Tab accepts, Esc dismisses. Turn them off in Settings.",
+  "suggestion.offer.on": "Suggestions on: Tab accepts, Esc dismisses. Turn them off in Settings.",
   "suggestions.settings.title": "Writing",
   "suggestions.settings.switch": "Suggest as I write, from my Documents",
   "suggestions.settings.body":
@@ -2987,19 +2962,22 @@ export const en = {
   "scripts.card.wouldRun": "It would run",
   "scripts.card.noArgs": "No arguments.",
   "scripts.card.noSandbox":
-    "Scripts run on this computer with no sandbox: this one could read, change or delete your files and use the internet, as you can. Nothing runs until you choose.",
-  "scripts.card.sandboxed":
-    "This script runs in a sandbox: it can't open your home folder or IncarnaMind's data, can only write in its own working folder, and has no internet. Nothing runs until you choose.",
+    "No sandbox: it can read, change or delete your files and use the internet.",
+  "scripts.card.sandboxed": "Runs in a sandbox: no internet, no home folder.",
+  "scripts.card.sandboxed.details":
+    "It can’t open your home folder or IncarnaMind’s data, can only write in its own working folder, and has no internet.",
   "scripts.card.allowOnce": "Allow once",
   "scripts.card.alwaysRun": "Always run",
-  "scripts.card.alwaysRunHint":
-    "Run every script of {skill} from now on without asking. You'll see a warning first.",
+  "scripts.card.alwaysRunHint": "Run {skill}’s scripts without asking from now on",
   "scripts.card.deny": "Deny",
   "scripts.alwaysRun.title": "Always run the scripts of {skill}?",
   "scripts.alwaysRun.body":
-    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts aren't sandboxed: they can read, change or delete your files, install software and send your data over the internet. Only do this for a Skill you trust completely. You can reset it in Settings, under Approvals.",
+    "From now on, {skill}’s scripts run without asking. With no sandbox, they can delete your files and send your data online.",
   "scripts.alwaysRun.bodySandboxed":
-    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts run in a sandbox: they can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. They can still read files elsewhere on this computer, such as on an external drive. Only do this for a Skill you trust. You can reset it in Settings, under Approvals.",
+    "From now on, {skill}’s scripts run without asking. They run in a sandbox, but can still read files on other drives.",
+  "scripts.alwaysRun.bodySandboxed.details":
+    "They can’t open your home folder or IncarnaMind’s data, can only write in their own working folder, and have no internet.",
+  "scripts.alwaysRun.trust": "Only for a Skill you trust. Reset in Settings › Approvals.",
   "scripts.alwaysRun.confirm": "Always run {skill}'s scripts",
   "scripts.alwaysRun.cancel": "Cancel",
   "scripts.call.waiting": "Waiting for your approval: {script} ({skill})",
@@ -3877,7 +3855,7 @@ export const en = {
     "Its server can't be reached. Check the URL and your internet connection.",
   "remoteConnectors.consent.note": "The Tool's arguments go to this server over the network.",
   "remoteConnectors.answer.signInRequired":
-    "Not used: {connector} needs you to sign in, in Settings → Connectors",
+    "Not used: {connector} needs sign-in · Settings › Connectors",
   "remoteConnectors.page.success.title": "Signed in to {name}",
   "remoteConnectors.page.success.body": "You can close this tab and go back to IncarnaMind.",
   "remoteConnectors.page.failure.title": "Signing in to {name} didn't work",
@@ -3887,14 +3865,13 @@ export const en = {
   "approvals.card.title": "{connector} wants to run {tool}",
   "approvals.card.changes":
     "This Tool may change something in {connector}. Nothing is sent until you choose.",
-  "approvals.card.readOnly":
-    "{connector} says this Tool only reads. You chose to approve it every time.",
+  "approvals.card.readOnly": "{connector} says it only reads. You chose to ask every time.",
   "approvals.card.arguments": "It would send",
   "approvals.card.noArguments": "No arguments.",
   "approvals.card.allowOnce": "Allow once",
   "approvals.card.alwaysAllow": "Always allow",
   "approvals.card.alwaysAllowHint":
-    "Run {tool} from now on without asking. You can reset it in Settings, under Approvals.",
+    "Run {tool} without asking from now on · Reset in Settings › Approvals",
   "approvals.card.deny": "Deny",
   "approvals.thirdParty.read.imported": "Asks first: this Answer read a Mind with imported text.",
   "approvals.thirdParty.read.webPage": "Asks first: this Answer read a web page.",
@@ -3937,22 +3914,20 @@ export const en = {
   "editor.hint.empty.ask": "press {shortcut} to ask a Question…",
   "editor.hint.first": "A Mind: write here and ask your Documents, every quote checked. {ask}",
   "editor.hint.first.ask": "Press {shortcut} to ask.",
-  "tabs.new.about": "New Mind: a page to write in and ask your Documents ({shortcut})",
+  "tabs.new.about": "New Mind: write and ask your Documents ({shortcut})",
   "editor.hint.afterAnswer": "Keep writing, or {ask}",
   "editor.hint.afterAnswer.ask": "press {shortcut} to ask a follow-up",
   "editor.hint.example": "Try it: write a line here, or {ask}",
   "editor.hint.example.ask": "press {shortcut} to ask your own Question",
   "examples.chip": "Example",
   "firstOpen.title": "Welcome to IncarnaMind",
-  "firstOpen.lead": "This example was checked against its Documents. Three steps, about a minute.",
+  "firstOpen.lead": "Three steps, about a minute.",
   "firstOpen.step.citation.title": "See a mistake it caught",
   "firstOpen.step.citation.done": "Saw a mistake it caught",
-  "firstOpen.step.citation.body":
-    "One figure in the draft is wrong. Click the red ≠ in the margin to see what the results actually say.",
+  "firstOpen.step.citation.body": "One figure is wrong. Click the red ≠ in the margin.",
   "firstOpen.step.question.title": "Ask a question",
   "firstOpen.step.question.done": "Asked a question",
-  "firstOpen.step.question.body":
-    "Ask the two Documents anything. The Answer quotes them, and every quote is checked.",
+  "firstOpen.step.question.body": "Ask the two Documents anything. Every quote is checked.",
   "firstOpen.step.question.ready": "Ask: “{question}”",
   "firstOpen.step.question.own": "or press {shortcut} to type your own",
   "firstOpen.step.question.ownOnly": "Press {shortcut} to ask your own Question.",
@@ -3961,7 +3936,7 @@ export const en = {
   "firstOpen.step.files.body":
     "Your files stay where they are. IncarnaMind reads them on this computer.",
   "firstOpen.done.title": "You're set up.",
-  "firstOpen.model.body": "One more step: choose an AI model to ask about your own files.",
+  "firstOpen.model.body": "Choose an AI model to ask about your own files.",
   "firstOpen.model.choose": "Choose a model",
   "firstOpen.next.lead": "Try next:",
   "firstOpen.next.compare": "Compare documents in a table",
@@ -3973,9 +3948,9 @@ export const en = {
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
-    "A Mind: write here and ask your Documents, every quote checked. This draft was checked against its two Documents, and one figure is wrong: click the red mark beside it to see what the results say.",
+    "A Mind: write here and ask your Documents, every quote checked. One figure here is wrong: click its red mark.",
   "examples.banner.body.tea":
-    "A Mind: write here and ask your Documents, every quote checked. You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
+    "A Mind: write here and ask your Documents, every quote checked. Click a check to see its quote; green means found.",
   "examples.banner.addOwn": "Add your Documents",
   "examples.banner.remove": "Remove the examples",
   "examples.banner.more": "Try an example closer to your work:",
@@ -3984,25 +3959,25 @@ export const en = {
   "examples.group.reports": "Reports",
   "examples.group.contracts": "Contracts",
   "examples.group.meetings": "Meetings",
-  "examples.answer": "Example Answer, written in advance: no model needed to try it",
+  "examples.answer": "Example Answer · no model needed",
   "gettingStarted.done": "Done: ",
   "gettingStarted.step.documents": "Add your Documents",
   "startGuide.title": "Start in three steps",
   "startGuide.documents.title": "Add your Documents, or connect your apps",
   "startGuide.documents.body":
-    "PDF, Word, PowerPoint, Excel, Markdown or text. Your files stay where they are; IncarnaMind only reads them. A Google Drive or OneDrive folder synced to this computer works too.",
+    "PDF, Word, PowerPoint, Excel, Markdown or text. IncarnaMind only reads them.",
   "startGuide.documents.linkFolder": "Link a folder…",
   "startGuide.documents.addFiles": "Add files…",
   "startGuide.documents.connectApp": "Connect an app…",
   "startGuide.documents.apps":
-    "Connect Notion, Google Drive and other apps, and Answers can look things up there too. Only your Documents get checked Citations.",
+    "Answers can also search Notion, Google Drive and more, without checked Citations.",
+  "startGuide.documents.linkFolder.tip":
+    "A Google Drive or OneDrive folder synced to this computer works too.",
   "startGuide.ask.title": "Ask a Question",
-  "startGuide.ask.body":
-    "Press {shortcut} and ask. The Answer appears in the assistant; add it to your note with one click.",
+  "startGuide.ask.body": "Press {shortcut} and ask your Documents.",
   "startGuide.ask.example": "e.g. What do these reports say about Q3 revenue?",
   "startGuide.check.title": "Check where each claim comes from",
-  "startGuide.check.body":
-    "Every claim gets a mark in the margin: {mark} when the quote is found in your Document. Click it to open the page.",
+  "startGuide.check.body": "{mark}: quote found in your Document. Click it to open the page.",
   "startGuide.example.lead": "Want to see it first?",
   "startGuide.example.open": "Open the example Mind",
   "meetings.mindTitle": "Meeting, {date}",
@@ -4492,8 +4467,7 @@ export const en = {
   "assistant.searchesAll": "Searches All Documents",
   "assistant.searches.one": "Searches “{scope}”",
   "assistant.searches.more": "Searches “{scope}” and {count} more",
-  "assistant.empty":
-    "Ask about the Mind you’re in or your Documents. Answers stay here, every Citation checked, until you add one to a note.",
+  "assistant.empty": "Ask about this Mind or your Documents.",
   "assistant.log": "Conversation “{title}”",
   "assistant.youAsked": "You asked:",
   "assistant.cleared": "Cleared “{title}”",
@@ -4508,7 +4482,7 @@ export const en = {
   "steps.passages.one": "1 passage",
   "steps.readCited": "Read {passages} · {count} sentences cited after checking",
   "steps.readCited.one": "Read {passages} · 1 sentence cited after checking",
-  "steps.readNoneMatched": "Read {passages} · none of its sentences could be matched to them",
+  "steps.readNoneMatched": "Read {passages} · no sentence matched them",
   "steps.read": "Read “{mind}”",
   "steps.read.part": "Read part of “{mind}”",
   "steps.read.selection": "Read your selection in “{mind}”",
@@ -4532,7 +4506,7 @@ export const en = {
   "steps.check.found": "found",
   "steps.check.notFound": "{count} not found",
   "steps.failed.search": "Couldn’t search {scope}",
-  "steps.failed.search.auth": "Couldn’t search {scope}: the key for a search model was refused",
+  "steps.failed.search.auth": "Couldn’t search {scope}: the search model’s key was refused",
   "steps.live.reading": "Reading {mind}…",
   "steps.live.searching": "Searching {scope}…",
   "steps.live.checking": "Checking {count} Citations…",
@@ -4632,12 +4606,14 @@ export const en = {
   "mindCall.failed.copy": "Didn't add to “{mind}”: “{text}” is there already, waiting",
   "mindCall.failed.newVersion": "Didn't add a second version of “{text}” to “{mind}”",
   "mindCall.failed.contentNotOwn":
-    "Couldn't change “{mind}”: only text the assistant wrote can be written anew",
+    "Couldn’t change “{mind}”: only the assistant’s own text can be rewritten",
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
   "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
-  "mindChanges.unlinked":
-    "· {count} sources in the table couldn't be linked, so they're shown as text",
-  "mindChanges.unlinked.one": "· 1 source in the table couldn't be linked, so it's shown as text",
+  "mindCall.failed.uncited": "Didn't add to “{mind}”: its sources weren't cited",
+  "mindChanges.unlinked": "· {count} sources shown as text, not linked",
+  "mindChanges.unlinked.one": "· 1 source shown as text, not linked",
+  "mindChanges.dropped": "· {count} sources couldn't be matched, so they were left out",
+  "mindChanges.dropped.one": "· 1 source couldn't be matched, so it was left out",
   "mindChanges.extraCells": "· {count} extra cells were kept as text",
   "mindChanges.extraCells.one": "· 1 extra cell was kept as text",
   "mindCall.failed.localMode": "Couldn't change “{mind}”: “Keep everything on this computer” is on",
@@ -4690,15 +4666,13 @@ export const en = {
     "There are {count} paragraphs starting “{name}”: {places}. Which one?",
   "assistant.place.under": "under “{heading}”",
   "assistant.place.number": "number {n}",
-  "assistant.table.unmade":
-    "I couldn't make this into a table, so it's below as text. Nothing was added to “{mind}”.",
+  "assistant.table.unmade": "No table made: it’s below as text, not in “{mind}”.",
   // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
   // tells an agent when a call can't be done, which the agent passes on to the User.
   "consent.flow.agents": "Your AI agents",
-  "consent.flow.agents.purpose":
-    "let an AI agent you use, such as Claude or Codex, read your Documents and cite them",
+  "consent.flow.agents.purpose": "let your AI agent read and cite your Documents",
   "consent.data.scoped-passages":
-    "Passages from the Documents in the folders you choose, as the agent searches and reads them",
+    "Passages from Documents in the chosen folders, as the agent reads them",
   "consent.data.scoped-minds": "Your Minds in those folders, when the agent reads them",
   "consent.data.answers": "IncarnaMind’s Answers to the agent’s Questions, with their quotes",
   "consent.flow.web-search": "Web search",

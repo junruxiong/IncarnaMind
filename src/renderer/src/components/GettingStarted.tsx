@@ -192,6 +192,7 @@ export function StartGuide() {
             <button
               type="button"
               data-testid="start-link-folder"
+              title={t("startGuide.documents.linkFolder.tip")}
               onClick={() => void addLinkedFolder()}
               className={buttonStyle("primary")}
             >

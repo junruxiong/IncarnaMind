@@ -94,7 +94,7 @@ const appCommands: readonly Command[] = [
     ...fromMenu("mind.new"),
     group: "main",
     reversible: true,
-    run: () => useAppStore.getState().createMind(),
+    run: () => useAppStore.getState().createMind({ titled: true }),
   },
   {
     id: "word.import",

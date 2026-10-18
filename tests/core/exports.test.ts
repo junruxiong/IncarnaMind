@@ -412,6 +412,22 @@ describe("exporting a Mind", () => {
     );
   });
 
+  test("a new Mind's title line left empty isn't exported: no empty heading at the top of the file", async () => {
+    const { core, mind, client } = await setUp();
+    writeMind(client, [
+      { type: "heading", attrs: { level: 1 } },
+      note("Spring tides come at new moon."),
+    ]);
+    await client.settled();
+
+    const markdown = decode(await core.exportMind(mind.id, { format: "markdown" }));
+    expect(markdown).toBe("Spring tides come at new moon.\n");
+    const html = decode(await core.exportMind(mind.id, { format: "html" }));
+    expect(html).not.toMatch(/<h[1-6][^>]*>\s*<\/h[1-6]>/);
+    const { document } = docxParts(await core.exportMind(mind.id, { format: "docx" }));
+    expect(paragraphsOf(document)).toEqual([{ text: "Spring tides come at new moon." }]);
+  });
+
   test("highlighted text is ==marked== in Markdown and highlighted in Word", async () => {
     const { core, mind, client } = await setUp();
     writeMind(client, [

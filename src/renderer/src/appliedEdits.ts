@@ -184,23 +184,52 @@ function beginEdit(editor: Editor, mindId: string, requestId: string): Applying 
 const ofRequest = (state: EditorState, request: string) =>
   proposalsIn(state.doc).filter((each) => each.request === request);
 
-/** The Proposals come with the core's updates, before its reply: this is a backstop. */
-function whenHeld(editor: Editor, request: string): Promise<boolean> {
+/** How long an edit's updates may take to reach the editor's copy after the core's reply. */
+const ARRIVAL_WAIT_MS = 5_000;
+
+/**
+ * Once the editor's copy has all the core had written when it replied, the request's Proposals
+ * among it: on a busy machine the reply can come before the edit's last update, which would
+ * come in after the edit stopped taking them, as no part of its Undo step and not accepted with
+ * it. "late" when they haven't all come within `ARRIVAL_WAIT_MS`; "none" when they came and
+ * left no Proposals of it.
+ */
+function whenArrived(
+  edit: Applying,
+  request: string,
+  stateVector: Uint8Array,
+): Promise<"arrived" | "none" | "late" | "closed"> {
+  const wanted = Y.decodeStateVector(stateVector);
+  const written = () =>
+    [...wanted].every(([client, clock]) => Y.getState(edit.doc.store, client) >= clock);
+  const held = () => ofRequest(edit.editor.state, request).length > 0;
   return new Promise((resolve) => {
-    if (editor.isDestroyed || ofRequest(editor.state, request).length > 0) {
-      resolve(!editor.isDestroyed);
+    if (edit.editor.isDestroyed) {
+      resolve("closed");
       return;
     }
-    const done = (held: boolean) => {
+    if (written() && held()) {
+      resolve("arrived");
+      return;
+    }
+    const done = (arrival: "arrived" | "none" | "late" | "closed") => {
       clearTimeout(timer);
-      editor.off("transaction", check);
-      resolve(held);
+      edit.doc.off("afterTransaction", check);
+      edit.editor.off("transaction", check);
+      edit.editor.off("destroy", closed);
+      resolve(arrival);
     };
     const check = () => {
-      if (ofRequest(editor.state, request).length > 0) done(true);
+      if (written() && held()) done("arrived");
     };
-    const timer = setTimeout(() => done(ofRequest(editor.state, request).length > 0), 5_000);
-    editor.on("transaction", check);
+    const closed = () => done("closed");
+    const timer = setTimeout(
+      () => done(!written() ? "late" : held() ? "arrived" : "none"),
+      ARRIVAL_WAIT_MS,
+    );
+    edit.doc.on("afterTransaction", check);
+    edit.editor.on("transaction", check);
+    edit.editor.on("destroy", closed);
   });
 }
 
@@ -414,7 +443,7 @@ const topBlockAt = (state: EditorState, pos: number): string | null => {
 export async function finishApplying(
   edit: Applying,
   result: EditWithAiResult,
-): Promise<{ applied: ChangedBlocks } | "held" | null> {
+): Promise<{ applied: ChangedBlocks } | "held" | "late" | null> {
   if (result.kind !== "proposed") {
     edit.stopTaking();
     if (edit.request) drawApplying(edit.editor, edit.request, false);
@@ -422,15 +451,14 @@ export async function finishApplying(
     return null;
   }
   edit.request ??= result.request;
-  const there = await whenHeld(edit.editor, result.request);
+  const arrival = await whenArrived(edit, result.request, result.stateVector);
   edit.stopTaking();
-  if (!there || edit.editor.isDestroyed) {
-    drawApplying(edit.editor, result.request, false);
-    return null;
-  }
+  if (arrival !== "closed") drawApplying(edit.editor, result.request, false);
+  // What came waits as changes to review, and what comes later joins them: nothing is lost.
+  if (arrival === "late") return "late";
+  if (arrival !== "arrived") return null;
   edit.leftOut = result.leftOut ?? [];
   if (result.held) {
-    drawApplying(edit.editor, result.request, false);
     const first = ofRequest(edit.editor.state, result.request)[0];
     const index = first ? edit.editor.state.doc.resolve(first.from).index(0) : -1;
     const id: unknown =

@@ -59,6 +59,8 @@ export interface LibraryOptions {
    */
   reranker?: CrossEncoder;
   documents: readonly EvalDocument[];
+  /** The folder of the example Documents the app ships, for a run that makes the example Mind. */
+  examples?: string;
   /** Web pages saved by their address from the HTML given, as `saveWebPage` saves a page open in the app: nothing is fetched. */
   webPages?: readonly EvalWebPage[];
   /** Looks up models in Ollama instead of the app's own lookup (see `evalOllamaModels`). */
@@ -236,7 +238,12 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
     await symlink(options.modelCache, modelsLink, "junction");
   }
   const adapters: CoreAdapters = {
-    paths: { dataDir, home: join(dataDir, "home"), documents: join(dataDir, "Documents") },
+    paths: {
+      dataDir,
+      home: join(dataDir, "home"),
+      documents: join(dataDir, "Documents"),
+      ...(options.examples && { examples: options.examples }),
+    },
     systemLanguages: () => ["en-US"],
     keychain: memoryKeychain(),
     browser: {

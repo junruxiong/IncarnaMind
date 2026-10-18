@@ -92,9 +92,8 @@ test("first run: Use my Copilot plan says what it costs and sends before anythin
   const notice = card.getByTestId("copilot-notice");
   await expect(notice.getByRole("listitem")).toHaveText([
     "Answers count toward your Copilot plan's usage limits.",
-    "This way of signing in is experimental: GitHub may refuse or block it.",
+    "Experimental: GitHub may block this sign-in.",
     "Sends your questions and document text to GitHub. · Details",
-    "It stays off until you sign in here, and you can sign out any time in Settings › Models.",
   ]);
   // The experimental way starts on the safe choice.
   await expect(notice.getByTestId("copilot-cancel")).toBeFocused();
@@ -150,7 +149,7 @@ test("first run: an organization's block says so, with an API key or another way
   const failure = card.getByTestId("copilot-failure");
   await expect(failure).toContainText("Your organization doesn't allow this app");
   await expect(failure).toContainText(
-    "Your organization's Copilot policy blocks IncarnaMind. Ask an admin to allow it, or choose another way.",
+    "Your organization's Copilot policy blocks IncarnaMind. Ask an admin.",
   );
   await expect(failure.getByRole("button")).toHaveText([
     "Use an API key instead",
