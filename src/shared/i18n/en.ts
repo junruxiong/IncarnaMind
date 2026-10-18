@@ -1374,6 +1374,8 @@ export const en = {
   "webPages.fetched": "Fetched {date}",
   "webPages.source": "Saved web page · {address} · saved {date}",
   "webPages.drop": "Drop to save the page, or drop it on a Folder",
+  "sandbox.off": "Running without the app’s sandbox",
+  "sandbox.off.fix": "How to fix",
   "status.alreadyAdded.one": "1 already added",
   "status.alreadyAdded.other": "{count} already added",
   "status.more": "+{count}",

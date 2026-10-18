@@ -1337,6 +1337,8 @@ export const zhCN = {
   "webPages.fetched": "抓取于 {date}",
   "webPages.source": "保存的网页 · {address} · 保存于 {date}",
   "webPages.drop": "松开即可保存网页，也可以拖到文件夹上",
+  "sandbox.off": "应用正在没有沙盒的情况下运行",
+  "sandbox.off.fix": "如何解决",
   "status.alreadyAdded.one": "1 个已存在",
   "status.alreadyAdded.other": "{count} 个已存在",
   "status.more": "+{count}",

@@ -12,6 +12,7 @@ import { useCapturing } from "../meetings";
 import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
+import { openSandboxHelp, useRunsWithoutSandbox } from "../sandbox";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { useTaggingAlert } from "../taggingAlert";
 import { useTaggingExplained } from "../taggingExplained";
@@ -347,6 +348,11 @@ function useStatuses(): Status[] {
   const dismissSkipped = useAppStore((state) => state.dismissSkippedFiles);
   const dismissAlreadyAdded = useAppStore((state) => state.dismissAlreadyAdded);
   const openSettings = useAppStore((state) => state.openSettings);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+  const sandboxOff = useRunsWithoutSandbox();
+  const sandboxNoticeDismissed = useAppStore(
+    (state) => state.settings?.device.sandboxNoticeDismissed === true,
+  );
   const taggingWaits = counts.waitingForTagger > 0;
   const tagging = !organizesNew && counts.tagging > 0;
   const organizingNow =
@@ -559,6 +565,18 @@ function useStatuses(): Status[] {
           : t("status.alreadyAdded.other", { count: alreadyAdded.length }),
       full: t("documents.alreadyAdded", { names: alreadyAdded.join(", ") }),
       dismiss: dismissAlreadyAdded,
+    });
+  }
+
+  if (sandboxOff && !sandboxNoticeDismissed) {
+    statuses.push({
+      testId: "no-sandbox",
+      tone: "waiting",
+      short: t("sandbox.off"),
+      full: t("sandbox.off"),
+      wraps: true,
+      action: { label: t("sandbox.off.fix"), testId: "no-sandbox-fix", run: openSandboxHelp },
+      dismiss: () => void updateSettings({ device: { sandboxNoticeDismissed: true } }),
     });
   }
 

@@ -9,11 +9,13 @@ import type {
 import { formatDate } from "../../../shared/dates";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
+import { openSandboxHelp, useRunsWithoutSandbox } from "../sandbox";
 import { useAppStore } from "../store";
 import { AiUseSettings } from "./AiUseSettings";
 import { ApprovalsSettings } from "./ApprovalsSettings";
 import { DetailsLine } from "./DetailsLine";
 import { OnThisComputer } from "./OnThisComputer";
+import { ProblemLine } from "./ProblemLine";
 import { USAGE_DATA_DETAILS_URL } from "./UsageDataCard";
 import {
   buttonStyle,
@@ -40,6 +42,7 @@ const reportError = (failure: unknown) => useAppStore.getState().reportError(fai
  */
 export function PrivacySettings() {
   const t = useT();
+  const sandboxOff = useRunsWithoutSandbox();
   const [flows, setFlows] = useState<RegisteredDataFlow[] | null>(null);
   const [traffic, setTraffic] = useState<NetworkTraffic[] | null>(null);
   // As loaded with the app, until the core's answer below.
@@ -118,6 +121,20 @@ export function PrivacySettings() {
       <p className={pageIntroClass}>
         {t(choices?.usageData.available ? "privacy.intro.usageData" : "privacy.intro")}
       </p>
+
+      {sandboxOff && (
+        <ProblemLine
+          testId="privacy-no-sandbox"
+          role="status"
+          action={{
+            label: t("sandbox.off.fix"),
+            testId: "privacy-no-sandbox-fix",
+            onClick: openSandboxHelp,
+          }}
+        >
+          {t("sandbox.off")}
+        </ProblemLine>
+      )}
 
       <section data-testid="consent-settings" className="flex flex-col">
         <h4 className={sectionTitleClass}>{t("consent.settings.title")}</h4>

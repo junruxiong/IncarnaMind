@@ -1922,6 +1922,8 @@ export interface DeviceSettings {
   sidebarHidden: boolean;
   /** The User chose "set up later" on the first-run chat setup screen. */
   chatSetupDismissed: boolean;
+  /** The User dismissed the sidebar's line saying the app runs without its sandbox (#1179). */
+  sandboxNoticeDismissed: boolean;
   /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
   gettingStarted: GettingStarted;
   /**
