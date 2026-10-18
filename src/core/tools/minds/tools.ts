@@ -39,6 +39,7 @@ import { setOrigins } from "../../../shared/blockOrigins";
 import { translate } from "../../../shared/i18n";
 import { looksLikeTable } from "../../../shared/markdownTables";
 import {
+  changedParagraphs,
   pendingProposals,
   readProposalAttribute,
   recordProposalRequest,
@@ -1607,7 +1608,10 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         }
         throw why;
       }
-      const tables = minds.read(mind.id, (note) => writtenBy(note, result.request).tables);
+      const { tables, changed } = minds.read(mind.id, (note) => ({
+        tables: writtenBy(note, result.request).tables,
+        changed: changedParagraphs(note, (ref) => ref.request === result.request),
+      }));
       const notes = someTableNotes({
         unlinkedSources: result.unlinkedSources ?? 0,
         extraCells: result.extraCells ?? 0,
@@ -1619,6 +1623,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
             created: false,
             request: result.request,
             proposals: result.proposals,
+            ...(changed > 0 && { changed }),
             ...(tables > 0 && { tables }),
             ...notes,
           };
