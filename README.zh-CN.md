@@ -51,7 +51,7 @@ Windows 版将通过 SignPath Foundation 为开源项目提供的免费签名服
 
 - **Windows** 提示“Windows 已保护你的电脑”：安装程序暂时还没有代码签名。点**更多信息**，再点**仍要运行**。
 - **macOS** 提示无法验证 IncarnaMind：在完成公证之前，先打开一次，在警告里点**完成**，再到**系统设置 → 隐私与安全性**里点**仍要打开**。也可以运行 `xattr -dr com.apple.quarantine /Applications/IncarnaMind.app`。未签名的 Mac 版不能自动更新：有新版本时，IncarnaMind 会通知你，并打开下载页面。
-- **Linux**：先运行 `chmod +x IncarnaMind-*.AppImage`。Ubuntu 22.04 及以后的版本还要运行 `sudo apt install libfuse2`（24.04 及以后是 `libfuse2t64`）。
+- **Linux**：Ubuntu 和 Debian 请用 .deb（推荐），其他发行版可用 AppImage。在 Ubuntu 24.04 及更新版本上，AppImage 会在没有应用沙盒的情况下运行。使用 AppImage 时，先运行 `chmod +x IncarnaMind-*.AppImage`。Ubuntu 22.04 及以后的版本还要运行 `sudo apt install libfuse2`（24.04 及以后是 `libfuse2t64`）。
 
 </details>
 
