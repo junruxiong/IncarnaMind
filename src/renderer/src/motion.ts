@@ -21,6 +21,7 @@
 import { type AnimationOptions, type AnimationPlaybackControlsWithThen, animate } from "motion";
 import { type RefObject, useLayoutEffect, useRef } from "react";
 import type { MotionPreference } from "../../core/api";
+import { typesText } from "./undo";
 
 // Tokens (DESIGN.md, Motion, Tokens) ------------------------------------------
 
@@ -329,6 +330,7 @@ function update(): void {
 /** Follows the system's Reduce motion, and says the mode on <html data-motion> for styles.css. */
 export function installMotion(): void {
   window.matchMedia(REDUCE_QUERY).addEventListener("change", update);
+  document.addEventListener("focusout", discardRetired);
   update();
 }
 
@@ -554,6 +556,36 @@ function copyOf(element: HTMLElement, box: Box): HTMLElement {
   return frame;
 }
 
+/** Finished copies still on the page because the User is typing: see `retire`. */
+const retiring = new Set<HTMLElement>();
+
+function discard(copy: HTMLElement): void {
+  copy.remove();
+  if (layer && !layer.root.childElementCount && layer.host.matches(":popover-open")) {
+    layer.host.hidePopover();
+  }
+}
+
+/**
+ * Takes a finished leaving copy off the page. Chromium ends the run of typing that Undo takes back
+ * as one whenever a node leaves the page, any node (FrameSelection::NodeWillBeRemoved), so while the
+ * User is in a field that takes text the copy only hides, and goes once the focus has left it (#1140).
+ */
+function retire(copy: HTMLElement): void {
+  if (!typesText(document.activeElement)) {
+    discard(copy);
+    return;
+  }
+  copy.style.display = "none";
+  retiring.add(copy);
+}
+
+function discardRetired(event: FocusEvent): void {
+  if (typesText(event.relatedTarget)) return;
+  for (const copy of retiring) discard(copy);
+  retiring.clear();
+}
+
 /**
  * Takes a copy of `element` as it shows now, to leave toward `to`, or
  * (`source`) toward what it came from; returns what plays it, or null when
@@ -600,12 +632,7 @@ function leaving(
         return;
       }
       copy.firstElementChild?.scrollTo({ top: scrollTop });
-      run(copy, plan, toward?.origin ?? how.origin, () => {
-        copy.remove();
-        if (layer && !layer.root.childElementCount && layer.host.matches(":popover-open")) {
-          layer.host.hidePopover();
-        }
-      });
+      run(copy, plan, toward?.origin ?? how.origin, () => retire(copy));
     });
   };
 }
