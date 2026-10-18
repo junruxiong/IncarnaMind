@@ -256,8 +256,6 @@ test("Style › in the page's ⋯ opens its choices beside it by pointer and by 
   // Other fonts… closes the menu and opens the list of fonts beside the ⋯.
   await style.hover();
   await expect(choices).toBeVisible();
-  // Across to its first choice first, level with Style: a slide down from Style would cross Delete, which closes it.
-  await choices.getByTestId("mind-style-font-default").hover();
   await pointAndClick(window, choices.getByTestId("mind-style-other-fonts"));
   const picker = window.getByTestId("mind-style-font-picker");
   await expect(picker).toBeVisible();
