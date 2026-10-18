@@ -393,7 +393,7 @@ describe("The providers of #178", () => {
     }
   });
 
-  test("each says whether it may train on API data: Mistral may, with an opt-out; Kimi's, DeepSeek's and Z.ai's terms don't say", () => {
+  test("each says whether it may train on API data: Mistral may, with an opt-out; Kimi's, DeepSeek's, Z.ai's and SiliconFlow's terms don't say", () => {
     const training = Object.fromEntries(
       added.map((id) => [id, catalogProvider(id)?.dataUse.training]),
     );
@@ -405,7 +405,7 @@ describe("The providers of #178", () => {
       qwen: "no",
       kimi: "unknown",
       glm: "unknown",
-      siliconflow: "no",
+      siliconflow: "unknown",
     });
     expect(catalogProvider("kimi")?.dataUse.url).toBe(
       "https://platform.kimi.ai/docs/agreement/modeluse",

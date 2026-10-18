@@ -624,10 +624,10 @@ const PROVIDERS = [
       images: "Qwen/Qwen3-VL-32B-Instruct",
     },
     dataUse: {
-      training: "no",
+      training: "unknown",
       summary: {
-        en: "Says it keeps no inputs or outputs and doesn't train on them; personal data stays in China.",
-        zh: "称不保留输入和输出，也不用于训练；个人信息存储在中国大陆。",
+        en: "China policy: no training, no stored inputs or outputs. International policy: doesn't say.",
+        zh: "中国站政策称不训练、不保留输入和输出；国际站政策未说明。",
       },
       url: "https://docs.siliconflow.cn/cn/legals/privacy-policy",
     },
