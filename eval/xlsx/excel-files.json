@@ -1,0 +1,3390 @@
+[
+ {
+  "name": "poi-1_NoIden.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/1_NoIden.xlsx",
+  "sha256": "87c8aa12cc031a54be9e2a3b1d6aec37b095eaafbb874218ad829528f13d286e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-123233_charts.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/123233_charts.xlsx",
+  "sha256": "47e9e8dea87494d17dbacce9aa3a9ec31cb2b26b288de05ca95c0a4622ca7f80",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-45430.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/45430.xlsx",
+  "sha256": "6c55370b676db1fa4c92e3215726f7f83f1d28807d95f7b44b5532186645aaae",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-45540_classic_Footer.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/45540_classic_Footer.xlsx",
+  "sha256": "090b7f22e7dd5309acd6122b225ac4124974d9c4c1caf574870aa5fafa5f4a8d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-45540_classic_Header.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/45540_classic_Header.xlsx",
+  "sha256": "f1096655276b5cb2301c830f190017499b4e5a6aefb113cff434868b85178e7a",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-45540_form_Footer.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/45540_form_Footer.xlsx",
+  "sha256": "6b462fff66e6228e590cec586077886b5aa81e6908612dfab79218d027ab7989",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-45540_form_Header.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/45540_form_Header.xlsx",
+  "sha256": "5e9a5cc4f70614fa4db4b8d87718f0e1bf6110e26046af251db8dc62a22ae7eb",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-45544.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/45544.xlsx",
+  "sha256": "a6ed1a727f7b741128565512d4b55d9cb74b52efec391109d783ece5dcbe81d8",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-46535.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/46535.xlsx",
+  "sha256": "3aefff05aa9eab15b18ecfac53d0dd733eae82f7655139422db562a19e412324",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-46536.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/46536.xlsx",
+  "sha256": "7e6169dd532c21a45b9b5381945627ff7ffb5990569ae549ae52e7216eab0be4",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-47090.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/47090.xlsx",
+  "sha256": "80122a145bc4104c4d5f8e263b0ea91892564ee8cc30042c4a24eda81b5e44bb",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-47504.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/47504.xlsx",
+  "sha256": "37e7a84e23ba6df5d7a160d760101f309e1580f79e37d461b211177c83e6fd4f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-47668.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/47668.xlsx",
+  "sha256": "41c504cc8fe4eebab5cbd9dfd4521661d043a5ebdfe212ded3134fbef808e3c4",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-47804.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/47804.xlsx",
+  "sha256": "35eaa8a561cdc57f6eda13ef97006391103b4d424cab7ab82fc369a4a9367a36",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-47813.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/47813.xlsx",
+  "sha256": "24ee6b9018780f1159126e1c7ed7e987fbe719b91c0da9a7a23286aea1d391cd",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-47862.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/47862.xlsx",
+  "sha256": "9001657debd5baae2288e9f8873cd1aa3f9a664ae2c44b264213c650919558a0",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-48495.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/48495.xlsx",
+  "sha256": "4a315e728f49620a62855a51ff762005e36136aee63d64ada93343ecc24d5d26",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-48539.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/48539.xlsx",
+  "sha256": "334a6ebff35265c31d7ada2729012da11169748416fab74e5804ef20906b231f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-48703.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/48703.xlsx",
+  "sha256": "10af0c1b25c30c09112f61f9e52980c8946f5379d85e7e3bf9daa5b02712c999",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-48779.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/48779.xlsx",
+  "sha256": "5db5b7be99314495087d55478a1ad6b12abd348d7d534e7a7ec1fe3e72bcda9d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-48923.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/48923.xlsx",
+  "sha256": "2da36b428bff2b23b47358a5782dd7ced36fab7bf209f699ec636c753b461d80",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-48962.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/48962.xlsx",
+  "sha256": "58a34dbdf0233db433aec6b8ddfacc47f4a5e59ecc2013e8ec56a7b8dd2d2044",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-49156.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/49156.xlsx",
+  "sha256": "7376a8118afc503a82759ad2277f5781a44dce057b2b0984a5b3b5b805db347d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-49273.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/49273.xlsx",
+  "sha256": "f99d52971bc5bed1b18fb23743c330611a5d011504d7f0991a4f2b9426ab8041",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-49325.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/49325.xlsx",
+  "sha256": "884b570ff452bf04e6e5d42f417cd69f5f81ef29431a646c1115af352e8d144f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-49783.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/49783.xlsx",
+  "sha256": "c6960c8e100dd4068686c8894cb00214ea8f1515fc70e5777e6e2ee9b1f77f84",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-49872.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/49872.xlsx",
+  "sha256": "e44c7518a4ad65bc1b30d22492c88aec0af2ef5cabd61978ed612e8420b03f91",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-49928.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/49928.xlsx",
+  "sha256": "3daabfb45eedcd7ea6c0658663ccc08f5705243d14cf6de6d4418175d6ee6e41",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-49966.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/49966.xlsx",
+  "sha256": "b34643668b81588e86bbd10f863d2b872e834dbf79848b945852913e806ee182",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-50096.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/50096.xlsx",
+  "sha256": "af2f2b9465f6556621ef4c116edc972430e72463c196f856c899009ae448ec87",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-50299.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/50299.xlsx",
+  "sha256": "eb32ad8da197c3e321e0f3808bd379d5a7c64928209db5c7c12def565f52bca0",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-50755_workday_formula_example.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/50755_workday_formula_example.xlsx",
+  "sha256": "c519f7c90b74d2c92500c47370a6b85a0a19430a0ee6470254fcbeaaa71fc505",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-50784-font_theme_colours.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/50784-font_theme_colours.xlsx",
+  "sha256": "5e5042f855d93ef36fa96db64f1a21f800f9ce4a662514fd0c0fa202e06d9545",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-50786-indexed_colours.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/50786-indexed_colours.xlsx",
+  "sha256": "ce6233e534aabcb238a5a6906bf39fed060feff3abc15655d62450cc4213e3e4",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-50795.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/50795.xlsx",
+  "sha256": "3c997b1d8529219326dd8191512751de7b50fd4b1215b59f659fe2fd933764de",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-50846-border_colours.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/50846-border_colours.xlsx",
+  "sha256": "dc7edf8efebcf6ba23705a459d7c416d445bd57b8c42fc4c473d961762c62d8a",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-50867_with_table.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/50867_with_table.xlsx",
+  "sha256": "142c5e3e48bde3adb5378f7c143b7374f24177d949b6117e4cbfd7ab1e7bae1a",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-51222.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/51222.xlsx",
+  "sha256": "46d53bfaed203e900bfcc734b3988c6136549e629a0ddcce9940d249877577e7",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-51470.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/51470.xlsx",
+  "sha256": "df58c4d9a0ca30dc3e4c451125e12b8890c309abd7d2abe536ee0ca6138d8746",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-51519.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/51519.xlsx",
+  "sha256": "3a68ed7bcd764b4f38ab6a66d5385a644b84de8572b00aefb4316b43a274882b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-51585.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/51585.xlsx",
+  "sha256": "0f6b5534e10bdc4e2919cc0ef57018d4381b2a4f732e36735a952e714f949e24",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-51626_contact.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/51626_contact.xlsx",
+  "sha256": "b550106fcaa97457c90b5c2ef756993a1d9d54a61a4813abab09ede879ea55f8",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-51626.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/51626.xlsx",
+  "sha256": "f991583281ecb4ded8a8cdaae989c021d16504de7ac2188883e7e0520df0dc2a",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-51710.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/51710.xlsx",
+  "sha256": "e83661bb4fdc02893f547ba910ab85241957f068da506ec07a9efcb638677700",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-51850.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/51850.xlsx",
+  "sha256": "ca96ff28d84fcc90e674107f080b6c1f68bcbe42b3a8bf25034ef38dc29bc10b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-51963.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/51963.xlsx",
+  "sha256": "7e37d10b34edd80c10af53a040bde395864662994c58f291c2b6a61bf57e7291",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-51998.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/51998.xlsx",
+  "sha256": "00415a5a936afc87016835893f6a7fa3fefec2632766730dc65a352c1acd2ab7",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-52425.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/52425.xlsx",
+  "sha256": "42462e58c1d01b70b69c280f9a42d54b3916da076b070d23d2a6518dc6a72168",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-52716.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/52716.xlsx",
+  "sha256": "5085d404c3fa54bef1d7e5d3234992ddfbea1057653730fb762cf5d26fef5235",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-53101.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/53101.xlsx",
+  "sha256": "8b494d0eb63786f8c3a1ca64c7f3f4d2d07de27c1c02d073dd3720d0c87526dd",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-53105.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/53105.xlsx",
+  "sha256": "7086065eb87271333338a4ba5c6ae0cc24d1ffc605204dcc23a4b58dc800070f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-53282.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/53282.xlsx",
+  "sha256": "110ea3a6dd7b7c0224901fe0fff46db6f6e6f55854257207ad5a7783afc2ea0c",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-53282b.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/53282b.xlsx",
+  "sha256": "7dc1e944e014f2bdeee7220cd7509d308104dbd7fc2ea4fdf59200b5aa62c552",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-53568.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/53568.xlsx",
+  "sha256": "2a134d6a424f9dc60b80dd002917ffdbe3f0bba7c46883ed3562e958826ae048",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-53734.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/53734.xlsx",
+  "sha256": "ee3abb66fcc3774806bd5f725d9b53e7f5d5a605e3b16d26735d7304a20b34ed",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-53798_shiftNegative_TMPL.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/53798_shiftNegative_TMPL.xlsx",
+  "sha256": "cf466036304f95dae2c3cdabf8b9ed69856c835f5987dcf6b71117d3d11ffcad",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-53798.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/53798.xlsx",
+  "sha256": "cf466036304f95dae2c3cdabf8b9ed69856c835f5987dcf6b71117d3d11ffcad",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-54034.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/54034.xlsx",
+  "sha256": "6e6bd9c1376b2361320aec8b7be63b2a8083eb63bbc29edce15d8766fb2b72f6",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-54071.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/54071.xlsx",
+  "sha256": "627e4e6c512bf12a66856749070d03f1ea51936192d57b9077568bbf9c9c09a1",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-54206.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/54206.xlsx",
+  "sha256": "1d62b1109bef4a4ef1f74ef43739bf67feff709b5a68f17e8b5c68bf79e66f1e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-54288-ref.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/54288-ref.xlsx",
+  "sha256": "91273f55a578438ab8fe57cb3dc8b2fc6e8c8274c18d215e75511567e642992d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-54399.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/54399.xlsx",
+  "sha256": "ac1770a7887c87ddffca3c1f692089e1c718136704b6199c19520bd10e28d450",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-54436.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/54436.xlsx",
+  "sha256": "658dd3273ddb40f1984c38bd587973546b7adffaab1135c0c8bb47035bba0e52",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-54524.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/54524.xlsx",
+  "sha256": "a8199a507f91e521baac4a3e5c8b44881ef6a3cc83227fbaf79235cee53382f3",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-54607.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/54607.xlsx",
+  "sha256": "c27ca48e67ad3e8a6dca800628dac949863c9da54d09b29bb9aa63567bad3b06",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-54764-2.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/54764-2.xlsx",
+  "sha256": "f5086915bf75301648346126b02c89ca18084d8b8ec8becbb47fcb276c806566",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-54764.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/54764.xlsx",
+  "sha256": "9b200eadb9ec0bc0f9c9b088a2f4f8bb3d73983e45a947a8929c9c22fd635886",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-55406_Conditional_formatting_sample.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/55406_Conditional_formatting_sample.xlsx",
+  "sha256": "882c71f142549f67cfb1231352f0d87059054d9016582de6531142783f2353df",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-55745.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/55745.xlsx",
+  "sha256": "fcd144c2693cba8e04dbd07f6b02b4961389eb60bcc65c094fcbae2bda901ac7",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-55814.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/55814.xlsx",
+  "sha256": "95ecf8b64c84e749f29689e8bb72a2c8faf192932cd8e7bed294e2242d5fd217",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-55850.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/55850.xlsx",
+  "sha256": "fc8393fc5f9d4d8b436aa65abb6b79ed744ab5c71ff0bcf42b2aade78a5a8a5f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-55864.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/55864.xlsx",
+  "sha256": "d717501f966bfb57fac57cb6e358a7adefd1b7d763c62ead690b7e98f253041f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-55906-MultiSheetRefs.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/55906-MultiSheetRefs.xlsx",
+  "sha256": "7a5cb4687ad8835a83fee98bf451b400b8ec7c2ae7fa88793930cab648c6e362",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-55923.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/55923.xlsx",
+  "sha256": "0ed4cebe5c65232841640364468187f6b60daa9459a05c93ffa734e322910508",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-55924.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/55924.xlsx",
+  "sha256": "25189a83c958e37c236cf4324705f2de965f3bded911794834027c2f9e1b3daa",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-55926.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/55926.xlsx",
+  "sha256": "2415613d76651c5c2c95569927a6076b1a345775e3373d3976a122b1bf921dd0",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-55927.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/55927.xlsx",
+  "sha256": "7237c5703405b1ad6f53bf50375042de2c22d070dbf0a05fd4f44280493b7170",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56011.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56011.xlsx",
+  "sha256": "4ebeb7ad840439033ed573a74295ca700036d35a9be9fe6a04d7d9613dad8cbe",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-56017.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56017.xlsx",
+  "sha256": "6a8e7358db7a10864cf971d7e6c51e692936248f468d32798dacb33e7672f9f3",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56169.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56169.xlsx",
+  "sha256": "58321b693403c75286a8898b0427dd2b672f9a4cc29bb5972fae3a926e104278",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56170.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56170.xlsx",
+  "sha256": "0c5bfaed727ae07b46ca53a3a7d11d6bbfbc6d687f14460c2c975f548da407d7",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56274.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56274.xlsx",
+  "sha256": "6a6ba76a44b725c7c465aa65f5a0c4ad6a21707b04a8386181d1625f48320548",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56295.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56295.xlsx",
+  "sha256": "d3bf7fc2da4c96868f4f77c705e21bd844746654ad3d503cc1170bc4117dc75e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56315.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56315.xlsx",
+  "sha256": "697d648d16ff68992300bdc24ea0937505e822d6dce1735e402552a07339d53b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56420.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56420.xlsx",
+  "sha256": "4242d24c266c82004c039498f6b580b4c338c1b981e0f4cf4f6e692147fa5c5c",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56502.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56502.xlsx",
+  "sha256": "e03e09742a9ef67b3c988d83371b92bd25c771d17896d827a8af97c816a63fed",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56511.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56511.xlsx",
+  "sha256": "6f7cf0eb6fbe79763b5c9a11b539cfbcabe5e1ba37e30025a415a11579352c85",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56514.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56514.xlsx",
+  "sha256": "b76459bddc14074f75e9f03af3fdb7cacb7225c4bb26f71fd7efaafbc893ccce",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56557.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56557.xlsx",
+  "sha256": "1660ad90dfb9e81d4b3fb6bf35d8a24d9515fdbe7abcfebaa909da08f1c01f2d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56574.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56574.xlsx",
+  "sha256": "e5eee015cd0de3def4b4a0d16cc3c68cfc340249fd830ed92b1c093ba53a38c3",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56644.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56644.xlsx",
+  "sha256": "ea2c622a3123d258d09fa47c68822978054c9b43975722362a535e4a01ce10fa",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56688_1.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56688_1.xlsx",
+  "sha256": "865eb0645b095f56e1057ecc25673b91604040f3e4ef362d56504ba8ffc02639",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56688_2.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56688_2.xlsx",
+  "sha256": "28a2ed967d41887a32a2862c66b8db31f28b16109e0a02477570c90ad516fc5b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56688_3.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56688_3.xlsx",
+  "sha256": "d257f64763257f03a89e19d8968d9dd967339118d2d93cb1e69439250d10609d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56688_4.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56688_4.xlsx",
+  "sha256": "aef8bab8e5ef9a9a9165aef0ff34fa6ca4ed626668ecb1145d8e1c337da7952b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56702.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56702.xlsx",
+  "sha256": "9254edcfc95feefdbdd622894ee76ba154f7b828ebdc5313933c221d55cfc080",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56730.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56730.xlsx",
+  "sha256": "18fafdf037da3cc9651bfbcbdf22d75d14e17db6abd0171630e9c72f6de79b45",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56737.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56737.xlsx",
+  "sha256": "454c2baa4359ab4ba7c9b840bf470c9d0a0d15b681809e497fb6b2f818d2ef97",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56822-Countifs.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56822-Countifs.xlsx",
+  "sha256": "dfa6d0e1b6a9983f34344bacdde63a0ba93a5c794b1e454efe181f6b04074711",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-56957.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/56957.xlsx",
+  "sha256": "3fe6d13e7d9d7cc0ac8d2f254753ad898c9126c432c0b7b4e8a0a5a2510e0542",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57171_57163_57165.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57171_57163_57165.xlsx",
+  "sha256": "e395daff19d0f745827b02d8f4b65ed6f00b1dbb48d0cc1fcf67b0ac5d61671b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57176.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57176.xlsx",
+  "sha256": "868c2f942c3bfea112363df9409092075d2377b09da16d925c86761cdf662078",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57196.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57196.xlsx",
+  "sha256": "41fc0b0fbd3f4a9c0f472ac0e39e8bc949a82b22df20747d8510db74c8dc59db",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57236.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57236.xlsx",
+  "sha256": "326ed022df7d55ba01f8571830254b1d2aeaa3e4ba939be53e324d267554009a",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57362.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57362.xlsx",
+  "sha256": "9f06f767e5b665965e892e3213e8c529ad42b2b12d2cccf9594eb3ffe945a86e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57423.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57423.xlsx",
+  "sha256": "4192016284070ba4f29e5a4ec5aba39894d2d8bc9c604dc2d548674a5eccc919",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57482-OnlyNumeric.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57482-OnlyNumeric.xlsx",
+  "sha256": "c2e538a986540f9ebb3056284a04cd9e58403a1141be2d3ab195db50166fdec7",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57523.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57523.xlsx",
+  "sha256": "24b8c9f2ed26d56d2ab5b27ffe5e88db5080f76a584b98acfd9ba81f40761316",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57535.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57535.xlsx",
+  "sha256": "106508ec8816a61ce51b1103c750823d965fb5d9eedfd5f8f063a4f846fe787f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57798.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57798.xlsx",
+  "sha256": "95932fd86315566576e06b484b8bafe5fb83d0a0cafc9d3a1580a5c4ec324797",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57826.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57826.xlsx",
+  "sha256": "17bb08266af466ca891415763f9fd092a4d24fb008d6f903b1b100f10a8e0eb1",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57828.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57828.xlsx",
+  "sha256": "8733106f00ea87341dd1140035d3c541c623ffe93f3d5103a7a0fd77b2d85ddb",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57838.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57838.xlsx",
+  "sha256": "b7ca4751a24911d8b635e17a143254f947f9fb760621f9ec18a9e6cc23abe249",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57890.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57890.xlsx",
+  "sha256": "2ac3a7a7d165b6fb7e63a93e0de6f26582e4e18554f61daafa969f4aa25fd225",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57893-many-merges.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57893-many-merges.xlsx",
+  "sha256": "f1b0cc07459a2e00f1e930ff54330e45b9d0626f45468b1ffa7eb3dc21d6f46b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-57914.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/57914.xlsx",
+  "sha256": "7b2c695d4fb3bec5d2f346cf3a07ae3804d6f51d0df282e5b88fd56ee9f5d072",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-58106.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/58106.xlsx",
+  "sha256": "88c0e478f174b166190abfd0cf416a033d03252049a998441b98f9841613761f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-58315.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/58315.xlsx",
+  "sha256": "434fabc617abf29b62bfbc1634e9f5bb0e59658b996ef218f1a92ceee4d793a1",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-58325_db.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/58325_db.xlsx",
+  "sha256": "a3320089b55a71f35bce6c51eb15bc37361823807e01f585a1dd77154acbf7fe",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-58648.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/58648.xlsx",
+  "sha256": "087142751d7e90aefc6c49f61a11041c58bc0d11bf60f949879ef6eb946d1990",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-58731.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/58731.xlsx",
+  "sha256": "7c9ea2dc47e651b5b95071719cc3f57e5a97e2e5493b7d81e9ed1acd3deab21c",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-58747.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/58747.xlsx",
+  "sha256": "6f0c0ef8e1f1cfaf7d4140e206c27b495bec9d0c1de0d9eac5ba68e1f11f5033",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-58896.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/58896.xlsx",
+  "sha256": "e067e207f4ceab277b4f6c37bb1ac143b9117718d29d2ea95481008201e9a1fd",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-59026.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/59026.xlsx",
+  "sha256": "738ce0f68555e3cc0f3c63bf06639212ef512754ed60b5eba77f39b58b73dfa1",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-59106.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/59106.xlsx",
+  "sha256": "e89fb8a826a64aefd457b225d8fe875d26ecc5c08f979707cc7d7b92b4cac80d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-59132.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/59132.xlsx",
+  "sha256": "cfbda71a1935e6fab94f348409f5168ba4a1dc3b3d03edf88773e262ac0d99f8",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-59264.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/59264.xlsx",
+  "sha256": "3173d18657a14bba33d127c2d95f7116e521d32c1ea38409963ffc807d06b283",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-59388.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/59388.xlsx",
+  "sha256": "d4108db1115be3c902bf8d5bd39d8ce268e13a229b5ab410eb3b46f0c9f96fcc",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-59687.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/59687.xlsx",
+  "sha256": "ee23ffdda17ae423203a82e6096bdb2d3e596f6a7deb9558826d8f7a178e1496",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-59736.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/59736.xlsx",
+  "sha256": "5c7f47a903bfb7acdac72db42a9b2359ae4c48e77fa10a46c4233891458002ca",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-60255_extra_drawingparts.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/60255_extra_drawingparts.xlsx",
+  "sha256": "2eb3b758062092344e8512f86aa26f6032e19d76d9b070ee9c24d4659732ee24",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-60509.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/60509.xlsx",
+  "sha256": "9890bc6a8630a0c2e371ae643b2743395adf3fc7c49e289799c853919105d99d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-60709.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/60709.xlsx",
+  "sha256": "367ba43f164936e93f10dac9fe6f01b3721980e934d152d35d7a029958b2a43c",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-60825.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/60825.xlsx",
+  "sha256": "5edd00c29d528fc987f50b86dd8ac407ec4e49f5a0d0b282662156ac726f4fa1",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-61034.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/61034.xlsx",
+  "sha256": "9b62e496695791931a51e0541e4fec1138e0b372a406ae7f87bb03bb5af5b2ce",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-61060-conditional-number-formatting.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/61060-conditional-number-formatting.xlsx",
+  "sha256": "9d57919aa4f6036fb922daba5d1dc913a8847581fd9a3dd3c4d79bca7d28bdb8",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-61063.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/61063.xlsx",
+  "sha256": "c3e08940b17d4f0e1d2d278e26a4c59c4f4d66370ce6306aa930f31006473982",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-61281.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/61281.xlsx",
+  "sha256": "9acdd4578b28638423d7103810e69a5e69fdc11e14dab6cd71aebcf53f4fcc6d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-61605.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/61605.xlsx",
+  "sha256": "1d41b31a788fdf2ce234660f6d2db5a8dc830a06a3886147cb8200bcdc964590",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-61652.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/61652.xlsx",
+  "sha256": "187d6ca93dd8c063f7a15c5b4f62e368254a727b731faa9a844941dfa87d1dab",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-61869.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/61869.xlsx",
+  "sha256": "ec108001bfa4679a67eabdcb13b8a231e6c33ef5d06d4f6140f9a47c16724e56",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-62629_toMerge.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/62629_toMerge.xlsx",
+  "sha256": "f1b366244c3c1af0a61f97e777ebe9fd00576ef6c16f48f65fc755fa6e8a498f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-62834.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/62834.xlsx",
+  "sha256": "e6984c58eba3d0746303c64fc4db73462ea1b6e5a4960e3c3dc550b64ddb0b42",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-63934.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/63934.xlsx",
+  "sha256": "8c9b96204e289ce6dffbf60d3a348c8045bdec10645a92ac0b7ff97ec0d78230",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-64508.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/64508.xlsx",
+  "sha256": "c5eaddea897df3eed95140c70000d7c5c75371e6d9aca2c5aee075bc7e6f953d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-64667.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/64667.xlsx",
+  "sha256": "28a8961ba0296b839988c66d0b779f2bb5e2fbfb2edc619e164302ee512c5760",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-64759.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/64759.xlsx",
+  "sha256": "43f3c765678160e26fab0e3963782a941fb3d41a6a4a9904a48656aa284d68e8",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-absolute-anchor-over-empty-sheet.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/absolute-anchor-over-empty-sheet.xlsx",
+  "sha256": "af3a4e266888c804c974d2de0fd1da1e9fd467c8071456b10380040c4755d28b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-AmpersandHeader.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/AmpersandHeader.xlsx",
+  "sha256": "8996c5807a831043b6b457d6de6f748e46fdf66aa434a5b6a92ef0d87343db1d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-atp.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/atp.xlsx",
+  "sha256": "32f3e668515150721147a1ee3a41c95b70beee7cc67dcbb005c8fca08f20d58f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-AverageTaxRates.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/AverageTaxRates.xlsx",
+  "sha256": "094b2facaf85870a3230a3b097b82b4bedd7659583e34977d196d04be3211367",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-Booleans.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/Booleans.xlsx",
+  "sha256": "5803ffe3c16185b195d81bb475ed8b63623a4a19060f69165d97150708ec59da",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-BrNotClosed.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/BrNotClosed.xlsx",
+  "sha256": "94fbe64babf5be655fb8bf1d0866f7ac66f1ff50e1039b1ac8cf84289600521e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-bug60848_sumproduct_unary_minus.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/bug60848_sumproduct_unary_minus.xlsx",
+  "sha256": "11ff0732cda143fd2d6db6d2a8d330c3bd68cf9e3fd41e086fde38943afe224e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-bug63189.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/bug63189.xlsx",
+  "sha256": "0671f497436a34ac15ae63f22407e6eb791be03efde38f87b10adf41e2051104",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-bug64512_embed.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/bug64512_embed.xlsx",
+  "sha256": "50a8f8c88c7308dd4a0b4eb61cd58fa34063243e62a22af7ffd5a59d34180f5b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-bug65306.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/bug65306.xlsx",
+  "sha256": "1dd83824fa99da09d0501b2e588575c4cede000c44542ac7fb9bbe06631de245",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-bug65464.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/bug65464.xlsx",
+  "sha256": "f2edc77ca170b11940e69a31b3ec5b88849b08ee493a0155fffb0ebdda961420",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-bug66215.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/bug66215.xlsx",
+  "sha256": "6574c2ee6665fa4d3bdad2cc6775658e0d5d24cc2c31eaaf2fa50b54851c34ba",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-bug66675.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/bug66675.xlsx",
+  "sha256": "3a1ad731e168ebec18a2ddee93455511d70d8ca8b489c44bbd189ef9cd8ed403",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-bug66827.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/bug66827.xlsx",
+  "sha256": "9e1de44faaf365b5ac744af4a01fe0dc9371b77a44fc9a7faf1d546400460a2b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-bug69769.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/bug69769.xlsx",
+  "sha256": "098d7379336832d5c286bf93163c760d6595197b970b7a5c1156209169c0480c",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "poi-bug69812.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/bug69812.xlsx",
+  "sha256": "762af996469e67c16165e3106b95af5aed6794ed0d9996d67f3eeb2e2def239f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-chart_sheet.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/chart_sheet.xlsx",
+  "sha256": "93e2d8663bc1a6b7d961f2a74440953ecdaadb1a3f171960129b730f7c935d3e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-chartTitle_noTitle.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/chartTitle_noTitle.xlsx",
+  "sha256": "9be4f74eea0dcbb802473be420f0e0ce0c45a47deec398d71c7411483a4ddf70",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-chartTitle_withTitle.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/chartTitle_withTitle.xlsx",
+  "sha256": "586c174285621c081020da523c4a814a9ad62b75d86f49276faa1b6036919395",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-chartTitle_withTitleFormula.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/chartTitle_withTitleFormula.xlsx",
+  "sha256": "120375c8bfd5b5e7cbb388531a1f328adde31f628419cfdc29202981e3a7bd93",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-clone_sheet.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/clone_sheet.xlsx",
+  "sha256": "c562b328818341d7daa28d5dbd2168946aeecbdb30a6e49d9b982da511879875",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-clusterfuzz-testcase-minimized-POIXSSFFuzzer-5265527465181184.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/clusterfuzz-testcase-minimized-POIXSSFFuzzer-5265527465181184.xlsx",
+  "sha256": "3df2702db5e10050701637415465bad583d97e8126121660c229b331c3e3c439",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-comments.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/comments.xlsx",
+  "sha256": "6c0b2e28e42d80115d88ac70bf5a610a61bc325d5886a6689ddeee34eefe7a2d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-commentTest.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/commentTest.xlsx",
+  "sha256": "2e359c938c9984ea70afe4a04087ab33333a30e66ff8747b47645eb75aac4bb3",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-conditional_formatting_cell_is.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/conditional_formatting_cell_is.xlsx",
+  "sha256": "7deed8f22cb3cf45733a94b975950b49f6ab89e37e891e62f0be8a0b07d9bc26",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-conditional_formatting_multiple_ranges.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/conditional_formatting_multiple_ranges.xlsx",
+  "sha256": "2ee236b3134d0494f44fc122b59ba883762a87415a332a3bd1cb972f7e0fcb0d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-conditional_formatting_with_formula_on_second_sheet.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/conditional_formatting_with_formula_on_second_sheet.xlsx",
+  "sha256": "c69d5988b66917d9e51dfdea04a75358b77061feebd2d7fc625c6ffdda85d816",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-ConditionalFormattingSamples.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/ConditionalFormattingSamples.xlsx",
+  "sha256": "8dfa997a642c00a1da8c0750c371f204553a98c537ca046028b052f9b424a074",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-CustomXMLMapping-singleattributenamespace.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/CustomXMLMapping-singleattributenamespace.xlsx",
+  "sha256": "9db4c7e7f9828d4029963eff7b726cabb7c032c9e6a7b3628a2f3d827d1f8f80",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-CustomXMLMappings-complex-type.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/CustomXMLMappings-complex-type.xlsx",
+  "sha256": "04455b63ab8f8fd3d879b63a7d2bacc5518821ede0c933a2799354a9adaf4b68",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-CustomXmlMappings-inverse-order.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/CustomXmlMappings-inverse-order.xlsx",
+  "sha256": "acbba8c672a3977e24813f017c276986d06909760835a5a3a12899e2a8816c87",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-CustomXMLMappings.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/CustomXMLMappings.xlsx",
+  "sha256": "6a5fbb160c7c9c2add5125ac07ceaf3f841d40e03d5c75025ab71946d49af289",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-CVLKRA-KYC_Download_File_Structure_V3.1.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/CVLKRA-KYC_Download_File_Structure_V3.1.xlsx",
+  "sha256": "a6a7bf557df8048108502973ecedc31d96f27d09ac166eedeae32fc96c13e8db",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-DataTableCities.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/DataTableCities.xlsx",
+  "sha256": "3b17486d4015b124423d38966a0aa88757b2177087941a905704b634204aed4e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-DataValidationEvaluations.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/DataValidationEvaluations.xlsx",
+  "sha256": "ea5706d9afc031a8c2afef880559483bad30ab2c18e2857aca5f3cfaa74decf4",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-DataValidations-49244.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/DataValidations-49244.xlsx",
+  "sha256": "8066b12c878d74aa35b55b22dc9daba9a56e91332a35cf96c4fc0f6af6bd3bd1",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-DateFormatNumberTests.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/DateFormatNumberTests.xlsx",
+  "sha256": "d18aade6ad10435baa4be3ac1c4ba4c15e48248bc24b91926920f3dec0aca033",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-DateFormatTests.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/DateFormatTests.xlsx",
+  "sha256": "16445dc0deba00671ee4315015a970d415ce9886da59c974532d946e99276c66",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-ElapsedFormatTests.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/ElapsedFormatTests.xlsx",
+  "sha256": "c3e574f098855b4d28e618353337c10941fc01d8e6c320c46a79731d5425c7ca",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-Excel_file_with_trash_item.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/Excel_file_with_trash_item.xlsx",
+  "sha256": "e9c4515c22be30487a9ce3c081e74cf58b5143aa42b6dc07e891aa261066fa98",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-ExcelPivotTableSample.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/ExcelPivotTableSample.xlsx",
+  "sha256": "f0ef1d61c9f3d8b27b18a876b8e24676314c6450ed64a725a7bfaa603fdd67e3",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-ExcelTables.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/ExcelTables.xlsx",
+  "sha256": "1e43011440eb39000d1751abaf9ded42d37b26f91b4f586a94bf91ce8ecbe9e5",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-FillWithoutColor.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/FillWithoutColor.xlsx",
+  "sha256": "95d1e35be1ab210c1e9ac29e53fe53c764379931b1df8ab9f98a71c060ef143e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-FormatChoiceTests.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/FormatChoiceTests.xlsx",
+  "sha256": "c8a86eedc7da9b9f421210cd42bb1164df4d068f39c1b10768f8e780f4f58852",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-FormatConditionTests.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/FormatConditionTests.xlsx",
+  "sha256": "96afa10c8f1f633fc2eaebf21a0883c96a8be2cc5f38fc8c2e826b5d9c140d4f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-FormatKM.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/FormatKM.xlsx",
+  "sha256": "ab5b08e968898f40477c2599dab9285c4557e6f212f3b942011e6588018244e0",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-Formatting.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/Formatting.xlsx",
+  "sha256": "5a0aa7c36c53b22cd26e3eeb2ee49bf16f7e4101aafa8b1503a0778f4010ddbc",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-FormulaEvalTestData_Copy.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/FormulaEvalTestData_Copy.xlsx",
+  "sha256": "01b21647d53501e8ec10f4eb522945d41ea3c8d1fdd57f8b0142ec34884c33eb",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-FormulaSheetRange.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/FormulaSheetRange.xlsx",
+  "sha256": "1943a81a9d439e3bb843b66fd2f9bcdcf37e31232c850ea31d47681b5d5efa12",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-ForShifting.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/ForShifting.xlsx",
+  "sha256": "acdee44e5923153f3d2edb1130d9a37bd9ff0674a61115924782c9a0fde2e1e5",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-GeneralFormatTests.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/GeneralFormatTests.xlsx",
+  "sha256": "607ff06ff0295d0920d81b27e09b91e86301b9f3862d1d22b093f8f8c5a4de28",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-GroupTest.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/GroupTest.xlsx",
+  "sha256": "a14e6d478004720480cb99844fd6b00260c804bfa02b3da3f496e2c1fb5c8949",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-HeaderFooterComplexFormats.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/HeaderFooterComplexFormats.xlsx",
+  "sha256": "70828c7e2e8b0068410009e7ab5054e475d1195ad6c6f4303e03732ab8f7ca9c",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-HsGetVal.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/HsGetVal.xlsx",
+  "sha256": "d4f4ee2a7f1a539f887f044bad19d33fb6476c60bf68640b5a64aa80a49cd65d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-InlineString.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/InlineString.xlsx",
+  "sha256": "c92383b48d5141248c7fb37e077b1aa02f716a995d57b779c357758b8afb5478",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-Intersection-52111-xssf.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/Intersection-52111-xssf.xlsx",
+  "sha256": "3630eed0229c419651e03e134af8121e81ef60761ddf6b613ce83a75dff0ca4e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-LIBRE_OFFICE-116306-0.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/LIBRE_OFFICE-116306-0.xlsx",
+  "sha256": "44d0f41ed21aec02f9a6bbd22cf73f9bd313b16006fe867e6c5fbe5a0a25e5f1",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-MatrixFormulaEvalTestData.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/MatrixFormulaEvalTestData.xlsx",
+  "sha256": "12f1dcef889c20fe54a09857790ba9803a7b061cc9fc5b85d0038cd6c86faa79",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-NewlineInFormulas.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/NewlineInFormulas.xlsx",
+  "sha256": "3ec9c0c59a6e3f1ec66ca023c4a4ba0235c8047a41bf859fd223f352146637de",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-NewStyleConditionalFormattings.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/NewStyleConditionalFormattings.xlsx",
+  "sha256": "1e97af3b87636bd0a759c25439a21b928c2ff3b9a3c57ca49ae24cb1ccdb7e2f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-NumberFormatApproxTests.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/NumberFormatApproxTests.xlsx",
+  "sha256": "0ed1e83006006bde250044e4f776238b11baea158ef27cd4b95be2363b98004a",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-NumberFormatTests.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/NumberFormatTests.xlsx",
+  "sha256": "a11d437ee538abe36d630a4795dd30d5823a68dce02a404a45e085dd49c4435d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-RepeatingRowsCols.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/RepeatingRowsCols.xlsx",
+  "sha256": "ff67241b278977c97f8f540fe935e087763db0c0e404bd71777f913a3d698c0b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-SampleSS.strict.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/SampleSS.strict.xlsx",
+  "sha256": "cbfff2096b33055de1686ae99ff649f78f3cc97d7271c242840be6b40837f6e6",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-SampleSS.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/SampleSS.xlsx",
+  "sha256": "44f1b6ef310c370d4902ee3452e6174da25a67bdb09f47850d51b3287cb3db71",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-SheetTabColors.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/SheetTabColors.xlsx",
+  "sha256": "1e0bc29719430c8e221465ce026e78063587516ef5037acafc466ce835356930",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-SimpleMultiCell.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/SimpleMultiCell.xlsx",
+  "sha256": "119b6e70c5bbca6ca3e46f981e0719c154d87203adb4b5b61210d726deab9f7a",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-SimpleNormal.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/SimpleNormal.xlsx",
+  "sha256": "6b300c76d7b6ba32e45c40086f5c8cea4b269946f7786a73e0d6f08c3acfe1e4",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-SimpleScatterChart.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/SimpleScatterChart.xlsx",
+  "sha256": "c3024ac94d6d42cbe48d20a798eda98b06d8dba6e2ed2b1fcda10659883c7be4",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-SimpleStrict.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/SimpleStrict.xlsx",
+  "sha256": "dd6d2142e4c440c5cfaa241aa48883bfc0a76742b4531102dd41aea2f7a4d2ad",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-SimpleWithComments.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/SimpleWithComments.xlsx",
+  "sha256": "d7d337b3436e863487d26439a57ef749950c599862325d7bce7e830acf1df0ba",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-SingleCellTable.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/SingleCellTable.xlsx",
+  "sha256": "81703720d256b69aebfeefac6134e81fd1b014104408db752f0ff24d46e4ba61",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-StructuredReferences.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/StructuredReferences.xlsx",
+  "sha256": "a746e336176f8157c50a0a3b017c4633b7b1d546bd1b8af0f8165a48d1bacc56",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-StructuredRefs-lots-with-lookups.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/StructuredRefs-lots-with-lookups.xlsx",
+  "sha256": "09af82b9abae2ffcff04777b69cbb23dfd15df788426153bcfa1e9359c3552be",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-Tables.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/Tables.xlsx",
+  "sha256": "3402bd6406a6ef32c3b88c45decb820f0ca797a8d971007f869b5ad3743bcbc8",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-TablesWithDifferentHeaders.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/TablesWithDifferentHeaders.xlsx",
+  "sha256": "bf6ac00bcc85e46c38eec0e643727fc8d3e55b2cc7c8e37e5972fa9f1c1373be",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-TestShiftRowSharedFormula.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/TestShiftRowSharedFormula.xlsx",
+  "sha256": "21f222c39b70fee2aad244b70a06123aa3bbd2e99ba29cfbc2ed157bcae095cd",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-TextFormatTests.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/TextFormatTests.xlsx",
+  "sha256": "c224c784e77f321c59c90f6d93380ff74a0e0013f0346e4b2cdf0a5ff5e3840b",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "poi-Themes.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/Themes.xlsx",
+  "sha256": "675234ce15443e36e8bb41869cfc700143b1ac7152ebb7531fc49a92789b3be4",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-Themes2.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/Themes2.xlsx",
+  "sha256": "f1c6597315e27b30cadcfa7bd4494a2a52e8a5a17a1a91dcc83fc29922d24c00",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-TwoSheetsNoneHidden.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/TwoSheetsNoneHidden.xlsx",
+  "sha256": "62f83686811614842efe4606d07669fd3c70b8ed8c8ff1459c2c329c802a2e59",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-TwoSheetsOneHidden.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/TwoSheetsOneHidden.xlsx",
+  "sha256": "3e9749837cac5a19a7628d7e60c1a1c6d0ff7657f27fa7904b217b96e0dc534f",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-ValueFunctionOfBlank.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/ValueFunctionOfBlank.xlsx",
+  "sha256": "202d993c1bdcde6f30619044a711f79f535bd0c8459f5e6ed30994962fdb09dd",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-VLookupFullColumn.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/VLookupFullColumn.xlsx",
+  "sha256": "2788b77ec3407056e75a56ae1ee01b0222e353ca29910a12ffc1e9a62569a990",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WidthsAndHeights.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WidthsAndHeights.xlsx",
+  "sha256": "72a84c23b2939f31fa6357867e6b34d3454efb84c830739c10797f767de1007e",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "poi-WithChart.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithChart.xlsx",
+  "sha256": "51f27aabf7417f5aaa0542857b6bb56a92d4afbabdc5c63f084c06f92b67429d",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithChartSheet.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithChartSheet.xlsx",
+  "sha256": "792b9f21afdb6b8b1f82345864ee15d55c17a1b54d71c250e82c87304385d362",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithConditionalFormatting.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithConditionalFormatting.xlsx",
+  "sha256": "ead4aad13d2b975f795b50e7c8b7da443fb1525a8f9fa7347a5f09041a3ed426",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithDrawing.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithDrawing.xlsx",
+  "sha256": "97b1ab359d6aecbe37864f30c85106e386f0a19bea8f290103927362a2701066",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithEmbeded.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithEmbeded.xlsx",
+  "sha256": "2bdaa7dbae4e739a5b1dc2654ccaeb15fe4d6a62cd47ab742db78100a7dcf9de",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithMoreVariousData.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithMoreVariousData.xlsx",
+  "sha256": "9cf5ac25bbe59ee30d954983e7803a854909be6d53e184933d4c47e8f6b248bb",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithTable.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithTable.xlsx",
+  "sha256": "624b33056b0d2686f4264eb21281fc0245167490463d2fdeb556984c239f7fa8",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithTextBox.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithTextBox.xlsx",
+  "sha256": "4626f09c5d870726d6c7837b37c2bbfe7376cb025f61648af39a63ee8be1b1be",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithTextBox2.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithTextBox2.xlsx",
+  "sha256": "b06a125aeb8d032a196d2cc8cb221197e6bc53d2be8ad08d29f404108857eb6c",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithThreeCharts.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithThreeCharts.xlsx",
+  "sha256": "629b69bd250d9b4e173eb2088eb80b656b7748b0287cd7b0df0c2dc22c6af7b0",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithTwoCharts.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithTwoCharts.xlsx",
+  "sha256": "7d29c92e9f7968a5bc9ec076458785295c24d13916b02b8a467c0a8fd013cddd",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-WithVariousData.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/WithVariousData.xlsx",
+  "sha256": "1440a832bb810c09687d3498b841782964b0b697e9242428fed1072ab22d078a",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "poi-XSSFSheet.copyRows.xlsx",
+  "url": "https://raw.githubusercontent.com/apache/poi/f3688f45b0de8934fb32736ba14efc5bbca4a580/test-data/spreadsheet/XSSFSheet.copyRows.xlsx",
+  "sha256": "85b76d790c3eeb07693ea94293440a9efa2b91e41e2a6bea4b7bbd7ab9edba90",
+  "licence": "Apache-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-129969-min.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/129969-min.xlsx",
+  "sha256": "c2c4d9ce32a714d574521c8f44c68a54a20ce3a962b2cd84540f113415ba2d32",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-activex_checkbox.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/activex_checkbox.xlsx",
+  "sha256": "021ad659a782b7dd04cac6b056e897cbc87aecf61fda91a3f6ca37da36ac6b1d",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-autofilter-colors-fg.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/autofilter-colors-fg.xlsx",
+  "sha256": "9bc60d29e03245b0ec94233986eccf0cf6a78d898fbfcd3685024fb445ee5424",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-autofilter-colors.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/autofilter-colors.xlsx",
+  "sha256": "cf1d66e64140eae397debf0c0adc78a4a27dea23c83df8e5cf71bdc6461fd6dd",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-autofilternamedrange.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/autofilternamedrange.xlsx",
+  "sha256": "8f7a17a5dfbd6cbf6b1045288d5fcfead31e84ca74329bd7e7cd6e74b4db6e44",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-autofilterShowButton.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/autofilterShowButton.xlsx",
+  "sha256": "98a94083b29c8b3d03c3eead5709b64532df60c2a18b164f7431c8f165f75859",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-bnc762542.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/bnc762542.xlsx",
+  "sha256": "89afbf1b494588041e6b860fd997950fae3425ae6b75c65ff77c441e141b91cc",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-Book1_custom.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/Book1_custom.xlsx",
+  "sha256": "04fab5c43604fc59a084c240960bc16b35b23357ced56047944559ab44273747",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-built-in_ranges.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/built-in_ranges.xlsx",
+  "sha256": "834c9aa7227219e48dcc2b166748464af04c99a909a77528195df6f72c137462",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-button-form-control.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/button-form-control.xlsx",
+  "sha256": "624321843560b792805592d604e7a645040f19f0ae1f661fec024b9aeec9613f",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-CalcThemeTest.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/CalcThemeTest.xlsx",
+  "sha256": "646fb7b7b0f437b8a999ca096e9a4b2ac636ed27ab1c33b571e2679d298a6d4c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-ceiling-floor.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/ceiling-floor.xlsx",
+  "sha256": "1f330777fce8b9c5144e014f2d84b3886e2d67fd0e61cc26ba9d0ddfd7167eba",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-cell-anchored-hidden-shapes.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/cell-anchored-hidden-shapes.xlsx",
+  "sha256": "5e0ac4b29f37cfeb9c8709e23ae0bc9389c964cdcdff35c2f1d918062f5c4606",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "lo-cell-borders.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/cell-borders.xlsx",
+  "sha256": "edd882ecf3faaea2950c95d347a22b907918e6e2f883891cdfac8945778c4df7",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-cell-multi-line.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/cell-multi-line.xlsx",
+  "sha256": "22fde6cac256b6755e2eca37f43c46b2ea04e86a5bbeef589d966f5ba2799575",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-chart_hyperlink.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/chart_hyperlink.xlsx",
+  "sha256": "b6dc58cd4e3d357e429ffc1cf16cdea1bf909593f1fc8d939f0a5fbac8218b08",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-checkbox-form-control-align.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/checkbox-form-control-align.xlsx",
+  "sha256": "3a90a534c6360dad21fb9f90a9b225e5f5b9fc356439abd5493af5fffa410434",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-checkbox-form-control-font.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/checkbox-form-control-font.xlsx",
+  "sha256": "c937cc0554afc819a4094ffb236a6ddb3dbb48201d5855af445ea49652e236f7",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-checkbox-form-control.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/checkbox-form-control.xlsx",
+  "sha256": "8b602b21777bc06ca574f61783594caa5c37f68bdf66c66e58ef598758367038",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-colorscale_num_with_ref.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/colorscale_num_with_ref.xlsx",
+  "sha256": "270a960ad209a997b1d2bb8640d45c1335e84107b1fcd5e8adda8e5e690cc86d",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-column-style-autofilter.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/column-style-autofilter.xlsx",
+  "sha256": "0c5c8dd675e69465e590b343089481030288fb1965d79cae19ce57a2ea238956",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-column-style.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/column-style.xlsx",
+  "sha256": "ce3f69fd3e5ee8a90cc72eaea6d9034b608b16f6153fcefc2d8e1c5002982a58",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-complex_icon_set.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/complex_icon_set.xlsx",
+  "sha256": "ffb217fc2bc772bd95f5651a684048bf741ce0511b32cd596fe498bc4d2b3164",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-cond_format_formula_listener.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/cond_format_formula_listener.xlsx",
+  "sha256": "035de984d14366f0d4e7cc37cbec589f3e2843b5180581714cf163492d388c18",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-cond_format_theme_color2.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/cond_format_theme_color2.xlsx",
+  "sha256": "eb6c9c5fc2a62cb0da4555727eb983d17669bcd8131c81e730bbb10886eb2192",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-cond_format_theme_color3.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/cond_format_theme_color3.xlsx",
+  "sha256": "321ad1afc41632105a36926db9719f5dc3bf7fc0c418b9777e79579b44d31842",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-cond_parent.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/cond_parent.xlsx",
+  "sha256": "f3e947b27c0f2af08c3067b0d4a571c5e3a23a6637b7a53e6542f51ce565abd0",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-condFormat_cellis.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/condFormat_cellis.xlsx",
+  "sha256": "fba4a6b3e19e77be3fd85882f280994b38296a162f181809cc9e5c274aaa43d4",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-condformat_databar.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/condformat_databar.xlsx",
+  "sha256": "1fc73ba3547ddfde691bf7008c23d5c205107b0a44e173ce2e56f2c345ae87ec",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-condformat_theme_color.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/condformat_theme_color.xlsx",
+  "sha256": "523f4157ea1103f5e24d10acb55fce729eb59da2d39aeba8f299ceb031436430",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-conditional_fmt_checkpriority.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/conditional_fmt_checkpriority.xlsx",
+  "sha256": "21e644459edc86e2d6c260d367a2cd42fca89b2f83da7a1b3a92115ff18368d7",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-conditional_fmt_origin.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/conditional_fmt_origin.xlsx",
+  "sha256": "12a3a7241e225299181a7e3de9721015ee4adf319b144f5158dcef507d0af116",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-customxml.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/customxml.xlsx",
+  "sha256": "2ebad8b30f7c50d60cb511aa652faf968b90588ad52f0ef76d8135cc432f5168",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-data_validation_test.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/data_validation_test.xlsx",
+  "sha256": "a9537c68719201cc64b35a6185bb5cbb602ce9d9e8d9d38a629846a67ac42488",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-dataValidity.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/dataValidity.xlsx",
+  "sha256": "bf7a53b6cd5aeced5bfb3241cf802a23759210c10447aeb62a9ab075cdb258e3",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-dateAutofilter.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/dateAutofilter.xlsx",
+  "sha256": "d7ab3dbb59388d245ee779bf8547748dc6bac70f3c7216e673e0d97dbbbd6bc4",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-different-column-width-excel2010.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/different-column-width-excel2010.xlsx",
+  "sha256": "8360cf592f6e79a75995b5356837ac35f2fa57cc74c0707e939158d5f552ffcb",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-embedded-text-in-decimal.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/embedded-text-in-decimal.xlsx",
+  "sha256": "936ccc7c26db5a206dfb8fbedde1827f85cc27f72c9f2d6e17a7244fdc0f56d4",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-empty_ext_defined_name.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/empty_ext_defined_name.xlsx",
+  "sha256": "fdc3b8b3cb84df64f404b5a1c1fd45014de6f43a8814415f4bdd55d8899dcfa5",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-enhanced-protection.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/enhanced-protection.xlsx",
+  "sha256": "2a8151eb9653172e350c214c755f820b6d9670b155f9593d41c1b258655bcd44",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-escape-unicode.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/escape-unicode.xlsx",
+  "sha256": "4fc5bfed83c80264b6bb06e321e404f86a0b99bd5f1c1fbabe1cef3f44c284e0",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-external-ref-wholecol-xlookup.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/external-ref-wholecol-xlookup.xlsx",
+  "sha256": "4ef073b06fd06a7751a0b22d767dde4af3cab9ac454b770708193fba57e54a41",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-external-refs.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/external-refs.xlsx",
+  "sha256": "80cd967dad7b889a5b6d0f07ed38961a19aafe8f6c4442fae3277cae264c6c26",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-fontSize.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/fontSize.xlsx",
+  "sha256": "45aed8b5b012ef17cf540772af6c6face2e5dd7561738ead84ec585bdbb58539",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-formats.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/formats.xlsx",
+  "sha256": "7bc3a117aa8f74fa1093376581fec69a0128415f60474455ae27c5ad2440f3f3",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-forum-mso-de-104083.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/forum-mso-de-104083.xlsx",
+  "sha256": "c718268285da63929de80fd1d619d50b4de898dcee75e531272e76fdc71c9a38",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-forum-mso-en4-134670.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/forum-mso-en4-134670.xlsx",
+  "sha256": "e54cd64b614c9b4edddf09eaaadebb02b85c323afaad02097ef98ee64d841b2e",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-forum-mso-en4-145327.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/forum-mso-en4-145327.xlsx",
+  "sha256": "2d9e138925ca26660f12189009782e1cd7531b634e509e8a1c960dc7cc1c1180",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-functions-excel-2010.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/functions-excel-2010.xlsx",
+  "sha256": "16a2f714110e538e505d566ff4fdf8267c49ac80b11f87b2b671bac894537b25",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-groupShape.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/groupShape.xlsx",
+  "sha256": "fa959117fde55e8f4d4d482e9b342cd0dc14599e762e553fac10b0eb8133f2a2",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-hiddenButton.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/hiddenButton.xlsx",
+  "sha256": "89bddd9805b122a198c5667652426890ab273af599f58362f7ea2f65ffdf1aca",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-hiddenShape.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/hiddenShape.xlsx",
+  "sha256": "fec6fd8b086774cbbe77988b5b3ab605372ade820be41b4a152bb94d226f730b",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-hyperlink_export.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/hyperlink_export.xlsx",
+  "sha256": "86709af721efb7b0d8293359032435dcb48b4a330d2d17b60f1bf079853b0c80",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-hyperlink_formula.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/hyperlink_formula.xlsx",
+  "sha256": "b274b5c39ef21247ea0c4076c5f9f15153428e0b134f6e28fdb3074a96c2fb3a",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-hyperlink.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/hyperlink.xlsx",
+  "sha256": "8693ab165bdfa767f071596ff29368ccc4771c5f0c1ef1a1fe81aa4f9524e2d6",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-hyperlinks.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/hyperlinks.xlsx",
+  "sha256": "246be6934c5bf339f3d2fafd253347b1eca963fe137af17442049dcff6f30061",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-image_hyperlink.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/image_hyperlink.xlsx",
+  "sha256": "ab0171ccc9b2b07d8a348cac527d49e26cd82c8e0aad002ab9cc877986466f67",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-IntersectionOperatorFixture.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/IntersectionOperatorFixture.xlsx",
+  "sha256": "d8ebab6e0a48a5fc3b227555a46fe7205aac174029e70e7f92573c34b91d6d0f",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-invalid_ext_data_validation.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/invalid_ext_data_validation.xlsx",
+  "sha256": "a7d58ac6d867f570c63cb104cdca1c601bdb40f87250232552ad78946adfe765",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-matrix-multiplication.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/matrix-multiplication.xlsx",
+  "sha256": "5a6d13188f8f500053c25233147ac1deef397cfcb126c108c491022902c44cc1",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-miscrowheights.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/miscrowheights.xlsx",
+  "sha256": "d9dbd18f3d0b39ec48e538c94b74fddb4dcd98b72747f64586d41a7cf8c390e3",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-MissingPathExternal.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/MissingPathExternal.xlsx",
+  "sha256": "6bbc39e3bfd409645795fa0c994d5c7e7b2dd02c42af6568bac33f08944410f5",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-named-ranges-hidden.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/named-ranges-hidden.xlsx",
+  "sha256": "b75f70ff0effa118fa3d4648369fb7167b20db35e5599fd52bddb238fefe5190",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-NamedSheetViews.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/NamedSheetViews.xlsx",
+  "sha256": "896f863f92dc5fc05ce7b038272261106a0d40f6fb77abff7bc149880346eaef",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-new_cond_format_test_export.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/new_cond_format_test_export.xlsx",
+  "sha256": "2f53e5cbdc0d2326fbf1185c688fe06a27802a5a5fca54e16abc6049db52816e",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-new_cond_format_test.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/new_cond_format_test.xlsx",
+  "sha256": "2f53e5cbdc0d2326fbf1185c688fe06a27802a5a5fca54e16abc6049db52816e",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-orderOfCNumFmtElements.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/orderOfCNumFmtElements.xlsx",
+  "sha256": "0b81c9c80a7d1c72634bed36b596da7f0059c109fe1f44e00b56562307423217",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivot_dark1.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivot_dark1.xlsx",
+  "sha256": "f0e8cb1efb1f689af282821c586522597c952c495e6db6c4f5ea2e7448f6f517",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_1s_difference.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_1s_difference.xlsx",
+  "sha256": "8cea016f7a9844f234649963570d794a99daaee431b06379fbcd91152a082f01",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_bool_field_filter.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_bool_field_filter.xlsx",
+  "sha256": "b22fec8b74b48ab24ca21cb20e89e8974a68dbbc7210dbcd8963205f9dd23ed3",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-PivotTable_CachedDefinitionAndDataInSync.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/PivotTable_CachedDefinitionAndDataInSync.xlsx",
+  "sha256": "b549617019d5d67ad50c25181c0a11c3a179f437e9b75a4756e10ffe86772a7a",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithCacheData.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithCacheData.xlsx",
+  "sha256": "9435c6677cd8a46c5c2798eda31b94e4795f3d485efd20b9d5d00ddae28aa77e",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithoutCacheData.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithoutCacheData.xlsx",
+  "sha256": "7891a46795881d73701c982426bd152f24d9f70f6ccfc6f69c21924e9e9687c5",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_date_field_filter.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_date_field_filter.xlsx",
+  "sha256": "da01cf11e3fbd532c9d71a686ced3d8634eff582649aea6b06f079cfcd321996",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_double_field_filter.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_double_field_filter.xlsx",
+  "sha256": "ac79e5e9b3f0756743a796136b6bbfaed17530df40bf7840d38edd21b05558b8",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_duplicated_member_filter.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_duplicated_member_filter.xlsx",
+  "sha256": "8523e57f2650f74f033dc665449f4b4539c0ced6ff1b46147920b37475db27a6",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_error_item_filter.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_error_item_filter.xlsx",
+  "sha256": "e03116d4ddc1368c4ef4372e35c4875fdf1a5115f327b12cb484c9d4a8d1f5ca",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_invalid_formats.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_invalid_formats.xlsx",
+  "sha256": "bf1b527fd8766ea8d6b40156e74c2d1139d52b6388289ef24bacf28d19d45c5e",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_long_text.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_long_text.xlsx",
+  "sha256": "094458258b72cca1fc854e1373500baf653a0b9836015f95304fd89ffdb5b291",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_outline_mode.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_outline_mode.xlsx",
+  "sha256": "1583f453aa4a70d38b502cb6c49a604cca4494f7da9ad9534544fc1ce54d73e2",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_rowcolpage_field_filter.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_rowcolpage_field_filter.xlsx",
+  "sha256": "e0b8ef511ddaf991571cac5ef95322f7e96b4928f0cd88c377675a4c27b6cccb",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_string_field_filter.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_string_field_filter.xlsx",
+  "sha256": "45463ecd0c558bd049eafe1c92ba6b629a54dd5a611a8cd17a6f9d61308121f7",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-pivottable_tabular_mode.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/pivottable_tabular_mode.xlsx",
+  "sha256": "efdcfbc61c76897427a90c3cf7bef983f7d11eba0c8feaeeacb166d34486038b",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-preserve-whitespace.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/preserve-whitespace.xlsx",
+  "sha256": "9728cae72a31de518a0c5acc3317cab6f70ae3bb7d247097d1b686da5e36fe65",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-ProtecteSheet1234Pass.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/ProtecteSheet1234Pass.xlsx",
+  "sha256": "fbad9061c6d2dd234ba99932004b60110775f8bd6dfc14349f015c6acde29ae3",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-queryTableExport.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/queryTableExport.xlsx",
+  "sha256": "b665ed05b9ed01d98ca6b01c080d91a9cbe1b9bf805cc53ef640bb95c89f64ce",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "lo-ref_string.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/ref_string.xlsx",
+  "sha256": "a96399b95bfc3c10ddd0907bbdd633c90ff4e70424f8af1ec1af72270cc35665",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-RowImportCellStyleIssue.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/RowImportCellStyleIssue.xlsx",
+  "sha256": "39b7b9c9583116d6d44b6c114accb4e49af2488c3bb6cbfc799df506d7d16440",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-shape-macro-ext-ref.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/shape-macro-ext-ref.xlsx",
+  "sha256": "659ea46d77eb1b2c2e25de49f7151c7212622b92f8fe1edfdad974509307fbf3",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-sheet-names.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/sheet-names.xlsx",
+  "sha256": "e768518ed6161ec4698e6a24506fc71ce2ebf56b0a2fa5d9dd352b2dfb5f47ec",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-sheet-tab-color.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/sheet-tab-color.xlsx",
+  "sha256": "5501d6ae93866d0425aadbab74443bee6146533182b7ceb90c620ab6de55d39f",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-SimpleSpillOperatorFixture.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/SimpleSpillOperatorFixture.xlsx",
+  "sha256": "87d624ad9e4493a4481ec84d14336757085088f9cfca382b89b4c0d9d1cb98d1",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-singlecontrol.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/singlecontrol.xlsx",
+  "sha256": "a13fd1a411a499f4b474bbe553c7950959ab8895131c40687522d14379885cde",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-sortconditionref.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/sortconditionref.xlsx",
+  "sha256": "40accc003c5b305b3adef414f8b13a9ec6b1ecb0f97d54305e00005480f81c0c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-sortconditionref2.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/sortconditionref2.xlsx",
+  "sha256": "fe574ac4fe70f4edbd355b6042c0945e23df112f3de0db51588c6e3e7db72944",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-Sparklines.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/Sparklines.xlsx",
+  "sha256": "9847a0015185459e126b3f60d09d4dbd4492d9a39644971118c67e38666d5b16",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-Spill.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/Spill.xlsx",
+  "sha256": "c1e17e7d0d8b8f1cae95461eb9145e025a9a151efc52718f72596283b5da20b0",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-strike-through.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/strike-through.xlsx",
+  "sha256": "0b9af56c9650ca2d4dbbf639f6c3e46ce46c4ebdd082c942f47e43f543922063",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-subtotal-above.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/subtotal-above.xlsx",
+  "sha256": "115274cee60bf5f660601790a342382383cba164d2dc62b6e88b03c1d77b4c0d",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-TableEmptyHeaders.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/TableEmptyHeaders.xlsx",
+  "sha256": "1b46aa492d18ab18f8718befaf23249fbf9ebe45312d4b4b1960c891bae38fd0",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "lo-tableref-column-linebreak.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tableref-column-linebreak.xlsx",
+  "sha256": "61e6977e9a942ffb38712409907e9c119a76186b37ef33bb86fd1b2cf1f98308",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tablerefsnamed.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tablerefsnamed.xlsx",
+  "sha256": "1a61f21a603403444587f695434cdd52c4777a0b71c827ea5a8db67afe1a3860",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-tableStyleInnerBorders.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tableStyleInnerBorders.xlsx",
+  "sha256": "69cc43ed1761bf5e17ca93d5baea2192a75ba8afa7343e538682b6322dca1d46",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-TableStyleTest.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/TableStyleTest.xlsx",
+  "sha256": "48293a9961176b34a6cb0f8a44c4e76dcafccab241b64d12a6446827e5380cee",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf100154.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf100154.xlsx",
+  "sha256": "d37e21ae6b4783c12940571c4ddac5580f31faa80922b3c43ad79171e009c2e2",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf104310-2.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf104310-2.xlsx",
+  "sha256": "425fbcace63421af0bc2979ee99a3967e76b7357774899f6d53c346163e719f1",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf105272.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf105272.xlsx",
+  "sha256": "5d7d21f683763d8346b009e52854815a0558fd35a66cf680c0ea9149901d0f61",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf105840_allRowsHidden.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf105840_allRowsHidden.xlsx",
+  "sha256": "a505455dbb26c09db9e531d8753db06e55a1741247bae6be5a37b4e86582e10d",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf106197_import_upright.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf106197_import_upright.xlsx",
+  "sha256": "989604bc3f719f07b665d5de2a584fb0718ca4f502727fec234cd2e31079ed2c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf107586.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf107586.xlsx",
+  "sha256": "2da35a67161d9d6c4137222f26c79953f02438b599864ecacaa2e486f7e2821b",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf109061.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf109061.xlsx",
+  "sha256": "ef1aafcf33ab6e13bcbecdc91dfc68118d03a0d3e1e40482fb30eec90039e526",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf110440.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf110440.xlsx",
+  "sha256": "0353bbdc7853fd8f5ac8b4d70222c61a2cb82dbb60b6146cdef236dbdeb5ac82",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf111876.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf111876.xlsx",
+  "sha256": "daa2d1593b2b4f3d6ee307d26ff77851cc764ce85b33683021cc6b78532b09db",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf111980_radioButtons.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf111980_radioButtons.xlsx",
+  "sha256": "78067fa92760a582e9674148029bfd2d9088cb964d2042fbdde2e5037bc30d00",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf112106.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf112106.xlsx",
+  "sha256": "d07b8fd2d192ebfe3a5d91423039fe67cd1bd9af2cfa8ec884a607a0d3445fe7",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf112567.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf112567.xlsx",
+  "sha256": "1f9fbbb508a24264b315506703dde6703f46a81bb5d442e47bc9db7d965daf72",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf112936.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf112936.xlsx",
+  "sha256": "2a8b8e43233e550ffa6cc2e7ed53f5616ef83507a4f09ddba513635f76d62337",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf113013.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf113013.xlsx",
+  "sha256": "3e47d3dfa966e9615dccb580277cb2c8994c2d2098a2ada35b9f1fbaffce95bb",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf113271.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf113271.xlsx",
+  "sha256": "564970c4b747f3cc90da5601237623827e9133ca6e21c0bc939b33f4d3afabe8",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf113621.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf113621.xlsx",
+  "sha256": "1159e2faef630607ef6654dd8d01c097d3069948a8e3c7bf2c0f935f324c6e74",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf115159.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf115159.xlsx",
+  "sha256": "98053ff4bab193b5cc1a8a86e0f00fad72321988507efbf1f70b173f0c19a533",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf117287_comment.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf117287_comment.xlsx",
+  "sha256": "b9ffcdd831fbc01baba6b910497796a4c1d24dc2416bac31a97a8b64b1513f8d",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf118668.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf118668.xlsx",
+  "sha256": "fa968f9b8a2f80254699ebde87f59b61c3fa746834e711570f233d43952dc163",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf118990.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf118990.xlsx",
+  "sha256": "8c25486c81216acfde9a32485991d3f723eaaa3c3d43ed5fc70748c8ad3dcf01",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf119190.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf119190.xlsx",
+  "sha256": "2e69c6368a2aaa9d946ef6b9f9e8c0737127a82d32590cb7f47a08ce3dd2c06c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf119292.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf119292.xlsx",
+  "sha256": "a35c8c41caf60251ce83897dada9dd08a82c8cd1bc09924c57568d279cc97a9c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf119565.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf119565.xlsx",
+  "sha256": "fd1e03c75c6f91c62f9350b2f5d37838f64a36f7272725db0c80ac52764495b8",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf120168.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf120168.xlsx",
+  "sha256": "f92e4bc58e4ff1f7858e5399cc2150ccd33364b7da0f094b43db32b8b7524a0b",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf120301_xmlSpaceParsing.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf120301_xmlSpaceParsing.xlsx",
+  "sha256": "73709ecaa9270324eaf3f0c4fae8ec5e733ab639daa7b407f08d42538bac60bf",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf120749.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf120749.xlsx",
+  "sha256": "8aa791bd3773f62aab51e6ea3d492c1af96e9937832ef2497e994612a545e221",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf121715.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf121715.xlsx",
+  "sha256": "62f330a65c8ce7b9e29d10fc19a2e671cfbd4a1bc626e21c81a27eb33e83ddc6",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf122102.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf122102.xlsx",
+  "sha256": "cd81fd2fd0b15f87bbad728e97258a9caccab2fab6d927386672214a36d9fd7a",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf122471.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf122471.xlsx",
+  "sha256": "4cbc85ab1658d52b7503102b8a1ed177487533439edcbfabec87cfd71f845382",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf122716_font_with_charset.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf122716_font_with_charset.xlsx",
+  "sha256": "466ae7b3fb4dfb5c8ad658c3473275847a17fc5a954717fa333ae6dfb81f7633",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf122945_TabColorProtectedSheet.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf122945_TabColorProtectedSheet.xlsx",
+  "sha256": "1986875a65956e304298afcb5b059d5a90bfee8624129ea4a5ee9afc84328922",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf123026_optimalRowHeight.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf123026_optimalRowHeight.xlsx",
+  "sha256": "183d6154b7b1acce27dbe7b6efa1c822396aa3b1b920dd387d773583ca25f6c0",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf123139_applyAlignment.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf123139_applyAlignment.xlsx",
+  "sha256": "f5d4282bece8a5427edf976866fc93eb65f16120540abf21635102d2bb2d099c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf123353.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf123353.xlsx",
+  "sha256": "3bbb1c159aa74c12dfe62ec904f1d8fd9612f64f1bc96dc190b66f45977666a3",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf124525.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf124525.xlsx",
+  "sha256": "deef1f4cc295be5b56c51933af20c846ff5067fc731434606b6180fa9f6b6416",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf129985.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf129985.xlsx",
+  "sha256": "db9febfd49106118ada4f245d6f05301b4e08223bd081a68f15eb4ac2842907d",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf130104_indent.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf130104_indent.xlsx",
+  "sha256": "8097b9960fc8bd964a8c0b2ac44347d2d47b4785049278d69cee4e708c991297",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf130959.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf130959.xlsx",
+  "sha256": "9323bfd87541358e36819db320c8f3dd514b8082d900d4d3bd1e6b5bda383eca",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf131380.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf131380.xlsx",
+  "sha256": "62c3cadc04f67ff1269282b0c82899dbaf6731826a32cac7bf55962724a22ab9",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf131424.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf131424.xlsx",
+  "sha256": "d60fc9f2fb5d7c9a0bc2f1f5daffd68b4dad757841523ef1694e7b32ec756fb2",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf131536.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf131536.xlsx",
+  "sha256": "eae1f20604d4c6889f7f8d8d0ddd926c1fbe71ebfe4c2189051be066de4417a9",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf134392.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf134392.xlsx",
+  "sha256": "30f79c7c368fa4508ab3ce38002ae3c8499c68c94a2104012aefed37e84efddb",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf134459_HeaderFooterColor.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf134459_HeaderFooterColor.xlsx",
+  "sha256": "a54981b736aa27d4783a7d4ba33a124bbc23d7a9d0ce355fa3492b1e39b998c2",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf134553.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf134553.xlsx",
+  "sha256": "9840c297c0bfc08a20e6a79c4e0123085a47c9da4839e9bace1e50268a7a3e31",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf134769.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf134769.xlsx",
+  "sha256": "50d4f7d5d0ffe17e2251b21cfb66bd5018e3b1791c7f5c27592a47a9d9e004b1",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf134817_HeaderFooterTextWith2Section.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf134817_HeaderFooterTextWith2Section.xlsx",
+  "sha256": "a04d3cc09dec97cae32d3b1e90751f1d452914eb0a3d92e11c88f02ad55bae56",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf134826.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf134826.xlsx",
+  "sha256": "2278f30d55fb89d456bc5e0b7385827c5117dbd5971c1fa22b68b3733ce0f202",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf135828_Shape_Rect.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf135828_Shape_Rect.xlsx",
+  "sha256": "248b67b0dcfa0613fd94447e4b6671f33c7b481bd2d155348f360a1c7df0d63a",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf136364.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf136364.xlsx",
+  "sha256": "614754592208a210abd991cd3a35d4c19632706c00b7d3028c0c1ed75459a606",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf136721_letter_sized_paper.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf136721_letter_sized_paper.xlsx",
+  "sha256": "42d2513d9cb37c6d154fccdcde4e59321eddc6934e6498690203af494fbd8a58",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf137000_export_upright.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf137000_export_upright.xlsx",
+  "sha256": "989604bc3f719f07b665d5de2a584fb0718ca4f502727fec234cd2e31079ed2c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf137543.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf137543.xlsx",
+  "sha256": "c48fc0c688dd276bdcccbe756a221821556653910bcd7b6c886a398c5a007ee2",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf138601.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf138601.xlsx",
+  "sha256": "1d625d4e1d725990f01eeb011bf0445141eace7d5f61a00f459eaaa490ce4fa7",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf139021.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf139021.xlsx",
+  "sha256": "4541c2b40d8d177cad6a096f379267b1c9aae4d2c08f8655de7d08fbd4c94a31",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf139167.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf139167.xlsx",
+  "sha256": "4b45807b089fd9382bee79685ed790ff6d9c1c9c9ed4c5fbcb5ac2af0bec3870",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf139394.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf139394.xlsx",
+  "sha256": "7f2ca0bb19fbf34e9c9cef599f7b2f7907debb4b786912adcc5881b4cf16376c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf139763ShapeAnchor.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf139763ShapeAnchor.xlsx",
+  "sha256": "11e502da96cd9b29bd9cd5223a1dbb6c8ab5175f97c7bb5c6f23e5d4051ca841",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf139928.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf139928.xlsx",
+  "sha256": "3d2906d0e92ee10323393bf7e7abe677b437e78ca8e965795d078b4261feb8ab",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf141644.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf141644.xlsx",
+  "sha256": "34bd878a5c1ba4521a3dbb1ae4a97871442d9537c62331d96dc344c29efbf547",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf142881.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf142881.xlsx",
+  "sha256": "ff310437601ee6ac45a1277a7c273e1341429c6426f223c8575f5dbb91d0197d",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf142929.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf142929.xlsx",
+  "sha256": "37157150a5809a8ff5c63fdccc5098eb169fe0ff27a247f527889978088cf663",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf143068_top10filter.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf143068_top10filter.xlsx",
+  "sha256": "cf343db1cfa0cb758627bfd530696cea994e1e644b61ca3b6926cc61e8a6e16e",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf144397.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf144397.xlsx",
+  "sha256": "748d25cb1c39fa4583e16bedaacd8db261acb4f10dc5b2eb22e77e5160ab4268",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf144642_RowHeight_28.35pt_SavedByExcel.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf144642_RowHeight_28.35pt_SavedByExcel.xlsx",
+  "sha256": "d7e705d8d0968514461afd1050c739f91db38b3c8968ac0a938d593980dffee7",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf145054.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf145054.xlsx",
+  "sha256": "9bc60d29e03245b0ec94233986eccf0cf6a78d898fbfcd3685024fb445ee5424",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf145057.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf145057.xlsx",
+  "sha256": "726dcdc188086c6d042ee2b71df1a7e94f47a982df3f4f24ac3b868398a22581",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf145129_DefaultRowHeight_28.35pt_SavedByExcel.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf145129_DefaultRowHeight_28.35pt_SavedByExcel.xlsx",
+  "sha256": "31fbca7039d7eff4ab06d77ee81a3fb5fa312f0af6877b678a13ac96cdc1404e",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf147014.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf147014.xlsx",
+  "sha256": "ec8ba700e972363a2007f9b85b50b5cb4bb6c1afc500d3bac7e47a0281e9cdfb",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf148820.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf148820.xlsx",
+  "sha256": "50566febc9332b5e4599d1f5fe392815fffdfccdf1a3df0717ee3fb606db48bc",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf151755_stylesLostOnXLSXExport.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf151755_stylesLostOnXLSXExport.xlsx",
+  "sha256": "9780a04eea0b08e15639b0bab04082e6ae926af6fbfa13b7129b43e4429aeed1",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-tdf151818_SmartartThemeFontColor.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf151818_SmartartThemeFontColor.xlsx",
+  "sha256": "379aece9fa1610bed5c9a84af406b5c3808249a9139addc3d0b36e5608c2ff77",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf152581_bordercolorNotExportedToXLSX.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf152581_bordercolorNotExportedToXLSX.xlsx",
+  "sha256": "39cc3adae83aa50b7e321358f3ea614c48c2d95c2a8ac2931969a72dbe17d492",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf153767.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf153767.xlsx",
+  "sha256": "c44565119d7375af84fa6741c0029bd3edf706ec8626a256d0f95170bc18030b",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf155321.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf155321.xlsx",
+  "sha256": "f8a7065d25e2d99365286833bbb180588e1c046d3c0d5a42a234f9f654261f64",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf156028.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf156028.xlsx",
+  "sha256": "3d2e9be91ea9e7c4ed53d10ac8939877a5f915f9982f691bc319461fe20c7267",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf156814.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf156814.xlsx",
+  "sha256": "2d09569faf64e502e950032029059e9ad05740a57416b5bcfa3276db33886b6b",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf157689.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf157689.xlsx",
+  "sha256": "68133d511d1bb89f940d12e81216b2c78ac7179112668cebbb6c3279a4d564d6",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf161301.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf161301.xlsx",
+  "sha256": "ad3050880c04008d5ed42e7c01bbeccf9f3c6a4396d461bb1185c2fcdcda5d16",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-tdf161365.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf161365.xlsx",
+  "sha256": "5c5ec45c1dd5db0a911e74d0e7e6cde5bf713b5ef38fcf84483903ddad583957",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf162093.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf162093.xlsx",
+  "sha256": "8a51c51ff709c6e729cbfefe061e9c2b67fb9d7388322217dc0bbbdd3bb7a6ff",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf162948.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf162948.xlsx",
+  "sha256": "84a9843413f176d81e5178f20ccb9d30fb929e083b660b4c280e6fd1e6b2b12c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf162963_TableWithTotalsEnabled.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf162963_TableWithTotalsEnabled.xlsx",
+  "sha256": "9beb883d778cc816bb335482af5bc7ddc1c7d15e6670f249ed267aa4fc3723fc",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf163554.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf163554.xlsx",
+  "sha256": "f35efcab604da67bfb49917da7e0662ac9552627d5a042a03695df95e9f9ea17",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf165180_date1904.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf165180_date1904.xlsx",
+  "sha256": "23b1189f96c388559bc837b521902a465a5bec6a0b8833858c25f1e0c65f72b7",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf165503.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf165503.xlsx",
+  "sha256": "19a9195964cd271a6c6f9bbe2119bca7a659401567bee497850bc79267d99400",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf165655.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf165655.xlsx",
+  "sha256": "acaf9b47ca57a88dbc4e9121fea419d0cae082f52394bbd29af50d1419bf6ad3",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf165886.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf165886.xlsx",
+  "sha256": "e2d6000953a3626fd420c339c321721cc0504f2104a296651df50797f2fd4a2c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf166413.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf166413.xlsx",
+  "sha256": "6e3eae0e9181dd091101ccdde25ed02162f7e190a6f3e24a3e2c32a84013c4d6",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf166712.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf166712.xlsx",
+  "sha256": "9c5e1b4abb860857f38bb21669881538d2ce73dbd3bbd9bd868506d8078c9319",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf166724_cellAnchor.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf166724_cellAnchor.xlsx",
+  "sha256": "0f46ba65844ba9909ddeb8e6a7e260bcc29dc4c079cbd976bbd3335ef9d8c3cc",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf167019.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf167019.xlsx",
+  "sha256": "298671dfe0882a2fcec106f198db5c17c0beeb96307f5001cc5f99179e773802",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf167689_tableType.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf167689_tableType.xlsx",
+  "sha256": "a3eb71132b5a34436d84c1d876ca90f2399ef2939d642a4765b039403c2b1d8d",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf167689_x15_namespace.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf167689_x15_namespace.xlsx",
+  "sha256": "b9064db5694c5e60928a7b6732aabf440c7d2f997d907834e38f927342ec8688",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf169072_illegalDates.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf169072_illegalDates.xlsx",
+  "sha256": "9705c5d8645d7d2d55645f60bbcc9e474fa7c1eaa278b6cbf241aff6be827472",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf169326_ignore_line_breaks_in_referenced_cells.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf169326_ignore_line_breaks_in_referenced_cells.xlsx",
+  "sha256": "ae80392532c2e2f1c690edd6cb5edc85cafda5d001c928794c547307451049d8",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf169379.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf169379.xlsx",
+  "sha256": "0d837fde065d7e77ad6e76927b27626952552e5ec08146a0121a1a48bb00df99",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf169496_hidden_graphic.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf169496_hidden_graphic.xlsx",
+  "sha256": "0b647da300a085f39914fdfae961463ae9e54ffe772b2e0eb9860a841ab93f72",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf41722.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf41722.xlsx",
+  "sha256": "41d31e0db85ec577e390bf0cab63d7809639065e67ebd11b5cc5fb3b2bba5b35",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf55417.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf55417.xlsx",
+  "sha256": "2afa8bab84e9d51af9b22a51e5dd0884bff736cdb1519c0ceacd8be19acb0c30",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf58243.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf58243.xlsx",
+  "sha256": "442be369ae4f768d9fe50f02c1a4cd7ed51583f6b4fcc8aac7108e44e6859437",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf60673.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf60673.xlsx",
+  "sha256": "d9abab27b6cb7ae4eda4729473d8d48175f63fa66457e64a8134f9fa59689bc8",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf66668.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf66668.xlsx",
+  "sha256": "219e7c282fcc96003bfb355ac63d7733fdd6936b4ca903f31b687789ee583f4d",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf73063.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf73063.xlsx",
+  "sha256": "4f7b90214fec6535157a754ec00f64cecca111d94f4bad6d99f34104d3633f1a",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-tdf79972.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf79972.xlsx",
+  "sha256": "e77807c9124583284a4f08dab5cd6e68fd56f56bb3ce18e14feb73d40017361b",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf81939.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf81939.xlsx",
+  "sha256": "a1b9a4d60403c5574298fdcb26199b267472f4002c542ded7592857d0e8ace9e",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf83671_SmartArt_import.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf83671_SmartArt_import.xlsx",
+  "sha256": "e713a591e918b57da4c41dcec4a168e82ee6d02b5eca423ec2a1fb8598370fd9",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf83672.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf83672.xlsx",
+  "sha256": "1e236ab61695e15c5516094883a480ee54d9ecc50dd45b65e0c08ad5ba6d4d6a",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf83779.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf83779.xlsx",
+  "sha256": "18fd8c72ff855decaa6d8101cc3cbd765e63a4ece1b1dc1443b664027eadbaa2",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf89139_pivot_table.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf89139_pivot_table.xlsx",
+  "sha256": "7bbd96e95997768731fe1a55ccf81b4eae3132495dfef5a557b8cf56707f7b8f",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf90104.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf90104.xlsx",
+  "sha256": "68d1d1e291d784ecd84215a3a443e86cf5bc23dcd1bbd15a77d31e9b400529a7",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf91251_missingOverflowRoundtrip.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf91251_missingOverflowRoundtrip.xlsx",
+  "sha256": "e8dc14774b199bdbb5a9b0822bff22efa2531dde45b6d42102500b2d3051271d",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf91332.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf91332.xlsx",
+  "sha256": "5d65bb68c1c82e70013245d1d133d9eb4034953f1a5a5bba99ea7b4cb1e89800",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf95640.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf95640.xlsx",
+  "sha256": "500bd1b25294f7261e081e327eb4d089e8514395ed820dd696125265b64b40f5",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-tdf97598_scenarios.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/tdf97598_scenarios.xlsx",
+  "sha256": "464b1d54cd89e08ae6a3a85eb65639103a4aabfa0eee76d702bc8b0e09fe7861",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-test_115192.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/test_115192.xlsx",
+  "sha256": "4d118926c5b208e70ee590cb0d9ada1e9941b8a0556064f11531c32588c34eb0",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-Test_ThemeColor_Text_Background_Border.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/Test_ThemeColor_Text_Background_Border.xlsx",
+  "sha256": "ce3cd412c0ab5231e8a74ca808a8a44b977263ef9eaeba9847b8c3ce090811f8",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-testDeleteCircles.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/testDeleteCircles.xlsx",
+  "sha256": "cb6f0c9746510d6c32ece2ee60c1168ada817a3b3617ddd8e6413e19a2e510e7",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-testDrawCircleInMergeCells.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/testDrawCircleInMergeCells.xlsx",
+  "sha256": "3f16a0acbad87e1bdd6ac1bc517029b9378ed4beb936f5654685d2b86a13e121",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-testShapeAutofit.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/testShapeAutofit.xlsx",
+  "sha256": "909a2df23386336d8f98cf11f9d8f062dec2bdc496ec4c265d8dd1c21e393df9",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-testShapeDisplacementOnRotationImport.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/testShapeDisplacementOnRotationImport.xlsx",
+  "sha256": "9b24285bb05e6ea349ec3056eaecc6d2c71ffeb1b7360b3dcf45db9e971c0f0a",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-testShapeRotationImport.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/testShapeRotationImport.xlsx",
+  "sha256": "722c45809c9715e68045189c1608b83f530751c0b965f5ab097ad37e145d63c5",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-textbox-CharKerningSpace.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/textbox-CharKerningSpace.xlsx",
+  "sha256": "4eac62e9b3284887d08d197405bf39ae4214a65828bdd08a5ace9cd1cda96fbd",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-textbox-CondensedCharacterSpace.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/textbox-CondensedCharacterSpace.xlsx",
+  "sha256": "2780dbdc3fd89d4b872639dcca15877193f3d01c17708633ecdf1d40386d50f8",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-textbox-hyperlink.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/textbox-hyperlink.xlsx",
+  "sha256": "0be29cc3f536fa8adb494a7e55b835a143be78ea07f41c7f947347526881bf7a",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-TextColor.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/TextColor.xlsx",
+  "sha256": "6be1ba592a6492f48b01f4aca3cb1ed66b24d6875da7dee5e25fe3eaf4826bdf",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-textLengthDataValidity.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/textLengthDataValidity.xlsx",
+  "sha256": "7d6695701649fb184137e9014c1b56577afefce766b5dca43292ad9336e7cf75",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-threadedComment.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/threadedComment.xlsx",
+  "sha256": "47f1813c00f19e88e202f5915b419a0c2e5e2768f95524af0cb11634612d5158",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-totalsRowFunction.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/totalsRowFunction.xlsx",
+  "sha256": "174fb09653d8fb6cabae2df96f611f20ff8f5547d83f4a3c50474173733cd63e",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel Online"
+ },
+ {
+  "name": "lo-twoCellAnchor_editAs_oneCell.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/twoCellAnchor_editAs_oneCell.xlsx",
+  "sha256": "e4834bdc006629e91f5daaedbe43de8990eed08dc8152441a299f5dd8b493ef1",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-underlineColor.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/underlineColor.xlsx",
+  "sha256": "167b369a3378dc3e7ab7a04149bcc182483afe9798ba2fa2edbef95017c3b147",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-universal-content-strict.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/universal-content-strict.xlsx",
+  "sha256": "fbd7591328bdb1b4d3341efcc692d42669b2e6f754babdc2b7b654fe050e2fc5",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-user_defined_function.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/user_defined_function.xlsx",
+  "sha256": "7928d1238542614efdceeeb369cd4b8f5f7af3e391f7c250be7e7edd0eaf1648",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Macintosh Excel"
+ },
+ {
+  "name": "lo-value-in-column-2000.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/value-in-column-2000.xlsx",
+  "sha256": "1ce5189ed66f8aa93022c0453450ebd8635169438790dc952c67399d5d30737c",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-writingMode.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/writingMode.xlsx",
+  "sha256": "477410c7cc8c922ea03924179cb456489ae96f8e67215b9e0bf7650aadfa41fc",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Excel"
+ },
+ {
+  "name": "lo-XlStartupExternal.xlsx",
+  "url": "https://raw.githubusercontent.com/LibreOffice/core/7094a2f2374c6b68c4038d9f05019942ba2caa09/sc/qa/unit/data/xlsx/XlStartupExternal.xlsx",
+  "sha256": "e06155747da482bfb7c1ac5f0ab3a80cbe5b510e664926709c356ba6b59e9bc4",
+  "licence": "MPL-2.0",
+  "application": "Microsoft Macintosh Excel"
+ }
+]
