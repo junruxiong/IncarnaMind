@@ -100,8 +100,8 @@ function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
 /**
  * The composer's quiet model chip, before the Search scope: the model the
  * Mind's next Questions are asked with, and a menu to choose another, grouped
- * by where it runs (your keys, the ChatGPT plan, this computer), each with a
- * one-line hint. A choice is remembered for the Mind (`setMindModel`); a Mind
+ * by where it runs (your keys, the ChatGPT plan, this computer), with a hint
+ * only on a model that needs one. A choice is remembered for the Mind (`setMindModel`); a Mind
  * with none uses the default for new Minds, which the menu names at its foot.
  * Until the User is signed in with ChatGPT, the plan's group offers "Continue
  * with ChatGPT"; while its model is chosen, it says the plan is in use, with

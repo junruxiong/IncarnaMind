@@ -48,7 +48,7 @@ import { useKeepInView } from "./useKeepInView";
  * + New chat, ⋯ and fold), with no line under it (#391), the conversation
  * (#201), and the composer at its foot. Folded on a side, it is a 44px rail
  * (show, New chat, History, which has no title to open it from); at the bottom
- * or floating, only its header. In the header, History is the title's ▾ and ⌘K.
+ * or floating, only its header.
  *
  * Where it sits and how big is the `Workbench`'s; this is what it shows.
  * Nothing in it is remounted when it moves, resizes or folds: the composer
