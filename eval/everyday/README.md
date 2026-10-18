@@ -10,6 +10,7 @@
 - **Every claimed change is real.** A model judges the reply against the record of what the Answer's Tools did (`judge.ts`), apart from the app's own detector, which the report shows next to it.
 - **Citations are there**: in the reply, or, for text written into a Mind, in that Mind, where no source may be written as text in brackets, like "[Deck, slide 3]".
 - **No marker without a Citation**: every Citation marker in the Answer's text ("[^2]") has its Citation. A model that writes markers without calling `cite` is asked once for its Citations (`src/core/answers/unmarkedQuotes.ts`), and the app takes out any marker still unbacked; the report says how many it took out, and a marker left in the text fails the request.
+- **No tool-call text**: nothing in the Answer's text is a Tool's call written as words, such as a `<cite>` block. The app takes it out, and gives the records of a `<cite>` block back to be recorded (`src/core/answers/toolText.ts`); one left in the text fails the request.
 - **Every Document is covered**: asked about all the Documents in scope, each is cited, or named in a sentence saying it wasn't covered.
 - **Only what was asked changes**: asked about one paragraph, the others read as they did once the Answer's changes are accepted.
 - **Changed in place**: asked to make the summary in the Mind longer, it changes that summary rather than adding a second version beside it.

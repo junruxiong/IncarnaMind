@@ -656,18 +656,12 @@ export function createLibrary(options: {
     settings: getSettings,
     taggingStoppedFor,
     /**
-     * Whether Organize holds the Document's Tags: it is queued, running or waiting there, or, while
-     * Organize files new Documents by itself, it has any assignment.
+     * Whether Organize holds the Document's Tags: it has an assignment that isn't finished (queued,
+     * running, waiting or failed), or, while Organize files new Documents by itself, any assignment.
      */
     isOrganizing(id: string): boolean {
       const held = assignment(id);
-      if (!held) return false;
-      return (
-        getSettings().automatic ||
-        held.status === "pending" ||
-        held.status === "classifying" ||
-        held.status === "waiting"
-      );
+      return !!held && (getSettings().automatic || held.status !== "classified");
     },
     taggingPlaces(): (string | null)[] {
       const ids = db

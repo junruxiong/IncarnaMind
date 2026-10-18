@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import { Agent, fetch as undiciFetch } from "undici";
 import {
+  type AnalysisRuntime,
   type AudioCapture,
   type Browser,
   BUILT_IN_SKILLS_PACKAGED,
@@ -23,12 +24,15 @@ import {
   type OllamaApp,
   type UsageDataSender,
 } from "../core";
+import { runAnalysis } from "../core/analysis";
 import type { PageFetch } from "../core/documents/web/fetch";
 import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
 import { type LocalServers, scriptedLocalServers } from "../core/providers/localServers";
 import { type Resolve, systemResolve } from "../core/tools/web/addresses";
 import type { FakeTranscriberOptions } from "../core/transcription/fake";
 import { SHOW_AGENT_CONNECTION } from "../shared/agentConnection";
+import type { AnalysisJob } from "../shared/analysis";
+import { createElectronAnalysisRuntime } from "./analysis";
 import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
@@ -254,6 +258,45 @@ function citationStylesFolder(): string {
   return app.isPackaged
     ? join(process.resourcesPath, "citation-styles")
     : join(app.getAppPath(), "resources", "citation-styles");
+}
+
+/**
+ * Pyodide and the packages Analyses run with (ADR-0023), found like the
+ * built-in Skills: in the packaged app's resources, otherwise where the build
+ * fetched them into the repository.
+ */
+function pythonFolder(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, "python")
+    : join(app.getAppPath(), "resources", "python");
+}
+
+/**
+ * The analysis sandbox. A test build also gives it to the smoke tests as
+ * `globalThis.incarnamindAnalysis`, which runs a job through the core's
+ * record of it, stopped after `stopAfterMs` when given: no part of the app
+ * runs Analyses yet.
+ */
+function analysisRuntime(log: Logger): AnalysisRuntime {
+  const runtime = createElectronAnalysisRuntime({
+    log,
+    rendererUrl: process.env.ELECTRON_RENDERER_URL,
+    folder: pythonFolder(),
+  });
+  if (import.meta.env.MODE === "test") {
+    (globalThis as { incarnamindAnalysis?: unknown }).incarnamindAnalysis = {
+      run: (job: AnalysisJob, stopAfterMs?: number) =>
+        runAnalysis(
+          runtime,
+          job,
+          stopAfterMs === undefined
+            ? new AbortController().signal
+            : AbortSignal.timeout(stopAfterMs),
+        ),
+      close: () => runtime.close(),
+    };
+  }
+  return runtime;
 }
 
 /**
@@ -629,6 +672,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     log,
     audioCapture: audioCapture(log),
     capturePage: createCitedPageCapture({ rendererUrl: process.env.ELECTRON_RENDERER_URL }),
+    analysisRuntime: analysisRuntime(log),
     paths: {
       dataDir,
       builtInSkills: builtInSkillsFolder(),

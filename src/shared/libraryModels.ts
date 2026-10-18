@@ -16,3 +16,24 @@ export const organizes = (
 export const organizesNewDocuments = (
   library: { groups: readonly unknown[]; settings: LibrarySettings } | null,
 ): boolean => organizes(library) && !!library?.settings.automatic;
+
+/**
+ * The Documents whose Tags Organize holds, so its rows say how they are going and the tagging rows
+ * leave them out: those with an assignment that isn't finished (queued, running, waiting or failed),
+ * or, while Organize files new Documents by itself, any assignment.
+ */
+export const organizeHeld = (
+  library: {
+    groups: readonly unknown[];
+    settings: LibrarySettings;
+    assignments: readonly { documentId: string; status: string }[];
+  } | null,
+): ReadonlySet<string> => {
+  if (!library || !organizes(library)) return new Set();
+  const everything = library.settings.automatic;
+  return new Set(
+    library.assignments
+      .filter((assignment) => everything || assignment.status !== "classified")
+      .map((assignment) => assignment.documentId),
+  );
+};

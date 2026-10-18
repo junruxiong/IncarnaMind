@@ -146,6 +146,13 @@ jobs:
             sleep 20
           done
           exit 1
+      # Chromium's sandbox starts on the runner only with its helper root's and setuid. The specs
+      # that run Analyses start the app sandboxed, as the User's runs, and Analyses don't run
+      # without the sandbox (ADR-0023).
+      - name: Let Electron's sandbox start
+        run: |
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
       # Chinese faces, as a Linux system with Chinese has (DESIGN.md, Typography): the runner has
       # none, so a printed PDF would hold no Chinese for the export specs to read back.
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
