@@ -1,3 +1,4 @@
+import { flip, offset, shift } from "@floating-ui/dom";
 import { useRef } from "react";
 import { formatDateTime } from "../../../../shared/dates";
 import { conversationName } from "../../../../shared/naming";
@@ -21,6 +22,8 @@ export function HistoryPopover({ anchor, onClose }: { anchor: Element; onClose()
     <Popover
       anchor={anchor}
       placement="bottom-start"
+      // Without crossAxis: false, flip() hangs a popover that is too wide for the room under the title from its right edge, over the page.
+      middleware={() => [offset(4), flip({ crossAxis: false }), shift({ padding: 8 })]}
       onDismiss={onClose}
       initialFocus={close}
       returnFocus

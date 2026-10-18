@@ -451,6 +451,32 @@ test("its ⋯ menu and the keyboard dock, float and fold it; ⌘J unfolds it int
   await expect(title).toBeFocused();
 });
 
+for (const language of ["en", "zh-CN"] as const) {
+  for (const width of [1100, 1440]) {
+    test(`History opens at the title's left edge, inside the assistant, docked on the right (${language}, ${width}px)`, async () => {
+      const { app, window } = await start(width);
+      await setLanguage(window, language);
+      const title = window.getByTestId("assistant-title");
+      await title.click();
+      const history = window.getByTestId("assistant-history-popover");
+      await expect(history).toBeVisible();
+      await expect(history.getByTestId("assistant-history-empty")).toBeVisible();
+      const [anchor, panel, popover] = await Promise.all([
+        boxOf(title),
+        boxOf(assistantOf(window)),
+        boxOf(history),
+      ]);
+      // Not hung from the title's right edge over the page: it starts in the assistant, at or before the title's left.
+      expect(popover.x).toBeGreaterThanOrEqual(panel.x - 1);
+      expect(popover.x).toBeLessThanOrEqual(anchor.x + 1);
+      // Only as far left as the window's edge needs: the title sits a few px inside the panel.
+      expect(anchor.x - popover.x).toBeLessThanOrEqual(12);
+      expect(popover.x + popover.width).toBeLessThanOrEqual(width);
+      await app.close();
+    });
+  }
+}
+
 test("under 1,000px a side dock sits at the bottom and goes back when wider; groups merge beside it and come back as it folds; its place, sizes and fold survive a closed tab and a restart", async () => {
   let session = await start();
   let { app, window } = session;
