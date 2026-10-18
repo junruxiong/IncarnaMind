@@ -1301,3 +1301,38 @@ export function createCitationSession(
 export function withoutFootnoteDefinitions(markdown: string): string {
   return markdown.replace(/^ {0,3}\[\^\d{1,4}\]:.*(?:\n|$)/gm, "");
 }
+
+/**
+ * The text without the Citation markers `backed` says have no Citation, each
+ * with the space before it unless a word follows, as the Answer shows them
+ * gone: "a claim [^3]." reads "a claim.". Code and footnote definitions keep theirs.
+ */
+export function withoutDeadMarkers(markdown: string, backed: (marker: number) => boolean): string {
+  let fenced = false;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      if (/^ {0,3}(?:```|~~~)/.test(line)) {
+        fenced = !fenced;
+        return line;
+      }
+      if (fenced) return line;
+      return line
+        .split(/(`[^`\n]*`)/)
+        .map((part, index) =>
+          index % 2 === 1
+            ? part
+            : part.replace(
+                /([ \t]*)\[\^(\d{1,4})\](?!:)/g,
+                (found, space: string, marker: string, at: number) =>
+                  backed(Number(marker))
+                    ? found
+                    : /^\p{L}/u.test(part.charAt(at + found.length))
+                      ? space
+                      : "",
+              ),
+        )
+        .join("");
+    })
+    .join("\n");
+}

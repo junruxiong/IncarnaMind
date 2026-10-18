@@ -21,13 +21,17 @@
  * marker, or goes, as a marker with no record always did. Only a quote the
  * check finds is taken, so nothing added is "not found".
  *
- * When nothing matches, the Answer has no Citation at all, and one of its
- * sentences shares at least five words with one of the Passages', the model
- * is asked once more, in one request with the Answer and the Passages it
- * read, for its Citations (as ./quoteRetry asks for quotes); what it gives
- * is taken the same way. Never more than once per Answer, so an Answer
- * saying the Documents don't cover the Question doesn't pay for it. In the
- * Tool loop the ask is one of the end-of-turn checks' (see ./turnChecks): `mayAsk`.
+ * The model is asked once more for its Citations, in one request with the
+ * Answer and the Passages it read (as ./quoteRetry asks for quotes), when a
+ * sentence is left with a marker it gave no record for, or, with no marker,
+ * when nothing matches, the Answer has no Citation at all and one of its
+ * sentences shares at least five words with one of the Passages'. What it
+ * gives is taken the same way, a Citation taking the marker its sentence has.
+ * A marker is enough to ask, so an Answer in another language than its
+ * Passages, which shares no words with them, is asked too. Never more than
+ * once per Answer, so an Answer saying the Documents don't cover the Question
+ * doesn't pay for it. In the Tool loop the ask is one of the end-of-turn
+ * checks' (see ./turnChecks): `mayAsk`.
  */
 import { jsonSchema, Output, streamText } from "ai";
 import { sentenceSpans } from "../../shared/sentences";
@@ -199,6 +203,61 @@ export function matchUnmarked(
   return matches;
 }
 
+/**
+ * The markers a sentence of the Answer has after its first word: one before
+ * it ("” [^1] And so…") belongs to the sentence before.
+ */
+function ownMarkers(sentence: { text: string }): number[] {
+  const first = [...sentence.text.matchAll(/\[\^\d{1,4}\]|[\p{L}\p{N}]/gu)].find(
+    (found) => !found[0].startsWith("["),
+  );
+  return first
+    ? [...sentence.text.slice(first.index).matchAll(MARKER)].map((found) => Number(found[1]))
+    : [];
+}
+
+/**
+ * What the one request gave, each Citation taking a marker the model wrote
+ * with no record in the sentence the Citation names (the sentence of the
+ * Answer worded most like it), so the Answer keeps no marker beside its own.
+ * A Citation for a sentence that has one already, or that `matched` gives one,
+ * is left out.
+ */
+function takingMarkers(
+  asked: readonly Omit<Match, "marker">[],
+  answer: string,
+  recorded: (marker: number) => boolean,
+  matched: readonly Found[],
+): Found[] {
+  const sentences = answerSentences(answer).map((sentence) => ({
+    ...sentence,
+    markers: ownMarkers(sentence),
+    words: wordsOf(sentence.text),
+  }));
+  const taken = new Set(
+    matched.flatMap((match) => (match.marker === undefined ? [] : [match.marker])),
+  );
+  return asked.flatMap((match) => {
+    const words = wordsOf(match.sentence);
+    let own: (typeof sentences)[number] | undefined;
+    let best = 0;
+    for (const sentence of sentences) {
+      const { score } = likeness(words, sentence.words);
+      if (score >= MIN_SIMILARITY && score > best) {
+        best = score;
+        own = sentence;
+      }
+    }
+    if (own && (own.markers.some(recorded) || matched.some((each) => each.start === own?.start))) {
+      return [];
+    }
+    const orphan = own?.markers.find((marker) => !taken.has(marker));
+    if (!own || orphan === undefined) return [match];
+    taken.add(orphan);
+    return [{ ...match, marker: orphan, start: own.start, end: own.end }];
+  });
+}
+
 /** Whether a sentence of `answer` shares as many words with a sentence of the Passages as a match needs. */
 function drawsOn(answer: string, passages: readonly ShownPassage[]): boolean {
   const theirs = passages.flatMap((passage) => passageSentences(passage.text).map(wordsOf));
@@ -231,7 +290,14 @@ export function settleOrphans(
     );
   const renumbered = new Set<number>();
   const edits: { at: number; length: number; text: string }[] = [];
+  // A footnote definition is dropped whole later; without its marker, its words would stay.
+  const definitions = new Set(
+    [...answer.matchAll(/^( {0,3})\[\^\d{1,4}\]:/gm)].map(
+      (found) => found.index + (found[1] ?? "").length,
+    ),
+  );
   for (const found of answer.matchAll(MARKER)) {
+    if (definitions.has(found.index)) continue;
     const marker = Number(found[1]);
     const taker = takers.get(marker);
     if (!taker || within(found.index) === taker) continue;
@@ -374,14 +440,26 @@ export async function* citeUnmarked(
   let matches = matchUnmarked(answer, passages, found, recorded);
   let asked = false;
   const cited = [...answer.matchAll(MARKER)].some((each) => recorded(Number(each[1])));
-  if (matches.length === 0 && !cited && drawsOn(answer, passages)) {
+  const matchedMarkers = new Set(matches.map((match) => match.marker));
+  const unbacked = answerSentences(answer).some((sentence) => {
+    const markers = ownMarkers(sentence);
+    return (
+      markers.length > 0 &&
+      !markers.some((marker) => recorded(marker) || matchedMarkers.has(marker))
+    );
+  });
+  if (unbacked || (matches.length === 0 && !cited && drawsOn(answer, passages))) {
     const toAsk = passagesToAsk(answer, passages, budget);
     if (toAsk.length > 0 && mayAsk()) {
       asked = true;
       yield { type: "phase", phase: "checking-quotes" };
       const given = await askForCitations(request, answer, toAsk, temperature);
       if (signal.aborted) return answer;
-      matches = given.filter((each) => found(each.passage, each.quote)).slice(0, MAX_ADDED);
+      const asking = given.filter((each) => found(each.passage, each.quote));
+      matches = [...matches, ...takingMarkers(asking, answer, recorded, matches)].slice(
+        0,
+        MAX_ADDED,
+      );
     }
   }
   if (matches.length === 0) {
