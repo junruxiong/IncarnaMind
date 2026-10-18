@@ -9,7 +9,7 @@ describe("startupDialog", () => {
     const dialog = startupDialog(newer, "en");
     expect(dialog.title).toBe("Update IncarnaMind to open your data");
     expect(dialog.detail).toBe(
-      "A newer version of IncarnaMind saved this data folder, so this version can't open it. Your data is safe and unchanged.",
+      "A newer IncarnaMind saved this data. Update to open it; nothing changed.",
     );
     expect(dialog.buttons).toEqual(["Download the latest version", "Quit"]);
     expect(`${dialog.message}${dialog.detail}`).not.toMatch(/58|migration/);
@@ -19,7 +19,7 @@ describe("startupDialog", () => {
     const dialog = startupDialog(newer, "zh-CN");
     expect(dialog.title).toBe("更新 IncarnaMind 才能打开你的数据");
     expect(dialog.detail).toBe(
-      "较新版本的 IncarnaMind 保存了这个数据文件夹，当前版本无法打开。你的数据完好无损，没有任何改动。",
+      "较新版本的 IncarnaMind 保存了这些数据。更新后即可打开，数据未改动。",
     );
     expect(dialog.buttons).toEqual(["下载最新版本", "退出"]);
     expect(`${dialog.message}${dialog.detail}`).not.toMatch(/58|migration/);

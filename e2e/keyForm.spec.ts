@@ -1,10 +1,11 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { createFakeOpenAI } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
+  addProviderForm,
   assistantAnswers,
   closeSettings,
   createDataFolder,
@@ -153,8 +154,7 @@ test("in Settings the notes and the key line are under the key field, the steps 
     await acceptPlainTextKeys(window);
     await language(window, "en");
     const settings = await openSettings(window, "models");
-    await settings.getByTestId("chat-choice-api-key").check();
-    const form = settings.getByTestId("provider-form");
+    const form = await addProviderForm(settings, "anthropic");
     const help = form.getByTestId("provider-key-help");
     // The form opens on Anthropic, which has all of it, whichever language is chosen after.
     for (const [value, link] of [
@@ -198,52 +198,41 @@ test("in Settings the notes and the key line are under the key field, the steps 
   }
 });
 
-/** Picks a provider's chip, opening More… first when it is folded under it. */
-async function chooseProvider(form: Locator, name: string) {
-  const chip = form.locator("label", {
-    hasText: new RegExp(`^${name.replace(/[()]/g, "\\$&")}$`),
-  });
-  if ((await chip.count()) === 0) await form.getByTestId("provider-more-toggle").click();
-  await chip.click();
-}
-
 test("a key line says what to do in IncarnaMind and links to the company's own page for the rest, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
     await acceptPlainTextKeys(window);
     const settings = await openSettings(window, "models");
-    await settings.getByTestId("chat-choice-api-key").check();
-    const form = settings.getByTestId("provider-form");
     for (const [name, en, zh] of [
       [
-        "Anthropic",
+        "anthropic",
         "Paste an API key from the Anthropic Console. · Details ↗",
         "粘贴 Anthropic Console 中的 API 密钥。 · 详情 ↗",
       ],
       [
-        "OpenAI",
+        "openai",
         "With a ChatGPT plan, you can use Continue with ChatGPT instead of a key. · Details ↗",
         "有 ChatGPT 订阅时，可以改用“使用 ChatGPT 继续”，无需密钥。 · 详情 ↗",
       ],
       [
-        "Google",
+        "google",
         "Paste a Gemini API key from Google AI Studio · Pricing ↗",
         "粘贴 Google AI Studio 的 Gemini API 密钥 · 价格 ↗",
       ],
       [
-        "OpenRouter",
+        "openrouter",
         "Pay per use with OpenRouter credits · Pricing ↗",
         "用 OpenRouter 额度按用量付费 · 价格 ↗",
       ],
       [
-        "Kimi (Moonshot AI)",
+        "kimi",
         "If Kimi refuses requests, check your Kimi account · Pricing ↗",
         "如果 Kimi 拒绝请求，请检查你的 Kimi 账户 · 价格 ↗",
       ],
     ] as const) {
       await language(window, "en");
-      await chooseProvider(form, name);
+      const form = await addProviderForm(settings, name);
       const line = form.getByTestId("provider-key-line");
       await expect(line).toHaveText(en);
       await expect(line.getByRole("link")).toHaveAttribute("href", /^https:\/\//);
@@ -259,6 +248,7 @@ test("a key line says what to do in IncarnaMind and links to the company's own p
           path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-line-${name}-zh-CN.png`,
         });
       }
+      await settings.getByTestId("models-back").click();
     }
   } finally {
     await app.close();
@@ -286,8 +276,7 @@ test("the provider's own line on what it does with the data sits under the sente
 
     await language(window, "en");
     const settings = await openSettings(window, "models");
-    await settings.getByTestId("chat-choice-api-key").check();
-    const line = settings.getByTestId("provider-form").getByTestId("provider-data-use");
+    const line = (await addProviderForm(settings, "anthropic")).getByTestId("provider-data-use");
     await expect(line.getByRole("link")).toHaveText("Data use ↗");
     await language(window, "zh-CN");
     await expect(line).toContainText("数据使用：");
@@ -392,10 +381,7 @@ test("Use this key shows a refused key in place, and with a good one saves and t
     // A server the User gives is offered in Settings, not at first run (ADR-0019); saved there,
     // it answers the Question waiting in the setup card all the same.
     const settings = await openSettings(window, "models");
-    await settings.getByTestId("chat-choice-api-key").check();
-    const form = settings.getByTestId("provider-form");
-    await form.getByTestId("provider-more-toggle").click();
-    await form.locator("label").filter({ hasText: "OpenAI-compatible server" }).click();
+    const form = await addProviderForm(settings, "openai-compatible");
     // A compatible server keeps a free-text Model.
     await expect(form.getByTestId("provider-model-text")).toBeVisible();
     await form.getByLabel("Server URL").fill(fake.url);
@@ -429,23 +415,20 @@ test("a model that needs 30-day data retention says so with the model's name, an
     await acceptPlainTextKeys(window);
     await language(window, "en");
     const settings = await openSettings(window, "models");
-    await settings.getByTestId("chat-choice-api-key").check();
-    const form = settings.getByTestId("provider-form");
-    await form.getByTestId("provider-more-toggle").click();
-    await form.getByRole("radio", { name: "OpenAI-compatible server" }).locator("xpath=..").click();
+    const form = await addProviderForm(settings, "openai-compatible");
     await form.locator('input[type="url"]').fill(fake.url);
     await form.getByTestId("provider-model-text").fill("claude-fable-5-1");
     await form.locator('input[type="password"]').fill("locked-key");
     await form.getByTestId("provider-use-key").click();
     const result = form.getByTestId("connection-test");
     await expect(result).toContainText(
-      "The key works, but claude-fable-5-1 needs your Anthropic organization to allow 30-day data retention. Choose another model. · Choose another model",
+      "The key works, but your organization disallows 30-day retention for claude-fable-5-1. Choose another model. · Choose another model",
       { timeout: 20_000 },
     );
     await expect(result).not.toContainText("Console");
     await language(window, "zh-CN");
     await expect(result).toContainText(
-      "密钥可用，但 claude-fable-5-1 要求你的 Anthropic 组织开启 30 天数据保留。请换一个模型。· 换一个模型",
+      "密钥可用，但你的组织未开启 claude-fable-5-1 所需的 30 天数据保留。请换一个模型。· 换一个模型",
     );
     await result.getByTestId("connection-test-choose-model").click();
     await expect(form.getByTestId("provider-model-text")).toBeFocused();

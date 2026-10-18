@@ -22,6 +22,7 @@ export const PRESETS: readonly CatalogProvider[] = [
     apiKey: "required",
     keyUrl: "https://console.groq.com/keys",
     docsUrl: "https://console.groq.com/docs/models",
+    pricingUrl: "https://groq.com/pricing",
     request: { openAiCompatible: { includeUsage: true, supportsStructuredOutputs: false } },
     roles: { answers: "openai/gpt-oss-120b", quickTasks: "openai/gpt-oss-20b" },
     dataUse: {
@@ -46,6 +47,7 @@ export const PRESETS: readonly CatalogProvider[] = [
     apiKey: "required",
     keyUrl: "https://api.together.ai/settings/projects/~current/api-keys",
     docsUrl: "https://docs.together.ai/docs/serverless-models",
+    pricingUrl: "https://www.together.ai/pricing",
     request: { openAiCompatible: { includeUsage: true, supportsStructuredOutputs: false } },
     roles: {
       answers: "deepseek-ai/DeepSeek-V4-Flash-0731",
@@ -78,6 +80,7 @@ export const PRESETS: readonly CatalogProvider[] = [
     apiKey: "required",
     keyUrl: "https://app.fireworks.ai/settings/users/api-keys",
     docsUrl: "https://docs.fireworks.ai/getting-started/quickstart",
+    pricingUrl: "https://fireworks.ai/pricing",
     request: { openAiCompatible: { includeUsage: true, supportsStructuredOutputs: false } },
     roles: {
       answers: "accounts/fireworks/models/glm-5p3-flash",
@@ -106,6 +109,7 @@ export const PRESETS: readonly CatalogProvider[] = [
     apiKey: "required",
     keyUrl: "https://cloud.cerebras.ai",
     docsUrl: "https://inference-docs.cerebras.ai/models/overview",
+    pricingUrl: "https://www.cerebras.ai/pricing",
     request: { openAiCompatible: { includeUsage: true, supportsStructuredOutputs: false } },
     roles: { answers: "gpt-oss-120b", quickTasks: "gpt-oss-120b" },
     dataUse: {
@@ -134,6 +138,7 @@ export const PRESETS: readonly CatalogProvider[] = [
     apiKey: "required",
     keyUrl: "https://dashboard.cohere.com/api-keys",
     docsUrl: "https://docs.cohere.com/docs/compatibility-api",
+    pricingUrl: "https://cohere.com/pricing",
     // Its compatibility API doesn't document `stream_options`, so streamed usage isn't asked for.
     request: { openAiCompatible: { includeUsage: false, supportsStructuredOutputs: false } },
     roles: {
@@ -167,6 +172,7 @@ export const PRESETS: readonly CatalogProvider[] = [
     apiKey: "required",
     keyUrl: "https://venice.ai/settings/api",
     docsUrl: "https://docs.venice.ai/overview/getting-started",
+    pricingUrl: "https://venice.ai/pricing",
     request: { openAiCompatible: { includeUsage: true, supportsStructuredOutputs: false } },
     roles: { answers: "deepseek-v4-flash-0731", quickTasks: "qwen3-5-9b" },
     dataUse: {
@@ -233,6 +239,7 @@ export const PRESETS: readonly CatalogProvider[] = [
     apiKey: "required",
     keyUrl: "https://console.aws.amazon.com/bedrock/home#/api-keys",
     docsUrl: "https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html",
+    pricingUrl: "https://aws.amazon.com/bedrock/pricing/",
     request: { openAiCompatible: { includeUsage: false, supportsStructuredOutputs: false } },
     roles: { answers: "openai.gpt-oss-120b", quickTasks: "openai.gpt-oss-20b" },
     dataUse: {
@@ -270,6 +277,7 @@ export const PRESETS: readonly CatalogProvider[] = [
     apiKey: "required",
     keyUrl: "https://dash.cloudflare.com/profile/api-tokens",
     docsUrl: "https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/",
+    pricingUrl: "https://developers.cloudflare.com/workers-ai/platform/pricing/",
     request: { openAiCompatible: { includeUsage: false, supportsStructuredOutputs: false } },
     roles: {
       answers: "@cf/zai-org/glm-5.3-flash",

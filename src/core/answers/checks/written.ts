@@ -105,7 +105,8 @@ export interface CheckWrittenInput {
  * What the check did: of the sentences with Citations (`cited`), how many it
  * sent, how many got a verdict and how many couldn't be checked, and what
  * stopped it; each part it cut, as it named it; how many land marked. Its
- * marks share `request`.
+ * marks share `request`. `blocked`: the sentences the User's own choice kept
+ * from being sent, among those that couldn't be checked.
  */
 export interface WrittenCheck {
   request: string;
@@ -114,6 +115,7 @@ export interface WrittenCheck {
   checked: number;
   failed: number;
   stop: RunStop | null;
+  blocked: { reason: "consent-revoked" | "local-mode"; count: number } | null;
   cut: string[];
   unsupported: number;
   contradicted: number;
@@ -526,6 +528,7 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
       checked: 0,
       failed: 0,
       stop,
+      blocked: null,
       cut: [],
       unsupported: 0,
       contradicted: 0,
@@ -554,6 +557,12 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
     });
     const failed = (sentence: Sentence, reason: ClaimCheckFailure, detail: string | null) => {
       done.failed++;
+      if (reason === "consent-revoked" || reason === "local-mode") {
+        done.blocked = {
+          reason: done.blocked?.reason ?? reason,
+          count: (done.blocked?.count ?? 0) + 1,
+        };
+      }
       console.warn(
         `A sentence the assistant wrote in Mind ${mindId} couldn't be checked before it landed: ${reason}${detail ? ` (${detail})` : ""}`,
       );
