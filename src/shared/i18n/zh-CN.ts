@@ -796,6 +796,7 @@ export const zhCN = {
   "edit.problem.retry": "重试",
   "edit.problem.cant-regenerate": "这处修订无法重新生成。拒绝它后，选中文字再用 AI 编辑。",
   "edit.problem.no-table": "AI 生成的表格不完整，因此没有改动。请重试，或改为要求生成列表。",
+  "edit.problem.late": "这次修改送达太慢，没有直接应用。请接受或拒绝这些修订。",
   "composer.edit.placeholder": "说说要怎么改…",
   "composer.edit.label": "说明要怎么修改选中的文字",
   "composer.edit.quote": "正在编辑“{text}”",

@@ -148,6 +148,10 @@ export function createMindContent(
       return Y.encodeStateAsUpdate(load(mindId).doc);
     },
 
+    stateVector(mindId: string): Uint8Array {
+      return Y.encodeStateVector(load(mindId).doc);
+    },
+
     /**
      * The content schema version the Mind was last written with. A Mind that
      * isn't loaded is read from what is stored and left unloaded, writing nothing.
