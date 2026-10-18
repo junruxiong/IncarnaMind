@@ -8,7 +8,7 @@
  */
 
 import { markdownToBlocks } from "../core/answers/markdown";
-import { CITATION_NODE, type ConversationAnswer } from "../core/api";
+import { CITATION_NODE, type ConversationAnswer, type MarkedCitation } from "../core/api";
 import { asGenerated } from "./aiText";
 import { citationNode, type NodeJSON, withCitations } from "./blockJson";
 import { withFigures } from "./figureMarkers";
@@ -39,6 +39,25 @@ export function answerBlocks(
       ),
     ),
   );
+}
+
+/** The Citation markers an Answer's text shows, in order, one for each place: a marker used twice is two. */
+export function markersIn(text: string): number[] {
+  const markers: number[] = [];
+  withCitations(markdownToBlocks(text), (marker) => {
+    markers.push(marker);
+    return null;
+  });
+  return markers;
+}
+
+/** The markers an Answer's text shows that no Citation of it has, each once. */
+export function markersWithoutCitation(answer: {
+  text: string;
+  citations: readonly Pick<MarkedCitation, "marker">[];
+}): number[] {
+  const cited = new Set(answer.citations.map(({ marker }) => marker));
+  return [...new Set(markersIn(answer.text))].filter((marker) => !cited.has(marker));
 }
 
 /** A space between two Citations, or between a Citation and the punctuation after it, is not kept (#612). */
