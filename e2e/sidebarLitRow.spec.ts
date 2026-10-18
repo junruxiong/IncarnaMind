@@ -15,7 +15,6 @@ import {
   removeDataFolder,
   setLanguage,
   setWindowSize,
-  splitFromTabMenu,
   useLocalChatModel,
 } from "./app";
 
@@ -214,9 +213,8 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(chosen).toHaveCount(2);
     await pointAndClick(window, mindRow(window, "Alpha"));
 
-    // Two groups: the lit row is the focused group's shown one.
+    // Two groups, the Document's beside the Mind: the lit row is the focused group's shown one.
     const groups = window.getByTestId("tab-group");
-    await splitFromTabMenu(window);
     await pointAndClick(window, mindRow(window, "Gamma"));
     await expect(groups).toHaveCount(2);
     await litIsShown(window);

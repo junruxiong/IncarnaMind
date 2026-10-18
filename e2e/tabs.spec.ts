@@ -438,7 +438,7 @@ test("the application menu makes a new Mind, opens Settings, and closes, reopens
   await expect(window.getByTestId("settings")).toBeVisible();
   await window.keyboard.press("Escape");
   await expect(window.getByTestId("settings")).toBeHidden();
-  await chooseMenuItem(app, "Open to the Side");
+  await chooseMenuItem(app, "Split to the Right");
   await expect(window.getByTestId("tab-group")).toHaveCount(2);
   await chooseMenuItem(app, "Close Tab");
   await expect(tabsOf(window)).toHaveCount(1);
@@ -455,7 +455,7 @@ test("the application menu makes a new Mind, opens Settings, and closes, reopens
   await expect.poll(() => menuTitles(app)).toContain("文件");
   await chooseMenuItem(app, "新建 Mind");
   await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
-  await chooseMenuItem(app, "在旁边打开");
+  await chooseMenuItem(app, "向右拆分");
   await expect(window.getByTestId("tab-group")).toHaveCount(2);
   await expect(window.getByRole("tablist", { name: "第 2 栏" })).toBeVisible();
   await app.close();
