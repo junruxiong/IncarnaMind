@@ -264,6 +264,14 @@ export function ownAppliedIn(
   return { kind: "applied", blockIds: range.map(idOf), fingerprint: fingerprintOf(range) };
 }
 
+/** A Mind's top-level Blocks from the `from`th on, to write again whole (#1149); null for none. */
+export function appliedFrom(blocks: Y.XmlFragment, from: number): OwnApplied | null {
+  const range = topLevelBlocks(blocks).slice(from);
+  return range.length === 0
+    ? null
+    : { kind: "applied", blockIds: range.map(idOf), fingerprint: fingerprintOf(range) };
+}
+
 /**
  * Proposes `revised` in place of `applied`'s Blocks: each old one to remove and each new one to
  * add after them, as Proposals of `request`, so rejecting them leaves the text as it was.
