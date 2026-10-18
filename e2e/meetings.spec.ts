@@ -289,7 +289,7 @@ test("an engine that can't start says so in plain words, never in its JavaScript
   await expect(line).not.toContainText("createAsync");
   await shot(window, "meeting-transcript-engine-stopped-en");
   await setLanguage(window, "zh-CN");
-  await expect(line).toHaveText("转写已停止。 · 重试");
+  await expect(line).toHaveText("转写已停止。· 重试");
   await shot(window, "meeting-transcript-engine-stopped-zh");
   const [meeting] = await bridge(window);
   expect(meeting?.status).toBe("recording");
