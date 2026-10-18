@@ -573,8 +573,10 @@ function copyOf(element: HTMLElement, box: Box): HTMLElement {
   return frame;
 }
 
-/** Finished copies still on the page because the User is typing: see `retire`. */
+/** Finished copies still on the page because the User is typing: see `retire`. Oldest first. */
 const retiring = new Set<HTMLElement>();
+/** More than this many and the oldest go at once: a long stay in one field mustn't pile them up. */
+const MOST_RETIRING = 16;
 
 function discard(copy: HTMLElement): void {
   copy.remove();
@@ -595,6 +597,11 @@ function retire(copy: HTMLElement): void {
   }
   copy.style.display = "none";
   retiring.add(copy);
+  for (const oldest of retiring) {
+    if (retiring.size <= MOST_RETIRING) break;
+    retiring.delete(oldest);
+    discard(oldest);
+  }
 }
 
 function discardRetired(event: FocusEvent): void {
@@ -1023,7 +1030,7 @@ export function leavingCopies(): {
 }[] {
   if (!layer) return [];
   return Array.from(layer.root.children)
-    .filter((child): child is HTMLElement => child instanceof HTMLElement)
+    .filter((child): child is HTMLElement => child instanceof HTMLElement && !retiring.has(child))
     .map((copy) => {
       const style = getComputedStyle(copy);
       return {
