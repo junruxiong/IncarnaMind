@@ -14,6 +14,7 @@ import {
   openSteps,
   pointAndClick,
   pointAt,
+  pressTextStart,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -300,7 +301,7 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
   const editor = window.getByTestId("mind-editor");
   await expect(editor.locator(":scope > h1")).toHaveCount(0);
   await editor.focus();
-  await window.keyboard.press(process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home");
+  await pressTextStart(window);
   await expect(editor).toBeFocused();
   // The cursor is in the first change once its bar shows.
   await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");
