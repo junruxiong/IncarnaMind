@@ -7,6 +7,7 @@
  */
 import type { Document, LinkedFolderLayout, RestoreRef, TagLinkState } from "../../core/api";
 import { core } from "./core";
+import { saidInLine } from "./lineNames";
 import type { Translate } from "./objects";
 import type { Undoable } from "./undo";
 
@@ -18,7 +19,7 @@ export function renamed(
   { before, after }: { before: string; after: string },
 ): Undoable {
   return {
-    message: t("object.renamed", { name: shown }),
+    ...saidInLine(t, (t) => t("object.renamed", { name: shown })),
     name: t("undo.name.rename"),
     undo: async () => {
       await rename(before);
@@ -41,8 +42,9 @@ export function deleted(
 ): Undoable {
   const count = refs.length;
   return {
-    message:
+    ...saidInLine(t, (t) =>
       count > 1 ? t("object.deleted.documents", { count }) : t("object.deleted", { name: shown }),
+    ),
     name:
       count > 1
         ? t("undo.name.delete.documents", { count })
@@ -65,7 +67,7 @@ export function mindMade(
   bringBack: () => Promise<unknown>,
 ): Undoable {
   return {
-    message: shown ? t("undo.mindStarted", { name: shown }) : t("undo.mindMade"),
+    ...saidInLine(t, (t) => (shown ? t("undo.mindStarted", { name: shown }) : t("undo.mindMade"))),
     name: t("menu.newMind"),
     undo: async () => {
       await remove();
@@ -84,7 +86,9 @@ export function linkedFolderPaused(
   setPaused: (paused: boolean) => Promise<unknown>,
 ): Undoable {
   return {
-    message: t(paused ? "undo.linkedFolderPaused" : "undo.linkedFolderResumed", { name: shown }),
+    ...saidInLine(t, (t) =>
+      t(paused ? "undo.linkedFolderPaused" : "undo.linkedFolderResumed", { name: shown }),
+    ),
     name: t(paused ? "linkedFolders.pause" : "linkedFolders.resume"),
     undo: async () => {
       await setPaused(!paused);
@@ -105,7 +109,9 @@ export function linkedFolderShown(
   const { before, after } = layouts;
   const flat = after === "flat";
   return {
-    message: t(flat ? "undo.linkedFolderFlat" : "undo.linkedFolderTree", { name: shown }),
+    ...saidInLine(t, (t) =>
+      t(flat ? "undo.linkedFolderFlat" : "undo.linkedFolderTree", { name: shown }),
+    ),
     name: t(flat ? "linkedFolders.layout.flat" : "linkedFolders.layout.tree"),
     undo: async () => {
       await setLayout(before);
@@ -149,12 +155,12 @@ export function retagged(
 ): Undoable {
   const { added, tag, names } = change;
   const [only] = names;
-  const message =
-    only !== undefined && names.length === 1
-      ? t(added ? "undo.tagAdded.one" : "undo.tagRemoved.one", { name: only, tag })
-      : t(added ? "undo.tagAdded" : "undo.tagRemoved", { count: names.length, tag });
   return {
-    message,
+    ...saidInLine(t, (t) =>
+      only !== undefined && names.length === 1
+        ? t(added ? "undo.tagAdded.one" : "undo.tagRemoved.one", { name: only, tag })
+        : t(added ? "undo.tagAdded" : "undo.tagRemoved", { count: names.length, tag }),
+    ),
     name: t(added ? "undo.name.tagAdded" : "undo.name.tagRemoved"),
     undo: async () => {
       await core.revertDocumentTags(before);
