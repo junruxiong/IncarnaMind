@@ -233,13 +233,13 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
   await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 waiting");
   const line = editor.getByTestId("applied-line");
   await expect(line.getByTestId("applied-count")).toHaveText(
-    "This would rewrite most of your text, so it's waiting for you",
+    "Waiting for you: this rewrites most of your text",
   );
   await expect(editor.locator("del.proposal-delete").first()).toBeVisible();
   await screenshot(window, "asked-held-en");
   await setLanguage(window, "zh-CN");
   await expect(line.getByTestId("applied-count")).toHaveText(
-    "这会改写你自己写的大部分内容，所以先等你确认",
+    "等你确认：这会改写你自己写的大部分内容",
   );
   await setLanguage(window, "en");
 

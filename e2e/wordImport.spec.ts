@@ -367,7 +367,7 @@ test("a file that can't be imported says why, and no Mind is made", async () => 
 
   const dialog = await importWordFromMenu(window);
   await expect(dialog.getByTestId("word-import-refusal")).toContainText(
-    "“Old minutes.doc” is an older Word file (.doc). Save it as .docx in Word, then import that.",
+    "“Old minutes.doc” is an older .doc file. Save it as .docx in Word, then import.",
   );
   await expect(dialog.getByTestId("word-import-confirm")).toHaveCount(0);
   await screenshot(dialog, "word-import-refused");
