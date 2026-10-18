@@ -456,6 +456,14 @@ export const tagCommands: readonly Command[] = [
     reversible: true,
     run: () => store().openTagsDialog(),
   },
+  {
+    // From anywhere, as ⌘K offers it: the sidebar lists only the Tags in use.
+    id: "tags.manage",
+    label: "tags.menu.manage",
+    group: "main",
+    reversible: true,
+    run: () => store().openTagsDialog(),
+  },
 ];
 
 const folderDocumentIds = (ctx: CommandContext): string[] => {

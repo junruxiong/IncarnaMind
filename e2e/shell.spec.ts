@@ -14,7 +14,6 @@ import {
   openLinkedFolderMenu,
   previewLink,
   removeDataFolder,
-  showFolders,
   showSourceLocations,
   turnOnEmbeddings,
   useLocalChatModel,
@@ -170,7 +169,7 @@ async function expectRowsAligned(window: Page): Promise<number> {
   return measured.length;
 }
 
-test("sidebar rows share one text edge, in the Folders view and on disk, a folder's children are one step deeper, and pane headers are 44px", async () => {
+test("sidebar rows share one text edge, in Not in a Folder and in the Linked folders, a folder's children are one step deeper, and pane headers are 44px", async () => {
   // Two Linked folders, one with a folder inside, and a file added on its own.
   const papersPath = join(sources, "Papers");
   const reportsPath = join(sources, "Reports");
@@ -203,10 +202,10 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
   const documents = window.getByTestId("document-list-item");
 
   const sidebar = window.getByTestId("sidebar");
-  // The Folders view: the Minds, then the Documents, Not in a Folder, at x 16 / 40.
-  const projectRows = tree.locator(
-    '[data-testid="mind-list-item"], [data-testid="document-list-item"]',
-  );
+  // Not in a Folder: the Minds, then the Documents, at x 16 / 40.
+  const projectRows = window
+    .getByTestId("not-in-a-folder")
+    .locator('[data-testid="mind-list-item"], [data-testid="document-list-item"]');
   await expect(projectRows).toHaveCount(3 + 4);
   for (const { icon, text, depth } of await rowEdges(sidebar, projectRows)) {
     expect(depth).toBe(0);
@@ -217,16 +216,15 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
     expect((await boxOf(row)).height).toBeCloseTo(28, 0);
   }
 
-  // On disk: every Folder, group and Document row, depth 0 at x 16 / 40, each level 24px deeper.
+  // The Linked folders, unfolded: every Folder and Document row as on disk, depth 0 at x 16 / 40,
+  // each level 24px deeper.
   await showSourceLocations(window);
-  const rows = tree.locator(
-    '[data-testid="folder-item"], [data-testid="other-documents"], [data-testid="document-list-item"]',
-  );
-  await expect(rows).toHaveCount(3 + 1 + 4);
-  await expect(documents.filter({ hasText: "Attention Is All You Need" })).toHaveAttribute(
-    "data-depth",
-    "2",
-  );
+  const linked = window.getByTestId("linked-folders-section");
+  const rows = linked.locator('[data-testid="folder-item"], [data-testid="document-list-item"]');
+  await expect(rows).toHaveCount(3 + 3);
+  await expect(
+    linked.getByTestId("document-list-item").filter({ hasText: "Attention Is All You Need" }),
+  ).toHaveAttribute("data-depth", "2");
   const edges = await rowEdges(sidebar, rows);
   for (const { icon, text, depth } of edges) {
     expect(icon).toBeCloseTo(16 + depth * 24, 0);
@@ -234,12 +232,12 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
   }
   // A Folder's children: their icon under its text, so their text is one step deeper.
   const papersText = await textLeft(folderRow(papers.folderId).getByTestId("row-text"));
-  const child = documents.filter({ hasText: "Language Models" });
+  const child = linked.getByTestId("document-list-item").filter({ hasText: "Language Models" });
   expect(await boxOf(child.locator("svg").first()).then((box) => box.x)).toBeCloseTo(papersText, 0);
   expect(await textLeft(child.getByTestId("row-text"))).toBeCloseTo(papersText + 24, 0);
-  // Both Linked folders and "Other Documents" at the top; 2026 and the Documents in
-  // Papers, Reports and Other Documents one step in; the Document in 2026 two.
-  expect(edges.map((edge) => edge.depth).sort()).toEqual([0, 0, 0, 1, 1, 1, 1, 2]);
+  // Both Linked folders at the top; 2026 and the Documents in Papers and Reports one step in; the
+  // Document in 2026 two.
+  expect(edges.map((edge) => edge.depth).sort()).toEqual([0, 0, 1, 1, 1, 2]);
 
   // "Library", Settings and Not in a Folder's label share the columns.
   const sidebarLeft = (await boxOf(sidebar)).x;
@@ -249,10 +247,9 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
   const settings = window.getByTestId("sidebar-footer").getByRole("button", { name: "Settings" });
   expect((await boxOf(settings.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
   expect((await textLeft(settings.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
-  await showFolders(window);
-  const notInAFolder = window.getByTestId("not-in-a-folder-toggle").locator("span");
-  expect((await textLeft(notInAFolder)) - sidebarLeft).toBeCloseTo(16, 0);
-  await showSourceLocations(window);
+  for (const heading of ["not-in-a-folder-title", "linked-folders-section-heading"]) {
+    expect((await textLeft(window.getByTestId(heading))) - sidebarLeft).toBeCloseTo(16, 0);
+  }
   // The header starts the window's title bar: macOS's traffic lights there (e2e/titleBar.spec.ts),
   // or else the app's mark, on the icon column.
   const header = window.getByTestId("sidebar-header");
@@ -280,7 +277,9 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
   // Folding a Folder hides what's inside it.
   const reportsRow = folderRow(reports.folderId);
   await reportsRow.getByTestId("folder-toggle").click();
-  await expect(documents.filter({ hasText: "Quarterly report" })).toHaveCount(0);
+  await expect(
+    linked.getByTestId("document-list-item").filter({ hasText: "Quarterly report" }),
+  ).toHaveCount(0);
 
   // A processing Document shows its progress at the row's end, on one line.
   await writeFile(join(sources, "Scaling Laws for Neural Language Models.txt"), LONG_TEXT);
@@ -290,7 +289,7 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
   const processing = documents.filter({ hasText: "Scaling Laws" });
   await expect(processing).toHaveAttribute("data-status", "embedding");
   await expect(processing.getByTestId("document-status")).toContainText("Embedding…");
-  await expect(processing).toHaveAttribute("data-depth", "1");
+  await expect(processing).toHaveAttribute("data-depth", "0");
   expect((await boxOf(processing)).height).toBeCloseTo(28, 0);
   // A Folder folded with the mouse keeps no highlight once the pointer moves on.
   await window.mouse.move(800, 400);
@@ -349,6 +348,7 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
   await confirmLink(dialog);
   const papers = linkedFolderRow(window, "Papers");
   await expect(papers).toHaveAttribute("data-state", "indexing");
+  await showSourceLocations(window);
   // Its rows come in as its files are found and read: measured once ten rows are there.
   await expect.poll(() => treeRows(window).count()).toBeGreaterThanOrEqual(10);
   await expectRowsAligned(window);
@@ -379,7 +379,10 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
 
   // A file deleted on disk: "Missing" at its row's end.
   await rm(join(drivePath, "Field notes.txt"));
-  const missing = window.getByTestId("document-list-item").filter({ hasText: "Field notes" });
+  const missing = window
+    .getByTestId("linked-folders-section")
+    .getByTestId("document-list-item")
+    .filter({ hasText: "Field notes" });
   await expect(missing).toHaveAttribute("data-file-status", "missing", { timeout: 15_000 });
   await expectRowsAligned(window);
   await screenshot(window, "linked-folders-missing", sidebar());
@@ -420,8 +423,7 @@ test("the status footer doesn't move the tree when tagging starts or stops", asy
   const status = window.getByTestId("sidebar-status");
   const watched = [
     window.getByTestId("open-library"),
-    window.getByTestId("browse-views"),
-    window.getByTestId("not-in-a-folder-toggle"),
+    window.getByTestId("not-in-a-folder-title"),
     window.getByTestId("mind-list-item"),
   ];
   const layout = async () => ({
@@ -430,7 +432,7 @@ test("the status footer doesn't move the tree when tagging starts or stops", asy
     footer: await boxOf(footer),
     status: await boxOf(status),
   });
-  await expect(watched[2] as Locator).toBeVisible();
+  await expect(watched[1] as Locator).toBeVisible();
   const before = await layout();
 
   // No chat model yet: the Document is ready, and tagging waits. The footer says so.

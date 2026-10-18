@@ -302,7 +302,12 @@ test("the + menu and the shell speak Chinese too", async () => {
   const plus = window.getByTestId("plus-menu");
   await expect(plus).toHaveAccessibleName("新建或添加");
   await plus.click();
-  await expect(window.getByRole("menuitem")).toHaveText([/新建 Mind/, /添加文档…/, /新建文件夹/, /更多/]);
+  await expect(window.getByRole("menuitem")).toHaveText([
+    /新建 Mind/,
+    /添加文档…/,
+    /新建文件夹/,
+    /更多/,
+  ]);
   await window.getByTestId("plus-more").hover();
   await expect(window.getByRole("menu", { name: "更多" }).getByRole("menuitem")).toHaveText([
     /添加同步文件夹…/,

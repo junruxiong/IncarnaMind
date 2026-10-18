@@ -21,7 +21,7 @@ import { useRequests } from "../requests";
 import { sorted } from "../sort";
 import { useSort } from "../sortChoices";
 import { documentFields, folderFields } from "../sortFields";
-import { allExamples, selectTagFilterKey, useAppStore } from "../store";
+import { allExamples, useAppStore } from "../store";
 import { foldKeys, useTreeItem } from "../treeKeys";
 import { ExampleChip } from "./GettingStarted";
 import { ChevronDownLineIcon, ChevronRightLineIcon, FolderLineIcon } from "./lineIcons";
@@ -44,21 +44,15 @@ const LINKED_WASH_MS = 1600;
 
 interface FolderTreeState {
   /**
-   * The Folders (and "Other Documents") the User folded. Everything else
-   * shows its contents, so every Document is in sight at first. (A big
-   * folder of one-file folders, such as Zotero's storage, starts flat.)
+   * The folders inside a Linked folder the User folded. Everything else
+   * shows its contents, so every Document is in sight once its Linked folder
+   * is unfolded. (A big folder of one-file folders, such as Zotero's
+   * storage, starts flat.)
    */
   collapsed: ReadonlySet<string>;
-  /**
-   * What the User folded while filtering by a Tag: kept apart, so a filtered
-   * view starts with everything in it unfolded, folds what the User folds
-   * there, and leaves the unfiltered tree as it was. Forgotten for another Tag.
-   */
-  filtered: { tagId: string; collapsed: ReadonlySet<string> } | null;
   /** The Linked folders the User unfolded: each starts folded, its row and state in sight. */
   opened: ReadonlySet<string>;
-  /** Folds or unfolds a Folder or group, in the tree as it shows now: filtered by `tagId`, or not. */
-  toggle(key: string, tagId: string | null): void;
+  toggle(key: string): void;
   toggleOpened(key: string): void;
 }
 
@@ -71,26 +65,13 @@ const toggled = (set: ReadonlySet<string>, key: string): ReadonlySet<string> => 
 /** What is folded. Kept while the window is open. */
 export const useFolderTree = create<FolderTreeState>()((set) => ({
   collapsed: new Set(),
-  filtered: null,
   opened: new Set(),
+  toggle: (key) => set((state) => ({ collapsed: toggled(state.collapsed, key) })),
   toggleOpened: (key) => set((state) => ({ opened: toggled(state.opened, key) })),
-  toggle: (key, tagId) =>
-    set((state) => {
-      if (tagId === null) return { collapsed: toggled(state.collapsed, key) };
-      const before = state.filtered?.tagId === tagId ? state.filtered.collapsed : new Set<string>();
-      return { filtered: { tagId, collapsed: toggled(before, key) } };
-    }),
 }));
 
 interface FolderTreeProps {
-  /** The Documents to show, already filtered. */
   documents: readonly Document[];
-  /**
-   * While filtering (by Tag), Folders and groups with none of `documents`
-   * below them are left out, and the rest show their contents until the
-   * User folds them in the filtered view (see `FolderTreeState.filtered`).
-   */
-  filtering: boolean;
   /** A Document's row, at a depth: 0 at the top level. */
   renderDocument(item: Document, depth: number): ReactNode;
 }
@@ -107,13 +88,11 @@ interface FolderTreeProps {
  * online-only files skipped, nothing in it) at its end, on its one line, and
  * offers its menu (see `ObjectMenu`).
  */
-export function FolderTree({ documents, filtering, renderDocument }: FolderTreeProps) {
+export function FolderTree({ documents, renderDocument }: FolderTreeProps) {
   const t = useT();
   const folders = useAppStore((state) => state.folders);
   const linkedFolders = useAppStore((state) => state.linkedFolders);
-  const tagFilter = useAppStore(selectTagFilterKey);
   const collapsed = useFolderTree((state) => state.collapsed);
-  const filteredFolds = useFolderTree((state) => state.filtered);
   const opened = useFolderTree((state) => state.opened);
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
   const language = useLanguage();
@@ -177,18 +156,8 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
           language,
         );
 
-  /** While filtering: whether a Folder has a shown Document anywhere below it. */
-  const hasDocuments = (node: FolderNode): boolean =>
-    (groups.get(node.folder.id)?.length ?? 0) > 0 || subfoldersOf(node).some(hasDocuments);
-
-  /** While filtering, what is shown shows its contents unless folded in this filtered view. */
-  const isExpanded = (key: string) =>
-    filtering && tagFilter !== null
-      ? !(filteredFolds?.tagId === tagFilter && filteredFolds.collapsed.has(key))
-      : !collapsed.has(key);
-
   const renderLevel = (nodes: readonly FolderNode[]): ReactNode =>
-    (filtering ? nodes.filter(hasDocuments) : nodes).map((node) => {
+    nodes.map((node) => {
       const { folder, depth } = node;
       const subfolders = subfoldersOf(node);
       const own = groups.get(folder.id) ?? [];
@@ -223,7 +192,7 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
           name={folder.name}
           icon={FolderLineIcon}
           depth={depth}
-          expanded={isExpanded(folder.id)}
+          expanded={!collapsed.has(folder.id)}
           expandable={hasContents}
           data={{ "data-folder-id": folder.id, "data-linked-folder-id": folder.linkedFolderId }}
         >
@@ -370,7 +339,6 @@ function GroupItem(props: GroupItemProps) {
   const { data } = props;
   const children = props.children;
   const toggle = useFolderTree((state) => state.toggle);
-  const tagFilter = useAppStore(selectTagFilterKey);
   const objectMenu = useObjectMenu(object ?? { kind: "folder", id: groupKey });
   const open = expandable && expanded;
   const treeItem = useTreeItem({ depth, expanded: expandable ? open : undefined });
@@ -418,8 +386,8 @@ function GroupItem(props: GroupItemProps) {
             {...treeItem}
             data-testid="folder-toggle"
             title={title ?? name}
-            onClick={() => (onToggle ? onToggle() : toggle(groupKey, tagFilter))}
-            onKeyDown={foldKeys(open, () => (onToggle ? onToggle() : toggle(groupKey, tagFilter)))}
+            onClick={() => (onToggle ? onToggle() : toggle(groupKey))}
+            onKeyDown={foldKeys(open, () => (onToggle ? onToggle() : toggle(groupKey)))}
             className={buttonClass}
             style={rowPadding(depth)}
           >

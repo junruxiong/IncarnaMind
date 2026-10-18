@@ -17,8 +17,8 @@ import {
 } from "./app";
 
 /*
- * Tags in the sidebar (#71): the Tags tab beside Folders and Source
- * locations, and the colours of a Document's Tags on its row. Driven as a
+ * Tags in the sidebar (#71): the Tags section, last in the tree, and the
+ * colours of a Document's Tags on its row. Driven as a
  * person would: the mouse slides to what it clicks, in steps, and the
  * keyboard is real key presses. Set INCARNAMIND_SCREENSHOTS to a folder to
  * save screenshots there, in English and Chinese.
@@ -185,7 +185,7 @@ const marksOf = (row: Locator) =>
     };
   });
 
-test("the Tags tab lists every Tag with its colour and count, lists its Documents, and filters the Library by it, with the mouse and the keyboard", async () => {
+test("the Tags section lists each Tag in use with its colour and count, lists its Documents, and filters the Library by it, with the mouse and the keyboard", async () => {
   const server = await decisionServer();
   const { app, window } = await launchApp(dataDir);
   try {
@@ -211,13 +211,12 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
       await core.classifyDocuments();
     }, `http://127.0.0.1:${port}`);
 
-    // Folders | Tags | Folders on disk, Folders first.
-    const browse = window.getByTestId("browse-views");
-    await expect(browse).toHaveAccessibleName("Browse Documents");
-    const views = browse.locator("button[aria-pressed]");
-    await expect(views).toHaveText(["Folders", "Tags", "Folders on disk"]);
-    await expect(views.first()).toHaveAttribute("aria-pressed", "true");
-    // In the Folders view, the rows show their Tags' colours too: Organize files
+    // One tree: the Folders, then the Tags in use, under their headings.
+    await expect(window.getByTestId("folders-title")).toHaveText("Folders");
+    const tagsToggle = window.getByTestId("tags-toggle");
+    await expect(tagsToggle).toHaveText("Tags");
+    await expect(tagsToggle).toHaveAttribute("aria-expanded", "true");
+    // In the Folders, the rows show their Tags' colours too: Organize files
     // Attention in Reports & presentations, which opens in place.
     const reports = sidebarFolder(window, "Reports & presentations");
     await expect(reports.getByTestId("browse-count")).toHaveText("3");
@@ -228,13 +227,8 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
       .filter({ hasText: "Attention" });
     await expect(attentionInFolders.getByTestId("tag-dot")).toHaveCount(3);
 
-    // The Tags tab: "Needs review" first, then every Tag in name order, with its colour
-    // and how many Documents carry it, a Tag no Document has too.
-    await slideAndClick(window, browse.getByRole("button", { name: "Tags", exact: true }));
-    await expect(browse.getByRole("button", { name: "Tags", exact: true })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    // The Tags: "Needs review" first, then each Tag in use in name order, with its colour and
+    // how many Documents carry it; a Tag no Document has isn't listed.
     const tagList = window.getByTestId("sidebar-tags");
     const tagRows = tagList.getByTestId("sidebar-tag");
     const tagRow = (id: string) =>
@@ -247,10 +241,8 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
         ["Book", 1, "orange"],
         ["Contract", 1, "red"],
         ["Invoice", 1, "green"],
-        ["Notes", 0, "gray"],
         ["Paper", 1, "purple"],
         ["Report", 2, "blue"],
-        ["Slides", 0, "yellow"],
       ]);
     const byName = (name: string) =>
       tagRows.filter({
@@ -298,10 +290,6 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
       const text = await row.locator(':scope > div [data-testid="row-text"]').boundingBox();
       expect((text?.x ?? 0) - sidebarLeft).toBeCloseTo(40, 0);
     }
-    // An empty Tag shows 0 and has nothing to expand.
-    await expect(byName("Notes").getByRole("button", { name: /^Expand / })).toHaveCount(0);
-    await expect(byName("Notes").getByTestId("browse-count")).toHaveText("0");
-
     // A Tag's chevron lists its Documents under it, one step in, with their colours.
     await slideAndClick(window, tagList.getByRole("button", { name: "Expand Report" }));
     const reportDocuments = byName("Report").getByTestId("document-list-item");
@@ -317,8 +305,8 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
       more: null,
     });
 
-    // Clicking a Tag shows its Documents in the Library, through the shared Tag filter,
-    // and marks it chosen; nothing in the list moves under the pointer.
+    // Clicking a Tag shows its Documents in the Library, through its Tag filter, and marks it
+    // chosen; the sidebar's tree stays as it was, so nothing moves under the pointer.
     const library = window.getByTestId("library");
     const tagFilter = library.locator('[data-testid="library-filter"][data-facet="tag"]');
     const openTag = (name: string) => byName(name).locator(":scope > div > button").first();
@@ -329,9 +317,8 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await expect(library.getByTestId("library-document")).toHaveCount(1);
     await expect(openTag("Paper")).toHaveAttribute("aria-selected", "true");
     await expect(openTag("Report")).toHaveAttribute("aria-selected", "false");
-    // The Tags view says the filter with its chosen Tag, so no "Tagged …" row pushes it down.
-    await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
     expect(await tagList.boundingBox()).toEqual(listBefore);
+    await expect(reports.getByTestId("document-list-item")).toHaveCount(3);
     await screenshot(window, "tags-tab-en");
 
     // By keyboard: on Report's row, Enter shows it, Enter again stops filtering; ← and → fold
@@ -357,8 +344,8 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await expect(reportDocuments).toHaveCount(2);
     await expect(openTag("Report")).toBeFocused();
     expect(await focusRingShows(window)).toBe(true);
-    // On up to the switcher, every stop with its ring.
-    await tabTo(window, browse.getByRole("button", { name: "Tags", exact: true }));
+    // On to the Tags heading, which folds them, every stop with its ring.
+    await tabTo(window, tagsToggle);
     expect(await focusRingShows(window)).toBe(true);
 
     // "Needs review" is reachable as in the Library's filter.
@@ -384,49 +371,17 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await window.keyboard.press("Escape");
     await expect(libraryTagMenu).toBeHidden();
 
-    // The sidebar's Tags menu, the same filter: each Tag after its dot, "Needs review" after
-    // the hollow ring.
-    const openFilterMenu = async () => {
-      await slideAndClick(window, window.getByTestId("tag-filter-menu"));
-      const menu = window.getByTestId("tag-filters");
-      await expect(menu).toBeVisible();
-      const review = menu.locator('[data-testid="tag-filter"][data-tag-id="needs-review"]');
-      await expect(review.getByTestId("review-ring")).toHaveCount(1);
-      await expect(review.getByTestId("tag-dot")).toHaveCount(0);
-      expect(
-        await menu
-          .getByTestId("tag-filter")
-          .getByTestId("tag-dot")
-          .evaluateAll((all) => all.map((each) => each.getAttribute("data-colour"))),
-      ).toEqual(["orange", "red", "green", "gray", "purple", "blue", "yellow"]);
-    };
-    await openFilterMenu();
-    await screenshot(window, "tag-filter-menu-en");
-    await window.keyboard.press("Escape");
-    await expect(window.getByTestId("tag-filters")).toBeHidden();
-
-    // The other views say the filter in a row under the switcher, and clear it there.
-    await slideAndClick(window, browse.getByRole("button", { name: "Folders", exact: true }));
-    await expect(window.getByTestId("tag-filter-active")).toHaveText("Tagged Needs review");
-    await slideAndClick(window, window.getByTestId("tag-filter-clear"));
-    await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
-    await slideAndClick(window, browse.getByRole("button", { name: "Tags", exact: true }));
-
     // In Chinese.
     await setLanguage(window, "zh-CN");
-    await expect(browse).toHaveAccessibleName("浏览文档");
-    await expect(views).toHaveText(["文件夹", "标签", "磁盘上的文件夹"]);
+    await expect(tagsToggle).toHaveText("标签");
     await expect(byName("待确认")).toHaveCount(1);
-    await slideAndClick(window, tagList.getByRole("button", { name: "展开 Report" }));
-    await expect(tagList.getByRole("button", { name: "收起 Report" })).toBeVisible();
+    await slideAndClick(window, tagList.getByRole("button", { name: "收起 Report" }));
+    await expect(tagList.getByRole("button", { name: "展开 Report" })).toBeVisible();
     await slideAndClick(window, openTag("Paper"));
     await expect(tagFilter).toHaveText("标签：Paper");
     await expect(openTag("Paper")).toHaveAttribute("aria-selected", "true");
     await window.mouse.move(700, 400, { steps: 6 });
     await screenshot(window, "tags-tab-zh");
-    await openFilterMenu();
-    await screenshot(window, "tag-filter-menu-zh");
-    await window.keyboard.press("Escape");
     await slideAndClick(window, tagFilter.getByTestId("library-filter-chip"));
     await expect(reviewOption.getByTestId("review-ring")).toHaveCount(1);
     await screenshot(window, "library-filter-menu-zh");
@@ -537,12 +492,6 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     // Reached by keyboard, the row shows its Tags' names, each after its dot, under it.
     const tip = window.getByTestId("tag-names-tip");
     await expect(tip).toBeHidden();
-    await slideAndClick(
-      window,
-      window.getByTestId("browse-views").getByRole("button", {
-        name: "Folders on disk",
-      }),
-    );
     await tabIntoRow(window, attention);
     expect(await focusRingShows(window)).toBe(true);
     await expect(tip).toBeVisible();

@@ -98,10 +98,15 @@ async function addTextDocuments(window: Page, files: Record<string, string>): Pr
   ).toHaveCount(paths.length, { timeout: 20_000 });
 }
 
-/** Manage Tags, from the sidebar's Tags menu. */
+/** Manage Tags, from ⌘K. */
 async function openManageTags(window: Page): Promise<void> {
-  await slideAndClick(window, window.getByTestId("tag-filter-menu"));
-  await slideAndClick(window, window.getByTestId("manage-tags"));
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type("Manage Tags");
+  await slideAndClick(
+    window,
+    window.getByTestId("palette-item").filter({ hasText: "Manage Tags…" }).first(),
+  );
   await expect(window.getByTestId("tags-dialog")).toBeVisible();
 }
 
@@ -428,7 +433,6 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     ).toHaveAttribute("data-colour", "blue");
     await screenshot(window, "filter-colours");
     await window.keyboard.press("Escape");
-    await expect(window.getByTestId("tag-filter-active")).toContainText("Report");
     // With a Tag filter, ⌘A takes exactly these Documents, to ask about.
     await rows.first().locator("[data-row-main]").focus();
     await window.keyboard.press("ControlOrMeta+a");
@@ -453,7 +457,6 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     const remove = library.getByTestId("library-filter-remove");
     while ((await remove.count()) > 0) await slideAndClick(window, remove.first());
     await expect(rows).toHaveCount(4);
-    await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
 
     // In Chinese, the chips, picker and filter speak Chinese; Tag names are the User's.
     await (await bridge(window)).evaluate((core) =>

@@ -291,7 +291,6 @@ for (const [language, width] of [
       const add = folders.getByTestId("folders-add");
       await window.mouse.move(width - 40, 300);
       await expect.poll(() => opacityOf(add)).toBe("0");
-      await expect.poll(() => opacityOf(tags.getByTestId("tag-filter-menu"))).toBe("0");
       await slideTo(window, folders.getByTestId("folders-section-heading"));
       await expect.poll(() => opacityOf(add)).toBe("1");
       await expect(add).toHaveAccessibleName(

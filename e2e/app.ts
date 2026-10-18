@@ -464,8 +464,42 @@ const linkedRoots = (window: Page, expanded: boolean) =>
 export async function showSourceLocations(window: Page): Promise<void> {
   await expect(window.getByTestId("linked-folders-section")).toBeVisible();
   const folded = linkedRoots(window, false);
+  // Once it has something to unfold: a Linked folder just linked is still being read.
+  await expect(folded.or(linkedRoots(window, true)).first()).toBeVisible({ timeout: 15_000 });
   for (let left = await folded.count(); left > 0; left--) await folded.first().click();
   await expect(folded).toHaveCount(0);
+}
+
+/**
+ * Puts a Tag on a Document through the core, each by its name (a Document's start will do): the
+ * sidebar's Tags section lists the Tags in use.
+ */
+export async function tagDocument(window: Page, documentName: string, tagName: string) {
+  await window.evaluate(
+    async (wanted) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const tag = (await core.listTags()).find((each) => each.name === wanted.tag);
+      const document = (await core.listDocuments()).find((each) =>
+        each.name.startsWith(wanted.document),
+      );
+      if (!tag || !document)
+        throw new Error(`No Tag ${wanted.tag} or Document ${wanted.document}.`);
+      await core.addTagToDocuments([document.id], tag.id);
+    },
+    { document: documentName, tag: tagName },
+  );
+  await expect(
+    window.getByTestId("sidebar-tag").filter({ hasText: tagName }).first(),
+  ).toBeAttached();
+}
+
+/** Manage Tags, from ⌘K. */
+export async function openManageTags(window: Page): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type("Manage Tags");
+  await window.getByTestId("palette-item").filter({ hasText: "Manage Tags…" }).first().click();
+  await expect(window.getByTestId("tags-dialog")).toBeVisible();
 }
 
 /** Folds the Linked folders again, so each Document shows once: in its Folder or Not in a Folder. */
@@ -649,18 +683,6 @@ export async function openDocumentTags(item: Locator): Promise<Locator> {
   await expect(menu).toBeVisible();
   // The Tags it has, in the picker's field.
   return menu.getByTestId("tag-token");
-}
-
-/**
- * Adds a Tag to the sidebar's filter (Documents with any Tag chosen show), or,
- * choosing a Tag already chosen, takes it out.
- */
-export async function filterByTag(window: Page, name: string): Promise<void> {
-  await window.getByTestId("tag-filter-menu").click();
-  await window
-    .getByTestId("tag-filters")
-    .getByRole("menuitemcheckbox", { name, exact: true })
-    .click();
 }
 
 /**

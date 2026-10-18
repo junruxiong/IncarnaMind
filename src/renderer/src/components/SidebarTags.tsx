@@ -7,7 +7,6 @@ import type { ObjectRef } from "../objects";
 import { useAppStore } from "../store";
 import { editTag } from "../tagChanges";
 import { BrowseGroup } from "./BrowseGroup";
-import { TagFilterMenu } from "./DocumentTags";
 import { useFolds } from "./LibraryFolders";
 import { SidebarSection } from "./SidebarSection";
 import { ReviewRing, TagDot } from "./TagColour";
@@ -23,10 +22,9 @@ const markBox = (mark: ReactNode) => (
  * The sidebar's Tags section, last in the tree, once a Tag is on a Document:
  * "Needs review" first while a Tag awaits review (as in the Tags filter),
  * then each Tag in use, in name order, with its dot and how many Documents
- * carry it. Its heading folds it away, and offers the Tag filter. Clicking a
- * Tag shows its Documents in the Library, through the Tag filter the Library
- * and the sidebar share, and marks it chosen; clicking it again there stops
- * filtering, as a chip does. Its chevron lists its Documents here, as a
+ * carry it. Its heading folds it away. Clicking a Tag shows its Documents in
+ * the Library, through the Library's Tag filter, and marks it chosen;
+ * clicking it again there stops filtering, as a chip does. Its chevron lists its Documents here, as a
  * Folder's does; a Document with several Tags is under each. The counts are
  * of every Document, whatever the filter, as Manage Tags counts them.
  */
@@ -94,7 +92,6 @@ export function SidebarTags({
       title={t("tags.title")}
       headingTestId="tags-toggle"
       fold={{ open: !folded, toggle: () => useFolds.getState().toggleTags() }}
-      actions={<TagFilterMenu />}
     >
       <ul role="none">
         {reviewing && group(NEEDS_REVIEW, t("tags.filter.review"), <ReviewRing />)}

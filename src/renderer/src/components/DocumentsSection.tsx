@@ -18,12 +18,12 @@ import {
 } from "../selection";
 import { dragFromRow, useSidebarMove } from "../sidebarMoves";
 import { useSortMenu } from "../sortMenu";
-import { allExamples, isOwnDocument, selectVisibleDocuments, useAppStore } from "../store";
+import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
 import { isMoveToKey, moveThroughRows, TREE_ROW, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
 import { useTreeKeyboard } from "../useTreeKeyboard";
-import { ActiveTagFilter, DocumentTagMenu } from "./DocumentTags";
+import { DocumentTagMenu } from "./DocumentTags";
 import { FolderTree } from "./FolderTree";
 import { InlineName } from "./InlineName";
 import { LibraryFolders } from "./LibraryFolders";
@@ -93,9 +93,7 @@ export function DocumentsSection() {
   );
   const quiet = firstOpen && !hasOwnDocuments;
   const libraryOpen = useAppStore((state) => currentTabOf(state.layout)?.item.kind === "library");
-  // The same array until the Documents or the Tag filter change (see `selectVisibleDocuments`).
-  const documents = useAppStore(selectVisibleDocuments);
-  const filtering = useAppStore((state) => state.tagFilter.length > 0);
+  const documents = useAppStore((state) => state.documents);
   const hasLinkedFolders = useAppStore((state) => state.linkedFolders.length > 0);
   const addDocuments = useAppStore((state) => state.addDocuments);
   const picker = useRef<HTMLInputElement>(null);
@@ -198,7 +196,6 @@ export function DocumentsSection() {
           </div>
         </div>
       )}
-      <ActiveTagFilter />
       <div ref={tree} data-testid="sidebar-sections" {...treeKeys}>
         <LibraryFolders
           documents={quiet ? NO_DOCUMENTS : documents}
@@ -207,11 +204,7 @@ export function DocumentsSection() {
         />
         {!quiet && hasLinkedFolders && (
           <SidebarSection testId="linked-folders-section" title={t("sidebar.linkedFolders")}>
-            <FolderTree
-              documents={documents}
-              filtering={filtering}
-              renderDocument={renderDocument}
-            />
+            <FolderTree documents={documents} renderDocument={renderDocument} />
           </SidebarSection>
         )}
         {!quiet && <SidebarTags renderDocument={renderDocument} />}

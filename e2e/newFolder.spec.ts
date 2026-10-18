@@ -458,7 +458,7 @@ test("in Chinese: “未命名文件夹”, a name typed through an input method
   }
 });
 
-test("with the sidebar hidden, or showing Tags, the name is still typed in the Folder's row", async () => {
+test("with the sidebar hidden, the name is still typed in the Folder's row", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 700);
@@ -470,8 +470,7 @@ test("with the sidebar hidden, or showing Tags, the name is still typed in the F
     await addDocuments(window, await writeTexts("Tide notes"));
     const field = nameField(window);
 
-    // The Tags view has no Folder rows: it gives way to Folders.
-    await window.getByTestId("browse-views").getByRole("button", { name: "Tags" }).click();
+    // ⇧⌘N from anywhere in the window.
     await window.keyboard.press("ControlOrMeta+Shift+n");
     await expect(field).toBeFocused();
     await window.keyboard.type("Reading");

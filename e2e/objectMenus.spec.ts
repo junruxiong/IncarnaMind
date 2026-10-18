@@ -250,8 +250,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "folder.delete",
   ]);
 
-  // A Tag, in the sidebar's Tags view.
-  await window.getByTestId("browse-views").getByRole("button", { name: "Tags" }).click();
+  // A Tag, in the sidebar's Tags section.
   const tag = window.getByTestId("sidebar-tag").first();
   const tagMenu = await sameFromBothWays(
     window,
@@ -261,9 +260,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     tag.getByTestId("tag-actions"),
   );
   expect(tagMenu).toEqual(["tag.open", "—", "tag.manage", "tag.rename", "—", "tag.delete"]);
-  await showFolders(window);
 
-  // A Linked folder, in Folders on disk.
+  // A Linked folder, in the Linked folders section.
   await linkFolderFromSidebar(app, window, library);
   await showSourceLocations(window);
   const linked = linkedFolderRow(window, "Library");
@@ -530,7 +528,6 @@ test("a Document's Tags…, a Folder's Edit description and a Tag's Rename and D
   await expect(window.getByTestId("library").locator("form input").first()).toHaveValue("Finance");
   await expect(window.getByTestId("library").locator("form textarea")).toHaveValue("Invoices");
 
-  await window.getByTestId("browse-views").getByRole("button", { name: "Tags" }).click();
   const tag = window.getByTestId("sidebar-tag").filter({ hasText: "Tides" });
   await rightClick(window, tag.getByTestId("row-text"));
   await tag.getByTestId("tag.rename").click();
