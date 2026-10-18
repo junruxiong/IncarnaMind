@@ -2237,6 +2237,7 @@ export function createCore(adapters: CoreAdapters): Core {
     tags,
     library,
     mindsChanged,
+    mindsRestored: (mindIds) => wordImports.resume(mindIds),
     conversationsChanged,
     tagsChanged,
     tagged: announceTagged,
