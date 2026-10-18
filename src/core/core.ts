@@ -227,6 +227,7 @@ import { createSuggestions } from "./suggestions";
 import { createTags, tagsOfDocument } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging, decisionModelTagger } from "./tags/jev";
+import { createRateLimitPause } from "./tags/rateLimit";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
 import { createPublicFetch } from "./tools/web/fetcher";
@@ -1875,6 +1876,15 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     signal: lifetime.signal,
   });
+  // A rate limit pauses automatic tagging and Organize together, and they go on when it ends.
+  const rateLimit = createRateLimitPause({
+    timers: paceTimers,
+    resumed: () => {
+      tagger.resume();
+      library.resume();
+    },
+    signal: lifetime.signal,
+  });
   // The one Tagging setting: the model automatic tagging uses, and Organize when picked by hand.
   const tagging = createTagging({
     setting: () => library.settings().classifier,
@@ -2007,6 +2017,7 @@ export function createCore(adapters: CoreAdapters): Core {
     announce: announceTagged,
     reportError: (error) => console.error(error),
     background,
+    rateLimit,
   });
   const automaticClassifiers = new Map<string, ReturnType<typeof automaticGroupClassifier>>();
   const library = createLibrary({
@@ -2025,6 +2036,7 @@ export function createCore(adapters: CoreAdapters): Core {
       batches.changed(assignments.map((each) => each.documentId));
     },
     providerExists: (id) => chat.exists(id),
+    rateLimit,
     readsPages: (classifier) => {
       switch (classifier.kind) {
         case "auto":
@@ -3550,6 +3562,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return { tag: tags.get(intoTagId), merged: { kind: "tag", id: tagId, links } };
     },
     retagDocuments: async (documentIds) => {
+      rateLimit.resumeNow();
       if (organizesNewDocuments()) return library.classify(documentIds);
       tagger.retag(documentIds);
     },

@@ -10,7 +10,7 @@
  * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
  * Tools and structured output, as a small server model does, so its Answers have no Citations.
  * A Document whose text says "slowly" takes a moment to tag or organize; one whose text says "unreachable"
- * can't reach the model the first time it is tagged.
+ * can't reach the model the first time it is tagged, and one that says "rate-limited" meets its rate limit.
  */
 
 import { APICallError } from "ai";
@@ -33,7 +33,13 @@ import {
 import { fakeResearchTags } from "./researchTags";
 import { fakeSkillDraft } from "./skillDraft";
 import { refusal, replyParts } from "./stream";
-import { fakeStructuredOutput, SLOW_TAGGING_MS, tagsSlowly, tagsUnreachable } from "./structured";
+import {
+  fakeStructuredOutput,
+  SLOW_TAGGING_MS,
+  tagsRateLimited,
+  tagsSlowly,
+  tagsUnreachable,
+} from "./structured";
 
 /** Time between two streamed words: slow enough for a test to watch the Answer grow. */
 const WORD_DELAY_MS = 60;
@@ -107,6 +113,16 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           url: "https://fake.invalid/chat",
           requestBodyValues: {},
           isRetryable: false,
+        });
+      }
+      if (tagsRateLimited(options)) {
+        throw new APICallError({
+          message: "Rate limit reached for requests",
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          statusCode: 429,
+          responseHeaders: { "retry-after": "3600" },
+          isRetryable: true,
         });
       }
       return {

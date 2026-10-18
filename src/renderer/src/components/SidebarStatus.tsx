@@ -1,6 +1,7 @@
 import { type ReactNode, type ToggleEvent, useEffect, useId, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
+import { formatDateTime } from "../../../shared/dates";
 import type { MessageKey } from "../../../shared/i18n";
 import { organizes } from "../../../shared/libraryModels";
 import { commands } from "../commands/registry";
@@ -256,6 +257,8 @@ function useStatuses(): Status[] {
       // Only the User's own Documents: the examples need no model, so they alone don't ask for one.
       let waitingForTagger = 0;
       let waitingForPlan = 0;
+      let rateLimited = 0;
+      let rateLimitEnds: string | null = null;
       let failedTagging = 0;
       let unreached = 0;
       // A paused Linked folder's Documents wait for the User: its row says so, not the footer.
@@ -274,8 +277,16 @@ function useStatuses(): Status[] {
             item.tagging === "waiting-for-provider" &&
             isOwnDocument(item, allExamples(state))
           ) {
-            waitingForTagger++;
-            if (item.taggingError?.kind === "plan-limit") waitingForPlan++;
+            if (item.taggingError?.kind === "rate-limit") {
+              rateLimited++;
+              const ends = item.taggingError.resetsAt ?? null;
+              if (ends !== null && (rateLimitEnds === null || ends > rateLimitEnds)) {
+                rateLimitEnds = ends;
+              }
+            } else {
+              waitingForTagger++;
+              if (item.taggingError?.kind === "plan-limit") waitingForPlan++;
+            }
           } else if (item.tagging === "failed" && isOwnDocument(item, allExamples(state))) {
             failedTagging++;
             if (item.taggingError?.kind === "network") unreached++;
@@ -288,6 +299,8 @@ function useStatuses(): Status[] {
         tagging,
         waitingForTagger,
         waitingForPlan,
+        rateLimited,
+        rateLimitEnds,
         failedTagging,
         unreached,
       };
@@ -506,6 +519,30 @@ function useStatuses(): Status[] {
     });
   }
 
+  if (counts.rateLimited > 0) {
+    const time = counts.rateLimitEnds ? formatDateTime(counts.rateLimitEnds, language) : "";
+    const limited = useAppStore
+      .getState()
+      .documents.filter(
+        (each) =>
+          each.status === "ready" &&
+          each.tagging === "waiting-for-provider" &&
+          each.taggingError?.kind === "rate-limit",
+      );
+    statuses.push({
+      testId: "tagging-rate-limited",
+      tone: "waiting",
+      short: t("status.taggingRateLimited", { time }),
+      full: t("status.taggingRateLimited.full", { time }),
+      wraps: true,
+      action: {
+        label: t("status.retry"),
+        testId: "tagging-rate-limited-retry",
+        run: () => void useAppStore.getState().retagDocuments(limited.map((each) => each.id)),
+      },
+    });
+  }
+
   if (counts.waitingForPlan > 0) {
     statuses.push({
       testId: "tagging-paused",
@@ -637,7 +674,8 @@ function useStatuses(): Status[] {
       (item) => item.status === "pending" || item.status === "classifying",
     ).length;
     const attention = library.assignments.filter(
-      (item) => item.status === "waiting" || item.status === "failed",
+      (item) =>
+        (item.status === "waiting" && item.error?.kind !== "rate-limit") || item.status === "failed",
     ).length;
     if (attention)
       statuses.push({

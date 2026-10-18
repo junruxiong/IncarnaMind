@@ -53,6 +53,16 @@ export function tagsUnreachable(options: GenerateOptions): boolean {
   return true;
 }
 
+const limitedOnce = new Set<string>();
+
+/** A Document whose text says "rate-limited" meets the model's rate limit the first time it is tagged. */
+export function tagsRateLimited(options: GenerateOptions): boolean {
+  const excerpt = taggingExcerpt(options);
+  if (!excerpt || !/\brate-limited\b/i.test(excerpt) || limitedOnce.has(excerpt)) return false;
+  limitedOnce.add(excerpt);
+  return true;
+}
+
 /**
  * The scripted tagger: of the Tag names offered, those that appear as a word
  * (ignoring case) in the Document's excerpt, i.e. its name or text.
