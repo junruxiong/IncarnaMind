@@ -26,7 +26,6 @@ import type { ChangedMind } from "./changedMinds";
 import { readMindHandle } from "./commands/handles";
 import { core } from "./core";
 import { pendingIn } from "./editor/proposalReview";
-import { translateNow as t } from "./i18n";
 import { openMindCopy } from "./mindCopies";
 import { useAppStore } from "./store";
 import { answerUndoPlace, type Undoable, useUndo } from "./undo";
@@ -327,16 +326,15 @@ export async function resolveAllChanges(
   }
   if (done.length === 0) return;
   const count = done.reduce((sum, step) => sum + step.count, 0);
-  const message =
-    outcome === "accept"
-      ? count === 1
-        ? t("proposal.accepted.one")
-        : t("proposal.accepted", { count })
-      : count === 1
-        ? t("proposal.rejected.one")
-        : t("proposal.rejected", { count });
   const change: Undoable = {
-    message,
+    said: (t) =>
+      outcome === "accept"
+        ? count === 1
+          ? t("proposal.accepted.one")
+          : t("proposal.accepted", { count })
+        : count === 1
+          ? t("proposal.rejected.one")
+          : t("proposal.rejected", { count }),
     shownAt: answerUndoPlace(answerId),
     undo: async () => {
       for (const step of [...done].reverse()) await step.undo();

@@ -18,13 +18,12 @@ export const en = {
   "library.showAll": "Show all {count}",
   "library.suggested": "Suggested",
   "library.suggested.title":
-    "Organize suggested “{folder}”. It counts here until you accept it or move it.",
+    "Organize suggested “{folder}”. Counts here until you accept or move it.",
   "library.organizing": "Organizing {count}…",
   "library.organize.failed.one": "Organize couldn't sort 1 Document",
   "library.organize.failed": "Organize couldn't sort {count} Documents",
   "library.organize.retry": "Try again",
-  "library.organize.explain":
-    "Suggests a Folder and Tags for each Document here. You accept or change each one.",
+  "library.organize.explain": "Suggests a Folder and Tags for each Document. You decide.",
   "library.organize.needsModel": "Organize needs an AI model",
   "library.organize.use": "Use {company}",
   "library.organize.sends": "Sends document names and excerpts to {company}.",
@@ -61,12 +60,9 @@ export const en = {
   "unread.reason.damaged": "The file is damaged or couldn't be opened.",
   "unread.reason.too-large": "Too large to open.",
   "unread.reason.pages": "Some scanned pages haven't been read yet.",
-  "library.fix.damaged":
-    "This file looks damaged. Open it in its app, save a copy, then add the copy",
-  "library.fix.damaged.pdf":
-    "This file looks damaged. Open it in your PDF app, save a copy, then add the copy",
-  "library.fix.password":
-    "This file is locked with a password. Remove the password in its app, then add the copy",
+  "library.fix.damaged": "Damaged file: save a copy from its app, then add it",
+  "library.fix.damaged.pdf": "Damaged file: save a copy from your PDF app, then add it",
+  "library.fix.password": "Password-protected: remove it in its app, then add the copy",
   "library.fix.tooLarge": "This file is too large to open",
   "library.fix.processing": "Something went wrong while reading this file",
   "library.fix.appStopped": "IncarnaMind stopped while reading this file",
@@ -110,8 +106,7 @@ export const en = {
     "Organizing 1 Document with {service}: its name, outline and short excerpts are sent",
   "library.progressSends.full.other":
     "Organizing {count} Documents with {service}: each one's name, outline and short excerpts are sent",
-  "library.waiting":
-    "{count} Documents need text, a model or permission. Open their details to check.",
+  "library.waiting": "{count} Documents can't be organized yet. Show why",
   "library.count": "{count} Documents",
   "library.count.one": "1 Document",
   "library.manual": "Your choice",
@@ -123,12 +118,11 @@ export const en = {
   "library.descriptionHint": "What belongs in this folder?",
   "library.countsOwnFiles": "Count files IncarnaMind wrote as evidence in this folder",
   "library.countsOwnFiles.hint":
-    "Files IncarnaMind wrote that are in other folders stay out of checks' evidence.",
+    "Files IncarnaMind wrote in other folders stay out of checks' evidence.",
   "library.countsOwnFiles.everywhere":
     "Counted in every folder: Settings → Search doesn't leave them out.",
   "library.save": "Save folder",
-  "library.startersHint":
-    "Start with the folders you need. Rename them or add your own at any time.",
+  "library.startersHint": "Pick the folders you need; rename or add more any time.",
   "library.addSelected": "Add selected folders",
   "library.connection": "Connection",
   "library.ollama": "Local decision model · Ollama",
@@ -139,8 +133,7 @@ export const en = {
   "library.route.unavailable": "4B model not installed",
   "library.model": "Model name",
   "library.server": "Local Ollama address",
-  "library.pageImages":
-    "Include up to 3 PDF page images with local Clef-Flash. Other formats use text only.",
+  "library.pageImages": "Up to 3 PDF page images go to local Clef-Flash. Other formats use text.",
   "library.automatic": "Move new Documents into Folders automatically",
   "library.preset.research": "Research papers",
   "library.preset.research.description": "Academic papers, experiments and research methods.",
@@ -315,8 +308,7 @@ export const en = {
   "undo.name.restore": "Restore",
   "deleted.title": "Recently deleted",
   "deleted.command": "Show Recently deleted",
-  "deleted.intro":
-    "Deleted things wait here for 30 days, then go for good. Your files on disk are never touched.",
+  "deleted.intro": "Kept here for 30 days, then deleted for good. Files on disk aren't touched.",
   "deleted.empty": "Nothing was deleted in the last 30 days.",
   "deleted.list": "Recently deleted",
   "deleted.name": "Name",
@@ -360,8 +352,7 @@ export const en = {
   "deleted.lost.mind": "The notes in {count} Minds are gone.",
   "deleted.lost.conversation.one": "The messages in “{name}” are gone.",
   "deleted.lost.conversation": "The messages in {count} conversations are gone.",
-  "deleted.lost.folder.one":
-    "The Folder “{name}” is gone. Its Documents and Minds stay, in no Folder.",
+  "deleted.lost.folder.one": "“{name}” is gone. Its Documents and Minds stay, in no Folder.",
   "deleted.lost.folder": "{count} Folders are gone. Their Documents and Minds stay, in no Folder.",
   "deleted.lost.tag.one": "The Tag “{name}” and where it was used are gone.",
   "deleted.lost.tag": "{count} Tags and where they were used are gone.",
@@ -982,12 +973,10 @@ export const en = {
   "viewer.removed.unlinked":
     "This Document's folder was unlinked. IncarnaMind kept the text your Citation quotes.",
   "viewer.removed.quote": "The quoted text:",
-  "viewer.file.missing":
-    "The file for {name} is missing from its folder. It shows here again once it is back",
-  "viewer.file.unavailable":
-    "The file for {name} can't be reached right now, such as when its drive is unplugged. It shows here again once it can be",
+  "viewer.file.missing": "The file for {name} is missing from its folder.",
+  "viewer.file.unavailable": "Can't reach “{name}” right now (drive unplugged?).",
   "viewer.file.locate": "Locate file…",
-  "viewer.file.notThis": "That isn't the file for {name}. IncarnaMind added it as a new Document",
+  "viewer.file.notThis": "Not the file for “{name}”: added as a new Document",
   "viewer.file.locateFailed": "Couldn't use that file: {reason}",
   "viewer.file.openFailed": "Couldn't open {name} in its app: {reason}",
   "viewer.page.label": "Page {number}",
@@ -1077,8 +1066,7 @@ export const en = {
   "documents.moveTo": "Move to…",
   "documents.none": "No Documents yet",
   "documents.none.addFiles": "Add files…",
-  "documents.drop":
-    "Drop PDF, Word, PowerPoint, Excel, CSV, TXT or Markdown files to add them, or a folder to link it",
+  "documents.drop": "Drop files to add them, or a folder to link it",
   "documents.status.queued": "Queued",
   "documents.status.extracting": "Extracting text…",
   "documents.status.ready": "Ready",
@@ -1101,10 +1089,9 @@ export const en = {
   "documents.failure.passwordProtected": "the file needs a password",
   "documents.failure.tooLarge": "the file is too large to open",
   "documents.failure.fileMissing": "its file is missing",
-  "documents.file.missing":
-    "File missing: it was removed from its folder. Its text and Citations are kept; new searches leave it out.",
+  "documents.file.missing": "File missing: Citations keep its text; searches skip it.",
   "documents.file.unavailable":
-    "File can't be reached right now, e.g. its drive is unplugged. It's still searched from its stored text.",
+    "Can't reach the file (drive unplugged?). Still searched from saved text.",
   "documents.file.missingReason": "The file is missing from its folder.",
   "documents.file.unavailableReason": "The file can't be reached right now.",
   "documents.fileShort.missing": "Missing",
@@ -1217,33 +1204,28 @@ export const en = {
   "linkedFolders.pick.button": "Link folder",
   "linkedFolders.preview.title": "Link this folder?",
   "linkedFolders.preview.titleLinked": "Already in IncarnaMind",
-  "linkedFolders.preview.already":
-    "“{name}” is linked already, so its files are in IncarnaMind. Linking it again changes nothing.",
+  "linkedFolders.preview.already": "“{name}” is already linked, so its files are in IncarnaMind.",
   "linkedFolders.preview.counting": "Counting the files in it…",
   "linkedFolders.preview.files.one": "1 supported file, {size}",
   "linkedFolders.preview.files.other": "{count} supported files, {size}",
-  "linkedFolders.preview.noFiles":
-    "No supported files in it yet. Files added to it later are read then.",
-  "linkedFolders.preview.time":
-    "Reading its files takes {time} on this computer, newest first. You can pause it at any time.",
-  "linkedFolders.preview.onlineOnly.one":
-    "1 file is online only, so it's skipped for now. You can download and read it later.",
-  "linkedFolders.preview.onlineOnly.other":
-    "{count} files are online only, so they're skipped for now. You can download and read them later.",
+  "linkedFolders.preview.noFiles": "No supported files yet. Files added later are read.",
+  "linkedFolders.preview.time": "Reading takes {time}, newest first.",
+  "linkedFolders.preview.onlineOnly.one": "1 online-only file is skipped for now.",
+  "linkedFolders.preview.onlineOnly.other": "{count} online-only files are skipped for now.",
   "linkedFolders.preview.readOnly":
-    "IncarnaMind only reads the folder. It never changes, moves or deletes anything in it.",
+    "IncarnaMind only reads this folder. It never changes, moves or deletes anything.",
   "linkedFolders.preview.merge.one":
-    "“{names}”, linked already, is inside this folder: it merges into this one, and its Documents keep their Tags and Citations.",
+    "“{names}”, already linked, merges into this folder and keeps its Tags and Citations.",
   "linkedFolders.preview.merge.other":
-    "{names}, linked already, are inside this folder: they merge into this one, and their Documents keep their Tags and Citations.",
+    "{names}, already linked, merge into this folder and keep their Tags and Citations.",
   "linkedFolders.preview.inside":
-    "This folder is inside “{name}”, which is linked already, so its files are in IncarnaMind. Linking it changes nothing.",
+    "This folder is inside linked “{name}”, so its files are already in IncarnaMind.",
   "linkedFolders.preview.layout": "Show it as",
   "linkedFolders.preview.layout.tree": "Folders",
   "linkedFolders.preview.layout.tree.hint": "Its subfolders, as they are on disk.",
   "linkedFolders.preview.layout.flat": "A flat list",
   "linkedFolders.preview.layout.flat.hint":
-    "Every Document in one list. Suits folders where most subfolders hold one file, like Zotero's storage.",
+    "One list of every Document. Suits Zotero-style storage folders.",
   "linkedFolders.preview.suggested": "Suggested",
   "linkedFolders.preview.failed": "Couldn't look in this folder: {message}",
   "linkedFolders.preview.cancel": "Cancel",
@@ -1259,7 +1241,7 @@ export const en = {
   "linkedFolders.state.paused.progress": "Reading is paused: {indexed} of {files} files read",
   "linkedFolders.state.unavailable": "Unavailable",
   "linkedFolders.state.unavailable.full":
-    "The folder can't be reached right now, e.g. its drive is unplugged. Its Documents are still searched from their stored text. If it moved, choose Locate folder… in its menu.",
+    "Can't reach this folder. Its saved text is still searched. If it moved, use Locate folder…",
   "linkedFolders.state.downloading": "Downloading…",
   "linkedFolders.state.downloading.full.one": "Downloading 1 online-only file to read it",
   "linkedFolders.state.downloading.full.other":
@@ -1287,10 +1269,9 @@ export const en = {
   "linkedFolders.locate.pickButton": "Choose",
   "linkedFolders.unlinkAction": "Unlink…",
   "linkedFolders.unlink.title": "Unlink “{name}”?",
-  "linkedFolders.unlink.body":
-    "The folder and the files in it aren't touched. IncarnaMind stops following it and forgets what it read in them.",
+  "linkedFolders.unlink.body": "Your files aren't touched. IncarnaMind forgets what it read.",
   "linkedFolders.unlink.citations":
-    "It keeps only the text your Citations quote, so they can still be checked.",
+    "It keeps only what your Citations quote, so they stay checkable.",
   "linkedFolders.unlink.cancel": "Cancel",
   "linkedFolders.unlink.confirm": "Unlink",
   "units.kb": "{size} KB",
@@ -1322,8 +1303,7 @@ export const en = {
   "status.taggingPermission": "Tags need your OK",
   "status.taggingFailed.one": "1 Document couldn't be tagged",
   "status.taggingFailed.other": "{count} Documents couldn't be tagged",
-  "status.taggingFailed.offline":
-    "The AI model couldn't be reached. Tagging tries again when you're back online, or now with Retry.",
+  "status.taggingFailed.offline": "Can't reach the AI model. Tagging resumes when you're online.",
   "status.taggingFailed.full": "The AI model couldn't tag them. Retry to try again.",
   "status.choose": "Choose…",
   "status.downloading": "Search model",
@@ -1337,10 +1317,9 @@ export const en = {
   "status.scanModelDownloading": "Text recognition",
   "status.scanModelDownloadFailed": "Text recognition model download failed",
   "status.scanModelFailed": "Text recognition model couldn't start",
-  "scan.model.downloading":
-    "Downloading the text recognition model: {downloaded} of {total} MB. Scanned pages are read as soon as it's ready, on this computer.",
+  "scan.model.downloading": "Downloading text recognition: {downloaded} of {total} MB",
   "scan.model.failed":
-    "The text recognition model couldn't be downloaded: {reason}. Scanned pages can't be read until it is.",
+    "Couldn't download text recognition: {reason}. Scans can't be read until then.",
   "scan.model.loadFailed": "The text recognition model couldn't start on this computer.",
   "status.rebuilding": "Rebuilding search",
   "status.searchError": "Search can't use {provider}",
@@ -1368,8 +1347,7 @@ export const en = {
   "webPages.fetchAgainFailed": "Couldn't fetch “{name}” again: {reason}",
   "webPages.tryAgain": "Try again",
   "webPages.add.keepLook": "Keep the page as it looks",
-  "webPages.keepLook.body":
-    "Also keeps a PDF of the page. It loads the page again, so its sites see a visit.",
+  "webPages.keepLook.body": "Also keeps a PDF: loads the page again, so its site sees a visit.",
   "webPages.reason.invalid-address": "it isn't a web address",
   "webPages.reason.unreachable": "the site can't be reached",
   "webPages.reason.timed-out": "the site took too long to answer",
@@ -1389,7 +1367,7 @@ export const en = {
   "webPages.menuTitle": "Web page",
   "webPages.fetched": "Fetched {date}",
   "webPages.source": "Saved web page · {address} · saved {date}",
-  "webPages.drop": "Drop to save the web page, or drop it on a Folder in the sidebar",
+  "webPages.drop": "Drop to save the page, or drop it on a Folder",
   "status.alreadyAdded.one": "1 already added",
   "status.alreadyAdded.other": "{count} already added",
   "status.more": "+{count}",
@@ -1557,15 +1535,14 @@ export const en = {
   "tags.dialog.count.one": "1 Document",
   "tags.dialog.toReview": "{count} to review",
   "tags.dialog.descriptionNote":
-    "Automatic tagging goes by the name and description, so a clear description makes it more accurate. Re-tag to apply a change.",
+    "Clear descriptions make tagging more accurate. Re-tag to apply a change.",
   "tags.dialog.search": "Find a Tag",
   "tags.dialog.noMatch": "No Tags match.",
   "tags.dialog.show": "Show the Documents tagged {name}",
   "tags.dialog.merge": "Merge {name} into another Tag",
   "tags.dialog.merge.label": "Merge “{name}” into",
   "tags.dialog.merge.choose": "Choose a Tag",
-  "tags.dialog.merge.body":
-    "Its Documents get “{into}” instead, and “{name}” is deleted. Tags you chose stay yours.",
+  "tags.dialog.merge.body": "Its Documents get “{into}”; “{name}” is deleted. Tags you chose stay.",
   "tags.dialog.merge.confirm": "Merge",
   "library.select": "Select {name}",
   "library.selectAll": "Select all {count} shown",
@@ -1589,8 +1566,7 @@ export const en = {
   "tags.state.noTags": "No Tags yet",
   "tags.state.addTag": "Add a Tag",
   "tags.state.failed": "Tagging failed. Re-tag to try again.",
-  "tags.dialog.body":
-    "Documents get their Tags, and once you have Folders a suggested Folder, going by these names and descriptions, from the model chosen in Settings → Models → Tagging: Automatic, unless you choose another. Tags you add to or remove from a Document are never changed automatically.",
+  "tags.dialog.body": "Tagging goes by these names and descriptions. Tags you set never change.",
   "tags.dialog.preset": "Preset",
   "tags.dialog.empty": "No Tags yet. Add one below.",
   "tags.dialog.name": "Name",
@@ -1603,8 +1579,7 @@ export const en = {
   "tags.dialog.new": "New Tag",
   "tags.dialog.create": "Add Tag",
   "tags.dialog.retag": "Re-tag all Documents",
-  "tags.dialog.retag.hint":
-    "Works out every Document's automatic Tags again, e.g. after you edit a Tag. Tags you added or removed yourself stay as they are.",
+  "tags.dialog.retag.hint": "Redoes automatic Tags for every Document. Tags you set stay.",
   "tags.dialog.retag.started": "Re-tagging has started.",
   "tags.dialog.done": "Done",
 
@@ -1691,7 +1666,10 @@ export const en = {
   "status.taggingStopped": "Tagging stopped",
   "status.taggingPaused": "Tagging waits for your ChatGPT plan",
   "status.taggingPaused.full":
-    "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
+    "ChatGPT plan limit reached: tagging waits for the reset, then resumes.",
+  "status.taggingRateLimited": "Rate limit reached · resumes at {time}",
+  "status.taggingRateLimited.full":
+    "AI model rate limit reached: tagging resumes at {time}, or now with Retry.",
   "jev.form.sends": "Sends Document text to Jev for tagging.",
 
   "settings.title": "Settings",
@@ -2205,7 +2183,7 @@ export const en = {
   "references.import.menu": "Import references…",
   "references.import.pick.title": "Import references",
   "references.import.pick.message":
-    "Choose a CSL JSON, BibTeX or RIS file exported from Zotero, EndNote or Mendeley.",
+    "Choose a CSL JSON, BibTeX or RIS file from Zotero, EndNote or Mendeley.",
   "references.import.pick.filter": "References (CSL JSON, BibTeX, RIS)",
   "references.import.running": "Importing “{name}”…",
   "references.import.running.reason": "Another import is running",
@@ -2222,14 +2200,13 @@ export const en = {
   "references.import.by.doi": "by DOI",
   "references.import.by.arxiv": "by arXiv ID",
   "references.import.by.title": "by title and year",
-  "references.import.unmatchedHint":
-    "Add the PDF to link it, or import again after adding the Documents.",
+  "references.import.unmatchedHint": "Add the PDF to link it, or import again afterwards.",
   "references.import.addPdf": "Add the PDF…",
   "references.import.files": "Attached files found on this computer: {count}",
   "references.import.addFiles": "Add them as Documents",
   "references.import.addingFiles": "Adding…",
   "references.import.failed.unreadable":
-    "Couldn't read “{name}”. Check that the file is still there, then try again.",
+    "Couldn't read “{name}”. Check the file is there, then retry.",
   "references.import.failed.too-large": "“{name}” is over 50 MB, too large to import.",
   "references.import.failed.unknown-format": "“{name}” isn't a CSL JSON, BibTeX or RIS file.",
   "references.import.failed.empty": "“{name}” has no references in it.",
@@ -2238,11 +2215,11 @@ export const en = {
   "references.import.help.zotero":
     "Zotero: File ▸ Export Library…, then choose CSL JSON or BibTeX.",
   "references.import.help.endnote":
-    "EndNote: File ▸ Export…, save as a text file with the Refman (RIS) Export style.",
+    "EndNote: File ▸ Export…, as text with the Refman (RIS) Export style.",
   "references.import.help.mendeley":
-    "Mendeley: select the references, then File ▸ Export… and choose BibTeX or RIS.",
+    "Mendeley: select references, then File ▸ Export… as BibTeX or RIS.",
   "references.import.help.folder":
-    "To read Zotero's PDFs in IncarnaMind, add its storage folder as a Linked folder, then import again: each reference is matched to its PDF.",
+    "To read Zotero's PDFs, link its storage folder, then import again.",
   "references.import.undo": "Imported references from “{name}”",
 
   "consent.settings.title": "Data sent to other services",
@@ -4096,7 +4073,7 @@ export const en = {
 
   "sources.title": "Find sources",
   "sources.intro":
-    "Search OpenAlex, arXiv and PubMed for papers. Open-access ones are added as Documents, the others as references. Choose openFDA, DailyMed, ClinicalTrials.gov or the eCFR below to find drug labels, clinical trials and US federal regulations, or type a citation such as 17 CFR 240.10b-5 or 42 U.S.C. § 1983.",
+    "Search papers in OpenAlex, arXiv and PubMed. Open-access ones become Documents.",
   "sources.search.label": "Search for sources",
   "sources.search.placeholder": "Topic, title, DOI, arXiv ID, NCT number or citation",
   "sources.search": "Search",
@@ -4115,7 +4092,7 @@ export const en = {
   "sources.problem.declined": "{provider} wasn't searched: you didn't allow it",
   "sources.problem.unreachable": "Couldn't reach {provider}",
   "sources.problem.rate-limited":
-    "{provider} asked to slow down, or its free searches for today are used up",
+    "{provider} asked to slow down, or today's free searches are used up",
   "sources.problem.service-error": "{provider} answered with an error",
   "sources.problem.needs-key": "{provider} is off: it needs your own free key",
   "sources.problem.key-rejected": "{provider} didn't accept your key",
@@ -4155,29 +4132,29 @@ export const en = {
   "sources.failed.key-rejected": "Your key wasn't accepted: change it above, then try again",
   "sources.failed": "Couldn't add it",
   "sources.provider.openalex.about":
-    "Papers in every field, with where they're open and how often they're cited. Its records are CC0.",
+    "Papers in every field, with open-access links and citation counts. CC0 records.",
   "sources.provider.arxiv.about":
-    "Preprints in physics, mathematics, computer science and more, all open. Its records are CC0.",
+    "Open preprints in physics, mathematics, computer science and more. CC0 records.",
   "sources.provider.pubmed.about":
     "Biomedical and life-science papers, with open full text from PubMed Central.",
   "sources.provider.crossref.about": "Looks up a DOI you type.",
   "sources.provider.openfda.about":
-    "FDA drug labels, section by section. Search by drug name or set id. Its records are CC0; it says not to rely on it for decisions about medical care. Asked only when you choose it.",
+    "FDA drug labels, by section. Search by drug name or set id. CC0 records; not for medical decisions. Asked only when you choose it.",
   "sources.provider.dailymed.about":
-    "The full drug labels filed with the FDA, from the National Library of Medicine, with their section numbers. Search by drug name or set id. Asked only when you choose it.",
+    "Full FDA drug labels, with section numbers. Search by drug name or set id. Asked only when you choose it.",
   "sources.provider.clinicaltrials.about":
-    "Clinical trial records: arms, outcomes, eligibility criteria and posted results. Search by condition or drug, or type an NCT number. Asked only when you choose it.",
+    "Clinical trial records: arms, outcomes, eligibility and results. Search by condition, drug or NCT number. Asked only when you choose it.",
   "sources.provider.ecfr.about":
-    "US federal regulations as amended to date (the Code of Federal Regulations), paragraph by paragraph: an unofficial compilation by the Office of the Federal Register. Search by words, or type a citation such as 17 CFR 240.10b-5, with “as of 2019-06-30” for an earlier version. Asked only when you choose it.",
+    "US federal regulations (CFR), by paragraph; an unofficial compilation. Search by words or a citation like 17 CFR 240.10b-5. Asked only when you choose it.",
   "sources.provider.govinfo.about":
-    "The United States Code and the official annual edition of the CFR, from the Government Publishing Office. Type a citation such as 42 U.S.C. § 1983. Needs your own free api.data.gov key.",
+    "The United States Code and the CFR's official annual edition. Type a citation like 42 U.S.C. § 1983. Needs your own free api.data.gov key.",
   "sources.notice": "The source says: {notice}",
   "sources.key.open": "{provider} key…",
   "sources.key.title": "Your own {provider} key",
   "sources.key.hint":
-    "Optional. A key gives {provider} a higher daily limit. It is kept in your keychain and sent only to {provider}.",
+    "Optional: a higher daily limit. Kept in your keychain, sent only to {provider}.",
   "sources.key.hint.needed":
-    "Needed: {provider} is off without one. It is kept in your keychain and sent only to {provider}.",
+    "Needed, or {provider} stays off. Kept in your keychain, sent only to {provider}.",
   "sources.key.signUp": "Get a free key",
   "sources.key.add": "Add key…",
   "sources.key.change": "Change key…",
@@ -4615,6 +4592,7 @@ export const en = {
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
   "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
   "mindCall.failed.uncited": "Didn't add to “{mind}”: its sources weren't cited",
+  "mindCall.failed.newMind": "Didn't add to “{mind}”: a new Mind was asked for",
   "mindChanges.unlinked": "· {count} sources shown as text, not linked",
   "mindChanges.unlinked.one": "· 1 source shown as text, not linked",
   "mindChanges.dropped": "· {count} sources couldn't be matched, so they were left out",

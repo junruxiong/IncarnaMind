@@ -12,7 +12,7 @@ import {
   type StyleCatalogue,
   type StyleSummary,
 } from "../../shared/citationStyles";
-import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
+import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { core } from "./core";
 import { useT } from "./i18n";
 import { useAppStore } from "./store";
@@ -120,15 +120,13 @@ export async function chooseCitationStyle(
   style: CitationStyleId,
   before: MindCitationStyle | null,
 ): Promise<boolean> {
-  const { reportError, settings } = useAppStore.getState();
-  const language = settings?.language ?? "en";
-  const t: Translate = (key, params) => translate(language, key, params);
+  const { reportError } = useAppStore.getState();
   try {
     const previous = before ?? (await core.getMindCitationStyle(mindId));
     if (previous.chosen && previous.style === style) return true;
     await core.setMindCitationStyle(mindId, style);
     useUndo.getState().push({
-      message: t("citationStyle.changed", { style: styleLabel(style, t) }),
+      said: (t) => t("citationStyle.changed", { style: styleLabel(style, t) }),
       undo: async () => {
         await core.setMindCitationStyle(mindId, previous.chosen ? previous.style : null, {
           folderDefault: previous.folderDefault,
