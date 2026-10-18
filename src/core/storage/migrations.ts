@@ -1770,6 +1770,15 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE document_groups ADD COLUMN filed_at TEXT;
     `,
   },
+  {
+    version: 99,
+    description: "A Document waiting out a rate limit keeps when it resumes (#1127)",
+    // ISO 8601 UTC, beside the error kind and message the tagging state already keeps; NULL when
+    // the error carries no time.
+    sql: `
+      ALTER TABLE documents ADD COLUMN tagging_error_resets_at TEXT;
+    `,
+  },
 ];
 
 /**
