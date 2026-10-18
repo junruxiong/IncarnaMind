@@ -5,6 +5,7 @@ import {
   readinessAlso,
 } from "../components/providers/ChatReadinessNotice";
 import { dismissEditProblem, stopEdit, TRANSLATE_LANGUAGES, useEdits } from "../editWithAi";
+import { providerErrorText } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 
@@ -86,6 +87,12 @@ export function EditStatus({ mindId }: { mindId: string }) {
           }}
         >
           {t("edit.problem.failed", { message: problem.message })}
+        </ProblemLine>
+      );
+    case "consent-revoked":
+      return (
+        <ProblemLine testId="edit-problem" className="composer-problem" action={close}>
+          {providerErrorText(problem.error, t)}
         </ProblemLine>
       );
     default:

@@ -22,6 +22,8 @@
  * calls create_mind with a short summary. "Write a summary of my leases"
  * (根据我的租约写一份总结) writes, naming the Documents in its scope, into a new
  * Mind, or the empty one it is asked from, so what it was written from shows (#1149).
+ * "Write a short summary of this agreement" (为这份协议写一份简短摘要) calls
+ * add_to_mind with it, for the Mind in focus.
  * "Write a brief summary" (写一份简要总结) adds one to the Mind in <mind>, but
  * answers that no Mind is open when that Mind has no name, as models did (#1212).
  */
@@ -93,6 +95,9 @@ const SUMMARY = [
   "Spring tides come at new and full moon, when the Sun and the Moon pull together.",
   "Neap tides come in between, at the quarter moons.",
 ].join("\n\n");
+
+/** The newcomer's first request (#1174): a short summary of "this agreement", written into the Mind in focus. */
+const SUMMARY_HERE = /\bwrite a short summary of this agreement\b|为这份协议写一份简短摘要/i;
 
 /** A request to change the Mind so it has a table: "…, with a table" (加上表格). */
 const WITH_A_TABLE = /\bwith a table\b|加上?表格/i;
@@ -175,6 +180,11 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     if (made === undefined)
       return { tool: "create_mind", input: { title: "Summary", content: SUMMARY } };
     return { text: firstSentence(made) };
+  }
+  if (SUMMARY_HERE.test(question)) {
+    const added = lastResult(prompt, "add_to_mind");
+    if (added === undefined) return { tool: "add_to_mind", input: { content: SUMMARY } };
+    return { text: firstSentence(added) };
   }
   if (
     SHORTEN.test(question) ||
