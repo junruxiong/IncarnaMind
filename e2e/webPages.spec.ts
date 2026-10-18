@@ -66,6 +66,7 @@ async function screenshot(target: Page | Locator, name: string): Promise<void> {
 /** "Add a web page…" from the sidebar's "+", with these addresses, one per line. Returns the dialog. */
 async function addWebPages(window: Page, addresses: string[]): Promise<Locator> {
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
   await dialog.getByTestId("add-web-page-addresses").fill(addresses.join("\n"));

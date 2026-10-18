@@ -241,6 +241,7 @@ test.describe("a web page the User saved", () => {
       await useLocalChatModel(window);
       await setLanguage(window, language);
       await window.getByTestId("plus-menu").click();
+      await window.getByTestId("plus-more").click();
       await window.getByTestId("plus-add-web-page").click();
       const dialog = window.getByTestId("add-web-page-dialog");
       await dialog.getByTestId("add-web-page-addresses").fill(address);

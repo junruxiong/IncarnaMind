@@ -101,6 +101,7 @@ test("dropping folders offers each for linking in turn; what's there already is 
   // The linked folder picked again: the dialog says it's linked already, and only closes.
   await interceptOpenDialog(app, papers);
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-link-folder").click();
   await expect(dialog.getByRole("heading")).toHaveText("Already in IncarnaMind");
   await expect(dialog.getByTestId("link-folder-inside")).toHaveText(

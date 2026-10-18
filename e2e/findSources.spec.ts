@@ -216,6 +216,8 @@ test("in Chinese at the narrowest window, Find sources from + fits and speaks Ch
     await setWindowSize(app, window, 900, 660);
 
     await window.getByTestId("plus-menu").click();
+
+    await window.getByTestId("plus-more").click();
     await window.getByTestId("plus-find-sources").click();
     const panel = window.getByTestId("find-sources");
     await expect(panel.getByRole("heading")).toHaveText("查找资料");
