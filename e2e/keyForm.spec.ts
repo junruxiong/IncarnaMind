@@ -200,7 +200,9 @@ test("in Settings the notes and the key line are under the key field, the steps 
 
 /** Picks a provider's chip, opening More… first when it is folded under it. */
 async function chooseProvider(form: Locator, name: string) {
-  const chip = form.locator("label", { hasText: new RegExp(`^${name}$`) });
+  const chip = form.locator("label", {
+    hasText: new RegExp(`^${name.replace(/[()]/g, "\\$&")}$`),
+  });
   if ((await chip.count()) === 0) await form.getByTestId("provider-more-toggle").click();
   await chip.click();
 }
@@ -233,6 +235,11 @@ test("a key line says what to do in IncarnaMind and links to the company's own p
         "OpenRouter",
         "Pay per use with OpenRouter credits · Pricing ↗",
         "用 OpenRouter 额度按用量付费 · 价格 ↗",
+      ],
+      [
+        "Kimi (Moonshot AI)",
+        "If Kimi refuses requests, check your Kimi account · Pricing ↗",
+        "如果 Kimi 拒绝请求，请检查你的 Kimi 账户 · 价格 ↗",
       ],
     ] as const) {
       await language(window, "en");
