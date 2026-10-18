@@ -21,12 +21,12 @@ import {
   type MindFocus,
   messageReference,
 } from "../../src/core";
+import { forPage } from "../../src/core/answers/pointersBack";
 import { toolRecordLines } from "../../src/core/answers/toolRecord";
 import { plainText } from "../../src/core/mindText";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
-import { answerBlocks } from "../../src/shared/answerBlocks";
+import { markersIn, pageBlocks } from "../../src/shared/answerBlocks";
 import { namesOneOf, sourcesAsText } from "../../src/shared/namedSources";
-import { withoutFraming } from "../../src/shared/noteBlocks";
 import { resolveProposals } from "../../src/shared/proposals";
 import { connectToMind } from "../../tests/helpers/mindClient";
 import { heading, note, writeMind } from "../../tests/helpers/minds";
@@ -39,7 +39,7 @@ import { type Library, openLibrary } from "../lib/library";
 import { createLog, type Log } from "../lib/log";
 import { createWorkerCrossEncoder } from "../lib/rerank";
 import { CASES, type EverydayCase, floorOf, type LibraryName } from "./cases";
-import { failureLine, type RequestFailure, requestFailures } from "./checks";
+import { failureLine, pointsBack, type RequestFailure, requestFailures } from "./checks";
 import { DATED_TEXTS, writeDatedDocuments } from "./dated";
 import { citedClaims } from "./dates";
 import { judgeClaims } from "./judge";
@@ -113,6 +113,8 @@ interface CaseResult {
   model: string;
   failures: RequestFailure[];
   reply: string;
+  /** The reply as Add to note puts it in a page. */
+  page: string;
   calls: string[];
   /** The Mind's Blocks that changed, as they read before and once its changes are accepted. */
   changes: { block: number; before: string; after: string }[];
@@ -294,7 +296,7 @@ async function runCase(
     const earlier = new Set(ids);
     await core.addToNote({
       mindId: mind.id,
-      blocks: withoutFraming(answerBlocks({ ...last, status: "done" })),
+      blocks: pageBlocks(last, each.before?.at(-1) ?? ""),
       origin: {
         from: messageReference(last.conversationId, last.id),
         question: each.before?.at(-1) ?? "",
@@ -356,6 +358,7 @@ async function runCase(
     );
   }
   const changedBlocks = changes.map((change) => change.block);
+  const page = forPage(answer.text, each.request);
   const failures = requestFailures({
     expected: each.expected,
     answer,
@@ -365,6 +368,7 @@ async function runCase(
     addedBlocks,
     sourcesAsText: sourcesAsTextIn,
     writtenInMinds,
+    addedToPage: page,
     scoped,
     texts: each.library === "dated" ? DATED_TEXTS : undefined,
   });
@@ -375,6 +379,7 @@ async function runCase(
     model,
     failures,
     reply: answer.text,
+    page,
     calls: record,
     changes,
     seconds: (Date.now() - started) / 1000,
@@ -473,6 +478,7 @@ async function runModel(
             model,
             failures: [],
             reply: "",
+            page: "",
             calls: [],
             changes: [],
             seconds: 0,
@@ -520,10 +526,16 @@ function report(
     results.filter((each) => each.failures.some((failure) => failure.kind === kind)).length;
   const dead = failing("dead-markers");
   const shaped = failing("tool-text");
-  const expecting = (key: "standsAlone" | "noExample") =>
+  const heldTo = (key: "standsAlone" | "noExample") =>
     results.filter(
       (each) => !each.error && CASES.find((one) => one.id === each.id)?.expected[key] === true,
-    ).length;
+    );
+  const expecting = (key: "standsAlone" | "noExample") => heldTo(key).length;
+  const pointingInPanel = heldTo("standsAlone").filter((each) => pointsBack(each.reply)).length;
+  const markersLeftOut = results.reduce(
+    (total, each) => total + markersIn(each.reply).length - markersIn(each.page).length,
+    0,
+  );
   const sum = (key: keyof AnswerUsage) =>
     results.reduce((total, each) => total + each.usage[key], 0).toLocaleString("en");
   const answered = results.filter((each) => !each.error && each.reply !== "");
@@ -627,7 +639,9 @@ function report(
     "",
     "## Standing on its own",
     "",
-    `${failing("points-back")} of ${expecting("standsAlone")} Answers held to it point to an earlier Answer, in the reply or in what they wrote into a Mind. ${failing("example")} of ${expecting("noExample")} mention the example unasked.`,
+    `${failing("points-back")} of ${expecting("standsAlone")} Answers held to it point to an earlier Answer in what goes into a page: the reply as Add to note puts it, or what they wrote into a Mind. In the panel, where the reply stays as the model wrote it, ${pointingInPanel} of them do. ${failing("example")} of ${expecting("noExample")} mention the example unasked.`,
+    "",
+    `Taking pointers out of the replies, as Add to note puts them in a page, left out ${markersLeftOut} Citation markers, over all ${results.length} Answers.`,
     "",
     "## Each run",
     "",

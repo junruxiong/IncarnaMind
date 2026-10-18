@@ -43,7 +43,7 @@
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { asGenerated } from "../../shared/aiText";
-import { answerBlocks, hasText } from "../../shared/answerBlocks";
+import { hasText, pageBlocks } from "../../shared/answerBlocks";
 import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
@@ -56,7 +56,6 @@ import {
   namesOneOf,
   sourcesAsText,
 } from "../../shared/namedSources";
-import { withoutFraming } from "../../shared/noteBlocks";
 import {
   decisionsOn,
   pendingProposals,
@@ -210,7 +209,7 @@ import {
   withFound,
 } from "./meetingHelp";
 import { paragraphAsked } from "./paragraphAsked";
-import { asksAboutEarlier, withoutPointersBack } from "./pointersBack";
+import { withoutPointersBack } from "./pointersBack";
 import {
   answerInstructions,
   connectorInstructions,
@@ -401,9 +400,9 @@ function lastAnswerOf(
   const at = earlier.findLastIndex((message) => message.kind === "answer");
   const answer = earlier[at];
   if (answer?.kind !== "answer") return null;
-  const blocks = withoutFraming(answerBlocks({ ...answer, status: "done" }));
-  if (!hasText(blocks)) return null;
   const question = earlier.slice(0, at).findLast((message) => message.kind === "question");
+  const blocks = pageBlocks(answer, question?.text ?? "");
+  if (!hasText(blocks)) return null;
   return {
     blocks,
     origin: { from: messageReference(conversationId, answer.id), question: question?.text ?? "" },
@@ -1134,13 +1133,6 @@ export function createAnswers(options: AnswersOptions) {
       }
       // A marker no Citation backs is not kept in the text, and each is counted for the summary.
       markdown = withoutDeadMarkers(markdown, (marker) => session.finalCitation(marker) !== null);
-      // A reply after a change to a Mind only reports on it; the text written there was already cleaned.
-      const reportsAChange = toolCalls.some(
-        (call) => call.mindChange !== undefined && changesAMind(call.mindChange),
-      );
-      if (!reportsAChange && !asksAboutEarlier(context.question)) {
-        markdown = withoutPointersBack(markdown).markdown;
-      }
       // Its steps say how many figures it shows, and its end how many it couldn't calculate.
       const placed = placedFigures(withoutFootnoteDefinitions(markdown), true);
       if (placed.figures.length > 0 || placed.missing > 0) {
@@ -1695,8 +1687,7 @@ export function createAnswers(options: AnswersOptions) {
                 let notFound = 0;
                 let unrecorded = 0;
                 let firstUnrecorded = -1;
-                const alone = withoutPointersBack(withoutFootnoteDefinitions(text));
-                const written = withoutSearchTalk(alone.markdown);
+                const written = withoutSearchTalk(withoutFootnoteDefinitions(text));
                 const link = (source: NamedSource) => {
                   const marker = session.markerFor(source);
                   return marker === null ? null : `[^${marker}]`;
@@ -1710,7 +1701,9 @@ export function createAnswers(options: AnswersOptions) {
                 const asText = sourcesAsText(written.markdown, known);
                 const sourced = linkKnownSources(written.markdown, known, link);
                 const tables = linkTableSources(sourced.text, link);
-                const cited = markdownToBlocks(tables.markdown).flatMap((block, index) =>
+                // After the sources written as text are linked, so a sentence citing one keeps its claim.
+                const alone = withoutPointersBack(tables.markdown);
+                const cited = markdownToBlocks(alone.markdown).flatMap((block, index) =>
                   withCitations([block], (marker) => {
                     const node = session.checkedNode(marker);
                     if (!node) {

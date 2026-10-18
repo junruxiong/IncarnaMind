@@ -19,8 +19,9 @@
  * - **Changed in place**: asked to make text in the Mind longer, it changes
  *   that text, not adding a second version beside it, nor leaving it as it
  *   was (#1061).
- * - **It stands on its own**: nothing in the reply, or in what it wrote into a
- *   Mind, points to an earlier Answer ("covered in my earlier answer", "见上一条回答").
+ * - **It stands on its own**: nothing that goes into a page, its reply as Add
+ *   to note puts it or what it wrote into a Mind, points to an earlier Answer
+ *   ("covered in my earlier answer", "见上一条回答").
  * - **No word of the example unasked**: asked about the User's own Documents
  *   after the example's Answer, nothing it wrote mentions the example's.
  * - **Only the text's dates**: every date the reply gives is one the
@@ -45,7 +46,7 @@ export interface Expected {
   only?: number;
   /** It asks to change text already in the Mind: adding a new version beside it fails. */
   inPlace?: true;
-  /** Nothing in its reply, or in what it writes into a Mind, points to an earlier Answer. */
+  /** Nothing in its reply as Add to note puts it, or in what it writes into a Mind, points to an earlier Answer. */
   standsAlone?: true;
   /** Asked about the User's own Documents after the example's Answer: nothing it writes mentions the example's. */
   noExample?: true;
@@ -69,6 +70,8 @@ export interface RequestOutcome {
   sourcesAsText?: readonly string[];
   /** The text of the Blocks it wrote or changed in Minds, once its changes are accepted. */
   writtenInMinds?: readonly string[];
+  /** Its reply as Add to note puts it in a page; the reply as written when not given. */
+  addedToPage?: string;
   scoped: readonly { id: string; name: string }[];
   /** The text of the Documents in scope, for `textDates`. */
   texts?: readonly string[];
@@ -105,6 +108,9 @@ const POINTS_BACK = new RegExp(
   ].join("|"),
   "i",
 );
+
+/** Whether text points to an earlier Answer, as `standsAlone` reads it. */
+export const pointsBack = (text: string): boolean => POINTS_BACK.test(text);
 
 /** The default example's Documents, figures and words (src/core/exampleSets.ts), in English and Chinese. */
 const EXAMPLE =
@@ -176,9 +182,11 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   if (outcome.sourcesAsText && outcome.sourcesAsText.length > 0) {
     failures.push({ kind: "as-text", sources: [...outcome.sourcesAsText] });
   }
-  const written = [answer.text, ...(outcome.writtenInMinds ?? [])].join("\n\n");
-  const pointer = expected.standsAlone ? written.match(POINTS_BACK)?.[0] : undefined;
+  const inMinds = outcome.writtenInMinds ?? [];
+  const inPage = [outcome.addedToPage ?? answer.text, ...inMinds].join("\n\n");
+  const pointer = expected.standsAlone ? inPage.match(POINTS_BACK)?.[0] : undefined;
   if (pointer) failures.push({ kind: "points-back", said: pointer });
+  const written = [answer.text, ...inMinds].join("\n\n");
   const example = expected.noExample ? written.match(EXAMPLE)?.[0] : undefined;
   if (example) failures.push({ kind: "example", said: example });
   const dates = expected.textDates ? datesNotInText(answer.text, outcome.texts ?? []) : [];

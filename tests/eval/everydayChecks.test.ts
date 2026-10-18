@@ -261,7 +261,7 @@ describe("Only what was asked changes", () => {
 });
 
 describe("Standing on its own, and the example unasked", () => {
-  const failed = (text: string, writtenInMinds: string[] = []) =>
+  const failed = (text: string, writtenInMinds: string[] = [], addedToPage?: string) =>
     requestFailures(
       outcome({
         expected: {
@@ -273,6 +273,7 @@ describe("Standing on its own, and the example unasked", () => {
         },
         answer: { text, citations: [], toolCalls: [], steps: null },
         writtenInMinds,
+        addedToPage,
       }),
     ).map((failure) => failure.kind);
 
@@ -293,6 +294,13 @@ describe("Standing on its own, and the example unasked", () => {
     expect(
       failed("Done.", ["## Summary", "Its results are covered in my earlier answer."]),
     ).toEqual(["points-back"]);
+  });
+
+  // protects=the reply is held to it as Add to note puts it in a page, where its pointer was cut, not as it stays in the panel; fails_when=a pointer left in the panel fails, or one in the page passes; no_claim=none beyond protects.
+  test("the reply is held to it as Add to note puts it in a page", () => {
+    const reply = "Its results are strong. They are covered in my earlier answer.";
+    expect(failed(reply, [], "Its results are strong.")).toEqual([]);
+    expect(failed("Its results are strong.", [], reply)).toEqual(["points-back"]);
   });
 
   // protects=a reply about the User's own Documents that mentions the example fails, in English and in Chinese; fails_when=it passes; no_claim=none beyond protects.

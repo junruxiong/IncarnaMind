@@ -806,7 +806,7 @@ function writtenNotes({ notFound, unrecorded, searchTalk, pointersBack }: Writte
       : []),
     ...(pointersBack > 0
       ? [
-          `${pointersBack === 1 ? "1 sentence" : `${pointersBack} sentences`} pointing to an earlier Answer ${pointersBack === 1 ? "was" : "were"} cut: the Mind is read without this conversation, so if it needs what ${pointersBack === 1 ? "that sentence" : "they"} pointed to, write that into it.`,
+          `What pointed to an earlier Answer was cut from ${pointersBack === 1 ? "1 sentence" : `${pointersBack} sentences`}: the Mind is read without this conversation, so if it needs what was pointed to, write that into it.`,
         ]
       : []),
   ];

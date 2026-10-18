@@ -22,8 +22,9 @@ import {
  * A newcomer's path with the scripted model, which says what models said
  * (#1172): the example's Answer, a Question about their own file from the
  * example's page, then a short summary asked from a new empty Mind, answered
- * in the panel, and put there with Add to note. The Answer about their file says nothing of the
- * example, and neither the summary nor the page points to an earlier Answer;
+ * in the panel, and put there with Add to note. The Answer about their file
+ * says nothing of the example. The summary's pointer to an earlier Answer
+ * stays in the panel, where the model wrote it, and doesn't go into the page;
  * in English and Chinese.
  */
 
@@ -62,7 +63,7 @@ test.afterEach(async () => {
 });
 
 for (const walk of WALKS) {
-  test(`asked from the example's page, an Answer about their own file says nothing of the example, and a summary added to a page points to no earlier Answer (${walk.name})`, async () => {
+  test(`asked from the example's page, an Answer about their own file says nothing of the example, and a summary added to a page leaves its pointer in the panel (${walk.name})`, async () => {
     const { app, window } = await launchApp(dataDir, { fakeChat: true, examples: true });
     await setWindowSize(app, window, 1440, 900);
     await setLanguage(window, walk.language);
@@ -101,7 +102,7 @@ for (const walk of WALKS) {
     const summary = await askInAssistant(window, walk.summary);
     const summaryText = summary.getByTestId("assistant-answer-text");
     await expect(summaryText).toContainText("That is all.");
-    await expect(summaryText).not.toContainText(walk.pointer);
+    await expect(summaryText).toContainText(walk.pointer);
     await addToNote(window, summary);
     const page = frontMind(window).getByTestId("mind-editor");
     await expect(page).toContainText("Your Documents answer this");
