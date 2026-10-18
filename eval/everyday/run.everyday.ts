@@ -273,11 +273,12 @@ async function runCase(
   const earlierCalls: ConversationAnswer["toolCalls"] = [];
   let last: ConversationAnswer | null = null;
   for (const earlier of each.before ?? []) {
+    const fromExample = each.beforeInExample === true;
     const answer = await ask(core, {
       text: earlier,
-      mindId: mind?.id ?? null,
+      mindId: (fromExample ? example?.mindId : mind?.id) ?? null,
       conversationId,
-      focus,
+      focus: fromExample ? null : focus,
     });
     conversationId = answer.conversationId;
     earlierCalls.push(...answer.toolCalls);
@@ -325,15 +326,18 @@ async function runCase(
   );
   const citedInMinds: string[] = [];
   const sourcesAsTextIn: string[] = [];
+  const writtenInMinds: string[] = [];
   const documentNames = scoped.map((document) => document.name);
   for (const mindId of changed) {
     const written = await connectToMind(core, mindId);
     await written.settled();
     citedInMinds.push(...citedDocuments(written.doc));
-    for (const text of acceptedTexts(written.doc, requests).values()) {
+    const was = mindId === mind?.id ? before : new Map<string, string>();
+    for (const [id, text] of acceptedTexts(written.doc, requests)) {
       sourcesAsTextIn.push(
         ...sourcesAsText(text, (source) => namesOneOf(source.name, documentNames)),
       );
+      if (was.get(id) !== text) writtenInMinds.push(text);
     }
   }
   let changes: CaseResult["changes"] = [];
@@ -355,6 +359,7 @@ async function runCase(
     changedBlocks,
     addedBlocks,
     sourcesAsText: sourcesAsTextIn,
+    writtenInMinds,
     scoped,
   });
   return {
@@ -500,9 +505,13 @@ function report(
   }));
   const percent = (passed: number, total: number) => `${Math.round((100 * passed) / total)}%`;
   const under = rows.filter((row) => row.under);
-  const dead = results.filter((each) =>
-    each.failures.some((failure) => failure.kind === "dead-markers"),
-  ).length;
+  const failing = (kind: RequestFailure["kind"]) =>
+    results.filter((each) => each.failures.some((failure) => failure.kind === kind)).length;
+  const dead = failing("dead-markers");
+  const expecting = (key: "standsAlone" | "noExample") =>
+    results.filter(
+      (each) => !each.error && CASES.find((one) => one.id === each.id)?.expected[key] === true,
+    ).length;
   const sum = (key: keyof AnswerUsage) =>
     results.reduce((total, each) => total + each.usage[key], 0).toLocaleString("en");
   const answered = results.filter((each) => !each.error && each.reply !== "");
@@ -569,6 +578,10 @@ function report(
     `${dead} of ${results.length} Answers keep a Citation marker that no Citation backs in their text.`,
     "",
     `The app took out ${results.reduce((total, each) => total + each.droppedMarkers, 0)} markers that nothing backed, in ${results.filter((each) => each.droppedMarkers > 0).length} Answers.`,
+    "",
+    "## Standing on its own",
+    "",
+    `${failing("points-back")} of ${expecting("standsAlone")} Answers held to it point to an earlier Answer, in the reply or in what they wrote into a Mind. ${failing("example")} of ${expecting("noExample")} mention the example unasked.`,
     "",
     "## Each run",
     "",

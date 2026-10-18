@@ -17,8 +17,10 @@
  * - **Changed in place**: asked to make text in the Mind longer, it changes
  *   that text, not adding a second version beside it, nor leaving it as it
  *   was (#1061).
- * - **The Question asked is the Answer's subject**: asked after the example's
- *   Answer, nothing in the reply is about an earlier Answer or the example.
+ * - **It stands on its own**: nothing in the reply, or in what it wrote into a
+ *   Mind, points to an earlier Answer ("covered in my earlier answer", "见上一条回答").
+ * - **No word of the example unasked**: asked about the User's own Documents
+ *   after the example's Answer, nothing it wrote mentions the example's.
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
@@ -37,8 +39,10 @@ export interface Expected {
   only?: number;
   /** It asks to change text already in the Mind: adding a new version beside it fails. */
   inPlace?: true;
-  /** It is asked after the example's Answer, and its reply says nothing of an earlier Answer or the example. */
-  noEarlier?: boolean;
+  /** Nothing in its reply, or in what it writes into a Mind, points to an earlier Answer. */
+  standsAlone?: true;
+  /** Asked about the User's own Documents after the example's Answer: nothing it writes mentions the example's. */
+  noExample?: true;
 }
 
 export interface RequestOutcome {
@@ -55,6 +59,8 @@ export interface RequestOutcome {
   addedBlocks?: readonly number[];
   /** Sources the Minds it wrote hold as text, in brackets, as written. */
   sourcesAsText?: readonly string[];
+  /** The text of the Blocks it wrote or changed in Minds, once its changes are accepted. */
+  writtenInMinds?: readonly string[];
   scoped: readonly { id: string; name: string }[];
 }
 
@@ -69,20 +75,28 @@ export type RequestFailure =
   | { kind: "beside" }
   | { kind: "untouched" }
   | { kind: "as-text"; sources: string[] }
-  | { kind: "earlier"; said: string };
+  | { kind: "points-back"; said: string }
+  | { kind: "example"; said: string };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
-const EARLIER = new RegExp(
+const POINTS_BACK = new RegExp(
   [
-    String.raw`\b(?:earlier|previous|first|last|prior) (?:answer|response|reply)\b`,
+    String.raw`\b(?:earlier|previous|first|last|prior|above|preceding) (?:answer|response|reply|message)s?\b`,
     String.raw`\b(?:disregard|ignore) (?:my|the|that|this) (?:earlier|previous|first|last|prior|answer|response|reply|figure|limit)`,
-    String.raw`Northwind|facilities agreement|leverage (?:limit|covenant)|\b3\.[15]x\b|\b3\.[15] times`,
-    "(?:之前|先前|前面|上一个|上一次|第一个)的?(?:回答|回复|答案)|(?:请|应)?(?:忽略|无视)(?:我|之前|先前|上一)",
-    "贷款协议|杠杆率",
+    String.raw`\bas (?:I )?(?:said|mentioned|noted|explained|described|covered|discussed) (?:earlier|before|above|previously)\b`,
+    String.raw`\bearlier in (?:this|our|the) (?:conversation|chat)\b`,
+    String.raw`\b(?:as|see|covered|described|explained|discussed|listed|noted|mentioned|set out|shown) above\b`,
+    "(?:上一条|上条|前一条|上一个|上一次|之前|先前|前面|刚才|上面|第一个)的?(?:回答|回复|答复|答案)",
+    "(?:见|参见|详见|请见|如|参阅)上文|上文(?:已|所述|提到)|如上所述|如前所述|前文(?:已|所述|提到)",
+    "(?:请|应)?(?:忽略|无视)(?:我|之前|先前|上一)",
   ].join("|"),
   "i",
 );
+
+/** The default example's Documents, figures and words (src/core/exampleSets.ts), in English and Chinese. */
+const EXAMPLE =
+  /Northwind|facilities agreement|credit committee|leverage (?:limit|covenant)|\b3\.[15] ?(?:x|times)\b|\b3\.5:1|贷款协议|杠杆率|授信委员会/i;
 
 const NOT_COVERED =
   /\b(?:couldn't|could not|can't|cannot|didn't|did not|wasn't|weren't|isn't|aren't|not|no|unable|left out|missing|skipped)\b|没有|未能|未|无法|不能|缺少|略去/i;
@@ -148,8 +162,11 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   if (outcome.sourcesAsText && outcome.sourcesAsText.length > 0) {
     failures.push({ kind: "as-text", sources: [...outcome.sourcesAsText] });
   }
-  const said = expected.noEarlier ? answer.text.match(EARLIER)?.[0] : undefined;
-  if (said) failures.push({ kind: "earlier", said });
+  const written = [answer.text, ...(outcome.writtenInMinds ?? [])].join("\n\n");
+  const pointer = expected.standsAlone ? written.match(POINTS_BACK)?.[0] : undefined;
+  if (pointer) failures.push({ kind: "points-back", said: pointer });
+  const example = expected.noExample ? written.match(EXAMPLE)?.[0] : undefined;
+  if (example) failures.push({ kind: "example", said: example });
   return failures;
 }
 
@@ -174,7 +191,9 @@ export function failureLine(failure: RequestFailure): string {
       return "left the text it was asked to change as it was";
     case "as-text":
       return `wrote sources into a Mind as text: ${failure.sources.map((source) => `“${source}”`).join(", ")}`;
-    case "earlier":
-      return `talks about an earlier Answer or the example: “${failure.said}”`;
+    case "points-back":
+      return `points to an earlier Answer: “${failure.said}”`;
+    case "example":
+      return `mentions the example unasked: “${failure.said}”`;
   }
 }

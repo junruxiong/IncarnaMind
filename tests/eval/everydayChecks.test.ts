@@ -240,25 +240,52 @@ describe("Only what was asked changes", () => {
   });
 });
 
-describe("Asked after the example's Answer", () => {
-  const reply = (text: string) =>
+describe("Standing on its own, and the example unasked", () => {
+  const failed = (text: string, writtenInMinds: string[] = []) =>
     requestFailures(
       outcome({
-        expected: { write: false, cite: false, coverAll: false, noEarlier: true },
+        expected: {
+          write: false,
+          cite: false,
+          coverAll: false,
+          standsAlone: true,
+          noExample: true,
+        },
         answer: { text, citations: [], toolCalls: [], steps: null },
+        writtenInMinds,
       }),
     ).map((failure) => failure.kind);
 
-  // protects=a reply that goes back to an earlier Answer or the example fails, in English and in Chinese, and one about the Question doesn't; fails_when=it passes, or an ordinary reply that says "leverages" or "忽略" fails; no_claim=none beyond protects.
-  test("a reply about an earlier Answer or the example fails", () => {
-    expect(reply("GraphST leverages spatial information to ignore the noise.")).toEqual([]);
-    expect(reply("GraphST 利用空间信息，忽略了噪声。")).toEqual([]);
-    expect(reply("It claims this. My first answer cited a facilities agreement.")).toEqual([
-      "earlier",
+  // protects=a reply that points to an earlier Answer fails, in English and in Chinese, and one that says it all again doesn't; fails_when=it passes, or an ordinary reply that says "earlier" or "忽略" fails; no_claim=none beyond protects.
+  test("a reply that points to an earlier Answer fails", () => {
+    expect(failed("GraphST leverages spatial information to ignore the noise.")).toEqual([]);
+    expect(failed("GraphST 利用空间信息，忽略了噪声。")).toEqual([]);
+    expect(failed("An earlier study found the same effect.")).toEqual([]);
+    expect(failed("Its results are covered in my earlier answer.")).toEqual(["points-back"]);
+    expect(failed("Its datasets are listed above.")).toEqual(["points-back"]);
+    expect(failed("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual(["points-back"]);
+    expect(failed("居家办公的规定见上一条回答。")).toEqual(["points-back"]);
+    expect(failed("数据集见上文。")).toEqual(["points-back"]);
+  });
+
+  // protects=text it wrote into a Mind is held to it as the reply is; fails_when=a pointer written into the page passes; no_claim=none beyond protects.
+  test("a pointer in what it wrote into a Mind fails", () => {
+    expect(
+      failed("Done.", ["## Summary", "Its results are covered in my earlier answer."]),
+    ).toEqual(["points-back"]);
+  });
+
+  // protects=a reply about the User's own Documents that mentions the example fails, in English and in Chinese; fails_when=it passes; no_claim=none beyond protects.
+  test("a reply that mentions the example fails", () => {
+    expect(failed("It claims this, and has nothing to do with Northwind.")).toEqual(["example"]);
+    expect(failed("It claims this. Please disregard the 3.5x leverage limit.")).toEqual([
+      "example",
     ]);
-    expect(reply("It claims this. Please disregard the 3.5x leverage limit.")).toEqual(["earlier"]);
-    expect(reply("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual(["earlier"]);
-    expect(reply("它的主张是这样。请忽略之前的杠杆率数字。")).toEqual(["earlier"]);
+    expect(failed("It claims this. My first answer cited a facilities agreement.")).toEqual([
+      "points-back",
+      "example",
+    ]);
+    expect(failed("它的主张是这样。请忽略之前的杠杆率数字。")).toEqual(["points-back", "example"]);
   });
 });
 
