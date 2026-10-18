@@ -128,6 +128,7 @@ import {
   InvalidInputError,
   isRecord,
   LinkedFolderWritesDeclinedError,
+  LocalModeError,
   MindReadOnlyError,
   NotFoundError,
   TaggingNotReadyError,
@@ -852,6 +853,13 @@ export function createCore(adapters: CoreAdapters): Core {
     const wasLocal = embedding.localOnly();
     await embedding.setLocalOnly(enabled);
     library.resume();
+    if (embedding.localOnly()) {
+      // A prompt still open for a cloud service closes: whatever the User answers, nothing goes (ADR-0022).
+      consent.refuseWaiting(
+        ({ flow }) => !consent.onThisComputer(flow.id, flow.service.id),
+        () => new LocalModeError(),
+      );
+    }
     if (wasLocal !== embedding.localOnly()) {
       usageData.localModeChanged();
       privacyChanged();
@@ -1886,6 +1894,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     hostedUrl: adapters.jevHostedUrl,
     signal: lifetime.signal,
+    localOnly: () => embedding.localOnly(),
   });
   // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds.
   const planPace = createPlanPace({

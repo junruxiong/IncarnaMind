@@ -122,6 +122,8 @@ export interface AskJevInput {
   retries: number;
   /** Each attempt fails after this long. */
   timeoutMs: number;
+  /** Called as each attempt is sent, retries included; throws to send nothing more. */
+  beforeSend?: () => void;
 }
 
 /**
@@ -149,6 +151,7 @@ async function requestJev(
   });
   for (let attempt = 0; ; attempt++) {
     const backoff = Math.min(INITIAL_BACKOFF_MS * 2 ** attempt, MAX_BACKOFF_MS);
+    input.beforeSend?.();
     let response: Response;
     try {
       response = await fetch(`${baseUrl}${JEV_PATH}`, {
