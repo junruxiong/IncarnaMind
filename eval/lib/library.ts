@@ -87,6 +87,8 @@ export interface LibraryOptions {
   answerSearch?: Pick<AnswerSearchTuning, "rerankDepth" | "maxPassages">;
   /** Time each step of the Answers asked (see ./timing); nothing sent to the model changes. */
   recordTimings?: boolean;
+  /** How outside agents reach this core (#351): where its socket is and the shim they start. */
+  agents?: CoreAdapters["agents"];
 }
 
 export interface EvalWebPage {
@@ -258,6 +260,7 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
     },
     embedder: options.embedder,
     ...(options.ollamaModels && { ollamaModels: options.ollamaModels }),
+    ...(options.agents && { agents: options.agents }),
     // The core reranks by default: with the real built-in model when asked for, as in the app
     // (Answers' searches); otherwise a fake, with nothing to download.
     ...(options.reranker
