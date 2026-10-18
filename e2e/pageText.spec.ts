@@ -79,7 +79,7 @@ test("the page starts with its text; the ⋯ at its top right opens by click and
   await window.keyboard.type("The last line.");
   expect((await button.boundingBox())?.y).toBeCloseTo(at.y, 0);
 
-  // Its menu is the sidebar row's, in the same order, with Style as a submenu after it, then the counts.
+  // Its menu is the sidebar row's, in the same order, with Style as a submenu before Delete, then the counts.
   const menu = await openPageMenu(window);
   const pageItems = await menuItemIds(menu);
   await window.keyboard.press("Escape");
@@ -90,7 +90,11 @@ test("the page starts with its text; the ⋯ at its top right opens by click and
   const rowItems = await menuItemIds(row.getByTestId("mind-actions"));
   await window.keyboard.press("Escape");
   expect(pageItems.length).toBeGreaterThan(5);
-  expect(pageItems).toEqual([...rowItems.filter((id) => id !== "mind.style"), "page-style"]);
+  // Minus what only the row offers (opening a Mind that is open), with Style before Delete, which is last.
+  const shared = rowItems.filter(
+    (id) => !["mind.style", "mind.open", "mind.openSide"].includes(id),
+  );
+  expect(pageItems).toEqual([...shared.slice(0, -1), "page-style", "mind.delete"]);
 
   // Its Rename names the Mind in its tab, and its text stays as it is.
   await pointAndClick(window, (await openPageMenu(window)).getByTestId("mind.rename"));
@@ -254,6 +258,8 @@ test("Style › in the page's ⋯ opens its choices beside it by pointer and by 
   // Other fonts… closes the menu and opens the list of fonts beside the ⋯.
   await style.hover();
   await expect(choices).toBeVisible();
+  // Across to its first choice first, level with Style: a slide down from Style would cross Delete, which closes it.
+  await choices.getByTestId("mind-style-font-default").hover();
   await pointAndClick(window, choices.getByTestId("mind-style-other-fonts"));
   const picker = window.getByTestId("mind-style-font-picker");
   await expect(picker).toBeVisible();

@@ -2960,6 +2960,7 @@ export const en = {
   "scripts.call.stderrTruncated": "Cut: only the last {bytes} bytes are kept.",
 
   "export.action": "Export",
+  "export.menu": "Export…",
   "export.as": "Export as {format}",
   "export.keywords": "export download save PDF Word docx Markdown source pack cited pages",
   "export.format": "Format",
@@ -3622,7 +3623,6 @@ export const en = {
   "command.proposal.acceptAll": "Accept all changes",
   "command.proposal.rejectAll": "Reject all changes",
   "command.proposal.regenerate": "Regenerate change",
-  "command.tab.new": "New Tab",
   "command.tab.next": "Next Tab",
   "command.tab.previous": "Previous Tab",
   "command.tab.keep": "Keep Tab Open",

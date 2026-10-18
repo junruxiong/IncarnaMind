@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 import {
   buildMenu,
   type MenuEntry,
+  menuEntries,
   menuIds,
   registerMenu,
 } from "../../src/renderer/src/commands/menus";
@@ -48,7 +49,7 @@ beforeAll(async () => {
 });
 
 describe("the menus", () => {
-  test("a Mind's is Open, Open to the side, Outline, Export as… and Export options…, Export AI use statement, Export check record as PDF and as CSV, History, Check this Mind, Check for contradictions, Style, Make this a Skill, Move to and New Folder with this Mind, Rename, then Delete after a rule", () => {
+  test("a Mind's is Open, Open to the side, Outline, Export…, Export AI use statement, Export check record as PDF and as CSV, History, Check this Mind, Check for contradictions, Style, Make this a Skill, Move to and New Folder with this Mind, Rename, then Delete after a rule", () => {
     const here = {
       "mind.citationStyle": () => undefined,
       "mind.moveTo": () => undefined,
@@ -59,13 +60,7 @@ describe("the menus", () => {
       "mind.openSide",
       "—",
       "mind.outline",
-      "mind.export",
-      "mind.exportAs.pdf",
-      "mind.exportAs.source-pack",
-      "mind.exportAs.html",
-      "mind.exportAs.share-page",
-      "mind.exportAs.markdown",
-      "mind.exportOptions",
+      "mind.exportMenu",
       "mind.aiUseStatement",
       "mind.checkRecord.pdf",
       "mind.checkRecord.csv",
@@ -89,13 +84,7 @@ describe("the menus", () => {
       "mind.openSide",
       "—",
       "mind.outline",
-      "mind.export",
-      "mind.exportAs.pdf",
-      "mind.exportAs.source-pack",
-      "mind.exportAs.html",
-      "mind.exportAs.share-page",
-      "mind.exportAs.markdown",
-      "mind.exportOptions",
+      "mind.exportMenu",
       "mind.aiUseStatement",
       "mind.checkRecord.pdf",
       "mind.checkRecord.csv",
@@ -109,10 +98,39 @@ describe("the menus", () => {
       "—",
       "mind.delete",
     ]);
-    // The page's ⋯ offers Style as a submenu of its own, so its list leaves the command out.
-    const page = idsIn(buildMenu("mind", focusOn("mind"), ["mind.style"]));
+    // The page's ⋯ offers Style as a submenu of its own, and nothing to open the Mind it is on.
+    const page = idsIn(
+      buildMenu("mind", focusOn("mind"), ["mind.style", "mind.open", "mind.openSide"]),
+    );
     expect(page).not.toContain("mind.style");
+    expect(page).not.toContain("mind.open");
+    expect(page).not.toContain("mind.openSide");
     expect(page).toContain("skill.fromMind");
+    expect(page).toContain("mind.exportMenu");
+  });
+
+  test("no Mind menu lists the export formats, which the Export button's menu and ⌘K have", () => {
+    for (const kind of ["mind", "tab"] as const) {
+      const ids = menuIds(kind);
+      expect(
+        ids.filter((id) => id.startsWith("mind.exportAs") || id === "mind.export"),
+        kind,
+      ).toEqual([]);
+      expect(
+        ids.filter((id) => id === "mind.exportMenu"),
+        kind,
+      ).toHaveLength(1);
+    }
+  });
+
+  test("Delete is the last item of a Mind's menu, and a tab's is its own items, then Delete", () => {
+    expect(idsIn(buildMenu("mind", focusOn("mind"))).at(-1)).toBe("mind.delete");
+    // A tab's menu has no layout here to build from: Delete is the one item of its last section.
+    const entries = menuEntries("tab");
+    const last = Math.max(...entries.map((each) => each.section));
+    expect(entries.filter((each) => each.section === last).map((each) => each.id)).toEqual([
+      "mind.delete",
+    ]);
   });
 
   test("a Document's file group is Open in default app, Show the file, Copy path, then Get info", () => {

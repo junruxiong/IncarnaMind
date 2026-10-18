@@ -93,6 +93,8 @@ function mindOf(ctx: CommandContext): string | null {
 const appCommands: readonly Command[] = [
   {
     ...fromMenu("mind.new"),
+    // ⌘T is the one every surface shows; ⌘N, which people expect, still works.
+    shortcut: { keys: "CmdOrCtrl+T", also: "CmdOrCtrl+N" },
     group: "main",
     reversible: true,
     run: () => useAppStore.getState().createMind({ titled: true }),

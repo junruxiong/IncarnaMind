@@ -2857,6 +2857,7 @@ export const zhCN = {
   "scripts.call.stderrTruncated": "已截断：只保留最后 {bytes} 字节。",
 
   "export.action": "导出",
+  "export.menu": "导出…",
   "export.as": "导出为{format}",
   "export.keywords": "导出 下载 保存 PDF Word docx Markdown 引用页面 合集",
   "export.format": "格式",
@@ -3486,7 +3487,6 @@ export const zhCN = {
   "command.proposal.acceptAll": "全部接受修订",
   "command.proposal.rejectAll": "全部拒绝修订",
   "command.proposal.regenerate": "重新生成修订",
-  "command.tab.new": "新建标签页",
   "command.tab.next": "下一个标签页",
   "command.tab.previous": "上一个标签页",
   "command.tab.keep": "保持标签页打开",

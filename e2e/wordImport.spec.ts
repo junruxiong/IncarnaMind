@@ -29,6 +29,7 @@ import {
   launchApp,
   motionSettled,
   openDocumentMenu,
+  openExportOptions,
   openPageMenu,
   openSettings,
   pageMenuButton,
@@ -37,7 +38,6 @@ import {
   savedLine,
   setLanguage,
   setWindowSize,
-  tabMenu,
   useLocalChatModel,
   useOutputLocation,
 } from "./app";
@@ -465,7 +465,7 @@ test("Export writes back into the Word file: the User's edits tracked under thei
   await expect(editor).not.toContainText("First sales in");
 
   // The sheet: the User's edits tracked, on for a Word file, under their name.
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await openExportOptions(window);
   const sheet = window.getByTestId("export-dialog");
   const track = sheet.getByTestId("export-track-changes");
   await expect(track).toBeChecked();
@@ -498,7 +498,7 @@ test("Export writes back into the Word file: the User's edits tracked under thei
   await pointAndClick(window, result.getByTestId("export-dismiss"));
 
   // Untracked, the file can't keep the comment: that is said before anything is saved.
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await openExportOptions(window);
   await track.click();
   await expect(track).not.toBeChecked();
   await sheet.getByTestId("export-save").click();

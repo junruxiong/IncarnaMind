@@ -718,9 +718,15 @@ export async function importWordFile(
   await expect(dialog).toBeHidden();
 }
 
-/** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
+/** The Export button's menu, then Export options…, which opens the sheet. */
+export async function openExportOptions(window: Page): Promise<void> {
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await pointAndClick(window, window.getByTestId("export-options"));
+}
+
+/** Export options…, from the Export button's menu; resolves once the sheet shows `title`. */
 export async function openOptions(window: Page, title: string): Promise<void> {
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await openExportOptions(window);
   await expect(window.getByTestId("export-dialog").getByRole("heading")).toHaveText(title);
 }
 
