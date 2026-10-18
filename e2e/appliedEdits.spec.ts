@@ -382,6 +382,82 @@ test("text typed elsewhere while a slow edit streams in stays, and one ⌘Z take
   await expect(line).toHaveCount(0);
 });
 
+test("on a slow computer, where the core's reply comes before the edit's last paragraph, the edit still applies whole, at once and from Apply, and one ⌘Z takes it all back", async () => {
+  const { window } = await launch();
+  await useLocalChatModel(window);
+  const { editor, paragraphs } = await mindWith(window, [FIRST, SECOND, THIRD]);
+  const line = lineOf(editor);
+  // The window six times slower: its copy of the Mind then takes the core's reply before the
+  // edit's last update, as CI's Mac did.
+  const devtools = await window.context().newCDPSession(window);
+  await devtools.send("Emulation.setCPUThrottlingRate", { rate: 6 });
+
+  await selectAll(window, editor);
+  await askToChange(window, "replace harbour with port");
+  const ported = [FIRST, SECOND.replace("harbour", "port"), THIRD.replace("harbour", "port")];
+  await expect(paragraphs).toHaveText(ported);
+  await expect(editor.locator("del.proposal-delete, ins.proposal-insert")).toHaveCount(0);
+  await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
+
+  await selectAll(window, editor);
+  await askToChange(window, "replace it all with a haiku");
+  await pointAndClick(window, line.getByTestId("applied-apply"));
+  await expect(paragraphs).toHaveText([
+    "Gulls wheel, crying",
+    "salt wind on stone",
+    "night falls soft",
+  ]);
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
+});
+
+test("an edit whose last update never reaches the window waits as changes to review, says so in English and Chinese, and the next edit can be asked", async () => {
+  const { app, window } = await launch();
+  await useLocalChatModel(window);
+  const { editor, paragraphs } = await mindWith(window, [FIRST, SECOND, THIRD]);
+  // The window misses the edit's second update, as when taking it in fails.
+  await app.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0]?.webContents;
+    if (!contents) return;
+    const send = contents.send.bind(contents);
+    let tagged = 0;
+    contents.send = (channel: string, ...args: unknown[]) => {
+      const [name, payload] = args as [string, { cause?: unknown } | undefined];
+      if (name === "mind.update" && payload?.cause && ++tagged === 2) return;
+      send(channel, ...args);
+    };
+  });
+
+  await selectAll(window, editor);
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("replace harbour with port");
+  await window.keyboard.press("Enter");
+  const problem = window.getByTestId("edit-problem");
+  await expect(problem).toHaveText(
+    /This edit took too long to arrive, so it wasn't applied\. Accept or reject its changes\./,
+    { timeout: 15_000 },
+  );
+  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+  await expect(editor.locator("del.proposal-delete").first()).toBeVisible();
+  await expect(window.getByTestId("proposals-bar")).toBeVisible();
+  await setLanguage(window, "zh-CN");
+  await expect(problem).toContainText("这次修改送达太慢，没有直接应用。请接受或拒绝这些修订。");
+  await setLanguage(window, "en");
+
+  await pointAndClick(window, window.getByTestId("proposals-reject-all"));
+  await expect(paragraphs).toHaveText([FIRST, SECOND, THIRD]);
+  // Nothing waits on it any more: the next edit is asked, not refused.
+  await slideSelect(window, paragraphs.first(), "Tides rise");
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("replace coast with shore");
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("edit-pending")).toBeVisible();
+});
+
 /** Runs a command from ⌘K by the keyboard: its words, then Enter. */
 async function fromPalette(window: Page, id: string, words: string) {
   await window.keyboard.press("ControlOrMeta+k");

@@ -823,6 +823,8 @@ export const en = {
     "This change can't be made again. Reject it, then select the text and edit it with AI.",
   "edit.problem.no-table":
     "The AI's table wasn't complete, so nothing was changed. Try again, or ask for a list instead.",
+  "edit.problem.late":
+    "This edit took too long to arrive, so it wasn't applied. Accept or reject its changes.",
   "composer.edit.placeholder": "Say what to change…",
   "composer.edit.label": "Say what to change in the selected text",
   "composer.edit.quote": "Editing “{text}”",
@@ -2673,10 +2675,8 @@ export const en = {
   "task.action.details": "Details",
   "task.ask.count": "{number} of {total}",
   "task.unknown.title": "IncarnaMind was closed during this step",
-  "task.unknown.file":
-    "It was writing {name}. The file there now isn't what it wrote, so it can't tell whether this step finished.",
-  "task.unknown.connector":
-    "It was making a change through {connector} ({tool}). It can't tell whether the change was made.",
+  "task.unknown.file": "Can’t tell if this step finished: {name} isn’t what it wrote.",
+  "task.unknown.connector": "Unsure the change through {connector} ({tool}) was made.",
   "task.unknown.redo": "Do it again",
   "task.unknown.skip": "Skip it",
   "task.details.cells": "{done} of {total} cells written",
@@ -2791,7 +2791,7 @@ export const en = {
   "citation.regenerate": "Regenerate the Answer",
   "citation.changedAfterCited": "The Document changed after this was cited.",
   "citation.recheck": "Check against the current version",
-  "citation.unsupported": "{model} can’t add Citations, so nothing in this Answer is checked",
+  "citation.unsupported": "{model} can’t add Citations: nothing here is checked",
   "citation.unsupported.choose": "Choose another model",
 
   "search.running": "Searching your Documents…",
@@ -2952,19 +2952,22 @@ export const en = {
   "scripts.card.wouldRun": "It would run",
   "scripts.card.noArgs": "No arguments.",
   "scripts.card.noSandbox":
-    "Scripts run on this computer with no sandbox: this one could read, change or delete your files and use the internet, as you can. Nothing runs until you choose.",
-  "scripts.card.sandboxed":
-    "This script runs in a sandbox: it can't open your home folder or IncarnaMind's data, can only write in its own working folder, and has no internet. Nothing runs until you choose.",
+    "No sandbox: it can read, change or delete your files and use the internet.",
+  "scripts.card.sandboxed": "Runs in a sandbox: no internet, no home folder.",
+  "scripts.card.sandboxed.details":
+    "It can’t open your home folder or IncarnaMind’s data, can only write in its own working folder, and has no internet.",
   "scripts.card.allowOnce": "Allow once",
   "scripts.card.alwaysRun": "Always run",
-  "scripts.card.alwaysRunHint":
-    "Run every script of {skill} from now on without asking. You'll see a warning first.",
+  "scripts.card.alwaysRunHint": "Run {skill}’s scripts without asking from now on",
   "scripts.card.deny": "Deny",
   "scripts.alwaysRun.title": "Always run the scripts of {skill}?",
   "scripts.alwaysRun.body":
-    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts aren't sandboxed: they can read, change or delete your files, install software and send your data over the internet. Only do this for a Skill you trust completely. You can reset it in Settings, under Approvals.",
+    "From now on, {skill}’s scripts run without asking. With no sandbox, they can delete your files and send your data online.",
   "scripts.alwaysRun.bodySandboxed":
-    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts run in a sandbox: they can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. They can still read files elsewhere on this computer, such as on an external drive. Only do this for a Skill you trust. You can reset it in Settings, under Approvals.",
+    "From now on, {skill}’s scripts run without asking. They run in a sandbox, but can still read files on other drives.",
+  "scripts.alwaysRun.bodySandboxed.details":
+    "They can’t open your home folder or IncarnaMind’s data, can only write in their own working folder, and have no internet.",
+  "scripts.alwaysRun.trust": "Only for a Skill you trust. Reset in Settings › Approvals.",
   "scripts.alwaysRun.confirm": "Always run {skill}'s scripts",
   "scripts.alwaysRun.cancel": "Cancel",
   "scripts.call.waiting": "Waiting for your approval: {script} ({skill})",
@@ -3842,7 +3845,7 @@ export const en = {
     "Its server can't be reached. Check the URL and your internet connection.",
   "remoteConnectors.consent.note": "The Tool's arguments go to this server over the network.",
   "remoteConnectors.answer.signInRequired":
-    "Not used: {connector} needs you to sign in, in Settings → Connectors",
+    "Not used: {connector} needs sign-in · Settings › Connectors",
   "remoteConnectors.page.success.title": "Signed in to {name}",
   "remoteConnectors.page.success.body": "You can close this tab and go back to IncarnaMind.",
   "remoteConnectors.page.failure.title": "Signing in to {name} didn't work",
@@ -3852,14 +3855,13 @@ export const en = {
   "approvals.card.title": "{connector} wants to run {tool}",
   "approvals.card.changes":
     "This Tool may change something in {connector}. Nothing is sent until you choose.",
-  "approvals.card.readOnly":
-    "{connector} says this Tool only reads. You chose to approve it every time.",
+  "approvals.card.readOnly": "{connector} says it only reads. You chose to ask every time.",
   "approvals.card.arguments": "It would send",
   "approvals.card.noArguments": "No arguments.",
   "approvals.card.allowOnce": "Allow once",
   "approvals.card.alwaysAllow": "Always allow",
   "approvals.card.alwaysAllowHint":
-    "Run {tool} from now on without asking. You can reset it in Settings, under Approvals.",
+    "Run {tool} without asking from now on · Reset in Settings › Approvals",
   "approvals.card.deny": "Deny",
   "approvals.thirdParty.read.imported": "Asks first: this Answer read a Mind with imported text.",
   "approvals.thirdParty.read.webPage": "Asks first: this Answer read a web page.",
@@ -3947,7 +3949,7 @@ export const en = {
   "examples.group.reports": "Reports",
   "examples.group.contracts": "Contracts",
   "examples.group.meetings": "Meetings",
-  "examples.answer": "Example Answer, written in advance: no model needed to try it",
+  "examples.answer": "Example Answer · no model needed",
   "gettingStarted.done": "Done: ",
   "gettingStarted.step.documents": "Add your Documents",
   "startGuide.title": "Start in three steps",
@@ -4470,7 +4472,7 @@ export const en = {
   "steps.passages.one": "1 passage",
   "steps.readCited": "Read {passages} · {count} sentences cited after checking",
   "steps.readCited.one": "Read {passages} · 1 sentence cited after checking",
-  "steps.readNoneMatched": "Read {passages} · none of its sentences could be matched to them",
+  "steps.readNoneMatched": "Read {passages} · no sentence matched them",
   "steps.read": "Read “{mind}”",
   "steps.read.part": "Read part of “{mind}”",
   "steps.read.selection": "Read your selection in “{mind}”",
@@ -4494,7 +4496,7 @@ export const en = {
   "steps.check.found": "found",
   "steps.check.notFound": "{count} not found",
   "steps.failed.search": "Couldn’t search {scope}",
-  "steps.failed.search.auth": "Couldn’t search {scope}: the key for a search model was refused",
+  "steps.failed.search.auth": "Couldn’t search {scope}: the search model’s key was refused",
   "steps.live.reading": "Reading {mind}…",
   "steps.live.searching": "Searching {scope}…",
   "steps.live.checking": "Checking {count} Citations…",
@@ -4596,12 +4598,14 @@ export const en = {
   "mindCall.failed.copy": "Didn't add to “{mind}”: “{text}” is there already, waiting",
   "mindCall.failed.newVersion": "Didn't add a second version of “{text}” to “{mind}”",
   "mindCall.failed.contentNotOwn":
-    "Couldn't change “{mind}”: only text the assistant wrote can be written anew",
+    "Couldn’t change “{mind}”: only the assistant’s own text can be rewritten",
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
   "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
-  "mindChanges.unlinked":
-    "· {count} sources in the table couldn't be linked, so they're shown as text",
-  "mindChanges.unlinked.one": "· 1 source in the table couldn't be linked, so it's shown as text",
+  "mindCall.failed.uncited": "Didn't add to “{mind}”: its sources weren't cited",
+  "mindChanges.unlinked": "· {count} sources shown as text, not linked",
+  "mindChanges.unlinked.one": "· 1 source shown as text, not linked",
+  "mindChanges.dropped": "· {count} sources couldn't be matched, so they were left out",
+  "mindChanges.dropped.one": "· 1 source couldn't be matched, so it was left out",
   "mindChanges.extraCells": "· {count} extra cells were kept as text",
   "mindChanges.extraCells.one": "· 1 extra cell was kept as text",
   "mindCall.failed.localMode": "Couldn't change “{mind}”: “Keep everything on this computer” is on",
@@ -4654,8 +4658,7 @@ export const en = {
     "There are {count} paragraphs starting “{name}”: {places}. Which one?",
   "assistant.place.under": "under “{heading}”",
   "assistant.place.number": "number {n}",
-  "assistant.table.unmade":
-    "I couldn't make this into a table, so it's below as text. Nothing was added to “{mind}”.",
+  "assistant.table.unmade": "No table made: it’s below as text, not in “{mind}”.",
   // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
   // tells an agent when a call can't be done, which the agent passes on to the User.
   "consent.flow.agents": "Your AI agents",

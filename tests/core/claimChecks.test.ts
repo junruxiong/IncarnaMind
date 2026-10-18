@@ -4,8 +4,20 @@ import { describe, expect, test, vi } from "vitest";
 import type { ClaimCheckAction, ClaimCheckAttributes, Core, Document } from "../../src/core";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
-import { checkingModel as checkingModelOf, type Plan, sentenceOf } from "../helpers/checks";
-import { type SourceFile, setUpWithDocuments } from "../helpers/citations";
+import {
+  checkGenerate,
+  checkingModel as checkingModelOf,
+  checkReply,
+  isCheckRun,
+  type Plan,
+  sentenceOf,
+} from "../helpers/checks";
+import {
+  answerEnded,
+  type SourceFile,
+  setUpWithDocuments,
+  shownPassages,
+} from "../helpers/citations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, sha256, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
@@ -818,6 +830,125 @@ describe("A memo's figure worked out from amounts in brackets (#978)", () => {
     if (result.verdict === "not-checked") throw new Error("Not checked.");
     expect(result.calculation?.figure.inputs.map((each) => each.number.value)).toEqual([
       385_000, -4_620, -1_500, -804,
+    ]);
+  });
+});
+
+describe("A count of people in brackets is a count (#1023)", () => {
+  const ACCOUNTS = {
+    name: "Statement of accounts.md",
+    contents: [
+      "# Statement of accounts",
+      "",
+      "£'000",
+      "",
+      "Revenue 45,300",
+      "",
+      "Administrative expenses (12,500)",
+      "",
+      "Headcount (250)",
+      "",
+      "Employees (1,250)",
+      "",
+      "Staff 人数（250）",
+      "",
+      "Impairment (£1.2m)",
+    ].join("\n"),
+  };
+  const HEADCOUNT = "Headcount (250)";
+  const IMPAIRMENT = "Impairment (£1.2m)";
+  const CLAIM = "We had 250 employees.";
+  const DEDUCTION = "Impairment was £1.2m, a deduction.";
+  const input = { name: "headcount", label: "Headcount", number: "(250)" };
+
+  // protects=#1023; fails_when=a headcount in brackets is read as minus 250, so a figure worked out from it is -250 and counted as negative, or an impairment in brackets with a currency and a scale is read as plus, so a correct sentence about either is Contradicted; no_claim=the wording of the Answer, which the scripted model writes.
+  test("the Answer to “What was the headcount?” says 250, “We had 250 employees.” is Supported, and an impairment in brackets is a deduction", async () => {
+    const plans: Record<string, Plan> = {
+      [CLAIM]: {
+        verdict: "contradicted",
+        calculation: {
+          inputs: [{ ...input, quote: HEADCOUNT }],
+          formula: "headcount",
+          stated: "250",
+        },
+      },
+      [DEDUCTION]: {
+        verdict: "contradicted",
+        calculation: {
+          inputs: [
+            { name: "impairment", label: "Impairment", quote: IMPAIRMENT, number: "(£1.2m)" },
+          ],
+          formula: "-impairment",
+          stated: "£1.2m",
+        },
+      },
+    };
+    const model = scriptedModel(
+      (call) => {
+        if (isCheckRun(call)) return checkReply(call, plans);
+        const searches = call.results.filter((result) => result.tool === "search_documents");
+        if (searches.length === 0) {
+          return { calls: [{ tool: "search_documents", input: { query: "headcount" } }] };
+        }
+        if (call.results.some((result) => result.tool === "calculate")) {
+          return { text: "We had [=1] employees[^1]." };
+        }
+        const passage = shownPassages(searches.at(-1)?.text ?? "").find((each) =>
+          each.text.includes(HEADCOUNT),
+        );
+        const figure = {
+          marker: 1,
+          label: "Headcount",
+          formula: "headcount",
+          inputs: [{ ...input, citation: 1 }],
+        };
+        return {
+          calls: [
+            {
+              tool: "cite",
+              input: {
+                citations: [{ marker: 1, passage: passage?.id, quote: HEADCOUNT }],
+              },
+            },
+            { tool: "calculate", input: { figures: [figure] } },
+          ],
+        };
+      },
+      { generate: checkGenerate(plans) },
+    );
+    const { core } = await setUpWithDocuments(model, [ACCOUNTS]);
+    const saved = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (saved.service) {
+      await core.allowDataFlow("chat", saved.service.id);
+      await core.allowDataFlow("checks", saved.service.id);
+    }
+
+    const asked = await core.askInConversation({ text: "What was the headcount?" });
+    if (!asked.asked) throw new Error("The Question wasn't asked.");
+    await answerEnded(core, asked.answerId);
+    const content = await core.getConversation(asked.conversation.id);
+    const answer = content.messages.find((message) => message.id === asked.answerId);
+    if (answer?.kind !== "answer") throw new Error("No Answer.");
+    expect(answer.figures[0]).toMatchObject({ shown: "250" });
+    expect(answer.figures[0]?.inputs.map((each) => each.number.value)).toEqual([250]);
+
+    const result = await core.checkClaim({ claim: CLAIM });
+    expect(result).toMatchObject({
+      verdict: "supported",
+      calculation: { stated: "250 employees" },
+    });
+    if (result.verdict === "not-checked") throw new Error("Not checked.");
+    expect(result.calculation?.figure.inputs.map((each) => each.number.value)).toEqual([250]);
+
+    const deduction = await core.checkClaim({ claim: DEDUCTION });
+    expect(deduction).toMatchObject({ verdict: "supported", calculation: { stated: "£1.2m" } });
+    if (deduction.verdict === "not-checked") throw new Error("Not checked.");
+    expect(deduction.calculation?.figure.inputs.map((each) => each.number.value)).toEqual([
+      -1_200_000,
     ]);
   });
 });

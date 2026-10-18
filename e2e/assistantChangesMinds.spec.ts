@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   enterContent,
+  focusSettled,
   frontMindName,
   launchApp,
   nameMind,
@@ -301,8 +302,8 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
   const editor = window.getByTestId("mind-editor");
   await expect(editor.locator(":scope > h1")).toHaveCount(0);
   await editor.focus();
+  await focusSettled(window, editor);
   await pressTextStart(window);
-  await expect(editor).toBeFocused();
   // The cursor is in the first change once its bar shows.
   await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");
   await window.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
@@ -442,9 +443,7 @@ test("a table the assistant writes into a Mind is a table, and the card counts i
   const title = answer.getByTestId("mind-changes").getByTestId("mind-changes-title");
   await expect(title).toHaveText("Added a table to “Q3 review”");
   const kept = answer.getByTestId("mind-changes").getByTestId("mind-changes-kept");
-  await expect(kept).toHaveText(
-    "· 1 source in the table couldn't be linked, so it's shown as text",
-  );
+  await expect(kept).toHaveText("· 1 source shown as text, not linked");
   await screenshot(window, "assistant-table");
 
   await pointAndClick(window, window.getByTestId("proposals-accept-all"));
@@ -453,7 +452,7 @@ test("a table the assistant writes into a Mind is a table, and the card counts i
   await setLanguage(window, "zh-CN");
   await setWindowSize(app, window, 900, 760);
   await expect(title).toHaveText("在“Q3 review”中添加了 1 个表格");
-  await expect(kept).toHaveText("· 表格中有 1 处出处无法关联，已作为文字显示");
+  await expect(kept).toHaveText("· 1 处出处未关联，显示为文字");
   await screenshot(window, "assistant-table-zh");
 });
 
