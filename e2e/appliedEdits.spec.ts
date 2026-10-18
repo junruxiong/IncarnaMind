@@ -148,11 +148,9 @@ test("Shorten from the menu applies at once; Review changes shows what it did, s
   await screenshot(window, "applied-review-en");
 
   // Restoring one leaves the other.
-  await pointAndClick(window, removed.first());
-  const changeBar = window.getByTestId("applied-change-bar");
-  await expect(changeBar).toContainText("Change 1 of 2");
-  await expect(changeBar.getByTestId("change-restore")).toHaveText("Restore original");
-  await pointAndClick(window, changeBar.getByTestId("change-restore"));
+  const restores = note.getByTestId("change-restore");
+  await expect(restores).toHaveText(["Restore original", "Restore original"]);
+  await pointAndClick(window, restores.first());
   await expect(removed).toHaveText(["really "]);
   await expect(note).toContainText("are very strong");
   await expect(window.getByTestId("undo-message")).toHaveText("Restored the original");
@@ -170,8 +168,7 @@ test("Shorten from the menu applies at once; Review changes shows what it did, s
   await pointAndClick(window, line.getByTestId("applied-review"));
   await expect(line.getByTestId("applied-count")).toHaveText("用 AI 编辑修改的 1 个段落");
   await expect(line.getByTestId("applied-done")).toHaveText("完成");
-  await pointAndClick(window, removed.first());
-  await expect(window.getByTestId("change-restore")).toHaveText("恢复原文");
+  await expect(note.getByTestId("change-restore")).toHaveText("恢复原文");
   await pointAndClick(window, line.getByTestId("applied-undo-all"));
   await expect(note).toHaveText("The tides here are very strong and regular.");
   await expect(line).toHaveCount(0);
@@ -268,7 +265,7 @@ test("an edit that would remove most of what was selected, and can't be mapped o
   await selectThree();
   await askToChange(window, "replace it all with a haiku");
   await expect(line.getByTestId("applied-count")).toHaveText(
-    "This edit would remove most of what you selected, so it's waiting for you",
+    "Waiting for you: this edit removes most of your selection",
   );
   // Each paragraph written anew reads whole, its old text one line above it, struck on a click (#1028).
   const was = editor.getByTestId("change-was-line").first();
@@ -281,7 +278,7 @@ test("an edit that would remove most of what was selected, and can't be mapped o
   await screenshot(window, "applied-held-en");
   await setLanguage(window, "zh-CN");
   await expect(line.getByTestId("applied-count")).toHaveText(
-    "这次修改会删掉你选中的大部分内容，所以先等你确认",
+    "等你确认：这次修改会删掉选中的大部分内容",
   );
   await expect(line.getByTestId("applied-apply")).toHaveText("应用");
   await expect(line.getByTestId("applied-discard")).toHaveText("放弃");
@@ -339,8 +336,7 @@ test("under Review changes, a paragraph that arrives after an edit's new Block a
   });
   await expect(paragraphs.last()).toHaveText("Added later.");
 
-  await pointAndClick(window, editor.locator(".applied-new--block").last());
-  await pointAndClick(window, window.getByTestId("change-restore"));
+  await pointAndClick(window, editor.getByTestId("change-restore"));
   await expect(paragraphs).toHaveText([FIRST, THIRD, "Added later."]);
 });
 
@@ -445,7 +441,7 @@ test("an edit whose last update never reaches the window waits as changes to rev
   await window.keyboard.press("Enter");
   const problem = window.getByTestId("edit-problem");
   await expect(problem).toHaveText(
-    /This edit took too long to arrive, so it wasn't applied\. Accept or reject its changes\./,
+    /This edit arrived too late to apply\. Accept or reject its changes\./,
     { timeout: 15_000 },
   );
   await expect(window.getByTestId("edit-pending")).toHaveCount(0);
@@ -489,7 +485,7 @@ test("by the keyboard alone: ⌘J, Review changes from ⌘K, ⌘⌫ restores the
   await expect(note).toHaveText("The tides here are very powerful and really regular.");
   await fromPalette(window, "edit.reviewApplied", "Review changes");
   await expect(line.getByTestId("applied-count")).toHaveText("1 paragraph changed by Edit with AI");
-  await expect(window.getByTestId("applied-change-bar")).toBeVisible();
+  await expect(note.getByTestId("change-restore")).toBeVisible();
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+Backspace");
   await expect(note).toHaveText(TIDES);

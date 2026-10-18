@@ -16,7 +16,7 @@ const PAPERS = [
   { id: "graphst", name: "2306.10683v1" },
 ];
 
-const citation = (documentId: string) => ({ documentId });
+const citation = (documentId: string, marker: number) => ({ documentId, marker });
 
 const created: AnswerToolCall = {
   id: "c1",
@@ -63,7 +63,7 @@ describe("The everyday request guards", () => {
       outcome({
         answer: {
           text: "The tutorial is a practical guide [^1]. GraphST models urban regions [^2].",
-          citations: [citation("tutorial"), citation("graphst")],
+          citations: [citation("tutorial", 1), citation("graphst", 2)],
           toolCalls: [],
           steps: null,
         },
@@ -71,6 +71,31 @@ describe("The everyday request guards", () => {
       }),
     );
     expect(failures.map((failure) => failure.kind)).toEqual(["no-change", "no-citations"]);
+  });
+
+  // protects=a marker in the Answer's text that no Citation backs fails, in Chinese as in English, and a marker in code or one with its Citation doesn't; fails_when=a dead marker passes or a backed one fails; no_claim=none beyond protects.
+  test("a Citation marker no Citation backs fails", () => {
+    const asked = (text: string, markers: number[]) =>
+      requestFailures(
+        outcome({
+          expected: { write: false, cite: true, coverAll: false },
+          answer: {
+            text,
+            citations: markers.map((marker) => citation("tutorial", marker)),
+            toolCalls: [],
+            steps: null,
+          },
+          citedInMinds: [],
+        }),
+      );
+    expect(asked("Self-attention is faster [^1]. It costs more [^2][^2].", [1])).toEqual([
+      { kind: "dead-markers", markers: [2] },
+    ]);
+    expect(asked("自注意力更快[^1]。它的成本更高[^2]。", [])).toEqual([
+      { kind: "no-citations" },
+      { kind: "dead-markers", markers: [1, 2] },
+    ]);
+    expect(asked("Self-attention is faster [^1]. Write `[^2]` for a marker.", [1])).toEqual([]);
   });
 
   // protects=asked to make the summary in the Mind longer, a second version added beside it fails, and one changed in place passes; fails_when=either is judged the other way; no_claim=none beyond protects.
@@ -132,7 +157,7 @@ describe("The everyday request guards", () => {
       outcome({
         answer: {
           text: "Made “Summary”.",
-          citations: [citation("tutorial"), citation("graphst")],
+          citations: [citation("tutorial", 1), citation("graphst", 2)],
           toolCalls: [created],
           steps: null,
         },
@@ -226,7 +251,7 @@ describe("Asked after the example's Answer", () => {
 
   // protects=a reply that goes back to an earlier Answer or the example fails, in English and in Chinese, and one about the Question doesn't; fails_when=it passes, or an ordinary reply that says "leverages" or "忽略" fails; no_claim=none beyond protects.
   test("a reply about an earlier Answer or the example fails", () => {
-    expect(reply("GraphST leverages spatial information to ignore the noise. [^1]")).toEqual([]);
+    expect(reply("GraphST leverages spatial information to ignore the noise.")).toEqual([]);
     expect(reply("GraphST 利用空间信息，忽略了噪声。")).toEqual([]);
     expect(reply("It claims this. My first answer cited a facilities agreement.")).toEqual([
       "earlier",

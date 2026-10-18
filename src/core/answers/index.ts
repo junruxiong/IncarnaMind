@@ -41,9 +41,9 @@
  * Everything here depends on the `AnswerEngine` port, not on the AI SDK.
  */
 import { randomUUID } from "node:crypto";
-import type * as Y from "yjs";
+import * as Y from "yjs";
 import { asGenerated } from "../../shared/aiText";
-import { answerBlocks } from "../../shared/answerBlocks";
+import { answerBlocks, hasText } from "../../shared/answerBlocks";
 import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
@@ -158,6 +158,7 @@ import { asksToCheckOrCalculate } from "./carefulIntent";
 import {
   type AnswerDocuments,
   createCitationSession,
+  withoutDeadMarkers,
   withoutFootnoteDefinitions,
 } from "./citations";
 import {
@@ -375,6 +376,16 @@ const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 const changesAMind = (change: MindChange) =>
   change.created || change.revised === true || change.proposals > 0;
 
+const holdsNothing = (blocks: Y.XmlFragment): boolean =>
+  blocks
+    .toArray()
+    .filter((block): block is Y.XmlElement => block instanceof Y.XmlElement)
+    .every((block, index) =>
+      block.nodeName === "paragraph"
+        ? block.length === 0
+        : index === 0 && block.nodeName === "heading",
+    );
+
 function lastAnswerOf(
   conversationId: string,
   earlier: readonly ConversationMessage[],
@@ -383,11 +394,12 @@ function lastAnswerOf(
   const answer = earlier[at];
   if (answer?.kind !== "answer") return null;
   const blocks = withoutFraming(answerBlocks({ ...answer, status: "done" }));
-  if (blocks.length === 0) return null;
+  if (!hasText(blocks)) return null;
   const question = earlier.slice(0, at).findLast((message) => message.kind === "question");
   return {
     blocks,
     origin: { from: messageReference(conversationId, answer.id), question: question?.text ?? "" },
+    folderId: question?.kind === "question" ? oneFolderOf(question.scope) : null,
   };
 }
 
@@ -1093,6 +1105,8 @@ export function createAnswers(options: AnswersOptions) {
       } catch (error) {
         options.reportError(error);
       }
+      // A marker no Citation backs is not kept in the text, and each is counted for the summary.
+      markdown = withoutDeadMarkers(markdown, (marker) => session.finalCitation(marker) !== null);
       // Its steps say how many figures it shows, and its end how many it couldn't calculate.
       const placed = placedFigures(withoutFootnoteDefinitions(markdown), true);
       if (placed.figures.length > 0 || placed.missing > 0) {
@@ -1620,8 +1634,14 @@ export function createAnswers(options: AnswersOptions) {
           : [];
       // The Minds' Tools, for an Answer in the assistant (#202).
       const minds = outside ? undefined : options.minds;
-      const route =
+      const routed =
         minds && input.assistant ? routeRequest(context.question, input.assistant) : null;
+      const focusedId = input.assistant?.focused?.mindId ?? null;
+      // A new piece fills the empty Mind the User is in rather than making another (#1109).
+      const route =
+        routed?.fillsEmpty && minds && focusedId && minds.read(focusedId, holdsNothing)
+          ? { ...routed, newMind: false }
+          : routed;
       const requested =
         route && (route.kind === "write" || route.kind === "edit")
           ? { change: route.kind, newMind: route.newMind }
@@ -1790,7 +1810,7 @@ export function createAnswers(options: AnswersOptions) {
           name: "claimed-change",
           check: (text) => {
             mindsNow = null;
-            const claims = claimsNoCallMade(text, toolCalls, mindsListed());
+            const claims = claimsNoCallMade(text, toolCalls, mindsListed(), focusedId);
             return claims.length > 0
               ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
               : null;
@@ -2276,6 +2296,7 @@ export function createAnswers(options: AnswersOptions) {
           turn.earlier.findLast((message) => message.kind === "answer"),
         ),
         followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
+        lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier) !== null,
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
