@@ -147,7 +147,7 @@ for (const language of ["en", "zh-CN"] as const) {
     const lib = window.getByTestId("library");
     await expect(lib.getByTestId("library-organize-explain")).toHaveText(
       language === "en"
-        ? "Suggests a Folder and Tags for each. You decide."
+        ? "Suggests a Folder and Tags for each Document. You decide."
         : "为每个文档建议文件夹和标签，由你决定。",
     );
     await pointAndClick(window, lib.getByTestId("library-organize"));
