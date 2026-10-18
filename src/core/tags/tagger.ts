@@ -22,6 +22,9 @@
  *   Document stay as they are (see `TagsStore.applyAutomatic`).
  * - Where the User stopped Tagging with AI, Documents are "stopped"
  *   and nothing is sent, unless the User asks to re-tag one.
+ * - While Organize files new Documents by itself, the Documents it holds are
+ *   its own. One it doesn't hold, such as one this tagger had when Organize
+ *   began filing new Documents, is still tagged here.
  */
 import type { DocumentKind, ProviderError } from "../api";
 import type { BackgroundCall, BackgroundJob, BackgroundQueue } from "../backgroundQueue";
@@ -61,9 +64,8 @@ const EXCERPT_ROWS = 6;
 
 export interface TaggerOptions {
   db: Database;
-  /** Organize owns tagging while it files new Documents by itself. */
+  /** Organize tags new Documents itself while it files them by itself; those it has no hold of yet stay with this tagger. */
   enabled?(): boolean;
-  /** Organize has this Document queued or running, and tags it. */
   organizing?(id: string): boolean;
   stopped(id: string): boolean;
   now: () => string;
@@ -186,7 +188,6 @@ export function createTagger(options: TaggerOptions) {
      * meanwhile: the run that comes next decides instead.
      */
     const stale = () =>
-      options.enabled?.() === false ||
       organized(id) ||
       lifetime.signal.aborted ||
       call.signal.aborted ||
@@ -254,10 +255,6 @@ export function createTagger(options: TaggerOptions) {
   async function tagNext(call: BackgroundCall): Promise<void> {
     try {
       if (queue.length === 0 || lifetime.signal.aborted) return;
-      if (options.enabled?.() === false) {
-        queue.length = 0;
-        return;
-      }
       const ready = await options.canRun();
       if (lifetime.signal.aborted) return;
       if (!ready) {
@@ -331,7 +328,7 @@ export function createTagger(options: TaggerOptions) {
    * "stopped", and those where it was turned back on are queued again.
    */
   function resume(): void {
-    if (lifetime.signal.aborted || options.enabled?.() === false) return;
+    if (lifetime.signal.aborted) return;
     const rows = db
       .all<{ id: string; tagging_status: string; tagging_error_kind: string | null }>(
         `SELECT id, tagging_status, tagging_error_kind FROM documents
