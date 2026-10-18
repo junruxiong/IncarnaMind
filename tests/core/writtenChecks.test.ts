@@ -112,13 +112,14 @@ async function harbour(model: ReturnType<typeof writingModel>, cloud: Writing["c
   const core = startCore(await createTempDataFolder(), {
     createChatModel: scriptedModels(model).createChatModel,
   });
+  let service: string | undefined;
   if (cloud) {
     core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
     const saved = await core.saveChatProvider(
       cloud.kind === "anthropic" ? { ...cloud, apiKey: "sk-ant-test" } : cloud,
     );
     // A cloud model in Ollama sends to ollama.com, not to the Ollama on this computer.
-    const service = cloud.kind === "ollama" ? OLLAMA_CLOUD.id : saved.service?.id;
+    service = cloud.kind === "ollama" ? OLLAMA_CLOUD.id : saved.service?.id;
     for (const flow of ["chat", "checks"] as const) {
       if (service) await core.allowDataFlow(flow, service);
     }
@@ -136,16 +137,24 @@ async function harbour(model: ReturnType<typeof writingModel>, cloud: Writing["c
     { type: "paragraph", content: [{ type: "text", text: "Boats moor by the quay." }] },
   ]);
   await client.settled();
-  return { core, folderId: folder.id, mindId: mind.id, client };
+  return { core, folderId: folder.id, mindId: mind.id, client, service };
 }
 
-async function write(writing: Writing, onClient?: (client: MindClient) => void) {
+async function write(
+  writing: Writing,
+  onStart?: (started: {
+    core: Core;
+    client: MindClient;
+    service: string | undefined;
+    calls: readonly ModelCall[];
+  }) => void,
+) {
   const calls: ModelCall[] = [];
   let started: Core | null = null;
   const model = writingModel(writing, calls, () => started);
-  const { core, folderId, mindId, client } = await harbour(model, writing.cloud);
+  const { core, folderId, mindId, client, service } = await harbour(model, writing.cloud);
   started = core;
-  onClient?.(client);
+  onStart?.({ core, client, service, calls });
   const answer = await askAssistant(
     core,
     {
@@ -315,6 +324,38 @@ describe("What the assistant writes is checked before it lands", { timeout: 30_0
     });
   });
 
+  // protects=turning the checks flow off while the check runs stops it at once: no request after it reaches the model's service, and the sentences land not checked, saying why (#1206); fails_when=the remaining sentences are still sent, or land unmarked; no_claim=the Privacy page.
+  test("turning the checks flow off while the check runs sends nothing more, and the sentences land not checked", async () => {
+    let turnOff: (() => Promise<void>) | null = null;
+    let sentBefore = -1;
+    const { core, calls, change, client } = await write(
+      {
+        content: `## Tides\n\n${UNBACKED} [^1]. Neap tide 2 is twice as strong [^1]. Neap tide 3 is twice as strong [^1].`,
+        cloud: { kind: "anthropic", modelId: "claude-haiku-5-5" },
+        during: () => turnOff?.() ?? Promise.resolve(),
+      },
+      ({ core: started, service, calls: made }) => {
+        turnOff = async () => {
+          if (service) await started.revokeConsent("checks", service);
+          sentBefore = made.filter(isCheckRun).length;
+        };
+      },
+    );
+
+    // The checks' first requests were on their way, a cloud model's three at once; none went after.
+    const checks = calls.filter(isCheckRun);
+    expect(sentBefore).toBeGreaterThan(0);
+    expect(checks).toHaveLength(sentBefore);
+    expect(checks.every((call) => call.results.length === 0)).toBe(true);
+    const marks = await marksIn(core, client);
+    expect(marks.map(({ check }) => [check.state, check.reason])).toEqual([
+      ["not-checked", "consent-revoked"],
+      ["not-checked", "consent-revoked"],
+      ["not-checked", "consent-revoked"],
+    ]);
+    expect(change?.selfCheck).toMatchObject({ cited: 3, sent: 3, checked: 0, failed: 3 });
+  });
+
   // protects=one write checks at most SENTENCES_CHECKED_AT_MOST sentences; the rest land marked not checked, and the reply says so; fails_when=a long draft sends a check for every sentence, or the rest land unmarked; no_claim=how long each check takes.
   test("one write checks at most the first sentences; the rest land marked not checked", async () => {
     const many = SENTENCES_CHECKED_AT_MOST + 1;
@@ -362,7 +403,7 @@ describe("What the assistant writes is checked before it lands", { timeout: 30_0
           await typing.settled();
         },
       },
-      (connected) => {
+      ({ client: connected }) => {
         client = connected;
       },
     );
