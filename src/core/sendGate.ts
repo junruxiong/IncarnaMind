@@ -8,11 +8,42 @@
  * Background work is never asked (ADR-0022): a flow turned off under it
  * throws `ConsentNeededError`, so it waits as it does before it starts.
  */
-import { wrapLanguageModel } from "ai";
+import { RetryError, wrapLanguageModel } from "ai";
 import type { DataFlowId, ExternalService } from "./api";
 import type { Consent } from "./consent";
 import { ConsentNeededError, ConsentRevokedError, LocalModeError } from "./errors";
+import type { ApiEmbeddingModel } from "./providers/embeddings";
 import type { ChatLanguageModel } from "./providers/models";
+import type { ApiRerankingModel } from "./providers/rerank";
+
+/** The gate's stop behind `error`, also when it ends the AI SDK's retries (`RetryError`); null for any other error. */
+export function gateStop(
+  error: unknown,
+): LocalModeError | ConsentRevokedError | ConsentNeededError | null {
+  const cause = RetryError.isInstance(error) ? error.lastError : error;
+  return cause instanceof LocalModeError ||
+    cause instanceof ConsentRevokedError ||
+    cause instanceof ConsentNeededError
+    ? cause
+    : null;
+}
+
+/**
+ * `model` with `check` before each call of `method`, the one that sends. The AI SDK has no
+ * wrapper for every kind of model, and calls the method again for each retry.
+ */
+function checkedBefore<T extends object>(model: T, method: string, check: () => void): T {
+  return new Proxy(model, {
+    get(target, key, receiver) {
+      const value: unknown = Reflect.get(target, key, receiver);
+      if (key !== method || typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        check();
+        return Reflect.apply(value, target, args);
+      };
+    },
+  });
+}
 
 export function createSendGate(consent: Consent, localOnly: () => boolean) {
   /** Throws `LocalModeError`, `ConsentRevokedError` or `ConsentNeededError` when nothing may go to `service` on `flowId` now. */
@@ -50,5 +81,13 @@ export function createSendGate(consent: Consent, localOnly: () => boolean) {
         },
       });
     },
+
+    /** The embedding model, with `check` before each of its requests, retries included. */
+    embeddingModel: (model: ApiEmbeddingModel, flowId: DataFlowId, service: ExternalService) =>
+      checkedBefore(model, "doEmbed", () => check(flowId, service)),
+
+    /** The reranking model, with `check` before each of its requests, retries included. */
+    rerankingModel: (model: ApiRerankingModel, flowId: DataFlowId, service: ExternalService) =>
+      checkedBefore(model, "doRerank", () => check(flowId, service)),
   };
 }

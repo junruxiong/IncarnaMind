@@ -41,6 +41,7 @@ import type { Consent } from "../consent";
 import { ConsentDeclinedError, EmbeddingModelNotReadyError, InvalidInputError } from "../errors";
 import {
   type ApiEmbeddingChoice,
+  type ApiEmbeddingModel,
   type EmbeddingModelFactory,
   embeddingKeyRequired,
   embeddingModelKey,
@@ -254,6 +255,9 @@ export function createActiveEmbedding(options: {
     const abortSignal = (timeoutMs: number) =>
       AbortSignal.any([inUse.signal, signal, AbortSignal.timeout(timeoutMs)]);
 
+    const gated = (model: ApiEmbeddingModel) =>
+      service ? gate.embeddingModel(model, "embeddings", service) : model;
+
     /** The key, if the provider takes one; throws (setting the error) when a required one is missing. */
     const key = async (): Promise<string | null> => {
       const apiKey = await secrets.tryGet(KEY_NAME);
@@ -291,10 +295,7 @@ export function createActiveEmbedding(options: {
     const request = async <T>(send: (apiKey: string | null) => Promise<T>): Promise<T> => {
       try {
         const apiKey = await key();
-        if (service) {
-          await consent.ensure("embeddings", service);
-          gate.check("embeddings", service);
-        }
+        if (service) await consent.ensure("embeddings", service);
         const result = await send(apiKey);
         if (current === provider && error !== null) setError(null);
         return result;
@@ -341,7 +342,7 @@ export function createActiveEmbedding(options: {
       embedPassages: (documentName, texts) =>
         request(async (apiKey) => {
           const { embeddings } = await embedMany({
-            model: createModel({ ...choice, apiKey }),
+            model: gated(createModel({ ...choice, apiKey })),
             values: texts.map((text) => `${normaliseText(documentName)}\n${normaliseText(text)}`),
             maxRetries: RETRIES,
             maxParallelCalls: 2,
@@ -358,7 +359,7 @@ export function createActiveEmbedding(options: {
       embedQuery: (query) =>
         request(async (apiKey) => {
           const { embedding } = await embed({
-            model: createModel({ ...choice, apiKey }),
+            model: gated(createModel({ ...choice, apiKey })),
             value: normaliseText(query),
             maxRetries: 1,
             abortSignal: abortSignal(QUERY_TIMEOUT_MS),

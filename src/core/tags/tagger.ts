@@ -41,6 +41,7 @@ import {
 } from "../errors";
 import { isPlanLimit } from "../providers/chatgpt/errors";
 import { classifyProviderError } from "../providers/providerErrors";
+import { gateStop } from "../sendGate";
 import type { PaceTimers } from "../sources/pace";
 import type { Database } from "../storage";
 import {
@@ -253,9 +254,9 @@ export function createTagger(options: TaggerOptions) {
         }
       } catch (error) {
         if (stale()) return;
-        const stopped = error instanceof ConsentNeededError || error instanceof LocalModeError;
+        const stopped = gateStop(error);
         const limitedUntil = stopped ? null : options.rateLimit.pause(error);
-        if (stopped) {
+        if (stopped instanceof ConsentNeededError || stopped instanceof LocalModeError) {
           // Turned off, or Local mode on, as it was sent (../sendGate): this and the rest wait.
           if (setState(id, "waiting-for-provider")) announce([id]);
           park();

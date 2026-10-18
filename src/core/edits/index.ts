@@ -86,6 +86,7 @@ import {
 } from "../proposals/write";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
+import { gateStop } from "../sendGate";
 import { asksToRemove, waitsForUser } from "./applies";
 import {
   EDIT_INSTRUCTIONS,
@@ -98,7 +99,7 @@ import {
 } from "./prompt";
 
 const failedEdit = (failure: unknown): EditWithAiResult =>
-  failure instanceof LocalModeError
+  gateStop(failure) instanceof LocalModeError
     ? { kind: "local-mode" }
     : { kind: "failed", error: classifyProviderError(failure) };
 
