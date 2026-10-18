@@ -71,7 +71,7 @@ for (const walk of WALKS) {
       timeout: 30_000,
     });
     // The ready Question waits for the example's Documents to be read, as its Citations show.
-    const checks = frontMind(window).getByTestId("margin-check");
+    const checks = frontMind(window).getByTestId("mind-editor").getByTestId("citation-chip");
     await expect(checks).toHaveCount(2);
     await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 60_000 });
     await markSteps(window, { citationChecked: true });
