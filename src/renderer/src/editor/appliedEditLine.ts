@@ -1,7 +1,8 @@
 /**
  * The lines over an edit the User asked for (#880; DESIGN.md, AI edits),
  * drawn in the text above the Block they are about, and under Review
- * changes each change's own Restore original, after its new words.
+ * changes a Restore original after the new words of each section rewritten
+ * as a whole and of each other change.
  * ProposalBars handles their buttons, by `data-applied-action` and
  * `data-applied-restore`. They go once the User edits.
  */
@@ -18,9 +19,11 @@ import {
   type ChangedBlock,
   LINE_WIDGET,
   originalShown,
+  type RewrittenSection,
   rewrittenSections,
   sectionKey,
   sectionLine,
+  sectionOf,
   toggled,
   wasLine,
 } from "./changeOriginals";
@@ -410,8 +413,46 @@ function changedBlockOf(
     : { key, pos, how: "words" };
 }
 
+interface PlacedChange {
+  change: AppliedChange;
+  index: number;
+  place: { from: number; to: number };
+  block: ChangedBlock;
+}
+
+/** What one Restore original restores: a section rewritten as a whole, or a single change. */
+export interface ChangeGroup {
+  members: readonly PlacedChange[];
+  /** The member whose new words come last, or the last of them when none has any: its Restore sits after it. */
+  last: PlacedChange;
+  from: number;
+  to: number;
+}
+
+function groupsOf(
+  placed: readonly PlacedChange[],
+  sections: readonly RewrittenSection[],
+): ChangeGroup[] {
+  const groups = new Map<RewrittenSection | PlacedChange, PlacedChange[]>();
+  for (const each of placed) {
+    const key = sectionOf(each.block, sections) ?? each;
+    groups.set(key, [...(groups.get(key) ?? []), each]);
+  }
+  return [...groups.values()].map((members) => {
+    const written = members.filter(({ place }) => place.to > place.from);
+    return {
+      members,
+      last: (written.length > 0 ? written : members).reduce((a, b) =>
+        b.place.to >= a.place.to ? b : a,
+      ),
+      from: Math.min(...members.map(({ place }) => place.from)),
+      to: Math.max(...members.map(({ place }) => place.to)),
+    };
+  });
+}
+
 function reviewedBlocks(state: EditorState, changes: readonly AppliedChange[]) {
-  const placed = changes.flatMap((change, index) => {
+  const placed = changes.flatMap((change, index): PlacedChange[] => {
     const place = placeOfChange(state, change);
     return place
       ? [{ change, index, place, block: changedBlockOf(state, change, index, place) }]
@@ -422,8 +463,12 @@ function reviewedBlocks(state: EditorState, changes: readonly AppliedChange[]) {
     placed.map(({ block }) => block),
     false,
   );
-  return { placed, sections };
+  return { placed, sections, groups: groupsOf(placed, sections) };
 }
+
+/** The groups an edit's changes are restored in, in reading order. */
+export const changeGroupsOf = (state: EditorState, changes: readonly AppliedChange[]) =>
+  reviewedBlocks(state, changes).groups;
 
 /**
  * What shows the old text of the change shown again that the cursor is in,
@@ -454,7 +499,8 @@ function changeMarks(
   shownKeys: ReadonlySet<string>,
   t: Translate,
 ): Decoration[] {
-  const { placed, sections } = reviewedBlocks(state, changes);
+  const { placed, sections, groups } = reviewedBlocks(state, changes);
+  const drawn = new Set<number>();
   const lines: Decoration[] = sections.map((section) => {
     const open = shownKeys.has(sectionKey(section));
     return Decoration.widget(section.heading.pos, () => sectionLine(t, section, open), {
@@ -462,69 +508,72 @@ function changeMarks(
       key: `rewrote:${section.heading.key}:${open}:${section.heading.title}:${t("change.showOriginal")}`,
     });
   });
-  return lines.concat(
-    placed.flatMap(({ change, index, place, block }) => {
-      const { inSection, shown } = originalShown(block, sections, shownKeys);
-      const marks: Decoration[] = [];
-      if (block.how === "rewritten" && !inSection) {
-        marks.push(
-          Decoration.widget(block.pos, () => wasLine(t, block, shown), {
-            ...LINE_WIDGET,
-            key: `was:${block.key}:${shown}:${block.old}:${t("change.showOriginal")}`,
-          }),
-        );
-      }
-      const oldShows =
-        block.how === "rewritten" || (block.how === "removed" && inSection) ? shown : true;
-      const oldDrawn = change.removed.size > 0 && oldShows;
-      if (oldDrawn) {
-        const old = () => {
-          const element = document.createElement(change.block ? "div" : "del");
-          element.className = change.block ? "applied-old applied-old--block" : "applied-old";
-          element.dataset.appliedChange = String(index);
-          element.textContent = textOf(change.removed);
-          return element;
-        };
-        marks.push(
-          Decoration.widget(place.from, old, {
-            side: -1,
-            ignoreSelection: true,
-            key: `applied-old:${index}:${textOf(change.removed)}`,
-          }),
-        );
-      }
-      const newDrawn = place.to > place.from;
-      if (newDrawn) {
-        const attributes = { "data-applied-change": String(index) };
-        marks.push(
-          change.block
-            ? Decoration.node(place.from, place.to, {
-                ...attributes,
-                class: "applied-new applied-new--block",
-              })
-            : Decoration.inline(place.from, place.to, { ...attributes, class: "applied-new" }),
-        );
-      }
-      if (newDrawn || oldDrawn) {
-        const label = t("edit.review.restore");
-        marks.push(
-          Decoration.widget(
-            place.to,
-            () => restoreHolder(restoreButton(index, changes.length, t), change.block !== null),
-            {
-              // Widgets at one position draw in order of side: after this change's new words but
-              // before the next change's old ones (-1), or, with no new words, after its own old ones.
-              side: newDrawn ? -3 : -0.9,
-              ignoreSelection: true,
-              stopEvent: () => true,
-              key: `applied-restore:${index}:${changes.length}:${change.block}:${label}`,
-            },
-          ),
-        );
-      }
-      return marks;
-    }),
-  );
+  const changed = placed.flatMap(({ change, index, place, block }) => {
+    const { inSection, shown } = originalShown(block, sections, shownKeys);
+    const marks: Decoration[] = [];
+    if (block.how === "rewritten" && !inSection) {
+      marks.push(
+        Decoration.widget(block.pos, () => wasLine(t, block, shown), {
+          ...LINE_WIDGET,
+          key: `was:${block.key}:${shown}:${block.old}:${t("change.showOriginal")}`,
+        }),
+      );
+    }
+    const oldShows =
+      block.how === "rewritten" || (block.how === "removed" && inSection) ? shown : true;
+    const oldDrawn = change.removed.size > 0 && oldShows;
+    if (oldDrawn) {
+      const old = () => {
+        const element = document.createElement(change.block ? "div" : "del");
+        element.className = change.block ? "applied-old applied-old--block" : "applied-old";
+        element.dataset.appliedChange = String(index);
+        element.textContent = textOf(change.removed);
+        return element;
+      };
+      marks.push(
+        Decoration.widget(place.from, old, {
+          side: -1,
+          ignoreSelection: true,
+          key: `applied-old:${index}:${textOf(change.removed)}`,
+        }),
+      );
+    }
+    const newDrawn = place.to > place.from;
+    if (newDrawn) {
+      const attributes = { "data-applied-change": String(index) };
+      marks.push(
+        change.block
+          ? Decoration.node(place.from, place.to, {
+              ...attributes,
+              class: "applied-new applied-new--block",
+            })
+          : Decoration.inline(place.from, place.to, { ...attributes, class: "applied-new" }),
+      );
+    }
+    if (newDrawn || oldDrawn) drawn.add(index);
+    return marks;
+  });
+  const restores = groups.flatMap((group, at) => {
+    if (!group.members.some(({ index }) => drawn.has(index))) return [];
+    const { last } = group;
+    const ownLine = last.change.block !== null;
+    const label = t("edit.review.restore");
+    return [
+      Decoration.widget(
+        last.place.to,
+        () => restoreHolder(restoreButton(at, groups.length, t), ownLine),
+        {
+          // Widgets at one position draw in order of side: after the group's new words but
+          // before the next change's old ones (-1), or, with no new words, after its own old ones.
+          side: last.place.to > last.place.from ? -3 : -0.9,
+          ignoreSelection: true,
+          stopEvent: () => true,
+          key: `applied-restore:${at}:${groups.length}:${ownLine}:${label}`,
+        },
+      ),
+    ];
+  });
+  return [...lines, ...changed, ...restores];
 }
 
 function decorations(state: EditorState, line: AppliedLine, options: Options): DecorationSet {
