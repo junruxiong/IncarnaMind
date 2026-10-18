@@ -30,7 +30,6 @@ import {
   ChevronLeftLineIcon,
   ChevronRightLineIcon,
   ChevronUpLineIcon,
-  HistoryLineIcon,
   PlusLineIcon,
 } from "../lineIcons";
 import { HelpStrip } from "../meetings/HelpStrip";
@@ -44,10 +43,11 @@ import { useKeepInView } from "./useKeepInView";
 
 /**
  * The window's one assistant (#253), outside the tab groups, as in Cursor:
- * its header (the conversation's title with ▾ and the clock for History,
+ * its header (the conversation's title with ▾, which opens History, then
  * + New chat, ⋯ and fold), with no line under it (#391), the conversation
  * (#201), and the composer at its foot. Folded on a side, it is a 44px rail
- * (show, New chat, History); at the bottom or floating, only its header.
+ * (show, New chat); at the bottom or floating, only its header. History is
+ * also in ⌘K.
  *
  * Where it sits and how big is the `Workbench`'s; this is what it shows.
  * Nothing in it is remounted when it moves, resizes or folds: the composer
@@ -83,8 +83,8 @@ export function Assistant({
 }) {
   const t = useT();
   const [history, setHistory] = useState<Element | null>(null);
-  const historyButton = useRef<HTMLButtonElement>(null);
   const titleButton = useRef<HTMLButtonElement>(null);
+  const railButton = useRef<HTMLButtonElement>(null);
   const aside = useRef<HTMLElement>(null);
   const rail = folded && isSide(dock);
   const foldInMenu = foldsInMenu(files.titleBar, dock);
@@ -94,7 +94,7 @@ export function Assistant({
   const handle = useMemo(
     () => ({
       openHistory() {
-        setHistory(historyButton.current ?? titleButton.current);
+        setHistory(titleButton.current ?? railButton.current);
       },
     }),
     [],
@@ -158,20 +158,6 @@ export function Assistant({
       <PlusLineIcon className="size-4" />
     </IconButton>
   );
-  const clock = (
-    <IconButton
-      ref={historyButton}
-      testId="assistant-history"
-      label={t("assistant.history")}
-      expanded={history !== null}
-      open={history !== null}
-      popup="dialog"
-      onClick={(event) => openHistory(event.currentTarget)}
-    >
-      <HistoryLineIcon className="size-4" />
-    </IconButton>
-  );
-
   return (
     <aside
       ref={aside}
@@ -193,6 +179,7 @@ export function Assistant({
           onClickCapture={afterMove}
         >
           <IconButton
+            ref={railButton}
             testId="assistant-fold"
             label={t("assistant.unfold", { shortcut: shortcutLabel("composer.focus") })}
             expanded={false}
@@ -202,7 +189,6 @@ export function Assistant({
           </IconButton>
           <WaitingDot />
           {newChatButton}
-          {clock}
         </div>
       ) : (
         <header
@@ -231,7 +217,6 @@ export function Assistant({
           </button>
           <WaitingDot />
           <span className="flex-1" />
-          {clock}
           {newChatButton}
           <AssistantMenu withFold={foldInMenu} />
           {!foldInMenu && (

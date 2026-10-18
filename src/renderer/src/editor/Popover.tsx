@@ -30,6 +30,8 @@ interface PopoverProps extends HTMLAttributes<HTMLDivElement> {
   onDismiss(how: "escape" | "outside"): void;
   /** What gets the focus once the popover shows, e.g. a menu's first item, or a text editor. */
   initialFocus?: RefObject<{ focus(): void } | null>;
+  /** Esc puts the focus back on `anchor`, the control that opened it, when that is a control. */
+  returnFocus?: boolean;
   children: ReactNode;
 }
 
@@ -48,6 +50,7 @@ export function Popover({
   middleware,
   onDismiss,
   initialFocus,
+  returnFocus = false,
   children,
   className = "",
   role = "dialog",
@@ -61,6 +64,12 @@ export function Popover({
   focusFirst.current = initialFocus;
   const placing = useRef(middleware);
   placing.current = middleware;
+  const returning = useRef(returnFocus);
+  returning.current = returnFocus;
+  const dismissByEscape = (from: Element | VirtualElement) => {
+    if (returning.current && from instanceof HTMLElement) from.focus();
+    dismiss.current("escape");
+  };
 
   // First, so it is copied while it still shows: closed, it shrinks back toward its anchor.
   useExitToward(ref, () => (anchor instanceof Element ? anchor : anchor.getBoundingClientRect()));
@@ -113,7 +122,7 @@ export function Popover({
       if (event.key !== "Escape" || event.defaultPrevented || inLater(event.target)) return;
       if (event.target instanceof Node && element.contains(event.target)) return;
       event.preventDefault();
-      dismiss.current("escape");
+      dismissByEscape(anchor);
     };
     document.addEventListener("pointerdown", dismissOnPressOutside, true);
     document.addEventListener("keydown", dismissOnEscape, true);
@@ -138,7 +147,7 @@ export function Popover({
         if (event.key === "Escape" && !event.defaultPrevented) {
           // Handled here, so Esc doesn't also close the Document viewer.
           event.preventDefault();
-          dismiss.current("escape");
+          dismissByEscape(anchor);
         }
       }}
       className={`editor-popover ${className}`}

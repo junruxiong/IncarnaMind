@@ -8,8 +8,7 @@ import { CloseLineIcon, HistoryLineIcon } from "../lineIcons";
 import { iconButtonClass } from "../ui";
 
 /**
- * The assistant's History, from its clock button, its title's ▾ or
- * "Conversation history" in ⌘K: the assistant's conversations (#300), newest
+ * The assistant's History, from its title's ▾ or "Conversation history" in ⌘K: the assistant's conversations (#300), newest
  * first, each with its name and when it was last asked in. Opening one, this
  * Folder's first, All Folders, search and each row's menu come with #258.
  */
@@ -24,6 +23,7 @@ export function HistoryPopover({ anchor, onClose }: { anchor: Element; onClose()
       placement="bottom-end"
       onDismiss={onClose}
       initialFocus={close}
+      returnFocus
       aria-label={t("assistant.history")}
       data-testid="assistant-history-popover"
     >
