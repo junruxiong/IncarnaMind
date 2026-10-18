@@ -1,4 +1,3 @@
-import { markdownToBlocks } from "../../core/answers/markdown";
 import type {
   AnswerPhase,
   AnswerToolCall,
@@ -7,7 +6,7 @@ import type {
   MarkedCitation,
   MindRead,
 } from "../../core/api";
-import { withCitations } from "../../shared/blockJson";
+import { markersIn } from "../../shared/answerBlocks";
 
 /**
  * An Answer's steps in the assistant (#391), from what its row keeps: its
@@ -106,16 +105,6 @@ const field = (call: AnswerToolCall, name: string): string => {
   const value: unknown = call.input?.[name];
   return typeof value === "string" ? value : "";
 };
-
-/** The Citation markers an Answer's text shows, in order, one for each place: a marker used twice is two. */
-export function markersIn(text: string): number[] {
-  const markers: number[] = [];
-  withCitations(markdownToBlocks(text), (marker) => {
-    markers.push(marker);
-    return null;
-  });
-  return markers;
-}
 
 /** The Citations an Answer shows, one for each marker in its text that has one. */
 function shownCitations({ text, citations }: Pick<StepsInput["answer"], "text" | "citations">) {

@@ -2299,7 +2299,10 @@ export interface DocumentScanProgress {
  *   up, a key or sign-in is missing, or the User declined sending excerpts to
  *   the tagger's service). Tagging resumes by itself once one can.
  * - "tagging": the tagger is deciding the Document's Tags.
- * - "tagged": its automatic Tags are up to date.
+ * - "tagged": its automatic Tags are up to date. With none, the tagger asked
+ *   and none fit.
+ * - "no-tags": there were no Tags to choose from, so no model was asked. It is
+ *   tagged once a Tag exists.
  * - "failed": the tagger's provider failed (see `taggingError`); a re-tag, a
  *   change of model or a restart tries again.
  * - "skipped": the Document has no text to tag (processing failed, or found none).
@@ -2311,6 +2314,7 @@ export type TaggingState =
   | "waiting-for-provider"
   | "tagging"
   | "tagged"
+  | "no-tags"
   | "failed"
   | "skipped"
   | "stopped";
