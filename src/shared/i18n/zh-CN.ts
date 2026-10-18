@@ -3880,7 +3880,6 @@ export const zhCN = {
   "meetings.transcript.open": "打开转写稿",
   "meetings.transcript.empty": "没有可转写的内容，未保存转写稿。",
   "meetings.transcript.downloadFailed": "无法下载语音模型：{message}",
-  "meetings.transcript.engineFailed": "转写已停止：{message}",
   "meetings.transcript.engineStopped": "转写已停止。",
   "meetings.transcript.saveFailed": "无法保存转写稿：{message}",
   "meetings.transcript.notSaved": "未保存转写稿：尚未选择新文件的保存位置。",
