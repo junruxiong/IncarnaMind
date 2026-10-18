@@ -45,7 +45,7 @@ function withAdded(): string | null {
   return documentsAdded(added).length > 0 ? note.mindId : null;
 }
 
-/** The Mind last written in, with the cited sentence nothing backs that its cursor is in (#1111). */
+/** The Mind last written in, with the cited sentence nothing backs that its cursor is in. */
 function withUnsupported() {
   const note = noteHandle.current;
   if (!note || note.editor.isDestroyed || !fixesFree(note.mindId)) return null;

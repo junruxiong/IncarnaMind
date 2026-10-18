@@ -346,7 +346,6 @@ function ClaimCard({
 }: {
   claim: ShownClaim;
   cited: readonly NumberedCitation[];
-  /** A cited sentence nothing backs: its card offers the fixes (../unsupportedFixes). */
   fixes: boolean;
   addable: boolean;
   added: number;

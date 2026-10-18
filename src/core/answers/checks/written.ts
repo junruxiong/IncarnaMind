@@ -39,7 +39,6 @@ import type { CheckScope } from "./verify";
 
 const CLOUD_SENTENCES_AT_ONCE = 3;
 
-/** Blocks whose text no check reads. */
 const UNCHECKED: ReadonlySet<string> = new Set(["question", "codeBlock", "blockMath", "heading"]);
 
 export interface WrittenCheckOptions {
@@ -79,19 +78,16 @@ export interface CheckWrittenInput {
   write(blocks: NodeJSON[]): void;
 }
 
+/** What the check did: how many sentences it checked, each part it cut as it named it, and how many land marked. */
 export interface WrittenCheck {
-  /** The sentences checked. */
   sentences: number;
-  /** Each part taken out, as the check named it. */
   cut: string[];
-  /** Sentences that land marked unsupported. */
   unsupported: number;
-  /** Sentences that land marked contradicted. */
   contradicted: number;
 }
 
 interface Sentence {
-  /** Where its paragraph is: an index into each level's content, from the top-level Block. */
+  /** An index into each level's content, from the top-level Block down to its paragraph. */
   path: number[];
   from: number;
   to: number;
@@ -101,7 +97,6 @@ interface Sentence {
   cited: CitedQuote[];
 }
 
-/** A paragraph's text as checks read it. */
 function paragraphText(content: readonly NodeJSON[]): string {
   return content
     .map((node) =>
@@ -110,7 +105,6 @@ function paragraphText(content: readonly NodeJSON[]): string {
     .join("");
 }
 
-/** Each inline node of a paragraph with where it starts in its text. */
 function inlineLayout(content: readonly NodeJSON[]): { node: NodeJSON; start: number }[] {
   let at = 0;
   return content.map((node) => {
@@ -132,7 +126,6 @@ function quoteOf(node: NodeJSON): CitedQuote | null {
   };
 }
 
-/** The sentences of the Blocks' paragraphs, at any depth, that have a Citation with a quote. */
 function citedSentences(blocks: readonly NodeJSON[]): Sentence[] {
   const found: Sentence[] = [];
   const visit = (nodes: readonly NodeJSON[], path: number[]) => {
@@ -169,11 +162,7 @@ function citedSentences(blocks: readonly NodeJSON[]): Sentence[] {
 
 const MARKER = /\[(\d{1,3})\]/g;
 
-/**
- * A paragraph as Edit with AI reads it, each Citation a numbered marker, and
- * its Citations by number; null when it holds an inline node a marker can't
- * stand for (a formula, a footnote), which a cut could lose.
- */
+/** Null when the sentence holds an inline node a marker can't stand for (a formula, a footnote), which a cut would lose. */
 function asMarked(
   content: readonly NodeJSON[],
   from: number,
@@ -200,11 +189,7 @@ function asMarked(
   return { passage: passage.trim(), context, citations };
 }
 
-/**
- * The sentence's new text as nodes, its markers made its Citations again, its
- * words marked as the sentence's first words were; null when the new text
- * keeps no Citation, adds or repeats one, or says nothing.
- */
+/** Null when the cut keeps no Citation, adds or repeats one, or says nothing. */
 function cutNodes(
   cut: string,
   sentence: readonly number[],
@@ -233,13 +218,11 @@ function cutNodes(
 
 interface Landing {
   sentence: Sentence;
-  /** Its new words, in place of the sentence's; null: it stays as written. */
+  /** In place of the sentence's own; null: it stays as written. */
   nodes: NodeJSON[] | null;
-  /** The check's mark it lands with; null: none. */
   mark: ClaimCheckAttributes | null;
 }
 
-/** A paragraph's content with each sentence cut or marked. */
 function landParagraph(content: readonly NodeJSON[], landings: readonly Landing[]): NodeJSON[] {
   const sorted = [...landings].sort((a, b) => a.sentence.from - b.sentence.from);
   const landingAt = (offset: number) =>
@@ -288,7 +271,6 @@ function landParagraph(content: readonly NodeJSON[], landings: readonly Landing[
   return out;
 }
 
-/** The Blocks with each paragraph's sentences landed. */
 function land(blocks: readonly NodeJSON[], landings: readonly Landing[]): NodeJSON[] {
   const byPath = new Map<string, Landing[]>();
   for (const landing of landings) {
@@ -307,7 +289,6 @@ function land(blocks: readonly NodeJSON[], landings: readonly Landing[]): NodeJS
   return visit(blocks, []);
 }
 
-/** The paragraph a sentence is in. */
 function paragraphAt(blocks: readonly NodeJSON[], path: readonly number[]): NodeJSON | undefined {
   let nodes: readonly NodeJSON[] | undefined = blocks;
   let node: NodeJSON | undefined;
@@ -319,7 +300,6 @@ function paragraphAt(blocks: readonly NodeJSON[], path: readonly number[]): Node
 }
 
 export function createWrittenCheck(options: WrittenCheckOptions) {
-  /** Cuts the part of a sentence its Citations don't support; null when that can't be done. */
   async function cutOf(
     blocks: readonly NodeJSON[],
     sentence: Sentence,
@@ -346,12 +326,10 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
         start + (node.text ?? "").length > sentence.from &&
         start < sentence.to,
     );
-    // The sentence's space before its next one stays.
-    const after = /\s*$/u.exec(sentence.text)?.[0] ?? "";
-    return cutNodes(`${cut.trim()}${after}`, numbers, marked.citations, first?.node.marks);
+    return cutNodes(cut.trim(), numbers, marked.citations, first?.node.marks);
   }
 
-  /** See `CheckWrittenInput`; null when there was nothing to check, or it couldn't be checked here. */
+  /** Null when there was nothing to check, or it couldn't be checked here. */
   return async function checkWritten(input: CheckWrittenInput): Promise<WrittenCheck | null> {
     const { mindId, blocks, prepared, signal } = input;
     if (judgesUnreliably(prepared) || !options.allowed(prepared)) return null;
