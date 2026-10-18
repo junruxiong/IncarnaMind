@@ -608,11 +608,11 @@ export const en = {
   "claim.unsupported.differs": "Your Documents say something different:",
   "claim.courtDecision.title": "This cites a court decision.",
   "claim.courtDecision.body":
-    "IncarnaMind can't check that the case exists or that it says this. Look it up in your legal research service before you rely on it.",
+    "IncarnaMind can't check this case exists or says this. Verify it before you rely on it.",
   "claim.citedCaseUnchecked":
-    "The case this sentence cites isn't in your Documents, so it hasn't been checked. Look it up in your legal research service before you rely on it.",
+    "Not checked: the cited case isn't in your Documents. Verify it before you rely on it.",
   "claim.courtDecision.held":
-    "This cites a court decision. The quoted words were found in your saved copy of the opinion ({document}, {location}). Whether it has been overruled or changed isn't checked: look it up in your legal research service before you rely on it.",
+    "Quote found in your copy of the opinion ({document}, {location}). Not checked whether it was overruled or changed: verify it before you rely on it.",
   "claim.unsupported.ownWorkings": "Only your own working file says this.",
   "claim.fixSentence": "Fix the sentence",
   "claim.findSources": "Find sources",
@@ -628,8 +628,7 @@ export const en = {
   "claim.reason.refused": "The model declined to check it.",
   "claim.reason.malformed": "The model's reply couldn't be read.",
   "claim.reason.empty": "The model gave an empty reply.",
-  "claim.reason.no-evidence":
-    "The model's quote isn't in the Document it named, so its verdict isn't shown.",
+  "claim.reason.no-evidence": "Verdict hidden: the model's quote isn't in that Document.",
   "claim.reason.rate-limit": "The model's service is busy for now. Check again in a moment.",
   "claim.reason.cost-cap": "Checking it could pass your monthly cap.",
   "claim.reason.plan-limit": "Your plan's usage limit is reached.",
@@ -665,8 +664,7 @@ export const en = {
   "health.checkedAll": "Checked {count} claims, {when}",
   "health.checkAll": "Check all",
   "health.next": "{part}: go to the next",
-  "checks.smallModel":
-    "This model is small, so its verdicts may be wrong. A larger model checks more reliably.",
+  "checks.smallModel": "A small model: its verdicts may be wrong.",
   "checks.running.find-support": "Finding support…",
   "checks.running.check-against-documents": "Checking against Documents…",
   "checks.running.contradiction-watch": "Checking cited claims for contradictions…",
@@ -691,8 +689,7 @@ export const en = {
   "checks.problem.chooseModel": "Choose a model",
   "checks.tryAgain": "Try again",
   "checks.problem.failed": "Couldn't check: {message}",
-  "checks.problem.no-folder":
-    "This Mind isn't in a Folder, so there are no other Documents to check it against.",
+  "checks.problem.no-folder": "Nothing to check against: this Mind isn't in a Folder.",
   "checks.problem.only-cited.folder": "“{folder}” holds only the Documents these claims cite.",
   "checks.problem.no-cited": "This Mind has no cited claims to check.",
   "checks.problem.no-claims": "This Mind has no claims to check.",
@@ -725,8 +722,7 @@ export const en = {
   "verify.pick.title": "Verify a document",
   "verify.pick.filter": "PDF documents",
   "verify.refused.unreadable": "Couldn't read that PDF.",
-  "verify.refused.no-text":
-    "That PDF has no text to check. If it's a scan, its pages couldn't be read.",
+  "verify.refused.no-text": "That PDF has no text to check; a scan's pages couldn't be read.",
   "verify.mindTitle": "Checking: {name}",
   "verify.from": "From {name}",
   "verify.from.title": "Someone else wrote this text. Open {name} beside it",
@@ -786,9 +782,10 @@ export const en = {
   "references.reason.rate-limited": "Not checked: {service} asked to slow down. Check again later",
   "references.reason.service-error": "Not checked: {service} had an error",
   "references.reason.registered-elsewhere":
-    "Not checked: its DOI exists, but neither Crossref nor OpenAlex has its record",
-  "references.notListed.detail":
-    "Neither has a record like it, but neither holds every conference paper, preprint or Chinese journal, so the work may still exist.",
+    "Not checked: the DOI exists, but Crossref and OpenAlex have no record",
+  "references.notListed.detail": "No record found, but the work may still exist.",
+  "references.notListed.why":
+    "Neither Crossref nor OpenAlex holds every conference paper, preprint or Chinese journal.",
   "references.stopped.unreachable": "{service} couldn't be reached.",
   "references.stopped.rate-limited": "{service} asked to slow down. Try again later.",
   "references.stopped.rate-limitedUntil":
@@ -1129,16 +1126,13 @@ export const en = {
   // Checks leave the files IncarnaMind wrote out of their evidence (#80).
   "evidence.ownFile": "IncarnaMind wrote this file, so checks don't count it as evidence",
   "evidence.countIt": "Count it",
-  "evidence.excluded.ownFile":
-    "Also found in “{name}”, which IncarnaMind wrote, so it isn't counted as evidence",
-  "evidence.excluded.checked":
-    "Also found in “{name}”, a copy of the document being checked, so it isn't counted as evidence",
+  "evidence.excluded.ownFile": "Also in “{name}”, which IncarnaMind wrote: not counted",
+  "evidence.excluded.checked": "Also in “{name}”, a copy of the checked document: not counted",
   "evidence.count": "Count as evidence",
   "evidence.countMany": "Count {count} Documents as evidence",
   "evidence.leaveOut": "Don't count as evidence",
   "evidence.leaveOutMany": "Don't count {count} Documents as evidence",
-  "evidence.menuHint":
-    "IncarnaMind wrote this file. Checks leave it out of their evidence unless you count it.",
+  "evidence.menuHint": "IncarnaMind wrote this file; checks skip it unless you count it.",
   "evidence.counted": "“{name}” counts as evidence now",
   "evidence.countedMany": "{count} Documents count as evidence now",
   "evidence.leftOut": "“{name}” no longer counts as evidence",
@@ -1147,8 +1141,7 @@ export const en = {
   "evidence.notCitedMany": "Don't cite {count} Documents",
   "evidence.citeAgain": "Cite this Document again",
   "evidence.citeAgainMany": "Cite {count} Documents again",
-  "evidence.notCited.hint":
-    "IncarnaMind can still read it to understand your question, but won't cite it or use it to support a check.",
+  "evidence.notCited.hint": "Read for context only: never cited or used as evidence.",
   "evidence.notCited.label": "Not cited",
   "evidence.notCited.done": "“{name}” won't be cited",
   "evidence.notCited.doneMany": "{count} Documents won't be cited",
@@ -2175,7 +2168,7 @@ export const en = {
   "reference.authors.placeholder": "Family, Given; one name after another",
   "reference.issued.placeholder": "2010, or 2010-08-04",
   "reference.issued.invalid": "Write a year, such as 2010, or a date, such as 2010-08-04",
-  "reference.doi.invalid": "That isn't a DOI: one starts with 10. and has a slash in it",
+  "reference.doi.invalid": "Not a DOI: it starts with 10. and has a slash",
   "reference.source.file": "Read from the file",
   "reference.source.lookup": "Filled in by Look up",
   "reference.source.user": "Edited or checked by you",
@@ -2185,7 +2178,7 @@ export const en = {
   "reference.toCheck.title": "Read from the file and not checked yet",
   "reference.confirm": "Mark as checked",
   "reference.undo.confirm": "Marked the details of “{name}” as checked",
-  "reference.addIdentifier": "Add its DOI or arXiv address, and Look up can fill in the rest.",
+  "reference.addIdentifier": "Add a DOI or arXiv address, then Look up fills the rest.",
   "reference.lookUp": "Look up",
   "reference.lookingUp": "Looking up…",
   "reference.lookUp.doi": "Fills empty fields from Crossref. Sends only the DOI.",
@@ -2741,14 +2734,11 @@ export const en = {
   "citation.badge.unsupported": "Unsupported by your Documents",
   "citation.badge.contradicted": "Contradicted",
   "citation.reason.quote-not-on-pages": "The quote isn't in the text of the place it cites.",
-  "citation.reason.pages-outside-passage":
-    "The place it cites isn't part of the Passage the quote came from.",
-  "citation.reason.too-many-pages":
-    "A Citation can cite one page, slide, section, or block of rows or lines, or two in a row.",
-  "citation.reason.no-text": "The place it cites has no text to check, e.g. a scanned page.",
+  "citation.reason.pages-outside-passage": "The cited place isn't in the quote's Passage.",
+  "citation.reason.too-many-pages": "A Citation can cite one place, or two in a row.",
+  "citation.reason.no-text": "The cited place has no text, e.g. a scan.",
   "citation.reason.document-removed": "The Document has been deleted.",
-  "citation.reason.quoted-words-not-on-pages":
-    "The words in quotation marks aren’t in the text of the place it cites.",
+  "citation.reason.quoted-words-not-on-pages": "The quoted words aren’t in the cited place.",
   "citation.reason.checking": "The quote is checked when the Answer is finished.",
   "citation.where": "{document}, {location}",
   "citation.scan": "Text read from a scan",
@@ -2764,10 +2754,9 @@ export const en = {
   "citation.closest.in": "Closest words in {location}",
   "citation.closest.document": "Closest words in {document}",
   "citation.closest.transcript": "Closest words in the transcript at {location}",
-  "citation.quoted.why":
-    "Quotation marks promise the Document’s exact words, so IncarnaMind checks them too.",
+  "citation.quoted.why": "Words in quotation marks are checked word for word.",
   "citation.meaning":
-    "“Quote found” means these words are where it cites. It doesn’t mean they support the sentence.",
+    "“Quote found” means the words are there, not that they support the sentence.",
   "citation.open.page": "Open the page",
   "citation.open.slide": "Open the slide",
   "citation.open.section": "Open the section",
