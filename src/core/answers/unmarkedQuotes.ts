@@ -38,6 +38,7 @@ import { sentenceSpans } from "../../shared/sentences";
 import type { AnswerEngineEvent, AnswerRequest } from "./engine";
 import {
   answerSentences,
+  answerTableUnits,
   likeness,
   type MarkerRecord,
   textEdits,
@@ -203,10 +204,7 @@ export function matchUnmarked(
   return matches;
 }
 
-/**
- * The markers a sentence of the Answer has after its first word: one before
- * it ("” [^1] And so…") belongs to the sentence before.
- */
+/** A marker before a sentence's first word ("” [^1] And so…") belongs to the sentence before. */
 function ownMarkers(sentence: { text: string }): number[] {
   const first = [...sentence.text.matchAll(/\[\^\d{1,4}\]|[\p{L}\p{N}]/gu)].find(
     (found) => !found[0].startsWith("["),
@@ -216,12 +214,18 @@ function ownMarkers(sentence: { text: string }): number[] {
     : [];
 }
 
+/** What a marker is written in: a sentence, or a row or cell of a table. */
+function markedUnits(answer: string) {
+  return [
+    ...answerSentences(answer).map((sentence) => ({ ...sentence, markers: ownMarkers(sentence) })),
+    ...answerTableUnits(answer),
+  ];
+}
+
 /**
  * What the one request gave, each Citation taking a marker the model wrote
- * with no record in the sentence the Citation names (the sentence of the
- * Answer worded most like it), so the Answer keeps no marker beside its own.
- * A Citation for a sentence that has one already, or that `matched` gives one,
- * is left out.
+ * with no record in the sentence it names, unless that sentence is cited
+ * already (`recorded`) or `matched` cites it.
  */
 function takingMarkers(
   asked: readonly Omit<Match, "marker">[],
@@ -229,23 +233,19 @@ function takingMarkers(
   recorded: (marker: number) => boolean,
   matched: readonly Found[],
 ): Found[] {
-  const sentences = answerSentences(answer).map((sentence) => ({
-    ...sentence,
-    markers: ownMarkers(sentence),
-    words: wordsOf(sentence.text),
-  }));
+  const units = markedUnits(answer).map((unit) => ({ ...unit, words: wordsOf(unit.text) }));
   const taken = new Set(
     matched.flatMap((match) => (match.marker === undefined ? [] : [match.marker])),
   );
   return asked.flatMap((match) => {
     const words = wordsOf(match.sentence);
-    let own: (typeof sentences)[number] | undefined;
+    let own: (typeof units)[number] | undefined;
     let best = 0;
-    for (const sentence of sentences) {
-      const { score } = likeness(words, sentence.words);
+    for (const unit of units) {
+      const { score } = likeness(words, unit.words);
       if (score >= MIN_SIMILARITY && score > best) {
         best = score;
-        own = sentence;
+        own = unit;
       }
     }
     if (own && (own.markers.some(recorded) || matched.some((each) => each.start === own?.start))) {
@@ -441,13 +441,11 @@ export async function* citeUnmarked(
   let asked = false;
   const cited = [...answer.matchAll(MARKER)].some((each) => recorded(Number(each[1])));
   const matchedMarkers = new Set(matches.map((match) => match.marker));
-  const unbacked = answerSentences(answer).some((sentence) => {
-    const markers = ownMarkers(sentence);
-    return (
+  const unbacked = markedUnits(answer).some(
+    ({ markers }) =>
       markers.length > 0 &&
-      !markers.some((marker) => recorded(marker) || matchedMarkers.has(marker))
-    );
-  });
+      !markers.some((marker) => recorded(marker) || matchedMarkers.has(marker)),
+  );
   if (unbacked || (matches.length === 0 && !cited && drawsOn(answer, passages))) {
     const toAsk = passagesToAsk(answer, passages, budget);
     if (toAsk.length > 0 && mayAsk()) {
