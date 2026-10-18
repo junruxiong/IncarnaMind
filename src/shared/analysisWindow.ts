@@ -20,6 +20,8 @@ export const ANALYSIS_CHANNELS = {
   run: "analysis:run",
   /** Page → main: Python is ready, or couldn't start (`AnalysisReady`). */
   ready: "analysis:ready",
+  /** Page → main: a job's interpreter is ready and it has started (its id): its time runs from now. */
+  started: "analysis:started",
   /** Page → main: what a job came to (`AnalysisReply`). */
   done: "analysis:done",
 } as const;
@@ -41,5 +43,6 @@ export const MAX_REPLY_CHARACTERS = 16_000_000;
 export interface AnalysisBridge {
   onRun(listener: (request: AnalysisRequest) => void): void;
   ready(state: AnalysisReady): void;
+  started(id: number): void;
   done(reply: AnalysisReply): void;
 }

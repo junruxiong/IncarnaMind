@@ -30,6 +30,8 @@ export const FAKE_PYTHON: AnalysisVersions = {
   languageVersion: "3.14.2",
   runtime: "Fake",
   packages: { numpy: "2.4.6", pandas: "3.0.2" },
+  helper: "fake",
+  app: "test",
 };
 
 export interface FakeAnalysisRuntime extends AnalysisRuntime {

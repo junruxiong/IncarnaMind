@@ -268,3 +268,92 @@ test("nothing leaves the sandbox: every way out to the network, to the computer'
   server.close();
   await rm(secretFolder, { recursive: true, force: true });
 });
+
+test("each job runs in a fresh interpreter: what a job changes in Python, pandas or the helper, and what it read, never reach the next", async () => {
+  test.setTimeout(180_000);
+  const { app } = await launchApp(dataDir);
+
+  const first = await run(
+    app,
+    python(
+      [
+        "import builtins, pandas as pd, incarnamind",
+        'builtins.kept = inputs["sales"]',
+        "pd.Series.sum = lambda self, *args, **kwargs: 999",
+        "incarnamind._numbers_written = lambda *args: ([], 0)",
+      ].join("\n"),
+      [SALES],
+    ),
+  );
+  expect(first.result.end).toEqual({ kind: "done" });
+
+  const next = await run(
+    app,
+    python(
+      [
+        "import builtins, pandas as pd",
+        'print(hasattr(builtins, "kept"))',
+        'result("sum", pd.Series([20, 22]).sum())',
+        "rate = 0.07",
+      ].join("\n"),
+    ),
+  );
+  expect(next.result.end).toEqual({ kind: "done" });
+  expect(next.result.output.printed).toBe("False\n");
+  expect(next.result.output.results).toEqual([
+    { kind: "figure", name: "sum", label: "sum", unit: null, value: 42 },
+  ]);
+  expect(next.result.output.literals.map((each) => each.text)).toEqual(["20", "22", "0.07"]);
+  await app.close();
+});
+
+test("what a job's page could keep is cleared after it: the next job's IndexedDB starts empty", async () => {
+  test.setTimeout(180_000);
+  const { app } = await launchApp(dataDir);
+  const inPage = (script: string) =>
+    app.evaluate(async ({ webContents }, code) => {
+      const page = webContents
+        .getAllWebContents()
+        .find((each) => each.getURL().startsWith("incarnamind-analysis:"));
+      return page ? page.executeJavaScript(code) : "no analysis window";
+    }, script);
+  expect((await run(app, python("print(1)"))).result.end).toEqual({ kind: "done" });
+
+  const written = await inPage(`new Promise((resolve, reject) => {
+    const open = indexedDB.open("kept", 1);
+    open.onupgradeneeded = () => open.result.createObjectStore("rows");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const tx = open.result.transaction("rows", "readwrite");
+      tx.objectStore("rows").put("left by a job", "row");
+      tx.oncomplete = () => { open.result.close(); resolve("written"); };
+    };
+  })`);
+  expect(written).toBe("written");
+  expect((await run(app, python("print(2)"))).result.end).toEqual({ kind: "done" });
+
+  const kept = await inPage(`new Promise((resolve) => {
+    const open = indexedDB.open("kept");
+    open.onsuccess = () => {
+      const db = open.result;
+      if (!db.objectStoreNames.contains("rows")) { db.close(); resolve("nothing"); return; }
+      const get = db.transaction("rows").objectStore("rows").get("row");
+      get.onsuccess = () => { db.close(); resolve(get.result ?? "nothing"); };
+    };
+  })`);
+  expect(kept).toBe("nothing");
+  await app.close();
+});
+
+test("with Chromium's sandbox off for the app, no job runs: each ends as unavailable, for the sandbox", async () => {
+  process.env.ELECTRON_DISABLE_SANDBOX = "1";
+  const launched = launchApp(dataDir);
+  delete process.env.ELECTRON_DISABLE_SANDBOX;
+  const { app } = await launched;
+
+  const ran = await run(app, python('result("sum", 40 + 2)'));
+
+  expect(ran.result.end).toMatchObject({ kind: "unavailable", reason: "no-sandbox" });
+  expect(ran.result.output.results).toEqual([]);
+  await app.close();
+});
