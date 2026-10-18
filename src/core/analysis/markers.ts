@@ -13,10 +13,16 @@ import type { Language } from "../language";
 const MARKER = /\[=(table|chart) (\d+)\]/g;
 const LINE = /^[ \t]*\[=(table|chart) (\d+)\][ \t]*$/;
 
+const numberText = (value: number): string => {
+  if (Number.isInteger(value) || !Number.isFinite(value)) return String(value);
+  const whole = Math.floor(Math.log10(Math.abs(value))) + 1;
+  return String(Number(value.toPrecision(Math.max(4, whole + 2))));
+};
+
 const cellText = (cell: AnalysisCell): string =>
   cell === null
     ? ""
-    : (typeof cell === "number" ? String(Number(cell.toPrecision(12))) : String(cell))
+    : (typeof cell === "number" ? numberText(cell) : String(cell))
         .replaceAll("|", "\\|")
         .replaceAll("\n", " ");
 

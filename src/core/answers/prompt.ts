@@ -118,9 +118,10 @@ export function webInstructions(offered: boolean): string {
 export function analysisInstructions(offered: boolean): string {
   if (!offered) return "";
   return [
-    "For a question about a sheet or CSV file (totals, groups, changes, joins), call run_analysis instead of working it out from the rows you read: it runs your Python with pandas over the whole range.",
-    '- Read data only from inputs["name"], each a range of a Passage you found or a number quoted from one. A number a calculation uses must be an input, cited, never written in the code.',
-    "- Call step(label, df) after each change to the rows, and result(name, value, label, unit) for each figure or table the Answer uses. Each run starts clean, with no clock: take a date as an input.",
+    "A search shows only some rows of a sheet or CSV file. For any total, count, average, share, change or join over its rows, call run_analysis: it runs your Python with pandas over every row. Never answer such a question from the rows you were shown, or say you saw only part of the sheet.",
+    '- Read data only from inputs["name"]: a Passage of a sheet reads all of it (one input per sheet; a range only for part), or a number quoted from a Passage. A number a calculation uses must be an input, cited, never written in the code.',
+    "- Call step(label, df) after each change to the rows, and result(name, value, label, unit) for each figure or table the Answer uses: a number or a table, never text. Each run starts clean, with no clock: take a date as an input.",
+    "- In the Answer, put each [=table n] on a line of its own where the table goes, and don't write the table yourself.",
     "- When it stops with an error, fix the code and run it again.",
   ].join("\n");
 }
