@@ -127,7 +127,7 @@ export const zhCN = {
   "library.model": "模型名称",
   "library.server": "本地 Ollama 地址",
   "library.pageImages": "向本地 Clef-Flash 提供最多 3 张 PDF 页面图片。其他格式仅读取文本。",
-  "library.automatic": "自动整理新增和更新的文档，保留我的手动选择。",
+  "library.automatic": "自动把新文档移入文件夹",
   "library.preset.research": "研究论文",
   "library.preset.research.description": "学术论文、实验和研究方法。",
   "library.preset.reports": "报告与演示",

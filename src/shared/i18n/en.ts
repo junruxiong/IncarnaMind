@@ -141,7 +141,7 @@ export const en = {
   "library.server": "Local Ollama address",
   "library.pageImages":
     "Include up to 3 PDF page images with local Clef-Flash. Other formats use text only.",
-  "library.automatic": "Organize new and changed Documents automatically. Keep my manual choices.",
+  "library.automatic": "Move new Documents into Folders automatically",
   "library.preset.research": "Research papers",
   "library.preset.research.description": "Academic papers, experiments and research methods.",
   "library.preset.reports": "Reports & presentations",
