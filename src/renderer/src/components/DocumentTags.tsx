@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Document } from "../../../core/api";
-import { organizesNewDocuments } from "../../../shared/libraryModels";
+import { organizeHeld, organizesNewDocuments } from "../../../shared/libraryModels";
 import { useT } from "../i18n";
 import { NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
@@ -66,15 +66,15 @@ export function DocumentTagMenu({
 
 /**
  * Under a Document's Tag picker: where automatic tagging is (waiting,
- * working, failed), "Re-tag automatically" (Organize, once Folders are in
- * use) and "Manage Tags…".
+ * working, failed) for those Organize doesn't hold, "Re-tag automatically"
+ * (Organize for those it holds) and "Manage Tags…".
  */
 export function DocumentTagFooter({ item, close }: { item: Document; close(): void }) {
   const t = useT();
   const library = useAppStore((state) => state.library);
-  const organizing = organizesNewDocuments(library);
+  const held = organizeHeld(library).has(item.id);
   const taggingLine =
-    item.status !== "ready" || organizing
+    item.status !== "ready" || held
       ? null
       : item.tagging === "pending"
         ? t("tags.state.pending")
@@ -109,7 +109,7 @@ export function DocumentTagFooter({ item, close }: { item: Document; close(): vo
           }}
           className={footerButton}
         >
-          {t(organizing ? "library.classify" : "tags.menu.retag")}
+          {t(held && organizesNewDocuments(library) ? "library.classify" : "tags.menu.retag")}
         </button>
       )}
       <button
