@@ -1857,6 +1857,7 @@ export const en = {
   "providers.test.network": "Couldn't reach the server. Check its URL and your connection.",
   "providers.test.provider": "The provider returned an error.",
   "providers.test.local-mode": "Not sent: “Keep everything on this computer” is on.",
+  "providers.test.consent-revoked": "Not sent: you turned off sending to this service.",
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
   "providers.test.too-long": "The model's context window is too small for even a short request.",
@@ -2461,7 +2462,8 @@ export const en = {
   "answer.error.network": "Couldn't reach {service}. Check your internet connection",
   "answer.error.provider": "{service} ran into a problem",
   "answer.error.consent-declined": "Nothing was sent: you chose not to send data to this service",
-  "answer.error.local-mode": "Stopped: “Keep everything on this computer” is on",
+  "answer.error.local-mode": "Stopped: everything stays on this computer",
+  "answer.error.consent-revoked": "Stopped: you turned off sending to {service}",
   "answer.error.useLocal": "Use a local model",
   "answer.error.ollama-not-running": "Ollama isn't running on this computer",
   "answer.error.too-long":
@@ -3413,6 +3415,8 @@ export const en = {
   "error.secrets.unencrypted": "This system can't encrypt API keys, so they can't be saved.",
   "error.consent.declined": "You declined sending data to {service}, so nothing was sent.",
   "error.consent.needed": "Waiting until you allow sending data to {service}. Nothing was sent.",
+  "error.consent.revoked": "Stopped: you turned off sending to {service}",
+  "error.localMode.stopped": "Stopped: everything stays on this computer",
   "error.connector.notFound": "That Connector doesn't exist.",
   "error.connector.nameEmpty": "A Connector's name can't be empty.",
   "error.connector.nameTooLong": "A Connector's name can't be longer than {max} characters.",

@@ -57,7 +57,13 @@ import type { Evidence } from "../../documents/evidence";
 import { parseCheckedDocument } from "../../documents/evidence";
 import type { RetainVersion, VersionRetention } from "../../documents/retention";
 import { parseModel, parsePlace } from "../../edits";
-import { ChatNotReadyError, ConsentDeclinedError, InvalidInputError, isRecord } from "../../errors";
+import {
+  ChatNotReadyError,
+  ConsentDeclinedError,
+  InvalidInputError,
+  isRecord,
+  LocalModeError,
+} from "../../errors";
 import type { Language } from "../../language";
 import type { MindContent } from "../../mindContent";
 import { parseMindId } from "../../minds";
@@ -283,6 +289,7 @@ export function createChecks(options: ChecksOptions) {
       if (error instanceof ChatNotReadyError) {
         return { ok: false, result: { kind: "not-ready", readiness: error.readiness } };
       }
+      if (error instanceof LocalModeError) return { ok: false, result: { kind: "local-mode" } };
       if (error instanceof ConsentDeclinedError) {
         const now = await chat.readiness(choice ?? undefined, "checks");
         return {

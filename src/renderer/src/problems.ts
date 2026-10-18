@@ -50,6 +50,8 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
     line: "answer.error.consent-declined",
     fix: { kind: "settings", page: "privacy", label: "answer.error.allow" },
   },
+  // Turned off on purpose: nothing to fix, and asking again asks for consent as usual.
+  "consent-revoked": { line: "answer.error.consent-revoked", fix: { kind: "none" } },
   // Stopped by local mode: a model on this computer can write it.
   "local-mode": {
     line: "answer.error.local-mode",
