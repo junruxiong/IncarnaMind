@@ -3257,7 +3257,8 @@ export const zhCN = {
   "quit.unsaved.title.one": "有 1 处改动尚未保存",
   "quit.unsaved.quit": "仍然退出",
   "quit.unsaved.keep": "保持打开",
-  "quit.unsaved.copyFailed": "副本没能保存：{reason}",
+  "quit.unsaved.copyFailed": "副本没能保存。{reason}",
+  "quit.unsaved.copyFailed.details": "详情：{raw}",
   "error.mind.missedChange": "这次改动依赖一处 Mind 没有收到的改动，所以没有保存。",
   "error.mind.newerVersionEdit":
     "较新版本的 IncarnaMind 修改过这个 Mind。更新 IncarnaMind 后才能编辑。",
