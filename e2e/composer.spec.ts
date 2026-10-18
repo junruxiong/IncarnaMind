@@ -497,6 +497,8 @@ test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
   await enterContent(window);
+  // Notes, not a title: the first line made body text.
+  await window.keyboard.press("Backspace");
   await window.keyboard.type("First thought");
   await window.keyboard.press("Enter");
   await window.keyboard.type("Second thought");
@@ -578,9 +580,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await expect(options).toHaveText([/fake-model/, /other-model/]);
     await expect(options.first()).toHaveAttribute("aria-checked", "true");
     await expect(options.first()).toBeFocused();
-    await expect(menu).toContainText(
-      "For this Mind’s next Questions. It’s remembered for the Mind.",
-    );
+    await expect(menu).toContainText("For this Mind’s Questions.");
     await expect(menu).toContainText("Default for new Minds: fake-model · Change in Settings");
     // What stays on this computer says so with its icon, in ink-secondary: green is for checks.
     const stays = menu.getByTestId("on-this-computer").first();

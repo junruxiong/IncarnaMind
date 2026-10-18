@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import * as Y from "yjs";
 import {
   type AnswerUsage,
@@ -23,11 +23,14 @@ import {
 import { toolRecordLines } from "../../src/core/answers/toolRecord";
 import { plainText } from "../../src/core/mindText";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
-import { answerBlocks } from "../../src/renderer/src/answerBlocks";
+import { answerBlocks } from "../../src/shared/answerBlocks";
+import { namesOneOf, sourcesAsText } from "../../src/shared/namedSources";
 import { withoutFraming } from "../../src/shared/noteBlocks";
 import { resolveProposals } from "../../src/shared/proposals";
 import { connectToMind } from "../../tests/helpers/mindClient";
 import { heading, note, writeMind } from "../../tests/helpers/minds";
+import { paragraph, wordFile } from "../../tests/helpers/word";
+import { importWordBytes } from "../../tests/helpers/wordMinds";
 import { type ChatSettings, readConfig } from "../lib/config";
 import { createWorkerEmbedder } from "../lib/embedder";
 import type { EvalDocument } from "../lib/evaluationSet";
@@ -146,6 +149,30 @@ async function ask(
   return answer;
 }
 
+async function askExample(core: Core, language: "en" | "zh-CN") {
+  await core.updateSettings({ user: { language } });
+  const { mindId } = await core.createExamples();
+  const asked = await vi.waitFor(() => core.askReadyQuestion(), {
+    timeout: 2 * 60_000,
+    interval: 500,
+  });
+  return { conversationId: asked.conversationId, mindId };
+}
+
+async function importWord(library: Library, word: NonNullable<EverydayCase["word"]>) {
+  const [title = "", ...body] = word.paragraphs;
+  const folder = join(library.dataDir, "word");
+  await mkdir(folder, { recursive: true });
+  return importWordBytes(
+    library.core,
+    folder,
+    wordFile({
+      body: [paragraph(title, { style: "Title" }), ...body.map((each) => paragraph(each))].join(""),
+    }),
+    { name: word.name, origin: "own", addOriginal: true },
+  );
+}
+
 /** The top-level Blocks, by id, as they read once these requests' changes are accepted. */
 function acceptedTexts(doc: Y.Doc, requests: ReadonlySet<string>): Map<string, string> {
   const copy = new Y.Doc();
@@ -198,8 +225,14 @@ async function runCase(
     usage.cachedInputTokens += event.usage.cachedInputTokens;
     usage.cacheWriteTokens += event.usage.cacheWriteTokens;
   });
-  const mind = each.mind ? await core.createMind({ title: each.mind.title }) : null;
-  const client = mind ? await connectToMind(core, mind.id) : null;
+  const example = each.afterExample ? await askExample(core, each.language) : null;
+  const imported = each.word ? await importWord(library, each.word) : null;
+  const mindId =
+    imported?.mindId ??
+    (each.inExample ? example?.mindId : null) ??
+    (each.mind ? (await core.createMind({ title: each.mind.title })).id : null);
+  const mind = mindId ? { id: mindId } : null;
+  const client = imported?.client ?? (mind ? await connectToMind(core, mind.id) : null);
   if (client && each.mind) {
     writeMind(
       client,
@@ -223,7 +256,7 @@ async function runCase(
     each.selectAll && client
       ? { selection: [...before.values()].join("\n\n"), blockIds: ids }
       : null;
-  let conversationId: string | null = null;
+  let conversationId: string | null = example?.conversationId ?? null;
   const earlierCalls: ConversationAnswer["toolCalls"] = [];
   let last: ConversationAnswer | null = null;
   for (const earlier of each.before ?? []) {
@@ -277,10 +310,17 @@ async function runCase(
     answer.toolCalls.flatMap((call) => (call.mindChange ? [call.mindChange.request] : [])),
   );
   const citedInMinds: string[] = [];
+  const sourcesAsTextIn: string[] = [];
+  const documentNames = scoped.map((document) => document.name);
   for (const mindId of changed) {
     const written = await connectToMind(core, mindId);
     await written.settled();
     citedInMinds.push(...citedDocuments(written.doc));
+    for (const text of acceptedTexts(written.doc, requests).values()) {
+      sourcesAsTextIn.push(
+        ...sourcesAsText(text, (source) => namesOneOf(source.name, documentNames)),
+      );
+    }
   }
   let changes: CaseResult["changes"] = [];
   if (client) {
@@ -300,6 +340,7 @@ async function runCase(
     citedInMinds,
     changedBlocks,
     addedBlocks,
+    sourcesAsText: sourcesAsTextIn,
     scoped,
   });
   return {
@@ -365,6 +406,7 @@ async function runModel(
       modelCache: join(config.cacheDir, "models"),
       reranker: createWorkerCrossEncoder(config.rerankOnCpu),
       documents: sets[name],
+      examples: join(ROOT, "resources", "examples"),
       keep: config.keepData,
       embeddings: false,
       log,
@@ -413,6 +455,7 @@ async function runModel(
               : `  ${result.failures.map(failureLine).join("; ")}`,
         );
         results.push(result);
+        if (each.afterExample) await core.updateSettings({ user: { language: "system" } });
       }
     } finally {
       await library.close();

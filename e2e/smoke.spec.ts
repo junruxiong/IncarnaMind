@@ -264,9 +264,7 @@ test("Settings → Models lists the key providers, and “Already pay for a plan
   await expect(settings.getByTestId("chat-choice-api-key")).toBeVisible();
   await expect(
     settings.locator("label").filter({ has: window.getByTestId("chat-choice-api-key") }),
-  ).toContainText(
-    "Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server",
-  );
+  ).toContainText("OpenAI, Anthropic, Google, DeepSeek and more");
   const plans = settings.getByTestId("plans-settings");
   await expect(plans).toContainText("Already pay for a plan?");
   await expect(plans).toContainText("ChatGPT Plus or Pro");
