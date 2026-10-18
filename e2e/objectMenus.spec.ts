@@ -149,7 +149,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await expect(editor.getByTestId("citation")).toHaveCount(1);
   await newMind(window);
 
-  // A Mind: Open, Open to the side; Export… (one item, which opens the Export button's menu),
+  // A Mind: Open, Open in new tab; Export… (one item, which opens the Export button's menu),
   // the AI use statement and check record; Move to…, New Folder with this Mind; Rename; then
   // Delete after a rule.
   const mind = window.getByTestId("mind-row").first();
@@ -162,7 +162,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   );
   expect(mindMenu).toEqual([
     "mind.open",
-    "mind.openSide",
+    "mind.openTab",
     "—",
     "mind.outline",
     "mind.exportMenu",
@@ -371,8 +371,8 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
     await expect(menu.getByTestId("mind.open")).toBeFocused();
     await expect.poll(() => ringShows(menu.getByTestId("mind.open"))).toBe(true);
     await window.keyboard.press("ArrowDown");
-    await expect(menu.getByTestId("mind.openSide")).toBeFocused();
-    await expect.poll(() => ringShows(menu.getByTestId("mind.openSide"))).toBe(true);
+    await expect(menu.getByTestId("mind.openTab")).toBeFocused();
+    await expect.poll(() => ringShows(menu.getByTestId("mind.openTab"))).toBe(true);
     await expect.poll(() => ringShows(menu.getByTestId("mind.open"))).toBe(false);
     await window.keyboard.press("ArrowUp");
     await window.keyboard.press("ArrowUp");
@@ -421,7 +421,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
   await rightClick(window, mind.getByTestId("mind-list-item"));
   await expect(menu.getByRole("menuitem")).toHaveText([
     "打开",
-    "在侧边打开",
+    "在新标签页中打开",
     /^大纲(⌥⌘L|Ctrl\+Alt\+L)$/,
     "导出…",
     "导出 AI 使用声明",
@@ -631,7 +631,27 @@ for (const language of ["en", "zh-CN"] as const) {
       if (name === "page") {
         // The Mind is open on this page: nothing to open it with.
         expect(ids, name).not.toContain("mind.open");
-        expect(ids, name).not.toContain("mind.openSide");
+        expect(ids, name).not.toContain("mind.openTab");
+      }
+      // One name per way of opening: the Mind's menu says Open and Open in new tab, with no keys,
+      // the tab's has one Split to the right with its keys, and none says "Open to the side".
+      const texts = await items.allTextContents();
+      expect(texts.join("\n"), name).not.toMatch(/Open to the side|在旁边打开|在侧边打开/);
+      if (name === "sidebar") {
+        expect(texts.slice(0, 2), name).toEqual(
+          language === "en" ? ["Open", "Open in new tab"] : ["打开", "在新标签页中打开"],
+        );
+      }
+      if (name === "tab") {
+        expect(
+          ids.filter((id) => id === "tab.split"),
+          name,
+        ).toHaveLength(1);
+        await expect(menu.getByTestId("tab.split"), name).toHaveText(
+          language === "en"
+            ? /^Split to the right(⌥⌘\\|Ctrl\+Alt\+\\)$/
+            : /^向右拆分(⌥⌘\\|Ctrl\+Alt\+\\)$/,
+        );
       }
       expect(ids.length, name).toBeLessThanOrEqual(17);
       // It fits: no scrollbar, and inside the window.

@@ -92,7 +92,7 @@ test("the page starts with its text; the ⋯ at its top right opens by click and
   expect(pageItems.length).toBeGreaterThan(5);
   // Minus what only the row offers (opening a Mind that is open), with Style before Delete, which is last.
   const shared = rowItems.filter(
-    (id) => !["mind.style", "mind.open", "mind.openSide"].includes(id),
+    (id) => !["mind.style", "mind.open", "mind.openTab"].includes(id),
   );
   expect(pageItems).toEqual([...shared.slice(0, -1), "page-style", "mind.delete"]);
 

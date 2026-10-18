@@ -15,7 +15,7 @@ const EXPORTS = [
 
 registerMenu("mind", [
   "mind.open",
-  "mind.openSide",
+  "mind.openTab",
   "mind.outline",
   ...EXPORTS,
   "mind.history",

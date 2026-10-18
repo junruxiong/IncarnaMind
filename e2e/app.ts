@@ -725,6 +725,12 @@ export async function tabMenu(window: Page): Promise<Locator> {
   return menu;
 }
 
+/** Splits the shown tab to the right from its menu, as a person does: a copy of it in a new group. */
+export async function splitFromTabMenu(window: Page): Promise<void> {
+  const menu = await tabMenu(window);
+  await pointAndClick(window, menu.getByTestId("tab.split"));
+}
+
 /** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
 export async function importWordFromMenu(window: Page): Promise<Locator> {
   await window.getByTestId("plus-menu").click();
@@ -1438,7 +1444,10 @@ export async function pointAndClick(
   {
     button = "left",
     modifiers = [],
-  }: { button?: "left" | "right"; modifiers?: readonly ("ControlOrMeta" | "Shift")[] } = {},
+  }: {
+    button?: "left" | "right" | "middle";
+    modifiers?: readonly ("ControlOrMeta" | "Shift")[];
+  } = {},
 ): Promise<void> {
   // A list that redraws as the click begins swaps the element for an equal one: look again.
   let box: Awaited<ReturnType<Locator["boundingBox"]>> = null;

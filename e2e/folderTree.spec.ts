@@ -231,7 +231,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     // In the shared order, each with its shortcut.
     await expect(actions.getByRole("menuitem")).toHaveText([
       /^Open$/,
-      /^Open to the side$/,
+      /^Open in new tab$/,
       /^Outline(⌥⌘L|Ctrl\+Alt\+L)$/,
       /^Export…$/,
       /^Export AI use statement$/,

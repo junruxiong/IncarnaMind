@@ -119,10 +119,6 @@ const surfaceOf = (element: Element | null): Surface => {
   return SURFACES.find((each) => each === marked) ?? "sidebar";
 };
 
-/**
- * Where a menu's last group begins, when that is the danger group (Delete): the rule before it, so
- * what a place adds to the menu goes above it. The menu's length when it has no such group.
- */
 function dangerStart(entries: readonly MenuEntry[]): number {
   const last = entries.at(-1);
   if (!last || last === "rule" || last.command.group !== "danger") return entries.length;
@@ -201,7 +197,6 @@ export function ObjectMenu({
     commands.run(item.command.id, ctx).catch(useAppStore.getState().reportError);
   };
 
-  // Its own items stop at the first of the danger group (Delete), which is always last.
   const dangerAt = dangerStart(entries);
   const itemOf = (entry: MenuEntry, index: number) => {
     if (entry === "rule") {

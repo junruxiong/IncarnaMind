@@ -15,6 +15,7 @@ import {
   removeDataFolder,
   setLanguage,
   setWindowSize,
+  splitFromTabMenu,
   useLocalChatModel,
 } from "./app";
 
@@ -215,8 +216,8 @@ for (const language of ["en", "zh-CN"] as const) {
 
     // Two groups: the lit row is the focused group's shown one.
     const groups = window.getByTestId("tab-group");
-    await pointAndClick(window, mindRow(window, "Gamma"), { button: "right" });
-    await pointAndClick(window, window.getByTestId("mind.openSide"));
+    await splitFromTabMenu(window);
+    await pointAndClick(window, mindRow(window, "Gamma"));
     await expect(groups).toHaveCount(2);
     await litIsShown(window);
     // Focus to the other group: the lit row moves to what that group shows.

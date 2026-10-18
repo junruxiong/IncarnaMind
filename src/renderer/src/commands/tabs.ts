@@ -93,7 +93,7 @@ export const tabCommands: readonly Command[] = [
   },
   {
     ...fromMenu("tab.split"),
-    menuLabel: "tabs.menu.side",
+    menuLabel: "tabs.menu.split",
     group: "open",
     reversible: true,
     when: (ctx) => targetOf(ctx) !== null,

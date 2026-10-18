@@ -1,4 +1,5 @@
 import type { BlockOrigin } from "../../../core/api";
+import { MENU_COMMANDS } from "../../../shared/commands";
 import { signInAgain } from "../chatGptSignIn";
 import { setCheckCardOpen } from "../checks";
 import { useCitationStylePicker } from "../citationStylePicker";
@@ -93,8 +94,7 @@ function mindOf(ctx: CommandContext): string | null {
 const appCommands: readonly Command[] = [
   {
     ...fromMenu("mind.new"),
-    // ⌘T is the one every surface shows; ⌘N, which people expect, still works.
-    shortcut: { keys: "CmdOrCtrl+T", also: "CmdOrCtrl+N" },
+    shortcut: { keys: MENU_COMMANDS["mind.new"].keys, also: "CmdOrCtrl+N" },
     group: "main",
     reversible: true,
     run: () => useAppStore.getState().createMind({ titled: true }),
