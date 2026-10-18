@@ -122,7 +122,7 @@ test("a résumé's summary rewritten by more than half reads whole, with one 原
 
   // The new paragraph whole, its old text one line above it, no old and new words between.
   const rewritten = SUMMARY.replace(OLD_PART, NEW_PART);
-  await expect(summary).toHaveText(rewritten);
+  await expect(summary).toHaveText(`${rewritten}恢复原文`);
   await expect(summary.locator("del")).toHaveCount(0);
   await expect(summary.locator(".applied-new")).toHaveText(rewritten);
   const was = editor.getByTestId("change-was-line");
