@@ -51,6 +51,8 @@ function taskFor(action: EditAction, instruction: string): string {
       return "Explain what the passage says.";
     case "instruction":
       return `Do what the User asks: ${instruction}`;
+    case "cut-unsupported":
+      return `Its sources don't support this part of it: ${instruction}. Take that part out, or rewrite the words so they no longer claim it, and leave the rest as it is, with its markers.`;
   }
 }
 

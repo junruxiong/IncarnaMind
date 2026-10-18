@@ -174,10 +174,10 @@ for (const language of ["en", "zh-CN"] as const) {
     for (const row of await card.getByTestId("claim-cited").all()) {
       expect(await fitsWithin(row, card)).toBe(true);
     }
-    // The card's actions stay as they were.
-    await expect(card.getByTestId("claim-find-sources")).toBeVisible();
-    await expect(card.getByTestId("claim-search-web")).toBeVisible();
-    await expect(card.getByTestId("claim-remove")).toBeVisible();
+    // Its fixes (e2e/unsupportedFixes.spec.ts).
+    await expect(card.getByTestId("claim-cut")).toBeVisible();
+    await expect(card.getByTestId("claim-find-support")).toBeVisible();
+    await expect(card.getByTestId("claim-keep")).toBeVisible();
     await window.keyboard.press("Escape");
 
     // One Citation says "Citation", not "Citations".
