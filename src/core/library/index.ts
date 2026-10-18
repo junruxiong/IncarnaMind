@@ -636,6 +636,20 @@ export function createLibrary(options: {
   return {
     settings: getSettings,
     taggingStoppedFor,
+    /**
+     * Whether Organize holds the Document's Tags: it is queued, running or waiting there, or, while
+     * Organize files new Documents by itself, it has any assignment.
+     */
+    isOrganizing(id: string): boolean {
+      const held = assignment(id);
+      if (!held) return false;
+      return (
+        getSettings().automatic ||
+        held.status === "pending" ||
+        held.status === "classifying" ||
+        held.status === "waiting"
+      );
+    },
     taggingPlaces(): (string | null)[] {
       const ids = db
         .all<{ id: string }>(
@@ -649,9 +663,8 @@ export function createLibrary(options: {
     },
     /**
      * Stops automatic Tagging with AI in these places, or turns it back on.
-     * Turned back on while Organize tags, their stopped Documents are
-     * organized as the User asked, even with automatic Organize off;
-     * otherwise automatic tagging picks them up.
+     * Turned back on while Organize tags new Documents, their stopped Documents
+     * are organized; otherwise automatic tagging picks them up.
      */
     setTaggingStopped(places: readonly (string | null)[], stop: boolean): void {
       if (stop) for (const place of places) if (place !== null) group(place);
@@ -661,7 +674,7 @@ export function createLibrary(options: {
         : before.taggingStopped.filter((each) => !places.includes(each));
       settings.writeDeviceValue("library", { ...before, taggingStopped });
       changed();
-      if (stop || !organizeModelOf(before) || groups().length === 0) return;
+      if (stop || !before.automatic || !organizeModelOf(before) || groups().length === 0) return;
       const ids = db
         .all<{ id: string }>(
           "SELECT id FROM documents WHERE deleted_at IS NULL AND tagging_status = 'stopped'",

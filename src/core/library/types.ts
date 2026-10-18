@@ -107,7 +107,8 @@ export interface LibrarySettings {
   organizeWith: TaggingClassifier | null;
   /**
    * Organize new and changed Documents by itself, once a classifier is chosen.
-   * On until the User turns it off.
+   * Off, automatic tagging still tags them and only the moves into Folders wait
+   * for Organize. On until the User turns it off.
    */
   automatic: boolean;
   /**
