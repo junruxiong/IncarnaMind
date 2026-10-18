@@ -1692,6 +1692,9 @@ export const en = {
   "status.taggingPaused": "Tagging waits for your ChatGPT plan",
   "status.taggingPaused.full":
     "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
+  "status.taggingRateLimited": "Rate limit reached · resumes at {time}",
+  "status.taggingRateLimited.full":
+    "The AI model's rate limit was reached. Tagging goes on by itself at {time}, or now with Retry.",
   "jev.form.sends": "Sends Document text to Jev for tagging.",
 
   "settings.title": "Settings",
@@ -4615,6 +4618,7 @@ export const en = {
   "mindCall.failed.stopped": "Stopped before “{mind}” changed",
   "mindCall.failed.noTable": "Couldn't make the table, so nothing was added to “{mind}”",
   "mindCall.failed.uncited": "Didn't add to “{mind}”: its sources weren't cited",
+  "mindCall.failed.newMind": "Didn't add to “{mind}”: a new Mind was asked for",
   "mindChanges.unlinked": "· {count} sources shown as text, not linked",
   "mindChanges.unlinked.one": "· 1 source shown as text, not linked",
   "mindChanges.dropped": "· {count} sources couldn't be matched, so they were left out",

@@ -40,6 +40,7 @@ import {
 } from "../errors";
 import { isPlanLimit } from "../providers/chatgpt/errors";
 import { classifyProviderError } from "../providers/providerErrors";
+import type { PaceTimers } from "../sources/pace";
 import type { Database } from "../storage";
 import {
   type DocumentExcerpt,
@@ -48,6 +49,8 @@ import {
   type TagDecision,
 } from "./classify";
 import type { TagsStore } from "./index";
+import { type RateLimitPause, rateLimitError } from "./rateLimit";
+import { isTransient, RETRY_WAIT_MS } from "./transient";
 
 /** What the "tagging" flow sends to the tagger's service: the chat model's or Jev's. */
 export const TAGGING_FLOW_SENDS = ["tags", "document-excerpts"] as const;
@@ -92,6 +95,10 @@ export interface TaggerOptions {
   reportError(error: unknown): void;
   /** The background model queue, in which tagging each Document takes one turn. */
   background: BackgroundQueue;
+  /** The pause a rate limit puts on all Tagging (see ./rateLimit). */
+  rateLimit: Pick<RateLimitPause, "pausedUntil" | "pause" | "succeeded">;
+  /** Waits before the one retry after a passing error. */
+  timers: PaceTimers;
 }
 
 interface DocumentRow {
@@ -102,6 +109,7 @@ interface DocumentRow {
   tagging_status: string;
   tagging_error_kind: string | null;
   tagging_error_message: string | null;
+  tagging_error_resets_at: string | null;
 }
 
 export function createTagger(options: TaggerOptions) {
@@ -122,7 +130,8 @@ export function createTagger(options: TaggerOptions) {
 
   const rowOf = (id: string) =>
     db.get<DocumentRow>(
-      `SELECT name, kind, page_count, status, tagging_status, tagging_error_kind, tagging_error_message
+      `SELECT name, kind, page_count, status, tagging_status, tagging_error_kind, tagging_error_message,
+         tagging_error_resets_at
        FROM documents WHERE id = ? AND deleted_at IS NULL`,
       [id],
     );
@@ -138,15 +147,16 @@ export function createTagger(options: TaggerOptions) {
       !row ||
       (row.tagging_status === state &&
         row.tagging_error_kind === (error?.kind ?? null) &&
-        row.tagging_error_message === (error?.message ?? null))
+        row.tagging_error_message === (error?.message ?? null) &&
+        row.tagging_error_resets_at === (error?.resetsAt ?? null))
     ) {
       return false;
     }
     db.run(
       `UPDATE documents SET tagging_status = ?, tagging_error_kind = ?, tagging_error_message = ?,
-         updated_at = ?
+         tagging_error_resets_at = ?, updated_at = ?
        WHERE id = ?`,
-      [state, error?.kind ?? null, error?.message ?? null, now(), id],
+      [state, error?.kind ?? null, error?.message ?? null, error?.resetsAt ?? null, now(), id],
     );
     return true;
   };
@@ -225,15 +235,28 @@ export function createTagger(options: TaggerOptions) {
       // A model on this computer serves one request at a time: an Answer goes first.
       if (tagger.local) call.runsLocally();
       if (stale()) return;
+      const signal = AbortSignal.any([lifetime.signal, call.signal]);
+      const decide = () =>
+        tagger.decide({ tags: definitions, excerpt: excerptOf(id, row), signal });
       try {
-        decisions = await tagger.decide({
-          tags: definitions,
-          excerpt: excerptOf(id, row),
-          signal: AbortSignal.any([lifetime.signal, call.signal]),
-        });
+        try {
+          decisions = await decide();
+        } catch (error) {
+          if (!isTransient(error)) throw error;
+          await options.timers.sleep(
+            RETRY_WAIT_MS.least + Math.random() * RETRY_WAIT_MS.jitter,
+            signal,
+          );
+          decisions = await decide();
+        }
       } catch (error) {
         if (stale()) return;
-        if (isPlanLimit(error)) {
+        const limitedUntil = options.rateLimit.pause(error);
+        if (limitedUntil !== null) {
+          const why = rateLimitError(limitedUntil, error);
+          if (setState(id, "waiting-for-provider", why)) announce([id]);
+          park(why);
+        } else if (isPlanLimit(error)) {
           // The ChatGPT plan's limit: this and the rest wait for it to reset (see ../library/planPace).
           const why = classifyProviderError(error);
           if (setState(id, "waiting-for-provider", why)) announce([id]);
@@ -243,6 +266,7 @@ export function createTagger(options: TaggerOptions) {
         }
         return;
       }
+      options.rateLimit.succeeded();
     }
     if (stale()) return;
 
@@ -258,6 +282,11 @@ export function createTagger(options: TaggerOptions) {
   async function tagNext(call: BackgroundCall): Promise<void> {
     try {
       if (queue.length === 0 || lifetime.signal.aborted) return;
+      const limitedUntil = options.rateLimit.pausedUntil();
+      if (limitedUntil !== null) {
+        park(rateLimitError(limitedUntil));
+        return;
+      }
       const ready = await options.canRun();
       if (lifetime.signal.aborted) return;
       if (!ready) {
@@ -359,14 +388,18 @@ export function createTagger(options: TaggerOptions) {
       );
       return;
     }
-    // Queued, they are about to be tagged, not waiting for a model; a plan's pause keeps saying why.
+    // Queued, they are about to be tagged, not waiting for a model; a plan's pause keeps saying
+    // why, and a rate limit's does until it ends.
+    const limited = options.rateLimit.pausedUntil() !== null;
     setStates(
       rest
         .filter(
           (row) =>
             row.tagging_status === "stopped" ||
             row.tagging_status === "no-tags" ||
-            (row.tagging_status === "waiting-for-provider" && row.tagging_error_kind === null),
+            (row.tagging_status === "waiting-for-provider" &&
+              (row.tagging_error_kind === null ||
+                (row.tagging_error_kind === "rate-limit" && !limited))),
         )
         .map((row) => row.id),
       "pending",

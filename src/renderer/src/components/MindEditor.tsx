@@ -25,7 +25,6 @@ import { startCompareDocuments, useComparisons } from "../comparisons";
 import { chosenScope, useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
-import { AppliedReviewBar } from "../editor/AppliedReviewBar";
 import { holdsAiText } from "../editor/aiText";
 import { AppliedEditLine } from "../editor/appliedEditLine";
 import { BlockHandle } from "../editor/BlockHandle";
@@ -711,7 +710,6 @@ function MindEditorView({
         {wordLook && <style>{wordLook.css}</style>}
         {wordLook && <WordTableFades frame={frame} />}
         {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
-        {!readOnly && <AppliedReviewBar editor={editor} />}
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} mind={{ id: mindId, doc }} />
