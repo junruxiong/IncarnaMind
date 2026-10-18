@@ -72,6 +72,23 @@ describe("The cited sentences of an Answer", () => {
     expect(found[0]?.context).toBe("Short inputs are cheap. Long ones are not.");
   });
 
+  // protects=what a model leaves of a malformed marker, or a lone "Yes", is no claim to check; fails_when=a stray "^{3}]" or a one-word sentence is sent to the check; no_claim=none beyond protects.
+  test("a leftover of a malformed marker, or a sentence that claims nothing, isn't checked", () => {
+    expect(
+      citedSentences("Short inputs are cheap.[^{3}][^2] Yes[^1].", CITATIONS).map(
+        (each) => each.sentence,
+      ),
+    ).toEqual([]);
+  });
+
+  // protects=a calculated figure's marker is written as the figure the Answer shows, so the check isn't asked about "[=1]"; fails_when=a claim reaches the check with its figure marker; no_claim=none beyond protects.
+  test("a calculated figure is read as the number the Answer shows", () => {
+    const [found] = citedSentences("The gap is [=1] points [^1].", CITATIONS, [
+      { marker: 1, shown: "17.2" },
+    ]);
+    expect(found?.sentence).toBe("The gap is 17.2 points.");
+  });
+
   // protects=a marker the Answer has no Citation for leaves its sentence uncited; fails_when=a sentence with a dropped marker is checked against nothing; no_claim=none beyond protects.
   test("a marker with no Citation doesn't make its sentence cited", () => {
     expect(citedSentences("It is quadratic [^9].", CITATIONS)).toEqual([]);

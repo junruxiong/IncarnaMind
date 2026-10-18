@@ -3,8 +3,14 @@
  * what they cite, as the app's own claim check (Check against Documents)
  * judges them, not a model of the evaluation's own.
  */
-import type { CitedQuote, Core, MarkedCitation } from "../../src/core";
-import { comparableSentence, INLINE_NODE, sentenceSpans } from "../../src/shared/sentences";
+import type { CitedQuote, Core, MarkedCitation, MarkedFigure } from "../../src/core";
+import { FIGURE_MARKER } from "../../src/shared/figureMarkers";
+import {
+  comparableSentence,
+  INLINE_NODE,
+  isClaim,
+  sentenceSpans,
+} from "../../src/shared/sentences";
 
 export interface CitedSentence {
   /** The sentence without its Citation markers. */
@@ -41,6 +47,7 @@ export function citedSentences(
     MarkedCitation,
     "marker" | "documentName" | "documentId" | "contentHash" | "quote"
   >[],
+  figures: readonly Pick<MarkedFigure, "marker" | "shown">[] = [],
 ): CitedSentence[] {
   const found: CitedSentence[] = [];
   for (const line of text.split("\n")) {
@@ -48,6 +55,11 @@ export function citedSentences(
     const markers: number[] = [];
     const marked = line
       .replace(BLOCK_MARKUP, "")
+      .replace(
+        FIGURE_MARKER,
+        (marker, number: string) =>
+          figures.find((each) => each.marker === Number(number))?.shown ?? marker,
+      )
       .replace(MARKER, (_, number: string) => {
         markers.push(Number(number));
         return INLINE_NODE;
@@ -72,7 +84,7 @@ export function citedSentences(
           : [];
       });
       const sentence = withoutMarkers(marked.slice(from, to));
-      if (cited.length > 0 && sentence !== "") found.push({ sentence, context, cited });
+      if (cited.length > 0 && isClaim(sentence)) found.push({ sentence, context, cited });
     }
   }
   return found;
@@ -81,10 +93,14 @@ export function citedSentences(
 /** Each cited sentence of an Answer, checked against the Documents as Check against Documents does. */
 export async function checkCitedSentences(
   core: Pick<Core, "checkClaim">,
-  answer: { text: string; citations: Parameters<typeof citedSentences>[1] },
+  answer: {
+    text: string;
+    citations: Parameters<typeof citedSentences>[1];
+    figures?: Parameters<typeof citedSentences>[2];
+  },
 ): Promise<SentenceSupport[]> {
   const results: SentenceSupport[] = [];
-  for (const each of citedSentences(answer.text, answer.citations)) {
+  for (const each of citedSentences(answer.text, answer.citations, answer.figures)) {
     const result = await core.checkClaim({
       claim: each.sentence,
       context: each.context,
