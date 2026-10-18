@@ -169,7 +169,7 @@ test("one Mind changed: the card says what was changed and how much of it waits,
   const card = answer.getByTestId("mind-changes");
   const title = card.getByTestId("mind-changes-title");
   const left = card.getByTestId("mind-changes-left");
-  await expect(title).toHaveText("在“第三季度”中已修改 1 个段落");
+  await expect(title).toHaveText("在“第三季度”中修改了 1 个段落");
   await expect(left).toHaveText("· 1 个段落待确认");
   await expect(card.getByTestId("mind-changes-row")).toHaveCount(0);
   await screenshot(window, "card-one-mind-zh");
@@ -180,7 +180,7 @@ test("one Mind changed: the card says what was changed and how much of it waits,
   await pointAndClick(window, card.getByTestId("mind-changes-accept-all"));
   const editor = window.getByTestId("mind-editor");
   await expect(editor.locator("p")).toHaveText(["销售好，利润很高。"]);
-  await expect(title).toHaveText("在“第三季度”中已修改 1 个段落");
+  await expect(title).toHaveText("在“第三季度”中修改了 1 个段落");
   await expect(left).toHaveText("· 没有待确认的修订");
 
   await window.keyboard.press("ControlOrMeta+z");
