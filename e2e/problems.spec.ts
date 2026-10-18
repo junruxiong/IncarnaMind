@@ -245,7 +245,7 @@ test("a Document whose file moved says so in the viewer with Locate file…, whi
   await gone.getByTestId("viewer-locate-file").focus();
   await window.keyboard.press("Enter");
   const result = gone.getByTestId("viewer-locate-result");
-  await expect(result).toContainText("That isn't the file for Amendment No. 2");
+  await expect(result).toContainText("Not the file for “Amendment No. 2”");
   await expect(item).toHaveCount(2);
   await expect(gone.getByTestId("viewer-locate-file")).toBeVisible();
   await screenshot(window, "viewer-file-not-this-en");
