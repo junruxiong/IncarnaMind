@@ -336,14 +336,14 @@ describe("Tagging with Jev", { timeout: 30_000 }, () => {
   test("a Jev failure marks tagging failed with its kind, after retrying; a re-tag tries again", async () => {
     const { core, jev } = await startWithJev();
     jev.answer({ Paper: 0.9 });
-    jev.fail({ status: 429, message: "Rate limit exceeded.", headers: { "retry-after": "0" } });
+    jev.fail({ status: 500, message: "Internal error.", headers: { "retry-after": "0" } });
     await useLocalJev(core, jev);
     const document = await addDocument(core, "Attention.md", PAPER_TEXT);
 
     const [failed] = await waitForTagging(core, [document.id], (each) => each.tagging === "failed");
     expect(failed).toMatchObject({
       status: "ready",
-      taggingError: { kind: "rate-limit", message: "Rate limit exceeded." },
+      taggingError: { kind: "provider", message: "Internal error." },
     });
     // Asked again twice after the first refusal.
     expect(jev.requests).toHaveLength(3);

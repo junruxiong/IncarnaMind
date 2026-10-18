@@ -675,7 +675,8 @@ function useStatuses(): Status[] {
     ).length;
     const attention = library.assignments.filter(
       (item) =>
-        (item.status === "waiting" && item.error?.kind !== "rate-limit") || item.status === "failed",
+        (item.status === "waiting" && item.error?.kind !== "rate-limit") ||
+        item.status === "failed",
     ).length;
     if (attention)
       statuses.push({

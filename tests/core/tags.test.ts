@@ -436,10 +436,10 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     const { core, tagging } = await startTagging(["Paper"]);
     tagging.fail(
       new APICallError({
-        message: "Too many requests",
+        message: "Internal server error",
         url: "http://127.0.0.1:11434/v1/chat/completions",
         requestBodyValues: {},
-        statusCode: 429,
+        statusCode: 500,
         isRetryable: false,
       }),
     );
@@ -447,7 +447,7 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     const document = await addDocument(core, "Attention.md", PAPER_TEXT);
 
     const [failed] = await waitForTagging(core, [document.id], (each) => each.tagging === "failed");
-    expect(failed?.taggingError).toEqual({ kind: "rate-limit", message: "Too many requests" });
+    expect(failed?.taggingError).toEqual({ kind: "provider", message: "Internal server error" });
     expect(failed?.status).toBe("ready");
 
     tagging.fail(null);

@@ -8,8 +8,8 @@
 import { APICallError } from "ai";
 import { describe, expect, test, vi } from "vitest";
 import type { Core, Document } from "../../src/core";
-import { RATE_LIMIT_PAUSE } from "../../src/core/tags/rateLimit";
 import type { PaceTimers } from "../../src/core/sources/pace";
+import { RATE_LIMIT_PAUSE } from "../../src/core/tags/rateLimit";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { scriptedModels } from "../helpers/models";
