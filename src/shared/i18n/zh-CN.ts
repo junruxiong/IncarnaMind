@@ -301,7 +301,7 @@ export const zhCN = {
   "undo.name.restore": "恢复",
   "deleted.title": "回收站",
   "deleted.command": "打开回收站",
-  "deleted.intro": "删除的内容保留 30 天。磁盘上的文件不受影响。",
+  "deleted.intro": "删除的内容保留 30 天，之后彻底删除。磁盘上的文件不受影响。",
   "deleted.empty": "回收站是空的。",
   "deleted.list": "回收站",
   "deleted.name": "名称",
