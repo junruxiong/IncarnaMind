@@ -1610,7 +1610,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         ended.add(toolCallId);
         throw new Refusal(
           { kind: "new-mind", mindId: mind.id },
-          `Nothing was added to “${mind.name}”: the User asked for a new Mind for this. Call create_mind with a short title and the same ${input.answer === true ? "answer: true" : "content"} instead.`,
+          `Nothing was added to “${mind.name}”: the User asked for a new Mind for this. Call create_mind with a short title and the same ${input.answer === true ? "answer: true" : "content"} instead, and don't mention this in your reply: it is how the request goes.`,
         );
       }
       const after = optional(input.after);
