@@ -23,6 +23,8 @@ import {
 } from "./app";
 
 const FIXTURES = join(__dirname, "..", "tests", "fixtures", "formats");
+/** Pictures of the editor for the spike's report, which CI uploads. */
+const SHOTS = join(__dirname, "..", "test-results", "excel-spike");
 const sha = async (path: string) =>
   createHash("sha256")
     .update(await readFile(path))
@@ -80,6 +82,7 @@ test("a workbook edited in the viewer recalculates, saves a copy and leaves the 
   await viewer.getByTestId("sheet-selected").waitFor();
   await expect(viewer.getByTestId("sheet-edit-ref")).toHaveText("B8");
   await expect(viewer.getByTestId("sheet-formula-input")).toHaveValue("=SUM(B4:B7)");
+  await viewer.screenshot({ path: join(SHOTS, `edited-${process.platform}.png`) });
 
   await viewer.getByTestId("sheet-save-copy").click();
   await expect(viewer.getByTestId("sheet-edit-saved")).toContainText(
@@ -97,6 +100,7 @@ test("a workbook edited in the viewer recalculates, saves a copy and leaves the 
   await expect(cited).toHaveAttribute("data-ref", "F7");
   await expect(cited).toHaveText("£1,677,500");
   await expect(cited).toBeInViewport();
+  await viewer.screenshot({ path: join(SHOTS, `cited-copy-${process.platform}.png`) });
   await app.close();
 });
 

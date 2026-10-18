@@ -9,8 +9,8 @@ validation, defined names, plus tables, comments, pictures, sparklines and slice
 made after an edit (an <name>.json beside it) leaves the edited cell and its dependents'
 values out of the value check, and only the edited cell's formula may differ.
 """
-import json, os, re, sys, zipfile, warnings, hashlib
-from multiprocessing import Pool
+import json, os, re, subprocess, sys, zipfile, warnings, hashlib
+from concurrent.futures import ThreadPoolExecutor
 warnings.filterwarnings("ignore")
 import openpyxl
 from openpyxl.worksheet.formula import ArrayFormula
@@ -155,14 +155,27 @@ def judge(job):
     r["examples"] = examples
     return r
 
+def judge_in_child(job):
+    """Each file in a process of its own, at most two minutes: a workbook can hang or crash openpyxl."""
+    original, copy, edit = job
+    args = [sys.executable, "-I", os.path.abspath(__file__), "--one", original, copy] + ([edit] if edit else [])
+    try:
+        done = subprocess.run(args, capture_output=True, text=True, timeout=120)
+        return json.loads(done.stdout.strip().splitlines()[-1])
+    except Exception as e:
+        return {"file": os.path.basename(copy), "judge_cannot_read_original": f"judge failed: {type(e).__name__}"}
+
 if __name__ == "__main__":
+    if sys.argv[1] == "--one":
+        print(json.dumps(judge((sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)), default=str))
+        sys.exit(0)
     originals, copies, out = sys.argv[1:4]
     jobs = []
     for name in sorted(os.listdir(copies)):
         if not name.endswith(".xlsx") or not os.path.exists(os.path.join(originals, name)): continue
         edit = os.path.join(copies, name[:-5] + ".json")
         jobs.append((os.path.join(originals, name), os.path.join(copies, name), edit if os.path.exists(edit) else None))
-    with Pool(6) as pool:
-        results = pool.map(judge, jobs, chunksize=4)
+    with ThreadPoolExecutor(6) as pool:
+        results = list(pool.map(judge_in_child, jobs))
     json.dump(results, open(out, "w"), indent=1, default=str)
     print(len(results), "judged")
