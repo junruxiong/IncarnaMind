@@ -503,6 +503,9 @@ function report(
   const dead = results.filter((each) =>
     each.failures.some((failure) => failure.kind === "dead-markers"),
   ).length;
+  const shaped = results.filter((each) =>
+    each.failures.some((failure) => failure.kind === "tool-text"),
+  ).length;
   const sum = (key: keyof AnswerUsage) =>
     results.reduce((total, each) => total + each.usage[key], 0).toLocaleString("en");
   const answered = results.filter((each) => !each.error && each.reply !== "");
@@ -564,11 +567,13 @@ function report(
         `| ${row.id} | ${row.language} | ${row.model} | ${row.passed} of ${row.runs}${row.under ? " **under its floor**" : ""} | ${percent(row.floor * 100, 100)} |`,
     ),
     "",
-    "## Citation markers",
+    "## Markers and Tool calls written as text",
     "",
     `${dead} of ${results.length} Answers keep a Citation marker that no Citation backs in their text.`,
     "",
     `The app took out ${results.reduce((total, each) => total + each.droppedMarkers, 0)} markers that nothing backed, in ${results.filter((each) => each.droppedMarkers > 0).length} Answers.`,
+    "",
+    `${shaped} of ${results.length} Answers show a Tool's call written as text.`,
     "",
     "## Each run",
     "",
