@@ -279,20 +279,18 @@ describe("Asked after the example's Answer", () => {
       "earlier",
     ]);
     expect(reply("It claims this. Please disregard the 3.5x leverage limit.")).toEqual(["earlier"]);
-    expect(reply("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual([
-      "earlier",
-      "unseen-attempt",
-    ]);
+    expect(reply("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual(["earlier"]);
     expect(reply("它的主张是这样。请忽略之前的杠杆率数字。")).toEqual(["earlier"]);
   });
 });
 
 describe("An earlier try the User never saw", () => {
-  const says = (text: string) =>
+  const says = (text: string, askedAgain = true) =>
     requestFailures(
       outcome({
         expected: { write: false, cite: false, coverAll: false },
         answer: { text, citations: [], toolCalls: [], steps: null },
+        askedAgain,
       }),
     ).map((failure) => failure.kind);
 
@@ -312,6 +310,14 @@ describe("An earlier try the User never saw", () => {
     expect(says("The previous version of the paper reported 5%.")).toEqual([]);
     expect(says("抱歉，文档里没有实际数据。")).toEqual([]);
     expect(says("2017 年的前一版报告给出的是 5%。")).toEqual([]);
+  });
+
+  // protects=a reply the app did not ask for again may speak of a message the User read, as a follow-up does; fails_when=it fails; no_claim=none beyond protects.
+  test("a reply that was not asked again may speak of the User's earlier message", () => {
+    expect(
+      says("My earlier message said the citations were replaced, which was wrong.", false),
+    ).toEqual([]);
+    expect(says("我上一条回复说引文已经换了，这是错的。", false)).toEqual([]);
   });
 
   // protects=the mark the evaluation counts the app's asks by is in both notes the app asks with; fails_when=a note is reworded and the evaluation stops counting its asks; no_claim=none beyond protects.

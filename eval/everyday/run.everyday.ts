@@ -366,6 +366,7 @@ async function runCase(
     changedBlocks,
     addedBlocks,
     sourcesAsText: sourcesAsTextIn,
+    askedAgain: asks.again > 0,
     scoped,
     texts: each.library === "dated" ? DATED_TEXTS : undefined,
   });
@@ -663,7 +664,7 @@ function report(
     "",
     "The app asks the model again when a reply claims a change no Tool made or a request to write wrote nothing, and once for the Citations of an Answer. The User reads none of those tries: the Answer says nothing of an earlier try. The `reask-` requests put a reply of their own in place of the model's first, so each of them is asked again.",
     "",
-    "| Model | Language | Answers | Asked again | Asked for Citations | Say something of an earlier try |",
+    "| Model | Language | Answers | Asked again | Asked for Citations | Asked again, and say something of an earlier try |",
     "|---|---|---|---|---|---|",
     ...asksByGroup(results).map(
       (group) =>

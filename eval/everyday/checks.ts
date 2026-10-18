@@ -22,7 +22,8 @@
  * - **The Question asked is the Answer's subject**: asked after the example's
  *   Answer, nothing in the reply is about an earlier Answer or the example.
  * - **No word of an attempt the User never saw**: when the app asks the model
- *   again inside a turn, the reply says nothing of the earlier try (#1226).
+ *   again inside a turn, the reply says nothing of the earlier try (#1226); a
+ *   reply that was not asked again may speak of a message the User did read.
  * - **Only the text's dates**: every date the reply gives is one the
  *   Documents' text writes, or is named as a file's (./dates).
  */
@@ -65,6 +66,8 @@ export interface RequestOutcome {
   addedBlocks?: readonly number[];
   /** Sources the Minds it wrote hold as text, in brackets, as written. */
   sourcesAsText?: readonly string[];
+  /** The app asked the model again inside the turn, so the User never read its first try. */
+  askedAgain?: boolean;
   scoped: readonly { id: string; name: string }[];
   /** The text of the Documents in scope, for `textDates`. */
   texts?: readonly string[];
@@ -190,7 +193,7 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   }
   const said = expected.noEarlier ? answer.text.match(EARLIER)?.[0] : undefined;
   if (said) failures.push({ kind: "earlier", said });
-  const unseen = aboutAnUnseenAttempt(answer.text);
+  const unseen = outcome.askedAgain ? aboutAnUnseenAttempt(answer.text) : null;
   if (unseen) failures.push({ kind: "unseen-attempt", said: unseen });
   const dates = expected.textDates ? datesNotInText(answer.text, outcome.texts ?? []) : [];
   if (dates.length > 0) failures.push({ kind: "date-not-in-text", dates });
