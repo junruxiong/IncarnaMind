@@ -31,8 +31,8 @@ const TIDES = buildPdf([
 const SENTENCE = "Spring tides happen at new and full moon.";
 
 const NOTICE = {
-  en: "This model is small, so its verdicts may be wrong. A larger model checks more reliably.",
-  "zh-CN": "这个模型较小，核对结论可能不准。换更大的模型会更可靠。",
+  en: "A small model: its verdicts may be wrong.",
+  "zh-CN": "模型较小，结论可能不准。",
 } as const;
 
 let dataDir: string;

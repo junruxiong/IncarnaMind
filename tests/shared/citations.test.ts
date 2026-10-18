@@ -336,7 +336,7 @@ describe("The words an Answer put in quotation marks that a Citation's page lack
       zh: "未在第 3 页找到引文",
     });
     expect(translate("en", "citation.reason.quoted-words-not-on-pages")).toContain(
-      "words in quotation marks",
+      "The quoted words",
     );
     expect(translate("zh-CN", "citation.reason.quoted-words-not-on-pages")).toContain("引号");
   });
