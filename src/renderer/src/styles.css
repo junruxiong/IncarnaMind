@@ -6349,9 +6349,9 @@
     }
   }
   /*
-   * Under an Answer: Copy · Add to note ▾ (Stop while it is written); on
-   * hover or focus, and always on the newest, while it is written and once
-   * it is added. Hidden ones keep their room and their place in the Tab order.
+   * Under an Answer: Copy · Add to note ▾; on hover or focus, and always on
+   * the newest, while it is written (empty then) and once it is added. Hidden
+   * ones keep their room and their place in the Tab order.
    */
   .assistant-answer-actions {
     display: flex;
@@ -6666,7 +6666,6 @@
   }
   .answer-steps-wait {
     margin: 0 0 0 20px;
-    overflow-wrap: anywhere;
     font-size: 13px;
     line-height: 18px;
     color: var(--color-ink-meta);
