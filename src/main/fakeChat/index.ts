@@ -121,7 +121,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           url: "https://fake.invalid/chat",
           requestBodyValues: {},
           statusCode: 429,
-          responseHeaders: { "retry-after": "3600" },
+          responseHeaders: { "retry-after": "600" },
           isRetryable: true,
         });
       }
