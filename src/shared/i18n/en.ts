@@ -222,6 +222,7 @@ export const en = {
   "sidebar.resize": "Resize the sidebar",
   "sidebar.hide": "Hide sidebar",
   "sidebar.show": "Show sidebar",
+  "sidebar.show.taggingNeedsYou": "Show sidebar · Tagging needs you",
   "sidebar.hidden.announce": "Sidebar hidden",
   "sidebar.shown.announce": "Sidebar shown",
   "sidebar.tree": "Folders, Minds and Documents",
