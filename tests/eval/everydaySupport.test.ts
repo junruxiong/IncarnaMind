@@ -30,6 +30,7 @@ const verdict = (kind: "supported" | "unsupported"): ClaimCheckResult => ({
   verdict: kind,
   evidence: null,
   says: null,
+  unsupported: null,
   calculation: null,
   citedCaseUnchecked: false,
   citedCaseFound: false,
