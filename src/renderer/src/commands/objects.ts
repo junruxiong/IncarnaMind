@@ -103,8 +103,10 @@ export const mindCommands: readonly Command[] = [
     label: "mind.moveTo",
     rowKeys: "CmdOrCtrl+Shift+M",
     group: "move",
-    appliesTo: ["mind", "tab"],
-    when: (ctx) => ofMind(ctx) && ctx.here?.["mind.moveTo"] !== undefined,
+    // A sidebar selection of Minds and Documents moves together, from either kind's row.
+    appliesTo: ["mind", "tab", "document"],
+    when: (ctx) =>
+      ctx.here?.["mind.moveTo"] !== undefined && (ofMind(ctx) || idsOf(ctx, "mind").length > 0),
     reversible: true,
     run: (ctx) => ctx.here?.["mind.moveTo"]?.(),
   },
@@ -196,7 +198,7 @@ export const documentCommands: readonly Command[] = [
     label: "documents.moveTo",
     rowKeys: "CmdOrCtrl+Shift+M",
     group: "move",
-    appliesTo: ["document"],
+    appliesTo: ["document", "mind"],
     reversible: true,
     ...needsHere("document.moveTo"),
   },

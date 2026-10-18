@@ -7,6 +7,9 @@ import type { ObjectRef } from "../objects";
 import { useAppStore } from "../store";
 import { editTag } from "../tagChanges";
 import { BrowseGroup } from "./BrowseGroup";
+import { TagFilterMenu } from "./DocumentTags";
+import { useFolds } from "./LibraryFolders";
+import { SidebarSection } from "./SidebarSection";
 import { ReviewRing, TagDot } from "./TagColour";
 
 const NONE: readonly Document[] = [];
@@ -17,14 +20,15 @@ const markBox = (mark: ReactNode) => (
 );
 
 /**
- * The sidebar's Tags view, beside Folders and Folders on disk: "Needs
- * review" first while a Tag awaits review (as in the Tags filter), then every
- * Tag in name order, each with its dot and how many Documents carry it.
- * Clicking one shows its Documents in the Library, through the Tag filter the
- * Library and the sidebar share, and marks it chosen; clicking it again
- * there stops filtering, as a chip does. Its chevron lists its Documents
- * here, as a Folder's does; a Document with several Tags is under each. The
- * counts are of every Document, whatever the filter, as Manage Tags counts them.
+ * The sidebar's Tags section, last in the tree, once a Tag is on a Document:
+ * "Needs review" first while a Tag awaits review (as in the Tags filter),
+ * then each Tag in use, in name order, with its dot and how many Documents
+ * carry it. Its heading folds it away, and offers the Tag filter. Clicking a
+ * Tag shows its Documents in the Library, through the Tag filter the Library
+ * and the sidebar share, and marks it chosen; clicking it again there stops
+ * filtering, as a chip does. Its chevron lists its Documents here, as a
+ * Folder's does; a Document with several Tags is under each. The counts are
+ * of every Document, whatever the filter, as Manage Tags counts them.
  */
 export function SidebarTags({
   renderDocument,
@@ -39,6 +43,7 @@ export function SidebarTags({
   const byTag = useMemo(() => documentsByTag(documents), [documents]);
   // Folded at first: a Document with several Tags would be listed several times.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const folded = useFolds((state) => state.tagsFolded);
 
   const group = (
     value: string,
@@ -80,29 +85,33 @@ export function SidebarTags({
     />
   );
 
+  const used = tags.filter((tag) => byTag.has(tag.id));
+  const reviewing = byTag.has(NEEDS_REVIEW) || tagFilter.includes(NEEDS_REVIEW);
+  if (used.length === 0 && !reviewing) return null;
   return (
-    <div data-testid="sidebar-tags">
-      {tags.length === 0 ? (
-        <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.menu.none")}</p>
-      ) : (
-        <ul role="none">
-          {(byTag.has(NEEDS_REVIEW) || tagFilter.includes(NEEDS_REVIEW)) &&
-            group(NEEDS_REVIEW, t("tags.filter.review"), <ReviewRing />)}
-          {tags.map((tag) =>
-            group(
-              tag.id,
-              tag.name,
-              <TagDot colour={tag.colour} size="md" />,
-              tag.description || tag.name,
-              { kind: "tag", id: tag.id },
-              {
-                label: t("tag.renameLabel", { name: tag.name }),
-                commit: (next) => editTag(tag.id, { name: next }),
-              },
-            ),
-          )}
-        </ul>
-      )}
-    </div>
+    <SidebarSection
+      testId="sidebar-tags"
+      title={t("tags.title")}
+      headingTestId="tags-toggle"
+      fold={{ open: !folded, toggle: () => useFolds.getState().toggleTags() }}
+      actions={<TagFilterMenu />}
+    >
+      <ul role="none">
+        {reviewing && group(NEEDS_REVIEW, t("tags.filter.review"), <ReviewRing />)}
+        {used.map((tag) =>
+          group(
+            tag.id,
+            tag.name,
+            <TagDot colour={tag.colour} size="md" />,
+            tag.description || tag.name,
+            { kind: "tag", id: tag.id },
+            {
+              label: t("tag.renameLabel", { name: tag.name }),
+              commit: (next) => editTag(tag.id, { name: next }),
+            },
+          ),
+        )}
+      </ul>
+    </SidebarSection>
   );
 }

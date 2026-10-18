@@ -24,12 +24,7 @@ import { documentFields, folderFields } from "../sortFields";
 import { allExamples, selectTagFilterKey, useAppStore } from "../store";
 import { foldKeys, useTreeItem } from "../treeKeys";
 import { ExampleChip } from "./GettingStarted";
-import {
-  ChevronDownLineIcon,
-  ChevronRightLineIcon,
-  FolderLineIcon,
-  LooseDocumentsLineIcon,
-} from "./lineIcons";
+import { ChevronDownLineIcon, ChevronRightLineIcon, FolderLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import {
   clearsActions,
@@ -41,7 +36,7 @@ import {
   rowPadding,
 } from "./sidebarRows";
 
-/** The "Other Documents" group's key among the folded. */
+/** The sort key of the files added on their own, which a Linked folder's tree leaves out. */
 const OTHER_DOCUMENTS = "other-documents";
 
 /** As long as the wash's animation lasts (`[data-just-linked]` in styles.css). */
@@ -60,8 +55,11 @@ interface FolderTreeState {
    * there, and leaves the unfiltered tree as it was. Forgotten for another Tag.
    */
   filtered: { tagId: string; collapsed: ReadonlySet<string> } | null;
+  /** The Linked folders the User unfolded: each starts folded, its row and state in sight. */
+  opened: ReadonlySet<string>;
   /** Folds or unfolds a Folder or group, in the tree as it shows now: filtered by `tagId`, or not. */
   toggle(key: string, tagId: string | null): void;
+  toggleOpened(key: string): void;
 }
 
 const toggled = (set: ReadonlySet<string>, key: string): ReadonlySet<string> => {
@@ -74,6 +72,8 @@ const toggled = (set: ReadonlySet<string>, key: string): ReadonlySet<string> => 
 export const useFolderTree = create<FolderTreeState>()((set) => ({
   collapsed: new Set(),
   filtered: null,
+  opened: new Set(),
+  toggleOpened: (key) => set((state) => ({ opened: toggled(state.opened, key) })),
   toggle: (key, tagId) =>
     set((state) => {
       if (tagId === null) return { collapsed: toggled(state.collapsed, key) };
@@ -96,12 +96,12 @@ interface FolderTreeProps {
 }
 
 /**
- * The Documents section's tree (ADR-0010): each Linked folder with its
- * Folders as they are on disk, and then "Other Documents", the files added
- * on their own. A Document is one step deeper than its Folder. A Linked
- * folder shown flat lists all its Documents right under it. Folders follow
- * the disk, so there is nothing to create, rename or move here; clicking one
- * folds or unfolds it. Without Linked folders, the Documents are the tree.
+ * The sidebar's Linked folders (ADR-0010): each Linked folder's row, with
+ * its state, folded at first; unfolded, its folders as they are on disk. The
+ * files added on their own are in the Folders and Not in a Folder only. A
+ * Document is one step deeper than its Folder. A Linked folder shown flat lists all its
+ * Documents right under it. Folders follow the disk, so there is nothing to
+ * create, rename or move here; clicking one folds or unfolds it.
  *
  * A Linked folder's own row says how it is (indexing, paused, unavailable,
  * online-only files skipped, nothing in it) at its end, on its one line, and
@@ -114,6 +114,7 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
   const tagFilter = useAppStore(selectTagFilterKey);
   const collapsed = useFolderTree((state) => state.collapsed);
   const filteredFolds = useFolderTree((state) => state.filtered);
+  const opened = useFolderTree((state) => state.opened);
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
   const language = useLanguage();
   const choices = useSort((state) => state.scopes);
@@ -208,7 +209,7 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
             name={folder.name}
             depth={depth}
             hasContents={hasContents}
-            expanded={isExpanded(folder.id)}
+            expanded={opened.has(folder.id)}
           >
             {contents}
           </LinkedFolderItem>
@@ -231,32 +232,11 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
       );
     });
 
-  const others = groups.get(null) ?? [];
-  // Without Linked folders there is nothing to set the Other Documents apart from.
-  if (tree.length === 0) {
-    return others.length === 0 ? null : (
-      <ul role="none" data-testid="document-tree">
-        {others.map((item) => renderDocument(item, 0))}
-      </ul>
-    );
-  }
+  if (tree.length === 0) return null;
   return (
     <ul role="none" data-testid="document-tree">
       {renderLevel(
         sorted(tree, choices.sidebar ?? forAll, (node) => folderFields(node.folder), language),
-      )}
-      {others.length > 0 && (
-        <GroupItem
-          testId="other-documents"
-          groupKey={OTHER_DOCUMENTS}
-          name={t("documents.other")}
-          icon={LooseDocumentsLineIcon}
-          depth={0}
-          expanded={isExpanded(OTHER_DOCUMENTS)}
-          expandable
-        >
-          {others.map((item) => renderDocument(item, 1))}
-        </GroupItem>
       )}
     </ul>
   );
@@ -317,6 +297,7 @@ function LinkedFolderItem({
       paused={state.kind === "paused"}
       chip={isExample && <ExampleChip />}
       object={{ kind: "linkedFolder", id: linked.id }}
+      onToggle={() => useFolderTree.getState().toggleOpened(folderId)}
       actions={
         <ObjectMenu
           target={{ kind: "linkedFolder", id: linked.id }}
@@ -370,6 +351,8 @@ interface GroupItemProps {
   object?: ObjectRef;
   /** After its name, unless a status takes the room: the examples' Linked folder says "Example". */
   chip?: ReactNode;
+  /** Folds or unfolds it, where that isn't `useFolderTree`'s `toggle` (a Linked folder's row). */
+  onToggle?(): void;
   data?: Record<`data-${string}`, string>;
   /** What is inside: sub-Folders, then Documents, shown while unfolded. */
   children: ReactNode;
@@ -383,6 +366,7 @@ interface GroupItemProps {
 function GroupItem(props: GroupItemProps) {
   const { testId, groupKey, name, title, icon: Icon, depth, expanded, expandable } = props;
   const { muted = false, status, progress = null, paused = false, actions, object, chip } = props;
+  const { onToggle } = props;
   const { data } = props;
   const children = props.children;
   const toggle = useFolderTree((state) => state.toggle);
@@ -434,8 +418,8 @@ function GroupItem(props: GroupItemProps) {
             {...treeItem}
             data-testid="folder-toggle"
             title={title ?? name}
-            onClick={() => toggle(groupKey, tagFilter)}
-            onKeyDown={foldKeys(open, () => toggle(groupKey, tagFilter))}
+            onClick={() => (onToggle ? onToggle() : toggle(groupKey, tagFilter))}
+            onKeyDown={foldKeys(open, () => (onToggle ? onToggle() : toggle(groupKey, tagFilter)))}
             className={buttonClass}
             style={rowPadding(depth)}
           >

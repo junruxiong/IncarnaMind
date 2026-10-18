@@ -170,6 +170,15 @@ export function madeMessage(
   return t(`folder.made.${kind}`, { name: folderName, count: what.count });
 }
 
+/** What is moved, as its drag and "Move to…" name it: "Shortlist", "3 Documents", "3 items". */
+export function movingName(t: Translate, items: MoveItems, names: Names): string {
+  const what = whatMoves(t, items, names);
+  if ("name" in what) return what.name;
+  if (what.kind === "minds") return t("mind.count", { count: what.count });
+  if (what.kind === "documents") return t("library.count", { count: what.count });
+  return t("move.items", { count: what.count });
+}
+
 /** The move as the Edit menu names it: "Move “Shortlist”", "Move 3 Documents". */
 export function moveName(t: Translate, items: MoveItems, names: Names): string {
   const what = whatMoves(t, items, names);

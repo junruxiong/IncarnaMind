@@ -1,23 +1,71 @@
 import type { DragEvent } from "react";
 import { create } from "zustand";
+import { startDocumentDrag } from "./documentDrag";
 import { itemsOf, type MoveItems } from "./moves";
 import { useAppStore } from "./store";
 import { carriesLinks, linksIn, useWebPages } from "./webPages";
 
 /**
- * Dragging Minds (and, with #212, Documents) onto a Folder in the sidebar, or
- * onto "Not in a Folder" to take them out of theirs. What is dragged travels
- * as its ids under a type of IncarnaMind's own, so the window's file drop
- * (`useFileDrop`) and the note ignore it. The target under the pointer
- * highlights; dropping moves, as "Move to…" does (`moveToFolder`). A link
- * dragged from a browser is saved there as a web page (#261).
+ * Dragging Minds and Documents in the sidebar onto a Folder, or onto "Not in
+ * a Folder" to take them out of theirs: one row, or every row selected with
+ * it, Minds and Documents mixed. What is dragged travels as its ids under a
+ * type of IncarnaMind's own, so the window's file drop and the note ignore
+ * it; Documents also travel as the composer takes them. A target lights up
+ * only while the drop would move something there; dropping moves, as "Move
+ * to…" does (`moveToFolder`). A link dragged from a browser is saved there as
+ * a web page (#261).
  */
 export const MOVE_TYPE = "application/x-incarnamind-move";
 
-/** Starts dragging these Minds and Documents. */
-export function startMoveDrag(event: DragEvent, items: MoveItems): void {
-  event.dataTransfer.setData(MOVE_TYPE, JSON.stringify(itemsOf(items)));
-  event.dataTransfer.effectAllowed = "move";
+/** How long a folded Folder is held under a drag before it opens, as in Finder. */
+const OPENS_AFTER_MS = 700;
+
+/** What is dragged now, read while it is over a target: a drag's data can only be read on the drop. */
+let dragging: { mindIds: string[]; documentIds: string[] } | null = null;
+
+/** Starts dragging these Minds and Documents, under a picture of what is dragged. */
+export function startMoveDrag(
+  event: DragEvent<HTMLElement>,
+  items: MoveItems,
+  label: string,
+): void {
+  const moving = itemsOf(items);
+  dragging = { mindIds: moving.mindIds, documentIds: moving.documentIds };
+  if (moving.documentIds.length > 0) startDocumentDrag(event, moving.documentIds);
+  event.dataTransfer.setData(MOVE_TYPE, JSON.stringify(dragging));
+  event.dataTransfer.effectAllowed = moving.documentIds.length > 0 ? "linkMove" : "move";
+  const count = moving.mindIds.length + moving.documentIds.length;
+  setPicture(event, label, count);
+}
+
+/**
+ * The row's icon and what is dragged ("Shortlist", or "3 Documents" with its
+ * count), on the sheet like a menu, in place of the browser's copy of the row.
+ */
+function setPicture(event: DragEvent<HTMLElement>, label: string, count: number): void {
+  const picture = document.createElement("div");
+  picture.className =
+    "fixed top-0 -left-[2000px] flex h-7 max-w-64 items-center gap-2 rounded-md bg-sheet px-2.5 text-[13px] text-ink shadow-[0_0_0_1px_var(--color-rule),0_12px_32px_rgba(23,25,28,0.12)]";
+  const icon = event.currentTarget.querySelector("svg")?.cloneNode(true);
+  if (icon instanceof SVGElement) {
+    icon.setAttribute("class", "size-4 shrink-0 text-ink-meta");
+    picture.append(icon);
+  }
+  const name = document.createElement("span");
+  name.className = "min-w-0 truncate";
+  name.textContent = label;
+  picture.append(name);
+  if (count > 1) {
+    const badge = document.createElement("span");
+    badge.className =
+      "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white";
+    badge.textContent = String(count);
+    picture.append(badge);
+  }
+  document.body.append(picture);
+  event.dataTransfer.setDragImage(picture, 12, 14);
+  // The browser copies the picture as the drag starts; it isn't needed after.
+  requestAnimationFrame(() => picture.remove());
 }
 
 const carriesMove = (event: DragEvent) => event.dataTransfer.types.includes(MOVE_TYPE);
@@ -36,39 +84,82 @@ export function droppedItems(event: DragEvent): MoveItems | null {
   }
 }
 
+/** Whether dropping what is dragged now into a Folder (null: out of every Folder) would move any of it. */
+function wouldMove(folderId: string | null): boolean {
+  if (!dragging) return false;
+  const { minds, library } = useAppStore.getState();
+  const folderOf = new Map(library?.assignments.map((each) => [each.documentId, each.groupId]));
+  return (
+    dragging.mindIds.some(
+      (id) => (minds.find((mind) => mind.id === id)?.folderId ?? null) !== folderId,
+    ) || dragging.documentIds.some((id) => (folderOf.get(id) ?? null) !== folderId)
+  );
+}
+
 /** The target the pointer drags over, by key: one at a time. */
 const useDropTarget = create<{ over: string | null }>()(() => ({ over: null }));
 
-// A drag that ends anywhere (dropped elsewhere, or Esc) leaves no target lit.
-const clear = () => useDropTarget.setState({ over: null });
-window.addEventListener("dragend", clear);
-window.addEventListener("drop", clear);
+let holding: { key: string; timer: number } | null = null;
+
+const stopHolding = () => {
+  if (holding) window.clearTimeout(holding.timer);
+  holding = null;
+};
+
+const clear = () => {
+  stopHolding();
+  useDropTarget.setState({ over: null });
+};
+
+// A drag that ends anywhere (dropped elsewhere, or Esc) leaves no target lit and nothing held.
+window.addEventListener("dragend", () => {
+  clear();
+  dragging = null;
+});
+window.addEventListener("drop", () => {
+  clear();
+  dragging = null;
+});
 
 /** The key a Folder's target goes by; Not in a Folder's for null. */
 const keyOf = (folderId: string | null) => folderId ?? "not-in-a-folder";
 
 /**
  * Makes an element a place to drop Minds and Documents into a Folder (null:
- * out of every Folder). `active` while something is dragged over it.
+ * out of every Folder). `active` while something it would take is dragged
+ * over it. `onHold`, given while the Folder is folded, opens it once a drag
+ * has rested on it a moment.
  */
-export function useFolderDrop(folderId: string | null) {
+export function useFolderDrop(folderId: string | null, onHold?: () => void) {
   const key = keyOf(folderId);
   const active = useDropTarget((state) => state.over === key);
-  const accepts = (event: DragEvent) => carriesMove(event) || carriesLinks(event);
+  const accepts = (event: DragEvent) =>
+    carriesMove(event) ? wouldMove(folderId) : carriesLinks(event);
+  const leave = () => {
+    if (useDropTarget.getState().over === key) clear();
+  };
   return {
     active,
     handlers: {
       onDragOver(event: DragEvent) {
-        if (!accepts(event)) return;
+        if (!accepts(event)) {
+          leave();
+          return;
+        }
         event.preventDefault();
         event.dataTransfer.dropEffect = carriesMove(event) ? "move" : "copy";
-        if (useDropTarget.getState().over !== key) useDropTarget.setState({ over: key });
+        if (useDropTarget.getState().over !== key) {
+          stopHolding();
+          useDropTarget.setState({ over: key });
+        }
+        if (onHold && holding?.key !== key) {
+          holding = { key, timer: window.setTimeout(onHold, OPENS_AFTER_MS) };
+        }
       },
       onDragLeave(event: DragEvent) {
-        if (!accepts(event)) return;
         // Still over it: only onto one of its own children.
         if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-        if (useDropTarget.getState().over === key) clear();
+        leave();
       },
       onDrop(event: DragEvent) {
         if (!accepts(event)) return;

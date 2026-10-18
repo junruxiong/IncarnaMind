@@ -133,4 +133,18 @@ describe("a selection of Minds and Documents", () => {
     expect(idsIn(buildMenu("document", ctx))).toEqual(["folder.newWith"]);
     expect(idsIn(buildMenu("mind", ctx))).toEqual(["folder.newWith"]);
   });
+
+  test("is offered Move to from either kind's row in the sidebar, which moves them together", () => {
+    const ctx = selectionOf([mind("m"), doc("a")], "sidebar");
+    const fromMind = { "mind.moveTo": () => undefined, "mind.rename": () => undefined };
+    const fromDocument = { "document.moveTo": () => undefined, "document.rename": () => undefined };
+    expect(idsIn(buildMenu("mind", { ...ctx, here: fromMind }))).toEqual([
+      "mind.moveTo",
+      "folder.newWith",
+    ]);
+    expect(idsIn(buildMenu("document", { ...ctx, here: fromDocument }))).toEqual([
+      "document.moveTo",
+      "folder.newWith",
+    ]);
+  });
 });
