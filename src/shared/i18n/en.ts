@@ -1747,7 +1747,8 @@ export const en = {
   "fileWrite.location.cancel": "Cancel",
   "fileWrite.location.failed": "Couldn't use that folder: {reason}",
   "fileWrite.linked.title": "Add files to “{folder}”?",
-  "fileWrite.linked.body": "Save “{name}” in “{folder}”, and allow new files there from now on?",
+  "fileWrite.linked.body":
+    "IncarnaMind only reads “{folder}”. Save “{name}” there, and allow new files from now on?",
   "fileWrite.linked.safe": "IncarnaMind never changes or deletes your files.",
   "fileWrite.linked.note": "You can change this in Settings › General.",
   "fileWrite.linked.allow": "Allow",
