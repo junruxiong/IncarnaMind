@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { app, type BrowserWindow, dialog, type SaveDialogOptions } from "electron";
 import type { Core, UnsavedChanges } from "../core";
 import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
+import { systemReason } from "../shared/systemReasons";
 
 /** The quit sheet's buttons, in their order. */
 const SAVE_COPY = 0;
@@ -42,6 +43,13 @@ export async function saveMindCopy(
   return true;
 }
 
+function copyFailedText(t: (key: MessageKey, params?: MessageParams) => string, raw: string) {
+  const reason = systemReason(raw);
+  return reason
+    ? `${t("quit.unsaved.copyFailed", { reason: t(reason) })}\n\n${t("quit.unsaved.copyFailed.details", { raw })}`
+    : t("quit.unsaved.copyFailed", { reason: raw });
+}
+
 export function guardQuit(core: Core, focusedWindow: () => BrowserWindow | null): void {
   let unsaved: UnsavedChanges | null = null;
   core.on("minds.unsaved", (state) => {
@@ -59,9 +67,7 @@ export function guardQuit(core: Core, focusedWindow: () => BrowserWindow | null)
         left.count === 1
           ? t("quit.unsaved.title.one")
           : t("quit.unsaved.title", { count: left.count }),
-      ...(copyFailed !== null && {
-        detail: t("quit.unsaved.copyFailed", { reason: copyFailed }),
-      }),
+      ...(copyFailed !== null && { detail: copyFailedText(t, copyFailed) }),
       buttons: [t("unsaved.saveCopy"), t("quit.unsaved.quit"), t("quit.unsaved.keep")],
       defaultId: KEEP_OPEN,
       cancelId: KEEP_OPEN,

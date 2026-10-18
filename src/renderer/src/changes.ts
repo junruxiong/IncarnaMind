@@ -152,11 +152,12 @@ export function retagged(
 ): Undoable {
   const { added, tag, names } = change;
   const [only] = names;
+  const count = names.length;
   return {
     said: (t) =>
-      only !== undefined && names.length === 1
+      only !== undefined && count === 1
         ? t(added ? "undo.tagAdded.one" : "undo.tagRemoved.one", { name: only, tag })
-        : t(added ? "undo.tagAdded" : "undo.tagRemoved", { count: names.length, tag }),
+        : t(added ? "undo.tagAdded" : "undo.tagRemoved", { count, tag }),
     name: (t) => t(added ? "undo.name.tagAdded" : "undo.name.tagRemoved"),
     undo: async () => {
       await core.revertDocumentTags(before);

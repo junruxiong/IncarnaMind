@@ -1,4 +1,4 @@
-import type { Document, LibrarySnapshot } from "../../core/api";
+import type { Document, LibraryGroup, LibrarySnapshot } from "../../core/api";
 import type { Language } from "../../core/language";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { core } from "./core";
@@ -53,7 +53,7 @@ export const stoppedPlaces = (library: LibrarySnapshot | null): TaggingPlace[] =
 /** The places in words, joined as the language joins a list: in “Contracts” and “Board”, and not in a Folder. */
 export function placesText(
   places: readonly TaggingPlace[],
-  library: LibrarySnapshot | null,
+  library: { groups: readonly Pick<LibraryGroup, "id" | "name">[] } | null,
   t: Translate,
   language: Language,
 ): string {
@@ -71,7 +71,12 @@ export function placesText(
 
 const placesIn = (places: readonly TaggingPlace[]) => {
   const { library } = useAppStore.getState();
-  return (t: Translate) => placesText(places, library, t, languageNow());
+  const named = {
+    groups: (library?.groups ?? [])
+      .filter((group) => places.includes(group.id))
+      .map(({ id, name }) => ({ id, name })),
+  };
+  return (t: Translate) => placesText(places, named, t, languageNow());
 };
 
 const setTagging = (places: readonly TaggingPlace[], on: boolean) => async () => {
