@@ -54,7 +54,7 @@ test("Documents that couldn't reach the model: one line with Retry, and tagged a
   await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn't be tagged");
   await expect(failed).toHaveAttribute(
     "title",
-    /^The AI model couldn't be reached\. Tagging tries again when you're back online, or now with Retry\./,
+    /^Can't reach the AI model\. Tagging resumes when you're online\./,
   );
   await failed.getByTestId("tagging-failed-retry").click();
   await expect(item(window, "Invoice 51")).toHaveAttribute("data-tagging", "tagged");
