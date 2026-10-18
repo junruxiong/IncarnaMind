@@ -4,7 +4,8 @@ import { checkSentences } from "../../checks";
 import { shownClaims } from "../../editor/claimChecks";
 import { mindEditor, whenMindEditor } from "../../editor/openEditors";
 import { editorDoc } from "../../editor/proposalReview";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
+import { leftToCheck, selfCheckLines, selfChecksOf } from "../../selfChecks";
 import { useAppStore } from "../../store";
 import { ProblemLine } from "../ProblemLine";
 
@@ -15,9 +16,7 @@ async function checkLeft(mindId: string, request: string): Promise<void> {
   const editor = mindEditor(mindId) ?? (await whenMindEditor(mindId, OPEN_WAIT_MS));
   const doc = editor && editorDoc(editor);
   if (!editor || !doc) return;
-  const ranges = shownClaims(editor.state)
-    .filter((claim) => claim.check.request === request && claim.shown.state === "not-checked")
-    .map((claim) => ({ from: claim.sentence.from, to: claim.sentence.to }));
+  const ranges = leftToCheck(shownClaims(editor.state), request);
   if (ranges.length > 0) {
     await checkSentences(editor, mindId, doc, "check-against-documents", { ranges });
   }
@@ -25,43 +24,46 @@ async function checkLeft(mindId: string, request: string): Promise<void> {
 
 /**
  * Under an Answer that wrote sentences with Citations into a Mind (#1111):
- * how many its check couldn't check, with Check again, and how many it
- * checked when there were more than one write checks, with Check the rest.
- * Either checks those left in their Mind now.
+ * how many its check couldn't check, with Check again, or why not (the
+ * spending cap, with Change the cap; a plan's limit, with when it resumes),
+ * and how many it checked when there were more than one write checks, with
+ * Check the rest. Check again and Check the rest check those left in their Mind now.
  */
 export function SelfCheckLines({ answer }: { answer: Pick<ConversationAnswer, "toolCalls"> }) {
   const t = useT();
+  const language = useLanguage();
   const [asked, setAsked] = useState<ReadonlySet<string>>(new Set());
-  const checks = answer.toolCalls.flatMap((call) => {
-    const change = call.mindChange;
-    return change?.selfCheck ? [{ mindId: change.mindId, ...change.selfCheck }] : [];
-  });
-  return checks.map(({ mindId, request, cited, sent, failed }) => {
+  return selfChecksOf(answer.toolCalls).map((check) => {
+    const { mindId, request } = check;
     if (asked.has(request)) return null;
-    const check = () => {
+    const checkNow = () => {
       setAsked((before) => new Set([...before, request]));
       checkLeft(mindId, request).catch(useAppStore.getState().reportError);
     };
     return (
       <div key={request}>
-        {failed > 0 && (
+        {selfCheckLines(check, t, language).map((line) => (
           <ProblemLine
+            key={line.kind}
             role="status"
-            testId="self-check-failed"
-            action={{ label: t("claim.checkAgain"), testId: "self-check-again", onClick: check }}
+            testId={`self-check-${line.kind}`}
+            details={line.details}
+            action={
+              line.action
+                ? {
+                    label: line.action.label,
+                    testId: `self-check-${line.kind}-action`,
+                    onClick:
+                      line.action.does === "check"
+                        ? checkNow
+                        : () => useAppStore.getState().openSettings("general"),
+                  }
+                : undefined
+            }
           >
-            {failed === 1 ? t("selfCheck.failed.one") : t("selfCheck.failed", { count: failed })}
+            {line.text}
           </ProblemLine>
-        )}
-        {sent < cited && (
-          <ProblemLine
-            role="status"
-            testId="self-check-capped"
-            action={{ label: t("selfCheck.checkRest"), testId: "self-check-rest", onClick: check }}
-          >
-            {t("selfCheck.capped", { checked: sent, count: cited })}
-          </ProblemLine>
-        )}
+        ))}
       </div>
     );
   });

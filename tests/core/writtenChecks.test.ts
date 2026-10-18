@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
 import type { Core } from "../../src/core";
-import { SENTENCES_CHECKED_AT_MOST } from "../../src/core/answers/checks/written";
+import { OLLAMA_CLOUD } from "../../src/core/providers/ollamaCloud";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
-import { claimCheckShown } from "../../src/shared/claimChecks";
+import { claimCheckShown, SENTENCES_CHECKED_AT_MOST } from "../../src/shared/claimChecks";
 import { INLINE_NODE } from "../../src/shared/sentences";
 import { askAssistant, changesIn, lastResult } from "../helpers/assistant";
 import { checkReply, isCheckRun, type Plan } from "../helpers/checks";
@@ -57,6 +57,12 @@ interface Writing {
   into?: boolean;
   /** Runs while the first check waits for its reply. */
   during?: () => Promise<void>;
+  /** A check's reply in place of `PLANS`', given the core; null: `PLANS`'. */
+  check?: (call: ModelCall, core: Core) => ScriptedReply | null;
+  /** A model on a service, not on this computer. */
+  cloud?: { kind: "anthropic"; modelId: string } | { kind: "ollama"; modelId: string };
+  /** How the Answer ends: a spending cap reached during the check stops it too. */
+  ends?: "finished" | "failed";
 }
 
 /**
@@ -64,13 +70,18 @@ interface Writing {
  * checks a sentence as `PLANS` says; and, asked to cut a sentence, keeps its
  * first clause and its marker.
  */
-function writingModel({ content, into = false, during }: Writing, calls: ModelCall[]) {
+function writingModel(
+  { content, into = false, during, check }: Writing,
+  calls: ModelCall[],
+  coreOf: () => Core | null,
+) {
   let waited: Promise<void> | null = null;
   const tool = into ? "add_to_mind" : "create_mind";
   return scriptedModel((call): ScriptedReply => {
     calls.push(call);
     if (isCheckRun(call)) {
-      const reply = checkReply(call, PLANS);
+      const core = coreOf();
+      const reply = (check && core && check(call, core)) || checkReply(call, PLANS);
       if (!during || waited || "error" in reply) return reply;
       waited = during();
       return { ...reply, pause: { after: 0, until: waited } };
@@ -97,11 +108,21 @@ function writingModel({ content, into = false, during }: Writing, calls: ModelCa
 }
 
 /** A core with the tides line in a Folder, and a Mind there with a heading and a line. */
-async function harbour(model: ReturnType<typeof writingModel>) {
+async function harbour(model: ReturnType<typeof writingModel>, cloud: Writing["cloud"]) {
   const core = startCore(await createTempDataFolder(), {
     createChatModel: scriptedModels(model).createChatModel,
   });
-  await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+  if (cloud) {
+    core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
+    const saved = await core.saveChatProvider(
+      cloud.kind === "anthropic" ? { ...cloud, apiKey: "sk-ant-test" } : cloud,
+    );
+    // A cloud model in Ollama sends to ollama.com, not to the Ollama on this computer.
+    const service = cloud.kind === "ollama" ? OLLAMA_CLOUD.id : saved.service?.id;
+    for (const flow of ["chat", "checks"] as const) {
+      if (service) await core.allowDataFlow(flow, service);
+    }
+  } else await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
   const sources = await createTempDataFolder();
   const documents = await addAndProcess(core, [
     await writeSourceFile(sources, "Tides.md", `# Tides\n\n${MOON}\n`),
@@ -120,16 +141,22 @@ async function harbour(model: ReturnType<typeof writingModel>) {
 
 async function write(writing: Writing, onClient?: (client: MindClient) => void) {
   const calls: ModelCall[] = [];
-  const model = writingModel(writing, calls);
-  const { core, folderId, mindId, client } = await harbour(model);
+  let started: Core | null = null;
+  const model = writingModel(writing, calls, () => started);
+  const { core, folderId, mindId, client } = await harbour(model, writing.cloud);
+  started = core;
   onClient?.(client);
-  const answer = await askAssistant(core, {
-    text: writing.into
-      ? "Add a short note on tides to this Mind"
-      : "Summarise these Documents into a new note",
-    ...(writing.into && { mindId }),
-    scope: { folderIds: [folderId], tagIds: [], documentIds: [] },
-  });
+  const answer = await askAssistant(
+    core,
+    {
+      text: writing.into
+        ? "Add a short note on tides to this Mind"
+        : "Summarise these Documents into a new note",
+      ...(writing.into && { mindId }),
+      scope: { folderIds: [folderId], tagIds: [], documentIds: [] },
+    },
+    writing.ends,
+  );
   const [change] = changesIn(answer);
   const page = writing.into ? client : await connectToMind(core, change?.mindId ?? "");
   await page.settled();
@@ -238,6 +265,56 @@ describe("What the assistant writes is checked before it lands", { timeout: 30_0
     );
   });
 
+  // protects=the spending cap reached during the check stops it: the sentences left land not checked for that reason, and the change says what stopped it, for the line that offers Change the cap; fails_when=they land unmarked, or the stop isn't kept; no_claim=the line's words.
+  test("the spending cap reached during the check stops it, and its sentences say why", async () => {
+    let capped = false;
+    const { core, change, client } = await write({
+      content: `## Tides\n\n${UNBACKED} [^1]. ${OVERSTATED} [^1].`,
+      cloud: { kind: "anthropic", modelId: "claude-haiku-5-5" },
+      ends: "failed",
+      check: (_call, started) => {
+        if (!capped) {
+          capped = true;
+          void started.updateSettings({ user: { monthlyCap: { amount: 0, currency: "USD" } } });
+        }
+        return null;
+      },
+    });
+
+    const marks = await marksIn(core, client);
+    expect(marks.map(({ check }) => [check.state, check.reason])).toEqual([
+      ["not-checked", "cost-cap"],
+      ["not-checked", "cost-cap"],
+    ]);
+    expect(change?.selfCheck).toMatchObject({
+      cited: 2,
+      sent: 2,
+      checked: 0,
+      failed: 2,
+      stop: { reason: "cost-cap" },
+    });
+  });
+
+  // protects=a plan's limit reached during the check stops it the same way, keeping the stop for the line that says when it resumes; fails_when=the sentences land unmarked, or the stop isn't kept; no_claim=the line's words.
+  test("a plan's limit reached during the check stops it, and its sentences say why", async () => {
+    const { core, change, client } = await write({
+      content: `## Tides\n\n${UNBACKED} [^1].`,
+      cloud: { kind: "ollama", modelId: "glm-5.3:cloud" },
+      check: () => ({
+        error: { status: 402, message: "You have reached your weekly usage limit" },
+      }),
+    });
+
+    const [mark] = await marksIn(core, client);
+    expect(mark?.check).toMatchObject({ state: "not-checked", reason: "plan-limit" });
+    expect(change?.selfCheck).toMatchObject({
+      sent: 1,
+      checked: 0,
+      failed: 1,
+      stop: { reason: "plan-limit" },
+    });
+  });
+
   // protects=one write checks at most SENTENCES_CHECKED_AT_MOST sentences; the rest land marked not checked, and the reply says so; fails_when=a long draft sends a check for every sentence, or the rest land unmarked; no_claim=how long each check takes.
   test("one write checks at most the first sentences; the rest land marked not checked", async () => {
     const many = SENTENCES_CHECKED_AT_MOST + 1;
@@ -261,7 +338,7 @@ describe("What the assistant writes is checked before it lands", { timeout: 30_0
     );
   });
 
-  // protects=words the User types into what the assistant wrote while the check runs stay: only the sentences cut or marked are written, each only while unchanged (the CTO's probe: a Block with no cut lost them); fails_when=the User's words vanish, or a sentence they changed is cut over; no_claim=none beyond protects.
+  // protects=words the User types into what the assistant wrote while the check runs stay: only the sentences cut or marked are written, each only while unchanged (one with no cut too); fails_when=the User's words vanish, or a sentence they changed is cut over; no_claim=none beyond protects.
   test("words the User types while the check runs stay, and a sentence they changed is only marked", async () => {
     let client: MindClient | null = null;
     const { core } = await write(

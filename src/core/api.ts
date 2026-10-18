@@ -976,11 +976,19 @@ export interface MindChange {
   checking?: number;
   /**
    * The check of the sentences with Citations it wrote, once over: how many there were
-   * (`cited`), how many it checked (`sent`) and how many of those couldn't be checked
-   * (`failed`). Those it couldn't check, or didn't, are marked not checked, under `request`.
-   * Absent: none was checked.
+   * (`cited`), how many it sent to be checked (`sent`), how many got a verdict
+   * (`checked`) and how many couldn't be checked (`failed`), and what stopped it, if
+   * anything did. Those it couldn't check, or didn't, are marked not checked, under
+   * `request`. Absent: none was checked.
    */
-  selfCheck?: { request: string; cited: number; sent: number; failed: number };
+  selfCheck?: {
+    request: string;
+    cited: number;
+    sent: number;
+    checked: number;
+    failed: number;
+    stop?: RunStop;
+  };
 }
 
 /** What a call of `read_web_page` came to (see `AnswerToolCall.webPage`). */

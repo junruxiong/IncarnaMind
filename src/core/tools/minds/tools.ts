@@ -1318,8 +1318,18 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       );
     }
     if (checked) {
-      const { request, cited, sent, failed } = checked;
-      written.change = { ...written.change, selfCheck: { request, cited, sent, failed } };
+      const { request, cited, sent, failed, stop } = checked;
+      written.change = {
+        ...written.change,
+        selfCheck: {
+          request,
+          cited,
+          sent,
+          checked: checked.checked,
+          failed,
+          ...(stop && { stop }),
+        },
+      };
     }
     if (reported || checked) options.changed(toolCallId, written.change);
     return checked;
