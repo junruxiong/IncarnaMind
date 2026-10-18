@@ -10,8 +10,6 @@ import { displayName } from "../../shared/documentNames";
 import { leftOutOfEvidence } from "../../shared/evidence";
 import type { MessageKey } from "../../shared/i18n";
 import { core } from "./core";
-import { translateNow } from "./i18n";
-import { saidInLine } from "./lineNames";
 import type { Undoable } from "./objects";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
@@ -50,11 +48,10 @@ async function choose(
   const [only] = documents;
   const state = on ? "on" : "off";
   const undoable: Undoable = {
-    ...saidInLine(translateNow, (t) =>
+    said: (t) =>
       only && documents.length === 1
         ? t(choice.one[state], { name: displayName(only) })
         : t(choice.many[state], { count: documents.length }),
-    ),
     undo: async () => {
       for (const document of documents) await choice.set(document.id, !on);
     },

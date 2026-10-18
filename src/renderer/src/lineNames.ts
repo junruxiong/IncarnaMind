@@ -29,6 +29,12 @@ const cutting =
         ),
     );
 
+/** What a line says from the interface's words, kept in place of its text so a language switch reaches it. */
+export type Words = (t: Translate) => string;
+
+/** `Words` for a line a name in it is cut in (`saidInLine`). */
+export type WordsInLine = (t: Translate, cut: (name: string) => string) => string;
+
 export interface Said {
   message: string;
   /** `message` with every name whole, for the tooltip and the accessible name; absent when none was cut. */
@@ -42,10 +48,7 @@ export interface Said {
  * screen). A name given to `t` as a placeholder is cut by it; one made part of a bigger value
  * first, such as a quoted list, goes through `cut`.
  */
-export function saidInLine(
-  t: Translate,
-  build: (t: Translate, cut: (name: string) => string) => string,
-): Said {
+export function saidInLine(t: Translate, build: WordsInLine): Said {
   const within = (columns: number) =>
     build(cutting(t, columns), (name) => shortenMiddle(name, columns));
   const message = within(NAME_IN_LINE_COLUMNS);
