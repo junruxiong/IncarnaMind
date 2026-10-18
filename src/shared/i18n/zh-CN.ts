@@ -3862,7 +3862,7 @@ export const zhCN = {
   "meetings.audio.recorded": "已录制 {time}",
   "meetings.audio.kept": "音频只存在这台电脑上，一天内删除。",
   "meetings.audio.keptUntil": "音频保存在这台电脑上，{time} 删除",
-  "meetings.audio.keptWhile": "音频只存在这台电脑上，一天内删除。",
+  "meetings.audio.keptWhile": "音频只存在这台电脑上，会议结束一天后删除。",
   "meetings.audio.delete": "立即删除音频",
   "meetings.audio.confirm": "永久删除这次会议的音频？笔记会保留。",
   "meetings.audio.deleteConfirm": "删除音频",
@@ -3900,7 +3900,8 @@ export const zhCN = {
   "meetings.health.unsaved": "有 {duration}的音频无法保存，转写稿中缺少这部分。",
   "meetings.settings.title": "录制",
   "meetings.settings.enabled": "录制会议",
-  "meetings.settings.enabledBody": "在 + 菜单中加入“录制会议”。首次使用会下载约 1 GB 的语音模型。",
+  "meetings.settings.enabledBody":
+    "在 + 菜单中加入“录制会议”。在本机转写；首次使用会下载约 1 GB 的语音模型。",
   "meetings.settings.cantRecord": "这个版本的 IncarnaMind 无法录制音频。",
   "meetings.settings.what": "录制内容",
   "meetings.settings.whatBoth": "你的麦克风和其他人（电脑声音）。",

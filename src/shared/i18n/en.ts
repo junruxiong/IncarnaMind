@@ -4038,7 +4038,7 @@ export const en = {
   "meetings.audio.recorded": "Recorded {time}",
   "meetings.audio.kept": "Audio stays on this computer; deleted within a day.",
   "meetings.audio.keptUntil": "Audio stays on this computer until {time}",
-  "meetings.audio.keptWhile": "Audio stays on this computer; deleted within a day.",
+  "meetings.audio.keptWhile": "Audio stays on this computer until a day after the meeting.",
   "meetings.audio.delete": "Delete audio now",
   "meetings.audio.confirm": "Delete this meeting’s audio for good? Your notes stay.",
   "meetings.audio.deleteConfirm": "Delete audio",
@@ -4078,7 +4078,7 @@ export const en = {
   "meetings.settings.title": "Recording",
   "meetings.settings.enabled": "Record meetings",
   "meetings.settings.enabledBody":
-    "Adds “Record a meeting” to the + menu. Downloads a 1 GB speech model once.",
+    "Adds “Record a meeting” to the + menu. Transcribed on this computer; a 1 GB speech model downloads once.",
   "meetings.settings.cantRecord": "This copy of IncarnaMind can’t record audio.",
   "meetings.settings.what": "What is recorded",
   "meetings.settings.whatBoth": "Your microphone and the other people (the computer’s sound).",
