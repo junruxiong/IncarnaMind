@@ -3243,6 +3243,9 @@ export const zhCN = {
   "error.layout.wordPlace": "无法打开 Word 文件中的这个位置。",
   "error.mind.notFromWord": "这个 Mind 不是从 Word 文件导入的，没有可添加的原文件。",
   "error.mind.newerVersion": "这是较新版本的 IncarnaMind 创建的。更新后才能打开。",
+  "error.mind.notStored":
+    "没能保存最近的改动（{reason}）。IncarnaMind 会保留它们，并在你下次改动时再试。",
+  "error.mind.missedChange": "这次改动依赖一处 Mind 没有收到的改动，所以没有保存。",
   "error.mind.newerVersionEdit":
     "较新版本的 IncarnaMind 修改过这个 Mind。更新 IncarnaMind 后才能编辑。",
   "error.conversation.notFound": "这个对话不存在或已删除。",

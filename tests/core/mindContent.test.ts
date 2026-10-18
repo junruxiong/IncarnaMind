@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import * as Y from "yjs";
-import { InvalidInputError, MIND_CONTENT_FIELD, NotFoundError } from "../../src/core";
+import {
+  type Core,
+  DATABASE_FILE,
+  InvalidInputError,
+  MIND_CONTENT_FIELD,
+  NotFoundError,
+} from "../../src/core";
 import { COMPACT_AFTER_UPDATES, createMindContent } from "../../src/core/mindContent";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
@@ -208,5 +215,135 @@ describe("Mind content", () => {
     );
     await expect(core.openMind(42 as never)).rejects.toThrow(InvalidInputError);
     await expect(core.closeMind(missing)).resolves.toBeUndefined();
+  });
+});
+
+/** Makes storing Mind content fail, as a full disk would, until the returned function is called. */
+function failWrites(dataDir: string): () => void {
+  const db = openDatabase(join(dataDir, DATABASE_FILE));
+  db.exec(
+    "CREATE TRIGGER fail_writes BEFORE INSERT ON mind_updates BEGIN SELECT RAISE(ABORT, 'disk full'); END",
+  );
+  return () => {
+    db.exec("DROP TRIGGER fail_writes");
+    db.close();
+  };
+}
+
+/** A copy of a Mind holding one paragraph, "BASE", stored, that sends each change as the editor does. */
+async function typingIn(core: Core) {
+  const mind = await core.createMind({ title: "Notes" });
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, (await core.openMind(mind.id)).state, core);
+  const sent: Promise<"stored" | "refused">[] = [];
+  doc.on("update", (update: Uint8Array, origin: unknown) => {
+    if (origin === core) return;
+    sent.push(
+      core.applyMindUpdate(mind.id, update).then(
+        () => "stored" as const,
+        () => "refused" as const,
+      ),
+    );
+  });
+  const paragraph = new Y.XmlElement("paragraph");
+  const text = new Y.XmlText("BASE");
+  paragraph.insert(0, [text]);
+  doc.getXmlFragment(MIND_CONTENT_FIELD).push([paragraph]);
+  await Promise.all(sent);
+  return {
+    mindId: mind.id,
+    doc,
+    /** Types at the end of the paragraph, and says whether the core stored it. */
+    type: (words: string) => {
+      text.insert(text.length, words);
+      const outcome = sent.at(-1);
+      if (!outcome) throw new Error("Nothing was sent.");
+      return outcome;
+    },
+  };
+}
+
+/** What a Mind holds once the app has quit and started again. */
+async function afterRestart(dataDir: string, mindId: string): Promise<string> {
+  const core = startCore(dataDir);
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, (await core.openMind(mindId)).state);
+  return doc.getXmlFragment(MIND_CONTENT_FIELD).toString();
+}
+
+describe("A change that can't be stored (#1119)", () => {
+  // protects=after one write fails, the User's later typing is stored, and the failed change with it, so all of it is there after a restart; fails_when=later writes resolve but vanish on reopen; no_claim=a real full disk or power loss.
+  test("typing after a failed write is kept, and the failed change with it", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const copy = await typingIn(core);
+    const restore = failWrites(dataDir);
+
+    expect(await copy.type(" LOST")).toBe("refused");
+    restore();
+    expect(await copy.type(" AFTER")).toBe("stored");
+    expect(await copy.type(" MORE")).toBe("stored");
+    core.close();
+
+    expect(await afterRestart(dataDir, copy.mindId)).toBe(
+      "<paragraph>BASE LOST AFTER MORE</paragraph>",
+    );
+  });
+
+  // protects=quitting once storage works again stores the change that failed, though nothing was typed since; fails_when=it is lost at quit; no_claim=none beyond protects.
+  test("quitting once storage works again stores the change that failed", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const copy = await typingIn(core);
+    const restore = failWrites(dataDir);
+    expect(await copy.type(" LOST")).toBe("refused");
+    restore();
+
+    core.close();
+
+    expect(await afterRestart(dataDir, copy.mindId)).toBe("<paragraph>BASE LOST</paragraph>");
+  });
+
+  // protects=quitting while storage still fails quits cleanly, says in the log which Mind lost changes, and what was stored before opens and takes typing again; fails_when=quitting throws, the stored text is damaged, or the loss goes unlogged; no_claim=that the unstored change survives, which nothing can store.
+  test("quitting while storage still fails keeps what was stored, and says what was lost", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const copy = await typingIn(core);
+    const restore = failWrites(dataDir);
+    expect(await copy.type(" LOST")).toBe("refused");
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    expect(() => core.close()).not.toThrow();
+    restore();
+
+    expect(logged.mock.calls.flat().join(" ")).toContain(copy.mindId);
+    logged.mockRestore();
+    expect(await afterRestart(dataDir, copy.mindId)).toBe("<paragraph>BASE</paragraph>");
+  });
+
+  // protects=a change that depends on one the core never got is refused, never acknowledged as stored, and the copy's whole state then stores all of it; fails_when=the dependent change resolves but isn't stored; no_claim=none beyond protects.
+  test("a change after one the core never got is refused, and the whole copy then stores both", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const copy = await typingIn(core);
+    const missed: Uint8Array[] = [];
+    const before = Y.encodeStateVector(copy.doc);
+    copy.doc.once("update", (update: Uint8Array) => missed.push(update));
+    copy.doc.transact(() => {
+      const text = copy.doc.getXmlFragment(MIND_CONTENT_FIELD).get(0);
+      if (!(text instanceof Y.XmlElement)) throw new Error("No paragraph.");
+      const words = text.get(0);
+      if (words instanceof Y.XmlText) words.insert(words.length, " MISSED");
+    }, core);
+    expect(missed).toHaveLength(1);
+    expect(Y.encodeStateVector(copy.doc)).not.toEqual(before);
+
+    expect(await copy.type(" NEXT")).toBe("refused");
+    await core.applyMindUpdate(copy.mindId, Y.encodeStateAsUpdate(copy.doc));
+    core.close();
+
+    expect(await afterRestart(dataDir, copy.mindId)).toBe(
+      "<paragraph>BASE MISSED NEXT</paragraph>",
+    );
   });
 });
