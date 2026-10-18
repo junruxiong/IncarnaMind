@@ -9,8 +9,10 @@ import { describeError } from "./errors";
  * ⌘Z / Ctrl+Z outside text, which ⇧⌘Z / Ctrl+Shift+Z (or Ctrl+Y) does again.
  */
 export interface Undoable {
-  /** What happened, said plainly. */
+  /** What happened, said plainly; a long name in it is cut in the middle (`saidInLine`). */
   message: string;
+  /** `message` with each name whole, for the tooltip and the accessible name, when one was cut. */
+  fullMessage?: string;
   /** What was done, for the Edit menu: "Move 3 Documents" makes "Undo Move 3 Documents". */
   name?: string;
   /** Takes it back. Throws `UndoRefused` when a fix would let it. */
