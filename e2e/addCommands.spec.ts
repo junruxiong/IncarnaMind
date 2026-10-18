@@ -66,6 +66,22 @@ async function countPickers(app: ElectronApplication): Promise<void> {
 const pickersAsked = (app: ElectronApplication) =>
   app.evaluate(() => (globalThis as { pickersAsked?: { count: number } }).pickersAsked?.count ?? 0);
 
+/** Whether the page takes ⌘O where the focus is, as macOS needs so its menu doesn't run the command from the text. */
+const takesKeys = (window: Page) =>
+  window.evaluate(() => {
+    const mac = /Mac/.test(navigator.platform);
+    const event = new KeyboardEvent("keydown", {
+      key: "o",
+      code: "KeyO",
+      metaKey: mac,
+      ctrlKey: !mac,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.activeElement?.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+
 async function openPalette(window: Page, query: string): Promise<void> {
   await window.keyboard.press("ControlOrMeta+k");
   await expect(window.getByTestId("palette-search")).toBeFocused();
@@ -142,7 +158,7 @@ test("⌘O opens the picker from the sidebar, a Mind and the Library, and does n
     await newMind(window);
     await enterContent(window);
     await window.keyboard.press("ControlOrMeta+o");
-    await window.evaluate(() => undefined);
+    expect(await takesKeys(window)).toBe(true);
     expect(await pickersAsked(app)).toBe(0);
 
     await window.getByTestId("open-library").click();
@@ -150,7 +166,7 @@ test("⌘O opens the picker from the sidebar, a Mind and the Library, and does n
     await window.getByTestId("library-search").click();
     await expect(window.getByTestId("library-search")).toBeFocused();
     await window.keyboard.press("ControlOrMeta+o");
-    await window.evaluate(() => undefined);
+    expect(await takesKeys(window)).toBe(true);
     expect(await pickersAsked(app)).toBe(0);
 
     // From the Library, with the focus on its Add button.

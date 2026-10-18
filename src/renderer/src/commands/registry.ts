@@ -41,7 +41,8 @@ export interface Shortcut {
   outsideText?: true;
   /**
    * Keys that do nothing while the focus is in text, so a picker never opens over what the User
-   * is typing. Unlike `outsideText`, the menu item and ⌘K run the command from anywhere.
+   * is typing; the key is still taken, so the menu doesn't run it on macOS. Unlike `outsideText`,
+   * the menu item and ⌘K run the command from anywhere.
    */
   notInText?: true;
   /** The same command's second keys on Windows and Linux: Ctrl+Y redoes there, as Ctrl+Shift+Z does. */
