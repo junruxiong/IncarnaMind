@@ -578,6 +578,7 @@ function useStatuses(): Status[] {
       short: t("status.taggingRateLimited", { time }),
       full: t("status.taggingRateLimited.full", { time }),
       wraps: true,
+      needsYou: true,
       action: {
         label: t("status.retry"),
         testId: "tagging-rate-limited-retry",
