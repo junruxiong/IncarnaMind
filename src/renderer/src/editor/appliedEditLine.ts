@@ -1,9 +1,11 @@
 /**
  * The lines over an edit the User asked for (#880; DESIGN.md, AI edits),
- * drawn in the text above the Block they are about. ProposalBars handles
- * their buttons, by `data-applied-action`. They go once the User edits.
+ * drawn in the text above the Block they are about, and under Review
+ * changes each change's own Restore original, after its new words.
+ * ProposalBars handles their buttons, by `data-applied-action` and
+ * `data-applied-restore`. They go once the User edits.
  */
-import { type Editor, Extension } from "@tiptap/core";
+import { type Editor, Extension, isMacOS } from "@tiptap/core";
 import type { Fragment, Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { type EditorState, Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
@@ -125,6 +127,28 @@ function button(action: AppliedAction, label: string): HTMLButtonElement {
   each.dataset.testid = `applied-${action}`;
   each.textContent = label;
   return each;
+}
+
+function restoreButton(index: number, count: number, t: Translate): HTMLButtonElement {
+  const each = document.createElement("button");
+  each.type = "button";
+  each.className = "proposal-action applied-restore";
+  each.dataset.appliedRestore = String(index);
+  each.dataset.testid = "change-restore";
+  each.title = `${t("proposal.position", { index: index + 1, count })} · ${isMacOS() ? "⌘⌫" : "Ctrl+Backspace"}`;
+  each.setAttribute("aria-keyshortcuts", isMacOS() ? "Meta+Backspace" : "Control+Backspace");
+  each.textContent = t("edit.review.restore");
+  return each;
+}
+
+function restoreHolder(button: HTMLButtonElement, ownLine: boolean): HTMLElement {
+  const holder = document.createElement(ownLine ? "div" : "span");
+  holder.contentEditable = "false";
+  holder.className = ownLine
+    ? "applied-restore-holder applied-restore-holder--block"
+    : "applied-restore-holder";
+  holder.append(button);
+  return holder;
 }
 
 function dot(): HTMLSpanElement {
@@ -295,7 +319,7 @@ function mainLine(line: AppliedLine, options: Options, blocks: ChangedBlocks): H
   const t = options.translate;
   if (line.kind === "applied") {
     const what = text(
-      "min-w-0",
+      "min-w-0 font-semibold",
       line.facts ? changeFact(t, line.facts, null) : appliedText(t, line.blocks),
       "applied-count",
     );
@@ -319,7 +343,11 @@ function mainLine(line: AppliedLine, options: Options, blocks: ChangedBlocks): H
     }
     return lineElement("applied-line", "applied-line", [
       sparkle(),
-      text("min-w-0", reviewText(t, blocks, line.byAssistant === true), "applied-count"),
+      text(
+        "min-w-0 font-semibold",
+        reviewText(t, blocks, line.byAssistant === true),
+        "applied-count",
+      ),
       dot(),
       undo,
       dot(),
@@ -448,7 +476,8 @@ function changeMarks(
       }
       const oldShows =
         block.how === "rewritten" || (block.how === "removed" && inSection) ? shown : true;
-      if (change.removed.size > 0 && oldShows) {
+      const oldDrawn = change.removed.size > 0 && oldShows;
+      if (oldDrawn) {
         const old = () => {
           const element = document.createElement(change.block ? "div" : "del");
           element.className = change.block ? "applied-old applied-old--block" : "applied-old";
@@ -464,7 +493,8 @@ function changeMarks(
           }),
         );
       }
-      if (place.to > place.from) {
+      const newDrawn = place.to > place.from;
+      if (newDrawn) {
         const attributes = { "data-applied-change": String(index) };
         marks.push(
           change.block
@@ -473,6 +503,23 @@ function changeMarks(
                 class: "applied-new applied-new--block",
               })
             : Decoration.inline(place.from, place.to, { ...attributes, class: "applied-new" }),
+        );
+      }
+      if (newDrawn || oldDrawn) {
+        const label = t("edit.review.restore");
+        marks.push(
+          Decoration.widget(
+            place.to,
+            () => restoreHolder(restoreButton(index, changes.length, t), change.block !== null),
+            {
+              // Widgets at one position draw in order of side: after this change's new words but
+              // before the next change's old ones (-1), or, with no new words, after its own old ones.
+              side: newDrawn ? -3 : -0.9,
+              ignoreSelection: true,
+              stopEvent: () => true,
+              key: `applied-restore:${index}:${changes.length}:${change.block}:${label}`,
+            },
+          ),
         );
       }
       return marks;
