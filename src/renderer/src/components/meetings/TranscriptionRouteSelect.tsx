@@ -2,6 +2,7 @@ import { TRANSCRIPTION_ROUTES } from "../../../../core/api";
 import type { MessageKey } from "../../../../shared/i18n";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { useTranscriptionServicesList } from "../../transcriptionServices";
 
 export const ROUTE_LABELS: Record<(typeof TRANSCRIPTION_ROUTES)[number], MessageKey> = {
   local: "meetings.route.local",
@@ -11,7 +12,8 @@ export const ROUTE_LABELS: Record<(typeof TRANSCRIPTION_ROUTES)[number], Message
 
 /**
  * Where meeting audio is transcribed, one setting wherever it is shown (Settings › Models,
- * Settings › Meetings, the first-run list). Unchosen, it is this computer.
+ * Settings › Meetings, the first-run list). Unchosen, it is this computer. A cloud service is
+ * offered once there is a key for it (#141); choosing it is the consent to send it meeting audio.
  */
 export function TranscriptionRouteSelect({
   id,
@@ -31,6 +33,13 @@ export function TranscriptionRouteSelect({
   const t = useT();
   const route = useAppStore((state) => state.settings?.device.transcriptionRoute) ?? "local";
   const updateSettings = useAppStore((state) => state.updateSettings);
+  const services = useTranscriptionServicesList();
+  const offered = TRANSCRIPTION_ROUTES.filter(
+    (each) =>
+      each === "local" ||
+      each === route ||
+      services.some((service) => service.route === each && service.hasKey),
+  );
   return (
     <select
       id={id}
@@ -55,7 +64,7 @@ export function TranscriptionRouteSelect({
       }}
       className={className}
     >
-      {TRANSCRIPTION_ROUTES.map((each) => (
+      {offered.map((each) => (
         <option key={each} value={each}>
           {t(ROUTE_LABELS[each])}
         </option>

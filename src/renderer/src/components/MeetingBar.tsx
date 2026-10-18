@@ -183,7 +183,10 @@ function TranscriptToggle({ meeting }: { meeting: Meeting }) {
   );
 }
 
-/** What the User should know about the recording, a line each: its health, a cut, a gap. */
+/**
+ * What the User should know about the recording, a line each: its health, a cut, a gap, and
+ * transcription back on this computer after the cloud service stopped (#141).
+ */
 function MeetingLines({ meeting }: { meeting: Meeting }) {
   const t = useT();
   const problem = useMeetings((state) => state.problems[meeting.id]);
@@ -237,6 +240,15 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
       action: { label: t("error.dismiss"), onClick: () => dismissGaps(meeting.id) },
     });
   }
+  const fellBack = meeting.transcript?.fellBack;
+  if (fellBack) {
+    lines.push({
+      key: "cloud",
+      text: t(fellBack.reason === "cap" ? "meetings.line.cloudCap" : "meetings.line.cloudDropped", {
+        time: clockTime(fellBack.atMs),
+      }),
+    });
+  }
 
   return (
     <>
@@ -244,7 +256,7 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
         <ProblemLine
           key={line.key}
           testId={`meeting-line-${line.key}`}
-          role={line.key === "gap" || line.key === "interrupted" ? "status" : "alert"}
+          role={STATUS_LINES.has(line.key) ? "status" : "alert"}
           className="meeting-line"
           action={line.action}
         >
@@ -254,6 +266,9 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
     </>
   );
 }
+
+/** Lines that say what happened, rather than something to put right. */
+const STATUS_LINES: ReadonlySet<string> = new Set(["gap", "interrupted", "cloud"]);
 
 const MICROPHONE_LINES: Partial<Record<MeetingSourceState, MessageKey>> = {
   denied: "meetings.line.microphoneDenied",

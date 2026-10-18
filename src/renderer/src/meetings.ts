@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { create } from "zustand";
-import type { AudioSource, Meeting, Settings } from "../../core/api";
+import type { AudioSource, Meeting, Settings, TranscriptionRoute } from "../../core/api";
 import { meetingTimeAt } from "../../shared/blockTimes";
 import { core } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
+import { useTranscriptionServices } from "./transcriptionServices";
 
 interface MeetingsState {
   meetings: Meeting[];
@@ -13,6 +14,8 @@ interface MeetingsState {
   problems: Readonly<Record<string, string>>;
   /** The Meeting whose Start waits for the User to read the one-time recording notice. */
   noticeFor: { meetingId: string; systemAudio: boolean } | null;
+  /** The Meeting whose first Start waits for the User to choose where its audio is transcribed (#141). */
+  sheetFor: { meetingId: string; systemAudio: boolean } | null;
   /** The gaps the User has dismissed, by Meeting: how many of its gaps they have seen. */
   gapsSeen: Readonly<Record<string, number>>;
   /** The Meetings whose recording details are shown (#161). */
@@ -21,8 +24,14 @@ interface MeetingsState {
   load(): Promise<void>;
   /** "Record a meeting": a new Mind, in a tab of its own, with the start block. */
   record(): Promise<void>;
-  /** Start recording, after the one-time notice if this device hasn't shown it. */
+  /**
+   * Start recording: the first time a cloud service has a key, after the User chooses where the
+   * audio is transcribed; otherwise after the one-time notice if this device hasn't shown it.
+   */
   start(meetingId: string, systemAudio: boolean): Promise<void>;
+  /** Where to transcribe was chosen on the first-meeting sheet: it is kept, and recording starts. */
+  pickRoute(route: TranscriptionRoute): Promise<void>;
+  cancelSheet(): void;
   /** The notice was read: recording starts, and the notice isn't shown again. */
   acceptNotice(): Promise<void>;
   cancelNotice(): void;
@@ -57,6 +66,7 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     meetings: [],
     problems: {},
     noticeFor: null,
+    sheetFor: null,
     gapsSeen: {},
     detailsShown: {},
 
@@ -83,6 +93,15 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     },
 
     async start(meetingId, systemAudio) {
+      const { settings, embedding } = useAppStore.getState();
+      if (settings?.device.transcriptionRoute === null && !embedding?.localOnly) {
+        const services = useTranscriptionServices.getState();
+        await services.load();
+        if (useTranscriptionServices.getState().services.some((service) => service.hasKey)) {
+          set({ sheetFor: { meetingId, systemAudio } });
+          return;
+        }
+      }
       if (!useAppStore.getState().settings?.device.meetingNoticeAccepted) {
         set({ noticeFor: { meetingId, systemAudio } });
         return;
@@ -101,6 +120,21 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     },
 
     cancelNotice: () => set({ noticeFor: null }),
+
+    async pickRoute(route) {
+      const waiting = get().sheetFor;
+      set({ sheetFor: null });
+      if (!waiting) return;
+      await attempt(waiting.meetingId, async () => {
+        // The sheet says where the recording stays and that the others must be told: the notice's words.
+        await core.updateSettings({
+          device: { transcriptionRoute: route, meetingNoticeAccepted: true },
+        });
+        await core.startMeeting(waiting);
+      });
+    },
+
+    cancelSheet: () => set({ sheetFor: null }),
     pause: (meetingId) => attempt(meetingId, () => core.pauseMeeting(meetingId)),
     resume: (meetingId) => attempt(meetingId, () => core.resumeMeeting(meetingId)),
     stop: (meetingId) => attempt(meetingId, () => core.stopMeeting(meetingId)),

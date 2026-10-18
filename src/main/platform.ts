@@ -207,8 +207,8 @@ const fakeScans = fakeEmbedder ? (process.env.INCARNAMIND_TEST_SCANS ?? null) : 
  * Test-only launch flags: the smoke tests transcribe Meetings with a fake
  * speech-to-text engine in the utility process, so no model is downloaded
  * (#136), slow, failing to read stretches or failing over as
- * INCARNAMIND_TEST_TRANSCRIBER_OPTIONS (JSON) asks (#161). Only a test build
- * honours them.
+ * INCARNAMIND_TEST_TRANSCRIBER_OPTIONS (JSON) asks (#161), and a pretend cloud
+ * service instead of OpenAI's or Soniox's (#141). Only a test build honours them.
  */
 const fakeTranscriber: FakeTranscriberOptions | undefined =
   import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_TRANSCRIBER === "fake"
@@ -723,6 +723,11 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
         model: { baseUrl: "http://localhost/", files: [] },
         vad: { baseUrl: "http://localhost/", files: [] },
       },
+      // The pretend cloud service takes any key but one that says it's wrong.
+      transcriptionKeyFetch: async (_url: string | URL | Request, init?: RequestInit) =>
+        new Response(null, {
+          status: new Headers(init?.headers).get("Authorization")?.includes("wrong") ? 401 : 200,
+        }),
     }),
     crossEncoder: createUtilityProcessCrossEncoder({ fake: fakeEmbedder }),
     textRecognizer: createUtilityProcessTextRecognizer(
