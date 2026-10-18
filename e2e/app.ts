@@ -574,11 +574,8 @@ export async function showSettingsPage(window: Page, page: SettingsPage): Promis
   return settings;
 }
 
-/**
- * In Settings › Models, opens Add a provider and the page that adds `catalogId` (#179).
- * Returns that page's key form.
- */
-export async function addProviderForm(settings: Locator, catalogId: string): Promise<Locator> {
+/** In Settings › Models, opens Add a provider and the page that adds `catalogId` (#179). */
+export async function addProviderPage(settings: Locator, catalogId: string): Promise<Locator> {
   await settings.getByTestId("models-add-provider").click();
   await settings
     .getByTestId("provider-directory")
@@ -586,8 +583,12 @@ export async function addProviderForm(settings: Locator, catalogId: string): Pro
     .click();
   const page = settings.getByTestId("provider-add");
   await expect(page).toHaveAttribute("data-catalog-id", catalogId);
-  return page.getByTestId("provider-form");
+  return page;
 }
+
+/** As `addProviderPage`, returning that page's key form. */
+export const addProviderForm = async (settings: Locator, catalogId: string): Promise<Locator> =>
+  (await addProviderPage(settings, catalogId)).getByTestId("provider-form");
 
 /** Closes Settings with its close button. */
 export async function closeSettings(window: Page): Promise<void> {

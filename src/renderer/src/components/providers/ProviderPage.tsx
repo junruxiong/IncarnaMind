@@ -17,14 +17,23 @@ import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 import { useAnswers } from "../../answers";
 import { core } from "../../core";
 import { formatMoney, formatSpent, joinMeta, setAsideText } from "../../cost";
+import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import { type KeyRefusal, useKeyRefusals } from "../../keyRefusals";
 import { useModelNames } from "../../modelNames";
 import { useAppStore } from "../../store";
 import { OnThisComputer } from "../OnThisComputer";
+import { ProblemMark } from "../ProblemLine";
 import { SettingsBackLink } from "../SettingsBackLink";
 import { useCostSummary } from "../SpendingCapSettings";
-import { buttonClass, fieldClass, fieldLabelClass, hintClass, successTextClass } from "../ui";
+import {
+  buttonClass,
+  errorTextClass,
+  fieldClass,
+  fieldLabelClass,
+  hintClass,
+  successTextClass,
+} from "../ui";
 import { OtherModels } from "./OtherModels";
 import { KeyRefusedLine, ProviderSendsLine, TestResult } from "./ProviderForm";
 import { logoIdOf, ProviderLogo } from "./ProviderLogo";
@@ -104,6 +113,7 @@ export function ProviderPage({
   const key = useProviderKey();
   const keyField = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<ProviderTestResult | null>(null);
   const [otherOpen, setOtherOpen] = useState(false);
@@ -144,6 +154,7 @@ export function ProviderPage({
     const apiKey = key.apiKey.trim();
     if (apiKey === "" || !someModel) return;
     setSaving(true);
+    setKeyError(null);
     try {
       const saved = await core.saveChatProvider({
         kind: provider.kind,
@@ -158,10 +169,10 @@ export function ProviderPage({
         keepDefault: true,
       });
       key.clear();
+      setResult(null);
       if (refused) useKeyRefusals.getState().saved(saved);
-      await test();
     } catch (failure) {
-      useAppStore.getState().reportError(failure);
+      setKeyError(errorMessage(failure, t));
     } finally {
       setSaving(false);
     }
@@ -311,6 +322,16 @@ export function ProviderPage({
           )}
         </div>
         {refusedHere && refused && <KeyRefusedLine id={`${id}-refused`} refused={refused} />}
+        {keyError && (
+          <p
+            role="alert"
+            data-testid="provider-page-key-error"
+            className={`${errorTextClass} mt-1`}
+          >
+            <ProblemMark />
+            {keyError}
+          </p>
+        )}
         {(catalog?.notes ?? []).map((note) => (
           <span key={note.en} data-testid="provider-note" className={hintClass}>
             {note[words]}

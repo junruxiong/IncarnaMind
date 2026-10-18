@@ -85,7 +85,11 @@ export function ProviderDirectory({
               <Tile
                 key={entry.id}
                 entry={entry}
-                added={providers.some((each) => (each.catalogId ?? each.kind) === entry.id)}
+                // A server the User gives can be added again at another address.
+                added={
+                  entry.id !== "openai-compatible" &&
+                  providers.some((each) => (each.catalogId ?? each.kind) === entry.id)
+                }
                 onOpen={() => onOpen(entry.id)}
               />
             ))}

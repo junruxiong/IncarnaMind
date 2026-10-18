@@ -114,7 +114,7 @@ function DefaultRow({
     row.role === "chatModel"
       ? null
       : ((row.role === "quickTasksModel" ? roles?.quickTasks : roles?.images) ?? null);
-  const empty = options.length === 0 && row.role === "chatModel";
+  const empty = options.length === 0;
 
   const choose = (next: string) => {
     const choice = choiceOf(next);
