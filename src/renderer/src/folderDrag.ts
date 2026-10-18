@@ -2,6 +2,7 @@ import type { DragEvent } from "react";
 import { create } from "zustand";
 import { startDocumentDrag } from "./documentDrag";
 import { itemsOf, type MoveItems } from "./moves";
+import { useSelection } from "./selection";
 import { useAppStore } from "./store";
 import { carriesLinks, linksIn, useWebPages } from "./webPages";
 
@@ -120,10 +121,10 @@ const keyOf = (folderId: string | null) => folderId ?? "not-in-a-folder";
 /**
  * Makes an element a place to drop Minds and Documents into a Folder (null:
  * out of every Folder). `active` while something it would take is dragged
- * over it. `onHold`, given while the Folder is folded, opens it once a drag
- * has rested on it a moment.
+ * over it. `open`, given while the Folder is folded, opens it once a drag
+ * has rested on it a moment, or once something is dropped into it.
  */
-export function useFolderDrop(folderId: string | null, onHold?: () => void) {
+export function useFolderDrop(folderId: string | null, open?: () => void) {
   const key = keyOf(folderId);
   const active = useDropTarget((state) => state.over === key);
   const accepts = (event: DragEvent) =>
@@ -145,8 +146,8 @@ export function useFolderDrop(folderId: string | null, onHold?: () => void) {
           stopHolding();
           useDropTarget.setState({ over: key });
         }
-        if (onHold && holding?.key !== key) {
-          holding = { key, timer: window.setTimeout(onHold, OPENS_AFTER_MS) };
+        if (open && holding?.key !== key) {
+          holding = { key, timer: window.setTimeout(open, OPENS_AFTER_MS) };
         }
       },
       onDragLeave(event: DragEvent) {
@@ -163,7 +164,11 @@ export function useFolderDrop(folderId: string | null, onHold?: () => void) {
           return;
         }
         const items = droppedItems(event);
-        if (items) void useAppStore.getState().moveToFolder(items, folderId);
+        if (!items) return;
+        void useAppStore.getState().moveToFolder(items, folderId);
+        open?.();
+        // A selection of one is the row shown, and stays; several chosen to drag together are done with.
+        if (useSelection.getState().items.length > 1) useSelection.getState().clear("sidebar");
       },
     },
   };

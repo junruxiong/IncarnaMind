@@ -269,6 +269,7 @@ export const en = {
   "move.search": "Find a Folder",
   "move.none": "No Folder matches",
   "move.here": "Here now",
+  "move.newFolder": "New Folder “{name}”",
   "move.items": "{count} items",
   "move.done": "Moved “{name}” to {folder}",
   "move.done.minds": "Moved {count} Minds to {folder}",

@@ -224,11 +224,12 @@ export interface AppState extends LayoutSlice {
   moveToFolder(items: MoveItems, folderId: string | null): Promise<void>;
   /**
    * Makes "Untitled Folder" (numbered if that is taken) and asks the sidebar to
-   * open its name field. With `items`, the Minds and Documents go into it at
-   * once. One step to undo, with its first name (`nameNewFolder`). Resolves to
-   * the Folder's id, or null if it couldn't be made.
+   * open its name field, or, given a `name`, makes it with that name. With
+   * `items`, the Minds and Documents go into it at once. One step to undo, with
+   * its first name (`nameNewFolder`). Resolves to the Folder's id, or null if
+   * it couldn't be made.
    */
-  createFolder(items?: MoveItems): Promise<string | null>;
+  createFolder(items?: MoveItems, name?: string): Promise<string | null>;
   /** Names the Folder just made: part of making it, so one Undo takes both back. */
   nameNewFolder(folderId: string, name: string): Promise<void>;
   /** Renames a Folder, keeping its description. */
@@ -937,14 +938,16 @@ export const useAppStore = create<AppState>()((set, get) => {
         );
       }),
 
-    createFolder: async (items) => {
+    createFolder: async (items, named) => {
       let madeId: string | null = null;
       await attempt(async () => {
         const { minds, documents, library } = get();
-        const name = untitledFolderName(
-          t,
-          (library?.groups ?? []).map((group) => group.name),
-        );
+        const name =
+          named?.trim() ||
+          untitledFolderName(
+            t,
+            (library?.groups ?? []).map((group) => group.name),
+          );
         const folder = await core.createLibraryGroup({ name, description: "" });
         await get().refreshLibrary();
         const chosen = items ? itemsOf(items) : null;
@@ -961,7 +964,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         const step = stepNamed(name);
         justMade = { id: folder.id, step, stepNamed };
         push(step);
-        useRequests.getState().ask({ nameFolder: folder.id });
+        if (!named?.trim()) useRequests.getState().ask({ nameFolder: folder.id });
         madeId = folder.id;
       });
       return madeId;

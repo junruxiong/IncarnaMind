@@ -379,6 +379,8 @@ for (const [language, width] of [
         financeFolder.getByTestId("folder-row"),
       );
       await expect(undoLine).toHaveText(t("move.done.items", { count: 3, folder: "Finance" }));
+      // Dropped, they are no longer selected.
+      await expect(window.getByTestId("sidebar-selection")).toHaveText("");
       expect(await folderOfMind(window, shortlist)).toBe(finance);
       expect(await folderOfDocument(window, budget)).toBe(finance);
       expect(await folderOfDocument(window, ledger)).toBe(finance);
@@ -420,17 +422,45 @@ for (const [language, width] of [
       await expect.poll(() => folderOfMind(window, shortlist)).toBe(finance);
       await expectScope(window, "Finance");
 
-      // Move to… by keyboard: ⇧⌘M on the row, type, Enter; ⌘Z takes it back.
+      // Move to… by keyboard: ⇧⌘M on the row, type, Enter, and the folded Folder opens with it;
+      // ⌘Z takes it back.
       const picker = window.getByTestId("move-to-picker");
+      if ((await researchFolder.getAttribute("data-expanded")) === "true") {
+        await researchFolder.getByTestId("folder-row").click();
+      }
+      await expect(researchFolder).toHaveAttribute("data-expanded", "false");
       await mindRow(window, "Shortlist").getByTestId("mind-list-item").focus();
       await window.keyboard.press("ControlOrMeta+Shift+KeyM");
       await expect(picker.getByTestId("move-to-search")).toBeFocused();
       await window.keyboard.type("Res");
       await window.keyboard.press("Enter");
       await expect.poll(() => folderOfMind(window, shortlist)).toBe(research);
+      await expect(researchFolder).toHaveAttribute("data-expanded", "true");
       await expectCountsOfCore(window);
       await expectScope(window, "Research");
       await undo(window);
+      await expect.poll(() => folderOfMind(window, shortlist)).toBe(finance);
+
+      // A name no Folder has: Move to… makes that Folder, which opens with the Mind inside; one ⌘Z
+      // takes both back.
+      await mindRow(window, "Shortlist").getByTestId("mind-list-item").focus();
+      await window.keyboard.press("ControlOrMeta+Shift+KeyM");
+      await expect(picker.getByTestId("move-to-search")).toBeFocused();
+      await window.keyboard.type("Harbour");
+      await expect(picker.getByTestId("move-to-option")).toHaveText([
+        t("move.newFolder", { name: "Harbour" }),
+      ]);
+      await window.keyboard.press("Enter");
+      const harbour = sidebarFolder(window, "Harbour");
+      await expect(harbour).toHaveAttribute("data-expanded", "true");
+      await expect(harbour.getByTestId("mind-list-item")).toHaveText("Shortlist");
+      await expect(undoLine).toHaveText(
+        t("folder.made.one", { name: "Harbour", item: "Shortlist" }),
+      );
+      await expectCountsOfCore(window);
+      await expectScope(window, "Harbour");
+      await undo(window);
+      await expect(harbour).toHaveCount(0);
       await expect.poll(() => folderOfMind(window, shortlist)).toBe(finance);
 
       // …for a Mind and two Documents selected together, and out of every Folder.

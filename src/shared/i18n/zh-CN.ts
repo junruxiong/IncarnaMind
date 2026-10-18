@@ -262,6 +262,7 @@ export const zhCN = {
   "move.search": "搜索文件夹",
   "move.none": "没有匹配的文件夹",
   "move.here": "当前位置",
+  "move.newFolder": "新建文件夹“{name}”",
   "move.items": "{count} 项",
   "move.done": "已将“{name}”移动到“{folder}”",
   "move.done.minds": "已将 {count} 个 Mind 移动到“{folder}”",
