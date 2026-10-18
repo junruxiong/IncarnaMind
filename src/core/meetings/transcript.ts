@@ -568,7 +568,9 @@ export function createTranscripts(options: TranscriptsOptions) {
         live.pendingFrom ??= live.held[0]?.atMs ?? live.pushedMs;
         live.held = [];
         state.state = "behind";
-        state.problem = { kind: "engine", message: model.status().error?.message ?? "" };
+        const message = model.status().error?.message ?? "";
+        log.warn("transcript.engineFailed", { meetingId: state.meetingId, message });
+        state.problem = { kind: "engine", message };
         options.changed();
         return;
       }
