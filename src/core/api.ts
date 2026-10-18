@@ -1955,6 +1955,12 @@ export interface DeviceSettings {
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
   /**
+   * Where meeting audio is transcribed, once the User has chosen: at first run (Change on the
+   * Meetings job) or in Settings. Null: not chosen, so this computer, and a first Meeting may
+   * ask once cloud routes exist (#141).
+   */
+  transcriptionRoute: TranscriptionRoute | null;
+  /**
    * The User has read, once on this device, what a recording captures and
    * that the other people should be told. Recording waits for it.
    */
@@ -1968,6 +1974,13 @@ export interface DeviceSettings {
   /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
   motion: MotionPreference;
 }
+
+/**
+ * Where a Meeting's audio is turned into text: on this computer, for now. The cloud routes
+ * (#141, #463) are added here, each served by the keys and sign-ins it names.
+ */
+export const TRANSCRIPTION_ROUTES = ["local"] as const;
+export type TranscriptionRoute = (typeof TRANSCRIPTION_ROUTES)[number];
 
 /**
  * How the window moves on a device (DESIGN.md, Motion): as the system's own
