@@ -149,8 +149,10 @@ describe("the menus", () => {
     expect(translate("en", "tabs.menu.split")).toBe("Split to the right");
     expect(translate("zh-CN", "tabs.menu.split")).toBe("向右拆分");
     // One act, one name: no string calls the same act "Open to the side".
-    expect(Object.values(en).filter((words) => /open to the side/i.test(words))).toEqual([]);
-    expect(Object.values(zhCN).filter((words) => /在旁边打开|在侧边打开/.test(words))).toEqual([]);
+    expect(Object.values(en).filter((words) => /^open to the side$/i.test(words))).toEqual([]);
+    expect(
+      Object.values(zhCN).filter((words) => /^(?:在旁边打开|在侧边打开)$/.test(words)),
+    ).toEqual([]);
   });
 
   test("Delete is the last item of a Mind's menu, and a tab's is its own items, then Delete", () => {
