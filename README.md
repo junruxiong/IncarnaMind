@@ -29,7 +29,7 @@
   <!-- After the first release, add: <a href="https://github.com/IncarnaMind/IncarnaMind/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/IncarnaMind/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="Six screens in turn: two sentences of a draft selected, with Check against Documents in the menu; the same draft checked, each sentence marked supported, unsupported or contradicted, with a count under the title; a Citation opened beside the note, its quote highlighted on the PDF page; a lender update someone else wrote, opened to verify, with Check 8 claims; its claims checked, one contradicted by the facilities agreement on page 3; and the checked draft in the Chinese interface."></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="Six screens in turn: two sentences of a draft selected in a Mind, with Check against Documents in the menu; the same draft checked, one mark per sentence in the margin (supported, unsupported, contradicted) and the check badge in the page's corner with its counts; a Citation opened beside the Mind, its quote highlighted on the PDF page; a lender update someone else wrote, opened with Verify a document…, offering Check 8 claims; its claims checked, one contradicted by the facilities agreement, with a card saying what the Document says; and the checked draft in the Chinese interface."></p>
 
 <p align="center"><sub>Everything shown is in the app today.</sub></p>
 
@@ -57,7 +57,7 @@ Windows releases will be signed through the SignPath Foundation's free signing f
 
 ## What you can do
 
-**Check your draft before you send it.** Select sentences in a Mind and choose **Check against Documents**: each one comes back supported, unsupported or contradicted by your Documents, with the page one click away, and the line under the title counts what still needs a look. A PDF someone else wrote can be checked the same way, claim by claim: **+ → Verify a document…**.
+**Check your draft before you send it.** Select sentences in a Mind and choose **Check against Documents**: each one comes back supported, unsupported or contradicted by your Documents, with the page one click away, and the badge in the page's corner counts what still needs a look. A PDF someone else wrote can be checked the same way, claim by claim: **+ → Verify a document…**.
 
 **Write and ask in one place.** A Mind is a notebook for one topic. Beside it sits the assistant: ask it about the Mind you're in or your files, and the Answer comes back there, in a conversation, with its citations checked. Your draft stays as you wrote it until you pick **Add to note**, which puts the Answer at your cursor as text you can edit, citations and all.
 
