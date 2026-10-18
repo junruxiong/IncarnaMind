@@ -13,10 +13,13 @@ import type { Core, UnsavedChanges } from "../core";
 import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 import { systemReason } from "../shared/systemReasons";
 
-/** The quit sheet's buttons, in their order. */
-const SAVE_COPY = 0;
-const QUIT_ANYWAY = 1;
-const KEEP_OPEN = 2;
+type Choice = "saveCopy" | "quitAnyway" | "keepOpen";
+
+const LABELS: Readonly<Record<Choice, MessageKey>> = {
+  saveCopy: "unsaved.saveCopy",
+  quitAnyway: "quit.unsaved.quit",
+  keepOpen: "quit.unsaved.keep",
+};
 
 /** A file name the file systems take: a Mind's title without what they refuse. */
 const fileNameOf = (title: string) => title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "Mind";
@@ -61,6 +64,12 @@ export function guardQuit(core: Core, focusedWindow: () => BrowserWindow | null)
     const { language } = await core.getSettings();
     const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
     const window = focusedWindow();
+    // Only a Mind not deleted can be copied: a deleted one comes back with Restore (#1202).
+    const choices: Choice[] = [
+      ...(left.mindIds.length > 0 ? (["saveCopy"] as const) : []),
+      "quitAnyway",
+      "keepOpen",
+    ];
     const options = {
       type: "warning" as const,
       message:
@@ -68,24 +77,24 @@ export function guardQuit(core: Core, focusedWindow: () => BrowserWindow | null)
           ? t("quit.unsaved.title.one")
           : t("quit.unsaved.title", { count: left.count }),
       ...(copyFailed !== null && { detail: copyFailedText(t, copyFailed) }),
-      buttons: [t("unsaved.saveCopy"), t("quit.unsaved.quit"), t("quit.unsaved.keep")],
-      defaultId: KEEP_OPEN,
-      cancelId: KEEP_OPEN,
+      buttons: choices.map((choice) => t(LABELS[choice])),
+      defaultId: choices.indexOf("keepOpen"),
+      cancelId: choices.indexOf("keepOpen"),
       noLink: true,
     };
     const { response } = window
       ? await dialog.showMessageBox(window, options)
       : await dialog.showMessageBox(options);
-    return { response, window };
+    return { choice: choices[response] ?? "keepOpen", window };
   };
   const decide = async () => {
     let copyFailed: string | null = null;
     for (;;) {
       const left = await core.saveChangesAgain();
       if (!left) break;
-      const { response, window } = await ask(left, copyFailed);
-      if (response === QUIT_ANYWAY) break;
-      if (response !== SAVE_COPY) return;
+      const { choice, window } = await ask(left, copyFailed);
+      if (choice === "quitAnyway") break;
+      if (choice !== "saveCopy") return;
       try {
         for (const mindId of left.mindIds) {
           if (!(await saveMindCopy(core, window, mindId))) return;
