@@ -3825,8 +3825,12 @@
     display: none;
   }
   /* Each line sits with the Block it is about: a gap above it, the Block right under it. */
-  .mind-editor > :not(.applied-line) + .change-section {
+  .mind-editor > * + .change-section {
     margin-top: 32px;
+  }
+  /* The applied line is 16px under the Block above, as any Block is, and 6px over the Block it is about. */
+  .mind-editor > .applied-line + * {
+    margin-top: 0;
   }
   .mind-editor > :is(.change-was, .change-section) + *,
   .mind-editor li > .change-was + * {
@@ -3885,10 +3889,6 @@
     line-height: 20px;
     user-select: none;
     white-space: normal;
-  }
-  /* The line is 16px under the Block above, as any Block is, and 6px over the Block it is about. */
-  .mind-editor > .applied-line + * {
-    --block-gap: 0px;
   }
   .mind-editor .applied-line {
     margin-bottom: 6px;
