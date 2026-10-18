@@ -454,6 +454,53 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     expect(tagging.requests).toHaveLength(1);
   });
 
+  test("while Organize files new Documents by itself, a Document the tagger checked with no Tags is checked once a Tag exists", async () => {
+    const { core } = await startTagging(["Paper"]);
+    const provider = await core.saveChatProvider(LOCAL);
+    await core.createLibraryGroup({ name: "Papers", description: "Research papers" });
+    const classifier = {
+      kind: "chat",
+      choice: { providerId: provider.id, modelId: "local-model" },
+    } as const;
+    await core.saveLibrarySettings({ classifier, automatic: false });
+    for (const tag of await core.listTags()) await core.deleteTag(tag.id);
+    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
+    await waitForTagging(core, [document.id], (each) => each.tagging === "no-tags");
+
+    await core.saveLibrarySettings({ classifier, automatic: true });
+    await core.createTag({ name: "Paper", description: "A research paper." });
+    const [tagged] = await waitForTagging(core, [document.id]);
+
+    expect(tagged?.tagging).toBe("tagged");
+    expect(await tagNamesOf(core, document.id)).toEqual(["Paper"]);
+  });
+
+  test("a Document still waiting for a Tag when the app quits is checked at the next start, if a Tag exists by then", async () => {
+    const dataDir = await createTempDataFolder();
+    const first = await startTagging(["Paper"], dataDir);
+    await first.core.saveChatProvider(LOCAL);
+    for (const tag of await first.core.listTags()) await first.core.deleteTag(tag.id);
+    const document = await addDocument(first.core, "Attention.md", PAPER_TEXT);
+    await waitForTagging(first.core, [document.id], (each) => each.tagging === "no-tags");
+    first.core.close();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run(
+        `INSERT INTO tags (id, name, description, preset, colour, created_at, updated_at)
+         VALUES (?, 'Paper', 'A research paper.', NULL, 'teal', ?, ?)`,
+        [randomUUID(), AT, AT],
+      );
+    } finally {
+      db.close();
+    }
+
+    const second = await startTagging(["Paper"], dataDir);
+    const [tagged] = await waitForTagging(second.core, [document.id]);
+
+    expect(tagged?.tagging).toBe("tagged");
+    expect(await tagNamesOf(second.core, document.id)).toEqual(["Paper"]);
+  });
+
   test("removing the chat model sends Documents not yet tagged back to waiting", async () => {
     const { core, tagging } = await startTagging(["Paper"]);
     tagging.fail(new Error("The model is down."));
