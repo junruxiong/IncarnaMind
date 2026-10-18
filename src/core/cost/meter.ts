@@ -487,12 +487,11 @@ export function createMeter(options: {
           const { currency } = use.perHour;
           return db.transaction(() => {
             const cap = options.cap();
-            if (
-              cap &&
-              againstCap(cap.currency, month) + inCurrency(amount, currency, cap.currency) >
-                cap.amount
-            ) {
-              return false;
+            if (cap) {
+              const spent = againstCap(cap.currency, month);
+              // A month already at the cap sends nothing more, however little.
+              if (spent >= cap.amount) return false;
+              if (spent + inCurrency(amount, currency, cap.currency) > cap.amount) return false;
             }
             const stamp = at.toISOString();
             if (row?.month === month) {

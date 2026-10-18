@@ -1029,6 +1029,11 @@ export interface CoreAdapters {
    * fake that needs none.
    */
   transcriptionModelSource?: { model: EmbeddingModelSource; vad: EmbeddingModelSource };
+  /**
+   * Asks a cloud transcription service whether it takes a key of its own (#141), before it is
+   * kept. The global `fetch` by default; tests answer without the network.
+   */
+  transcriptionKeyFetch?: typeof fetch;
   /** Where the core logs what happens (see `Logger`). None by default. */
   log?: Logger;
 }

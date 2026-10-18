@@ -2657,6 +2657,7 @@ export function createCore(adapters: CoreAdapters): Core {
     meter,
     localOnly: () => embedding.localOnly(),
     providerKey: (catalogId) => chat.apiKeyOf(catalogId),
+    ...(adapters.transcriptionKeyFetch && { fetch: adapters.transcriptionKeyFetch }),
     vadFile: async () => {
       if (!transcriptionModel) throw new Error("This copy can't transcribe.");
       return transcriptionModel.vadFile();

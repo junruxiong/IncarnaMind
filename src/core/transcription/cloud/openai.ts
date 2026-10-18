@@ -71,6 +71,11 @@ export function createUpsampler(): (samples: Int16Array) => Int16Array {
   };
 }
 
+const toPcm = (samples: Float32Array) =>
+  Int16Array.from(samples, (sample) =>
+    Math.max(-32768, Math.min(32767, Math.round(sample * 32768))),
+  );
+
 const base64 = (samples: Int16Array) =>
   Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength).toString("base64");
 
@@ -335,10 +340,12 @@ export function createOpenAiStream(
   return {
     push(samples) {
       if (ended || finishing || samples.length === 0) return;
-      keep(samples);
+      // The service is sent what the detector hears: a quiet voice raised, as on this computer.
+      const leveled = level(toFloat(samples));
+      keep(toPcm(leveled));
       received += samples.length;
       append();
-      detector.accept(level(toFloat(samples)));
+      detector.accept(leveled);
       look();
       settle();
     },
