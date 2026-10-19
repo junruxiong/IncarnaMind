@@ -80,9 +80,9 @@ export function createCloudTranscription(options: CloudTranscriptionOptions) {
   const request = options.fetch ?? fetch;
   const gate = createSendGate(consent, options.localOnly);
   const chosen = () => settings.get().device.transcriptionRoute;
-  /** The routes with a key now, by its fingerprint: per chunk the gate can't wait for the keychain. */
+  // By fingerprint, read ahead: the gate runs per chunk and can't wait for the keychain.
   const keys = new Map<CloudTranscriptionRoute, string>();
-  /** Routes whose key the service refused, until the key changes. */
+  // Until the key changes, so each Meeting doesn't start with a refusal and a gap.
   const refused = new Set<CloudTranscriptionRoute>();
 
   async function keyOf(

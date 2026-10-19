@@ -136,9 +136,8 @@ interface LiveStream {
 
 interface Live {
   stream: string;
-  /** Where the live audio goes: this computer, or a cloud service. */
   engine: "local" | CloudTranscriptionRoute;
-  /** The cloud service's streams and what has been counted against the cap, while `engine` is one. */
+  /** `aheadMs`: audio counted against the cap and not sent yet. */
   cloud: { stream: CloudStream; meter: CloudAudioMeter; aheadMs: number } | null;
   /** Where to transcribe is being worked out: the audio waits meanwhile. */
   choosing: boolean;
@@ -453,11 +452,8 @@ export function createTranscripts(options: TranscriptsOptions) {
     return null;
   }
 
-  /**
-   * Who said a line a cloud service told apart (#141): someone numbered in the order heard in
-   * the Meeting. The microphone's lines stay "Me", so they are never taken for the other side
-   * and echo removal still applies; a new session's labels are new people.
-   */
+  // The microphone's lines stay "Me", so they are never taken for the other side and echo removal
+  // still applies. Labels are per stream: a new session's "1" is a new person.
   function voiceOf(state: State, stream: string, source: AudioSource, label: string): string {
     if (source === "microphone") return SPEAKER_ME;
     const voices = state.voices ?? {};
@@ -613,7 +609,6 @@ export function createTranscripts(options: TranscriptsOptions) {
     health.add(state.meetingId, { kind: "switched", atMs, from, to, reason });
   }
 
-  /** A cloud stream ended before it was finished: the live audio goes to this computer. */
   function heardLost(stream: string, loss: CloudLoss): void {
     if (closed) return;
     const found = owner(stream);
@@ -627,12 +622,9 @@ export function createTranscripts(options: TranscriptsOptions) {
     if (live) leaveCloud(found.state, live, loss);
   }
 
-  /**
-   * The live audio goes to this computer from now on (#141). Dropped, refused, or the gate
-   * closed: the cloud's streams are dropped, nothing they queued is sent, and the stretch this
-   * computer didn't hear is transcribed after Stop (marked as a gap where the cloud failed). At
-   * the cap, the streams finish with what they were already sent.
-   */
+  // Dropped, refused or the gate closed: the cloud's streams are dropped, nothing they queued is
+  // sent, and the stretch this computer didn't hear is transcribed after Stop. At the cap, the
+  // streams finish with what they were already sent.
   function leaveCloud(state: State, live: Live, reason: Leaving): void {
     if (live.engine === "local") return;
     const route = live.engine;
@@ -673,14 +665,12 @@ export function createTranscripts(options: TranscriptsOptions) {
     options.changed();
   }
 
-  /** The send gate's answer for a live cloud route, as a reason to leave it; null while open. */
   function gateClosed(live: Live): Leaving | null {
     if (live.engine === "local") return null;
     const now = options.cloud?.sending(live.engine) ?? "stopped";
     return now === "ok" ? null : now === "local-mode" ? "local-mode" : "user";
   }
 
-  /** A cloud stream is ready: what the core held for it goes, if the gate is still open. */
   function heardOpened(stream: string): void {
     if (closed) return;
     const found = owner(stream);
@@ -747,7 +737,6 @@ export function createTranscripts(options: TranscriptsOptions) {
     });
   }
 
-  /** The cloud service takes the live audio: its streams open as each source's audio first comes. */
   function startCloud(state: State, live: Live): void {
     live.started = true;
     state.state = "live";
@@ -765,7 +754,6 @@ export function createTranscripts(options: TranscriptsOptions) {
     options.changed();
   }
 
-  /** Counts cloud audio against the cap ahead of sending it; false at the cap. */
   function counted(live: Live, audio: TrackedAudio): boolean {
     const cloud = live.cloud;
     if (!cloud) return true;
@@ -832,7 +820,6 @@ export function createTranscripts(options: TranscriptsOptions) {
     options.changed();
   }
 
-  /** Works out where a stretch of recording is transcribed, the audio waiting meanwhile. */
   function choose(state: State, live: Live, cloud: NonNullable<TranscriptsOptions["cloud"]>): void {
     cloud.start().then(
       (start) => {
@@ -1037,7 +1024,6 @@ export function createTranscripts(options: TranscriptsOptions) {
     log.info("transcript.saved", { meetingId: state.meetingId, lines: state.cues.length });
   }
 
-  /** The live streams give their last lines, up to `endMs`; they are the Meeting's until then. */
   function finishStreams(state: State, live: Live, endMs: number): void {
     const callSound = live.callSound();
     const fromMs = live.doneMs;

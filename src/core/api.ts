@@ -2000,24 +2000,19 @@ export type CloudTranscriptionRoute = Exclude<TranscriptionRoute, "local">;
 /** A cloud transcription service, as Settings and the first-meeting sheet offer it. */
 export interface TranscriptionServiceStatus {
   route: CloudTranscriptionRoute;
-  /** "OpenAI", "Soniox": where meeting audio goes. */
   name: string;
   model: string;
-  /** What an hour of audio costs at list price. */
+  /** List price per hour of audio. */
   perHour: Money;
-  /** "provider": it uses the key of the chat provider of the same name; "own": a key of its own. */
+  /** "provider": it uses the key of the chat provider of the same name in Settings › Models. */
   key: "provider" | "own";
-  /** A key is there to use. */
   hasKey: boolean;
-  /** It names speakers as it transcribes. */
   liveSpeakers: boolean;
-  /** Where to get a key of its own. */
   keyUrl: string | null;
 }
 
 export interface SetTranscriptionKeyInput {
   route: CloudTranscriptionRoute;
-  /** The key, checked with the service before it is kept. */
   apiKey: string;
 }
 
