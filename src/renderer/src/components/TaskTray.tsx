@@ -26,6 +26,8 @@ const MIN_TRAY = 220;
 const MIN_ROOM = 56;
 /** What the conversation keeps above the tray and the composer, at the least: a few lines (#678). */
 const MIN_THREAD = 120;
+/** While the assistant's question waits, the conversation gives it room for its options: the Question's line stays. */
+const MIN_THREAD_ASKING = 40;
 
 const ALLOW_KEYS = "CmdOrCtrl+Enter";
 
@@ -192,6 +194,7 @@ export function TaskTray({ mindId }: { mindId: string | null }) {
     planning ||
     viewing !== undefined ||
     queued.length > 0;
+  const choosing = asking === undefined && question !== undefined;
 
   useLayoutEffect(() => {
     const element = tray.current;
@@ -201,7 +204,8 @@ export function TaskTray({ mindId }: { mindId: string | null }) {
       // The composer and the room under it, which the slot's padding keeps.
       const slot = element.parentElement?.getBoundingClientRect().height ?? 0;
       const composer = slot - element.getBoundingClientRect().height;
-      const room = Math.max(MIN_ROOM, column.clientHeight - composer - MIN_THREAD);
+      const thread = choosing ? MIN_THREAD_ASKING : MIN_THREAD;
+      const room = Math.max(MIN_ROOM, column.clientHeight - composer - thread);
       const share = Math.floor(column.clientHeight * TRAY_SHARE);
       setMaxHeight(Math.min(room, Math.max(share, MIN_TRAY)));
     };
@@ -209,7 +213,7 @@ export function TaskTray({ mindId }: { mindId: string | null }) {
     const observer = new ResizeObserver(fitTray);
     observer.observe(column);
     return () => observer.disconnect();
-  }, [present]);
+  }, [present, choosing]);
 
   if (!present) return null;
   return (

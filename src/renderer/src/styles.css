@@ -3595,6 +3595,18 @@
     font-size: 12px;
     color: var(--color-ink-meta);
   }
+  /* In the tray the head and the buttons stay, and the options scroll between them, two rows at least. */
+  .task-ask .choice-card {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .task-ask .choice-options {
+    flex: 1 1 auto;
+    min-height: 72px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
   .answer-asked-line {
     font-size: 13px;
     line-height: 20px;

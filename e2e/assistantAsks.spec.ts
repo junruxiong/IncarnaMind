@@ -120,6 +120,8 @@ test("in Chinese, the question and its rows, at a narrow window", async () => {
   const box = await card.boundingBox();
   const tray = await window.getByTestId("task-tray").boundingBox();
   expect(box && tray && box.x + box.width <= tray.x + tray.width + 1).toBe(true);
+  await expect(card.getByTestId("question-option").first()).toBeInViewport();
+  await expect(card.getByTestId("question-continue")).toBeInViewport();
 
   await card.getByTestId("question-other").fill("还有那份锅炉的");
   await card.getByTestId("question-other").press("Enter");
