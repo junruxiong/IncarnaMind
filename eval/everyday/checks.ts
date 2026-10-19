@@ -180,12 +180,18 @@ function blocksIn(text: string): string[] {
 export function guardTook(input: string, output: string): { removed: string[]; changed: string[] } {
   const kept = blocksIn(output);
   const removed: string[] = [];
+  const changed: string[] = [];
   let at = 0;
   for (const block of blocksIn(input)) {
-    if (block === kept[at]) at++;
-    else removed.push(block);
+    const found = kept.indexOf(block, at);
+    if (found < 0) {
+      removed.push(block);
+      continue;
+    }
+    changed.push(...kept.slice(at, found));
+    at = found + 1;
   }
-  return { removed, changed: kept.slice(at) };
+  return { removed, changed: [...changed, ...kept.slice(at)] };
 }
 
 // The words a pointer is made of, so what a sentence says besides is what's left.
@@ -269,7 +275,9 @@ export function takenOut(outcome: RequestOutcome): { removed: string[]; changed:
   );
   return {
     removed: [
-      ...(outcome.addedToPage === undefined ? [] : leftOut(outcome.answer.text, outcome.addedToPage)),
+      ...(outcome.addedToPage === undefined
+        ? []
+        : leftOut(outcome.answer.text, outcome.addedToPage)),
       ...took.flatMap((each) => each.removed),
     ],
     changed: took.flatMap((each) => each.changed),

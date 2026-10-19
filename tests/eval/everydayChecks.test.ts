@@ -5,7 +5,13 @@
  * own net.
  */
 import { describe, expect, test } from "vitest";
-import { pointersIn, type RequestOutcome, requestFailures } from "../../eval/everyday/checks";
+import {
+  guardTook,
+  pointersIn,
+  type RequestOutcome,
+  requestFailures,
+  rewrittenLater,
+} from "../../eval/everyday/checks";
 import { judgeClaims, verdictIn } from "../../eval/everyday/judge";
 import { languageRates, rowRates } from "../../eval/everyday/rates";
 import { ASKED_AGAIN } from "../../eval/everyday/reasks";
@@ -314,21 +320,44 @@ describe("Standing on its own, and the example unasked", () => {
     ).toEqual(["They are covered in my earlier answer.", "数据集见上文。"]);
   });
 
-  // protects=content left out of a page fails: a sentence of the reply that says more than a pointer, or a Block of what a call gave to write into a Mind lost whole, in English and Chinese; a pointer taken out passes, and so does a sentence the app rewrote inside a Block that stayed; fails_when=lost content passes, or a pointer taken out or a rewritten sentence fails; no_claim=none beyond protects.
-  test("content left out of a page fails", () => {
+  // protects=a sentence of the reply that says more than a pointer, left out of it as Add to note puts it, fails as content lost; one that is only a pointer doesn't; fails_when=lost content passes, or a pointer taken out fails; no_claim=none beyond protects.
+  test("content left out of the reply as Add to note puts it fails", () => {
     const correction = "I made an error in my previous answer and the total excludes VAT.";
     expect(lost(`Pay is 5k. ${correction}`, "Pay is 5k.")).toEqual(["content-lost"]);
     expect(lost("Pay is 5k. See my earlier answer.", "Pay is 5k.")).toEqual([]);
-    expect(lost("Done.", undefined, ["月薪一万。\n\n年假见上文。"], ["月薪一万。"])).toEqual([]);
+  });
+
+  // protects=the gate holds the guard to its own input and output: a Block it took that says more than a pointer, or a Block it changed, is content lost; a pointer paragraph it took is not; fails_when=either loss is missed, or a kept Block is taken for changed; no_claim=none beyond protects.
+  test("the guard may take out only a pointer paragraph, and change nothing", () => {
+    expect(guardTook("Pay is 5k.\n\nSee my earlier answer.", "Pay is 5k.")).toEqual({
+      removed: ["See my earlier answer."],
+      changed: [],
+    });
+    expect(guardTook("**Total: £45,000**\n\nSee above.\n\nVAT is extra.", "VAT is extra.")).toEqual(
+      { removed: ["**Total: £45,000**", "See above."], changed: [] },
+    );
     expect(
-      lost("Done.", undefined, ["月薪一万。\n\n合同写道：“租金见上文。”"], ["月薪一万。"]),
-    ).toEqual(["content-lost"]);
-    expect(lost("Done.", undefined, ["Pay is 5k.\n\n- Bonus is 1k."], ["Pay is 5k."])).toEqual([
-      "content-lost",
-    ]);
-    expect(
-      lost("Done.", undefined, ["Key results. Highlights are below[^8]:"], ["Key results. All."]),
-    ).toEqual([]);
+      guardTook("Pay is 5k. See above.\n\nBonus is 1k.", "Pay is 5k.\n\nBonus is 1k."),
+    ).toEqual({ removed: ["Pay is 5k. See above."], changed: ["Pay is 5k."] });
+  });
+
+  // protects=through the real guard, what each Mind tool's content loses is only pointer paragraphs, as the evaluation reads them in English and Chinese (同上, 参考上文 included), and a sentence the model or the app rewrote after the guard is counted apart, not as lost; fails_when=a correct removal reads as lost, or a later rewrite fails the guard; no_claim=none beyond protects.
+  test("what a call gave to write into a Mind, through the guard", () => {
+    for (const pointer of [
+      "See my earlier answer.",
+      "年假见上文。",
+      "同上。",
+      "具体内容请参考上文。",
+    ]) {
+      expect(lost("Done.", undefined, [`Pay is 5k.\n\n${pointer}`], ["Pay is 5k."])).toEqual([]);
+    }
+    const rewritten = outcome({
+      expected: { write: true, cite: false, coverAll: false },
+      givenToMinds: ["Key results. Highlights are below[^8]:"],
+      writtenInMinds: ["Key results. All of them."],
+    });
+    expect(requestFailures(rewritten).map((failure) => failure.kind)).not.toContain("content-lost");
+    expect(rewrittenLater(rewritten)).toEqual(["Highlights are below[^8]:"]);
   });
 
   // protects=a reply about the User's own Documents that mentions the example fails, in English and in Chinese; fails_when=it passes; no_claim=none beyond protects.

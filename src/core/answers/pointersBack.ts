@@ -86,7 +86,6 @@ const onlyAPointer = (paragraph: string) =>
   });
 
 const FENCE = /^\s*(?:```|~~~)/;
-// A heading, list item, table, quote or code: never taken out, whatever it says.
 const NOT_A_PARAGRAPH = /^\s*(?:#|[-*+]\s|\d{1,3}[.)]\s|\||>|```|~~~)|^ {4}/;
 
 function blocksIn(markdown: string): string[] {
