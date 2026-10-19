@@ -732,13 +732,11 @@ export const catalogProvider = (id: string | null | undefined): CatalogProvider 
 /**
  * What a provider does with what it is sent. A local app's own line holds only
  * while its server runs on this computer: at an address `elsewhere` it is any
- * server's, so it says that. Ollama has no address, so its line stands.
+ * server's, so it says that.
  */
 export function dataUseOf(provider: CatalogProvider, elsewhere: boolean): DataUse {
-  const canBeElsewhere =
-    provider.group === "local" && provider.endpoints.some((endpoint) => endpoint.field);
   return (
-    (elsewhere && canBeElsewhere && catalogProvider("openai-compatible")?.dataUse) ||
+    (elsewhere && provider.group === "local" && catalogProvider("openai-compatible")?.dataUse) ||
     provider.dataUse
   );
 }

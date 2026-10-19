@@ -454,15 +454,15 @@ describe("The providers of #178", () => {
     expect(catalogProvider("siliconflow")?.dataUse.url).toContain("docs.siliconflow.com/en/");
   });
 
-  test("a local app's data line gives way to a server's when its address is on another computer", () => {
+  test("a local app's data line gives way to a server's when its server is on another computer, Ollama's included", () => {
     const server = catalogProvider("openai-compatible")?.dataUse;
-    for (const id of ["lmstudio", "unsloth"]) {
+    expect(server?.summary.en).toMatch(/^Depends on the server/);
+    for (const id of ["lmstudio", "unsloth", "ollama"]) {
       const provider = catalogProvider(id);
       expect(provider && dataUseOf(provider, false), id).toBe(provider?.dataUse);
       expect(provider && dataUseOf(provider, true), id).toBe(server);
     }
-    expect(server?.summary.en).toMatch(/^Depends on the server/);
-    for (const id of ["ollama", "anthropic", "openai-compatible"]) {
+    for (const id of ["anthropic", "openai-compatible"]) {
       const provider = catalogProvider(id);
       expect(provider && dataUseOf(provider, true), id).toBe(provider?.dataUse);
     }
