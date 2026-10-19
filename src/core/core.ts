@@ -137,7 +137,8 @@ import {
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
-import { createExports } from "./exports";
+import { createExports, type ExportsDependencies } from "./exports";
+import { createComparisonExport } from "./exports/comparisonExport";
 import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
 import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPictures";
@@ -1801,7 +1802,7 @@ export function createCore(adapters: CoreAdapters): Core {
     const marked = ownFiles.record(data, kind);
     for (const document of documents.getMany(marked)) events.emit("document.status", document);
   };
-  const mindExports = createExports({
+  const exportDependencies: ExportsDependencies = {
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
     liveDocuments: () => documents.list(),
@@ -1845,7 +1846,9 @@ export function createCore(adapters: CoreAdapters): Core {
     author: () => settings.get().author,
     log: adapters.log ?? silentLogger,
     now,
-  });
+  };
+  const mindExports = createExports(exportDependencies);
+  const comparisonExport = createComparisonExport(exportDependencies);
   const checkRecord = createCheckRecord({
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.peek(mindId, look),
@@ -3928,6 +3931,15 @@ export function createCore(adapters: CoreAdapters): Core {
     saveCheckRecord: async (mindId, format) => {
       const { fileName, data } = await checkRecord.file(mindId, format);
       return saveExport(fileName, data);
+    },
+    saveComparisonExport: async (input) => {
+      const ref: Record<string, unknown> = isRecord(input) ? input : {};
+      const { fileName, data, unverifiedCitations } = comparisonExport.workbook(
+        ref.mindId,
+        ref.tableId,
+      );
+      const saved = await saveExport(fileName, data);
+      return saved.status === "saved" ? { ...saved, unverifiedCitations } : saved;
     },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);
