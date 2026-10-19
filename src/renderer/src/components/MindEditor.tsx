@@ -97,7 +97,6 @@ import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { useCountSettings, WordCount } from "../editor/WordCount";
 import { OriginalNotAdded, useWordFile, WordImportProgress } from "../editor/WordOrigin";
 import { WordTableFades } from "../editor/WordTableFades";
-import { WordListPaste } from "../editor/wordListPaste";
 import { useWordLookStyle } from "../editor/wordLookStyle";
 import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
@@ -341,7 +340,6 @@ function MindEditorView({
         FootnoteKeys,
         DocumentChipKeys,
         ListKeys,
-        WordListPaste,
         MeetingNotes.configure({
           mindId,
           doc,
