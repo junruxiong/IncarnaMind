@@ -381,7 +381,10 @@ export async function runCase(
   }
   const changedBlocks = changes.map((change) => change.block);
   const page = forPage(answer.text, each.request);
+  // edit_mind after it rewrites what add_to_mind gave, so the page is the model's revision of it.
+  const revised = answer.toolCalls.some((call) => call.tool === "edit_mind" && call.mindChange);
   const givenToMinds = answer.toolCalls.flatMap((call) =>
+    !revised &&
     (call.tool === "add_to_mind" || call.tool === "create_mind") &&
     call.status === "done" &&
     call.mindChange &&
