@@ -8774,6 +8774,7 @@
   }
   .comparison-action,
   .comparison-back,
+  .comparison-export,
   .comparison-add-question {
     display: inline-flex;
     flex: none;

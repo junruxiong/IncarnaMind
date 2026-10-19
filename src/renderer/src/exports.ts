@@ -4,6 +4,7 @@ import type {
   ExportFormat,
   ExportMindOptions,
   ExportPreferences,
+  SavedComparisonExport,
   SavedExport,
   SavedMindExport,
   SentenceChecksExported,
@@ -74,7 +75,13 @@ export const optionsFor = (
     : { format, theirChanges };
 };
 
-export type ExportKind = ExportFormat | `check-record-${CheckRecordFormat}`;
+/** A comparison table saved as an Excel workbook (#132). */
+export const COMPARISON_EXCEL = "comparison-xlsx";
+
+export type ExportKind =
+  | ExportFormat
+  | `check-record-${CheckRecordFormat}`
+  | typeof COMPARISON_EXCEL;
 
 export const isCheckRecord = (kind: ExportKind): kind is `check-record-${CheckRecordFormat}` =>
   kind.startsWith("check-record-");
@@ -82,8 +89,11 @@ export const isCheckRecord = (kind: ExportKind): kind is `check-record-${CheckRe
 export const checkRecordKind = (format: CheckRecordFormat): `check-record-${CheckRecordFormat}` =>
   `check-record-${format}`;
 
-/** How the last export went, said in the Mind it exported (`ExportResultLine`). */
-export type ExportResult =
+/**
+ * How the last export went, said in the Mind it exported (`ExportResultLine`); `tableId` names
+ * the comparison table a workbook was made from.
+ */
+export type ExportResult = { tableId?: string } & (
   | { mindId: string; state: "saving"; format: ExportKind }
   | {
       mindId: string;
@@ -119,7 +129,8 @@ export type ExportResult =
       format: ExportKind;
       linkedFolderId: string;
       folder: string;
-    };
+    }
+);
 
 export const useExports = create<{
   result: ExportResult | null;
@@ -131,10 +142,16 @@ export const useExports = create<{
 
 // Null while the same Mind is still exporting, so a held ⇧⌘E makes one file; a newer export or a
 // dismissal wins over a late answer.
-function begin(mindId: string, kind: ExportKind): ((next: ExportResult | null) => void) | null {
+function begin(
+  mindId: string,
+  kind: ExportKind,
+  tableId?: string,
+): ((next: ExportResult | null) => void) | null {
   const { result } = useExports.getState();
   if (result?.mindId === mindId && result.state === "saving") return null;
-  useExports.setState({ result: { mindId, state: "saving", format: kind } });
+  useExports.setState({
+    result: { mindId, state: "saving", format: kind, ...(tableId && { tableId }) },
+  });
   return (next) => {
     const current = useExports.getState().result;
     if (current?.mindId === mindId && current.state === "saving") {
@@ -153,7 +170,7 @@ const NO_CHECKS: SentenceChecksExported = {
 function savedResult(
   mindId: string,
   format: ExportKind,
-  saved: Exclude<SavedMindExport, { status: "review" }> | SavedExport,
+  saved: Exclude<SavedMindExport, { status: "review" }> | SavedExport | SavedComparisonExport,
 ): ExportResult | null {
   if (saved.status === "saved") {
     return {
@@ -257,11 +274,45 @@ export async function exportCheckRecord(
   }
 }
 
-export function exportAgain(
+/**
+ * Saves a comparison table as an Excel workbook (#132) into the Output location, as an export
+ * does; the result line says how it went.
+ */
+export async function exportComparison(
   mindId: string,
-  kind: ExportKind,
+  tableId: string,
+  first?: () => Promise<boolean>,
+): Promise<void> {
+  const settle = begin(mindId, COMPARISON_EXCEL, tableId);
+  if (!settle) return;
+  try {
+    if (first && !(await first())) {
+      settle(null);
+      return;
+    }
+    const saved = savedResult(
+      mindId,
+      COMPARISON_EXCEL,
+      await core.saveComparisonExport({ mindId, tableId }),
+    );
+    settle(saved && { ...saved, tableId });
+  } catch (failure) {
+    settle({
+      mindId,
+      state: "failed",
+      format: COMPARISON_EXCEL,
+      tableId,
+      message: errorMessage(failure, translateNow),
+    });
+  }
+}
+
+export function exportAgain(
+  result: Pick<ExportResult, "mindId" | "format" | "tableId">,
   first: () => Promise<boolean>,
 ): Promise<void> {
+  const { mindId, format: kind } = result;
+  if (kind === COMPARISON_EXCEL) return exportComparison(mindId, result.tableId ?? "", first);
   if (!isCheckRecord(kind)) return exportMind(mindId, kind, first);
   return exportCheckRecord(mindId, kind === "check-record-pdf" ? "pdf" : "csv", first);
 }
