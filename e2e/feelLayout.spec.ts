@@ -3,6 +3,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   mindWrittenBefore,
+  moveAssistant,
   pointAndClick,
   removeDataFolder,
   setWindowSize,
@@ -100,16 +101,14 @@ test("the assistant folding and docking", async () => {
 
   for (const place of ["bottom", "float", "left", "right"] as const) {
     await feel.step(`dock ${place}`, async () => {
-      await pointAndClick(window, window.getByTestId("assistant-more"));
-      await pointAndClick(window, window.getByTestId(`assistant-menu-${place}`));
+      await moveAssistant(window, place);
       await expect(assistant).toHaveAttribute("data-chosen-dock", place);
     });
     await feel.expectFocus(`dock ${place}`, window.getByTestId("assistant-more"));
   }
 
   await feel.step("fold at the bottom", async () => {
-    await pointAndClick(window, window.getByTestId("assistant-more"));
-    await pointAndClick(window, window.getByTestId("assistant-menu-bottom"));
+    await moveAssistant(window, "bottom");
     await pointAndClick(window, window.getByTestId("assistant-fold"));
     await expect(assistant).toHaveAttribute("data-folded", "true");
   });

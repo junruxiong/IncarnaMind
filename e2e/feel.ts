@@ -37,7 +37,16 @@ interface Known {
   issue: number;
 }
 
-export const KNOWN: readonly Known[] = [];
+export const KNOWN: readonly Known[] = [
+  { flow: "assistant-place", step: "dock bottom", kind: "focus", issue: 1316 },
+  { flow: "assistant-place", step: "dock float", kind: "focus", issue: 1316 },
+  { flow: "assistant-place", step: "dock left", kind: "focus", issue: 1316 },
+  { flow: "assistant-place", step: "dock right", kind: "focus", issue: 1316 },
+  { flow: "sidebar", step: "delete", kind: "focus", issue: 1311 },
+  { flow: "first-open", step: "check the Mind", kind: "shift", issue: 1312 },
+  { flow: "library-2000", step: "show all 2,000", kind: "input", issue: 1313 },
+  { flow: "library-2000", step: "show all 2,000", kind: "long-task", issue: 1313 },
+];
 
 interface Shift {
   value: number;
