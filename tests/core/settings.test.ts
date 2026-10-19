@@ -92,6 +92,7 @@ describe("Settings", () => {
         skillScriptTimeoutSeconds: 60,
         suggestionOffers: 0,
         meetingSystemAudio: true,
+        transcriptionRoute: null,
         meetingNoticeAccepted: false,
         meetingPanel: true,
         meetingPanelHidden: true,
@@ -195,6 +196,7 @@ describe("Settings", () => {
       skillScriptTimeoutSeconds: 60,
       suggestionOffers: 0,
       meetingSystemAudio: true,
+      transcriptionRoute: null,
       meetingNoticeAccepted: false,
       meetingPanel: true,
       meetingPanelHidden: true,
@@ -267,6 +269,7 @@ describe("Settings", () => {
       skillScriptTimeoutSeconds: 15,
       suggestionOffers: 1,
       meetingSystemAudio: false,
+      transcriptionRoute: "local" as const,
       meetingNoticeAccepted: true,
       meetingPanel: false,
       meetingPanelHidden: false,
@@ -375,6 +378,10 @@ describe("Settings", () => {
     {
       name: "a way to show someone's changes that isn't one",
       patch: { user: { exportOptions: { ...DEFAULT_EXPORT, theirChanges: "hidden" } } },
+    },
+    {
+      name: "a place to transcribe meetings that isn't one",
+      patch: { device: { transcriptionRoute: "carrier-pigeon" } },
     },
     {
       name: "a default model without a model",

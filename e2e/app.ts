@@ -522,6 +522,17 @@ export async function ollamaListing(models: string[], { delayMs = 0 }: { delayMs
 }
 
 /**
+ * Continue on the setup card, once a key or sign-in works and the card says what each job uses:
+ * the Question that waited is asked then, and the composer takes the card's place.
+ */
+export async function continueSetup(window: Page): Promise<void> {
+  const next = window.getByTestId("setup-continue");
+  await expect(next).toBeVisible();
+  await pointAndClick(window, next);
+  await expect(window.getByTestId("model-setup")).toBeHidden();
+}
+
+/**
  * Sets up a local chat model (Ollama's, so nothing needs consent), through the
  * core's bridge as the setup screen would. With `fakeChat`, the scripted model answers.
  */

@@ -15,6 +15,8 @@ import {
   type Settings,
   type SharePagePreferences,
   SKILL_SCRIPT_LIMITS,
+  TRANSCRIPTION_ROUTES,
+  type TranscriptionRoute,
   type UserSettings,
   type WordExportPreferences,
 } from "./api";
@@ -201,6 +203,7 @@ const deviceScope: Scope<DeviceSettings> = {
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
     suggestionOffers: 0,
     meetingSystemAudio: true,
+    transcriptionRoute: null,
     meetingNoticeAccepted: false,
     meetingPanel: true,
     meetingPanelHidden: true,
@@ -218,6 +221,8 @@ const deviceScope: Scope<DeviceSettings> = {
     suggestionOffers: (value): value is number =>
       typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100,
     meetingSystemAudio: isBoolean,
+    transcriptionRoute: (value): value is TranscriptionRoute | null =>
+      value === null || TRANSCRIPTION_ROUTES.some((route) => route === value),
     meetingNoticeAccepted: isBoolean,
     meetingPanel: isBoolean,
     meetingPanelHidden: isBoolean,
