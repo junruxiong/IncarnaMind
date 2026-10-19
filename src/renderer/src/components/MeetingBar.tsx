@@ -21,6 +21,7 @@ import {
   StopLineIcon,
 } from "./lineIcons";
 import { LevelBars } from "./meetings/LevelBars";
+import { ROUTE_LABELS } from "./meetings/TranscriptionRouteSelect";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { TranscriptLines } from "./TranscriptLines";
 import { useTabPlace } from "./tabs/tabItems";
@@ -242,10 +243,21 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
   }
   const fellBack = meeting.transcript?.fellBack;
   if (fellBack) {
+    const service = t(ROUTE_LABELS[fellBack.route]);
+    const time = clockTime(fellBack.atMs);
     lines.push({
       key: "cloud",
-      text: t(fellBack.reason === "cap" ? "meetings.line.cloudCap" : "meetings.line.cloudDropped", {
-        time: clockTime(fellBack.atMs),
+      text: t(FELL_BACK[fellBack.reason], { service, time }),
+      ...(fellBack.reason === "refused" && {
+        action: {
+          label: t("meetings.key.replace"),
+          testId: "meeting-line-change-key",
+          // OpenAI's key is its provider's, in Models; a service's own key is in Meetings.
+          onClick: () =>
+            useAppStore
+              .getState()
+              .openSettings(fellBack.route === "openai" ? "models" : "meetings"),
+        },
       }),
     });
   }
@@ -267,8 +279,17 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
   );
 }
 
-/** Lines that say what happened, rather than something to put right. */
 const STATUS_LINES: ReadonlySet<string> = new Set(["gap", "interrupted", "cloud"]);
+
+const FELL_BACK: Record<
+  NonNullable<NonNullable<Meeting["transcript"]>["fellBack"]>["reason"],
+  MessageKey
+> = {
+  dropped: "meetings.line.cloudDropped",
+  refused: "meetings.line.cloudRefused",
+  cap: "meetings.line.cloudCap",
+  "local-mode": "meetings.line.cloudLocalMode",
+};
 
 const MICROPHONE_LINES: Partial<Record<MeetingSourceState, MessageKey>> = {
   denied: "meetings.line.microphoneDenied",

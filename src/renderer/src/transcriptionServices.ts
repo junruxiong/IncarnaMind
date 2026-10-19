@@ -7,6 +7,7 @@ import { core } from "./core";
 import { formatMoney, joinMeta } from "./cost";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
+import { useAppStore } from "./store";
 
 interface TranscriptionServicesState {
   /** The cloud services that can transcribe meeting audio (#141); empty until loaded. */
@@ -46,6 +47,12 @@ export function useTranscriptionServicesList(): TranscriptionServiceStatus[] {
 }
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
+
+/** Where a Meeting's recording stays, said so it holds with a cloud route chosen too. */
+export function useAudioKeptKey(): MessageKey {
+  const route = useAppStore((state) => state.settings?.device.transcriptionRoute);
+  return route && route !== "local" ? "meetings.audio.keptCloud" : "meetings.audio.kept";
+}
 
 /** "gpt-live-transcribe · about $1.02 an hour · uses your OpenAI key". */
 export function serviceMeta(service: TranscriptionServiceStatus, t: Translate, language: Language) {

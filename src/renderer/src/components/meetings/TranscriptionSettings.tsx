@@ -1,5 +1,7 @@
-import { useId, useState } from "react";
-import type { TranscriptionServiceStatus } from "../../../../core/api";
+import { useEffect, useId, useState } from "react";
+import type { SecretStorageStatus, TranscriptionServiceStatus } from "../../../../core/api";
+import { core } from "../../core";
+import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import {
@@ -8,6 +10,7 @@ import {
   useTranscriptionServicesList,
 } from "../../transcriptionServices";
 import { ProblemLine } from "../ProblemLine";
+import { SecretStorageNotice } from "../providers/ProviderForm";
 import {
   buttonStyle,
   inputClass,
@@ -19,19 +22,25 @@ import {
 } from "../ui";
 
 /**
- * Under "Transcribe on" in Settings › Meetings (#141): where the chosen route sends meeting
- * audio, in the line that makes choosing it the consent (ADR-0022).
+ * Under "Transcribe on" in Settings › Meetings (#141). Before a cloud service is chosen it says
+ * what choosing one sends, so the choice is the consent (ADR-0022); once chosen, where the audio
+ * goes and what it costs, or that Local mode holds it back.
  */
 export function TranscriptionRouteLine({ id }: { id?: string }) {
   const t = useT();
   const language = useLanguage();
   const route = useAppStore((state) => state.settings?.device.transcriptionRoute) ?? "local";
+  const localMode = useAppStore((state) => state.embedding?.localOnly === true);
   const services = useTranscriptionServicesList();
   const service = services.find((each) => each.route === route);
   if (!service) {
     return (
       <p id={id} data-testid="meetings-route-line" className={rowTextClass}>
-        {t("meetings.route.localLine")}
+        {t(
+          services.some((each) => each.hasKey)
+            ? "meetings.route.consent"
+            : "meetings.route.hereLine",
+        )}
       </p>
     );
   }
@@ -40,7 +49,11 @@ export function TranscriptionRouteLine({ id }: { id?: string }) {
       <p className="text-[13px] leading-5 text-ink-meta tabular-nums">
         {serviceMeta(service, t, language)}
       </p>
-      <p className={rowTextClass}>{t("meetings.route.data", { service: service.name })}</p>
+      <p className={rowTextClass}>
+        {localMode
+          ? t("meetings.route.paused")
+          : t("meetings.route.cloudLine", { service: service.name })}
+      </p>
     </div>
   );
 }
@@ -56,7 +69,7 @@ export function TranscriptionRouteConsent() {
   if (!service) return null;
   return (
     <p data-testid="meetings-route-consent" className="text-[12px] leading-5 text-ink-meta">
-      {t("meetings.route.data", { service: service.name })}
+      {t("meetings.route.cloudLine", { service: service.name })}
     </p>
   );
 }
@@ -77,9 +90,23 @@ export function TranscriptionKeyRows() {
 
 function TranscriptionKeyRow({ service }: { service: TranscriptionServiceStatus }) {
   const t = useT();
-  const language = useLanguage();
   const inputId = useId();
   const [open, setOpen] = useState(false);
+  const [storage, setStorage] = useState<SecretStorageStatus | null>(null);
+  useEffect(() => {
+    core
+      .getSecretStorage()
+      .then(setStorage, (error: unknown) =>
+        console.error("The keychain's state couldn't be read.", error),
+      );
+  }, []);
+  const acceptPlainText = async () => {
+    try {
+      setStorage(await core.acceptPlainTextSecretStorage());
+    } catch (error) {
+      setProblem(errorMessage(error, t));
+    }
+  };
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -102,10 +129,10 @@ function TranscriptionKeyRow({ service }: { service: TranscriptionServiceStatus 
           {t("meetings.key.title", name)}
         </label>
         <p className={rowTextClass}>
-          {serviceMeta(service, t, language)}
+          {t("meetings.key.line", name)}
           {service.keyUrl && (
             <>
-              {" · "}
+              {" "}
               <a
                 href={service.keyUrl}
                 target="_blank"
@@ -148,12 +175,15 @@ function TranscriptionKeyRow({ service }: { service: TranscriptionServiceStatus 
             <button
               type="submit"
               data-testid="transcription-key-save"
-              disabled={key.trim() === "" || saving}
+              disabled={key.trim() === "" || saving || (storage !== null && !storage.canSave)}
               className={buttonStyle("primary")}
             >
               {t(saving ? "meetings.key.checking" : "meetings.key.save")}
             </button>
           </form>
+        )}
+        {open && storage && !storage.canSave && (
+          <SecretStorageNotice status={storage} onAccept={() => void acceptPlainText()} />
         )}
         {problem && (
           <ProblemLine className="mt-1" testId="transcription-key-problem">

@@ -9408,6 +9408,11 @@ export interface CoreApi {
   /** Forgets a transcription service's own key; meeting audio is then transcribed on this computer. */
   removeTranscriptionKey(route: CloudTranscriptionRoute): Promise<TranscriptionServiceStatus[]>;
   /**
+   * Whether this computer keeps up with live speech, as the last Meeting transcribed here
+   * measured it; null before one has been. The speed probe (#462) will measure it sooner.
+   */
+  getTranscriptionSpeed(): Promise<{ keepsUp: boolean | null }>;
+  /**
    * Tries the Meeting's Transcript again after a problem (`MeetingTranscript.problem`):
    * downloads or starts the speech-to-text model, or saves the WebVTT file again.
    */
@@ -9983,6 +9988,7 @@ const methods: Record<CoreApiMethod, true> = {
   listTranscriptionServices: true,
   setTranscriptionKey: true,
   removeTranscriptionKey: true,
+  getTranscriptionSpeed: true,
   retryTranscript: true,
   openAudioSettings: true,
   askMeetingHelp: true,
