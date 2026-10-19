@@ -43,7 +43,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   const chat = privacy.locator('[data-testid="data-flow"][data-flow-id="chat"]');
   await expect(chat).toContainText("Chat");
   await expect(chat).toContainText(
-    "This Mind's text, Notes and earlier Answers, minus excluded Notes",
+    "This Mind’s text, Notes and earlier Answers, minus excluded Notes",
   );
   await expect(chat).toContainText("passages from your Documents");
   await expect(privacy.locator('[data-flow-id="tagging"]')).toContainText("Automatic Tags");
