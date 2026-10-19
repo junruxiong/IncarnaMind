@@ -12,7 +12,7 @@ export interface CloudStreamReport {
   progress(doneMs: number): void;
   /** It ended before it was finished; nothing more is reported. */
   lost(loss: CloudLoss): void;
-  /** The service is ready for audio. */
+  /** The core holds the audio until now, so a send gate that closes meanwhile sends nothing. */
   opened(): void;
 }
 
@@ -21,7 +21,6 @@ export interface CloudStreamHandle {
   push(samples: Int16Array): void;
   /** No more audio comes: resolves once its last text has been reported, or it is lost. */
   finish(): Promise<void>;
-  /** Forgets it, closing the connection. */
   drop(): void;
 }
 

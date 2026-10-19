@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { Core } from "../../src/core";
 import { readVtt } from "../../src/core/documents/formats/vtt";
 import { InvalidInputError } from "../../src/core/errors";
@@ -74,6 +74,13 @@ describe("Cloud transcription with the User's own key", { timeout: 60_000 }, () 
     const { cues } = readVtt(readFileSync(saved.savedPath as string, "utf8"));
     expect(new Set(cues.map((cue) => cue.speaker))).toEqual(new Set(["Speaker 1", "Speaker 2"]));
 
+    await vi.waitFor(
+      async () => {
+        const found = await core.searchPassages("one point two million", { mode: "keyword" });
+        expect(found.map((passage) => passage.documentId)).toContain(live.documentId);
+      },
+      { timeout: 20_000, interval: 50 },
+    );
     const mind = await core.createMind({ title: "Budget" });
     const client = await connectToMind(core, mind.id);
     const { answerId } = await askAndFinish(core, client, mind.id, "Does the budget hold?");

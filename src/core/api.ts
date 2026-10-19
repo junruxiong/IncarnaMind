@@ -2042,7 +2042,6 @@ export interface TranscriptionServiceStatus {
   route: CloudTranscriptionRoute;
   name: string;
   model: string;
-  /** List price per hour of audio. */
   perHour: Money;
   /** "provider": it uses the key of the chat provider of the same name in Settings › Models. */
   key: "provider" | "own";
