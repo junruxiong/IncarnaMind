@@ -248,7 +248,7 @@ for (const [language, width] of [
     const chart = editor.getByTestId("chart");
     await expect(chart.getByTestId("chart-point")).toHaveCount(3);
     await expect(point(chart, 1, 0)).toHaveAttribute("aria-label", /2,?000/);
-    await expect(chart.getByTestId("chart-source")).not.toContainText(/isn't drawn|未绘制/);
+    await expect(chart.getByTestId("chart-source")).not.toContainText(/isn’t drawn|未绘制/);
     await screenshot(window, `table-chart-quantities-${language}-${width}`);
     await app.close();
   });

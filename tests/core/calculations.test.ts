@@ -874,7 +874,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
     expect(finished.uncalculated).toBe(1);
     expect(calculateCall(answer)).toMatchObject({ resultCount: 2, uncalculated: 1 });
     expect(translate("en", "answer.figures.uncalculated.one")).toBe(
-      "1 figure couldn't be calculated",
+      "1 figure couldn’t be calculated",
     );
   });
 
