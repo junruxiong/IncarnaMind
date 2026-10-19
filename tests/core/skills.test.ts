@@ -622,6 +622,49 @@ describe("Answers use Skills", () => {
     expect(started.map((event) => event.call.tool)).toEqual(["use_skill"]);
   });
 
+  // protects=a Skill's text, loaded by use_skill or forced, is followed by the Question's language, so Documents in another language don't win (#1273); fails_when=a Skill run states the language only far above its text, or not at all; no_claim=what a real model does, which the everyday eval's summary cases check.
+  test("a Skill's instructions are followed by the Question's language, whether use_skill loads them or the User forced them", async () => {
+    const note =
+      "The Skill's instructions don't change the language of your Answer. The Question is written in English, so answer in English.";
+    const loaded = scriptedModel((call): ScriptedReply => {
+      const result = call.results.find((each) => each.tool === "use_skill");
+      if (!result) return { calls: [{ tool: "use_skill", input: { name: "tide-tables" } }] };
+      return { text: result.text };
+    });
+    const first = await setUpAnswers(loaded);
+    await importSkill(first.core, await writeFolder(first.sources, "tides", TIDES_SKILL));
+    const { answerId } = await askAndWait(
+      first.core,
+      first.client,
+      first.mind.id,
+      "When is high water in Brest?",
+    );
+    const text = answerText(first.client, answerId);
+    expect(text).toContain(BODY_MARKER);
+    expect(text.indexOf(note)).toBeGreaterThan(text.indexOf("</skill>"));
+
+    const calls: ModelCall[] = [];
+    const forced = scriptedModel((call) => {
+      calls.push(call);
+      return { text: "Answered." };
+    });
+    const second = await setUpAnswers(forced);
+    await importSkill(second.core, await writeFolder(second.sources, "tides", TIDES_SKILL));
+    await askAndWait(
+      second.core,
+      second.client,
+      second.mind.id,
+      "When is high water in Brest?",
+      "tide-tables",
+    );
+    const system = calls[0]?.system ?? "";
+    expect(system.indexOf(note)).toBeGreaterThan(system.indexOf("</skill>"));
+    // The line for the Question itself still ends the instructions, as before the Skill.
+    expect(system.split("\n").at(-1)).toBe(
+      "- The Question is written in English, so answer in English.",
+    );
+  });
+
   test("use_skill can't load a Skill that's turned off or doesn't exist", async () => {
     const model = scriptedModel((call): ScriptedReply => {
       if (call.index === 0) {

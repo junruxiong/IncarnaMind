@@ -1774,7 +1774,7 @@ export function createAnswers(options: AnswersOptions) {
           ? skillTools({
               loadable: listed.length > 0,
               useSkill: async (name) =>
-                loadedSkillText(await opened.load(name), { withFiles: true, scripts }),
+                loadedSkillText(await opened.load(name), { withFiles: true, scripts, language }),
               skill: (name) => opened.skill(name),
               readSkillFile: (skill, path) => opened.readFile(skill, path),
               ...(scripts && {
@@ -1867,7 +1867,7 @@ export function createAnswers(options: AnswersOptions) {
               asked.each,
               options.documents.searchableCount(documentIds),
             ),
-            skillInstructions(listed, forced, withSkillTools, scripts),
+            skillInstructions(listed, forced, withSkillTools, scripts, language),
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
