@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import type { Document, LinkedFolder } from "../../../core/api";
+import type { Document, LibraryGroup, LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
 import { mindName } from "../../../shared/naming";
 import { copyText } from "../copied";
@@ -86,6 +86,11 @@ function Panel() {
       ? state.linkedFolders.find((each) => each.id === target.id)
       : undefined,
   );
+  const group = useAppStore((state) =>
+    target?.kind === "folder"
+      ? state.library?.groups.find((each) => each.id === target.id)
+      : undefined,
+  );
   const panel = useRef<HTMLDivElement>(null);
   const row = rowOf(from);
   useExitToward(panel, () => row ?? from);
@@ -100,12 +105,12 @@ function Panel() {
   }, []);
 
   // What it was about is gone (deleted, unlinked): nothing left to show.
-  const gone = !item && !linked;
+  const gone = !item && !linked && !group;
   useEffect(() => {
     if (gone) useInfo.getState().close();
   }, [gone]);
 
-  const name = item ? displayName(item) : linked ? folderName(linked.path) : "";
+  const name = item ? displayName(item) : linked ? folderName(linked.path) : (group?.name ?? "");
   return (
     <div
       ref={panel}
@@ -130,7 +135,13 @@ function Panel() {
       style={{ width: WIDTH_PX }}
       className={panelClass}
     >
-      {item ? <DocumentInfo document={item} /> : linked && <LinkedFolderInfo linked={linked} />}
+      {item ? (
+        <DocumentInfo document={item} />
+      ) : linked ? (
+        <LinkedFolderInfo linked={linked} />
+      ) : (
+        group && <FolderInfo group={group} />
+      )}
     </div>
   );
 }
@@ -374,6 +385,38 @@ function LinkedFolderInfo({ linked }: { linked: LinkedFolder }) {
         showLabel={t(showFileLabelKey(navigator.platform))}
         onShow={() => void useAppStore.getState().showLinkedFolder(linked.id)}
       />
+    </>
+  );
+}
+
+function FolderInfo({ group }: { group: LibraryGroup }) {
+  const t = useT();
+  const language = useLanguage();
+  const count = useAppStore((state) => {
+    const filed = new Set(
+      (state.library?.assignments ?? [])
+        .filter((each) => each.groupId === group.id)
+        .map((each) => each.documentId),
+    );
+    return state.documents.filter((each) => filed.has(each.id)).length;
+  });
+  const documents = t(count === 1 ? "library.count.one" : "library.count", {
+    count: formatCount(count, language),
+  });
+  return (
+    <>
+      <Header icon={<FolderLineIcon className="size-7" />} name={group.name} line={documents} />
+      <Rows>
+        <Row label={t("info.description")} testId="info-description">
+          {group.description || <span className="text-ink-meta">{t("info.description.none")}</span>}
+        </Row>
+        <Row label={t("info.documents")} testId="info-documents">
+          {documents}
+        </Row>
+        <Row label={t("info.added")} testId="info-added">
+          {addedDate(group.createdAt, language)}
+        </Row>
+      </Rows>
     </>
   );
 }

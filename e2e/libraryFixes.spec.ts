@@ -145,7 +145,10 @@ for (const language of ["en", "zh-CN"] as const) {
     );
     await window.getByTestId("open-library").click();
     const lib = window.getByTestId("library");
-    await expect(lib.getByTestId("library-organize-explain")).toHaveText(
+    // The line that said what Organize does is its button's tooltip.
+    await expect(lib.getByTestId("library-organize-explain")).toHaveCount(0);
+    await expect(lib.getByTestId("library-organize")).toHaveAttribute(
+      "title",
       language === "en"
         ? "Suggests a Folder and Tags for each Document. You decide."
         : "为每个文档建议文件夹和标签，由你决定。",

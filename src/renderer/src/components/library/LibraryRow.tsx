@@ -29,14 +29,14 @@ import { documentsToMove, useDocumentMove } from "./DocumentMoveTo";
 import { RowTags } from "./RowTags";
 
 /**
- * The columns past the name, and the widths of the page at which they give
- * way, Added first, then Format, then Tags, so the name keeps its room.
+ * The columns past the name: Added goes first, then Format, then the Tags' chips, as far as it
+ * takes for no name to be cut (`useFittingColumns`). Narrow, only the chips go: the "+" stays, so
+ * Tags… from the menu still has its place.
  */
 export const COLUMN_CLASSES = {
-  // Narrow, only the chips go: the "+" stays, so Tags… from the menu still has its place.
-  tags: "w-[200px] shrink-0 @max-[512px]/page:w-auto @max-[512px]/page:[&_[data-testid^=tag-chip]]:hidden",
-  format: "w-[76px] shrink-0 @max-[704px]/page:hidden",
-  added: "w-24 shrink-0 @max-[768px]/page:hidden",
+  tags: "max-w-[200px] shrink-0 group-data-[hide~=tags]/page:[&_[data-testid^=tag-chip]]:hidden",
+  format: "w-[76px] shrink-0 group-data-[hide~=format]/page:hidden",
+  added: "w-24 shrink-0 group-data-[hide~=added]/page:hidden",
   more: "flex w-7 shrink-0 justify-end",
 } as const;
 
@@ -134,6 +134,8 @@ export const LibraryRow = memo(function LibraryRow({
   const place = useTabPlace();
   const name = displayName(doc);
   const source = sourceOf(doc);
+  const format = t(FORMAT_LABELS[doc.kind]);
+  const added = addedLabel(doc.createdAt, new Date(), language);
   const [citing, setCiting] = useState<{ focus: ReferenceField | null } | null>(null);
   const citeToggle = useRef<HTMLButtonElement>(null);
   const citePanelId = useId();
@@ -217,12 +219,15 @@ export const LibraryRow = memo(function LibraryRow({
                   type="button"
                   {...TREE_ROW}
                   data-row-main=""
-                  title={name === source ? name : `${name}\n${source}`}
+                  title={[name, ...(name === source ? [] : [source]), `${format} · ${added}`].join(
+                    "\n",
+                  )}
                   className="flex min-w-0 items-center gap-2 text-left focus-visible:outline-0"
                 >
                   <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
                   <span
                     data-testid="library-document-name"
+                    data-fit-name=""
                     className="min-w-0 truncate text-ui text-ink"
                   >
                     {match ? <Marked text={name} ranges={match.ranges} /> : name}
@@ -298,13 +303,13 @@ export const LibraryRow = memo(function LibraryRow({
           data-testid="library-document-format"
           className={`${COLUMN_CLASSES.format} truncate text-[13px] text-ink-secondary`}
         >
-          {t(FORMAT_LABELS[doc.kind])}
+          {format}
         </span>
         <span
           data-testid="library-document-added"
           className={`${COLUMN_CLASSES.added} truncate text-[13px] whitespace-nowrap text-ink-secondary`}
         >
-          {addedLabel(doc.createdAt, new Date(), language)}
+          {added}
         </span>
         <span className={COLUMN_CLASSES.more}>
           <ObjectMenu

@@ -118,8 +118,9 @@ function foldKeys(key: string, open: boolean) {
 
 /**
  * A Folder's head: its name, which folds the section and renames in place
- * (double-click or F2), how many it holds, its description and, pointed at,
- * its ⋯. Edit description… opens the Folder's form under it.
+ * (double-click or F2), how many it holds and, pointed at, its ⋯, with its
+ * description as the head's tooltip and in Get info. Edit description… opens
+ * the Folder's form under it.
  */
 function FolderHead({
   folder,
@@ -187,7 +188,7 @@ function FolderHead({
         icon={<FolderLineIcon className="size-4" />}
         name={name}
         count={count}
-        description={folder.description}
+        tip={folder.description}
         testId="library-section-head"
         rowProps={rename.renaming ? {} : objectMenu.rowProps}
         end={
@@ -321,23 +322,15 @@ function Organize({ documents }: { documents: readonly Document[] }) {
   }
   if (!hasFolders || documents.length === 0) return null;
   return (
-    <span className="flex min-w-0 items-baseline gap-2">
-      <span
-        data-testid="library-organize-explain"
-        className="min-w-0 truncate text-[13px] text-ink-meta @max-[704px]/page:hidden"
-      >
-        {t("library.organize.explain")}
-      </span>
-      <button
-        type="button"
-        data-testid="library-organize"
-        title={t("library.organize.explain")}
-        onClick={() => run(documents.map((doc) => doc.id))}
-        className={quietButtonClass}
-      >
-        {t("library.classify")}
-      </button>
-    </span>
+    <button
+      type="button"
+      data-testid="library-organize"
+      title={t("library.organize.explain")}
+      onClick={() => run(documents.map((doc) => doc.id))}
+      className={quietButtonClass}
+    >
+      {t("library.classify")}
+    </button>
   );
 }
 
