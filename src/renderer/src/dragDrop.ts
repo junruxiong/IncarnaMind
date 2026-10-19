@@ -258,6 +258,7 @@ function settleInto(target: Element, at: Point): void {
 }
 
 export interface DropProps {
+  onDragEnter(event: DragEvent): void;
   onDragOver(event: DragEvent): void;
   onDragLeave(event: DragEvent): void;
   onDrop(event: DragEvent): void;
@@ -281,21 +282,24 @@ export function dropProps<Place>(
   const leave = () => {
     if (useDragState.getState().over?.key === key) clear();
   };
+  const over = (event: DragEvent) => {
+    listenForEnd();
+    const effect = effectOf(event);
+    if (!effect) {
+      leave();
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = DROP_EFFECTS[effect.kind];
+    show(key, effect, pointOf(event));
+    if (open && holding?.key !== key) {
+      holding = { key, timer: setTimeout(open, OPENS_AFTER_MS) };
+    }
+  };
   return {
-    onDragOver(event) {
-      listenForEnd();
-      const effect = effectOf(event);
-      if (!effect) {
-        leave();
-        return;
-      }
-      event.preventDefault();
-      event.dataTransfer.dropEffect = DROP_EFFECTS[effect.kind];
-      show(key, effect, pointOf(event));
-      if (open && holding?.key !== key) {
-        holding = { key, timer: setTimeout(open, OPENS_AFTER_MS) };
-      }
-    },
+    // Chromium sends no dragover with the move that enters an element, only with the next one.
+    onDragEnter: over,
+    onDragOver: over,
     onDragLeave(event) {
       // Still over it: only onto one of its own children.
       if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;

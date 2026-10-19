@@ -125,10 +125,13 @@ function documentsTarget(dropped: Dropped[] = []): DropTarget {
 const lit = () => layer.useDragState.getState().over?.key ?? null;
 
 describe("a drop target", () => {
-  test("lights while what is dragged is what it takes, and says what its drop would do", () => {
+  test("lights while what is dragged is what it takes, from the move that enters it, and says what its drop would do", () => {
     const { types, data } = startDragging([doc("a"), doc("b")]);
+    const target = layer.dropProps("tag", documentsTarget());
+    target.onDragEnter(dragEvent(types, { data }));
+    expect(lit()).toBe("tag");
     const over = dragEvent(types, { data });
-    layer.dropProps("tag", documentsTarget()).onDragOver(over);
+    target.onDragOver(over);
     expect(lit()).toBe("tag");
     expect(over.defaultPrevented).toBe(true);
     expect(over.dataTransfer.dropEffect).toBe("copy");
