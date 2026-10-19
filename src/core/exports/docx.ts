@@ -29,6 +29,7 @@ import {
   type TableCell,
   tableLayout,
 } from "../mindText";
+import { HEADER_AND_FOOTER_DISTANCE, MARGIN, PAPER } from "../pageDefaults";
 import { changeKey } from "./citations";
 import type { ExportLabels } from "./labels";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
@@ -103,15 +104,6 @@ const RELATIONSHIP = {
 } as const;
 
 const MAIN_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml";
-
-/** Page sizes and margins, in twentieths of a point ("twips"): 1 inch margins. */
-export const PAPER = {
-  letter: { width: 12240, height: 15840 },
-  a4: { width: 11906, height: 16838 },
-} as const;
-export const MARGIN = 1440;
-/** From a page's edge to its header and to its footer. */
-export const HEADER_AND_FOOTER_DISTANCE = 720;
 
 /** One level of a list, or of a quote, indents this much (half an inch). */
 const INDENT = 720;

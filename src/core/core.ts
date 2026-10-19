@@ -139,7 +139,6 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
-import { PAPER as DOCX_PAPER } from "./exports/docx";
 import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
 import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPictures";
@@ -180,6 +179,7 @@ import {
 import { firstLineOf, readBlocks, textStart, theirChangesReading } from "./mindText";
 import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
+import { PAPER as PAGE_PAPER } from "./pageDefaults";
 import { nativePageSetup } from "./pageSetup";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -408,6 +408,8 @@ export function createCore(adapters: CoreAdapters): Core {
   }
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
+  const systemPaper = () =>
+    paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages()));
   try {
     ensureWorkspace(db, now);
   } catch (error) {
@@ -1794,7 +1796,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     sharePageTextOnly: (mindId) => content.readSettings(mindId, textOnlyDocuments),
     printer: adapters.printer ?? null,
-    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
+    paper: systemPaper,
     ...(adapters.pictures && { pictures: adapters.pictures }),
     wordPackage: (mindId) => wordImports.packageOf(mindId),
     author: () => settings.get().author,
@@ -1822,7 +1824,7 @@ export function createCore(adapters: CoreAdapters): Core {
     localMode: () => embedding.localOnly(),
     language: () => settings.get().language,
     printer: adapters.printer ?? null,
-    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
+    paper: systemPaper,
     now,
   });
   const ownFileOf = (options: ExportMindOptions): OwnFileKind =>
@@ -3889,10 +3891,10 @@ export function createCore(adapters: CoreAdapters): Core {
     getMindStyle: async (mindId) => content.readSettings(minds.get(mindId).id, mindStyleOf),
     getPageSetup: async (mindId) => {
       const mind = minds.get(mindId);
-      const paper = paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages()));
+      const paper = systemPaper();
       if (wordImports.originalOf(mind.id) === null) return nativePageSetup(paper);
       const pkg = await openWordPackage(await wordImports.packageOf(mind.id));
-      return readPageSetup(pkg, DOCX_PAPER[paper]);
+      return readPageSetup(pkg, PAGE_PAPER[paper]);
     },
     setMindStyle: async (mindId, style) => {
       if (!isMindStyle(style)) throw new InvalidInputError({ key: "error.mindStyle.invalid" });

@@ -6181,7 +6181,7 @@ export interface RegisteredDataFlow {
 }
 
 // ---------------------------------------------------------------------------
-// Page setup (#803, part 1 of Page view)
+// Page setup
 // ---------------------------------------------------------------------------
 
 /** How a page number is written: Word's `decimal`, `lowerRoman`, `upperRoman`, `lowerLetter` and `upperLetter`. */
@@ -6192,7 +6192,7 @@ export type PageNumberFormat =
   | "lowerLetter"
   | "upperLetter";
 
-/** One run in a header or footer: text, or a field that the page it is drawn on fills in. */
+/** One run in a header or footer: text, a tab to a position the page sets, or a field that the page it is drawn on fills in. */
 export type PageFurnitureRun =
   | { kind: "text"; text: string; bold?: true; italic?: true }
   | {
@@ -6203,18 +6203,38 @@ export type PageFurnitureRun =
       format: PageNumberFormat | null;
       bold?: true;
       italic?: true;
+    }
+  /** Word's absolute position tab (`w:ptab`): the text after it starts at the margin's left, centre or right. */
+  | {
+      kind: "alignedTab";
+      align: "left" | "center" | "right";
+      relativeTo: "margin" | "indent";
     };
 
+/** A tab stop of a paragraph, from its style and itself as Word resolves them: `position` is from the text area's left edge, in twips. */
+export interface PageTabStop {
+  position: number;
+  align: "left" | "center" | "right" | "decimal" | "bar";
+  leader?: "dot" | "hyphen" | "underscore" | "heavy" | "middleDot";
+}
+
 export interface PageFurnitureParagraph {
+  /** From the paragraph or its style, as Word resolves it. */
   align: "left" | "center" | "right" | "justify";
   runs: PageFurnitureRun[];
+  /** Where the tabs ("\t") in the runs stop. Absent: none are set, so Word's default stops. */
+  tabStops?: PageTabStop[];
   /** It is in a text box anchored in the paragraph before it, as a page number often is. */
   inTextBox?: true;
+  /** It is a frame (`w:framePr`), which Word places beside the text, such as a page number at the margin: where is not read yet. */
+  framed?: true;
 }
 
 /** A header or a footer: its paragraphs, tables flattened to their paragraphs, a text box's after the one it is anchored in. */
 export interface PageFurniture {
   paragraphs: PageFurnitureParagraph[];
+  /** How many pictures and shapes it holds that are not read yet (a logo): none is drawn. Absent: none. */
+  pictures?: number;
 }
 
 /** A header or footer for each kind of page: most pages, the first, and the even ones. */
@@ -6237,6 +6257,7 @@ export interface PageSection {
   start: "nextPage" | "continuous" | "evenPage" | "oddPage";
   width: number;
   height: number;
+  /** From the box: landscape where it is wider than tall, as Word draws it, whatever `w:orient` says. */
   orientation: "portrait" | "landscape";
   margins: {
     top: number;

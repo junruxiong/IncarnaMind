@@ -15,14 +15,11 @@ import type {
   PageNumberFormat,
   PageSection,
   PageSetup,
+  PageTabStop,
 } from "../../api";
+import { HEADER_AND_FOOTER_DISTANCE, MARGIN, PAPER } from "../../pageDefaults";
 import { type Relationship, relationshipsOf, type WordPackage } from "./docxPackage";
-import { child, elements, onOff, parseXml, textOf, walk, type XmlElement } from "./xml";
-
-/** Word's own defaults for a section with no `w:pgSz` or `w:pgMar`: US Letter and one inch. */
-const LETTER = { width: 12240, height: 15840 };
-const INCH = 1440;
-const HEADER_AND_FOOTER_DISTANCE = 720;
+import { child, elements, onOff, ordinalsOf, parseXml, textOf, walk, type XmlElement } from "./xml";
 
 const FORMATS: Readonly<Record<string, PageNumberFormat>> = {
   decimal: "decimal",
@@ -32,7 +29,6 @@ const FORMATS: Readonly<Record<string, PageNumberFormat>> = {
   upperLetter: "upperLetter",
 };
 
-/** A field's `\* roman` switch: Word's names for the same formats. */
 const SWITCHES: Readonly<Record<string, PageNumberFormat>> = {
   arabic: "decimal",
   roman: "lowerRoman",
@@ -55,7 +51,9 @@ const twips = (value: string | undefined, fallback: number): number => {
   return value !== undefined && Number.isFinite(parsed) ? Math.round(parsed) : fallback;
 };
 
-const ALIGNS = {
+type Align = PageFurnitureParagraph["align"];
+
+const ALIGNS: Readonly<Record<string, Align>> = {
   left: "left",
   start: "left",
   center: "center",
@@ -63,22 +61,141 @@ const ALIGNS = {
   end: "right",
   both: "justify",
   distribute: "justify",
-} as const;
+};
 
-/** The paper and margins a section has when nothing says; the caller gives the paper for the region. */
+const TAB_ALIGNS: Readonly<Record<string, PageTabStop["align"]>> = {
+  left: "left",
+  start: "left",
+  num: "left",
+  center: "center",
+  right: "right",
+  end: "right",
+  decimal: "decimal",
+  bar: "bar",
+};
+
+const TAB_LEADERS: Readonly<Record<string, NonNullable<PageTabStop["leader"]>>> = {
+  dot: "dot",
+  hyphen: "hyphen",
+  underscore: "underscore",
+  heavy: "heavy",
+  middleDot: "middleDot",
+};
+
+/** The paper a section has when the file gives none; the caller picks it for the region. */
 export interface PageDefaults {
   width: number;
   height: number;
 }
 
-/** What a header or footer paragraph holds, one run at a time. */
+interface ParagraphStyle {
+  basedOn: string | null;
+  align: Align | undefined;
+  tabs: XmlElement | undefined;
+}
+
+interface Styles {
+  paragraph: ReadonlyMap<string, ParagraphStyle>;
+  defaultId: string | null;
+  /** From `w:docDefaults`, below every style. */
+  align: Align | undefined;
+}
+
+const MAX_STYLE_DEPTH = 20;
+
+async function stylesOf(
+  pkg: WordPackage,
+  relationships: ReadonlyMap<string, Relationship>,
+): Promise<Styles> {
+  const paragraph = new Map<string, ParagraphStyle>();
+  const styles: Styles = { paragraph, defaultId: null, align: undefined };
+  const part = [...relationships.values()].find(
+    (rel) => !rel.external && rel.type.endsWith("/styles"),
+  );
+  const xml = part && pkg.zip.has(part.target) ? await pkg.zip.readText(part.target) : undefined;
+  if (!xml) return styles;
+  for (const element of elements(parseXml(xml))) {
+    if (element.name === "w:docDefaults") {
+      const pPr = child(child(element, "w:pPrDefault") ?? element, "w:pPr");
+      styles.align = alignOf(pPr);
+    }
+    if (element.name !== "w:style" || element.attrs["w:type"] !== "paragraph") continue;
+    const id = element.attrs["w:styleId"];
+    if (!id) continue;
+    if (element.attrs["w:default"] === "1" || element.attrs["w:default"] === "true") {
+      styles.defaultId = id;
+    }
+    const pPr = child(element, "w:pPr");
+    paragraph.set(id, {
+      basedOn: child(element, "w:basedOn")?.attrs["w:val"] ?? null,
+      align: alignOf(pPr),
+      tabs: pPr && child(pPr, "w:tabs"),
+    });
+  }
+  return styles;
+}
+
+const alignOf = (pPr: XmlElement | undefined): Align | undefined => {
+  const jc = pPr && child(pPr, "w:jc")?.attrs["w:val"];
+  return jc === undefined ? undefined : (ALIGNS[jc] ?? "left");
+};
+
+/** A style and the styles it is based on, itself first. */
+function styleChain(styles: Styles, id: string | null): ParagraphStyle[] {
+  const chain: ParagraphStyle[] = [];
+  const seen = new Set<string>();
+  for (let at = id; at && !seen.has(at) && chain.length < MAX_STYLE_DEPTH; ) {
+    seen.add(at);
+    const style = styles.paragraph.get(at);
+    if (!style) break;
+    chain.push(style);
+    at = style.basedOn;
+  }
+  return chain;
+}
+
+/** A paragraph's alignment and tab stops: its own, else its style's, down the styles it is based on. */
+function paragraphLayout(
+  styles: Styles,
+  pPr: XmlElement | undefined,
+): { align: Align; tabStops: PageTabStop[] } {
+  const named = pPr && child(pPr, "w:pStyle")?.attrs["w:val"];
+  const chain = styleChain(styles, named ?? styles.defaultId);
+  const align = alignOf(pPr) ?? chain.find((style) => style.align)?.align ?? styles.align ?? "left";
+  const stops = new Map<number, PageTabStop>();
+  const layers = [...chain.map((style) => style.tabs).reverse(), pPr && child(pPr, "w:tabs")];
+  for (const tabs of layers) {
+    for (const tab of tabs ? elements(tabs) : []) {
+      if (tab.name !== "w:tab") continue;
+      const position = Number(tab.attrs["w:pos"]);
+      if (!Number.isFinite(position)) continue;
+      const kind = tab.attrs["w:val"] ?? "left";
+      if (kind === "clear") {
+        stops.delete(position);
+        continue;
+      }
+      const leader = TAB_LEADERS[tab.attrs["w:leader"] ?? ""];
+      stops.set(position, {
+        position: Math.round(position),
+        align: TAB_ALIGNS[kind] ?? "left",
+        ...(leader && { leader }),
+      });
+    }
+  }
+  return { align, tabStops: [...stops.values()].sort((a, b) => a.position - b.position) };
+}
+
+interface Formatting {
+  bold?: true;
+  italic?: true;
+}
+
 class RunReader {
   readonly runs: PageFurnitureRun[] = [];
   private readonly fields: {
     instruction: string;
     inResult: boolean;
-    bold: boolean;
-    italic: boolean;
+    format: Formatting;
     result: PageFurnitureRun[];
   }[] = [];
 
@@ -121,8 +238,8 @@ class RunReader {
     }
   }
 
-  private formatting(run: XmlElement): { bold?: true; italic?: true } {
-    const props = child(run, "w:rPr");
+  private formatting(run: XmlElement | undefined): Formatting {
+    const props = run && child(run, "w:rPr");
     return {
       ...(props && onOff(child(props, "w:b")) && { bold: true as const }),
       ...(props && onOff(child(props, "w:i")) && { italic: true as const }),
@@ -138,55 +255,64 @@ class RunReader {
         if (open && !open.inResult) open.instruction += textOf(part);
       } else if (part.name === "w:t") this.add({ kind: "text", text: textOf(part), ...format });
       else if (part.name === "w:tab") this.add({ kind: "text", text: "\t", ...format });
-      else if (part.name === "w:br" || part.name === "w:cr") {
+      else if (part.name === "w:ptab") {
+        this.add({
+          kind: "alignedTab",
+          align:
+            part.attrs["w:alignment"] === "center"
+              ? "center"
+              : part.attrs["w:alignment"] === "right"
+                ? "right"
+                : "left",
+          relativeTo: part.attrs["w:relativeTo"] === "indent" ? "indent" : "margin",
+        });
+      } else if (part.name === "w:br" || part.name === "w:cr") {
         this.add({ kind: "text", text: "\n", ...format });
       }
     }
   }
 
-  private fieldChar(mark: XmlElement, format: { bold?: true; italic?: true }): void {
+  private fieldChar(mark: XmlElement, format: Formatting): void {
     const type = mark.attrs["w:fldCharType"];
     if (type === "begin") {
-      this.fields.push({
-        instruction: "",
-        inResult: false,
-        bold: format.bold === true,
-        italic: format.italic === true,
-        result: [],
-      });
+      this.fields.push({ instruction: "", inResult: false, format, result: [] });
     } else if (type === "separate") {
       const open = this.fields.at(-1);
       if (open) open.inResult = true;
     } else if (type === "end") {
       const closed = this.fields.pop();
-      if (closed) this.finish(closed.instruction, closed.result, closed);
+      if (closed) this.finish(closed.instruction, closed.result, closed.format);
     }
   }
 
   private simpleField(field: XmlElement): void {
     const inside = new RunReader();
     inside.read(field);
-    this.finish(field.attrs["w:instr"] ?? "", inside.runs, { bold: false, italic: false });
+    const first = elements(field).find((each) => each.name === "w:r");
+    this.finish(field.attrs["w:instr"] ?? "", inside.runs, this.formatting(first));
   }
 
   /** A field IncarnaMind draws becomes a field run; any other is its last result as text. */
   private finish(
     instruction: string,
     result: readonly PageFurnitureRun[],
-    format: { bold: boolean; italic: boolean },
+    format: Formatting,
   ): void {
     const words = instruction.trim().split(/\s+/);
     const name = (words[0] ?? "").toUpperCase();
     if (FIELDS.has(name)) {
-      const switched = words.findIndex((word) => word === "\\*");
-      const given = switched >= 0 ? words[switched + 1] : undefined;
-      const field = name as "PAGE" | "NUMPAGES" | "SECTIONPAGES";
+      const shown = result.find((run) => run.kind === "text");
+      const bold = format.bold ?? (shown?.kind === "text" ? shown.bold : undefined);
+      const italic = format.italic ?? (shown?.kind === "text" ? shown.italic : undefined);
+      const given = words.flatMap((word, at) =>
+        words[at - 1] === "\\*" ? (SWITCHES[word] ? [SWITCHES[word]] : []) : [],
+      )[0];
       this.add({
         kind: "field",
-        field,
-        format: (given !== undefined && SWITCHES[given]) || null,
-        ...(format.bold && { bold: true as const }),
-        ...(format.italic && { italic: true as const }),
+        field: name as "PAGE" | "NUMPAGES" | "SECTIONPAGES",
+        format: given ?? null,
+        ...(bold && { bold }),
+        ...(italic && { italic }),
       });
       return;
     }
@@ -197,26 +323,34 @@ class RunReader {
 /** A text box's other half, the VML a file keeps for older readers, says the same again. */
 const notFallback = (element: XmlElement) => element.name !== "mc:Fallback";
 
-function furnitureOf(root: XmlElement): PageFurniture {
+function furnitureOf(root: XmlElement, styles: Styles): PageFurniture {
   // A page number is often a text box in the footer: its paragraphs follow the one it is anchored in.
   const boxed = new Set<XmlElement>();
+  let pictures = 0;
   for (const box of walk(root, notFallback)) {
-    if (box.name !== "w:txbxContent") continue;
-    for (const inside of walk(box)) if (inside.name === "w:p") boxed.add(inside);
+    if (box.name === "w:txbxContent") {
+      for (const inside of walk(box)) if (inside.name === "w:p") boxed.add(inside);
+    } else if (box.name === "w:drawing" || box.name === "w:pict") {
+      const holdsText = [...walk(box)].some((each) => each.name === "w:txbxContent");
+      if (!holdsText) pictures++;
+    }
   }
   const paragraphs: PageFurnitureParagraph[] = [];
   for (const element of walk(root, notFallback)) {
     if (element.name !== "w:p") continue;
     const reader = new RunReader();
     reader.read(element);
-    const jc = child(child(element, "w:pPr") ?? element, "w:jc")?.attrs["w:val"] ?? "left";
+    const pPr = child(element, "w:pPr");
+    const { align, tabStops } = paragraphLayout(styles, pPr);
     paragraphs.push({
-      align: ALIGNS[jc as keyof typeof ALIGNS] ?? "left",
+      align,
       runs: reader.runs,
+      ...(tabStops.length > 0 && { tabStops }),
       ...(boxed.has(element) && { inTextBox: true as const }),
+      ...(pPr && child(pPr, "w:framePr") && { framed: true as const }),
     });
   }
-  return { paragraphs };
+  return { paragraphs, ...(pictures > 0 && { pictures }) };
 }
 
 const furnitureKinds = ["default", "first", "even"] as const;
@@ -227,9 +361,9 @@ class Furniture {
   constructor(
     private readonly pkg: WordPackage,
     private readonly relationships: ReadonlyMap<string, Relationship>,
+    private readonly styles: Styles,
   ) {}
 
-  /** What a section's references name, by kind; a kind it doesn't name is left out. */
   async named(
     sectPr: XmlElement | undefined,
     reference: "w:headerReference" | "w:footerReference",
@@ -252,7 +386,7 @@ class Furniture {
       read = (async () => {
         if (!this.pkg.zip.has(name)) return null;
         const xml = await this.pkg.zip.readText(name);
-        return xml ? furnitureOf(parseXml(xml)) : null;
+        return xml ? furnitureOf(parseXml(xml), this.styles) : null;
       })();
       this.parts.set(name, read);
     }
@@ -260,37 +394,46 @@ class Furniture {
   }
 }
 
-/** Each `w:sectPr` of the document in order, with the place its break has in the Mind. */
+/**
+ * Each section's `w:sectPr` in order, with the place of the atom that ends it in the Mind. Word
+ * finds a break in any paragraph of the body's flow, inside a content control or custom XML too.
+ * The Mind keeps a control as one atom and no atom for a break inside it, so such a break is
+ * named by the outermost control that holds it.
+ */
 function sectionsOf(
   document: XmlElement,
 ): { sectPr: XmlElement | undefined; breakPlace: string | null }[] {
   const body = child(document, "w:body");
   if (!body) return [];
-  const places = new Map<XmlElement, string>();
-  let count = 0;
-  for (const element of walk(document)) {
-    if (element.name === "w:sectPr") places.set(element, `w:sectPr#${count++}`);
-  }
+  const ordinals = ordinalsOf(document);
+  const placeOf = (element: XmlElement) => `${element.name}#${ordinals.get(element) ?? 0}`;
   const found: { sectPr: XmlElement | undefined; breakPlace: string | null }[] = [];
-  for (const block of elements(body)) {
-    const sectPr = block.name === "w:p" ? child(child(block, "w:pPr") ?? block, "w:sectPr") : null;
-    if (sectPr) found.push({ sectPr, breakPlace: places.get(sectPr) ?? null });
-  }
+  const visit = (container: XmlElement, control: XmlElement | null) => {
+    for (const block of elements(container)) {
+      if (block.name === "w:p") {
+        const pPr = child(block, "w:pPr");
+        const sectPr = pPr && child(pPr, "w:sectPr");
+        if (sectPr) found.push({ sectPr, breakPlace: placeOf(control ?? sectPr) });
+      } else if (block.name === "w:customXml") visit(block, control);
+      else if (block.name === "w:sdt")
+        visit(child(block, "w:sdtContent") ?? block, control ?? block);
+    }
+  };
+  visit(body, null);
   // The last section's properties are the body's own; a file with none has the defaults.
   found.push({ sectPr: child(body, "w:sectPr"), breakPlace: null });
   return found;
 }
 
-/** The pages of a Word package, as its sections set them up. */
 export async function readPageSetup(
   pkg: WordPackage,
-  defaults: PageDefaults = LETTER,
+  defaults: PageDefaults = PAPER.letter,
 ): Promise<PageSetup> {
   const xml = await pkg.zip.readText(pkg.part);
   if (!xml) return { source: "word", oddAndEven: false, sections: [] };
   const document = parseXml(xml);
   const relationships = await relationshipsOf(pkg.zip, pkg.part);
-  const furniture = new Furniture(pkg, relationships);
+  const furniture = new Furniture(pkg, relationships, await stylesOf(pkg, relationships));
 
   const settings = [...relationships.values()].find((rel) => rel.type.endsWith("/settings"));
   const settingsXml =
@@ -318,15 +461,13 @@ export async function readPageSetup(
       start: START_TYPES[type as keyof typeof START_TYPES] ?? "nextPage",
       width,
       height,
-      orientation:
-        size?.attrs["w:orient"] === "landscape" || (!size?.attrs["w:orient"] && width > height)
-          ? "landscape"
-          : "portrait",
+      // Word draws the box by `w:w` and `w:h`; a `w:orient` that disagrees with them is not what is drawn.
+      orientation: width > height ? "landscape" : "portrait",
       margins: {
-        top: twips(margins?.attrs["w:top"], INCH),
-        right: twips(margins?.attrs["w:right"], INCH),
-        bottom: twips(margins?.attrs["w:bottom"], INCH),
-        left: twips(margins?.attrs["w:left"], INCH),
+        top: twips(margins?.attrs["w:top"], MARGIN),
+        right: twips(margins?.attrs["w:right"], MARGIN),
+        bottom: twips(margins?.attrs["w:bottom"], MARGIN),
+        left: twips(margins?.attrs["w:left"], MARGIN),
         gutter: twips(margins?.attrs["w:gutter"], 0),
         header: twips(margins?.attrs["w:header"], HEADER_AND_FOOTER_DISTANCE),
         footer: twips(margins?.attrs["w:footer"], HEADER_AND_FOOTER_DISTANCE),
