@@ -891,6 +891,16 @@ export function createChat(options: {
 
     exists: (id: string) => rowById(id) !== undefined,
 
+    /** The key of the saved provider of a hosted catalog entry, for another service of its (#141). */
+    async apiKeyOf(catalogId: string): Promise<{ providerId: string; apiKey: string } | null> {
+      for (const row of knownRows()) {
+        if ((row.catalog_id ?? row.kind) !== catalogId || row.base_url !== null) continue;
+        const apiKey = await secrets.tryGet(keyName(row.id));
+        if (apiKey) return { providerId: row.id, apiKey };
+      }
+      return null;
+    },
+
     /**
      * How requests to `choice` (the default model when left out) are metered,
      * as known now, without asking any server; null without a model.

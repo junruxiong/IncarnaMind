@@ -28,6 +28,8 @@ export type {
   CapturePage,
   CaptureSession,
   CaptureState,
+  CloudLoss,
+  CloudStream,
   CoreAdapters,
   CpuFallbackReason,
   CrashReporter,

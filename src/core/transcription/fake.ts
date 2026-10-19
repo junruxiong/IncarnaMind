@@ -9,6 +9,7 @@
  */
 import { MEETING_SAMPLE_RATE } from "../adapters";
 import type { TranscriberPort, TranscriberResponse } from "./channel";
+import type { FakeCloudOptions } from "./fakeCloud";
 import type { SpeechEngine, VoiceDetector } from "./speech";
 
 export const FAKE_LINES: readonly string[] = [
@@ -58,6 +59,8 @@ export interface FakeFailover {
 /** What the smoke tests ask of the fake transcriber (INCARNAMIND_TEST_TRANSCRIBER_OPTIONS). */
 export interface FakeTranscriberOptions extends FakeSpeechOptions {
   failover?: FakeFailover;
+  /** How the pretend cloud service behaves, for streams opened with one (#141). */
+  cloud?: FakeCloudOptions;
 }
 
 /**

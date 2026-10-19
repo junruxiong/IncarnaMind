@@ -36,6 +36,13 @@ import {
   type PanelCommand,
   type PanelState,
 } from "../shared/meetingPanel";
+import {
+  PERMISSION_GUIDE_ARGUMENT,
+  PERMISSION_GUIDE_BRIDGE_KEY,
+  PERMISSION_GUIDE_CHANNELS,
+  type PermissionGuideBridge,
+  type PermissionGuideState,
+} from "../shared/permissionGuide";
 import { titleBarOf } from "../shared/titleBar";
 
 function listen<T>(channel: string, listener: (value: T) => void): () => void {
@@ -135,6 +142,13 @@ const files: FilesBridge = {
     return stop;
   },
   onSetUpModel: (listener) => listen<void>(FILES_CHANNELS.setUpModel, () => listener()),
+  showPermissionGuide: (source) => ipcRenderer.invoke(FILES_CHANNELS.showPermissionGuide, source),
+  closePermissionGuide: () => ipcRenderer.send(FILES_CHANNELS.closePermissionGuide),
+  onPermissionGuide: (listener) => {
+    const stop = listen<PermissionGuideState | null>(FILES_CHANNELS.permissionGuide, listener);
+    ipcRenderer.send(FILES_CHANNELS.permissionGuideWanted);
+    return stop;
+  },
 };
 
 // The hidden window that draws a cited page (#133) shows the viewer's views, which need the core,
@@ -164,4 +178,16 @@ if (process.argv.includes(MEETING_PANEL_ARGUMENT)) {
     onCommand: (listener) => listen<PanelCommand>(MEETING_PANEL_CHANNELS.command, listener),
   };
   contextBridge.exposeInMainWorld(MEETING_PANEL_BRIDGE_KEY, panel);
+}
+
+// The guide beside System Settings has the file helpers too, for the window's error log.
+if (process.argv.includes(PERMISSION_GUIDE_ARGUMENT)) {
+  const guide: PermissionGuideBridge = {
+    resize: (width, height) => ipcRenderer.send(PERMISSION_GUIDE_CHANNELS.size, width, height),
+    close: () => ipcRenderer.send(PERMISSION_GUIDE_CHANNELS.close),
+    state: () => ipcRenderer.invoke(PERMISSION_GUIDE_CHANNELS.state),
+    onState: (listener) =>
+      listen<PermissionGuideState | null>(PERMISSION_GUIDE_CHANNELS.state, listener),
+  };
+  contextBridge.exposeInMainWorld(PERMISSION_GUIDE_BRIDGE_KEY, guide);
 }
