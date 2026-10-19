@@ -16,11 +16,24 @@ const WINDOW = 512;
 /** The engine id the model definitions use (./model). */
 export const QWEN3_ASR = "qwen3-asr";
 
+function hasDefault<T extends object>(loaded: T | { default: T }): loaded is { default: T } {
+  return "default" in loaded;
+}
+
+// A native `import()` of a CommonJS package, as the built process makes, has all its exports on
+// `default`: Node finds named ones only where it can read them off the file. A bundler's interop has both.
+const exportsOf = <T extends object>(loaded: T | { default: T }): T =>
+  hasDefault(loaded) ? loaded.default : loaded;
+
+// Loaded only when needed: the native runtime is large.
+export async function loadSherpa() {
+  return exportsOf(await import("sherpa-onnx-node"));
+}
+
 export async function createSherpaEngine(model: TranscriptionModelFiles): Promise<SpeechEngine> {
   if (model.engine !== QWEN3_ASR)
     throw new Error(`Unknown speech-to-text engine "${model.engine}".`);
-  // Loaded only when needed: the native runtime is large.
-  const sherpa = await import("sherpa-onnx-node");
+  const sherpa = await loadSherpa();
   const { files } = model;
   const required = (name: string) => {
     const path = files[name];
@@ -103,8 +116,7 @@ export async function createSherpaEngine(model: TranscriptionModelFiles): Promis
         } catch (error) {
           if (!(error instanceof SyntaxError)) throw error;
           // The stretch was decoded; sherpa's reader refused its JSON (#981): read it here.
-          const loaded = await import("sherpa-onnx-node/addon.js");
-          const addon = "default" in loaded ? loaded.default : loaded;
+          const addon = exportsOf(await import("sherpa-onnx-node/addon.js"));
           return wordsOnly(textOfResult(addon.getOfflineStreamResultAsJson(stream.handle)));
         }
       },

@@ -41,6 +41,7 @@ import { type RequestFailure, requestFailures } from "./checks";
 import { DATED_TEXTS } from "./dated";
 import { citedClaims } from "./dates";
 import { judgeClaims } from "./judge";
+import type { Asks, ReaskWatch } from "./reasks";
 import { checkCitedSentences, type SentenceSupport } from "./support";
 
 const ROOT = resolve(__dirname, "../..");
@@ -118,6 +119,8 @@ export interface CaseResult {
   usage: AnswerUsage;
   /** The markers the app took out of its Answers because no Citation backed them. */
   droppedMarkers: number;
+  /** How often the app asked the model inside this Answer: again, and once for Citations. */
+  asks: Asks;
   /** A research request: each cited sentence of the reply, as the app's own check judged it; null for the others. */
   support: SentenceSupport[] | null;
   /** A summary: its sentences outside headings that make a claim, and how many carry a Citation; null for the others. */
@@ -222,7 +225,15 @@ export async function runCase(
   judge: ReturnType<typeof createAiSdkChatModel>,
   model: string,
   each: AskedRequest,
-  checkModel: ChatModelChoice | null = null,
+  {
+    watch,
+    checkModel = null,
+  }: {
+    /** Watches the app's own asks inside the Answer; none watched without it. */
+    watch?: ReaskWatch;
+    /** The model the cited sentences are checked on; null: the default chat model. */
+    checkModel?: ChatModelChoice | null;
+  } = {},
 ): Promise<CaseResult> {
   const { core } = library;
   const started = Date.now();
@@ -302,6 +313,7 @@ export async function runCase(
     addedBlocks = ids.flatMap((id, block) => (earlier.has(id) ? [] : [block]));
     before = acceptedTexts(client.doc, new Set());
   }
+  watch?.begin(each.firstReply ?? null);
   const answer = await ask(core, {
     text: each.request,
     mindId: mind?.id ?? null,
@@ -309,6 +321,7 @@ export async function runCase(
     focus,
   });
   const answeredSeconds = (Date.now() - started) / 1000;
+  const asks = watch ? { ...watch.end() } : { again: 0, citations: 0 };
   counting();
   const minds = await core.listMinds();
   const names = (id: string) => minds.find((each) => each.id === id)?.title ?? null;
@@ -358,6 +371,7 @@ export async function runCase(
     changedBlocks,
     addedBlocks,
     sourcesAsText: sourcesAsTextIn,
+    askedAgain: asks.again > 0,
     scoped,
     texts: each.expected.textDates ? DATED_TEXTS : undefined,
   });
@@ -375,6 +389,7 @@ export async function runCase(
     error: answer.status === "failed" ? `${answer.errorKind}: ${answer.errorMessage}` : null,
     usage,
     droppedMarkers,
+    asks,
     support,
     claims: each.summary ? citedClaims(answer.text) : null,
   };

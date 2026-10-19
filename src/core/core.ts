@@ -1140,7 +1140,10 @@ export function createCore(adapters: CoreAdapters): Core {
           pages: [],
         }),
       );
-    return [...unread, ...files];
+    // By name, the same in every interface language: the order they were added in can tie.
+    return [...unread, ...files].sort(
+      (a, b) => a.name.localeCompare(b.name, "en", { numeric: true }) || a.id.localeCompare(b.id),
+    );
   };
   // What checks and comparison tables search (#80): as Answers do, without IncarnaMind's own
   // files and the document being checked. Answers themselves search everything, as before.
@@ -1192,7 +1195,8 @@ export function createCore(adapters: CoreAdapters): Core {
     readableMindName: (mindId) => {
       const found = minds.locate(mindId);
       if (!found || found.deletedAt !== null) return null;
-      return isKnownKind(minds.get(mindId).kind) ? found.name : null;
+      if (!isKnownKind(minds.get(mindId).kind)) return null;
+      return found.name || translate(settings.get().language, "mind.untitled");
     },
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
     meetingHelp: (mindId, question) => meetingHelpOf(mindId, question),
@@ -1584,6 +1588,7 @@ export function createCore(adapters: CoreAdapters): Core {
       content.remove(mind.id, at);
       return mind;
     });
+    content.removed(deleted.id, at);
     meetings.mindDeleted(deleted.id);
     mindsChanged();
     layouts.forgetDeletedMinds();
@@ -2583,10 +2588,12 @@ export function createCore(adapters: CoreAdapters): Core {
     mindExists: (mindId) => minds.list().some((mind) => mind.id === mindId),
     deleteMind: (mindId) => {
       const at = now();
-      db.transaction(() => {
+      const deleted = db.transaction(() => {
         const mind = minds.delete(mindId, at);
         content.remove(mind.id, at);
+        return mind;
       });
+      content.removed(deleted.id, at);
       mindsChanged();
       layouts.forgetDeletedMinds();
     },
@@ -3302,6 +3309,8 @@ export function createCore(adapters: CoreAdapters): Core {
       await readinessChanged();
     },
     testChatConnection: (input) => loggingTest("chat")(chat.test(input)),
+    testChatProvider: (providerId) => loggingTest("chat")(chat.testProvider(providerId)),
+    getModelRoles: async () => ({ quickTasks: chat.quickTasksModel(), images: chat.imageModel() }),
     getChatReadiness: () => chat.readiness(),
     listChatModels: () => chat.listModels(),
     setChatModelInMenu: async (input) => chat.setInMenu(input),
@@ -3418,7 +3427,13 @@ export function createCore(adapters: CoreAdapters): Core {
           lifetime.signal,
         );
       }
-      const provider = await chat.save({ kind: "ollama", baseUrl, modelId: model });
+      const provider = await chat.save({
+        kind: "ollama",
+        baseUrl,
+        modelId: model,
+        // Local mode leaves only a model on this computer to answer.
+        keepDefault: input?.keepDefault === true && input.localOnly !== true,
+      });
       settingsChanged();
       await readinessChanged();
       // Local mode is the User's choice here (#545), made in the box under the button.

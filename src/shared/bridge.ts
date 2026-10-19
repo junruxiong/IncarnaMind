@@ -93,6 +93,11 @@ export interface FilesBridge {
    * reached.
    */
   showLinkedFolder(linkedFolderId: string): Promise<void>;
+  /**
+   * Whether Chromium's sandbox is off for this app (`--no-sandbox` or
+   * `ELECTRON_DISABLE_SANDBOX`), the check Analyses make too: the window says so.
+   */
+  runsWithoutSandbox(): Promise<boolean>;
   /** Writes an error nothing in the window caught to the log, scrubbed of the User's content. */
   logError(report: RendererErrorReport): void;
   /** Calls `listener` with each command chosen in the application menu. Returns how to stop. */
@@ -172,6 +177,7 @@ export const FILES_CHANNELS = {
   pickWordFile: "files:pickWordFile",
   pickPdfFile: "files:pickPdfFile",
   showLinkedFolder: "files:showLinkedFolder",
+  runsWithoutSandbox: "files:runsWithoutSandbox",
   logError: "files:logError",
   /** From the page: the sidebar is hidden (true) or shown (false), for the View menu's label. */
   sidebarHidden: "app:sidebarHidden",

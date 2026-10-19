@@ -22,11 +22,20 @@
  * calls create_mind with a short summary. "Write a summary of my leases"
  * (根据我的租约写一份总结) writes, naming the Documents in its scope, into a new
  * Mind, or the empty one it is asked from, so what it was written from shows (#1149).
+ * "Make a bar chart of revenue by quarter" (画一个各季度收入的柱状图; "line chart",
+ * 折线图) searches, cites each quarter's revenue, and adds them as a table with its
+ * chart (#1091); "Make a bar chart of rent by lease" does the same with each unit's
+ * monthly rent, so Use all can draw it again from every lease.
+ * "Write a short summary of this agreement" (为这份协议写一份简短摘要) calls
+ * add_to_mind with it, for the Mind in focus.
+ * "Write a brief summary" (写一份简要总结) adds one to the Mind in <mind>, but
+ * answers that no Mind is open when that Mind has no name, as models did (#1212).
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
 import { ASSISTANT_REPLACES } from "./appliedEdits";
 import { paragraphsReply } from "./paragraphs";
+import { passagesIn } from "./passages";
 import {
   lastQuestion,
   lastResult,
@@ -82,7 +91,12 @@ export function mindRead(prompt: Prompt): string | null {
 const SUMMARY_PAGE =
   /\bwrite a summary page\b|写一个总结页面|\bwrite a summary of my documents\b|根据我现有的文件帮我写一份summary/i;
 const LONGER = /\blonger\b|长一点|更长/i;
+const REVENUE_CHART = /\bchart of revenue by quarter\b|各季度收入的(?:柱状图|折线图)/i;
+const QUARTER_REVENUE = /Revenue in (Q\d) was (€\d+ million)/g;
+const RENT_CHART = /\bchart of rent by lease\b/i;
+const UNIT_RENT = /The monthly rent for (unit \d+) is (€[\d,]+)/g;
 const LEASES_SUMMARY = /\bwrite a summary of my leases\b|根据我的租约写一份总结/i;
+const BRIEF_SUMMARY = /\bbrief summary\b|简要总结/i;
 /** A rewrite of the User's text (改写), which Edit with AI's scripted model writes anew. */
 const REWRITE = /\brewrite\b|改写/i;
 const SUMMARY = [
@@ -90,6 +104,9 @@ const SUMMARY = [
   "Spring tides come at new and full moon, when the Sun and the Moon pull together.",
   "Neap tides come in between, at the quarter moons.",
 ].join("\n\n");
+
+/** The newcomer's first request (#1174): a short summary of "this agreement", written into the Mind in focus. */
+const SUMMARY_HERE = /\bwrite a short summary of this agreement\b|为这份协议写一份简短摘要/i;
 
 /** A request to change the Mind so it has a table: "…, with a table" (加上表格). */
 const WITH_A_TABLE = /\bwith a table\b|加上?表格/i;
@@ -143,6 +160,8 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
       return { tool: "add_to_mind", input: { content: "## Risks\n\nThe supplier is late." } };
     return { text: firstSentence(added) };
   }
+  if (REVENUE_CHART.test(question)) return revenueChart(prompt, question);
+  if (RENT_CHART.test(question)) return tableChart(prompt, RENT);
   if (LEASES_SUMMARY.test(question)) {
     const made = lastResult(prompt, "create_mind") ?? lastResult(prompt, "add_to_mind");
     if (made !== undefined) return { text: firstSentence(made) };
@@ -154,11 +173,29 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
       ? { tool: "add_to_mind", input: { content } }
       : { tool: "create_mind", input: { title: "Summary", content } };
   }
+  if (BRIEF_SUMMARY.test(question)) {
+    const mind = userText(prompt.find((message) => message.role === "user"));
+    if (!/<mind name="[^"]+">/.test(mind)) {
+      return {
+        text: /\p{Script=Han}/u.test(question)
+          ? "没有打开的笔记，所以没法写进去。"
+          : "No Mind is open, so I can't write it there.",
+      };
+    }
+    const added = lastResult(prompt, "add_to_mind");
+    if (added === undefined) return { tool: "add_to_mind", input: { content: SUMMARY } };
+    return { text: firstSentence(added) };
+  }
   if (SUMMARY_PAGE.test(question)) {
     const made = lastResult(prompt, "create_mind");
     if (made === undefined)
       return { tool: "create_mind", input: { title: "Summary", content: SUMMARY } };
     return { text: firstSentence(made) };
+  }
+  if (SUMMARY_HERE.test(question)) {
+    const added = lastResult(prompt, "add_to_mind");
+    if (added === undefined) return { tool: "add_to_mind", input: { content: SUMMARY } };
+    return { text: firstSentence(added) };
   }
   if (
     SHORTEN.test(question) ||
@@ -202,4 +239,65 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
   const title = called?.[1] ?? called?.[2] ?? "Scripted notes";
   const content = `## Summary\n\n${cited ? CITED_ANSWER : "Written by the scripted assistant."}`;
   return { tool: "create_mind", input: { title, content } };
+}
+
+interface ChartedFigures {
+  query: string;
+  pattern: RegExp;
+  header: string;
+  title: string;
+  kind: "bar" | "line";
+}
+
+const RENT: ChartedFigures = {
+  query: "monthly rent",
+  pattern: UNIT_RENT,
+  header: "| Lease | Rent |",
+  title: "Rent by lease",
+  kind: "bar",
+};
+
+function revenueChart(prompt: Prompt, question: string): Reply {
+  const chinese = /\p{Script=Han}/u.test(question);
+  return tableChart(prompt, {
+    query: "revenue by quarter",
+    pattern: QUARTER_REVENUE,
+    header: chinese ? "| 季度 | 收入 |" : "| Quarter | Revenue |",
+    title: chinese ? "各季度收入" : "Revenue by quarter",
+    kind: /\bline chart\b|折线图/i.test(question) ? "line" : "bar",
+  });
+}
+
+function tableChart(prompt: Prompt, figures: ChartedFigures): Reply {
+  const added = lastResult(prompt, "add_to_mind");
+  if (added !== undefined) return { text: firstSentence(added) };
+  const [searched] = toolResults(prompt, "search_documents");
+  if (searched === undefined) return { tool: "search_documents", input: { query: figures.query } };
+  const found = passagesIn(searched)
+    .flatMap((passage) =>
+      [...passage.text.matchAll(figures.pattern)].map((match) => ({
+        passage: passage.id,
+        label: match[1] ?? "",
+        figure: match[2] ?? "",
+        quote: match[0],
+      })),
+    )
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  if (toolResults(prompt, "cite").length === 0) {
+    const citations = found.map((each, index) => ({
+      marker: index + 1,
+      passage: each.passage,
+      quote: each.quote,
+    }));
+    return { tool: "cite", input: { citations } };
+  }
+  const table = [
+    figures.header,
+    "|---|---|",
+    ...found.map((each, index) => `| ${each.label} | ${each.figure} [^${index + 1}] |`),
+  ].join("\n");
+  return {
+    tool: "add_to_mind",
+    input: { chart: { kind: figures.kind, title: figures.title }, content: table },
+  };
 }

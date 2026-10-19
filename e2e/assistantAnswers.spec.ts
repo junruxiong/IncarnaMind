@@ -226,6 +226,12 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   await expect(options.filter({ hasText: "Chapter 2 outline" })).toHaveCount(1);
   await expect(options.last()).toContainText("New Mind");
   await screenshot(window, "assistant-add-to-picker");
+  // Esc closes it and the focus goes back to the control that opened it.
+  await window.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+  await expect(answer.getByTestId("answer-add-to")).toBeFocused();
+  await pointAndClick(window, answer.getByTestId("answer-add-to"));
+  await expect(picker).toBeVisible();
   await window.keyboard.type("chapter");
   await expect(options).toHaveCount(2);
   await window.keyboard.press("Enter");
@@ -278,9 +284,9 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   await pointAndClick(window, shown.getByTestId("answer-add-to"));
   await pointAndClick(window, window.getByTestId("add-to-option").last());
   await expect(shown.getByTestId("answer-added")).toContainText(
-    "Made the Mind “When do spring tides happen” from this Answer",
+    "Made the Mind “Your Documents answer this” from this Answer",
   );
-  const tab = window.getByTestId("mind-tab").filter({ hasText: "When do spring tides happen" });
+  const tab = window.getByTestId("mind-tab").filter({ hasText: "Your Documents answer this" });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   const made = window.getByTestId("mind-editor");
   await expect(made.locator('[data-proposal="insert"]')).toHaveCount(2);
@@ -485,7 +491,7 @@ test("the ⋯ menu adds the last Answer to a new Mind and clears the conversatio
   await askInAssistant(window, "When do spring tides happen?");
   await pointAndClick(window, more);
   await pointAndClick(window, window.getByTestId("assistant-menu-last-to-new-mind"));
-  const tab = window.getByTestId("mind-tab").filter({ hasText: "When do spring tides happen" });
+  const tab = window.getByTestId("mind-tab").filter({ hasText: "Your Documents answer this" });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   await expect(window.getByTestId("mind-editor").locator('[data-proposal="insert"]')).toHaveCount(
     2,

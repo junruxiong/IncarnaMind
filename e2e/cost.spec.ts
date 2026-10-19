@@ -177,6 +177,7 @@ test("Settings → Models shows what a key spent this month, and the ChatGPT pla
     await window.keyboard.press("Enter");
     await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done");
     const settings = await openSettings(window, "models");
+    await settings.getByTestId("provider-row").first().click();
     const cost = settings.getByTestId("chat-provider-cost");
     await expect(cost).toHaveText("This month: $0 spent");
     await shot(window, "models-key-wide-en");
@@ -186,6 +187,7 @@ test("Settings → Models shows what a key spent this month, and the ChatGPT pla
     await expect(cost).toHaveText("本月已花 $0");
     await shot(window, "models-key-narrow-zh");
     await bridge(window).language("en");
+    await settings.getByTestId("models-back").click();
 
     // Signed in with ChatGPT and using the plan: its line names the plan, never a price.
     await interceptOpenExternal(app);
@@ -199,8 +201,10 @@ test("Settings → Models shows what a key spent this month, and the ChatGPT pla
     await expect(plan.getByTestId("chatgpt-in-use")).toHaveText(
       "Using ChatGPT plan · Manage usage ↗",
     );
-    await expect(settings.getByTestId("chat-provider-current")).toHaveText("ChatGPT plan");
+    await settings.getByTestId("provider-row").filter({ hasText: "ChatGPT plan" }).click();
+    await expect(settings.getByTestId("provider-page-title")).toHaveText("ChatGPT plan");
     await expect(settings.getByTestId("chat-provider-cost")).toHaveCount(0);
+    await settings.getByTestId("models-back").click();
     await plan.scrollIntoViewIfNeeded();
     await shot(window, "models-plan-narrow-en");
     await setWindowSize(app, window, WIDE.width, WIDE.height);
@@ -279,6 +283,7 @@ test("work still running is set aside apart from what was spent, and the set-asi
     db.run(insert, ["open-1", providerId, "reserved", 1.28, null, at, at]);
 
     const settings = await openSettings(window, "models");
+    await settings.getByTestId("provider-row").first().click();
     const cost = settings.getByTestId("chat-provider-cost");
     await expect(cost).toHaveText("This month: $0.01 spent · $1.28 set aside for work in progress");
     await expect(settings.getByTestId("chat-provider-set-aside")).toHaveAttribute(
@@ -315,6 +320,7 @@ test("work still running is set aside apart from what was spent, and the set-asi
     db.run("UPDATE model_requests SET status = 'settled', cost = 0.01 WHERE id = 'open-1'");
     db.close();
     await openSettings(window, "models");
+    await settings.getByTestId("provider-row").first().click();
     await expect(cost).toHaveText("This month: $0.02 spent");
     await expect(settings.getByTestId("chat-provider-set-aside")).toHaveCount(0);
     await showSettingsPage(window, "general");

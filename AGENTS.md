@@ -29,6 +29,7 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
    - `src/core` is the product and never imports Electron; Biome enforces this. Pass a capability in as an adapter instead.
    - `src/main` is the Electron shell.
    - The renderer reaches the core only through the bridge (`src/shared/bridge.ts`).
+   - Keep the core portable to other hosts and ready for sync ([`docs/agents/portability.md`](docs/agents/portability.md)). Node built-ins go through adapters, `fetch` is passed in, the core API stays structured-clone-safe, OAuth takes its redirect from the host, and secrets never sync.
 4. **Keep files focused.** Put a new feature in its own component, hook or core module rather than growing `App.tsx` or another long file.
 5. **Fix types; don't silence them.** TypeScript is strict. No `any`, no `@ts-ignore`, and no `!` assertion just to quiet the compiler.
 6. **Never swallow an error.** A failure the User can act on becomes a problem in plain words, where it happened (`DESIGN.md`, Problems). Log the rest with enough context to find it.
@@ -58,6 +59,7 @@ Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the p
 - Run what CI runs: `npm run typecheck`, `npm run lint`, `npm test`, and `npm run test:smoke` for the specs your change touches.
 - Try the edge cases in `docs/agents/testing.md` that apply (empty and huge input, Chinese, broken files, offline, failing models, quitting halfway, twice and Undo), and say which in the pull request.
 - Update or remove the tests for UI you changed.
+- A feature with a real engine (transcription, OCR, embeddings, the reranker, Python analysis) also needs a test that loads the real module the way the built app does. The fake engines are for everything else.
 - Watch `gh pr checks <number> --watch` and fix any red check before reporting.
 - Tests must pass on any machine:
   - launch through `e2e/app.ts` and set the window size;
@@ -82,7 +84,8 @@ Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the p
   - motion only from the shared module (`src/renderer/src/motion.ts`), as `DESIGN.md` › Motion says, with no hand-written transitions;
   - layouts that hold at every width, in English and Chinese.
   - teach features where they live, not in onboarding, which only gets the User to a first checked Answer.
-- A UI pull request ticks the template's interaction checklist, shows before and after screenshots, and sets the built screen beside the design board it implements, explaining every difference.
+- Build to the interactive prototype's behaviour, not to a still design board: a board fixes the looks only.
+- A UI pull request ticks the template's interaction checklist, shows before and after screenshots, and records the flow in the built app beside the same flow in the prototype, explaining every difference.
 
 ## Commits and pull requests
 

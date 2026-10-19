@@ -24,6 +24,7 @@ import {
 import type { Core } from "../core";
 import { FILES_CHANNELS } from "../shared/bridge";
 import { type MessageKey, translate } from "../shared/i18n";
+import { sandboxOff } from "./analysisPaths";
 import { handle } from "./ipc";
 import { type FileLogger, logsFolder, logWindowError } from "./log";
 import {
@@ -269,6 +270,15 @@ export function serveFileActions(
       throw new Error("The Linked folder can't be reached right now.");
     }
     shell.showItemInFolder(linked.path);
+  });
+
+  handle(FILES_CHANNELS.runsWithoutSandbox, (event) => {
+    refuseUnknown(event);
+    // Playwright starts a test build on Linux with --no-sandbox: only a test that is about the line asks for it.
+    if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_SANDBOX_NOTICE !== "1") {
+      return false;
+    }
+    return sandboxOff((name) => app.commandLine.hasSwitch(name), process.env);
   });
 
   ipcMain.on(FILES_CHANNELS.sidebarHidden, (event, hidden: unknown) => {

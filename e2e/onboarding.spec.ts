@@ -128,7 +128,7 @@ test("a first run opens on the credit paper with no model set up: its Citations 
   const answer = pane.getByTestId("answer");
   await expect(answer.getByTestId("answer-example")).toHaveText("Example Answer · no model needed");
   // Both Citations are checked against the Documents' text: the quotes are found.
-  const checks = pane.getByTestId("margin-check");
+  const checks = pane.getByTestId("mind-editor").getByTestId("citation-chip");
   await expect(checks).toHaveCount(2);
   await expect(checks.nth(0)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
@@ -342,7 +342,10 @@ test("an empty Mind of one's own shows the three steps, the example's steps tick
     window,
     window.getByTestId("mind-list-item").filter({ has: window.getByTestId("example-chip") }),
   );
-  const checks = window.getByTestId("mind-pane").getByTestId("margin-check");
+  const checks = window
+    .getByTestId("mind-pane")
+    .getByTestId("mind-editor")
+    .getByTestId("citation-chip");
   await expect(checks.nth(0)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
   await expect(step(window, "files")).toHaveAttribute("data-state", "done");
   await pointAndClick(window, checks.nth(0));
@@ -364,7 +367,7 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   const { app, window } = await launchApp(dataDir, { examples: true });
   await setWindowSize(app, window, 1440, 900);
   const pane = window.getByTestId("mind-pane");
-  const checks = pane.getByTestId("margin-check");
+  const checks = pane.getByTestId("mind-editor").getByTestId("citation-chip");
   await expect(checks.nth(0)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
   const firstScreen = [
     window.getByTestId("sidebar"),
@@ -459,7 +462,10 @@ test("in Chinese, the ready Question is the Chinese example's, answered with no 
       timeout: 30_000,
     },
   );
-  const checks = window.getByTestId("mind-pane").getByTestId("margin-check");
+  const checks = window
+    .getByTestId("mind-pane")
+    .getByTestId("mind-editor")
+    .getByTestId("citation-chip");
   await expect(checks).toHaveCount(2);
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 30_000 });
   await markSteps(window, { citationChecked: true });

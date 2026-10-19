@@ -154,6 +154,13 @@ export interface LaunchOptions {
    * CI's Linux runners give Electron's sandbox helper the rights it needs (ci.yml).
    */
   sandboxed?: boolean;
+  /**
+   * The window may say when the app runs without its sandbox (#1179), which a test build keeps
+   * quiet otherwise, as Playwright starts every test on Linux with --no-sandbox. "switch": the
+   * app is started with --no-sandbox; "environment": with ELECTRON_DISABLE_SANDBOX; "on": with
+   * its sandbox, where the line must not show. The sandbox is on in the last two on Linux too.
+   */
+  sandboxNotice?: "switch" | "environment" | "on";
 }
 
 /**
@@ -214,6 +221,7 @@ export async function launchApp(
     scriptedTasks = false,
     contradictionWatchDelayMs,
     sandboxed = false,
+    sandboxNotice,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -247,6 +255,9 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_LOOK_LIMIT;
   delete env.INCARNAMIND_TEST_TASKS;
   delete env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS;
+  delete env.INCARNAMIND_TEST_SANDBOX_NOTICE;
+  if (sandboxNotice) env.INCARNAMIND_TEST_SANDBOX_NOTICE = "1";
+  if (sandboxNotice === "environment") env.ELECTRON_DISABLE_SANDBOX = "1";
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -284,9 +295,14 @@ export async function launchApp(
   if (transcriber) env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS = JSON.stringify(transcriber);
 
   const app = await electron.launch({
-    args: [...KEYCHAIN_ARGS, appDir, ...APP_ARGS],
+    args: [
+      ...KEYCHAIN_ARGS,
+      ...(sandboxNotice === "switch" ? ["--no-sandbox"] : []),
+      appDir,
+      ...APP_ARGS,
+    ],
     env,
-    chromiumSandbox: sandboxed,
+    chromiumSandbox: sandboxed || sandboxNotice === "environment" || sandboxNotice === "on",
   });
   openApps.set(app, dataDir);
   app.on("close", () => {
@@ -574,6 +590,22 @@ export async function showSettingsPage(window: Page, page: SettingsPage): Promis
   return settings;
 }
 
+/** In Settings › Models, opens Add a provider and the page that adds `catalogId` (#179). */
+export async function addProviderPage(settings: Locator, catalogId: string): Promise<Locator> {
+  await settings.getByTestId("models-add-provider").click();
+  await settings
+    .getByTestId("provider-directory")
+    .locator(`[data-catalog-id="${catalogId}"]`)
+    .click();
+  const page = settings.getByTestId("provider-add");
+  await expect(page).toHaveAttribute("data-catalog-id", catalogId);
+  return page;
+}
+
+/** As `addProviderPage`, returning that page's key form. */
+export const addProviderForm = async (settings: Locator, catalogId: string): Promise<Locator> =>
+  (await addProviderPage(settings, catalogId)).getByTestId("provider-form");
+
 /** Closes Settings with its close button. */
 export async function closeSettings(window: Page): Promise<void> {
   const settings = window.getByTestId("settings");
@@ -677,6 +709,22 @@ export function savedLine(name: string, folder: string, language: "en" | "zh-CN"
     : `Saved “${name}” in ${basename(folder)}`;
 }
 
+/** Opens the assistant's ⋯ and its Move assistant row, whose submenu has the places it docks. */
+export async function openMoveAssistant(window: Page): Promise<void> {
+  await window.getByTestId("assistant-more").click();
+  await window.getByTestId("assistant-menu-move").click();
+  await expect(window.getByTestId("assistant-menu-docks")).toBeVisible();
+}
+
+/** Docks or floats the assistant from its ⋯ › Move assistant. */
+export async function moveAssistant(
+  window: Page,
+  place: "right" | "left" | "bottom" | "float",
+): Promise<void> {
+  await openMoveAssistant(window);
+  await pointAndClick(window, window.getByTestId(`assistant-menu-${place}`));
+}
+
 /** The result line's saved file, once it says it saved one. */
 export async function savedPath(window: Page, name: string): Promise<string> {
   const done = window.getByTestId("export-result").getByTestId("export-done");
@@ -691,6 +739,12 @@ export async function tabMenu(window: Page): Promise<Locator> {
   const menu = tab.getByTestId("tab-actions");
   await expect(menu).toBeVisible();
   return menu;
+}
+
+/** Splits the shown tab to the right from its menu, as a person does: a copy of it in a new group. */
+export async function splitFromTabMenu(window: Page): Promise<void> {
+  const menu = await tabMenu(window);
+  await pointAndClick(window, menu.getByTestId("tab.split"));
 }
 
 /** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
@@ -718,9 +772,15 @@ export async function importWordFile(
   await expect(dialog).toBeHidden();
 }
 
-/** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
+/** The Export button's menu, then Export options…, which opens the sheet. */
+export async function openExportOptions(window: Page): Promise<void> {
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await pointAndClick(window, window.getByTestId("export-options"));
+}
+
+/** Export options…, from the Export button's menu; resolves once the sheet shows `title`. */
 export async function openOptions(window: Page, title: string): Promise<void> {
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await openExportOptions(window);
   await expect(window.getByTestId("export-dialog").getByRole("heading")).toHaveText(title);
 }
 
@@ -1143,6 +1203,26 @@ export async function motionSettled(window: Page): Promise<void> {
     .toBe(0);
 }
 
+/** A design token (`--color-warning-wash`) as the colour the browser draws it in. */
+export function tokenColor(window: Page, token: string): Promise<string> {
+  return window.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  }, token);
+}
+
+/** The colours an element is drawn in: its text and its background. */
+export function paintOf(target: Locator): Promise<{ color: string; background: string }> {
+  return target.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, background: style.backgroundColor };
+  });
+}
+
 /**
  * Clicks `target` where it is now, as a person does, without waiting for it to
  * stop moving (a menu still growing from its button): the app takes a click
@@ -1380,7 +1460,10 @@ export async function pointAndClick(
   {
     button = "left",
     modifiers = [],
-  }: { button?: "left" | "right"; modifiers?: readonly ("ControlOrMeta" | "Shift")[] } = {},
+  }: {
+    button?: "left" | "right" | "middle";
+    modifiers?: readonly ("ControlOrMeta" | "Shift")[];
+  } = {},
 ): Promise<void> {
   // A list that redraws as the click begins swaps the element for an equal one: look again.
   let box: Awaited<ReturnType<Locator["boundingBox"]>> = null;

@@ -93,14 +93,9 @@ export async function runOurs(
   run: number,
 ): Promise<HarnessRun> {
   const model = `${setup.chat.kind}/${setup.chat.modelId}`;
-  const result = await runCase(
-    handle.library,
-    handle.scoped,
-    setup.judge,
-    model,
-    each,
-    handle.checkModel,
-  );
+  const result = await runCase(handle.library, handle.scoped, setup.judge, model, each, {
+    checkModel: handle.checkModel,
+  });
   const usage = usageOf(result.usage);
   const dead = result.failures.flatMap((failure) =>
     failure.kind === "dead-markers" ? failure.markers : [],
