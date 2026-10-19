@@ -252,7 +252,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   // So does the marker whose quote wasn't found, which doesn't open the page.
   await markers.nth(2).click();
   await expect(card.getByTestId("citation-badge")).toHaveText("Quote not found on p. 2");
-  await expect(card.getByTestId("citation-reason")).toContainText("isn't in the text");
+  await expect(card.getByTestId("citation-reason")).toContainText("isn’t in the text");
   await expect(window.getByTestId("viewer")).toHaveCount(0);
   await screenshot(window, "mind-card-not-found.png");
   await window.mouse.click(away.x, away.y);
