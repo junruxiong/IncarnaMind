@@ -139,22 +139,19 @@ describe("a selection of Minds and Documents", () => {
 describe("a selection of several kinds", () => {
   const fromMind = { "mind.moveTo": () => undefined };
 
-  test("of Minds and Documents is offered Move to…, New Folder with these and Delete for all of them, with the count", () => {
+  test("of Minds and Documents is offered Move to… and Delete for all of them, with the count", () => {
     const ctx = { ...selectionOf([mind("m"), doc("a"), doc("b")], "sidebar"), here: fromMind };
     const entries = buildMixedMenu(ctx).flatMap((entry) => (entry === "rule" ? [] : [entry]));
     expect(entries.map((entry) => entry.command.id)).toEqual([
       "selection.moveTo",
-      "folder.newWith",
       "selection.delete",
     ]);
     expect(entries.map((entry) => menuLabelOf(entry.command, ctx, english))).toEqual([
       "Move 3 items to…",
-      "New Folder with 3 items",
       "Delete 3 items",
     ]);
     expect(entries.map((entry) => menuLabelOf(entry.command, ctx, chinese))).toEqual([
       "将 3 项移动到…",
-      "新建文件夹并放入 3 项",
       "删除 3 项",
     ]);
   });

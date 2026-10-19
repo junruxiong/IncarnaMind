@@ -783,8 +783,7 @@ for (const [language, width] of [
       await expect(sidebarFolder(window, "Finance")).toHaveCount(1);
       await expect(mindRow(window, "Shortlist")).toHaveCount(1);
 
-      // A Mind and a Document: Move to…, New Folder with these and Delete, each with the count; ⌘⌫
-      // takes both.
+      // A Mind and a Document: Move to… and Delete, each with the count; ⌘⌫ takes both.
       await mindRow(window, "Shortlist").getByTestId("mind-list-item").click();
       await documentRow(window, "Budget")
         .getByTestId("open-document")
@@ -793,7 +792,6 @@ for (const [language, width] of [
       const documentMenu = documentRow(window, "Budget").getByTestId("document-file-actions");
       await expect(documentMenu.getByRole("menuitem")).toHaveText([
         new RegExp(t("selection.moveTo", { count: 2 })),
-        new RegExp(t("folder.newWith.items", { count: 2 })),
         new RegExp(t("selection.delete", { count: 2 })),
       ]);
       await window.keyboard.press("Escape");
