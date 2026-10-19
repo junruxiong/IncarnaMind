@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from "vitest";
-import { buildMenu, type MenuEntry } from "../../src/renderer/src/commands/menus";
+import { buildMenu, buildMixedMenu, type MenuEntry } from "../../src/renderer/src/commands/menus";
 import {
   type CommandContext,
   commands,
@@ -16,6 +16,7 @@ import { type MessageKey, type MessageParams, translate } from "../../src/shared
 
 const doc = (id: string): ObjectRef => ({ kind: "document", id });
 const mind = (id: string): ObjectRef => ({ kind: "mind", id });
+const folder = (id: string): ObjectRef => ({ kind: "folder", id });
 const selectionOf = (selection: ObjectRef[], surface: CommandContext["surface"] = "library") =>
   ({ selection, focus: selection.at(-1) ?? null, surface }) satisfies CommandContext;
 
@@ -132,5 +133,31 @@ describe("a selection of Minds and Documents", () => {
     const ctx = selectionOf([mind("m"), doc("a")], "sidebar");
     expect(idsIn(buildMenu("document", ctx))).toEqual(["folder.newWith"]);
     expect(idsIn(buildMenu("mind", ctx))).toEqual(["folder.newWith"]);
+  });
+});
+
+describe("a selection of several kinds", () => {
+  const fromMind = { "mind.moveTo": () => undefined };
+
+  test("of Minds and Documents is offered Move to… and Delete for all of them, with the count", () => {
+    const ctx = { ...selectionOf([mind("m"), doc("a"), doc("b")], "sidebar"), here: fromMind };
+    const entries = buildMixedMenu(ctx).flatMap((entry) => (entry === "rule" ? [] : [entry]));
+    expect(entries.map((entry) => entry.command.id)).toEqual([
+      "selection.moveTo",
+      "selection.delete",
+    ]);
+    expect(entries.map((entry) => menuLabelOf(entry.command, ctx, english))).toEqual([
+      "Move 3 items to…",
+      "Delete 3 items",
+    ]);
+    expect(entries.map((entry) => menuLabelOf(entry.command, ctx, chinese))).toEqual([
+      "将 3 项移动到…",
+      "删除 3 项",
+    ]);
+  });
+
+  test("holding a Folder is offered only Delete, since Folders don't go inside Folders", () => {
+    const ctx = { ...selectionOf([folder("f"), mind("m")], "sidebar"), here: fromMind };
+    expect(idsIn(buildMixedMenu(ctx))).toEqual(["selection.delete"]);
   });
 });

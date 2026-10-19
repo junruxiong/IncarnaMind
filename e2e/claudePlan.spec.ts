@@ -10,6 +10,7 @@ import {
   acceptPlainTextKeys,
   assistantAnswers,
   closeSettings,
+  continueSetup,
   createDataFolder,
   interceptOpenExternal,
   launchApp,
@@ -149,7 +150,7 @@ test("first run: the row is first under Other ways, says the usage limits first 
     await field.fill(code);
     await waiting.getByTestId("claude-paste-continue").click();
 
-    await expect(card).toBeHidden();
+    await continueSetup(window);
     const answer = assistantAnswers(window).first();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(answer).toContainText(ANSWER);

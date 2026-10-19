@@ -1,13 +1,15 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { CATALOG_PROVIDERS } from "../src/core/providers/catalog";
 import { createFakeOpenAI } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
   addProviderForm,
   assistantAnswers,
   closeSettings,
+  continueSetup,
   createDataFolder,
   interceptOpenExternal,
   launchApp,
@@ -286,6 +288,65 @@ test("the provider's own line on what it does with the data sits under the sente
   }
 });
 
+test("every provider's line on what it does with the data is one line beside its link at 900px wide, in English and Chinese, at first run and in Settings", async () => {
+  const { app, window } = await launchApp(dataDir);
+  const hosted = CATALOG_PROVIDERS.filter(
+    (each) => each.group !== "local" && each.id !== "openai-compatible",
+  );
+  const oneLine = (line: Locator) =>
+    line.evaluate((element) => {
+      const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+      return element.getBoundingClientRect().height < lineHeight * 1.5;
+    });
+  try {
+    await setWindowSize(app, window, 900, 900);
+    await acceptPlainTextKeys(window);
+    let checked = 0;
+    for (const [value, words] of [
+      ["en", "en"],
+      ["zh-CN", "zh"],
+    ] as const) {
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await card.getByTestId("setup-key").click();
+      const form = card.getByTestId("provider-form");
+      await form.getByTestId("provider-more-toggle").click();
+      for (const provider of hosted.filter((each) => each.support === "first-class")) {
+        await form
+          .locator("label", { has: window.locator(`input[value="${provider.id}"]`) })
+          .click();
+        const line = form.getByTestId("provider-data-use");
+        await expect(line).toContainText(provider.dataUse.summary[words]);
+        expect(await oneLine(line), `${provider.id} at first run, ${value}`).toBe(true);
+        checked += 1;
+      }
+      await card.getByTestId("setup-back").click();
+
+      await language(window, "en");
+      const settings = await openSettings(window, "models");
+      await language(window, value);
+      for (const provider of hosted) {
+        const line = (await addProviderForm(settings, provider.id)).getByTestId(
+          "provider-data-use",
+        );
+        await expect(line).toContainText(provider.dataUse.summary[words]);
+        expect(await oneLine(line), `${provider.id} in Settings, ${value}`).toBe(true);
+        await expect(line.getByRole("link")).toHaveAttribute(
+          "href",
+          (words === "zh" && provider.dataUse.zhUrl) || (provider.dataUse.url ?? ""),
+        );
+        checked += 1;
+        await settings.getByTestId("models-back").click();
+      }
+      await language(window, "en");
+      await closeSettings(window);
+    }
+    expect(checked).toBeGreaterThan(40);
+  } finally {
+    await app.close();
+  }
+});
+
 test("a way that can't be used yet says why, with the next step: Ollama not running, and Use this key before a key is pasted, in English and Chinese", async () => {
   // Nothing answers where Ollama would be.
   const { app, window } = await launchApp(dataDir, { ollama: "http://127.0.0.1:9" });
@@ -397,7 +458,7 @@ test("Use this key shows a refused key in place, and with a good one saves and t
     await form.getByTestId("provider-use-key").click();
     await expect(form).toBeHidden();
     await closeSettings(window);
-    await expect(card).toBeHidden();
+    await continueSetup(window);
     // The waiting Question was asked: the conversation holds its Answer (the server only answers
     // the connection test, so how it ends is not the point).
     await expect(assistantAnswers(window).first()).toBeVisible({ timeout: 15_000 });

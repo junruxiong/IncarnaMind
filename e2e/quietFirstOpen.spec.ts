@@ -39,9 +39,10 @@ test("a first open shows only the example page: no tab strip, no assistant, a sl
   await expect(window.getByTestId("ask-pill")).toContainText("Ask anything");
 
   await expect(sidebar.getByTestId("open-library")).toHaveCount(0);
-  await expect(sidebar.getByTestId("browse-views")).toHaveCount(0);
+  await expect(sidebar.getByTestId("folders-section")).toHaveCount(0);
+  await expect(sidebar.getByTestId("sidebar-tags")).toHaveCount(0);
   await expect(sidebar.getByTestId("document-list-item")).toHaveCount(0);
-  await expect(sidebar.getByTestId("not-in-a-folder-toggle")).toHaveText("Examples");
+  await expect(sidebar.getByTestId("not-in-a-folder-title")).toHaveText("Examples");
   await expect(sidebar.getByTestId("mind-list-item")).toHaveCount(1);
   await expect(sidebar.getByTestId("sidebar-status")).toHaveCount(0);
   await expect(window.getByTestId("mind-count-button")).toHaveCount(0);
@@ -218,10 +219,11 @@ test("Tagging paused by a rate limit shows in the footer on the first open, with
 
 test("a Mind of one's own made on the first open isn't listed under Examples (#123)", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true });
-  const section = window.getByTestId("sidebar").getByTestId("not-in-a-folder-toggle");
+  const section = window.getByTestId("sidebar").getByTestId("not-in-a-folder-title");
   await expect(section).toHaveText("Examples");
   await newMind(window);
   await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
+  // "Not in a Folder", though there is no Folder yet.
   await expect(section).toHaveText("Not in a Folder");
   await app.close();
 });
@@ -253,7 +255,7 @@ test("the quiet first open holds at 1,100 px in Chinese (#123)", async () => {
   const box = await pill.boundingBox();
   const card = await window.getByTestId("card").boundingBox();
   expect(box && card && box.x >= card.x && box.x + box.width <= card.x + card.width).toBe(true);
-  await expect(window.getByTestId("sidebar").getByTestId("not-in-a-folder-toggle")).toHaveText(
+  await expect(window.getByTestId("sidebar").getByTestId("not-in-a-folder-title")).toHaveText(
     "示例",
   );
   await app.close();

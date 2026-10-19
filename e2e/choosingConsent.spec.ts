@@ -15,6 +15,7 @@ import {
   addProviderForm,
   askInAssistant,
   closeSettings,
+  continueSetup,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -124,7 +125,7 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
   await form.getByTestId("provider-sends").scrollIntoViewIfNeeded();
   await screenshot(window, "choosing-line-setup-en");
   await form.getByTestId("provider-use-key").click();
-  await expect(setup).toBeHidden();
+  await continueSetup(window);
 
   // A Document is tagged without asking.
   await addDocuments(window, [await invoice("Invoice 41")]);
