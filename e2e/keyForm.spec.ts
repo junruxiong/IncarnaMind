@@ -382,32 +382,35 @@ test("a way that can't be used yet says why, with the next step: Ollama not runn
   }
 });
 
-/** Made-up keys in the forms of the services that have one: no real key is here. */
-const KIMI_KEY = `sk-${"aZ3".repeat(16)}`;
-const OPENAI_KEY = `sk-proj-${"aZ3".repeat(20)}`;
-const ANTHROPIC_KEY = `sk-ant-api03-${"aZ3".repeat(14)}`;
+/** Made-up keys: the prefixes some services' keys all start with, and a bare sk- that names nobody. */
+const KEYS = {
+  anthropic: `sk-ant-api03-${"aZ3".repeat(14)}`,
+  openai: `sk-proj-${"aZ3".repeat(20)}`,
+  openrouter: `sk-or-v1-${"0f9a".repeat(16)}`,
+  xai: `xai-${"aZ3".repeat(26)}`,
+  bare: `sk-${"aZ3".repeat(16)}`,
+};
 
-for (const { value, first, wrong, other, use, anyway, unknown } of [
+const checked = (form: Locator) => form.getByRole("radio", { checked: true });
+
+for (const { value, first, other, anyway, notAnthropic } of [
   {
     value: "en",
     first: "Anthropic",
-    wrong: "This looks like Kimi’s key.",
-    other: "This looks like OpenAI’s key.",
-    use: "Use Kimi",
+    other: "OpenAI",
     anyway: "Use it for Anthropic anyway",
-    unknown: "This doesn’t look like Anthropic’s key.",
+    notAnthropic:
+      "This isn’t Anthropic’s key: its keys start with sk-ant-. Choose the service it belongs to.",
   },
   {
     value: "zh-CN",
     first: "DeepSeek",
-    wrong: "这个密钥看起来是 Kimi 的。",
-    other: "这个密钥看起来是 OpenAI 的。",
-    use: "改用 Kimi",
+    other: "OpenAI",
     anyway: "仍用于 DeepSeek",
-    unknown: "",
+    notAnthropic: "这不是 Anthropic 的密钥：它的密钥以 sk-ant- 开头。请选择它所属的服务。",
   },
 ] as const) {
-  test(`a key pasted for another service is never sent to the one chosen: the card says whose it looks like, and nothing goes until the User switches or agrees (${value})`, async () => {
+  test(`a key goes only to its own service: its prefix picks the service, a key the chosen one can't have is never sent, and nothing goes before the User agrees (${value})`, async () => {
     const { app, window } = await launchApp(dataDir);
     try {
       await setWindowSize(app, window, 1100, 900);
@@ -419,77 +422,126 @@ for (const { value, first, wrong, other, use, anyway, unknown } of [
       const key = form.locator('input[type="password"]');
       const line = form.getByTestId("provider-key-wrong");
       const useKey = form.getByTestId("provider-use-key");
-      await expect(form.getByRole("radio", { checked: true })).toHaveAccessibleName(first);
+      await expect(checked(form)).toHaveAccessibleName(first);
 
-      // A key of the chosen service's own form says nothing, and can be used.
-      if (value === "en") {
-        await key.fill(ANTHROPIC_KEY);
-        await expect(line).toHaveCount(0);
-        await expect(useKey).toBeEnabled();
-      }
-
-      // A Kimi key: the card says so, and Use this key waits, from the button and from Enter.
-      await key.fill(KIMI_KEY);
-      await expect(line).toHaveText(new RegExp(`^${wrong}`));
-      await expect(line.getByTestId("provider-key-use-service")).toHaveText(use);
-      await expect(useKey).toBeDisabled();
-      await key.press("Enter");
-      await expect(form.getByTestId("connection-test")).toHaveCount(0);
-      await expect(useKey).toBeDisabled();
-      await expect(useKey).toHaveText(value === "en" ? "Use this key" : "使用这个密钥");
+      await key.fill(KEYS.openai);
+      await expect(checked(form)).toHaveAccessibleName(other);
+      await expect(line).toContainText(
+        value === "en" ? "This is OpenAI’s key" : "这是 OpenAI 的密钥",
+      );
+      await expect(line.getByTestId("provider-key-anyway")).toHaveText(anyway);
+      await expect(key).toHaveValue(KEYS.openai);
+      await expect(useKey).toBeEnabled();
       if (process.env.INCARNAMIND_SCREENSHOTS) {
         await window.screenshot({
           path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-wrong-service-${value}.png`,
         });
       }
-
-      // Another service's key, then the switch: its chip, the key kept, nothing said.
-      await key.fill(OPENAI_KEY);
-      await expect(line).toHaveText(new RegExp(`^${other}`));
-      await line.getByTestId("provider-key-use-service").click();
-      await expect(form.getByRole("radio", { checked: true })).toHaveAccessibleName("OpenAI");
-      await expect(key).toHaveValue(OPENAI_KEY);
+      await line.getByTestId("provider-key-anyway").click();
+      await expect(checked(form)).toHaveAccessibleName(first);
+      await expect(key).toHaveValue(KEYS.openai);
       await expect(line).toHaveCount(0);
       await expect(useKey).toBeEnabled();
 
-      // The Kimi key again, and the switch to a service this list doesn't offer: its chip shows.
-      await key.fill(KIMI_KEY);
-      await line.getByTestId("provider-key-use-service").click();
-      await expect(card.getByTestId("provider-form-title")).toContainText("Kimi");
-      await expect(form.getByRole("radio", { checked: true })).toHaveAccessibleName("Kimi");
-      await expect(key).toHaveValue(KIMI_KEY);
-      await expect(line).toHaveCount(0);
+      await key.fill(KEYS.openrouter);
+      await expect(checked(form)).toHaveAccessibleName("OpenRouter");
 
-      // A key of no known form, for a service that has one, or for DeepSeek, which has none.
-      if (value === "en") {
-        await form.getByRole("radio", { name: "Anthropic" }).check({ force: true });
-        await expect(key).toHaveValue("");
-        await key.fill("not-a-key-at-all");
-        await expect(line).toHaveText(new RegExp(`^${unknown}`));
-        await expect(useKey).toBeDisabled();
-        await line.getByTestId("provider-key-anyway").click();
-        await expect(line).toHaveCount(0);
-        await expect(useKey).toBeEnabled();
-        // Changing the key asks again.
-        await key.fill("another-key");
-        await expect(line).toHaveCount(1);
-        await expect(line.getByTestId("provider-key-anyway")).toHaveText(anyway);
-      } else {
-        await form.getByRole("radio", { name: /DeepSeek|深度求索/ }).check({ force: true });
-        await key.fill("not-a-key-at-all");
-        await expect(line).toHaveCount(0);
-        await expect(useKey).toBeEnabled();
-        await key.fill(KIMI_KEY);
-        await expect(line.getByTestId("provider-key-anyway")).toHaveText(anyway);
-        await line.getByTestId("provider-key-anyway").click();
-        await expect(line).toHaveCount(0);
-        await expect(useKey).toBeEnabled();
-      }
+      // xAI is a best-effort provider, so first run doesn't offer it (ADR-0019): the key waits for the User.
+      await key.fill(KEYS.xai);
+      await expect(line).toContainText(value === "en" ? "This is xAI’s key" : "这是 xAI 的密钥");
+      await expect(checked(form)).toHaveAccessibleName("OpenRouter");
+      await expect(useKey).toBeDisabled();
+      await key.press("Enter");
+      await expect(form.getByTestId("connection-test")).toHaveCount(0);
+      await expect(useKey).toBeDisabled();
+      await line.getByTestId("provider-key-anyway").click();
+      await expect(line).toHaveCount(0);
+      await expect(useKey).toBeEnabled();
+      await key.fill(`${KEYS.xai}x`);
+      await expect(line).toHaveCount(1);
+
+      await form.getByRole("radio", { name: "Anthropic" }).check({ force: true });
+      await key.fill(KEYS.bare);
+      await expect(line).toHaveText(notAnthropic);
+      await expect(line.getByTestId("provider-key-anyway")).toHaveCount(0);
+      await expect(useKey).toBeDisabled();
+      await key.press("Enter");
+      await expect(form.getByTestId("connection-test")).toHaveCount(0);
+      await expect(useKey).toHaveText(value === "en" ? "Use this key" : "使用这个密钥");
+
+      await form.getByRole("radio", { name: "DeepSeek" }).check({ force: true });
+      await expect(key).toHaveValue(KEYS.bare);
+      await expect(line).toHaveCount(0);
+      await expect(useKey).toBeEnabled();
+
+      await key.fill("not-a-key-at-all");
+      await expect(line).toHaveCount(0);
+      await expect(useKey).toBeEnabled();
     } finally {
       await app.close();
     }
   });
 }
+
+test("in Settings, a key that is not the page's service goes nowhere on Add a provider and on a provider's page, and the page stays the provider's", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const settings = await openSettings(window, "models");
+    const form = await addProviderForm(settings, "anthropic");
+    const key = form.locator('input[type="password"]');
+    const line = form.getByTestId("provider-key-wrong");
+    const useKey = form.getByTestId("provider-use-key");
+    const title = settings.getByTestId("provider-page-title");
+
+    await key.fill(KEYS.openai);
+    await expect(line).toContainText("This is OpenAI’s key");
+    await expect(title).toHaveText("Anthropic");
+    await expect(useKey).toBeDisabled();
+    await key.press("Enter");
+    await expect(form.getByTestId("connection-test")).toHaveCount(0);
+    await key.fill(KEYS.bare);
+    await expect(line).toHaveText("This isn’t Anthropic’s key: its keys start with sk-ant-.");
+    await expect(useKey).toBeDisabled();
+    await key.fill(KEYS.openai);
+    await line.getByTestId("provider-key-anyway").click();
+    await expect(line).toHaveCount(0);
+    await expect(useKey).toBeEnabled();
+    await expect(title).toHaveText("Anthropic");
+    await key.fill(KEYS.anthropic);
+    await expect(line).toHaveCount(0);
+    await expect(useKey).toBeEnabled();
+    await settings.getByTestId("models-back").click();
+
+    const saved = await window.evaluate(async (apiKey) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      return core.saveChatProvider({ kind: "anthropic", apiKey, modelId: "claude-haiku-5-5" });
+    }, KEYS.anthropic);
+    await settings.getByTestId("provider-row").first().click();
+    const page = settings.getByTestId("provider-page");
+    await expect(page).toHaveAttribute("data-provider-id", saved.id);
+    const pageKey = page.getByTestId("provider-page-key");
+    const save = page.getByTestId("provider-page-save-key");
+    await pageKey.fill(KEYS.bare);
+    await expect(page.getByTestId("provider-key-wrong")).toHaveText(
+      "This isn’t Anthropic’s key: its keys start with sk-ant-.",
+    );
+    await expect(save).toBeDisabled();
+    await pageKey.press("Enter");
+    await expect(page.getByTestId("provider-page-key-error")).toHaveCount(0);
+    await pageKey.fill(KEYS.openai);
+    await expect(page.getByTestId("provider-key-wrong")).toContainText("This is OpenAI’s key");
+    await expect(save).toBeDisabled();
+    await page.getByTestId("provider-key-anyway").click();
+    await expect(save).toBeEnabled();
+    await pageKey.fill(KEYS.anthropic);
+    await expect(page.getByTestId("provider-key-wrong")).toHaveCount(0);
+    await expect(save).toBeEnabled();
+  } finally {
+    await app.close();
+  }
+});
 
 /**
  * An OpenAI-compatible server that refuses one key and answers with the other, and answers a

@@ -1,70 +1,69 @@
 import { describe, expect, test } from "vitest";
-import {
-  KEY_FORM_PROVIDERS,
-  keyFits,
-  serviceOfKey,
-} from "../../src/core/providers/catalog/keyForms";
-import { catalogProvider } from "../../src/core/providers/catalog/providers";
+import { checkKey, serviceOfKey } from "../../src/core/providers/catalog/keyForms";
 
 const alnum = (length: number, seed = "aZ3") =>
   seed.repeat(Math.ceil(length / seed.length)).slice(0, length);
 
-/** Keys as each provider's own form has them, made up: no real key is in a test. */
-const EXAMPLES: readonly { provider: string; why: string; key: string }[] = [
-  { provider: "anthropic", why: "sk-ant-", key: `sk-ant-api03-${alnum(40)}` },
-  { provider: "anthropic", why: "an admin key", key: `sk-ant-admin01-${alnum(40)}` },
-  { provider: "openai", why: "sk-proj-", key: `sk-proj-${alnum(60)}` },
-  { provider: "openai", why: "sk-svcacct-", key: `sk-svcacct-${alnum(60)}` },
-  { provider: "openai", why: "sk-admin-", key: `sk-admin-${alnum(60)}` },
-  {
-    provider: "openai",
-    why: "the older form, with its marker",
-    key: `sk-${alnum(20)}T3BlbkFJ${alnum(20)}`,
-  },
-  { provider: "google", why: "AIza", key: `AIzaSy${alnum(33, "a-Z_9")}` },
-  { provider: "openrouter", why: "sk-or-", key: `sk-or-v1-${alnum(64, "0f9a")}` },
-  { provider: "xai", why: "xai-", key: `xai-${alnum(80)}` },
-  { provider: "kimi", why: "sk- and 48 letters and digits", key: `sk-${alnum(48)}` },
+/** Keys with a prefix that names its service, made up: no real key is in a test. */
+const NAMED: readonly { service: string; key: string }[] = [
+  { service: "anthropic", key: `sk-ant-api03-${alnum(40)}` },
+  { service: "anthropic", key: `sk-ant-admin01-${alnum(40)}` },
+  { service: "openrouter", key: `sk-or-v1-${alnum(64, "0f9a")}` },
+  { service: "xai", key: `xai-${alnum(80)}` },
+  { service: "google", key: `AIzaSy${alnum(33, "a-Z_9")}` },
+  { service: "google", key: `AQ.${alnum(40, "aZ3_-")}` },
+  { service: "openai", key: `sk-proj-${alnum(60)}` },
+  { service: "openai", key: `sk-None-${alnum(60)}` },
+  { service: "openai", key: `sk-svcacct-${alnum(60)}` },
+  { service: "openai", key: `sk-admin-${alnum(60)}` },
+  { service: "openai", key: `sk-${alnum(20)}T3BlbkFJ${alnum(20)}` },
 ];
 
-describe("A provider's key form (#1384)", () => {
-  test.each(EXAMPLES)("$provider: $why is its own and no other's", ({ provider, key }) => {
-    expect(serviceOfKey(key)).toBe(provider);
-    expect(keyFits(provider, key)).toBe(true);
-    for (const other of KEY_FORM_PROVIDERS.filter((each) => each !== provider)) {
-      expect(keyFits(other, key), `${other} for ${provider}'s key`).toBe(false);
-    }
+/** Services whose keys must start with a prefix of their own. */
+const STRICT = ["anthropic", "openrouter", "xai", "google"];
+
+describe("A key's prefix and its service (#1384)", () => {
+  test.each(NAMED)("a $service key is recognised as its own", ({ service, key }) => {
+    expect(serviceOfKey(key)).toBe(service);
+    expect(checkKey(service, key)).toEqual({ ok: true });
   });
 
-  test("every provider with a form has an example above, and is in the catalog", () => {
-    for (const provider of KEY_FORM_PROVIDERS) {
-      expect(
-        EXAMPLES.some((each) => each.provider === provider),
-        provider,
-      ).toBe(true);
-      expect(catalogProvider(provider), provider).toBeDefined();
-    }
-  });
+  test.each(NAMED)(
+    "a $service key is another service's, whichever else is chosen",
+    ({ service, key }) => {
+      for (const other of [...STRICT, "openai", "deepseek", "kimi", "qwen"].filter(
+        (each) => each !== service,
+      )) {
+        expect(checkKey(other, key), `${other} for ${service}'s key`).toEqual({
+          ok: false,
+          service,
+        });
+      }
+    },
+  );
 
   test.each([
-    ["a key with no form of its own", "d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6"],
-    ["a DeepSeek or Qwen key's shape", `sk-${"0123456789abcdef".repeat(2)}`],
+    [
+      "a bare sk- and 48 letters and digits, which Kimi, relays and OpenAI's oldest keys have",
+      `sk-${alnum(48)}`,
+    ],
+    ["a bare sk- and 48 lowercase letters, which SiliconFlow has", `sk-${alnum(48, "abc")}`],
+    [
+      "a bare sk- and 32 hex digits, which DeepSeek and Qwen have",
+      `sk-${"0123456789abcdef".repeat(2)}`,
+    ],
     ["a Chinese key with a dot", `${"0123456789abcdef".repeat(2)}.${alnum(16)}`],
-    ["too short for Kimi", `sk-${alnum(20)}`],
     ["not a key", "hello"],
-    ["empty", ""],
-  ])("%s is recognised as nobody's", (_what, key) => {
+  ])("%s names nobody", (_what, key) => {
     expect(serviceOfKey(key)).toBeNull();
   });
 
-  test("a provider whose keys have no form of its own has none to fail", () => {
-    for (const provider of ["deepseek", "qwen", "mistral", "glm", "siliconflow"]) {
-      expect(keyFits(provider, `sk-ant-api03-${alnum(40)}`), provider).toBeNull();
-    }
-  });
-
-  test("spaces around a pasted key don't matter", () => {
-    expect(serviceOfKey(`  sk-ant-api03-${alnum(40)}\n`)).toBe("anthropic");
-    expect(keyFits("anthropic", ` sk-ant-api03-${alnum(40)} `)).toBe(true);
-  });
+  test.each(STRICT)(
+    "under %s, a key that names nobody lacks the prefix its keys start with",
+    (service) => {
+      const check = checkKey(service, `sk-${alnum(48)}`);
+      expect(check).toMatchObject({ ok: false, service: null });
+      expect("prefixes" in check ? check.prefixes.length : 0).toBeGreaterThan(0);
+    },
+  );
 });

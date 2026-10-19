@@ -5,9 +5,10 @@ import type {
   SecretStorageStatus,
   TestChatConnectionInput,
 } from "../../../../core/api";
+import type { Language } from "../../../../core/language";
 import type { DataUse } from "../../../../core/providers/catalog";
 import { catalogMenu } from "../../../../core/providers/catalog";
-import { keyFits, serviceOfKey } from "../../../../core/providers/catalog/keyForms";
+import { serviceOfKey } from "../../../../core/providers/catalog/keyForms";
 import {
   catalogProvider,
   dataUseOf,
@@ -32,7 +33,7 @@ import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
 import { useAppStore } from "../../store";
 import { MetaLine } from "../MetaLine";
-import { LineAction, type ProblemAction, ProblemLine, ProblemMark } from "../ProblemLine";
+import { LineAction, type ProblemAction, ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   errorTextClass,
@@ -44,6 +45,7 @@ import {
   successTextClass,
 } from "../ui";
 import { KeyHelp } from "./KeyHelp";
+import { KeyCheckLine, useKeyCheck } from "./keyCheck";
 import { LocalServerLine, useLocalServer } from "./LocalServerLine";
 import { SendsLine } from "./SendsLine";
 import { keyProviderName, testErrorKey, useProviderKey } from "./shared";
@@ -68,6 +70,10 @@ const fieldDefault = (kind: CatalogId): string => {
   const provider = catalogProvider(kind);
   return (provider && endpointOf(provider, "")?.field?.default) ?? "";
 };
+
+/** A Kimi key belongs to the region it was made in: the interface's language says which. */
+const defaultRegion = (kind: CatalogId, language: Language): string =>
+  kind === "kimi" ? (language === "zh-CN" ? "cn" : "intl") : "";
 
 /** The "Another model…" choice of the model list. */
 const OTHER_MODEL = "\u0000other";
@@ -153,7 +159,9 @@ export function ProviderForm({
   );
   const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
-  const [endpointId, setEndpointId] = useState(refused?.endpoint ?? initialEndpoint ?? "");
+  const [endpointId, setEndpointId] = useState(
+    refused?.endpoint ?? initialEndpoint ?? defaultRegion(first, language),
+  );
   const key = useProviderKey();
   const { apiKey } = key;
   const [fieldValue, setFieldValue] = useState(() => fieldDefault(first));
@@ -172,8 +180,7 @@ export function ProviderForm({
     ) && !jev?.enabled;
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
-  /** The provider and key the User chose to use together although the key looks like another's. */
-  const [agreed, setAgreed] = useState<string | null>(null);
+  const [switchedFrom, setSwitchedFrom] = useState<CatalogId | null>(null);
 
   useEffect(() => {
     core.getSecretStorage().then(setSecretStorage, () => undefined);
@@ -242,14 +249,10 @@ export function ProviderForm({
                 ? "providers.form.needsModel"
                 : null;
   const complete = kind !== null && missing === null && (!local || server.status?.running === true);
-  // A key that looks like another service's goes nowhere until the User says so (#1384).
-  const given = apiKey.trim();
-  const checksKey = given !== "" && kind !== null && kind !== "openai-compatible" && !local;
-  const looksLike = checksKey ? serviceOfKey(given) : null;
-  const otherService = looksLike !== null && looksLike !== kind ? looksLike : null;
-  const keyIsOthers = checksKey && (keyFits(kind, given) === false || otherService !== null);
-  const keyUnsure = keyIsOthers && agreed !== `${kind}\n${given}`;
-
+  const keyCheck = useKeyCheck(
+    kind !== null && kind !== "openai-compatible" && !local ? kind : null,
+    apiKey,
+  );
   const shortName = (option: CatalogId) =>
     option === "qwen"
       ? t("providers.kind.short.qwen")
@@ -271,19 +274,23 @@ export function ProviderForm({
         name={`${id}-kind`}
         value={option}
         checked={kind === option}
-        onChange={() => choose(option)}
+        onChange={() => choose(option, { keepKey: keyCheck.blocked })}
         className="sr-only"
       />
       {shortName(option)}
     </label>
   );
 
-  const choose = (next: CatalogId) => {
-    // A key typed for one provider is never sent to another.
-    if (next !== kind) key.clear();
+  const choose = (
+    next: CatalogId,
+    { keepKey = false, from = null }: { keepKey?: boolean; from?: CatalogId | null } = {},
+  ) => {
+    // A key typed for one provider is never sent to another, unless it was pasted for this one.
+    if (next !== kind && !keepKey) key.clear();
     setKind(next);
-    if (more.includes(next)) setMoreOpen(true);
-    setEndpointId("");
+    setSwitchedFrom(from);
+    if (more.includes(next) || !ROW.includes(next)) setMoreOpen(true);
+    setEndpointId(defaultRegion(next, language));
     setFieldValue(fieldDefault(next));
     setModelId((current) =>
       current === "" || isSuggestion(current) ? suggestedModel(next) : current,
@@ -292,11 +299,15 @@ export function ProviderForm({
     setError(null);
   };
 
-  /** Moves to the service a key looks like, with the key: it was pasted for it. */
-  const switchTo = (next: CatalogId) => {
-    const pasted = apiKey;
-    choose(next);
-    key.type(pasted);
+  // A prefix that names a service this list offers moves the form there, the key with it.
+  const typeKey = (value: string) => {
+    key.type(value, baseUrl);
+    setSwitchedFrom(null);
+    const named =
+      only || kind === null || kind === "openai-compatible" || local ? null : serviceOfKey(value);
+    if (named !== null && named !== kind && offered.includes(named)) {
+      choose(named, { keepKey: true, from: kind });
+    }
   };
 
   useEffect(() => {
@@ -351,7 +362,7 @@ export function ProviderForm({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!keyUnsure) void run();
+    if (!keyCheck.blocked) void run();
   };
 
   const acceptPlainText = async () => {
@@ -400,6 +411,10 @@ export function ProviderForm({
   // First run offers only the first-class providers (ADR-0019); Settings offers them all.
   const offered = withMoreProviders ? [...main, ...more] : main;
   const rowKinds = ROW.filter((each) => offered.includes(each));
+  // A key that fits no service's prefix may be one the services under More… issue.
+  const showMore =
+    moreOpen ||
+    (!keyCheck.check.ok && keyCheck.check.service === null && apiKey.trim().startsWith("sk-"));
   const underMore = offered.filter((each) => !rowKinds.includes(each));
 
   return (
@@ -418,13 +433,8 @@ export function ProviderForm({
         <fieldset>
           <legend className="sr-only">{t("providers.form.label")}</legend>
           <div className="flex flex-wrap gap-1">
-            {[
-              ...rowKinds,
-              ...(moreOpen ? underMore : []),
-              // A service the key's form named, which this list doesn't offer, is shown once chosen.
-              ...(kind && !offered.includes(kind) ? [kind] : []),
-            ].map(chip)}
-            {underMore.length > 0 && !moreOpen && (
+            {[...rowKinds, ...(showMore ? underMore : [])].map(chip)}
+            {underMore.length > 0 && !showMore && (
               <button
                 type="button"
                 data-testid="provider-more-toggle"
@@ -539,7 +549,7 @@ export function ProviderForm({
             <input
               type="password"
               value={apiKey}
-              onChange={(event) => key.type(event.target.value, baseUrl)}
+              onChange={(event) => typeKey(event.target.value)}
               onBlur={() => local && apiKey.trim() !== "" && void server.detect(apiKey, fieldUsed)}
               autoComplete="off"
               spellCheck={false}
@@ -552,37 +562,23 @@ export function ProviderForm({
               <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
             )}
           </label>
-          {keyUnsure && kind && (
-            <ProblemLine
-              testId="provider-key-wrong"
-              role="status"
-              action={
-                otherService
-                  ? {
-                      label: t("providers.form.keyUse", { service: shortName(otherService) }),
-                      testId: "provider-key-use-service",
-                      onClick: () => switchTo(otherService),
-                    }
-                  : {
-                      label: t("providers.form.keyAnyway", { provider: shortName(kind) }),
-                      testId: "provider-key-anyway",
-                      onClick: () => setAgreed(`${kind}\n${given}`),
-                    }
-              }
-              also={
-                otherService
-                  ? {
-                      label: t("providers.form.keyAnyway", { provider: shortName(kind) }),
-                      testId: "provider-key-anyway",
-                      onClick: () => setAgreed(`${kind}\n${given}`),
-                    }
-                  : undefined
-              }
-            >
-              {otherService
-                ? t("providers.form.keyOther", { service: shortName(otherService) })
-                : t("providers.form.keyUnknown", { provider: shortName(kind) })}
-            </ProblemLine>
+          {kind && (
+            <KeyCheckLine
+              check={keyCheck.check}
+              provider={shortName(kind)}
+              nameOf={shortName}
+              pickAbove={!only}
+              onAnyway={() => keyCheck.agree()}
+              {...(switchedFrom !== null && {
+                from: {
+                  name: shortName(switchedFrom),
+                  back: () => {
+                    choose(switchedFrom, { keepKey: true });
+                    keyCheck.agree(switchedFrom);
+                  },
+                },
+              })}
+            />
           )}
           {catalog && (
             <KeyHelp
@@ -678,7 +674,7 @@ export function ProviderForm({
             <button
               type="submit"
               data-testid="provider-use-key"
-              disabled={!complete || keyBlocked || keyUnsure || busy !== null}
+              disabled={!complete || keyBlocked || keyCheck.blocked || busy !== null}
               className={primaryButtonClass}
             >
               {busy

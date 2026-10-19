@@ -1,35 +1,47 @@
 /**
- * What each provider's API keys look like, where the provider says so or its keys show it: the
- * first-run card and the key form use it to catch a key pasted for another service before
- * anything is sent (#1384). Only forms that tell their service apart are here. A provider
- * missing from the table (Mistral, DeepSeek, Qwen, GLM, SiliconFlow, a server's own keys) has
- * keys that look like others' or like nothing in particular, so its keys are never flagged and
- * never recognised.
+ * Key prefixes that name their service, as its own pages show them: Anthropic's admin key
+ * (platform.claude.com/docs/en/manage-claude/admin-api), OpenRouter's example key
+ * (openrouter.ai/docs/api/api-reference/oauth/exchange-authorization-code-for-api-key), xAI's
+ * `XAI_API_KEY` example (docs.x.ai/build/overview), OpenAI's project keys and the marker every
+ * one of its keys carries, and Google's AIza keys and the AQ. keys AI Studio now makes (a Google
+ * staff reply, discuss.ai.google.dev/t/171571). A bare `sk-` names nobody: DeepSeek, Kimi, Qwen,
+ * SiliconFlow and the relays all issue it, so their keys are never recognised, and a service
+ * with no prefix of its own accepts any key.
  */
-const KEY_FORMS: Readonly<Record<string, readonly RegExp[]>> = {
-  anthropic: [/^sk-ant-/],
-  openai: [/^sk-(?:proj|svcacct|admin)-/, /^sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}$/],
-  google: [/^AIza[\w-]{30,}$/],
-  openrouter: [/^sk-or-/],
-  xai: [/^xai-/],
-  // The same length as the older OpenAI form, which has its marker where a Kimi key has none.
-  kimi: [/^sk-(?!.{20}T3BlbkFJ)[A-Za-z0-9]{48}$/],
+const OWN_PREFIXES: Readonly<Record<string, readonly string[]>> = {
+  anthropic: ["sk-ant-"],
+  openrouter: ["sk-or-"],
+  xai: ["xai-"],
+  google: ["AIza", "AQ."],
 };
 
-/** The providers whose keys have a form of their own. */
-export const KEY_FORM_PROVIDERS: readonly string[] = Object.keys(KEY_FORMS);
+const OPENAI = /^sk-(?:proj|None|svcacct|admin)-|^sk-[\w-]*T3BlbkFJ/;
 
-/** Whether `key` looks like the keys of the provider `catalogId`; null where its keys have no form of their own. */
-export function keyFits(catalogId: string, key: string): boolean | null {
-  const forms = KEY_FORMS[catalogId];
-  return forms ? forms.some((form) => form.test(key.trim())) : null;
-}
+export type KeyCheck =
+  | { ok: true }
+  /** The key's prefix names another service. */
+  | { ok: false; service: string }
+  /** The service's keys always start with one of `prefixes`, and this key doesn't. */
+  | { ok: false; service: null; prefixes: readonly string[] };
 
-/** The provider whose keys `key` looks like, if one does. */
-export function serviceOfKey(key: string): string | null {
-  const given = key.trim();
-  for (const [catalogId, forms] of Object.entries(KEY_FORMS)) {
-    if (forms.some((form) => form.test(given))) return catalogId;
+function serviceNamedBy(key: string): string | null {
+  for (const [catalogId, prefixes] of Object.entries(OWN_PREFIXES)) {
+    if (prefixes.some((prefix) => key.startsWith(prefix))) return catalogId;
   }
-  return null;
+  return OPENAI.test(key) ? "openai" : null;
 }
+
+export function checkKey(catalogId: string, key: string): KeyCheck {
+  const given = key.trim();
+  if (given === "") return { ok: true };
+  const named = serviceNamedBy(given);
+  if (named !== null) return named === catalogId ? { ok: true } : { ok: false, service: named };
+  const prefixes = OWN_PREFIXES[catalogId];
+  if (prefixes && !prefixes.some((prefix) => given.startsWith(prefix))) {
+    return { ok: false, service: null, prefixes };
+  }
+  return { ok: true };
+}
+
+/** The service a key's prefix names, if it names one. */
+export const serviceOfKey = (key: string): string | null => serviceNamedBy(key.trim());
