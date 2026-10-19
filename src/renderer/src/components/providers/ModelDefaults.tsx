@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type {
   ChatModelChoice,
   ChatModelGroup,
@@ -68,9 +68,8 @@ export function useJobSummary(
   }
   if (role === "chatModel") return t("models.defaults.noModel");
   const automatic = role === "quickTasksModel" ? roles?.quickTasks : roles?.images;
-  return automatic
-    ? t("models.defaults.automatic", { model: modelOf(automatic) })
-    : t("models.defaults.automaticNone");
+  if (automatic) return t("models.defaults.automatic", { model: modelOf(automatic) });
+  return t(role === "imageModel" ? "models.defaults.images.none" : "models.defaults.automaticNone");
 }
 
 /** One job's name on the left and what it uses on the right, in Settings and at first run. */
@@ -160,7 +159,8 @@ export function RoleSelect({
   providers,
   roles,
   className = jobSelectClass,
-  autoFocus,
+  labelledBy,
+  focusOnShow,
   onChosen,
   onBlur,
   onEscape,
@@ -171,7 +171,10 @@ export function RoleSelect({
   providers: readonly ChatProvider[];
   roles: ModelRoles | null;
   className?: string;
-  autoFocus?: boolean;
+  /** The element that names it, where its label isn't one that points at it. */
+  labelledBy?: string;
+  /** It takes the focus when it shows (Change was just pressed). */
+  focusOnShow?: boolean;
   onChosen?(): void;
   onBlur?(): void;
   onEscape?(): void;
@@ -179,6 +182,10 @@ export function RoleSelect({
   const t = useT();
   const language = useLanguage();
   const nameOf = useModelNames();
+  const field = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (focusOnShow) field.current?.focus();
+  }, [focusOnShow]);
   const user = useAppStore((state) => state.settings?.user);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const saved = keyOf(user?.[role]);
@@ -212,6 +219,8 @@ export function RoleSelect({
       ? null
       : ((role === "quickTasksModel" ? roles?.quickTasks : roles?.images) ?? null);
   const empty = options.length === 0;
+  // Nothing to choose, which the setup card's Change still opens, to say so: no dead end.
+  const none = empty && role === "imageModel";
 
   const choose = (next: string) => {
     const choice = choiceOf(next);
@@ -230,14 +239,14 @@ export function RoleSelect({
 
   return (
     <select
+      ref={field}
       id={id}
       aria-describedby={`${id}-tip`}
+      aria-labelledby={labelledBy}
       data-testid={`model-default-${role}`}
       value={value}
-      disabled={empty}
+      disabled={empty && !focusOnShow}
       title={current ? current.modelId : undefined}
-      // biome-ignore lint/a11y/noAutofocus: opened by Change, which the User just pressed.
-      autoFocus={autoFocus}
       onBlur={onBlur}
       onKeyDown={(event) => {
         if (event.key === "Escape" && onEscape) {
@@ -255,7 +264,7 @@ export function RoleSelect({
         <option value="">
           {automatic
             ? t("models.defaults.automatic", { model: modelOf(automatic) })
-            : t("models.defaults.automaticNone")}
+            : t(none ? "models.defaults.images.none" : "models.defaults.automaticNone")}
         </option>
       )}
       {options.map((choice) => (
