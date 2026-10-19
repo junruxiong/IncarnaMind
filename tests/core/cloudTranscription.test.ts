@@ -403,7 +403,10 @@ describe("Cloud transcription with the User's own key", { timeout: 60_000 }, () 
       await core.startMeeting({ meetingId: meeting.id });
       record(5 * SECOND);
       const live = await until(core, meeting.id, (transcript) => transcript.lines >= 2);
-      expect(live).toMatchObject({ cloud: null, fellBack: null });
+      expect(live).toMatchObject({
+        cloud: null,
+        fellBack: { route: "qwen", reason: "local-mode", atMs: 0 },
+      });
       await core.stopMeeting(meeting.id);
       const saved = await until(core, meeting.id, (transcript) => transcript.state === "saved");
       const { cues } = readVtt(readFileSync(saved.savedPath as string, "utf8"));

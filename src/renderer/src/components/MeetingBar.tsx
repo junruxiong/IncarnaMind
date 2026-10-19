@@ -1,11 +1,6 @@
 import { isMacOS } from "@tiptap/core";
 import type { ReactNode } from "react";
-import type {
-  AudioSource,
-  Meeting,
-  MeetingSourceState,
-  MeetingTranscript,
-} from "../../../core/api";
+import type { AudioSource, Meeting, MeetingSourceState } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
@@ -15,7 +10,6 @@ import { helpKeysLabel, useMeetingHelp } from "../meetingHelp";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
 import { useAppStore } from "../store";
-import { ROUTE_LABELS } from "../transcriptionServices";
 import { hideTranscript, showTranscript, useDocumentTab } from "../transcripts";
 import { CaptureDetailsToggle } from "./CaptureDetails";
 import {
@@ -250,8 +244,7 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
   if (fellBack) {
     lines.push({
       key: "cloud",
-      text: t(cloudLine(fellBack), {
-        provider: t(ROUTE_LABELS[fellBack.route]),
+      text: t(fellBack.reason === "cap" ? "meetings.line.cloudCap" : "meetings.line.cloudDropped", {
         time: clockTime(fellBack.atMs),
       }),
     });
@@ -272,12 +265,6 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
       ))}
     </>
   );
-}
-
-function cloudLine({ route, reason }: NonNullable<MeetingTranscript["fellBack"]>): MessageKey {
-  if (reason === "cap") return "meetings.line.cloudCap";
-  if (reason === "dropped") return "meetings.line.cloudDropped";
-  return route === "qwen" ? "meetings.line.cloudRefusedRegion" : "meetings.line.cloudRefused";
 }
 
 /** Lines that say what happened, rather than something to put right. */

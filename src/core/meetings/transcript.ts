@@ -19,11 +19,14 @@
  *   if its audio is still there.
  *
  * Where the User chose a cloud service (#141), the live audio goes to it
- * instead, counted against the monthly cap as it goes. A lost connection, or
- * the service refusing, hands the live audio to this computer: what the cloud
- * hadn't given text for is a gap, filled in after Stop. At the cap, the
- * cloud's streams finish what they were sent, and this computer goes on. The
- * meeting bar says so, and recording never stops.
+ * instead, each chunk through the cloud's send gate and counted against the
+ * monthly cap first. A lost connection, or the service refusing its key,
+ * hands the live audio to this computer: what the cloud hadn't given text for
+ * is a gap, filled in after Stop. At the cap, the cloud's streams finish what
+ * they were sent. When the gate closes (Local mode, consent revoked, another
+ * route chosen, the key removed), its streams are dropped with nothing more
+ * sent, and this computer transcribes that stretch after Stop. Recording never
+ * stops, and the bar says why, except where the User chose.
  *
  * What is needed to pick up after a crash is in files beside the Transcript,
  * as the audio's parts are (ADR-0015): its lines and gaps in the WebVTT file,
@@ -53,7 +56,6 @@ import type {
   AudioSource,
   CloudTranscriptionRoute,
   Document,
-  ExternalService,
   MeetingTranscript,
   SavedFile,
   TranscriptProblem,
@@ -98,7 +100,7 @@ const CATCH_UP_CHUNK_MS = 20_000;
 const PROBE_MS = 30_000;
 /** Partial text reaches the window at most this often. */
 const PARTIAL_EVERY_MS = 500;
-/** Cloud audio is counted against the cap this much ahead of what is sent. */
+/** Cloud audio is counted against the cap this much ahead of what is sent, so the cap is never passed. */
 const COUNTED_AHEAD_MS = 10_000;
 
 const SAMPLE_RATE_MS = 16;
@@ -121,13 +123,15 @@ interface Saved {
   savedDefaulted?: boolean;
   /** Stopped with nothing transcribed. */
   empty?: boolean;
-  /** The number each speaker a cloud service told apart has, by source and its own label. */
+  /** The number each speaker a cloud service told apart has, by stream and its own label. */
   voices?: Record<string, number>;
 }
 
 interface LiveStream {
   baseMs: number;
   doneMs: number;
+  /** A cloud stream's audio held in the core until its connection opens; absent once it has. */
+  waiting?: Int16Array[];
 }
 
 interface Live {
@@ -135,12 +139,7 @@ interface Live {
   /** Where the live audio goes: this computer, or a cloud service. */
   engine: "local" | CloudTranscriptionRoute;
   /** The cloud service's streams and what has been counted against the cap, while `engine` is one. */
-  cloud: {
-    stream: CloudStream;
-    meter: CloudAudioMeter;
-    aheadMs: number;
-    service: ExternalService;
-  } | null;
+  cloud: { stream: CloudStream; meter: CloudAudioMeter; aheadMs: number } | null;
   /** Where to transcribe is being worked out: the audio waits meanwhile. */
   choosing: boolean;
   tracks: Tracks;
@@ -227,7 +226,7 @@ export interface TranscriptsOptions {
   /** Each Meeting's capture health (#161): how fast live text came, restarts, falling behind, switches. */
   health: CaptureHealthRecords;
   /** The cloud service the User chose for meeting audio (#141). Absent: always this computer. */
-  cloud?: Pick<CloudTranscription, "start" | "allowed">;
+  cloud?: Pick<CloudTranscription, "start" | "sending" | "refuse">;
   changed(): void;
   log: Logger;
 }
@@ -241,8 +240,9 @@ const streamName = (prefix: string, source: AudioSource) => `${prefix}:${source}
 const speakerOf = (source: AudioSource, callSound: boolean) =>
   source === "system" ? SPEAKER_THEM : callSound ? SPEAKER_ME : SPEAKER_UNKNOWN;
 
-/** The audio a stretch of tracks holds, in ms. */
 const lengthOf = (audio: TrackedAudio) => audio.microphone.length / SAMPLE_RATE_MS;
+
+type Leaving = "dropped" | "refused" | "cap" | "user" | "local-mode";
 
 /** The engine couldn't start, or stopped, while what was left was being transcribed. */
 class EngineError extends Error {}
@@ -455,13 +455,14 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   /**
    * Who said a line a cloud service told apart (#141): someone numbered in the order heard in
-   * the Meeting, except the User's own microphone in a call, which stays "Me".
+   * the Meeting. The microphone's lines stay "Me", so they are never taken for the other side
+   * and echo removal still applies; a new session's labels are new people.
    */
-  function voiceOf(state: State, source: AudioSource, speaker: string, label: string): string {
-    if (speaker === SPEAKER_ME) return speaker;
+  function voiceOf(state: State, stream: string, source: AudioSource, label: string): string {
+    if (source === "microphone") return SPEAKER_ME;
     const voices = state.voices ?? {};
     state.voices = voices;
-    const key = `${source}:${label}`;
+    const key = `${stream}:${label}`;
     const number = voices[key] ?? Object.keys(voices).length + 1;
     voices[key] = number;
     return numberedSpeaker(number);
@@ -492,7 +493,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     if (!found) return;
     const { state, baseMs, live } = found;
     const speaker = segment.speaker
-      ? voiceOf(state, found.source, found.speaker, segment.speaker)
+      ? voiceOf(state, segment.stream, found.source, segment.speaker)
       : found.speaker;
     const startMs = baseMs + segment.startMs;
     if (!segment.final) {
@@ -627,25 +628,28 @@ export function createTranscripts(options: TranscriptsOptions) {
   }
 
   /**
-   * The live audio goes to this computer from now on (#141). "dropped" and "refused": what the
-   * cloud hadn't given text for is a gap, transcribed on this computer after Stop. "cap" and
-   * "user": its streams finish with what they were sent. The bar says why, except where the
-   * User chose.
+   * The live audio goes to this computer from now on (#141). Dropped, refused, or the gate
+   * closed: the cloud's streams are dropped, nothing they queued is sent, and the stretch this
+   * computer didn't hear is transcribed after Stop (marked as a gap where the cloud failed). At
+   * the cap, the streams finish with what they were already sent.
    */
-  function leaveCloud(state: State, live: Live, reason: CloudLoss | "cap" | "user"): void {
+  function leaveCloud(state: State, live: Live, reason: Leaving): void {
     if (live.engine === "local") return;
     const route = live.engine;
     const atMs = live.pushedMs;
-    if (reason === "dropped" || reason === "refused") {
+    if (reason === "cap") {
+      if (live.started) finishStreams(state, live, atMs);
+    } else {
       dropStreams(live);
       const lost = { fromMs: live.doneMs, toMs: Math.max(live.doneMs, live.pushedMs) };
       if (live.started && live.pendingFrom === null && lost.toMs > lost.fromMs) {
-        state.gaps.push({ ...lost, reason: "cloud" });
+        if (reason === "dropped" || reason === "refused") {
+          state.gaps.push({ ...lost, reason: "cloud" });
+        }
         state.pending = addRange(state.pending, lost);
       }
-    } else if (live.started) {
-      finishStreams(state, live, atMs);
     }
+    if (reason === "refused") options.cloud?.refuse(route);
     live.engine = "local";
     live.cloud = null;
     live.started = false;
@@ -660,12 +664,37 @@ export function createTranscripts(options: TranscriptsOptions) {
       atMs,
       from: "cloud",
       to: "local",
-      reason: reason === "dropped" || reason === "refused" ? "failed" : reason,
+      reason:
+        reason === "dropped" || reason === "refused" ? "failed" : reason === "cap" ? "cap" : "user",
     });
     startEngine(state);
     writeLines(state, { now: true });
     persist(state);
     options.changed();
+  }
+
+  /** The send gate's answer for a live cloud route, as a reason to leave it; null while open. */
+  function gateClosed(live: Live): Leaving | null {
+    if (live.engine === "local") return null;
+    const now = options.cloud?.sending(live.engine) ?? "stopped";
+    return now === "ok" ? null : now === "local-mode" ? "local-mode" : "user";
+  }
+
+  /** A cloud stream is ready: what the core held for it goes, if the gate is still open. */
+  function heardOpened(stream: string): void {
+    if (closed) return;
+    const found = owner(stream);
+    const live = found?.state.live;
+    const own = found?.live && live ? live.streams[found.source] : undefined;
+    if (!found || !live || !own?.waiting) return;
+    const leaving = gateClosed(live);
+    if (leaving) {
+      leaveCloud(found.state, live, leaving);
+      return;
+    }
+    const waiting = own.waiting;
+    delete own.waiting;
+    for (const samples of waiting) transcriber.push(stream, samples);
   }
 
   transcriber.listen({
@@ -676,6 +705,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     stopped: engineStopped,
     switched: heardSwitch,
     lost: heardLost,
+    opened: heardOpened,
   });
 
   // ---- Live ----
@@ -751,9 +781,9 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   function pushTracks(state: State, live: Live, audio: TrackedAudio): void {
     if (live.engine !== "local") {
-      const allowed = (live.cloud && options.cloud?.allowed(live.cloud.service)) ?? false;
-      if (!allowed || !counted(live, audio)) {
-        leaveCloud(state, live, allowed ? "cap" : "user");
+      const leaving = gateClosed(live) ?? (counted(live, audio) ? null : "cap");
+      if (leaving) {
+        leaveCloud(state, live, leaving);
         if (live.started) pushTracks(state, live, audio);
         else live.held.push(audio);
         return;
@@ -763,11 +793,14 @@ export function createTranscripts(options: TranscriptsOptions) {
       const samples = audio[source];
       if (!samples) continue;
       const name = streamName(live.stream, source);
-      if (!live.streams[source]) {
-        live.streams[source] = { baseMs: audio.atMs, doneMs: audio.atMs };
+      let own = live.streams[source];
+      if (!own) {
+        own = { baseMs: audio.atMs, doneMs: audio.atMs, ...(live.cloud && { waiting: [] }) };
+        live.streams[source] = own;
         if (live.cloud) transcriber.open(name, live.cloud.stream);
       }
-      transcriber.push(name, samples);
+      if (own.waiting) own.waiting.push(samples);
+      else transcriber.push(name, samples);
     }
     live.pushedMs = audio.atMs + lengthOf(audio);
   }
@@ -806,22 +839,18 @@ export function createTranscripts(options: TranscriptsOptions) {
         if (closed || state.live !== live) return;
         live.choosing = false;
         if (start && "refused" in start) {
-          state.fellBack = { route: start.route, atMs: live.pushedMs, reason: "cap" };
+          const reason = start.refused === "key" ? "refused" : start.refused;
+          state.fellBack = { route: start.route, atMs: live.pushedMs, reason };
           health.add(state.meetingId, {
             kind: "switched",
             atMs: live.pushedMs,
             from: "cloud",
             to: "local",
-            reason: "cap",
+            reason: reason === "refused" ? "failed" : reason === "cap" ? "cap" : "user",
           });
         } else if (start) {
           live.engine = start.route;
-          live.cloud = {
-            stream: start.stream,
-            meter: start.meter,
-            aheadMs: 0,
-            service: start.service,
-          };
+          live.cloud = { stream: start.stream, meter: start.meter, aheadMs: 0 };
           log.info("transcript.cloud", { meetingId: state.meetingId, route: start.route });
         }
         startEngine(state);
@@ -1012,6 +1041,15 @@ export function createTranscripts(options: TranscriptsOptions) {
   function finishStreams(state: State, live: Live, endMs: number): void {
     const callSound = live.callSound();
     const fromMs = live.doneMs;
+    // A cloud stream that never opened has sent nothing: this computer transcribes its stretch.
+    let unopened = false;
+    for (const source of SOURCES) {
+      if (!live.streams[source]?.waiting) continue;
+      transcriber.drop(streamName(live.stream, source));
+      delete live.streams[source];
+      unopened = true;
+    }
+    if (unopened) state.pending = addRange(state.pending, { fromMs, toMs: endMs });
     const ending = SOURCES.flatMap((source) => {
       const own = live.streams[source];
       return own
@@ -1061,6 +1099,8 @@ export function createTranscripts(options: TranscriptsOptions) {
     const live = state.live;
     if (!live) return;
     feed(state, live.tracks.flush());
+    const leaving = gateClosed(live);
+    if (leaving) leaveCloud(state, live, leaving);
     state.live = null;
     state.partials.clear();
     if (live.started && live.pendingFrom === null) {
@@ -1139,6 +1179,18 @@ export function createTranscripts(options: TranscriptsOptions) {
               }
             : null),
       };
+    },
+
+    /**
+     * Where meeting audio may go changed (Local mode, consent, the chosen route, a key): every
+     * live cloud stream whose gate is now closed is dropped at once, not at its next chunk.
+     */
+    recheckCloud(): void {
+      for (const state of states.values()) {
+        const live = state.live;
+        const leaving = live && gateClosed(live);
+        if (live && leaving) leaveCloud(state, live, leaving);
+      }
     },
 
     /**

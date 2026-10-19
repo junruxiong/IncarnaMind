@@ -3,7 +3,6 @@ import type { TranscriptionServiceStatus } from "../../../../core/api";
 import { useLanguage, useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import {
-  ROUTE_LABELS,
   serviceMeta,
   useTranscriptionServices,
   useTranscriptionServicesList,
@@ -18,7 +17,6 @@ import {
   rowTitleClass,
   ruledRowClass,
 } from "../ui";
-import { RouteData } from "./RouteData";
 
 /**
  * Under "Transcribe on" in Settings › Meetings (#141): where the chosen route sends meeting
@@ -42,7 +40,7 @@ export function TranscriptionRouteLine({ id }: { id?: string }) {
       <p className="text-[13px] leading-5 text-ink-meta tabular-nums">
         {serviceMeta(service, t, language)}
       </p>
-      <RouteData service={service} className={rowTextClass} />
+      <p className={rowTextClass}>{t("meetings.route.data", { service: service.name })}</p>
     </div>
   );
 }
@@ -52,15 +50,14 @@ export function TranscriptionRouteLine({ id }: { id?: string }) {
  * that meeting audio goes to the chosen cloud service; nothing while it is this computer.
  */
 export function TranscriptionRouteConsent() {
+  const t = useT();
   const route = useAppStore((state) => state.settings?.device.transcriptionRoute) ?? "local";
   const service = useTranscriptionServicesList().find((each) => each.route === route);
   if (!service) return null;
   return (
-    <RouteData
-      service={service}
-      testId="meetings-route-consent"
-      className="text-[12px] leading-5 text-ink-meta"
-    />
+    <p data-testid="meetings-route-consent" className="text-[12px] leading-5 text-ink-meta">
+      {t("meetings.route.data", { service: service.name })}
+    </p>
   );
 }
 
@@ -86,7 +83,7 @@ function TranscriptionKeyRow({ service }: { service: TranscriptionServiceStatus 
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const name = { provider: t(ROUTE_LABELS[service.route]) };
+  const name = { service: service.name };
   const save = async () => {
     setSaving(true);
     const failed = await useTranscriptionServices.getState().setKey(service.route, key);

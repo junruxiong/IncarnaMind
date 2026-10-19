@@ -9,8 +9,8 @@
  * { type: "drop", stream }. The other end answers a load or a finish with
  * { type: "done", id } or { type: "error", id, message }, and reports
  * { type: "segment", segment }, { type: "progress", stream, doneMs },
- * { type: "failed", stream, message }, { type: "switched", change } and
- * { type: "lost", stream, loss } as they happen.
+ * { type: "failed", stream, message }, { type: "switched", change },
+ * { type: "lost", stream, loss } and { type: "opened", stream } as they happen.
  *
  * A stream opened with a cloud service (#141) goes to it instead of the engine, from the same
  * process: OpenAI's live model needs Silero VAD, which runs here.
@@ -51,7 +51,8 @@ export type TranscriberResponse =
   | { type: "progress"; stream: string; doneMs: number }
   | { type: "failed"; stream: string; message: string }
   | { type: "switched"; change: EngineSwitch }
-  | { type: "lost"; stream: string; loss: CloudLoss };
+  | { type: "lost"; stream: string; loss: CloudLoss }
+  | { type: "opened"; stream: string };
 
 /** A running process that serves the engine, as the side that sends requests sees it. */
 export interface TranscriberChannel {
@@ -106,6 +107,9 @@ export function createChannelTranscriber(start: () => TranscriberChannel): Trans
         case "lost":
           clouds.delete(response.stream);
           for (const listener of listeners) listener.lost(response.stream, response.loss);
+          return;
+        case "opened":
+          for (const listener of listeners) listener.opened(response.stream);
           return;
       }
     });
@@ -240,6 +244,7 @@ export function serveTranscriber(
       segment: report.segment,
       progress: (doneMs: number) => report.progress(stream, doneMs),
       lost,
+      opened: () => port.respond({ type: "opened", stream }),
     };
     const options = {
       stream,
@@ -258,7 +263,9 @@ export function serveTranscriber(
         made.catch(() => detectors.delete(config.vad));
       }
       return createOpenAiStream({ ...options, detector: (await made)() });
-    } catch {
+    } catch (error) {
+      // The process has no logger of its own: its output goes to the app's log.
+      console.error("Silero VAD couldn't load for a cloud stream:", messageOf(error));
       lost("dropped");
       return null;
     }

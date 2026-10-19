@@ -143,7 +143,12 @@ describe.runIf(CLIPS)("Each route's error rate on English, Chinese and both taki
         const options = {
           stream: language,
           connect: recording(log),
-          report: { segment, progress: () => {}, lost: (loss: string) => (lost = loss) },
+          report: {
+            segment,
+            progress: () => {},
+            lost: (loss: string) => (lost = loss),
+            opened: () => {},
+          },
         };
         const handle: CloudStreamHandle =
           route === "openai"

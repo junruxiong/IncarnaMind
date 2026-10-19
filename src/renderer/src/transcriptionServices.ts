@@ -1,10 +1,6 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import type {
-  CloudTranscriptionRoute,
-  TranscriptionRoute,
-  TranscriptionServiceStatus,
-} from "../../core/api";
+import type { CloudTranscriptionRoute, TranscriptionServiceStatus } from "../../core/api";
 import type { Language } from "../../core/language";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { core } from "./core";
@@ -51,23 +47,16 @@ export function useTranscriptionServicesList(): TranscriptionServiceStatus[] {
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
-export const ROUTE_LABELS: Record<TranscriptionRoute, MessageKey> = {
-  local: "meetings.route.local",
-  openai: "meetings.route.openai",
-  soniox: "meetings.route.soniox",
-  qwen: "meetings.route.qwen",
-};
-
 /** "gpt-live-transcribe · about $1.02 an hour · uses your OpenAI key". */
 export function serviceMeta(service: TranscriptionServiceStatus, t: Translate, language: Language) {
   const price = formatMoney(service.perHour, language);
   const named = service.key === "provider";
-  const provider = t(ROUTE_LABELS[service.route]);
   return joinMeta([
     named ? service.model : "",
     t(named ? "meetings.route.perHour" : "meetings.route.perHourFirst", { price }),
-    t(named ? "meetings.route.providerKey" : "meetings.route.ownKey", { provider }),
-    service.region?.[language === "zh-CN" ? "zh" : "en"] ?? "",
+    t(service.key === "provider" ? "meetings.route.providerKey" : "meetings.route.ownKey", {
+      service: service.name,
+    }),
     service.liveSpeakers ? t("meetings.route.speakers") : "",
   ]);
 }

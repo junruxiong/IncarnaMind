@@ -115,7 +115,7 @@ export function createFakeCloud(options: FakeCloudOptions = {}): CloudConnect {
             close(1000);
           } else if (options.refuse) {
             reply({ tokens: [], error_code: 401, error_message: "Incorrect API key provided." });
-            close(1000);
+            later(() => close(1000));
           }
           return;
         }
@@ -185,7 +185,7 @@ export function createFakeCloud(options: FakeCloudOptions = {}): CloudConnect {
       events.open();
       if (openai && options.refuse) {
         reply({ type: "error", error: { type: "invalid_request_error", code: "invalid_api_key" } });
-        close(3000);
+        later(() => close(3000));
       }
     });
     return socket;

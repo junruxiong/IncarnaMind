@@ -2,11 +2,10 @@ import type { ReactNode } from "react";
 import type { TranscriptionRoute, TranscriptionServiceStatus } from "../../../../core/api";
 import { useGap, useLanguage, useT } from "../../i18n";
 import { useMeetings } from "../../meetings";
-import { ROUTE_LABELS, serviceMeta, useTranscriptionServices } from "../../transcriptionServices";
+import { serviceMeta, useTranscriptionServices } from "../../transcriptionServices";
 import { CloudLineIcon, ComputerLineIcon } from "../lineIcons";
 import { buttonStyle, dialogClass, dialogTitleClass } from "../ui";
 import { useModal } from "../useModal";
-import { RouteData } from "./RouteData";
 
 const cardClass = "flex flex-col gap-1 rounded-[10px] px-3.5 py-3 ring-1 ring-rule ring-inset";
 const recommendedCardClass =
@@ -97,21 +96,22 @@ function CloudCard({
 }) {
   const t = useT();
   const language = useLanguage();
-  const name = t(ROUTE_LABELS[service.route]);
   return (
     <div data-testid={`transcription-sheet-${service.route}`} className={cardClass}>
       <RouteHead
         route={service.route}
-        name={name}
+        name={service.name}
         icon={<CloudLineIcon className="size-4 text-ink-meta" />}
-        action={t("meetings.sheet.use", { provider: name })}
+        action={t("meetings.sheet.use", { service: service.name })}
         onPick={onPick}
       />
       <p className="text-[13px] leading-[18px] text-ink-meta tabular-nums">
         {serviceMeta(service, t, language)}
       </p>
       {/* The consent line is the point of the card: body text, not fine print. */}
-      <RouteData service={service} className={`${lineClass} text-ink`} />
+      <p className={`${lineClass} text-ink`}>
+        {t("meetings.route.data", { service: service.name })}
+      </p>
     </div>
   );
 }

@@ -69,6 +69,7 @@ export function createQwenStream(options: CloudStreamOptions & { url: string }):
 
   const socket = options.connect(options.url, options.apiKey, {
     open() {
+      if (ended) return;
       socket.send(
         JSON.stringify({
           header: header("run-task"),
@@ -98,6 +99,8 @@ export function createQwenStream(options: CloudStreamOptions & { url: string }):
 
   function end(): void {
     ended = true;
+    // What waited for the task is never sent once the stream has ended.
+    waiting.length = 0;
     clearTimeout(connectTimer);
     if (finishTimer) clearTimeout(finishTimer);
     finishing?.resolve();
@@ -140,6 +143,7 @@ export function createQwenStream(options: CloudStreamOptions & { url: string }):
         started = true;
         clearTimeout(connectTimer);
         for (const audio of waiting.splice(0)) socket.send(audio);
+        report.opened();
         return;
       case "result-generated": {
         const sentence = sentenceOf(message?.payload);
