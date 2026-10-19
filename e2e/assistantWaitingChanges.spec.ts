@@ -60,7 +60,7 @@ test("over changes it can't revise, the assistant changes nothing, says why, and
   await expect(bar.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
   const timeline = await openSteps(window, refused);
   await expect(timeline.getByTestId("answer-mind-call")).toHaveText(
-    /Couldn't change “Q3 review”: 2 changes are waiting there/,
+    /Couldn’t change “Q3 review”: 2 changes are waiting there/,
   );
   // The line sits under the Answer's text, inside the assistant, once the steps have opened.
   await expect

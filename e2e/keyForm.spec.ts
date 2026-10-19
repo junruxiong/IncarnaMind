@@ -100,7 +100,7 @@ test("Where do I find it? opens with the keyboard, and holds the notes, the step
     await acceptPlainTextKeys(window);
     // The first provider is Anthropic in English, which has all four; DeepSeek in Chinese, with no note and no key line.
     for (const [value, count, keyPage] of [
-      ["en", 1, "Open Anthropic's key page ↗"],
+      ["en", 1, "Open Anthropic’s key page ↗"],
       ["zh-CN", 0, "打开 DeepSeek 的密钥页面 ↗"],
     ] as const) {
       await language(window, value);

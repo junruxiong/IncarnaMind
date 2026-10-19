@@ -85,7 +85,7 @@ test("Don't cite this Document in the sidebar: the label shows beside its name, 
 
   await openDocumentMenu(workings);
   const item = workings.getByTestId("document.dontCite");
-  await expect(item).toHaveText("Don't cite this Document");
+  await expect(item).toHaveText("Don’t cite this Document");
   await expect(item).toHaveAttribute(
     "title",
     "Read for context only: never cited or used as evidence.",
@@ -96,7 +96,7 @@ test("Don't cite this Document in the sidebar: the label shows beside its name, 
   await expect(label).toHaveText("Not cited");
   await expect(report.getByTestId("document-not-cited")).toHaveCount(0);
   const undo = window.getByTestId("undo-line");
-  await expect(undo.getByTestId("undo-message")).toHaveText("“Workings” won't be cited");
+  await expect(undo.getByTestId("undo-message")).toHaveText("“Workings” won’t be cited");
   const [name, labelBox, row] = await Promise.all([
     workings.getByTestId("row-text").boundingBox(),
     label.boundingBox(),

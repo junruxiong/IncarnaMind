@@ -29,13 +29,13 @@ const WIDTHS = [900, 1600] as const;
 
 const WORDS = {
   en: {
-    notRunning: "Ollama isn't running on this computer",
+    notRunning: "Ollama isn’t running on this computer",
     open: "Open Ollama",
     opening: "Opening Ollama…",
     get: "Get Ollama ↗",
     tryAgain: "Try again",
     notDetected: "Install and start Ollama from ollama.com to run models here.",
-    installed: "Ollama is on this computer, but it isn't running.",
+    installed: "Ollama is on this computer, but it isn’t running.",
     detected: "Ollama is running. Questions and Documents stay on this computer.",
     recommended: (model: string) => `Recommended: ${model}, 3.3 GB. It is downloaded once.`,
     use: (model: string) => `Use local models (${model}, 3.3 GB)`,
