@@ -3,7 +3,6 @@ import type { Currency, RunEstimate } from "../../core/api";
 /** A source's Documents come ticked only when there are this few: a newcomer's one button never spends on a whole Library. */
 export const TICKED_AT_START_MAX = 5;
 
-/** A run over more Documents than this asks first. */
 export const ASK_ABOVE_DOCUMENTS = 20;
 
 /**
@@ -13,7 +12,6 @@ export const ASK_ABOVE_DOCUMENTS = 20;
  */
 export const ASK_ABOVE_COST: Readonly<Record<Currency, number>> = { USD: 0.5, CNY: 3.5 };
 
-/** The Documents a source starts with ticked: all of a few, none of many. */
 export const startingChecks = <T>(offered: readonly T[]): readonly T[] =>
   offered.length <= TICKED_AT_START_MAX ? offered : [];
 

@@ -95,7 +95,7 @@ export function CompareSheet({
           : null;
   const questionsHint = asked.length === 0 ? "comparison.sheet.noQuestions" : null;
   const blocked = documents.length === 0 || documentsHint !== null || questionsHint !== null;
-  // What the question is about: it goes when the Documents, the Questions' number or the model change.
+  // The question before a run is about these Documents, Questions and this model, and goes when any change.
   const runKey = `${checked.map((document) => document.id).join()}|${asked.length}|${model?.providerId}|${model?.modelId}`;
   const confirming = askedFor === runKey;
 
@@ -133,7 +133,7 @@ export function CompareSheet({
     };
   }, [open, cells, model, t, language]);
 
-  // The header checkbox shows some of the Documents ticked as a dash.
+  // `indeterminate` is a property of the element, not an attribute.
   useEffect(() => {
     if (selectAll.current) selectAll.current.indeterminate = someTicked && !allTicked;
   }, [someTicked, allTicked]);
@@ -144,6 +144,7 @@ export function CompareSheet({
   if (!sheet) return null;
 
   const close = () => {
+    setAskedFor(null);
     closeCompareSheet(mindId);
     editor.commands.focus();
   };

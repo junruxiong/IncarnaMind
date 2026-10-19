@@ -114,7 +114,7 @@ export const documentIdsIn = (refs: readonly ObjectRef[]): string[] =>
 
 const librarySelection = () => documentIdsIn(selectedOn("library"));
 
-/** What a source starts with ticked: the Library's selection whole, else a few Documents, never most of a Library. */
+// The Library's selection is the User's own choice, so it comes ticked whole; any other source starts with a few Documents or none.
 function startingIds(source: SheetSource, offered: Document[]): string[] {
   const ticked = source === "selected" ? offered : startingChecks(offered);
   return ticked.slice(0, MAX_COMPARISON_DOCUMENTS).map((document) => document.id);
@@ -150,7 +150,6 @@ export async function startCompareDocuments(
   });
 }
 
-/** Takes the sheet's Documents from `source`, ticking what a source starts with. */
 export function chooseCompareSource(mindId: string, source: SheetSource): void {
   const open = useComparisons.getState().sheets[mindId];
   if (!open) return;
