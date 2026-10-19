@@ -1,7 +1,7 @@
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import type { CommandId } from "../../../shared/commands";
 import { menuKeysLabel } from "../commands/keymap";
-import { buildMenu, type MenuEntry, type MenuItem } from "../commands/menus";
+import { buildMenu, buildMixedMenu, type MenuEntry, type MenuItem } from "../commands/menus";
 import {
   type CommandContext,
   commands,
@@ -183,7 +183,12 @@ export function ObjectMenu({
     surface,
     here: { ...tagsHere(target, button.current, chosen), ...here },
   };
-  const selectionEntries = menu.open ? buildMenu(target.kind, forSelection, without) : [];
+  const mixed = new Set(forSelection.selection.map((each) => each.kind)).size > 1;
+  const selectionEntries = !menu.open
+    ? []
+    : mixed
+      ? buildMixedMenu(forSelection)
+      : buildMenu(target.kind, forSelection, without);
   // Kinds mixed in the selection that share no command: the menu is this row's own.
   const alone = menu.open && forSelection.selection.length > 0 && selectionEntries.length === 0;
   const ctx: CommandContext = alone
