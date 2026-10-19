@@ -322,6 +322,9 @@ describe("Standing on its own, and the example unasked", () => {
         "## Summary\n\nIts results are strong. They are covered in my earlier answer.\n\n- 数据集见上文。\n- An earlier study found the same effect.",
       ),
     ).toEqual(["They are covered in my earlier answer.", "数据集见上文。"]);
+    expect(
+      pointersIn("Its MAE is 1.1285 in Chicago, as covered in my earlier answer."),
+    ).toHaveLength(1);
   });
 
   // protects=the reply is held to the gate as Add to note puts it: a pointer paragraph taken out passes, and a correction or a pointer cut from inside a paragraph fails as content lost; fails_when=lost content passes, or a pointer taken out fails; no_claim=none beyond protects.

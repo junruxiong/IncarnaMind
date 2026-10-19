@@ -163,7 +163,7 @@ function proseSentences(text: string): string[] {
     if (fenced || /^\s*\|/.test(line)) return [];
     return line
       .replace(/^\s*(?:[-*+]|\d{1,3}[.)]|#{1,6}|>)\s+/, "")
-      .split(/(?<=[.!?。！？]["”’)」』]*(?:\[\^\d{1,4}\])*)\s*/u)
+      .split(/(?<=[.!?。！？]["”’)」』]*(?:\[\^\d{1,4}\])*)(?!\d)\s*/u)
       .map((sentence) => sentence.trim())
       .filter((sentence) => /[\p{L}\p{N}]/u.test(sentence));
   });
