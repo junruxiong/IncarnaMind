@@ -8,11 +8,12 @@ import { commands } from "../commands/registry";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
 import { saidInLine } from "../lineNames";
-import { useCapturing } from "../meetings";
+import { useCapturing, useMeetings } from "../meetings";
 import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
 import { openSandboxHelp, useRunsWithoutSandbox } from "../sandbox";
+import { useSettled } from "../settling";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { useTaggingAlert } from "../taggingAlert";
 import { useTaggingExplained } from "../taggingExplained";
@@ -84,10 +85,18 @@ interface Status {
  * files, files that were in IncarnaMind already). One line:
  * the most pressing status, and "+N" for the others, which lists them above
  * the row. Its 28px are kept even when there is nothing to say, so the tree
- * above moves only for a status that takes two lines.
+ * above moves only for a status that takes two lines. A status that is only
+ * progress shows after it has lasted 300 ms and stays at least 500 ms once shown,
+ * so none flashes; a failure or a question shows at once.
  */
 export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean }) {
   const statuses = useStatuses();
+  const shown = useSettled(
+    statuses.filter((status) => !isProblem(status)).map((status) => status.testId),
+  );
+  // A status the work has left stays its last 500 ms as it was.
+  const seen = useRef(new Map<string, Status>());
+  for (const status of statuses) seen.current.set(status.testId, status);
   const alerting = statuses.some((status) => status.alerts === true);
   useEffect(() => {
     useTaggingAlert.setState({ needsYou: alerting });
@@ -98,7 +107,15 @@ export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean
     },
     [],
   );
-  const [first, ...others] = statuses.filter((status) => !problemsOnly || isProblem(status));
+  const kept = [...shown]
+    .filter((id) => !statuses.some((status) => status.testId === id))
+    .flatMap((id) => seen.current.get(id) ?? []);
+  const [first, ...others] = [
+    ...statuses.filter((status) =>
+      problemsOnly ? isProblem(status) : isProblem(status) || shown.has(status.testId),
+    ),
+    ...(problemsOnly ? [] : kept),
+  ];
   if (problemsOnly && !first) return null;
   return (
     <div data-testid="sidebar-status" className="flex min-h-7 shrink-0 flex-col">
@@ -264,6 +281,7 @@ function useStatuses(): Status[] {
   const t = useT();
   const language = useLanguage();
   const skipped = useAppStore((state) => state.skippedFiles);
+  const cantRecord = useMeetings((state) => state.cantRecord);
   const alreadyAdded = useAppStore((state) => state.alreadyAdded);
   const model = useAppStore((state) => state.embeddingModel);
   const embedding = useAppStore((state) => state.embedding);
@@ -539,6 +557,26 @@ function useStatuses(): Status[] {
             },
           }),
       dismiss: () => dismiss(problem),
+    });
+  }
+
+  if (cantRecord) {
+    const text = t("meetings.settings.cantRecord");
+    statuses.push({
+      testId: "cant-record",
+      tone: "waiting",
+      short: text,
+      full: text,
+      wraps: true,
+      action: {
+        label: t("meetings.cantRecord.notes"),
+        testId: "cant-record-notes",
+        run() {
+          useMeetings.getState().clearCantRecord();
+          void useAppStore.getState().createMind({ titled: true });
+        },
+      },
+      dismiss: () => useMeetings.getState().clearCantRecord(),
     });
   }
 

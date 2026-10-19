@@ -1,46 +1,38 @@
-import {
-  type ChangeEvent,
-  memo,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ChangeEvent, type KeyboardEvent, memo, type ReactNode, useMemo, useRef } from "react";
 import type { Document, DocumentStatus, Tag } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
-import { startDocumentDrag } from "../documentDrag";
 import { documentStatusText } from "../documentStatus";
 import { useFirstOpen } from "../firstOpen";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel, formatCount } from "../linkedFolders";
 import { usePeekKey } from "../peek";
-import { useRequests } from "../requests";
 import { scanningStatus } from "../scanStatus";
 import {
   rowsIn,
-  selectedOn,
   useSelectable,
   useSelectionFollowsShown,
   useSelectionOrder,
+  useSeveralSelected,
 } from "../selection";
+import { dragFromRow, moveFromMenu, useSidebarMove } from "../sidebarMoves";
 import { useSortMenu } from "../sortMenu";
-import { allExamples, isOwnDocument, selectVisibleDocuments, useAppStore } from "../store";
+import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
-import { moveThroughRows, TREE_ROW, useTreeItem } from "../treeKeys";
+import { isMoveToKey, moveThroughRows, TREE_ROW, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
 import { useTreeKeyboard } from "../useTreeKeyboard";
-import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags";
-import { FolderTree } from "./FolderTree";
+import { DocumentTagMenu } from "./DocumentTags";
 import { InlineName } from "./InlineName";
 import { LibraryFolders } from "./LibraryFolders";
+import { LinkedFolderRows } from "./LinkedFolderRows";
 import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon, MoreLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
-import { ProblemLine } from "./ProblemLine";
+import { SidebarMoveTo } from "./SidebarMoveTo";
 import { SidebarSearch } from "./SidebarSearch";
+import { SidebarSection } from "./SidebarSection";
 import { SidebarTags } from "./SidebarTags";
 import {
   clearsActions,
@@ -69,15 +61,6 @@ const shortStatusMessages: Record<DocumentStatus, MessageKey | null> = {
 
 const NO_DOCUMENTS: readonly Document[] = [];
 
-/** The ways to browse the Documents, in the switcher's order. */
-type BrowseView = "folders" | "tags" | "sources";
-
-const browseLabels: Record<BrowseView, MessageKey> = {
-  folders: "library.groups",
-  tags: "tags.title",
-  sources: "library.sources",
-};
-
 /** Still being processed: the row is muted until it's done. */
 const isProcessing = (status: DocumentStatus) =>
   status === "queued" ||
@@ -86,71 +69,43 @@ const isProcessing = (status: DocumentStatus) =>
   status === "embedding";
 
 /**
- * The sidebar's tree: "All Documents", then a switcher, "Folders | Tags |
- * Folders on disk" (with the Tag filter and "+" for a new Folder), over one
- * of three views. Folders, the first, is the User's projects: each Folder
- * with its Minds and Documents, then Not in a Folder (see `LibraryFolders`).
- * Tags lists the Tags (see `SidebarTags`); Folders on disk, each Linked
- * folder with its folders as on disk, then "Other Documents", the files
- * added on their own (see `FolderTree`). With nothing to browse but Minds,
- * there is no switcher. Each Document is one row: its name, its Tags' colours (see
- * `TagMarks`) and, while it's processed, if it failed, or if its file is
- * missing or can't be reached, its status at the end. Its Tags are in its
- * Tags menu, and the Tags dialog; its "More" menu renames it, opens its file
- * or shows it in its folder, and deletes it. Clicking a Document opens it in
- * the viewer. Documents and Linked folders are added from the header's "+"
- * menu, or dropped anywhere on the window (see `FileDrop`); with none yet,
- * the tree says so.
+ * The sidebar's tree, the same on every screen: Search and the Library, then
+ * the sections, each shown once it has something in it: the Folders, each
+ * with its Minds and Documents, and Not in a Folder (see `LibraryFolders`),
+ * the Linked folders (see `LinkedFolderRows`), and the Tags in
+ * use (see `SidebarTags`). On a first open with nothing of the User's own,
+ * the Library waits for their first Document. Each Document is one row: its
+ * name, its Tags' colours (see `TagMarks`) and, while it's processed, if it
+ * failed, or if its file is missing or can't be reached, its status at the
+ * end. Its Tags are in its Tags menu, and the Tags dialog; its "More" menu
+ * renames it, moves it, opens its file or shows it in its folder, and
+ * deletes it. Clicking a Document opens it in the viewer. Documents and
+ * Linked folders are added from the header's New menu, or dropped anywhere
+ * on the window (see `FileDrop`).
  */
 export function DocumentsSection() {
   const t = useT();
   const language = useLanguage();
-  const hasTags = useAppStore((state) => state.tags.length > 0);
   const documentCount = useAppStore((state) => state.documents.length);
-  const hasAnyDocuments = documentCount > 0;
   const firstOpen = useFirstOpen();
   const hasOwnDocuments = useAppStore((state) =>
     state.documents.some((each) => isOwnDocument(each, allExamples(state))),
   );
   const quiet = firstOpen && !hasOwnDocuments;
-  const [chosenView, setView] = useState<BrowseView>("folders");
   const libraryOpen = useAppStore((state) => currentTabOf(state.layout)?.item.kind === "library");
-  // The same array until the Documents or the Tag filter change (see `selectVisibleDocuments`).
-  const documents = useAppStore(selectVisibleDocuments);
-  const filtering = useAppStore((state) => state.tagFilter.length > 0);
-  const hasFolders = useAppStore(
-    (state) => state.folders.length > 0 || state.linkedFolders.length > 0,
-  );
+  const documents = useAppStore((state) => state.documents);
+  const hasLinkedFolders = useAppStore((state) => state.linkedFolders.length > 0);
   const addDocuments = useAppStore((state) => state.addDocuments);
   const picker = useRef<HTMLInputElement>(null);
   const tree = useRef<HTMLDivElement>(null);
   const treeKeys = useTreeKeyboard(tree);
-  // ⌘A and Shift-click reach the rows in view: every Mind and Document the tree draws.
+  // ⌘A and Shift-click reach the rows in view: every Folder, Mind and Document the tree draws.
   useSelectionOrder("sidebar", () => rowsIn(tree.current));
   useSelectionFollowsShown(tree);
   const tags = useAppStore((state) => state.tags);
   // Built once per change to the Tags, so each row only looks its own up.
   const tagsById = useMemo(() => tagIndex(tags), [tags]);
 
-  // Folders always: the Minds are there. Tags and the tree on disk once there is something to
-  // browse (a Document or a Linked folder, so the first Document moves nothing).
-  const somethingToBrowse = hasAnyDocuments || hasFolders;
-  const views: BrowseView[] = [
-    "folders",
-    ...(hasTags && somethingToBrowse ? (["tags"] as const) : []),
-    ...(somethingToBrowse ? (["sources"] as const) : []),
-  ];
-  const view = views.includes(chosenView) ? chosenView : "folders";
-  // A Folder just made is named in its row, which only the Folders view has.
-  const naming = useRequests((state) => state.nameFolder !== null);
-  // A folder just linked: the view that shows it, with its row in sight and washed for a moment (#763).
-  const justLinked = useRequests((state) => state.showLinked);
-  useEffect(() => {
-    if (justLinked !== null) setView("sources");
-  }, [justLinked]);
-  useEffect(() => {
-    if (naming) setView("folders");
-  }, [naming]);
   /**
    * Each Document's row as last made, by depth, while the Tags stay the same
    * (#156). A list of thousands drawn again because one Document changed
@@ -180,11 +135,8 @@ export function DocumentsSection() {
     if (picked.length > 0) void addDocuments(picked);
   };
 
-  // A Linked folder shows even before its first Document, unless a filter hides it.
-  const empty = documents.length === 0 && (filtering || !hasFolders);
-
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: ↑ and ↓ go on from the tree's first and last rows to Search and All Documents.
+    // biome-ignore lint/a11y/noStaticElementInteractions: ↑ and ↓ go on from the tree's first and last rows to Search and the Library.
     <div
       data-testid="documents-section"
       {...tagNamesTipListProps}
@@ -244,88 +196,24 @@ export function DocumentsSection() {
           </div>
         </div>
       )}
-      {!quiet && views.length > 1 && (
-        <div className="mx-2 my-2 flex items-center gap-2 border-b border-rule pb-1">
-          <fieldset
-            className="flex min-w-0 items-center gap-3 text-[12px] text-ink-meta"
-            data-testid="browse-views"
-            aria-label={t("library.browse")}
-          >
-            {views.map((each) => (
-              <button
-                key={each}
-                type="button"
-                aria-pressed={view === each}
-                title={t(browseLabels[each])}
-                className={`min-w-0 truncate ${view === each ? "font-semibold text-ink" : "hover:text-ink"}`}
-                onClick={() => setView(each)}
-              >
-                {t(browseLabels[each])}
-              </button>
-            ))}
-          </fieldset>
-          <span className="ml-auto flex shrink-0 items-center">
-            <TagFilterMenu />
-          </span>
-        </div>
-      )}
-      {/* Under the switcher, so it never moves; in the Tags view, the chosen Tags say it. */}
-      {view !== "tags" && <ActiveTagFilter />}
-      <div
-        ref={tree}
-        role="tree"
-        aria-multiselectable="true"
-        aria-label={t("sidebar.tree")}
-        {...treeKeys}
-      >
-        {view === "folders" ? (
-          <LibraryFolders
-            documents={quiet ? NO_DOCUMENTS : documents}
-            renderDocument={renderDocument}
-            quiet={quiet}
-          />
-        ) : view === "tags" ? (
-          <SidebarTags renderDocument={renderDocument} />
-        ) : (
-          <FolderTree documents={documents} filtering={filtering} renderDocument={renderDocument} />
+      <div ref={tree} data-testid="sidebar-sections" {...treeKeys}>
+        <LibraryFolders
+          documents={quiet ? NO_DOCUMENTS : documents}
+          renderDocument={renderDocument}
+          quiet={quiet}
+        />
+        {!quiet && hasLinkedFolders && (
+          <SidebarSection testId="linked-folders-section" title={t("sidebar.linkedFolders")}>
+            <LinkedFolderRows />
+          </SidebarSection>
         )}
+        {!quiet && <SidebarTags />}
       </div>
-      {/* The Tags view lists every Tag, whatever the filter. */}
-      {empty &&
-        view !== "tags" &&
-        (filtering ? (
-          <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.filter.empty")}</p>
-        ) : (
-          <ProblemLine
-            role="status"
-            testId="documents-empty"
-            className="px-2 pt-2 pb-1"
-            action={{
-              label: t("documents.none.addFiles"),
-              testId: "documents-empty-add-files",
-              onClick: () => void useAppStore.getState().pickDocuments(),
-            }}
-            also={{
-              label: t("sidebar.plus.linkFolder"),
-              testId: "documents-empty-link-folder",
-              onClick: () => void useAppStore.getState().addLinkedFolder(),
-            }}
-          >
-            {t("documents.none")}
-          </ProblemLine>
-        ))}
       <LinkFolderDialog />
       <TagNamesTip />
+      <SidebarMoveTo />
     </div>
   );
-}
-
-/** The Documents a drag from this row takes: all those selected, if it is one of them. */
-function draggedWith(documentId: string): string[] {
-  const chosen = selectedOn("sidebar").flatMap((each) =>
-    each.kind === "document" ? [each.id] : [],
-  );
-  return chosen.includes(documentId) ? chosen : [documentId];
 }
 
 /**
@@ -334,9 +222,10 @@ function draggedWith(documentId: string): string[] {
  * end while it's processed, if it failed, or if its file is missing or can't
  * be reached (then muted too; clicking still opens what IncarnaMind kept of
  * it). The name gives way first; the row stays one 28px line. Pointed at, it
- * offers its Tags and a menu for the rest. It is in the Folder its file is
- * in, so there is no moving it here. Memoised: a sidebar of thousands of
- * Documents draws again only the rows whose Document changed.
+ * offers its Tags and a menu for the rest. It drags onto a Folder or the
+ * composer, with the rows selected with it, and moves by its menu or ⇧⌘M
+ * too (see `SidebarMoveTo`). Memoised: a sidebar of thousands of Documents
+ * draws again only the rows whose Document changed.
  */
 const DocumentRow = memo(function DocumentRow({
   item,
@@ -362,12 +251,18 @@ const DocumentRow = memo(function DocumentRow({
     const shown = currentTabOf(state.layout)?.item;
     return shown?.kind === "document" && shown.documentId === item.id;
   });
-  const objectMenu = useObjectMenu({ kind: "document", id: item.id });
-  const select = useSelectable({ kind: "document", id: item.id }, "sidebar", () =>
-    openDocument({ documentId: item.id }),
-  );
+  const object = { kind: "document", id: item.id } as const;
+  const objectMenu = useObjectMenu(object);
+  const select = useSelectable(object, "sidebar", () => openDocument({ documentId: item.id }));
+  const several = useSeveralSelected("sidebar");
   const peek = usePeekKey(item.id, "sidebar");
   const lit = select.selected;
+  const moveToKey = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!isMoveToKey(event)) return;
+    event.preventDefault();
+    useSidebarMove.getState().show(event.currentTarget, object);
+  };
+  const row = useRef<HTMLLIElement>(null);
   const muted = !lit && (isProcessing(item.status) || item.fileStatus !== "available");
   const treeItem = useTreeItem({ depth, selected: select.selected });
 
@@ -384,7 +279,8 @@ const DocumentRow = memo(function DocumentRow({
       {...select.refProps}
       {...peek.rowProps}
       {...(rename.renaming ? {} : objectMenu.rowProps)}
-      className={rowClass(lit, muted ? "muted" : "item")}
+      ref={row}
+      className={rowClass(lit, muted ? "muted" : "item", several)}
     >
       {rename.renaming ? (
         <div
@@ -413,8 +309,12 @@ const DocumentRow = memo(function DocumentRow({
           // A click opens it, in a preview beside the Mind or in the group already showing a Document;
           // ⌘-click and Shift-click select (`useSelectable`).
           onClick={select.onClick}
+          onKeyDown={(event) => {
+            rename.nameProps.onKeyDown(event);
+            moveToKey(event);
+          }}
           draggable
-          onDragStart={(event) => startDocumentDrag(event, draggedWith(item.id))}
+          onDragStart={(event) => dragFromRow(event, object)}
           className={`${rowButtonClass} ${clearsActions.tagsAndMenu}`}
           style={rowPadding(depth)}
         >
@@ -425,7 +325,10 @@ const DocumentRow = memo(function DocumentRow({
               {shownName}
             </span>
             <NotCitedLabel item={item} />
-            <TagMarks chips={chips} />
+            <TagMarks
+              chips={chips}
+              reserved={item.tagging === "pending" || item.tagging === "tagging"}
+            />
           </span>
           <DocumentStatusLabel item={item} />
         </button>
@@ -434,9 +337,12 @@ const DocumentRow = memo(function DocumentRow({
         <div className={rowActionsClass}>
           <DocumentTagMenu item={item} buttonClassName={rowActionButtonClass} tabIndex={-1} />
           <ObjectMenu
-            target={{ kind: "document", id: item.id }}
+            target={object}
             label={t("documents.more", { name: item.name })}
-            here={{ "document.rename": rename.start }}
+            here={{
+              "document.rename": rename.start,
+              "document.moveTo": () => moveFromMenu(row.current, object),
+            }}
             tabIndex={-1}
           />
         </div>

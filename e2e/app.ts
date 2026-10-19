@@ -23,6 +23,7 @@ import {
 } from "../src/core/api";
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import type { DocumentLocation } from "../src/shared/documentViewer";
+import { translate } from "../src/shared/i18n";
 import type { TestHooks } from "../src/shared/testHooks";
 import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
 import { APP_ARGS, homeEnv, KEYCHAIN_ARGS } from "../tests/helpers/home";
@@ -123,6 +124,8 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /** A copy with no way to record audio: Record says so. */
+  noAudioEngine?: boolean;
   /** What a Meeting's fake speech-to-text engine does: slow, failing to read stretches, failing over. */
   transcriber?: FakeTranscriberOptions;
   /**
@@ -214,6 +217,7 @@ export async function launchApp(
     copilot,
     keepWindow = false,
     computerSound = "allowed",
+    noAudioEngine = false,
     transcriber,
     scans,
     web,
@@ -260,7 +264,7 @@ export async function launchApp(
   if (sandboxNotice === "environment") env.ELECTRON_DISABLE_SANDBOX = "1";
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
-  env.INCARNAMIND_TEST_AUDIO = "fake";
+  env.INCARNAMIND_TEST_AUDIO = noAudioEngine ? "none" : "fake";
   env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
@@ -468,24 +472,52 @@ export async function editFolderInLibrary(window: Page, name: string): Promise<L
 }
 
 /**
- * Shows the sidebar's Folders on disk view: each Linked folder with its
- * folders as on disk, and "Other Documents".
+ * Waits for the sidebar's Linked folders section and each Linked folder's row. The rows don't
+ * unfold: their files sit in the Folders and Not in a Folder.
  */
 export async function showSourceLocations(window: Page): Promise<void> {
-  const button = window.getByTestId("browse-views").getByRole("button", {
-    name: "Folders on disk",
+  const section = window.getByTestId("linked-folders-section");
+  await expect(section).toBeVisible();
+  await expect(
+    section.locator('[data-testid="folder-item"][data-root="true"]').first(),
+  ).toBeVisible({
+    timeout: 15_000,
   });
-  await button.click();
-  await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
-/** Shows the sidebar's Folders view: the User's Folders with their Minds and Documents. */
-export async function showFolders(window: Page): Promise<void> {
-  const button = window
-    .getByTestId("browse-views")
-    .getByRole("button", { name: "Folders", exact: true });
-  await button.click();
-  await expect(button).toHaveAttribute("aria-pressed", "true");
+/**
+ * Puts a Tag on a Document through the core, each by its name (a Document's start will do): the
+ * sidebar's Tags section lists the Tags in use.
+ */
+export async function tagDocument(window: Page, documentName: string, tagName: string) {
+  await window.evaluate(
+    async (wanted) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const tag = (await core.listTags()).find((each) => each.name === wanted.tag);
+      const document = (await core.listDocuments()).find((each) =>
+        each.name.startsWith(wanted.document),
+      );
+      if (!tag || !document)
+        throw new Error(`No Tag ${wanted.tag} or Document ${wanted.document}.`);
+      await core.addTagToDocuments([document.id], tag.id);
+    },
+    { document: documentName, tag: tagName },
+  );
+  await expect(
+    window.getByTestId("sidebar-tag").filter({ hasText: tagName }).first(),
+  ).toBeAttached();
+}
+
+/** Manage Tags, from ⌘K, in the interface's language. */
+export async function openManageTags(window: Page, language: "en" | "zh-CN" = "en"): Promise<void> {
+  const label = translate(language, "tags.menu.manage");
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(label.replace(/…$/, ""));
+  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
+  await pointAt(window, item);
+  await item.click();
+  await expect(window.getByTestId("tags-dialog")).toBeVisible();
 }
 
 /**
@@ -624,26 +656,28 @@ export async function closeSettings(window: Page): Promise<void> {
   await expect(settings).toBeHidden();
 }
 
-/** Settings → Meetings → Record meetings, by its switch; `whileOpen` runs before Settings closes. */
-export async function turnOnMeetings(window: Page, whileOpen?: () => Promise<void>): Promise<void> {
-  const settings = await openSettings(window, "meetings");
-  const recording = settings.getByTestId("meetings-enabled");
-  await recording.hover();
-  await recording.click();
-  await expect(recording).toBeChecked();
-  await whileOpen?.();
-  await closeSettings(window);
-}
-
 /** The + menu's "Record a meeting": a new Mind with the start block. */
 export async function recordMeeting(window: Page): Promise<Locator> {
   const plus = window.getByTestId("plus-menu");
   await plus.hover();
   await plus.click();
+  await window.getByTestId("plus-more").click();
   await window.getByRole("menuitem", { name: "Record a meeting" }).click();
   const start = window.getByTestId("meeting-start");
   await expect(start).toBeVisible();
   return start;
+}
+
+/** The + menu's "Record a meeting" once the recording notice is read: recording at once, in one action. */
+export async function recordMeetingNow(window: Page): Promise<Locator> {
+  const plus = window.getByTestId("plus-menu");
+  await plus.hover();
+  await plus.click();
+  await window.getByTestId("plus-more").click();
+  await window.getByRole("menuitem", { name: "Record a meeting" }).click();
+  const bar = window.getByTestId("meeting-bar");
+  await expect(bar).toHaveAttribute("data-status", "recording");
+  return bar;
 }
 
 /** Starts recording from the start block; the first time, through the one-time notice. */
@@ -688,18 +722,6 @@ export async function openDocumentTags(item: Locator): Promise<Locator> {
   await expect(menu).toBeVisible();
   // The Tags it has, in the picker's field.
   return menu.getByTestId("tag-token");
-}
-
-/**
- * Adds a Tag to the sidebar's filter (Documents with any Tag chosen show), or,
- * choosing a Tag already chosen, takes it out.
- */
-export async function filterByTag(window: Page, name: string): Promise<void> {
-  await window.getByTestId("tag-filter-menu").click();
-  await window
-    .getByTestId("tag-filters")
-    .getByRole("menuitemcheckbox", { name, exact: true })
-    .click();
 }
 
 /**
@@ -761,6 +783,7 @@ export async function splitFromTabMenu(window: Page): Promise<void> {
 /** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
 export async function importWordFromMenu(window: Page): Promise<Locator> {
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-import-word").click();
   const dialog = window.getByTestId("word-import-dialog");
   await expect(dialog).toBeVisible();
@@ -912,6 +935,7 @@ export async function previewLink(
   if (button) await button.click();
   else {
     await window.getByTestId("plus-menu").click();
+    await window.getByTestId("plus-more").click();
     await window.getByTestId("plus-link-folder").click();
   }
   const dialog = window.getByTestId("link-folder-dialog");
@@ -1815,6 +1839,28 @@ export async function pointAt(window: Page, target: Locator): Promise<{ x: numbe
   const point = { x: box.x + Math.min(box.width / 2, 40), y: box.y + box.height / 2 };
   await window.mouse.move(point.x, point.y, { steps: 8 });
   return point;
+}
+
+/**
+ * Drags `from` onto `to` as a person does: slides onto it, presses, slides onto `to` and rests
+ * there while `whileOver` looks at what the drag shows, then lets go.
+ */
+export async function dragOnto(
+  window: Page,
+  from: Locator,
+  to: Locator,
+  whileOver?: () => Promise<void>,
+): Promise<void> {
+  await pointAt(window, from);
+  await window.mouse.down();
+  try {
+    const point = await pointAt(window, to);
+    // A hand never rests quite still: during a drag the page hears where it is at the next move.
+    await window.mouse.move(point.x + 2, point.y);
+    await whileOver?.();
+  } finally {
+    await window.mouse.up();
+  }
 }
 
 /** Presses Tab, or Shift+Tab if `target` comes before the focus, until `target` has the focus. */

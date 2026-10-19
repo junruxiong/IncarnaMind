@@ -47,6 +47,7 @@ import {
   folderCommands,
   linkedFolderCommands,
   mindCommands,
+  mixedSelectionCommands,
   tagCommands,
 } from "./objects";
 import { pageCommands } from "./page";
@@ -123,6 +124,7 @@ const appCommands: readonly Command[] = [
   ...documentCommands,
   ...peekCommands,
   ...folderCommands,
+  ...mixedSelectionCommands,
   ...taggingCommands,
   ...newFolderCommands,
   ...tagCommands,
