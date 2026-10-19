@@ -5,7 +5,8 @@
  * this window's own page as the video, stopped at once). Each track runs
  * through a 16 kHz AudioContext and the "pcm-frames" worklet, and its frames
  * go to the main process as 16-bit PCM. The microphone is opened again when
- * the default input changes or its device goes.
+ * the default input changes or its device goes, and closed while the User has
+ * paused it, so nothing opens or hears it then.
  */
 import type { AudioSource } from "../../core/api";
 import {
@@ -39,6 +40,8 @@ const open = new Map<AudioSource, Open>();
 let running = false;
 /** The microphone is being opened again; another change waits for it. */
 let reopening: Promise<void> | null = null;
+/** Opening the microphone, and closing it for a pause, one at a time. */
+let microphoneChange: Promise<void> = Promise.resolve();
 
 function audioContext(): Promise<AudioContext> {
   context ??= (async () => {
@@ -145,6 +148,13 @@ function reopenMicrophone(): Promise<void> {
   return next;
 }
 
+function changeMicrophone(change: () => Promise<void>): Promise<void> {
+  microphoneChange = microphoneChange.then(change).catch((error: unknown) => {
+    console.error(error);
+  });
+  return microphoneChange;
+}
+
 async function openSystemAudio(): Promise<void> {
   let stream: MediaStream;
   try {
@@ -173,12 +183,13 @@ async function openSystemAudio(): Promise<void> {
 async function start(request: CaptureStart): Promise<void> {
   running = true;
   await audioContext();
-  if (request.microphone) await openMicrophone();
+  if (request.microphone) await changeMicrophone(openMicrophone);
   if (request.systemAudio) await openSystemAudio();
 }
 
 async function stop(): Promise<void> {
   running = false;
+  await microphoneChange;
   await reopening;
   await Promise.all([close("microphone"), close("system")]);
   if (context) await (await context).close();
@@ -189,6 +200,14 @@ navigator.mediaDevices.addEventListener("devicechange", () => {
   if (running && open.has("microphone")) void reopenMicrophone();
 });
 
+bridge.onMicrophone((on) => {
+  void changeMicrophone(async () => {
+    await reopening;
+    if (!running) return;
+    if (!on) await close("microphone");
+    else if (!open.has("microphone")) await openMicrophone();
+  });
+});
 bridge.onStart((request) => {
   start(request).catch((error: unknown) => {
     console.error(error);

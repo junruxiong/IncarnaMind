@@ -89,6 +89,23 @@ describe("Transcripts as WebVTT", () => {
     expect(readVtt(writeVtt(ampersand))).toEqual(ampersand);
   });
 
+  test("a stretch the User paused their microphone is a gap that reads back, and no Unit holds it", async () => {
+    const transcript = {
+      cues: [
+        { startMs: 1000, endMs: 2500, text: "Before.", speaker: "Me" },
+        { startMs: 4000, endMs: 5000, text: "The other side goes on.", speaker: "Them" },
+        { startMs: 12_000, endMs: 13_000, text: "After.", speaker: "Me" },
+      ],
+      gaps: [{ fromMs: 3000, toMs: 11_000, reason: "micPaused" as const }],
+    };
+    const written = writeVtt(transcript);
+    expect(written).toContain("NOTE gap 00:00:03.000 to 00:00:11.000 micPaused\n");
+    expect(readVtt(written)).toEqual(transcript);
+    const [unit] = await extractUnits("transcript", new TextEncoder().encode(written));
+    expect(unit?.text).not.toContain("micPaused");
+    expect(unit?.text.split("\n")).toEqual(["Before.", "The other side goes on.", "After."]);
+  });
+
   test("a file that isn't WebVTT is refused", () => {
     expect(() => readVtt("1\n00:00:01,000 --> 00:00:02,000\nAn SRT file\n")).toThrow(
       "doesn't start with WEBVTT",

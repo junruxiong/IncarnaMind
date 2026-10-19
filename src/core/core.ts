@@ -3914,6 +3914,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       return meetings.setTemplate(meetingId, template);
     },
+    setMeetingMicrophone: async (input) => meetings.setMicrophonePaused(input),
 
     openDocumentFile: async (documentId) => {
       const file = await documents.openFile(documentId);

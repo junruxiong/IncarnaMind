@@ -13,7 +13,8 @@
  * The shortcuts are held only while a Meeting records: never while it is
  * paused or after it stops, so other apps get their keys back. A button's press
  * goes to the panel, or, with none shown, to the app's window, which asks
- * there; Call help's shows or hides the panel.
+ * there; Call help's shows or hides the panel, and Pause my mic's pauses or
+ * resumes the Meeting's microphone.
  */
 import { join } from "node:path";
 import {
@@ -96,9 +97,28 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     sync();
   }
 
+  function toggleMicrophone(): void {
+    const meeting = liveMeeting();
+    if (!meeting) return;
+    core
+      .setMeetingMicrophone({
+        meetingId: meeting.id,
+        paused: meeting.microphonePausedAtMs === null,
+      })
+      .catch((error: unknown) =>
+        options.log.error("meeting.microphoneFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+  }
+
   function press(kind: HelpShortcut): void {
     if (kind === "panel") {
       choose(!panel);
+      return;
+    }
+    if (kind === "mic") {
+      toggleMicrophone();
       return;
     }
     if (panel && !panel.isDestroyed()) {

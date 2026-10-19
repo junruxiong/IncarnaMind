@@ -583,6 +583,11 @@ export interface AudioSink {
 
 /** One recording in progress, from `AudioCapture.start`. */
 export interface CaptureSession {
+  /**
+   * Stops the microphone at its source, or starts it again; the computer's sound goes on. A
+   * microphone that is off isn't open, so no samples come from it.
+   */
+  setMicrophone(on: boolean): void;
   /** Stops capturing. Resolves once the last samples have reached the sink. */
   stop(): Promise<void>;
 }

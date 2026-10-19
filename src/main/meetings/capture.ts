@@ -140,6 +140,8 @@ export function createElectronAudioCapture({
       captureWindows.add(window);
       const contents = window.webContents;
       const fromWindow = (event: IpcMainEvent) => event.sender === contents;
+      let microphoneOn = true;
+      let started = false;
       let stopped = () => {};
       const whenStopped = new Promise<void>((resolve) => {
         stopped = resolve;
@@ -189,8 +191,12 @@ export function createElectronAudioCapture({
           else void window.loadFile(join(__dirname, "../renderer/capture.html"));
         });
         if (window.isDestroyed()) return;
-        const start: CaptureStart = { microphone, systemAudio: request.systemAudio };
+        const start: CaptureStart = {
+          microphone: microphone && microphoneOn,
+          systemAudio: request.systemAudio,
+        };
         contents.send(CAPTURE_CHANNELS.start, start);
+        started = true;
       };
       const starting = begin().catch((error: unknown) => {
         log.error("meeting.captureFailed", {
@@ -201,6 +207,10 @@ export function createElectronAudioCapture({
       });
 
       return {
+        setMicrophone(on) {
+          microphoneOn = on;
+          if (started && !window.isDestroyed()) contents.send(CAPTURE_CHANNELS.microphone, on);
+        },
         async stop() {
           await starting;
           if (!window.isDestroyed()) {

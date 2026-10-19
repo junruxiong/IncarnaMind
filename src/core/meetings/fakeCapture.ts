@@ -34,6 +34,8 @@ export interface FakeCapture extends AudioCapture {
   /** How many captures have started, and whether one runs now. */
   readonly started: number;
   readonly running: boolean;
+  /** The microphone is on while a capture runs: off, it sends nothing. */
+  readonly microphoneOn: boolean;
   /** The sources the System Settings link was opened for. */
   readonly settingsOpened: readonly AudioSource[];
 }
@@ -77,6 +79,9 @@ export function createFakeCapture(options: FakeCaptureOptions = {}): FakeCapture
     get running() {
       return sink !== null;
     },
+    get microphoneOn() {
+      return wanted.microphone;
+    },
     settingsOpened,
 
     start(request, given) {
@@ -98,6 +103,11 @@ export function createFakeCapture(options: FakeCaptureOptions = {}): FakeCapture
         }, tick);
       }
       return {
+        setMicrophone(on) {
+          if (sink !== given || wanted.microphone === on) return;
+          wanted = { ...wanted, microphone: on };
+          if (on) given.state("microphone", "recording");
+        },
         stop: async () => {
           if (timer) clearInterval(timer);
           timer = null;

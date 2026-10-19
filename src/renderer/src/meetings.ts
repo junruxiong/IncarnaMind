@@ -28,6 +28,8 @@ interface MeetingsState {
   cancelNotice(): void;
   pause(meetingId: string): Promise<void>;
   resume(meetingId: string): Promise<void>;
+  /** Pauses the Meeting's microphone, or resumes it; the computer's sound is recorded either way. */
+  setMicrophonePaused(meetingId: string, paused: boolean): Promise<void>;
   stop(meetingId: string): Promise<void>;
   discard(meetingId: string): Promise<void>;
   deleteAudio(meetingId: string): Promise<void>;
@@ -103,6 +105,8 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     cancelNotice: () => set({ noticeFor: null }),
     pause: (meetingId) => attempt(meetingId, () => core.pauseMeeting(meetingId)),
     resume: (meetingId) => attempt(meetingId, () => core.resumeMeeting(meetingId)),
+    setMicrophonePaused: (meetingId, paused) =>
+      attempt(meetingId, () => core.setMeetingMicrophone({ meetingId, paused })),
     stop: (meetingId) => attempt(meetingId, () => core.stopMeeting(meetingId)),
     discard: (meetingId) => attempt(meetingId, () => core.discardMeeting(meetingId)),
     deleteAudio: (meetingId) => attempt(meetingId, () => core.deleteMeetingAudio(meetingId)),

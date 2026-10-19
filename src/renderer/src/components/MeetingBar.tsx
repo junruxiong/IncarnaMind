@@ -21,6 +21,7 @@ import {
   StopLineIcon,
 } from "./lineIcons";
 import { LevelBars } from "./meetings/LevelBars";
+import { MicrophoneButton } from "./meetings/MicrophoneButton";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { TranscriptLines } from "./TranscriptLines";
 import { useTabPlace } from "./tabs/tabItems";
@@ -51,8 +52,8 @@ export function MeetingBar({ meeting, children }: { meeting: Meeting; children?:
 
 /**
  * The live-recording dot (red, the one red outside Citation checks; grey
- * while paused), "Recording 24:16" (or "Paused") with its level bars, Pause or Resume and Stop.
- * ⌘⇧P is the "meeting.pauseResume" command's (../commands/meetings).
+ * while paused), "Recording 24:16" (or "Paused") with its level bars, Pause my mic, Pause or
+ * Resume and Stop. ⌘⇧P is the "meeting.pauseResume" command's (../commands/meetings).
  */
 function MeetingControls({ meeting }: { meeting: Meeting }) {
   const t = useT();
@@ -80,6 +81,11 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
         </span>
         <LevelBars meeting={meeting} />
       </span>
+      <MicrophoneButton
+        meeting={meeting}
+        testId="meeting-mic"
+        className="meeting-button meeting-button--icon"
+      />
       <button
         type="button"
         data-testid={recording ? "meeting-pause" : "meeting-resume"}
@@ -188,7 +194,7 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
   const t = useT();
   const problem = useMeetings((state) => state.problems[meeting.id]);
   const gapsSeen = useMeetings((state) => state.gapsSeen[meeting.id] ?? 0);
-  const { openSettings, resume, dismissGaps } = useMeetings.getState();
+  const { openSettings, resume, dismissGaps, setMicrophonePaused } = useMeetings.getState();
   const settings = (source: AudioSource): ProblemAction => ({
     label: t(isMacOS() ? "meetings.line.openSettings.mac" : "meetings.line.openSettings.other"),
     testId: `meeting-settings-${source}`,
@@ -226,6 +232,17 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
       ...(meeting.sources.system !== "unavailable" && { action: settings("system") }),
     });
   }
+  if (meeting.microphonePausedAtMs !== null) {
+    lines.push({
+      key: "microphone-paused",
+      text: t("meetings.mic.pausedSince", { time: clockTime(meeting.microphonePausedAtMs) }),
+      action: {
+        label: t("meetings.mic.resumeLine"),
+        testId: "meeting-mic-resume",
+        onClick: () => void setMicrophonePaused(meeting.id, false),
+      },
+    });
+  }
   const gap = meeting.gaps.length > gapsSeen ? meeting.gaps.at(-1) : undefined;
   if (gap && meeting.status === "recording") {
     lines.push({
@@ -244,7 +261,7 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
         <ProblemLine
           key={line.key}
           testId={`meeting-line-${line.key}`}
-          role={line.key === "gap" || line.key === "interrupted" ? "status" : "alert"}
+          role={STATUS_LINES.has(line.key) ? "status" : "alert"}
           className="meeting-line"
           action={line.action}
         >
@@ -254,6 +271,8 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
     </>
   );
 }
+
+const STATUS_LINES: ReadonlySet<string> = new Set(["gap", "interrupted", "microphone-paused"]);
 
 const MICROPHONE_LINES: Partial<Record<MeetingSourceState, MessageKey>> = {
   denied: "meetings.line.microphoneDenied",

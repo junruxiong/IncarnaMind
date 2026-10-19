@@ -25,12 +25,19 @@ export interface Cue {
 
 /**
  * Why a stretch of a Meeting has no text: transcription restarted after a
- * crash, the computer slept, IncarnaMind wasn't running, or the audio was
- * deleted before it could catch up.
+ * crash, the computer slept, IncarnaMind wasn't running, the audio was
+ * deleted before it could catch up, or the User paused their microphone
+ * (the other side's lines go on through it).
  */
-export type GapReason = "restarted" | "sleep" | "interrupted" | "lost";
+export type GapReason = "restarted" | "sleep" | "interrupted" | "lost" | "micPaused";
 
-export const GAP_REASONS: readonly GapReason[] = ["restarted", "sleep", "interrupted", "lost"];
+export const GAP_REASONS: readonly GapReason[] = [
+  "restarted",
+  "sleep",
+  "interrupted",
+  "lost",
+  "micPaused",
+];
 
 export interface TranscriptGap {
   fromMs: number;
@@ -50,7 +57,7 @@ export const CUES_PER_BLOCK = 40;
 
 const TIMING =
   /^((?:\d{1,}:)?\d{2}:\d{2}\.\d{3})[ \t]+-->[ \t]+((?:\d{1,}:)?\d{2}:\d{2}\.\d{3})(?:[ \t].*)?$/;
-const GAP = /^NOTE gap ((?:\d+:)?\d{2}:\d{2}\.\d{3}) to ((?:\d+:)?\d{2}:\d{2}\.\d{3}) ([a-z]+)$/;
+const GAP = /^NOTE gap ((?:\d+:)?\d{2}:\d{2}\.\d{3}) to ((?:\d+:)?\d{2}:\d{2}\.\d{3}) ([A-Za-z]+)$/;
 const ENTITIES: Readonly<Record<string, string>> = {
   amp: "&",
   lt: "<",

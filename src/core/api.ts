@@ -7456,6 +7456,11 @@ export interface Meeting {
   transcript: MeetingTranscript | null;
   /** How well its capture went, so a bad recording can be explained (#161). */
   health: CaptureHealth;
+  /**
+   * While the User has paused their microphone: where in the Meeting's time that began, in ms of
+   * recording before it; otherwise null. The computer's sound is still recorded.
+   */
+  microphonePausedAtMs: number | null;
   /** The help asked for last during the call, whose Answer the floating panel shows; null before any and after Stop. */
   help: MeetingHelp | null;
   /** The kind of meeting the help buttons are for, as the User chose it; null: the general buttons only. */
@@ -7492,6 +7497,12 @@ export interface AskMeetingHelpInput {
 export interface SetMeetingTemplateInput {
   meetingId: string;
   template: MeetingHelpTemplate | null;
+}
+
+export interface SetMeetingMicrophoneInput {
+  meetingId: string;
+  /** True stops the microphone, as the User does when they mute themselves in the call; false starts it again. */
+  paused: boolean;
 }
 
 /** How loud each source of a recording Meeting is now, from 0 (silence) to 1. */
@@ -9366,6 +9377,12 @@ export interface CoreApi {
   askMeetingHelp(input: AskMeetingHelpInput): Promise<ConversationAskResult>;
   /** Sets the kind of meeting a live Meeting's help buttons are for: its template adds two or three. */
   setMeetingTemplate(input: SetMeetingTemplateInput): Promise<Meeting>;
+  /**
+   * Pauses the microphone of a Meeting that records or is paused, or resumes it. Paused, nothing
+   * from the microphone is saved, transcribed or sent to a transcription service, and the Transcript
+   * marks the stretch; the computer's sound goes on. Every Meeting starts with its microphone on.
+   */
+  setMeetingMicrophone(input: SetMeetingMicrophoneInput): Promise<Meeting>;
 
   /** Outside agents (#351, experimental): the setting, what pauses them, and every pairing. */
   getAgents(): Promise<AgentSettings>;
@@ -9927,6 +9944,7 @@ const methods: Record<CoreApiMethod, true> = {
   openAudioSettings: true,
   askMeetingHelp: true,
   setMeetingTemplate: true,
+  setMeetingMicrophone: true,
   getAgents: true,
   setAgentsEnabled: true,
   connectAgent: true,

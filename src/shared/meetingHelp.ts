@@ -87,24 +87,30 @@ export const isMeetingHelpKind = (value: unknown): value is MeetingHelpKind =>
 
 /**
  * The global shortcuts during a call, in Settings' order: Call help's, which shows or hides the
- * panel the buttons are in, then each general button's.
+ * panel the buttons are in, then each general button's, then Pause my mic's.
  */
-export const HELP_SHORTCUTS = ["panel", ...GENERAL_HELP] as const;
+export const HELP_SHORTCUTS = ["panel", ...GENERAL_HELP, "mic"] as const;
 export type HelpShortcut = (typeof HELP_SHORTCUTS)[number];
 
 export const isHelpShortcut = (value: unknown): value is HelpShortcut =>
   HELP_SHORTCUTS.some((shortcut) => shortcut === value);
 
 export const helpShortcutLabel = (shortcut: HelpShortcut): MessageKey =>
-  shortcut === "panel" ? "meetings.callHelp" : helpLabel(shortcut);
+  shortcut === "panel"
+    ? "meetings.callHelp"
+    : shortcut === "mic"
+      ? "meetings.mic.pause"
+      : helpLabel(shortcut);
 
 /**
- * A shortcut by default: ⌃⌥1–7 and ⌃⌥H on macOS, which Zoom and Teams leave
- * free; Ctrl+Shift+1–8 elsewhere, where Ctrl+Alt is AltGr on many European
- * layouts and types characters, and Teams leaves a call on Ctrl+Shift+H.
+ * A shortcut by default: ⌃⌥1–7, ⌃⌥H and ⌃⌥M on macOS, which Zoom and Teams
+ * leave free; Ctrl+Shift+1–8 and Ctrl+Shift+U elsewhere, where Ctrl+Alt is
+ * AltGr on many European layouts and types characters, and Teams leaves a
+ * call on Ctrl+Shift+H and mutes on Ctrl+Shift+M.
  */
 export function defaultHelpKeys(shortcut: HelpShortcut, mac: boolean): string {
   if (shortcut === "panel") return mac ? "Ctrl+Alt+H" : "Ctrl+Shift+8";
+  if (shortcut === "mic") return mac ? "Ctrl+Alt+M" : "Ctrl+Shift+U";
   const digit = GENERAL_HELP.indexOf(shortcut) + 1;
   return mac ? `Ctrl+Alt+${digit}` : `Ctrl+Shift+${digit}`;
 }
