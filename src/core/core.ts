@@ -176,6 +176,7 @@ import {
 } from "./minds";
 import { firstLineOf, readBlocks, textStart, theirChangesReading } from "./mindText";
 import { createNoteAdding, insertBlocks } from "./noteAdding";
+import { createOfficeBridge, type OfficeBridge } from "./office";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -309,6 +310,8 @@ export interface Core extends CoreApi, CoreEventSource {
   systemAwake(): void;
   /** Every event the core emits, for the host to forward to the UI. */
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
+  /** The Office add-in bridge; undefined unless the host asked for it (spike for #1272). */
+  readonly officeBridge: OfficeBridge | undefined;
   /** Every external data flow. Core modules register theirs here; consent covers each one. */
   readonly dataFlows: DataFlowRegistry;
   /**
@@ -2897,6 +2900,16 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   agentsLocalModeChanged = () => agents.localModeChanged();
   agents.start().catch((error: unknown) => console.error(error));
+  const officeBridge = adapters.officeBridge
+    ? createOfficeBridge({
+        adapter: adapters.officeBridge,
+        log: adapters.log ?? silentLogger,
+        secrets,
+        clock: () => performance.now(),
+        now,
+      })
+    : undefined;
+  officeBridge?.start().catch((error: unknown) => console.error(error));
   // Setting IncarnaMind up in the User's agent, from Settings → Agents.
   const agentSetup = createAgentSetup({
     agents,
@@ -3965,6 +3978,7 @@ export function createCore(adapters: CoreAdapters): Core {
     systemAwake: () => meetings.awake(),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
+    officeBridge,
     dataFlows: consent.registry,
     networkTraffic: privacy.traffic,
     retention,
@@ -3979,6 +3993,7 @@ export function createCore(adapters: CoreAdapters): Core {
       transcripts?.close();
       // Outside agents can't reach the core while it closes.
       void agents.close().catch((error: unknown) => console.error(error));
+      void officeBridge?.close().catch((error: unknown) => console.error(error));
       // First, so stopping the Answers below starts no background work.
       citedPages.close();
       background.close();
