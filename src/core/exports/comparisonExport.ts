@@ -29,11 +29,10 @@ export type ComparisonExportDependencies = Pick<
   | "now"
 >;
 
-/** A comparison table as an .xlsx, with how many Citations it holds and how many aren't "Quote found". */
+/** A comparison table as an .xlsx, with how many of its Citations aren't "Quote found". */
 export interface ComparisonWorkbook {
   fileName: string;
   data: Uint8Array;
-  citations: number;
   unverifiedCitations: number;
 }
 
@@ -70,7 +69,7 @@ export function createComparisonExport(deps: ComparisonExportDependencies) {
         return readComparisonTable(table, options);
       });
       if (!reading) throw new NotFoundError({ key: "error.comparison.notFound" });
-      const { book, citations, unverified } = comparisonBook({
+      const { book, unverified } = comparisonBook({
         reading,
         textLanguage: deps.citationStyle(mind.id).textLanguage,
         t,
@@ -90,7 +89,6 @@ export function createComparisonExport(deps: ComparisonExportDependencies) {
       return {
         fileName: `${name}.xlsx`,
         data: writeXlsx(book, deflateRawSync, { author: "IncarnaMind", created: deps.now() }),
-        citations,
         unverifiedCitations: unverified,
       };
     },

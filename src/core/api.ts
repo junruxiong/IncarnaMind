@@ -4021,8 +4021,8 @@ export type ComparisonResult =
 
 /** What saving a comparison table as an Excel workbook did (`CoreApi.saveComparisonExport`). */
 export type SavedComparisonExport =
-  /** Saved, with how many Citations the workbook holds and how many of them aren't "Quote found". */
-  | { status: "saved"; file: SavedFile; citations: number; unverifiedCitations: number }
+  /** Saved, with how many of the workbook's Citations aren't "Quote found", which the result line says. */
+  | { status: "saved"; file: SavedFile; unverifiedCitations: number }
   | Exclude<SavedExport, { status: "saved" }>;
 
 /** A comparison table whose cells are being filled ("comparison.filling"). */

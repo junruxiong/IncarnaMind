@@ -18,7 +18,6 @@ const SPREADSHEETML = "application/vnd.openxmlformats-officedocument.spreadsheet
 
 /** What a cell can hold, by Excel's limit; a longer text is cut and ends in "…". */
 export const MAX_CELL_TEXT = 32_767;
-/** Excel's limit for a sheet's name. */
 const MAX_SHEET_NAME = 31;
 /** Day 0 of Excel's 1900 date system, as JavaScript counts days: 30 December 1899. */
 const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
@@ -30,7 +29,6 @@ export function dateSerial(day: string): number {
   return (Date.UTC(year, month - 1, date) - EXCEL_EPOCH) / DAY_MS;
 }
 
-/** A sheet's name as Excel allows it: no \ / ? * [ ] :, not starting or ending with ', at most 31 characters, unique. */
 function sheetNames(sheets: readonly Sheet[]): string[] {
   const taken = new Set<string>();
   return sheets.map((sheet, index) => {
@@ -52,7 +50,6 @@ function sheetNames(sheets: readonly Sheet[]): string[] {
 
 const quotedSheet = (name: string) => `'${name.replace(/'/g, "''")}'`;
 
-/** Every cell's address, by sheet, row and column id. */
 function addresses(book: SheetBook, names: readonly string[]) {
   const sheets = new Map(
     book.sheets.map((sheet, index) => [
@@ -64,19 +61,20 @@ function addresses(book: SheetBook, names: readonly string[]) {
       },
     ]),
   );
-  const at = (ref: CellRef, from: string): string => {
+  const cell = (ref: CellRef) => {
     const sheet = sheets.get(ref.sheet);
     const row = sheet?.rows.get(ref.row);
     const column = sheet?.columns.get(ref.column);
     if (!sheet || row === undefined || !column) {
       throw new Error(`No cell ${ref.sheet}/${ref.row}/${ref.column} in the book.`);
     }
-    return ref.sheet === from ? `${column}${row}` : `${quotedSheet(sheet.name)}!${column}${row}`;
+    return { sheetName: sheet.name, local: `${column}${row}` };
   };
-  const local = (ref: CellRef) => {
-    const sheet = sheets.get(ref.sheet);
-    return `${sheet?.columns.get(ref.column) ?? "A"}${sheet?.rows.get(ref.row) ?? 1}`;
+  const at = (ref: CellRef, from: string): string => {
+    const { sheetName, local } = cell(ref);
+    return ref.sheet === from ? local : `${quotedSheet(sheetName)}!${local}`;
   };
+  const local = (ref: CellRef) => cell(ref).local;
   return { at, local, sheetName: (id: string) => sheets.get(id)?.name ?? "" };
 }
 
@@ -92,7 +90,6 @@ function formulaText(formula: Formula, sheet: string, at: (ref: CellRef, from: s
     .replace(/^=/, "");
 }
 
-/** The book's styles: a cell's style is its number format, whether it is bold, and whether it wraps. */
 function createStyles() {
   const formats = new Map<string, number>();
   const xfs = new Map<string, number>([["0|0|0", 0]]);
@@ -236,7 +233,6 @@ const commentsXml = (notes: WrittenSheet["notes"], author: string) =>
 /** Each drawing owns blocks of 1,024 shape ids, and its idmap lists them; ids outside its blocks break the file. */
 const SHAPE_BLOCK = 1024;
 
-/** The notes' boxes as Excel draws them, hidden until the cell is pointed at; shape ids from `firstBlock`'s. */
 const notesVml = (notes: WrittenSheet["notes"], firstBlock: number, blocks: number) =>
   `<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="${Array.from({ length: blocks }, (_, at) => firstBlock + at).join(",")}"/></o:shapelayout><v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202" path="m,l,21600r21600,l21600,xe"><v:stroke joinstyle="miter"/><v:path gradientshapeok="t" o:connecttype="rect"/></v:shapetype>${notes
     .map(
@@ -252,7 +248,6 @@ export interface XlsxOptions {
   created: string;
 }
 
-/** The book as an .xlsx package. */
 export function writeXlsx(book: SheetBook, deflate: Deflate, options: XlsxOptions): Uint8Array {
   const names = sheetNames(book.sheets);
   const where = addresses(book, names);

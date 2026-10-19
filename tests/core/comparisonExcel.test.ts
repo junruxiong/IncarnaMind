@@ -40,7 +40,7 @@ describe("A comparison table exported to Excel", () => {
     const { core, mind, tableId } = await compareReports();
     const saved = await core.saveComparisonExport({ mindId: mind.id, tableId });
     if (saved.status !== "saved") throw new Error(`Not saved: ${saved.status}`);
-    expect(saved).toMatchObject({ citations: 10, unverifiedCitations: 0 });
+    expect(saved).toMatchObject({ unverifiedCitations: 0 });
     expect(saved.file.name).toBe("Tides.xlsx");
 
     const { sheets } = await shownWorkbook(saved.file.path);
@@ -127,9 +127,9 @@ describe("A comparison table exported to Excel", () => {
     await copyRows(client, tableId, 1_000);
     const saved = await core.saveComparisonExport({ mindId: mind.id, tableId });
     if (saved.status !== "saved") throw new Error(`Not saved: ${saved.status}`);
-    expect(saved.citations).toBe(5_000);
     const { sheets } = await shownWorkbook(saved.file.path);
     expect(sheets[0]?.rowCount).toBe(1_001);
+    expect(sheets[1]?.rowCount).toBe(5_001);
     expect(sheets[0]?.at("B1001")).toMatchObject({ text: "$1.2m", raw: 1_200_000 });
   });
 

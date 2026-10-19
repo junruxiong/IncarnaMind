@@ -27,7 +27,6 @@ export interface SheetColumn {
 
 export interface SheetRow {
   id: string;
-  /** A heading row: its cells are bold. */
   header?: boolean;
   cells: SheetCell[];
 }
@@ -58,8 +57,6 @@ export interface SheetCell {
   formula?: Formula;
   /** Its note, as Excel shows one when the cell is pointed at. */
   note?: string;
-  /** Opens another cell of the book. */
   link?: CellRef;
-  /** Its text wraps within the column. */
   wrap?: boolean;
 }

@@ -49,7 +49,6 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
 export const exportPreferences = (): ExportPreferences =>
   useAppStore.getState().settings?.user.exportOptions ?? DEFAULT_PREFERENCES;
 
-/** A comparison table saved as an Excel workbook (#132). */
 export const COMPARISON_EXCEL = "comparison-xlsx";
 
 export type ExportKind =

@@ -30,7 +30,6 @@ const MONTHS = [
   "december",
 ];
 
-/** "March", "Mar", "Mar." or "Sept" as a month from 1, and whether it was written in full. */
 function monthOf(word: string): { month: number; full: boolean } | null {
   const lower = word.toLowerCase().replace(/\.$/, "");
   const full = MONTHS.indexOf(lower);
@@ -48,7 +47,6 @@ function isoDay(year: number, month: number, day: number): string | null {
 const day = (date: string | null, format: string): FigureCell | null =>
   date ? { value: { kind: "date", date }, format } : null;
 
-/** A whole text that is one day: "31 March 2026", "March 31, 2026", "2026-03-31", "2026年3月31日", "31/03/2026". */
 function dayCell(text: string): FigureCell | null {
   let match = /^(\d{1,2})\s+([A-Za-z]{3,9}\.?)\s+(\d{4})$/.exec(text);
   if (match) {
@@ -93,17 +91,15 @@ function dayCell(text: string): FigureCell | null {
   return null;
 }
 
-/** Text as an Excel number format's literal. */
 const literal = (text: string) => (text ? `"${text.replace(/"/g, "")}"` : "");
 
-/**
- * The format that writes `value` as `chars` wrote it: its currency before or after, its decimals,
- * its scale word where Excel can scale by thousands ("$1.2m" is 1,200,000 shown as "$1.2m"), and
- * brackets for a minus written in brackets.
- */
+/** The digits of a written figure, with every grouping mark the figures reader accepts ("1’234"). */
+const DIGIT_SPAN = /\d[\d.,'’\s]*\d|\d/;
+const AMOUNT_PARTS = new RegExp(`^([^\\d]*?)(${DIGIT_SPAN.source})(.*)$`, "su");
+
 function amountFormat(chars: string, decimals: number, scale: number, scaleWord: string | null) {
-  const parts = /^([^\d]*?)(\d[\d.,'\s ]*\d|\d)(.*)$/su.exec(chars);
-  const bracketed = /^\s*\(/.test(chars);
+  const parts = AMOUNT_PARTS.exec(chars);
+  const bracketed = /^[^\d]*\(/.test(chars);
   let before = (parts?.[1] ?? "").replace(/[(\-−–]/g, "");
   let after = (parts?.[3] ?? "").replace(/\)\s*$/, "");
   const exponent = Math.round(Math.log10(scale));
@@ -122,10 +118,13 @@ function amountFormat(chars: string, decimals: number, scale: number, scaleWord:
   const grouping = /^\d{4,}$/.test(whole) ? "0" : "#,##0";
   const digits = `${grouping}${shown > 0 ? `.${"0".repeat(shown)}` : ""}${thousands ? ",".repeat(exponent / 3) : ""}`;
   const positive = `${literal(before)}${digits}${literal(after.trimEnd())}`;
-  return bracketed ? `${positive};(${positive})` : positive;
+  // "$(3,400)" keeps its bracket inside the currency, "(3,400)" around everything.
+  const negative = /^\s*\(/.test(chars)
+    ? `(${positive})`
+    : `${literal(before)}(${digits})${literal(after.trimEnd())}`;
+  return bracketed ? `${positive};${negative}` : positive;
 }
 
-/** The amount or percentage `text` is, whole, or null. */
 function numberCell(text: string, language: Language): FigureCell | null {
   let figures = readFigures(text, { accounts: true });
   const ambiguous = figures[0]?.ambiguous ?? [];
@@ -150,6 +149,11 @@ function numberCell(text: string, language: Language): FigureCell | null {
     return null;
   }
   const { unit } = figure;
+  const written = DIGIT_SPAN.exec(figure.chars)?.[0] ?? "";
+  // A code ("02139", "00445790") isn't an amount, and Excel keeps only 15 significant digits:
+  // either would show something other than what the Document says.
+  if (unit.kind === "plain" && figure.scaleWord === null && /^0\d/.test(written)) return null;
+  if (written.replace(/\D/g, "").replace(/^0+/, "").replace(/0+$/, "").length > 15) return null;
   if (unit.kind === "percent") {
     const digits = `0${figure.decimals > 0 ? `.${"0".repeat(figure.decimals)}` : ""}%`;
     return {
@@ -170,11 +174,16 @@ function numberCell(text: string, language: Language): FigureCell | null {
  * the language the Mind is written in, and a figure in brackets is a minus.
  */
 export function figureCell(answer: string, language: Language): FigureCell | null {
-  const text = answer
-    .trim()
-    .replace(/[.。]$/u, "")
-    .trim();
+  const text = answer.trim();
   if (text === "" || /\n/.test(text)) return null;
+  // A sentence's full stop goes, but "1,2 Mio." keeps the dot of its scale word.
+  return (
+    wholeFigure(text, language) ??
+    (/[.。]$/u.test(text) ? wholeFigure(text.slice(0, -1).trim(), language) : null)
+  );
+}
+
+function wholeFigure(text: string, language: Language): FigureCell | null {
   const date = dayCell(text);
   if (date) return date;
   const whole = numberCell(text, language);

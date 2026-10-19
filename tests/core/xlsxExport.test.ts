@@ -45,6 +45,12 @@ describe("An Answer as a cell", () => {
     ["1.2亿元", 120_000_000, '#,##0"元"'],
     ["12500", 12_500, "0"],
     ["12,500.50", 12_500.5, "#,##0.00"],
+    ["1’234", 1_234, "#,##0"],
+    ["CHF 1’234.50", 1_234.5, '"CHF "#,##0.00'],
+    ["$(3,400)", -3_400, '"$"#,##0;"$"(#,##0)'],
+    ["1,2 Mio.", 1_200_000, '#,##0.0,," Mio."'],
+    ["$1.2m.", 1_200_000, '"$"#,##0.0,,"m"'],
+    ["0.5", 0.5, "#,##0.0"],
   ])("%s is the number %d", (answer, number, format) => {
     expect(figureCell(answer, "en")).toEqual({ value: { kind: "number", number }, format });
   });
@@ -60,7 +66,7 @@ describe("An Answer as a cell", () => {
     expect(figureCell(answer, "en")).toEqual({ value: { kind: "date", date }, format });
   });
 
-  // protects=an Answer that isn't one figure, or one the reader can't settle, stays text; fails_when=a sentence, a range, an estimate, a duration or an ambiguous day becomes a number; no_claim=none beyond protects.
+  // protects=an Answer that isn't one figure, or one the reader can't settle, stays text, as do codes with a leading zero and figures past Excel's 15 digits; fails_when=a sentence, a range, an estimate, a duration, an ambiguous day, a code or a long figure becomes a number; no_claim=none beyond protects.
   test.each([
     "Revenue was $1.2m",
     "about $5m",
@@ -70,6 +76,10 @@ describe("An Answer as a cell", () => {
     "30 February 2026",
     "Not reported",
     "Smith & Partners, appointed in 2019",
+    "00445790",
+    "02139",
+    "007",
+    "12345678901234567890",
   ])("%s stays text", (answer) => {
     expect(figureCell(answer, "en")).toBeNull();
   });
@@ -218,6 +228,32 @@ describe("The .xlsx writer", () => {
       '<o:idmap v:ext="edit" data="3"/>',
     );
     expect(shapes("xl/drawings/vmlDrawing2.vml")).toEqual([3_073, 3_074]);
+  });
+
+  // protects=a link naming a cell the book doesn't have fails, as a formula's does, rather than pointing at A1; fails_when=the book is written with a link to the wrong cell; no_claim=none beyond protects.
+  test("refuses a link to a cell the book doesn't have", () => {
+    const linked: SheetBook = {
+      sheets: [
+        {
+          id: "s",
+          name: "S",
+          columns: [{ id: "a" }],
+          rows: [
+            {
+              id: "r",
+              cells: [
+                {
+                  column: "a",
+                  value: { kind: "text", text: "See" },
+                  link: { sheet: "s", row: "missing", column: "a" },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(() => write(linked)).toThrow("No cell s/missing/a in the book.");
   });
 
   // protects=the cells read back as Excel shows them, by row and column id whatever order they were given in, with their notes and frozen headings; fails_when=a number is stored as text, a format or note is lost, or a cell lands in another column; no_claim=row heights.

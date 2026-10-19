@@ -15,10 +15,6 @@ function cursorBlockIn(mindId: string | null): string | null {
   return typeof id === "string" ? id : null;
 }
 
-/**
- * The comparison table an export takes: the one expanded, else the one the cursor is in, else
- * the Mind's only one.
- */
 function tableToExport(): { mindId: string; tableId: string } | null {
   const mindId = currentMindIdOf(useAppStore.getState().layout);
   const note = noteHandle.current;
@@ -53,7 +49,6 @@ export const comparisonCommands: readonly Command[] = [
     },
   },
   {
-    // The expanded table's "Export to Excel" (#132), for a table not expanded too.
     id: "comparison.exportExcel",
     label: "export.excel.command",
     keywords: ["export.excel.keywords"],

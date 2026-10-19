@@ -628,7 +628,6 @@ export interface ComparisonReading {
   }[];
 }
 
-/** A comparison table's rows and cells, each cell in its Question's column. */
 export function readComparisonTable(table: Y.XmlElement, options: ReadOptions): ComparisonReading {
   const say = options.comparisonText ?? ((key, params) => translate("en", key, params));
   const questions = comparisonQuestionsOf(table.getAttributes());

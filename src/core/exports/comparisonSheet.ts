@@ -97,10 +97,9 @@ const TABLE = "table";
 const SOURCES = "sources";
 const DOCUMENT_COLUMN = "document";
 
-/** The table and its Sources as a sheet book, and how many Citations it holds and how many aren't "Quote found". */
+/** The table and its Sources as a sheet book, and how many of its Citations aren't "Quote found". */
 export function comparisonBook(input: ComparisonSheetInput): {
   book: SheetBook;
-  citations: number;
   unverified: number;
 } {
   const { reading, t } = input;
@@ -172,7 +171,6 @@ export function comparisonBook(input: ComparisonSheetInput): {
     return { id: rowId, cells };
   });
   return {
-    citations: sources.length,
     unverified,
     book: {
       sheets: [
