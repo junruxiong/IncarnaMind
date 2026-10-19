@@ -53,6 +53,7 @@ import type {
   AudioSource,
   CloudTranscriptionRoute,
   Document,
+  ExternalService,
   MeetingTranscript,
   SavedFile,
   TranscriptProblem,
@@ -134,7 +135,12 @@ interface Live {
   /** Where the live audio goes: this computer, or a cloud service. */
   engine: "local" | CloudTranscriptionRoute;
   /** The cloud service's streams and what has been counted against the cap, while `engine` is one. */
-  cloud: { stream: CloudStream; meter: CloudAudioMeter; aheadMs: number } | null;
+  cloud: {
+    stream: CloudStream;
+    meter: CloudAudioMeter;
+    aheadMs: number;
+    service: ExternalService;
+  } | null;
   /** Where to transcribe is being worked out: the audio waits meanwhile. */
   choosing: boolean;
   tracks: Tracks;
@@ -617,19 +623,20 @@ export function createTranscripts(options: TranscriptsOptions) {
       return;
     }
     const live = found.state.live;
-    if (live) leaveCloud(found.state, live, "dropped");
+    if (live) leaveCloud(found.state, live, loss);
   }
 
   /**
-   * The live audio goes to this computer from now on (#141). "dropped": what the cloud hadn't
-   * given text for is a gap, transcribed on this computer after Stop. "cap" and "user": its
-   * streams finish with what they were sent. The bar says why, except where the User chose.
+   * The live audio goes to this computer from now on (#141). "dropped" and "refused": what the
+   * cloud hadn't given text for is a gap, transcribed on this computer after Stop. "cap" and
+   * "user": its streams finish with what they were sent. The bar says why, except where the
+   * User chose.
    */
-  function leaveCloud(state: State, live: Live, reason: "dropped" | "cap" | "user"): void {
+  function leaveCloud(state: State, live: Live, reason: CloudLoss | "cap" | "user"): void {
     if (live.engine === "local") return;
     const route = live.engine;
     const atMs = live.pushedMs;
-    if (reason === "dropped") {
+    if (reason === "dropped" || reason === "refused") {
       dropStreams(live);
       const lost = { fromMs: live.doneMs, toMs: Math.max(live.doneMs, live.pushedMs) };
       if (live.started && live.pendingFrom === null && lost.toMs > lost.fromMs) {
@@ -653,7 +660,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       atMs,
       from: "cloud",
       to: "local",
-      reason: reason === "dropped" ? "failed" : reason,
+      reason: reason === "dropped" || reason === "refused" ? "failed" : reason,
     });
     startEngine(state);
     writeLines(state, { now: true });
@@ -744,7 +751,7 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   function pushTracks(state: State, live: Live, audio: TrackedAudio): void {
     if (live.engine !== "local") {
-      const allowed = options.cloud?.allowed(live.engine) ?? false;
+      const allowed = (live.cloud && options.cloud?.allowed(live.cloud.service)) ?? false;
       if (!allowed || !counted(live, audio)) {
         leaveCloud(state, live, allowed ? "cap" : "user");
         if (live.started) pushTracks(state, live, audio);
@@ -809,7 +816,12 @@ export function createTranscripts(options: TranscriptsOptions) {
           });
         } else if (start) {
           live.engine = start.route;
-          live.cloud = { stream: start.stream, meter: start.meter, aheadMs: 0 };
+          live.cloud = {
+            stream: start.stream,
+            meter: start.meter,
+            aheadMs: 0,
+            service: start.service,
+          };
           log.info("transcript.cloud", { meetingId: state.meetingId, route: start.route });
         }
         startEngine(state);

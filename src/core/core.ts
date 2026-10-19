@@ -3101,7 +3101,7 @@ export function createCore(adapters: CoreAdapters): Core {
       const languageWas = settings.get().language;
       const updated = settings.update(change);
       // Choosing a cloud service where its line says meeting audio goes to it is the consent (ADR-0022).
-      if (route !== undefined) cloudTranscription.chose(updated.device.transcriptionRoute);
+      if (route !== undefined) await cloudTranscription.chose(updated.device.transcriptionRoute);
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.

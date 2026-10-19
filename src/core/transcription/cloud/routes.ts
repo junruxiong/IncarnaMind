@@ -12,6 +12,7 @@
 import type { CloudStream } from "../../adapters";
 import type {
   CloudTranscriptionRoute,
+  ExternalService,
   SetTranscriptionKeyInput,
   TranscriptionRoute,
   TranscriptionServiceStatus,
@@ -19,7 +20,7 @@ import type {
 import type { Consent } from "../../consent";
 import type { Meter } from "../../cost/meter";
 import { InvalidInputError, isRecord } from "../../errors";
-import { TRANSCRIPTION_SERVICES } from "../../providers/catalog/transcription";
+import { qwenRegion, TRANSCRIPTION_SERVICES } from "../../providers/catalog/transcription";
 import type { Secrets } from "../../secrets";
 import type { SettingsStore } from "../../settings";
 
@@ -44,8 +45,20 @@ export interface CloudAudioMeter {
 }
 
 export type CloudStart =
-  | { route: CloudTranscriptionRoute; stream: CloudStream; meter: CloudAudioMeter }
+  | {
+      route: CloudTranscriptionRoute;
+      stream: CloudStream;
+      meter: CloudAudioMeter;
+      /** Where its audio goes, which the consent is for. */
+      service: ExternalService;
+    }
   | { route: CloudTranscriptionRoute; refused: "cap" };
+
+interface ServiceKey {
+  providerId: string;
+  apiKey: string;
+  endpoint: string | null;
+}
 
 export interface CloudTranscriptionOptions {
   settings: SettingsStore;
@@ -54,7 +67,7 @@ export interface CloudTranscriptionOptions {
   meter: Meter;
   localOnly(): boolean;
   /** The key of the saved chat provider for a catalog entry, with its row. */
-  providerKey(catalogId: string): Promise<{ providerId: string; apiKey: string } | null>;
+  providerKey(catalogId: string): Promise<ServiceKey | null>;
   /** Silero VAD's file, downloaded first if needed: OpenAI's turns need it. */
   vadFile(): Promise<string>;
   fetch?: typeof fetch;
@@ -67,40 +80,50 @@ export function createCloudTranscription(options: CloudTranscriptionOptions) {
   const request = options.fetch ?? fetch;
   const chosen = () => settings.get().device.transcriptionRoute;
 
-  async function keyOf(
-    route: CloudTranscriptionRoute,
-  ): Promise<{ providerId: string; apiKey: string } | null> {
+  async function keyOf(route: CloudTranscriptionRoute): Promise<ServiceKey | null> {
     if (TRANSCRIPTION_SERVICES[route].key === "provider") return options.providerKey(route);
     const apiKey = await secrets.tryGet(keyName(route));
-    return apiKey ? { providerId: route, apiKey } : null;
+    return apiKey ? { providerId: route, apiKey, endpoint: null } : null;
   }
+
+  const serviceOf = (route: CloudTranscriptionRoute, key: ServiceKey | null): ExternalService =>
+    route === "qwen"
+      ? qwenRegion(key?.endpoint ?? null).service
+      : TRANSCRIPTION_SERVICES[route].service;
 
   consent.registry.register({
     id: "transcription",
     sends: SENDS,
     async services() {
       const route = chosen();
-      return isCloudRoute(route) ? [TRANSCRIPTION_SERVICES[route].service] : [];
+      return isCloudRoute(route) ? [serviceOf(route, await keyOf(route))] : [];
     },
   });
 
   const list = async (): Promise<TranscriptionServiceStatus[]> =>
     Promise.all(
-      Object.values(TRANSCRIPTION_SERVICES).map(async (service) => ({
-        route: service.route,
-        name: service.name,
-        model: service.model,
-        perHour: service.perHour,
-        key: service.key,
-        hasKey: (await keyOf(service.route)) !== null,
-        liveSpeakers: service.liveSpeakers,
-        keyUrl: service.keyUrl ?? null,
-      })),
+      Object.values(TRANSCRIPTION_SERVICES).map(async (service) => {
+        const key = await keyOf(service.route);
+        const region = service.route === "qwen" && key ? qwenRegion(key.endpoint) : null;
+        return {
+          route: service.route,
+          name: service.name,
+          recipient: service.recipient,
+          model: service.model,
+          perHour: region?.perHour ?? service.perHour,
+          region: region?.label ?? null,
+          dataUse: service.dataUse ?? null,
+          key: service.key,
+          hasKey: key !== null,
+          liveSpeakers: service.liveSpeakers,
+          keyUrl: service.keyUrl ?? null,
+        };
+      }),
     );
 
   /** Whether meeting audio may go to the service now: not in Local mode, and still allowed. */
-  const allowed = (route: CloudTranscriptionRoute) =>
-    !options.localOnly() && consent.allows("transcription", TRANSCRIPTION_SERVICES[route].service);
+  const allowed = (service: ExternalService) =>
+    !options.localOnly() && consent.allows("transcription", service);
 
   return {
     list,
@@ -108,9 +131,10 @@ export function createCloudTranscription(options: CloudTranscriptionOptions) {
     allowed,
 
     /** The User chose where meeting audio is transcribed: a cloud service, chosen, is allowed. */
-    chose(route: TranscriptionRoute | null): void {
-      if (isCloudRoute(route))
-        consent.choose(["transcription"], TRANSCRIPTION_SERVICES[route].service);
+    async chose(route: TranscriptionRoute | null): Promise<void> {
+      if (isCloudRoute(route)) {
+        consent.choose(["transcription"], serviceOf(route, await keyOf(route)));
+      }
     },
 
     /** A choice the User can make now: a cloud service needs its key. */
@@ -175,26 +199,26 @@ export function createCloudTranscription(options: CloudTranscriptionOptions) {
      */
     async start(): Promise<CloudStart | null> {
       const route = chosen();
-      if (!isCloudRoute(route) || !allowed(route)) return null;
-      const service = TRANSCRIPTION_SERVICES[route];
+      if (!isCloudRoute(route)) return null;
       const key = await keyOf(route);
-      if (!key) return null;
+      const where = serviceOf(route, key);
+      if (!key || !allowed(where)) return null;
+      const service = TRANSCRIPTION_SERVICES[route];
+      const region = route === "qwen" ? qwenRegion(key.endpoint) : null;
       const audio = meter.audio({
         providerId: key.providerId,
         modelId: service.model,
-        perHour: service.perHour,
+        perHour: region?.perHour ?? service.perHour,
       });
       if (!audio.add(0)) return { route, refused: "cap" };
-      const stream: CloudStream =
-        route === "openai"
-          ? {
-              service: "openai",
-              model: service.model,
-              apiKey: key.apiKey,
-              vad: await options.vadFile(),
-            }
-          : { service: "soniox", model: service.model, apiKey: key.apiKey };
-      return { route, stream, meter: audio };
+      const { model } = service;
+      const { apiKey } = key;
+      const stream: CloudStream = region
+        ? { service: "qwen", model, apiKey, url: region.url }
+        : route === "openai"
+          ? { service: "openai", model, apiKey, vad: await options.vadFile() }
+          : { service: "soniox", model, apiKey };
+      return { route, stream, meter: audio, service: where };
     },
   };
 }

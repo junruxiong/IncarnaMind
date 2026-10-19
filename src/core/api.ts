@@ -10,6 +10,7 @@ import type {
   TaggingClassifier,
   TaggingModels,
 } from "./library/types";
+import type { Localized } from "./providers/catalog/types";
 import type { UiUsageEvent } from "./usageEvents";
 
 export type {
@@ -1990,10 +1991,10 @@ export interface DeviceSettings {
 
 /**
  * Where a Meeting's audio is turned into text: on this computer, or by a cloud service with the
- * User's own key (#141): OpenAI with the key of the OpenAI provider in Settings › Models, Soniox
- * with a key of its own. #463 adds Qwen.
+ * User's own key (#141): OpenAI and Qwen (Alibaba Cloud Model Studio, for mainland China) with
+ * the key of their provider in Settings › Models, Soniox with a key of its own.
  */
-export const TRANSCRIPTION_ROUTES = ["local", "openai", "soniox"] as const;
+export const TRANSCRIPTION_ROUTES = ["local", "openai", "soniox", "qwen"] as const;
 export type TranscriptionRoute = (typeof TRANSCRIPTION_ROUTES)[number];
 export type CloudTranscriptionRoute = Exclude<TranscriptionRoute, "local">;
 
@@ -2002,9 +2003,15 @@ export interface TranscriptionServiceStatus {
   route: CloudTranscriptionRoute;
   /** "OpenAI", "Soniox": where meeting audio goes. */
   name: string;
+  /** Who gets the audio, as the consent line names it ("Alibaba Cloud" for Qwen). */
+  recipient: Localized;
   model: string;
-  /** What an hour of audio costs at list price. */
+  /** What an hour of audio costs at list price, in the key's region where it has one. */
   perHour: Money;
+  /** The region the key is for, where the service has them (Qwen's, as in Settings › Models). */
+  region: Localized | null;
+  /** What the service's own agreement says it does with the audio, where we have checked it. */
+  dataUse: { summary: Localized; url: Localized } | null;
   /** "provider": it uses the key of the chat provider of the same name; "own": a key of its own. */
   key: "provider" | "own";
   /** A key is there to use. */
@@ -7655,9 +7662,14 @@ export interface MeetingTranscript {
   /**
    * The cloud service the User chose stopped while this stretch of recording went on, and this
    * computer took over: where, in the Meeting's time, and why ("dropped": the connection was
-   * lost or the service refused; "cap": the month's spending reached the cap). Null otherwise.
+   * lost; "refused": the service didn't accept the key, or the account has no credit left;
+   * "cap": the month's spending reached the cap). Null otherwise.
    */
-  fellBack: { route: CloudTranscriptionRoute; atMs: number; reason: "dropped" | "cap" } | null;
+  fellBack: {
+    route: CloudTranscriptionRoute;
+    atMs: number;
+    reason: "dropped" | "refused" | "cap";
+  } | null;
   /** The WebVTT file in the Output location, once saved. */
   savedPath: string | null;
   /** Its save took the default Output location, none being chosen yet (`SavedFile.defaulted`). */
