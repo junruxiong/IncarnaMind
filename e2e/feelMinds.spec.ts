@@ -88,7 +88,8 @@ test("first open, a Question, its Citation, and the Mind checked", async () => {
     await window.keyboard.press("Escape");
     await expect(window.getByTestId("citation-card")).toBeHidden();
   });
-  await feel.expectFocus("close the Citation", chip);
+  // A clicked chip leaves focus where it was (CitationView), so closing finds it there still.
+  await feel.expectFocus("close the Citation", window.getByTestId("composer-input"));
 
   await feel.step("check the Mind", async () => {
     await pointAndClick(window, editorOf(window));

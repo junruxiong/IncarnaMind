@@ -325,33 +325,32 @@ async function film(window: Page, folder: string): Promise<() => Promise<void>> 
   };
 }
 
-/** Makes the frames a video when ffmpeg is there (CI installs it); the frames stay either way. */
-function encode(folder: string, video: string): Promise<void> {
-  return new Promise((resolve) => {
+/** Makes the frames a video when ffmpeg is there (CI installs it), then drops them; else keeps them. */
+async function encode(folder: string, video: string): Promise<void> {
+  const made = await new Promise<boolean>((resolve) => {
     const ffmpeg = spawn(
       "ffmpeg",
-      ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", "frames.txt"].concat([
-        "-vf",
-        "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-        "-fps_mode",
-        "vfr",
-        "-pix_fmt",
-        "yuv420p",
-        video,
-      ]),
+      [
+        ["-y", "-loglevel", "error"],
+        ["-f", "concat", "-safe", "0", "-i", "frames.txt"],
+        // H.264 needs even sides; the window's may be odd.
+        ["-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2"],
+        ["-fps_mode", "vfr", "-pix_fmt", "yuv420p", video],
+      ].flat(),
       { cwd: folder, stdio: "ignore" },
     );
     let missing = false;
     ffmpeg.on("error", (error) => {
       missing = true;
       console.warn(`No video of ${video}, its frames are in ${folder}: ${error.message}`);
-      resolve();
+      resolve(false);
     });
     ffmpeg.on("close", (code) => {
       if (code !== 0 && !missing) console.warn(`ffmpeg stopped with ${code} making ${video}`);
-      resolve();
+      resolve(code === 0);
     });
   });
+  if (made) await rm(folder, { recursive: true, force: true });
 }
 
 export interface FeelRun {

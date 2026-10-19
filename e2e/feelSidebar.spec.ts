@@ -76,9 +76,10 @@ test("the sidebar: open, rename in place, move, delete and Undo, and a new Mind 
     await window.keyboard.press("Escape");
     await expect(row.getByTestId("mind-actions")).toBeHidden();
   });
+  // The ⋯ button shows only on hover, so Esc gives focus back to its row (ObjectMenu).
   await feel.expectFocus(
     "menu opened and closed",
-    mindRow(window, "Budget").getByTestId("mind-menu"),
+    mindRow(window, "Budget").getByTestId("mind-list-item"),
   );
 
   await feel.step("move to a Folder", async () => {
