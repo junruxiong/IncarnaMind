@@ -1749,7 +1749,7 @@ export const en = {
   "setup.chatgpt.line": "Plus or Pro \u00b7 no key needed",
   "setup.chatgpt.line.china": "Plus or Pro, outside mainland China \u00b7 no key needed",
   "setup.key.use": "Paste an API key",
-  "setup.key.for": "OpenAI, Anthropic, Google, DeepSeek and more",
+  "setup.key.for": "OpenAI, Anthropic, Google, DeepSeek, Kimi and more",
   "setup.back": "Back",
   "setup.ready": "{name} works",
   "setup.ready.generic": "Your AI model works",

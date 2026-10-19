@@ -5,6 +5,7 @@ import type {
   SecretStorageStatus,
   TestChatConnectionInput,
 } from "../../../../core/api";
+import type { Language } from "../../../../core/language";
 import type { DataUse } from "../../../../core/providers/catalog";
 import { catalogMenu } from "../../../../core/providers/catalog";
 import { serviceOfKey } from "../../../../core/providers/catalog/keyForms";
@@ -61,8 +62,14 @@ const suggestedModel = (kind: CatalogId): string => catalogProvider(kind)?.roles
 const isSuggestion = (model: string) =>
   KEY_PROVIDERS.some((kind) => suggestedModel(kind) === model);
 
-/** The providers shown as one row of choices; the rest are under "More…". */
-const ROW: readonly CatalogId[] = ["anthropic", "openai", "google", "deepseek", "qwen"];
+/** The providers shown as one row of choices, in the order the interface's language puts first; the rest are under "More…". */
+const ROW: Readonly<Record<Language, readonly CatalogId[]>> = {
+  en: ["anthropic", "openai", "google", "deepseek", "kimi", "qwen"],
+  "zh-CN": ["deepseek", "qwen", "kimi", "glm", "anthropic", "openai", "google"],
+};
+
+/** First run offers these two as well, though they are best-effort: its key line names them (#1375). */
+const FIRST_RUN_ALSO: readonly CatalogId[] = ["kimi", "glm"];
 
 /** What a provider's address field holds when it is chosen. */
 const fieldDefault = (kind: CatalogId): string => {
@@ -290,7 +297,7 @@ export function ProviderForm({
     if (next !== kind && !keepKey) key.clear();
     setKind(next);
     setSwitchedFrom(from);
-    if (more.includes(next) || !ROW.includes(next)) setMoreOpen(true);
+    if (more.includes(next) || !ROW[language].includes(next)) setMoreOpen(true);
     setEndpointId(defaultRegion(next, language));
     setFieldValue(fieldDefault(next));
     setModelId((current) =>
@@ -411,8 +418,10 @@ export function ProviderForm({
     />
   );
   // First run offers only the first-class providers (ADR-0019); Settings offers them all.
-  const offered = withMoreProviders ? [...main, ...more] : main;
-  const rowKinds = ROW.filter((each) => offered.includes(each));
+  const offered = withMoreProviders
+    ? [...main, ...more]
+    : [...main, ...FIRST_RUN_ALSO.filter((each) => !main.includes(each))];
+  const rowKinds = ROW[language].filter((each) => offered.includes(each));
   // A key that fits no service's prefix may be one the services under More… issue.
   const showMore =
     moreOpen ||

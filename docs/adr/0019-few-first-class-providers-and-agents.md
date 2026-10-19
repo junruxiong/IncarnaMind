@@ -50,3 +50,8 @@ A plan can also be reached through an experimental sign-in route, where the User
 - Settings → Models no longer splits the key providers into the first-class ones and "More providers". "Add a provider…" opens a directory of every provider in groups that follow the interface language: Popular, International, China, On this computer and Other in English, and 常用, 中国, 国际, 本机, 其他 in Chinese.
 - Popular holds what most Users of that language set up first, whatever its tier: Anthropic, OpenAI, Google, Ollama and OpenRouter in English; DeepSeek, Qwen, Kimi, GLM, SiliconFlow and Ollama in Chinese, where the best-effort Kimi and GLM are among the most used.
 - The tiers still decide what the first-run setup offers, which providers have a key guide, and which are tried by hand before a release.
+
+## Amendment: Kimi and GLM on the first-run key form (#1375)
+
+- The first-run key line names the providers that work for the language: DeepSeek, Qwen, Kimi and GLM in Chinese; OpenAI, Anthropic, Google, DeepSeek and Kimi in English. Each named provider opens its key form in one step, so Kimi and GLM, best-effort providers, are offered there too, though they still have no guide of their own and no release check.
+- The form's row of choices follows the language: in Chinese DeepSeek, Qwen, Kimi and GLM come first. Settings › Models is as before.

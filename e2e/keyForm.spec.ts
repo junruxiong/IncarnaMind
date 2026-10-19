@@ -554,6 +554,47 @@ for (const height of [560, 700]) {
   });
 }
 
+for (const { value, line, chips, titles } of [
+  {
+    value: "en",
+    line: "OpenAI, Anthropic, Google, DeepSeek, Kimi and more",
+    chips: ["Anthropic", "OpenAI", "Google", "DeepSeek", "Kimi", "Qwen"],
+    titles: ["Anthropic", "OpenAI", "Google", "DeepSeek", "Kimi"],
+  },
+  {
+    value: "zh-CN",
+    line: "DeepSeek、通义千问、Kimi、智谱 GLM 等",
+    chips: ["DeepSeek", "通义千问", "Kimi", "智谱 GLM", "Anthropic", "OpenAI", "Google"],
+    titles: ["DeepSeek", "通义千问", "Kimi", "智谱 GLM"],
+  },
+] as const) {
+  test(`the first-run key line names the services that work for the language, and each opens its key form in one step (${value})`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1100, 900);
+      await acceptPlainTextKeys(window);
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await expect(card.getByTestId("setup-key-for")).toHaveText(line);
+      await card.getByTestId("setup-key").click();
+      const form = card.getByTestId("provider-form");
+      const row = form.getByRole("radio");
+      await expect(row).toHaveCount(chips.length);
+      for (const [index, name] of chips.entries()) {
+        await expect(row.nth(index)).toHaveAccessibleName(name);
+      }
+      for (const name of titles) {
+        await form.getByRole("radio", { name, exact: true }).check({ force: true });
+        await expect(card.getByTestId("provider-form-title")).toContainText(name);
+        await expect(form.locator('input[type="password"]')).toBeVisible();
+        await expect(form.getByRole("radio", { checked: true })).toHaveAccessibleName(name);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+}
+
 test("in Settings, a key that is not the page's service goes nowhere on Add a provider and on a provider's page, and the page stays the provider's", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
