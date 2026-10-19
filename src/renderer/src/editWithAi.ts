@@ -52,7 +52,7 @@ export const TRANSLATE_LANGUAGES: readonly { id: string; name: string; prompt: s
 ];
 
 /** Why an Edit with AI request gave no Proposals, for the line in the composer. */
-export type EditProblem =
+export type EditProblem = (
   | {
       kind:
         | "unchanged"
@@ -62,11 +62,13 @@ export type EditProblem =
         | "local-mode"
         | "cant-regenerate"
         | "no-table"
-        | "late";
+        | "late"
+        | "busy";
     }
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   | { kind: "failed"; message: string; retry: () => void }
-  | { kind: "consent-revoked"; error: ProviderError };
+  | { kind: "consent-revoked"; error: ProviderError }
+) & { inMenu?: true };
 
 interface Pending {
   requestId: string;
@@ -75,6 +77,8 @@ interface Pending {
   language: string | null;
   /** Stopped by the User: it still settles before another edit can start, so its Undo stays its own. */
   stopped?: boolean;
+  /** Asked in the selection menu: the menu says what it does, and the sidebar's status once the menu is closed, never the composer. */
+  inMenu?: true;
 }
 
 interface EditsState {
@@ -86,6 +90,8 @@ interface EditsState {
   editing: Readonly<Record<string, { quote: string }>>;
   /** By Mind: what a screen reader is told about Proposals, with a count to say it again. */
   spoken: Readonly<Record<string, { text: string; at: number }>>;
+  /** By Mind: the selection menu is showing the edit asked in it, so the sidebar's status stays quiet. */
+  menuShows: Readonly<Record<string, true>>;
 }
 
 export const useEdits = create<EditsState>()(() => ({
@@ -93,6 +99,7 @@ export const useEdits = create<EditsState>()(() => ({
   problems: {},
   editing: {},
   spoken: {},
+  menuShows: {},
 }));
 
 const set = <K extends keyof EditsState>(
@@ -117,6 +124,12 @@ export function speak(mindId: string, text: string): void {
 }
 
 export const dismissEditProblem = (mindId: string) => set("problems", mindId, null);
+
+export const setMenuShows = (mindId: string, shown: boolean) =>
+  set("menuShows", mindId, shown ? true : null);
+
+export const noteBusy = (mindId: string, inMenu: boolean) =>
+  set("problems", mindId, inMenu ? { kind: "busy", inMenu: true } : { kind: "busy" });
 
 /** A selection shown short, for the composer's chip. */
 function quoteOf(text: string): string {
@@ -161,8 +174,8 @@ const failure = (error: unknown): EditWithAiResult => ({
  * the selection closes at its end, so the User can write on. The change
  * applies at once (#880); one held back waits as Proposals, which take the
  * cursor, if it is still where it was, so their bar shows; anything else is
- * one line in the composer. One edit at a time in a Mind. Says whether the
- * change came back.
+ * one line in the composer, or where `from` says it was asked, the selection
+ * menu. One edit at a time in a Mind. Says whether the change came back.
  */
 export async function requestEdit(
   editor: Editor,
@@ -171,6 +184,7 @@ export async function requestEdit(
   action: EditAction,
   instruction?: string,
   range?: { from: number; to: number },
+  from?: "menu",
 ): Promise<boolean> {
   const selection = selectionForEdit(editor.state, range);
   if (!selection || editor.isDestroyed || useEdits.getState().pending[mindId]) return false;
@@ -181,6 +195,7 @@ export async function requestEdit(
     requestId,
     action,
     language: action === "translate" ? (instruction ?? null) : null,
+    ...(from === "menu" && { inMenu: true as const }),
   });
   setEditTarget(editor, selection.range);
   const { selection: now } = editor.state;
@@ -215,7 +230,7 @@ export async function requestEdit(
     watch.movedOn(),
     result,
     async () => {
-      await requestEdit(editor, mindId, doc, action, instruction, range ?? selection.range);
+      await requestEdit(editor, mindId, doc, action, instruction, range ?? selection.range, from);
     },
     applying,
   );
@@ -239,6 +254,7 @@ async function arrived(
   applying: Applying | null = null,
 ): Promise<void> {
   const edits = useEdits.getState();
+  const inMenu = edits.pending[mindId]?.inMenu === true;
   const mine = edits.pending[mindId]?.requestId === requestId;
   const stopped = !mine || edits.pending[mindId]?.stopped === true;
   // Stopped: nothing waits on the text any more, unless another request or the composer does.
@@ -252,8 +268,10 @@ async function arrived(
   } finally {
     if (mine) set("pending", mindId, null);
   }
+  const problem = (found: EditProblem): void =>
+    set("problems", mindId, inMenu ? { ...found, inMenu: true as const } : found);
   if (outcome === "late") {
-    set("problems", mindId, { kind: "late" });
+    problem({ kind: "late" });
     return;
   }
   if (outcome !== null && outcome !== "held") {
@@ -288,11 +306,7 @@ async function arrived(
     return;
   }
   if (result.kind === "cancelled") return;
-  set(
-    "problems",
-    mindId,
-    result.kind === "failed" ? failedEdit(result.error, () => void retry()) : result,
-  );
+  problem(result.kind === "failed" ? failedEdit(result.error, () => void retry()) : result);
 }
 
 /**
@@ -399,7 +413,10 @@ export function editFromComposer(
   doc: Y.Doc,
   instruction: string,
 ): boolean {
-  if (useEdits.getState().pending[mindId]) return false;
+  if (useEdits.getState().pending[mindId]) {
+    noteBusy(mindId, false);
+    return false;
+  }
   const target = editTarget(editor.state);
   set("editing", mindId, null);
   if (!target || instruction.trim() === "") {

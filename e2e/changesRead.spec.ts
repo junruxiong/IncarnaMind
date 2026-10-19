@@ -63,7 +63,7 @@ async function changeAndReview(window: Page, editor: Locator, line: Locator, ins
   await expect(window.getByTestId("selection-edit-field")).toBeFocused();
   await window.keyboard.type(instruction);
   await window.keyboard.press("Enter");
-  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+  await expect(window.getByTestId("selection-edit-working")).toHaveCount(0);
   await pointAndClick(window, editor.getByTestId("applied-line").getByTestId("applied-review"));
 }
 

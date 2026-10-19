@@ -1,34 +1,42 @@
 import type { VirtualElement } from "@floating-ui/dom";
 import { type Editor, posToDOMRect } from "@tiptap/core";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useEdits } from "../editWithAi";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { noteBusy, setMenuShows, useEdits } from "../editWithAi";
 import { holdSelection } from "./heldSelection";
 import { editTarget } from "./proposalReview";
 
-/** What the Mind lends the selection menu for its Edit with AI… field. */
 export interface EditWithAiField {
   mindId: string;
-  /** Asks for the change as the assistant's composer does, applied in place. */
   send(editor: Editor, instruction: string): void;
-  /** Moves the request and the selection to the composer; absent where there is no assistant. */
+  /** Absent where there is no assistant to hand the request to. */
   handOff?(editor: Editor, instruction: string): void;
 }
 
-/** The field before a request, while the AI works on it, and after, when it is shown why it gave nothing. */
 export type EditPhase = "idle" | "working" | "settled";
 
+// The working line goes after the Block's end, so it never lies over the text being changed.
+function endOfBlock(doc: ProseMirrorNode, pos: number): number {
+  const $pos = doc.resolve(pos);
+  for (let depth = $pos.depth; depth > 0; depth--) {
+    if ($pos.node(depth).isTextblock) return $pos.end(depth);
+  }
+  return pos;
+}
+
 /**
- * The state of the selection menu's Edit with AI… field: what is typed, and
- * the request it sends. The cursor goes back to the text at once, so the User
- * can write on; the menu stays under the text as one line (`working`) until
- * the AI is done, then goes, or, if it gave nothing and the User hasn't moved,
- * comes back over the selection with the field and the reason.
+ * What the selection menu's Edit with AI… field is doing: what is typed, the
+ * request it sends, and where that stands. While the AI works the menu is one
+ * line under the text, with the keys: Esc stops, Enter does nothing. When it is
+ * done the menu goes, or, if it gave nothing and the User hasn't moved, comes
+ * back over the selection with the field and the reason.
  */
 export function useEditField(editor: Editor, edit: EditWithAiField | undefined, hide: () => void) {
   const mindId = edit?.mindId;
   const [phase, setPhase] = useState<EditPhase>("idle");
   const [text, setText] = useState("");
   const input = useRef<HTMLInputElement>(null);
+  const pill = useRef<HTMLDivElement>(null);
   const working = useRef(false);
   const sent = useRef<{ from: number; to: number } | null>(null);
   const pending = useEdits((state) => (mindId ? state.pending[mindId] : undefined));
@@ -37,13 +45,16 @@ export function useEditField(editor: Editor, edit: EditWithAiField | undefined, 
     // Set before the request collapses the selection, which would otherwise close the menu.
     working.current = true;
     setPhase("working");
-    editor.view.focus();
   };
 
   const send = () => {
     const instruction = text.trim();
     if (!edit || instruction === "" || working.current) return;
-    if (useEdits.getState().pending[edit.mindId]) return;
+    if (useEdits.getState().pending[edit.mindId]) {
+      noteBusy(edit.mindId, true);
+      setPhase("settled");
+      return;
+    }
     const { from, to } = editor.state.selection;
     asked();
     edit.send(editor, instruction);
@@ -69,9 +80,19 @@ export function useEditField(editor: Editor, edit: EditWithAiField | undefined, 
     hide();
   }, [phase, pending, editor, mindId, hide]);
 
+  useLayoutEffect(() => {
+    if (phase === "working") pill.current?.focus({ preventScroll: true });
+  }, [phase]);
+
   useEffect(() => {
     if (phase === "settled") input.current?.focus({ preventScroll: true });
   }, [phase]);
+
+  useEffect(() => {
+    if (!mindId || phase === "idle") return;
+    setMenuShows(mindId, true);
+    return () => setMenuShows(mindId, false);
+  }, [mindId, phase]);
 
   const reset = useCallback(() => {
     working.current = false;
@@ -81,13 +102,14 @@ export function useEditField(editor: Editor, edit: EditWithAiField | undefined, 
     holdSelection(editor, false, "edit-field");
   }, [editor]);
 
-  /** While the AI works the menu stays under the text it is working on, as it was. */
   const anchor = useCallback((): VirtualElement | null => {
     const target = working.current ? editTarget(editor.state) : null;
     if (!target) return null;
-    const clamp = (pos: number) => Math.min(pos, editor.state.doc.content.size);
+    const { doc } = editor.state;
+    const clamp = (pos: number) => Math.min(pos, doc.content.size);
     return {
-      getBoundingClientRect: () => posToDOMRect(editor.view, clamp(target.from), clamp(target.to)),
+      getBoundingClientRect: () =>
+        posToDOMRect(editor.view, clamp(target.from), endOfBlock(doc, clamp(target.to))),
     };
   }, [editor]);
 
@@ -96,6 +118,7 @@ export function useEditField(editor: Editor, edit: EditWithAiField | undefined, 
     text,
     setText,
     input,
+    pill,
     working,
     send,
     asked,

@@ -21,6 +21,7 @@ import { placesText, resumeTagging, stoppedDocumentPlaces, taggingPlaces } from 
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
 import { CloseLineIcon } from "./lineIcons";
+import { useMenuEditStatus } from "./menuEditStatus";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
 import { testErrorKey } from "./providers/shared";
 import { rowActionButtonClass } from "./sidebarRows";
@@ -289,6 +290,7 @@ function useStatuses(): Status[] {
   const organizing = organizes(library);
   const organizesNew = organizesNewDocuments(library);
   const capturing = useCapturing();
+  const editing = useMenuEditStatus();
   const counts = useAppStore(
     useShallow((state) => {
       let processing = 0;
@@ -789,6 +791,8 @@ function useStatuses(): Status[] {
       action: stop,
     });
   }
+
+  if (editing) statuses.push(editing);
 
   if (organizing && library) {
     const pending = library.assignments.filter(

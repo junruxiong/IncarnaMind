@@ -133,10 +133,10 @@ const controlsOf = (menu: HTMLElement | null) =>
     ) ?? [],
   );
 
-/** A short Mind view can't hold the whole menu: its rows scroll, the Edit with AI field stays in sight at its foot. */
 function fitToView(frame: HTMLElement | null) {
   const view = frame?.closest(".mind-scroller");
-  // The 8px padding at both ends of the view, and the 8px offset that comes after the slide.
+  // A short view can't hold the whole menu: its rows scroll and the field stays at its foot. The
+  // room leaves the 8px padding at both ends of the view, and the 8px offset that comes after the slide.
   frame?.style.setProperty("--selection-menu-room", view ? `${view.clientHeight - 24}px` : "100vh");
 }
 
@@ -255,9 +255,10 @@ export function SelectionMenu({
   const working = field.working;
   const shouldShow = useCallback<NonNullable<BubbleMenuProps["shouldShow"]>>(
     ({ editor: current, element, view }) =>
-      working.current ||
-      (showsOver(current, pressed.current) &&
-        (view.hasFocus() || element.contains(document.activeElement))),
+      working.current
+        ? element.contains(document.activeElement)
+        : showsOver(current, pressed.current) &&
+          (view.hasFocus() || element.contains(document.activeElement)),
     [working],
   );
 
@@ -449,11 +450,18 @@ export function SelectionMenu({
     editor.commands.focus();
   };
 
-  const leaveField = (event: FocusEvent<HTMLInputElement>) => {
+  const leaveField = (event: FocusEvent<HTMLElement>) => {
     const next = event.relatedTarget;
-    if (!(next instanceof Element) || field.working.current) return;
-    const inside = frame.current?.contains(next) || editor.view.dom.contains(next);
-    if (!inside && !next.closest(".editor-popover")) hideMenu(editor);
+    if (
+      next instanceof Element &&
+      (frame.current?.contains(next) || next.closest(".editor-popover"))
+    ) {
+      return;
+    }
+    // A click in the text moves the selection, which closes the menu over the field; the working line has no selection to follow.
+    if (field.working.current || (next instanceof Element && !editor.view.dom.contains(next))) {
+      hideMenu(editor);
+    }
   };
 
   const handOff = () => {
@@ -473,7 +481,9 @@ export function SelectionMenu({
         options={options}
         className="selection-menu-frame"
       >
-        {field.phase === "working" && edit && <EditWorking mindId={edit.mindId} />}
+        {field.phase === "working" && edit && (
+          <EditWorking mindId={edit.mindId} pill={field.pill} onLeave={leaveField} />
+        )}
         <div
           ref={menu}
           role="menu"

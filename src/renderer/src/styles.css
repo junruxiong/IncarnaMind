@@ -5053,7 +5053,6 @@
     line-height: 16px;
     color: var(--color-ink-meta);
   }
-  /* "Edit with AI…" at the menu's foot, and the line that takes the menu's place while the AI works. */
   .selection-edit-foot {
     position: sticky;
     bottom: 0;

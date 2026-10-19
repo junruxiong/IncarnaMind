@@ -1,5 +1,5 @@
 import type { Editor } from "@tiptap/core";
-import type { FocusEvent, KeyboardEvent } from "react";
+import type { FocusEvent, KeyboardEvent, RefObject } from "react";
 import { ChatLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { stopEdit, useEdits } from "../editWithAi";
@@ -13,11 +13,6 @@ type Field = ReturnType<typeof useEditField>;
 
 const CARET_KEYS: ReadonlySet<string> = new Set(["ArrowLeft", "ArrowRight", "Home", "End"]);
 
-/**
- * "Edit with AI…" at the foot of the selection menu: what to change is typed
- * here, and Enter asks for it, as the composer would. The control at the
- * field's end moves the request and the selection to the composer instead.
- */
 export function EditField({
   editor,
   edit,
@@ -46,6 +41,7 @@ export function EditField({
     }
     if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.metaKey) {
       event.preventDefault();
+      event.stopPropagation();
       field.send();
     }
   };
@@ -103,12 +99,32 @@ export function EditField({
   );
 }
 
-/** What takes the menu's place while the AI works on the change: one line, with Stop. */
-export function EditWorking({ mindId }: { mindId: string }) {
+export function EditWorking({
+  mindId,
+  pill,
+  onLeave,
+}: {
+  mindId: string;
+  pill: RefObject<HTMLDivElement | null>;
+  onLeave(event: FocusEvent<HTMLElement>): void;
+}) {
   const t = useT();
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Escape") stopEdit(mindId);
+  };
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: it only keeps the cursor in the text when Stop is clicked.
-    <div onMouseDown={(event) => event.preventDefault()} className="editor-menu selection-working">
+    // biome-ignore lint/a11y/noStaticElementInteractions: it holds the cursor while the AI works, so Enter does nothing and Esc stops it.
+    <div
+      ref={pill}
+      tabIndex={-1}
+      onKeyDown={onKeyDown}
+      onBlur={onLeave}
+      onMouseDown={(event) => event.preventDefault()}
+      className="editor-menu selection-working"
+    >
       <ProblemLine
         role="status"
         testId="selection-edit-working"

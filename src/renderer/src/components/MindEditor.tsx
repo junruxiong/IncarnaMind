@@ -99,7 +99,7 @@ import { OriginalNotAdded, useWordFile, WordImportProgress } from "../editor/Wor
 import { WordTableFades } from "../editor/WordTableFades";
 import { useWordLookStyle } from "../editor/wordLookStyle";
 import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
-import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
+import { requestEdit, startEditing, TRANSLATE_LANGUAGES, useEdits } from "../editWithAi";
 import { useFirstOpen } from "../firstOpen";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
@@ -549,13 +549,11 @@ function MindEditorView({
     ];
   }, [mindId, doc, hasDocuments]);
 
-  // The field at the foot of the selection menu asks as the assistant's composer would, so the
-  // change applies in place; its hand-off moves the request to that composer.
   const editField = useMemo(
     (): EditWithAiField => ({
       mindId,
       send: (current, instruction) =>
-        void requestEdit(current, mindId, doc, "instruction", instruction),
+        void requestEdit(current, mindId, doc, "instruction", instruction, undefined, "menu"),
       ...(reads && {
         handOff(current: typeof editor, typed: string) {
           if (!startEditing(current, mindId)) return;
@@ -612,10 +610,13 @@ function MindEditorView({
   }, [asksHere, editor, doc, mindId]);
 
   // The assistant writing changes into this Mind as they come (#202): "Writing…" where the next goes.
+  // An edit asked in the selection menu changes the text in place, with no line that moves it.
   useEffect(() => {
-    setWritingPlace(editor, writingPlaceOf(mindId));
+    const placeNow = (place: ReturnType<typeof writingPlaceOf>) =>
+      useEdits.getState().pending[mindId]?.inMenu ? null : place;
+    setWritingPlace(editor, placeNow(writingPlaceOf(mindId)));
     return onMindWriting(({ mindId: changed, place }) => {
-      if (changed === mindId) setWritingPlace(editor, place);
+      if (changed === mindId) setWritingPlace(editor, placeNow(place));
     });
   }, [editor, mindId]);
 

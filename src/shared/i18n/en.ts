@@ -828,6 +828,7 @@ export const en = {
   "edit.problem.cant-regenerate": "Can't be made again: reject it, then edit the text with AI.",
   "edit.problem.no-table": "The AI's table wasn't complete, so nothing changed. Try again.",
   "edit.problem.late": "This edit arrived too late to apply. Accept or reject its changes.",
+  "edit.problem.busy": "Another edit is still running. Wait for it, or stop it.",
   "composer.edit.placeholder": "Say what to change…",
   "composer.edit.label": "Say what to change in the selected text",
   "composer.edit.quote": "Editing “{text}”",
