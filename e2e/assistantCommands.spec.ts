@@ -177,6 +177,7 @@ test("a delete the assistant starts asks first, naming what goes, and Don't dele
   await expect(card.getByTestId("approval-allow-once")).toContainText("Delete");
   await expect(card.getByTestId("approval-deny")).toHaveText("Don't delete");
   await expect(card.getByTestId("approval-always-allow")).toHaveCount(0);
+  await screenshot(window, "commands-delete-asks-en");
   await pointAndClick(window, card.getByTestId("approval-deny"));
   const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
