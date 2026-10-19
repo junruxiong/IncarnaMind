@@ -1562,7 +1562,7 @@ export function createLibrary(options: LibraryOptions) {
     remove(idInput: unknown, keepInput: unknown = []): void {
       const row = getRow(idInput);
       if (!Array.isArray(keepInput) || !keepInput.every((id) => typeof id === "string")) {
-        throw new InvalidInputError("keep must be a list of Document ids.");
+        throw new InvalidInputError({ key: "error.linkedFolder.keep" });
       }
       const keep = new Set<string>(keepInput);
       stopWatcher(row.id);

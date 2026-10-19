@@ -146,6 +146,29 @@ test("Undo of a link that merged a Linked folder links that folder again, its Do
       linked: [inner],
       documents: [{ name: "Memo", id: memo?.id, in: inner }],
     });
+
+  // Linked again under a new id, the inner folder's own link still undoes.
+  await expect.poll(() => undoItem(app)).toEqual({ label: "Undo Link “Inner”", enabled: true });
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => library(window)).toEqual({ linked: [], documents: [] });
+  await app.close();
+});
+
+test("unlinking a folder that merged another takes both links' Undo away", async () => {
+  const folder = await folderOfNotes();
+  const { app, window } = await launchApp(dataDir);
+  await start(app, window);
+  await linkFolderFromSidebar(app, window, join(folder, "Inner"));
+  await linkFolderFromSidebar(app, window, folder);
+  await expect.poll(async () => (await library(window)).linked).toEqual([folder]);
+
+  const menu = await openLinkedFolderMenu(linkedFolderRow(window, "Deals"));
+  await menu.getByTestId("linkedFolder.unlink").click();
+  await window.getByTestId("confirm-unlink-folder").click();
+  await expect(linkedFolderRow(window, "Deals")).toHaveCount(0);
+
+  await leaveText(window);
+  await expect.poll(() => undoItem(app)).toEqual({ label: "Undo", enabled: false });
   await app.close();
 });
 

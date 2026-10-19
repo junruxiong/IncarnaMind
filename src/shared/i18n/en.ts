@@ -3657,6 +3657,7 @@ export const en = {
     "The Library holds up to 100 Folders. Delete one, then restore this one.",
   "error.restore.notDeleted": "“{name}” isn't deleted, so it can't be deleted permanently.",
   "error.history.gone": "That version is no longer kept.",
+  "error.linkedFolder.keep": "IncarnaMind couldn’t tell which Documents to keep.",
   "error.linkedFolder.notThis":
     "That folder doesn't hold “{name}”'s files. Choose the folder that does.",
   "error.linkedFolder.overlaps":
