@@ -418,6 +418,53 @@ test("Kimi is listed under International and under China, and each opens its for
     await expect(settings.getByTestId("provider-directory-group")).toHaveCount(2);
     await settings.getByTestId("models-back").click();
     await expect(await open("international")).toHaveValue("intl");
+    await settings.getByTestId("models-back").click();
+    // Popular, in Chinese, is Kimi's own region.
+    await expect(await open("popular")).toHaveValue("cn");
+  } finally {
+    await app.close();
+  }
+});
+
+test("with Kimi saved on China, only the China tile says Added and opens it, and International opens an empty form (#1348)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const saved = await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      return core.saveChatProvider({
+        kind: "kimi",
+        endpoint: "cn",
+        apiKey: "sk-not-real",
+        modelId: "kimi-k2.6",
+      });
+    });
+    const settings = await openSettings(window, "models");
+    const tile = (group: string) =>
+      settings.locator(
+        `[data-testid="provider-directory-group"][data-group="${group}"] [data-catalog-id="kimi"]`,
+      );
+    const directory = async () => {
+      await settings.getByTestId("models-add-provider").click();
+      await settings.getByTestId("provider-directory-search").fill("kimi");
+    };
+
+    await directory();
+    await expect(tile("china")).toContainText("Added");
+    await expect(tile("international")).not.toContainText("Added");
+    await tile("international").click();
+    const form = settings.getByTestId("provider-add").getByTestId("provider-form");
+    await expect(form.getByRole("combobox", { name: /^Region/ })).toHaveValue("intl");
+    await expect(form.getByLabel(/^API key/)).toHaveValue("");
+    await settings.getByTestId("models-back").click();
+
+    await directory();
+    await tile("china").click();
+    await expect(settings.getByTestId("provider-page")).toHaveAttribute(
+      "data-provider-id",
+      saved.id,
+    );
   } finally {
     await app.close();
   }

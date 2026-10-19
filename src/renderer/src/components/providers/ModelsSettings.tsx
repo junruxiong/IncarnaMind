@@ -28,6 +28,7 @@ import { PlansSettings } from "./PlansSettings";
 import { ProviderDirectory } from "./ProviderDirectory";
 import { logoIdOf, ProviderLogo } from "./ProviderLogo";
 import { ProviderPage, providerName, type RemovedProvider } from "./ProviderPage";
+import { catalogIdOf, savedProviderFor } from "./shared";
 
 type View =
   | { page: "list" }
@@ -37,8 +38,6 @@ type View =
 
 const ANSWERS_TARGET = ["chat-model"] as const;
 const DIRECTORY_TARGET = ["add-provider"] as const;
-
-const catalogIdOf = (provider: ChatProvider) => provider.catalogId ?? provider.kind;
 
 export function ModelsSettings() {
   const readiness = useAppStore((state) => state.chatReadiness);
@@ -113,19 +112,15 @@ export function ModelsSettings() {
     groups?.find((each) => each.provider.id === providerId);
 
   const pageFor = (catalogId: string, endpoint: string | null): View => {
+    const saved = savedProviderFor(providers, catalogId, endpoint);
     const catalog = catalogProvider(catalogId);
-    const region = catalog ? (endpointOf(catalog, endpoint)?.id ?? null) : null;
-    // A server the User gives can be added again at another address.
-    const saved =
-      catalogId === "openai-compatible"
-        ? undefined
-        : providers.find(
-            (each) =>
-              catalogIdOf(each) === catalogId && (region === null || each.endpoint === region),
-          );
     return saved
       ? { page: "provider", providerId: saved.id }
-      : { page: "add", catalogId, endpoint: region };
+      : {
+          page: "add",
+          catalogId,
+          endpoint: catalog ? (endpointOf(catalog, endpoint)?.id ?? null) : null,
+        };
   };
 
   const added = (provider: ChatProvider) => {

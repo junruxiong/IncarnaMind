@@ -11,11 +11,10 @@ import { SearchLineIcon } from "../lineIcons";
 import { SettingsBackLink } from "../SettingsBackLink";
 import { type DirectoryGroup, directoryGroups } from "./directoryGroups";
 import { ProviderLogo } from "./ProviderLogo";
-import { keyProviderName } from "./shared";
+import { keyProviderName, savedProviderFor } from "./shared";
 
 const headClass = "text-[13px] leading-5 font-semibold text-ink";
 
-/** Under International or China, a provider opens on the region the heading names, where it has one. */
 const regionOf = (entry: CatalogProvider, group: DirectoryGroup): string | null => {
   const region = group === "international" ? "intl" : group === "china" ? "cn" : null;
   return region !== null && entry.endpoints.some((each) => each.id === region) ? region : null;
@@ -82,18 +81,17 @@ export function ProviderDirectory({
         >
           <h5 className={headClass}>{t(`models.directory.group.${group}`)}</h5>
           <div className="grid grid-cols-1 gap-2 @[30rem]:grid-cols-2">
-            {entries.map((entry) => (
-              <Tile
-                key={entry.id}
-                entry={entry}
-                // A server the User gives can be added again at another address.
-                added={
-                  entry.id !== "openai-compatible" &&
-                  providers.some((each) => (each.catalogId ?? each.kind) === entry.id)
-                }
-                onOpen={() => onOpen(entry.id, regionOf(entry, group))}
-              />
-            ))}
+            {entries.map((entry) => {
+              const region = regionOf(entry, group);
+              return (
+                <Tile
+                  key={entry.id}
+                  entry={entry}
+                  added={savedProviderFor(providers, entry.id, region) !== undefined}
+                  onOpen={() => onOpen(entry.id, region)}
+                />
+              );
+            })}
           </div>
         </div>
       ))}

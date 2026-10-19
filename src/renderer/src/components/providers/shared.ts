@@ -4,6 +4,7 @@ import type { Language } from "../../../../core/language";
 import {
   catalogProvider,
   catalogProviderOf,
+  endpointOf,
   fieldValueOf,
   isPreset,
   kindOfCatalogId,
@@ -33,6 +34,26 @@ export function readinessKey(readiness: Extract<ChatReadiness, { ready: false }>
   return isSignInRoute(kind)
     ? SIGN_IN_ROUTES[kind].problems["signed-out"].line
     : "chatgpt.readiness.sign-in-required";
+}
+
+export const catalogIdOf = (provider: ChatProvider) => provider.catalogId ?? provider.kind;
+
+/**
+ * The provider a click on a catalog entry opens, if one is saved: for a hosted provider the one
+ * on the region asked for (its first when none), so a Kimi saved on China is not one on International.
+ * A server the User gives can be added again at another address, so it is never "saved".
+ */
+export function savedProviderFor(
+  providers: readonly ChatProvider[],
+  catalogId: string,
+  endpoint: string | null,
+): ChatProvider | undefined {
+  if (catalogId === "openai-compatible") return undefined;
+  const catalog = catalogProvider(catalogId);
+  const region = catalog ? (endpointOf(catalog, endpoint)?.id ?? null) : null;
+  return providers.find(
+    (each) => catalogIdOf(each) === catalogId && (region === null || each.endpoint === region),
+  );
 }
 
 export function keyProviderName(id: string, t: Translate, language: Language): string {
