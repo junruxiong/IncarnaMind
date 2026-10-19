@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  acceptPlainTextKeys,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -55,6 +56,7 @@ test("with a Soniox key, the first recording asks where to transcribe; choosing 
   await setWindowSize(app, window, 1600, 900);
   await dismissChatSetup(window);
   await useOutputLocation(window, sources);
+  await acceptPlainTextKeys(window);
 
   // Settings › Meetings: a Soniox key of its own, checked before it is kept.
   await turnOnMeetings(window, async () => {

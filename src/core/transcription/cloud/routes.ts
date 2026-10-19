@@ -130,7 +130,7 @@ export function createCloudTranscription(options: CloudTranscriptionOptions) {
       const given = isRecord(input) ? (input as Partial<SetTranscriptionKeyInput>) : {};
       const route = given.route;
       if (!isCloudRoute(route) || TRANSCRIPTION_SERVICES[route].key !== "own") {
-        throw new InvalidInputError("That transcription service doesn't take a key of its own.");
+        throw new InvalidInputError({ key: "error.transcription.noOwnKey" });
       }
       const apiKey = typeof given.apiKey === "string" ? given.apiKey.trim() : "";
       if (!apiKey) throw new InvalidInputError({ key: "error.transcription.keyMissing" });
@@ -163,7 +163,7 @@ export function createCloudTranscription(options: CloudTranscriptionOptions) {
 
     async removeKey(route: unknown): Promise<TranscriptionServiceStatus[]> {
       if (!isCloudRoute(route))
-        throw new InvalidInputError("That isn't a cloud transcription service.");
+        throw new InvalidInputError({ key: "error.transcription.unknownService" });
       if (TRANSCRIPTION_SERVICES[route].key === "own") await secrets.delete(keyName(route));
       if (chosen() === route) settings.update({ device: { transcriptionRoute: "local" } });
       return list();

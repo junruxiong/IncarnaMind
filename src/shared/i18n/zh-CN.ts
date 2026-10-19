@@ -3442,6 +3442,8 @@ export const zhCN = {
   "error.transcription.keyMissing": "请先粘贴密钥。",
   "error.transcription.unreachable": "无法连接 {service}。请检查网络后重试。",
   "error.transcription.keyRefused": "{service} 不接受这个密钥。请重新复制后粘贴到这里。",
+  "error.transcription.noOwnKey": "这个转写服务使用你在“模型”中设置的密钥。",
+  "error.transcription.unknownService": "这不是转写服务。",
   "error.meeting.template": "这不是会议模板。请从模板菜单中选择。",
   "error.comparison.noQuestion": "先添加一个要对比的问题。",
   "error.comparison.tooManyQuestions": "对比表最多可以有 {max} 个问题。",

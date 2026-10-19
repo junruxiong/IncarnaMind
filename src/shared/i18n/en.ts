@@ -3581,6 +3581,8 @@ export const en = {
     "Couldn’t reach {service}. Check the connection and try again.",
   "error.transcription.keyRefused":
     "{service} didn’t accept this key. Copy it again and paste it here.",
+  "error.transcription.noOwnKey": "That transcription service uses the key you set in Models.",
+  "error.transcription.unknownService": "That isn’t a transcription service.",
   "error.meeting.template": "That isn’t a meeting template. Choose one from the template menu.",
   "error.comparison.noQuestion": "Add a Question to compare by.",
   "error.comparison.tooManyQuestions": "A comparison table has at most {max} Questions.",
