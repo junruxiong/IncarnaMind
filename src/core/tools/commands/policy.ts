@@ -52,7 +52,6 @@ export function askOf(checked: CheckedCommand, context: CommandContext): Command
   throw new Error(`${checked.command} would do what nothing can ask the User about.`);
 }
 
-/** An item by the name the User knew it by, before this Answer renamed it. */
 function asKnown(item: CommandItem, before: ReadonlyMap<string, string>): CommandItem {
   const known = before.get(item.id);
   return known === undefined || known === item.name

@@ -22,7 +22,6 @@ const reasonOf = (error: unknown) => (error instanceof Error ? error.message : S
 interface Change {
   step: CommandStep;
   undone: boolean;
-  /** What its Undo left in place. */
   kept: CommandKept | null;
 }
 

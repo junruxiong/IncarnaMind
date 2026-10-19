@@ -109,7 +109,6 @@ export function commandTools(options: CommandToolsOptions): {
   drop(toolCallId: string): void;
 } {
   const checked = new Map<string, CheckedCommand>();
-  /** The asks of the calls waiting for the User, by call. */
   const asks = new Map<string, CommandAsk>();
   /** How many things the Answer changed without asking, since the User last allowed more. */
   let changed = 0;
