@@ -3,6 +3,7 @@ import type { Document, DocumentStatus, Tag } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
 import { documentStatusText, isProcessing } from "../documentStatus";
+import { useDragSource } from "../dragDrop";
 import { useFirstOpen } from "../firstOpen";
 import { useLanguage, useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
@@ -16,7 +17,7 @@ import {
   useSelectionOrder,
   useSeveralSelected,
 } from "../selection";
-import { dragFromRow, moveFromMenu, useSidebarMove } from "../sidebarMoves";
+import { moveFromMenu, rowDrag, useSidebarMove } from "../sidebarMoves";
 import { useSortMenu } from "../sortMenu";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
@@ -217,8 +218,8 @@ export function DocumentsSection() {
  * end while it's processed, if it failed, or if its file is missing or can't
  * be reached (then muted too; clicking still opens what IncarnaMind kept of
  * it). The name gives way first; the row stays one 28px line. Pointed at, it
- * offers its Tags and a menu for the rest. It drags onto a Folder or the
- * composer, with the rows selected with it, and moves by its menu or ⇧⌘M
+ * offers its Tags and a menu for the rest. It drags onto a Folder, a Tag or
+ * the composer, with the rows selected with it, and moves by its menu or ⇧⌘M
  * too (see `SidebarMoveTo`). Memoised: a sidebar of thousands of Documents
  * draws again only the rows whose Document changed.
  */
@@ -260,6 +261,7 @@ const DocumentRow = memo(function DocumentRow({
   const row = useRef<HTMLLIElement>(null);
   const muted = !lit && (isProcessing(item.status) || item.fileStatus !== "available");
   const treeItem = useTreeItem({ depth, selected: select.selected });
+  const dragSource = useDragSource(() => rowDrag(object, "sidebar"));
 
   return (
     <li
@@ -308,8 +310,7 @@ const DocumentRow = memo(function DocumentRow({
             rename.nameProps.onKeyDown(event);
             moveToKey(event);
           }}
-          draggable
-          onDragStart={(event) => dragFromRow(event, object)}
+          {...dragSource}
           className={`${rowButtonClass} ${clearsActions.tagsAndMenu}`}
           style={rowPadding(depth)}
         >

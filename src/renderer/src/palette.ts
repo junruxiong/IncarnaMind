@@ -40,6 +40,7 @@ import { matchName, type NameMatch, queryWords } from "./matcher";
 import type { ObjectRef, Translate } from "./objects";
 import { useSelection } from "./selection";
 import { refKey } from "./selectionModel";
+import { moveFromPalette } from "./sidebarMoves";
 import { useAppStore } from "./store";
 
 const NOTHING: CommandContext = { selection: [], focus: null, surface: "palette" };
@@ -59,10 +60,13 @@ function objectInFront(): ObjectRef | null {
  */
 export function contextAt(active: Element | null): CommandContext {
   const { surface, items } = useSelection.getState();
-  if (surface !== null && items.length > 0 && surfaceOf(active) === surface) {
-    return { ...NOTHING, selection: items };
-  }
-  return { ...NOTHING, focus: objectAt(active) ?? objectInFront() };
+  const ctx: CommandContext =
+    surface !== null && items.length > 0 && surfaceOf(active) === surface
+      ? { ...NOTHING, selection: items }
+      : { ...NOTHING, focus: objectAt(active) ?? objectInFront() };
+  const targets = ctx.selection.length > 0 ? ctx.selection : ctx.focus ? [ctx.focus] : [];
+  const moveTo = () => moveFromPalette(targets);
+  return { ...ctx, here: { "mind.moveTo": moveTo, "document.moveTo": moveTo } };
 }
 
 interface PaletteState {

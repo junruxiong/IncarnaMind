@@ -226,9 +226,10 @@ export interface AppState extends LayoutSlice {
   /**
    * Moves Minds and Documents into a Folder, or out of every Folder (null):
    * shown at once, then as the core has it, with "Moved … · Undo" (and ⌘Z).
-   * The sidebar's drag and drop and "Move to…" share it.
+   * Drops on a Folder and "Move to…" share it. Resolves to the change it put on
+   * the undo stack, or null when nothing moved.
    */
-  moveToFolder(items: MoveItems, folderId: string | null): Promise<void>;
+  moveToFolder(items: MoveItems, folderId: string | null): Promise<Undoable | null>;
   /**
    * Makes "Untitled Folder" (numbered if that is taken) and asks the sidebar to
    * open its name field, or, given a `name`, makes it with that name. With
@@ -385,8 +386,8 @@ export interface AppState extends LayoutSlice {
   setTagFilter(tagIds: readonly string[]): void;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
   removeDocumentTag(documentId: string, tagId: string): Promise<void>;
-  /** Puts a Tag on several Documents at once, or takes it off them. */
-  addTagToDocuments(documentIds: readonly string[], tagId: string): Promise<void>;
+  /** Puts a Tag on several Documents at once, resolving to the change it put on the undo stack. */
+  addTagToDocuments(documentIds: readonly string[], tagId: string): Promise<Undoable | null>;
   removeTagFromDocuments(documentIds: readonly string[], tagId: string): Promise<void>;
   /** Creates a Tag; the list follows the core's event. Throws what the core throws. */
   createTag(name: string, description?: string): Promise<Tag>;
@@ -504,7 +505,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
   /** Runs an action, reporting a failure instead of throwing. */
-  const attempt = async (action: () => Promise<void>) => {
+  const attempt = async (action: () => Promise<unknown>) => {
     try {
       await action();
     } catch (error) {
@@ -631,7 +632,9 @@ export const useAppStore = create<AppState>()((set, get) => {
       added ? core.addTagToDocuments(ids, tagId) : core.removeTagFromDocuments(ids, tagId);
     await again();
     const tag = get().tags.find((each) => each.id === tagId)?.name ?? "";
-    push(retagged({ added, tag, names }, before, again));
+    const change = retagged({ added, tag, names }, before, again);
+    push(change);
+    return change;
   };
 
   /** Closes a tab, then says so with Reopen. */
@@ -959,8 +962,9 @@ export const useAppStore = create<AppState>()((set, get) => {
         folderId: kind === "folder" ? (scope.folderIds[0] ?? null) : null,
       }),
 
-    moveToFolder: (items, folderId) =>
-      attempt(async () => {
+    moveToFolder: async (items, folderId) => {
+      let change: Undoable | null = null;
+      await attempt(async () => {
         const { minds, documents, library } = get();
         // Only what isn't there already: dropping a Mind back on its own Folder moves nothing.
         const folderOf = new Map(
@@ -975,17 +979,18 @@ export const useAppStore = create<AppState>()((set, get) => {
         if (mindIds.length + documentIds.length === 0) return;
         const moving = { mindIds, documentIds };
         const done = await move(moving, folderId);
-        push(
-          moveChange({
-            moving,
-            folderId,
-            folderName: library?.groups.find((group) => group.id === folderId)?.name ?? "",
-            named: namesOfMoving(moving, { minds, documents }),
-            names: namesOfFolders(library, [folderId, ...foldersMovedFrom(done)]),
-            done,
-          }),
-        );
-      }),
+        change = moveChange({
+          moving,
+          folderId,
+          folderName: library?.groups.find((group) => group.id === folderId)?.name ?? "",
+          named: namesOfMoving(moving, { minds, documents }),
+          names: namesOfFolders(library, [folderId, ...foldersMovedFrom(done)]),
+          done,
+        });
+        push(change);
+      });
+      return change;
+    },
 
     createFolder: async (items, named) => {
       let madeId: string | null = null;
@@ -1479,7 +1484,13 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     removeDocumentTag: (documentId, tagId) => attempt(() => retag(false, [documentId], tagId)),
 
-    addTagToDocuments: (documentIds, tagId) => attempt(() => retag(true, documentIds, tagId)),
+    addTagToDocuments: async (documentIds, tagId) => {
+      let change: Undoable | null = null;
+      await attempt(async () => {
+        change = await retag(true, documentIds, tagId);
+      });
+      return change;
+    },
 
     removeTagFromDocuments: (documentIds, tagId) => attempt(() => retag(false, documentIds, tagId)),
 
