@@ -1041,6 +1041,8 @@ export const zhCN = {
   "documents.add.linkFolder": "同步文件夹…",
   "documents.add.webPage": "网页…",
   "documents.add.connect": "连接应用…",
+  "documents.add.keywords": "导入 上传 文件 PDF Word 本机",
+  "documents.add.linkFolder.keywords": "同步 文件夹 关联 保持同步",
   "documents.moveTo": "移动到…",
   "documents.none": "还没有文档",
   "documents.none.addFiles": "添加文件…",

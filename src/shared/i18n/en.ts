@@ -1068,6 +1068,8 @@ export const en = {
   "documents.add.linkFolder": "A folder that stays in sync…",
   "documents.add.webPage": "A web page…",
   "documents.add.connect": "Connect an app…",
+  "documents.add.keywords": "import upload files PDF Word from this computer",
+  "documents.add.linkFolder.keywords": "link folder sync watch keep in sync Linked folder",
   "documents.moveTo": "Move to…",
   "documents.none": "No Documents yet",
   "documents.none.addFiles": "Add files…",
