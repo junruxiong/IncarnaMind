@@ -1512,9 +1512,6 @@ export function createLibrary(options: LibraryOptions) {
         containsLinkedFolderIds: linked
           .filter((row) => row.path !== path && isInside(path, row.path))
           .map((row) => row.id),
-        addedOnTheirOwn: outer
-          ? 0
-          : files.filter((file) => documentAt(file.path)?.linked_folder_id === null).length,
       };
     },
 
@@ -1559,18 +1556,23 @@ export function createLibrary(options: LibraryOptions) {
 
     /**
      * Unlinks a folder: its Documents and Folders leave the index, but for
-     * the text their Citations quote. Nothing on disk changes.
+     * the text their Citations quote, and for the Documents in `keep`, which
+     * stay as files added on their own. Nothing on disk changes.
      */
-    remove(idInput: unknown): void {
+    remove(idInput: unknown, keepInput: unknown = []): void {
       const row = getRow(idInput);
+      if (!Array.isArray(keepInput) || !keepInput.every((id) => typeof id === "string")) {
+        throw new InvalidInputError("keep must be a list of Document ids.");
+      }
+      const keep = new Set<string>(keepInput);
       stopWatcher(row.id);
       const at = now();
-      const ids = db
-        .all<{ id: string }>(
-          "SELECT id FROM documents WHERE linked_folder_id = ? AND deleted_at IS NULL",
-          [row.id],
-        )
-        .map((each) => each.id);
+      const live = db.all<{ id: string; path: string }>(
+        "SELECT id, path FROM documents WHERE linked_folder_id = ? AND deleted_at IS NULL",
+        [row.id],
+      );
+      const ids = live.filter((each) => !keep.has(each.id)).map((each) => each.id);
+      const kept = live.filter((each) => keep.has(each.id));
       let foldersChanged = false;
       db.transaction(() => {
         hooks.remove(ids, at);
@@ -1579,8 +1581,16 @@ export function createLibrary(options: LibraryOptions) {
           at,
           row.id,
         ]);
+        for (const document of kept) {
+          db.run(`UPDATE documents SET ${PLACE_COLUMNS}, updated_at = ? WHERE id = ?`, [
+            ...placeValues(placeOf(document.path, null)),
+            at,
+            document.id,
+          ]);
+        }
         foldersChanged = folders.removeAll(row.id, at);
       });
+      if (kept.length > 0) hooks.moved(kept.map((each) => each.id));
       statuses.delete(row.id);
       onlineOnly.delete(row.id);
       unsupported.delete(row.id);

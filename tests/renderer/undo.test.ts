@@ -218,18 +218,6 @@ describe("the undo stack", () => {
     expect(log).toEqual(["undo Request"]);
   });
 
-  test("a change that can't be taken back ends what ⌘Z reaches, and says why", async () => {
-    const log: string[] = [];
-    push(change("Organize", log));
-    useUndo.getState().cut(() => "Linked “Deals”. Undo can't take it back.");
-    expect(useUndo.getState().line?.note?.(noWords)).toBe(
-      "Linked “Deals”. Undo can't take it back.",
-    );
-    await undo();
-    expect(log).toEqual([]);
-    expect(useUndo.getState().done).toEqual([]);
-  });
-
   test("a change withdrawn leaves the stack and its line", () => {
     const log: string[] = [];
     const accepted = change("Accept", log);

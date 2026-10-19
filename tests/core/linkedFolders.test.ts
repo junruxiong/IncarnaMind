@@ -169,7 +169,6 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
       layout: "flat",
       insideLinkedFolderId: null,
       containsLinkedFolderIds: [],
-      addedOnTheirOwn: 0,
     });
     expect(preview.estimatedSeconds).toBeGreaterThan(0);
     expect(await core.listDocuments()).toEqual([]);
@@ -300,8 +299,6 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
     if (!single) throw new Error("Nothing was added.");
     expect(single).toMatchObject({ linkedFolderId: null, folderId: null, fileStatus: "available" });
     expect(await core.listDocuments({ linkedFolderId: null })).toEqual([single]);
-    // So the window knows unlinking would take it too, and offers no Undo for the link (#1361).
-    expect(await core.previewLinkedFolder(library)).toMatchObject({ addedOnTheirOwn: 1 });
 
     const documents = await linkAndProcess(core, library);
 
@@ -319,6 +316,25 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
     const inside = await writeSourceFile(library, "Sub/inside.md", RIVERS);
     const { documents: added } = await core.addDocuments([inside, other]);
     expect(added.map((each) => each.linkedFolderId)).toEqual([linked?.id, null]);
+  });
+
+  // protects=Undo of a link (#1361) unlinks it but keeps the Documents that were there before, as files added on their own with their ids; fails_when=a kept Document goes, or stays in the gone Linked folder; no_claim=the window's Undo step.
+  test("unlinking a folder keeps the Documents asked for, as files added on their own", async () => {
+    const library = await createSourceFolder();
+    const core = startCore(await createTempDataFolder());
+    const [single] = await addAndProcess(core, [await writeSourceFile(library, "notes.md", TIDES)]);
+    if (!single) throw new Error("Nothing was added.");
+    await writeSourceFile(library, "b.md", NEAP);
+    await linkAndProcess(core, library);
+    const linked = (await core.listLinkedFolders())[0];
+    if (!linked) throw new Error("Nothing was linked.");
+
+    await core.removeLinkedFolder(linked.id, { keep: [single.id] });
+
+    expect(await core.listLinkedFolders()).toEqual([]);
+    expect(await core.listDocuments()).toEqual([
+      expect.objectContaining({ id: single.id, linkedFolderId: null, folderId: null }),
+    ]);
   });
 
   test("unlinking a folder removes its Documents and Folders from the index", async () => {

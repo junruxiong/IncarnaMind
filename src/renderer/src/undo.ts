@@ -86,11 +86,6 @@ interface UndoState {
   /** Hides the line; the stack stays. */
   dismiss(): void;
   /**
-   * A change that can't be taken back ends what ⌘Z reaches: the changes before it go, so ⌘Z never
-   * takes back an older one the User can't see from where they are. `note` says why.
-   */
-  cut(note: Words): void;
-  /**
    * A change already made has more to it, made just now: a request's later commands. It goes
    * back on top, past what the User did meanwhile, so ⌘Z takes it back first, and shows its line.
    */
@@ -194,9 +189,6 @@ export const useUndo = create<UndoState>()((set, get) => {
     },
     dismiss() {
       set({ line: null });
-    },
-    cut(note) {
-      set({ done: [], undone: [], line: { id: ++lines, note } });
     },
     renew(change) {
       set((state) => ({

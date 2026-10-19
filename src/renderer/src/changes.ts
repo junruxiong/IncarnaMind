@@ -89,7 +89,7 @@ export function folderLinked(
 ): Undoable {
   return {
     said: (t) => t("undo.folderLinked", { name: shown }),
-    name: (t) => t("menu.linkFolder"),
+    name: (t) => t("undo.name.linkFolder", { name: shown }),
     undo: async () => {
       await unlink();
     },
