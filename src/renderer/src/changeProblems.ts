@@ -79,6 +79,8 @@ export function problemText(t: Translate, problem: MindProblem, mind: string): s
       return t("mindCall.failed.noTable", { mind });
     case "uncited":
       return t("mindCall.failed.uncited", { mind });
+    case "no-chart":
+      return t(`mindCall.failed.noChart.${problem.problem}`, { mind });
     case "new-mind":
       return t("mindCall.failed.newMind", { mind });
     case "local-mode":
