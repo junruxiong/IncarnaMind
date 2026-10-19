@@ -300,7 +300,10 @@ function report(
     `Rewritten after the guard, not by it: ${results.reduce((total, each) => total + each.rewritten.length, 0)} sentences of what the calls gave are no longer in the Mind as written, rewritten by the model's edit_mind or by the app's own check of the sentences written:`,
     "",
     ...results.flatMap((each) =>
-      each.rewritten.map((sentence) => `- ${each.id}, ${each.model}: “${sentence}”`),
+      each.rewritten.map(
+        ({ given, now }) =>
+          `- ${each.id}, ${each.model}: given “${given}”; the Mind holds “${now ?? "nothing like it"}”`,
+      ),
     ),
     "",
     "## Asked again inside the turn",

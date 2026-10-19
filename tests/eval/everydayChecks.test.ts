@@ -357,7 +357,18 @@ describe("Standing on its own, and the example unasked", () => {
       writtenInMinds: ["Key results. All of them."],
     });
     expect(requestFailures(rewritten).map((failure) => failure.kind)).not.toContain("content-lost");
-    expect(rewrittenLater(rewritten)).toEqual(["Highlights are below[^8]:"]);
+    expect(rewrittenLater(rewritten)).toEqual([{ given: "Highlights are below[^8]:", now: null }]);
+    const cut = outcome({
+      expected: { write: true, cite: false, coverAll: false },
+      givenToMinds: ["It fuses mobility and POIs, which geography can miss [^2]."],
+      writtenInMinds: ["Pay is 5k.", "It fuses mobility and POIs."],
+    });
+    expect(rewrittenLater(cut)).toEqual([
+      {
+        given: "It fuses mobility and POIs, which geography can miss [^2].",
+        now: "It fuses mobility and POIs.",
+      },
+    ]);
   });
 
   // protects=a reply about the User's own Documents that mentions the example fails, in English and in Chinese; fails_when=it passes; no_claim=none beyond protects.

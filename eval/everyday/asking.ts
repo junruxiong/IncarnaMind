@@ -118,8 +118,8 @@ export interface CaseResult {
   page: string;
   /** What the guard took out: sentences of the reply, by Add to note, and Blocks of what the calls gave to write into Minds. */
   removed: string[];
-  /** Sentences of what the calls gave that the model's edit_mind or the app's own check rewrote after the guard. */
-  rewritten: string[];
+  /** Sentences of what the calls gave that the model's edit_mind or the app's own check rewrote after the guard, and what the Mind holds now. */
+  rewritten: { given: string; now: string | null }[];
   pointersLeft: number;
   calls: string[];
   /** The Mind's Blocks that changed, as they read before and once its changes are accepted. */

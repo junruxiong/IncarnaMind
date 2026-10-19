@@ -284,18 +284,30 @@ export function takenOut(outcome: RequestOutcome): { removed: string[]; changed:
   };
 }
 
+const wordsOf = (text: string) =>
+  new Set(text.toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}|\p{Script=Han}/gu) ?? []);
+
 /**
  * The sentences the guard and search-talk filtering left in what the calls
- * gave that the Mind no longer holds as written: the model's edit_mind, or
- * the app's check of the sentences written, rewrote them after the guard.
+ * gave that the Mind no longer holds as written, each with the Block of the
+ * Mind that shares most of its words: the model's edit_mind, or the app's
+ * check of the sentences written, rewrote them after the guard.
  */
-export const rewrittenLater = (outcome: RequestOutcome): string[] =>
-  leftOut(
-    (outcome.givenToMinds ?? [])
-      .map((input) => withoutSearchTalk(withoutPointersBack(input).markdown).markdown)
-      .join("\n\n"),
-    (outcome.writtenInMinds ?? []).join("\n\n"),
-  );
+export function rewrittenLater(outcome: RequestOutcome): { given: string; now: string | null }[] {
+  const written = outcome.writtenInMinds ?? [];
+  const given = (outcome.givenToMinds ?? [])
+    .map((input) => withoutSearchTalk(withoutPointersBack(input).markdown).markdown)
+    .join("\n\n");
+  return leftOut(given, written.join("\n\n")).map((sentence) => {
+    const words = wordsOf(sentence);
+    const shared = (block: string) => [...wordsOf(block)].filter((word) => words.has(word)).length;
+    const now = written.reduce<string | null>(
+      (best, block) => (shared(block) > (best === null ? 0 : shared(best)) ? block : best),
+      null,
+    );
+    return { given: sentence, now };
+  });
+}
 
 /** The ways one request failed its guards; none when it passed. */
 export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
