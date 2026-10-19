@@ -9,10 +9,19 @@
  * Pure, with no Node or DOM imports: the editor, the core's one reader
  * (exports, Question context) and the tests share it.
  */
-import type { CitationAttributes, CitationCheck } from "../core/api";
+import {
+  CITATION_NODE,
+  type CitationAttributes,
+  type CitationCheck,
+  FOOTNOTE_NODE,
+  PROPOSAL_ATTRIBUTE,
+  PROPOSAL_INSERT_MARK,
+} from "../core/api";
+import type { NodeJSON } from "./blockJson";
 import { type Figure, type FigureUnit, figureContextOf, readFigures } from "./figures";
 import type { MessageKey, MessageParams } from "./i18n";
 import { holdsPeriods, isPeriod } from "./periods";
+import { readProposalAttribute } from "./proposals";
 
 export const CHART_KINDS = ["bar", "line", "pie", "scatter"] as const;
 export type ChartKind = (typeof CHART_KINDS)[number];
@@ -736,6 +745,105 @@ export interface SourceLine {
   citation: CitationAttributes | null;
 }
 
+const CITATION_KEYS: readonly (keyof CitationAttributes)[] = [
+  "passageId",
+  "documentId",
+  "documentName",
+  "contentHash",
+  "pageFrom",
+  "pageTo",
+  "location",
+  "quote",
+  "check",
+  "checkReason",
+  "verdict",
+  "quotedWords",
+];
+
+const BLOCK_TYPES = new Set([
+  "paragraph",
+  "heading",
+  "blockquote",
+  "bulletList",
+  "orderedList",
+  "listItem",
+  "taskList",
+  "taskItem",
+  "codeBlock",
+]);
+
+// Text still waiting to be accepted isn't the User's yet.
+const proposed = (node: NodeJSON) =>
+  readProposalAttribute(node.attrs?.[PROPOSAL_ATTRIBUTE])?.kind === "insert" ||
+  (node.marks ?? []).some((mark) => mark.type === PROPOSAL_INSERT_MARK);
+
+/**
+ * A line of text as a chart reads it, from a node as ProseMirror writes it in JSON (`toJSON()`,
+ * or the core's Blocks): its words, without Citations, footnotes or text still waiting, and its
+ * first Citation.
+ */
+export function sourceLineOf(node: NodeJSON): SourceLine {
+  let text = "";
+  let citation: CitationAttributes | null = null;
+  const visit = (child: NodeJSON) => {
+    if (proposed(child)) return;
+    if (child.type === CITATION_NODE) {
+      if (!citation) {
+        const copy: Record<string, unknown> = {};
+        for (const key of CITATION_KEYS) {
+          const value = child.attrs?.[key];
+          if (value !== undefined) copy[key] = value;
+        }
+        citation = copy as unknown as CitationAttributes;
+      }
+      return;
+    }
+    if (child.type === FOOTNOTE_NODE) return;
+    if (child.type === "text") text += child.text ?? "";
+    else if (child.type === "hardBreak" || (BLOCK_TYPES.has(child.type) && text !== "")) {
+      text += " ";
+    }
+    for (const each of child.content ?? []) visit(each);
+  };
+  for (const child of node.content ?? []) visit(child);
+  return { text: text.replace(/\s+/g, " ").trim(), citation };
+}
+
+const span = (value: unknown) =>
+  typeof value === "number" && Number.isInteger(value) && value > 1 ? value : 1;
+
+/** A table in JSON on its grid, a cell that spans in each slot it covers (`SourceGrid`). */
+export function gridOfTable(table: NodeJSON): SourceGrid {
+  const grid: (SourceCell | null)[][] = [];
+  const rowAt = (at: number) => {
+    const slots = grid[at] ?? [];
+    grid[at] = slots;
+    return slots;
+  };
+  (table.content ?? []).forEach((row, at) => {
+    const slots = rowAt(at);
+    let column = 0;
+    for (const cell of row.content ?? []) {
+      while (slots[column] !== undefined) column++;
+      const read: SourceCell = {
+        ...sourceLineOf(cell),
+        header: cell.type === "tableHeader",
+        continued: false,
+      };
+      const across = span(cell.attrs?.colspan);
+      for (let down = 0; down < span(cell.attrs?.rowspan); down++) {
+        const spanned = rowAt(at + down);
+        for (let step = 0; step < across; step++) {
+          spanned[column + step] = down === 0 && step === 0 ? read : { ...read, continued: true };
+        }
+      }
+      column += across;
+    }
+  });
+  const width = Math.max(0, ...grid.map((row) => row.length));
+  return grid.map((row) => Array.from({ length: width }, (_, column) => row[column] ?? null));
+}
+
 /** What separates a label from the figure after it: "Q1: 289.4", "Revenue – $1.2bn". */
 const LABEL_END = /[\s:：,，;；=\-–—]+$/u;
 const LABEL_START = /^[\s:：,，;；=\-–—•·*]+/u;
@@ -790,5 +898,11 @@ export function chartFromFigures(
 
 /** Compares what is drawn and where it came from, not how it was stored. */
 export function sameChartData(a: ChartData, b: ChartData): boolean {
-  return JSON.stringify(readChartData(a)) === JSON.stringify(readChartData(b));
+  // The core writes a Citation without the attributes left null, the editor with them: a chart
+  // the assistant drew from a table reads the same as one the User draws from it.
+  const asCompared = (data: ChartData) =>
+    JSON.stringify(readChartData(data), (_, value: unknown) =>
+      value === null ? undefined : value,
+    );
+  return asCompared(a) === asCompared(b);
 }

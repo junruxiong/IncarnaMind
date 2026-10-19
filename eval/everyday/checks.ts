@@ -27,6 +27,9 @@
  *   "见上一条回答"); the pointers left there are counted.
  * - **No word of the example unasked**: asked about the User's own Documents
  *   after the example's Answer, nothing it wrote mentions the example's.
+ * - **No word of an attempt the User never saw**: when the app asks the model
+ *   again inside a turn, the reply says nothing of the earlier try (#1226); a
+ *   reply that was not asked again may speak of a message the User did read.
  * - **Only the text's dates**: every date the reply gives is one the
  *   Documents' text writes, or is named as a file's (./dates).
  */
@@ -79,6 +82,8 @@ export interface RequestOutcome {
   addedToPage?: string;
   /** The Markdown its calls gave to write into Minds, without what search-talk filtering takes out. */
   givenToMinds?: readonly string[];
+  /** The app asked the model again inside the turn, so the User never read its first try. */
+  askedAgain?: boolean;
   scoped: readonly { id: string; name: string }[];
   /** The text of the Documents in scope, for `textDates`. */
   texts?: readonly string[];
@@ -99,6 +104,7 @@ export type RequestFailure =
   | { kind: "earlier"; said: string }
   | { kind: "example"; said: string }
   | { kind: "content-lost"; sentences: string[] }
+  | { kind: "unseen-attempt"; said: string }
   | { kind: "date-not-in-text"; dates: string[] };
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
@@ -189,6 +195,29 @@ export const pointersIn = (text: string): string[] =>
 const EXAMPLE =
   /Northwind|facilities agreement|credit committee|leverage (?:limit|covenant)|\b3\.[15] ?(?:x|times)\b|\b3\.5:1|贷款协议|杠杆率|授信委员会/i;
 
+const UNSEEN_ATTEMPT = new RegExp(
+  [
+    String.raw`\b(?:sorry|apolog(?:y|ies|ise|ize)|my (?:mistake|bad))\b[^.!?\n]*\b(?:previous|earlier|prior|a moment ago|just now|last (?:reply|response|answer|message|time|attempt))\b`,
+    String.raw`\b(?:my|the|that|your) (?:previous|earlier|prior|last) (?:reply|response|answer|message|attempt)\b`,
+    String.raw`\bas I (?:said|mentioned|noted|stated) (?:before|earlier|previously|above)\b`,
+    String.raw`\b(?:let me|I'll|I will) (?:try again|redo|correct (?:that|this|myself))\b`,
+    "(?:抱歉|对不起|不好意思|很抱歉|道歉)[^。！？\\n]*(?:上一|前一|之前|先前|刚才|上次|前面)",
+    "(?:上一|前一|之前|先前|刚才|上次|前面)(?:条|次|个)?的?(?:回复|回答|答复|答案|消息|尝试)",
+    "如我(?:之前|刚才|前面|上面)所说",
+  ].join("|"),
+  "iu",
+);
+
+/** The first sentence that apologises for, or refers to, an earlier reply or try of the model's. */
+export function aboutAnUnseenAttempt(reply: string): string | null {
+  return (
+    reply
+      .split(/(?<=[.!?])\s+|(?<=[。！？])|\n+/)
+      .map((sentence) => sentence.trim())
+      .find((sentence) => UNSEEN_ATTEMPT.test(sentence)) ?? null
+  );
+}
+
 const NOT_COVERED =
   /\b(?:couldn't|could not|can't|cannot|didn't|did not|wasn't|weren't|isn't|aren't|not|no|unable|left out|missing|skipped)\b|没有|未能|未|无法|不能|缺少|略去/i;
 
@@ -272,6 +301,8 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   if (example) failures.push({ kind: "example", said: example });
   const lost = lostContent(takenOut(outcome));
   if (lost.length > 0) failures.push({ kind: "content-lost", sentences: lost });
+  const unseen = outcome.askedAgain ? aboutAnUnseenAttempt(answer.text) : null;
+  if (unseen) failures.push({ kind: "unseen-attempt", said: unseen });
   const dates = expected.textDates ? datesNotInText(answer.text, outcome.texts ?? []) : [];
   if (dates.length > 0) failures.push({ kind: "date-not-in-text", dates });
   return failures;
@@ -306,6 +337,8 @@ export function failureLine(failure: RequestFailure): string {
       return `mentions the example unasked: “${failure.said}”`;
     case "content-lost":
       return `left out of a page what says more than a pointer: ${failure.sentences.map((sentence) => `“${sentence}”`).join(" ")}`;
+    case "unseen-attempt":
+      return `says something of an earlier try the User never saw: “${failure.said}”`;
     case "date-not-in-text":
       return `gives a date the Documents' text doesn't: ${failure.dates.join(", ")}`;
   }

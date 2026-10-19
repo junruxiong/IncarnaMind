@@ -40,6 +40,8 @@ export interface EverydayCase {
   research?: true;
   /** A summary: the report counts its sentences outside headings that carry a Citation (./dates). */
   summary?: true;
+  /** What the model's first reply is, in place of its own, so the app must ask again (./reasks). */
+  firstReply?: string;
 }
 
 /** The share of its runs a request must pass: two in three, one in three for a hard one. */
@@ -298,6 +300,45 @@ export const CASES: readonly EverydayCase[] = [
     mind: READING_GROUP,
     request: "Write a summary page of these documents",
     expected: WRITE_ALL,
+  },
+  // The app asks the model again inside the turn, its first reply being one it would ask about: nothing the User reads is about that try (#1226).
+  {
+    id: "reask-write",
+    language: "en",
+    library: "papers",
+    mind: READING_GROUP,
+    request: "Write a summary page of these documents",
+    firstReply:
+      "Here is a summary of the two documents.\n\n## Summary\n\nThe first document is the paper 2306.10683v1. The second is “A Tutorial about Random Neural Networks in Supervised Learning”.",
+    expected: WRITE_ALL,
+  },
+  {
+    id: "reask-write-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: READING_GROUP_ZH,
+    request: "写一个总结页面",
+    firstReply:
+      "下面是这两份文档的总结。\n\n## 总结\n\n第一份文档是论文 2306.10683v1，第二份是《A Tutorial about Random Neural Networks in Supervised Learning》。",
+    expected: WRITE_ALL,
+  },
+  {
+    id: "reask-claim",
+    language: "en",
+    library: "papers",
+    mind: READING_GROUP,
+    request: "Add a short section on GraphST's results to my notes",
+    firstReply: "I've added a short section on GraphST's results to “Reading group”.",
+    expected: WRITE,
+  },
+  {
+    id: "reask-claim-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: READING_GROUP_ZH,
+    request: "把教程的主要观点加到我的笔记里",
+    firstReply: "我已经在“读书会”里添加了教程的主要观点。",
+    expected: WRITE,
   },
   // In a new, empty Mind with no name yet, a piece asked for goes into it (#1212).
   {
