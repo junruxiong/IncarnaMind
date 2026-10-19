@@ -9,6 +9,7 @@ import type { DataUse } from "../../../../core/providers/catalog";
 import { catalogMenu } from "../../../../core/providers/catalog";
 import {
   catalogProvider,
+  dataUseOf,
   endpointOf,
   fieldAccepts,
   fieldUrl,
@@ -614,7 +615,7 @@ export function ProviderForm({
                   : providerName
               }
               tagsOnSave={tagsAutomatically}
-              dataUse={catalog?.dataUse}
+              dataUse={catalog && dataUseOf(catalog, away)}
             />
           )}
           <div data-setup-foot className="flex flex-wrap items-center gap-2">
@@ -703,6 +704,7 @@ export function ProviderSendsLine({
   const words = language === "zh-CN" ? "zh" : "en";
   const summary = dataUse && t("providers.form.dataUse", { summary: dataUse.summary[words] });
   const link = `${t("providers.form.dataUseLink")} ↗`;
+  const href = (words === "zh" && dataUse?.zhUrl) || dataUse?.url;
   return (
     <div className="flex flex-col">
       <SendsLine provider={provider} />
@@ -712,10 +714,10 @@ export function ProviderSendsLine({
       {summary && (
         <p data-testid="provider-data-use" className={`${hintClass} mt-0`}>
           {summary}
-          {dataUse?.url && (
+          {href && (
             <>
               {gap(language, summary, link)}
-              <a href={dataUse.url} target="_blank" rel="noreferrer" className="underline">
+              <a href={href} target="_blank" rel="noreferrer" className="underline">
                 {link}
               </a>
             </>

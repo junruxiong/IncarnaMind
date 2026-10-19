@@ -11,6 +11,7 @@ import {
   setLanguage,
   setWindowSize,
   sidebarFolder,
+  tagDocument,
 } from "./app";
 
 /*
@@ -211,7 +212,7 @@ for (const { width, label } of [
         await core.createTag({ name });
         await core.createTag({ name: "Moons" });
       }, long);
-      await window.getByTestId("browse-views").getByRole("button", { name: "标签" }).click();
+      await tagDocument(window, "Tides", "Moons");
       const moons = window.getByTestId("sidebar-tag").filter({ hasText: "Moons" });
       await moons.getByRole("treeitem").first().focus();
       await window.keyboard.press("F2");

@@ -112,6 +112,17 @@ export function webInstructions(offered: boolean): string {
   ].join("\n");
 }
 
+export function commandInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    'You can also do in the app what the User asks of their Documents and Minds, with list_commands and run_command: rename, move to a Folder, tag, delete (to Recently deleted), export a Mind as a file, and add files from a folder ("rename these by date", "move the leases into Real estate", "tag every invoice Finance", "export this Mind as Word", "add the PDFs in ~/Downloads/deals", "把发票都加上财务标签").',
+    "- First find what to act on with list_commands, by the words of the request, then run a command on exactly what it found, by id, one call per command. Never act on something it didn't find, and never guess an id. If nothing matches, say so and change nothing.",
+    "- Renaming by date: use the dates list_commands gives, as YYYY-MM-DD before the name, unless the User says otherwise.",
+    "- A Question about the Documents isn't a command: answer it. Writing into a Mind is the Minds' Tools' work.",
+    "- Say only what the calls returned, in a sentence or two: what changed, and what didn't and why. A command that failed or that the User didn't allow didn't happen: never say it did. The User can undo the changes with Undo.",
+  ].join("\n");
+}
+
 /** The Document the Mind in focus is the working copy of (#1036), by name; empty for none. */
 export function workingCopyNote(original: string | null): string {
   if (original === null) return "";

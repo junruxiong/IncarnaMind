@@ -1,7 +1,6 @@
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import type { CoreBridge } from "../src/core/api";
 import type { TestHooks } from "../src/shared/testHooks";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
@@ -9,7 +8,6 @@ import {
   clickNow,
   createDataFolder,
   dismissChatSetup,
-  filterByTag,
   interceptOpenDialog,
   launchApp,
   linkedFolderRow,
@@ -101,6 +99,7 @@ test("dropping folders offers each for linking in turn; what's there already is 
   // The linked folder picked again: the dialog says it's linked already, and only closes.
   await interceptOpenDialog(app, papers);
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-link-folder").click();
   await expect(dialog.getByRole("heading")).toHaveText("Already in IncarnaMind");
   await expect(dialog.getByTestId("link-folder-inside")).toHaveText(
@@ -132,41 +131,6 @@ test("a Document that failed offers Retry, which processes it again", async () =
   // A ready Document has nothing to retry.
   await openDocumentMenu(item);
   await expect(item.getByTestId("document.retry")).toHaveCount(0);
-  await app.close();
-});
-
-test("folding while filtering by a Tag folds the filtered view, and leaves the rest as it was", async () => {
-  const library = join(sources, "Library");
-  await writeTree(library, ["Reports/Q1.txt", "Reports/Q2.txt", "Notes/Idea.txt"]);
-  const { app, window } = await launchApp(dataDir);
-  await dismissChatSetup(window);
-  await linkFolderFromSidebar(app, window, library);
-  await showSourceLocations(window);
-  const items = window.getByTestId("document-list-item");
-  await expect(items).toHaveCount(3);
-  // Tag the two reports, through the core's bridge, as the Tags menu would.
-  await window.evaluate(async () => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const report = (await bridge.listTags()).find((tag) => tag.name === "Report");
-    if (!report) throw new Error("No preset Tag named Report.");
-    for (const item of await bridge.listDocuments()) {
-      if (item.name.startsWith("Q")) await bridge.addDocumentTag(item.id, report.id);
-    }
-  });
-
-  await filterByTag(window, "Report");
-  await expect(items).toHaveCount(2);
-  const reports = window.getByTestId("folder-item").filter({ hasText: "Reports" });
-  const toggle = reports.getByTestId("folder-toggle");
-  await toggle.click();
-  // Folded, visibly, in the filtered view.
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(items).toHaveCount(0);
-
-  // Without the filter, the tree is as the User left it: unfolded.
-  await window.getByTestId("tag-filter-clear").click();
-  await expect(items).toHaveCount(3);
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await app.close();
 });
 
@@ -208,9 +172,9 @@ test("a right-click on a row opens its menu, without selecting its name; a selec
   await linkFolderFromSidebar(app, window, library);
   await showSourceLocations(window);
   const item = window.getByTestId("document-list-item").filter({ hasText: "Field notes" });
-  // Settled: the file added on its own has moved under "Other Documents", so its row stays put.
+  // Settled: the file added on its own is in Not in a Folder, at the top level.
   await expect(linkedFolderRow(window, "Library")).toHaveAttribute("data-state", "idle");
-  await expect(item).toHaveAttribute("data-depth", "1");
+  await expect(item).toHaveAttribute("data-depth", "0");
 
   await item.getByTestId("row-text").click({ button: "right" });
   await expect(item.getByTestId("document-file-actions")).toBeVisible();
@@ -285,8 +249,7 @@ test("Add Documents opens a sheet on the window in a folder on this computer, th
         ).openDialogsAsked ?? [],
     );
 
-  // From the "+" menu; the empty sidebar offers the same.
-  await expect(window.getByTestId("documents-empty-add-files")).toHaveText("Add files…");
+  // From the "+" menu.
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-add-documents").click();
   const items = window.getByTestId("document-list-item");

@@ -78,11 +78,23 @@ function healthOf(doc: ProseMirrorNode): Record<HealthPart, number> {
   >;
 }
 
-/** The sentences "Check all" would check: claims with no check, but those the last whole-Mind check found make none. */
-function uncheckedIn(doc: ProseMirrorNode, skipped: readonly string[] = []): number {
+/**
+ * The sentences "not checked yet": claims with no check that have a Citation or that an Answer
+ * wrote (the blocks with the ids in `answered`), but not those the last whole-Mind check found make none.
+ */
+function uncheckedIn(
+  doc: ProseMirrorNode,
+  skipped: readonly string[] = [],
+  answered: readonly string[] = [],
+): number {
   const { claims, kept } = claimsOf(doc, { versions: null, folderId: null });
-  return noteHealth(doc, claims, (attributes) => attributes.check, new Set([...skipped, ...kept]))
-    .unchecked.length;
+  return noteHealth(
+    doc,
+    claims,
+    (attributes) => attributes.check,
+    new Set([...skipped, ...kept]),
+    (blockId) => typeof blockId === "string" && answered.includes(blockId),
+  ).unchecked.length;
 }
 
 const NOTHING = {
@@ -215,16 +227,44 @@ describe("A Mind's health", () => {
     expect(healthOf(after)).toEqual({ ...NOTHING, found: 1 });
   });
 
-  test("knows which claims were never checked, for Check all: not those checked, short ones, or those the last whole-Mind check found make no claim (#737)", () => {
+  test("knows which claims were never checked: those with a Citation or an Answer wrote, not plain notes, those checked, short ones, or those the last whole-Mind check found make no claim (#737)", () => {
     const opinion = "We think the tides are lovely in spring.";
     const doc = docOf(
       paragraph(checked("Spring tides come at full moon.", "supported")),
-      paragraph(text("Neap tides come at the quarter moons. "), text(opinion)),
+      paragraph(text("Neap tides come at the quarter moons "), citation("found"), text(". ")),
+      { type: "paragraph", attrs: { id: "answer" }, content: [text(opinion)] },
+      paragraph(text("The harbour master thinks the tides are lovely in spring.")),
       paragraph(text("Thanks!")),
       heading("A heading that claims a lot about tides"),
     );
 
-    expect(uncheckedIn(doc)).toBe(2);
-    expect(uncheckedIn(doc, [sentenceKey(opinion)])).toBe(1);
+    expect(uncheckedIn(doc, [], ["answer"])).toBe(2);
+    expect(uncheckedIn(doc, [sentenceKey(opinion)], ["answer"])).toBe(1);
+    // Without an Answer's text, only the cited claim is one to check.
+    expect(uncheckedIn(doc)).toBe(1);
+  });
+
+  test("a sentence is in one part only: a plain claim has no Citation, a cited or Answer-written one is not checked yet", () => {
+    const doc = docOf(
+      paragraph(text("Spring tides come at full moon.")),
+      paragraph(text("Neap tides come at the quarter moons "), citation("found"), text(".")),
+      {
+        type: "paragraph",
+        attrs: { id: "answer" },
+        content: [text("The harbour master thinks the tides are lovely in spring.")],
+      },
+    );
+    const { claims, kept } = claimsOf(doc, { versions: null, folderId: null });
+    const health = noteHealth(
+      doc,
+      claims,
+      (attributes) => attributes.check,
+      kept,
+      (blockId) => blockId === "answer",
+    );
+
+    expect(health.unchecked).toHaveLength(2);
+    expect(health.noCitation).toHaveLength(1);
+    for (const at of health.unchecked) expect(health.noCitation).not.toContain(at);
   });
 });

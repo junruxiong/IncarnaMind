@@ -1886,21 +1886,24 @@ export function createDocuments(options: DocumentsOptions) {
     /**
      * How many live Documents have Passages to search (of all of them, or only
      * of these), and the names of the `limit` most recently added, newest
-     * first, each with its title when its name doesn't hold it.
+     * first, each with its title when its name doesn't hold it; `webPage`: one
+     * of them is a saved web page, named by its own title.
      */
     searchableNames(
       documentIds: readonly string[] | undefined,
       limit: number,
-    ): { total: number; names: string[] } {
+    ): { total: number; names: string[]; webPage: boolean } {
       const { where, params } = searchable(documentIds);
-      const names = db
-        .all<{ name: string; title: string | null }>(
-          `SELECT d.name, d.title FROM documents d WHERE ${where}
-           ORDER BY d.created_at DESC, d.rowid DESC LIMIT ?`,
-          [...params, BigInt(limit)],
-        )
-        .map((row) => withTitle(row.name, row.title));
-      return { total: searchableCount(documentIds), names };
+      const rows = db.all<{ name: string; title: string | null; kind: string }>(
+        `SELECT d.name, d.title, d.kind FROM documents d WHERE ${where}
+         ORDER BY d.created_at DESC, d.rowid DESC LIMIT ?`,
+        [...params, BigInt(limit)],
+      );
+      return {
+        total: searchableCount(documentIds),
+        names: rows.map((row) => withTitle(row.name, row.title)),
+        webPage: rows.some((row) => row.kind === "web"),
+      };
     },
 
     /** The live Documents with Passages to search (of all of them, or only of these), the most text first: `size` characters. */

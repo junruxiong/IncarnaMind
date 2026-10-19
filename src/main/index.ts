@@ -31,6 +31,7 @@ import { serveFileActions } from "./files";
 import { handle } from "./ipc";
 import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
+import { isGuideWindow, servePermissionGuide } from "./meetings/guide";
 import { isPanelWindow, serveMeetingPanel } from "./meetings/panel";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
@@ -103,7 +104,7 @@ let core: Core | undefined;
 /** The app's windows: not the hidden one that records a Meeting's audio, nor the floating panel. */
 const appWindows = () =>
   BrowserWindow.getAllWindows().filter(
-    (window) => !isCaptureWindow(window) && !isPanelWindow(window),
+    (window) => !isCaptureWindow(window) && !isPanelWindow(window) && !isGuideWindow(window),
   );
 
 /** The windows that hear the core's events: the app's, and the floating panel during a call. */
@@ -296,6 +297,7 @@ app.whenReady().then(async () => {
     log: logger,
     testHooks,
   });
+  servePermissionGuide({ rendererUrl, appWindows, trusted: isFromOurRenderer, testHooks });
   installMenuInLanguage(core);
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
   if (!testHooks) startAutoUpdates(core);

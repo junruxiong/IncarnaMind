@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
   addProviderForm,
@@ -183,9 +184,18 @@ test("LM Studio and Unsloth Studio are On this computer in Add a provider, besid
     await expect(form.getByTestId("provider-sends")).toContainText(
       "Sends your questions and document text to Unsloth Studio.",
     );
+    // The app's own line holds only while its server runs here; at another computer it is any server's.
+    const dataUse = form.getByTestId("provider-data-use");
+    await expect(dataUse).toContainText("Depends on the server: check its terms.");
+    await expect(dataUse).not.toContainText("Runs on this computer");
+    await expect(dataUse.getByRole("link")).toHaveCount(0);
+    await setLanguage(window, "zh-CN");
+    await expect(dataUse).toContainText("取决于服务器，请查看其条款");
+    await setLanguage(window, "en");
     await form.getByTestId("provider-field").fill("127.0.0.1:8888");
     await form.getByLabel(/^API key/).focus();
     await expect(form.getByTestId("provider-sends")).toHaveCount(0);
+    await expect(dataUse).toHaveCount(0);
     if (process.env.INCARNAMIND_SCREENSHOTS) {
       await settings.screenshot({
         path: `${process.env.INCARNAMIND_SCREENSHOTS}/preset-local-en.png`,
@@ -205,6 +215,31 @@ test("LM Studio and Unsloth Studio are On this computer in Add a provider, besid
     await setLanguage(window, "zh-CN");
     await expect(form.getByTestId("local-server")).toContainText("127.0.0.1:1234 没有响应");
     await expect(form.getByTestId("provider-use-key-why")).toHaveText("请先启动 LM Studio。");
+  } finally {
+    await app.close();
+  }
+});
+
+test("Ollama at a server on another computer shows a server's data line, not its own, in English and Chinese", async () => {
+  const { app, window } = await launchApp(dataDir, { ollama: "http://127.0.0.1:9" });
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await core.saveChatProvider({
+        kind: "ollama",
+        baseUrl: "http://192.168.1.20:11434",
+        modelId: "home-model",
+      });
+    });
+    const settings = await openSettings(window, "models");
+    await settings.getByTestId("provider-row").first().click();
+    const line = settings.getByTestId("provider-page").getByTestId("provider-data-use");
+    await expect(line).toContainText("Depends on the server: check its terms.");
+    await expect(line).not.toContainText("Local models stay local");
+    await setLanguage(window, "zh-CN");
+    await expect(line).toContainText("取决于服务器，请查看其条款");
+    await expect(line).not.toContainText("本地模型不外传");
   } finally {
     await app.close();
   }
