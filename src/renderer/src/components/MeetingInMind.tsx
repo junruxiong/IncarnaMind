@@ -23,7 +23,11 @@ import { buttonStyle, fieldLabelClass, inputClass } from "./ui";
  */
 export function MeetingInMind({ mindId }: { mindId: string }) {
   const meeting = useMeetingOf(mindId);
+  const starting = useMeetings((state) => !!meeting && state.starting[meeting.id] === true);
   if (!meeting) return null;
+  if (meeting.status === "ready" && starting) {
+    return <div aria-hidden="true" data-testid="meeting-bar-room" className="meeting-bar-room" />;
+  }
   if (meeting.status === "ready") return <MeetingStart meeting={meeting} />;
   if (isLive(meeting)) {
     return (

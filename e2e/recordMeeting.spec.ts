@@ -119,6 +119,55 @@ test("the first time, ⌘Z right after Record takes the new Mind back", async ()
   await app.close();
 });
 
+test("the first time, Redo after the take-back does nothing: a Mind with no Meeting would come back", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
+  await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+  await expect(window.getByTestId("meeting-start")).toBeVisible();
+  await leaveText(window);
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect.poll(async () => (await mindsOf(window)).length).toBe(0);
+
+  await window.keyboard.press("ControlOrMeta+Shift+z");
+  // The core answers in the order it was asked: a restore Redo had sent would show here.
+  expect(await mindsOf(window)).toHaveLength(0);
+  expect(await meetings(window)).toEqual([]);
+  await app.close();
+});
+
+test("Record moves nothing on the new Mind's page when its bar comes: the room is kept from the first paint", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await readNotice(window);
+  await window.evaluate(() => {
+    const tops: number[] = [];
+    (globalThis as unknown as { tops: number[] }).tops = tops;
+    const tick = () => {
+      const editor = document.querySelector('[data-testid="mind-editor"]');
+      if (editor) tops.push(Math.round(editor.getBoundingClientRect().top * 10) / 10);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
+  await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
+  await expect(window.getByTestId("meeting-bar-room")).toHaveCount(0);
+
+  const tops = await window.evaluate(() => (globalThis as unknown as { tops: number[] }).tops);
+  expect(tops.length).toBeGreaterThan(3);
+  expect(
+    Math.max(...tops) - Math.min(...tops),
+    `the text's top over the frames: ${tops}`,
+  ).toBeLessThanOrEqual(1);
+  await app.close();
+});
+
 test("once a recording has run and stopped, ⌘Z never takes its Meeting or audio back", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);

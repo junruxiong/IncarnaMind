@@ -2023,6 +2023,11 @@
     background: var(--color-sheet);
     font-family: var(--font-sans);
   }
+  /* The bar's room (its border, padding and one row of controls) while a Record starts, so the text doesn't move when it comes. */
+  .meeting-bar-room {
+    height: 42px;
+    margin: 0 -16px 24px;
+  }
   .meeting-line {
     padding: 0 4px 2px;
   }
