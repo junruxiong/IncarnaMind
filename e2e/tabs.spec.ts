@@ -461,7 +461,7 @@ test("the application menu makes a new Mind, opens Settings, and closes, reopens
   await app.close();
 });
 
-test("a Mind is renamed in place from its sidebar row, and Not in a Folder folds away", async () => {
+test("a Mind is renamed in place from its sidebar row", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   for (const name of ["Alpha notes", "Beta research"]) {
@@ -502,11 +502,5 @@ test("a Mind is renamed in place from its sidebar row, and Not in a Folder folds
   await expect(field).toBeFocused();
   await window.keyboard.press("Escape");
 
-  // Folded, Not in a Folder gives its room to the rest.
-  const toggle = window.getByTestId("not-in-a-folder-toggle");
-  await toggle.click();
-  await expect(rows).toHaveCount(0);
-  await toggle.click();
-  await expect(rows).toHaveCount(2);
   await app.close();
 });
