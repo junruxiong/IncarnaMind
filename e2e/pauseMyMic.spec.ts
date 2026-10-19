@@ -215,7 +215,7 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   const line = bar.getByTestId("meeting-line-microphone-paused");
   await expect(line).toHaveText(/^My mic paused since \d+:\d\d · Resume$/);
   const open = transcript.getByTestId("transcript-mic-paused");
-  await expect(wordsOf(open)).toHaveText(/^My mic paused since \d+:\d\d · Resume$/);
+  await expect(wordsOf(open)).toHaveText(/^My mic paused since \d\d:\d\d · Resume$/);
   const since = msOf(/(\d+:\d\d)/.exec((await line.textContent()) ?? "")?.[1] ?? "0:00");
   await expect(bar).toHaveAttribute("data-status", "recording");
   await shot(window, "mic-paused-en");
@@ -243,7 +243,7 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   await expect(open).toBeHidden();
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
   const span = transcript.locator('[data-testid="transcript-gap"][data-reason="micPaused"]');
-  await expect(wordsOf(span)).toHaveText(/^My mic paused \d+:\d\d–\d+:\d\d$/);
+  await expect(wordsOf(span)).toHaveText(/^My mic paused \d\d:\d\d–\d\d:\d\d$/);
   await shot(window, "mic-after-en");
 
   // The shortcut, held only while recording, pauses it from another app.
@@ -351,7 +351,7 @@ test("Pause my mic in Chinese: the tooltips, the line, ⌘K and the mark in Chin
   await bar.getByTestId("meeting-transcript-toggle").click();
   const transcript = window.getByTestId("viewer-transcript");
   const open = transcript.getByTestId("transcript-mic-paused");
-  await expect(wordsOf(open)).toHaveText(/^我的麦克风自 \d+:\d\d 起已暂停 · 恢复$/);
+  await expect(wordsOf(open)).toHaveText(/^我的麦克风自 \d\d:\d\d 起已暂停 · 恢复$/);
   const since = msOf(/(\d+:\d\d)/.exec((await open.textContent()) ?? "")?.[1] ?? "0:00");
   await expect
     .poll(async () => {
@@ -362,7 +362,7 @@ test("Pause my mic in Chinese: the tooltips, the line, ⌘K and the mark in Chin
   await fromPalette(window, "恢复我的麦克风");
   await expect(mic).toHaveAttribute("aria-pressed", "false");
   await expect(wordsOf(transcript.getByTestId("transcript-gap"))).toHaveText(
-    /^我的麦克风在 \d+:\d\d–\d+:\d\d 暂停$/,
+    /^我的麦克风在 \d\d:\d\d–\d\d:\d\d 暂停$/,
   );
   await expect(transcript.getByTestId("transcript-gap")).toHaveAttribute(
     "data-reason",

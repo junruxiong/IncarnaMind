@@ -443,7 +443,7 @@ function TranscriptContent({
                         parts={[
                           <span key="since">
                             <MicOffLineIcon className="mr-1.5 inline size-3.5 align-[-2px]" />
-                            {t("meetings.mic.pausedSince", { time: clockTime(row.fromMs) })}
+                            {t("meetings.mic.pausedSince", { time: paddedClockTime(row.fromMs) })}
                           </span>,
                           <LineAction
                             key="resume"
@@ -470,8 +470,8 @@ function TranscriptContent({
                           <>
                             <MicOffLineIcon className="mr-1.5 inline size-3.5 align-[-2px]" />
                             {t("meetings.mic.pausedSpan", {
-                              from: clockTime(row.gap.fromMs),
-                              to: clockTime(row.gap.toMs),
+                              from: paddedClockTime(row.gap.fromMs),
+                              to: paddedClockTime(row.gap.toMs),
                             })}
                           </>
                         ) : row.gap.toMs > row.gap.fromMs ? (
