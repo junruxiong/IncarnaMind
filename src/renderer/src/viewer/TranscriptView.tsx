@@ -38,6 +38,7 @@ const GAP_REASONS: Record<Exclude<GapReason, "micPaused">, MessageKey> = {
   sleep: "transcript.gap.sleep",
   interrupted: "transcript.gap.interrupted",
   lost: "transcript.gap.lost",
+  cloud: "transcript.gap.cloud",
 };
 
 const read = (bytes: Uint8Array): Transcript => readVtt(new TextDecoder().decode(bytes));

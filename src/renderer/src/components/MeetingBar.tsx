@@ -23,6 +23,7 @@ import {
 } from "./lineIcons";
 import { LevelBars } from "./meetings/LevelBars";
 import { MicrophoneButton } from "./meetings/MicrophoneButton";
+import { ROUTE_LABELS } from "./meetings/TranscriptionRouteSelect";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { TranscriptLines } from "./TranscriptLines";
 import { useTabPlace } from "./tabs/tabItems";
@@ -190,7 +191,10 @@ function TranscriptToggle({ meeting }: { meeting: Meeting }) {
   );
 }
 
-/** What the User should know about the recording, a line each: its health, a cut, a gap. */
+/**
+ * What the User should know about the recording, a line each: its health, a cut, a gap, and
+ * transcription back on this computer after the cloud service stopped (#141).
+ */
 function MeetingLines({ meeting }: { meeting: Meeting }) {
   const t = useT();
   const problem = useMeetings((state) => state.problems[meeting.id]);
@@ -256,6 +260,26 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
       action: { label: t("error.dismiss"), onClick: () => dismissGaps(meeting.id) },
     });
   }
+  const fellBack = meeting.transcript?.fellBack;
+  if (fellBack) {
+    const service = t(ROUTE_LABELS[fellBack.route]);
+    const time = clockTime(fellBack.atMs);
+    lines.push({
+      key: "cloud",
+      text: t(FELL_BACK[fellBack.reason], { service, time }),
+      ...(fellBack.reason === "refused" && {
+        action: {
+          label: t("meetings.key.replace"),
+          testId: "meeting-line-change-key",
+          // OpenAI's key is its provider's, in Models; a service's own key is in Meetings.
+          onClick: () =>
+            useAppStore
+              .getState()
+              .openSettings(fellBack.route === "openai" ? "models" : "meetings"),
+        },
+      }),
+    });
+  }
 
   return (
     <>
@@ -290,7 +314,22 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
   );
 }
 
-const STATUS_LINES: ReadonlySet<string> = new Set(["gap", "interrupted", "microphone-paused"]);
+const STATUS_LINES: ReadonlySet<string> = new Set([
+  "gap",
+  "interrupted",
+  "cloud",
+  "microphone-paused",
+]);
+
+const FELL_BACK: Record<
+  NonNullable<NonNullable<Meeting["transcript"]>["fellBack"]>["reason"],
+  MessageKey
+> = {
+  dropped: "meetings.line.cloudDropped",
+  refused: "meetings.line.cloudRefused",
+  cap: "meetings.line.cloudCap",
+  "local-mode": "meetings.line.cloudLocalMode",
+};
 
 const MICROPHONE_LINES: Partial<Record<MeetingSourceState, MessageKey>> = {
   denied: "meetings.line.microphoneDenied",

@@ -491,6 +491,13 @@ describe("Built-in Skills forced on a Question", { timeout: 30_000 }, () => {
         expect(call.system).toContain(`For this Question the User chose the Skill "${name}"`);
         expect(call.system).toContain(body);
       }
+      // They tell the model to write in the Question's language, but before the Passages: the search says it again after them (#1273).
+      const searched = calls
+        .flatMap((call) => call.results)
+        .find((result) => result.tool === "search_documents");
+      expect(searched?.text).toMatch(
+        /The Skill's instructions don't change the language of your Answer\. The Question is written in English, so answer in English\.$/,
+      );
       // The other built-in Skills are listed by name and description only.
       for (const other of BUILT_IN_SKILL_NAMES.filter((each) => each !== name)) {
         const { frontmatter, body: otherBody } = await shipped(other);

@@ -1,8 +1,9 @@
 /**
  * An `AudioCapture` with no devices, for the tests and the smoke tests: the
  * microphone makes a 440 Hz tone, the computer's sound a quieter 660 Hz one
- * (or silence). The tests push audio by hand; the smoke tests' copy makes it in
- * real time (`realTime`). Never the real microphone.
+ * (or silence, or a recording played once, for checking transcription by
+ * hand). The tests push audio by hand; the smoke tests' copy makes it in real
+ * time (`realTime`). Never the real microphone.
  */
 import {
   type AudioCapture,
@@ -21,6 +22,23 @@ export interface FakeCaptureOptions {
   microphone?: "allowed" | "denied";
   /** Makes audio by itself, as captured, every `realTime` ms. */
   realTime?: number;
+  /** The computer's sound plays these samples once, then silence; the microphone is quiet meanwhile. */
+  recording?: Int16Array;
+}
+
+/** A WAV file's samples: 16-bit PCM, mono, at `MEETING_SAMPLE_RATE`, as a recording to play. */
+export function wavSamples(bytes: Uint8Array): Int16Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let at = 12; at + 8 <= bytes.length; ) {
+    const id = String.fromCharCode(...bytes.subarray(at, at + 4));
+    const size = view.getUint32(at + 4, true);
+    if (id === "data") {
+      const body = bytes.slice(at + 8, at + 8 + size - (size % 2));
+      return new Int16Array(body.buffer);
+    }
+    at += 8 + size + (size % 2);
+  }
+  throw new Error("The recording has no audio.");
 }
 
 export interface FakeCapture extends AudioCapture {
@@ -59,6 +77,12 @@ export function createFakeCapture(options: FakeCaptureOptions = {}): FakeCapture
     const count = Math.round((ms * MEETING_SAMPLE_RATE) / 1000);
     const samples = new Int16Array(count);
     if (source === "system" && system === "silent") return samples;
+    if (options.recording) {
+      if (source === "system")
+        samples.set(options.recording.subarray(made.system, made.system + count));
+      made[source] += count;
+      return samples;
+    }
     const [hertz, level] = source === "microphone" ? [440, 6000] : [660, 3000];
     for (let i = 0; i < count; i++) {
       const t = (made[source] + i) / MEETING_SAMPLE_RATE;
