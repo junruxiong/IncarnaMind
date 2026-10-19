@@ -63,6 +63,7 @@ import {
 } from "../../answers/blocks";
 import type { CheckWrittenInput, WrittenCheck } from "../../answers/checks/written";
 import type { ParagraphAsked } from "../../answers/paragraphAsked";
+import { withoutPointersBack } from "../../answers/pointersBack";
 import {
   BLOCK_ID_ATTRIBUTE,
   type BlockOrigin,
@@ -207,10 +208,7 @@ export interface MindToolsOptions {
    * Citations weren't found, how many markers had no Citation, which sources
    * were written as text, and how many sentences it left out.
    */
-  blocksOf(
-    markdown: string,
-    options?: { streaming?: boolean },
-  ): {
+  blocksOf(markdown: string): {
     blocks: NodeJSON[];
     cited: number;
     notFound: number;
@@ -226,14 +224,6 @@ export interface MindToolsOptions {
     /** Cells beyond its tables' columns, their text kept in the row's last cell. */
     extraCells: number;
     searchTalk: number;
-    pointersBack: number;
-    /** Sentences that point to an earlier Answer but say more, so kept as written. */
-    pointersLeft: number;
-    /**
-     * Headings and lead-ins left out because nothing under them stayed; always
-     * 0 while `streaming`, as what goes under them hasn't all come.
-     */
-    framing: number;
   };
   /**
    * What the User's words asked for (../../answers/routeRequest), which the
@@ -983,7 +973,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const logPointersLeft = (left: number, mindId: string, toolCallId: string) => {
     if (left > 0) {
       console.info(
-        `${left} sentences pointing to an earlier Answer were written as they were into Mind ${mindId} (call ${toolCallId}): each says more than the pointer.`,
+        `${left} Blocks pointing to an earlier Answer were written as they were into Mind ${mindId} (call ${toolCallId}): only a paragraph that is nothing but a pointer is left out.`,
       );
     }
   };
@@ -1226,9 +1216,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     }
     const { writer } = stream;
     if (stream.copy !== null || stream.uncited) return;
-    const { blocks, firstUnrecorded, sourcesAsText } = options.blocksOf(content.value, {
-      streaming: true,
-    });
+    const { blocks, firstUnrecorded, sourcesAsText } = options.blocksOf(content.value);
     if (!uncitedRefused && sourcesAsText.length > 0) {
       stream.uncited = true;
       return;
@@ -1266,9 +1254,6 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       unlinkedSources: 0,
       extraCells: 0,
       searchTalk: 0,
-      pointersBack: 0,
-      pointersLeft: 0,
-      framing: 0,
     };
   };
 
@@ -1318,19 +1303,24 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const stream = streams.get(toolCallId);
     streams.delete(toolCallId);
     ended.add(toolCallId);
-    const markdown = typeof given === "string" ? given : null;
+    const alone = withoutPointersBack(typeof given === "string" ? given : "");
+    const markdown = typeof given === "string" ? alone.markdown : null;
     const content =
-      typeof given === "string" ? options.blocksOf(given) : answerContent(given.blocks);
-    const { blocks, cited, notFound, unrecorded, searchTalk, pointersBack, ...notes } = content;
+      typeof given === "string" ? options.blocksOf(alone.markdown) : answerContent(given.blocks);
+    const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
     let writer = stream?.writer ?? null;
     const unmade = blocks.some(unmadeTable);
     const again = made ? "call create_mind again" : "call add_to_mind again";
     const uncited = unmade ? null : uncitedIn(mind, content, again, { answer: true, retry, made });
-    // A heading or lead-in written as the text came in may have nothing under it now: write it all again.
-    const reframed = content.framing > 0;
+    // What streamed in holds the pointers taken out of the whole text: it is written again.
+    const streamedPointers = alone.removed > 0;
     if (
       writer &&
-      (unmade || uncited || reframed || writer.mind.id !== mind.id || writer.named !== after)
+      (unmade ||
+        uncited ||
+        streamedPointers ||
+        writer.mind.id !== mind.id ||
+        writer.named !== after)
     ) {
       withdraw(writer);
       minds.writing(writer.mind.id, null);
@@ -1348,7 +1338,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     }
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
-    logPointersLeft(content.pointersLeft, writer.mind.id, toolCallId);
+    logPointersLeft(alone.left, writer.mind.id, toolCallId);
     // A chart drawn before `cite` records its table's markers would draw values with no Citation.
     const later = chart !== null && unrecorded > 0 && markdown !== null;
     const drawn = chart && !later ? drawChart(writer, blocks, chart, markdown) : null;
@@ -1378,7 +1368,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       notFound,
       unrecorded,
       searchTalk,
-      pointersBack,
+      pointersBack: alone.removed,
       charted,
       blocks: { mindId: writer.mind.id, ids: writer.ids, blocks },
     };
@@ -1650,10 +1640,11 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     retry: boolean,
     { again = "call edit_mind again", asWrite = false } = {},
   ): Written & { change: MindChange; dropped: number } => {
-    const content = options.blocksOf(markdown);
-    const { blocks, cited, notFound, unrecorded, searchTalk, pointersBack, ...notes } = content;
+    const alone = withoutPointersBack(markdown);
+    const content = options.blocksOf(alone.markdown);
+    const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
     if (blocks.some(unmadeTable)) throw noTable(mind);
-    logPointersLeft(content.pointersLeft, mind.id, toolCallId);
+    logPointersLeft(alone.left, mind.id, toolCallId);
     const uncited = uncitedIn(mind, content, again, { answer: false, retry });
     if (uncited) throw uncited;
     const dropped = minds.read(mind.id, (note) => citationsDropped(note, over, blocks));
@@ -1698,14 +1689,20 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     };
     options.changed(toolCallId, change);
     if (unrecorded > 0) {
-      unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision, sent: change });
+      unsettled.set(toolCallId, {
+        mindId: mind.id,
+        ids,
+        markdown: alone.markdown,
+        change: revision,
+        sent: change,
+      });
     }
     return {
       change,
       notFound,
       unrecorded,
       searchTalk,
-      pointersBack,
+      pointersBack: alone.removed,
       dropped,
       blocks: { mindId: mind.id, ids, blocks },
     };

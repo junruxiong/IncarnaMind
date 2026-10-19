@@ -209,7 +209,6 @@ import {
   withFound,
 } from "./meetingHelp";
 import { paragraphAsked } from "./paragraphAsked";
-import { withoutPointersBack } from "./pointersBack";
 import {
   answerInstructions,
   connectorInstructions,
@@ -1675,13 +1674,12 @@ export function createAnswers(options: AnswersOptions) {
               ...input.assistant,
               language: answerLanguage(context.question),
               figure: (marker) => (calculating ? figures.figure(marker) : null),
-              blocksOf: (text, { streaming = false } = {}) => {
+              blocksOf: (text) => {
                 let found = 0;
                 let notFound = 0;
                 let unrecorded = 0;
                 let firstUnrecorded = -1;
-                const final = !streaming;
-                const written = withoutSearchTalk(withoutFootnoteDefinitions(text), { final });
+                const written = withoutSearchTalk(withoutFootnoteDefinitions(text));
                 const link = (source: NamedSource) => {
                   const marker = session.markerFor(source);
                   return marker === null ? null : `[^${marker}]`;
@@ -1695,9 +1693,7 @@ export function createAnswers(options: AnswersOptions) {
                 const asText = sourcesAsText(written.markdown, known);
                 const sourced = linkKnownSources(written.markdown, known, link);
                 const tables = linkTableSources(sourced.text, link);
-                // After the sources written as text are linked, so a sentence citing one keeps its claim.
-                const alone = withoutPointersBack(tables.markdown, { final });
-                const cited = markdownToBlocks(alone.markdown).flatMap((block, index) =>
+                const cited = markdownToBlocks(tables.markdown).flatMap((block, index) =>
                   withCitations([block], (marker) => {
                     const node = session.checkedNode(marker);
                     if (!node) {
@@ -1728,9 +1724,6 @@ export function createAnswers(options: AnswersOptions) {
                   unlinkedSources: tables.unlinked,
                   extraCells: tables.extraCells,
                   searchTalk: written.left,
-                  pointersBack: alone.removed,
-                  pointersLeft: alone.left,
-                  framing: written.framing + alone.framing,
                 };
               },
               changed: (toolCallId, change) => {

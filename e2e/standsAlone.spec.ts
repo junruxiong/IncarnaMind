@@ -18,15 +18,8 @@ import {
   useLocalChatModel,
 } from "./app";
 
-/*
- * A newcomer's path with the scripted model, which says what models said
- * (#1172): the example's Answer, a Question about their own file from the
- * example's page, then a short summary asked from a new empty Mind, answered
- * in the panel, and put there with Add to note. The Answer about their file
- * says nothing of the example. The summary's pointer to an earlier Answer
- * stays in the panel, where the model wrote it, and doesn't go into the page;
- * in English and Chinese.
- */
+// The scripted model says what real models said in #1172: a pointer after a short summary, and a
+// line setting the User's file apart from the example.
 
 const WALKS = [
   {

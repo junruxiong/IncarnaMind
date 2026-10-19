@@ -9,8 +9,6 @@
  * User's own ("I found three issues in the lease").
  */
 
-import { withoutSentences } from "./proseSentences";
-
 // The first person singular: a Document's "we" is its authors.
 const SELF = /\bI\b|\b[Mm](?:y|e)\b/;
 const SEARCHING = /\bsearch(?:es|ed|ing)?\b|\bpassages?\b|\bretriev(?:e|es|ed|al|ing)\b/i;
@@ -22,6 +20,8 @@ const CHINESE =
 // A cited sentence is the Document's.
 const CITED = /\[\^?\d+\]/;
 
+const SENTENCE = /[^.!?。！？\n]+(?:[.!?。！？]+["”’)]*|$)\s*/g;
+
 const aboutSearching = (sentence: string) =>
   !CITED.test(sentence) &&
   ((SELF.test(sentence) && SEARCHING.test(sentence)) ||
@@ -30,14 +30,26 @@ const aboutSearching = (sentence: string) =>
 
 /**
  * Markdown to write into a Mind without its sentences about searching, and
- * how many were left out. A paragraph left with nothing goes too, and with
- * `final` (the whole text) a heading left with nothing under it, which
- * `framing` counts.
+ * how many were left out. A paragraph left with nothing goes too.
  */
-export function withoutSearchTalk(
-  markdown: string,
-  { final = true }: { final?: boolean } = {},
-): { markdown: string; left: number; framing: number } {
-  const kept = withoutSentences(markdown, aboutSearching, { final });
-  return { markdown: kept.markdown, left: kept.dropped, framing: kept.framing };
+export function withoutSearchTalk(markdown: string): { markdown: string; left: number } {
+  let left = 0;
+  const kept = markdown.split(/\n{2,}/).flatMap((paragraph) => {
+    if (/^\s*(?:#{1,6}\s|```|\||>)/.test(paragraph)) return [paragraph];
+    const lines = paragraph.split("\n").map((line) => {
+      const lead = /^\s*(?:[-*+]|\d{1,3}[.)])\s+/.exec(line)?.[0] ?? "";
+      const sentences = line.slice(lead.length).match(SENTENCE) ?? [];
+      const staying = sentences.filter((sentence) => {
+        const out = aboutSearching(sentence);
+        if (out) left++;
+        return !out;
+      });
+      if (staying.length === sentences.length) return line;
+      const rest = staying.join("").trim();
+      return rest ? `${lead}${rest}` : null;
+    });
+    const remaining = lines.filter((line): line is string => line !== null);
+    return remaining.length > 0 ? [remaining.join("\n")] : [];
+  });
+  return { markdown: kept.join("\n\n"), left };
 }

@@ -25,10 +25,10 @@
  * gets a lead-in before its content and a closing note after it (#702).
  * One that asks how much something grew (增长) has the growth from the first
  * two numbers of its quote calculated, and writes it with its marker.
- * As models did (#1172), one for a "short summary" (简短的摘要) ends by pointing
- * to an earlier Answer, and one about "home working" (居家办公) asked beside a
- * Mind ends by setting the Documents apart from it, unless the instructions
- * say that Mind is an example.
+ * As models did (#1172), one for a "short summary" (简短的摘要) ends with a
+ * paragraph pointing to an earlier Answer, and one about "home working"
+ * (居家办公) asked beside a Mind ends by setting the Documents apart from it,
+ * unless the instructions say that Mind is an example.
  * Before its search it reasons, a line that quotes the Question, as a model
  * that thinks does. A Question asked "slowly" waits a moment before each step
  * and writes its Answer word by word, so a test sees each step of the Answer.
@@ -284,7 +284,7 @@ const HOME_WORKING = /\bhome working\b|居家办公/i;
 function withAsides(prompt: Prompt, question: string, answer: string): string {
   const chinese = /\p{Script=Han}/u.test(question);
   if (SHORT_SUMMARY.test(question)) {
-    return `${answer} ${chinese ? "居家办公的规定见上一条回答。" : "Notice, holiday and home working are covered in my earlier answer."}`;
+    return `${answer}\n\n${chinese ? "居家办公的规定见上一条回答。" : "Notice, holiday and home working are covered in my earlier answer."}`;
   }
   const beside = /<mind name="([^"]*)">/.exec(
     userText(prompt.find((message) => message.role === "user")),

@@ -1,11 +1,10 @@
 /**
- * Text that goes into a page stands on its own (#1172): a sentence that is
- * only a pointer to an earlier Answer goes, from a closed list of shapes. Any
- * other sentence that points back stays exactly as written and is counted:
- * losing what it says is worse than leaving a pointer in.
+ * Text that goes into a page stands on its own (#1172). Once it is whole, a
+ * paragraph that is one sentence pointing to an earlier Answer and nothing
+ * else goes, from a closed list of shapes. Everything else stays exactly as
+ * written, and what points back is counted: losing what a page says is worse
+ * than leaving a pointer in.
  */
-
-import { withoutSentences } from "./proseSentences";
 
 const MY_EARLIER = String.raw`my (?:earlier|previous|prior|last|first|original) (?:answer|reply|response)s?`;
 const EARLIER = String.raw`(?:${MY_EARLIER}|(?:the|that) (?:earlier|previous|prior|last|preceding) (?:answer|reply|response))`;
@@ -46,9 +45,9 @@ const PURE = [
   `(?:正如|如)(?:我)?(?:在)?(?:${EARLIER_ZH}|上面|前面|之前|上|前)?(?:中|里)?(?:所述|所说|所列|提到的|说的|讲的|提到过的|说过的)|如上述|同上`,
   `${TOPIC_ZH}?(?:与|和|跟|同)(?:我)?${EARLIER_ZH}(?:一致|相同)?`,
 ].map((shape) => new RegExp(`^[(（]?(?:${shape})[.!。！]?[)）]?[.!。！]?$`, "iu"));
-// A name that says something of what it names: "Pay rises yearly and the rest", "试用期为三个月的规定".
+// A name that says something of what it names: "Pay rises yearly and the rest", "试用期为三个月", "年假十五天".
 const CLAIMS =
-  /\d|\b(?:is|are|was|were|be|been|has|have|had|will|would|can|could|may|might|must|shall|should|do|does|did|not|no|never|only)\b|[是为有将会应已不没了]/iu;
+  /\d|\b(?:is|are|was|were|be|been|has|have|had|will|would|can|could|may|might|must|shall|should|do|does|did|not|no|never|only)\b|[是为有将会应已不没了零〇一二三四五六七八九十百千万亿两半]/iu;
 const CITED = /\[[\^=]\d{1,4}\]/;
 
 const POINTS_BACK = new RegExp(
@@ -79,46 +78,55 @@ const ASKS_ABOUT_EARLIER = new RegExp(
 /** Whether a Question asks about an earlier Answer, so what is written for it may point to one. */
 export const asksAboutEarlier = (question: string): boolean => ASKS_ABOUT_EARLIER.test(question);
 
-const onlyAPointer = (sentence: string) =>
-  !CITED.test(sentence) &&
+const onlyAPointer = (paragraph: string) =>
+  !CITED.test(paragraph) &&
   PURE.some((shape) => {
-    const match = shape.exec(sentence);
+    const match = shape.exec(paragraph);
     return match !== null && !CLAIMS.test(match.groups?.topic ?? "");
   });
 
-/**
- * Markdown without its sentences that are only a pointer to an earlier
- * Answer: `removed` counts them, `left` the sentences that point back but say
- * more, kept as written, and `framing` the headings and lead-ins left with
- * nothing under them. `final`: the whole text, not part of one still coming
- * in, so those headings and lead-ins can go too. With nothing left, the
- * Markdown is given back as it was.
- */
-export function withoutPointersBack(
-  markdown: string,
-  { final = true }: { final?: boolean } = {},
-): { markdown: string; removed: number; left: number; framing: number } {
-  let pointing = 0;
-  const kept = withoutSentences(
-    markdown,
-    (sentence) => {
-      const pure = onlyAPointer(sentence);
-      if (pure || POINTS_BACK.test(sentence)) pointing++;
-      return pure;
-    },
-    { final, wholeItems: true },
-  );
-  if (!/[\p{L}\p{N}]/u.test(kept.markdown)) {
-    return { markdown, removed: 0, left: pointing, framing: 0 };
+const FENCE = /^\s*(?:```|~~~)/;
+// A heading, list item, table, quote or code: never taken out, whatever it says.
+const NOT_A_PARAGRAPH = /^\s*(?:#|[-*+]\s|\d{1,3}[.)]\s|\||>|```|~~~)|^ {4}/;
+
+function blocksIn(markdown: string): string[] {
+  const blocks: string[] = [];
+  let block: string[] = [];
+  let fenced = false;
+  for (const line of markdown.split("\n")) {
+    if (FENCE.test(line)) fenced = !fenced;
+    if (fenced || line.trim() !== "") {
+      block.push(line);
+      continue;
+    }
+    if (block.length > 0) blocks.push(block.join("\n"));
+    block = [];
   }
-  return {
-    markdown: kept.markdown,
-    removed: kept.dropped,
-    left: pointing - kept.dropped,
-    framing: kept.framing,
-  };
+  if (block.length > 0) blocks.push(block.join("\n"));
+  return blocks;
 }
 
-/** Markdown as it goes into a page: without pointers to an earlier Answer, unless its Question asked about one. */
+/**
+ * Markdown, once whole, without its paragraphs that are only a pointer to an
+ * earlier Answer: `removed` counts them, `left` the Blocks that point back and
+ * stay as written. With nothing else in it, the Markdown is given back as it was.
+ */
+export function withoutPointersBack(markdown: string): {
+  markdown: string;
+  removed: number;
+  left: number;
+} {
+  const blocks = blocksIn(markdown);
+  const pure = (block: string) =>
+    !block.includes("\n") && !NOT_A_PARAGRAPH.test(block) && onlyAPointer(block.trim());
+  const kept = blocks.filter((block) => !pure(block));
+  const pointing = blocks.filter(
+    (block) => pure(block) || (!FENCE.test(block) && POINTS_BACK.test(block)),
+  ).length;
+  const removed = blocks.length - kept.length;
+  if (removed === 0 || kept.length === 0) return { markdown, removed: 0, left: pointing };
+  return { markdown: kept.join("\n\n"), removed, left: pointing - removed };
+}
+
 export const forPage = (markdown: string, question: string): string =>
   asksAboutEarlier(question) ? markdown : withoutPointersBack(markdown).markdown;

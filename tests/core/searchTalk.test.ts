@@ -36,7 +36,7 @@ describe("Text written into a Mind, without talk of searching", () => {
     "- Revenue rose 3% to £27.4bn.\n- Net debt was £2.6bn.",
     "| Search | Found |\n|---|---|\n| a | b |",
   ])("%s", (text) => {
-    expect(withoutSearchTalk(text)).toEqual({ markdown: text, left: 0, framing: 0 });
+    expect(withoutSearchTalk(text)).toEqual({ markdown: text, left: 0 });
   });
 
   // protects=a list item or paragraph left empty goes, and the rest keeps its shape; fails_when=an empty bullet or paragraph is written; no_claim=none beyond protects.

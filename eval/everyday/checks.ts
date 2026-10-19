@@ -133,11 +133,9 @@ function proseSentences(text: string): string[] {
       fenced = !fenced;
       return [];
     }
-    // Headings, tables, quotes and lead-ins are the page's shape, not what it says.
-    if (fenced || /^\s*(?:\||#{1,6}\s|>)|[:：](?:\*\*)?\s*$|^\s*\*\*[^*]+\*\*\s*$/.test(line))
-      return [];
+    if (fenced || /^\s*\|/.test(line)) return [];
     return line
-      .replace(/^\s*(?:[-*+]|\d{1,3}[.)])\s+/, "")
+      .replace(/^\s*(?:[-*+]|\d{1,3}[.)]|#{1,6}|>)\s+/, "")
       .split(/(?<=[.!?。！？]["”’)」』]*(?:\[\^\d{1,4}\])*)\s*/u)
       .map((sentence) => sentence.trim())
       .filter((sentence) => /[\p{L}\p{N}]/u.test(sentence));
