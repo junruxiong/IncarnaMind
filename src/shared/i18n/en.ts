@@ -4137,6 +4137,20 @@ export const en = {
   "meetings.line.systemUnavailable": "This computer records only your microphone.",
   "meetings.line.openSettings.mac": "Open System Settings",
   "meetings.line.openSettings.other": "Open Settings",
+  "meetings.guide.title.microphone": "Allow the microphone",
+  "meetings.guide.title.system": "Allow the computer’s sound",
+  "meetings.guide.where.microphone": "Privacy & Security › Microphone",
+  "meetings.guide.where.system": "Privacy & Security › Screen & System Audio Recording",
+  "meetings.guide.step1": "Find IncarnaMind in the list.",
+  "meetings.guide.step2": "Switch it on.",
+  "meetings.guide.waiting": "Waiting for you…",
+  "meetings.guide.done.microphone":
+    "Done. Stop the recording and start it again to record your voice.",
+  "meetings.guide.done.system":
+    "Done. Quit and reopen IncarnaMind, then record again, to record the computer’s sound.",
+  "meetings.guide.inline":
+    "In System Settings, open {where}, find IncarnaMind in the list and switch it on.",
+  "meetings.guide.close": "Close (Esc)",
   "meetings.transcript.name": "Transcript · {meeting}",
   "meetings.transcript.nameAlone": "Transcript",
   "meetings.bar.showTranscript": "Show transcript",
