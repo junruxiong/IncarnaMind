@@ -49,6 +49,7 @@ import { looksLikeTable } from "../../../shared/markdownTables";
 import {
   changedParagraphs,
   pendingProposals,
+  proposalRequestOf,
   readProposalAttribute,
   recordProposalRequest,
   resolveProposals,
@@ -1051,6 +1052,23 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     writer.written = blocks.length;
   };
 
+  /**
+   * A chart a call draws is a write the User asked for, whatever their words were: its change
+   * applies at once with Undo, as the text writes do (#1358). In one Mind only, and not in one
+   * the Answer made, as for any other.
+   */
+  const asksForChart = (writer: Writer): void => {
+    if (writer.made) return;
+    askedMind ??= writer.mind.id;
+    if (askedMind !== writer.mind.id) return;
+    minds.edit(writer.mind.id, (note) => {
+      const doc = note.doc;
+      const made = doc ? proposalRequestOf(doc, writer.request) : null;
+      if (!doc || made?.source !== "answer-added" || made.requested) return;
+      recordProposalRequest(doc, writer.request, { ...made, requested: "write" });
+    });
+  };
+
   /** What a request did in a Mind: how many of its changes wait there now. */
   const changeIn = (mindId: string, request: string, created: boolean): MindChange => {
     const { proposals, paragraphs, tables, charts } = minds.read(mindId, (note) => ({
@@ -1313,6 +1331,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     }
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
+    if (chart !== null) asksForChart(writer);
     // A chart drawn before `cite` records its table's markers would draw values with no Citation.
     const later = chart !== null && unrecorded > 0 && markdown !== null;
     const drawn = chart && !later ? drawChart(writer, blocks, chart, markdown) : null;
@@ -1400,6 +1419,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const writer = writerFor(mind, null, false);
     writer.anchor = table.picked.id;
     writeMore(writer, [drawn.chart]);
+    asksForChart(writer);
     const change = changeOf(writer, false);
     options.changed(toolCallId, change);
     return `Proposed a chart of the table in “${mind.name}”, right after it. ${outcomeOf(mind, change.request)}`;

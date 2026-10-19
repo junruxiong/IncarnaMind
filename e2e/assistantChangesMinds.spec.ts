@@ -123,8 +123,8 @@ test("the card lists each Mind changed: Open shows the change, Reject all remove
   const card = answer.getByTestId("mind-changes");
   await expect(card.getByTestId("mind-changes-title")).toHaveText("2 Minds changed");
   const rows = card.getByTestId("mind-changes-row");
-  await expect(rows.nth(0)).toContainText("Edited: Project plan· 1 waiting");
-  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 waiting");
+  await expect(rows.nth(0)).toContainText("Edited: Project plan· 1 change waiting");
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 changes waiting");
   await expect(rows.nth(0).locator(".mind-changes-name")).toHaveAttribute(
     "title",
     "Wrote 1 paragraph in “Project plan”",
@@ -144,9 +144,9 @@ test("the card lists each Mind changed: Open shows the change, Reject all remove
   await expect(answer.getByTestId("answer-added")).toContainText("Rejected 3 changes");
 
   await pointAndClick(window, answer.getByTestId("answer-added-undo"));
-  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 waiting");
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 changes waiting");
   await expect(made).toHaveCount(1);
-  await expect(rows.nth(0)).toContainText("· 1 waiting");
+  await expect(rows.nth(0)).toContainText("· 1 change waiting");
 
   await pointAndClick(window, card.getByTestId("mind-changes-accept-all"));
   await expect(rows.nth(0)).toContainText("· none waiting");
@@ -171,7 +171,9 @@ test("one Mind changed: the card says what was changed and how much of it waits,
   const title = card.getByTestId("mind-changes-title");
   const left = card.getByTestId("mind-changes-left");
   await expect(title).toHaveText("在“第三季度”中修改了 1 个段落");
-  await expect(left).toHaveText("· 1 个段落待确认");
+  // What was changed counts by paragraph; what waits counts as the Mind's bar does.
+  await expect(left).toHaveText("· 2 处修订待确认");
+  await expect(window.getByTestId("proposals-count")).toHaveText("来自助手的 2 处修订");
   await expect(card.getByTestId("mind-changes-row")).toHaveCount(0);
   await screenshot(window, "card-one-mind-zh");
 
@@ -185,7 +187,7 @@ test("one Mind changed: the card says what was changed and how much of it waits,
   await expect(left).toHaveText("· 没有待确认的修订");
 
   await window.keyboard.press("ControlOrMeta+z");
-  await expect(left).toHaveText("· 1 个段落待确认");
+  await expect(left).toHaveText("· 2 处修订待确认");
   await expect(window.getByTestId("proposals-count")).toHaveText("来自助手的 2 处修订");
 });
 
@@ -290,7 +292,7 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
   const card = answer.getByTestId("mind-changes");
   const fact = "Created “Fieldwork plan with a summary” and wrote 1 paragraph";
   await expect(card.getByTestId("mind-changes-title")).toHaveText(fact);
-  await expect(card.getByTestId("mind-changes-left")).toHaveText("· 2 waiting");
+  await expect(card.getByTestId("mind-changes-left")).toHaveText("· 2 changes waiting");
   const made = window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan with a summary" });
   await expect(made).toHaveCount(1);
 
@@ -322,7 +324,7 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
 
   await pointAndClick(window, answer.getByTestId("answer-added-undo"));
   await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
-  await expect(card.getByTestId("mind-changes-left")).toHaveText("· 2 waiting");
+  await expect(card.getByTestId("mind-changes-left")).toHaveText("· 2 changes waiting");
   await expect(editor).toContainText("Ask the roastery about Tuesdays.");
   await expect(made).toHaveCount(1);
 });
@@ -340,14 +342,14 @@ test("Reject all keeps a Mind the assistant made once something of it was accept
     "Add Ship the beta in May to Project plan and make a new note called Fieldwork plan",
   );
   const rows = answer.getByTestId("mind-changes-row");
-  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 waiting");
+  await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· 2 changes waiting");
 
   // Fieldwork plan is open beside, with the cursor in its first change: ⌘↵ accepts that one.
   await pointAndClick(window, rows.nth(1).getByTestId("mind-changes-open"));
   await expect(frontMindName(window)).toHaveText("Fieldwork plan");
   await expect(window.getByTestId("change-bar")).toContainText("Change 1 of 2");
   await window.keyboard.press("ControlOrMeta+Enter");
-  await expect(rows.nth(1)).toContainText("· 1 waiting");
+  await expect(rows.nth(1)).toContainText("· 1 change waiting");
 
   await pointAndClick(window, answer.getByTestId("mind-changes-reject-all"));
   await expect(rows.nth(1)).toContainText("Created: Fieldwork plan· none waiting");
