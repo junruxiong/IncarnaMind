@@ -31,7 +31,7 @@ const TURNED_ON = {
 } as const;
 
 for (const language of ["en", "zh-CN"] as const) {
-  test(`“Keep everything on this computer” is on Privacy, first below its statement, and nowhere else; turning it on offers Undo there (${language})`, async () => {
+  test(`“Keep everything on this computer” is on Privacy, below the statement and the services it names, and nowhere else; turning it on offers Undo there (${language})`, async () => {
     const { app, window } = await launchApp(dataDir);
     await dismissChatSetup(window);
     await setWindowSize(app, window, 1100, 720);
@@ -43,14 +43,18 @@ for (const language of ["en", "zh-CN"] as const) {
     const setting = page.getByTestId("local-only-setting");
     await expect(page.getByTestId("local-only")).toHaveCount(1);
 
-    const [intro, row, flows] = await Promise.all([
-      page.locator("p").first().boundingBox(),
-      setting.boundingBox(),
+    const [flows, row, traffic] = await Promise.all([
       page.getByTestId("consent-settings").boundingBox(),
+      setting.boundingBox(),
+      page.getByTestId("network-traffic").boundingBox(),
     ]);
-    if (!intro || !row || !flows) throw new Error("Privacy isn't laid out.");
-    expect(row.y).toBeGreaterThanOrEqual(intro.y + intro.height);
-    expect(row.y + row.height).toBeLessThanOrEqual(flows.y);
+    if (!flows || !row || !traffic) throw new Error("Privacy isn't laid out.");
+    // The statement is the page's first line; the switch comes after it and its services.
+    await expect(
+      page.locator("p").first().locator("xpath=ancestor::*[@data-testid='privacy-flows-intro']"),
+    ).toHaveCount(1);
+    expect(row.y).toBeGreaterThanOrEqual(flows.y + flows.height);
+    expect(row.y + row.height).toBeLessThanOrEqual(traffic.y);
 
     for (const other of ["search", "models", "general"] as const) {
       await showSettingsPage(window, other);
@@ -88,6 +92,11 @@ test("typing “local” in ⌘K finds it and opens Privacy at its switch, in En
     await window.keyboard.press("Enter");
     const settings = window.getByTestId("settings");
     await expect(settings).toHaveAttribute("data-page", "privacy");
+    await expect(settings.getByTestId("local-only")).toBeFocused();
+    // Space turns it on or off, and the focus stays on it.
+    const before = await localOnly(window);
+    await window.keyboard.press("Space");
+    await expect.poll(() => localOnly(window)).toBe(!before);
     await expect(settings.getByTestId("local-only")).toBeFocused();
     await settings.getByTestId("settings-close").click();
     await expect(settings).toBeHidden();

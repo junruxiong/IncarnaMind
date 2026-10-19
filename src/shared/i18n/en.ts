@@ -2217,11 +2217,12 @@ export const en = {
   "privacy.flows.none": "None. Everything stays on this computer.",
   "privacy.flows.intro.details":
     "Nothing goes to a service you haven't allowed, or at all while “Keep everything on this computer” is on. Where a provider offers it, IncarnaMind asks it not to store your requests.",
-  "privacy.flows.service": "to {service}",
   "privacy.flows.sends": "Sends:",
   "privacy.flows.decided": "{status} on {date}",
   "privacy.flows.chosen": "Allowed when you chose {service}, {date}",
   "privacy.flows.allow": "Allow",
+  "privacy.flows.partly": "Some uses aren’t allowed yet",
+  "privacy.flows.stopped": "Stopped allowing {service}",
   "privacy.traffic.title": "Other network traffic",
   "privacy.traffic.intro": "These services receive nothing of yours.",
   "privacy.traffic.on": "On",
