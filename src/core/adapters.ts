@@ -27,6 +27,7 @@ import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
 import type { FetchLimits, PageFetch } from "./documents/web/fetch";
 import type { PictureLimits } from "./documents/web/pictures";
+import type { OfficeBridgeAdapter } from "./office";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { AnthropicOAuthConfig } from "./providers/claudeAccount/config";
 import type { CopilotProfile } from "./providers/copilot/config";
@@ -837,6 +838,12 @@ export interface CoreAdapters {
     /** Opens an agent's install link (Cursor's) in its app. */
     openLink?(url: string): Promise<void>;
   };
+  /**
+   * The Office add-in bridge (spike for #1272): given, the app serves its add-in
+   * pages and API on the loopback addresses (see src/core/office). Not given,
+   * which is every build's default, nothing listens.
+   */
+  officeBridge?: OfficeBridgeAdapter;
   /** Runs the built-in embedding model (see `Embedder`). */
   embedder: Embedder;
   /**

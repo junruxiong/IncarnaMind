@@ -35,6 +35,7 @@ import { isGuideWindow, servePermissionGuide } from "./meetings/guide";
 import { isPanelWindow, serveMeetingPanel } from "./meetings/panel";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
+import { officeBridgeAdapter, showPairingCode } from "./officeBridge";
 import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } from "./platform";
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { realHomeProblem } from "./testHome";
@@ -253,6 +254,7 @@ app.whenReady().then(async () => {
   const createChatModel = await testChatModel();
   const taskKinds = await testTaskKinds();
   const executor = await scriptExecutor;
+  const officeBridge = officeBridgeAdapter();
   // The window's page starts loading while the core starts. Its calls reach the core once
   // `exposeCore` has run, below: they wait until this synchronous run is done.
   createWindow();
@@ -269,6 +271,7 @@ app.whenReady().then(async () => {
           baseUrl === defaultOllamaUrl() ? Promise.resolve([]) : installedOllamaModels(baseUrl),
       }),
       ...(taskKinds.length > 0 && { taskKinds }),
+      ...(officeBridge && { officeBridge }),
     });
   } catch (error) {
     await showStartupError(error);
@@ -276,6 +279,9 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
+  if (officeBridge && core.officeBridge) {
+    void showPairingCode(core.officeBridge, officeBridge.authorityFile);
+  }
   guardQuit(core, () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null);
   if (taskKinds.length > 0) {
     const started = core;
