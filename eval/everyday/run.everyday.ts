@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import { test } from "vitest";
 import type { AnswerUsage } from "../../src/core";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
-import { type ChatSettings, readConfig } from "../lib/config";
+import { type ChatSettings, chatModelSpecOf, chatProviderOf, readConfig } from "../lib/config";
 import { createWorkerEmbedder } from "../lib/embedder";
 import type { EvalDocument } from "../lib/evaluationSet";
 import { openLibrary } from "../lib/library";
@@ -40,13 +40,7 @@ async function runModel(
     reports: await reports(),
     dated: await writeDatedDocuments(datedFolder),
   };
-  const judge = createAiSdkChatModel({
-    kind: judging.kind,
-    modelId: judging.modelId,
-    apiKey: judging.apiKey,
-    baseUrl: judging.baseUrl,
-    thinking: "off",
-  });
+  const judge = createAiSdkChatModel({ ...chatModelSpecOf(judging), thinking: "off" });
   const model = `${chat.kind}/${chat.modelId}`;
   const results: CaseResult[] = [];
   for (const name of ["papers", "reports", "dated"] as const) {
@@ -74,12 +68,7 @@ async function runModel(
           request.flow.id === "chat" || request.flow.id === "checks",
         );
       });
-      await core.saveChatProvider({
-        kind: chat.kind,
-        modelId: chat.modelId,
-        ...(chat.apiKey !== null && { apiKey: chat.apiKey }),
-        ...(chat.baseUrl !== null && { baseUrl: chat.baseUrl }),
-      });
+      await core.saveChatProvider(chatProviderOf(chat));
       const scoped = [...library.documents.values()].map((document) => ({
         id: document.id,
         name: document.name,
