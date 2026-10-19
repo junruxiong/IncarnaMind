@@ -3576,6 +3576,7 @@ export const zhCN = {
   "error.skill.builtInName": "已有内置技能名为“{name}”。请在 SKILL.md 中换个名字。",
   "error.approval.riskNotAccepted": "总是运行技能脚本之前，先确认风险提示。",
   "error.approval.commandOnce": "命令只能逐次允许，不能设为始终允许。",
+  "error.question.answer": "这个问题不接受这样的回答。",
   "error.mindStyle.invalid": "无法使用这个字体和字号。",
   "error.privacy.usageDataLocalMode": "使用数据保持关闭：已开启“所有内容都留在这台电脑上”。",
   "error.check.claimTooLong": "这条说法太长，无法核对：最多 {max} 个字符。",

@@ -203,6 +203,7 @@ import {
 import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
+import { createQuestions } from "./questions";
 import { createRecentlyDeleted } from "./recentlyDeleted";
 import { createReferenceChecks } from "./referenceChecks";
 import {
@@ -1030,6 +1031,9 @@ export function createCore(adapters: CoreAdapters): Core {
     },
   });
 
+  // The assistant's questions to the User, waiting in the tray (#1374).
+  const questions = createQuestions(events);
+
   // Requests to one service kept apart, as its operator asks: Look up and Find sources share them.
   const paceTimers = adapters.paceTimers ?? realTimers;
   const pace = createPace(paceTimers);
@@ -1349,6 +1353,7 @@ export function createCore(adapters: CoreAdapters): Core {
       decide: (call) => approvals.decide(call),
       request: (call, signal) => approvals.request(call, signal),
     },
+    questions: { ask: (request, signal) => questions.ask(request, signal) },
     scripts: {
       enabled: () => settings.get().device.skillScriptsEnabled,
       timeoutSeconds: () => settings.get().device.skillScriptTimeoutSeconds,
@@ -3835,6 +3840,8 @@ export function createCore(adapters: CoreAdapters): Core {
     setApprovalPolicy: async (input) => approvals.set(input),
     revokeApprovalPolicy: async (policyId) => approvals.revoke(policyId),
     listApprovalRequests: async () => approvals.requests(),
+    listUserQuestions: async () => questions.list(),
+    answerUserQuestion: async (requestId, answer) => questions.answer(requestId, answer),
     respondToApproval: async (requestId, decision, options) =>
       approvals.respond(requestId, decision, options),
 
