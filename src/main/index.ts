@@ -298,7 +298,10 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
-  guardQuit(core, () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null);
+  const settleQuit = guardQuit(
+    core,
+    () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null,
+  );
   if (taskKinds.length > 0) {
     const started = core;
     (globalThis as { incarnamindScriptedTask?: unknown }).incarnamindScriptedTask = {
@@ -322,7 +325,7 @@ app.whenReady().then(async () => {
   servePermissionGuide({ rendererUrl, appWindows, trusted: isFromOurRenderer, testHooks });
   installMenuInLanguage(core);
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
-  if (!testHooks) startAutoUpdates(core);
+  if (!testHooks) startAutoUpdates(core, settleQuit);
 
   app.on("activate", () => {
     if (appWindows().length === 0) createWindow();
