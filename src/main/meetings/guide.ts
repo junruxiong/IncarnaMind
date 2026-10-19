@@ -32,9 +32,8 @@ import {
 import { handle } from "../ipc";
 
 const POLL_MS = 1000;
-/** How long the done message stays, in the window beside System Settings and in the app's window. */
+/** How long the done message stays in the window beside System Settings; the app's window keeps it until the User dismisses it. */
 const WINDOW_DONE_MS = 2500;
-const INLINE_DONE_MS = 8000;
 const FIRST_HEIGHT = 280;
 
 const guideWindows = new WeakSet<BrowserWindow>();
@@ -138,9 +137,11 @@ export function servePermissionGuide(options: PermissionGuideOptions): void {
     });
     guideWindows.add(window);
     guide = window;
-    window.setAlwaysOnTop(true, "floating");
-    window.once("ready-to-show", () => {
-      if (!window.isDestroyed()) window.showInactive();
+    // As the meeting's floating panel is, so it follows the User into a full-screen Space.
+    window.setAlwaysOnTop(true, "screen-saver");
+    window.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+      skipTransformProcessType: true,
     });
     window.on("closed", () => {
       if (guide === window) end();
@@ -160,7 +161,7 @@ export function servePermissionGuide(options: PermissionGuideOptions): void {
     clearInterval(polling);
     polling = undefined;
     tell();
-    leaving = setTimeout(end, state.placement === "beside" ? WINDOW_DONE_MS : INLINE_DONE_MS);
+    if (state.placement === "beside") leaving = setTimeout(end, WINDOW_DONE_MS);
   }
 
   function show(source: AudioSource): GuidePlacement {
@@ -206,7 +207,10 @@ export function servePermissionGuide(options: PermissionGuideOptions): void {
     const size = { width: Math.ceil(width), height: Math.ceil(height) };
     if (size.width < 1 || size.height < 1) return;
     const bounds = guide.getBounds();
-    if (bounds.width === size.width && bounds.height === size.height) return;
-    guide.setBounds({ x: bounds.x + bounds.width - size.width, y: bounds.y, ...size });
+    if (bounds.width !== size.width || bounds.height !== size.height) {
+      guide.setBounds({ x: bounds.x + bounds.width - size.width, y: bounds.y, ...size });
+    }
+    // Shown once the page has drawn its steps and told its size: never as a blank box.
+    if (!guide.isVisible()) guide.showInactive();
   });
 }

@@ -73,6 +73,16 @@ for (const language of ["en", "zh-CN"] as const) {
     const guide = await guideWindow(app);
     const card = guide.getByTestId("permission-guide");
     await expect(card).toHaveAttribute("data-status", "waiting");
+    // It shows once its steps are drawn and it has its size: never as a blank box.
+    const bounds = () =>
+      app.evaluate(({ BrowserWindow }) => {
+        const window = BrowserWindow.getAllWindows().find((each) =>
+          each.webContents.getURL().includes("permissionGuide"),
+        );
+        return window ? { visible: window.isVisible(), height: window.getBounds().height } : null;
+      });
+    await expect.poll(async () => (await bounds())?.visible).toBe(true);
+    expect((await bounds())?.height).not.toBe(280);
     const words = {
       en: ["Allow the computer’s sound", "Privacy & Security › Screen & System Audio Recording"],
       "zh-CN": ["允许录制电脑声音", "隐私与安全性 › 录屏与系统录音"],
@@ -152,12 +162,11 @@ test("where the guide can't sit beside System Settings, the steps show in the wi
 
   await grant(app, "system");
   await expect(steps).toContainText("Done. Quit and reopen IncarnaMind");
-  await expect(steps).toHaveCount(0, { timeout: 15_000 });
-
-  await grant(app, "system");
-  await pointAndClick(window, window.getByTestId("meeting-settings-system"));
-  await expect(steps).toContainText("Done.");
+  // It stays, with the page where it was, until the User dismisses it.
   await pointAndClick(window, window.getByTestId("meeting-line-guide-close"));
   await expect(steps).toHaveCount(0);
+
+  await pointAndClick(window, window.getByTestId("meeting-settings-system"));
+  await expect(steps).toContainText("Done. Quit and reopen IncarnaMind");
   await app.close();
 });
