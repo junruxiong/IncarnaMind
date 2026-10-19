@@ -21,17 +21,13 @@ import {
 import { iconButtonClass, menuClass, menuItemClass } from "./ui";
 import { usePopoverMenu, useSubmenu } from "./usePopoverMenu";
 
-type NewItem = {
+interface NewItem {
+  id: CommandId;
   testId: string;
   icon: ComponentType<{ className?: string }>;
-} & (
-  | {
-      id: CommandId;
-      /** The menu's own words, where the command's ⌘K label says more than the menu needs. */
-      label?: MessageKey;
-    }
-  | { run(): void; label: MessageKey }
-);
+  /** The menu's own words, where the command's ⌘K label says more than the menu needs. */
+  label?: MessageKey;
+}
 
 const WordIcon = ({ className }: { className?: string }) => (
   <DocumentLineIcon kind="docx" className={className} />
@@ -40,13 +36,10 @@ const WebPageIcon = ({ className }: { className?: string }) => (
   <DocumentLineIcon kind="web" className={className} />
 );
 
-// Add Documents… (⌘O) and Link a folder… become commands in #1245; until then the menu calls
-// them itself.
 const ADD_DOCUMENTS: NewItem = {
+  id: "documents.add",
   testId: "plus-add-documents",
   icon: PlusLineIcon,
-  label: "sidebar.plus.addDocuments",
-  run: () => void useAppStore.getState().pickDocuments(),
 };
 
 const NEW_ITEMS: readonly NewItem[] = [
@@ -73,17 +66,12 @@ const MORE_ITEMS: readonly NewItem[] = [
     icon: FindSourcesLineIcon,
     label: "sidebar.plus.findSources",
   },
-  {
-    testId: "plus-link-folder",
-    icon: FolderPlusLineIcon,
-    label: "sidebar.plus.linkFolder",
-    run: () => void useAppStore.getState().addLinkedFolder(),
-  },
+  { id: "linkedFolder.add", testId: "plus-link-folder", icon: FolderPlusLineIcon },
 ];
 
 const WINDOW: CommandContext = { selection: [], focus: null, surface: "sidebar" };
 
-/** Each command-backed item runs the command ⌘K lists, so the two can't drift apart. */
+/** Each item runs the command ⌘K lists, with its keys, so the two can't drift apart. */
 export function NewMenu() {
   const t = useT();
   const menu = usePopoverMenu();
@@ -91,9 +79,6 @@ export function NewMenu() {
   const picking = useAppStore((state) => state.pickingDocuments);
 
   const entryOf = (each: NewItem) => {
-    if (!("id" in each)) {
-      return { label: t(each.label), keys: null, run: each.run };
-    }
     const command = commands.get(each.id);
     if (!command || !offered(command, WINDOW)) return null;
     return {

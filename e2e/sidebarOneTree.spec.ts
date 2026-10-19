@@ -595,10 +595,11 @@ const MORE_ROWS: readonly MessageKey[] = [
   "sidebar.plus.findSources",
   "sidebar.plus.linkFolder",
 ];
-// Add Documents… and Link a folder… join ⌘K once they are commands (#1245).
 const IN_PALETTE: readonly MessageKey[] = [
   "menu.newMind",
+  "sidebar.plus.addDocuments",
   "menu.newFolder",
+  "sidebar.plus.linkFolder",
   "wordImport.command",
   "command.compareDocuments",
   "verify.command",
@@ -629,6 +630,9 @@ for (const [language, width] of [
       for (const [index, key] of NEW_MENU_ROWS.entries()) {
         await expect(rows.nth(index)).toContainText(t(key));
       }
+      await expect(window.getByTestId("plus-add-documents")).toContainText(
+        process.platform === "darwin" ? "⌘O" : "Ctrl+O",
+      );
       await pointAt(window, window.getByTestId("plus-more"));
       await expect(more).toHaveCount(MORE_ROWS.length);
       for (const [index, key] of MORE_ROWS.entries()) {

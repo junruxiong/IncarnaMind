@@ -218,6 +218,7 @@ test("the + menu in the sidebar header offers New Mind, Add Documents…, New Fo
   await expect(items).toHaveText([/New Mind/, /Add Documents…/, /New Folder/, /More/]);
   const mod = process.platform === "darwin" ? "⌘" : "Ctrl+";
   await expect(items.nth(0)).toContainText(`${mod}T`);
+  await expect(items.nth(1)).toContainText(`${mod}O`);
   await expect(items.first()).toBeFocused();
   await expect(plus).toHaveAttribute("aria-expanded", "true");
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "shell-menu-en.png") });
