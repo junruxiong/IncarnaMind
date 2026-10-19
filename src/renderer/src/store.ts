@@ -848,6 +848,13 @@ export const useAppStore = create<AppState>()((set, get) => {
           readList("rerank", core.getRerankSettings(), readAt),
           readList("privacy", core.getPrivacySettings(), readAt),
         ]);
+        const reloaded = windowLoadedBefore();
+        // Minds made before this setting existed count as an earlier launch.
+        const launchedBefore = settings.device.openedBefore || minds.length > 0;
+        // Before the tabs are drawn, so the Mind left in front isn't drawn only to be covered.
+        if (!offered?.mindId && launchedBefore && !reloaded) {
+          await get().openHome({ first: true });
+        }
         // What the core's events brought before this is in the lists just read.
         documentUpdates.flush();
         const read = {
@@ -867,13 +874,6 @@ export const useAppStore = create<AppState>()((set, get) => {
         const fresh = Object.fromEntries(
           Object.entries(read).filter(([list]) => !pushedSince(list as PushedList, readAt)),
         ) as Partial<Pick<AppState, PushedList>>;
-        const reloaded = windowLoadedBefore();
-        // Minds made before this setting existed count as an earlier launch.
-        const launchedBefore = settings.device.openedBefore || minds.length > 0;
-        // Before the tabs are drawn, so the Mind left in front isn't drawn only to be covered.
-        if (!offered?.mindId && launchedBefore && !reloaded) {
-          await get().openHome({ first: true });
-        }
         set({
           ...fresh,
           documents,
