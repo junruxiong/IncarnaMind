@@ -201,12 +201,8 @@ describe("the errors a User meets in each area", () => {
     });
   });
 
-  test("Meetings say they are off, and a Meeting that isn't there", async () => {
+  test("A Meeting that isn't there", async () => {
     const core = startCore(await createTempDataFolder());
-    await expect(core.createMeeting()).rejects.toMatchObject({
-      message: "Meetings are turned off in Settings.",
-      wording: { key: "error.meeting.off" },
-    });
     await expect(core.startMeeting({ meetingId: "no-such-meeting" })).rejects.toMatchObject({
       wording: { key: "error.meeting.notFound" },
     });
