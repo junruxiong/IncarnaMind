@@ -16,7 +16,7 @@ import {
   type CaptureWindowState,
   toPcm16,
 } from "../../shared/capture";
-import { createMicrophone } from "./microphone";
+import { createMicrophone, startMicrophone } from "./microphone";
 import pcmFramesUrl from "./pcmFrames.ts?worker&url";
 
 const found = (window as unknown as Partial<Record<string, CaptureBridge>>)[CAPTURE_BRIDGE_KEY];
@@ -128,7 +128,12 @@ async function openMicrophone(stillWanted: () => boolean): Promise<void> {
     for (const track of stream.getTracks()) track.stop();
     return;
   }
-  await connect("microphone", stream);
+  try {
+    await connect("microphone", stream);
+  } catch (error) {
+    for (const track of stream.getTracks()) track.stop();
+    throw error;
+  }
   report("microphone", "recording");
   const [track] = stream.getAudioTracks();
   if (track) track.onended = () => void microphone.reopen();
@@ -168,7 +173,7 @@ async function openSystemAudio(): Promise<void> {
 async function start(request: CaptureStart): Promise<void> {
   running = true;
   // Queued before anything is awaited: a pause that follows is never behind this open.
-  const microphoneOpened = request.microphone ? microphone.start() : Promise.resolve();
+  const microphoneOpened = startMicrophone(microphone, request);
   await audioContext();
   await microphoneOpened;
   if (request.systemAudio) await openSystemAudio();

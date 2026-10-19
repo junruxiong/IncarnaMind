@@ -191,13 +191,13 @@ describe("Pause my mic", () => {
     expect(mic.reversible).toBe(true);
   });
 
-  test("shows the global shortcut the meeting holds for it, ⌃⌥M or Ctrl+Shift+U by default", () => {
+  test("shows the global shortcut the meeting holds for it, ⌃⌥M or Ctrl+Shift+M by default", () => {
     const settings = {
       device: { meetingHelpKeys: {} },
       meetingAudio: "both",
     } as unknown as Settings;
     stores.useAppStore.setState({ settings });
-    expect(command("meeting.microphone").globalKeys?.()).toMatch(/^(⌃⌥M|Ctrl\+Shift\+U)$/);
+    expect(command("meeting.microphone").globalKeys?.()).toMatch(/^(⌃⌥M|Ctrl\+Shift\+M)$/);
     stores.useAppStore.setState({
       settings: {
         ...settings,

@@ -10,9 +10,9 @@ import {
 } from "../../src/shared/meetingHelp";
 
 describe("The shortcuts held during a call", () => {
-  test("Pause my mic is ⌃⌥M on macOS and Ctrl+Shift+U elsewhere, where Ctrl+Alt is AltGr on many layouts", () => {
+  test("Pause my mic is ⌃⌥M on macOS and Ctrl+Shift+M elsewhere, where Ctrl+Alt is AltGr on many layouts and Ctrl+Shift+U starts Unicode entry", () => {
     expect(defaultHelpKeys("mic", true)).toBe("Ctrl+Alt+M");
-    expect(defaultHelpKeys("mic", false)).toBe("Ctrl+Shift+U");
+    expect(defaultHelpKeys("mic", false)).toBe("Ctrl+Shift+M");
     expect(isHelpShortcut("mic")).toBe(true);
     expect(helpShortcutLabel("mic")).toBe("meetings.mic.pause");
   });
@@ -28,7 +28,7 @@ describe("The shortcuts held during a call", () => {
   test("the User's own keys for it are kept, or none at all", () => {
     expect(isHelpKeys({ mic: "Ctrl+Alt+F8" })).toBe(true);
     expect(isHelpKeys({ mic: "" })).toBe(true);
-    expect(isHelpKeys({ mic: "Shift+U" })).toBe(false);
+    expect(isHelpKeys({ mic: "Shift+M" })).toBe(false);
     expect(helpKeysOf("mic", { mic: "Ctrl+Alt+F8" }, false)).toBe("Ctrl+Alt+F8");
     expect(helpKeysOf("mic", { mic: "" }, false)).toBeNull();
     expect(helpKeysOf("mic", {}, true)).toBe("Ctrl+Alt+M");

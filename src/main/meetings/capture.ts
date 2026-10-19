@@ -23,8 +23,8 @@ import type { AudioSource } from "../../core/api";
 import {
   CAPTURE_CHANNELS,
   CAPTURE_PARTITION,
-  type CaptureStart,
   type CaptureWindowState,
+  createMicrophoneRelay,
 } from "../../shared/capture";
 
 /** How long stopping waits for the window to send its last samples. */
@@ -140,8 +140,12 @@ export function createElectronAudioCapture({
       captureWindows.add(window);
       const contents = window.webContents;
       const fromWindow = (event: IpcMainEvent) => event.sender === contents;
-      let microphoneOn = true;
-      let started = false;
+      const microphoneRelay = createMicrophoneRelay({
+        start: (request) => contents.send(CAPTURE_CHANNELS.start, request),
+        microphone: (on) => {
+          if (!window.isDestroyed()) contents.send(CAPTURE_CHANNELS.microphone, on);
+        },
+      });
       let stopped = () => {};
       const whenStopped = new Promise<void>((resolve) => {
         stopped = resolve;
@@ -191,12 +195,7 @@ export function createElectronAudioCapture({
           else void window.loadFile(join(__dirname, "../renderer/capture.html"));
         });
         if (window.isDestroyed()) return;
-        const start: CaptureStart = {
-          microphone: microphone && microphoneOn,
-          systemAudio: request.systemAudio,
-        };
-        contents.send(CAPTURE_CHANNELS.start, start);
-        started = true;
+        microphoneRelay.start({ microphone, systemAudio: request.systemAudio });
       };
       const starting = begin().catch((error: unknown) => {
         log.error("meeting.captureFailed", {
@@ -207,10 +206,7 @@ export function createElectronAudioCapture({
       });
 
       return {
-        setMicrophone(on) {
-          microphoneOn = on;
-          if (started && !window.isDestroyed()) contents.send(CAPTURE_CHANNELS.microphone, on);
-        },
+        setMicrophone: (on) => microphoneRelay.set(on),
         async stop() {
           await starting;
           if (!window.isDestroyed()) {

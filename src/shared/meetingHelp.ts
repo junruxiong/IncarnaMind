@@ -104,13 +104,13 @@ export const helpShortcutLabel = (shortcut: HelpShortcut): MessageKey =>
 
 /**
  * A shortcut by default: ⌃⌥1–7, ⌃⌥H and ⌃⌥M on macOS, which Zoom and Teams
- * leave free; Ctrl+Shift+1–8 and Ctrl+Shift+U elsewhere, where Ctrl+Alt is
- * AltGr on many European layouts and types characters, and Teams leaves a
- * call on Ctrl+Shift+H and mutes on Ctrl+Shift+M.
+ * leave free; Ctrl+Shift+1–8 and Ctrl+Shift+M elsewhere, where Ctrl+Alt is
+ * AltGr on many European layouts and types characters, Teams leaves a call
+ * on Ctrl+Shift+H, and Ctrl+Shift+U starts Unicode entry in GTK and IBus.
  */
 export function defaultHelpKeys(shortcut: HelpShortcut, mac: boolean): string {
   if (shortcut === "panel") return mac ? "Ctrl+Alt+H" : "Ctrl+Shift+8";
-  if (shortcut === "mic") return mac ? "Ctrl+Alt+M" : "Ctrl+Shift+U";
+  if (shortcut === "mic") return mac ? "Ctrl+Alt+M" : "Ctrl+Shift+M";
   const digit = GENERAL_HELP.indexOf(shortcut) + 1;
   return mac ? `Ctrl+Alt+${digit}` : `Ctrl+Shift+${digit}`;
 }

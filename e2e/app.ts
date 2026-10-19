@@ -378,6 +378,66 @@ export async function panelOf(app: ElectronApplication): Promise<Page> {
   return page;
 }
 
+export async function expectBarOneRow(bar: Locator): Promise<void> {
+  await expect
+    .poll(() =>
+      bar.evaluate((element) => {
+        const controls = element.querySelector<HTMLElement>('[data-testid="meeting-controls"]');
+        if (!controls) throw new Error("The bar has no controls.");
+        const shown = (id: string) => {
+          const found = element.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+          return found !== null && found.offsetParent !== null;
+        };
+        const row = parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--meeting-bar-row"),
+        );
+        const frame = controls.getBoundingClientRect();
+        const seen = [...controls.children].filter(
+          (each): each is HTMLElement => each instanceof HTMLElement && each.offsetParent !== null,
+        );
+        const middle = (each: Element) => {
+          const box = each.getBoundingClientRect();
+          return box.top + box.height / 2;
+        };
+        const buttons = [...element.querySelectorAll<HTMLElement>(".meeting-button")].filter(
+          (each) => each.offsetParent !== null,
+        );
+        return {
+          rowHeight: Math.abs(frame.height - row) < 1,
+          oneRow: seen.every(
+            (each) =>
+              Math.abs(middle(each) - middle(controls)) < 2 &&
+              each.getBoundingClientRect().right <= frame.right + 1,
+          ),
+          kept:
+            ["meeting-dot", "meeting-time", "meeting-mic", "meeting-stop"].every(shown) &&
+            (shown("meeting-pause") || shown("meeting-resume")),
+          fits: element.scrollWidth <= element.clientWidth + 1,
+          cut: buttons.some((button) =>
+            [button, ...button.querySelectorAll("span")].some(
+              (each) => each.scrollWidth > each.clientWidth + 1,
+            ),
+          ),
+          foldedHaveMore:
+            [
+              "meeting-mark",
+              "meeting-call-help",
+              "meeting-transcript-toggle",
+              "meeting-details-toggle",
+            ].every(shown) || shown("meeting-more"),
+        };
+      }),
+    )
+    .toEqual({
+      rowHeight: true,
+      oneRow: true,
+      kept: true,
+      fits: true,
+      cut: false,
+      foldedHaveMore: true,
+    });
+}
+
 export const panelOpen = (app: ElectronApplication) =>
   app.windows().some((page) => !page.isClosed() && page.url().includes("meetingPanel.html"));
 

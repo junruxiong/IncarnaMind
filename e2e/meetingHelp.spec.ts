@@ -6,6 +6,7 @@ import {
   closeSettings,
   createDataFolder,
   dismissChatSetup,
+  expectBarOneRow,
   heldGlobalKeys as held,
   launchApp,
   openSettings,
@@ -322,59 +323,7 @@ test("help during the call: the panel folds to level bars that become Stop, ⌘K
   await app.close();
 });
 
-/** Where the meeting bar's controls sit, by test id. */
-async function controls(bar: Locator) {
-  const box = async (id: string) => {
-    const found = await bar.getByTestId(id).boundingBox();
-    if (!found) throw new Error(`${id} isn't shown.`);
-    return found;
-  };
-  const [stop, mark, callHelp, transcript, details] = await Promise.all(
-    [
-      "meeting-stop",
-      "meeting-mark",
-      "meeting-call-help",
-      "meeting-transcript-toggle",
-      "meeting-details-toggle",
-    ].map(box),
-  );
-  if (!stop || !mark || !callHelp || !transcript || !details)
-    throw new Error("A control is missing.");
-  const cut = await bar
-    .locator(".meeting-button")
-    .evaluateAll((buttons) =>
-      buttons.some((button) =>
-        [button, ...button.querySelectorAll("span")].some(
-          (each) => each.scrollWidth > each.clientWidth + 1,
-        ),
-      ),
-    );
-  return { stop, mark, callHelp, transcript, details, cut };
-}
-
-/** The bar on one row, or wrapped before Show transcript; no button's words wrap or are cut. */
-async function expectBarRows(bar: Locator, rows: 1 | 2): Promise<void> {
-  await expect
-    .poll(async () => {
-      const { stop, mark, callHelp, transcript, details, cut } = await controls(bar);
-      const sameRow = (a: { y: number }, b: { y: number }) => Math.abs(a.y - b.y) < 2;
-      const oneLine = [mark, callHelp, transcript].every(
-        (each) => Math.abs(each.height - stop.height) < 1,
-      );
-      const shape =
-        sameRow(mark, callHelp) && sameRow(transcript, details)
-          ? sameRow(mark, transcript)
-            ? 1
-            : transcript.y >= callHelp.y + callHelp.height
-              ? 2
-              : 0
-          : 0;
-      return { shape, oneLine, cut };
-    })
-    .toEqual({ shape: rows, oneLine: true, cut: false });
-}
-
-test("help during the call: Call help in the meeting bar shows and hides the panel for the meeting, its tooltip, ⌘K and Settings name its shortcut, held only while recording, and the bar wraps before Show transcript when narrow, in English and Chinese", async () => {
+test("help during the call: Call help in the meeting bar shows and hides the panel for the meeting, its tooltip, ⌘K and Settings name its shortcut, held only while recording, and the bar stays one row when narrow, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir, {
     fakeChat: true,
     transcriber: { theirLines: BUYER },
@@ -442,12 +391,11 @@ test("help during the call: Call help in the meeting bar shows and hides the pan
     `Show the call help panel (${mac ? "⌃⌥J" : "Ctrl+Alt+J"})`,
   );
 
-  // Wide, the bar is one row; at 1,100 px it wraps before Show transcript. The same in Chinese.
   await window.mouse.move(1, 1);
-  await expectBarRows(bar, 1);
+  await expectBarOneRow(bar);
   await shot(bar, "call-help-bar-en-1600");
   await setWindowSize(app, window, 1100, 800);
-  await expectBarRows(bar, 2);
+  await expectBarOneRow(bar);
   await shot(bar, "call-help-bar-en-1100");
   await (await core(window)).evaluate((bridge) =>
     bridge.updateSettings({ user: { language: "zh-CN" } }),
@@ -461,10 +409,10 @@ test("help during the call: Call help in the meeting bar shows and hides the pan
   await panelOf(app);
   await expect(callHelp).toHaveAttribute("title", "隐藏通话助手浮窗");
   await window.mouse.move(1, 1);
-  await expectBarRows(bar, 2);
+  await expectBarOneRow(bar);
   await shot(bar, "call-help-bar-zh-1100");
   await setWindowSize(app, window, 1600, 900);
-  await expectBarRows(bar, 1);
+  await expectBarOneRow(bar);
   await shot(bar, "call-help-bar-zh-1600");
 
   // Stopped, nothing is held.

@@ -8,6 +8,7 @@ import type { FakeCapture } from "../src/core/meetings/fakeCapture";
 import {
   createDataFolder,
   dismissChatSetup,
+  expectBarOneRow,
   heldGlobalKeys,
   launchApp,
   panelOf,
@@ -34,8 +35,8 @@ async function shot(page: Page | Locator, name: string): Promise<void> {
 }
 
 const mac = process.platform === "darwin";
-const MIC_KEYS = mac ? "Ctrl+Alt+M" : "Ctrl+Shift+U";
-const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Shift+U";
+const MIC_KEYS = mac ? "Ctrl+Alt+M" : "Ctrl+Shift+M";
+const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Shift+M";
 
 /** Lines come every couple of seconds of sound, a few seconds behind it. */
 const LINES_WITHIN = { timeout: 30_000 };
@@ -136,35 +137,6 @@ async function marksOf(transcript: Locator): Promise<{ from: number; to: number 
   });
 }
 
-async function expectBarHolds(bar: Locator): Promise<void> {
-  await expect
-    .poll(() =>
-      bar.evaluate((element) => {
-        const frame = element.getBoundingClientRect();
-        const controls = [...element.querySelectorAll(".meeting-button, .meeting-state")];
-        const heights = new Set(
-          [...element.querySelectorAll(".meeting-button")].map((each) =>
-            Math.round(each.getBoundingClientRect().height),
-          ),
-        );
-        return {
-          inside: controls.every((each) => {
-            const box = each.getBoundingClientRect();
-            return box.left >= frame.left - 1 && box.right <= frame.right + 1;
-          }),
-          fits: element.scrollWidth <= element.clientWidth + 1,
-          oneLine: heights.size === 1,
-          cut: [...element.querySelectorAll(".meeting-button")].some((button) =>
-            [button, ...button.querySelectorAll("span")].some(
-              (each) => each.scrollWidth > each.clientWidth + 1,
-            ),
-          ),
-        };
-      }),
-    )
-    .toEqual({ inside: true, fits: true, oneLine: true, cut: false });
-}
-
 test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the microphone while the other side is recorded, no Me line comes for the stretch, and the Transcript marks it", async () => {
   test.setTimeout(150_000);
   const { app, window } = await launchApp(dataDir);
@@ -203,7 +175,7 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
     await pressedAfter(window, "meeting-mic", true, () => pointAndClick(window, mic)),
   ).toBeLessThan(100);
   await expect(mic).toHaveAttribute("aria-pressed", "true");
-  await expect(mic).toHaveAccessibleName("My mic paused");
+  await expect(mic).toHaveAccessibleName("Pause my mic");
   await expect(mic).toHaveAttribute("title", `Resume my mic (${MIC_LABEL})`);
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(false);
   const line = bar.getByTestId("meeting-line-microphone-paused");
@@ -313,27 +285,27 @@ test("Pause my mic in Chinese: the tooltips, the line, ⌘K and the mark in Chin
   const bar = await recordingMeeting(window);
   const mic = bar.getByTestId("meeting-mic");
   await window.mouse.move(1, 1);
-  await expectBarHolds(bar);
+  await expectBarOneRow(bar);
   await shot(bar, "mic-bar-1100-en");
 
   await setLanguage(window, "zh-CN");
   await expect(mic).toHaveAccessibleName("暂停我的麦克风");
   await expect(mic).toHaveAttribute("title", `暂停我的麦克风，对方仍会录制（${MIC_LABEL}）`);
-  await expectBarHolds(bar);
+  await expectBarOneRow(bar);
   await shot(bar, "mic-bar-1100-zh");
 
   await pointAndClick(window, mic);
   await expect(mic).toHaveAttribute("aria-pressed", "true");
-  await expect(mic).toHaveAccessibleName("我的麦克风已暂停");
+  await expect(mic).toHaveAccessibleName("暂停我的麦克风");
   await expect(mic).toHaveAttribute("title", `恢复我的麦克风（${MIC_LABEL}）`);
   const line = bar.getByTestId("meeting-line-microphone-paused");
   await expect(line).toHaveText(/^我的麦克风自 \d+:\d\d 起已暂停 · 恢复$/);
   await window.mouse.move(1, 1);
-  await expectBarHolds(bar);
+  await expectBarOneRow(bar);
   await shot(bar, "mic-bar-paused-1100-zh");
   await setLanguage(window, "en");
   await expect(line).toHaveText(/^My mic paused since \d+:\d\d · Resume$/);
-  await expectBarHolds(bar);
+  await expectBarOneRow(bar);
   await shot(bar, "mic-bar-paused-1100-en");
   await setLanguage(window, "zh-CN");
 
@@ -394,6 +366,7 @@ test("Pause my mic in the floating panel: the header's button and the line under
 
   await pointAndClick(panel, mic);
   await expect(mic).toHaveAttribute("aria-pressed", "true");
+  await expect(mic).toHaveAccessibleName("Pause my mic");
   await expect(mic).toHaveAttribute("title", `Resume my mic (${MIC_LABEL})`);
   const line = panel.getByTestId("panel-mic-line");
   await expect(line).toHaveText(/^My mic paused since \d+:\d\d·Resume$/);
@@ -404,6 +377,7 @@ test("Pause my mic in the floating panel: the header's button and the line under
   await setLanguage(window, "zh-CN");
   await expect(line).toHaveText(/^我的麦克风自 \d+:\d\d 起已暂停·恢复$/);
   await expect(mic).toHaveAttribute("title", `恢复我的麦克风（${MIC_LABEL}）`);
+  await expect(mic).toHaveAccessibleName("暂停我的麦克风");
   const header = await panel.locator(".panel-header").boundingBox();
   const lineBox = await line.boundingBox();
   const closeBox = await panel.getByTestId("panel-close").boundingBox();
@@ -418,5 +392,51 @@ test("Pause my mic in the floating panel: the header's button and the line under
   await expect(mic).toHaveAttribute("title", `暂停我的麦克风，对方仍会录制（${MIC_LABEL}）`);
   await expect(barMic).toHaveAttribute("aria-pressed", "false");
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
+  await app.close();
+});
+
+test("the recording bar never wraps: from 1,600 px down to 900 px, in English and Chinese, with the transcript beside it or not, it is one row of one height and keeps the state, Pause my mic, Pause and Stop", async () => {
+  test.setTimeout(240_000);
+  const { app, window } = await launchApp(dataDir);
+  await setWindowSize(app, window, 1600, 900);
+  await dismissChatSetup(window);
+  const bar = await recordingMeeting(window);
+  const toggle = bar.getByTestId("meeting-transcript-toggle");
+  const folded = new Set<string>();
+
+  for (const language of ["en", "zh-CN"] as const) {
+    await setLanguage(window, language);
+    for (const beside of [false, true]) {
+      await setWindowSize(app, window, 1600, 900);
+      if ((await toggle.getAttribute("aria-pressed")) !== String(beside)) {
+        await pointAndClick(window, toggle);
+      }
+      await expect(toggle).toHaveAttribute("aria-pressed", String(beside));
+      for (let width = 1600; width >= 900; width -= 100) {
+        await setWindowSize(app, window, width, 800);
+        await window.mouse.move(1, 1);
+        await expectBarOneRow(bar);
+        for (const id of ["meeting-mark", "meeting-call-help", "meeting-transcript-toggle"]) {
+          if (!(await bar.getByTestId(id).isVisible())) folded.add(id);
+        }
+      }
+      // The transcript beside the meeting leaves the bar its narrowest: what is hidden is in the ⋯.
+      await setWindowSize(app, window, 1100, 800);
+      await window.mouse.move(1, 1);
+      await expectBarOneRow(bar);
+      if (!(await bar.getByTestId("meeting-mark").isVisible())) {
+        const more = bar.getByTestId("meeting-more");
+        await pointAndClick(window, more);
+        const menu = window.getByTestId("meeting-more-menu");
+        await expect(menu.getByTestId("meeting-more-mark")).toBeEnabled();
+        await window.keyboard.press("Escape");
+        await expect(menu).toBeHidden();
+        await expect(more).toBeFocused();
+      }
+    }
+  }
+  await shot(bar, "mic-bar-narrow");
+  // The sweep did reach narrow bars: Mark was folded into the ⋯ somewhere, and the bar held.
+  expect(folded.has("meeting-mark")).toBe(true);
   await app.close();
 });

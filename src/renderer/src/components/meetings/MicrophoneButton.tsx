@@ -38,7 +38,7 @@ export function MicrophoneButton({
       type="button"
       data-testid={testId}
       aria-pressed={paused}
-      aria-label={t(paused ? "meetings.mic.paused" : "meetings.mic.pause")}
+      aria-label={t("meetings.mic.pause")}
       title={title}
       onClick={() => void useMeetings.getState().setMicrophonePaused(meeting.id, !paused)}
       className={className}

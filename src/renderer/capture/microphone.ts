@@ -5,11 +5,21 @@
  * that arrives while the page is still starting is never overtaken by an open that was already
  * queued: the microphone, and the system's indicator for it, are on only while it is wanted.
  */
+import type { CaptureStart } from "../../shared/capture";
+
 export interface MicrophoneDevice {
   isOpen(): boolean;
   /** Opens it, or leaves it closed when `stillWanted()` turns false while it is being granted. */
   open(stillWanted: () => boolean): Promise<void>;
   close(): Promise<void>;
+}
+
+/** Starts the microphone the way the main process asked: not at all where the OS refused it. */
+export function startMicrophone(
+  microphone: { start(on: boolean): Promise<void> },
+  request: CaptureStart,
+): Promise<void> {
+  return request.microphone ? microphone.start(request.microphoneOn) : Promise.resolve();
 }
 
 export function createMicrophone(device: MicrophoneDevice) {
@@ -32,13 +42,13 @@ export function createMicrophone(device: MicrophoneDevice) {
   }
 
   return {
-    /** The capture started: opens the microphone, unless a pause has already come. */
-    start(): Promise<void> {
+    /** The capture started, with the microphone on or already paused: it opens only if it is on. */
+    start(on: boolean): Promise<void> {
+      wanted = on;
       running = true;
       return queue(settle);
     },
 
-    /** The User paused the microphone (false) or has it on again (true). */
     set(on: boolean): Promise<void> {
       wanted = on;
       return queue(settle);

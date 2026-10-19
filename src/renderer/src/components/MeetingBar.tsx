@@ -21,6 +21,7 @@ import {
   ResumeLineIcon,
   StopLineIcon,
 } from "./lineIcons";
+import { BarMore } from "./meetings/BarMore";
 import { LevelBars } from "./meetings/LevelBars";
 import { MicrophoneButton } from "./meetings/MicrophoneButton";
 import { ROUTE_LABELS } from "./meetings/TranscriptionRouteSelect";
@@ -108,28 +109,30 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
         aria-label={t("meetings.bar.stopLabel")}
         title={t("meetings.bar.stopLabel")}
         onClick={() => void stop(meeting.id)}
-        className="meeting-button"
+        className="meeting-button meeting-button--words"
       >
         <StopLineIcon className="size-3.5" />
-        {t("meetings.bar.stop")}
+        <span className="meeting-button-word">{t("meetings.bar.stop")}</span>
       </button>
       <button
         type="button"
         data-testid="meeting-mark"
+        data-fold="mark"
         disabled={!recording}
         aria-label={t("meetings.mark.title", { shortcut: markShortcut })}
         title={t(recording ? "meetings.mark.title" : "meetings.command.markPaused", {
           shortcut: markShortcut,
         })}
         onClick={() => void commands.run("meeting.mark")}
-        className="meeting-button"
+        className="meeting-button meeting-button--words"
       >
         <BookmarkLineIcon className="size-3.5" />
-        {t("meetings.mark")}
+        <span className="meeting-button-word">{t("meetings.mark")}</span>
       </button>
       <CallHelpToggle />
       <TranscriptToggle meeting={meeting} />
       <CaptureDetailsToggle meeting={meeting} />
+      <BarMore />
     </div>
   );
 }
@@ -148,13 +151,15 @@ function CallHelpToggle() {
     <button
       type="button"
       data-testid="meeting-call-help"
+      data-fold="help"
       aria-pressed={shown}
+      aria-label={title}
       title={title}
       onClick={() => files.showMeetingPanel(!shown)}
-      className="meeting-button"
+      className="meeting-button meeting-button--words"
     >
       <FloatLineIcon className="size-3.5" />
-      {t("meetings.callHelp")}
+      <span className="meeting-button-word">{t("meetings.callHelp")}</span>
     </button>
   );
 }
@@ -175,15 +180,17 @@ function TranscriptToggle({ meeting }: { meeting: Meeting }) {
     <button
       type="button"
       data-testid="meeting-transcript-toggle"
+      data-fold="transcript"
       aria-pressed={tab !== null}
       disabled={!documentId}
+      aria-label={documentId ? label : t("meetings.bar.transcriptSoon")}
       title={documentId ? label : t("meetings.bar.transcriptSoon")}
       onClick={() => {
         if (!documentId) return;
         if (tab) hideTranscript(tab.id);
         else showTranscript(documentId, place?.groupId);
       }}
-      className="meeting-button meeting-button--end"
+      className="meeting-button meeting-button--words meeting-button--end"
     >
       <DocumentLineIcon kind="transcript" className="size-3.5" />
       <span className="meeting-button-label">{label}</span>

@@ -141,6 +141,13 @@
   --font-mono-writing:
     "JetBrains Mono", var(--font-cjk-sans), ui-monospace, "SFMono-Regular", Menlo, Consolas,
     monospace;
+  /*
+   * The recording bar's controls are one row at every width and in every language, so the bar
+   * with nothing under it is this high: the row, its 6px padding twice and its 1px borders. A
+   * layout that keeps room for the bar before it appears holds `--meeting-bar-height`.
+   */
+  --meeting-bar-row: 28px;
+  --meeting-bar-height: calc(var(--meeting-bar-row) + 14px);
 }
 
 /*
@@ -2001,6 +2008,7 @@
     border-radius: 8px;
     background: var(--color-sheet);
     font-family: var(--font-sans);
+    container: meeting-bar / inline-size;
   }
   .meeting-line {
     padding: 0 4px 2px;
@@ -2044,14 +2052,13 @@
       color: var(--color-ink);
     }
   }
-  /* Too narrow for one row, the last controls wrap to a second, never inside a button. */
+  /* Never a second row: the container queries below take words, then buttons, out of it. */
   .meeting-controls {
     display: flex;
     flex-shrink: 0;
-    flex-wrap: wrap;
     align-items: center;
     gap: 2px;
-    min-height: 28px;
+    height: var(--meeting-bar-row);
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink);
@@ -2115,6 +2122,51 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .meeting-more {
+    display: none;
+  }
+  /*
+   * As the bar narrows its buttons give up their words and keep their icons (their names and
+   * keys are in their tooltips), then Mark, then Call help, then the transcript and details
+   * buttons fold into the ⋯. The state and timer, Pause my mic, Pause and Stop stay. By the
+   * bar's own width, so nothing is measured and nothing moves while the window is dragged. A
+   * row needs, in English, which needs most: 567px with words, 334px with icons, 308px without
+   * Call help (Mark is folded for the same width the ⋯ takes) and 256px with only the four that
+   * stay and the ⋯; each query below leaves 12px over that.
+   */
+  @container meeting-bar (width < 580px) {
+    .meeting-button--words {
+      justify-content: center;
+      width: 24px;
+      padding: 0;
+    }
+    .meeting-button-word,
+    .meeting-button-label {
+      display: none;
+    }
+  }
+  @container meeting-bar (width < 346px) {
+    .meeting-more {
+      display: inline-flex;
+    }
+    [data-fold="mark"] {
+      display: none;
+    }
+  }
+  @container meeting-bar (width < 340px) {
+    [data-fold="help"] {
+      display: none;
+    }
+  }
+  @container meeting-bar (width < 320px) {
+    [data-fold="transcript"],
+    [data-fold="details"] {
+      display: none;
+    }
+    .meeting-more {
+      margin-left: auto;
+    }
   }
   /* A quiet 22px chip: no fill until pointed at (the model, "All Documents"). */
   .composer-chip {

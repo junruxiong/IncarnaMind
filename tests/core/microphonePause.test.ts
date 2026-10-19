@@ -196,7 +196,6 @@ const streamsOf = (played: Played, source: "microphone" | "system") =>
 const samplesIn = (frames: readonly Int16Array[]) =>
   frames.reduce((sum, each) => sum + each.length, 0);
 
-/** What a source's streams were sent, in order, as one number. */
 const hashOf = (frames: readonly Int16Array[]) => {
   const hash = createHash("sha256");
   for (const each of frames) hash.update(each);
@@ -220,7 +219,6 @@ const said = (played: Played, speaker: string) =>
 
 const isMicrophone = (stream: string) => /:microphone(:\d+)?$/.test(stream);
 
-/** The first microphone stream was finished by the pause, and nothing was sent to it after that. */
 function expectFirstStreamFinishedAtThePause(played: Played) {
   const first = Object.keys(played.pushed).find(isMicrophone);
   const finish = played.finished.find((each) => each.stream === first);

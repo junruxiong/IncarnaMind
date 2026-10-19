@@ -29,8 +29,33 @@ export const CAPTURE_CHANNELS = {
 export interface CaptureStart {
   /** Open the microphone: false when the OS has already refused it. */
   microphone: boolean;
+  /** The User has it on: false when they paused it before the page started. */
+  microphoneOn: boolean;
   /** Record the computer's sound too. */
   systemAudio: boolean;
+}
+
+/**
+ * What the main process says to the capture page about the User's microphone: the first message
+ * (the start) carries whether they have paused it already, and each change after it goes on as
+ * it comes. A pause before the start isn't lost, and a resume after it isn't taken for refused.
+ */
+export function createMicrophoneRelay(page: {
+  start(request: CaptureStart): void;
+  microphone(on: boolean): void;
+}) {
+  let on = true;
+  let started = false;
+  return {
+    set(next: boolean): void {
+      on = next;
+      if (started) page.microphone(next);
+    },
+    start(request: Omit<CaptureStart, "microphoneOn">): void {
+      page.start({ ...request, microphoneOn: on });
+      started = true;
+    },
+  };
 }
 
 /** How a source is doing, as the capture window sees it (`CaptureState` in the core's adapters). */

@@ -12,6 +12,7 @@ import {
   DEFAULT_FOLDER_ZH,
   dismissChatSetup,
   enterContent,
+  expectBarOneRow,
   frontMindName,
   launchApp,
   motionSettled,
@@ -817,22 +818,7 @@ test("recording details: a slow engine, a fallback and a part that can't be save
 
   await setWindowSize(app, window, 900, 700);
   await expect(details).toBeVisible();
-  // Too narrow for one row, the last control wraps to a second; no button is cut.
-  const controls = await bar.getByTestId("meeting-controls").boundingBox();
-  expect(controls?.height).toBeLessThanOrEqual(56);
-  await expect
-    .poll(() =>
-      bar
-        .locator(".meeting-button")
-        .evaluateAll((buttons) =>
-          buttons.some((button) =>
-            [button, ...button.querySelectorAll("span")].some(
-              (each) => each.scrollWidth > each.clientWidth + 1,
-            ),
-          ),
-        ),
-    )
-    .toBe(false);
+  await expectBarOneRow(bar);
   const barBox = await bar.boundingBox();
   const detailsBox = await details.boundingBox();
   if (!barBox || !detailsBox) throw new Error("The bar isn't drawn.");

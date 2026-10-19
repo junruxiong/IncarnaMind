@@ -4180,6 +4180,7 @@ export const en = {
   "meetings.bar.resume": "Resume recording ({shortcut})",
   "meetings.bar.stop": "Stop",
   "meetings.bar.stopLabel": "Stop recording",
+  "meetings.bar.more": "More for the recording",
   "meetings.line.interrupted":
     "IncarnaMind closed while recording. Everything up to {time} is saved.",
   "meetings.line.resume": "Resume",
@@ -4670,7 +4671,6 @@ export const en = {
   "meetings.mic.pauseTip": "Pause my mic. The other side is still recorded",
   "meetings.mic.pauseTipKeys": "Pause my mic. The other side is still recorded ({keys})",
   "meetings.mic.resumeTipKeys": "Resume my mic ({keys})",
-  "meetings.mic.paused": "My mic paused",
   "meetings.mic.pausedSince": "My mic paused since {time}",
   "meetings.mic.pausedSpan": "My mic paused {from}–{to}",
   "meetings.mic.resumeLine": "Resume",
