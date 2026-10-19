@@ -14,11 +14,11 @@ const t =
 
 const FULL = {
   en: [
-    "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
+    "your Questions, the Mind you’re in, matching passages with their Document names and pages, and the names of other Documents in scope",
     "each sentence you check",
     "the paragraph you pause on, for writing suggestions",
     "the text you ask the assistant to change",
-    "each Document's name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
+    "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
   ],
   "zh-CN": [
     "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",

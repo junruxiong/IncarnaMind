@@ -288,7 +288,7 @@ test("work still running is set aside apart from what was spent, and the set-asi
     await expect(cost).toHaveText("This month: $0.01 spent · $1.28 set aside for work in progress");
     await expect(settings.getByTestId("chat-provider-set-aside")).toHaveAttribute(
       "title",
-      "Kept aside so running work can't go over your monthly limit",
+      "Kept aside so running work can’t go over your monthly limit",
     );
     await shot(window, "set-aside-models-wide-en");
     await showSettingsPage(window, "general");

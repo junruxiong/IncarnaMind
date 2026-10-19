@@ -286,7 +286,7 @@ describe("A Linked folder found somewhere else keeps its Documents", { timeout: 
     const [single] = (await core.addDocuments([join(copy, "tides.md")])).documents;
 
     await expect(core.locateLinkedFolder(linked, empty)).rejects.toMatchObject({
-      message: "That folder doesn't hold “Library”'s files. Choose the folder that does.",
+      message: "That folder doesn’t hold “Library”’s files. Choose the folder that does.",
       wording: { key: "error.linkedFolder.notThis", values: { name: "Library" } },
     });
     await expect(core.locateLinkedFolder(linked, join(other, "Inside"))).rejects.toThrow(
