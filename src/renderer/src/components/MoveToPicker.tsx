@@ -1,4 +1,5 @@
 import { useT } from "../i18n";
+import { matchName, queryWords } from "../matcher";
 import { useAppStore } from "../store";
 import { FolderLineIcon, FolderPlusLineIcon } from "./lineIcons";
 import { type PickerOption, type PickerSection, SearchPicker } from "./SearchPicker";
@@ -7,10 +8,10 @@ type Choice = string | null | { newFolder: string };
 
 /**
  * "Move to…": a Folder picker that opens beside what is moved (`anchor`),
- * with a field to find a Folder by name. "Not in a Folder" first, then every
- * Folder by name; the one it is in now is ticked. Typing filters, the arrows
- * move, Enter moves it there, Esc closes. Shared by a Mind's menu and (#212)
- * the Documents, the Library's selection and ⌘⇧M.
+ * with a field to find a Folder by name, or a Chinese one by its pinyin.
+ * "Not in a Folder" first, then every Folder by name; the one it is in now is
+ * ticked. Typing filters, the arrows move, Enter moves it there, Esc closes.
+ * Shared by every Move to…: the menus, the Library's selection, ⇧⌘M and ⌘K.
  */
 export function MoveToPicker({
   anchor,
@@ -45,11 +46,21 @@ export function MoveToPicker({
       />
     ),
   }));
-  const withNewFolder = (query: string): PickerSection<Choice>[] => {
+  const matching = (query: string): PickerSection<Choice>[] => {
+    const words = queryWords(query);
+    const found =
+      words.length === 0
+        ? options
+        : options
+            .flatMap((option) => {
+              const match = matchName(words, option.label);
+              return match ? [{ option, score: match.score }] : [];
+            })
+            .sort((a, b) => b.score - a.score)
+            .map(({ option }) => option);
     const wanted = query.toLocaleLowerCase();
-    const found = options.filter((option) => option.label.toLocaleLowerCase().includes(wanted));
     const taken = groups.some((group) => group.name.toLocaleLowerCase() === wanted);
-    if (!query || taken) return [{ options: found }];
+    if (!onCreate || !query || taken) return [{ options: found }];
     const newFolder: PickerOption<Choice> = {
       id: { newFolder: query },
       label: t("move.newFolder", { name: query }),
@@ -64,7 +75,7 @@ export function MoveToPicker({
       title={t("move.title", { name })}
       searchLabel={t("move.search")}
       noMatch={() => t("move.none")}
-      options={onCreate ? withNewFolder : options}
+      options={matching}
       current={current}
       currentLabel={t("move.here")}
       onChoose={(choice) => {
