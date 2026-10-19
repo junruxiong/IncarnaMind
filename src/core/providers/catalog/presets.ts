@@ -57,8 +57,8 @@ export const PRESETS: readonly CatalogProvider[] = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Trains only if you opt in; may use stored prompts for products; some models pass them on.",
-        zh: "加入才用于训练；提示可能用于改进产品；部分模型转交其他公司。",
+        en: "Trains only if you opt in; stores prompts; some models pass them to other companies.",
+        zh: "加入才用于训练；保存提示；部分模型转交其他公司。",
       },
       url: "https://docs.together.ai/docs/privacy-and-security",
       sources: ["https://docs.together.ai/docs/zero-data-retention"],
