@@ -92,10 +92,12 @@ test("with a Soniox key, the first recording's sheet offers it under Other waysâ
   await expect(line).toContainText("Transcribe on this computer");
   await expect(line).toContainText("Private and free");
   await expect(sheet.getByTestId("meeting-route-ways")).toHaveCount(0);
+  await expect(sheet).toContainText("a 1 GB speech model downloads once");
   await shot(window, "route-line-en-1600");
   await line.getByTestId("meeting-route-other").click();
   const ways = sheet.getByTestId("meeting-route-ways");
   await expect(ways).toContainText("Soniox Â· your key");
+  await expect(ways.getByTestId("meeting-route-use-soniox")).toBeFocused();
   await expect(ways).toContainText(
     "Choosing one sends the meetingâ€™s audio to that service while you record.",
   );
@@ -118,7 +120,17 @@ test("with a Soniox key, the first recording's sheet offers it under Other waysâ
   await use.click();
   await expect(line).toContainText("Transcribe with Soniox");
   await expect(line).toContainText("Audio goes to Soniox while you record");
-  await expect(line.getByTestId("meeting-route-here")).toHaveText("Use this computer");
+  await expect(sheet).not.toContainText("speech model");
+  const here = line.getByTestId("meeting-route-here");
+  await expect(here).toHaveText("Use this computer");
+  await expect(here).toBeFocused();
+  // By keyboard, each button that goes hands focus to the one that takes its place.
+  await window.keyboard.press("Enter");
+  await expect(line.getByTestId("meeting-route-other")).toBeFocused();
+  await window.keyboard.press("Enter");
+  await expect(ways.getByTestId("meeting-route-use-soniox")).toBeFocused();
+  await window.keyboard.press("Enter");
+  await expect(here).toBeFocused();
   const chosen = await core(window);
   expect(chosen.settings.device.transcriptionRoute).toBe("soniox");
   expect(chosen.flows).toContainEqual(

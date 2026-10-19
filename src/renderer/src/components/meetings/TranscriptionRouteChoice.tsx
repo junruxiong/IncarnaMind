@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CloudTranscriptionRoute } from "../../../../core/api";
 import { core } from "../../core";
 import { useT } from "../../i18n";
@@ -15,8 +15,9 @@ const linkClass =
  * Where the first recording is transcribed, on its sheet (#141): one line, this computer, with a
  * quiet "Other ways…" that unfolds to the cloud services the User has keys for. Each has its own
  * button, and that click is the consent (ADR-0022); nothing is chosen for the User. Once one is
- * chosen, the line names it, with the way back. When this computer is known not to keep up, the
- * services show unfolded with the reason, or, with no key, a line says live text may lag.
+ * chosen, the line names it, with the way back. A choice made before the sheet opened (first run,
+ * Settings) stands, so the sheet doesn't ask again. When this computer is known not to keep up,
+ * the services show unfolded with the reason, or, with no key, a line says live text may lag.
  */
 export function TranscriptionRouteChoice() {
   const t = useT();
@@ -26,7 +27,18 @@ export function TranscriptionRouteChoice() {
   const openSettings = useAppStore((state) => state.openSettings);
   const services = useTranscriptionServicesList().filter((service) => service.hasKey);
   const [open, setOpen] = useState(false);
+  const [chosenBefore] = useState(route);
   const [keepsUp, setKeepsUp] = useState<boolean | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  // Each button here removes itself, so focus goes on to what replaces it, once that has rendered
+  // (a choice waits for the settings to come back), never to the page body.
+  const focusNext = useRef<string | null>(null);
+  useEffect(() => {
+    const next = focusNext.current && root.current?.querySelector<HTMLElement>(focusNext.current);
+    if (!next) return;
+    focusNext.current = null;
+    next.focus();
+  });
   useEffect(() => {
     core.getTranscriptionSpeed().then(
       (speed) => setKeepsUp(speed.keepsUp),
@@ -38,7 +50,7 @@ export function TranscriptionRouteChoice() {
   const chosen = services.find((service) => service.route === route);
   if (chosen && !localMode) {
     return (
-      <div data-testid="meeting-route" data-route={chosen.route} className={lineClass}>
+      <div ref={root} data-testid="meeting-route" data-route={chosen.route} className={lineClass}>
         <CloudLineIcon className="size-[18px] shrink-0 text-ink-meta" />
         <div className="min-w-0 grow">
           <p className="text-ui font-semibold text-ink">
@@ -51,7 +63,10 @@ export function TranscriptionRouteChoice() {
         <button
           type="button"
           data-testid="meeting-route-here"
-          onClick={() => void updateSettings({ device: { transcriptionRoute: "local" } })}
+          onClick={() => {
+            focusNext.current = '[data-testid="meeting-route-other"]';
+            void updateSettings({ device: { transcriptionRoute: "local" } });
+          }}
           className={linkClass}
         >
           {t("meetings.route.useHere")}
@@ -60,15 +75,16 @@ export function TranscriptionRouteChoice() {
     );
   }
 
-  const offered = localMode ? [] : services;
+  const offered = localMode || chosenBefore === "local" ? [] : services;
   const slow = keepsUp === false;
   const unfolded = offered.length > 0 && (open || slow);
   const use = (each: CloudTranscriptionRoute) => {
     setOpen(false);
+    focusNext.current = '[data-testid="meeting-route-here"]';
     void updateSettings({ device: { transcriptionRoute: each } });
   };
   return (
-    <div data-testid="meeting-route" data-route="local" className="flex flex-col gap-2">
+    <div ref={root} data-testid="meeting-route" data-route="local" className="flex flex-col gap-2">
       <div className={lineClass}>
         <ComputerLineIcon className="size-[18px] shrink-0 text-ink-meta" />
         <div className="min-w-0 grow">
@@ -80,7 +96,10 @@ export function TranscriptionRouteChoice() {
             type="button"
             data-testid="meeting-route-other"
             aria-expanded={false}
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              focusNext.current = '[data-testid^="meeting-route-use-"]';
+              setOpen(true);
+            }}
             className={linkClass}
           >
             {t("meetings.route.otherWays")}
