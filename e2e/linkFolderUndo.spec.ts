@@ -190,7 +190,7 @@ test("unlinking from the folder's menu takes the link's Undo away", async () => 
 });
 
 for (const [language, refused] of [
-  ["en", "Couldn't do it again: "],
+  ["en", "Couldn’t do it again: "],
   ["zh-CN", "无法重做："],
 ] as const) {
   test(`a Redo after the folder was deleted says why in plain words, and nothing is lost (${language})`, async () => {
