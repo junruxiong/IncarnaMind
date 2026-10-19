@@ -62,6 +62,8 @@ export interface Expected {
   noExample?: true;
   /** Every date its reply gives is one the Documents' text writes (`RequestOutcome.texts`), or a file's named as such. */
   textDates?: boolean;
+  /** Its reply is in the Question's language, whatever language the Documents are in (#892, #1273); quoted words don't count. */
+  language?: "en" | "zh-CN";
 }
 
 export interface RequestOutcome {
@@ -107,7 +109,30 @@ export type RequestFailure =
   | { kind: "example"; said: string }
   | { kind: "content-lost"; sentences: string[] }
   | { kind: "unseen-attempt"; said: string }
-  | { kind: "date-not-in-text"; dates: string[] };
+  | { kind: "date-not-in-text"; dates: string[] }
+  | { kind: "wrong-language"; wanted: "en" | "zh-CN"; share: number };
+
+const QUOTED = /“[^”]*”|"[^"]*"|「[^」]*」|『[^』]*』/g;
+const CITATION_MARKER = /\[\^\d+\]/g;
+const CJK = /[\u3400-\u9fff]/g;
+const LATIN_LETTER = /[A-Za-z]/g;
+/** An English reply may name a Chinese party; a Chinese one may name a company: past this, the other language is written. */
+const ENGLISH_CJK_AT_MOST = 0.2;
+const CHINESE_CJK_AT_LEAST = 0.5;
+
+/** The share of a reply's letters, outside quoted words and Citation markers, that are Chinese characters. */
+export function chineseShare(reply: string): number {
+  const own = reply.replace(QUOTED, " ").replace(CITATION_MARKER, " ");
+  const chinese = own.match(CJK)?.length ?? 0;
+  const latin = own.match(LATIN_LETTER)?.length ?? 0;
+  return chinese + latin === 0 ? 0 : chinese / (chinese + latin);
+}
+
+/** Whether the reply is in `language`, by the share of Chinese characters in its own words. */
+export function inLanguage(reply: string, language: "en" | "zh-CN"): boolean {
+  const share = chineseShare(reply);
+  return language === "en" ? share <= ENGLISH_CJK_AT_MOST : share >= CHINESE_CJK_AT_LEAST;
+}
 
 const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
@@ -379,6 +404,13 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   if (unseen) failures.push({ kind: "unseen-attempt", said: unseen });
   const dates = expected.textDates ? datesNotInText(answer.text, outcome.texts ?? []) : [];
   if (dates.length > 0) failures.push({ kind: "date-not-in-text", dates });
+  if (expected.language && !inLanguage(answer.text, expected.language)) {
+    failures.push({
+      kind: "wrong-language",
+      wanted: expected.language,
+      share: chineseShare(answer.text),
+    });
+  }
   return failures;
 }
 
@@ -415,5 +447,7 @@ export function failureLine(failure: RequestFailure): string {
       return `says something of an earlier try the User never saw: “${failure.said}”`;
     case "date-not-in-text":
       return `gives a date the Documents' text doesn't: ${failure.dates.join(", ")}`;
+    case "wrong-language":
+      return `is not written in ${failure.wanted === "en" ? "English" : "Chinese"}, the Question's language (${Math.round(failure.share * 100)}% of its letters are Chinese characters)`;
   }
 }
