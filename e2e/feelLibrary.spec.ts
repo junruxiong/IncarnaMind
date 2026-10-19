@@ -14,12 +14,6 @@ import {
 } from "./app";
 import { endFeel, startFeel } from "./feel";
 
-/*
- * The feel check (#1242, e2e/feel.ts) on the Library with 2,000 Documents, scrolled, and on
- * Export: what moves that the User didn't move, how soon each step paints, the long tasks while
- * scrolling, and where focus is.
- */
-
 let dataDir: string;
 let sources: string;
 let out: string;

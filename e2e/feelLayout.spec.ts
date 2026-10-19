@@ -10,12 +10,6 @@ import {
 } from "./app";
 import { endFeel, startFeel } from "./feel";
 
-/*
- * The feel check (#1242, e2e/feel.ts) on switching tabs back and forth, and on the assistant
- * folding and docking: what moves that the User didn't move, how soon each step paints, and
- * where focus is.
- */
-
 let dataDir: string;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();

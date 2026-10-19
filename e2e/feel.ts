@@ -1,14 +1,5 @@
 /**
- * The feel check (#1242, DESIGN.md › Feel): records in the window what a User feels on a flow,
- * step by step, with the browser's own measures (PerformanceObserver, the Event Timing API).
- * - Layout shifts no recent input caused, with the element that moved: any above
- *   `SHIFT_LIMIT` fails, since nothing should move that the User didn't move.
- * - Input to next paint for each step's input, and long tasks: reported for every run, failing
- *   only above ceilings no CI runner reaches by chance (`INPUT_CEILING_MS`, `LONG_TASK_CEILING_MS`).
- * - Where focus is after a close, a create or a delete: never on the page body.
- * Each flow's table goes to the job summary on CI, and a video of the flow is kept beside it.
- * What main does wrong today is listed in `KNOWN` with its issue, so the check is strict for
- * everything else; a listed problem that no longer happens fails too, so the list stays true.
+ * How to run the feel check and what to do when it fails: docs/agents/testing.md › The feel check.
  */
 import { spawn } from "node:child_process";
 import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
@@ -16,7 +7,7 @@ import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import { type LaunchOptions, launchApp } from "./app";
 
-/** A layout shift's score above which it fails: a shift this small is a pixel of rounding. */
+/** A step's layout shifts that no recent input caused fail above this sum: less is rounding. */
 export const SHIFT_LIMIT = 0.001;
 /**
  * Input to next paint above which a step fails. The target is 100 ms on a laptop; CI's runners
@@ -29,26 +20,63 @@ export const LONG_TASK_CEILING_MS = 1000;
 /** Where each flow's report and video go: uploaded by CI (`.github/workflows/ci.yml`). */
 export const FEEL_FOLDER = join(__dirname, "..", "test-results", "feel");
 
-/** A problem main has today, filed as its issue: reported, but it doesn't fail the build. */
-interface Known {
-  flow: string;
-  step: string;
-  kind: Problem["kind"];
-  issue: number;
-  /** It depends on timing, so a run where it didn't happen doesn't make it stale. */
-  sometimes?: true;
-}
+/**
+ * A problem main has today, filed as its issue, bounded by what was measured: one that is worse,
+ * or in another step, still fails. A time's bound is half again the slowest measured, since a busy
+ * runner varies that much. Remove the entry in the pull request that closes the issue.
+ */
+type Known = { flow: string; step: string; issue: number } & (
+  | { kind: "shift"; moved: readonly string[]; max: number }
+  | {
+      kind: "focus";
+      /** Where focus lands instead: "body", or a test id. */
+      landed: string;
+      /** It depends on timing, so a run without it doesn't make the entry stale. */
+      sometimes?: true;
+    }
+  | { kind: "input" | "long-task"; max: number }
+);
 
 export const KNOWN: readonly Known[] = [
-  { flow: "assistant-place", step: "dock bottom", kind: "focus", issue: 1316 },
-  { flow: "assistant-place", step: "dock float", kind: "focus", issue: 1316 },
-  { flow: "assistant-place", step: "dock left", kind: "focus", issue: 1316 },
-  { flow: "assistant-place", step: "dock right", kind: "focus", issue: 1316 },
-  { flow: "sidebar", step: "rename in place", kind: "focus", issue: 1322, sometimes: true },
-  { flow: "sidebar", step: "delete", kind: "focus", issue: 1311 },
-  { flow: "first-open", step: "check the Mind", kind: "shift", issue: 1312 },
-  { flow: "library-2000", step: "show all 2,000", kind: "input", issue: 1313 },
-  { flow: "library-2000", step: "show all 2,000", kind: "long-task", issue: 1313 },
+  { flow: "assistant-place", step: "dock bottom", kind: "focus", landed: "body", issue: 1316 },
+  { flow: "assistant-place", step: "dock float", kind: "focus", landed: "body", issue: 1316 },
+  { flow: "assistant-place", step: "dock left", kind: "focus", landed: "body", issue: 1316 },
+  { flow: "assistant-place", step: "dock right", kind: "focus", landed: "body", issue: 1316 },
+  {
+    flow: "sidebar",
+    step: "rename in place",
+    kind: "focus",
+    landed: "mind-list-item",
+    sometimes: true,
+    issue: 1322,
+  },
+  { flow: "sidebar", step: "delete", kind: "focus", landed: "body", issue: 1311 },
+  {
+    flow: "first-open",
+    step: "check the Mind",
+    kind: "shift",
+    moved: ["check-card", "tab-group"],
+    max: 0.0083,
+    issue: 1312,
+  },
+  {
+    flow: "assistant-writes",
+    step: "ask for a section",
+    kind: "shift",
+    moved: [
+      "mind-editor",
+      "assistant-answer",
+      "assistant-question",
+      "proposals-line",
+      "proposals-accept-all",
+      "proposals-reject-all",
+      "mind-changes-left",
+    ],
+    max: 0.0062,
+    issue: 1325,
+  },
+  { flow: "library-2000", step: "show all 2,000", kind: "input", max: 2100, issue: 1313 },
+  { flow: "library-2000", step: "show all 2,000", kind: "long-task", max: 1900, issue: 1313 },
 ];
 
 interface Shift {
@@ -62,31 +90,61 @@ interface StepRecord {
   shifts: Shift[];
   /** The longest input to next paint among the step's inputs, in ms; null: no input. */
   input: number | null;
-  /** The step's long tasks, in ms. */
   longTasks: number[];
   /** Where focus went, when the step checks it. */
   focus: string | null;
 }
 
-type Problem =
-  | { kind: "shift"; step: string; detail: string }
-  | { kind: "focus"; step: string; detail: string }
-  | { kind: "input"; step: string; detail: string }
-  | { kind: "long-task"; step: string; detail: string };
+type Problem = { step: string } & (
+  | { kind: "shift"; value: number; moved: string[] }
+  | { kind: "focus"; at: string; expected: string }
+  | { kind: "input" | "long-task"; ms: number }
+);
+
+function detailOf(problem: Problem): string {
+  switch (problem.kind) {
+    case "shift":
+      return `${problem.value.toFixed(4)} moving ${problem.moved.join(", ") || "(unknown)"}`;
+    case "focus":
+      return `on ${problem.at}, not the expected ${problem.expected}`;
+    case "input":
+      return `${Math.round(problem.ms)} ms to next paint`;
+    case "long-task":
+      return `${Math.round(problem.ms)} ms`;
+  }
+}
+
+function excuses(known: Known, problem: Problem): boolean {
+  if (known.step !== problem.step || known.kind !== problem.kind) return false;
+  switch (problem.kind) {
+    case "shift":
+      return (
+        known.kind === "shift" &&
+        problem.value <= known.max &&
+        problem.moved.every((each) => known.moved.includes(each))
+      );
+    case "focus":
+      return (
+        known.kind === "focus" &&
+        (problem.at === known.landed || problem.at.startsWith(`${known.landed} `))
+      );
+    default:
+      return (known.kind === "input" || known.kind === "long-task") && problem.ms <= known.max;
+  }
+}
 
 interface FeelEntries {
   shifts: { at: number; value: number; moved: string[] }[];
   events: { at: number; duration: number }[];
   longTasks: { at: number; duration: number }[];
+  /** Hands over what the observers hold but haven't reported yet. */
+  take(): void;
 }
 
-/** Starts the window's observers: buffered, so what happened before is there too. */
 async function observe(window: Page): Promise<void> {
   await window.evaluate(() => {
     const holder = globalThis as unknown as { feel?: FeelEntries };
     if (holder.feel) return;
-    const feel: FeelEntries = { shifts: [], events: [], longTasks: [] };
-    holder.feel = feel;
     const describe = (node: Node | null): string => {
       const element = node instanceof Element ? node : (node?.parentElement ?? null);
       if (!element) return "(gone)";
@@ -103,8 +161,8 @@ async function observe(window: Page): Promise<void> {
       hadRecentInput: boolean;
       sources?: { node: Node | null }[];
     } => "value" in entry && "hadRecentInput" in entry;
-    new PerformanceObserver((list) => {
-      for (const shift of list.getEntries()) {
+    const onShifts = (entries: PerformanceEntryList) => {
+      for (const shift of entries) {
         if (!isShift(shift) || shift.hadRecentInput) continue;
         feel.shifts.push({
           at: shift.startTime,
@@ -112,28 +170,45 @@ async function observe(window: Page): Promise<void> {
           moved: [...new Set((shift.sources ?? []).map((source) => describe(source.node)))],
         });
       }
-    }).observe({ type: "layout-shift", buffered: true });
-    new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
+    };
+    const onLongTasks = (entries: PerformanceEntryList) => {
+      for (const entry of entries) {
         feel.longTasks.push({ at: entry.startTime, duration: entry.duration });
       }
-    }).observe({ type: "longtask", buffered: true });
+    };
+    const onEvents = (entries: PerformanceEntryList) => {
+      for (const event of entries) {
+        if (!(event instanceof PerformanceEventTiming) || event.interactionId === 0) continue;
+        feel.events.push({ at: event.startTime, duration: event.duration });
+      }
+    };
+    const shifts = new PerformanceObserver((list) => onShifts(list.getEntries()));
+    const longTasks = new PerformanceObserver((list) => onLongTasks(list.getEntries()));
+    const events = new PerformanceObserver((list) => onEvents(list.getEntries()));
+    const feel: FeelEntries = {
+      shifts: [],
+      events: [],
+      longTasks: [],
+      take: () => {
+        onShifts(shifts.takeRecords());
+        onLongTasks(longTasks.takeRecords());
+        onEvents(events.takeRecords());
+      },
+    };
+    holder.feel = feel;
+    shifts.observe({ type: "layout-shift", buffered: true });
+    longTasks.observe({ type: "longtask", buffered: true });
     // Every input slower than a frame, not only those over the default 104 ms.
-    const events: PerformanceObserverInit & { durationThreshold: number } = {
+    const everyInput: PerformanceObserverInit & { durationThreshold: number } = {
       type: "event",
       buffered: true,
       durationThreshold: 16,
     };
-    new PerformanceObserver((list) => {
-      for (const event of list.getEntries()) {
-        if (!(event instanceof PerformanceEventTiming) || event.interactionId === 0) continue;
-        feel.events.push({ at: event.startTime, duration: event.duration });
-      }
-    }).observe(events);
+    events.observe(everyInput);
   });
 }
 
-/** The page's clock now, after two frames: whatever the last step changed has been painted. */
+// Two frames: what the last step changed has been painted by then.
 const paintedAt = (window: Page) =>
   window.evaluate(
     () =>
@@ -146,6 +221,7 @@ const entriesBetween = (window: Page, from: number, to: number) =>
   window.evaluate(
     ({ from, to }) => {
       const { feel } = globalThis as unknown as { feel: FeelEntries };
+      feel.take();
       const inside = (entry: { at: number }) => entry.at >= from && entry.at < to;
       return {
         shifts: feel.shifts.filter(inside),
@@ -156,10 +232,7 @@ const entriesBetween = (window: Page, from: number, to: number) =>
     { from, to },
   );
 
-/**
- * Where focus is and where a step expects it, each named by its test id (else its tag) and the
- * start of its text, so two rows of one kind tell apart; "body" for none.
- */
+// Named by test id and the start of the text, so two rows of one kind tell apart.
 const focusOn = (target: Locator) =>
   target.evaluate((expected) => {
     const named = (element: Element) => {
@@ -179,13 +252,14 @@ const focusOn = (target: Locator) =>
 export interface Feel {
   /** Runs one step of the flow, its action waiting for the state it leads to, and records it. */
   step(name: string, action: () => Promise<void>): Promise<void>;
-  /**
-   * After a close, a create or a delete: focus must be on `target` (where the opener, the new
-   * name or the next item is), never on the page body.
-   */
+  /** After a close, a create or a delete: focus must be on `target`, never on the page body. */
   expectFocus(step: string, target: Locator): Promise<void>;
-  /** Records what is left and writes the report: what fails, and what `KNOWN` lists that didn't happen. */
-  finish(): Promise<{ failing: string[]; stale: string[] }>;
+  /**
+   * Records what is left and writes the report. `failing`: what no known entry excuses. `stale`:
+   * shift and focus entries that didn't happen. `unseen`: the known times, and focus that depends
+   * on timing, that didn't happen this run, which CI lists without failing.
+   */
+  finish(): Promise<{ failing: string[]; stale: string[]; unseen: string[] }>;
 }
 
 /** Starts recording a flow in `window`, from now: what happened before its first step is its "start". */
@@ -195,7 +269,7 @@ export async function feelOf(window: Page, flow: string): Promise<Feel> {
   const problems: Problem[] = [];
   let from = 0;
 
-  const record = async (name: string, focus: string | null = null) => {
+  const record = async (name: string) => {
     const to = await paintedAt(window);
     const entries = await entriesBetween(window, from, to);
     from = to;
@@ -206,19 +280,18 @@ export async function feelOf(window: Page, flow: string): Promise<Feel> {
       ? Math.max(...entries.events.map((event) => event.duration))
       : null;
     const longTasks = entries.longTasks.map((task) => task.duration);
-    steps.push({ name, shifts, input, longTasks, focus });
-    for (const shift of shifts.filter((each) => each.value > SHIFT_LIMIT)) {
-      problems.push({
-        kind: "shift",
-        step: name,
-        detail: `${shift.value.toFixed(4)} moving ${shift.moved.join(", ") || "(unknown)"}`,
-      });
+    steps.push({ name, shifts, input, longTasks, focus: null });
+    // Summed over the step: two small shifts in one frame move as much as one big one.
+    const shifted = shifts.reduce((sum, each) => sum + each.value, 0);
+    if (shifted > SHIFT_LIMIT) {
+      const moved = [...new Set(shifts.flatMap((each) => each.moved))];
+      problems.push({ kind: "shift", step: name, value: shifted, moved });
     }
     if (input !== null && input > INPUT_CEILING_MS) {
-      problems.push({ kind: "input", step: name, detail: `${Math.round(input)} ms to next paint` });
+      problems.push({ kind: "input", step: name, ms: input });
     }
-    for (const task of longTasks.filter((each) => each > LONG_TASK_CEILING_MS)) {
-      problems.push({ kind: "long-task", step: name, detail: `${Math.round(task)} ms` });
+    for (const ms of longTasks.filter((each) => each > LONG_TASK_CEILING_MS)) {
+      problems.push({ kind: "long-task", step: name, ms });
     }
   };
 
@@ -233,27 +306,21 @@ export async function feelOf(window: Page, flow: string): Promise<Feel> {
       const { at, expected, onTarget } = await focusOn(target);
       const last = steps.findLast((each) => each.name === step);
       if (last) last.focus = at;
-      if (!onTarget) {
-        problems.push({ kind: "focus", step, detail: `on ${at}, not the expected ${expected}` });
-      }
+      if (!onTarget) problems.push({ kind: "focus", step, at, expected });
     },
 
     async finish() {
       await record("end");
-      const known = (problem: Problem) =>
-        KNOWN.find(
-          (each) => each.flow === flow && each.step === problem.step && each.kind === problem.kind,
-        );
-      // A time depends on the runner, so a known slow step may not be slow this run: only a shift
-      // or a focus that no longer happens is stale.
-      const stale = KNOWN.filter(
-        (each) =>
-          each.flow === flow &&
-          !each.sometimes &&
-          (each.kind === "shift" || each.kind === "focus") &&
-          !problems.some((problem) => problem.step === each.step && problem.kind === each.kind),
-      );
-      const report = tableOf(flow, steps, problems, known);
+      const listed = KNOWN.filter((each) => each.flow === flow);
+      const knownFor = (problem: Problem) => listed.find((each) => excuses(each, problem));
+      const happened = (known: Known) =>
+        problems.some((problem) => problem.step === known.step && problem.kind === known.kind);
+      // A time depends on the runner, and some focus on timing: those may not happen every run.
+      const always = (known: Known) =>
+        (known.kind === "shift" || known.kind === "focus") &&
+        !(known.kind === "focus" && known.sometimes);
+      const missing = listed.filter((each) => !happened(each));
+      const report = tableOf(flow, steps, problems, knownFor, missing);
       await mkdir(FEEL_FOLDER, { recursive: true });
       await writeFile(join(FEEL_FOLDER, `${flow}.md`), report);
       await writeFile(
@@ -262,11 +329,17 @@ export async function feelOf(window: Page, flow: string): Promise<Feel> {
       );
       if (process.env.GITHUB_STEP_SUMMARY)
         await appendFile(process.env.GITHUB_STEP_SUMMARY, report);
+      const named = (known: Known) => `#${known.issue} (${flow} › ${known.step}, ${known.kind})`;
       return {
         failing: problems
-          .filter((problem) => !known(problem))
-          .map((problem) => `${problem.step}: ${problem.kind} ${problem.detail}`),
-        stale: stale.map((each) => `${each.step}: ${each.kind} (#${each.issue})`),
+          .filter((problem) => !knownFor(problem))
+          .map((problem) => `${problem.step}: ${problem.kind} ${detailOf(problem)}`),
+        stale: missing
+          .filter(always)
+          .map((known) => `${named(known)} no longer reproduces: remove this entry`),
+        unseen: missing
+          .filter((known) => !always(known))
+          .map((known) => `${named(known)} didn't happen in this run`),
       };
     },
   };
@@ -276,16 +349,22 @@ function tableOf(
   flow: string,
   steps: readonly StepRecord[],
   problems: readonly Problem[],
-  known: (problem: Problem) => Known | undefined,
+  knownFor: (problem: Problem) => Known | undefined,
+  missing: readonly Known[],
 ): string {
   const cell = (step: StepRecord) => {
     const shift = step.shifts.reduce((sum, each) => sum + each.value, 0);
-    const marks = problems
-      .filter((problem) => problem.step === step.name)
-      .map((problem) => {
-        const listed = known(problem);
-        return `${listed ? `known #${listed.issue}` : "**fails**"}: ${problem.kind} ${problem.detail}`;
-      });
+    const marks = [
+      ...problems
+        .filter((problem) => problem.step === step.name)
+        .map((problem) => {
+          const known = knownFor(problem);
+          return `${known ? `known #${known.issue}` : "**fails**"}: ${problem.kind} ${detailOf(problem)}`;
+        }),
+      ...missing
+        .filter((known) => known.step === step.name)
+        .map((known) => `known #${known.issue}: no ${known.kind} problem this run`),
+    ];
     return [
       step.name,
       shift === 0 ? "0" : shift.toFixed(4),
@@ -308,7 +387,6 @@ function tableOf(
   ].join("\n");
 }
 
-/** Films the window from now: each painted frame to disk, with when it was painted. */
 async function film(window: Page, folder: string): Promise<() => Promise<void>> {
   await rm(folder, { recursive: true, force: true });
   await mkdir(folder, { recursive: true });
@@ -341,7 +419,6 @@ async function film(window: Page, folder: string): Promise<() => Promise<void>> 
   };
 }
 
-/** Makes the frames a video when ffmpeg is there (CI installs it), then drops them; else keeps them. */
 async function encode(folder: string, video: string): Promise<void> {
   const made = await new Promise<boolean>((resolve) => {
     const ffmpeg = spawn(
@@ -391,7 +468,10 @@ export async function startFeel(
 
 /** Ends a flow: its report and its video, then what fails. */
 export async function endFeel({ app, feel, flow, stopFilming }: FeelRun): Promise<void> {
-  const { failing, stale } = await feel.finish();
+  const { failing, stale, unseen } = await feel.finish();
+  if (unseen.length > 0) {
+    await writeFile(join(FEEL_FOLDER, `${flow}.unseen.txt`), `${unseen.join("\n")}\n`);
+  }
   await stopFilming();
   await app.close();
   await encode(join(FEEL_FOLDER, `${flow}-frames`), join(FEEL_FOLDER, `${flow}.mp4`));
@@ -399,5 +479,5 @@ export async function endFeel({ app, feel, flow, stopFilming }: FeelRun): Promis
     failing,
     "Fix what the feel check found, or file it and list it in KNOWN (e2e/feel.ts)",
   ).toEqual([]);
-  expect(stale, "These no longer happen: take them out of KNOWN (e2e/feel.ts)").toEqual([]);
+  expect(stale, "Take these out of KNOWN (e2e/feel.ts)").toEqual([]);
 }

@@ -16,12 +16,6 @@ import {
 } from "./app";
 import { endFeel, startFeel } from "./feel";
 
-/*
- * The feel check (#1242, e2e/feel.ts) on a Mind's main flows: from the first open to a checked
- * Mind, typing in a long Mind with its count running, and the assistant writing into a Mind
- * then Undo. The model is the smoke tests' fake.
- */
-
 let dataDir: string;
 let sources: string;
 test.beforeEach(async () => {
@@ -119,7 +113,6 @@ test("typing in a long Mind, its count shown", async () => {
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  // About 5,000 words: 100 paragraphs of 50.
   const paragraph = (index: number) =>
     `Paragraph ${index}: ${Array.from({ length: 48 }, (_, word) => ["harbour", "tide", "cargo", "pier", "weather", "arrival"][word % 6]).join(" ")}.`;
   await mindWrittenBefore(
@@ -150,7 +143,6 @@ test("typing in a long Mind, its count shown", async () => {
     for (let turn = 0; turn < 8; turn++) await window.mouse.wheel(0, 900);
     await expect(editorOf(window).getByText("Paragraph 1:")).not.toBeInViewport();
   });
-  // Whichever paragraph the scroll left in the middle of the window.
   const shown = await editorOf(window).evaluate(
     (editor) =>
       [...editor.querySelectorAll("p")]

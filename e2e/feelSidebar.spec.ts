@@ -12,12 +12,6 @@ import {
 } from "./app";
 import { endFeel, startFeel } from "./feel";
 
-/*
- * The feel check (#1242, e2e/feel.ts) on the sidebar, the tabs and the assistant's place: each
- * step's layout shifts, input to next paint and long tasks, and where focus lands after a close,
- * a create and a delete.
- */
-
 let dataDir: string;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();
