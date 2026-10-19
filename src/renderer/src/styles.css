@@ -994,27 +994,6 @@
     animation: none;
   }
 
-  /* The tab, following the pointer. */
-  .tab-drag-ghost {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 60;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    max-width: 260px;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 6px;
-    background: var(--color-sheet);
-    box-shadow: var(--shadow-popover);
-    color: var(--color-ink);
-    font-size: 13px;
-    font-weight: 600;
-    white-space: nowrap;
-    pointer-events: none;
-  }
   /* Where a tab dropped on a strip will land. */
   .tab-drop-line {
     position: fixed;
@@ -9304,9 +9283,7 @@
   display: none;
 }
 
-/* While a tab or the assistant is dragged: no text is selected, and the pointer says so (last, so it wins). */
-body.tab-dragging,
-body.tab-dragging *,
+/* While the assistant is dragged: no text is selected, and the pointer says so (last, so it wins). */
 body.assistant-dragging,
 body.assistant-dragging * {
   cursor: grabbing;

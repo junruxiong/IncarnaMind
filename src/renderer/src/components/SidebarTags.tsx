@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import type { Tag } from "../../../core/api";
+import { useDropTarget } from "../dragDrop";
+import { tagTarget } from "../folderDrag";
 import { useT } from "../i18n";
 import { isShown } from "../layoutSlice";
 import { documentsByTag } from "../libraryFilters";
@@ -11,14 +13,20 @@ import { InlineName } from "./InlineName";
 import { useFolds } from "./LibraryFolders";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import { SidebarSection } from "./SidebarSection";
-import { clearsActions, rowActionsClass, rowButtonClass, rowClass } from "./sidebarRows";
+import {
+  clearsActions,
+  dropIntoClass,
+  rowActionsClass,
+  rowButtonClass,
+  rowClass,
+} from "./sidebarRows";
 import { TagDot } from "./TagColour";
 
 /**
  * The sidebar's Tags section, last in the tree: the Tags at least one
  * Document carries, in name order, each with how many. A Tag shows its
  * Documents in the Library, through the Tag filter; Tags awaiting review are
- * reviewed there too.
+ * reviewed there too. Documents dragged onto a Tag get it (`tagTarget`).
  */
 export function SidebarTags() {
   const t = useT();
@@ -63,14 +71,25 @@ function TagRow({ tag, count }: { tag: Tag; count: number }) {
   // The first click of a double-click chose or cleared it: back as it was before renaming.
   const naming = useRename<HTMLButtonElement>(`sidebar-tag:${tag.id}`, show);
   const treeItem = useTreeItem({ depth: 0, selected: chosen });
+  const drop = useDropTarget(`sidebar-tag:${tag.id}`, tagTarget(tag.id));
   const mark = (
     <span className="flex size-4 shrink-0 items-center justify-center">
       <TagDot colour={tag.colour} size="md" />
     </span>
   );
   return (
-    <li role="none" data-testid="sidebar-tag" data-tag-id={tag.id} data-count={count}>
-      <div className={rowClass(chosen)} {...(naming.renaming ? {} : objectMenu.rowProps)}>
+    <li
+      role="none"
+      data-testid="sidebar-tag"
+      data-tag-id={tag.id}
+      data-count={count}
+      data-drop-target={drop.over ? "true" : undefined}
+    >
+      <div
+        className={`${rowClass(chosen)} ${drop.over ? dropIntoClass : ""}`}
+        {...(naming.renaming ? {} : objectMenu.rowProps)}
+        {...drop.props}
+      >
         {naming.renaming ? (
           <span className={`${rowButtonClass} pr-1`}>
             {mark}

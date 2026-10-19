@@ -83,3 +83,4 @@ Add the interaction checklist from the pull request template to the acceptance c
 - Add before and after screenshots, at a narrow and a wide window, in English and Chinese where text changed.
 - Record the flow in the built app beside the same flow in the prototype (a short GIF of each), with the mouse and the keyboard, and list every difference in behaviour or looks with its reason.
 - Test it like a person: with the mouse and the keyboard, in the built app, not only in unit tests.
+- If it changes a flow the feel check covers (`e2e/feel*.spec.ts`), run that spec (testing.md, The feel check).
