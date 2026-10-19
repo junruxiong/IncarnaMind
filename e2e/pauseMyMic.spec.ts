@@ -35,8 +35,8 @@ async function shot(page: Page | Locator, name: string): Promise<void> {
 }
 
 const mac = process.platform === "darwin";
-const MIC_KEYS = mac ? "Ctrl+Alt+M" : "Ctrl+Shift+M";
-const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Shift+M";
+const MIC_KEYS = mac ? "Ctrl+Alt+M" : "Ctrl+Shift+9";
+const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Shift+9";
 
 /** Lines come every couple of seconds of sound, a few seconds behind it. */
 const LINES_WITHIN = { timeout: 30_000 };

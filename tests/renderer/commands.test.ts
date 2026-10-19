@@ -10,6 +10,7 @@ import {
 import type { ObjectRef } from "../../src/renderer/src/objects";
 import { MENU_COMMANDS, type MenuCommandId } from "../../src/shared/commands";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
+import { defaultHelpKeys, HELP_SHORTCUTS } from "../../src/shared/meetingHelp";
 
 /*
  * Every command the app has: no key bound twice where both commands could act,
@@ -181,6 +182,33 @@ describe("shortcuts", () => {
       }
     }
   });
+
+  test.each(SYSTEMS)(
+    "the keys held over the meeting app while recording are none the window or the menu binds, on $name",
+    ({ mac }) => {
+      const bound = new Set<string>();
+      for (const command of all) {
+        const shortcut = command.shortcut;
+        if (shortcut && !(shortcut.macOnly && !mac)) {
+          for (const keys of [
+            keysOn(shortcut.keys, mac),
+            ...(!mac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
+            ...(shortcut.also ? [shortcut.also] : []),
+          ]) {
+            bound.add(keysForm(keys, mac));
+          }
+        }
+        if (command.rowKeys) bound.add(keysForm(keysOn(command.rowKeys, mac), mac));
+      }
+      for (const { keys } of Object.values(MENU_COMMANDS)) {
+        if (keys) bound.add(keysForm(keys, mac));
+      }
+      for (const shortcut of HELP_SHORTCUTS) {
+        const keys = defaultHelpKeys(shortcut, mac);
+        expect(bound.has(keysForm(keys, mac)), `${shortcut}: ${keys}`).toBe(false);
+      }
+    },
+  );
 
   test.each(SYSTEMS)(
     "that act while the User types keep the keys of text to it, on $name",

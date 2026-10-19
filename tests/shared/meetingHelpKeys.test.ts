@@ -10,9 +10,9 @@ import {
 } from "../../src/shared/meetingHelp";
 
 describe("The shortcuts held during a call", () => {
-  test("Pause my mic is ⌃⌥M on macOS and Ctrl+Shift+M elsewhere, where Ctrl+Alt is AltGr on many layouts and Ctrl+Shift+U starts Unicode entry", () => {
+  test("Pause my mic is ⌃⌥M on macOS and Ctrl+Shift+9 elsewhere, where Ctrl+Alt is AltGr on many layouts, Teams mutes on Ctrl+Shift+M and Ctrl+Shift+U starts Unicode entry", () => {
     expect(defaultHelpKeys("mic", true)).toBe("Ctrl+Alt+M");
-    expect(defaultHelpKeys("mic", false)).toBe("Ctrl+Shift+M");
+    expect(defaultHelpKeys("mic", false)).toBe("Ctrl+Shift+9");
     expect(isHelpShortcut("mic")).toBe(true);
     expect(helpShortcutLabel("mic")).toBe("meetings.mic.pause");
   });

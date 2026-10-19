@@ -104,13 +104,14 @@ export const helpShortcutLabel = (shortcut: HelpShortcut): MessageKey =>
 
 /**
  * A shortcut by default: ⌃⌥1–7, ⌃⌥H and ⌃⌥M on macOS, which Zoom and Teams
- * leave free; Ctrl+Shift+1–8 and Ctrl+Shift+M elsewhere, where Ctrl+Alt is
- * AltGr on many European layouts and types characters, Teams leaves a call
- * on Ctrl+Shift+H, and Ctrl+Shift+U starts Unicode entry in GTK and IBus.
+ * leave free; Ctrl+Shift+1–9 elsewhere, where Ctrl+Alt is AltGr on many
+ * European layouts and types characters, and Teams leaves a call on
+ * Ctrl+Shift+H. Pause my mic is not on M or U: Teams mutes on Ctrl+Shift+M, and
+ * GTK and IBus start Unicode entry on Ctrl+Shift+U.
  */
 export function defaultHelpKeys(shortcut: HelpShortcut, mac: boolean): string {
   if (shortcut === "panel") return mac ? "Ctrl+Alt+H" : "Ctrl+Shift+8";
-  if (shortcut === "mic") return mac ? "Ctrl+Alt+M" : "Ctrl+Shift+M";
+  if (shortcut === "mic") return mac ? "Ctrl+Alt+M" : "Ctrl+Shift+9";
   const digit = GENERAL_HELP.indexOf(shortcut) + 1;
   return mac ? `Ctrl+Alt+${digit}` : `Ctrl+Shift+${digit}`;
 }
