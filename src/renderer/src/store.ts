@@ -51,7 +51,6 @@ import { errorMessage } from "./errors";
 import {
   createLayoutSlice,
   currentMindIdOf,
-  focusedGroupOf,
   followLayout,
   groupsMerged,
   type LayoutSlice,
@@ -182,7 +181,8 @@ export interface AppState extends LayoutSlice {
   openLibrary(filter?: string, options?: { side?: boolean }): void;
   /**
    * Shows Home (one tab per window): its tab where it is open, else a new one
-   * in the focused group, or first in it with `first`, as at a launch.
+   * in the focused group, or with `first`, as at a launch, the first group's
+   * first tab after its pinned ones.
    */
   openHome(options?: { side?: boolean; first?: boolean }): Promise<void>;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
@@ -757,15 +757,18 @@ export const useAppStore = create<AppState>()((set, get) => {
       });
     },
     openHome: async (options) => {
-      const { layout } = get();
-      const group = layout ? focusedGroupOf(layout) : null;
+      const first = get().layout?.groups[0];
       await get().changeLayout({
         type: "open",
         item: { kind: "home" },
         where: options?.side
           ? { in: "side" }
-          : options?.first && group?.tabs[0]
-            ? { in: "group", before: group.tabs[0].id }
+          : options?.first && first
+            ? {
+                in: "group",
+                groupId: first.id,
+                before: first.tabs.find((tab) => !tab.pinned)?.id,
+              }
             : { in: "place" },
       });
     },
