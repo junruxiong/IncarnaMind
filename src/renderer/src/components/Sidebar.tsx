@@ -187,7 +187,7 @@ function PlusMenu() {
         >
           <MindLineIcon className="size-4 shrink-0 text-ink-meta" />
           <span className="flex-1">{t("sidebar.newMind")}</span>
-          <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel("tab.new")}</span>
+          <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel("mind.new")}</span>
         </button>
         <button
           type="button"

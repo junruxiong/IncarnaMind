@@ -16,7 +16,7 @@ function send(command: MenuCommand): void {
 }
 
 /**
- * The application menu, in the interface language: New Mind (⌘N), New Folder
+ * The application menu, in the interface language: New Mind (⌘T), New Folder
  * (⇧⌘N), Close Tab (⌘W), Reopen Closed Tab (⇧⌘T) and Settings… (⌘,) with the usual Edit, View
  * and Window items. As in a browser, ⌘W closes the tab and Shift+⌘W the
  * window. Reload and the developer tools are only in development and test
