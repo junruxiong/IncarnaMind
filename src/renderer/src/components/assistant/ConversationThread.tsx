@@ -55,6 +55,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const messages = useConversations((state) => state.messages);
   const asking = useConversations((state) => state.asking);
   const waitingQuestion = useModelSetup((state) => state.waiting);
+  const modelWorks = useModelSetup((state) => state.ready);
   const askingQuote = useConversations((state) => state.askingQuote);
   const onItsWay = useAnswerOnItsWay();
   const stopWanted = useConversations((state) => state.stopWanted);
@@ -201,9 +202,11 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       {waitingQuestion && (
         <>
           <QuestionBubble text={waitingQuestion.text} quote="" />
-          <p data-testid="assistant-waiting-model" className="assistant-empty">
-            {t("setup.waiting")}
-          </p>
+          {!modelWorks && (
+            <p data-testid="assistant-waiting-model" className="assistant-empty">
+              {t("setup.waiting")}
+            </p>
+          )}
         </>
       )}
       {plan && (
