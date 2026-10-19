@@ -100,18 +100,16 @@ for (const { language, width, body, items, long } of SETTINGS) {
     await window.keyboard.type("- ");
     await window.keyboard.type(items[0]);
     const edgeLeft = await edge(editor);
-    // Tab at the first item has nothing to go under: nothing changes, and the focus stays in the page.
+    // The first item has nothing to go under: Tab changes nothing and the focus stays.
     await window.keyboard.press("Tab");
     await expect(editor).toBeFocused();
     await expect(editor.locator("ul")).toHaveCount(1);
     await expect(editor.locator("ul ul")).toHaveCount(0);
-    // Level 1: the text 48px in from the edge, the bullet 24px in (DESIGN.md).
     const first = editor.locator("li").first();
     near((await textLeft(first)) - edgeLeft, 48);
     near((await markerLeft(first)) - edgeLeft, 24);
     await screenshot(window, `list-level-1-${language}-${width}`);
 
-    // Tab makes the next item a level 2 item under the first: one step, the caret where it was.
     await window.keyboard.press("Enter");
     await window.keyboard.type(items[1]);
     await window.keyboard.press("Tab");
@@ -125,7 +123,6 @@ for (const { language, width, body, items, long } of SETTINGS) {
     await window.keyboard.press("Backspace");
     await screenshot(window, `list-level-2-${language}-${width}`);
 
-    // A long item at level 3: its lines start at the same place.
     await window.keyboard.press("Enter");
     await window.keyboard.type(long);
     await window.keyboard.press("Tab");
@@ -149,7 +146,6 @@ for (const { language, width, body, items, long } of SETTINGS) {
     expect(wrapped.length, "the long item wraps onto a second line").toBeGreaterThan(1);
     for (const start of wrapped) near(start, wrapped[0] ?? 0);
 
-    // Shift-Tab moves it out a level at a time, and ⌘Z puts each step back.
     await window.keyboard.press("Shift+Tab");
     await expect(third).toHaveCount(0);
     await expect(editor.locator("ul ul > li")).toHaveCount(2);
@@ -165,7 +161,6 @@ for (const { language, width, body, items, long } of SETTINGS) {
     const again = await linesOf(level1);
     for (const start of again) near(start, again[0] ?? 0);
 
-    // Backspace at the start of an empty item ends the list.
     await window.keyboard.press("Enter");
     await expect(editor.locator("li")).toHaveCount(4);
     await window.keyboard.press("Backspace");

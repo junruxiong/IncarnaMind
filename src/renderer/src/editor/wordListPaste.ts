@@ -6,7 +6,6 @@ const LIST_STYLE = /mso-list:\s*l\d+\s+level(\d+)/i;
 /** What Word writes before a numbered item's words: "1.", "a)", "(iv)". */
 const NUMBERED = /^\(?(?:\d+|[a-z]+)[.)]$/i;
 
-/** A list paragraph's words, with Word's marker (a span it marks to be ignored) and its empty `o:p` taken out, and whether the marker was a number. */
 function wordsOf(paragraph: Element): { html: string; ordered: boolean } {
   const copy = paragraph.cloneNode(true) as Element;
   let ordered = false;
@@ -80,7 +79,6 @@ export function listsFromWord(html: string, document: Document): string {
   return root.innerHTML;
 }
 
-/** Pasting a list from Word keeps its levels. */
 export const WordListPaste = Extension.create({
   name: "wordListPaste",
 
