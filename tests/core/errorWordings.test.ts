@@ -98,7 +98,7 @@ describe("an error the window shows", () => {
       key: "error.document.nameTooLong",
       values: { max: 500 },
     });
-    expect(error.message).toBe("A Document's name can't be longer than 500 characters.");
+    expect(error.message).toBe("A Document’s name can’t be longer than 500 characters.");
     expect(error.wording).toEqual({ key: "error.document.nameTooLong", values: { max: 500 } });
     expect(new NotFoundError("It was deleted.").wording).toBeNull();
   });
@@ -162,7 +162,7 @@ describe("the errors a User meets in each area", () => {
       wording: { key: "error.agent.nameEmpty" },
     });
     await expect(core.connectAgent({ name: "x".repeat(81) })).rejects.toMatchObject({
-      message: "An agent's name can be at most 80 characters.",
+      message: "An agent’s name can be at most 80 characters.",
       wording: { key: "error.agent.nameTooLong", values: { max: 80 } },
     });
     await expect(core.connectAgent({ name: "codex" })).rejects.toMatchObject({
@@ -201,12 +201,8 @@ describe("the errors a User meets in each area", () => {
     });
   });
 
-  test("Meetings say they are off, and a Meeting that isn't there", async () => {
+  test("A Meeting that isn't there", async () => {
     const core = startCore(await createTempDataFolder());
-    await expect(core.createMeeting()).rejects.toMatchObject({
-      message: "Meetings are turned off in Settings.",
-      wording: { key: "error.meeting.off" },
-    });
     await expect(core.startMeeting({ meetingId: "no-such-meeting" })).rejects.toMatchObject({
       wording: { key: "error.meeting.notFound" },
     });

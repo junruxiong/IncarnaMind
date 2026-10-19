@@ -5,6 +5,7 @@ import { createFakeOpenAI, signInAt } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
   assistantAnswers,
+  closeSettings,
   continueSetup,
   createDataFolder,
   interceptOpenExternal,
@@ -14,6 +15,7 @@ import {
   openSettings,
   placeAssistant,
   pointAndClick,
+  recordMeeting,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -589,7 +591,7 @@ const JOBS = {
     ready: "“Ollama”可以使用了",
     title: "各项任务使用的模型",
     change: "更改",
-    meetings: "在本机",
+    meetings: "在这台电脑上",
     noReader: "还没有能读图的模型",
     changeQuick: "更改快速任务",
   },
@@ -741,6 +743,93 @@ test("Continue works without touching a row, and Models and Meetings in Settings
   await expect(window.getByTestId("model-defaults").getByTestId("meetings-route")).toHaveValue(
     "local",
   );
+  await app.close();
+});
+
+/** A Soniox key kept, so a cloud route is offered beside this computer. */
+async function keepSonioxKey(window: Page) {
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await core.setTranscriptionKey({ route: "soniox", apiKey: "soniox-test-key" });
+  });
+}
+
+const transcriptionConsent = (window: Page) =>
+  window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const flows = await core.listDataFlows();
+    return flows.find((each) => each.flow.id === "transcription")?.consent ?? "not-asked";
+  });
+
+const CLOUD_CONSENT = "A cloud service gets the meeting’s audio while you record.";
+
+/** The first recording's sheet, opened from a new Meeting's Start. */
+async function firstRecordingSheet(window: Page) {
+  const start = await recordMeeting(window);
+  await start.getByTestId("meeting-start-record").click();
+  const sheet = window.getByTestId("meeting-notice");
+  await expect(sheet).toBeVisible();
+  return sheet;
+}
+
+// ADR-0022: choosing the service is the consent, so the line that says what it sends is on screen first.
+test("with a Soniox key, the card's Meetings row says a cloud service gets the audio before Soniox can be chosen, then where it goes; the first recording's sheet then shows that choice without asking", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1100, 900);
+  await acceptPlainTextKeys(window);
+  await keepSonioxKey(window);
+  const card = await askFirstQuestion(window);
+  await useLocalChatModel(window);
+  await expectJobsCard(window, card);
+
+  const line = card.getByTestId("meetings-route-consent");
+  await expect(line).toHaveText(CLOUD_CONSENT);
+  const meetings = card.getByTestId("setup-job-meetings");
+  await pointAndClick(window, meetings.getByTestId("setup-job-meetings-change"));
+  const route = meetings.getByTestId("meetings-route");
+  await expect(route.locator("option:not([hidden])")).toHaveText(["On this computer", "Soniox"]);
+  await expect(line).toBeVisible();
+  expect(await transcriptionConsent(window)).toBe("not-asked");
+  await route.selectOption("soniox");
+  await expect(meetings.getByTestId("setup-job-meetings-value")).toHaveText("Soniox");
+  await expect(line).toHaveText("Audio goes to Soniox while you record");
+  expect(await transcriptionConsent(window)).toBe("accepted");
+  await continueSetup(window);
+  await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
+    timeout: 15_000,
+  });
+
+  const sheet = await firstRecordingSheet(window);
+  const chosen = sheet.getByTestId("meeting-route");
+  await expect(chosen).toContainText("Transcribe with Soniox");
+  await expect(chosen).toContainText("Audio goes to Soniox while you record");
+  await expect(sheet.getByTestId("meeting-route-ways")).toHaveCount(0);
+  await app.close();
+});
+
+test("with a Soniox key, Settings › Models says a cloud service gets the audio beside the Meetings choice before Soniox is chosen, then where it goes; this computer chosen there, the first recording's sheet doesn't offer other ways", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1100, 900);
+  await acceptPlainTextKeys(window);
+  await useLocalChatModel(window);
+  await keepSonioxKey(window);
+
+  const models = (await openSettings(window, "models")).getByTestId("model-defaults");
+  const line = models.getByTestId("meetings-route-consent");
+  await expect(line).toHaveText(CLOUD_CONSENT);
+  const route = models.getByTestId("meetings-route");
+  await expect(route).toHaveValue("");
+  expect(await transcriptionConsent(window)).toBe("not-asked");
+  await route.selectOption("soniox");
+  await expect(line).toHaveText("Audio goes to Soniox while you record");
+  expect(await transcriptionConsent(window)).toBe("accepted");
+  await route.selectOption("local");
+  await expect(line).toHaveText(CLOUD_CONSENT);
+  await closeSettings(window);
+
+  const sheet = await firstRecordingSheet(window);
+  await expect(sheet.getByTestId("meeting-route")).toContainText("Transcribe on this computer");
+  await expect(sheet.getByTestId("meeting-route-other")).toHaveCount(0);
   await app.close();
 });
 

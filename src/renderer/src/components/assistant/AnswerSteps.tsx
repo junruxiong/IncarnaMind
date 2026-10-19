@@ -21,6 +21,7 @@ import {
 import { checkedWords, checkingWords } from "../../answerStepWords";
 import { useAnswers } from "../../answers";
 import { stepsScope } from "../../assistantContext";
+import { commandCallText } from "../../commandFacts";
 import { NO_SCOPE } from "../../composer";
 import { CallRow, SkillRow } from "../../editor/AnswerView";
 import { CheckMarkIcon, RegenerateSmallIcon } from "../../editor/icons";
@@ -31,6 +32,7 @@ import { useModelNames } from "../../modelNames";
 import type { Translate } from "../../objects";
 import { openCited, quoteSaysSo } from "../../openCited";
 import { scopeChips } from "../../scope";
+import { skillTitle } from "../../skills";
 import { useAppStore } from "../../store";
 import { SearchIcon } from "../icons";
 import {
@@ -250,6 +252,7 @@ function runningText(
   }
   if (call.source === "sources") return t("sources.call.running", { query: field(call, "query") });
   if (call.source === "minds") return mindCallText(t, call, mindOf(call));
+  if (call.source === "commands") return commandCallText(t, call);
   if (call.source === "web") {
     return call.tool === "search_web"
       ? t("web.call.searching", { query: field(call, "query") })
@@ -257,12 +260,12 @@ function runningText(
   }
   if (call.tool === "run_skill_script") {
     return t("scripts.call.running", {
-      skill: field(call, "skill"),
+      skill: skillTitle(field(call, "skill"), t),
       script: field(call, "script"),
     });
   }
   const skill = call.tool === "use_skill" ? field(call, "name") : field(call, "skill");
-  return t("skills.answer.loading", { name: skill });
+  return t("skills.answer.loading", { name: skillTitle(skill, t) });
 }
 
 const mindLabel = (t: Translate, mind: AskedFrom) => mind.name || t("mind.untitled");

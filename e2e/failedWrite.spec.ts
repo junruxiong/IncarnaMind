@@ -175,7 +175,7 @@ test("Save a copy… writes the Mind as a Word file where the User chooses, thou
 for (const [language, why] of [
   [
     "en",
-    /^The copy couldn’t be saved\. That file or folder isn't there any more\.\n\nDetails: .*ENOENT/,
+    /^The copy couldn’t be saved\. That file or folder isn’t there any more\.\n\nDetails: .*ENOENT/,
   ],
   ["zh-CN", /^副本没能保存。这个文件或文件夹已不存在。\n\n详情：.*ENOENT/],
 ] as const) {

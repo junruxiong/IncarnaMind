@@ -79,6 +79,9 @@ import {
   type ChatReadiness,
   type CitationSupport,
   type ClaimedChange,
+  type CommandDone,
+  type CommandProblem,
+  type CommandsFound,
   type ConversationAnswer,
   type ConversationAskResult,
   type ConversationMessage,
@@ -133,6 +136,7 @@ import {
 import { scriptCallInput, skillTools } from "../skills/tools";
 import { asksForSources } from "../sources/intent";
 import {
+  COMMAND_TOOLS,
   DOCUMENT_TOOLS,
   SKILL_TOOLS,
   type Tool,
@@ -140,6 +144,11 @@ import {
   type ToolProvider,
   type ToolProviderKind,
 } from "../tools";
+import type { Findable } from "../tools/commands/find";
+import { type CommandRename, renamesIn } from "../tools/commands/policy";
+import type { CommandsHost } from "../tools/commands/run";
+import type { CommandSteps } from "../tools/commands/steps";
+import { commandTools } from "../tools/commands/tools";
 import { type MindsForTools, type MindToolsOptions, mindTools } from "../tools/minds/tools";
 import { asksForWeb } from "../tools/web/intent";
 import { type SavedPage, webTools } from "../tools/web/tools";
@@ -212,6 +221,7 @@ import {
 import { paragraphAsked } from "./paragraphAsked";
 import {
   answerInstructions,
+  commandInstructions,
   connectorInstructions,
   documentInstructions,
   emptyMindNote,
@@ -223,6 +233,8 @@ import {
   mindInstructions,
   signInNeededInstructions,
   skillInstructions,
+  skillLanguageNote,
+  skillSetsLanguage,
   sourcesInstructions,
   webInstructions,
   withPassageNotes,
@@ -489,6 +501,11 @@ export interface AnswersOptions {
    */
   minds?: MindsForTools;
   /**
+   * The app's commands an Answer in the assistant runs for the User (#1110, ../tools/commands):
+   * what they act on, and the Undo of each Run's changes; absent: it runs none.
+   */
+  commands?: { host: CommandsHost; findable(): Promise<Findable>; steps: CommandSteps };
+  /**
    * Takes back the changes an Answer proposed in Minds, before it is written
    * again (#202): those still waiting are rejected, and a Mind it made goes
    * once nothing else is in it.
@@ -569,7 +586,9 @@ const calculatedCall = (): AnswerToolCall => ({
 const deniedResult = (call: ToolCallToApprove) =>
   "script" in call
     ? `The User denied running ${call.script} of the Skill "${call.skill.name}", so it didn't run. Carry on without it, don't run it again, and say what wasn't done.`
-    : `The User denied this call of ${call.tool} (from the Connector "${call.connector.name}"), so it wasn't made and nothing was sent. Carry on without it, don't call it again, and say what wasn't done.`;
+    : "ask" in call
+      ? `The User didn't allow ${call.subject.command}, so it didn't run and nothing changed. Carry on without it, don't run it again, and say what wasn't done.`
+      : `The User denied this call of ${call.tool} (from the Connector "${call.connector.name}"), so it wasn't made and nothing was sent. Carry on without it, don't call it again, and say what wasn't done.`;
 
 /**
  * What the model reads for a call of a Tool whose side effect nothing can
@@ -592,6 +611,7 @@ const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
   sources: "sources",
   web: "web",
   minds: "minds",
+  commands: "commands",
 };
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -606,8 +626,14 @@ export interface DocumentsForAnswers
   searchableCount(documentIds: readonly string[] | null): number;
   /** Every live Document's names: what a Citation in the Question context names its Document by. */
   names(): readonly LiveDocument[];
-  /** How many Documents there are to search, and the names of the `limit` most recently added, newest first. */
-  searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
+  /**
+   * How many Documents there are to search, and the names of the `limit` most recently added,
+   * newest first; `webPage`: one of them is a saved web page, named by its own title.
+   */
+  searchableNames(
+    documentIds: readonly string[] | null,
+    limit: number,
+  ): ListedDocuments & { webPage: boolean };
   /** The Documents to search, the most text first. */
   searchableBySize(documentIds: readonly string[] | null): SizedDocument[];
   /** The live Passages of a live Document at positions `from` to `to`, in reading order. */
@@ -833,7 +859,10 @@ export function createAnswers(options: AnswersOptions) {
       MindToolsOptions,
       "focused" | "folderId" | "origin" | "lastAnswer" | "remake"
     > &
-      RequestContext;
+      RequestContext & {
+        /** What the commands of the Conversation's earlier Answers renamed, oldest first. */
+        renames: readonly CommandRename[];
+      };
   }): void {
     const { home, answerId, model, context, forcedSkill } = input;
     const scoped = input.scoped ?? input.documentIds !== null;
@@ -1195,7 +1224,14 @@ export function createAnswers(options: AnswersOptions) {
       resultCount: number | null,
       found: Pick<
         AnswerToolCall,
-        "passages" | "error" | "webPage" | "mindChange" | "mindProblem"
+        | "passages"
+        | "error"
+        | "webPage"
+        | "mindChange"
+        | "mindProblem"
+        | "found"
+        | "command"
+        | "commandProblem"
       > = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1209,6 +1245,9 @@ export function createAnswers(options: AnswersOptions) {
       if (found.webPage) call.webPage = found.webPage;
       if (found.mindChange) call.mindChange = found.mindChange;
       if (found.mindProblem) call.mindProblem = found.mindProblem;
+      if (found.found) call.found = found.found;
+      if (found.command) call.command = found.command;
+      if (found.commandProblem) call.commandProblem = found.commandProblem;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       input.onCall?.({ ...call });
       writeSoon();
@@ -1224,6 +1263,9 @@ export function createAnswers(options: AnswersOptions) {
     /** What each call of a Minds' Tool changed, by call, for its card when it finishes (#202). */
     const mindChanges = new Map<string, MindChange>();
     const mindProblems = new Map<string, MindProblem>();
+    const commandsFound = new Map<string, CommandsFound>();
+    const commandsDone = new Map<string, CommandDone>();
+    const commandProblems = new Map<string, CommandProblem>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1262,6 +1304,7 @@ export function createAnswers(options: AnswersOptions) {
 
     /** Skill scripts the gate checked and let through, by call: their call runs what was checked. */
     const allowedScripts = new Map<string, { script: SkillScript; args: string[] }>();
+    let commandsOffered: ReturnType<typeof commandTools> | null = null;
 
     /**
      * `run_skill_script` at the gate: records its card, which shows the Skill,
@@ -1315,6 +1358,51 @@ export function createAnswers(options: AnswersOptions) {
     };
 
     /**
+     * Commands are checked one at a time, each after the User answered the one before, so a call
+     * that would take the Answer past its limit is counted after those before it.
+     */
+    let commandTurn: Promise<unknown> = Promise.resolve();
+    // Whether it asks is the commands' policy's (../tools/commands/policy, #1110).
+    const commandGate = (
+      commands: ReturnType<typeof commandTools>,
+      { id: toolCallId, input, tainted, thirdParty }: GatedCall,
+    ): Promise<string | null> => {
+      const card: AnswerToolCall = {
+        id: toolCallId,
+        tool: COMMAND_TOOLS.run,
+        source: "commands",
+        input,
+        status: "running",
+        resultCount: null,
+      };
+      callStarted(card);
+      const gated = async (): Promise<string | null> => {
+        const { checked, ask: asked, readTitles } = await commands.check(toolCallId, input);
+        if (!asked) return null;
+        const denied = await ask(
+          {
+            ...place,
+            answerId,
+            toolCallId,
+            subject: { kind: "command", command: checked.command },
+            tool: COMMAND_TOOLS.run,
+            ask: asked,
+            effects: checked.effects,
+            tainted: tainted || readTitles,
+            ...readReasons(thirdParty),
+          },
+          card,
+        );
+        if (denied === null) commands.allowed(toolCallId);
+        else commands.drop(toolCallId);
+        return denied;
+      };
+      const next = commandTurn.then(gated, gated);
+      commandTurn = next.catch(() => undefined);
+      return next;
+    };
+
+    /**
      * The gate the engine awaits before each Tool call (see `RunRequest.gate`):
      * a Connector's Tool asks first unless the User or its Effects say it
      * needn't; a Skill script is checked, then asks unless the Skill's scripts
@@ -1359,6 +1447,8 @@ export function createAnswers(options: AnswersOptions) {
         );
       } else if (tool.name === SKILL_TOOLS.runScript && skills) {
         denied = await scriptGate(skills, call, tool.effects(input));
+      } else if (tool.name === COMMAND_TOOLS.run && commandsOffered) {
+        denied = await commandGate(commandsOffered, call);
       } else if (!tool.effects(input).every(runsByDefault)) {
         // New side-effecting Tools ask unless a scope grant covers them (ADR-0013): until their
         // provider can ask, their side effects never run.
@@ -1591,6 +1681,15 @@ export function createAnswers(options: AnswersOptions) {
       // the Documents' and the Skills'. A Connector's Tool asks the User first unless it needn't
       // (see `gate`).
       const provided: Tool[] = [];
+      // The Question's language stays the Answer's while the Skill it follows names none; a help
+      // button and a check have their own rules for it (#1273).
+      const keepsQuestionsLanguage = !help && input.toolSet !== "check";
+      let skillNamesNoLanguage = false;
+      const followed = <T extends { instructions: string }>(skill: T): T => {
+        skillNamesNoLanguage = !skillSetsLanguage(skill.instructions);
+        return skill;
+      };
+      if (forced) followed(forced);
       for (const provider of outside ? [] : options.toolProviders) {
         // Find sources' Tool only for a Question that asks for papers or other sources.
         if (provider.kind === "sources" && !asksForSources(context.question)) continue;
@@ -1744,6 +1843,23 @@ export function createAnswers(options: AnswersOptions) {
             })
           : null;
       if (mindsTools) settleMinds = () => mindsTools.settle();
+      const commands = outside ? undefined : options.commands;
+      commandsOffered =
+        commands && input.assistant
+          ? commandTools({
+              host: commands.host,
+              findable: () => commands.findable(),
+              focusedMindId: focusedId,
+              namesWebPage: options.documents.searchableNames(documentIds, LISTED_DOCUMENTS)
+                .webPage,
+              renames: input.assistant.renames,
+              runId: randomUUID(),
+              steps: commands.steps,
+              found: (toolCallId, found) => commandsFound.set(toolCallId, found),
+              ran: (toolCallId, done) => commandsDone.set(toolCallId, done),
+              failed: (toolCallId, problem) => commandProblems.set(toolCallId, problem),
+            })
+          : null;
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -1774,7 +1890,7 @@ export function createAnswers(options: AnswersOptions) {
           ? skillTools({
               loadable: listed.length > 0,
               useSkill: async (name) =>
-                loadedSkillText(await opened.load(name), { withFiles: true, scripts }),
+                loadedSkillText(followed(await opened.load(name)), { withFiles: true, scripts }),
               skill: (name) => opened.skill(name),
               readSkillFile: (skill, path) => opened.readFile(skill, path),
               ...(scripts && {
@@ -1845,6 +1961,7 @@ export function createAnswers(options: AnswersOptions) {
             sourceTools = false,
             webTools: withWebTools = false,
             mindTools: withMindTools = false,
+            commandTools: withCommandTools = false,
           } = {},
         ) =>
           [
@@ -1873,6 +1990,7 @@ export function createAnswers(options: AnswersOptions) {
             webInstructions(withWebTools),
             workingCopyNote(original?.name ?? null),
             mindInstructions(withMindTools, route),
+            commandInstructions(withCommandTools),
             emptyMindNote(withMindTools, focusedEmpty),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
@@ -1892,10 +2010,19 @@ export function createAnswers(options: AnswersOptions) {
         model: prepared.model,
         ...(prepareQuick && { quickModel: () => prepareQuick(model, prepared) }),
         documents,
-        tools: [...provided, ...fromSkills, ...fromWeb, ...(mindsTools?.tools ?? [])],
+        tools: [
+          ...provided,
+          ...fromSkills,
+          ...fromWeb,
+          ...(mindsTools?.tools ?? []),
+          ...(commandsOffered?.tools ?? []),
+        ],
         gate,
         streamsInput,
         toolSet: input.toolSet ?? (help ? "documents" : undefined),
+        ...(keepsQuestionsLanguage && {
+          languageNote: () => (skillNamesNoLanguage ? skillLanguageNote(language) : null),
+        }),
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         structuredOutput: givesStructuredOutput(prepared.capabilities),
@@ -1998,12 +2125,18 @@ export function createAnswers(options: AnswersOptions) {
             const webPage = webPages.get(event.id);
             const mindChange = mindChanges.get(event.id);
             const mindProblem = mindProblems.get(event.id);
+            const found = commandsFound.get(event.id);
+            const command = commandsDone.get(event.id);
+            const commandProblem = commandProblems.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
               ...(webPage && { webPage }),
               ...(mindChange && { mindChange }),
               ...(mindProblem && { mindProblem }),
+              ...(found && { found }),
+              ...(command && { command }),
+              ...(commandProblem && { commandProblem }),
             });
             break;
           }
@@ -2311,6 +2444,7 @@ export function createAnswers(options: AnswersOptions) {
         followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
         lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier) !== null,
         remake,
+        renames: renamesIn(turn.earlier),
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
