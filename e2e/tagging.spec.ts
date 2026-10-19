@@ -99,7 +99,7 @@ test("Automatic says which model it uses; another one is chosen from the list an
     await expect(chat.getByRole("radio")).toBeChecked();
     await expect(automatic.getByRole("radio")).not.toBeChecked();
     await expect(section.getByTestId("tagging-review")).toHaveText(
-      "Every Tag it adds is kept; remove any you don't want.",
+      "Every Tag it adds is kept; remove any you don’t want.",
     );
     await expect
       .poll(() =>

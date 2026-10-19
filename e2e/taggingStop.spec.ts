@@ -116,7 +116,7 @@ test("the status names where Tagging goes; Stop keeps the Folder's new Documents
   await expect(stop).toHaveText("Stop");
   await expect(stop).toHaveAttribute(
     "title",
-    `Stop, and don't tag new Documents in “${FOLDER}” with AI until you turn it back on`,
+    `Stop, and don’t tag new Documents in “${FOLDER}” with AI until you turn it back on`,
   );
   await screenshot(window, "tagging-status-stop-en");
 
@@ -347,7 +347,7 @@ test("while Organize runs, the status names the company too, with Stop", async (
   );
   await expect(progress).toHaveAttribute(
     "title",
-    /^Organizing [2-5] Documents with Anthropic: each one's name, outline and short excerpts are sent \(page images for scans\)$/,
+    /^Organizing [2-5] Documents with Anthropic: each one’s name, outline and short excerpts are sent \(page images for scans\)$/,
   );
   await screenshot(window, "organize-status-stop-en");
   await progress.getByTestId("tagging-stop").click();
