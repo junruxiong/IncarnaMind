@@ -1,9 +1,13 @@
 import type { Editor } from "@tiptap/core";
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
+import type { RunEstimate } from "../../../core/api";
 import { MAX_COMPARISON_DOCUMENTS, MAX_COMPARISON_QUESTIONS } from "../../../shared/comparisons";
+import { asksFirst } from "../compareScope";
 import {
+  chooseCompareSource,
   closeCompareSheet,
+  documentIdsIn,
   makeComparisonTable,
   type SheetSource,
   sheetDocuments,
@@ -13,8 +17,10 @@ import {
 import { core } from "../core";
 import { type EstimateLine, estimateLine, joinMeta } from "../cost";
 import { RemoveIcon, TableIcon } from "../editor/icons";
+import { AskBlock } from "../editor/MindCheckLine";
 import { ModelChip, useMindModel } from "../editor/ModelChip";
 import { useLanguage, useT } from "../i18n";
+import { useSelectedOn } from "../selection";
 import { useAppStore } from "../store";
 import { ChevronDownLineIcon, PlusLineIcon } from "./lineIcons";
 import { ProblemLine } from "./ProblemLine";
@@ -24,12 +30,14 @@ import { usePopoverMenu } from "./usePopoverMenu";
 
 /**
  * Compare Documents (#98; the canvas board Final-37-Compare-Start): at the
- * foot of the Mind, the Documents of its Folder, ticked, two to a row, with
- * the Folder to take them from; the Questions, one per column, "+ Question"
- * adding one; "Anything else the table should show?"; and, at its foot, the
- * "Compare Documents" chip (× closes it), the estimate for a cloud model
- * billed per token (none for a plan or this computer, #83), the model chip
- * and "Make the table". Esc closes it, ⌘↵ makes the table.
+ * foot of the Mind, the Documents of a Folder, All Documents or the Library's
+ * selection, two to a row, with a header checkbox to tick all or none; the
+ * Questions, one per column, "+ Question" adding one; "Anything else the
+ * table should show?"; and, at its foot, the estimate for a cloud model
+ * billed per token (none for a plan or this computer, #83), the
+ * "Compare Documents" chip (× closes it), the model chip and "Make the
+ * table". A large run asks first, in the foot's place. Esc closes the sheet
+ * (or the question), ⌘↵ makes the table.
  */
 export function CompareSheet({
   mindId,
@@ -51,16 +59,21 @@ export function CompareSheet({
   const region = useRef<HTMLElement>(null);
   const questionFields = useRef<(HTMLInputElement | null)[]>([]);
   const focusQuestion = useRef<number | null>(null);
-  const [estimate, setEstimate] = useState<EstimateLine | null>(null);
+  const selectAll = useRef<HTMLInputElement>(null);
+  const ask = useRef<HTMLDivElement>(null);
+  const hintIds = useId();
+  const [estimate, setEstimate] = useState<RunEstimated | null>(null);
+  const [askedFor, setAskedFor] = useState<string | null>(null);
 
   const source = sheet?.source ?? "all";
+  const selected = sheet?.selected;
   // biome-ignore lint/correctness/useExhaustiveDependencies: listed again when the Library or its Documents change.
   const documents = useMemo(
     () =>
-      sheetDocuments(source).sort((a, b) =>
+      sheetDocuments(source, selected).sort((a, b) =>
         a.name.localeCompare(b.name, language, { numeric: true }),
       ),
-    [source, allDocuments, library, settings, language],
+    [source, selected, allDocuments, library, settings, language],
   );
   const checked = useMemo(() => {
     const ticked = new Set(sheet?.checked ?? []);
@@ -69,6 +82,22 @@ export function CompareSheet({
   const questions = sheet?.questions ?? [];
   const asked = questions.filter((question) => question.trim() !== "");
   const cells = checked.length * asked.length;
+  const tickable = Math.min(documents.length, MAX_COMPARISON_DOCUMENTS);
+  const allTicked = tickable > 0 && checked.length >= tickable;
+  const someTicked = checked.length > 0;
+  const documentsHint =
+    documents.length === 0
+      ? null
+      : checked.length === 0
+        ? "comparison.sheet.noneChecked"
+        : checked.length > MAX_COMPARISON_DOCUMENTS
+          ? "comparison.sheet.tooMany"
+          : null;
+  const questionsHint = asked.length === 0 ? "comparison.sheet.noQuestions" : null;
+  const blocked = documents.length === 0 || documentsHint !== null || questionsHint !== null;
+  // What the question is about: it goes when the Documents, the Questions' number or the model change.
+  const runKey = `${checked.map((document) => document.id).join()}|${asked.length}|${model?.providerId}|${model?.modelId}`;
+  const confirming = askedFor === runKey;
 
   // The first Question's field takes the focus as the sheet opens.
   const open = sheet !== undefined;
@@ -95,18 +124,22 @@ export function CompareSheet({
       return;
     }
     let current = true;
-    core
-      .estimateRun({ items: cells, ...(model && { model }) })
-      .then((result) => {
-        if (current) setEstimate(estimateLine(result, t, language));
-      })
-      .catch(() => {
-        if (current) setEstimate(null);
-      });
+    estimateCells(cells, model).then((run) => {
+      if (current && run) setEstimate({ cells, run, line: estimateLine(run, t, language) });
+      else if (current) setEstimate(null);
+    });
     return () => {
       current = false;
     };
   }, [open, cells, model, t, language]);
+
+  // The header checkbox shows some of the Documents ticked as a dash.
+  useEffect(() => {
+    if (selectAll.current) selectAll.current.indeterminate = someTicked && !allTicked;
+  }, [someTicked, allTicked]);
+  useEffect(() => {
+    if (confirming) ask.current?.querySelector("button")?.focus();
+  }, [confirming]);
 
   if (!sheet) return null;
 
@@ -115,13 +148,25 @@ export function CompareSheet({
     editor.commands.focus();
   };
   const make = async () => {
-    if (empty !== null) return;
+    if (blocked) return;
+    setAskedFor(null);
     const made = await makeComparisonTable(
       mindId,
       checked.map((document) => document.id),
       model,
     );
     if (made && !editor.isDestroyed) editor.commands.focus();
+  };
+  // The estimate may not be in yet for the Questions just typed: a run is asked about on its own.
+  const requestMake = async () => {
+    if (blocked || sheet.making) return;
+    const run = estimate?.cells === cells ? estimate.run : await estimateCells(cells, model);
+    if (asksFirst(checked.length, run)) setAskedFor(runKey);
+    else await make();
+  };
+  const chooseDocuments = () => {
+    setAskedFor(null);
+    selectAll.current?.focus();
   };
   const setQuestions = (next: string[]) => updateCompareSheet(mindId, { questions: next });
   const addQuestion = (at = questions.length) => {
@@ -135,21 +180,27 @@ export function CompareSheet({
     else ticked.add(documentId);
     updateCompareSheet(mindId, { checked: [...ticked] });
   };
-  const chooseSource = (next: SheetSource) =>
-    updateCompareSheet(mindId, {
-      source: next,
-      checked: sheetDocuments(next)
-        .slice(0, MAX_COMPARISON_DOCUMENTS)
-        .map((document) => document.id),
-    });
-
+  const tick = (ids: readonly string[]) => updateCompareSheet(mindId, { checked: ids });
+  const tickAll = () =>
+    tick(documents.slice(0, MAX_COMPARISON_DOCUMENTS).map((document) => document.id));
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape" && !event.defaultPrevented) {
       event.preventDefault();
-      close();
+      if (confirming) chooseDocuments();
+      else close();
     } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
-      void make();
+      void (confirming ? make() : requestMake());
+    } else if (
+      event.key.toLowerCase() === "a" &&
+      (event.metaKey || event.ctrlKey) &&
+      !event.shiftKey &&
+      !event.altKey &&
+      event.target instanceof HTMLElement &&
+      event.target.matches(".compare-sheet-documents input")
+    ) {
+      event.preventDefault();
+      tickAll();
     }
   };
   const onQuestionKey = (index: number) => (event: KeyboardEvent<HTMLInputElement>) => {
@@ -170,17 +221,11 @@ export function CompareSheet({
       ? t("comparison.sheet.allDocuments")
       : (library?.groups.find((group) => group.id === source)?.name ??
         t("comparison.sheet.allDocuments"));
-  /** Why the table can't be made yet, said where the estimate goes. */
-  const empty =
-    documents.length === 0
-      ? "comparison.sheet.noDocuments"
-      : checked.length === 0
-        ? "comparison.sheet.noneChecked"
-        : checked.length > MAX_COMPARISON_DOCUMENTS
-          ? "comparison.sheet.tooMany"
-          : asked.length === 0
-            ? "comparison.sheet.noQuestions"
-            : null;
+  const heading =
+    source === "selected"
+      ? t("comparison.sheet.documentsSelected")
+      : t("comparison.sheet.documentsIn", { folder: folderName });
+  const hintFor = (key: string) => `${hintIds}${key}`;
 
   return (
     <section
@@ -193,10 +238,25 @@ export function CompareSheet({
       <div className="compare-sheet-body">
         <div className="compare-sheet-documents">
           <div className="compare-sheet-heading">
-            <SourceMenu
-              label={t("comparison.sheet.documentsIn", { folder: folderName })}
-              onChoose={chooseSource}
-            />
+            <span className="compare-sheet-scope">
+              {documents.length > 0 && (
+                <input
+                  ref={selectAll}
+                  type="checkbox"
+                  data-testid="compare-sheet-select-all"
+                  className="compare-sheet-select-all"
+                  aria-label={t(
+                    someTicked ? "comparison.sheet.selectNone" : "comparison.sheet.selectAll",
+                  )}
+                  title={t(
+                    someTicked ? "comparison.sheet.selectNone" : "comparison.sheet.selectAll",
+                  )}
+                  checked={allTicked}
+                  onChange={() => (someTicked ? tick([]) : tickAll())}
+                />
+              )}
+              <SourceMenu label={heading} onChoose={(next) => chooseCompareSource(mindId, next)} />
+            </span>
             <span data-testid="compare-sheet-counted" className="compare-sheet-count">
               {t("comparison.sheet.counted", { checked: checked.length, total: documents.length })}
             </span>
@@ -228,6 +288,15 @@ export function CompareSheet({
                 </li>
               ))}
             </ul>
+          )}
+          {documentsHint && (
+            <p
+              id={hintFor("documents")}
+              data-testid="compare-sheet-hint-documents"
+              className="compare-sheet-hint"
+            >
+              {t(documentsHint, { max: MAX_COMPARISON_DOCUMENTS })}
+            </p>
           )}
         </div>
         <div className="compare-sheet-questions">
@@ -281,6 +350,15 @@ export function CompareSheet({
               {t("comparison.addQuestion")}
             </button>
           )}
+          {questionsHint && (
+            <p
+              id={hintFor("questions")}
+              data-testid="compare-sheet-hint-questions"
+              className="compare-sheet-hint"
+            >
+              {t(questionsHint)}
+            </p>
+          )}
         </div>
       </div>
       <input
@@ -304,49 +382,83 @@ export function CompareSheet({
             {t("answer.error.consent-declined")}
           </ProblemLine>
         ))}
-      <div className="compare-sheet-foot">
-        <span className="compare-sheet-chip">
-          <TableIcon className="size-3.5" />
-          {t("comparison.sheet.region")}
-          <button
-            type="button"
-            data-testid="compare-sheet-close"
-            aria-label={t("comparison.sheet.close")}
-            title={t("comparison.sheet.close")}
-            onClick={close}
-          >
-            <RemoveIcon className="size-3" />
-          </button>
-        </span>
-        <span
-          data-testid="compare-sheet-note"
-          className="compare-sheet-note"
-          title={estimate?.title}
-        >
-          {empty
-            ? t(empty, { max: MAX_COMPARISON_DOCUMENTS })
-            : estimate && joinMeta(estimate.parts)}
-        </span>
-        <ModelChip doc={doc} onChosen={() => region.current?.focus()} />
-        <button
-          type="button"
-          data-testid="compare-sheet-make"
-          className={buttonStyle("primary", "sm")}
-          disabled={empty !== null || sheet.making}
-          onClick={() => void make()}
-        >
-          {t("comparison.sheet.make")}
-        </button>
-      </div>
+      {confirming ? (
+        <div ref={ask} className="compare-sheet-ask">
+          <AskBlock
+            testId="compare-sheet-ask"
+            question={t(
+              checked.length === 1 ? "comparison.sheet.ask.one" : "comparison.sheet.ask",
+              {
+                count: checked.length,
+              },
+            )}
+            estimate={estimate?.cells === cells ? estimate.line : null}
+            check={{
+              label: t("comparison.sheet.make"),
+              testId: "compare-sheet-ask-make",
+              onClick: () => void make(),
+            }}
+            notNow={{
+              label: t("comparison.sheet.ask.choose"),
+              testId: "compare-sheet-ask-choose",
+              onClick: chooseDocuments,
+            }}
+          />
+        </div>
+      ) : (
+        <>
+          {!blocked && estimate?.cells === cells && estimate.line && (
+            <p
+              data-testid="compare-sheet-estimate"
+              className="compare-sheet-estimate"
+              title={estimate.line.title}
+            >
+              {joinMeta(estimate.line.parts)}
+            </p>
+          )}
+          <div className="compare-sheet-foot">
+            <span className="compare-sheet-chip">
+              <TableIcon className="size-3.5" />
+              {t("comparison.sheet.region")}
+              <button
+                type="button"
+                data-testid="compare-sheet-close"
+                aria-label={t("comparison.sheet.close")}
+                title={t("comparison.sheet.close")}
+                onClick={close}
+              >
+                <RemoveIcon className="size-3" />
+              </button>
+            </span>
+            <ModelChip doc={doc} onChosen={() => region.current?.focus()} />
+            <button
+              type="button"
+              data-testid="compare-sheet-make"
+              className={buttonStyle("primary", "sm")}
+              disabled={blocked || sheet.making}
+              aria-describedby={
+                [documentsHint && hintFor("documents"), questionsHint && hintFor("questions")]
+                  .filter(Boolean)
+                  .join(" ") || undefined
+              }
+              onClick={() => void requestMake()}
+            >
+              {t("comparison.sheet.make")}
+            </button>
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
-/** "Documents in {Folder} ⌄": the Folder to take them from, or All Documents. */
+/** "Documents in {Folder} ⌄": the Folder to take them from, All Documents, or those selected in the Library. */
 function SourceMenu({ label, onChoose }: { label: string; onChoose(source: SheetSource): void }) {
   const t = useT();
   const groups = useAppStore((state) => state.library?.groups) ?? [];
+  const inLibrary = useSelectedOn("library");
   const menu = usePopoverMenu();
+  const selectedCount = menu.open ? sheetDocuments("selected", documentIdsIn(inLibrary)).length : 0;
   return (
     <>
       <button
@@ -367,6 +479,20 @@ function SourceMenu({ label, onChoose }: { label: string; onChoose(source: Sheet
       >
         {menu.open && (
           <>
+            {selectedCount > 0 && (
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="compare-sheet-source-selected"
+                className={menuItemClass}
+                onClick={() => {
+                  onChoose("selected");
+                  menu.close();
+                }}
+              >
+                {t("comparison.sheet.selectedInLibrary", { count: selectedCount })}
+              </button>
+            )}
             {groups.map((group) => (
               <button
                 key={group.id}
@@ -397,4 +523,20 @@ function SourceMenu({ label, onChoose }: { label: string; onChoose(source: Sheet
       </div>
     </>
   );
+}
+
+interface RunEstimated {
+  cells: number;
+  run: RunEstimate;
+  line: EstimateLine | null;
+}
+
+function estimateCells(
+  cells: number,
+  model: { providerId: string; modelId: string } | null,
+): Promise<RunEstimate | null> {
+  return core.estimateRun({ items: cells, ...(model && { model }) }).catch((error: unknown) => {
+    console.warn(`Couldn't estimate comparing ${cells} cells; it goes on without one.`, error);
+    return null;
+  });
 }

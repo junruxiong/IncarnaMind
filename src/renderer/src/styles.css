@@ -9071,6 +9071,24 @@
     font-weight: 400;
     color: var(--color-ink-meta);
   }
+  .compare-sheet-scope {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+  .compare-sheet-select-all {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    accent-color: var(--color-ink);
+  }
+  .compare-sheet-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
   .compare-sheet-source {
     display: inline-flex;
     min-width: 0;
@@ -9198,17 +9216,28 @@
   .compare-sheet-problem {
     padding: 0 16px 4px;
   }
+  .compare-sheet-estimate {
+    padding: 0 16px 8px;
+    text-align: end;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink);
+  }
   .compare-sheet-foot {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 0 8px 8px 12px;
   }
+  .compare-sheet-ask {
+    padding: 0 8px 8px;
+  }
   .compare-sheet-chip {
     display: inline-flex;
     flex: none;
     align-items: center;
     gap: 6px;
+    margin-right: auto;
     height: 26px;
     padding: 0 4px 0 8px;
     border: 1px solid var(--color-rule);
@@ -9230,15 +9259,6 @@
       background: var(--color-hover);
       color: var(--color-ink);
     }
-  }
-  .compare-sheet-note {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 12px;
-    color: var(--color-ink-meta);
   }
   @container mind (width < 760px) {
     .compare-sheet-body {
