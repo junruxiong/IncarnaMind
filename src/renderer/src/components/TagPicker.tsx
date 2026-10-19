@@ -552,7 +552,7 @@ function TagOption({
       data-coverage={coverage}
       data-needs-review={review ? "true" : undefined}
       data-active={active ? "true" : undefined}
-      title={tag.description || undefined}
+      title={tag.description ? `${tag.name}: ${tag.description}` : tag.name}
       onMouseDown={(event) => event.preventDefault()}
       onMouseMove={onHover}
       onClick={onChoose}

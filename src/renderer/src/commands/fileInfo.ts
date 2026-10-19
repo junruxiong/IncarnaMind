@@ -19,7 +19,6 @@ function fileOf(ctx: CommandContext): { ref: ObjectRef; path: string; web: boole
   return document && { ref, path: document.path, web: document.web !== null };
 }
 
-/** What Get info is about: a Library Folder, or a Document or Linked folder, one at a time. */
 function infoOf(ctx: CommandContext): ObjectRef | undefined {
   const [ref, ...rest] = targetsOf(ctx);
   if (ref?.kind === "folder") return rest.length === 0 ? ref : undefined;

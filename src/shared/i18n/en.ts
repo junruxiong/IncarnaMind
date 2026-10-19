@@ -1205,7 +1205,6 @@ export const en = {
   "info.organize": "Organize",
   "info.description": "Description",
   "info.description.none": "None yet",
-  "info.documents": "Documents",
   "info.files": "Files",
   "info.size": "Size",
   "info.upToDate": "Up to date",

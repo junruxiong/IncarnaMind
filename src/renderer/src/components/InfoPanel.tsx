@@ -10,7 +10,7 @@ import { providerErrorText } from "../errors";
 import { addedDate, documentSummary, fileDate, showFileLabelKey } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
 import { useInfo } from "../info";
-import { organizeModel, organizeState } from "../libraryPage";
+import { folderCounts, organizeModel, organizeState } from "../libraryPage";
 import {
   fileStatusLabel,
   folderName,
@@ -151,7 +151,11 @@ function Header({ icon, name, line }: { icon: ReactNode; name: string; line: str
     <div className="flex items-center gap-2.5 border-b border-rule px-4 pt-3.5 pb-2.5">
       <span className="flex size-7 shrink-0 items-center justify-center text-ink-meta">{icon}</span>
       <div className="min-w-0 flex-1">
-        <p data-testid="info-name" className="truncate text-ui leading-5 font-semibold text-ink">
+        <p
+          data-testid="info-name"
+          title={name}
+          className="truncate text-ui leading-5 font-semibold text-ink"
+        >
           {name}
         </p>
         <p data-testid="info-summary" className="truncate text-[12px] leading-4 text-ink-meta">
@@ -392,14 +396,14 @@ function LinkedFolderInfo({ linked }: { linked: LinkedFolder }) {
 function FolderInfo({ group }: { group: LibraryGroup }) {
   const t = useT();
   const language = useLanguage();
-  const count = useAppStore((state) => {
-    const filed = new Set(
-      (state.library?.assignments ?? [])
-        .filter((each) => each.groupId === group.id)
-        .map((each) => each.documentId),
-    );
-    return state.documents.filter((each) => filed.has(each.id)).length;
-  });
+  const count = useAppStore(
+    (state) =>
+      folderCounts(
+        state.library?.groups ?? [],
+        state.documents,
+        state.library?.assignments ?? [],
+      ).get(group.id) ?? 0,
+  );
   const documents = t(count === 1 ? "library.count.one" : "library.count", {
     count: formatCount(count, language),
   });
@@ -409,9 +413,6 @@ function FolderInfo({ group }: { group: LibraryGroup }) {
       <Rows>
         <Row label={t("info.description")} testId="info-description">
           {group.description || <span className="text-ink-meta">{t("info.description.none")}</span>}
-        </Row>
-        <Row label={t("info.documents")} testId="info-documents">
-          {documents}
         </Row>
         <Row label={t("info.added")} testId="info-added">
           {addedDate(group.createdAt, language)}

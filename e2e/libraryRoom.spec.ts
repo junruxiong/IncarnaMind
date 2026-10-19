@@ -1,4 +1,5 @@
-import { expect, type Locator, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import {
   createDataFolder,
   launchApp,
@@ -8,7 +9,7 @@ import {
   setLanguage,
   setWindowSize,
 } from "./app";
-import { openFullLibrary } from "./libraryFixture";
+import { LONG_NAME, openFullLibrary } from "./libraryFixture";
 
 /*
  * The Library gives names their width and keeps its sentences in tooltips (#1192): Added goes first,
@@ -31,22 +32,53 @@ test.afterEach(async () => {
 const WORTH_ROOM = 320;
 const LEAST_ROOM = 160;
 
-/** The names of the rows on screen that have less room than they are asked for. */
-function namesCut(library: Locator) {
+/**
+ * The names of the rows on screen that have less room than they are asked for, or, `fully` off,
+ * than it takes to read their start.
+ */
+function namesCut(library: Locator, fully = true) {
   return library.evaluate(
-    (root, [worth, least]) =>
+    (root, [worth, least, whole]) =>
       [...root.querySelectorAll('[data-testid="library-document-name"]')]
         .filter((name) => {
           const box = name.getBoundingClientRect();
-          return (
-            box.width > 0 &&
-            box.height > 0 &&
-            name.clientWidth + 1 <
-              (name.scrollWidth <= (worth ?? 0) ? name.scrollWidth : (least ?? 0))
-          );
+          const wanted = whole
+            ? name.scrollWidth <= (worth ?? 0)
+              ? name.scrollWidth
+              : (least ?? 0)
+            : Math.min(name.scrollWidth, least ?? 0);
+          return box.width > 0 && box.height > 0 && name.clientWidth + 1 < wanted;
         })
         .map((name) => name.textContent),
-    [WORTH_ROOM, LEAST_ROOM],
+    [WORTH_ROOM, LEAST_ROOM, fully ? 1 : 0],
+  );
+}
+
+const NARROWEST = "added format narrowest";
+
+/**
+ * Whether no name is cut for want of room: or, with the page down to Tags in their narrowest
+ * room and their chips, every name still shows its start.
+ */
+async function namesHaveRoom(library: Locator) {
+  if ((await namesCut(library)).length === 0) return true;
+  const hide = await library.locator("[data-hide]").getAttribute("data-hide");
+  return hide === NARROWEST && (await namesCut(library, false)).length === 0;
+}
+
+/** The rows on screen that have Tags but show none of them: a narrow page keeps at least a chip. */
+function rowsWithoutTheirChips(library: Locator) {
+  return library.evaluate((root) =>
+    [...root.querySelectorAll('[data-testid="library-document"]')]
+      .filter((row) => row.getBoundingClientRect().height > 0)
+      .filter((row) => row.querySelector('[data-testid="tag-chip"]'))
+      .filter(
+        (row) =>
+          ![...row.querySelectorAll('[data-testid="tag-chip"]')].some(
+            (chip) => chip.getBoundingClientRect().width > 0,
+          ),
+      )
+      .map((row) => row.querySelector('[data-testid="library-document-name"]')?.textContent),
   );
 }
 
@@ -86,7 +118,7 @@ for (const language of ["en", "zh-CN"] as const) {
     // With the assistant beside the page, and with it folded: the narrow page gives names the room.
     for (const folded of [false, true]) {
       await placeAssistant(window, { folded });
-      await expect.poll(() => namesCut(library), { message: `folded: ${folded}` }).toEqual([]);
+      await expect.poll(() => namesHaveRoom(library), { message: `folded: ${folded}` }).toBe(true);
     }
 
     // Wide, Added and Format are there.
@@ -95,14 +127,14 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(first.getByTestId("library-document-format")).toBeVisible();
     await expect(first.getByTestId("library-document-added")).toBeVisible();
 
-    // With a Document open beside the page, in the narrowest room, every column has gone first:
-    // Added, Format and the Tags' chips, and the names that are cut take all the room there is.
+    // Narrow again, with the assistant beside the page: Added and Format have gone first, the Tags
+    // keep a chip on every row that has one, and only the one name too long for any row is cut.
     await setWindowSize(app, window, 1100, 900);
-    await pointAndClick(window, library.getByTestId("library-document-name").first());
-    await expect(window.getByTestId("viewer")).toBeVisible();
+    await placeAssistant(window, { folded: false });
+    await expect(first).toBeVisible();
     await expect(first.getByTestId("library-document-added")).toBeHidden();
     await expect(first.getByTestId("library-document-format")).toBeHidden();
-    await expect(library.locator('[data-testid="tag-chip"]:visible')).toHaveCount(0);
+    await expect.poll(() => rowsWithoutTheirChips(library)).toEqual([]);
 
     // What they said is the name's tooltip.
     const tip = await first
@@ -147,7 +179,7 @@ for (const language of ["en", "zh-CN"] as const) {
     const info = window.getByTestId("info-panel");
     await expect(info.getByTestId("info-name")).toHaveText("Board");
     await expect(info.getByTestId("info-description")).toHaveText(words.board);
-    await expect(info.getByTestId("info-documents")).toHaveText(words.documents);
+    await expect(info.getByTestId("info-summary")).toHaveText(words.documents);
     await window.keyboard.press("Escape");
     await expect(info).toHaveCount(0);
 
@@ -188,6 +220,132 @@ for (const language of ["en", "zh-CN"] as const) {
     await app.close();
   });
 }
+
+/** Puts four Tags with long names on the Document with the long name, so its row has the most to fit. */
+async function tagTheLongName(window: Page) {
+  await window.evaluate(async (name) => {
+    const api = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const doc = (await api.listDocuments()).find((each) => each.name === name);
+    if (!doc) throw new Error("The long name is not in the Library.");
+    for (const tag of [
+      "Regulatory filings",
+      "Audit committee",
+      "Second review",
+      "Board evidence",
+    ]) {
+      const made = await api.createTag({ name: tag, description: "" });
+      await api.addDocumentTag(doc.id, made.id);
+    }
+  }, LONG_NAME);
+}
+
+test("at 900 px a row with a long name and four Tags is no wider than the page", async () => {
+  const { app, window } = await launchLibrary("en");
+  const library = window.getByTestId("library");
+  await tagTheLongName(window);
+  await setWindowSize(app, window, 900, 900);
+  const more = library.getByTestId("library-show-all");
+  while ((await more.count()) > 0) await more.first().click();
+  const row = library.getByTestId("library-document").filter({
+    has: window.getByTestId("library-document-name").getByText(LONG_NAME.slice(0, 30)),
+  });
+  await expect(row.getByTestId("tag-chip")).not.toHaveCount(0);
+  await expect
+    .poll(() =>
+      library.evaluate((root) => {
+        const page = root.querySelector<HTMLElement>("[data-hide]");
+        return page ? page.scrollWidth - page.clientWidth : -1;
+      }),
+    )
+    .toBe(0);
+  await app.close();
+});
+
+test("the page fits its names again when its width or a name changes, and not for what is only pointed at, selected or opened", async () => {
+  const { app, window } = await launchLibrary("en");
+  const library = window.getByTestId("library");
+  await setWindowSize(app, window, 1100, 900);
+  await window.evaluate(() => {
+    const page = document.querySelector("[data-hide]");
+    const writes: number[] = [];
+    (globalThis as unknown as { fitWrites: number[] }).fitWrites = writes;
+    if (!page) throw new Error("No page.");
+    new MutationObserver((records) => writes.push(records.length)).observe(page, {
+      attributes: true,
+      attributeFilter: ["data-hide"],
+    });
+  });
+  const writes = () =>
+    window.evaluate(() =>
+      (globalThis as unknown as { fitWrites: number[] }).fitWrites.reduce((a, b) => a + b, 0),
+    );
+
+  const row = library.getByTestId("library-document").first();
+  await pointAndClick(window, row.getByTestId("library-document-name"), { button: "right" });
+  await window.keyboard.press("Escape");
+  await pointAndClick(window, row.getByTestId("document-tags"));
+  await window.keyboard.press("Escape");
+  await window.keyboard.press("ArrowDown");
+  await window.evaluate(
+    () =>
+      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
+  expect(await writes()).toBe(0);
+
+  await setWindowSize(app, window, 1500, 900);
+  await expect.poll(writes).toBeGreaterThan(0);
+  await app.close();
+});
+
+test("a Tag name too long for the picker is cut, and its tooltip reads it whole", async () => {
+  const { app, window } = await launchLibrary("en");
+  const library = window.getByTestId("library");
+  await setWindowSize(app, window, 1440, 900);
+  const name = "Quarterly regulatory filings and the evidence kept for the audit committee";
+  await window.evaluate(async (tag) => {
+    const api = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await api.createTag({ name: tag, description: "" });
+  }, name);
+  const register = library.getByTestId("library-document").filter({
+    has: window.getByTestId("library-document-name").getByText("Risk register", { exact: true }),
+  });
+  await pointAndClick(window, register.getByTestId("tag-chip").first());
+  const option = register.getByTestId("document-tags-popover").getByTestId("tag-option").filter({
+    hasText: "Quarterly regulatory",
+  });
+  await option.scrollIntoViewIfNeeded();
+  await expect(option).toHaveAttribute("title", name);
+  await app.close();
+});
+
+test("a Folder holds the same number of Documents in the Library, in ⌘K and in Get info, though one in it was deleted", async () => {
+  const { app, window } = await launchLibrary("en");
+  const library = window.getByTestId("library");
+  await setWindowSize(app, window, 1440, 900);
+  await window.evaluate(async () => {
+    const api = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const doc = (await api.listDocuments()).find((each) => each.name === "Risk register");
+    if (doc) await api.deleteDocument(doc.id);
+  });
+  const head = library.getByTestId("library-section-head").filter({
+    has: window.getByTestId("library-section-name").getByText("Board", { exact: true }),
+  });
+  await expect(head.getByTestId("library-section-count")).toHaveText("8");
+
+  await window.keyboard.press("ControlOrMeta+k");
+  await window.keyboard.type("Board");
+  await expect(
+    window.locator('[data-testid="palette-item"][data-kind="folder"]').filter({ hasText: "Board" }),
+  ).toContainText("8 Documents");
+  await window.keyboard.press("Escape");
+
+  await pointAndClick(window, head, { button: "right" });
+  await pointAndClick(window, window.getByTestId("file.info").filter({ visible: true }));
+  await expect(window.getByTestId("info-panel").getByTestId("info-summary")).toHaveText(
+    "8 Documents",
+  );
+  await app.close();
+});
 
 const TIPS = {
   en: {

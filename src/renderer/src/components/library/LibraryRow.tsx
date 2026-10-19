@@ -205,7 +205,7 @@ export const LibraryRow = memo(function LibraryRow({
       <LibrarySelectBox document={doc} />
       <div
         {...(rename.renaming ? {} : dragSource)}
-        className="flex min-h-[39px] items-center gap-4 pr-1.5 pl-3"
+        className="flex min-h-[39px] items-center gap-4 pr-1.5 pl-3 group-data-[hide~=narrowest]/page:gap-2"
       >
         <div className="flex min-w-0 flex-1 items-center">
           <span aria-hidden="true" className="w-5 shrink-0" />
@@ -303,7 +303,10 @@ export const LibraryRow = memo(function LibraryRow({
             )}
           </div>
         </div>
-        <div data-row-cell="tags" className={`${COLUMN_CLASSES.tags} flex min-w-0 items-center`}>
+        <div
+          data-row-cell="tags"
+          className={`${COLUMN_CLASSES.tags} flex min-w-0 items-center overflow-hidden`}
+        >
           <RowTags document={doc} />
         </div>
         <span

@@ -31,7 +31,6 @@ export function SectionHead({
   /** The name as shown: a button that folds it too, or a field while it is renamed. */
   name: ReactNode;
   count: number;
-  /** What it is, shown pointing at it. */
   tip?: string | undefined;
   end?: ReactNode;
   testId: string;

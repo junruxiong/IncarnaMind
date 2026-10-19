@@ -1175,7 +1175,6 @@ export const zhCN = {
   "info.organize": "整理",
   "info.description": "描述",
   "info.description.none": "还没有描述",
-  "info.documents": "文档",
   "info.files": "文件",
   "info.size": "大小",
   "info.upToDate": "已是最新",
