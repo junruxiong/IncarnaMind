@@ -378,8 +378,10 @@ test("text typed elsewhere while a slow edit streams in stays, and one ⌘Z take
   await pointAndClick(window, paragraphs.last());
   await window.keyboard.press("End");
   await window.keyboard.type(" typed meanwhile");
-  await expect(window.getByTestId("edit-status")).toHaveCount(0, { timeout: 30_000 });
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 3 paragraphs");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 3 paragraphs", {
+    timeout: 30_000,
+  });
+  await expect(window.getByTestId("edit-status")).toHaveCount(0);
   await expect(paragraphs.last()).toHaveText("Notes: typed meanwhile");
 
   await editor.focus();
