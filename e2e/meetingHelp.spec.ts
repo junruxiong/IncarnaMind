@@ -1,14 +1,18 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   closeSettings,
   createDataFolder,
   dismissChatSetup,
+  heldGlobalKeys as held,
   launchApp,
   openSettings,
+  panelOf,
+  panelOpen,
   pointAndClick,
+  pressHeldKeys as pressKeys,
   recordMeeting,
   removeDataFolder,
   setWindowSize,
@@ -54,29 +58,6 @@ test.afterEach(async () => {
 
 const core = (window: Page) =>
   window.evaluateHandle(() => (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind);
-
-async function panelOf(app: ElectronApplication): Promise<Page> {
-  const find = () => app.windows().find((page) => page.url().includes("meetingPanel.html"));
-  await expect.poll(() => find() !== undefined, { timeout: 15_000 }).toBe(true);
-  const page = find();
-  if (!page) throw new Error("The floating panel didn't open.");
-  await page.getByTestId("meeting-panel").waitFor();
-  return page;
-}
-
-const panelOpen = (app: ElectronApplication) =>
-  app.windows().some((page) => !page.isClosed() && page.url().includes("meetingPanel.html"));
-
-const held = (app: ElectronApplication, keys: string) =>
-  app.evaluate(({ globalShortcut }, asked) => globalShortcut.isRegistered(asked), keys);
-
-/** Presses a held shortcut, as the system would with another app in front. */
-const pressKeys = (app: ElectronApplication, kind: string) =>
-  app.evaluate((_electron, pressed) => {
-    (
-      globalThis as unknown as { incarnamindPressHelpKeys(kind: string): void }
-    ).incarnamindPressHelpKeys(pressed);
-  }, kind);
 
 /** A meeting recording from both sides, its first lines in. */
 async function recordingMeeting(window: Page) {

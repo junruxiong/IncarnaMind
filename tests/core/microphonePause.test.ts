@@ -54,12 +54,12 @@ async function playCall({
 }) {
   const dataDir = await createTempDataFolder();
   const clock = manualClock();
-  let sink: AudioSink | null = null;
+  const captured: { sink: AudioSink | null } = { sink: null };
   const microphone = { on: true, switches: [] as boolean[] };
   const capture: AudioCapture = {
     systemAudio: true,
     start(_request, given) {
-      sink = given;
+      captured.sink = given;
       given.state("microphone", "recording");
       given.state("system", "recording");
       return {
@@ -69,7 +69,7 @@ async function playCall({
           if (on) given.state("microphone", "recording");
         },
         stop: async () => {
-          sink = null;
+          captured.sink = null;
         },
       };
     },
@@ -118,10 +118,10 @@ async function playCall({
     clock.advance(TICK_MS);
     const from = tick * FRAME;
     if (microphone.on || leaks) {
-      sink?.audio("microphone", MICROPHONE.slice(from, from + FRAME));
+      captured.sink?.audio("microphone", MICROPHONE.slice(from, from + FRAME));
       if (microphone.on) heardByCapture += FRAME;
     }
-    sink?.audio("system", SYSTEM.slice(from, from + FRAME));
+    captured.sink?.audio("system", SYSTEM.slice(from, from + FRAME));
     await nextTurn();
   }
   await core.stopMeeting(id);

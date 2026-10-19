@@ -105,8 +105,30 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     cancelNotice: () => set({ noticeFor: null }),
     pause: (meetingId) => attempt(meetingId, () => core.pauseMeeting(meetingId)),
     resume: (meetingId) => attempt(meetingId, () => core.resumeMeeting(meetingId)),
-    setMicrophonePaused: (meetingId, paused) =>
-      attempt(meetingId, () => core.setMeetingMicrophone({ meetingId, paused })),
+    async setMicrophonePaused(meetingId, paused) {
+      const before = get().meetings.find((each) => each.id === meetingId);
+      const show = (meeting: Meeting) =>
+        set((state) => ({
+          meetings: state.meetings.map((each) => (each.id === meetingId ? meeting : each)),
+        }));
+      // The button answers at once; the core's own answer replaces this one a moment later.
+      if (before) {
+        show({
+          ...before,
+          microphonePausedAtMs: paused
+            ? (before.microphonePausedAtMs ?? meetingTimeAt(before, Date.now()))
+            : null,
+        });
+      }
+      await attempt(meetingId, async () => {
+        try {
+          await core.setMeetingMicrophone({ meetingId, paused });
+        } catch (error) {
+          if (before) show(before);
+          throw error;
+        }
+      });
+    },
     stop: (meetingId) => attempt(meetingId, () => core.stopMeeting(meetingId)),
     discard: (meetingId) => attempt(meetingId, () => core.discardMeeting(meetingId)),
     deleteAudio: (meetingId) => attempt(meetingId, () => core.deleteMeetingAudio(meetingId)),
