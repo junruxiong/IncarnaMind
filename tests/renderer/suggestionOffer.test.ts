@@ -21,6 +21,7 @@ const bridge = {
 
 let suggestions: typeof import("../../src/renderer/src/suggestions");
 let useAppStore: typeof import("../../src/renderer/src/store").useAppStore;
+type State = ReturnType<typeof useAppStore.getState>;
 
 beforeAll(async () => {
   (globalThis as unknown as { window: unknown }).window = {
@@ -50,6 +51,14 @@ beforeEach(() => {
   useAppStore.setState({
     settings: settings(),
     minds: [{ id: "mind", folderId: "folder" } as Mind],
+    // A Document filed in the Mind's Folder, which makes the Folder the Mind's own scope (#1359).
+    documents: [
+      { id: "survey", status: "ready", fileStatus: "present", folderId: null, tags: [] },
+    ] as unknown as State["documents"],
+    library: {
+      groups: [{ id: "folder", name: "Harbour" }],
+      assignments: [{ documentId: "survey", groupId: "folder" }],
+    } as unknown as State["library"],
   });
 });
 
@@ -75,6 +84,16 @@ describe("a pause while suggestions are off", () => {
     });
     // Counted on this device: it shows at most twice.
     expect(updateSettings).toHaveBeenCalledWith({ device: { suggestionOffers: 1 } });
+  });
+
+  // protects=a Mind whose Folder holds no Document asks with every Document, as the composer does (#1359); fails_when=it asks with the empty Folder; no_claim=what the core suggests.
+  test("asks with every Document while the Mind's Folder holds none", async () => {
+    suggestNext.mockResolvedValue({ kind: "off", scopeHasDocuments: true });
+    useAppStore.setState({ documents: [] });
+    await ask();
+    expect(suggestNext).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: { folderIds: [], tagIds: [], documentIds: [] } }),
+    );
   });
 
   test("offers nothing when the User said Not now in that Mind while the pause's request was out", async () => {
