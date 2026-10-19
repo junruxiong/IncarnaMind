@@ -1666,6 +1666,7 @@ export function createAnswers(options: AnswersOptions) {
               paragraph: paragraphAsked(context.question),
               ...input.assistant,
               language: answerLanguage(context.question),
+              figure: (marker) => (calculating ? figures.figure(marker) : null),
               blocksOf: (text) => {
                 let found = 0;
                 let notFound = 0;

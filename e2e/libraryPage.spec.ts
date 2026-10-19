@@ -841,7 +841,7 @@ test("an empty Library offers one Add Documents, its ways in, and a place to dro
     await expect(
       window.getByTestId("library-add-documents-items").getByRole("menuitem"),
     ).toHaveText([
-      "Files…",
+      /^Files…(⌘O|Ctrl\+O)$/,
       "A folder that stays in sync…",
       "A web page…",
       "Find sources…",

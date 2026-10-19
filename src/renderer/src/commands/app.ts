@@ -19,6 +19,7 @@ import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { verifyDocument } from "../verify";
 import { useWordImport } from "../wordImport";
+import { addDocumentCommands } from "./addDocuments";
 import { answerTableCommands } from "./answerTables";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
@@ -116,6 +117,7 @@ const appCommands: readonly Command[] = [
     reversible: true,
     run: () => verifyDocument(),
   },
+  ...addDocumentCommands,
   ...editCommands,
   ...selectionCommands,
   ...mindCommands,
