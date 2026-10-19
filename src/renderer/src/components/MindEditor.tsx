@@ -97,6 +97,7 @@ import { useCountSettings, WordCount } from "../editor/WordCount";
 import { OriginalNotAdded, useWordFile, WordImportProgress } from "../editor/WordOrigin";
 import { WordTableFades } from "../editor/WordTableFades";
 import { useWordLookStyle } from "../editor/wordLookStyle";
+import { WordPaste } from "../editor/wordPaste";
 import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { useFirstOpen } from "../firstOpen";
@@ -361,6 +362,7 @@ function MindEditorView({
         }),
         Focus.configure({ className: "has-focus", mode: "shallowest" }),
         TitleLine,
+        WordPaste,
         SmartTypography,
         SlashMenu.configure({
           items: (place) => {

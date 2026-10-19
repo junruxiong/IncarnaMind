@@ -26,7 +26,9 @@
  */
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
 import { NODE_CHARACTER, targetHash } from "../../../shared/proposals";
+import { groupWordLists } from "../../../shared/wordLists";
 import { runLookOf } from "../../../shared/wordLook";
+import { mindHeadingLevel } from "../../../shared/wordStyles";
 import {
   BLOCK_ID_ATTRIBUTE,
   IMAGE_NODE,
@@ -1089,7 +1091,7 @@ class Reader {
     const node =
       level === null
         ? paragraphNode("paragraph", {})
-        : paragraphNode("heading", { level: Math.min(6, Math.max(1, level)) });
+        : paragraphNode("heading", { level: mindHeadingLevel(level) });
     node.content.push(...this.pending);
     this.pending = [];
     this.fieldDepth = 0;
@@ -1862,40 +1864,31 @@ function rowsOf(
   return rows;
 }
 
-/**
- * Groups list items into the editor's lists: consecutive items of one
- * numbering, nested by level (a level deeper than the one before goes one
- * deeper only), numbered from where Word's numbering has got to.
- */
-function groupLists(items: readonly Item[]): NodeJSON[] {
-  const out: NodeJSON[] = [];
-  const open: { list: NodeJSON; ordered: boolean; numId: string }[] = [];
-  for (const { node, list } of items) {
-    if (!list) {
-      open.length = 0;
-      out.push(node);
-      continue;
-    }
-    const depth = Math.min(list.level, open.length);
-    open.length = Math.min(open.length, depth + 1);
-    const top = open[depth];
-    if (top && (top.ordered !== list.ordered || (depth === 0 && top.numId !== list.numId))) {
-      open.length = depth;
-    }
-    if (open.length === depth) {
-      const created: NodeJSON = list.ordered
-        ? {
-            type: "orderedList",
-            attrs: { [BLOCK_ID_ATTRIBUTE]: newId(), start: list.number },
-            content: [],
-          }
-        : { type: "bulletList", attrs: { [BLOCK_ID_ATTRIBUTE]: newId() }, content: [] };
-      const parent = open[depth - 1];
-      if (parent) parent.list.content?.at(-1)?.content?.push(created);
-      else out.push(created);
-      open.push({ list: created, ordered: list.ordered, numId: list.numId });
-    }
-    open[depth]?.list.content?.push({ type: "listItem", content: [node] });
-  }
-  return out;
-}
+const groupLists = (items: readonly Item[]): NodeJSON[] =>
+  groupWordLists(
+    items.map(({ node, list }) => ({
+      node,
+      list: list && {
+        listId: list.numId,
+        level: list.level,
+        ordered: list.ordered,
+        number: list.number,
+      },
+    })),
+    {
+      list: (place) =>
+        place.ordered
+          ? {
+              type: "orderedList",
+              attrs: { [BLOCK_ID_ATTRIBUTE]: newId(), start: place.number },
+              content: [],
+            }
+          : { type: "bulletList", attrs: { [BLOCK_ID_ATTRIBUTE]: newId() }, content: [] },
+      item: (list, block) => {
+        list.content?.push({ type: "listItem", content: [block] });
+      },
+      nest: (parent, list) => {
+        parent.content?.at(-1)?.content?.push(list);
+      },
+    },
+  );
