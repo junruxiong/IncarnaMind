@@ -491,14 +491,18 @@ for (const { language, width } of SCOPE_VARIANTS) {
     await expect(ask).toHaveCount(0);
     await expect(selectAll).toBeFocused();
     await expect(ticked).toHaveCount(22);
-    // Esc closes the question, not the sheet; changing what is ticked closes it too.
+    // ⌘↵ asks; pressed again it doesn't answer. Esc closes the question, not the sheet.
     await window.keyboard.press("ControlOrMeta+Enter");
     await expect(ask).toBeVisible();
+    await window.keyboard.press("ControlOrMeta+Enter");
+    await expect(ask).toBeVisible();
+    await expect(window.getByTestId("comparison-table")).toHaveCount(0);
     await window.keyboard.press("Escape");
     await expect(ask).toHaveCount(0);
     await expect(sheet).toBeVisible();
     await window.keyboard.press("ControlOrMeta+Enter");
     await expect(ask).toBeVisible();
+    // Changing what is ticked closes the question.
     await pointAndClick(window, boxes.nth(5));
     await expect(ask).toHaveCount(0);
     await expect(counted).toHaveText(words.counted(21, 22));

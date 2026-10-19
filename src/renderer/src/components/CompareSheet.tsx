@@ -37,7 +37,7 @@ import { usePopoverMenu } from "./usePopoverMenu";
  * billed per token (none for a plan or this computer, #83), the
  * "Compare Documents" chip (× closes it), the model chip and "Make the
  * table". A large run asks first, in the foot's place. Esc closes the sheet
- * (or the question), ⌘↵ makes the table.
+ * (or the question), ⌘↵ makes the table or asks.
  */
 export function CompareSheet({
   mindId,
@@ -191,7 +191,8 @@ export function CompareSheet({
       else close();
     } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
-      void (confirming ? make() : requestMake());
+      // A second press, or a held key, must not answer the question unread: Enter on its button does.
+      if (!confirming) void requestMake();
     } else if (
       event.key.toLowerCase() === "a" &&
       (event.metaKey || event.ctrlKey) &&
