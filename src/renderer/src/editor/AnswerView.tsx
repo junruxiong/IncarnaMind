@@ -19,6 +19,7 @@ import { isCalculated, RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
+import { CommandCall } from "../components/assistant/CommandCall";
 import { MindCall } from "../components/assistant/MindCall";
 import { DetailsLine } from "../components/DetailsLine";
 import { useIsExampleAnswer } from "../components/GettingStarted";
@@ -45,10 +46,12 @@ import type { SettingsPage } from "../settingsPages";
 import { skillTitle } from "../skills";
 import { useAppStore } from "../store";
 import { reasonKey } from "../webPages";
+import { CommandApprovalCard } from "./CommandApprovalCard";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
 import { PlanLimitLine } from "./PlanLimitLine";
 import { ThirdPartyLine } from "./ThirdPartyLine";
+import { withShortcut } from "./withShortcut";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
 
@@ -460,6 +463,7 @@ export function CallRows({
 /** The row of a call through a Connector, of Find sources, of web search, of a Minds' Tool, or of a Skill script. */
 export function CallRow({ call }: { call: AnswerToolCall }) {
   if (call.source === "minds") return <MindCall call={call} />;
+  if (call.source === "commands") return <CommandCall call={call} />;
   if (call.source === "connector") return <ConnectorCall call={call} />;
   if (call.source === "sources") return <SourcesCall call={call} />;
   if (call.source === "web") return <WebCall call={call} />;
@@ -467,18 +471,11 @@ export function CallRow({ call }: { call: AnswerToolCall }) {
 }
 
 /**
- * A button's tooltip and name with its shortcut: its label drops the hint when
- * the assistant is narrow (#612), and the shortcut still works.
- */
-export function withShortcut(label: string, keys: string | undefined) {
-  return keys ? { title: `${label} (${keys})`, "aria-label": `${label} (${keys})` } : {};
-}
-
-/**
  * The approval card for a request: a Connector's Tool, or a Skill script.
  * `keys`: the shortcut that allows it once, shown on its button (the Task tray's ⌘↵).
  */
 export function ApprovalCard({ request, keys }: { request: ApprovalRequest; keys?: string }) {
+  if ("ask" in request) return <CommandApprovalCard request={request} keys={keys} />;
   return request.subject.kind === "skill-script" ? (
     <ScriptApprovalCard request={request as SkillScriptApprovalRequest} keys={keys} />
   ) : (

@@ -12,6 +12,7 @@ import {
   acceptPlainTextKeys,
   assistantAnswers,
   catchCopies,
+  continueSetup,
   copied,
   createDataFolder,
   interceptOpenExternal,
@@ -126,7 +127,7 @@ test("first run: Use my Copilot plan says what it costs and sends before anythin
   await pointAndClick(window, card.getByTestId("copilot-sign-in"));
   await expect(card.getByTestId("copilot-code")).toHaveText(USER_CODE);
   github.approve();
-  await expect(card).toBeHidden();
+  await continueSetup(window);
   await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });

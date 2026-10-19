@@ -80,6 +80,7 @@ test.afterEach(async () => {
 
 async function add(window: Page, path: string, title: string) {
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
   await dialog.getByTestId("add-web-page-addresses").fill(`http://127.0.0.1:${port}${path}`);

@@ -24,7 +24,6 @@ import {
   pathsShown,
   previewLink,
   removeDataFolder,
-  setLanguage,
   setWindowSize,
   showSourceLocations,
   useLocalChatModel,
@@ -53,6 +52,10 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
   await removeDataFolder(sources);
 });
+
+/** The Linked folders' Document rows: in Not in a Folder, since a Linked folder's row doesn't unfold. */
+const linkedRows = (window: Page) =>
+  window.getByTestId("not-in-a-folder").getByTestId("document-list-item");
 
 async function screenshot(target: Page | Locator, name: string): Promise<void> {
   if (!SCREENSHOTS) return;
@@ -133,14 +136,14 @@ test("a linked folder's files become Documents, and follow edits and deletions o
   await linkFolderFromSidebar(app, window, library);
   await showSourceLocations(window);
 
-  const items = window.getByTestId("document-list-item");
+  const items = linkedRows(window);
   await expect(items).toHaveCount(2);
   const notesItem = items.filter({ hasText: "Reading notes" });
   const reportItem = items.filter({ hasText: "Report" });
   await expect(notesItem).toHaveAttribute("data-status", "ready");
   await expect(reportItem).toHaveAttribute("data-status", "ready");
   await expect(notesItem).toHaveAttribute("data-file-status", "available");
-  // The Linked folder is a Folder, with its own folders inside.
+  // The Linked folder is one row of its own.
   await expect(window.getByTestId("folder-item").filter({ hasText: "Library" })).toHaveCount(1);
 
   // Edited on disk: indexed again, as a new version, while the app runs.
@@ -213,7 +216,7 @@ test("Add folder… shows what linking would take, then the folder's row shows i
   await expect(row).toHaveAttribute("data-state", "online-only", { timeout: 60_000 });
   await expect(row.getByTestId("folder-status")).toContainText("2 online-only");
   await expect(row.getByTestId("folder-progress")).toHaveCount(0);
-  await expect(window.getByTestId("document-list-item")).toHaveCount(4);
+  await expect(linkedRows(window)).toHaveCount(4);
 
   // Its menu offers to download and index them (not done here: it would ask iCloud Drive).
   const menu = await openLinkedFolderMenu(row);
@@ -268,7 +271,7 @@ test("pausing a Linked folder holds its indexing until it is resumed", async () 
   await app.close();
 });
 
-test("a Linked folder shows as Folders or a flat list, chosen when linking and from its menu", async () => {
+test("a Linked folder's layout, Folders or a flat list, is chosen when linking and from its menu", async () => {
   // Zotero's storage: a folder per item, one file in each. For twenty or more, linking
   // suggests a flat list.
   const storage = join(sources, "storage");
@@ -287,20 +290,18 @@ test("a Linked folder shows as Folders or a flat list, chosen when linking and f
   await showSourceLocations(window);
 
   const row = linkedFolderRow(window, "storage");
-  const documents = window.getByTestId("document-list-item");
-  const subfolders = window.locator('[data-testid="folder-item"]:not([data-root])');
+  const documents = linkedRows(window);
+  // All 20 in Not in a Folder, which lists the first five, then "Show 15 more".
+  const loose = window.getByTestId("not-in-a-folder");
   await expect(row).toHaveAttribute("data-layout", "tree");
-  await expect(documents).toHaveCount(20);
-  await expect(subfolders).toHaveCount(20);
-  await expect(documents.first()).toHaveAttribute("data-depth", "2");
+  await expect(loose).toHaveAttribute("data-count", "20");
+  await expect(documents.first()).toHaveAttribute("data-depth", "0");
 
-  // A flat list: every Document right under the folder, no subfolders.
+  // A flat list, from its menu; its row stays one row, and its files where they were.
   let menu = await openLinkedFolderMenu(row);
   await menu.getByTestId("linkedFolder.layout").click();
   await expect(row).toHaveAttribute("data-layout", "flat");
-  await expect(subfolders).toHaveCount(0);
-  await expect(documents).toHaveCount(20);
-  for (const item of await documents.all()) await expect(item).toHaveAttribute("data-depth", "1");
+  await expect(loose).toHaveAttribute("data-count", "20");
   await screenshot(window.getByTestId("sidebar"), "row-flat");
 
   // And back.
@@ -308,7 +309,6 @@ test("a Linked folder shows as Folders or a flat list, chosen when linking and f
   await expect(menu.getByTestId("linkedFolder.layout")).toHaveText("Show as folders");
   await menu.getByTestId("linkedFolder.layout").click();
   await expect(row).toHaveAttribute("data-layout", "tree");
-  await expect(subfolders).toHaveCount(20);
   await app.close();
 });
 
@@ -322,7 +322,16 @@ test("a small library of one-file folders keeps its folders", async () => {
   await confirmLink(dialog);
   await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Reading")).toHaveAttribute("data-layout", "tree");
-  await expect(window.locator('[data-testid="folder-item"]:not([data-root])')).toHaveCount(3);
+  await expect
+    .poll(() =>
+      window.evaluate(
+        async () =>
+          (
+            await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listFolders()
+          ).filter((folder) => folder.parentId !== null).length,
+      ),
+    )
+    .toBe(3);
   await app.close();
 });
 
@@ -337,7 +346,7 @@ test("a file deleted on disk shows as missing, still opens, and can be removed f
   await showSourceLocations(window);
   const row = linkedFolderRow(window, "Library");
   await expect(row).toHaveAttribute("data-state", "idle");
-  const items = window.getByTestId("document-list-item");
+  const items = linkedRows(window);
   const doomed = items.filter({ hasText: "Deleted later" });
   await expect(doomed).toHaveAttribute("data-status", "ready");
 
@@ -388,7 +397,7 @@ test("unlinking asks first, and leaves the folder on disk exactly as it was", as
   await showSourceLocations(window);
   const row = linkedFolderRow(window, "Library");
   await expect(row).toHaveAttribute("data-state", "idle");
-  const items = window.getByTestId("document-list-item");
+  const items = linkedRows(window);
   await expect(items).toHaveCount(3);
 
   // Cancel changes nothing.
@@ -409,8 +418,8 @@ test("unlinking asks first, and leaves the folder on disk exactly as it was", as
   await expect(row).toHaveCount(0);
   await expect(items).toHaveCount(0);
   expect(await linkedAt(window, library)).toBeUndefined();
-  // Nothing linked and nothing added: the section says how to start again.
-  await expect(window.getByTestId("documents-empty")).toBeVisible();
+  // Nothing linked: the Linked folders section is gone with it.
+  await expect(window.getByTestId("linked-folders-section")).toHaveCount(0);
   // Byte for byte, time for time, as it was.
   expect(await snapshot(library)).toEqual(before);
   await app.close();
@@ -438,7 +447,7 @@ test("after unlinking, a Citation of a Document in the folder still says its quo
   await menu.getByTestId("linkedFolder.unlink").click();
   await window.getByTestId("confirm-unlink-folder").click();
   await expect(row).toHaveCount(0);
-  await expect(window.getByTestId("document-list-item")).toHaveCount(0);
+  await expect(linkedRows(window)).toHaveCount(0);
 
   // The page it quotes is kept, so its check stands.
   await expect(citation).toHaveAttribute("data-check", "found");
@@ -460,7 +469,7 @@ test("after unlinking, a Citation of a Document in the folder still says its quo
   await linkFolderFromSidebar(app, window, library);
   await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Library")).toHaveAttribute("data-state", "idle");
-  await expect(window.getByTestId("document-list-item")).toHaveCount(1);
+  await expect(linkedRows(window)).toHaveCount(1);
   await citation.getByTestId("citation-chip").click();
   await expect(window.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
   await expect(window.getByTestId("viewer-title")).toHaveText("Tides");
@@ -487,7 +496,7 @@ test("a Linked folder that can't be reached shows as unavailable, and so do its 
   await expect(row).toHaveAttribute("data-state", "unavailable", { timeout: 15_000 });
   await expect(row.getByTestId("folder-status")).toHaveText(/^Unavailable/);
   await expect(row).toHaveCSS("color", "rgb(101, 107, 116)");
-  const items = window.getByTestId("document-list-item");
+  const items = linkedRows(window);
   await expect(items).toHaveCount(2);
   for (const item of await items.all()) {
     await expect(item).toHaveAttribute("data-file-status", "unavailable");
@@ -557,8 +566,8 @@ test("a Linked folder that moved is located from its menu, and its Document and 
   await menu.getByTestId("linkedFolder.locate").click();
   const located = linkedFolderRow(window, "Library 2026");
   await expect(located).toHaveAttribute("data-state", "idle", { timeout: 15_000 });
-  await expect(located.getByTestId("folder-toggle")).toHaveAttribute("title", moved);
-  const item = window.getByTestId("document-list-item");
+  await expect(located.getByTestId("linked-folder-open")).toHaveAttribute("title", moved);
+  const item = linkedRows(window);
   await expect(item).toHaveCount(1);
   await expect(item).toHaveAttribute("data-file-status", "available");
   // The same Document and version, not a new one.
@@ -630,40 +639,30 @@ test("in Chinese a folder that doesn't hold the Linked folder's files is refused
   }
 });
 
-test("an empty Linked folder says so; with nothing linked or added, the sidebar says where to start", async () => {
+test("an empty Linked folder says so, in its section, which comes with it", async () => {
   const empty = join(sources, "Projects");
   await mkdir(empty);
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
 
-  // The empty sidebar offers both ways in, as the "+" menu does.
-  const start = window.getByTestId("documents-empty");
-  await expect(start).toHaveText("No Documents yet · Add files… · Link a folder…");
-  await screenshot(window.getByTestId("sidebar"), "documents-empty");
-  await setLanguage(window, "zh-CN");
-  await expect(start).toHaveText("还没有文档 · 添加文件… · 添加同步文件夹…");
-  await setLanguage(window, "en");
+  // An empty sidebar says nothing: no section waits for its first item.
+  await expect(window.getByTestId("linked-folders-section")).toHaveCount(0);
+  await expect(window.getByTestId("sidebar-sections")).toHaveText("");
 
-  // Its "Link a folder…".
-  const dialog = await previewLink(
-    app,
-    window,
-    empty,
-    start.getByTestId("documents-empty-link-folder"),
-  );
+  // The + menu's More › Link a folder….
+  const dialog = await previewLink(app, window, empty);
   await expect(dialog.getByTestId("link-folder-files")).toHaveText(
     "No supported files yet. Files added later are read.",
   );
   await expect(dialog.getByTestId("link-folder-time")).toHaveCount(0);
   await confirmLink(dialog);
-  await showSourceLocations(window);
+  await expect(window.getByTestId("linked-folders-section")).toBeVisible();
 
   const row = linkedFolderRow(window, "Projects");
   await expect(row).toHaveAttribute("data-state", "empty");
   await expect(row.getByTestId("folder-status")).toHaveText(/^No supported files/);
-  // Nothing to unfold: no chevron, no toggle.
-  await expect(row.getByTestId("folder-toggle")).toHaveCount(0);
-  await expect(start).toHaveCount(0);
+  // A row that never unfolds.
+  await expect(row.getByTestId("linked-folder-open")).not.toHaveAttribute("aria-expanded");
   await screenshot(window.getByTestId("sidebar"), "row-empty");
   await app.close();
 });
@@ -685,6 +684,7 @@ test("linking a folder that overlaps a Linked folder says what happens: they mer
   // A folder inside it is linked already: the dialog says so, and only closes.
   await interceptOpenDialog(app, join(papers, "2026", "Drafts"));
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-link-folder").click();
   const dialog = window.getByTestId("link-folder-dialog");
   await expect(dialog.getByRole("heading")).toHaveText("Already in IncarnaMind");
@@ -705,6 +705,6 @@ test("linking a folder that overlaps a Linked folder says what happens: they mer
   await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Papers")).toHaveAttribute("data-state", "idle");
   await expect(linkedFolderRow(window, "2026")).toHaveCount(0);
-  await expect(window.getByTestId("document-list-item")).toHaveCount(4);
+  await expect(linkedRows(window)).toHaveCount(4);
   await app.close();
 });

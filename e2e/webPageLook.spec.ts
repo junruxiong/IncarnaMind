@@ -119,6 +119,7 @@ test.afterEach(async () => {
 
 async function add(window: Page, path: string, title: string, keepLook: boolean) {
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
   await dialog.getByTestId("add-web-page-addresses").fill(`http://look.example:${port}${path}`);
@@ -143,6 +144,7 @@ test("off by default: the box is unticked, a page saved is never loaded for its 
   await dismissChatSetup(window);
 
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
   await expect(dialog.getByTestId("add-web-page-keep-look")).not.toBeChecked();
@@ -179,6 +181,7 @@ test("off by default: the box is unticked, a page saved is never loaded for its 
   await closeSettings(window);
 
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   await expect(dialog.getByTestId("add-web-page-keep-look")).toBeChecked();
   await motionSettled(window);

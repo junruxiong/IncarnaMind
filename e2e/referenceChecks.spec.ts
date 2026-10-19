@@ -110,6 +110,7 @@ async function verifyPaper(width: number) {
   });
   await interceptOpenDialog(app, join(sources, "Memory paper.pdf"));
   await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
   await pointAndClick(window, window.getByTestId("plus-verify-document"));
   await expect(frontMindName(window)).toHaveText("Checking: Memory paper");
   return { app, window };
