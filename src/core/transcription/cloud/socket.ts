@@ -27,14 +27,19 @@ export type CloudConnect = (url: string, apiKey: string, events: CloudSocketEven
 
 const PROBE_TIMEOUT_MS = 5000;
 
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
 async function keyTurnedAway(url: string, apiKey: string): Promise<boolean> {
   try {
     const { status } = await fetch(url.replace(/^ws/, "http"), {
       headers: { Authorization: `Bearer ${apiKey}` },
+      redirect: "manual",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
     return status === 401 || status === 403;
-  } catch {
+  } catch (error) {
+    // The process has no logger of its own: its output goes to the app's log.
+    console.error("The cloud service couldn't be asked about the key:", messageOf(error));
     return false;
   }
 }
