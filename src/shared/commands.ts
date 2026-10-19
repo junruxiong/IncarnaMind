@@ -65,7 +65,7 @@ export const ASSISTANT_COMMANDS = {
   "mind.moveTo": { on: "mind", does: "app", deletes: false },
   "mind.delete": { on: "mind", does: "app", deletes: true },
   "mind.export": { on: "mind", does: "export", deletes: false },
-  "documents.add": { on: "library", does: "add", deletes: false },
+  "documents.addFromFolder": { on: "library", does: "add", deletes: false },
 } as const satisfies Record<CommandId, AssistantCommand>;
 
 export type AssistantCommandId = keyof typeof ASSISTANT_COMMANDS;

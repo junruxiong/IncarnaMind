@@ -23,7 +23,7 @@ const DONE: Readonly<Record<Exclude<AssistantCommandId, "mind.export">, [Message
     "document.tags": ["commands.done.tags.one", "commands.done.tags"],
     "document.delete": ["commands.done.delete.document.one", "commands.done.delete.document"],
     "mind.delete": ["commands.done.delete.mind.one", "commands.done.delete.mind"],
-    "documents.add": ["commands.done.add.one", "commands.done.add"],
+    "documents.addFromFolder": ["commands.done.add.one", "commands.done.add"],
   };
 
 const RUNNING: Readonly<Record<AssistantCommandId, MessageKey>> = {
@@ -35,7 +35,7 @@ const RUNNING: Readonly<Record<AssistantCommandId, MessageKey>> = {
   "document.delete": "commands.running.delete",
   "mind.delete": "commands.running.delete",
   "mind.export": "commands.running.export",
-  "documents.add": "commands.running.add",
+  "documents.addFromFolder": "commands.running.add",
 };
 
 const isCommand = (value: string): value is AssistantCommandId =>

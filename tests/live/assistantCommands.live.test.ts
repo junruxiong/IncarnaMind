@@ -172,6 +172,16 @@ describe("The assistant runs the app's commands, live: Anthropic", () => {
           keep: true,
         },
         {
+          text: `Add the documents in the folder ${inbox}`,
+          check: (before, after) =>
+            expect(after.names.filter((name) => !before.names.includes(name))).toEqual([
+              "Teaser",
+              "Term sheet",
+              "notes",
+            ]),
+          asks: true,
+        },
+        {
           text: `Add the PDFs in ${inbox}`,
           check: (before, after) =>
             expect(after.names.filter((name) => !before.names.includes(name))).toEqual([

@@ -547,14 +547,14 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
     };
   },
 
-  "documents.add": async (input, { core }) => {
+  "documents.addFromFolder": async (input, { core }) => {
     const folder = await folderOnDisk(needs(input.folder, "error.commands.noFolderPath"));
     const files = await filesIn(folder, input.kinds);
     if (files.length === 0) {
       throw new InvalidInputError({ key: "error.commands.noFiles", values: { folder } });
     }
     return {
-      command: "documents.add",
+      command: "documents.addFromFolder",
       effects: [{ action: "read", scope: { kind: "folder", path: folder } }, ...IN_APP],
       items: [],
       into: null,

@@ -21,7 +21,7 @@ const ICONS: Readonly<Record<string, ComponentType<{ className?: string }>>> = {
   "document.delete": TrashLineIcon,
   "mind.delete": TrashLineIcon,
   "mind.export": ExportLineIcon,
-  "documents.add": PlusLineIcon,
+  "documents.addFromFolder": PlusLineIcon,
 };
 
 /**

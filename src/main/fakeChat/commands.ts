@@ -130,7 +130,7 @@ export function commandsReply(
     if (lastResult(prompt, "run_command") !== undefined) return said(prompt);
     return {
       tool: "run_command",
-      input: { command: "documents.add", folder: add[1], kinds: ["pdf"] },
+      input: { command: "documents.addFromFolder", folder: add[1], kinds: ["pdf"] },
     };
   }
   return null;

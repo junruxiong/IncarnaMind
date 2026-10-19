@@ -44,7 +44,7 @@ const ARGUMENTS: Readonly<Record<AssistantCommandId, string>> = {
   "mind.moveTo": "ids; folder: a Folder's name, made if there is none",
   "mind.delete": "ids: sent to Recently deleted, where the User can restore them",
   "mind.export": `ids: one Mind; format: ${COMMAND_EXPORT_FORMATS.join(", ")}; folder: an absolute path, or none for the Output location`,
-  "documents.add":
+  "documents.addFromFolder":
     "folder: an absolute path or ~/…; kinds: file extensions such as pdf, or none for every kind",
 };
 

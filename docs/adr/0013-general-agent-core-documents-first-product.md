@@ -110,7 +110,7 @@ Code a model writes for an analysis runs in Pyodide, in a hidden, sandboxed rend
 
 The assistant can do what the User does with the app's commands. A **Commands** Tool provider gives an Answer in the assistant two Tools: `list_commands` finds the Documents or Minds a command would act on, and `run_command` runs one command on what it found, by id. It matches exactly, by words in a name, a Tag or a Folder, never by meaning. A command added later needs its mark, its check and run in the core, and a line in the Tool's description, but no new Tool.
 
-- **Only commands marked for the assistant run.** The table is `ASSISTANT_COMMANDS`, keyed by the command list's ids, plus `documents.add` for the Add Documents button, which isn't in ⌘K. An unmarked command is refused before anything runs.
+- **Only commands marked for the assistant run.** The table is `ASSISTANT_COMMANDS`, keyed by the command list's ids. Adding files has its own entry, `documents.addFromFolder`: it reads the folder named and always asks, unlike the Add Documents command, which opens the system's file picker and is never the assistant's. An unmarked command is refused before anything runs.
   - The marked ones rename, move to a Folder, tag, delete to Recently deleted, export a Mind, and add files from a folder.
   - None changes consent, Local mode, keys, sign-ins, approval policies, Privacy or usage data, or deletes for good.
   - A test pins the table and what each entry does.

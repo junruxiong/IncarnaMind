@@ -306,7 +306,7 @@ describe("Commands that reach outside IncarnaMind wait for the User (#1110)", {
     await writeFile(join(inbox, "sub", "d.md"), "# D\n");
     const model = calling(() => ({
       tool: "run_command",
-      input: { command: "documents.add", folder: inbox, kinds: ["md"] },
+      input: { command: "documents.addFromFolder", folder: inbox, kinds: ["md"] },
     }));
     const { core, mind } = await setUpWithDocuments(model, []);
     const requested = nextEvent(core, "approval.requested");

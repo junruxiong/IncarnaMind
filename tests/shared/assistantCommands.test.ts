@@ -13,7 +13,7 @@ describe("The commands the assistant may run (#1110)", () => {
       "mind.moveTo": { on: "mind", does: "app", deletes: false },
       "mind.delete": { on: "mind", does: "app", deletes: true },
       "mind.export": { on: "mind", does: "export", deletes: false },
-      "documents.add": { on: "library", does: "add", deletes: false },
+      "documents.addFromFolder": { on: "library", does: "add", deletes: false },
     });
   });
 
@@ -22,5 +22,10 @@ describe("The commands the assistant may run (#1110)", () => {
     const denied =
       /^settings\.|consent|privacy|approval|secret|key|sign-?in|usage|permanent|deletePermanently|localMode/i;
     expect(Object.keys(ASSISTANT_COMMANDS).filter((id) => denied.test(id))).toEqual([]);
+  });
+
+  // protects=the Add Documents command, which opens the system's file picker, is never the assistant's: it adds a named folder's files with its own command, which always asks; fails_when=the picker command is marked; no_claim=what the picker does.
+  test("never the Add Documents command, which opens the file picker", () => {
+    expect(Object.keys(ASSISTANT_COMMANDS)).not.toContain("documents.add");
   });
 });
