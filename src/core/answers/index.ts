@@ -1350,7 +1350,7 @@ export function createAnswers(options: AnswersOptions) {
       return denied;
     };
 
-    // Only what reaches outside IncarnaMind asks (#1110): a change inside it runs, and Undo takes it back.
+    // Whether it asks is the commands' policy's (../tools/commands/policy, #1110).
     const commandGate = async (
       commands: ReturnType<typeof commandTools>,
       { id: toolCallId, input, tainted, thirdParty }: GatedCall,
@@ -1364,8 +1364,12 @@ export function createAnswers(options: AnswersOptions) {
         resultCount: null,
       };
       callStarted(card);
-      const checked = await commands.check(toolCallId, input);
-      if (!checked.ask) return null;
+      const { checked, ask: asked } = await commands.check(toolCallId, input, {
+        tainted,
+        readThirdParty: thirdParty.length > 0,
+        focusedMindId: mindIn,
+      });
+      if (!asked) return null;
       const denied = await ask(
         {
           ...place,
@@ -1373,7 +1377,7 @@ export function createAnswers(options: AnswersOptions) {
           toolCallId,
           subject: { kind: "command", command: checked.command },
           tool: COMMAND_TOOLS.run,
-          ask: checked.ask,
+          ask: asked,
           effects: checked.effects,
           tainted,
           ...readReasons(thirdParty),

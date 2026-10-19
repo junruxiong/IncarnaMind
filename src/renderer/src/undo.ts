@@ -20,6 +20,11 @@ export interface Undoable {
   /** Takes it back. Throws `UndoRefused` when a fix would let it. */
   undo(): Promise<void>;
   /**
+   * What the line says once it is taken back, when it couldn't take back all of it as it was:
+   * a Folder it kept for what the User put in it since. Null: nothing.
+   */
+  undoneNote?(): Words | null;
+  /**
    * Where its line shows, when that is where the User acted rather than the
    * sidebar's foot: under an Answer in the assistant (`answerUndoPlace`).
    */
@@ -58,8 +63,9 @@ export interface UndoProblem {
 }
 
 export type UndoLineState =
-  | { id: number; change: Undoable; problem?: undefined }
-  | { id: number; problem: UndoProblem; change?: undefined };
+  | { id: number; change: Undoable; problem?: undefined; note?: undefined }
+  | { id: number; problem: UndoProblem; change?: undefined; note?: undefined }
+  | { id: number; note: Words; change?: undefined; problem?: undefined };
 
 interface UndoState {
   /** The changes ⌘Z takes back, the last one last. */
@@ -76,6 +82,8 @@ interface UndoState {
   withdraw(change: Undoable): void;
   /** Hides the line; the stack stays. */
   dismiss(): void;
+  /** Shows again what a change on the line says, once it says more: a request's later commands. */
+  renew(change: Undoable): void;
 }
 
 /** How long the line shows before it goes by itself. */
@@ -147,7 +155,11 @@ export const useUndo = create<UndoState>()((set, get) => {
           refused("undo", change, error);
           return;
         }
-        set((state) => ({ undone: change.redo ? [...state.undone, change] : [] }));
+        const note = change.undoneNote?.() ?? null;
+        set((state) => ({
+          undone: change.redo ? [...state.undone, change] : [],
+          ...(note && { line: { id: ++lines, note } }),
+        }));
       }),
     redo: () =>
       inTurn(async () => {
@@ -171,6 +183,9 @@ export const useUndo = create<UndoState>()((set, get) => {
     },
     dismiss() {
       set({ line: null });
+    },
+    renew(change) {
+      set((state) => (state.line?.change === change ? { line: { ...state.line, change } } : {}));
     },
   };
 });

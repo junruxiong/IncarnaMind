@@ -8,10 +8,18 @@
  * the Answer's gate (`check`).
  */
 import { ASSISTANT_COMMANDS, type AssistantCommandId } from "../../../shared/commands";
-import type { CommandDone, CommandProblem, CommandsFound, CommandTarget } from "../../api";
+import {
+  COMMAND_AT_ONCE,
+  type CommandAsk,
+  type CommandDone,
+  type CommandProblem,
+  type CommandsFound,
+  type CommandTarget,
+} from "../../api";
 import { TranslatableError } from "../../errors";
 import { COMMAND_TOOLS, type Tool, type ToolProviderInfo } from "../index";
 import { type Findable, type FindInput, find, foundLine, foundOf } from "./find";
+import { askOf, type CommandContext } from "./policy";
 import {
   type CheckedCommand,
   COMMAND_EXPORT_FORMATS,
@@ -84,7 +92,11 @@ export function commandTools(options: CommandToolsOptions): {
    * Checks a call of `run_command` at the Answer's gate and keeps it for its run: what it would
    * do, and whether it asks first. Throws, the card saying why, for one that can't run.
    */
-  check(toolCallId: string, input: Record<string, unknown>): Promise<CheckedCommand>;
+  check(
+    toolCallId: string,
+    input: Record<string, unknown>,
+    context: CommandContext,
+  ): Promise<{ checked: CheckedCommand; ask: CommandAsk | null }>;
   /** The User didn't allow a call `check` kept: it never runs. */
   drop(toolCallId: string): void;
 } {
@@ -142,7 +154,7 @@ export function commandTools(options: CommandToolsOptions): {
 
   const runTool: Tool = {
     name: COMMAND_TOOLS.run,
-    description: `Runs one of the app's commands for the User, on ${nouns.document[1]} or ${nouns.mind[1]} ${COMMAND_TOOLS.list} found, by id. For Documents: ${commandList("document")}. For Minds: ${commandList("mind")}. To add files: ${commandList("library")}. A change inside IncarnaMind runs at once and the User can undo it; a file saved outside the Output location, and files added from a folder, wait for the User to allow them. Say only what each call returned.`,
+    description: `Runs one of the app's commands for the User, on ${nouns.document[1]} or ${nouns.mind[1]} ${COMMAND_TOOLS.list} found, by id. For Documents: ${commandList("document")}. For Minds: ${commandList("mind")}. To add files: ${commandList("library")}. A change inside IncarnaMind runs at once and the User can undo it. These wait for the User to allow them: a file saved anywhere but the Output location itself, files added from a folder, a change of more than ${COMMAND_AT_ONCE} things, a delete after you read the Documents or the web, and deleting the Mind the User is in. Say only what each call returned.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -180,11 +192,12 @@ export function commandTools(options: CommandToolsOptions): {
 
   return {
     tools: [listTool, runTool],
-    async check(toolCallId, input) {
+    async check(toolCallId, input, context) {
       try {
         const command = await checkCommand(parseCommandInput(input), options.host);
+        const ask = askOf(command, context);
         checked.set(toolCallId, command);
-        return command;
+        return { checked: command, ask };
       } catch (error) {
         options.failed(toolCallId, problemOf(String(input.command ?? ""), error));
         throw error;

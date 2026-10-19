@@ -228,6 +228,8 @@ export function createApprovals(options: ApprovalsOptions) {
    * "always" at all: they ask unless a scope grant covers the call.
    */
   const decide = (call: CallToDecide): "run" | "ask" => {
+    // A command's call is decided by its own rules (../tools/commands/policy), never a stored policy.
+    if (call.subject.kind === "command") return "ask";
     const policy = policyOf(call.subject);
     // A Tool turned off isn't offered; one called all the same, e.g. as it was turned off, asks.
     if (policy === "ask" || policy === "off") return "ask";

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { CommandDone, CommandItem, ConversationAnswer } from "../../../../core/api";
-import { undoRun, useCommandRuns } from "../../assistantCommands";
+import { keptWords, undoRun, useCommandRuns } from "../../assistantCommands";
 import { commandCallText, commandRuns, runText, undoable } from "../../commandFacts";
 import { files } from "../../core";
 import { showFileLabelKey } from "../../fileInfo";
@@ -46,7 +46,7 @@ export function CommandsCard({
   const unrun = answer.toolCalls.filter(
     (call) => call.tool === "run_command" && call.status === "failed",
   );
-  const { here, undone } = useCommandRuns();
+  const { here, undone, kept } = useCommandRuns();
   if (streaming || (runs.length === 0 && unrun.length === 0)) return null;
   return (
     <section data-testid="command-changes" className="mind-changes">
@@ -78,6 +78,12 @@ export function CommandsCard({
                     <span data-testid="command-changes-undone" className="mind-changes-count">
                       {t("mindChanges.undone")}
                     </span>
+                    {(kept[run]?.length ?? 0) > 0 && (
+                      <span data-testid="command-changes-kept" className="mind-changes-count">
+                        {" "}
+                        {keptWords(kept[run] ?? [])(t)}
+                      </span>
+                    )}
                   </>
                 ) : (
                   here[run] &&

@@ -5,7 +5,8 @@
  * moves what it found by "lease" in one call, "Tag every invoice Finance" (给发票加上“财务”标签)
  * tags those found by "invoice", "Delete the drafts" sends those found by "draft" to Recently
  * deleted, and "Delete the document with id X" names an id nothing has. "Export this Mind as Word"
- * exports the Mind in focus, to the folder after "to" when there is one; "Add the PDFs in /path"
+ * exports the Mind in focus, to the folder after "to" when there is one, and "Delete this Mind"
+ * sends it to Recently deleted; "Add the PDFs in /path"
  * adds a folder's PDFs. Each then replies with the first sentence of what its calls returned.
  */
 import { lastResult, type Prompt, type Reply, toolResults } from "./prompt";
@@ -54,6 +55,7 @@ const MOVE = /\bmove the leases into (.+?)[.?!]*$|把租约移到“(.+?)”/i;
 const TAG = /\btag every invoice (.+?)[.?!]*$|给发票加上“(.+?)”标签/i;
 const DELETE_DRAFTS = /\bdelete the drafts\b/i;
 const DELETE_ID = /\bdelete the document with id (\S+?)[.?!]*$/i;
+const DELETE_MIND = /\bdelete this mind\b/i;
 const EXPORT = /\bexport this mind as word(?: to (\S+?))?[.?!]*$/i;
 const ADD = /\badd the pdfs in (\S+?)[.?!]*$/i;
 
@@ -102,6 +104,12 @@ export function commandsReply(
   if (unknown) {
     if (lastResult(prompt, "run_command") !== undefined) return said(prompt);
     return { tool: "run_command", input: { command: "document.delete", ids: [unknown[1]] } };
+  }
+  if (DELETE_MIND.test(question)) {
+    return findThen(prompt, { kind: "mind" }, (found) => {
+      const mind = found.find((each) => each.focused);
+      return mind ? { command: "mind.delete", ids: [mind.id] } : null;
+    });
   }
   const exported = EXPORT.exec(question);
   if (exported) {

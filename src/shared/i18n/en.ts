@@ -3448,6 +3448,8 @@ export const en = {
   "error.commands.notAbsolute": "“{folder}” isn't a full folder path.",
   "error.commands.noFolder": "There is no folder at “{folder}”.",
   "error.commands.noFiles": "There are no files IncarnaMind can add in {folder}.",
+  "error.commands.undoPartly": "Some changes couldn't be taken back: {reasons}",
+  "error.commands.redoPartly": "Some changes couldn't be made again: {reasons}",
   "error.commands.undoGone":
     "These changes can't be undone any more: IncarnaMind has restarted since.",
   "error.commands.wordLoses":
@@ -3500,6 +3502,26 @@ export const en = {
   "commands.ask.add.title.one": "Read 1 file in “{folder}”?",
   "commands.ask.add.text":
     "They're read on this computer and added to the Library. Nothing else in the folder is read.",
+  "commands.ask.change.document.rename": "Rename {count} Documents?",
+  "commands.ask.change.document.rename.one": "Rename “{name}”?",
+  "commands.ask.change.mind.rename": "Rename {count} Minds?",
+  "commands.ask.change.mind.rename.one": "Rename “{name}”?",
+  "commands.ask.change.document.moveTo": "Move {count} Documents to “{folder}”?",
+  "commands.ask.change.document.moveTo.one": "Move “{name}” to “{folder}”?",
+  "commands.ask.change.mind.moveTo": "Move {count} Minds to “{folder}”?",
+  "commands.ask.change.mind.moveTo.one": "Move “{name}” to “{folder}”?",
+  "commands.ask.change.document.tags": "Tag {count} Documents “{tag}”?",
+  "commands.ask.change.document.tags.one": "Tag “{name}” “{tag}”?",
+  "commands.ask.change.document.delete": "Move {count} Documents to Recently deleted?",
+  "commands.ask.change.document.delete.one": "Move “{name}” to Recently deleted?",
+  "commands.ask.change.mind.delete": "Move {count} Minds to Recently deleted?",
+  "commands.ask.change.mind.delete.one": "Move “{name}” to Recently deleted?",
+  "commands.ask.why.many": "The assistant asks before changing more than {max} things at once.",
+  "commands.ask.why.afterReading":
+    "This Answer read text you didn't write here, which could have asked for this.",
+  "commands.ask.why.focusedMind": "It's the Mind you're in.",
+  "commands.kept.folder": "Kept the Folder “{name}”: you've filed things in it since.",
+  "commands.kept.tag": "Kept the Tag “{name}”: you've tagged other Documents with it since.",
   "commands.ask.allow": "Allow",
   "commands.ask.deny": "Don't allow",
   "error.files.outside":

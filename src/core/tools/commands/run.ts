@@ -89,12 +89,19 @@ export interface Ran {
   said: string;
 }
 
-/** A command checked at the gate: what it can do, what it asks the User first, and the run. */
+/**
+ * A command checked at the gate: what it can do, what it would change inside IncarnaMind, what
+ * it would do outside it (`outside`: what its approval shows; null: nothing), and the run.
+ * Whether it asks first is the gate's to decide (`askOf`).
+ */
 export interface CheckedCommand {
   command: AssistantCommandId;
   effects: Effect[];
-  /** Null: it runs without asking. */
-  ask: CommandAsk | null;
+  /** The Documents or Minds it changes, as named now. */
+  items: CommandItem[];
+  /** The Folder or Tag it puts them in, by name. */
+  into: string | null;
+  outside: CommandAsk | null;
   run(): Promise<Ran>;
 }
 
@@ -133,7 +140,7 @@ export function parseCommandInput(input: Record<string, unknown>): CommandInput 
  * saved in the Output location or in the folder named, or a folder read and its files added.
  */
 export function commandEffects(input: Record<string, unknown>): Effect[] {
-  if (!isCommand(input.command)) return [];
+  if (!isCommand(input.command)) return [{ action: "write", scope: { kind: "anywhere" } }];
   const folder = text(input.folder);
   switch (ASSISTANT_COMMANDS[input.command].does) {
     case "app":
@@ -238,12 +245,21 @@ const mindItem = (mind: Mind, renamed?: Mind): CommandItem => ({
 
 type Checker = (input: CommandInput, host: CommandsHost) => Promise<CheckedCommand>;
 
-const inApp = (command: AssistantCommandId, run: () => Promise<Ran>): CheckedCommand => ({
-  command,
-  effects: IN_APP,
-  ask: null,
-  run,
-});
+const inApp = (
+  command: AssistantCommandId,
+  items: CommandItem[],
+  into: string | null,
+  run: () => Promise<Ran>,
+): CheckedCommand => ({ command, effects: IN_APP, items, into, outside: null, run });
+
+/** Whether a Folder holds anything: Documents filed in it, or Minds. */
+async function holdsAny(core: CommandsCore, folderId: string): Promise<boolean> {
+  const [library, minds] = await Promise.all([core.getLibrary(), core.listMinds()]);
+  return (
+    library.assignments.some((each) => each.groupId === folderId) ||
+    minds.some((mind) => mind.folderId === folderId)
+  );
+}
 
 async function folderNamed(core: CommandsCore, name: string) {
   const existing = (await core.getLibrary()).groups.find((group) => same(group.name, name));
@@ -270,15 +286,19 @@ function moveTo(command: "document.moveTo" | "mind.moveTo"): Checker {
     const name = needs(input.folder, "error.commands.noFolderName");
     const documents = kind === "document" ? await documentsOf(core, input.ids) : [];
     const minds = kind === "mind" ? await mindsOf(core, input.ids) : [];
-    const items = {
+    const moving = {
       documentIds: documents.map((each) => each.id),
       mindIds: minds.map((each) => each.id),
     };
-    return inApp(command, async () => {
+    const items = [
+      ...documents.map((each) => documentItem(each)),
+      ...minds.map((each) => mindItem(each)),
+    ];
+    return inApp(command, items, name, async () => {
       const { folder, made } = await folderNamed(core, name);
       let move: FolderMove;
       try {
-        move = await core.moveToFolder({ ...items, folderId: folder.id });
+        move = await core.moveToFolder({ ...moving, folderId: folder.id });
       } catch (error) {
         if (made) await core.deleteLibraryGroup(folder.id);
         throw error;
@@ -293,16 +313,27 @@ function moveTo(command: "document.moveTo" | "mind.moveTo"): Checker {
         ...minds.filter((each) => moved.has(each.id)).map((each) => mindItem(each)),
       ];
       const already = documents.length + minds.length - changed.length;
+      /** Whether its Undo removed the Folder it made; false: kept for what the User filed in it. */
+      let removed: boolean | null = null;
       return {
         done: { items: changed, into: { kind: "folder", id: folder.id, name: folder.name, made } },
         step: {
           undo: async () => {
             await moveBack(core, move);
-            if (made) await core.deleteLibraryGroup(folder.id);
+            if (!made || removed === false) return null;
+            // What the User filed in it since keeps it.
+            if (await holdsAny(core, folder.id)) {
+              removed = false;
+              return { kind: "folder", name: folder.name };
+            }
+            await core.deleteLibraryGroup(folder.id);
+            removed = true;
+            return null;
           },
           redo: async () => {
-            if (made) await core.restore([{ kind: "folder", id: folder.id }]);
-            move = await core.moveToFolder({ ...items, folderId: folder.id });
+            if (removed) await core.restore([{ kind: "folder", id: folder.id }]);
+            removed = null;
+            move = await core.moveToFolder({ ...moving, folderId: folder.id });
           },
         },
         said: `Moved ${plural(changed.length, kind === "document" ? "Document" : "Mind")} to the Folder “${folder.name}”${made ? ", which this made" : ""}.${already > 0 ? ` ${plural(already, "was", "were")} in it already.` : ""}`,
@@ -332,13 +363,14 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
   "document.rename": async (input, { core }) => {
     const document = onlyOne(await documentsOf(core, input.ids));
     const name = needs(input.name, "error.commands.noName");
-    return inApp("document.rename", async () => {
+    return inApp("document.rename", [documentItem(document)], null, async () => {
       const renamed = await core.renameDocument(document.id, name);
       return {
         done: { items: [documentItem(document, renamed)] },
         step: {
           undo: async () => {
             await core.renameDocument(document.id, document.name);
+            return null;
           },
           redo: async () => {
             await core.renameDocument(document.id, renamed.name);
@@ -352,13 +384,14 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
   "mind.rename": async (input, { core }) => {
     const mind = onlyOne(await mindsOf(core, input.ids));
     const name = needs(input.name, "error.commands.noName");
-    return inApp("mind.rename", async () => {
+    return inApp("mind.rename", [mindItem(mind)], null, async () => {
       const renamed = await core.renameMind(mind.id, name);
       return {
         done: { items: [mindItem(mind, renamed)] },
         step: {
           undo: async () => {
             await core.renameMind(mind.id, mind.title);
+            return null;
           },
           redo: async () => {
             await core.renameMind(mind.id, renamed.title);
@@ -375,14 +408,22 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
   "document.tags": async (input, { core }) => {
     const name = needs(input.tag, "error.commands.noTag");
     const documents = await documentsOf(core, input.ids);
-    return inApp("document.tags", async () => {
+    const items = documents.map((each) => documentItem(each));
+    return inApp("document.tags", items, name, async () => {
       const existing = (await core.listTags()).find((each) => same(each.name, name));
       const tag = existing ?? (await core.createTag({ name }));
       const made = existing === undefined;
       const changed = documents.filter((each) => !each.tags.some((one) => one.tagId === tag.id));
       const ids = changed.map((each) => each.id);
       const before = tagLinks(documents, ids, tag.id);
-      if (ids.length > 0) await core.addTagToDocuments(ids, tag.id);
+      try {
+        if (ids.length > 0) await core.addTagToDocuments(ids, tag.id);
+      } catch (error) {
+        if (made) await core.deleteTag(tag.id);
+        throw error;
+      }
+      /** Whether its Undo removed the Tag it made; false: kept for Documents the User tagged since. */
+      let removed: boolean | null = null;
       const already = documents.length - changed.length;
       return {
         done: {
@@ -392,10 +433,19 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
         step: {
           undo: async () => {
             if (ids.length > 0) await core.revertDocumentTags(before);
-            if (made) await core.deleteTag(tag.id);
+            if (!made || removed === false) return null;
+            const tagged = await core.listDocuments();
+            if (tagged.some((each) => each.tags.some((one) => one.tagId === tag.id))) {
+              removed = false;
+              return { kind: "tag", name: tag.name };
+            }
+            await core.deleteTag(tag.id);
+            removed = true;
+            return null;
           },
           redo: async () => {
-            if (made) await core.restore([{ kind: "tag", id: tag.id }]);
+            if (removed) await core.restore([{ kind: "tag", id: tag.id }]);
+            removed = null;
             if (ids.length > 0) await core.addTagToDocuments(ids, tag.id);
           },
         },
@@ -408,11 +458,18 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
     const documents = await documentsOf(core, input.ids);
     const refs = documents.map((each) => ({ kind: "document" as const, id: each.id }));
     const remove = () => deleteAll(refs, (id) => core.deleteDocument(id), core.restore);
-    return inApp("document.delete", async () => {
+    const items = documents.map((each) => documentItem(each));
+    return inApp("document.delete", items, null, async () => {
       await remove();
       return {
-        done: { items: documents.map((each) => documentItem(each)) },
-        step: { undo: () => core.restore(refs), redo: remove },
+        done: { items },
+        step: {
+          undo: async () => {
+            await core.restore(refs);
+            return null;
+          },
+          redo: remove,
+        },
         said: `Moved ${plural(documents.length, "Document")} to Recently deleted, where the User can restore them for ${RECENTLY_DELETED_DAYS} days.`,
       };
     });
@@ -422,11 +479,18 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
     const minds = await mindsOf(core, input.ids);
     const refs = minds.map((each) => ({ kind: "mind" as const, id: each.id }));
     const remove = () => deleteAll(refs, (id) => core.deleteMind(id), core.restore);
-    return inApp("mind.delete", async () => {
+    const items = minds.map((each) => mindItem(each));
+    return inApp("mind.delete", items, null, async () => {
       await remove();
       return {
-        done: { items: minds.map((each) => mindItem(each)) },
-        step: { undo: () => core.restore(refs), redo: remove },
+        done: { items },
+        step: {
+          undo: async () => {
+            await core.restore(refs);
+            return null;
+          },
+          redo: remove,
+        },
         said: `Moved ${plural(minds.length, "Mind")} to Recently deleted, where the User can restore them for ${RECENTLY_DELETED_DAYS} days.`,
       };
     });
@@ -436,9 +500,9 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
     const mind = onlyOne(await mindsOf(host.core, input.ids));
     const given = input.folder === null ? null : await folderOnDisk(input.folder);
     const output = given === null ? null : await host.outputFolder();
-    // The Output location, and any folder in it, is where the User chose new files go.
-    const elsewhere = given !== null && (output === null || !isInside(output, given));
-    const into = given !== null && given !== output ? given : null;
+    // Only the Output location itself: a folder in it may be one a sync service shares.
+    const elsewhere = given !== null && given !== output;
+    const into = elsewhere ? given : null;
     const run = async (): Promise<Ran> => {
       const file = await host.exportMind(mind.id, input.format, into, elsewhere);
       return {
@@ -455,11 +519,14 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
         said: `Saved “${mindName(mind)}” as “${file.name}” in ${elsewhere ? file.folder : `the Output location, ${file.folder}`}. A file can't be taken back with Undo.`,
       };
     };
+    const items = [mindItem(mind)];
     if (!elsewhere || given === null) {
       return {
         command: "mind.export",
         effects: [{ action: "write", scope: { kind: "output" } }],
-        ask: null,
+        items,
+        into: null,
+        outside: null,
         run,
       };
     }
@@ -467,7 +534,9 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
     return {
       command: "mind.export",
       effects: [{ action: "write", scope: { kind: "folder", path: given } }],
-      ask: {
+      items,
+      into: null,
+      outside: {
         kind: "export",
         mind: { id: mind.id, name: mindName(mind) },
         format: input.format,
@@ -487,7 +556,9 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
     return {
       command: "documents.add",
       effects: [{ action: "read", scope: { kind: "folder", path: folder } }, ...IN_APP],
-      ask: { kind: "add", folder, files },
+      items: [],
+      into: null,
+      outside: { kind: "add", folder, files },
       async run() {
         const known = new Set((await core.listDocuments()).map((each) => each.id));
         const result = await core.addDocuments(files.map((name) => join(folder, name)));
@@ -500,7 +571,10 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
             added.length === 0
               ? null
               : {
-                  undo: () => deleteAll(refs, (id) => core.deleteDocument(id), core.restore),
+                  undo: async () => {
+                    await deleteAll(refs, (id) => core.deleteDocument(id), core.restore);
+                    return null;
+                  },
                   redo: () => core.restore(refs),
                 },
           said: `Added ${plural(added.length, "Document")} from ${folder}.${already > 0 ? ` ${plural(already, "was", "were")} in the Library already.` : ""}${result.skipped.length > 0 ? ` ${plural(result.skipped.length, "file")} couldn't be added.` : ""}`,

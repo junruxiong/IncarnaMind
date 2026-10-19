@@ -108,15 +108,26 @@ Code a model writes for an analysis runs in Pyodide, in a hidden, sandboxed rend
 
 ## Amendment, 2026-10-18: the assistant runs the app's commands (#1110)
 
-The assistant can do what the User does with the app's commands. A **Commands** Tool provider gives an Answer in the assistant two Tools: `list_commands` finds the Documents or Minds a command would act on, and `run_command` runs one command on what it found, by id. It matches exactly, by words in a name, a Tag or a Folder, never by meaning. A command added later needs no new Tool, only its mark.
+The assistant can do what the User does with the app's commands. A **Commands** Tool provider gives an Answer in the assistant two Tools: `list_commands` finds the Documents or Minds a command would act on, and `run_command` runs one command on what it found, by id. It matches exactly, by words in a name, a Tag or a Folder, never by meaning. A command added later needs its mark, its check and run in the core, and a line in the Tool's description, but no new Tool.
 
-- **Only commands marked for the assistant run** (`ASSISTANT_COMMANDS`, keyed by the command list's ids, and `documents.add` for the Add Documents button, which isn't in ⌘K). An unmarked command is off. The marked ones rename, move to a Folder, tag, delete to Recently deleted, export a Mind, and add files from a folder. No mark is ever given to a command that changes consent, Local mode, keys, sign-ins, approval policies or Privacy, or that deletes for good.
+- **Only commands marked for the assistant run.** The table is `ASSISTANT_COMMANDS`, keyed by the command list's ids, plus `documents.add` for the Add Documents button, which isn't in ⌘K. An unmarked command is refused before anything runs.
+  - The marked ones rename, move to a Folder, tag, delete to Recently deleted, export a Mind, and add files from a folder.
+  - None changes consent, Local mode, keys, sign-ins, approval policies, Privacy or usage data, or deletes for good.
+  - A test pins the table and what each entry does.
 - **The core runs them**, through its own public interface, as the window's clicks do. The renderer's command list stays the window's.
-- **Effects come from each command's own metadata.** An in-app change is a write on the Library, a new scope. Export is a write to the Output location, a new scope the User chose for new files, or to the folder named. Adding files is a read of that folder plus a write on the Library.
-- **Approvals by Effect.**
-  - In-app changes run at once, and the undo line says what changed. A Run's changes are one step of Undo, kept for the session (`undoCommands`).
-  - Export into the Output location also runs at once: it adds a new file where the User chose new files to go.
-  - Export to any other folder, and reading a folder's files, ask every time. The User can Allow or Don't allow, never "always", whatever the Run read. A folder read lists the files right in that folder, of the kinds asked for, and reads nothing a link leads to outside it.
+- **Whether a call asks is decided in one place**, from what the command's entry says it does and what checking the call found, never by the command's own code.
+  - **A change inside the Library runs at once.** This holds even after the Run read Passages or third-party text, and so departs from #78's rule that new side-effecting Tools ask unless a scope grant covers them: the Library is now that grant. Each Run's changes are one step of Undo for the session. That step goes on the stack as the Run's first change lands, so a change the User makes meanwhile comes after it.
+  - **Except these, which ask:**
+    - a call that changes more than 20 things;
+    - a delete after the Run read Passages, a Connector's reply or third-party text;
+    - a delete of the Mind the User is in.
+  - **Export into the Output location itself runs at once.** The Output location is a new scope, the folder the User chose for new files. A folder inside it may be one a sync service shares, so it asks, as any other folder does.
+  - **Reading a folder's files always asks.** The ask lists the files right in that folder, of the kinds asked for, and reads nothing a link leads to outside it.
+  - **An ask offers only Allow or Don't allow.** It never offers "always", and no stored policy applies to a command.
   - None of the marked commands sends anything off the computer. A later one that does asks the same way.
+- **Undo is all or nothing per change, and leaves the User's own things alone.**
+  - A command that fails part way takes back what it did.
+  - An Undo that can't take back one change takes back the rest, says which failed, and takes back what is left when tried again. Redo then makes it all again.
+  - Undo leaves a Folder or Tag the Run made in place, and says so, when the User has put their own things in it since.
 - **Reported from results.** The card under the reply says only what each `run_command` call returned, including the failed and the denied ones.
 - **Not for every Run.** Check Runs and outside agents aren't offered them.

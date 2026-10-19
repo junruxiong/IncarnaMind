@@ -162,6 +162,27 @@ test("renaming by date, moving into a new Folder and tagging each happen at once
   await app.close();
 });
 
+test("deleting the Mind the User is in asks first, saying why, and Don't allow keeps it", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setUp(app, window);
+
+  const card = await askAndWait(window, "Delete this Mind");
+  await expect(card).toHaveAttribute("data-ask", "change");
+  await expect(card).toContainText("Move “Deal notes” to Recently deleted?");
+  await expect(card).toContainText("It's the Mind you're in.");
+  await expect(card.getByTestId("approval-always-allow")).toHaveCount(0);
+  await pointAndClick(window, card.getByTestId("approval-deny"));
+  const answer = assistantAnswers(window).last();
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(answer.getByTestId("command-changes-unrun")).toHaveText(
+    "Not allowed, so nothing changed",
+  );
+  await expect(window.getByTestId("mind-row").filter({ hasText: "Deal notes" })).toBeVisible();
+  await app.close();
+});
+
 test("a command that fails says so on the card and changes nothing", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);

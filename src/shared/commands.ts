@@ -40,11 +40,15 @@ export type MenuCommandId = keyof typeof MENU_COMMANDS;
 
 /**
  * What a command the assistant runs does, which decides whether it asks the User first
- * (ADR-0013, amended for #1110): "app", a change inside IncarnaMind that Undo takes back, runs
- * at once; "export" saves a Mind as a file, at once in the Output location and asking anywhere
- * else; "add" reads a folder's files and adds them to the Library, asking first.
+ * (ADR-0013, amended for #1110): "app", a change inside IncarnaMind that Undo takes back;
+ * "export" saves a Mind as a file; "add" reads a folder's files and adds them to the Library.
+ * `deletes`: it sends things to Recently deleted.
  */
-export type AssistantEffect = "app" | "export" | "add";
+export interface AssistantCommand {
+  on: "document" | "mind" | "library";
+  does: "app" | "export" | "add";
+  deletes: boolean;
+}
 
 /**
  * The commands of the list the assistant may run for the User (#1110), and what each does. A
@@ -53,18 +57,23 @@ export type AssistantEffect = "app" | "export" | "add";
  * Recently deleted, as the User's own does).
  */
 export const ASSISTANT_COMMANDS = {
-  "document.rename": { on: "document", does: "app" },
-  "document.moveTo": { on: "document", does: "app" },
-  "document.tags": { on: "document", does: "app" },
-  "document.delete": { on: "document", does: "app" },
-  "mind.rename": { on: "mind", does: "app" },
-  "mind.moveTo": { on: "mind", does: "app" },
-  "mind.delete": { on: "mind", does: "app" },
-  "mind.export": { on: "mind", does: "export" },
-  "documents.add": { on: "library", does: "add" },
-} as const satisfies Record<
-  CommandId,
-  { on: "document" | "mind" | "library"; does: AssistantEffect }
->;
+  "document.rename": { on: "document", does: "app", deletes: false },
+  "document.moveTo": { on: "document", does: "app", deletes: false },
+  "document.tags": { on: "document", does: "app", deletes: false },
+  "document.delete": { on: "document", does: "app", deletes: true },
+  "mind.rename": { on: "mind", does: "app", deletes: false },
+  "mind.moveTo": { on: "mind", does: "app", deletes: false },
+  "mind.delete": { on: "mind", does: "app", deletes: true },
+  "mind.export": { on: "mind", does: "export", deletes: false },
+  "documents.add": { on: "library", does: "add", deletes: false },
+} as const satisfies Record<CommandId, AssistantCommand>;
 
 export type AssistantCommandId = keyof typeof ASSISTANT_COMMANDS;
+
+/** The commands that change things inside IncarnaMind, which Undo takes back. */
+export type AppCommandId = {
+  [Id in AssistantCommandId]: (typeof ASSISTANT_COMMANDS)[Id]["does"] extends "app" ? Id : never;
+}[AssistantCommandId];
+
+export const isAppCommand = (id: AssistantCommandId): id is AppCommandId =>
+  ASSISTANT_COMMANDS[id].does === "app";

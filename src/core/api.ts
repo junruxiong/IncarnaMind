@@ -40,7 +40,7 @@ export type {
  * the renderer import it.
  */
 import type { CitationForm, CitationStyleId, StyleCatalogue } from "../shared/citationStyles";
-import type { AssistantCommandId } from "../shared/commands";
+import type { AppCommandId, AssistantCommandId } from "../shared/commands";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
 import type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate } from "../shared/meetingHelp";
 import type { MindStyle } from "../shared/mindStyle";
@@ -6964,11 +6964,31 @@ export interface ToolApprovalRequest extends ApprovalRequestBase {
 }
 
 /**
- * What a command the assistant runs for the User would do outside IncarnaMind, as its
- * approval shows it (#1110): save a Mind as a file in a folder other than the Output location,
- * or read a folder's files (`files`, by name, nothing outside it) and add them to the Library.
+ * Why a change inside IncarnaMind waits for the User (#1110): it changes more than
+ * `COMMAND_AT_ONCE` things, it deletes after its Answer read text the User didn't write here
+ * (Passages, a Connector's reply, a web page), or it deletes the Mind the User is in.
+ */
+export type CommandAskReason = "many" | "afterReading" | "focusedMind";
+
+/** How many things one call of a command may change before it asks the User first (#1110). */
+export const COMMAND_AT_ONCE = 20;
+
+/**
+ * What a command the assistant runs for the User would do, as its approval shows it (#1110):
+ * save a Mind as a file in a folder other than the Output location; read a folder's files
+ * (`files`, by name, nothing outside it) and add them to the Library; or change things inside
+ * IncarnaMind that need the User's say (`reason`), `names` the first of them.
  */
 export type CommandAsk =
+  | {
+      kind: "change";
+      command: AppCommandId;
+      reason: CommandAskReason;
+      count: number;
+      names: string[];
+      /** The Folder or Tag it would put them in, by name. */
+      into: string | null;
+    }
   | {
       kind: "export";
       mind: { id: string; name: string };
@@ -6979,6 +6999,12 @@ export type CommandAsk =
       fileName: string;
     }
   | { kind: "add"; folder: string; files: string[] };
+
+/** A Folder or Tag the commands of a Run made, left in place by their Undo: the User filed things in it since. */
+export interface CommandKept {
+  kind: "folder" | "tag";
+  name: string;
+}
 
 /**
  * A command the assistant runs for the User (#1110) waiting for their approval: it would
@@ -8021,10 +8047,12 @@ export interface CoreApi {
   restore(refs: RestoreRef[]): Promise<void>;
   /**
    * Takes back every change the commands of one of the assistant's Runs made (#1110), the last
-   * first: `CommandDone.run`. Throws NotFoundError for a Run of an earlier session.
+   * first: `CommandDone.run`. Returns the Folders and Tags it made that it left in place. A change
+   * that can't be taken back is skipped, the rest are, and it throws, saying which: called again,
+   * it tries those left. Throws NotFoundError for a Run of an earlier session.
    */
-  undoCommands(run: string): Promise<void>;
-  /** Makes again the changes `undoCommands` took back. */
+  undoCommands(run: string): Promise<CommandKept[]>;
+  /** Makes again the changes `undoCommands` took back, as far as it can, saying what it couldn't. */
   redoCommands(run: string): Promise<void>;
   /** What can be restored: the Minds, conversations, Documents, Folders and Tags deleted in the last `RECENTLY_DELETED_DAYS`, newest first. */
   listDeleted(): Promise<DeletedItem[]>;

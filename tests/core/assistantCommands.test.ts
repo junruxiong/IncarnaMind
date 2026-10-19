@@ -3,6 +3,7 @@ import { mkdir, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { ApprovalRequest, ConversationAnswer, Core } from "../../src/core";
+import { openDatabase } from "../../src/core/storage";
 import { askAssistant } from "../helpers/assistant";
 import { askAndFinish, setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent } from "../helpers/core";
@@ -28,7 +29,9 @@ type Step = (results: ModelCall["results"]) => { tool: string; input: unknown };
 /** A model that makes these calls, one a step, each from what the earlier ones returned, then replies. */
 const calling = (...steps: Step[]) =>
   scriptedModel((call) => {
-    const made = call.results.filter((each) => /^(?:list|run)_commands?$/.test(each.tool)).length;
+    const made = call.results.filter((each) =>
+      /^(?:list_commands|run_command|search_documents)$/.test(each.tool),
+    ).length;
     const step = steps[made];
     return step ? { calls: [step(call.results)] } : { text: "Done." };
   });
@@ -319,5 +322,234 @@ describe("Commands that reach outside IncarnaMind wait for the User (#1110)", {
     await core.undoCommands(runOf(answer));
     expect(await core.listDocuments()).toEqual([]);
     expect(existsSync(join(inbox, "a.md"))).toBe(true);
+  });
+});
+
+describe("What the assistant's commands ask the User first (#1110)", {
+  timeout: 90_000,
+}, () => {
+  const deny = (core: Core) => {
+    const asked: ApprovalRequest[] = [];
+    core.on("approval.requested", (request) => {
+      asked.push(request);
+      void core.respondToApproval(request.requestId, "deny");
+    });
+    return asked;
+  };
+
+  // protects=export into a folder inside the Output location, which a sync service may share, asks as anywhere else does; only the Output location itself runs at once; fails_when=a subfolder of it is written without asking; no_claim=the export itself.
+  test("export into a folder inside the Output location asks", async () => {
+    const output = await createTempDataFolder();
+    const shared = join(output, "Shared with client");
+    await mkdir(shared);
+    const model = calling(
+      find("Tides", "mind"),
+      run("mind.export", { format: "markdown", folder: shared }),
+    );
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    await core.setOutputLocation(output);
+    const asked = deny(core);
+
+    await askAssistant(core, { text: "Export this Mind to the shared folder", mindId: mind.id });
+
+    expect(asked.map((request) => "ask" in request && request.ask.kind)).toEqual(["export"]);
+    expect(await readdir(shared)).toEqual([]);
+  });
+
+  // protects=once the Answer has read Passages, a delete asks, naming how many, and Don't allow deletes nothing (an injected instruction can't empty the Library); fails_when=it runs at once; no_claim=renames and moves of a few, which still run with Undo.
+  test("a delete after reading Passages asks, and Don't allow deletes nothing", async () => {
+    const model = calling(
+      () => ({ tool: "search_documents", input: { query: "invoice" } }),
+      find("Northwind"),
+      run("document.delete"),
+    );
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const asked = deny(core);
+    const before = await names(core);
+
+    const answer = await askAssistant(core, { text: "What did Northwind bill?", mindId: mind.id });
+
+    expect(asked).toEqual([
+      expect.objectContaining({
+        ask: expect.objectContaining({
+          kind: "change",
+          command: "document.delete",
+          reason: "afterReading",
+          count: 2,
+        }),
+      }),
+    ]);
+    expect(commandCalls(answer).at(-1)?.approval).toBe("denied");
+    expect(await names(core)).toEqual(before);
+  });
+
+  // protects=one call that would change more than 20 things asks first, whatever it is, with the count; fails_when=a mass rename, move or tag runs at once; no_claim=calls of 20 or fewer.
+  test("a call that changes more than 20 things asks first", async () => {
+    const many = Array.from({ length: 21 }, (_, index) => ({
+      name: `Receipt ${index + 1}.md`,
+      contents: `# Receipt ${index + 1}\n\nPaid.\n`,
+    }));
+    const model = calling(find("Receipt"), run("document.tags", { tag: "Paid" }));
+    const { core, mind } = await setUpWithDocuments(model, many);
+    const asked = deny(core);
+
+    await askAssistant(core, { text: "Tag every receipt Paid", mindId: mind.id });
+
+    expect(asked).toEqual([
+      expect.objectContaining({
+        ask: expect.objectContaining({ kind: "change", reason: "many", count: 21, into: "Paid" }),
+      }),
+    ]);
+    expect((await core.listTags()).map((tag) => tag.name)).not.toContain("Paid");
+  });
+
+  // protects=deleting the Mind the User is in always asks; fails_when=it is sent to Recently deleted at once; no_claim=other Minds.
+  test("deleting the Mind the User is in asks", async () => {
+    const model = calling(find("Tides", "mind"), run("mind.delete"));
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const asked = deny(core);
+
+    await askAssistant(core, { text: "Delete this Mind", mindId: mind.id });
+
+    expect(asked).toEqual([
+      expect.objectContaining({
+        ask: expect.objectContaining({ reason: "focusedMind", count: 1 }),
+      }),
+    ]);
+    expect((await core.listMinds()).map((each) => each.id)).toContain(mind.id);
+  });
+
+  // protects=a stored "always" for a command, synced from elsewhere, never lets one run without asking; fails_when=an export elsewhere runs at once; no_claim=Connectors' and Skills' policies.
+  test("a stored always policy for a command is never applied", async () => {
+    const elsewhere = await createTempDataFolder();
+    const model = calling(
+      find("Tides", "mind"),
+      run("mind.export", { format: "markdown", folder: elsewhere }),
+    );
+    const { core, mind, dataDir } = await setUpWithDocuments(model, DOCUMENTS);
+    const db = openDatabase(join(dataDir, "incarnamind.db"));
+    const at = new Date().toISOString();
+    db.run(
+      `INSERT INTO approval_policies (id, subject_kind, subject_id, policy, created_at, updated_at)
+       VALUES (?, 'command', 'mind.export', 'always', ?, ?)`,
+      [crypto.randomUUID(), at, at],
+    );
+    db.close();
+    const asked = deny(core);
+
+    await askAssistant(core, { text: "Export this Mind there", mindId: mind.id });
+
+    expect(asked).toHaveLength(1);
+    expect(await readdir(elsewhere)).toEqual([]);
+  });
+});
+
+describe("Undo of the assistant's commands (#1110)", { timeout: 90_000 }, () => {
+  // protects=an Undo that can't take back one change takes back the rest, says which failed, and tried again once the cause is fixed takes back what is left; Redo then makes all of it again; fails_when=the Run is stuck half-undone, or Redo does nothing; no_claim=the window's line.
+  test("a partial Undo is tried again, then Redo makes it all again", async () => {
+    const model = calling(
+      find("Lease"),
+      (results) => ({
+        tool: "run_command",
+        input: { command: "document.rename", ids: idsFound(results), name: "Renamed lease" },
+      }),
+      find("invoice"),
+      run("document.tags", { tag: "Finance" }),
+    );
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const answer = await askAssistant(core, {
+      text: "Rename the lease and tag the invoices",
+      mindId: mind.id,
+    });
+    const lease = (await core.listDocuments()).find((each) => each.name === "Renamed lease");
+    if (!lease) throw new Error("Not renamed.");
+    await core.deleteDocument(lease.id);
+
+    await expect(core.undoCommands(runOf(answer))).rejects.toMatchObject({
+      wording: { key: "error.commands.undoPartly" },
+    });
+    expect((await core.listTags()).map((tag) => tag.name)).not.toContain("Finance");
+
+    await core.restore([{ kind: "document", id: lease.id }]);
+    await core.undoCommands(runOf(answer));
+    expect(await names(core)).toContain("Lease Harbour Street");
+
+    await core.redoCommands(runOf(answer));
+    expect(await names(core)).toContain("Renamed lease");
+    const finance = (await core.listTags()).find((tag) => tag.name === "Finance");
+    expect(
+      (await core.listDocuments()).filter((each) =>
+        each.tags.some((one) => one.tagId === finance?.id),
+      ),
+    ).toHaveLength(2);
+  });
+
+  // protects=Undo leaves in place a Folder the Run made once the User filed their own things in it, and says so; fails_when=the User's Document is unfiled; no_claim=a Folder the User made.
+  test("Undo keeps a Folder it made when the User filed something in it since", async () => {
+    const model = calling(find("Lease"), run("document.moveTo", { folder: "Real estate" }));
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const answer = await askAssistant(core, {
+      text: "Move the leases into Real estate",
+      mindId: mind.id,
+    });
+    const folder = (await core.getLibrary()).groups.find((group) => group.name === "Real estate");
+    const invoice = (await core.listDocuments()).find((each) => each.name.startsWith("Northwind"));
+    if (!folder || !invoice) throw new Error("No Folder or invoice.");
+    await core.moveToFolder({ documentIds: [invoice.id], folderId: folder.id });
+
+    expect(await core.undoCommands(runOf(answer))).toEqual([
+      { kind: "folder", name: "Real estate" },
+    ]);
+
+    const library = await core.getLibrary();
+    expect(library.groups.map((group) => group.name)).toContain("Real estate");
+    expect(library.assignments.find((each) => each.documentId === invoice.id)?.groupId).toBe(
+      folder.id,
+    );
+    const lease = (await core.listDocuments()).find((each) => each.name.startsWith("Lease"));
+    expect(
+      library.assignments.find((each) => each.documentId === lease?.id)?.groupId ?? null,
+    ).toBeNull();
+  });
+
+  // protects=Undo leaves in place a Tag the Run made once the User tagged other Documents with it, and takes it off only the Run's; fails_when=the User's own tagging is taken off; no_claim=automatic tagging.
+  test("Undo keeps a Tag it made when the User tagged something else with it since", async () => {
+    const model = calling(find("invoice"), run("document.tags", { tag: "Finance" }));
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const answer = await askAssistant(core, { text: "Tag every invoice Finance", mindId: mind.id });
+    const finance = (await core.listTags()).find((tag) => tag.name === "Finance");
+    const lease = (await core.listDocuments()).find((each) => each.name.startsWith("Lease"));
+    if (!finance || !lease) throw new Error("No Tag or lease.");
+    await core.addTagToDocuments([lease.id], finance.id);
+
+    expect(await core.undoCommands(runOf(answer))).toEqual([{ kind: "tag", name: "Finance" }]);
+
+    const tagged = (await core.listDocuments())
+      .filter((each) => each.tags.some((one) => one.tagId === finance.id))
+      .map((each) => each.name);
+    expect(tagged).toEqual(["Lease Harbour Street"]);
+  });
+
+  // protects=a tag command that fails part way leaves no empty Tag behind; fails_when=the new Tag stays with nothing tagged; no_claim=a Tag that was there already.
+  test("a tag command that fails leaves no new Tag behind", async () => {
+    const model = scriptedModel((call) => {
+      const listed = call.results.find((each) => each.tool === "list_commands");
+      if (!listed) return { calls: [find("Draft")([])] };
+      if (call.results.some((each) => each.tool === "run_command")) return { text: "Done." };
+      const ids = idsFound(call.results);
+      // Deleted first, then tagged: the Document is gone when the Tag is put on it.
+      return {
+        calls: [
+          { tool: "run_command", input: { command: "document.delete", ids } },
+          { tool: "run_command", input: { command: "document.tags", ids, tag: "Fresh" } },
+        ],
+      };
+    });
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+
+    const answer = await askAssistant(core, { text: "Delete and tag the draft", mindId: mind.id });
+
+    expect(commandCalls(answer).map((call) => call.status)).toEqual(["done", "done", "failed"]);
+    expect((await core.listTags()).map((tag) => tag.name)).not.toContain("Fresh");
   });
 });
