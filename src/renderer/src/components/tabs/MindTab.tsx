@@ -1,5 +1,6 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useId, useState } from "react";
 import { files } from "../../core";
+import { useDropTarget } from "../../dragDrop";
 import {
   CompareSheetSlotContext,
   ComposerDockContext,
@@ -20,6 +21,7 @@ import { MakeSkillCard } from "../MakeSkillCard";
 import { MeetingInMind } from "../MeetingInMind";
 import { MindEditor } from "../MindEditor";
 import { ChatReadinessNotice } from "../providers/ChatReadinessNotice";
+import { dropIntoClass } from "../sidebarRows";
 import { buttonStyle } from "../ui";
 import { useTabPlace } from "./tabItems";
 
@@ -41,7 +43,7 @@ export function MindTab({ mindId }: { mindId: string }) {
   const tabId = useTabPlace()?.tabId;
   const merged = useGroupsMerged();
   const read = useAppStore((state) => assistantTabOf(state.layout, merged)?.id === tabId);
-  const dropTarget = useWordFileDrop();
+  const wordDrop = useWordFileDrop();
   const writing = useWritingProperties(mindId);
   const pill = useQuietAssistant();
   if (!mind) return null;
@@ -49,7 +51,16 @@ export function MindTab({ mindId }: { mindId: string }) {
   return (
     <div className="relative flex min-h-0 flex-grow flex-col">
       <div className="relative flex min-h-0 flex-grow flex-col">
-        <div ref={dropTarget} className="mind-scroller min-h-0 flex-grow overflow-auto">
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: a drop target, in the capture phase because the note's own handlers accept every drag over the text; "Import a Word file…" does it without dragging. */}
+        <div
+          data-testid="mind-scroller"
+          data-drop-target={wordDrop.over ? "true" : undefined}
+          onDragEnterCapture={wordDrop.props.onDragEnter}
+          onDragOverCapture={wordDrop.props.onDragOver}
+          onDragLeave={wordDrop.props.onDragLeave}
+          onDropCapture={wordDrop.props.onDrop}
+          className={`mind-scroller min-h-0 flex-grow overflow-auto ${wordDrop.over ? `rounded-lg ${dropIntoClass}` : ""}`}
+        >
           {/* Every text in it starts at one edge (styles.css, `.mind-column`). */}
           <article
             data-testid="mind-pane"
@@ -90,26 +101,27 @@ export function MindTab({ mindId }: { mindId: string }) {
 
 /**
  * A Word file dropped on a Mind, alone, opens the import screen (#104), which
- * also offers to add it as a Document, as a drop anywhere else does. It is
- * taken before the window's own drop handling (`useFileDrop`) sees it.
+ * also offers to add it as a Document, as a drop anywhere else does. Before
+ * the drop only its type is known; a file with no path on this computer is
+ * added as the window would.
  */
 function useWordFileDrop() {
-  const [element, setElement] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    if (!element) return;
-    const drop = (event: DragEvent) => {
-      if (event.defaultPrevented || !event.dataTransfer) return;
-      const dropped = Array.from(event.dataTransfer.files);
-      const file = dropped.length === 1 ? dropped[0] : undefined;
-      const path = file && isWordFile(file.name) ? files.pathForFile(file) : "";
-      if (!path) return;
-      event.preventDefault();
-      void useWordImport.getState().open(path, true);
-    };
-    element.addEventListener("drop", drop);
-    return () => element.removeEventListener("drop", drop);
-  }, [element]);
-  return setElement;
+  return useDropTarget(`mind-word:${useId()}`, {
+    accepts(dragged) {
+      if (dragged.kind !== "files") return null;
+      const count = dragged.names?.length ?? dragged.types.length;
+      const [name] = dragged.names ?? [];
+      const word = name !== undefined ? isWordFile(name) : /word/i.test(dragged.types[0] ?? "");
+      return count === 1 && word ? { kind: "import", said: (t) => t("drop.importWord") } : null;
+    },
+    drop(dropped) {
+      const [file] = dropped.kind === "files" ? dropped.files : [];
+      if (!file) return;
+      const path = files.pathForFile(file);
+      if (path) void useWordImport.getState().open(path, true);
+      else void useAppStore.getState().addDropped([file], []);
+    },
+  });
 }
 
 /** A window with no tab open: a way to start a Mind. */

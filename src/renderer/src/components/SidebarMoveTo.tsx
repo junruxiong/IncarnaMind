@@ -1,3 +1,4 @@
+import { moveIntoFolder } from "../folderDrag";
 import { itemsOf, type MoveItems } from "../moves";
 import { nameOfMoved, useSidebarMove } from "../sidebarMoves";
 import { useAppStore } from "../store";
@@ -6,7 +7,7 @@ import { MoveToPicker } from "./MoveToPicker";
 
 // The Folder they went into opens, so they stay in sight.
 async function moveThere(items: MoveItems, folderId: string | null): Promise<void> {
-  await useAppStore.getState().moveToFolder(items, folderId);
+  await moveIntoFolder(items, folderId);
   if (folderId) useFolds.getState().reveal(folderId);
 }
 
