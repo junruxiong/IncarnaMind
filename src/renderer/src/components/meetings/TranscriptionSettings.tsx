@@ -11,7 +11,6 @@ import {
   useTranscriptionServicesList,
 } from "../../transcriptionServices";
 import { ProblemLine } from "../ProblemLine";
-import { CloudLine } from "./CloudLine";
 import { SecretStorageNotice } from "../providers/ProviderForm";
 import {
   buttonStyle,
@@ -22,6 +21,7 @@ import {
   rowTitleClass,
   ruledRowClass,
 } from "../ui";
+import { CloudLine } from "./CloudLine";
 
 /**
  * Under "Transcribe on" in Settings › Meetings (#141). Before a cloud service is chosen it says
