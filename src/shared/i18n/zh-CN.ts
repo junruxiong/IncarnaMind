@@ -275,6 +275,7 @@ export const zhCN = {
   "drop.moveTo.conversations": "将 {count} 个对话移动到“{folder}”",
   "drop.addTag": "加上标签“{tag}”",
   "drop.addTag.documents": "为 {count} 个文档加上标签“{tag}”",
+  "drop.importWord": "导入这个 Word 文件",
   "move.undo": "撤销",
   "move.undoLabel": "撤销：{message}",
   "move.dismiss": "关闭",

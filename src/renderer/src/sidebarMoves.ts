@@ -11,7 +11,6 @@ import { findTab } from "./tabs";
 
 const movable = (ref: ObjectRef) => ref.kind === "mind" || ref.kind === "document";
 
-/** What a row's drag or Move to… takes: the row, or every Mind and Document selected with it. */
 function movedFrom(row: ObjectRef, surface: SelectSurface): ObjectRef[] {
   const chosen = selectedOn(surface);
   const held = chosen.some((each) => each.kind === row.kind && each.id === row.id);
@@ -23,7 +22,6 @@ export function nameOfMoved(items: MoveItems): string {
   return movingName(translateNow, items, { minds, documents });
 }
 
-/** A row's drag, for `useDragSource`. */
 export function rowDrag(row: ObjectRef, surface: SelectSurface): ObjectDrag {
   const refs = movedFrom(row, surface);
   return { refs, name: nameOfMoved(itemsOfRefs(refs)), from: surface };
@@ -45,10 +43,19 @@ export function moveFromMenu(row: HTMLElement | null, object: ObjectRef): void {
   );
 }
 
-const shown = (element: Element | null | undefined): element is HTMLElement =>
-  element instanceof HTMLElement && element.getClientRects().length > 0;
+// In the window: the rows of a sidebar slid away still have boxes, off to its left.
+function shown(element: Element | null | undefined): element is HTMLElement {
+  if (!(element instanceof HTMLElement)) return false;
+  const box = element.getBoundingClientRect();
+  return (
+    box.width > 0 &&
+    box.right > 0 &&
+    box.left < window.innerWidth &&
+    box.bottom > 0 &&
+    box.top < window.innerHeight
+  );
+}
 
-/** Where Move to… opens from ⌘K: beside a row showing one of them, else the tab in front. */
 function anchorFor(refs: readonly ObjectRef[]): HTMLElement | null {
   for (const ref of refs) {
     const menus = document.querySelectorAll(`[data-object-menu="${CSS.escape(refKey(ref))}"]`);
@@ -56,10 +63,10 @@ function anchorFor(refs: readonly ObjectRef[]): HTMLElement | null {
     if (row) return row;
   }
   const front = document.querySelector('[data-focused] [role="tab"][aria-selected="true"]');
-  return shown(front) ? front : null;
+  if (shown(front)) return front;
+  return document.querySelector<HTMLElement>("[data-move-to-fallback]");
 }
 
-/** What a tab shows, as an object; any other object as it is. */
 function shownBy(ref: ObjectRef): ObjectRef {
   if (ref.kind !== "tab") return ref;
   const item = findTab(useAppStore.getState().layout, ref.id)?.item;
@@ -68,7 +75,6 @@ function shownBy(ref: ObjectRef): ObjectRef {
   return ref;
 }
 
-/** Opens Move to… from ⌘K for what it acts on, once the palette has closed. */
 export function moveFromPalette(targets: readonly ObjectRef[]): void {
   const refs = targets.map(shownBy);
   const items = itemsOfRefs(refs.filter(movable));

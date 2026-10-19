@@ -31,6 +31,7 @@ import { TagsDialog } from "./components/TagsDialog";
 import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
 import { WordImportDialog } from "./components/WordImportDialog";
 import { files } from "./core";
+import { useDragState } from "./dragDrop";
 import { useEscapeToDismiss } from "./escapeDismiss";
 import { useExamplesMenu, useExportMenu } from "./exportMenu";
 import { useLanguage, useT } from "./i18n";
@@ -191,6 +192,8 @@ function Workspace() {
     },
     (addresses) => void useWebPages.getState().add(addresses),
   );
+  // A target inside that takes the files (a Word file on a Mind) says what its drop does instead.
+  const takenInside = useDragState((state) => state.over !== null);
   const windowWidth = useWindowWidth();
   const assistantBeside = useAppStore((state) => {
     const place = state.layout?.assistant;
@@ -283,6 +286,12 @@ function Workspace() {
         <TabNoticeLine />
         <DropLabel />
         <CommandPalette />
+        {/* Where Move to… from ⌘K opens when nothing it moves is in sight: where the palette was. */}
+        <span
+          data-move-to-fallback
+          aria-hidden="true"
+          className="pointer-events-none fixed top-16 left-[calc(50%-8rem)] size-px"
+        />
         <SettingsDialog />
         <HistoryView />
         <TagsDialog />
@@ -301,7 +310,7 @@ function Workspace() {
         <MeetingNoticeDialog />
         <FileWriteDialog />
         <ErrorNotices />
-        {fileDrop.active && !fileDrop.links && <DropOverlay />}
+        {fileDrop.active && !fileDrop.links && !takenInside && <DropOverlay />}
         <p role="status" data-testid="sidebar-announcement" className="sr-only">
           {announcement}
         </p>

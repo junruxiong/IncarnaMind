@@ -382,7 +382,6 @@ export interface AppState extends LayoutSlice {
   removeDocumentTag(documentId: string, tagId: string): Promise<void>;
   /** Puts a Tag on several Documents at once, resolving to the change it put on the undo stack. */
   addTagToDocuments(documentIds: readonly string[], tagId: string): Promise<Undoable | null>;
-  /** Takes a Tag off several Documents at once. */
   removeTagFromDocuments(documentIds: readonly string[], tagId: string): Promise<void>;
   /** Creates a Tag; the list follows the core's event. Throws what the core throws. */
   createTag(name: string, description?: string): Promise<Tag>;

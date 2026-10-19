@@ -1,5 +1,5 @@
 import type { DragEvent } from "react";
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import type {
   Dragged,
   Dropped,
@@ -11,38 +11,53 @@ import type { ObjectRef } from "../../src/renderer/src/objects";
 import { type Undoable, useUndo } from "../../src/renderer/src/undo";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
-/*
- * The drag-and-drop layer (docs/designs/interaction-system.md, C.5): a target
- * lights only while it would take what is dragged, one at a time, clears when
- * the pointer leaves it, and its drop's change goes on the undo stack, with or
- * without a drag.
- */
+// What the drop's picture shrinks into, the motion module stood in for: there is no page here.
+const settled: unknown[] = [];
+vi.mock("../../src/renderer/src/motion", () => ({
+  exitToward: (element: unknown) => settled.push(element),
+}));
 
 type Layer = typeof import("../../src/renderer/src/dragDrop");
 let layer: Layer;
 let OBJECTS_TYPE: typeof ObjectsType;
 
-/** Just enough of an element for the drag's picture, which a test never sees. */
-function fakeElement(): Record<string, unknown> {
-  const element: Record<string, unknown> = {
+interface FakeElement {
+  children: unknown[];
+  [field: string]: unknown;
+}
+
+function fakeElement(icon: unknown = null): FakeElement {
+  const element: FakeElement = {
+    children: [],
     className: "",
     dataset: {},
     style: {},
     textContent: "",
     classList: { remove() {} },
-    append() {},
+    append(child: unknown) {
+      element.children.push(child);
+    },
     remove() {},
-    querySelector: () => null,
+    querySelector: () => icon,
     setAttribute() {},
+    cloneNode: () => ({ ...element, children: [...element.children] }),
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }),
   };
   return element;
 }
 
+class FakeIcon {
+  constructor(readonly name: string) {}
+  cloneNode() {
+    return new FakeIcon(this.name);
+  }
+  setAttribute() {}
+}
+
 beforeAll(async () => {
   Object.assign(globalThis, {
     document: { createElement: fakeElement, body: { append() {} } },
-    SVGElement: class {},
+    SVGElement: FakeIcon,
   });
   layer = await import("../../src/renderer/src/dragDrop");
   OBJECTS_TYPE = layer.OBJECTS_TYPE;
@@ -51,16 +66,20 @@ beforeAll(async () => {
 beforeEach(() => {
   useUndo.setState({ done: [], undone: [], line: null });
   layer.useDragState.setState({ over: null, at: null, source: null });
+  settled.length = 0;
+});
+afterEach(() => {
+  vi.useRealTimers();
 });
 
-/** A drag event as the browser gives one: what it carries, and where its pointer is. */
 function dragEvent(
   types: string[],
   {
     data = {},
     inside = false,
     taken = false,
-  }: { data?: Record<string, string>; inside?: boolean; taken?: boolean } = {},
+    from = fakeElement(),
+  }: { data?: Record<string, string>; inside?: boolean; taken?: boolean; from?: FakeElement } = {},
 ) {
   const store = { ...data };
   const event = {
@@ -68,7 +87,7 @@ function dragEvent(
     clientY: 60,
     defaultPrevented: taken,
     relatedTarget: {},
-    currentTarget: { contains: () => inside, ...fakeElement() },
+    currentTarget: { ...from, contains: () => inside },
     dataTransfer: {
       types,
       dropEffect: "none",
@@ -92,9 +111,8 @@ function dragEvent(
 const doc = (id: string): ObjectRef => ({ kind: "document", id });
 const mind = (id: string): ObjectRef => ({ kind: "mind", id });
 
-/** Starts dragging these from a row, as its `useDragSource` does, and returns what the drag carries. */
-function startDragging(refs: ObjectRef[]) {
-  const start = dragEvent([]);
+function startDragging(refs: ObjectRef[], from = fakeElement()) {
+  const start = dragEvent([], { from });
   // A plain function behind a hook's name: it holds no state, so a test may call it here.
   const { useDragSource: sourceOf } = layer;
   sourceOf(() => ({ refs, name: "Budget", from: "sidebar" })).onDragStart(start);
@@ -108,7 +126,6 @@ function change(said: string): Undoable {
   return { said: () => said, undo: async () => {} };
 }
 
-/** A Tag-like target: Documents only, its drop one change to undo. */
 function documentsTarget(dropped: Dropped[] = []): DropTarget {
   return {
     accepts: (dragged: Dragged) =>
@@ -205,7 +222,8 @@ describe("a drop target", () => {
     expect(useUndo.getState().done).toHaveLength(1);
   });
 
-  test("a folded target opens once the drag has rested on it", async () => {
+  test("a folded target opens once the drag has rested on it", () => {
+    vi.useFakeTimers();
     const { types, data } = startDragging([doc("a")]);
     let opened = 0;
     layer
@@ -213,8 +231,49 @@ describe("a drop target", () => {
         opened++;
       })
       .onDragOver(dragEvent(types, { data }));
+    vi.advanceTimersByTime(699);
     expect(opened).toBe(0);
-    await expect.poll(() => opened, { timeout: 2000 }).toBe(1);
+    vi.advanceTimersByTime(1);
+    expect(opened).toBe(1);
+  });
+
+  test("goes dark when it leaves the page in mid-drag, and leaves another lit one be", () => {
+    const { types, data } = startDragging([doc("a")]);
+    layer.dropProps("tag", documentsTarget()).onDragOver(dragEvent(types, { data }));
+    layer.releaseTarget("folder");
+    expect(lit()).toBe("tag");
+    layer.releaseTarget("tag");
+    expect(lit()).toBeNull();
+    expect(layer.useDragState.getState().at).toBeNull();
+  });
+
+  test("the picture that settles into the target on the drop is the one lifted, with the row's icon", () => {
+    const { types, data } = startDragging([doc("a"), doc("b")], fakeElement(new FakeIcon("row")));
+    const target = layer.dropProps("tag", documentsTarget());
+    const into = fakeElement(new FakeIcon("tag"));
+    target.onDragOver(dragEvent(types, { data, from: into }));
+    target.onDrop(dragEvent(types, { data, from: into }));
+    expect(settled).toHaveLength(1);
+    const [picture] = settled as FakeElement[];
+    expect(picture?.children[0]).toEqual(new FakeIcon("row"));
+  });
+});
+
+describe("files dragged from another app", () => {
+  test("are known by their types until the drop, which names them", () => {
+    const word = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const item = { kind: "file", type: word } as DataTransferItem;
+    expect(
+      layer.draggedIn({ types: ["Files"], items: [item] as never, files: [] as never }),
+    ).toEqual({
+      kind: "files",
+      types: [word],
+      names: null,
+    });
+    const file = { name: "Memo.docx" } as File;
+    expect(
+      layer.draggedIn({ types: ["Files"], items: [item] as never, files: [file] as never }),
+    ).toEqual({ kind: "files", types: [word], names: ["Memo.docx"] });
   });
 });
 

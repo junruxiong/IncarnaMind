@@ -1,3 +1,4 @@
+import type { Document, LibrarySnapshot, Mind } from "../../core/api";
 import { type Dropped, type DropTarget, runDrop, useDragState } from "./dragDrop";
 import { type MoveItems, moveLabel } from "./moves";
 import type { ObjectRef } from "./objects";
@@ -22,18 +23,59 @@ export const itemsOfRefs = (refs: readonly ObjectRef[]): MoveItems => ({
 const folderNow = (folderId: string | null) =>
   useAppStore.getState().library?.groups.find((group) => group.id === folderId)?.name ?? "";
 
-function wouldMove(refs: readonly ObjectRef[], folderId: string | null): boolean {
-  const { minds, library } = useAppStore.getState();
-  const folderOf = new Map(library?.assignments.map((each) => [each.documentId, each.groupId]));
-  return refs.some((ref) =>
-    ref.kind === "mind"
-      ? (minds.find((mind) => mind.id === ref.id)?.folderId ?? null) !== folderId
-      : ref.kind === "document" && (folderOf.get(ref.id) ?? null) !== folderId,
-  );
+interface Index {
+  minds: readonly Mind[];
+  library: LibrarySnapshot | null;
+  documents: readonly Document[];
+  refs: readonly ObjectRef[];
+  folderOfMind: Map<string, string | null>;
+  folderOfDocument: Map<string, string | null>;
+  documentById: Map<string, Document>;
+  moves: Map<string | null, boolean>;
+  tagged: Map<string, string[]>;
 }
 
-/** A selection of one is the row shown, and stays; several chosen to drag together are done with. */
+let index: Index | null = null;
+
+// Asked on every move of a drag, over a selection that can be the whole Library: worked out once
+// per drag and per state of the Library, then looked up.
+function indexFor(refs: readonly ObjectRef[]): Index {
+  const { minds, library, documents } = useAppStore.getState();
+  if (index?.minds !== minds || index.library !== library || index.documents !== documents) {
+    index = {
+      minds,
+      library,
+      documents,
+      refs,
+      folderOfMind: new Map(minds.map((mind) => [mind.id, mind.folderId])),
+      folderOfDocument: new Map(
+        library?.assignments.map((each) => [each.documentId, each.groupId]),
+      ),
+      documentById: new Map(documents.map((document) => [document.id, document])),
+      moves: new Map(),
+      tagged: new Map(),
+    };
+  } else if (index.refs !== refs) {
+    index = { ...index, refs, moves: new Map(), tagged: new Map() };
+  }
+  return index;
+}
+
+function wouldMove(refs: readonly ObjectRef[], folderId: string | null): boolean {
+  const known = indexFor(refs);
+  const answer = known.moves.get(folderId);
+  if (answer !== undefined) return answer;
+  const moves = refs.some((ref) =>
+    ref.kind === "mind"
+      ? (known.folderOfMind.get(ref.id) ?? null) !== folderId
+      : ref.kind === "document" && (known.folderOfDocument.get(ref.id) ?? null) !== folderId,
+  );
+  known.moves.set(folderId, moves);
+  return moves;
+}
+
 function doneWithSelection(dropped: Dropped): void {
+  // A selection of one is the row shown, and stays; several chosen to drag together are done with.
   if (dropped.kind !== "objects" || !dropped.from) return;
   if (useSelection.getState().items.length > 1) useSelection.getState().clear(dropped.from);
 }
@@ -73,17 +115,19 @@ export const moveIntoFolder = (items: MoveItems, folderId: string | null): Promi
 export const useDraggedOutOfFolder = (): boolean =>
   useDragState((state) => state.source !== null && wouldMove(state.source.refs, null));
 
-/** The Documents dragged that a Tag would change: none unless everything dragged is a Document. */
 function taggable(refs: readonly ObjectRef[], tagId: string): string[] {
-  if (refs.some((ref) => ref.kind !== "document")) return [];
-  const { documents } = useAppStore.getState();
-  return refs.flatMap((ref) => {
-    const link = documents
-      .find((document) => document.id === ref.id)
-      ?.tags.find((each) => each.tagId === tagId);
-    // An automatic Tag, or one awaiting review, becomes the User's own.
-    return link?.source !== "user" || link.needsReview ? [ref.id] : [];
-  });
+  const known = indexFor(refs);
+  const answer = known.tagged.get(tagId);
+  if (answer) return answer;
+  const ids = refs.some((ref) => ref.kind !== "document")
+    ? []
+    : refs.flatMap((ref) => {
+        const link = known.documentById.get(ref.id)?.tags.find((each) => each.tagId === tagId);
+        // An automatic Tag, or one awaiting review, becomes the User's own.
+        return link?.source !== "user" || link.needsReview ? [ref.id] : [];
+      });
+  known.tagged.set(tagId, ids);
+  return ids;
 }
 
 export function tagTarget(tagId: string): DropTarget {

@@ -324,6 +324,23 @@ for (const [language, width] of [
       await expect.poll(async () => (await where(window)).minds.Plan).toBe("Research");
       await undo(window);
       await expect.poll(async () => (await where(window)).minds.Plan).toBeNull();
+
+      // With the sidebar hidden, its row slid away, ⌘K's Move to… still opens in the window.
+      await window.keyboard.press("ControlOrMeta+Backslash");
+      await expect(window.getByTestId("sidebar-panel")).toHaveAttribute("data-hidden", "true");
+      await window.keyboard.press("ControlOrMeta+k");
+      await expect(window.getByTestId("palette-search")).toBeFocused();
+      await window.keyboard.type(t("mind.moveTo").replace("…", ""));
+      await expect(window.getByTestId("palette-item").first()).toContainText(t("mind.moveTo"));
+      await window.keyboard.press("Enter");
+      await expect(picker.getByTestId("move-to-search")).toBeFocused();
+      const shownAt = await picker.boundingBox();
+      if (!shownAt) throw new Error("Move to… isn't showing.");
+      expect(shownAt.x).toBeGreaterThanOrEqual(0);
+      expect(shownAt.x + shownAt.width).toBeLessThanOrEqual(width);
+      await window.keyboard.press("Escape");
+      await expect(picker).toBeHidden();
+      await window.keyboard.press("ControlOrMeta+Backslash");
     } finally {
       await app.close();
     }

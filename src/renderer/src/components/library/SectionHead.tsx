@@ -8,7 +8,7 @@ import { dropIntoClass } from "../sidebarRows";
  * The head of a section of the Library page, as a toggle in a Notion page:
  * the chevron that folds it, its icon, its name, how many it holds, a line
  * about it and, at its end, what it offers. It rules the section off from
- * the next in the strong rule. With `drop`, it takes what is dragged onto it.
+ * the next in the strong rule.
  */
 export function SectionHead({
   label,

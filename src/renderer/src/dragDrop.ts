@@ -1,4 +1,4 @@
-import { type DragEvent, useState } from "react";
+import { type DragEvent, useEffect, useState } from "react";
 import { create } from "zustand";
 import type { Words } from "./lineNames";
 import { exitToward } from "./motion";
@@ -25,13 +25,16 @@ export interface Point {
   y: number;
 }
 
-/** What is dragged, as far as a target can know before the drop. */
+/**
+ * Before the drop, files are known only by their types; `names` comes with the
+ * drop, or with a drag a test makes.
+ */
 export type Dragged =
   | { kind: "objects"; refs: readonly ObjectRef[] }
-  | { kind: "files" }
+  | { kind: "files"; types: readonly string[]; names: readonly string[] | null }
   | { kind: "links" };
 
-/** What a drop hands its target. `from`: the list whose selection was dragged. */
+/** `from`: the list whose selection was dragged. */
 export type Dropped =
   | { kind: "objects"; refs: readonly ObjectRef[]; from?: SelectSurface | undefined }
   | { kind: "files"; files: File[]; folders: File[] }
@@ -52,7 +55,6 @@ export interface DropTarget<Place = unknown> {
   drop(dropped: Dropped, effect: DropEffect<Place>): DropResult | Promise<DropResult>;
 }
 
-/** A drag from this window: what it carries, and the name its picture gives it. */
 export interface ObjectDrag {
   refs: readonly ObjectRef[];
   name: string;
@@ -71,6 +73,8 @@ export const useDragState = create<DragState>()(() => ({ over: null, at: null, s
 
 // A drag's data can only be read on the drop, so what is dragged is kept here for the targets it passes over.
 let dragging: ObjectDrag | null = null;
+// Its picture as lifted, so the one that settles into the target on the drop is the same.
+let lifted: HTMLElement | null = null;
 let holding: { key: string; timer: ReturnType<typeof setTimeout> } | null = null;
 
 const stopHolding = () => {
@@ -86,6 +90,7 @@ function clear(): void {
 function endDrag(): void {
   clear();
   dragging = null;
+  lifted = null;
   useDragState.setState({ source: null });
 }
 
@@ -103,6 +108,7 @@ const afterFrame = (run: () => void) =>
 
 function setPicture(event: DragEvent<HTMLElement>, name: string, count: number): void {
   const picture = pictureOf(event.currentTarget, name, count);
+  lifted = picture.cloneNode(true) as HTMLElement;
   document.body.append(picture);
   event.dataTransfer.setDragImage(picture, 12, 14);
   // The browser copies the picture as the drag starts; it isn't needed after.
@@ -161,14 +167,21 @@ export function useDragSource(drag: () => ObjectDrag | null) {
   } as const;
 }
 
-type DragData = Pick<DataTransfer, "types">;
+type DragData = Pick<DataTransfer, "types"> & Partial<Pick<DataTransfer, "items" | "files">>;
 
-/** What a drag over a target carries, or null for nothing the layer knows. */
 export function draggedIn(data: DragData): Dragged | null {
   const { types } = data;
   if (types.includes(OBJECTS_TYPE))
     return dragging ? { kind: "objects", refs: dragging.refs } : null;
-  if (types.includes("Files")) return { kind: "files" };
+  if (types.includes("Files")) {
+    const items = Array.from(data.items ?? []).filter((item) => item.kind === "file");
+    const names = Array.from(data.files ?? [], (file) => file.name);
+    return {
+      kind: "files",
+      types: items.map((item) => item.type),
+      names: names.length > 0 ? names : null,
+    };
+  }
   if (types.includes("text/uri-list")) return { kind: "links" };
   return null;
 }
@@ -217,7 +230,6 @@ const pointOf = (event: { clientX: number; clientY: number }): Point => ({
   y: event.clientY,
 });
 
-/** Puts a drop's change on the undo stack, with its line; a failure is said where it happened. */
 function finish(result: DropResult | Promise<DropResult>): Promise<void> {
   return Promise.resolve(result).then(
     (change) => {
@@ -245,10 +257,9 @@ function show(key: string, effect: DropEffect, point: Point): void {
   useDragState.setState({ ...(changed && { over: { key, effect } }), at });
 }
 
-/** The drop's picture shrinks into the row that took it (DESIGN.md, Motion). */
 function settleInto(target: Element, at: Point): void {
-  if (!dragging) return;
-  const picture = pictureOf(target, dragging.name, dragging.refs.length);
+  if (!lifted) return;
+  const picture = lifted;
   picture.classList.remove("top-0", "-left-[2000px]");
   picture.style.left = `${at.x - 12}px`;
   picture.style.top = `${at.y - 14}px`;
@@ -313,13 +324,18 @@ export function dropProps<Place>(
       clear();
       const dropped = droppedIn(event.dataTransfer);
       if (!dropped) return;
-      // A target that says what its drop does is a row: the picture shrinks into it.
+      // A target that says what its drop does is a row: the picture shrinks into it (DESIGN.md, Motion).
       if (dropped.kind === "objects" && effect.said)
         settleInto(event.currentTarget, pointOf(event));
       void finish(target.drop(dropped, effect));
       open?.();
     },
   };
+}
+
+/** A target gone mid-drag (its Folder deleted, its section folded away) gets no dragleave to go dark. */
+export function releaseTarget(key: string): void {
+  if (useDragState.getState().over?.key === key) clear();
 }
 
 /** Makes an element a drop target: `over` is what its drop would do while something it takes is over it. */
@@ -331,6 +347,7 @@ export function useDropTarget<Place = undefined>(
   const over = useDragState((state) =>
     state.over?.key === key ? (state.over.effect as DropEffect<Place>) : null,
   );
+  useEffect(() => () => releaseTarget(key), [key]);
   return { over, props: dropProps(key, target, open) };
 }
 
@@ -349,7 +366,6 @@ export function useDropArea(target: DropTarget) {
   };
   return {
     over: depth > 0 ? (entered?.effect ?? null) : null,
-    /** What was dragged in last: files or links, say. */
     dragged: entered?.dragged ?? null,
     props: {
       onDragEnter(event: DragEvent) {

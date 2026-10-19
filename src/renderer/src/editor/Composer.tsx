@@ -335,21 +335,23 @@ export function Composer({
   };
 
   /** Documents dragged from the sidebar join the Search scope, as "@" would add them. */
-  const addDocuments = (ids: readonly string[]) => {
-    const have = scopeIds(scope, "document");
-    const fresh = ids.filter((id) => !have.includes(id));
+  const addDocuments = (fresh: readonly string[]) => {
     if (fresh.length === 0) return;
-    updateScope({ ...scope, documentIds: [...have, ...fresh] });
+    updateScope({ ...scope, documentIds: [...scopeIds(scope, "document"), ...fresh] });
     field.current?.focus();
   };
-  const documentsIn = (dragged: Dragged | Dropped) =>
-    dragged.kind === "objects"
-      ? dragged.refs.flatMap((ref) => (ref.kind === "document" ? [ref.id] : []))
-      : [];
+  // Only those not in the scope yet: the composer never lights for a drop that would add nothing.
+  const freshIn = (dragged: Dragged | Dropped) => {
+    if (dragged.kind !== "objects") return [];
+    const have = scopeIds(scope, "document");
+    return dragged.refs.flatMap((ref) =>
+      ref.kind === "document" && !have.includes(ref.id) ? [ref.id] : [],
+    );
+  };
   const drop = useDropTarget(`composer:${dropKey}`, {
-    accepts: (dragged) => (documentsIn(dragged).length > 0 ? { kind: "attach" } : null),
+    accepts: (dragged) => (freshIn(dragged).length > 0 ? { kind: "attach" } : null),
     drop(dropped) {
-      addDocuments(documentsIn(dropped));
+      addDocuments(freshIn(dropped));
     },
   });
 

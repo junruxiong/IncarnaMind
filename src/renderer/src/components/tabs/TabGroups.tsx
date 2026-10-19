@@ -207,7 +207,6 @@ function TabGroup({
   );
 }
 
-/** While a tab is dragged: where it would land lights up. */
 function DragFeedback({ dragged, target }: { dragged: boolean; target: DropTarget | null }) {
   const t = useT();
   if (!dragged || !target) return null;

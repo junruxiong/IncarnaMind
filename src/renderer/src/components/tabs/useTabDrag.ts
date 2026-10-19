@@ -109,7 +109,6 @@ const tabIn = (dragged: Dragged | Dropped): string | null => {
   return ref?.kind === "tab" ? ref.id : null;
 };
 
-/** The groups as the target of a tab's drag: the tab dragged, and where it would land. */
 export function useTabDrag(merged: boolean) {
   const draggedTabId = useDragState((state) => {
     const [ref] = state.source?.refs ?? [];

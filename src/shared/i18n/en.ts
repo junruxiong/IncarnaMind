@@ -282,6 +282,7 @@ export const en = {
   "drop.moveTo.conversations": "Move {count} conversations to {folder}",
   "drop.addTag": "Add the Tag {tag}",
   "drop.addTag.documents": "Add the Tag {tag} to {count} Documents",
+  "drop.importWord": "Import the Word file",
   "move.undo": "Undo",
   "move.undoLabel": "Undo: {message}",
   "move.dismiss": "Dismiss",
