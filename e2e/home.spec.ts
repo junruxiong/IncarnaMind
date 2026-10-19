@@ -2,9 +2,10 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import { formatWeekdayDate } from "../src/shared/dates";
+import { formatLongDay } from "../src/shared/dates";
 import { translate } from "../src/shared/i18n";
 import type { MessageKey, MessageParams } from "../src/shared/i18n/types";
+import type { TestHooks } from "../src/shared/testHooks";
 import {
   createDataFolder,
   launchApp,
@@ -14,14 +15,6 @@ import {
   setWindowSize,
   sidebarFolder,
 } from "./app";
-
-/*
- * Home: a first run opens the example Mind, and every launch after it opens
- * on Home, with New Mind and its ▾ (the sidebar's New menu), Coming up,
- * Recent and the Folders as cards. Home has no composer: ⌘J goes to the
- * assistant's, and Home stays.
- * Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots there.
- */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 
@@ -61,12 +54,21 @@ const makeFolder = async (window: Page, name: string): Promise<string> =>
     name,
   );
 
+const meetingsComingUp = (window: Page, meetings: { id: string; title: string; start: string }[]) =>
+  window.evaluate(
+    (given) =>
+      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.setComingUp(given),
+    meetings,
+  );
+
 const homeTab = (window: Page) => window.getByTestId("home-tab");
 const recentRows = (window: Page) => window.getByTestId("home-recent-row");
 const recentRow = (window: Page, title: string) =>
   recentRows(window).filter({
     has: window.getByTestId("row-text").getByText(title, { exact: true }),
   });
+const shownMindName = (window: Page) =>
+  window.locator('[data-testid="mind-tab"][aria-selected="true"] [data-testid="tab-title"]');
 
 async function expectHomeInFront(window: Page): Promise<void> {
   await expect(window.getByTestId("home")).toBeVisible();
@@ -87,7 +89,7 @@ for (const [language, width] of [
   ["zh-CN", 1440],
   ["zh-CN", 900],
 ] as const) {
-  test(`a first run opens the example Mind under a sidebar of Home and Search; the next launch opens on Home with a welcome and no meetings coming up (${language}, ${width}px)`, async () => {
+  test(`a first run opens the example Mind under a sidebar of Home and Search; the next launch opens on Home with a welcome, and Coming up only once a meeting is coming (${language}, ${width}px)`, async () => {
     const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
     let { app, window } = await launchApp(dataDir, { examples: true });
     try {
@@ -97,7 +99,6 @@ for (const [language, width] of [
       await expect(window.getByTestId("mind-pane")).toBeVisible();
       await expect(window.getByTestId("home")).toHaveCount(0);
 
-      // The header, Home and Search, the example, and the foot: no New chat row, no Library yet.
       await expect(sidebar.getByTestId("plus-menu")).toBeVisible();
       await expect(sidebar.getByTestId("sidebar-home")).toHaveText(t("home.title"));
       await expect(sidebar.getByTestId("sidebar-search")).toContainText(t("sidebar.search"));
@@ -115,35 +116,32 @@ for (const [language, width] of [
       await screenshot(window, `home-first-run-${language}-${width}`);
       await app.close();
 
-      // The next launch: Home in front, the example kept in its tab behind it.
       ({ app, window } = await launchApp(dataDir, { examples: true }));
       await setWindowSize(app, window, width, 760);
       await expectHomeInFront(window);
       await expect(window.getByTestId("mind-tab")).toHaveCount(1);
-      const tabs = window.getByRole("tab");
-      await expect(tabs.first()).toHaveAttribute("data-kind", "home");
+      await expect(window.getByRole("tab").first()).toHaveAttribute("data-kind", "home");
       await expect(window.getByTestId("home-greeting")).toHaveText(
         new RegExp(
           `^(${["morning", "afternoon", "evening"].map((part) => t(`home.greeting.${part}` as MessageKey)).join("|")})$`,
         ),
       );
-      // Only the example: a welcome until the User has a Mind of their own, and no Recent yet.
       await expect(window.getByTestId("home-line")).toHaveText(t("home.welcome"));
       await expect(window.getByTestId("home-recent")).toHaveCount(0);
-      // Home has no composer of its own.
       await expect(window.getByTestId("home").getByRole("textbox")).toHaveCount(0);
+      await expect(window.getByTestId("home-coming-up")).toHaveCount(0);
+      await screenshot(window, `home-welcome-${language}-${width}`);
 
+      const inAnHour = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      await meetingsComingUp(window, [{ id: "board", title: "Harbour board", start: inAnHour }]);
       const comingUp = window.getByTestId("home-coming-up");
       await expect(comingUp).toContainText(t("home.comingUp"));
-      await expect(comingUp.getByTestId("home-no-meetings")).toContainText(t("home.noMeetings"));
-      await screenshot(window, `home-welcome-${language}-${width}`);
-      await comingUp.getByTestId("home-connect-calendar").click();
-      await expect(window.getByTestId("settings-page-meetings")).toBeVisible();
-      await window.keyboard.press("Escape");
-      await expect(window.getByTestId("settings-page-meetings")).toHaveCount(0);
-      await expectHomeInFront(window);
+      await expect(comingUp.getByTestId("home-meeting")).toHaveCount(1);
+      await expect(comingUp.getByTestId("home-meeting")).toContainText("Harbour board");
+      await expect(comingUp.getByTestId("home-meeting-time")).not.toHaveText("");
+      await meetingsComingUp(window, []);
+      await expect(comingUp).toHaveCount(0);
 
-      // The example's tab is still there, and Home comes back from the sidebar.
       await window.getByTestId("mind-tab").click();
       await expect(window.getByTestId("mind-pane")).toBeVisible();
       await expect(window.getByTestId("sidebar-home")).not.toHaveAttribute("aria-current", "page");
@@ -164,14 +162,20 @@ for (const [language, width] of [
       await setLanguage(window, language);
       await expectHomeInFront(window);
 
-      // The line under the greeting is the date alone while nothing needs the User.
-      const now = new Date();
+      const morning = new Date(2026, 9, 19, 9, 30);
+      await window.clock.setFixedTime(morning);
+      await homeTab(window).getByTestId("tab-close").click();
+      await expect(window.getByTestId("home")).toHaveCount(0);
+      await goHome(window);
+      await expect(window.getByTestId("home-greeting")).toHaveText(t("home.greeting.morning"));
       await expect(window.getByTestId("home-line")).toHaveText(
-        formatWeekdayDate(now, language, { now }),
+        formatLongDay(morning, language, { now: morning }),
+      );
+      await expect(window.getByTestId("home-line")).toHaveText(
+        language === "en" ? "Monday 19 October" : "10月19日 星期一",
       );
       await expect(window.getByTestId("home-line").getByRole("button")).toHaveCount(0);
 
-      // One click: a new Mind with the cursor in its title; Enter goes on to its text.
       await window.getByTestId("home-new-mind").click();
       const pane = window.locator('[data-testid="mind-pane"]:visible');
       await expect(pane).toHaveCount(1);
@@ -189,14 +193,12 @@ for (const [language, width] of [
       );
       await expect(homeTab(window)).toHaveCount(1);
 
-      // Back on Home it is first in Recent, with its first line under its name.
       await goHome(window);
       await expect(recentRows(window).first().getByTestId("row-text")).toHaveText("Harbour plan");
       await expect(recentRows(window).first().getByTestId("home-recent-snippet")).toHaveText(
         "Tide tables for the spring.",
       );
 
-      // The ▾ opens the same menu as the sidebar header's +.
       await window.getByTestId("plus-menu").click();
       const sidebarItems = await window
         .getByTestId("plus-menu-items")
@@ -211,7 +213,6 @@ for (const [language, width] of [
       await window.mouse.down();
       await window.mouse.up();
       await expect(items).toHaveText(sidebarItems);
-      // It opens under the button, its right edge on the button's.
       const menuBox = await window.getByTestId("home-plus-menu-items").boundingBox();
       const triggerBox = await trigger.boundingBox();
       expect(menuBox?.y ?? 0).toBeGreaterThan(triggerBox?.y ?? 0);
@@ -224,7 +225,6 @@ for (const [language, width] of [
       await expect(items).toHaveCount(0);
       await expect(trigger).toBeFocused();
 
-      // By keyboard: Enter opens it on New Mind, ↓ walks to New Folder, Enter names one in place.
       await window.keyboard.press("Enter");
       await expect(window.getByTestId("home-plus-new-mind")).toBeFocused();
       await window.keyboard.press("ArrowDown");
@@ -241,7 +241,6 @@ for (const [language, width] of [
       ).toBeVisible();
       await expectHomeInFront(window);
 
-      // ⌘J: the cursor in the assistant's composer, and Home stays in front.
       await window.getByTestId("home-greeting").click();
       await window.keyboard.press("ControlOrMeta+j");
       await expect(window.getByTestId("composer-input")).toBeFocused();
@@ -257,7 +256,7 @@ for (const [language, width] of [
   ["en", 1440],
   ["zh-CN", 900],
 ] as const) {
-  test(`Recent lists the User's Minds newest first, six and then See all, and each Folder is a card; rows and cards open by mouse and keyboard, rename with F2 and have the shared menu (${language}, ${width}px)`, async () => {
+  test(`Recent lists the User's Minds newest first, six and then See all, kept with the scroll when Home comes back; each Folder is a card in the sidebar's order; rows and cards open by mouse and keyboard, rename with F2 and have the shared menu (${language}, ${width}px)`, async () => {
     const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
     await writeFile(join(sources, "Budget.txt"), "Budget for the harbour project.\n");
     let { app, window } = await launchApp(dataDir);
@@ -278,11 +277,10 @@ for (const [language, width] of [
     await app.close();
     ({ app, window } = await launchApp(dataDir));
     try {
-      await setWindowSize(app, window, width, 900);
+      await setWindowSize(app, window, width, 760);
       await setLanguage(window, language);
       await expectHomeInFront(window);
 
-      // Newest first, six, then all seven in place.
       await expect(recentRows(window)).toHaveCount(6);
       await expect(recentRows(window).first().getByTestId("row-text")).toHaveText("Ferries");
       const all = window.getByTestId("home-recent-all");
@@ -295,7 +293,6 @@ for (const [language, width] of [
       await expect(recentRows(window)).toHaveCount(6);
       await all.click();
 
-      // The Folder column shows while there is room, and goes first when there isn't.
       const folderColumn = recentRow(window, "Q3 review").getByTestId("home-recent-folder");
       if (width >= 1100) await expect(folderColumn).toHaveText("Finance");
       else await expect(folderColumn).toBeHidden();
@@ -304,20 +301,23 @@ for (const [language, width] of [
       );
       await screenshot(window, `home-recent-${language}-${width}`);
 
-      // A click opens the Mind; Home keeps its tab.
+      const scroller = window.getByTestId("home-scroller");
+      const scrolled = await scroller.evaluate((element) => {
+        element.scrollTop = Math.min(160, element.scrollHeight - element.clientHeight);
+        return element.scrollTop;
+      });
+      expect(scrolled).toBeGreaterThan(0);
       await recentRow(window, "Tides").getByTestId("home-recent-open").click();
-      await expect(
-        window.locator('[data-testid="mind-tab"][aria-selected="true"] [data-testid="tab-title"]'),
-      ).toHaveText("Tides");
+      await expect(shownMindName(window)).toHaveText("Tides");
+      await expect(window.getByTestId("home")).toHaveCount(0);
       await expect(homeTab(window)).toHaveCount(1);
       await goHome(window);
+      await expect(recentRows(window)).toHaveCount(7);
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(scrolled);
 
-      // By keyboard: Enter opens it, F2 renames it in place.
       await recentRow(window, "Ideas").getByTestId("home-recent-open").focus();
       await window.keyboard.press("Enter");
-      await expect(
-        window.locator('[data-testid="mind-tab"][aria-selected="true"] [data-testid="tab-title"]'),
-      ).toHaveText("Ideas");
+      await expect(shownMindName(window)).toHaveText("Ideas");
       await goHome(window);
       await recentRow(window, "Moorings").getByTestId("home-recent-open").focus();
       await window.keyboard.press("F2");
@@ -327,13 +327,15 @@ for (const [language, width] of [
       await name.press("Enter");
       await expect(recentRow(window, "Mooring fees")).toHaveCount(1);
       await expect(
+        recentRow(window, "Mooring fees").getByTestId("home-recent-snippet"),
+      ).toHaveCount(0);
+      await expect(
         window
           .getByTestId("sidebar")
           .getByTestId("mind-list-item")
           .filter({ hasText: "Mooring fees" }),
       ).toHaveCount(1);
 
-      // The shared menu: a right-click, or Shift+F10 on the focused row; Esc gives the row back.
       const pilots = recentRow(window, "Pilots");
       await pilots.click({ button: "right" });
       const menu = pilots.getByTestId("mind-actions");
@@ -348,7 +350,6 @@ for (const [language, width] of [
       await window.keyboard.press("Escape");
       await expect(pilots.getByTestId("home-recent-open")).toBeFocused();
 
-      // A Folder's card: what it holds, its two latest, when it last changed, and a New Folder card.
       const card = window.getByTestId("home-folder-card").filter({ hasText: "Finance" });
       await expect(card.getByTestId("home-folder-counts")).toHaveText(
         `${t("home.minds.one")} · ${t("library.count.one")}`,
@@ -359,14 +360,12 @@ for (const [language, width] of [
       );
       const newFolder = window.getByTestId("home-new-folder");
       await expect(newFolder).toHaveText(t("menu.newFolder"));
-      // Side by side while there is room for three; two to a row on a narrower Home.
       const cardBox = await card.boundingBox();
       const newBox = await newFolder.boundingBox();
       expect(newBox?.y ?? 0).toBeCloseTo(cardBox?.y ?? 0, 0);
       expect(newBox?.x ?? 0).toBeGreaterThan((cardBox?.x ?? 0) + (cardBox?.width ?? 0));
       await screenshot(window, `home-folders-${language}-${width}`);
 
-      // A click opens the Folder in the Library; Enter on its name does too.
       await card.getByTestId("home-folder-open").click();
       await expect(window.getByTestId("library")).toBeVisible();
       await goHome(window);
@@ -375,7 +374,6 @@ for (const [language, width] of [
       await expect(window.getByTestId("library")).toBeVisible();
       await goHome(window);
 
-      // F2 renames it in place, and its menu is the Folder's.
       await card.getByTestId("home-folder-open").focus();
       await window.keyboard.press("F2");
       const folderName = window.getByTestId("home-folder-card").getByRole("textbox");
@@ -390,7 +388,6 @@ for (const [language, width] of [
       await window.keyboard.press("Escape");
       await expect(renamed.getByTestId("folder-actions")).toBeHidden();
 
-      // The New Folder card names a new Folder in place.
       await newFolder.click();
       const field = window.getByTestId("folder-rename-field");
       await expect(field).toBeFocused();
@@ -399,6 +396,14 @@ for (const [language, width] of [
       await expect(
         window.getByTestId("home-folder-card").filter({ hasText: "Research" }),
       ).toBeVisible();
+      const sidebarOrder = window
+        .getByTestId("library-folders")
+        .getByTestId("library-folder")
+        .locator(':scope > div [data-testid="row-text"]');
+      await expect(sidebarOrder).toHaveCount(2);
+      await expect(window.getByTestId("home-folder-open")).toHaveText(
+        await sidebarOrder.allTextContents(),
+      );
     } finally {
       await app.close();
     }

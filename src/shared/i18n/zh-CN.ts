@@ -187,8 +187,6 @@ export const zhCN = {
   "home.suggestions.one": "1 条推荐待确认",
   "home.newMind.more": "更多新建方式",
   "home.comingUp": "即将开始",
-  "home.noMeetings": "没有即将开始的会议",
-  "home.connectCalendar": "连接日历",
   "home.recent": "最近",
   "home.seeAll": "查看全部 {count} 个",
   "home.showFewer": "收起",

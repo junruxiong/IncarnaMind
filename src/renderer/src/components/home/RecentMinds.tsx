@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import type { Mind } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
 import { timeAgo } from "../../dates";
-import { useMindSnippets, useMinuteClock, useOwnMinds } from "../../home";
+import { useHomeView, useMindSnippets, useOwnMinds } from "../../home";
 import { useLanguage, useT } from "../../i18n";
 import { moveFromMenu } from "../../sidebarMoves";
 import { useAppStore } from "../../store";
@@ -13,12 +13,11 @@ import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 
 const FIRST_ROWS = 6;
 
-export function RecentMinds() {
+export function RecentMinds({ now }: { now: Date }) {
   const t = useT();
   const minds = useOwnMinds();
   const snippets = useMindSnippets();
-  const now = useMinuteClock();
-  const [all, setAll] = useState(false);
+  const all = useHomeView((state) => state.all);
   if (minds.length === 0) return null;
   const shown = all ? minds : minds.slice(0, FIRST_ROWS);
   return (
@@ -34,7 +33,7 @@ export function RecentMinds() {
           type="button"
           data-testid="home-recent-all"
           aria-expanded={all}
-          onClick={() => setAll(!all)}
+          onClick={() => useHomeView.setState({ all: !all })}
           className="mt-2 rounded-sm text-[13px] font-semibold text-ink-secondary hover:text-ink"
         >
           {all ? t("home.showFewer") : t("home.seeAll", { count: minds.length })}

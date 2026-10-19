@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
+import { create } from "zustand";
 import type { Mind } from "../../core/api";
 import { core } from "./core";
 import { isProcessing } from "./documentStatus";
 import { exampleMindIds, useAppStore } from "./store";
 
 const NO_MINDS: readonly Mind[] = [];
+
+// Home's tab unmounts while another is shown: what the User unfolded and where they scrolled
+// wait here for when they come back.
+export const useHomeView = create<{ all: boolean; scrollTop: number }>()(() => ({
+  all: false,
+  scrollTop: 0,
+}));
 
 export function useOwnMinds(): readonly Mind[] {
   const minds = useAppStore((state) => state.minds);

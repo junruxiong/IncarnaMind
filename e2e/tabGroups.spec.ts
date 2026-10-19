@@ -415,7 +415,6 @@ test("groups, tabs, previews, pins and widths come back after a restart, with Ho
   session = await launchApp(dataDir);
   window = session.window;
   await expect(groupsOf(window)).toHaveCount(2);
-  // Home opens after the pinned tab, and takes the focus.
   await expect(titlesIn(groupAt(window, 0))).toHaveText(["Beta", "Home", "Alpha"]);
   await expect(tabNamed(window, "Beta")).toHaveAttribute("data-pinned", "true");
   await expect(groupAt(window, 0).getByTestId("home-tab")).not.toHaveAttribute("data-pinned");

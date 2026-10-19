@@ -1,7 +1,7 @@
-import { formatWeekdayDate, partOfDay } from "../../../../shared/dates";
+import { formatLongDay, partOfDay } from "../../../../shared/dates";
 import { menuKeysLabel } from "../../commands/keymap";
 import { commands } from "../../commands/registry";
-import { useHomeNeeds, useMinuteClock, useOwnMinds } from "../../home";
+import { useHomeNeeds, useOwnMinds } from "../../home";
 import { useLanguage, useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { PencilLineIcon } from "../lineIcons";
@@ -11,10 +11,9 @@ import { primaryButtonClass } from "../ui";
 const linkClass =
   "rounded-sm font-semibold text-ink underline-offset-2 hover:underline hover:decoration-rule-strong";
 
-export function HomeHeader() {
+export function HomeHeader({ now }: { now: Date }) {
   const t = useT();
   const language = useLanguage();
-  const now = useMinuteClock();
   const own = useOwnMinds().length;
   const { reading, suggestions } = useHomeNeeds();
   const command = commands.get("mind.new");
@@ -59,7 +58,7 @@ export function HomeHeader() {
             t("home.welcome")
           ) : (
             <>
-              <span>{formatWeekdayDate(now, language, { now })}</span>
+              <span>{formatLongDay(now, language, { now })}</span>
               {needs.map((need) => (
                 <span key={need.id} className="contents">
                   <span aria-hidden="true" className="text-ink-placeholder">

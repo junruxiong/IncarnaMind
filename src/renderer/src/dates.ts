@@ -21,7 +21,6 @@ export function dayOf(
 
 const MINUTE = 60 * 1000;
 
-/** How long ago, for a list of recent work: "just now", "5 min ago", "2 h ago" today, "Yesterday", or the date. */
 export function timeAgo(
   at: Date,
   now: Date,
@@ -32,7 +31,7 @@ export function timeAgo(
   if (minutes < 1) return say("date.justNow");
   if (minutes < 60) return say("date.minutesAgo", { count: minutes });
   const days = Math.round((startOfDay(now).getTime() - startOfDay(at).getTime()) / DAY);
-  if (days <= 0) return say("date.hoursAgo", { count: Math.floor(minutes / 60) });
+  if (days <= 0) return say("date.hoursAgo", { count: Math.round(minutes / 60) });
   if (days === 1) return say("date.yesterday.ago");
   return formatShortDate(at, language, { now });
 }

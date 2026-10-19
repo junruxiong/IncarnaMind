@@ -195,7 +195,6 @@ for (const [language, width] of [
       await setLanguage(window, language);
       const sidebar = window.getByTestId("sidebar");
 
-      // Fresh: the header's +, Home, Search and the Library, then nothing until there is something.
       await expect(sidebar.getByTestId("plus-menu")).toBeVisible();
       await expect(sidebar.getByTestId("sidebar-home")).toHaveText(t("home.title"));
       await expect(sidebar.getByTestId("sidebar-search")).toContainText(t("sidebar.search"));
@@ -211,7 +210,6 @@ for (const [language, width] of [
       }
       await expect(sidebar.getByRole("button", { name: t("assistant.newChat") })).toHaveCount(0);
       await expect(sidebar.getByTestId("sidebar-sections")).toHaveText("");
-      // Home, Search, the Library and the foot share the icon and text columns.
       const left = (await sidebar.boundingBox())?.x ?? 0;
       for (const row of [
         sidebar.getByTestId("sidebar-home"),

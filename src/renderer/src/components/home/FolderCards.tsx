@@ -1,10 +1,12 @@
-import type { DocumentKind, LibraryGroup } from "../../../../core/api";
+import { useMemo } from "react";
+import type { Document, DocumentKind, LibraryGroup, Mind } from "../../../../core/api";
 import { displayName } from "../../../../shared/documentNames";
 import { mindName } from "../../../../shared/naming";
 import { commands } from "../../commands/registry";
 import { timeAgo } from "../../dates";
-import { useFolderDrop } from "../../folderDrag";
-import { useMinuteClock } from "../../home";
+import { useDropTarget } from "../../dragDrop";
+import { useFolderContents } from "../../folderContents";
+import { folderTarget } from "../../folderDrag";
 import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
 import { useAppStore } from "../../store";
@@ -17,16 +19,26 @@ import { dropIntoClass } from "../sidebarRows";
 const cardClass =
   "group relative flex min-h-[132px] min-w-0 flex-col gap-1 rounded-[10px] bg-sheet px-3.5 py-3 text-left shadow-[inset_0_0_0_1px_var(--color-rule)] hover:shadow-[inset_0_0_0_1px_var(--color-rule-strong)]";
 
-export function FolderCards() {
+const NO_MINDS: readonly Mind[] = [];
+const NO_DOCUMENTS: readonly Document[] = [];
+
+export function FolderCards({ now }: { now: Date }) {
   const t = useT();
-  const groups = useAppStore((state) => state.library?.groups) ?? [];
-  if (groups.length === 0) return null;
+  const documents = useAppStore((state) => state.documents);
+  const { orderedGroups, documentsByFolder, mindsByFolder } = useFolderContents(documents);
+  if (orderedGroups.length === 0) return null;
   return (
     <section data-testid="home-folders" className="mb-7">
       <h2 className="mb-1.5 text-label font-semibold text-ink-meta">{t("library.groups")}</h2>
       <div className="grid grid-cols-3 gap-3 @max-[760px]/home:grid-cols-2 @max-[480px]/home:grid-cols-1">
-        {groups.map((folder) => (
-          <FolderCard key={folder.id} folder={folder} />
+        {orderedGroups.map((folder) => (
+          <FolderCard
+            key={folder.id}
+            folder={folder}
+            minds={mindsByFolder.get(folder.id) ?? NO_MINDS}
+            documents={documentsByFolder.get(folder.id) ?? NO_DOCUMENTS}
+            now={now}
+          />
         ))}
         <button
           type="button"
@@ -49,48 +61,57 @@ interface Item {
   kind: DocumentKind | null;
 }
 
-function FolderCard({ folder }: { folder: LibraryGroup }) {
+function FolderCard({
+  folder,
+  minds,
+  documents,
+  now,
+}: {
+  folder: LibraryGroup;
+  minds: readonly Mind[];
+  documents: readonly Document[];
+  now: Date;
+}) {
   const t = useT();
   const language = useLanguage();
-  const now = useMinuteClock();
-  const minds = useAppStore((state) => state.minds);
-  const documents = useAppStore((state) => state.documents);
-  const assignments = useAppStore((state) => state.library?.assignments);
   const object = { kind: "folder", id: folder.id } as const;
   const objectMenu = useObjectMenu(object);
   const rename = useRename<HTMLButtonElement>(`home-folder:${folder.id}`);
-  const drop = useFolderDrop(folder.id);
-  const filed = new Set(
-    (assignments ?? []).filter((each) => each.groupId === folder.id).map((each) => each.documentId),
+  const drop = useDropTarget(`home-folder:${folder.id}`, folderTarget(folder.id));
+  const untitled = t("mind.untitled");
+  const items = useMemo<Item[]>(
+    () =>
+      [
+        ...minds.map((mind) => ({
+          id: mind.id,
+          name: mindName(mind) || untitled,
+          at: mind.updatedAt,
+          kind: null,
+        })),
+        ...documents.map((each) => ({
+          id: each.id,
+          name: displayName(each),
+          at: each.createdAt,
+          kind: each.kind,
+        })),
+      ].sort((a, b) => b.at.localeCompare(a.at)),
+    [minds, documents, untitled],
   );
-  const ownMinds = minds.filter((mind) => mind.folderId === folder.id);
-  const ownDocuments = documents.filter((each) => filed.has(each.id));
-  const items: Item[] = [
-    ...ownMinds.map((mind) => ({
-      id: mind.id,
-      name: mindName(mind) || t("mind.untitled"),
-      at: mind.updatedAt,
-      kind: null,
-    })),
-    ...ownDocuments.map((each) => ({
-      id: each.id,
-      name: displayName(each),
-      at: each.createdAt,
-      kind: each.kind,
-    })),
-  ].sort((a, b) => b.at.localeCompare(a.at));
-  const kinds = [...new Set(ownDocuments.map((each) => each.kind))].slice(0, 5);
+  const kinds = useMemo(
+    () => [...new Set(documents.map((each) => each.kind))].slice(0, 5),
+    [documents],
+  );
   const latest = items[0]?.at;
 
   return (
     <div
       data-testid="home-folder-card"
       data-folder-id={folder.id}
-      data-drop-target={drop.active ? "true" : undefined}
+      data-drop-target={drop.over ? "true" : undefined}
       {...(rename.renaming ? {} : objectMenu.rowProps)}
-      {...drop.handlers}
+      {...drop.props}
       title={folder.description || undefined}
-      className={`${cardClass} ${drop.active ? dropIntoClass : ""}`}
+      className={`${cardClass} ${drop.over ? dropIntoClass : ""}`}
     >
       <div className="flex min-w-0 items-center gap-2 font-semibold text-ink">
         <FolderLineIcon className="size-4 shrink-0 text-ink-meta" />
@@ -126,11 +147,11 @@ function FolderCard({ folder }: { folder: LibraryGroup }) {
         )}
       </div>
       <p data-testid="home-folder-counts" className="mb-1 text-label text-ink-meta">
-        {ownMinds.length === 1 ? t("home.minds.one") : t("home.minds", { count: ownMinds.length })}
+        {minds.length === 1 ? t("home.minds.one") : t("home.minds", { count: minds.length })}
         {" · "}
-        {ownDocuments.length === 1
+        {documents.length === 1
           ? t("library.count.one")
-          : t("library.count", { count: ownDocuments.length })}
+          : t("library.count", { count: documents.length })}
       </p>
       {items.slice(0, 2).map((item) => (
         <p

@@ -166,7 +166,7 @@ import { createCaptureHealth } from "./meetings/health";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
-import { createMindIndex } from "./mindIndex";
+import { createMindIndex, lineUnderName } from "./mindIndex";
 import {
   createMinds,
   type NewMind,
@@ -3095,13 +3095,9 @@ export function createCore(adapters: CoreAdapters): Core {
     searchConversations: async (query) => conversations.search(query),
     searchMinds: async (query) => mindIndex.search(query),
     listMindSnippets: async () => {
-      const lines = mindIndex.firstLines(2);
+      const leading = mindIndex.leadingLines();
       return minds.list().flatMap((mind) => {
-        // A long first line is the name cut short: the line under it is the one to show.
-        const name = mindName(mind).replace(/[\s…]+$/u, "");
-        const text = (lines.get(mind.id) ?? []).find(
-          (line) => name === "" || !line.startsWith(name),
-        );
+        const text = lineUnderName(leading.get(mind.id) ?? [], mindName(mind));
         return text ? [{ mindId: mind.id, text }] : [];
       });
     },

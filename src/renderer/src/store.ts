@@ -473,8 +473,8 @@ function windowLoadedBefore(): boolean {
     const before = sessionStorage.getItem(LOADED_KEY) !== null;
     sessionStorage.setItem(LOADED_KEY, "1");
     return before;
-  } catch {
-    // Not known, then: it opens on Home, as a new window does.
+  } catch (error) {
+    console.warn("Couldn't tell whether this window loaded before; it opens on Home.", error);
     return false;
   }
 }
@@ -867,6 +867,13 @@ export const useAppStore = create<AppState>()((set, get) => {
         const fresh = Object.fromEntries(
           Object.entries(read).filter(([list]) => !pushedSince(list as PushedList, readAt)),
         ) as Partial<Pick<AppState, PushedList>>;
+        const reloaded = windowLoadedBefore();
+        // Minds made before this setting existed count as an earlier launch.
+        const launchedBefore = settings.device.openedBefore || minds.length > 0;
+        // Before the tabs are drawn, so the Mind left in front isn't drawn only to be covered.
+        if (!offered?.mindId && launchedBefore && !reloaded) {
+          await get().openHome({ first: true });
+        }
         set({
           ...fresh,
           documents,
@@ -875,12 +882,6 @@ export const useAppStore = create<AppState>()((set, get) => {
           askedOwnAtLaunch: settings.device.gettingStarted.askedOwn,
           status: { kind: "ready" },
         });
-        const reloaded = windowLoadedBefore();
-        // Minds made before this setting existed count as an earlier launch.
-        const launchedBefore = settings.device.openedBefore || minds.length > 0;
-        if (!offered?.mindId && launchedBefore && !reloaded) {
-          await get().openHome({ first: true });
-        }
         if (!settings.device.openedBefore) {
           void get().updateSettings({ device: { openedBefore: true } });
         }

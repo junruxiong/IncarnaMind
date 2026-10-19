@@ -99,7 +99,6 @@ test("the Library is a tab beside the Mind, which stays in its own tab, and it c
     await window.getByTestId("library-tab").click();
     await expect(library).toBeVisible();
 
-    // It comes back after a restart, behind Home.
     await session.app.close();
     session = await launchApp(dataDir);
     window = session.window;

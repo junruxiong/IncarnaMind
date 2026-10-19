@@ -194,8 +194,6 @@ export const en = {
   "home.suggestions.one": "1 suggestion to review",
   "home.newMind.more": "More ways to start",
   "home.comingUp": "Coming up",
-  "home.noMeetings": "No meetings coming up",
-  "home.connectCalendar": "Connect a calendar",
   "home.recent": "Recent",
   "home.seeAll": "See all {count}",
   "home.showFewer": "Show fewer",

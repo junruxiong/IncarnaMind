@@ -26,7 +26,6 @@ const failureMessages: Record<DocumentFailureReason, MessageKey> = {
   "app-stopped": "documents.failure.appStopped",
 };
 
-/** Still being read: queued, having its text taken out, or embedded. */
 export const isProcessing = (status: DocumentStatus) =>
   status === "queued" ||
   status === "extracting" ||

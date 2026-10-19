@@ -18,6 +18,7 @@ export interface DateOptions {
  * that isn't a date gives "". Exports keep the date rules of their citation style.
  *
  *   Day            12 October          10月12日
+ *   Long day       Monday 12 October   10月12日 星期一
  *   Date           12 Oct 2026         2026年10月12日
  *   Date and time  12 Oct 2026, 15:20  2026年10月12日 15:20
  *   Time           15:20               15:20
@@ -78,12 +79,6 @@ function format(
 }
 
 /** "12 October", "10月12日". */
-/** The part of the day a greeting names: morning until noon, afternoon until six, then evening. */
-export function partOfDay(now: Date): "morning" | "afternoon" | "evening" {
-  const hour = now.getHours();
-  return hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
-}
-
 export function formatDay(moment: Moment, language: Language, options: DateOptions = {}): string {
   return format(moment, language, options, { day: "numeric", month: "long" });
 }
@@ -115,6 +110,19 @@ export function formatWeekdayDate(
     { weekday: "long", day: "numeric", month: "short" },
     true,
   );
+}
+
+/** "Monday 12 October", "10月12日 星期一": a day named in full; with the year when it isn't this one. */
+export function formatLongDay(
+  moment: Moment,
+  language: Language,
+  options: DateOptions = {},
+): string {
+  const date = toDate(moment);
+  if (Number.isNaN(date.getTime())) return "";
+  const day = format(date, language, options, { day: "numeric", month: "long" }, true);
+  const weekday = format(date, language, options, { weekday: "long" });
+  return language === "zh-CN" ? `${day} ${weekday}` : `${weekday} ${day}`;
 }
 
 /** "October 2026", "2026年10月": a date known to the month. */
@@ -161,4 +169,9 @@ export function formatDateTime(
   if (calendarOf(date, options.timeZone) === calendarOf(now, options.timeZone)) return time;
   const day = formatShortDate(date, language, { ...options, now });
   return `${day}${BETWEEN_DAY_AND_TIME[language]}${time}`;
+}
+
+export function partOfDay(now: Date): "morning" | "afternoon" | "evening" {
+  const hour = now.getHours();
+  return hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
 }

@@ -256,7 +256,6 @@ test("removing the examples deletes the example Mind, its Documents and the copi
     .toBe("gone");
   await first.app.close();
 
-  // A first run happens once: the next launch opens on Home and doesn't make them again.
   const again = await launchApp(dataDir, { examples: true });
   await expect(again.window.getByTestId("home")).toBeVisible();
   await expect(again.window.getByTestId("mind-list-item")).toHaveCount(0);
@@ -605,7 +604,6 @@ test("on a fresh install, a first checked Citation from the User's own file take
       await action();
     };
 
-    // The window takes a dropped file as the add button's sheet does.
     await step("drop the file", () =>
       window.getByTestId("add-documents-input").setInputFiles([notes]),
     );
