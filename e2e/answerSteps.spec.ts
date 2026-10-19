@@ -556,7 +556,7 @@ test("with a Chinese lease and the Chinese interface, the line names 租赁合�
   await core(window).language("zh-CN");
   await core(window).mind("授信委员会报告（草稿）");
   const before = await ask(window, "春潮什么时候出现？");
-  await expect(before.getByTestId("answer-steps")).toHaveText("读了“授信委员会报告（草稿）”");
+  await expect(before.getByTestId("answer-steps-line")).toHaveText("读了“授信委员会报告（草稿）”");
 
   await writeFile(join(sources, "租赁合同-2026.txt"), LEASE_ZH);
   await addDocuments(window, [join(sources, "租赁合同-2026.txt")]);
