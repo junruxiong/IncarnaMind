@@ -3413,7 +3413,7 @@ export const zhCN = {
   "commands.ask.why.delete.one":
     "它会移到回收站，{days} 天内可以恢复。助手删除任何内容前都会先问你。",
   "commands.ask.read": "助手读过不是你写的文字。",
-  "commands.ask.item.renamed": "{name}（这个回答中已重命名为“{renamed}”）",
+  "commands.ask.item.renamed": "{name}（这个对话中已重命名为“{renamed}”）",
   "commands.kept.folder": "保留了文件夹“{name}”：之后你在里面放了其他内容。",
   "commands.kept.tag": "保留了标签“{name}”：之后你用它标记了其他文档。",
   "commands.ask.allow": "允许",

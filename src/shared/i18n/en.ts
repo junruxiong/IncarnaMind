@@ -3533,7 +3533,7 @@ export const en = {
   "commands.ask.why.delete.one":
     "It goes to Recently deleted, where you can restore it for {days} days. The assistant always asks before it deletes.",
   "commands.ask.read": "The assistant read text you didn't write.",
-  "commands.ask.item.renamed": "{name} (renamed to “{renamed}” in this answer)",
+  "commands.ask.item.renamed": "{name} (renamed to “{renamed}” in this conversation)",
   "commands.kept.folder": "Kept the Folder “{name}”: you've filed things in it since.",
   "commands.kept.tag": "Kept the Tag “{name}”: you've tagged other Documents with it since.",
   "commands.ask.allow": "Allow",
