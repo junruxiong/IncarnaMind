@@ -101,13 +101,13 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
         data-mind-id={mind.id}
         aria-current={isOpen ? "page" : undefined}
         title={title}
-        // A click opens it; ⌘-click and Shift-click select (`useSelectable`). A middle click opens it to the side.
+        // A click opens it; ⌘-click and Shift-click select (`useSelectable`).
         onClick={select.onClick}
         onMouseDown={(event) => {
           if (event.button === 1) event.preventDefault(); // no autoscroll
         }}
         onAuxClick={(event) => {
-          if (event.button === 1) openMind(mind.id, { side: true });
+          if (event.button === 1) openMind(mind.id, { newTab: true });
         }}
         onKeyDown={(event) => {
           rename.nameProps.onKeyDown(event);

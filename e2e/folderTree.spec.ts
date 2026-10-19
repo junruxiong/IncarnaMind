@@ -225,15 +225,9 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     // In the shared order, each with its shortcut.
     await expect(actions.getByRole("menuitem")).toHaveText([
       /^Open$/,
-      /^Open to the side$/,
+      /^Open in new tab$/,
       /^Outline(⌥⌘L|Ctrl\+Alt\+L)$/,
-      /^Export as Word \(\.docx\)(⇧⌘E|Ctrl\+Shift\+E)$/,
-      /^Export as PDF$/,
-      /^Export as Source pack \(PDF\)$/,
-      /^Export as HTML$/,
-      /^Export as Web page to share \(\.html\)$/,
-      /^Export as Markdown \(\.md\)$/,
-      /^Export options…$/,
+      /^Export…$/,
       /^Export AI use statement$/,
       /^Export check record as PDF$/,
       /^Export check record as CSV$/,
@@ -281,7 +275,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(shortlist.getByTestId("mind-list-item")).toBeFocused();
     await window.keyboard.press("Shift+F10");
     await expect(actions.getByTestId("mind.open")).toBeFocused();
-    for (let step = 0; step < 19; step++) await window.keyboard.press("ArrowDown");
+    for (let step = 0; step < 13; step++) await window.keyboard.press("ArrowDown");
     await expect(actions.getByTestId("mind.moveTo")).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(picker.getByTestId("move-to-search")).toBeFocused();

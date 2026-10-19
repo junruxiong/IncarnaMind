@@ -89,13 +89,13 @@ export const mindCommands: readonly Command[] = [
     run: (ctx) => store().openMind(idsOf(ctx, "mind")[0] ?? ""),
   },
   {
-    id: "mind.openSide",
-    label: "mind.openSide",
+    id: "mind.openTab",
+    label: "mind.openTab",
     group: "open",
     appliesTo: ["mind"],
     when: onlyOne,
     reversible: true,
-    run: (ctx) => store().openMind(idsOf(ctx, "mind")[0] ?? "", { side: true }),
+    run: (ctx) => store().openMind(idsOf(ctx, "mind")[0] ?? "", { newTab: true }),
   },
   // Exporting (Export as…, Export options…) is in ./exports.
   {
@@ -147,7 +147,7 @@ export const documentCommands: readonly Command[] = [
   },
   {
     id: "document.openTab",
-    label: "document.openTab",
+    label: "mind.openTab",
     group: "open",
     appliesTo: ["document"],
     when: onlyOne,

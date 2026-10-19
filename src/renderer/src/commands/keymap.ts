@@ -81,6 +81,7 @@ export function runShortcut(
     const keys = [
       keysOn(shortcut.keys, isMac),
       ...(!isMac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
+      ...(shortcut.also ? [shortcut.also] : []),
     ];
     if (!keys.some((each) => pressed(each, event, isMac))) continue;
     if (shortcut.list && !inList(event.target)) continue;
