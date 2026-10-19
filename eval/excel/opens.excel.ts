@@ -18,7 +18,7 @@ import { convertFile, convertToPdf, findLibreOffice } from "../word/libreoffice"
 
 const OUT = process.env.INCARNAMIND_EXCEL_OUT;
 const REQUIRED = process.env.INCARNAMIND_EXCEL_REQUIRE_LIBREOFFICE === "1";
-/** Its values as stored, not as shown: a figure comes out as its number. */
+/** Its numbers as stored, without their formats; LibreOffice still writes a percentage as "12.5%". */
 const RAW_CSV = "csv:Text - txt - csv (StarCalc):44,34,76,1,,0,false,true,false,false,false";
 
 /** The workbook with a row of formulas under the table, as a person adds one in Excel. */
@@ -84,8 +84,8 @@ test("a comparison table exported to Excel opens in LibreOffice, its figures num
     expect(csv.opened, csv.problem).toBe(true);
     const rows = rowsOf(csv.data?.toString("utf8") ?? "");
     console.log(rows.map((row) => row.join(" | ")).join("\n"));
-    expect(rows[1]?.slice(1, 4).map(Number)).toEqual([1_200_000, -3_400, 0.125]);
-    expect(rows[3]?.slice(1, 4).map(Number)).toEqual([2_400_000, -4_650, 0.1075]);
+    expect(rows[1]?.slice(1, 4)).toEqual(["1200000", "-3400", "12.5%"]);
+    expect(rows[3]?.slice(1, 4)).toEqual(["2400000", "-4650", "10.75%"]);
   }
 
   // A table of 1,000 rows.

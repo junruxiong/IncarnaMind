@@ -10,7 +10,7 @@ import { mindName } from "../../shared/naming";
 import { readableQuoteText } from "../../shared/readableQuote";
 import { findBlock } from "../answers/blocks";
 import { type CitationAttributes, COMPARISON_TABLE_NODE } from "../api";
-import { InvalidInputError, NotFoundError } from "../errors";
+import { NotFoundError } from "../errors";
 import { safeFileName } from "../fileNames";
 import { type Footnote, type ReadOptions, readComparisonTable, reviewReading } from "../mindText";
 import { comparisonBook } from "./comparisonSheet";
@@ -41,7 +41,7 @@ export function createComparisonExport(deps: ComparisonExportDependencies) {
   return {
     workbook(mindId: unknown, tableId: unknown): ComparisonWorkbook {
       if (typeof tableId !== "string" || tableId === "") {
-        throw new InvalidInputError("Exporting a comparison table needs the table's id.");
+        throw new NotFoundError({ key: "error.comparison.notFound" });
       }
       const mind = deps.mind(mindId);
       const language = deps.language();
