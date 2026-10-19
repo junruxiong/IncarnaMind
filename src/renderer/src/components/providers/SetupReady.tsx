@@ -1,5 +1,5 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import type { ChatModelGroup, ChatProvider } from "../../../../core/api";
+import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
+import type { ChatProvider } from "../../../../core/api";
 import { useAnswers } from "../../answers";
 import { continueSetup } from "../../conversations";
 import { core } from "../../core";
@@ -8,13 +8,13 @@ import { useAppStore } from "../../store";
 import { CheckLineIcon } from "../lineIcons";
 import { ROUTE_LABELS, TranscriptionRouteSelect } from "../meetings/TranscriptionRouteSelect";
 import { TranscriptionRouteConsent } from "../meetings/TranscriptionSettings";
+import { ProblemLine } from "../ProblemLine";
 import { buttonStyle } from "../ui";
 import { CHATGPT_RECIPIENT } from "./ChatGptSignIn";
 import { jobSelectClass, ROWS, RoleSelect, useJobSummary, useModelRoles } from "./ModelDefaults";
 import { providerName } from "./ProviderPage";
 import { SendsLine } from "./SendsLine";
 
-/** The company a provider's questions go to, or null where they stay on this computer. */
 function recipientOf(provider: ChatProvider, name: string): string | null {
   if (provider.kind === "ollama") return null;
   if (provider.kind === "chatgpt") return CHATGPT_RECIPIENT;
@@ -34,33 +34,44 @@ export function SetupReady() {
   const user = useAppStore((state) => state.settings?.user);
   const groups = useAnswers((state) => state.models) ?? [];
   const [providers, setProviders] = useState<ChatProvider[]>([]);
+  const [listFailed, setListFailed] = useState(false);
   const roles = useModelRoles(groups);
   const next = useRef<HTMLButtonElement>(null);
 
   // The menus were read before this provider existed.
+  const loadModels = useCallback(() => {
+    setListFailed(false);
+    core.listChatModels().then(
+      (models) => useAnswers.setState({ models }),
+      (error: unknown) => {
+        console.error("The setup card couldn't read the list of models.", error);
+        setListFailed(true);
+      },
+    );
+  }, []);
   useEffect(() => {
-    useAnswers.setState({ models: null });
-    useAnswers.getState().loadModels();
+    loadModels();
+    // Local, and quick: the name and recipient don't wait for the list of models.
     core
       .listChatProviders()
       .then(setProviders, (error: unknown) =>
         console.error("The saved chat providers couldn't be listed for the setup card.", error),
       );
     next.current?.focus({ preventScroll: true });
-  }, []);
+  }, [loadModels]);
 
   const chosen = user?.chatModel;
-  const group = groups.find((each) => each.provider.id === chosen?.providerId);
-  const name = group ? providerName(group.provider, t, language) : null;
-  const recipient = group && name ? recipientOf(group.provider, name) : null;
+  const provider = providers.find((each) => each.id === chosen?.providerId);
+  const name = provider ? providerName(provider, t, language) : null;
+  const recipient = provider && name ? recipientOf(provider, name) : null;
   // Only when the Answers model can't read a scan itself, which a model's own record says.
+  const group = groups.find((each) => each.provider.id === chosen?.providerId);
   const readsImages = chosen ? group?.about[chosen.modelId]?.readsImages : undefined;
   const rows = ROWS.filter((row) => row.role !== "imageModel" || readsImages === false);
 
   return (
     <section
       data-testid="model-setup"
-      data-ready=""
       aria-labelledby={`${id}-title`}
       className="setup-card flex min-h-0 max-h-[85vh] flex-col gap-2.5 overflow-y-auto px-4"
     >
@@ -70,9 +81,17 @@ export function SetupReady() {
         data-testid="setup-ready-title"
         className="flex items-center gap-2 text-[15px] leading-6 font-semibold text-ink"
       >
-        <CheckLineIcon className="size-4 shrink-0 text-success" />
-        {name ? t("setup.ready", { name }) : t("setup.title")}
+        <CheckLineIcon className="size-4 shrink-0 text-ink" />
+        {name ? t("setup.ready", { name }) : t("setup.ready.generic")}
       </h2>
+      {listFailed && (
+        <ProblemLine
+          testId="setup-jobs-problem"
+          action={{ label: t("setup.jobs.retry"), testId: "setup-jobs-retry", onClick: loadModels }}
+        >
+          {t("setup.jobs.listFailed")}
+        </ProblemLine>
+      )}
       <section data-testid="setup-jobs" className="flex flex-col">
         <h3 className="text-[13px] leading-5 font-semibold text-ink-secondary">
           {t("setup.jobs.title")}
@@ -93,7 +112,8 @@ export function SetupReady() {
                 providers={providers}
                 roles={roles}
                 className={jobSelectClass}
-                autoFocus
+                labelledBy={`${id}-${row.role}-label`}
+                focusOnShow
                 onChosen={done}
                 onBlur={left}
                 onEscape={done}
@@ -111,7 +131,8 @@ export function SetupReady() {
             <TranscriptionRouteSelect
               id={`${id}-meetings`}
               className={jobSelectClass}
-              autoFocus
+              labelledBy={`${id}-meetings-label`}
+              focusOnShow
               onChosen={done}
               onBlur={left}
               onEscape={done}
@@ -142,7 +163,7 @@ function RoleSummary({
   roles,
 }: {
   role: (typeof ROWS)[number]["role"];
-  groups: readonly ChatModelGroup[];
+  groups: Parameters<typeof useJobSummary>[1];
   roles: ReturnType<typeof useModelRoles>;
 }) {
   return <>{useJobSummary(role, groups, roles)}</>;
@@ -154,7 +175,6 @@ function RouteSummary() {
   return <>{t(ROUTE_LABELS[route])}</>;
 }
 
-/** One job: its name, what it uses, and Change, which swaps the words for the choice, where they are. */
 function Job({
   id,
   testId,
@@ -205,9 +225,9 @@ function Job({
             ref={change}
             type="button"
             data-testid={`setup-job-${testId}-change`}
-            aria-label={`${t("setup.jobs.change")}: ${label}`}
+            aria-label={t("setup.jobs.changeJob", { job: label })}
             onClick={() => setEditing(true)}
-            className="shrink-0 text-[13px] font-semibold text-accent underline-offset-2 hover:underline"
+            className="shrink-0 text-[13px] leading-5 font-semibold text-accent underline-offset-2 hover:underline"
           >
             {t("setup.jobs.change")}
           </button>

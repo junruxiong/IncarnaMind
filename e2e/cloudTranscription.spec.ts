@@ -74,8 +74,8 @@ test("with a Soniox key, the first recording asks where to transcribe; choosing 
     await expect(row.getByTestId("transcription-key-saved")).toHaveText("Saved");
     // Offered, not chosen: this computer stays until the User picks.
     const route = settings.getByTestId("meetings-route");
-    await expect(route.locator("option")).toHaveText(["On this computer", "Soniox"]);
-    await expect(route).toHaveValue("local");
+    await expect(route.locator("option:not([hidden])")).toHaveText(["On this computer", "Soniox"]);
+    await expect(route).toHaveValue("");
     await expect(settings.getByTestId("meetings-route-line")).toHaveText(
       "Private and free: the audio never leaves this computer.",
     );
