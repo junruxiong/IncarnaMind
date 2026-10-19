@@ -304,6 +304,29 @@ describe("Changes waiting when their Mind is deleted (#1202)", () => {
     },
   );
 
+  // protects=a Restore that throws partway leaves a deleted Mind as it was: its waiting changes still count with no copy offered, and are stored deleted once storage is back, never as live text; fails_when=the failed Restore brings the Mind back in memory, so a copy is offered or the next save stores the changes live; no_claim=none beyond protects.
+  test("a Restore that fails partway leaves the deleted Mind's waiting changes as they were", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const copy = await typingIn(core);
+    const restore = failWrites(dataDir);
+    await copy.type(" LOST");
+    await core.deleteMind(copy.mindId);
+
+    await expect(
+      core.restore([
+        { kind: "mind", id: copy.mindId },
+        { kind: "mind", id: "no-such-mind" },
+      ]),
+    ).rejects.toThrow();
+
+    expect(await core.unsavedChanges()).toMatchObject({ count: 1, mindIds: [] });
+    restore();
+    expect(await core.saveChangesAgain()).toBeNull();
+    expect(storedRows(dataDir, copy.mindId)).toBe(0);
+    core.close();
+  });
+
   // protects=what waits in a deleted Mind still counts, for the notice and the quit sheet, but no copy of it is offered; fails_when=the count leaves it out, so quitting says nothing of it; no_claim=the sheet's look, which the e2e checks.
   test("a deleted Mind's waiting changes count, with no copy offered", async () => {
     const dataDir = await createTempDataFolder();

@@ -98,6 +98,9 @@ export const selectedOn = (surface: SelectSurface): readonly ObjectRef[] => {
 export const useSelectedOn = (surface: SelectSurface): readonly ObjectRef[] =>
   useSelection((state) => (state.surface === surface ? state.items : NONE));
 
+export const useSeveralSelected = (surface: SelectSurface): boolean =>
+  useSelection((state) => state.surface === surface && state.items.length > 1);
+
 /**
  * One row's part in the gestures. A click opens it and selects just it;
  * ⌘-click or Ctrl-click adds or removes it, and Shift-click extends from the
@@ -160,13 +163,15 @@ export function extendThroughRows(
   return true;
 }
 
-/** Keeps the selection to Documents and Minds that still exist, as they are deleted. */
+/** Keeps the selection to Documents, Minds and Folders that still exist, as they are deleted. */
 export function usePruneSelection(): void {
   const documents = useAppStore((state) => state.documents);
   const minds = useAppStore((state) => state.minds);
+  const folders = useAppStore((state) => state.library?.groups);
   useEffect(() => {
     const documentIds = new Set(documents.map((each) => each.id));
     const mindIds = new Set(minds.map((each) => each.id));
+    const folderIds = folders ? new Set(folders.map((each) => each.id)) : null;
     useSelection
       .getState()
       .keepOnly((ref) =>
@@ -174,9 +179,11 @@ export function usePruneSelection(): void {
           ? documentIds.has(ref.id)
           : ref.kind === "mind"
             ? mindIds.has(ref.id)
-            : true,
+            : ref.kind === "folder" && folderIds
+              ? folderIds.has(ref.id)
+              : true,
       );
-  }, [documents, minds]);
+  }, [documents, minds, folders]);
 }
 
 const shownKey = (state: ReturnType<typeof useAppStore.getState>): string | null => {

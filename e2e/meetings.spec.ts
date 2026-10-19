@@ -88,11 +88,14 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await useOutputLocation(window, sources);
   // Off until turned on: the + menu has no "Record a meeting".
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").hover();
+  await expect(window.getByTestId("plus-more-menu")).toBeVisible();
   await expect(window.getByRole("menuitem", { name: "Record a meeting" })).toHaveCount(0);
   await window.keyboard.press("Escape");
   await turnOnMeetings(window, () => shot(window, "settings-meetings-en"));
   if (SCREENSHOTS) {
     await window.getByTestId("plus-menu").click();
+    await window.getByTestId("plus-more").hover();
     await expect(window.getByRole("menuitem", { name: "Record a meeting" })).toBeVisible();
     await shot(window, "plus-menu-record-en");
     await window.keyboard.press("Escape");
