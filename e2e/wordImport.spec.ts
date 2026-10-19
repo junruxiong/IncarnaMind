@@ -250,7 +250,7 @@ test("someone else's tracked changes wait in place with who made them and when: 
 
   // Rejected by the keyboard, with the cursor in it: Priya's word goes.
   await pointAndClick(window, editor.locator("ins.proposal-theirs", { hasText: "monthly" }));
-  await expect(window.getByTestId("proposal-spoken")).toContainText("Priya Nair's change: adds");
+  await expect(window.getByTestId("proposal-spoken")).toContainText("Priya Nair’s change: adds");
   await window.keyboard.press("ControlOrMeta+Backspace");
   await expect(editor.locator("p", { hasText: "The Tenant" })).toHaveText(
     "The Tenant pays rent in advance by cheque.",
@@ -505,10 +505,10 @@ test("Export writes back into the Word file: the User's edits tracked under thei
   await expect(sheet).toBeHidden();
   await exportFromMenu(window);
   await expect(result.getByTestId("export-review")).toHaveText(
-    "1 thing in the Word file can't be kept: Marcus Hale's comment “Is spring realistic?” is on text you deleted · Export anyway",
+    "1 thing in the Word file can’t be kept: Marcus Hale’s comment “Is spring realistic?” is on text you deleted · Export anyway",
   );
   await expect(result.getByTestId("export-review-items")).toHaveText(
-    "Marcus Hale's comment “Is spring realistic?” is on text you deleted",
+    "Marcus Hale’s comment “Is spring realistic?” is on text you deleted",
   );
   expect(await readdir(output)).toEqual(["Memo.docx"]);
   await motionSettled(window);

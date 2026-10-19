@@ -23,18 +23,18 @@ describe("an error from the core", () => {
     const failure = ipc(
       "core:renameDocument",
       "InvalidInputError",
-      "A Document's name can't be empty.",
+      "A Document’s name can’t be empty.",
     );
-    expect(errorMessage(failure, english)).toBe("A Document's name can't be empty.");
+    expect(errorMessage(failure, english)).toBe("A Document’s name can’t be empty.");
     expect(describeError(failure).reason).toBeNull();
   });
 
   test("keeps the method and the class for the Details, not the wrapping", () => {
     const { detail } = describeError(
-      ipc("core:renameDocument", "InvalidInputError", "A Document's name can't be empty."),
+      ipc("core:renameDocument", "InvalidInputError", "A Document’s name can’t be empty."),
     );
     expect(detail).toBe(
-      "core:renameDocument\nInvalidInputError: A Document's name can't be empty.",
+      "core:renameDocument\nInvalidInputError: A Document’s name can’t be empty.",
     );
     expect(detail).not.toContain("Error invoking remote method");
   });
@@ -48,10 +48,10 @@ describe("an error from the core", () => {
     const failure = ipc(
       "core:addDocuments",
       "Error",
-      "Couldn't read it.\n    at read (/app/core.js:10:5)\n    at async run (/app/core.js:20:3)",
+      "Couldn’t read it.\n    at read (/app/core.js:10:5)\n    at async run (/app/core.js:20:3)",
     );
     const { message, detail } = describeError(failure);
-    expect(message).toBe("Couldn't read it.");
+    expect(message).toBe("Couldn’t read it.");
     expect(detail).not.toMatch(/\n\s+at /);
   });
 
@@ -68,7 +68,7 @@ describe("an error from the core", () => {
 const crossed = (method: string, error: Error) =>
   new Error(`Error invoking remote method '${method}': ${String(errorForWindow(error))}`);
 
-const TOO_LONG = "A Document's name can't be longer than 500 characters.";
+const TOO_LONG = "A Document’s name can’t be longer than 500 characters.";
 const tooLong = () =>
   new InvalidInputError({ key: "error.document.nameTooLong", values: { max: 500 } });
 

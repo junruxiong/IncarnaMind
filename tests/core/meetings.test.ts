@@ -543,7 +543,7 @@ describe("What a Meeting needs", () => {
     expect(inMind.mindId).toBe(mind.id);
     await expect(core.createMeeting({ mindId: mind.id })).rejects.toThrow(/already/);
     await core.startMeeting({ meetingId: inMind.id });
-    await expect(core.discardMeeting(inMind.id)).rejects.toThrow(/hasn't started/);
+    await expect(core.discardMeeting(inMind.id)).rejects.toThrow(/hasn’t started/);
   });
 
   test("while a Meeting records, Documents wait to be read, and are read once it pauses", async () => {
