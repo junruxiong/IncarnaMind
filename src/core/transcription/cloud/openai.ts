@@ -27,9 +27,9 @@ export const OPENAI_TRANSCRIPTION_URL = "wss://api.openai.com/v1/realtime?intent
 /** The Realtime API's PCM is 24 kHz. */
 const SERVICE_RATE = 24_000;
 /** What is sent from before the detector heard speech start: it notices a little late. */
-const LEAD_IN_MS = 400;
+const LEAD_IN_MS = 1200;
 /** What is kept for the lead-in. */
-const KEPT_MS = 1000;
+const KEPT_MS = 2000;
 /** The service refuses a commit of less audio than this. */
 const MIN_TURN_MS = 100;
 /** The languages a Meeting is expected in: the app's two. */

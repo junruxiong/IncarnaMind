@@ -121,8 +121,8 @@ const completedOf = (events: readonly OpenAiEvent[]) =>
       .map((each) => [each.item_id, each.transcript ?? ""]),
   );
 
-/** Ten turns of 2 s speech after 1 s of quiet, as the recording's ten turns. */
-const TURNS: [number, number][] = Array.from({ length: 10 }, (_, i) => [i * 3 + 1, i * 3 + 3]);
+/** Ten turns of 2 s speech after 4 s of quiet, as the recording's ten turns. */
+const TURNS: [number, number][] = Array.from({ length: 10 }, (_, i) => [i * 6 + 4, i * 6 + 6]);
 
 describe("OpenAI's live transcription, played back as it was recorded", () => {
   function run(events: readonly OpenAiEvent[]) {
@@ -138,7 +138,7 @@ describe("OpenAI's live transcription, played back as it was recorded", () => {
     });
     service.open();
     service.say({ type: "session.updated" });
-    feed((samples) => stream.push(samples), 31);
+    feed((samples) => stream.push(samples), 61);
     const finished = stream.finish();
     for (const event of events) if (event.type !== "session.updated") service.say(event);
     return { service, heard, finished };
@@ -164,15 +164,15 @@ describe("OpenAI's live transcription, played back as it was recorded", () => {
       },
     });
     expect(rest.filter((each) => each.type === "input_audio_buffer.commit")).toHaveLength(10);
-    // 2 s of speech in each of ten turns, from 0.4 s before the detector heard it: 24 s of 31.
+    // 2 s of speech in each of ten turns, from 1.2 s before the detector heard it: 33 s of 61.
     const appended = rest
       .filter(
         (each): each is { type: string; audio: string } =>
           each.type === "input_audio_buffer.append",
       )
       .reduce((sum, each) => sum + Buffer.from(each.audio, "base64").byteLength / 2, 0);
-    expect(appended / 24_000).toBeGreaterThan(20);
-    expect(appended / 24_000).toBeLessThan(26);
+    expect(appended / 24_000).toBeGreaterThan(30);
+    expect(appended / 24_000).toBeLessThan(36);
     expect(heard.losses).toEqual([]);
   });
 
@@ -185,11 +185,11 @@ describe("OpenAI's live transcription, played back as it was recorded", () => {
       turns.map((item, index) => [index + 1, (completed.get(item) ?? "").trim()]),
     );
     const third = heard.finals()[2];
-    // Its speech from 7 s to 9 s, from 0.4 s before the detector heard it, a frame in.
-    expect(third).toMatchObject({ startMs: 6700, endMs: 9000 });
+    // Its speech from 16 s to 18 s, from 1.2 s before the detector heard it, a frame in.
+    expect(third).toMatchObject({ startMs: 14_900, endMs: 18_000 });
     const partials = heard.segments.filter((each) => !each.final && each.id === 1);
     expect(partials.length).toBeGreaterThan(1);
-    expect(heard.progress.at(-1)).toBe(31_000);
+    expect(heard.progress.at(-1)).toBe(61_000);
   });
 
   test("results that arrive out of order still go to their own turns, matched by item_id", async () => {

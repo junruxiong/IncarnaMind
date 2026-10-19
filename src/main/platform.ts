@@ -26,7 +26,7 @@ import {
 } from "../core";
 import { runAnalysis } from "../core/analysis";
 import type { PageFetch } from "../core/documents/web/fetch";
-import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
+import { createFakeCapture, type FakeCapture, wavSamples } from "../core/meetings/fakeCapture";
 import { type LocalServers, scriptedLocalServers } from "../core/providers/localServers";
 import { type Resolve, systemResolve } from "../core/tools/web/addresses";
 import type { FakeTranscriberOptions } from "../core/transcription/fake";
@@ -580,15 +580,19 @@ function copilotStandIn(): CoreAdapters["copilotProfiles"] {
  * What records Meetings: the hidden capture window (ADR-0015). Test-only
  * launch flags: the smoke tests record a fake that makes a tone in real time,
  * so no device is ever opened (INCARNAMIND_TEST_AUDIO=fake), its computer's
- * sound allowed, denied or silent (INCARNAMIND_TEST_AUDIO_SYSTEM). They reach
- * it as `globalThis.incarnamindFakeAudio`, e.g. to change the microphone.
+ * sound allowed, denied or silent (INCARNAMIND_TEST_AUDIO_SYSTEM), or a
+ * recording played once (INCARNAMIND_TEST_AUDIO_FILE, a 16 kHz mono 16-bit WAV),
+ * for checking transcription by hand. They reach it as
+ * `globalThis.incarnamindFakeAudio`, e.g. to change the microphone.
  */
 function audioCapture(log: Logger): AudioCapture {
   if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_AUDIO === "fake") {
     const system = process.env.INCARNAMIND_TEST_AUDIO_SYSTEM;
+    const recording = process.env.INCARNAMIND_TEST_AUDIO_FILE;
     const fake = createFakeCapture({
       realTime: 100,
       system: system === "denied" || system === "silent" ? system : "allowed",
+      ...(recording && { recording: wavSamples(readFileSync(recording)) }),
     });
     (globalThis as { incarnamindFakeAudio?: FakeCapture }).incarnamindFakeAudio = fake;
     return fake;
