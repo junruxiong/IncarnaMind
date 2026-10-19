@@ -120,6 +120,24 @@ test("the first time, Record makes a Mind with no line, and ⌘Z right after it 
   await app.close();
 });
 
+test("a Record that has begun a recording says nothing, and ⌘Z right after it doesn't take the Mind back", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await readNotice(window);
+
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
+  await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
+  await expect(window.getByTestId("undo-message")).toHaveCount(0);
+
+  await leaveText(window);
+  await window.keyboard.press("ControlOrMeta+z");
+  expect(await mindsOf(window)).toHaveLength(1);
+  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
+  await app.close();
+});
+
 test("once a recording has run and stopped, ⌘Z never takes its Meeting or audio back", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);

@@ -6,9 +6,7 @@ import { core, files } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { currentMindIdOf } from "./layoutSlice";
-import type { Translate } from "./objects";
 import { useAppStore } from "./store";
-import { UNDO_SHOWN_MS, type Undoable, useUndo } from "./undo";
 
 interface MeetingsState {
   meetings: Meeting[];
@@ -96,7 +94,6 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
         const folderId = minds.find((each) => each.id === inView)?.folderId ?? null;
         const meeting = await core.createMeeting(folderId ? { folderId } : undefined);
         const starts = settings.device.meetingNoticeAccepted;
-        takeBackable(meeting, starts);
         // The notes come first in a meeting: the text has the cursor, as in a Mind made with ⌘T.
         useAppStore.setState({ bodyToFocus: meeting.mindId });
         // A tab of its own, as New Mind opens one: never in place of the Mind the User is in.
@@ -165,69 +162,8 @@ function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record
   return rest;
 }
 
-/** The Record whose new Mind Undo can still take back, by Meeting. */
-const takeBackableRecords = new Map<
-  string,
-  { change: Undoable; seen: boolean; timer?: ReturnType<typeof setTimeout> }
->();
-
-const capturedAnything = (meeting: Meeting) =>
-  meeting.audio.kept ||
-  meeting.recordedMs > 0 ||
-  meeting.status === "paused" ||
-  meeting.status === "stopped";
-
-function dropTakeBack(meetingId: string): void {
-  const pending = takeBackableRecords.get(meetingId);
-  if (!pending) return;
-  clearTimeout(pending.timer);
-  takeBackableRecords.delete(meetingId);
-  useUndo.getState().withdraw(pending.change);
-}
-
-/**
- * Offers Undo for the recording a Record just began, which takes its Mind back while nothing has
- * been recorded. Once audio is saved, or the line has gone, it doesn't offer it any more: Undo
- * never deletes a recorded Meeting or its audio. A Record that made a Mind and began nothing says
- * nothing: Delete takes the Mind back.
- */
-function takeBackable(meeting: Meeting, recording: boolean): void {
-  if (!recording) return;
-  const change = {
-    said: (t: Translate) => t("meetings.record.undo"),
-    name: (t: Translate) => t("meetings.record"),
-    undo: async () => {
-      const now = useMeetings.getState().meetings.find((each) => each.id === meeting.id);
-      if (now && capturedAnything(now)) return;
-      await core.deleteMind(meeting.mindId);
-    },
-    redo: async () => {
-      await core.restore([{ kind: "mind", id: meeting.mindId }]);
-      useAppStore.getState().openMind(meeting.mindId);
-    },
-  };
-  takeBackableRecords.set(meeting.id, { change, seen: false });
-  useUndo.getState().push(change);
-}
-
-function settleTakeBacks(meetings: readonly Meeting[]): void {
-  for (const [meetingId, pending] of takeBackableRecords) {
-    const meeting = meetings.find((each) => each.id === meetingId);
-    if (!meeting) {
-      if (pending.seen) dropTakeBack(meetingId);
-      continue;
-    }
-    pending.seen = true;
-    if (capturedAnything(meeting)) dropTakeBack(meetingId);
-    else if (meeting.recordingSince !== null && !pending.timer) {
-      pending.timer = setTimeout(() => dropTakeBack(meetingId), UNDO_SHOWN_MS);
-    }
-  }
-}
-
 core.on("meetings.changed", (meetings) => {
   useMeetings.setState({ meetings });
-  settleTakeBacks(meetings);
 });
 
 /** This copy can record audio. */

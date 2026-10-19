@@ -101,7 +101,6 @@ async function startWithADocument(language: "en" | "zh-CN" = "en") {
   return running;
 }
 
-/** A Mind made leaves no line and nothing for ⌘Z to take back, whichever way it is made: Delete takes it back. */
 async function madeQuietly(window: Page, make: () => Promise<void>): Promise<string> {
   const before = await mindIds(window);
   await make();

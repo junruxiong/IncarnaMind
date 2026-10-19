@@ -1379,7 +1379,6 @@ export function textBoxOf(target: Locator) {
   });
 }
 
-/** The box of the last line of an element's words, in CSS pixels. */
 export function lastLineBoxOf(target: Locator) {
   return target.evaluate((element) => {
     const range = document.createRange();

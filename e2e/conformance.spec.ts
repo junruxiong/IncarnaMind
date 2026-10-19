@@ -104,6 +104,7 @@ const MAKES_A_MIND = new Set([
   "document.startMind",
   "folder.ask",
   "folder.newMind",
+  "mind.aiUseStatement",
 ]);
 
 let dataDir: string;
