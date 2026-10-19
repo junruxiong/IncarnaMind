@@ -83,13 +83,13 @@ export function mindMade(
 
 /** A folder linked: undone by unlinking it, which touches nothing on disk, done again by linking it again. */
 export function folderLinked(
-  shown: string,
+  shown: () => string,
   unlink: () => Promise<unknown>,
   link: () => Promise<unknown>,
 ): Undoable {
   return {
-    said: (t) => t("undo.folderLinked", { name: shown }),
-    name: (t) => t("undo.name.linkFolder", { name: shown }),
+    said: (t) => t("undo.folderLinked", { name: shown() }),
+    name: (t) => t("undo.name.linkFolder", { name: shown() }),
     undo: async () => {
       await unlink();
     },

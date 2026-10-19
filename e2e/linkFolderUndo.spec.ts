@@ -5,6 +5,7 @@ import { type ElectronApplication, expect, type Page, test } from "@playwright/t
 import { translate } from "../src/shared/i18n";
 import {
   addDocuments,
+  confirmLink,
   coreOf,
   createDataFolder,
   dismissChatSetup,
@@ -14,6 +15,7 @@ import {
   linkedFolderRow,
   linkFolderFromSidebar,
   openLinkedFolderMenu,
+  previewLink,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -175,9 +177,16 @@ test("⌘Z ⌘Z pressed at once after a merge takes back both links, and nothing
   await app.close();
 });
 
-/** "Deals", linked, then renamed on disk to "Deals 2026" and located there from its menu. */
-async function linkAndLocate(app: ElectronApplication, window: Page): Promise<string> {
+/**
+ * "Deals", linked, then renamed on disk to "Deals 2026" and located there from its menu. With
+ * `merged`, "Deals/Inner" is linked first, so linking "Deals" merges it.
+ */
+async function linkAndLocate(app: ElectronApplication, window: Page, merged = false) {
   const folder = await folderOfNotes();
+  if (merged) {
+    await linkFolderFromSidebar(app, window, join(folder, "Inner"));
+    await expect.poll(async () => (await library(window)).documents).toHaveLength(1);
+  }
   await linkFolderFromSidebar(app, window, folder);
   await expect.poll(async () => (await library(window)).documents).toHaveLength(3);
   const moved = `${folder} 2026`;
@@ -198,6 +207,9 @@ test("after Locate, ⌘Z unlinks the folder where it is now, and ⇧⌘Z links i
   const moved = await linkAndLocate(app, window);
 
   await leaveText(window);
+  await expect
+    .poll(() => undoItem(app))
+    .toEqual({ label: "Undo Link “Deals 2026”", enabled: true });
   await window.keyboard.press("ControlOrMeta+z");
   await expect(linkedFolderRow(window, "Deals 2026")).toHaveCount(0);
   await expect.poll(() => library(window)).toEqual({ linked: [], documents: [] });
@@ -208,6 +220,90 @@ test("after Locate, ⌘Z unlinks the folder where it is now, and ⇧⌘Z links i
   await window.keyboard.press("ControlOrMeta+Shift+z");
   await expect(linkedFolderRow(window, "Deals 2026")).toHaveCount(1);
   await expect.poll(async () => (await library(window)).linked).toEqual([moved]);
+  await app.close();
+});
+
+test("after a merge and a Locate, ⌘Z links the merged folder again where it is now, its Document kept", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await start(app, window);
+  const moved = await linkAndLocate(app, window, true);
+  const inner = join(moved, "Inner");
+  const memo = (await library(window)).documents.find((each) => each.name === "Memo");
+
+  await leaveText(window);
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect
+    .poll(() => library(window))
+    .toEqual({ linked: [inner], documents: [{ name: "Memo", id: memo?.id, in: inner }] });
+  await expect(window.getByTestId("undo-line")).not.toContainText(
+    translate("en", "undo.refused", { reason: "" }),
+  );
+
+  await expect.poll(() => undoItem(app)).toEqual({ label: "Undo Link “Inner”", enabled: true });
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => library(window)).toEqual({ linked: [], documents: [] });
+  await app.close();
+});
+
+test("when a merged folder is gone, the merge's Undo says so and changes nothing", async () => {
+  const folder = await folderOfNotes();
+  const { app, window } = await launchApp(dataDir);
+  await start(app, window);
+  await linkFolderFromSidebar(app, window, join(folder, "Inner"));
+  await expect.poll(async () => (await library(window)).documents).toHaveLength(1);
+  await linkFolderFromSidebar(app, window, folder);
+  await expect.poll(async () => (await library(window)).linked).toEqual([folder]);
+  await rm(join(folder, "Inner"), { recursive: true });
+
+  await leaveText(window);
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(window.getByTestId("undo-line")).toContainText(
+    translate("en", "undo.refused", { reason: "" }),
+  );
+  expect((await library(window)).linked).toEqual([folder]);
+  await app.close();
+});
+
+test("the line of a link that merges 600 Documents shows within 100 ms of the click, on the page's clock", async () => {
+  const folder = await folderOfNotes();
+  await Promise.all(
+    Array.from({ length: 599 }, (_, index) =>
+      writeFile(join(folder, "Inner", `Note ${index + 1}.md`), `# Note ${index + 1}\n\nA line.\n`),
+    ),
+  );
+  const { app, window } = await launchApp(dataDir);
+  await start(app, window);
+  await linkFolderFromSidebar(app, window, join(folder, "Inner"));
+  await expect
+    .poll(async () => (await library(window)).documents.length, { timeout: 60_000 })
+    .toBe(600);
+  const dialog = await previewLink(app, window, folder);
+  await window.evaluate(() => {
+    const times = window as unknown as { clicked?: number; shown?: number };
+    document.addEventListener(
+      "click",
+      (event) => {
+        if ((event.target as Element).closest('[data-testid="link-folder-confirm"]')) {
+          times.clicked = performance.now();
+        }
+      },
+      true,
+    );
+    new MutationObserver(() => {
+      const line = document.querySelector('[data-testid="undo-line"]');
+      if (times.shown === undefined && line?.textContent?.includes("Deals")) {
+        times.shown = performance.now();
+      }
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  await confirmLink(dialog);
+  await expect(window.getByTestId("undo-line")).toContainText("Linked “Deals”");
+  const { clicked, shown } = await window.evaluate(() => {
+    const times = window as unknown as { clicked?: number; shown?: number };
+    return { clicked: times.clicked ?? null, shown: times.shown ?? null };
+  });
+  expect(clicked).not.toBeNull();
+  expect((shown ?? Number.POSITIVE_INFINITY) - (clicked ?? 0)).toBeLessThan(100);
   await app.close();
 });
 
