@@ -1,6 +1,6 @@
 /**
- * Key prefixes that name their service, as its own pages show them: Anthropic's admin key
- * (platform.claude.com/docs/en/manage-claude/admin-api), OpenRouter's example key
+ * Key prefixes that name their service, as its own pages show them: Anthropic's keys
+ * (platform.claude.com/docs/en/manage-claude/authentication), OpenRouter's example key
  * (openrouter.ai/docs/api/api-reference/oauth/exchange-authorization-code-for-api-key), xAI's
  * `XAI_API_KEY` example (docs.x.ai/build/overview), OpenAI's project keys and the marker every
  * one of its keys carries, and Google's AIza keys and the AQ. keys AI Studio now makes (a Google
@@ -12,10 +12,10 @@ const OWN_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   anthropic: ["sk-ant-"],
   openrouter: ["sk-or-"],
   xai: ["xai-"],
-  google: ["AIza", "AQ."],
+  google: ["AQ.", "AIza"],
 };
 
-const OPENAI = /^sk-(?:proj|None|svcacct|admin)-|^sk-[\w-]*T3BlbkFJ/;
+const OPENAI = /^sk-(?:proj|None)-|^sk-[\w-]*T3BlbkFJ/;
 
 export type KeyCheck =
   | { ok: true }
@@ -43,5 +43,4 @@ export function checkKey(catalogId: string, key: string): KeyCheck {
   return { ok: true };
 }
 
-/** The service a key's prefix names, if it names one. */
 export const serviceOfKey = (key: string): string | null => serviceNamedBy(key.trim());

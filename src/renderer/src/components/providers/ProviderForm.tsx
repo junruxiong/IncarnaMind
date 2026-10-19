@@ -208,6 +208,7 @@ export function ProviderForm({
     keyField.current?.focus({ preventScroll: true });
   }, []);
   const outcome = useRef<HTMLDivElement>(null);
+  const keyLine = useRef<HTMLDivElement>(null);
   // The setup card keeps the action row at its foot, which would leave a failure under it out of sight.
   useEffect(() => {
     if (test?.ok === false || error) outcome.current?.scrollIntoView({ block: "nearest" });
@@ -248,6 +249,11 @@ export function ProviderForm({
     kind !== null && kind !== "openai-compatible" && !local ? kind : null,
     apiKey,
   );
+  const keyLineShown = keyCheck.blocked || switchedFrom !== null;
+  // The card's foot would cover the line under it, and the button it explains is grey.
+  useEffect(() => {
+    if (keyLineShown) keyLine.current?.scrollIntoView({ block: "nearest" });
+  }, [keyLineShown]);
   const shortName = (option: CatalogId) =>
     option === "qwen"
       ? t("providers.kind.short.qwen")
@@ -294,9 +300,10 @@ export function ProviderForm({
     setError(null);
   };
 
-  // A prefix that names a service this list offers moves the form there, the key with it.
   const typeKey = (value: string) => {
     key.type(value, baseUrl);
+    // Spaces around the same key change nothing, and leave an agreement to use it where it was.
+    if (value.trim() === apiKey.trim()) return;
     setSwitchedFrom(null);
     const named =
       only || kind === null || kind === "openai-compatible" || local ? null : serviceOfKey(value);
@@ -557,24 +564,26 @@ export function ProviderForm({
               <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
             )}
           </label>
-          {kind && (
-            <KeyCheckLine
-              check={keyCheck.check}
-              provider={shortName(kind)}
-              nameOf={shortName}
-              pickAbove={!only}
-              onAnyway={() => keyCheck.agree()}
-              {...(switchedFrom !== null && {
-                from: {
-                  name: shortName(switchedFrom),
-                  back: () => {
-                    choose(switchedFrom, { keepKey: true });
-                    keyCheck.agree(switchedFrom);
+          <div ref={keyLine}>
+            {kind && (
+              <KeyCheckLine
+                check={keyCheck.check}
+                provider={shortName(kind)}
+                nameOf={shortName}
+                pickAbove={!only}
+                onAnyway={() => keyCheck.agree()}
+                {...(switchedFrom !== null && {
+                  from: {
+                    name: shortName(switchedFrom),
+                    back: () => {
+                      choose(switchedFrom, { keepKey: true });
+                      keyCheck.agree(switchedFrom);
+                    },
                   },
-                },
-              })}
-            />
-          )}
+                })}
+              />
+            )}
+          </div>
           {catalog && (
             <KeyHelp
               key={`${kind}:${endpoint?.id}`}

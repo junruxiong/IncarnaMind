@@ -19,7 +19,6 @@ export function useKeyCheck(catalogId: string | null, apiKey: string) {
   return {
     check,
     blocked: !check.ok,
-    /** The User chose to use the key for `catalogId` although it names another service. */
     agree: (forCatalogId: string | null = catalogId) => setAgreed(`${forCatalogId}\n${given}`),
   };
 }
@@ -78,7 +77,7 @@ export function KeyCheckLine({
       </ProblemLine>
     );
   }
-  const prefixes = new Intl.ListFormat(language, { type: "disjunction" }).format(check.prefixes);
+  const prefixes = check.prefixes.join(language === "zh-CN" ? " 或 " : " or ");
   const lacks = t("providers.form.keyNot", { provider, prefixes });
   const pick = t("providers.form.keyNot.pick");
   return (

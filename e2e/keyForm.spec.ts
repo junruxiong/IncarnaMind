@@ -393,12 +393,14 @@ const KEYS = {
 
 const checked = (form: Locator) => form.getByRole("radio", { checked: true });
 
-for (const { value, first, other, anyway, notAnthropic } of [
+for (const { value, first, other, anyway, notAnthropic, notGoogle } of [
   {
     value: "en",
     first: "Anthropic",
     other: "OpenAI",
     anyway: "Use it for Anthropic anyway",
+    notGoogle:
+      "This isn’t Google’s key: its keys start with AQ. or AIza. Choose the service it belongs to.",
     notAnthropic:
       "This isn’t Anthropic’s key: its keys start with sk-ant-. Choose the service it belongs to.",
   },
@@ -407,6 +409,7 @@ for (const { value, first, other, anyway, notAnthropic } of [
     first: "DeepSeek",
     other: "OpenAI",
     anyway: "仍用于 DeepSeek",
+    notGoogle: "这不是 Google 的密钥：Google 的密钥以 AQ. 或 AIza 开头。请选择它所属的服务。",
     notAnthropic: "这不是 Anthropic 的密钥：Anthropic 的密钥以 sk-ant- 开头。请选择它所属的服务。",
   },
 ] as const) {
@@ -443,6 +446,11 @@ for (const { value, first, other, anyway, notAnthropic } of [
       await expect(line).toHaveCount(0);
       await expect(useKey).toBeEnabled();
 
+      await key.fill(` ${KEYS.openai} `);
+      await expect(checked(form)).toHaveAccessibleName(first);
+      await expect(line).toHaveCount(0);
+      await expect(useKey).toBeEnabled();
+
       await key.fill(KEYS.openrouter);
       await expect(checked(form)).toHaveAccessibleName("OpenRouter");
 
@@ -468,6 +476,11 @@ for (const { value, first, other, anyway, notAnthropic } of [
       await key.press("Enter");
       await expect(form.getByTestId("connection-test")).toHaveCount(0);
       await expect(useKey).toHaveText(value === "en" ? "Use this key" : "使用这个密钥");
+
+      await form.getByRole("radio", { name: "Google" }).check({ force: true });
+      await expect(key).toHaveValue(KEYS.bare);
+      await expect(line).toHaveText(notGoogle);
+      await expect(useKey).toBeDisabled();
 
       await form.getByRole("radio", { name: "DeepSeek" }).check({ force: true });
       await expect(key).toHaveValue(KEYS.bare);
@@ -502,6 +515,44 @@ test("Kimi's form opens on the region of the interface's language: International
     await app.close();
   }
 });
+
+for (const height of [560, 700]) {
+  test(`in a window ${height}px high, the line that explains the grey button is in view, not under the card's foot`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 900, height);
+      await acceptPlainTextKeys(window);
+      const card = await openKeyForm(window);
+      await card.getByTestId("setup-key").click();
+      const form = card.getByTestId("provider-form");
+      const key = form.locator('input[type="password"]');
+      // The card scrolled so the key field sits just above the foot: what comes under it is hidden by it.
+      await key.focus();
+      await card.evaluate(
+        (element, fieldBottom) => {
+          const foot = element.querySelector("[data-setup-foot]")?.getBoundingClientRect();
+          if (foot) element.scrollTop += fieldBottom - foot.top + 4;
+        },
+        await key.boundingBox().then((box) => (box ? box.y + box.height : 0)),
+      );
+      await window.keyboard.insertText(KEYS.bare);
+      const line = form.getByTestId("provider-key-wrong");
+      await expect(line).toBeVisible();
+      await expect(form.getByTestId("provider-use-key")).toBeDisabled();
+      await expect(line).toBeInViewport({ ratio: 1 });
+      await expect
+        .poll(async () => {
+          const lineBox = await line.boundingBox();
+          const foot = await form.locator("[data-setup-foot]").boundingBox();
+          if (!lineBox || !foot) return null;
+          return lineBox.y + lineBox.height <= foot.y + 1 || lineBox.y >= foot.y + foot.height - 1;
+        })
+        .toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+}
 
 test("in Settings, a key that is not the page's service goes nowhere on Add a provider and on a provider's page, and the page stays the provider's", async () => {
   const { app, window } = await launchApp(dataDir);

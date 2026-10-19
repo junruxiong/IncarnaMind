@@ -14,8 +14,6 @@ const NAMED: readonly { service: string; key: string }[] = [
   { service: "google", key: `AQ.${alnum(40, "aZ3_-")}` },
   { service: "openai", key: `sk-proj-${alnum(60)}` },
   { service: "openai", key: `sk-None-${alnum(60)}` },
-  { service: "openai", key: `sk-svcacct-${alnum(60)}` },
-  { service: "openai", key: `sk-admin-${alnum(60)}` },
   { service: "openai", key: `sk-${alnum(20)}T3BlbkFJ${alnum(20)}` },
 ];
 
@@ -43,10 +41,7 @@ describe("A key's prefix and its service (#1384)", () => {
   );
 
   test.each([
-    [
-      "a bare sk- and 48 letters and digits, which Kimi, relays and OpenAI's oldest keys have",
-      `sk-${alnum(48)}`,
-    ],
+    ["a bare sk- and 48 letters and digits, which Kimi and the relays have", `sk-${alnum(48)}`],
     ["a bare sk- and 48 lowercase letters, which SiliconFlow has", `sk-${alnum(48, "abc")}`],
     [
       "a bare sk- and 32 hex digits, which DeepSeek and Qwen have",
