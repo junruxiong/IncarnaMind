@@ -1,7 +1,18 @@
 import { type RefObject, useLayoutEffect } from "react";
 
-/** What the page hides, one more at each step: Added first, then Format, then the Tags' chips. */
-const STEPS = ["", "added", "added format", "added format tags"] as const;
+/**
+ * What the page gives up, one more at each step: Added, then Format, then the Tags' room (the
+ * words the columns' classes read), and last the chips themselves.
+ */
+const STEPS = [
+  "",
+  "added",
+  "added format",
+  "added format narrow",
+  "added format narrower",
+  "added format narrowest",
+  "added format chips",
+] as const;
 
 /** A name wider than this is cut at any width, so it doesn't make the columns give way. */
 const WORTH_ROOM = 320;
@@ -10,8 +21,9 @@ const isCut = (name: HTMLElement) =>
   name.scrollWidth > name.clientWidth + 1 && name.scrollWidth <= WORTH_ROOM;
 
 /**
- * Hides the columns past a Document's name, Added first, then Format, then the Tags' chips, only as
- * far as it takes for no name to be cut (`data-hide` on the page, read by the columns' classes).
+ * Gives up the columns past a Document's name, Added first, then Format, then some of the Tags'
+ * room, then their chips, only as far as it takes for no name to be cut (`data-hide` on the page,
+ * read by the columns' classes), so every row's columns keep the same edges.
  */
 export function useFittingColumns(page: RefObject<HTMLElement | null>): void {
   useLayoutEffect(() => {

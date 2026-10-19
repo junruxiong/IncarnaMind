@@ -29,12 +29,12 @@ import { documentsToMove, useDocumentMove } from "./DocumentMoveTo";
 import { RowTags } from "./RowTags";
 
 /**
- * The columns past the name: Added goes first, then Format, then the Tags' chips, as far as it
- * takes for no name to be cut (`useFittingColumns`). Narrow, only the chips go: the "+" stays, so
- * Tags… from the menu still has its place.
+ * The columns past the name: as far as it takes for no name to be cut (`useFittingColumns`),
+ * Added goes first, then Format, then the Tags' room shrinks, then the chips go. Narrow, only the
+ * chips go: the "+" stays, so Tags… from the menu still has its place.
  */
 export const COLUMN_CLASSES = {
-  tags: "max-w-[200px] shrink-0 group-data-[hide~=tags]/page:[&_[data-testid^=tag-chip]]:hidden",
+  tags: "w-[200px] shrink-0 group-data-[hide~=narrow]/page:w-[152px] group-data-[hide~=narrower]/page:w-[112px] group-data-[hide~=narrowest]/page:w-[88px] group-data-[hide~=chips]/page:w-auto group-data-[hide~=chips]/page:[&_[data-testid^=tag-chip]]:hidden",
   format: "w-[76px] shrink-0 group-data-[hide~=format]/page:hidden",
   added: "w-24 shrink-0 group-data-[hide~=added]/page:hidden",
   more: "flex w-7 shrink-0 justify-end",

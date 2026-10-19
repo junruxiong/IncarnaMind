@@ -30,28 +30,19 @@ test.afterEach(async () => {
 /** A name wider than this is cut at any width (`useFittingColumns`). */
 const WORTH_ROOM = 320;
 
-/** The names the rows on screen cut though they would fit in `WORTH_ROOM`, and the room a row with no Tags keeps for them. */
-function roomTaken(library: Locator) {
+/** The names of the rows on screen that are cut though they would fit in `WORTH_ROOM`. */
+function namesCut(library: Locator) {
   return library.evaluate((root, worth) => {
     const shown = (element: Element) => {
       const box = element.getBoundingClientRect();
       return box.width > 0 && box.height > 0;
     };
-    const rows = [...root.querySelectorAll('[data-testid="library-document"]')].filter(shown);
-    const names = rows.map(
-      (row) => row.querySelector('[data-testid="library-document-name"]') as HTMLElement,
-    );
-    const cut = names
-      .filter((name) => name.scrollWidth > name.clientWidth + 1 && name.scrollWidth <= worth)
+    return [...root.querySelectorAll('[data-testid="library-document-name"]')]
+      .filter(
+        (name) =>
+          shown(name) && name.scrollWidth > name.clientWidth + 1 && name.scrollWidth <= worth,
+      )
       .map((name) => name.textContent);
-    const emptyTags = rows
-      .filter((row) => !row.querySelector('[data-testid="tag-chip"]'))
-      .map(
-        (row) =>
-          (row.querySelector('[data-row-cell="tags"]') as HTMLElement).getBoundingClientRect()
-            .width,
-      );
-    return { rows: rows.length, cut, emptyTags: Math.max(0, ...emptyTags) };
   }, WORTH_ROOM);
 }
 
@@ -91,11 +82,7 @@ for (const language of ["en", "zh-CN"] as const) {
     // With the assistant beside the page, and with it folded: the narrow page gives names the room.
     for (const folded of [false, true]) {
       await placeAssistant(window, { folded });
-      await expect
-        .poll(async () => (await roomTaken(library)).cut, { message: `folded: ${folded}` })
-        .toEqual([]);
-      // A Document with no Tags keeps no room for them: the name takes it.
-      expect((await roomTaken(library)).emptyTags).toBeLessThanOrEqual(40);
+      await expect.poll(() => namesCut(library), { message: `folded: ${folded}` }).toEqual([]);
     }
 
     // Wide, Added and Format are there.
