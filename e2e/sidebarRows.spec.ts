@@ -1,13 +1,13 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ElectronApplication, expect, type Locator, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 import type { EmbeddingModelStatus } from "../src/core/api";
-import { EVENT_CHANNEL } from "../src/shared/bridge";
 import {
   addDocuments,
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  emit,
   launchApp,
   newMind,
   pointAt,
@@ -253,17 +253,6 @@ const downloading = (model: EmbeddingModelStatus, done: number, total: number) =
   totalBytes: total,
   error: null,
 });
-
-/** Pushes a core event to the window, as the core does when something happens. */
-const emit = (app: ElectronApplication, name: string, payload: unknown) =>
-  app.evaluate(
-    ({ BrowserWindow }, sent) => {
-      for (const each of BrowserWindow.getAllWindows()) {
-        each.webContents.send(sent.channel, sent.name, sent.payload);
-      }
-    },
-    { channel: EVENT_CHANNEL, name, payload },
-  );
 
 test("at the narrowest sidebar a downloading model's figure is whole beside +1, in English and Chinese, and the popover and tooltip give the full sentence", async () => {
   test.setTimeout(120_000);

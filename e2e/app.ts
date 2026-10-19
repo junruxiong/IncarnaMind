@@ -22,6 +22,7 @@ import {
   type SaveChatProviderInput,
 } from "../src/core/api";
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
+import { EVENT_CHANNEL } from "../src/shared/bridge";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import { translate } from "../src/shared/i18n";
 import type { TestHooks } from "../src/shared/testHooks";
@@ -1180,6 +1181,17 @@ export async function catchCopies(window: Page): Promise<void> {
 /** What the page last copied since `catchCopies`. */
 export const copied = (window: Page) =>
   window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
+
+/** Pushes a core event to the window, as the core does when something happens. */
+export const emit = (app: ElectronApplication, name: string, payload: unknown) =>
+  app.evaluate(
+    ({ BrowserWindow }, sent) => {
+      for (const each of BrowserWindow.getAllWindows()) {
+        each.webContents.send(sent.channel, sent.name, sent.payload);
+      }
+    },
+    { channel: EVENT_CHANNEL, name, payload },
+  );
 
 /** Switches the interface's language, as Settings does. */
 export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
