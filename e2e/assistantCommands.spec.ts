@@ -175,7 +175,7 @@ test("a delete the assistant starts asks first, naming what goes, and Don't dele
     "It goes to Recently deleted, where you can restore it for 30 days. The assistant always asks before it deletes.",
   );
   await expect(card.getByTestId("approval-allow-once")).toContainText("Delete");
-  await expect(card.getByTestId("approval-deny")).toHaveText("Don't delete");
+  await expect(card.getByTestId("approval-deny")).toHaveText("Don’t delete");
   await expect(card.getByTestId("approval-always-allow")).toHaveCount(0);
   await screenshot(window, "commands-delete-asks-en");
   await pointAndClick(window, card.getByTestId("approval-deny"));
@@ -227,7 +227,7 @@ test("a command that fails says so on the card and changes nothing", async () =>
   const answer = await askInAssistant(window, "Delete the document with id nope");
 
   await expect(answer.getByTestId("command-changes-unrun")).toHaveText(
-    "Didn't run: There is no Document with the id nope.",
+    "Didn’t run: There is no Document with the id nope.",
   );
   await expect(answer.getByTestId("command-changes-title")).toHaveCount(0);
   expect(await library(window)).toEqual(before);

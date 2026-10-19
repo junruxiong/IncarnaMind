@@ -183,7 +183,7 @@ test("Add Documents ▾ → Find sources… asks each provider once, then adds a
     services.fail("files", 403);
     await page.getByTestId("find-sources-add").click();
     await expect(page.getByTestId("find-sources-added")).toHaveText(
-      "Couldn't download the open copy, so its reference was added",
+      "Couldn’t download the open copy, so its reference was added",
     );
     await expect(page.getByTestId("find-sources-get-pdf")).toHaveText("Open the free text…");
     services.fail("files", null);
