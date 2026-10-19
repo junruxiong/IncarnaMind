@@ -64,6 +64,17 @@ for (const language of ["en", "zh-CN"] as const) {
     ).toHaveCount(1);
     await window.keyboard.press("Escape");
 
+    // Words people look for: "transcribe" and "call", 录音 and 转写.
+    for (const word of language === "en" ? ["transcribe", "call"] : ["录音", "转写"]) {
+      await window.keyboard.press("ControlOrMeta+k");
+      await expect(window.getByTestId("palette-search")).toBeFocused();
+      await window.keyboard.type(word);
+      await expect(
+        window.getByTestId("palette-item").filter({ hasText: RECORD[language] }),
+      ).toHaveCount(1);
+      await window.keyboard.press("Escape");
+    }
+
     await setLanguage(window, "en");
     const settings = await openSettings(window, "meetings");
     await expect(settings.getByTestId("meetings-settings")).toContainText("What is recorded");
@@ -73,7 +84,7 @@ for (const language of ["en", "zh-CN"] as const) {
   });
 }
 
-test("once the recording notice is read, Record records in one action; ⌘Z takes back its new Mind", async () => {
+test("once the recording notice is read, Record records in one action, with the cursor in the notes", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await readNotice(window);
@@ -85,13 +96,49 @@ test("once the recording notice is read, Record records in one action; ⌘Z take
   expect((await meetings(window)).map((each) => each.status)).toEqual(["recording"]);
   expect(await mindsOf(window)).toHaveLength(1);
 
+  await window.keyboard.type("First note");
+  await expect(window.getByTestId("mind-editor")).toContainText("First note");
+  await app.close();
+});
+
+test("the first time, ⌘Z right after Record takes the new Mind back", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+  await expect(window.getByTestId("meeting-start")).toBeVisible();
+  expect(await mindsOf(window)).toHaveLength(1);
+
   await leaveText(window);
   await window.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => (await mindsOf(window)).length).toBe(0);
-  await expect(window.getByTestId("meeting-bar")).toHaveCount(0);
+  await app.close();
+});
+
+test("once a recording has run and stopped, ⌘Z never takes its Meeting or audio back", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await readNotice(window);
+
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
+  await pointAndClick(window, window.getByTestId("meeting-stop"));
   await expect
-    .poll(async () => (await meetings(window)).filter((each) => each.status === "recording"))
-    .toEqual([]);
+    .poll(async () => (await meetings(window))[0]?.status, { timeout: 30_000 })
+    .toBe("stopped");
+  const [stopped] = await meetings(window);
+
+  await leaveText(window);
+  await window.keyboard.press("ControlOrMeta+z");
+  await window.keyboard.press("ControlOrMeta+z");
+  // The core answers in the order it was asked: a deletion Undo had sent would show here.
+  const after = await meetings(window);
+  expect(after.map((each) => each.id)).toEqual([stopped?.id]);
+  expect(after[0]?.status).toBe("stopped");
+  expect(after[0]?.audio.kept).toBe(stopped?.audio.kept);
+  expect(await mindsOf(window)).toHaveLength(1);
   await app.close();
 });
 

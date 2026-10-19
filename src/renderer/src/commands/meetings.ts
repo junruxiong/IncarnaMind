@@ -96,6 +96,7 @@ export const meetingCommands: readonly Command[] = [
   {
     id: "meeting.record",
     label: "meetings.record",
+    keywords: ["meetings.record.keywords"],
     group: "main",
     // A new Mind, which ⌘Z takes back.
     reversible: true,
