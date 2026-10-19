@@ -64,52 +64,102 @@ describe("pasting what Word copies", () => {
     });
   });
 
-  test("a list's levels nest, and a list that starts later keeps its number", () => {
+  // The rule for Word's numbering: a run becomes a list only when the editor can draw every marker in it.
+  test.each(["1、", "（1）", "一、", "1.1.", "a)"])(
+    "a run numbered %s stays paragraphs, each with its number typed",
+    (marker) => {
+      const doc = pasted(
+        word(listParagraph("l0", 1, marker, "First") + listParagraph("l0", 1, marker, "Second")),
+      );
+      expect(blocks(doc)).toEqual([
+        { type: "paragraph", text: `${marker} First` },
+        { type: "paragraph", text: `${marker} Second` },
+      ]);
+    },
+  );
+
+  test("a run numbered from 3. is a list that starts at 3", () => {
     const doc = pasted(
-      word(
-        listParagraph("l0", 1, "4.", "Collect the samples.") +
-          listParagraph("l0", 2, "a.", "Label each bottle.") +
-          listParagraph("l0", 2, "b.", "Keep them cold.") +
-          listParagraph("l0", 1, "5.", "Send them to the lab."),
-      ),
+      word(listParagraph("l0", 1, "3.", "Third") + listParagraph("l0", 1, "4.", "Fourth")),
     );
     expect(blocks(doc).map((block) => block.type)).toEqual(["orderedList"]);
-    const list = doc.firstChild;
-    expect(list?.attrs.start).toBe(4);
-    expect(items(list)).toEqual(["Collect the samples.", "Send them to the lab."]);
-    const inner = list?.firstChild?.lastChild;
-    expect(inner?.type.name).toBe("orderedList");
-    expect(items(inner)).toEqual(["Label each bottle.", "Keep them cold."]);
+    expect(doc.firstChild?.attrs.start).toBe(3);
+    expect(items(doc.firstChild)).toEqual(["Third", "Fourth"]);
   });
 
-  test("bullets in symbol fonts, Roman numerals and Chinese numbering are told apart", () => {
+  test.each(["·", "o", "§", "\uf0b7"])("a run of %s bullets is a bullet list", (bullet) => {
+    const doc = pasted(word(listParagraph("l1", 1, bullet, "Tide tables")));
+    expect(doc.firstChild?.type.name).toBe("bulletList");
+    expect(doc.firstChild?.firstChild?.type.name).toBe("listItem");
+    expect(doc.firstChild?.firstChild?.firstChild?.type.name).toBe("paragraph");
+    expect(doc.textContent).toBe("Tide tables");
+  });
+
+  test("a run with one marker the editor can't draw stays plain; the next run is a list", () => {
     const doc = pasted(
       word(
-        listParagraph("l1", 1, "§", "Tide tables") +
-          listParagraph("l1", 2, "o", "Spring tides") +
-          `<p class=MsoNormal>Between the lists</p>` +
-          listParagraph("l2", 1, "iii.", "Third reason") +
-          `<p class=MsoNormal>中文</p>` +
-          listParagraph("l3", 1, "二、", "第二点") +
-          `<p class=MsoNormal>Roman again</p>` +
-          listParagraph("l4", 1, "i.", "First reason"),
+        listParagraph("l0", 1, "1.", "Collect") +
+          listParagraph("l0", 2, "a.", "Label") +
+          "<p class=MsoNormal>Then</p>" +
+          listParagraph("l1", 1, "·", "Boats"),
       ),
     );
-    expect(blocks(doc).map((block) => block.type)).toEqual([
-      "bulletList",
-      "paragraph",
-      "orderedList",
-      "paragraph",
-      "orderedList",
-      "paragraph",
-      "orderedList",
+    expect(blocks(doc)).toEqual([
+      { type: "paragraph", text: "1. Collect" },
+      { type: "paragraph", text: "a. Label" },
+      { type: "paragraph", text: "Then" },
+      { type: "bulletList", text: "Boats" },
     ]);
-    expect(doc.firstChild?.firstChild?.lastChild?.type.name).toBe("bulletList");
-    expect(doc.child(2).attrs.start).toBe(3);
-    expect(items(doc.child(4))).toEqual(["第二点"]);
-    expect(doc.child(6).attrs.start).toBe(1);
   });
 
+  test("bullets nest by level", () => {
+    const doc = pasted(
+      word(
+        listParagraph("l1", 1, "·", "Spring tides") +
+          listParagraph("l1", 2, "o", "At new moon") +
+          listParagraph("l1", 2, "o", "At full moon") +
+          listParagraph("l1", 1, "·", "Neap tides"),
+      ),
+    );
+    expect(blocks(doc).map((block) => block.type)).toEqual(["bulletList"]);
+    const list = doc.firstChild;
+    expect(items(list)).toEqual(["Spring tides", "Neap tides"]);
+    const inner = list?.firstChild?.lastChild;
+    expect(inner?.type.name).toBe("bulletList");
+    expect(items(inner)).toEqual(["At new moon", "At full moon"]);
+  });
+
+  test("a bullet under a numbered step nests in it, and the numbering goes on after", () => {
+    const doc = pasted(
+      word(
+        listParagraph("l0", 1, "1.", "First") +
+          listParagraph("l0", 2, "·", "Detail") +
+          listParagraph("l0", 1, "2.", "Second"),
+      ),
+    );
+    const list = doc.firstChild;
+    expect(list?.type.name).toBe("orderedList");
+    expect(items(list)).toEqual(["First", "Second"]);
+    const inner = list?.firstChild?.lastChild;
+    expect(inner?.type.name).toBe("bulletList");
+    expect(items(inner)).toEqual(["Detail"]);
+  });
+
+  test("a paragraph between two runs ends the first", () => {
+    const doc = pasted(
+      word(
+        listParagraph("l0", 1, "1.", "One") +
+          "<p class=MsoNormal>Between</p>" +
+          listParagraph("l0", 1, "2.", "Two"),
+      ),
+    );
+    expect(blocks(doc)).toEqual([
+      { type: "orderedList", text: "One" },
+      { type: "paragraph", text: "Between" },
+      { type: "orderedList", text: "Two" },
+    ]);
+    expect(doc.child(2).attrs.start).toBe(2);
+  });
   test("a list in a table cell stays in its cell, and Windows Word's comment-wrapped markers go", () => {
     const windows = (marker: string, words: string) =>
       `<p class=MsoListParagraph style='mso-list:l0 level1 lfo1'><!--[if !supportLists]--><span><span style='mso-list:Ignore'>${marker}<span>&nbsp; </span></span></span><!--[endif]-->${words}</p>`;

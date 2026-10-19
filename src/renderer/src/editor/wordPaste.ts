@@ -1,55 +1,65 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { groupWordLists, type WordListPlace } from "../../../shared/wordLists";
+import { drawnMarker, groupWordLists, type WordListPlace } from "../../../shared/wordLists";
 import { headingLevelOfStyleName, mindHeadingLevel } from "../../../shared/wordStyles";
 
 const FROM_WORD = /urn:schemas-microsoft-com:office:word|class=["']?Mso|mso-list:/i;
 
 const LIST = /mso-list:\s*(l\d+)\s+level(\d+)\s+(lfo\d+)/i;
 
-// Word writes a list's marker as text; a bullet's is a symbol-font character such as "·" or "§".
-const NUMBERED = /^\(?([0-9]+|[a-z]|[ivxlcdm]+|[一二三四五六七八九十]+)[.)、]$/i;
-
-const ROMAN: Readonly<Record<string, number>> = {
-  i: 1,
-  v: 5,
-  x: 10,
-  l: 50,
-  c: 100,
-  d: 500,
-  m: 1000,
-};
-
-function numberOf(marker: string): number {
-  if (/^\d+$/.test(marker)) return Number(marker);
-  const lower = marker.toLowerCase();
-  // A list that starts at "i." counts in Roman numerals, not from the ninth letter.
-  if (/^[ivxlcdm]+$/.test(lower) && (lower.length > 1 || lower === "i")) {
-    let total = 0;
-    for (const [index, letter] of [...lower].entries()) {
-      const value = ROMAN[letter] ?? 0;
-      const next = ROMAN[lower[index + 1] ?? ""] ?? 0;
-      total += value < next ? -value : value;
-    }
-    return total;
-  }
-  if (/^[a-z]$/.test(lower)) return lower.charCodeAt(0) - 96;
-  return 1;
+interface ListParagraph {
+  element: Element;
+  /** The number or bullet Word typed before the words, in the span it styles `mso-list:Ignore`. */
+  marker: Element | null;
+  shown: string;
+  listId: string;
+  level: number;
 }
 
-function listPlace(paragraph: Element): WordListPlace | null {
-  const found = LIST.exec(paragraph.getAttribute("style") ?? "");
+function listParagraphOf(element: Element): ListParagraph | null {
+  const found = element.tagName === "P" ? LIST.exec(element.getAttribute("style") ?? "") : null;
   if (!found) return null;
-  const marker = paragraph.querySelector('[style*="mso-list:Ignore" i]');
-  const shown = (marker?.textContent ?? "").replace(/\s/g, "");
-  marker?.remove();
-  const numbered = NUMBERED.exec(shown);
+  const marker = element.querySelector('[style*="mso-list:Ignore" i]');
   return {
+    element,
+    marker,
+    shown: (marker?.textContent ?? "").replace(/\s/g, ""),
     listId: `${found[1]} ${found[3]}`,
     level: Number(found[2]) - 1,
-    ordered: numbered !== null,
-    number: numbered ? numberOf(numbered[1] ?? "") : 1,
   };
+}
+
+/**
+ * Each run of list paragraphs as the editor's lists when it can draw every marker in the run; a
+ * run with any other numbering style stays paragraphs, each with its number typed before its words.
+ */
+function listBlocks(children: readonly Element[], document: Document) {
+  const found = children.map(listParagraphOf);
+  const blocks: { node: Element; list: WordListPlace | null }[] = [];
+  for (let at = 0; at < children.length; ) {
+    let end = at;
+    while (end < children.length && found[end]) end++;
+    const run = found.slice(at, end).filter((each) => each !== null);
+    if (run.length === 0) {
+      const child = children[at];
+      if (child) blocks.push({ node: child, list: null });
+      at++;
+      continue;
+    }
+    const markers = run.map((each) => drawnMarker(each.shown));
+    const drawn = markers.every((marker) => marker !== null);
+    for (const [index, each] of run.entries()) {
+      const marker = drawn ? markers[index] : null;
+      if (marker) each.marker?.remove();
+      else each.marker?.replaceWith(`${each.shown} `);
+      blocks.push({
+        node: paragraphOf(each.element, document),
+        list: marker ? { listId: each.listId, level: each.level, ...marker } : null,
+      });
+    }
+    at = end;
+  }
+  return blocks;
 }
 
 // Word copies a comment as an anchor around its words, a "[JM1]" mark after them and its text at the end.
@@ -73,21 +83,26 @@ function headingOf(paragraph: Element, document: Document): Element | null {
   return heading;
 }
 
+function paragraphOf(paragraph: Element, document: Document): Element {
+  const plain = document.createElement("p");
+  plain.append(...paragraph.childNodes);
+  return plain;
+}
+
 /** HTML copied from Word with its lists, Title and comments as the Word import reads them; other HTML as it is. */
 export function fromWord(html: string): string {
   if (!FROM_WORD.test(html)) return html;
   const document = new DOMParser().parseFromString(html, "text/html");
   const { body } = document;
   dropComments(body);
+  for (const empty of [...body.getElementsByTagName("o:p")]) {
+    if (empty.textContent === "") empty.remove();
+  }
   const lists = (container: Element) => {
     const children = [...container.children];
     if (!children.some((child) => LIST.test(child.getAttribute("style") ?? ""))) return;
-    const blocks = children.map((child) => {
-      const list = child.tagName === "P" ? listPlace(child) : null;
-      return { node: list ? paragraphOf(child, document) : child, list };
-    });
     container.replaceChildren(
-      ...groupWordLists<Element>(blocks, {
+      ...groupWordLists<Element>(listBlocks(children, document), {
         list: (place) => {
           const list = document.createElement(place.ordered ? "ol" : "ul");
           if (place.ordered && place.number !== 1) list.setAttribute("start", String(place.number));
@@ -111,12 +126,6 @@ export function fromWord(html: string): string {
     if (heading) paragraph.replaceWith(heading);
   }
   return body.innerHTML;
-}
-
-function paragraphOf(paragraph: Element, document: Document): Element {
-  const plain = document.createElement("p");
-  plain.append(...paragraph.childNodes);
-  return plain;
 }
 
 export const WordPaste = Extension.create({

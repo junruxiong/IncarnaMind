@@ -49,3 +49,17 @@ export function groupWordLists<Node>(
   }
   return out;
 }
+
+// The editor draws bullets and plain "N." numbers; Word's Symbol and Wingdings bullets copy as private-use characters.
+const BULLET = /^(?:[·o§•▪■◦●○□➢➤✓*\-–—]|[\uF000-\uF8FF])$/u;
+const DECIMAL = /^(\d+)\.$/;
+
+/**
+ * A list marker as Word types it ("3.", "·"), when the editor can draw it: ordered with its
+ * number, or a bullet. Null for a numbering style it can't draw ("1、", "（1）", "a)", "1.1.").
+ */
+export function drawnMarker(marker: string): { ordered: boolean; number: number } | null {
+  if (BULLET.test(marker)) return { ordered: false, number: 1 };
+  const decimal = DECIMAL.exec(marker);
+  return decimal ? { ordered: true, number: Number(decimal[1]) } : null;
+}
