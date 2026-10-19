@@ -69,10 +69,12 @@ export function useMenuEditLine(editor: Editor, mindId: string, readOnly: boolea
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
       if (!running?.menu || running.stopped || useEdits.getState().menuShows[mindId]) return;
       event.preventDefault();
+      event.stopImmediatePropagation();
       stopEdit(mindId);
     };
-    dom.addEventListener("keydown", onKey);
-    return () => dom.removeEventListener("keydown", onKey);
+    // Ahead of the editor's own use of Esc.
+    dom.addEventListener("keydown", onKey, true);
+    return () => dom.removeEventListener("keydown", onKey, true);
   }, [editor, mindId, readOnly]);
 }
 

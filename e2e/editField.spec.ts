@@ -370,46 +370,40 @@ for (const sidebar of ["shown", "hidden"] as const) {
   });
 }
 
-test("Stop on the running line, or Esc in the text, stops a menu edit with the text as it was, with the sidebar hidden too", async () => {
-  const { app, window } = await launchApp(dataDir, { fakeChat: true });
-  await dismissChatSetup(window);
-  await useLocalChatModel(window);
-  await setWindowSize(app, window, 1280, 820);
-  const original = "The tides here are very strong and really regular.";
-  await newMind(window);
-  const editor = window.getByTestId("mind-editor");
-  await editor.click();
-  await window.keyboard.type(original);
-  await window.keyboard.press("Enter");
-  await window.keyboard.type("Notes:");
-  const paragraphs = editor.locator(":scope > p");
-  await hideSidebar(window);
-  await editor.click();
-  const running = editor.getByTestId("menu-edit-line");
+for (const how of ["Stop on the running line", "Esc in the text"] as const) {
+  test(`${how} stops a menu edit with the text as it was, with the sidebar hidden`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setWindowSize(app, window, 1280, 820);
+    const original = "The tides here are very strong and really regular.";
+    await newMind(window);
+    const editor = window.getByTestId("mind-editor");
+    await editor.click();
+    await window.keyboard.type(original);
+    await window.keyboard.press("Enter");
+    await window.keyboard.type("Notes:");
+    const paragraphs = editor.locator(":scope > p");
+    await hideSidebar(window);
+    await editor.click();
+    const running = editor.getByTestId("menu-edit-line");
 
-  const start = async () => {
     await slideSelect(window, paragraphs.first(), "The tides here are very strong");
     await window.keyboard.press("ControlOrMeta+j");
-    await window.keyboard.type("Shorten this slowly");
+    await window.keyboard.type("Shorten this forever");
     await window.keyboard.press("Enter");
     await expect(window.getByTestId("selection-edit-working")).toBeVisible();
     await pointAndClick(window, paragraphs.last());
     await expect(running).toBeVisible();
-  };
 
-  await start();
-  await pointAndClick(window, running.getByTestId("menu-edit-stop"));
-  await expect(running).toHaveCount(0);
-  await expect(paragraphs.first()).toHaveText(original);
-  await expect(editor.getByTestId("applied-line")).toHaveCount(0);
-
-  await start();
-  await window.keyboard.press("Escape");
-  await expect(running).toHaveCount(0);
-  await expect(paragraphs.first()).toHaveText(original);
-  await expect(editor.getByTestId("applied-line")).toHaveCount(0);
-  await app.close();
-});
+    if (how === "Esc in the text") await window.keyboard.press("Escape");
+    else await pointAndClick(window, running.getByTestId("menu-edit-stop"));
+    await expect(running).toHaveCount(0);
+    await expect(paragraphs.first()).toHaveText(original);
+    await expect(editor.getByTestId("applied-line")).toHaveCount(0);
+    await app.close();
+  });
+}
 
 test("a second request while one runs can't send, and says why in the menu it was asked in", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
@@ -629,7 +623,7 @@ for (const sidebar of ["shown", "hidden"] as const) {
     await window.keyboard.type("replace tides with seas");
     await window.keyboard.press("Enter");
     await expect(problem).toHaveCount(1);
-    await expect(menu.getByTestId("edit-problem")).toContainText("Edit with AI didn't work");
+    await expect(menu.getByTestId("edit-problem")).toContainText(/Edit with AI didn.t work/);
     await expect(field).toHaveValue("replace tides with seas");
 
     // Try again from the menu asks again and fails again, still one line.
@@ -641,7 +635,7 @@ for (const sidebar of ["shown", "hidden"] as const) {
     await window.keyboard.press("Escape");
     await expect(menu).toHaveCount(0);
     await expect(problem).toHaveCount(1);
-    await expect(editor.getByTestId("edit-problem")).toContainText("Edit with AI didn't work");
+    await expect(editor.getByTestId("edit-problem")).toContainText(/Edit with AI didn.t work/);
     expect(await onScreen(problem)).toBe(true);
     await expect(window.getByTestId("edit-status-problem")).toHaveCount(0);
     await expect(window.getByTestId("sidebar-toggle-dot")).toHaveCount(0);
