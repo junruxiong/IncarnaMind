@@ -35,6 +35,7 @@ import type { RerankingModel } from "../reranking";
 import type { Secrets } from "../secrets";
 import { createSendGate, gateStop } from "../sendGate";
 import type { SettingsStore } from "../settings";
+import { parseApiKey } from "./apiKey";
 import { classifyProviderError } from "./providerErrors";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
@@ -95,13 +96,6 @@ function parseStored(value: unknown): StoredRerank | null {
   if (value === undefined) return DEFAULT_RERANK;
   if (!isRecord(value) || !isRerankKind(value.kind)) return null;
   return { kind: value.kind, modelId: typeof value.modelId === "string" ? value.modelId : null };
-}
-
-/** undefined: keep the stored key. Blank text counts as "keep". */
-function parseApiKey(value: unknown): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string") throw new InvalidInputError("The API key must be text.");
-  return value.trim() || undefined;
 }
 
 function parseModel(value: unknown): string | null {

@@ -32,6 +32,7 @@ import type { Secrets } from "../secrets";
 import { createSendGate, gateStop } from "../sendGate";
 import type { SettingsStore } from "../settings";
 import type { Database } from "../storage";
+import { parseApiKey as parseKey } from "./apiKey";
 import {
   cloudWindow,
   type ModelCapabilities,
@@ -288,9 +289,8 @@ function parseApiKey(
   { kind, catalogId }: { kind: ChatProviderKind; catalogId: string | null },
 ): string | null | undefined {
   if (value === undefined || value === null) return value;
-  if (typeof value !== "string") throw new InvalidInputError("The API key must be text.");
-  const key = value.trim();
-  if (key === "") return undefined;
+  const key = parseKey(value);
+  if (key === undefined) return undefined;
   if (!acceptsApiKey(kind, catalogId)) {
     throw new InvalidInputError("This provider doesn't take an API key.");
   }

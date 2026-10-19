@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
+import { cleanApiKey } from "../shared/apiKey";
 import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { optionsFor } from "../shared/exportOptions";
@@ -3473,7 +3474,7 @@ export function createCore(adapters: CoreAdapters): Core {
           values: { provider: String(isRecord(input) ? input.catalogId : input) },
         });
       }
-      const apiKey = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey : null;
+      const apiKey = (typeof input.apiKey === "string" && cleanApiKey(input.apiKey)) || null;
       return localServers.detect(
         input.catalogId,
         apiKey,

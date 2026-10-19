@@ -7,10 +7,20 @@ import {
   TranslatableError,
 } from "../errors";
 import { OAuthTokenError } from "../oauth";
+import { KeyCharacterError } from "./apiKey";
 import { ChatGptPlanError, ChatGptSignInRequiredError } from "./chatgpt/errors";
 import { JevRequestError } from "./jev";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** The engine's refusal of a header with a character above 255 (a key with a Chinese character in it), as the error saying so. */
+function keyCharacterOf(message: string): KeyCharacterError | null {
+  const code =
+    /Cannot convert argument to a ByteString because the character at index \d+ has a value of (\d+)/.exec(
+      message,
+    )?.[1];
+  return code === undefined ? null : new KeyCharacterError(String.fromCharCode(Number(code)));
+}
 
 /** A local model can't take a request, found before anything is sent: e.g. it isn't a chat model. */
 export class LocalModelError extends Error {
@@ -215,6 +225,15 @@ export function classifyProviderError(error: unknown): ProviderError {
     if (status === 404) return { kind: "model", message };
     if (status === 429) return { kind: "rate-limit", message };
     return { kind: "provider", message };
+  }
+
+  const badKey = keyCharacterOf(message);
+  if (badKey) {
+    return {
+      kind: "auth",
+      message: badKey.message,
+      ...(badKey.wording && { wording: badKey.wording }),
+    };
   }
 
   if (cause instanceof Error) {
