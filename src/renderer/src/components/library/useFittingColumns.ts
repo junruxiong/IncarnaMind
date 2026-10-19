@@ -14,11 +14,14 @@ const STEPS = [
   "added format chips",
 ] as const;
 
-/** A name wider than this is cut at any width, so it doesn't make the columns give way. */
+/** A name that would take more than this is asked for no more: one long name doesn't clear the columns. */
 const WORTH_ROOM = 320;
 
+/** What a name wider than that is asked for: enough to read its start. */
+const LEAST_ROOM = 160;
+
 const isCut = (name: HTMLElement) =>
-  name.scrollWidth > name.clientWidth + 1 && name.scrollWidth <= WORTH_ROOM;
+  name.clientWidth + 1 < (name.scrollWidth <= WORTH_ROOM ? name.scrollWidth : LEAST_ROOM);
 
 /**
  * Gives up the columns past a Document's name, Added first, then Format, then some of the Tags'

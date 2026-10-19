@@ -27,23 +27,27 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/** A name wider than this is cut at any width (`useFittingColumns`). */
+/** What `useFittingColumns` asks for: a name that fits in this, whole; a longer one, this much of it. */
 const WORTH_ROOM = 320;
+const LEAST_ROOM = 160;
 
-/** The names of the rows on screen that are cut though they would fit in `WORTH_ROOM`. */
+/** The names of the rows on screen that have less room than they are asked for. */
 function namesCut(library: Locator) {
-  return library.evaluate((root, worth) => {
-    const shown = (element: Element) => {
-      const box = element.getBoundingClientRect();
-      return box.width > 0 && box.height > 0;
-    };
-    return [...root.querySelectorAll('[data-testid="library-document-name"]')]
-      .filter(
-        (name) =>
-          shown(name) && name.scrollWidth > name.clientWidth + 1 && name.scrollWidth <= worth,
-      )
-      .map((name) => name.textContent);
-  }, WORTH_ROOM);
+  return library.evaluate(
+    (root, [worth, least]) =>
+      [...root.querySelectorAll('[data-testid="library-document-name"]')]
+        .filter((name) => {
+          const box = name.getBoundingClientRect();
+          return (
+            box.width > 0 &&
+            box.height > 0 &&
+            name.clientWidth + 1 <
+              (name.scrollWidth <= (worth ?? 0) ? name.scrollWidth : (least ?? 0))
+          );
+        })
+        .map((name) => name.textContent),
+    [WORTH_ROOM, LEAST_ROOM],
+  );
 }
 
 /** The words a User can read in the Library as it stands: the text in view, not what scrolls below. */
@@ -189,7 +193,7 @@ const TIPS = {
   en: {
     organize: "Suggests a Folder and Tags for each Document. You decide.",
     board: "Minutes, board packs and resolutions",
-    deleted: "Kept here for 30 days, then deleted for good. Files on disk aren't touched.",
+    deleted: "Kept here for 30 days, then deleted for good. Files on disk aren’t touched.",
     documents: "9 Documents",
     markOn: "on this Document",
   },
