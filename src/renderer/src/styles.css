@@ -2470,19 +2470,51 @@
       line-height: var(--text-body--line-height);
     }
 
-    /* Lists: the text keeps the edge; bullets and numbers hang in the margin. */
+    /*
+     * Lists are indented as Word indents them (DESIGN.md): the text of level 1 starts 48px in
+     * from the text edge, its bullet or number inside the 24px hang before it, and each level
+     * goes 48px further. Bullets are drawn here to sit 24px in; numbers are the browser's,
+     * right-aligned just before the text.
+     */
     :where(ul, ol) {
       margin: 0;
-      padding: 0;
+      padding: 0 0 0 48px;
     }
     :where(ul) {
-      list-style: disc outside;
+      list-style: none;
     }
     :where(ol) {
       list-style: decimal outside;
     }
+    li {
+      position: relative;
+    }
     li::marker {
       color: var(--color-ink-secondary);
+    }
+    ul > li::before {
+      content: "";
+      position: absolute;
+      left: -24px;
+      top: calc(0.5lh - 3px);
+      box-sizing: border-box;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-ink-secondary);
+      pointer-events: none;
+    }
+    ul ul > li::before {
+      border: 1.5px solid var(--color-ink-secondary);
+      background: none;
+    }
+    ul ul ul > li::before {
+      border: none;
+      border-radius: 0;
+      background: var(--color-ink-secondary);
+    }
+    ul:has(> li[data-checked]) > li::before {
+      content: none;
     }
     :where(li + li) {
       margin-top: 4px;
@@ -2493,11 +2525,8 @@
     :where(li > * + *) {
       margin-top: 4px;
     }
-    :where(li ul, li ol) {
-      padding-left: 24px;
-    }
 
-    /* A checklist: the box hangs in the margin like a bullet; a done item is struck through. */
+    /* A checklist: the box sits where a bullet does; a done item is struck through. */
     ul:has(> li[data-checked]) {
       list-style: none;
     }
@@ -6288,11 +6317,17 @@
     }
     /*
      * Lists: the text starts 20px in, its bullet or number inside those 20px
-     * (a Mind's hang in its margin; an Answer has none); a nested list goes 20px
-     * further. Past nine items the numbers need a little more.
+     * (a Mind's are indented as Word indents them, 48px; the panel is narrow); a nested
+     * list goes 20px further. Past nine items the numbers need a little more.
      */
     :where(ul, ol) {
       padding-left: 20px;
+    }
+    :where(ul:not(:has(> li[data-checked]))) {
+      list-style: disc outside;
+    }
+    ul > li::before {
+      content: none;
     }
     :where(ol:has(> li:nth-child(10))) {
       padding-left: 28px;
