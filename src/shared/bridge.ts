@@ -1,8 +1,9 @@
 /** Names shared by the main process and the preload script for the typed core bridge. */
-import type { CoreApiMethod } from "../core/api";
+import type { AudioSource, CoreApiMethod } from "../core/api";
 import type { MenuCommandId } from "./commands";
 import type { GeneralHelpKind } from "./meetingHelp";
 import type { PanelCommand, PanelState } from "./meetingPanel";
+import type { GuidePlacement, PermissionGuideState } from "./permissionGuide";
 import type { TitleBar } from "./titleBar";
 
 /** The renderer reaches the core as `window.incarnamind`. */
@@ -132,6 +133,15 @@ export interface FilesBridge {
   meetingPanelCommand(command: PanelCommand): void;
   /** Calls `listener` when the floating panel's Set up was clicked: the window shows where a model is chosen. */
   onSetUpModel(listener: () => void): () => void;
+  /**
+   * Shows the guide for a permission the User must add by hand in System Settings (#1105), beside
+   * it if the screen has room: where it showed, "none" where this system has no such guide.
+   */
+  showPermissionGuide(source: AudioSource): Promise<GuidePlacement>;
+  /** Closes the guide, and the steps in the window. */
+  closePermissionGuide(): void;
+  /** Calls `listener` with the guide's state, now and when it changes; null when there is none. Returns how to stop. */
+  onPermissionGuide(listener: (state: PermissionGuideState | null) => void): () => void;
 }
 
 /** The command the application menu asks the window to run (see src/main/menu.ts). */
@@ -202,4 +212,11 @@ export const FILES_CHANNELS = {
   meetingPanelCommand: "app:meetingPanelCommand",
   /** From the main process: the floating panel's Set up was clicked. */
   setUpModel: "app:setUpModel",
+  /** From the page: show the guide beside System Settings for a source; the main process answers where. */
+  showPermissionGuide: "app:showPermissionGuide",
+  closePermissionGuide: "app:closePermissionGuide",
+  /** From the page: what the guide's state is now; the main process answers on `permissionGuide`. */
+  permissionGuideWanted: "app:permissionGuideWanted",
+  /** From the main process: the guide's state (`PermissionGuideState`), or null. */
+  permissionGuide: "app:permissionGuide",
 } as const;
