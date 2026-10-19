@@ -1,6 +1,14 @@
 import { describe, expect, test } from "vitest";
 import { translate } from "../../src/shared/i18n";
-import { SPEAKER_ME, SPEAKER_THEM, SPEAKER_UNKNOWN, speakerKey } from "../../src/shared/speakers";
+import {
+  isTheirs,
+  numberedSpeaker,
+  SPEAKER_ME,
+  SPEAKER_THEM,
+  SPEAKER_UNKNOWN,
+  speakerKey,
+  speakerName,
+} from "../../src/shared/speakers";
 
 describe("The words for who said a live line (#941)", () => {
   test.each([
@@ -18,5 +26,13 @@ describe("The words for who said a live line (#941)", () => {
   test("a person's name is shown as it is", () => {
     expect(speakerKey("Dana")).toBeNull();
     expect(speakerKey("Speaker 1")).toBeNull();
+  });
+
+  test("someone a cloud service told apart is numbered, worded in the interface's language, and is the other side", () => {
+    const speaker = numberedSpeaker(2);
+    expect(speakerName(speaker, (key, params) => translate("en", key, params))).toBe("Speaker 2");
+    expect(speakerName(speaker, (key, params) => translate("zh-CN", key, params))).toBe("发言人 2");
+    expect([speaker, SPEAKER_THEM].every(isTheirs)).toBe(true);
+    expect([SPEAKER_ME, SPEAKER_UNKNOWN, "Dana", null].some(isTheirs)).toBe(false);
   });
 });
