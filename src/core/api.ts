@@ -968,7 +968,9 @@ export type MindProblem =
     }
   | { kind: "local-mode" | "not-ready" }
   | { kind: "model"; mindId: string; message: string }
-  | { kind: "copy" | "new-version"; mindId: string; text: string };
+  | { kind: "copy" | "new-version"; mindId: string; text: string }
+  /** A chart of a table already in the Mind (#1091): "several" tables, and the cursor in none. */
+  | { kind: "no-chart"; mindId: string; problem: ChartProblem | "several" };
 
 /**
  * Where the assistant writes next in a Mind, as its changes come in (#202):
@@ -982,6 +984,13 @@ export interface MindWriting {
   mindId: string;
   place: WritingPlace | null;
 }
+
+/**
+ * Why a chart the User asked the assistant for wasn't drawn (#1091): no table to draw it from,
+ * no column of numbers, one column for a scatter chart, or figures with no Citation and no
+ * calculation.
+ */
+export type ChartProblem = "noTable" | "noNumbers" | "needsTwo" | "uncited";
 
 /**
  * What a call of a Minds' Tool did (#202): the changes it proposed in one
@@ -1001,6 +1010,10 @@ export interface MindChange {
   paragraphs?: number;
   /** How many tables it added. Absent: none. */
   tables?: number;
+  /** How many charts it added (#1091). Absent: none. */
+  charts?: number;
+  /** Why the chart asked for wasn't drawn, the table kept (#1091). Absent: none was asked for, or it was drawn. */
+  chartNotDrawn?: ChartProblem;
   /** Sources in its tables' cells written as a name in brackets that matched no Citation, kept as text. Absent: none. */
   unlinkedSources?: number;
   /** Sources the assistant wrote as a name in brackets that matched no Citation it recorded, so left out. Absent: none. */
@@ -2001,6 +2014,12 @@ export interface DeviceSettings {
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
   /**
+   * Where meeting audio is transcribed, once the User has chosen: at first run (Change on the
+   * Meetings job) or in Settings. Null: not chosen, so this computer, and a first Meeting may
+   * ask once cloud routes exist (#141).
+   */
+  transcriptionRoute: TranscriptionRoute | null;
+  /**
    * The User has read, once on this device, what a recording captures and
    * that the other people should be told. Recording waits for it.
    */
@@ -2014,6 +2033,13 @@ export interface DeviceSettings {
   /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
   motion: MotionPreference;
 }
+
+/**
+ * Where a Meeting's audio is turned into text: on this computer, for now. The cloud routes
+ * (#141, #463) are added here, each served by the keys and sign-ins it names.
+ */
+export const TRANSCRIPTION_ROUTES = ["local"] as const;
+export type TranscriptionRoute = (typeof TRANSCRIPTION_ROUTES)[number];
 
 /**
  * How the window moves on a device (DESIGN.md, Motion): as the system's own
@@ -8407,7 +8433,7 @@ export interface CoreApi {
   /**
    * The files in a Search scope that couldn't be read, and why (#740): its
    * Documents with no text, password-protected or damaged, and the files in
-   * its Linked folders in a format not read. A scope of none (null) is every
+   * its Linked folders in a format not read, by file name. A scope of none (null) is every
    * Document. Empty when everything in it was read.
    */
   listUnreadFiles(scope?: SearchScope | null): Promise<UnreadFile[]>;

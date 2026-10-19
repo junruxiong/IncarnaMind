@@ -36,6 +36,14 @@ const quoted = (text: string) => `â€œ${text.replace(/\s+/g, " ").slice(0, 120)}â
 const counted = (count: number, one: string, many = `${one}s`) =>
   `${count} ${count === 1 ? one : many}`;
 
+const NO_CHART = {
+  several: "it has more than one table, and the User's cursor was in none",
+  noTable: "it has no table",
+  noNumbers: "its table has no column of numbers",
+  needsTwo: "a scatter chart needs two columns of numbers",
+  uncited: "some of its table's figures have no Citation",
+} as const satisfies Record<Extract<MindProblem, { kind: "no-chart" }>["problem"], string>;
+
 function whyNot(problem: MindProblem | undefined): string {
   switch (problem?.kind) {
     case "waiting":
@@ -80,6 +88,8 @@ function whyNot(problem: MindProblem | undefined): string {
       return "the model couldn't be used";
     case "model":
       return `the model failed: ${problem.message}`;
+    case "no-chart":
+      return NO_CHART[problem.problem];
     case undefined:
       return "it failed";
   }

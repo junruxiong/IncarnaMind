@@ -2,12 +2,12 @@
  * The Minds an Answer in the assistant changed or made (#202), from its Tool
  * calls: what its card lists (`MindChangesCard`). Only data.
  */
-import type { ConversationAnswer } from "../../core/api";
+import type { ChartProblem, ConversationAnswer } from "../../core/api";
 
 /**
  * A Mind an Answer changed or made, the requests its changes there belong to,
  * and what its calls did there: paragraphs written in whole Blocks, paragraphs
- * changed, tables added, and what of those tables was kept as text: sources
+ * changed, tables and charts added, and what of those tables was kept as text: sources
  * that couldn't be linked, extra cells.
  */
 export interface ChangedMind {
@@ -17,6 +17,9 @@ export interface ChangedMind {
   wrote: number;
   changed: number;
   tables: number;
+  charts: number;
+  /** Why the last chart asked for there wasn't drawn; null when none was refused. */
+  chartNotDrawn: ChartProblem | null;
   unlinkedSources: number;
   droppedSources: number;
   extraCells: number;
@@ -34,6 +37,8 @@ export function changedMinds(answer: Pick<ConversationAnswer, "toolCalls">): Cha
       wrote: 0,
       changed: 0,
       tables: 0,
+      charts: 0,
+      chartNotDrawn: null,
       unlinkedSources: 0,
       droppedSources: 0,
       extraCells: 0,
@@ -46,6 +51,8 @@ export function changedMinds(answer: Pick<ConversationAnswer, "toolCalls">): Cha
       row.changed += change.changed ?? change.proposals - tables;
     } else row.wrote += change.paragraphs ?? 0;
     row.tables += tables;
+    row.charts += change.charts ?? 0;
+    if (change.chartNotDrawn) row.chartNotDrawn = change.chartNotDrawn;
     row.unlinkedSources += change.unlinkedSources ?? 0;
     row.droppedSources += change.droppedSources ?? 0;
     row.extraCells += change.extraCells ?? 0;
