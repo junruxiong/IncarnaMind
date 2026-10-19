@@ -105,11 +105,13 @@ const RELATIONSHIP = {
 const MAIN_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml";
 
 /** Page sizes and margins, in twentieths of a point ("twips"): 1 inch margins. */
-const PAPER = {
+export const PAPER = {
   letter: { width: 12240, height: 15840 },
   a4: { width: 11906, height: 16838 },
 } as const;
-const MARGIN = 1440;
+export const MARGIN = 1440;
+/** From a page's edge to its header and to its footer. */
+export const HEADER_AND_FOOTER_DISTANCE = 720;
 
 /** One level of a list, or of a quote, indents this much (half an inch). */
 const INDENT = 720;
@@ -135,7 +137,7 @@ export function renderDocx(
   const document =
     `${XML_DECLARATION}<w:document xmlns:w="${NS.w}" xmlns:r="${NS.r}" xmlns:wp="${NS.wp}" xmlns:a="${NS.a}" xmlns:pic="${NS.pic}" xmlns:m="${NS.m}"><w:body>` +
     body +
-    `<w:sectPr><w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>` +
+    `<w:sectPr><w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="${HEADER_AND_FOOTER_DISTANCE}" w:footer="${HEADER_AND_FOOTER_DISTANCE}" w:gutter="0"/></w:sectPr>` +
     "</w:body></w:document>";
 
   const comments = review?.comments ?? [];

@@ -6181,6 +6181,98 @@ export interface RegisteredDataFlow {
 }
 
 // ---------------------------------------------------------------------------
+// Page setup (#803, part 1 of Page view)
+// ---------------------------------------------------------------------------
+
+/** How a page number is written: Word's `decimal`, `lowerRoman`, `upperRoman`, `lowerLetter` and `upperLetter`. */
+export type PageNumberFormat =
+  | "decimal"
+  | "lowerRoman"
+  | "upperRoman"
+  | "lowerLetter"
+  | "upperLetter";
+
+/** One run in a header or footer: text, or a field that the page it is drawn on fills in. */
+export type PageFurnitureRun =
+  | { kind: "text"; text: string; bold?: true; italic?: true }
+  | {
+      kind: "field";
+      /** The page's number, the pages in the document, or the pages in the section. */
+      field: "PAGE" | "NUMPAGES" | "SECTIONPAGES";
+      /** The field's own `\* roman`-style switch; null: the section's number format. */
+      format: PageNumberFormat | null;
+      bold?: true;
+      italic?: true;
+    };
+
+export interface PageFurnitureParagraph {
+  align: "left" | "center" | "right" | "justify";
+  runs: PageFurnitureRun[];
+  /** It is in a text box anchored in the paragraph before it, as a page number often is. */
+  inTextBox?: true;
+}
+
+/** A header or a footer: its paragraphs, tables flattened to their paragraphs, a text box's after the one it is anchored in. */
+export interface PageFurniture {
+  paragraphs: PageFurnitureParagraph[];
+}
+
+/** A header or footer for each kind of page: most pages, the first, and the even ones. */
+export interface PageFurnitureSet {
+  default: PageFurniture | null;
+  /** Used where the section has a different first page. */
+  first: PageFurniture | null;
+  /** Used where the document has different odd and even pages. */
+  even: PageFurniture | null;
+}
+
+/** One section of a document's pages. Lengths are in twips (twentieths of a point, 1,440 to the inch). */
+export interface PageSection {
+  /**
+   * The place ("w:sectPr#3") of the section break atom that ends it in the Mind,
+   * as `WordAtomAttributes.source` has it; null for the last section, which ends with the document.
+   */
+  breakPlace: string | null;
+  /** Where its first page starts: on a new page, on the same page, or on the next odd or even one. */
+  start: "nextPage" | "continuous" | "evenPage" | "oddPage";
+  width: number;
+  height: number;
+  orientation: "portrait" | "landscape";
+  margins: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+    gutter: number;
+    /** From the page's top edge to its header, and from its bottom edge to its footer. */
+    header: number;
+    footer: number;
+  };
+  /** The first page has its own header and footer. */
+  differentFirstPage: boolean;
+  pageNumbers: {
+    /** The number the section's first page takes; null: it carries on from the section before. */
+    start: number | null;
+    format: PageNumberFormat;
+  };
+  /** As this section has them: a header or footer the file doesn't give it is the section before's. */
+  headers: PageFurnitureSet;
+  footers: PageFurnitureSet;
+}
+
+/**
+ * How a Mind's pages are set up, for Page view: what the Word file it was imported
+ * from says, or, for a Mind that wasn't, the size and margins of the native export. Pages are
+ * layout only: none of this is in the Mind's content, its sync or its Questions.
+ */
+export interface PageSetup {
+  source: "word" | "native";
+  /** Odd and even pages have different headers and footers. */
+  oddAndEven: boolean;
+  sections: PageSection[];
+}
+
+// ---------------------------------------------------------------------------
 // Privacy
 
 /**
@@ -9309,6 +9401,12 @@ export interface CoreApi {
   getMindStyle(mindId: string): Promise<MindStyle>;
   /** Sets the Mind's font and text size together, so Undo can put both back. */
   setMindStyle(mindId: string, style: MindStyle): Promise<MindStyle>;
+  /**
+   * The pages of a Mind, for Page view (#803): each section's size, orientation and margins, and its
+   * headers and footers with their page fields, as the Word file it was imported from has them; for
+   * any other Mind, the native export's paper (A4 or Letter by region) and margins in one section.
+   */
+  getPageSetup(mindId: string): Promise<PageSetup>;
 
   /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
   getOutputSettings(): Promise<OutputSettings>;
@@ -9910,6 +10008,7 @@ const methods: Record<CoreApiMethod, true> = {
   openCitationStyleLicences: true,
   getMindStyle: true,
   setMindStyle: true,
+  getPageSetup: true,
   getOutputSettings: true,
   setOutputLocation: true,
   setLinkedFolderWriting: true,

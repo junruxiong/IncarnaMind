@@ -109,6 +109,8 @@ import {
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
 import { pdfIsLocked, pdfOpensWith } from "./documents/extract";
 import { statIdentity } from "./documents/files";
+import { openWordPackage } from "./documents/formats/docxPackage";
+import { readPageSetup } from "./documents/formats/docxPages";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
@@ -137,6 +139,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
+import { PAPER as DOCX_PAPER } from "./exports/docx";
 import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
 import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPictures";
@@ -177,6 +180,7 @@ import {
 import { firstLineOf, readBlocks, textStart, theirChangesReading } from "./mindText";
 import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
+import { nativePageSetup } from "./pageSetup";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
@@ -3883,6 +3887,13 @@ export function createCore(adapters: CoreAdapters): Core {
       await adapters.shell.openPath(path);
     },
     getMindStyle: async (mindId) => content.readSettings(minds.get(mindId).id, mindStyleOf),
+    getPageSetup: async (mindId) => {
+      const mind = minds.get(mindId);
+      const paper = paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages()));
+      if (wordImports.originalOf(mind.id) === null) return nativePageSetup(paper);
+      const pkg = await openWordPackage(await wordImports.packageOf(mind.id));
+      return readPageSetup(pkg, DOCX_PAPER[paper]);
+    },
     setMindStyle: async (mindId, style) => {
       if (!isMindStyle(style)) throw new InvalidInputError({ key: "error.mindStyle.invalid" });
       const mind = writableMind(mindId);
