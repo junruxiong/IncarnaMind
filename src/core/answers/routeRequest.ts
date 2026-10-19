@@ -18,7 +18,11 @@
  * "根据我现有的文件帮我写一份summary") goes into a new Mind (#1109). After an
  * Answer, "make it a document" or "你不给我建一份文档吗" puts that Answer in a
  * new Mind as it is (`fromAnswer`), a question in form but not in meaning.
+ * "Make a bar chart of revenue by quarter" ("画一个各季度收入的柱状图") writes a
+ * cited table and its chart into the Mind (`chart`, #1091).
  */
+import type { ChartKind } from "../../shared/charts";
+
 export type RequestKind = "edit" | "write" | "unclear";
 
 export interface RequestRoute {
@@ -28,6 +32,11 @@ export interface RequestRoute {
   fromAnswer?: true;
   /** A piece, or the last Answer, fills the empty Mind the User is in rather than making another. */
   fillsEmpty?: true;
+  /**
+   * A chart is asked for: of `kind`, or, null, of the kind a chart starts as; `existing`, of a
+   * table already in the Mind ("chart this table").
+   */
+  chart?: { kind: ChartKind | null; existing?: true };
 }
 
 // Never a doubt: "I mean write a summary…", "no, keep it shorter", "帮我润色一下这段".
@@ -131,6 +140,18 @@ const HOW = /\bhow\b|怎么|怎样|如何/;
 const INTO_THEIRS =
   /\b(?:in|into|to|for|on|under|after) (?:my|this|the) (?:own )?(?:notes?|page|mind|draft|summary|section|intro|introduction|conclusion|list|table)\b|\b(?:here|below)$/;
 
+const CHART_KIND_WORD = "(?:bar|column|line|pie|scatter)";
+const CHART_NOUN = "(?:chart|graph|plot)";
+const AS_KIND = `(?:,? (?:as|in) (?:a|an) ${CHART_KIND_WORD} ${CHART_NOUN})?`;
+const CHARTS = [
+  new RegExp(
+    `^(?:make|draw|create|add|show|give|put together)(?: me)?(?: (?:a|an|one))?(?: ${CHART_KIND_WORD})? ${CHART_NOUN}(?: (?:of|for|showing|comparing|from) ${WORDS})?${AS_KIND}$`,
+    "u",
+  ),
+  new RegExp(`^(?:chart|plot|graph) ${WORDS}${AS_KIND}$`, "u"),
+];
+const ZH_CHART_NOUN = "(?:柱状图|条形图|折线图|曲线图|饼图|饼状图|散点图|图表|统计图)";
+
 const FOLLOW_UPS = [
   new RegExp(
     `^(?:(?:make|keep) it )?(?:(?:a bit|a little|much|even) )?(?:${COMPARED}|${MORE}|short|simple|formal|concise|(?:about )?\\d+ words)$`,
@@ -195,6 +216,35 @@ const ZH_FOLLOW_UPS = [
   /^(?:翻译成|改成)(?:中文|英文)$/,
 ];
 const ZH_CONTINUE = /^(?:继续|接着写|继续写)$/;
+const ZH_CHARTS = [
+  new RegExp(
+    `^(?:(?:根据|基于|用|把)${ZH_FREE}，?)?(?:帮我)?(?:画|做|生成|绘制|加|添加|做成|画成)(?:一[个张幅份])?(?:${ZH_FREE})?${ZH_CHART_NOUN}$`,
+    "u",
+  ),
+];
+// The kind named last wins: "a bar chart of revenue, as a line chart".
+const KIND_NAMED =
+  /\b(bar|column|line|pie|scatter) (?:chart|graph|plot)\b|(柱状图|条形图|折线图|曲线图|饼图|饼状图|散点图)/gu;
+const EXISTING_TABLE = /\b(?:this|that|the|my) table\b|这个表格|这张表|这个表|该表格|上面的表格/u;
+const KINDS: Readonly<Record<string, ChartKind>> = {
+  bar: "bar",
+  column: "bar",
+  line: "line",
+  pie: "pie",
+  scatter: "scatter",
+  柱状图: "bar",
+  条形图: "bar",
+  折线图: "line",
+  曲线图: "line",
+  饼图: "pie",
+  饼状图: "pie",
+  散点图: "scatter",
+};
+
+function chartKindOf(question: string): ChartKind | null {
+  const last = [...question.toLocaleLowerCase().matchAll(KIND_NAMED)].at(-1);
+  return KINDS[last?.[1] ?? last?.[2] ?? ""] ?? null;
+}
 const ZH_PIECE_NOUN =
   "(?:总结|摘要|报告|备忘录|综述|简报|计划|概述|方案|纪要|summary|report|memo|review|brief|plan|overview)";
 const ZH_PIECES = [
@@ -236,7 +286,7 @@ export interface RequestContext {
   lastAnswerHasText?: boolean;
 }
 
-type PlainKind = "edit" | "write" | "piece" | "as-a-mind";
+type PlainKind = "edit" | "write" | "piece" | "as-a-mind" | "chart";
 
 function plainKind(
   question: string,
@@ -256,6 +306,7 @@ function plainKind(
     if (ZH_ASKS.test(chinese)) return null;
     if (lastAnswerHasText && ZH_AS_A_MIND.test(chinese)) return "as-a-mind";
     if (matches(ZH_EDITS, chinese)) return "edit";
+    if (matches(ZH_CHARTS, chinese)) return "chart";
     if (ZH_ADD_IT.test(chinese)) return followsAnAnswer ? "write" : null;
     if (matches(ZH_PIECES, chinese)) return "piece";
     if (matches(ZH_WRITES, chinese)) return "write";
@@ -281,6 +332,7 @@ function plainKind(
   if (ASKS.test(english)) return null;
   if (lastAnswerHasText && AS_A_MIND.test(english)) return "as-a-mind";
   if (matches(EDITS, english)) return WHOLE_MIND.test(english) ? null : "edit";
+  if (matches(CHARTS, english)) return "chart";
   if (ADD_IT.test(english)) return followsAnAnswer ? "write" : null;
   if (matches(PIECES, english)) return "piece";
   if (matches(WRITES, english)) return "write";
@@ -293,6 +345,16 @@ export function routeRequest(question: string, context: RequestContext): Request
   const plain = plainKind(question, context);
   if (plain === "as-a-mind") {
     return { kind: "write", newMind: true, fromAnswer: true, fillsEmpty: true };
+  }
+  if (plain === "chart") {
+    return {
+      kind: "write",
+      newMind: SAYS_NEW.test(question.toLocaleLowerCase()),
+      chart: {
+        kind: chartKindOf(question),
+        ...(EXISTING_TABLE.test(question.toLocaleLowerCase()) && { existing: true as const }),
+      },
+    };
   }
   const kind = plain === "piece" ? "write" : (plain ?? "unclear");
   const lower = question.toLocaleLowerCase();

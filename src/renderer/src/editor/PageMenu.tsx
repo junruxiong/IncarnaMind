@@ -86,7 +86,8 @@ export function PageMenu({
             }),
           "mind.moveTo": () => requestAnimationFrame(() => setMoving(button())),
         }}
-        without={["mind.style"]}
+        // The Mind is open on this page: nothing to open, and Style is below.
+        without={["mind.style", "mind.open", "mind.openTab"]}
         more={
           readOnly && !origin
             ? undefined
