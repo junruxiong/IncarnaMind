@@ -9,10 +9,12 @@ import type {
 import type { Language } from "../../../../core/language";
 import {
   catalogProviderOf,
+  dataUseOf,
   endpointOf,
   fieldValueOf,
   isPreset,
 } from "../../../../core/providers/catalog/providers";
+import { OLLAMA_CLOUD } from "../../../../core/providers/ollamaCloud";
 import { formatDate } from "../../../../shared/dates";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 import { useAnswers } from "../../answers";
@@ -263,7 +265,11 @@ export function ProviderPage({
       </header>
 
       {provider.service ? (
-        <ProviderSendsLine provider={provider.service.name} dataUse={catalog?.dataUse} />
+        <ProviderSendsLine
+          provider={provider.service.name}
+          // Ollama's cloud models run at ollama.com, which its own line covers.
+          dataUse={catalog && dataUseOf(catalog, provider.service.id !== OLLAMA_CLOUD.id)}
+        />
       ) : (
         <p className="text-[13px] leading-5">
           <OnThisComputer>{t("providers.choice.local")}</OnThisComputer>
