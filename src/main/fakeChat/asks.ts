@@ -9,6 +9,7 @@ import { lastResult, type Prompt, type Reply, systemOf } from "./prompt";
 const MAIN_DOCUMENTS =
   /\bsummari[sz]e the (?:main|key|important) documents\b|总结.*(?:主要|重要).*文档/i;
 const MAIN_ONES = /\bsummari[sz]e the main ones\b/i;
+const FOR_THE_BOARD = /\bfor the board\b/i;
 
 const namesIn = (system: string): string[] => {
   const list = /names, newest first:\n((?:- .+\n?)+)/.exec(system)?.[1] ?? "";
@@ -49,10 +50,16 @@ export function asksReply(
     return {
       tool: "ask_user",
       input: {
-        question: chinese ? "要总结哪几份文档？" : "Which Documents should I summarise?",
+        question: chinese
+          ? "要总结哪几份文档？"
+          : FOR_THE_BOARD.test(question)
+            ? "Which Documents should I summarise for the board, given that some of them are drafts, some are signed, and the minutes only record what was decided rather than why it was decided?"
+            : "Which Documents should I summarise?",
         detail: chinese
           ? `资料库里有 ${documents.length} 份，已选中最新的两份。`
-          : `Your Library has ${documents.length}. The two newest are picked.`,
+          : FOR_THE_BOARD.test(question)
+            ? `Your Library has ${documents.length}. The two newest are picked, since the board asks about what changed most recently, and the older lease hasn't changed this year.`
+            : `Your Library has ${documents.length}. The two newest are picked.`,
         multiple: true,
         other: true,
         options: documents.slice(0, 4).map((name, index) => ({

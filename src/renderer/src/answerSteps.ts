@@ -143,6 +143,10 @@ const mindRow = ({ answer, askedFrom, selection }: StepsInput) =>
       ? ({ kind: "asked", mind: askedFrom } as const)
       : null;
 
+// A question the Tool refused, or one left open when its Answer stopped, waits for nothing now.
+const unansweredQuestion = (call: AnswerToolCall) =>
+  call.source === "asks" && call.status !== "running" && !call.asked?.answer;
+
 /**
  * The rows of the unfolded timeline, in order: the model's reasoning (or
  * who answered), the Mind read, unless the folded line already says so and
@@ -152,10 +156,6 @@ const mindRow = ({ answer, askedFrom, selection }: StepsInput) =>
  * of the Citations last. A call still waiting for the User has no row: its
  * approval card shows instead.
  */
-// A question the Tool refused, or one left open when its Answer stopped, waits for nothing now.
-const unansweredQuestion = (call: AnswerToolCall) =>
-  call.source === "asks" && call.status !== "running" && !call.asked?.answer;
-
 export function stepRows(input: StepsInput): StepRow[] {
   const { answer } = input;
   const rows: StepRow[] = [];

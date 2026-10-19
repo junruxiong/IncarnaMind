@@ -154,6 +154,36 @@ test("at a narrow window the question keeps its line, and its rows and buttons s
   await app.close();
 });
 
+/** Whether nothing covers the middle of `target`: what the User sees there is it. */
+const uncovered = (target: Locator) =>
+  target.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const seen = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    return seen !== null && element.contains(seen);
+  });
+
+test("at a narrow window a long question scrolls away with its rows, so a row is always in view", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setUp(app, window);
+  await setWindowSize(app, window, 900, 700);
+
+  const card = await ask(window, "Summarise the main documents for the board");
+  await expect(card).toContainText("rather than why it was decided?");
+  const rows = card.getByTestId("question-option");
+  await expect(rows.first()).toBeFocused();
+  expect(await uncovered(rows.first())).toBe(true);
+  expect(await uncovered(card.getByTestId("question-continue"))).toBe(true);
+  await window.keyboard.press("ArrowDown");
+  await expect(rows.nth(1)).toBeFocused();
+  expect(await uncovered(rows.nth(1))).toBe(true);
+  await window.keyboard.press("ArrowDown");
+  await expect(rows.nth(2)).toBeFocused();
+  expect(await uncovered(rows.nth(2))).toBe(true);
+  await app.close();
+});
+
 test("Esc skips: the Answer goes on with the two newest and says so", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);

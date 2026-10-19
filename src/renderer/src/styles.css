@@ -7551,6 +7551,20 @@
       .approval-card:not(.choice-card) .approval-explanation {
         display: none;
       }
+      /* A long question would leave its rows no room between a stuck head and the buttons: here it scrolls away with them. */
+      .choice-card {
+        overflow-y: auto;
+        scroll-padding-bottom: 48px;
+
+        .approval-head {
+          position: static;
+        }
+        .choice-options {
+          flex: none;
+          min-height: 0;
+          overflow: visible;
+        }
+      }
     }
     .approval-details {
       padding: 10px;

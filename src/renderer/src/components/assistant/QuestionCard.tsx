@@ -23,9 +23,9 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
   const answer = useQuestions((state) => state.answer);
   const { question } = request;
   const { options, multiple, other } = question;
-  const [ticked, setTicked] = useState<ReadonlySet<number>>(
-    () => new Set(options.flatMap((option, index) => (option.preselected ? [index] : []))),
-  );
+  const preselected = () =>
+    new Set(options.flatMap((option, index) => (option.preselected ? [index] : [])));
+  const [ticked, setTicked] = useState<ReadonlySet<number>>(preselected);
   const [wrote, setWrote] = useState("");
   const card = useRef<HTMLElement>(null);
   const titleId = useId();
@@ -62,8 +62,27 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
       active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
         ? active.value
         : (active?.textContent ?? "");
-    if (typesText(active) && words.trim() !== "") return;
-    card.current?.querySelector<HTMLElement>("[data-question-row]")?.focus();
+    const first = card.current?.querySelector<HTMLElement>("[data-question-row]");
+    if (typesText(active) && words.trim() !== "") first?.scrollIntoView({ block: "nearest" });
+    else first?.focus();
+  }, []);
+
+  // The tray settles its height after the card shows: the row with the focus, or the first, stays in view.
+  useEffect(() => {
+    const element = card.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      const active = document.activeElement;
+      const row =
+        active instanceof HTMLElement &&
+        element.contains(active) &&
+        active.matches("[data-question-row]")
+          ? active
+          : element.querySelector<HTMLElement>("[data-question-row]");
+      row?.scrollIntoView({ block: "nearest" });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
   // A number picks a row from anywhere but a field, as the tray's other asks take ⌘↵.
@@ -184,7 +203,9 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
               spellCheck={false}
               onChange={(event) => {
                 setWrote(event.target.value);
-                if (!multiple && event.target.value.trim() !== "") setTicked(new Set());
+                if (!multiple) {
+                  setTicked(event.target.value.trim() === "" ? preselected() : new Set());
+                }
               }}
               onKeyDown={(event) => {
                 // Enter while an input method composes picks its word; it never sends.
