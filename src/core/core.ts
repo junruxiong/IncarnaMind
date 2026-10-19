@@ -3230,8 +3230,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return renamed;
     },
     deleteDocument: async (id) => {
-      await documents.delete(id);
-      activity.documentDeleted(id as string);
+      for (const deleted of await documents.delete(id)) activity.documentDeleted(deleted);
+    },
+    deleteDocuments: async (ids) => {
+      for (const deleted of await documents.delete(ids)) activity.documentDeleted(deleted);
     },
     retryDocument: async (id) => documents.retry(id),
     unlockDocument: async (input) => {

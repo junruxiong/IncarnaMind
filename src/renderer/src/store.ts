@@ -77,7 +77,7 @@ import { useNotices } from "./notices";
 import type { ObjectRef } from "./objects";
 import { useRequests } from "./requests";
 import { resolveSettingsPage, type SettingsPage, type SettingsTarget } from "./settingsPages";
-import { asOneStep, type Undoable, UndoRefused, useUndo } from "./undo";
+import { asOneStep, sayWhileSlow, type Undoable, UndoRefused, useUndo } from "./undo";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -1278,14 +1278,19 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     deleteDocuments: (ids) =>
       attempt(async () => {
-        const first = get().documents.find((each) => each.id === ids[0]);
-        const remove = async () => {
-          for (const id of ids) await core.deleteDocument(id);
-          documentUpdates.flush();
-          set((state) => ({ documents: state.documents.filter((each) => !ids.includes(each.id)) }));
-        };
-        await remove();
         if (ids.length === 0) return;
+        const first = get().documents.find((each) => each.id === ids[0]);
+        const gone = new Set(ids);
+        const work = async () => {
+          await core.deleteDocuments([...ids]);
+          documentUpdates.flush();
+          set((state) => ({ documents: state.documents.filter((each) => !gone.has(each.id)) }));
+        };
+        const remove = () =>
+          ids.length > 1
+            ? sayWhileSlow((t) => t("object.deleting.documents", { count: ids.length }), work)
+            : work();
+        await remove();
         const shown = first ? displayName(first) : "";
         push(
           deleted(

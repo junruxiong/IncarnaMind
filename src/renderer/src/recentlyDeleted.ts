@@ -43,12 +43,13 @@ const refsOf = (items: readonly DeletedItem[]) => items.map(({ kind, id }) => ({
 
 /** Deletes again what a restore brought back, as deleting it did. */
 async function deleteAgain(items: readonly DeletedItem[]): Promise<void> {
+  const documents = items.filter((item) => item.kind === "document").map((item) => item.id);
+  if (documents.length > 0) await core.deleteDocuments(documents);
   for (const { kind, id } of items) {
     if (kind === "mind") await core.deleteMind(id);
     else if (kind === "conversation") await core.deleteConversation(id);
-    else if (kind === "document") await core.deleteDocument(id);
     else if (kind === "folder") await core.deleteLibraryGroup(id);
-    else await core.deleteTag(id);
+    else if (kind === "tag") await core.deleteTag(id);
   }
 }
 

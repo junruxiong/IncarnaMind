@@ -304,6 +304,8 @@ export const en = {
   "object.renamed": "Renamed to “{name}”",
   "object.deleted": "Moved “{name}” to Recently deleted",
   "object.deleted.documents": "Moved {count} Documents to Recently deleted",
+  "object.deleting.documents": "Moving {count} Documents to Recently deleted…",
+  "object.restoring.documents": "Restoring {count} Documents…",
   "object.deleted.items": "Moved {count} items to Recently deleted",
   "undo.name.delete.documents": "Delete {count} Documents",
   "object.restored": "Restored “{name}”",

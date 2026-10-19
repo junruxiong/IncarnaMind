@@ -2365,18 +2365,28 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
-     * Removes a Document from the index. The User's file isn't touched; only a
-     * copy the old layout made in the data folder is removed with it.
+     * Removes Documents from the index, all in one step, or none when one isn't found. The
+     * User's files aren't touched; only copies the old layout made in the data folder go with
+     * them. Returns their ids.
      */
-    async delete(idInput: unknown): Promise<void> {
-      const id = parseId(idInput);
-      const row = find(id);
-      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
-      removeFromIndex([id], now());
-      if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
-        await rm(row.path, { force: true }).catch(reportError);
+    async delete(idsInput: unknown): Promise<string[]> {
+      const ids = [...new Set((Array.isArray(idsInput) ? idsInput : [idsInput]).map(parseId))];
+      const rows = ids.map((id) => {
+        const row = find(id);
+        if (!row) throw new NotFoundError({ key: "error.document.notFound" });
+        return row;
+      });
+      removeFromIndex(ids, now());
+      for (const row of rows) {
+        if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
+          await rm(row.path, { force: true }).catch(reportError);
+        }
       }
-      library.documentsChanged(row.linked_folder_id);
+      // Once a Linked folder, not once a Document: 1,700 Documents took 90 s one by one (#1349).
+      for (const linkedFolderId of new Set(rows.map((row) => row.linked_folder_id))) {
+        library.documentsChanged(linkedFolderId);
+      }
+      return ids;
     },
 
     /**

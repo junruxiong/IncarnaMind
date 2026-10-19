@@ -297,6 +297,8 @@ export const zhCN = {
   "object.renamed": "已重命名为“{name}”",
   "object.deleted": "已将“{name}”移到回收站",
   "object.deleted.documents": "已将 {count} 个文档移到回收站",
+  "object.deleting.documents": "正在将 {count} 个文档移到回收站…",
+  "object.restoring.documents": "正在恢复 {count} 个文档…",
   "object.deleted.items": "已将 {count} 项移到回收站",
   "undo.name.delete.documents": "删除 {count} 个文档",
   "object.restored": "已恢复“{name}”",

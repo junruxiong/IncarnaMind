@@ -306,11 +306,14 @@ describe("changes the User can take back", () => {
     await useUndo.getState().undo();
     expect(method("restore")).toHaveBeenCalledWith([{ kind: "document", id: "a" }]);
     await useUndo.getState().redo();
-    expect(method("deleteDocument")).toHaveBeenCalledTimes(2);
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(2);
   });
 
-  test("several Documents deleted together are one change, said by their count", async () => {
+  // protects=deleting several Documents is one call to the core and one change, said by their count (#1349); fails_when=the core is asked once per Document, which took 90 s for 1,700; no_claim=how long the core takes.
+  test("several Documents deleted together are one call and one change, said by their count", async () => {
     await useAppStore.getState().deleteDocuments(["a", "b"]);
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(1);
+    expect(method("deleteDocuments")).toHaveBeenCalledWith(["a", "b"]);
     expect(said(top())).toBe("Moved 2 Documents to Recently deleted");
     expect(named(top())).toBe("Delete 2 Documents");
     expect(useAppStore.getState().documents.map((each) => each.id)).toEqual(["c"]);
@@ -319,6 +322,38 @@ describe("changes the User can take back", () => {
       { kind: "document", id: "a" },
       { kind: "document", id: "b" },
     ]);
+  });
+
+  // protects=a delete still going after a second says so where its result will show, until it is done, and Undo of one does too (#1349); fails_when=nothing shows meanwhile, or the note outlives the delete; no_claim=how long the core takes.
+  test("a delete that takes longer than a second says what it is doing until it is done", async () => {
+    const slow = () => {
+      let finish: () => void = () => undefined;
+      const done = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return { done, finish };
+    };
+    const note = () => useUndo.getState().line?.note?.(words);
+
+    const deleting = slow();
+    method("deleteDocuments").mockReturnValue(deleting.done);
+    const deleted = useAppStore.getState().deleteDocuments(["a", "b"]);
+    vi.advanceTimersByTime(999);
+    expect(note()).toBeUndefined();
+    vi.advanceTimersByTime(1);
+    expect(note()).toBe("Moving 2 Documents to Recently deleted…");
+    deleting.finish();
+    await deleted;
+    expect(said(useUndo.getState().line?.change)).toBe("Moved 2 Documents to Recently deleted");
+
+    const restoring = slow();
+    method("restore").mockReturnValue(restoring.done);
+    const undone = useUndo.getState().undo();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(note()).toBe("Restoring 2 Documents…");
+    restoring.finish();
+    await undone;
+    expect(useUndo.getState().line).toBeNull();
   });
 
   test("a Tag added is undone by putting each link back as it was, with who chose it", async () => {

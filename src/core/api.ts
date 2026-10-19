@@ -8404,6 +8404,8 @@ export interface CoreApi {
    * linked again.
    */
   deleteDocument(id: string): Promise<void>;
+  /** Removes Documents from the index as `deleteDocument` does, all in one step: or none, when one isn't found. */
+  deleteDocuments(ids: string[]): Promise<void>;
   /**
    * Processes a Document that failed again, from its file as it is now, e.g.
    * once the User has fixed it. Returns it, queued; "document.status" events
@@ -9867,6 +9869,7 @@ const methods: Record<CoreApiMethod, true> = {
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
+  deleteDocuments: true,
   retryDocument: true,
   unlockDocument: true,
   forgetDocumentPassword: true,

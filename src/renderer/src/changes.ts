@@ -9,7 +9,7 @@ import type { LinkedFolderLayout, RestoreRef, TagLinkState } from "../../core/ap
 import { core } from "./core";
 import type { Words } from "./lineNames";
 import type { Translate } from "./objects";
-import type { Undoable } from "./undo";
+import { sayWhileSlow, type Undoable } from "./undo";
 
 /** A name the User gave, or the words for what it is called when it has none. */
 type Shown = string | Words;
@@ -53,7 +53,13 @@ export function deleted(
       count > 1
         ? t("undo.name.delete.documents", { count })
         : t("undo.name.delete", { name: shownIn(t, shown) }),
-    undo: () => core.restore(refs),
+    undo: () =>
+      count > 1
+        ? sayWhileSlow(
+            (t) => t("object.restoring.documents", { count }),
+            () => core.restore(refs),
+          )
+        : core.restore(refs),
     redo: async () => {
       await remove();
     },
