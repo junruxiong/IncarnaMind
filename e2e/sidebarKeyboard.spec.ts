@@ -422,9 +422,9 @@ test("↑ ↓ Home and End walk the rows, → and ← unfold, fold, step in and 
   }
 });
 
-test("a Linked folder's subfolders, however deep, are rows of the tree: each a level deeper, folded, unfolded and left by the arrows", async () => {
+test("a Linked folder is one row of the tree, reached by the arrows: → and ← leave it as it is, and Enter opens the Library", async () => {
   const library = join(sources, "Library");
-  for (const file of ["root.txt", "A/top.txt", "A/B/mid.txt", "A/B/C/deep.txt"]) {
+  for (const file of ["root.txt", "A/top.txt", "A/B/mid.txt"]) {
     await mkdir(dirname(join(library, file)), { recursive: true });
     await writeFile(join(library, file), `${file}: spring tides come twice a month.\n`);
   }
@@ -435,78 +435,33 @@ test("a Linked folder's subfolders, however deep, are rows of the tree: each a l
     await linkFolderFromSidebar(app, window, library);
     await showSourceLocations(window);
     const section = window.getByTestId("linked-folders-section");
-    const inSection = (name: string | RegExp, exact = false) =>
-      section.getByRole("treeitem", { name, exact });
-    const linked = inSection(/^Library/);
-    const a = inSection("A", true);
-    const b = inSection("B", true);
-    const c = inSection("C", true);
-    const deep = inSection(/^deep/);
-    await expect(deep).toBeVisible();
-    await expect(section.getByRole("treeitem")).toHaveCount(8);
-
-    // Each is a level below its folder: the Linked folder, A, B, C, and the Document in C.
-    for (const [item, level] of [
-      [linked, "1"],
-      [a, "2"],
-      [b, "3"],
-      [c, "4"],
-      [deep, "5"],
-    ] as const) {
-      await expect(item).toHaveAttribute("aria-level", level);
-    }
-    await expect(section.getByRole("tree")).toMatchAriaSnapshot(`
-      - tree:
-        - treeitem /^Library/ [expanded] [level=1]
-        - treeitem "A" [expanded] [level=2]
-        - treeitem "B" [expanded] [level=3]
-        - treeitem "C" [expanded] [level=4]
-        - treeitem /^deep/ [level=5]
-        - treeitem /^mid/ [level=4]
-        - treeitem /^top/ [level=3]
-        - treeitem /^root/ [level=2]
-    `);
+    const linked = section.getByRole("treeitem", { name: /^Library/ });
+    await expect(section.getByRole("treeitem")).toHaveCount(1);
+    await expect(linked).toHaveAttribute("aria-level", "1");
+    await expect(linked).not.toHaveAttribute("aria-expanded");
+    // Its files are rows of Not in a Folder.
+    await expect(
+      window.getByTestId("not-in-a-folder").getByRole("treeitem", { name: /^(root|top|mid)/ }),
+    ).toHaveCount(3);
 
     // From the Documents in Not in a Folder, ↓ goes on into the Linked folders section.
     await tabIntoTree(window);
     for (
       let step = 0;
-      step < 6 && !(await linked.evaluate((item) => item === document.activeElement));
+      step < 8 && !(await linked.evaluate((item) => item === document.activeElement));
       step++
     ) {
       await window.keyboard.press("ArrowDown");
     }
     await expect(linked).toBeFocused();
-    // The Linked folder's row has actions, its subfolders' none: each has one ring.
     await expectOneRing(window);
-    // → steps in, one level at a time, to the first row of each folder.
-    for (const next of [a, b, c, deep]) {
-      await window.keyboard.press("ArrowRight");
-      await expect(next).toBeFocused();
-      await expectOneRing(window);
+    for (const key of ["ArrowRight", "ArrowLeft"]) {
+      await window.keyboard.press(key);
+      await expect(linked).toBeFocused();
+      await expect(section.getByRole("treeitem")).toHaveCount(1);
     }
-    // ← steps out of the Document to C, folds C, steps out to B, folds B, and so on.
-    await window.keyboard.press("ArrowLeft");
-    await expect(c).toBeFocused();
-    await window.keyboard.press("ArrowLeft");
-    await expect(c).toHaveAttribute("aria-expanded", "false");
-    await expect(deep).toHaveCount(0);
-    await window.keyboard.press("ArrowLeft");
-    await expect(b).toBeFocused();
-    await window.keyboard.press("ArrowLeft");
-    await expect(b).toHaveAttribute("aria-expanded", "false");
-    await expect(c).toHaveCount(0);
-    await window.keyboard.press("ArrowLeft");
-    await expect(a).toBeFocused();
-    await window.keyboard.press("ArrowLeft");
-    await window.keyboard.press("ArrowLeft");
-    await expect(linked).toBeFocused();
-    await expect(linked).toHaveAttribute("aria-expanded", "true");
-    // Type-ahead reaches into the deepest unfolded folder: "t" is top.txt's name.
-    await window.keyboard.press("ArrowRight");
-    await window.keyboard.press("ArrowRight");
-    await window.keyboard.press("ArrowRight");
-    await typeName(window, "t", inSection(/^top/));
+    await window.keyboard.press("Enter");
+    await expect(window.getByTestId("library")).toBeVisible();
   } finally {
     await app.close();
   }

@@ -22,7 +22,6 @@ import {
   removeDataFolder,
   setLanguage,
   setWindowSize,
-  showFolders,
   showSourceLocations,
   sidebarFolder,
   useLocalChatModel,
@@ -282,7 +281,6 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "linkedFolder.unlink",
   ]);
-  await showFolders(window);
 
   // A tab: its own actions, then Close and Close other tabs last. The keyboard opens the same menu
   // as the right-click, its ⋯ being out of sight in the tab.

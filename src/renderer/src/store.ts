@@ -74,9 +74,10 @@ import {
 } from "./moves";
 import { untitledFolderName } from "./newFolder";
 import { useNotices } from "./notices";
+import type { ObjectRef } from "./objects";
 import { useRequests } from "./requests";
 import { resolveSettingsPage, type SettingsPage, type SettingsTarget } from "./settingsPages";
-import { type Undoable, UndoRefused, useUndo } from "./undo";
+import { asOneStep, type Undoable, UndoRefused, useUndo } from "./undo";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -238,6 +239,8 @@ export interface AppState extends LayoutSlice {
   editFolder(folderId: string, input: LibraryGroupInput): Promise<void>;
   /** Deletes a Folder, with Undo: its Documents and Minds go to Not in a Folder. */
   deleteFolder(folderId: string): Promise<void>;
+  /** Deletes the Minds, Documents and Folders given, together, with one Undo. */
+  deleteSelection(items: readonly ObjectRef[]): Promise<void>;
   /** Lists a Mind just made and opens it in a new tab after the shown one, in the focused group or `groupId`. */
   showNewMind(mind: Mind, groupId?: string): Promise<void>;
   /** Called once the new Mind's text has the focus. */
@@ -1029,6 +1032,24 @@ export const useAppStore = create<AppState>()((set, get) => {
         await remove();
         if (folder) push(deleted(folder.name, [{ kind: "folder", id: folderId }], remove));
       }),
+
+    deleteSelection: (items) => {
+      const ids = (kind: ObjectRef["kind"]) =>
+        items.flatMap((each) => (each.kind === kind ? [each.id] : []));
+      const count = items.length;
+      // A Folder last: what was in it is put back into it once it is back.
+      return asOneStep(
+        {
+          said: (t) => t("object.deleted.items", { count }),
+          name: (t) => t("selection.delete", { count }),
+        },
+        async () => {
+          for (const id of ids("mind")) await get().deleteMind(id);
+          if (ids("document").length > 0) await get().deleteDocuments(ids("document"));
+          for (const id of ids("folder")) await get().deleteFolder(id);
+        },
+      );
+    },
 
     openExamples: () =>
       attempt(async () => {

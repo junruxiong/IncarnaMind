@@ -48,12 +48,14 @@ const isNameKey = (event: KeyboardEvent) =>
 /** Deletes the object of the focused row, or the whole selection if the row is part of it. */
 function deleteFrom(row: HTMLElement): void {
   const object = objectAt(row);
-  const command = object && DELETES[object.kind];
-  if (!object || !command) return;
+  if (!object) return;
   const chosen = selectedOn("sidebar");
   const selection = chosen.some((each) => each.kind === object.kind && each.id === object.id)
     ? chosen
     : [];
+  const mixed = new Set(selection.map((each) => each.kind)).size > 1;
+  const command = mixed ? "selection.delete" : DELETES[object.kind];
+  if (!command) return;
   commands
     .run(command, { selection, focus: object, surface: "sidebar" })
     .catch(useAppStore.getState().reportError);

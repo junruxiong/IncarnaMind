@@ -103,10 +103,8 @@ export const mindCommands: readonly Command[] = [
     label: "mind.moveTo",
     rowKeys: "CmdOrCtrl+Shift+M",
     group: "move",
-    // A sidebar selection of Minds and Documents moves together, from either kind's row.
-    appliesTo: ["mind", "tab", "document"],
-    when: (ctx) =>
-      ctx.here?.["mind.moveTo"] !== undefined && (ofMind(ctx) || idsOf(ctx, "mind").length > 0),
+    appliesTo: ["mind", "tab"],
+    when: (ctx) => ofMind(ctx) && ctx.here?.["mind.moveTo"] !== undefined,
     reversible: true,
     run: (ctx) => ctx.here?.["mind.moveTo"]?.(),
   },
@@ -198,7 +196,7 @@ export const documentCommands: readonly Command[] = [
     label: "documents.moveTo",
     rowKeys: "CmdOrCtrl+Shift+M",
     group: "move",
-    appliesTo: ["document", "mind"],
+    appliesTo: ["document"],
     reversible: true,
     ...needsHere("document.moveTo"),
   },
@@ -463,6 +461,36 @@ export const tagCommands: readonly Command[] = [
     group: "main",
     reversible: true,
     run: () => store().openTagsDialog(),
+  },
+];
+
+const kindsIn = (ctx: CommandContext) => new Set(ctx.selection.map((each) => each.kind)).size;
+const rowMoveTo = (ctx: CommandContext) =>
+  ctx.here?.["mind.moveTo"] ?? ctx.here?.["document.moveTo"];
+
+/** A selection of several kinds: only what applies to all of it, as `registerMixedMenu` lists. */
+export const mixedSelectionCommands: readonly Command[] = [
+  {
+    id: "selection.moveTo",
+    label: (ctx, t) => t("selection.moveTo", { count: ctx.selection.length }),
+    rowKeys: "CmdOrCtrl+Shift+M",
+    group: "move",
+    // Folders don't go inside Folders until #246.
+    appliesTo: ["mind", "document"],
+    when: (ctx) => kindsIn(ctx) > 1 && rowMoveTo(ctx) !== undefined,
+    reversible: true,
+    run: (ctx) => rowMoveTo(ctx)?.(),
+  },
+  {
+    id: "selection.delete",
+    label: (ctx, t) => t("selection.delete", { count: ctx.selection.length }),
+    rowKeys: "CmdOrCtrl+Backspace",
+    group: "danger",
+    destructive: true,
+    appliesTo: ["mind", "document", "folder"],
+    when: (ctx) => kindsIn(ctx) > 1,
+    reversible: true,
+    run: (ctx) => store().deleteSelection(ctx.selection),
   },
 ];
 

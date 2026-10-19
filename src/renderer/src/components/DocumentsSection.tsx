@@ -16,7 +16,7 @@ import {
   useSelectionOrder,
   useSeveralSelected,
 } from "../selection";
-import { dragFromRow, useSidebarMove } from "../sidebarMoves";
+import { dragFromRow, moveFromMenu, useSidebarMove } from "../sidebarMoves";
 import { useSortMenu } from "../sortMenu";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
@@ -24,9 +24,9 @@ import { isMoveToKey, moveThroughRows, TREE_ROW, useTreeItem } from "../treeKeys
 import { useRename } from "../useRename";
 import { useTreeKeyboard } from "../useTreeKeyboard";
 import { DocumentTagMenu } from "./DocumentTags";
-import { FolderTree } from "./FolderTree";
 import { InlineName } from "./InlineName";
 import { LibraryFolders } from "./LibraryFolders";
+import { LinkedFolderRows } from "./LinkedFolderRows";
 import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon, MoreLineIcon } from "./lineIcons";
 import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
@@ -72,7 +72,7 @@ const isProcessing = (status: DocumentStatus) =>
  * The sidebar's tree, the same on every screen: Search and the Library, then
  * the sections, each shown once it has something in it: the Folders, each
  * with its Minds and Documents, and Not in a Folder (see `LibraryFolders`),
- * the Linked folders as they are on disk (see `FolderTree`), and the Tags in
+ * the Linked folders (see `LinkedFolderRows`), and the Tags in
  * use (see `SidebarTags`). On a first open with nothing of the User's own,
  * the Library waits for their first Document. Each Document is one row: its
  * name, its Tags' colours (see `TagMarks`) and, while it's processed, if it
@@ -204,10 +204,10 @@ export function DocumentsSection() {
         />
         {!quiet && hasLinkedFolders && (
           <SidebarSection testId="linked-folders-section" title={t("sidebar.linkedFolders")}>
-            <FolderTree documents={documents} renderDocument={renderDocument} />
+            <LinkedFolderRows />
           </SidebarSection>
         )}
-        {!quiet && <SidebarTags renderDocument={renderDocument} />}
+        {!quiet && <SidebarTags />}
       </div>
       <LinkFolderDialog />
       <TagNamesTip />
@@ -263,13 +263,6 @@ const DocumentRow = memo(function DocumentRow({
     useSidebarMove.getState().show(event.currentTarget, object);
   };
   const row = useRef<HTMLLIElement>(null);
-  // Once the menu has closed and given the focus back, so the picker opens beside the button.
-  const moveFromMenu = () =>
-    requestAnimationFrame(() =>
-      useSidebarMove
-        .getState()
-        .show(row.current?.querySelector<HTMLElement>("[data-object-menu]") ?? null, object),
-    );
   const muted = !lit && (isProcessing(item.status) || item.fileStatus !== "available");
   const treeItem = useTreeItem({ depth, selected: select.selected });
 
@@ -343,7 +336,10 @@ const DocumentRow = memo(function DocumentRow({
           <ObjectMenu
             target={object}
             label={t("documents.more", { name: item.name })}
-            here={{ "document.rename": rename.start, "document.moveTo": moveFromMenu }}
+            here={{
+              "document.rename": rename.start,
+              "document.moveTo": () => moveFromMenu(row.current, object),
+            }}
             tabIndex={-1}
           />
         </div>

@@ -17,7 +17,8 @@ import {
 /**
  * After linking a folder, the sidebar shows where it is (#763): its row in
  * the Linked folders section (同步文件夹), apart from the User's own Folders,
- * in sight and washed for a moment. The two sections never share a name.
+ * in sight and washed for a moment. The two sections never share a name. The
+ * row doesn't unfold, and opens the Library.
  */
 let dataDir: string;
 let sources: string;
@@ -36,7 +37,7 @@ const WORDS = {
 } as const;
 
 for (const language of ["en", "zh-CN"] as const) {
-  test(`a folder just linked is in sight in the Linked folders section, its row washed (${language})`, async () => {
+  test(`a folder just linked is in sight in the Linked folders section, its row washed; it doesn't unfold and opens the Library (${language})`, async () => {
     test.setTimeout(120_000);
     const words = WORDS[language];
     const linked = join(sources, words.name);
@@ -69,6 +70,21 @@ for (const language of ["en", "zh-CN"] as const) {
     // A moment later the wash is gone, and the row stays where it was.
     await expect(row).not.toHaveAttribute("data-just-linked", "true", { timeout: 10_000 });
     await expect(row).toBeVisible();
+
+    // Its row doesn't unfold: its files, from its top and its folder, are in Not in a Folder.
+    const open = row.getByTestId("linked-folder-open");
+    await expect(open).not.toHaveAttribute("aria-expanded");
+    await expect(section.getByTestId("document-list-item")).toHaveCount(0);
+    await expect(
+      window
+        .getByTestId("not-in-a-folder")
+        .getByTestId("document-list-item")
+        .filter({ hasText: /^(Lease|Renewal)/ }),
+    ).toHaveCount(2);
+    // A click opens the Library, and the row stays one row.
+    await open.click();
+    await expect(window.getByTestId("library")).toBeVisible();
+    await expect(section.getByTestId("folder-item")).toHaveCount(1);
     await app.close();
   });
 }

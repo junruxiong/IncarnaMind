@@ -39,7 +39,6 @@ export const rowClass = (selected: boolean, tone: RowTone = "app", oneOfMany = f
         : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover`
   }`;
 
-/** A row or heading that something dragged over it would go into: the "into" box. */
 export const dropIntoClass = "bg-accent-wash shadow-[inset_0_0_0_2px_var(--color-accent)]";
 
 /** A name being typed in a row. */
@@ -62,8 +61,6 @@ export const rowButtonClass =
 export const clearsActions = {
   menu: "actions-shown:pr-[33px]",
   tagsAndMenu: "actions-shown:pr-[58px]",
-  /** A Tag's row, whose menu sits 29px in from the edge, before its chevron. */
-  menuBeforeChevron: "actions-shown:pr-[36px]",
 } as const;
 
 /** A row's 16px icon: muted unless the row is selected. */

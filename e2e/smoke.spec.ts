@@ -13,6 +13,7 @@ import {
   frontMindName,
   interceptOpenExternal,
   launchApp,
+  linkedFolderRow,
   linkFolderFromSidebar,
   nameMind,
   newMind,
@@ -352,7 +353,7 @@ test("an API key typed for one chat provider is cleared when another is chosen, 
   await app.close();
 });
 
-test("a Linked folder shows its folders as on disk in its section, folded at first, and files added on their own stay in Not in a Folder", async () => {
+test("a Linked folder is one row in its section, which doesn't unfold: its files sit in Not in a Folder with those added on their own, and the row opens the Library", async () => {
   const sources = await createDataFolder();
   try {
     const library = join(await realpath(sources), "Library");
@@ -365,59 +366,33 @@ test("a Linked folder shows its folders as on disk in its section, folded at fir
     const { app, window } = await launchApp(dataDir);
     await dismissChatSetup(window);
     const section = window.getByTestId("linked-folders-section");
-    const folders = section.getByTestId("folder-item");
-    const inSection = section.getByTestId("document-list-item");
+    const notInAFolder = window.getByTestId("not-in-a-folder").getByTestId("document-list-item");
 
-    // A file added on its own, with no Linked folder yet: its row in Not in a Folder, at the top
-    // level, and no Linked folders section.
+    // A file added on its own, with no Linked folder yet: its row in Not in a Folder, and no
+    // Linked folders section.
     await addDocuments(window, [loose]);
-    const looseItem = window
-      .getByTestId("not-in-a-folder")
-      .getByTestId("document-list-item")
-      .filter({ hasText: "Loose notes" });
+    const looseItem = notInAFolder.filter({ hasText: "Loose notes" });
     await expect(looseItem).toHaveAttribute("data-depth", "0");
     await expect(section).toHaveCount(0);
 
-    // "Add folder…" links a folder, picked with the system's picker (answered by the test),
-    // once the User confirms in the link dialog. Its row comes folded, its state in sight.
+    // "Link a folder…" links a folder once the User confirms in the link dialog. Its one row comes,
+    // with nothing to unfold and none of its files under it.
     await linkFolderFromSidebar(app, window, library);
-    const root = folders.filter({ hasText: "Library" });
-    await expect(root).toHaveAttribute("data-depth", "0");
-    await expect(root.getByTestId("folder-toggle")).toHaveAttribute("aria-expanded", "false");
-    await expect(inSection).toHaveCount(0);
     await showSourceLocations(window);
-    await expect(root.getByTestId("folder-toggle")).toHaveAttribute("aria-expanded", "true");
-    const paperItem = inSection.filter({ hasText: "Paper" });
-    await expect(paperItem).toHaveAttribute("data-depth", "1");
-    // Its folders, nested as on disk, each level one step deeper.
-    const projects = folders.filter({ hasText: "Projects" });
-    await expect(projects).toHaveAttribute("data-depth", "1");
-    const year = folders.filter({ hasText: "2026" });
-    await expect(year).toHaveAttribute("data-depth", "2");
-    const planItem = inSection.filter({ hasText: "Plan" });
-    await expect(planItem).toHaveAttribute("data-depth", "3");
-    await expect(planItem).toHaveAttribute(
-      "data-folder-id",
-      `${await year.getAttribute("data-folder-id")}`,
-    );
-    // Folding a folder hides what's inside it, its sub-Folder's too; unfolding shows it again.
-    const toggle = projects.getByTestId("folder-toggle");
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await expect(year).toHaveCount(0);
-    await expect(planItem).toHaveCount(0);
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(planItem).toBeVisible();
+    const root = linkedFolderRow(window, "Library");
+    await expect(section.getByTestId("folder-item")).toHaveCount(1);
+    await expect(root.getByTestId("linked-folder-open")).not.toHaveAttribute("aria-expanded");
+    await expect(section.getByTestId("document-list-item")).toHaveCount(0);
+    // Its files, from its top and from its folders, sit in Not in a Folder beside the loose one.
+    await expect(notInAFolder.filter({ hasText: "Paper" })).toHaveAttribute("data-depth", "0");
+    await expect(notInAFolder.filter({ hasText: "Plan" })).toHaveAttribute("data-depth", "0");
+    await expect(looseItem).toBeVisible();
 
-    // The file added on its own is in no Linked folder: it stays in Not in a Folder alone.
-    await expect(inSection.filter({ hasText: "Loose notes" })).toHaveCount(0);
-    await expect(looseItem).toHaveAttribute("data-depth", "0");
-
-    // Folding the Linked folder hides everything in it.
-    await root.getByTestId("folder-toggle").click();
-    await expect(inSection).toHaveCount(0);
-    await expect(folders).toHaveCount(1);
+    // The row opens the Library, and stays as it was.
+    await root.getByTestId("linked-folder-open").click();
+    await expect(window.getByTestId("library")).toBeVisible();
+    await expect(section.getByTestId("folder-item")).toHaveCount(1);
+    await expect(section.getByTestId("document-list-item")).toHaveCount(0);
     await app.close();
   } finally {
     await removeDataFolder(sources);

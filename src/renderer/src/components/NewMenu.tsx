@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
-import type { CommandId, ShortcutKeys } from "../../../shared/commands";
+import type { CommandId } from "../../../shared/commands";
 import type { MessageKey } from "../../../shared/i18n";
-import { keysHere, menuKeysLabel } from "../commands/keymap";
+import { menuKeysLabel } from "../commands/keymap";
 import { type CommandContext, commands, labelOf, offered } from "../commands/registry";
 import { TableIcon } from "../editor/icons";
 import { useT } from "../i18n";
@@ -30,7 +30,7 @@ type NewItem = {
       /** The menu's own words, where the command's ⌘K label says more than the menu needs. */
       label?: MessageKey;
     }
-  | { run(): void; label: MessageKey; keys?: ShortcutKeys }
+  | { run(): void; label: MessageKey }
 );
 
 const WordIcon = ({ className }: { className?: string }) => (
@@ -40,13 +40,12 @@ const WebPageIcon = ({ className }: { className?: string }) => (
   <DocumentLineIcon kind="web" className={className} />
 );
 
-// Add Documents… and Link a folder… become commands, and ⌘O is bound, in #1245; until then the
-// menu calls them itself and shows the keys they will have.
+// Add Documents… (⌘O) and Link a folder… become commands in #1245; until then the menu calls
+// them itself.
 const ADD_DOCUMENTS: NewItem = {
   testId: "plus-add-documents",
   icon: PlusLineIcon,
   label: "sidebar.plus.addDocuments",
-  keys: "CmdOrCtrl+O",
   run: () => void useAppStore.getState().pickDocuments(),
 };
 
@@ -93,7 +92,7 @@ export function NewMenu() {
 
   const entryOf = (each: NewItem) => {
     if (!("id" in each)) {
-      return { label: t(each.label), keys: each.keys ? keysHere(each.keys) : null, run: each.run };
+      return { label: t(each.label), keys: null, run: each.run };
     }
     const command = commands.get(each.id);
     if (!command || !offered(command, WINDOW)) return null;

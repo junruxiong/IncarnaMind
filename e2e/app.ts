@@ -468,23 +468,18 @@ export async function editFolderInLibrary(window: Page, name: string): Promise<L
   return form;
 }
 
-/** The roots of the sidebar's Linked folders section, by whether they show what is inside. */
-const linkedRoots = (window: Page, expanded: boolean) =>
-  window
-    .getByTestId("linked-folders-section")
-    .locator(`[data-root="true"] [data-testid="folder-toggle"][aria-expanded="${expanded}"]`);
-
 /**
- * Unfolds each Linked folder in the sidebar's Linked folders section, which
- * starts folded, to show its folders and Documents as they are on disk.
+ * Waits for the sidebar's Linked folders section and each Linked folder's row. The rows don't
+ * unfold: their files sit in the Folders and Not in a Folder.
  */
 export async function showSourceLocations(window: Page): Promise<void> {
-  await expect(window.getByTestId("linked-folders-section")).toBeVisible();
-  const folded = linkedRoots(window, false);
-  // Once it has something to unfold: a Linked folder just linked is still being read.
-  await expect(folded.or(linkedRoots(window, true)).first()).toBeVisible({ timeout: 15_000 });
-  for (let left = await folded.count(); left > 0; left--) await folded.first().click();
-  await expect(folded).toHaveCount(0);
+  const section = window.getByTestId("linked-folders-section");
+  await expect(section).toBeVisible();
+  await expect(
+    section.locator('[data-testid="folder-item"][data-root="true"]').first(),
+  ).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 /**
@@ -520,13 +515,6 @@ export async function openManageTags(window: Page, language: "en" | "zh-CN" = "e
   await pointAt(window, item);
   await item.click();
   await expect(window.getByTestId("tags-dialog")).toBeVisible();
-}
-
-/** Folds the Linked folders again, so each Document shows once: in its Folder or Not in a Folder. */
-export async function showFolders(window: Page): Promise<void> {
-  const open = linkedRoots(window, true);
-  for (let left = await open.count(); left > 0; left--) await open.first().click();
-  await expect(open).toHaveCount(0);
 }
 
 /**

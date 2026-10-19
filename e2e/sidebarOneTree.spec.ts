@@ -222,13 +222,13 @@ for (const [language, width] of [
       }
       await screenshot(window, `one-tree-fresh-${language}-${width}`);
 
-      // A Mind: it is listed under "Minds" while there are no Folders.
+      // A Mind: it is listed under "Not in a Folder", though there are no Folders yet.
       await makeMind(window, "Shortlist");
       const minds = notInAFolder(window);
-      await expect(minds.getByTestId("not-in-a-folder-title")).toHaveText(t("sidebar.minds"));
+      await expect(minds.getByTestId("not-in-a-folder-title")).toHaveText(t("library.unsorted"));
       await expect(minds.getByTestId("mind-list-item")).toHaveText("Shortlist");
 
-      // A Folder: the Folders section comes, and the Minds in none are "Not in a Folder".
+      // A Folder: the Folders section comes, and the heading stays as it was.
       await makeFolder(window, "Finance");
       const folders = window.getByTestId("folders-section");
       await expect(folders.getByTestId("folders-title")).toHaveText(t("library.groups"));
@@ -629,9 +629,6 @@ for (const [language, width] of [
       for (const [index, key] of NEW_MENU_ROWS.entries()) {
         await expect(rows.nth(index)).toContainText(t(key));
       }
-      await expect(window.getByTestId("plus-add-documents")).toContainText(
-        process.platform === "darwin" ? "⌘O" : "Ctrl+O",
-      );
       await pointAt(window, window.getByTestId("plus-more"));
       await expect(more).toHaveCount(MORE_ROWS.length);
       for (const [index, key] of MORE_ROWS.entries()) {
@@ -668,6 +665,245 @@ for (const [language, width] of [
         await window.keyboard.press("Escape");
         await expect(search).toHaveCount(0);
       }
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+/** Whether the core still has these: a Mind, a Document or a Folder, by id. */
+const inCore = (
+  window: Page,
+  refs: { minds?: string[]; documents?: string[]; folders?: string[] },
+) =>
+  window.evaluate(async (wanted) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const [minds, documents, library] = await Promise.all([
+      bridge.listMinds(),
+      bridge.listDocuments(),
+      bridge.getLibrary(),
+    ]);
+    return [
+      ...(wanted.minds ?? []).map((id) => minds.some((each) => each.id === id)),
+      ...(wanted.documents ?? []).map((id) => documents.some((each) => each.id === id)),
+      ...(wanted.folders ?? []).map((id) => library.groups.some((each) => each.id === id)),
+    ];
+  }, refs);
+
+for (const [language, width] of [
+  ["en", 1440],
+  ["zh-CN", 900],
+] as const) {
+  test(`a plain click on a Folder opens it and keeps the open Mind lit; ⌘-click still selects it (${language}, ${width}px)`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, width, 660);
+      await setLanguage(window, language);
+      const finance = await makeFolder(window, "Finance");
+      const shortlist = await makeMind(window, "Shortlist");
+      await makeMind(window, "Ledger notes");
+      await moveMind(window, shortlist, finance);
+      const folder = sidebarFolder(window, "Finance");
+      const ledger = mindRow(window, "Ledger notes").getByTestId("mind-list-item");
+      await pointAt(window, ledger);
+      await window.mouse.down();
+      await window.mouse.up();
+      await expect(ledger).toHaveAttribute("aria-selected", "true");
+
+      // Unfolded and folded again with a click: the Folder never takes the open Mind's light.
+      const row = folder.getByTestId("folder-row");
+      for (const expanded of ["true", "false"]) {
+        await pointAt(window, row);
+        await window.mouse.down();
+        await window.mouse.up();
+        await expect(folder).toHaveAttribute("data-expanded", expanded);
+        await expect(row).toHaveAttribute("aria-selected", "false");
+        await expect(ledger).toHaveAttribute("aria-selected", "true");
+      }
+      // Enter on it does the same.
+      await row.focus();
+      await window.keyboard.press("Enter");
+      await expect(folder).toHaveAttribute("data-expanded", "true");
+      await expect(ledger).toHaveAttribute("aria-selected", "true");
+      // ⌘-click adds it to the selection, without folding it.
+      await row.click({ modifiers: ["ControlOrMeta"] });
+      await expect(row).toHaveAttribute("aria-selected", "true");
+      await expect(folder).toHaveAttribute("data-expanded", "true");
+      await expect(window.getByTestId("sidebar-selection")).toHaveText(
+        translate(language, "sidebar.selected", { count: 2 }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  test(`a selection of several kinds gets one menu for all of it: a Folder and a Mind go with Delete, a Mind and a Document with ⌘⌫, each back with one ⌘Z (${language}, ${width}px)`, async () => {
+    const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
+    await writeFile(join(sources, "Budget.txt"), "Budget for the harbour project.\n");
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, width, 660);
+      await setLanguage(window, language);
+      const finance = await makeFolder(window, "Finance");
+      const shortlist = await makeMind(window, "Shortlist");
+      await addFiles(window, [join(sources, "Budget.txt")]);
+      await expect(documentRow(window, "Budget")).toHaveAttribute("data-status", "ready");
+      const budget = (await documentIds(window)).Budget ?? "";
+      const folderRow = sidebarFolder(window, "Finance").getByTestId("folder-row");
+      const shortlistRow = mindRow(window, "Shortlist").getByTestId("mind-list-item");
+      const undoLine = window.getByTestId("undo-message");
+
+      // A Folder and a Mind: the menu holds Delete only, saying how many, and takes both.
+      await folderRow.click({ modifiers: ["ControlOrMeta"] });
+      await shortlistRow.click({ modifiers: ["ControlOrMeta"] });
+      await expect(window.getByTestId("sidebar-selection")).toHaveText(
+        t("sidebar.selected", { count: 2 }),
+      );
+      await shortlistRow.click({ button: "right" });
+      const menu = mindRow(window, "Shortlist").getByTestId("mind-actions");
+      await expect(menu.getByRole("menuitem")).toHaveText([t("selection.delete", { count: 2 })]);
+      await menu.getByTestId("selection.delete").click();
+      await expect(undoLine).toHaveText(t("object.deleted.items", { count: 2 }));
+      await expect(sidebarFolder(window, "Finance")).toHaveCount(0);
+      await expect(mindRow(window, "Shortlist")).toHaveCount(0);
+      expect(await inCore(window, { minds: [shortlist], folders: [finance] })).toEqual([
+        false,
+        false,
+      ]);
+      await undo(window);
+      await expect
+        .poll(() => inCore(window, { minds: [shortlist], folders: [finance] }))
+        .toEqual([true, true]);
+      await expect(sidebarFolder(window, "Finance")).toHaveCount(1);
+      await expect(mindRow(window, "Shortlist")).toHaveCount(1);
+
+      // A Mind and a Document: Move to… and Delete, each with the count; ⌘⌫ takes both.
+      await mindRow(window, "Shortlist").getByTestId("mind-list-item").click();
+      await documentRow(window, "Budget")
+        .getByTestId("open-document")
+        .click({ modifiers: ["ControlOrMeta"] });
+      await documentRow(window, "Budget").getByTestId("open-document").click({ button: "right" });
+      const documentMenu = documentRow(window, "Budget").getByTestId("document-file-actions");
+      await expect(documentMenu.getByRole("menuitem")).toHaveText([
+        new RegExp(t("selection.moveTo", { count: 2 })),
+        new RegExp(t("selection.delete", { count: 2 })),
+      ]);
+      await window.keyboard.press("Escape");
+      await documentRow(window, "Budget").getByTestId("open-document").focus();
+      await window.keyboard.press("ControlOrMeta+Backspace");
+      await expect(undoLine).toHaveText(t("object.deleted.items", { count: 2 }));
+      expect(await inCore(window, { minds: [shortlist], documents: [budget] })).toEqual([
+        false,
+        false,
+      ]);
+      await undo(window);
+      await expect
+        .poll(() => inCore(window, { minds: [shortlist], documents: [budget] }))
+        .toEqual([true, true]);
+      await expect(documentRow(window, "Budget")).toHaveCount(1);
+      await expect(mindRow(window, "Shortlist")).toHaveCount(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test(`with nothing loose, a Mind dragged out of a Folder lands on Not in a Folder, there only while the drag lasts (${language}, ${width}px)`, async () => {
+    const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, width, 660);
+      await setLanguage(window, language);
+      const finance = await makeFolder(window, "Finance");
+      const shortlist = await makeMind(window, "Shortlist");
+      await moveMind(window, shortlist, finance);
+      const folder = sidebarFolder(window, "Finance");
+      await expect(notInAFolder(window)).toHaveCount(0);
+      await folder.getByTestId("folder-row").click();
+      const source = mindRow(window, "Shortlist").getByTestId("mind-list-item");
+      await expect(source).toBeVisible();
+
+      // Picked up, the empty heading comes to take it; let go on it, the Mind is out.
+      const from = await pointAt(window, source);
+      await window.mouse.down();
+      await window.mouse.move(from.x + 4, from.y + 12, { steps: 4 });
+      const heading = notInAFolderHeading(window);
+      await expect(heading).toBeVisible();
+      await expect(heading).toHaveText(t("library.unsorted"));
+      const to = await heading.boundingBox();
+      if (!to) throw new Error("No heading to drop on.");
+      await window.mouse.move(to.x + 40, to.y + to.height / 2, { steps: 8 });
+      await window.mouse.move(to.x + 42, to.y + to.height / 2);
+      await expect(heading).toHaveAttribute("data-drop-target", "true");
+      await window.mouse.up();
+      await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
+      await expect.poll(() => folderOfMind(window, shortlist)).toBeNull();
+      await expect(window.getByTestId("undo-message")).toHaveText(
+        t("move.done", { name: "Shortlist", folder: t("library.unsorted") }),
+      );
+
+      // ⌘Z puts it back; a drag let go elsewhere leaves no empty heading behind.
+      await undo(window);
+      await expect.poll(() => folderOfMind(window, shortlist)).toBe(finance);
+      await expect(notInAFolder(window)).toHaveCount(0);
+      const again = await pointAt(window, source);
+      await window.mouse.down();
+      await window.mouse.move(again.x + 4, again.y + 12, { steps: 4 });
+      await expect(notInAFolderHeading(window)).toBeVisible();
+      await window.mouse.move(width - 60, 400, { steps: 8 });
+      await window.mouse.up();
+      await expect(notInAFolder(window)).toHaveCount(0);
+      expect(await folderOfMind(window, shortlist)).toBe(finance);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test(`Tags lists only the Tags a Document carries, each with its count, and its heading's fold is remembered after a restart (${language}, ${width}px)`, async () => {
+    for (const name of ["Budget", "Ledger"]) {
+      await writeFile(join(sources, `${name}.txt`), `${name} for the harbour project.\n`);
+    }
+    let { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, width, 660);
+      await setLanguage(window, language);
+      await addFiles(
+        window,
+        ["Budget", "Ledger"].map((name) => join(sources, `${name}.txt`)),
+      );
+      await expect(
+        window.locator('[data-testid="document-list-item"][data-status="ready"]'),
+      ).toHaveCount(2);
+      const ids = await documentIds(window);
+      await window.evaluate(
+        async (tagged) => {
+          const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+          const harbour = await bridge.createTag({ name: "Harbour" });
+          await bridge.createTag({ name: "Unused" });
+          await bridge.addTagToDocuments(tagged, harbour.id);
+        },
+        [ids.Budget ?? "", ids.Ledger ?? ""],
+      );
+      const tags = window.getByTestId("sidebar-tags");
+      await expect(tags.getByTestId("sidebar-tag")).toHaveCount(1);
+      await expect(tags.getByTestId("sidebar-tag").getByTestId("row-text")).toHaveText("Harbour");
+      await expect(tags.getByTestId("sidebar-tag").getByTestId("browse-count")).toHaveText("2");
+      // A Tag shows its Documents in the Library.
+      await tags.getByTestId("sidebar-tag").getByRole("treeitem").click();
+      await expect(window.getByTestId("library")).toBeVisible();
+
+      // Folded from its heading, and still folded after a restart.
+      const toggle = tags.getByTestId("tags-toggle");
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await expect(tags.getByTestId("sidebar-tag")).toHaveCount(0);
+      await app.close();
+      ({ app, window } = await launchApp(dataDir));
+      await setWindowSize(app, window, width, 660);
+      const after = window.getByTestId("sidebar-tags");
+      await expect(after.getByTestId("tags-toggle")).toHaveAttribute("aria-expanded", "false");
+      await expect(after.getByTestId("sidebar-tag")).toHaveCount(0);
+      await after.getByTestId("tags-toggle").click();
+      await expect(after.getByTestId("sidebar-tag")).toHaveCount(1);
     } finally {
       await app.close();
     }

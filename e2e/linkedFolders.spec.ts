@@ -53,9 +53,9 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/** The Document rows of the sidebar's Linked folders, as on disk (they are in Not in a Folder too). */
+/** The Linked folders' Document rows: in Not in a Folder, since a Linked folder's row doesn't unfold. */
 const linkedRows = (window: Page) =>
-  window.getByTestId("linked-folders-section").getByTestId("document-list-item");
+  window.getByTestId("not-in-a-folder").getByTestId("document-list-item");
 
 async function screenshot(target: Page | Locator, name: string): Promise<void> {
   if (!SCREENSHOTS) return;
@@ -143,7 +143,7 @@ test("a linked folder's files become Documents, and follow edits and deletions o
   await expect(notesItem).toHaveAttribute("data-status", "ready");
   await expect(reportItem).toHaveAttribute("data-status", "ready");
   await expect(notesItem).toHaveAttribute("data-file-status", "available");
-  // The Linked folder is a Folder, with its own folders inside.
+  // The Linked folder is one row of its own.
   await expect(window.getByTestId("folder-item").filter({ hasText: "Library" })).toHaveCount(1);
 
   // Edited on disk: indexed again, as a new version, while the app runs.
@@ -271,7 +271,7 @@ test("pausing a Linked folder holds its indexing until it is resumed", async () 
   await app.close();
 });
 
-test("a Linked folder shows as Folders or a flat list, chosen when linking and from its menu", async () => {
+test("a Linked folder's layout, Folders or a flat list, is chosen when linking and from its menu", async () => {
   // Zotero's storage: a folder per item, one file in each. For twenty or more, linking
   // suggests a flat list.
   const storage = join(sources, "storage");
@@ -291,19 +291,15 @@ test("a Linked folder shows as Folders or a flat list, chosen when linking and f
 
   const row = linkedFolderRow(window, "storage");
   const documents = linkedRows(window);
-  const subfolders = window.locator('[data-testid="folder-item"]:not([data-root])');
   await expect(row).toHaveAttribute("data-layout", "tree");
   await expect(documents).toHaveCount(20);
-  await expect(subfolders).toHaveCount(20);
-  await expect(documents.first()).toHaveAttribute("data-depth", "2");
+  await expect(documents.first()).toHaveAttribute("data-depth", "0");
 
-  // A flat list: every Document right under the folder, no subfolders.
+  // A flat list, from its menu; its row stays one row, and its files where they were.
   let menu = await openLinkedFolderMenu(row);
   await menu.getByTestId("linkedFolder.layout").click();
   await expect(row).toHaveAttribute("data-layout", "flat");
-  await expect(subfolders).toHaveCount(0);
   await expect(documents).toHaveCount(20);
-  for (const item of await documents.all()) await expect(item).toHaveAttribute("data-depth", "1");
   await screenshot(window.getByTestId("sidebar"), "row-flat");
 
   // And back.
@@ -311,7 +307,6 @@ test("a Linked folder shows as Folders or a flat list, chosen when linking and f
   await expect(menu.getByTestId("linkedFolder.layout")).toHaveText("Show as folders");
   await menu.getByTestId("linkedFolder.layout").click();
   await expect(row).toHaveAttribute("data-layout", "tree");
-  await expect(subfolders).toHaveCount(20);
   await app.close();
 });
 
@@ -325,7 +320,16 @@ test("a small library of one-file folders keeps its folders", async () => {
   await confirmLink(dialog);
   await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Reading")).toHaveAttribute("data-layout", "tree");
-  await expect(window.locator('[data-testid="folder-item"]:not([data-root])')).toHaveCount(3);
+  await expect
+    .poll(() =>
+      window.evaluate(
+        async () =>
+          (
+            await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listFolders()
+          ).filter((folder) => folder.parentId !== null).length,
+      ),
+    )
+    .toBe(3);
   await app.close();
 });
 
@@ -560,7 +564,7 @@ test("a Linked folder that moved is located from its menu, and its Document and 
   await menu.getByTestId("linkedFolder.locate").click();
   const located = linkedFolderRow(window, "Library 2026");
   await expect(located).toHaveAttribute("data-state", "idle", { timeout: 15_000 });
-  await expect(located.getByTestId("folder-toggle")).toHaveAttribute("title", moved);
+  await expect(located.getByTestId("linked-folder-open")).toHaveAttribute("title", moved);
   const item = linkedRows(window);
   await expect(item).toHaveCount(1);
   await expect(item).toHaveAttribute("data-file-status", "available");
@@ -655,8 +659,8 @@ test("an empty Linked folder says so, in its section, which comes with it", asyn
   const row = linkedFolderRow(window, "Projects");
   await expect(row).toHaveAttribute("data-state", "empty");
   await expect(row.getByTestId("folder-status")).toHaveText(/^No supported files/);
-  // Nothing to unfold: no chevron, no toggle.
-  await expect(row.getByTestId("folder-toggle")).toHaveCount(0);
+  // A row that never unfolds.
+  await expect(row.getByTestId("linked-folder-open")).not.toHaveAttribute("aria-expanded");
   await screenshot(window.getByTestId("sidebar"), "row-empty");
   await app.close();
 });

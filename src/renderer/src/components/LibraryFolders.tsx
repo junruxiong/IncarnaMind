@@ -3,7 +3,7 @@ import { create } from "zustand";
 import type { Document, LibraryGroup, Mind } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
-import { useFolderDrop } from "../folderDrag";
+import { useFolderDrop, useMoveDrag } from "../folderDrag";
 import { useLanguage, useT } from "../i18n";
 import { currentMindIdOf, currentTabOf } from "../layoutSlice";
 import { useRequests } from "../requests";
@@ -122,12 +122,12 @@ export const useFolds = create<Folds>()((set, get) => {
  * more Documents"), and opens and closes in place: the main area stays as it
  * is. After the Folders, "Not in a Folder" holds every Mind and Document in
  * none; a Mind there searches every Document, which its heading says on
- * hover. While there are no Folders and it holds only Minds, it is "Minds".
- * Each section shows only with something in it. Minds and Documents drag onto
- * a Folder, or onto Not in a Folder's heading to leave theirs (see
- * `useFolderDrop`); a Folder renames in place (double-click or F2, as in
- * Finder) and has its menu (⋯ or a right-click). The keys that walk the tree,
- * → and ← among them, are `useTreeKeyboard`'s.
+ * hover. Each section shows only with something in it, but Not in a Folder
+ * also shows while something is dragged out of a Folder, to take the drop.
+ * Minds and Documents drag onto a Folder, or onto Not in a Folder's heading
+ * to leave theirs (see `useFolderDrop`); a Folder renames in place
+ * (double-click or F2, as in Finder) and has its menu (⋯ or a right-click).
+ * The keys that walk the tree, → and ← among them, are `useTreeKeyboard`'s.
  */
 export function LibraryFolders({
   documents,
@@ -187,6 +187,7 @@ export function LibraryFolders({
     [groups, sidebarSort, language],
   );
 
+  const draggingOut = useMoveDrag((state) => state.outOfFolder);
   const looseMinds = mindsByFolder.get(null) ?? NO_MINDS;
   const looseDocuments = documentsByFolder.get(null) ?? NO_DOCUMENTS;
   const newFolderLabel = t("sidebar.newFolderKeys", { keys: shortcutLabel("folder.new") });
@@ -226,13 +227,12 @@ export function LibraryFolders({
           </ul>
         </SidebarSection>
       )}
-      {(looseMinds.length > 0 || looseDocuments.length > 0) && (
+      {(looseMinds.length > 0 || looseDocuments.length > 0 || draggingOut) && (
         <NotInAFolder
           minds={looseMinds}
           documents={looseDocuments}
           renderDocument={renderDocument}
           quiet={quiet}
-          noFolders={groups.length === 0}
         />
       )}
     </div>
@@ -308,9 +308,9 @@ function Contents({
 
 /**
  * A Folder's row and, while open, what is in it. Clicking (or Enter, or
- * Space) opens and closes it in place, and selects it as any row; ⌘-click
- * and Shift-click select; double-click or F2 renames it. Its row takes a
- * drop, and opens when a drag rests on it folded, as in Finder.
+ * Space) opens and closes it in place; ⌘-click and Shift-click select it;
+ * double-click or F2 renames it. Its row takes a drop, and opens when a drag
+ * rests on it folded, as in Finder.
  */
 function FolderGroup({
   folder,
@@ -401,10 +401,10 @@ function FolderGroup({
             aria-current={shownInLibrary ? "page" : undefined}
             title={folder.description ? `${folder.name}\n${folder.description}` : folder.name}
             onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey) select.onClick(event);
+              // A plain click only opens or closes it: the Mind the User is in stays the one lit.
               // The second click of a double-click renames instead.
-              if (event.detail <= 1 || event.metaKey || event.ctrlKey || event.shiftKey) {
-                select.onClick(event);
-              }
+              else if (event.detail <= 1) toggle();
             }}
             onKeyDown={(event) => {
               rename.nameProps.onKeyDown(event);
@@ -450,36 +450,28 @@ function FolderGroup({
   );
 }
 
-/**
- * Every Mind and Document in no Folder, under one heading: "Not in a Folder",
- * which says on hover that its Minds search every Document, or "Minds" while
- * there are no Folders and nothing else in it. Dropping a Mind or a Document
- * on the heading takes it out of its Folder.
- */
 function NotInAFolder({
   minds,
   documents,
   renderDocument,
   quiet,
-  noFolders,
 }: {
   minds: readonly Mind[];
   documents: readonly Document[];
   renderDocument(document: Document, depth: number): ReactNode;
   quiet: boolean;
-  noFolders: boolean;
 }) {
   const t = useT();
   const drop = useFolderDrop(null);
   const examplesOnly = useAppStore((state) => {
     const examples = allExamples(state);
-    return quiet && minds.every((mind) => examples.some((each) => each.mindId === mind.id));
+    return (
+      quiet &&
+      minds.length > 0 &&
+      minds.every((mind) => examples.some((each) => each.mindId === mind.id))
+    );
   });
-  const title = examplesOnly
-    ? t("sidebar.examples")
-    : noFolders && documents.length === 0
-      ? t("sidebar.minds")
-      : t("library.unsorted");
+  const title = examplesOnly ? t("sidebar.examples") : t("library.unsorted");
   return (
     <div data-testid="not-in-a-folder" data-count={documents.length} data-minds={minds.length}>
       <SidebarSection

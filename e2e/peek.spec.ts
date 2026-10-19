@@ -663,7 +663,7 @@ test("a Document whose file is gone says Missing in its peek, and a press elsewh
     await linkFolderFromSidebar(app, window, folder);
     await showSourceLocations(window);
     const doomed = window
-      .getByTestId("linked-folders-section")
+      .getByTestId("not-in-a-folder")
       .getByTestId("document-list-item")
       .filter({ hasText: "Deleted later" });
     await expect(doomed).toHaveAttribute("data-status", "ready");

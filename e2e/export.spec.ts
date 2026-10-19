@@ -32,7 +32,6 @@ import {
   removeDataFolder,
   savedLine,
   setWindowSize,
-  showFolders,
   showSourceLocations,
   useLocalChatModel,
   useOutputLocation,
@@ -541,9 +540,9 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await exportFromMenu(window);
   await expect(window.getByTestId("export-done")).toHaveText(savedLine("Tides.docx", papers));
 
-  // The Linked folder picks the export up, beside the User's own file.
+  // The Linked folder picks the export up, beside the User's own file, both in Not in a Folder.
   await showSourceLocations(window);
-  const items = window.getByTestId("linked-folders-section").getByTestId("document-list-item");
+  const items = window.getByTestId("not-in-a-folder").getByTestId("document-list-item");
   const exported = items.filter({ hasText: "Tides" });
   const moon = items.filter({ hasText: "Moon" });
   await expect(exported).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
@@ -618,7 +617,6 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await (await coreOf(window)).evaluate((core) =>
     core.createLibraryGroup({ name: "Reports", description: "" }),
   );
-  await showFolders(window);
   await editFolderInLibrary(window, "Reports");
   const library = window.getByTestId("library");
   const counts = library.getByTestId("folder-counts-own-files");

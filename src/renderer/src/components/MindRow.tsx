@@ -6,7 +6,7 @@ import { useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { useMindStatus } from "../mindStatus";
 import { useSelectable, useSeveralSelected } from "../selection";
-import { dragFromRow, useSidebarMove } from "../sidebarMoves";
+import { dragFromRow, moveFromMenu, useSidebarMove } from "../sidebarMoves";
 import { useAppStore } from "../store";
 import { isMoveToKey, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
@@ -150,16 +150,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
                     row.current?.querySelector<HTMLElement>("[data-object-menu]") ?? null,
                   ),
               ),
-            // Once the menu has closed and given the focus back, so the picker opens beside the button.
-            "mind.moveTo": () =>
-              requestAnimationFrame(() =>
-                useSidebarMove
-                  .getState()
-                  .show(
-                    row.current?.querySelector<HTMLElement>("[data-object-menu]") ?? null,
-                    object,
-                  ),
-              ),
+            "mind.moveTo": () => moveFromMenu(row.current, object),
           }}
         />
       </div>

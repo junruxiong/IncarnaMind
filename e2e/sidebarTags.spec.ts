@@ -185,7 +185,7 @@ const marksOf = (row: Locator) =>
     };
   });
 
-test("the Tags section lists each Tag in use with its colour and count, lists its Documents, and filters the Library by it, with the mouse and the keyboard", async () => {
+test("the Tags section lists each Tag a Document carries with its colour and count, and filters the Library by it, with the mouse and the keyboard", async () => {
   const server = await decisionServer();
   const { app, window } = await launchApp(dataDir);
   try {
@@ -226,18 +226,18 @@ test("the Tags section lists each Tag in use with its colour and count, lists it
       .getByTestId("document-list-item")
       .filter({ hasText: "Attention" });
     await expect(attentionInFolders.getByTestId("tag-dot")).toHaveCount(3);
+    expect(await marksOf(attentionInFolders)).toEqual({
+      colours: ["orange", "red", "purple"],
+      more: "+1",
+    });
 
-    // The Tags: "Needs review" first, then each Tag in use in name order, with its colour and
-    // how many Documents carry it; a Tag no Document has isn't listed.
+    // The Tags each Document carries, in name order, with its colour and how many carry it. A Tag
+    // no Document has isn't listed, and nor is "Needs review": Tags are reviewed in the Library.
     const tagList = window.getByTestId("sidebar-tags");
     const tagRows = tagList.getByTestId("sidebar-tag");
-    const tagRow = (id: string) =>
-      tagList.locator(`[data-testid="sidebar-tag"][data-tag-id="${id}"]`);
-    await expect(tagRow("needs-review")).toHaveCount(1, { timeout: 20_000 });
     await expect
       .poll(() => tagRowsListed(tagRows), { timeout: 20_000 })
       .toEqual([
-        ["Needs review", 1, null],
         ["Book", 1, "orange"],
         ["Contract", 1, "red"],
         ["Invoice", 1, "green"],
@@ -257,31 +257,6 @@ test("the Tags section lists each Tag in use with its colour and count, lists it
       filled: true,
       border: 1,
     });
-    const reviewHead = byName("Needs review").locator(":scope > div");
-    await expect(reviewHead.getByTestId("tag-dot")).toHaveCount(0);
-    // Its edge is 1.5px, which a screen that isn't Retina (CI's) draws as 1px: borders are
-    // drawn in whole device pixels.
-    const edge = await window.evaluate(() => {
-      const probe = document.createElement("span");
-      probe.style.border = "1.5px solid";
-      document.body.append(probe);
-      const width = Number.parseFloat(getComputedStyle(probe).borderTopWidth);
-      probe.remove();
-      return width;
-    });
-    expect(await reviewHead.getByTestId("review-ring").locator("span").evaluate(dotShape)).toEqual({
-      width: 9,
-      height: 9,
-      round: true,
-      filled: false,
-      border: edge,
-    });
-    expect(
-      await reviewHead
-        .getByTestId("review-ring")
-        .locator("span")
-        .evaluate((element) => getComputedStyle(element).borderTopColor),
-    ).toBe("rgb(180, 95, 6)");
     // Rows are 28px, their marks in the icon column and their names on the text edge.
     const sidebarLeft = (await window.getByTestId("sidebar").boundingBox())?.x ?? 0;
     for (const row of await tagRows.all()) {
@@ -290,21 +265,6 @@ test("the Tags section lists each Tag in use with its colour and count, lists it
       const text = await row.locator(':scope > div [data-testid="row-text"]').boundingBox();
       expect((text?.x ?? 0) - sidebarLeft).toBeCloseTo(40, 0);
     }
-    // A Tag's chevron lists its Documents under it, one step in, with their colours.
-    await slideAndClick(window, tagList.getByRole("button", { name: "Expand Report" }));
-    const reportDocuments = byName("Report").getByTestId("document-list-item");
-    await expect(reportDocuments).toHaveCount(2);
-    await expect(reportDocuments.first()).toHaveAttribute("data-depth", "1");
-    const attention = reportDocuments.filter({ hasText: "Attention" });
-    expect(await marksOf(attention)).toEqual({
-      colours: ["orange", "red", "purple"],
-      more: "+1",
-    });
-    expect(await marksOf(reportDocuments.filter({ hasText: "Q1 report" }))).toEqual({
-      colours: ["blue"],
-      more: null,
-    });
-
     // Clicking a Tag shows its Documents in the Library, through its Tag filter, and marks it
     // chosen; the sidebar's tree stays as it was, so nothing moves under the pointer.
     const library = window.getByTestId("library");
@@ -321,8 +281,7 @@ test("the Tags section lists each Tag in use with its colour and count, lists it
     await expect(reports.getByTestId("document-list-item")).toHaveCount(3);
     await screenshot(window, "tags-tab-en");
 
-    // By keyboard: on Report's row, Enter shows it, Enter again stops filtering; ← and → fold
-    // and unfold its Documents, the chevron's job with the mouse.
+    // By keyboard: on Report's row, Enter shows it, Enter again stops filtering.
     await tabIntoRow(window, openTag("Report"));
     expect(await focusRingShows(window)).toBe(true);
     await window.keyboard.press("Enter");
@@ -336,24 +295,13 @@ test("the Tags section lists each Tag in use with its colour and count, lists it
     await expect(openTag("Report")).toHaveAttribute("aria-selected", "false");
     await window.keyboard.press("Enter");
     await expect(tagFilter).toHaveText("Tags: Report");
-    await window.keyboard.press("ArrowLeft");
-    await expect(reportDocuments).toHaveCount(0);
-    await expect(openTag("Report")).toHaveAttribute("aria-expanded", "false");
-    await expect(tagList.getByRole("button", { name: "Expand Report" })).toHaveCount(1);
-    await window.keyboard.press("ArrowRight");
-    await expect(reportDocuments).toHaveCount(2);
     await expect(openTag("Report")).toBeFocused();
     expect(await focusRingShows(window)).toBe(true);
     // On to the Tags heading, which folds them, every stop with its ring.
     await tabTo(window, tagsToggle);
     expect(await focusRingShows(window)).toBe(true);
 
-    // "Needs review" is reachable as in the Library's filter.
-    await slideAndClick(window, openTag("Needs review"));
-    await expect(tagFilter).toHaveText("Tags: Needs review");
-    await expect(library.getByTestId("library-document")).toHaveCount(1);
-    await expect(library.getByTestId("library-document")).toContainText("March invoice");
-    // The Library's Tags filter, too: each Tag after its dot, "Needs review" after the ring.
+    // The Library's Tags filter has each Tag after its dot, and "Needs review" after the ring.
     await slideAndClick(window, tagFilter.getByTestId("library-filter-chip"));
     const libraryTagMenu = library.locator('[data-testid="library-filter-menu"][data-facet="tag"]');
     const reviewOption = libraryTagMenu.locator(
@@ -374,9 +322,6 @@ test("the Tags section lists each Tag in use with its colour and count, lists it
     // In Chinese.
     await setLanguage(window, "zh-CN");
     await expect(tagsToggle).toHaveText("标签");
-    await expect(byName("待确认")).toHaveCount(1);
-    await slideAndClick(window, tagList.getByRole("button", { name: "收起 Report" }));
-    await expect(tagList.getByRole("button", { name: "展开 Report" })).toBeVisible();
     await slideAndClick(window, openTag("Paper"));
     await expect(tagFilter).toHaveText("标签：Paper");
     await expect(openTag("Paper")).toHaveAttribute("aria-selected", "true");

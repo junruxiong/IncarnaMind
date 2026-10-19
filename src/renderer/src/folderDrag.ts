@@ -23,6 +23,9 @@ const OPENS_AFTER_MS = 700;
 // A drag's data can only be read on the drop, so what is dragged is kept here for the targets it passes over.
 let dragging: { mindIds: string[]; documentIds: string[] } | null = null;
 
+/** Whether something in a Folder is being dragged: Not in a Folder then shows, empty or not, to take it. */
+export const useMoveDrag = create<{ outOfFolder: boolean }>()(() => ({ outOfFolder: false }));
+
 export function startMoveDrag(
   event: DragEvent<HTMLElement>,
   items: MoveItems,
@@ -30,6 +33,9 @@ export function startMoveDrag(
 ): void {
   const moving = itemsOf(items);
   dragging = { mindIds: moving.mindIds, documentIds: moving.documentIds };
+  const outOfFolder = wouldMove(null);
+  // Not while the drag starts: a page that changes then makes the browser give the drag up.
+  if (outOfFolder) requestAnimationFrame(() => useMoveDrag.setState({ outOfFolder }));
   if (moving.documentIds.length > 0) startDocumentDrag(event, moving.documentIds);
   event.dataTransfer.setData(MOVE_TYPE, JSON.stringify(dragging));
   event.dataTransfer.effectAllowed = moving.documentIds.length > 0 ? "linkMove" : "move";
@@ -105,15 +111,15 @@ const clear = () => {
   useDropTarget.setState({ over: null });
 };
 
+const endDrag = () => {
+  clear();
+  dragging = null;
+  useMoveDrag.setState({ outOfFolder: false });
+};
+
 // A drag that ends anywhere (dropped elsewhere, or Esc) leaves no target lit and nothing held.
-window.addEventListener("dragend", () => {
-  clear();
-  dragging = null;
-});
-window.addEventListener("drop", () => {
-  clear();
-  dragging = null;
-});
+window.addEventListener("dragend", endDrag);
+window.addEventListener("drop", endDrag);
 
 /** The key a Folder's target goes by; Not in a Folder's for null. */
 const keyOf = (folderId: string | null) => folderId ?? "not-in-a-folder";

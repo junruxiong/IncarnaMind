@@ -98,7 +98,6 @@ export const selectedOn = (surface: SelectSurface): readonly ObjectRef[] => {
 export const useSelectedOn = (surface: SelectSurface): readonly ObjectRef[] =>
   useSelection((state) => (state.surface === surface ? state.items : NONE));
 
-/** Whether several rows are selected on a surface: each then has the look of one of many. */
 export const useSeveralSelected = (surface: SelectSurface): boolean =>
   useSelection((state) => state.surface === surface && state.items.length > 1);
 
