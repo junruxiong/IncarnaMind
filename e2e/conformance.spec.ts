@@ -137,12 +137,13 @@ const registryOf = (window: Page): Promise<Registry> =>
     return hooks.registry();
   });
 
+/** The sidebar shows all its sections at once; Tags, which folds, is unfolded first. */
 async function showView(window: Page, name: "Folders" | "Tags"): Promise<void> {
-  const button = window.getByTestId("browse-views").getByRole("button", { name, exact: true });
-  // Folders is what the sidebar shows until there is something else to switch to.
-  if (name === "Folders" && (await button.count()) === 0) return;
-  if ((await button.getAttribute("aria-pressed")) !== "true") await button.click();
-  await expect(button).toHaveAttribute("aria-pressed", "true");
+  if (name !== "Tags") return;
+  const toggle = window.getByTestId("tags-toggle");
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
 }
 
 /** Shows an object, and says where it is: its row, the part a click lands on, its ⋯ button and its menu. */
@@ -670,7 +671,7 @@ const STAGES: Record<Staged, Stage> = {
     opened: ({ window }) => window.locator('[data-testid="folder-row"][aria-expanded="true"]'),
   },
   tag: {
-    // The Tags view is there once there is a Document to Tag.
+    // The Tags section is there once a Document has a Tag.
     async make({ window, sources: dir }) {
       const path = join(dir, "Tides.txt");
       await writeFile(path, "Neap tides are the smallest of the month.\n");

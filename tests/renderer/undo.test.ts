@@ -190,6 +190,34 @@ describe("the undo stack", () => {
     expect(useUndo.getState().done).toEqual([]);
   });
 
+  test("an undo refused in its own words with no fix leaves the stack, saying so", async () => {
+    const log: string[] = [];
+    push(change("A", log));
+    push({
+      said: () => "Renamed",
+      name: () => "Rename",
+      undo: () => Promise.reject(new UndoRefused(() => "One change couldn't be taken back.", null)),
+    });
+    await undo();
+    expect(useUndo.getState().line?.problem?.reason(noWords)).toBe(
+      "One change couldn't be taken back.",
+    );
+    expect(useUndo.getState().line?.problem?.fix).toBeNull();
+    expect(names(useUndo.getState().done)).toEqual(["A"]);
+  });
+
+  test("a change renewed as more of it lands goes back on top, past the User's own", async () => {
+    const log: string[] = [];
+    const request = change("Request", log);
+    push(request);
+    push(change("Mine", log));
+    useUndo.getState().renew(request);
+    expect(names(useUndo.getState().done)).toEqual(["Mine", "Request"]);
+    expect(useUndo.getState().line?.change).toBe(request);
+    await undo();
+    expect(log).toEqual(["undo Request"]);
+  });
+
   test("a change withdrawn leaves the stack and its line", () => {
     const log: string[] = [];
     const accepted = change("Accept", log);

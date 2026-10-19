@@ -57,8 +57,16 @@ function Line({ line }: { line: UndoLineState }) {
   const shown = useRef<HTMLDivElement>(null);
   useFade(shown);
 
-  useGoesBy(line.change ? line.id : null);
+  useGoesBy(line.change || line.note ? line.id : null);
   useDismissOnEscape(true, () => useUndo.getState().dismiss());
+
+  if (line.note) {
+    return (
+      <div ref={shown} data-testid="undo-note" className={lineClass}>
+        <span className="min-w-0 break-words">{line.note(t)}</span>
+      </div>
+    );
+  }
 
   if (line.problem) {
     const { step, reason, fix } = line.problem;

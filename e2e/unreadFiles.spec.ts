@@ -241,6 +241,7 @@ for (const language of ["en", "zh-CN"] as const) {
       const { app, window } = await start(language);
       await interceptOpenDialog(app, report);
       await pointAndClick(window, window.getByTestId("plus-menu"));
+      await pointAndClick(window, window.getByTestId("plus-more"));
       await pointAndClick(window, window.getByTestId("plus-verify-document"));
       await expect(window.getByTestId("check-card").getByTestId("verify-ask")).toBeVisible();
       const card = await checkCard(window);
@@ -273,6 +274,7 @@ for (const language of ["en", "zh-CN"] as const) {
       const { app, window } = await start(language);
       await interceptOpenDialog(app, report);
       await pointAndClick(window, window.getByTestId("plus-menu"));
+      await pointAndClick(window, window.getByTestId("plus-more"));
       await pointAndClick(window, window.getByTestId("plus-verify-document"));
       await expect(window.getByTestId("check-card").getByTestId("verify-ask")).toBeVisible();
       const card = await checkCard(window);

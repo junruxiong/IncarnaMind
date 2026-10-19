@@ -2,15 +2,10 @@ import type { ReactNode } from "react";
 import type { Document, Tag } from "../../../core/api";
 import { organizeHeld, organizesNewDocuments } from "../../../shared/libraryModels";
 import { useT } from "../i18n";
-import { NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
 import { placeOf, resumeTagging } from "../taggingStop";
-import { CheckLineIcon, CloseLineIcon, TagLineIcon } from "./lineIcons";
-import { rowActionButtonClass, rowClass } from "./sidebarRows";
-import { ReviewRing, TagDot } from "./TagColour";
+import { TagLineIcon } from "./lineIcons";
 import { pickerLabel, TagPicker, tagPopoverClass, useTagPopover } from "./TagPicker";
-import { menuClass, menuItemClass, menuRuleClass, menuTitleClass } from "./ui";
-import { usePopoverMenu } from "./usePopoverMenu";
 
 /**
  * A Document's Tags button and the Tag picker it opens (see `TagPicker`):
@@ -196,147 +191,6 @@ export function DocumentTagFooter({ item, close }: { item: Document; close(): vo
           className={footerButton}
         >
           {t("tags.menu.manage")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** A Tag filter value in words: a Tag's name, or "Needs review". */
-function useFilterName(): (value: string) => string {
-  const t = useT();
-  const tags = useAppStore((state) => state.tags);
-  return (value) =>
-    value === NEEDS_REVIEW
-      ? t("tags.filter.review")
-      : (tags.find((tag) => tag.id === value)?.name ?? value);
-}
-
-/** Each list of Documents looked at, and whether any of them has a Tag awaiting review. */
-const reviewingIn = new WeakMap<readonly Document[], boolean>();
-
-/**
- * Whether any Document has a Tag awaiting review: worked out once per list,
- * not at every change to the store (#156).
- */
-function anyAwaitsReview(documents: readonly Document[]): boolean {
-  let reviewing = reviewingIn.get(documents);
-  if (reviewing === undefined) {
-    reviewing = documents.some((item) => item.tags.some((link) => link.needsReview));
-    reviewingIn.set(documents, reviewing);
-  }
-  return reviewing;
-}
-
-/**
- * The Documents label's Tags button: a menu to show only the Documents with
- * any of the Tags chosen (choosing one again takes it out), and "Manage
- * Tags…". The Library's Tags filter is the same filter.
- */
-export function TagFilterMenu() {
-  const t = useT();
-  const tags = useAppStore((state) => state.tags);
-  const tagFilter = useAppStore((state) => state.tagFilter);
-  const reviewing = useAppStore((state) => anyAwaitsReview(state.documents));
-  const menu = usePopoverMenu();
-  const values = [...(reviewing || tagFilter.includes(NEEDS_REVIEW) ? [NEEDS_REVIEW] : [])];
-  const name = useFilterName();
-
-  return (
-    <>
-      <button
-        {...menu.buttonProps}
-        type="button"
-        data-testid="tag-filter-menu"
-        aria-label={t("tags.title")}
-        title={t("tags.filter.label")}
-        className={rowActionButtonClass}
-      >
-        <TagLineIcon className="size-4" />
-      </button>
-      <div
-        {...menu.menuProps}
-        role="menu"
-        aria-label={t("tags.title")}
-        data-testid="tag-filters"
-        className={menuClass}
-      >
-        {menu.open && (
-          <>
-            <p className={menuTitleClass}>{t("tags.filter.title")}</p>
-            {tags.length === 0 && <p className="px-2 py-1 text-ink-meta">{t("tags.menu.none")}</p>}
-            {[...values, ...tags.map((tag) => tag.id)].map((value) => {
-              const selected = tagFilter.includes(value);
-              const tag = tags.find((each) => each.id === value);
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="menuitemcheckbox"
-                  aria-checked={selected}
-                  data-testid="tag-filter"
-                  data-tag-id={value}
-                  title={tag?.description || undefined}
-                  onClick={() => {
-                    menu.close();
-                    useAppStore.getState().toggleTagFilter(value);
-                  }}
-                  className={`${menuItemClass} pl-2`}
-                >
-                  <CheckLineIcon
-                    className={`size-3.5 shrink-0 ${selected ? "text-ink" : "invisible"}`}
-                  />
-                  {tag ? <TagDot colour={tag.colour} /> : value === NEEDS_REVIEW && <ReviewRing />}
-                  <span className="truncate">{name(value)}</span>
-                </button>
-              );
-            })}
-            <div className={menuRuleClass} />
-            <button
-              type="button"
-              role="menuitem"
-              data-testid="manage-tags"
-              onClick={() => {
-                menu.close();
-                useAppStore.getState().openTagsDialog();
-              }}
-              className={`${menuItemClass} pl-[30px]`}
-            >
-              {t("tags.menu.manage")}
-            </button>
-          </>
-        )}
-      </div>
-    </>
-  );
-}
-
-/** While the Documents are filtered by Tags: a row that says which, to clear it. */
-export function ActiveTagFilter() {
-  const t = useT();
-  const tagFilter = useAppStore((state) => state.tagFilter);
-  const name = useFilterName();
-  if (tagFilter.length === 0) return null;
-  return (
-    <div
-      data-testid="tag-filter-active"
-      data-tag-id={tagFilter.join(" ")}
-      className={rowClass(false)}
-    >
-      <div className="flex h-full w-full min-w-0 items-center gap-2 pr-1 pl-2">
-        <TagLineIcon className="size-4 shrink-0 text-ink-meta" />
-        <span className="min-w-0 flex-1 truncate">
-          {t("tags.filter.active", { tag: tagFilter.map(name).join(", ") })}
-        </span>
-        <button
-          type="button"
-          data-testid="tag-filter-clear"
-          aria-label={t("tags.filter.clear")}
-          title={t("tags.filter.clear")}
-          onClick={() => useAppStore.getState().setTagFilter([])}
-          className={rowActionButtonClass}
-        >
-          <CloseLineIcon className="size-3.5" />
         </button>
       </div>
     </div>

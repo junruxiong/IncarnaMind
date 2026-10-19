@@ -7,6 +7,7 @@
  * (./claimedChanges). In English, as the rest of the instructions are.
  */
 import type { AnswerToolCall, MindChange, MindProblem } from "../api";
+import { COMMAND_TOOLS } from "../tools";
 
 /** A Mind's name now, by its id; null for one deleted or unknown. */
 export type MindNames = (mindId: string) => string | null;
@@ -209,7 +210,30 @@ function lineOf(call: AnswerToolCall, names: MindNames, states?: ChangeStates): 
             ? "the User denied it, so it wasn't made"
             : "failed"
       }`;
+    case "commands":
+      return commandLine(call);
   }
+}
+
+function commandLine(call: AnswerToolCall): string {
+  if (call.tool === COMMAND_TOOLS.list) {
+    if (!call.found) return "list_commands: failed";
+    const { kind, count, by } = call.found;
+    const words = Object.entries(by).map(([what, value]) => `${what} ${quoted(value)}`);
+    return `list_commands ${kind}s${words.length > 0 ? ` by ${words.join(", ")}` : ""}: found ${count}`;
+  }
+  const done = call.command;
+  if (!done) {
+    return `run_command ${field(call, "command")}: ${call.approval === "denied" ? "the User didn't allow it, so nothing changed" : "failed, so nothing changed"}`;
+  }
+  const items = done.items
+    .map((item) =>
+      item.renamed ? `${quoted(item.name)} to ${quoted(item.renamed)}` : quoted(item.name),
+    )
+    .join(", ");
+  const into = done.into ? ` into the ${done.into.kind} ${quoted(done.into.name)}` : "";
+  const file = done.file ? `, saved as ${quoted(done.file.name)} in ${done.file.folder}` : "";
+  return `run_command ${done.command}: ${counted(done.items.length, "item")}${items ? ` (${items})` : ""}${into}${file}`;
 }
 
 export function toolRecordLines(

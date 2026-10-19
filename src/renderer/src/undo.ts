@@ -20,6 +20,11 @@ export interface Undoable {
   /** Takes it back. Throws `UndoRefused` when a fix would let it. */
   undo(): Promise<void>;
   /**
+   * What the line says once it is taken back, when it couldn't take back all of it as it was:
+   * a Folder it kept for what the User put in it since. Null: nothing.
+   */
+  undoneNote?(): Words | null;
+  /**
    * Where its line shows, when that is where the User acted rather than the
    * sidebar's foot: under an Answer in the assistant (`answerUndoPlace`).
    */
@@ -39,11 +44,14 @@ export interface UndoFix {
   run(): Promise<void>;
 }
 
-/** An undo or a redo the core can't do yet, with the fix that lets it: it stays on the stack. */
+/**
+ * An undo or a redo the core can't do, said in the interface's words: with the fix that lets it,
+ * it stays on the stack; with none, it never can and leaves it.
+ */
 export class UndoRefused extends Error {
   constructor(
     readonly said: Words,
-    readonly fix: UndoFix,
+    readonly fix: UndoFix | null,
   ) {
     super(said((key, params) => translate("en", key, params)));
     this.name = "UndoRefused";
@@ -58,8 +66,9 @@ export interface UndoProblem {
 }
 
 export type UndoLineState =
-  | { id: number; change: Undoable; problem?: undefined }
-  | { id: number; problem: UndoProblem; change?: undefined };
+  | { id: number; change: Undoable; problem?: undefined; note?: undefined }
+  | { id: number; problem: UndoProblem; change?: undefined; note?: undefined }
+  | { id: number; note: Words; change?: undefined; problem?: undefined };
 
 interface UndoState {
   /** The changes ⌘Z takes back, the last one last. */
@@ -76,6 +85,11 @@ interface UndoState {
   withdraw(change: Undoable): void;
   /** Hides the line; the stack stays. */
   dismiss(): void;
+  /**
+   * A change already made has more to it, made just now: a request's later commands. It goes
+   * back on top, past what the User did meanwhile, so ⌘Z takes it back first, and shows its line.
+   */
+  renew(change: Undoable): void;
 }
 
 /** How long the line shows before it goes by itself. */
@@ -147,7 +161,11 @@ export const useUndo = create<UndoState>()((set, get) => {
           refused("undo", change, error);
           return;
         }
-        set((state) => ({ undone: change.redo ? [...state.undone, change] : [] }));
+        const note = change.undoneNote?.() ?? null;
+        set((state) => ({
+          undone: change.redo ? [...state.undone, change] : [],
+          ...(note && { line: { id: ++lines, note } }),
+        }));
       }),
     redo: () =>
       inTurn(async () => {
@@ -172,8 +190,39 @@ export const useUndo = create<UndoState>()((set, get) => {
     dismiss() {
       set({ line: null });
     },
+    renew(change) {
+      set((state) => ({
+        done: [...state.done.filter((each) => each !== change), change],
+        undone: [],
+        line: lineOf(change),
+      }));
+    },
   };
 });
+
+/**
+ * Runs changes that each go on the stack as they are made, then leaves them there as one step:
+ * Undo takes them back last first, Redo does them again in order.
+ */
+export async function asOneStep(
+  words: Pick<Undoable, "said" | "name">,
+  run: () => Promise<void>,
+): Promise<void> {
+  const before = useUndo.getState().done.length;
+  await run();
+  const steps = useUndo.getState().done.slice(before);
+  if (steps.length < 2) return;
+  for (const step of steps) useUndo.getState().withdraw(step);
+  useUndo.getState().push({
+    ...words,
+    undo: async () => {
+      for (const step of [...steps].reverse()) await step.undo();
+    },
+    redo: async () => {
+      for (const step of steps) await step.redo?.();
+    },
+  });
+}
 
 export const useAnswerLine = (answerId: string) =>
   useUndo((state) =>

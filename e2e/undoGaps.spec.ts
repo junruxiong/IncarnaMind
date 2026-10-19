@@ -283,6 +283,7 @@ test("typing in a multi-line field is one step: a form in a dialog, and a form i
 
   // A dialog: the addresses of web pages.
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
   await typedWordIsOneStep(window, dialog.getByTestId("add-web-page-addresses"), "");
@@ -302,6 +303,7 @@ test("typing while a closed menu is still fading is one step, though its copy wo
   await dismissChatSetup(window);
   await setMotionSpeed(window, 0.2);
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const addresses = window.getByTestId("add-web-page-dialog").getByTestId("add-web-page-addresses");
   await pointAndClick(window, addresses);
@@ -319,6 +321,7 @@ test("Chinese typed by an input method into a multi-line field is one step too",
   const { window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const addresses = window.getByTestId("add-web-page-dialog").getByTestId("add-web-page-addresses");
   await pointAndClick(window, addresses);
