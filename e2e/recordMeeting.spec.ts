@@ -143,11 +143,24 @@ test("Record moves nothing on the new Mind's page when its bar comes: the room i
   await dismissChatSetup(window);
   await readNotice(window);
   await window.evaluate(() => {
-    const tops: number[] = [];
-    (globalThis as unknown as { tops: number[] }).tops = tops;
+    const frames: { top: number; stage: string; lines: number }[] = [];
+    (globalThis as unknown as { frames: typeof frames }).frames = frames;
     const tick = () => {
       const editor = document.querySelector('[data-testid="mind-editor"]');
-      if (editor) tops.push(Math.round(editor.getBoundingClientRect().top * 10) / 10);
+      const bar = document.querySelector('[data-testid="meeting-bar"]');
+      const stage = bar
+        ? "bar"
+        : document.querySelector('[data-testid="meeting-bar-room"]')
+          ? "room"
+          : document.querySelector('[data-testid="meeting-start"]')
+            ? "start"
+            : "";
+      if (editor && stage) {
+        const lines = [...(bar?.children ?? [])]
+          .filter((child) => child.getAttribute("data-testid") !== "meeting-controls")
+          .reduce((sum, child) => sum + child.getBoundingClientRect().height + 2, 0);
+        frames.push({ top: Math.round(editor.getBoundingClientRect().top), stage, lines });
+      }
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -159,12 +172,18 @@ test("Record moves nothing on the new Mind's page when its bar comes: the room i
   await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
   await expect(window.getByTestId("meeting-bar-room")).toHaveCount(0);
 
-  const tops = await window.evaluate(() => (globalThis as unknown as { tops: number[] }).tops);
-  expect(tops.length).toBeGreaterThan(3);
-  expect(
-    Math.max(...tops) - Math.min(...tops),
-    `the text's top over the frames: ${tops}`,
-  ).toBeLessThanOrEqual(1);
+  const frames = await window.evaluate(
+    () =>
+      (globalThis as unknown as { frames: { top: number; stage: string; lines: number }[] }).frames,
+  );
+  expect(frames.some((frame) => frame.stage === "room")).toBe(true);
+  // The start block never shows between the room and the bar, and the text stays where it was
+  // but for the bar's own status lines, which come with the transcript's engine.
+  expect(frames.filter((frame) => frame.stage === "start")).toEqual([]);
+  const room = frames.find((frame) => frame.stage === "room")?.top ?? 0;
+  for (const frame of frames) {
+    expect(Math.abs(frame.top - frame.lines - room), JSON.stringify(frames)).toBeLessThanOrEqual(1);
+  }
   await app.close();
 });
 

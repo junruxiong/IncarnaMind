@@ -111,13 +111,12 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
           where: { in: "group" },
         });
         if (starts) await get().start(meeting.id, meeting.systemAudio);
+        // The core's event can come after start() returns, and showing the start block between
+        // would flash it: the Meeting leaves "starting" with its status, or here if the start failed.
+        if (meeting.id in get().problems) set(stopStarting(meeting.id));
       } catch (error) {
         useAppStore.getState().reportError(error);
-      } finally {
-        if (created) {
-          const done = created;
-          set((state) => ({ starting: withoutKey(state.starting, done) }));
-        }
+        if (created) set(stopStarting(created));
       }
     },
 
@@ -166,13 +165,26 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
   };
 });
 
+const stopStarting =
+  (meetingId: string) =>
+  (state: MeetingsState): Pick<MeetingsState, "starting"> => ({
+    starting: withoutKey(state.starting, meetingId),
+  });
+
 function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> {
   const { [key]: _, ...rest } = record;
   return rest;
 }
 
 core.on("meetings.changed", (meetings) => {
-  useMeetings.setState({ meetings });
+  useMeetings.setState((state) => ({
+    meetings,
+    starting: Object.fromEntries(
+      Object.keys(state.starting)
+        .filter((id) => meetings.some((each) => each.id === id && each.status === "ready"))
+        .map((id) => [id, true as const]),
+    ),
+  }));
   settleTakeBacks(meetings);
 });
 
