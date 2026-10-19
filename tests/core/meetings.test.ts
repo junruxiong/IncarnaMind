@@ -394,7 +394,7 @@ describe("Pausing my microphone", () => {
     const meeting = await core.createMeeting();
     await expect(
       core.setMeetingMicrophone({ meetingId: meeting.id, paused: true }),
-    ).rejects.toThrow(/isn't being recorded/);
+    ).rejects.toThrow(/isn’t being recorded/);
     await core.startMeeting({ meetingId: meeting.id });
     await core.pauseMeeting(meeting.id);
     const paused = await core.setMeetingMicrophone({ meetingId: meeting.id, paused: true });
@@ -411,7 +411,7 @@ describe("Pausing my microphone", () => {
     await core.stopMeeting(meeting.id);
     await expect(
       core.setMeetingMicrophone({ meetingId: meeting.id, paused: false }),
-    ).rejects.toThrow(/isn't being recorded/);
+    ).rejects.toThrow(/isn’t being recorded/);
   });
 
   test("a Meeting cut off with the microphone paused finds it on when it is resumed", async () => {
