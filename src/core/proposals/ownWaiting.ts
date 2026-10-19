@@ -12,6 +12,7 @@ import * as Y from "yjs";
 import { INLINE_CODE_MARK } from "../../shared/aiText";
 import { askedFor } from "../../shared/askedChanges";
 import { originOf } from "../../shared/blockOrigins";
+import { readChart } from "../../shared/charts";
 import {
   keepRevised,
   pendingProposals,
@@ -23,6 +24,7 @@ import {
 import { type NodeJSON, topLevelBlocks } from "../answers/blocks";
 import {
   BLOCK_ID_ATTRIBUTE,
+  CHART_NODE,
   CITATION_NODE,
   GENERATED_MARK,
   PROPOSAL_ATTRIBUTE,
@@ -286,9 +288,19 @@ export function writtenByAnswer(
   const [first] = top;
   if (range.length === 0) return null;
   if (heading && first && first.nodeName === "heading" && !fromAnswer(first)) range.unshift(first);
+  const ids = new Set(range.map(idOf));
+  // A chart carries no mark, but one drawn from the Answer's own table there is the Answer's:
+  // written again, it is drawn again from the new table (#1091).
+  const drawnHere = (element: Y.XmlElement) => {
+    if (element.nodeName !== CHART_NODE) return false;
+    const { source } = readChart(element.getAttributes());
+    return source.kind === "table" && source.blockId !== null && ids.has(source.blockId);
+  };
   return {
-    applied: { kind: "applied", blockIds: range.map(idOf), fingerprint: fingerprintOf(range) },
-    edited: !range.every((element) => !fromAnswer(element) || allAiText(element, writtenAtom)),
+    applied: { kind: "applied", blockIds: [...ids], fingerprint: fingerprintOf(range) },
+    edited: !range.every(
+      (element) => !fromAnswer(element) || drawnHere(element) || allAiText(element, writtenAtom),
+    ),
   };
 }
 

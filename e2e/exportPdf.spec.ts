@@ -34,7 +34,6 @@ import {
   savedLine,
   savedPath,
   setWindowSize,
-  tabMenu,
   useOutputLocation,
   WINDOW_SIZE,
 } from "./app";
@@ -135,9 +134,9 @@ async function documentNamed(window: Page, name: string): Promise<Document> {
   return found;
 }
 
-/** Export as PDF, from the tab's menu, while Word is still the last format. */
+/** Export as PDF, from the Export button's menu, while Word is still the last format. */
 async function exportAsPdf(window: Page): Promise<void> {
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportAs.pdf"));
+  await exportFromMenu(window, "pdf");
 }
 
 let dataDir: string;
@@ -581,7 +580,7 @@ test("Export as HTML saves one .html file whose footnotes link both ways, and th
   const out = await createDataFolder();
   await useOutputLocation(window, out);
 
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportAs.html"));
+  await exportFromMenu(window, "html");
   const path = await savedPath(window, "Tides 潮汐.html");
   const html = await readFile(path, "utf8");
   expect(html.startsWith("<!DOCTYPE html>")).toBe(true);
