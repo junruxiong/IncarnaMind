@@ -148,8 +148,8 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await expect(marks(window).and(window.locator('[data-check="checking"]'))).toHaveCount(0);
   await expect(marks(window).and(window.locator('[data-check="contradicted"]'))).toHaveCount(1);
   await expect(marks(window).and(window.locator('[data-check="supported"]'))).toHaveCount(3);
-  // Nothing changed since: nothing to check again.
-  await expect(health.getByTestId("health-check")).toHaveCount(0);
+  // Nothing changed since: no claim is one not checked yet.
+  await expect(health.getByTestId("health-unchecked")).toHaveCount(0);
   await expect(window.getByTestId("check-badge")).toContainText("1");
   await screenshot(window, "mind-check-done-en");
 
@@ -159,15 +159,43 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await slideSelect(window, first, "Penguins");
   await window.keyboard.type("Puffins");
   await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(1);
-  const again = (await checkCard(window)).getByTestId("health-check");
-  await expect(again).toHaveText("Check again");
+  // The card's one action checks what changed, here the edited claim alone, at once; its
+  // tooltip says how many that is.
+  const again = (await checkCard(window)).getByTestId("badge-check-mind");
+  await expect(again).toHaveText("Check this Mind");
+  await expect(again).toHaveAttribute("title", "1 changed sentence");
   await pointAndClick(window, again);
   await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(0);
   await expect(marks(window).and(window.locator('[data-check="unsupported"]'))).toHaveCount(11);
   await expect(marks(window)).toHaveCount(15);
+  await expect(again).toHaveAttribute("title", "Nothing changed: checks every sentence");
+
+  // ⌘K's "Check this Mind" is that same action; "Check every sentence again" is the whole Mind.
+  await slideSelect(window, first, "Puffins");
+  await window.keyboard.type("Gulls");
+  await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(1);
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type("check this mind");
+  await pointAndClick(
+    window,
+    window.getByTestId("palette-item").filter({ hasText: "Check this Mind" }).first(),
+  );
+  await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(0);
+  await expect(window.getByTestId("mind-check-ask")).toHaveCount(0);
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type("check every sentence");
+  await pointAndClick(
+    window,
+    window.getByTestId("palette-item").filter({ hasText: "Check every sentence again" }).first(),
+  );
+  await expect(window.getByTestId("check-card").getByTestId("mind-check-ask")).toContainText(
+    "Check this Mind’s 15 claims against your Documents?",
+  );
 });
 
-test("In Chinese and a narrow window, from the Mind's tab menu: a model on this computer asks with the claims and no price; a Folder that holds too little offers all Documents; Check all checks a sentence written since", async () => {
+test("In Chinese and a narrow window, from the Mind's tab menu: a model on this computer asks with the claims and no price; a Folder that holds too little offers all Documents; Check this Mind checks a sentence written since", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await writeFile(
     join(sources, "Garden.pdf"),
@@ -194,7 +222,7 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await setWindowSize(app, window, 900, 720);
 
   await window.getByTestId("mind-tab").first().click({ button: "right" });
-  await pointAndClick(window, window.getByRole("menuitem", { name: "核对整个 Mind" }));
+  await pointAndClick(window, window.getByRole("menuitem", { name: "核对此 Mind" }));
   // On this computer it asks too, in the badge's card, with the claims the model named and no price.
   const health = window.getByTestId("check-card");
   const ask = health.getByTestId("mind-check-ask");
@@ -221,7 +249,7 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await expect(health.getByTestId("health-unsupported")).toContainText("11 条无依据");
   await screenshot(window, "mind-check-done-zh-narrow");
 
-  // A sentence written since: "全部核对" checks it, and the rest stay as they were.
+  // A sentence written since: "核对此 Mind" checks it alone, and the rest stay as they were.
   const editor = window.getByTestId("mind-editor");
   const last = editor.locator(":scope > p").last();
   const box = await last.boundingBox();
@@ -230,13 +258,14 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await last.click({ position: { x: box.width - 2, y: box.height - 4 } });
   await window.keyboard.type(" The harbour office opens at nine in the morning.");
   await expect(last).toContainText("worth building. The harbour office opens");
-  const all = (await checkCard(window)).getByTestId("health-check");
-  await expect(all).toHaveText("全部核对");
+  const all = (await checkCard(window)).getByTestId("badge-check-mind");
+  await expect(all).toHaveText("核对此 Mind");
+  await expect(all).toHaveAttribute("title", "1 句有改动");
   await pointAndClick(window, all);
   await expect(ask).toContainText("要对照这个文件夹中的文档，核对这个 Mind 中的这条说法吗？");
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
   await expect(marks(window)).toHaveCount(16);
-  await expect(health.getByTestId("health-check")).toHaveCount(0);
+  await expect(health.getByTestId("health-unchecked")).toHaveCount(0);
 });
 
 test("when the provider can't be reached while the claims are named, Try again names them again and asks before it checks", async () => {
