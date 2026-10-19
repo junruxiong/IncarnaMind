@@ -4045,7 +4045,8 @@ export const en = {
   "meetings.sheet.recommended": "Recommended",
   "meetings.sheet.useLocal": "Start on this computer",
   "meetings.sheet.use": "Use {service}",
-  "meetings.sheet.foot": "Recording starts when you choose. The recording itself stays on this computer.",
+  "meetings.sheet.foot":
+    "Recording starts when you choose. The recording itself stays on this computer.",
   "meetings.bar.label": "Meeting recording",
   "meetings.bar.recording": "Recording",
   "meetings.bar.paused": "Paused",
