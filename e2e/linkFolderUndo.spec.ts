@@ -83,7 +83,7 @@ test("a link that takes over Documents added before says Undo can't take it back
 
     await linkFolderFromSidebar(app, window, folder);
     await expect(window.getByTestId("undo-line")).toContainText(
-      "It took over Documents you had added from it, so Undo can't take it back",
+      "It took in Documents added before, so Undo can't unlink it.",
     );
 
     await leaveText(window);

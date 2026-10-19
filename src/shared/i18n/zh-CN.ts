@@ -284,8 +284,7 @@ export const zhCN = {
   "undo.mindStarted": "已新建“{name}”",
   "undo.mindMade": "已新建 Mind",
   "undo.folderLinked": "已添加同步文件夹“{name}”",
-  "undo.folderLinkedKept":
-    "已添加同步文件夹“{name}”。它接管了你之前从中添加的文档，所以无法撤销；要移除它，请用它的 ⋯ 菜单。",
+  "undo.folderLinkedKept": "已添加同步文件夹“{name}”。它接管了之前添加的文档，所以无法撤销。",
   "undo.linkedFolderPaused": "已暂停读取“{name}”",
   "undo.linkedFolderResumed": "已继续读取“{name}”",
   "undo.linkedFolderFlat": "已将“{name}”显示为平铺列表",
