@@ -6,9 +6,9 @@
  * than leaving a pointer in.
  */
 
-const MY_EARLIER = String.raw`my (?:earlier|previous|prior|last|first|original) (?:answer|reply|response)s?`;
-const EARLIER = String.raw`(?:${MY_EARLIER}|(?:the|that) (?:earlier|previous|prior|last|preceding) (?:answer|reply|response))`;
-const CONVERSATION = String.raw`(?:earlier|above) in (?:this|our|the) (?:conversation|chat)`;
+const MY_EARLIER = `my (?:earlier|previous|prior|last|first|original) (?:answer|reply|response)s?`;
+const EARLIER = `(?:${MY_EARLIER}|(?:the|that) (?:earlier|previous|prior|last|preceding) (?:answer|reply|response))`;
+const CONVERSATION = `(?:earlier|above) in (?:this|our|the) (?:conversation|chat)`;
 const THERE = `(?:in ${EARLIER}|above|${CONVERSATION})`;
 const SET_OUT =
   "(?:covered|set out|described|explained|discussed|listed|given|summari[sz]ed|detailed|addressed|answered|outlined|shown|noted|mentioned|included|dealt with|stated)";
@@ -18,7 +18,7 @@ const I_SET_OUT =
   "I (?:have |['’]ve )?(?:already )?(?:covered|set out|described|explained|discussed|listed|gave|summari[sz]ed|detailed|addressed|answered|outlined|showed|noted|mentioned|went (?:over|through))";
 // What a pointer may name without saying anything of it: "notice, holiday and home working".
 const ITEM = String.raw`(?:(?:the|these|those|this|that|its|their|other|all|more|further|full) ){0,2}[\p{L}'’-]+(?: [\p{L}'’-]+)?`;
-const TOPIC = String.raw`(?<topic>${ITEM}(?:(?:,| and| or|, and|, or) ${ITEM}){0,4})`;
+const TOPIC = `(?<topic>${ITEM}(?:(?:,| and| or|, and|, or) ${ITEM}){0,4})`;
 const LEAD = String.raw`(?:(?:for (?:more|further|the full|the) (?:detail|details|information|list|breakdown|figures|rest)|for details|for more|as (?:discussed|mentioned|noted|explained)),\s*)?`;
 
 const ANSWER_ZH =
@@ -32,13 +32,13 @@ const LEAD_ZH =
 const SEE_ZH = `(?:可|请)?(?:见|参见|详见|请见|参阅|参考|查看)(?:我)?(?:在)?${EARLIER_ZH}(?:中|里)?`;
 
 const PURE = [
-  String.raw`${LEAD}(?:please )?(?:see|refer to|check)(?: also)? (?:${EARLIER}|above|${CONVERSATION})(?: for ${TOPIC})?`,
-  String.raw`${TOPIC} (?:is|are|was|were|has been|have been)(?: already| all| both| also)? (?:${SET_OUT} ${THERE}|in ${EARLIER}|${CONVERSATION})`,
-  String.raw`(?:as|like) (?:I )?${SAID} (?:earlier|above|before|previously|in ${EARLIER}|${CONVERSATION})`,
-  String.raw`(?:already )?${SET_OUT} ${THERE}`,
-  String.raw`(?:same as |as )(?:above|in ${EARLIER})`,
-  String.raw`${I_SET_OUT}(?: ${TOPIC})? (?:in ${EARLIER}|above|earlier|before|${CONVERSATION})`,
-  String.raw`${TOPIC} (?:is|are|remains?) (?:unchanged from|the same as in) ${EARLIER}`,
+  `${LEAD}(?:please )?(?:see|refer to|check)(?: also)? (?:${EARLIER}|above|${CONVERSATION})(?: for ${TOPIC})?`,
+  `${TOPIC} (?:is|are|was|were|has been|have been)(?: already| all| both| also)? (?:${SET_OUT} ${THERE}|in ${EARLIER}|${CONVERSATION})`,
+  `(?:as|like) (?:I )?${SAID} (?:earlier|above|before|previously|in ${EARLIER}|${CONVERSATION})`,
+  `(?:already )?${SET_OUT} ${THERE}`,
+  `(?:same as |as )(?:above|in ${EARLIER})`,
+  `${I_SET_OUT}(?: ${TOPIC})? (?:in ${EARLIER}|above|earlier|before|${CONVERSATION})`,
+  `${TOPIC} (?:is|are|remains?) (?:unchanged from|the same as in) ${EARLIER}`,
   `${LEAD_ZH}${TOPIC_ZH}?${SEE_ZH}`,
   `${TOPIC_ZH}?(?:我)?(?:已经?|都)?在${EARLIER_ZH}(?:中|里)?(?:已经?|都)?${SET_OUT_ZH}(?:了|过)?`,
   `${TOPIC_ZH}?${EARLIER_ZH}(?:中|里)?(?:已经?|都)${SET_OUT_ZH}(?:了|过)?`,

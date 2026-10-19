@@ -680,6 +680,27 @@ export const CASES: readonly EverydayCase[] = [
     request: "请为 GraphST 这篇论文写一个简短的摘要。",
     expected: { ...ANSWER, standsAlone: true, noExample: true },
   },
+  // The summary answered in the panel, then put into the page as it is: the copy of the last Answer the guard reads too.
+  {
+    id: "page-copy",
+    language: "en",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    before: ["Summarise the GraphST paper for my manager."],
+    request: "Put that summary into this page as it is.",
+    expected: { ...WRITE, standsAlone: true, noExample: true },
+  },
+  {
+    id: "page-copy-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    before: ["请为 GraphST 这篇论文写一份给经理看的摘要。"],
+    request: "把这份摘要原样放进这个页面。",
+    expected: { ...WRITE, standsAlone: true, noExample: true },
+  },
   // Research questions where an inference is tempting: a cited sentence says only what its quote supports (#1073).
   {
     id: "research-attention-long",

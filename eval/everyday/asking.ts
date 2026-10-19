@@ -38,6 +38,7 @@ import type { Library } from "../lib/library";
 import type { Log } from "../lib/log";
 import type { EverydayCase } from "./cases";
 import {
+  givenToMindsOf,
   pointersIn,
   type RequestFailure,
   type RequestOutcome,
@@ -381,11 +382,9 @@ export async function runCase(
   }
   const changedBlocks = changes.map((change) => change.block);
   const page = forPage(answer.text, each.request);
-  const givenToMinds = answer.toolCalls.flatMap((call) =>
-    ["add_to_mind", "create_mind", "edit_mind"].includes(call.tool) &&
-    typeof call.input.content === "string"
-      ? [{ content: call.input.content, landed: call.status === "done" && !call.mindProblem }]
-      : [],
+  const givenToMinds = givenToMindsOf(
+    answer.toolCalls,
+    last ? { text: last.text, question: each.before?.at(-1) ?? "" } : null,
   );
   const outcome: RequestOutcome = {
     expected: each.expected,

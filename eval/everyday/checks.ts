@@ -34,7 +34,7 @@
  *   Documents' text writes, or is named as a file's (./dates).
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
-import { withoutPointersBack } from "../../src/core/answers/pointersBack";
+import { forPage, withoutPointersBack } from "../../src/core/answers/pointersBack";
 import { withoutSearchTalk } from "../../src/core/answers/searchTalk";
 import { toolTextIn } from "../../src/core/answers/toolText";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
@@ -84,8 +84,8 @@ export interface RequestOutcome {
   writtenInMinds?: readonly string[];
   /** Its reply as Add to note puts it in a page; the reply as written when not given. */
   addedToPage?: string;
-  /** The `content` each of its calls of add_to_mind, create_mind and edit_mind gave, as the guard reads it, and whether it went into a Mind. */
-  givenToMinds?: readonly { content: string; landed: boolean }[];
+  /** What its calls of add_to_mind, create_mind and edit_mind gave to write (`givenToMindsOf`). */
+  givenToMinds?: readonly GivenToMind[];
   /** The app asked the model again inside the turn, so the User never read its first try. */
   askedAgain?: boolean;
   scoped: readonly { id: string; name: string }[];
@@ -176,8 +176,7 @@ const lettersOf = (text: string) =>
     .replace(/[^\p{L}\p{N}]+/gu, "")
     .toLocaleLowerCase();
 
-/** The sentences of `given` that `written` doesn't hold, read as letters and digits only. */
-export function leftOut(given: string, written: string): string[] {
+function leftOut(given: string, written: string): string[] {
   const there = lettersOf(written);
   return proseSentences(given).filter((sentence) => !there.includes(lettersOf(sentence)));
 }
@@ -240,14 +239,25 @@ function onlyAPointer(sentence: string): boolean {
   return words.filter((word) => !POINTER_WORDS.has(word)).length <= 4 && han.length <= 10;
 }
 
+const NOT_A_PARAGRAPH = /^\s*(?:#|[-*+]\s|\d{1,3}[.)]\s|\||>|```|~~~)|^ {4}/;
+
 /**
- * Of sentences left out of a page, those that say more than a pointer to an
- * earlier Answer, by this evaluation's own reading rather than the app's: a
- * pointer names an earlier Answer, holds no figure, marker or quote, and
- * says at most four words, or ten Chinese characters, besides.
+ * Whether the guard may take out a Block, by this evaluation's own reading
+ * rather than the app's: a paragraph of one line and one sentence, which is
+ * only a pointer to an earlier Answer (it names one, holds no figure, marker
+ * or quote, and says at most four words, or ten Chinese characters, besides).
  */
-export const lostContent = (sentences: readonly string[]): string[] =>
-  sentences.filter((sentence) => !onlyAPointer(sentence));
+const aPointerParagraph = (block: string) =>
+  !block.includes("\n") &&
+  !NOT_A_PARAGRAPH.test(block) &&
+  proseSentences(block).length === 1 &&
+  onlyAPointer(block.trim());
+
+/** What the guard lost going from `input` to `output`: each Block it took that it may not take, and each Block it changed. */
+export function guardLosses(input: string, output: string): string[] {
+  const { removed, changed } = guardTook(input, output);
+  return [...removed.filter((block) => !aPointerParagraph(block)), ...changed];
+}
 
 /** The sentences of what goes into a page that point to an earlier Answer. */
 export const pointersIn = (text: string): string[] =>
@@ -290,22 +300,53 @@ function namedAsUncovered(reply: string, name: string): boolean {
 }
 
 /**
- * What the guard took out on the way into a page: sentences of the reply, by
- * Add to note, and Blocks of what the calls gave to write into Minds, with the
- * Blocks it changed, which must be none.
+ * What a call of add_to_mind, create_mind or edit_mind gave to write: its
+ * `content`; or, given `answer: true`, the earlier Answer it copied, which
+ * the guard reads as Add to note does, with that Answer's Question. `landed`:
+ * it went into a Mind.
  */
-export function takenOut(outcome: RequestOutcome): { removed: string[]; changed: string[] } {
-  const took = (outcome.givenToMinds ?? []).map(({ content }) =>
-    guardTook(content, withoutPointersBack(content).markdown),
-  );
+export interface GivenToMind {
+  content: string;
+  question?: string;
+  landed: boolean;
+}
+
+export function givenToMindsOf(
+  calls: ConversationAnswer["toolCalls"],
+  earlier: { text: string; question: string } | null,
+): GivenToMind[] {
+  return calls.flatMap((call) => {
+    if (!["add_to_mind", "create_mind", "edit_mind"].includes(call.tool)) return [];
+    const landed = call.status === "done" && !call.mindProblem;
+    // The app takes the earlier Answer and leaves `content` aside when `answer` is true.
+    if (call.input.answer === true && call.tool !== "edit_mind") {
+      return earlier ? [{ content: earlier.text, question: earlier.question, landed }] : [];
+    }
+    return typeof call.input.content === "string" ? [{ content: call.input.content, landed }] : [];
+  });
+}
+
+const guarded = ({ content, question }: GivenToMind) =>
+  question === undefined ? withoutPointersBack(content).markdown : forPage(content, question);
+
+/**
+ * What the guard took out on the way into a page, Block by Block: of the
+ * reply, by Add to note, and of what the calls gave to write into Minds; and
+ * what of it was lost: a Block it may not take, or a Block it changed.
+ */
+export function takenOut(outcome: RequestOutcome): { removed: string[]; lost: string[] } {
+  const pairs: [string, string][] = [
+    ...(outcome.addedToPage === undefined
+      ? []
+      : [[outcome.answer.text, outcome.addedToPage] as [string, string]]),
+    ...(outcome.givenToMinds ?? []).map((given): [string, string] => [
+      given.content,
+      guarded(given),
+    ]),
+  ];
   return {
-    removed: [
-      ...(outcome.addedToPage === undefined
-        ? []
-        : leftOut(outcome.answer.text, outcome.addedToPage)),
-      ...took.flatMap((each) => each.removed),
-    ],
-    changed: took.flatMap((each) => each.changed),
+    removed: pairs.flatMap(([input, output]) => guardTook(input, output).removed),
+    lost: pairs.flatMap(([input, output]) => guardLosses(input, output)),
   };
 }
 
@@ -322,7 +363,7 @@ export function rewrittenLater(outcome: RequestOutcome): { given: string; now: s
   const written = outcome.writtenInMinds ?? [];
   const given = (outcome.givenToMinds ?? [])
     .filter(({ landed }) => landed)
-    .map(({ content }) => withoutSearchTalk(withoutPointersBack(content).markdown).markdown)
+    .map((given) => withoutSearchTalk(guarded(given)).markdown)
     .join("\n\n");
   return leftOut(given, written.join("\n\n")).map((sentence) => {
     const words = wordsOf(sentence);
@@ -398,8 +439,7 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   const written = [answer.text, ...inMinds].join("\n\n");
   const example = expected.noExample ? written.match(EXAMPLE)?.[0] : undefined;
   if (example) failures.push({ kind: "example", said: example });
-  const took = takenOut(outcome);
-  const lost = [...lostContent(took.removed), ...took.changed];
+  const { lost } = takenOut(outcome);
   if (lost.length > 0) failures.push({ kind: "content-lost", sentences: lost });
   const unseen = outcome.askedAgain ? aboutAnUnseenAttempt(answer.text) : null;
   if (unseen) failures.push({ kind: "unseen-attempt", said: unseen });
