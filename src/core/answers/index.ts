@@ -1682,12 +1682,13 @@ export function createAnswers(options: AnswersOptions) {
               paragraph: paragraphAsked(context.question),
               ...input.assistant,
               language: answerLanguage(context.question),
-              blocksOf: (text) => {
+              blocksOf: (text, { streaming = false } = {}) => {
                 let found = 0;
                 let notFound = 0;
                 let unrecorded = 0;
                 let firstUnrecorded = -1;
-                const written = withoutSearchTalk(withoutFootnoteDefinitions(text));
+                const final = !streaming;
+                const written = withoutSearchTalk(withoutFootnoteDefinitions(text), { final });
                 const link = (source: NamedSource) => {
                   const marker = session.markerFor(source);
                   return marker === null ? null : `[^${marker}]`;
@@ -1702,7 +1703,7 @@ export function createAnswers(options: AnswersOptions) {
                 const sourced = linkKnownSources(written.markdown, known, link);
                 const tables = linkTableSources(sourced.text, link);
                 // After the sources written as text are linked, so a sentence citing one keeps its claim.
-                const alone = withoutPointersBack(tables.markdown);
+                const alone = withoutPointersBack(tables.markdown, { final });
                 const cited = markdownToBlocks(alone.markdown).flatMap((block, index) =>
                   withCitations([block], (marker) => {
                     const node = session.checkedNode(marker);
@@ -1734,7 +1735,9 @@ export function createAnswers(options: AnswersOptions) {
                   unlinkedSources: tables.unlinked,
                   extraCells: tables.extraCells,
                   searchTalk: written.left,
-                  pointersBack: alone.left,
+                  pointersBack: alone.removed,
+                  pointersLeft: alone.left,
+                  framing: written.framing + alone.framing,
                 };
               },
               changed: (toolCallId, change) => {

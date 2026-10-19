@@ -261,7 +261,12 @@ describe("Only what was asked changes", () => {
 });
 
 describe("Standing on its own, and the example unasked", () => {
-  const failed = (text: string, writtenInMinds: string[] = [], addedToPage?: string) =>
+  const failed = (
+    text: string,
+    writtenInMinds: string[] = [],
+    addedToPage?: string,
+    givenToMinds?: string[],
+  ) =>
     requestFailures(
       outcome({
         expected: {
@@ -274,6 +279,7 @@ describe("Standing on its own, and the example unasked", () => {
         answer: { text, citations: [], toolCalls: [], steps: null },
         writtenInMinds,
         addedToPage,
+        givenToMinds,
       }),
     ).map((failure) => failure.kind);
 
@@ -301,6 +307,17 @@ describe("Standing on its own, and the example unasked", () => {
     const reply = "Its results are strong. They are covered in my earlier answer.";
     expect(failed(reply, [], "Its results are strong.")).toEqual([]);
     expect(failed("Its results are strong.", [], reply)).toEqual(["points-back"]);
+  });
+
+  // protects=a sentence that says more than a pointer, left out of a page, fails as content lost, from the reply or from what a call gave to write into a Mind, in English and Chinese; one that was only a pointer passes; fails_when=lost content passes, or a pointer taken out fails; no_claim=none beyond protects.
+  test("content left out of a page fails", () => {
+    const correction = "I made an error in my previous answer and the total excludes VAT.";
+    expect(failed(`Pay is 5k. ${correction}`, [], "Pay is 5k.")).toEqual(["content-lost"]);
+    expect(failed("Pay is 5k. See my earlier answer.", [], "Pay is 5k.")).toEqual([]);
+    expect(failed("Done.", ["月薪一万。"], undefined, ["月薪一万。年假见上文。"])).toEqual([]);
+    expect(
+      failed("Done.", ["月薪一万。"], undefined, ["月薪一万。合同写道：“租金见上文。”"]),
+    ).toEqual(["content-lost"]);
   });
 
   // protects=a reply about the User's own Documents that mentions the example fails, in English and in Chinese; fails_when=it passes; no_claim=none beyond protects.

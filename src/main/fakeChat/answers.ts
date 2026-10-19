@@ -281,7 +281,6 @@ const IN_MILLIONS = /\bin millions\b/i;
 const SHORT_SUMMARY = /\bshort summary\b|简短的摘要/i;
 const HOME_WORKING = /\bhome working\b|居家办公/i;
 
-/** What a model added to its Answer that the Question didn't ask for (see the top of this file). */
 function withAsides(prompt: Prompt, question: string, answer: string): string {
   const chinese = /\p{Script=Han}/u.test(question);
   if (SHORT_SUMMARY.test(question)) {

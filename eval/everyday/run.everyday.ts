@@ -22,6 +22,7 @@ import {
   messageReference,
 } from "../../src/core";
 import { forPage } from "../../src/core/answers/pointersBack";
+import { withoutSearchTalk } from "../../src/core/answers/searchTalk";
 import { toolRecordLines } from "../../src/core/answers/toolRecord";
 import { plainText } from "../../src/core/mindText";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
@@ -39,7 +40,15 @@ import { type Library, openLibrary } from "../lib/library";
 import { createLog, type Log } from "../lib/log";
 import { createWorkerCrossEncoder } from "../lib/rerank";
 import { CASES, type EverydayCase, floorOf, type LibraryName } from "./cases";
-import { failureLine, pointsBack, type RequestFailure, requestFailures } from "./checks";
+import {
+  failureLine,
+  pointersIn,
+  pointsBack,
+  type RequestFailure,
+  type RequestOutcome,
+  requestFailures,
+  takenOut,
+} from "./checks";
 import { DATED_TEXTS, writeDatedDocuments } from "./dated";
 import { citedClaims } from "./dates";
 import { judgeClaims } from "./judge";
@@ -115,6 +124,10 @@ interface CaseResult {
   reply: string;
   /** The reply as Add to note puts it in a page. */
   page: string;
+  /** Sentences taken out on the way into a page, by Add to note or in what it wrote into Minds. */
+  removed: string[];
+  /** Sentences that point to an earlier Answer, left in what goes into a page. */
+  pointersLeft: number;
   calls: string[];
   /** The Mind's Blocks that changed, as they read before and once its changes are accepted. */
   changes: { block: number; before: string; after: string }[];
@@ -359,7 +372,15 @@ async function runCase(
   }
   const changedBlocks = changes.map((change) => change.block);
   const page = forPage(answer.text, each.request);
-  const failures = requestFailures({
+  const givenToMinds = answer.toolCalls.flatMap((call) =>
+    (call.tool === "add_to_mind" || call.tool === "create_mind") &&
+    call.status === "done" &&
+    call.mindChange &&
+    typeof call.input.content === "string"
+      ? [withoutSearchTalk(call.input.content).markdown]
+      : [],
+  );
+  const outcome: RequestOutcome = {
     expected: each.expected,
     answer,
     verdict,
@@ -369,9 +390,11 @@ async function runCase(
     sourcesAsText: sourcesAsTextIn,
     writtenInMinds,
     addedToPage: page,
+    givenToMinds,
     scoped,
     texts: each.library === "dated" ? DATED_TEXTS : undefined,
-  });
+  };
+  const failures = requestFailures(outcome);
   return {
     id: each.id,
     language: each.language,
@@ -380,6 +403,8 @@ async function runCase(
     failures,
     reply: answer.text,
     page,
+    removed: takenOut(outcome),
+    pointersLeft: pointersIn([page, ...writtenInMinds].join("\n\n")).length,
     calls: record,
     changes,
     seconds: (Date.now() - started) / 1000,
@@ -479,6 +504,8 @@ async function runModel(
             failures: [],
             reply: "",
             page: "",
+            removed: [],
+            pointersLeft: 0,
             calls: [],
             changes: [],
             seconds: 0,
@@ -535,6 +562,10 @@ function report(
   const markersLeftOut = results.reduce(
     (total, each) => total + markersIn(each.reply).length - markersIn(each.page).length,
     0,
+  );
+  const pointersLeft = heldTo("standsAlone").reduce((total, each) => total + each.pointersLeft, 0);
+  const lost = results.flatMap((each) =>
+    each.failures.flatMap((failure) => (failure.kind === "content-lost" ? failure.sentences : [])),
   );
   const sum = (key: keyof AnswerUsage) =>
     results.reduce((total, each) => total + each.usage[key], 0).toLocaleString("en");
@@ -641,7 +672,15 @@ function report(
     "",
     `${failing("points-back")} of ${expecting("standsAlone")} Answers held to it point to an earlier Answer in what goes into a page: the reply as Add to note puts it, or what they wrote into a Mind. Counting the replies in the panel, where they stay as the model wrote them: ${pointingInPanel}. ${failing("example")} of ${expecting("noExample")} mention the example unasked.`,
     "",
-    `Taking pointers out of the replies, as Add to note puts them in a page, left out ${markersLeftOut} Citation markers, over all ${results.length} Answers.`,
+    `Pointers left: ${pointersLeft} sentences that point to an earlier Answer stay in what goes into a page, over the ${expecting("standsAlone")} Answers held to it. Each says more than the pointer, so it is kept as written.`,
+    "",
+    `Content lost: ${lost.length} sentences that say more than a pointer were left out of a page, over all ${results.length} Answers. Taking pointers out of the replies left out ${markersLeftOut} Citation markers.`,
+    "",
+    "Every sentence taken out on the way into a page, to read by hand:",
+    "",
+    ...results.flatMap((each) =>
+      each.removed.map((sentence) => `- ${each.id}, ${each.model}: “${sentence}”`),
+    ),
     "",
     "## Each run",
     "",

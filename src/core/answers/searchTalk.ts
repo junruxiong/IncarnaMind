@@ -9,7 +9,7 @@
  * User's own ("I found three issues in the lease").
  */
 
-import { rewriteSentences } from "./proseSentences";
+import { withoutSentences } from "./proseSentences";
 
 // The first person singular: a Document's "we" is its authors.
 const SELF = /\bI\b|\b[Mm](?:y|e)\b/;
@@ -30,9 +30,14 @@ const aboutSearching = (sentence: string) =>
 
 /**
  * Markdown to write into a Mind without its sentences about searching, and
- * how many were left out. A paragraph left with nothing goes too.
+ * how many were left out. A paragraph left with nothing goes too, and with
+ * `final` (the whole text) a heading left with nothing under it, which
+ * `framing` counts.
  */
-export function withoutSearchTalk(markdown: string): { markdown: string; left: number } {
-  const kept = rewriteSentences(markdown, (sentence) => (aboutSearching(sentence) ? "" : sentence));
-  return { markdown: kept.markdown, left: kept.changed };
+export function withoutSearchTalk(
+  markdown: string,
+  { final = true }: { final?: boolean } = {},
+): { markdown: string; left: number; framing: number } {
+  const kept = withoutSentences(markdown, aboutSearching, { final });
+  return { markdown: kept.markdown, left: kept.dropped, framing: kept.framing };
 }
