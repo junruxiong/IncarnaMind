@@ -499,6 +499,138 @@ describe("an Answer's steps", () => {
   });
 });
 
+describe("where an Answer found what it says", () => {
+  const LEASE = { ...citation(1, "p1", "lease", 1), documentName: "租赁合同-2026" };
+  const RENT = { ...citation(2, "p2", "lease", 2), documentName: "租赁合同-2026" };
+  const unsearched = (extra: Partial<StepsInput["answer"]> = {}, more: Partial<StepsInput> = {}) =>
+    input(
+      { text: "月租金 4,800 元 [^1]。押金 9,600 元 [^2]。", citations: [LEASE, RENT], ...extra },
+      more,
+    );
+
+  // protects=an Answer whose Citations are all from a Document its model was given with the Question, with no search and another Mind open, says it read that Document beside the Mind, and its timeline has a row for the Document with where each Citation points; fails_when=the line names only the open Mind, names the Document twice for two Citations in it, or the timeline leaves the Document out; no_claim=that the model was given the text, which tests/core/answerSources.test.ts holds.
+  test("Citations from a Document given with the Question, none searched: the line names it beside the Mind", () => {
+    const steps = unsearched({ read: READ }, { askedFrom: MIND });
+    expect(foldedLine(steps)).toEqual({
+      kind: "read-documents",
+      documents: [LEASE],
+      mind: READ,
+    });
+    expect(stepRows(steps)).toEqual([
+      { kind: "answered", model: "claude-sonnet-5-5", seconds: 4 },
+      { kind: "read", mind: READ, share: null },
+      { kind: "read-documents", documents: [LEASE], sources: [LEASE, RENT] },
+      { kind: "check", count: 2, notFound: 0 },
+    ]);
+    expect(en("steps.readDocuments.mind.one", { mind: "Lit review", document: "Lease 2026" })).toBe(
+      "Read “Lit review” and “Lease 2026”",
+    );
+    expect(
+      zh("steps.readDocuments.mind.one", { mind: "授信委员会报告", document: "租赁合同-2026" }),
+    ).toBe("读了“授信委员会报告”和“租赁合同-2026”");
+    expect(zh("steps.readDocuments.one", { document: "租赁合同-2026" })).toBe(
+      "读了“租赁合同-2026”",
+    );
+  });
+
+  // protects=no Mind read: the line is the Documents alone, counted when more than one; fails_when=it names a Mind that wasn't read, or a Document no Citation is from; no_claim=none beyond protects.
+  test("with no Mind read, the line is the Documents alone, counted from two", () => {
+    const other = { ...citation(3, "p3", "heat", 2), documentName: "Heat study" };
+    const steps = unsearched({ citations: [LEASE, other, RENT] });
+    expect(foldedLine(steps)).toEqual({
+      kind: "read-documents",
+      documents: [LEASE, other],
+      mind: null,
+    });
+    const row = stepRows(steps).find((each) => each.kind === "read-documents");
+    expect(row).toEqual({
+      kind: "read-documents",
+      documents: [LEASE, other],
+      sources: [LEASE, other, RENT],
+    });
+    expect(stepRows(steps).some((each) => each.kind === "read")).toBe(false);
+    expect(en("steps.readDocuments.mind", { mind: "Lit review", count: 2 })).toBe(
+      "Read “Lit review” and 2 Documents",
+    );
+    expect(en("steps.readDocuments", { count: 2 })).toBe("Read 2 Documents");
+    expect(zh("steps.readDocuments.mind", { mind: "授信委员会报告", count: 2 })).toBe(
+      "读了“授信委员会报告”和 2 个文档",
+    );
+    expect(zh("steps.readDocuments", { count: 2 })).toBe("读了 2 个文档");
+  });
+
+  // protects=an Answer that cited nothing says it read the Mind only, with no Document named; fails_when=a Document the Answer didn't cite is named, or the Mind is lost; no_claim=none beyond protects.
+  test("from the open Mind only: the line says that and names no Document", () => {
+    const steps = input({ read: READ, text: "Your notes say so." }, { askedFrom: MIND });
+    expect(foldedLine(steps)).toEqual({ kind: "read", mind: READ, share: null });
+    expect(stepRows(steps).map((row) => row.kind)).toEqual(["answered"]);
+  });
+
+  // protects=Citations a search found stay under it, and one it didn't find sits under the Documents given with the Question: the line is the search's, counting both, and the timeline has each in its place; fails_when=a Citation is under a search that didn't find it, or a Document it cites goes unnamed; no_claim=none beyond protects.
+  test("a search beside a Document given with the Question: each Citation under where it came from", () => {
+    const found = citation(3, "p3", "heat", 2);
+    const steps = unsearched({
+      text: "Rent [^1]. Heat [^3].",
+      toolCalls: [search("s1", "heat", { passages: ["p3"] })],
+      citations: [LEASE, found],
+      read: READ,
+    });
+    expect(foldedLine(steps)).toEqual({ kind: "searched", sources: 2, extraScopes: 0 });
+    const rows = stepRows(steps);
+    expect(rows.map((row) => row.kind)).toEqual([
+      "answered",
+      "read",
+      "read-documents",
+      "search",
+      "check",
+    ]);
+    expect(rows[2]).toEqual({ kind: "read-documents", documents: [LEASE], sources: [LEASE] });
+    expect(rows[3]).toMatchObject({ kind: "search", found: 4, used: 1, sources: [found] });
+  });
+
+  // protects=a search that found nothing says nothing was found and names nothing as read, whatever Mind is open; fails_when=the line says "Read" the Mind, or invents a source; no_claim=the timeline still says the Mind was read, because it was.
+  test("a search that found nothing: nothing found, and no Document or Mind named as read", () => {
+    const steps = input(
+      { toolCalls: [search("s1", "租金", { resultCount: 0 })], read: READ },
+      { askedFrom: MIND },
+    );
+    expect(foldedLine(steps)).toEqual({ kind: "searched", sources: 0, extraScopes: 0 });
+    expect(en("steps.sources.none")).toBe("nothing found");
+    expect(zh("steps.sources.none")).toBe("没有找到相关内容");
+    const rows = stepRows(steps);
+    expect(rows.map((row) => row.kind)).toEqual(["answered", "read", "search"]);
+    expect(rows[2]).toMatchObject({ kind: "search", found: 0, used: 0, sources: [] });
+  });
+
+  // protects=a Document read in a web search, and the live transcript of a meeting, are named by their own lines, never as read with the Question; fails_when=either shows as read-documents; no_claim=none beyond protects.
+  test("a web page the Answer read, and a meeting's transcript, are not read with the Question", () => {
+    const page: AnswerToolCall = {
+      id: "w1",
+      tool: "read_web_page",
+      source: "web",
+      input: { url: "https://news.example/parks" },
+      status: "done",
+      resultCount: 3,
+      webPage: { address: "https://news.example/parks", documentId: "d9", name: "Parks" },
+    };
+    const web = unsearched({ toolCalls: [page], citations: [citation(1, "p", "d9", 1)] });
+    expect(foldedLine(web)).toEqual({ kind: "searched-web", sources: 1 });
+    expect(stepRows(web).some((row) => row.kind === "read-documents")).toBe(false);
+    const meeting = unsearched({ citations: [citation(1, "t", "t1", 1)] }, { meeting: true });
+    expect(foldedLine(meeting)).toEqual({ kind: "listened", sources: 1 });
+    expect(stepRows(meeting).some((row) => row.kind === "read-documents")).toBe(false);
+  });
+
+  // protects=an Answer from before searches kept their Passages still credits its Citations to its last search; fails_when=they turn into Documents read with the Question; no_claim=none beyond protects.
+  test("an older Answer's Citations stay under its last search", () => {
+    const steps = unsearched({ toolCalls: [search("s1", "rent"), search("s2", "deposit")] });
+    expect(foldedLine(steps)).toEqual({ kind: "searched", sources: 1, extraScopes: 0 });
+    const rows = stepRows(steps);
+    expect(rows.some((row) => row.kind === "read-documents")).toBe(false);
+    expect(rows.at(-2)).toMatchObject({ kind: "search", sources: [LEASE, RENT] });
+  });
+});
+
 describe("the live step", () => {
   const live = (
     answer: Partial<StepsInput["answer"]>,

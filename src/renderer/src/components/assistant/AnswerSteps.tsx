@@ -298,11 +298,31 @@ function sourcesText(t: Translate, count: number): string {
   return count === 1 ? t("steps.sources.one") : t("steps.sources", { count });
 }
 
+function documentsReadText(
+  t: Translate,
+  documents: readonly StepSource[],
+  documentOf: (source: StepSource) => string,
+  mind: string | null = null,
+): string {
+  const [first] = documents;
+  const document = documents.length === 1 && first ? documentOf(first) : null;
+  const count = documents.length;
+  if (mind === null) {
+    return document === null
+      ? t("steps.readDocuments", { count })
+      : t("steps.readDocuments.one", { document });
+  }
+  return document === null
+    ? t("steps.readDocuments.mind", { mind, count })
+    : t("steps.readDocuments.mind.one", { mind, document });
+}
+
 function foldedText(
   t: Translate,
   line: FoldedLine,
   scope: (extra: number) => string,
   modelOf: (modelId: string) => string,
+  documentOf: (source: StepSource) => string,
 ): string {
   switch (line.kind) {
     case "searched":
@@ -321,6 +341,13 @@ function foldedText(
       return t("steps.searchedWeb", { sources: sourcesText(t, line.sources) });
     case "listened":
       return t("steps.listened", { sources: sourcesText(t, line.sources) });
+    case "read-documents":
+      return documentsReadText(
+        t,
+        line.documents,
+        documentOf,
+        line.mind && !line.mind.deleted ? mindLabel(t, line.mind) : null,
+      );
     case "read":
     case "asked":
       return mindStepText(t, line);
@@ -352,16 +379,30 @@ function FoldedToggle({
 }) {
   const t = useT();
   const nameOf = useModelNames();
+  const documentOf = useDocumentNames();
+  const documentKind = useAppStore((state) =>
+    line.kind === "read-documents" && line.documents.length === 1
+      ? state.documents.find((document) => document.id === line.documents[0]?.documentId)?.kind
+      : undefined,
+  );
   const label =
     askedAgain === undefined
-      ? foldedText(t, line, scopeOf, (id) => nameOf(id).name)
+      ? foldedText(t, line, scopeOf, (id) => nameOf(id).name, documentOf)
       : askedAgain === 1
         ? t("coverage.askedAgain.one")
         : t("coverage.askedAgain", { count: askedAgain });
   const step =
     askedAgain === undefined && (line.kind === "read" || line.kind === "asked") ? line : null;
   const mind = step?.mind;
-  const Icon = mind ? MindLineIcon : line.kind === "answered" ? SparkLineIcon : SearchIcon;
+  const icon = mind ? (
+    <MindLineIcon className="answer-steps-icon" />
+  ) : line.kind === "answered" ? (
+    <SparkLineIcon className="answer-steps-icon" />
+  ) : line.kind === "read-documents" ? (
+    <DocumentLineIcon kind={documentKind ?? "text"} className="answer-steps-icon" />
+  ) : (
+    <SearchIcon className="answer-steps-icon" />
+  );
   const parts = step && !step.mind.deleted ? mindStepText(t, step, NAME).split(NAME) : [];
   if (mind && parts.length === 2) {
     const [before, after] = parts;
@@ -380,7 +421,7 @@ function FoldedToggle({
           onClick={onToggle}
           className="answer-steps-toggle answer-steps-part"
         >
-          <Icon className="answer-steps-icon" />
+          {icon}
           {before}
         </button>
         <button
@@ -415,7 +456,7 @@ function FoldedToggle({
       onClick={onToggle}
       className="answer-steps-line answer-steps-toggle"
     >
-      <Icon className="answer-steps-icon" />
+      {icon}
       <span className="answer-steps-text">{label}</span>
       <ChevronRightLineIcon aria-hidden="true" className="answer-steps-chevron" />
     </button>
@@ -506,6 +547,8 @@ function StepItem({
         </Step>
       );
     }
+    case "read-documents":
+      return <ReadDocumentsStep row={row} />;
     case "search":
       return <SearchStep row={row} scope={scope} />;
     case "failed-search":
@@ -614,10 +657,7 @@ const plainSummary = (summary: string) => summary.replace(/\*\*(.+?)\*\*/g, "$1"
 /** A search, or several in a row: what was searched for, what was found and used, and its sources. */
 function SearchStep({ row, scope }: { row: Extract<StepRow, { kind: "search" }>; scope: string }) {
   const t = useT();
-  const [all, setAll] = useState(false);
   const queries = row.calls.map((call) => field(call, "query"));
-  const shown = all ? row.sources : row.sources.slice(0, SHOWN_SOURCES);
-  const more = row.sources.length - shown.length;
   return (
     <Step kind={row.kind} icon={<SearchIcon />}>
       <p className="answer-step-title">
@@ -640,32 +680,62 @@ function SearchStep({ row, scope }: { row: Extract<StepRow, { kind: "search" }>;
           ? t("steps.search.found.one", { used: row.used })
           : t("steps.search.found", { found: row.found, used: row.used })}
       </p>
-      {row.sources.length > 0 && (
-        <ul className="answer-step-sources">
-          {shown.map((source) => (
-            <li key={`${source.marker}`}>
-              <SourceRow source={source} />
-            </li>
-          ))}
-          {more > 0 && (
-            <li>
-              <button
-                type="button"
-                data-testid="answer-step-sources-more"
-                onClick={() => setAll(true)}
-                className="answer-step-source answer-step-detail"
-              >
-                {t("steps.sources.more", { count: more })}
-              </button>
-            </li>
-          )}
-        </ul>
-      )}
+      <SourceList sources={row.sources} />
     </Step>
   );
 }
 
-/** A source a search led to: its Document and Location, which open beside the Mind as its Citation does. */
+function ReadDocumentsStep({ row }: { row: Extract<StepRow, { kind: "read-documents" }> }) {
+  const t = useT();
+  const documentOf = useDocumentNames();
+  const kind = useAppStore((state) =>
+    row.documents.length === 1
+      ? state.documents.find((document) => document.id === row.documents[0]?.documentId)?.kind
+      : undefined,
+  );
+  return (
+    <Step kind={row.kind} icon={<DocumentLineIcon kind={kind ?? "text"} />}>
+      <p className="answer-step-title">{documentsReadText(t, row.documents, documentOf)}</p>
+      <SourceList sources={row.sources} />
+    </Step>
+  );
+}
+
+function SourceList({ sources }: { sources: StepSource[] }) {
+  const t = useT();
+  const [all, setAll] = useState(false);
+  const shown = all ? sources : sources.slice(0, SHOWN_SOURCES);
+  const more = sources.length - shown.length;
+  if (sources.length === 0) return null;
+  return (
+    <ul className="answer-step-sources">
+      {shown.map((source) => (
+        <li key={`${source.marker}`}>
+          <SourceRow source={source} />
+        </li>
+      ))}
+      {more > 0 && (
+        <li>
+          <button
+            type="button"
+            data-testid="answer-step-sources-more"
+            onClick={() => setAll(true)}
+            className="answer-step-source answer-step-detail"
+          >
+            {t("steps.sources.more", { count: more })}
+          </button>
+        </li>
+      )}
+    </ul>
+  );
+}
+
+function useDocumentNames(): (source: StepSource) => string {
+  const documents = useAppStore((state) => state.documents);
+  return (source) => shownDocumentName(source, documents) || source.documentName;
+}
+
+/** A source of a step: its Document and Location, which open beside the Mind as its Citation does. */
 function SourceRow({ source }: { source: StepSource }) {
   const t = useT();
   const kind = useAppStore(

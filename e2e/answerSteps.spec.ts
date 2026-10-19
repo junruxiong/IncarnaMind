@@ -47,6 +47,22 @@ const TIDES = buildPdf([
   { lines: ["Tides and the Moon", "The Moon raises two bulges of water on the Earth."] },
   { lines: ["Spring and neap tides", SPRING] },
 ]);
+const LEASE = buildPdf([
+  {
+    lines: [
+      "Lease agreement",
+      "Term: 36 months from 1 March 2026.",
+      "Monthly rent: $4,800.",
+      "Deposit: $9,600.",
+    ],
+  },
+]);
+const LEASE_ZH = [
+  "租赁合同-2026",
+  "租期：2026 年 3 月 1 日至 2029 年 2 月 28 日，共三年。",
+  "月租金：人民币 4,800 元整。",
+  "押金：人民币 9,600 元。",
+].join("\n");
 const MODEL = "claude-haiku-5-5";
 const MODEL_NAME = "Claude Haiku 5.5";
 const LONG_FOLDER = "Thesis: urban heat islands and the night-time cooling of city parks";
@@ -499,6 +515,79 @@ test("in Chinese, the line and the timeline; after a restart the steps are still
   expect(await stepsOf(timeline)).toEqual(["reasoning", "read", "search", "check"]);
   await expect(timeline.getByTestId("answer-reasoning")).toHaveText(summary ?? "");
   await second.app.close();
+});
+
+test("an Answer whose Citations are all from a Document given with the Question names that Document beside the Mind it read, in the line and the timeline, in English and Chinese", async () => {
+  const { app, window } = await start({ documents: false });
+  await writeFile(join(sources, "Lease 2026.pdf"), LEASE);
+  await addDocuments(window, [join(sources, "Lease 2026.pdf")]);
+  await core(window).mind("Credit report draft");
+  const answer = await ask(
+    window,
+    "What are the term, monthly rent and deposit in the lease? Answer without searching.",
+  );
+
+  const line = answer.getByTestId("answer-steps");
+  await expect(line).toHaveText("Read “Credit report draft” and “Lease 2026”");
+  await expect(line).toHaveAttribute("data-kind", "read-documents");
+  const timeline = await openSteps(window, answer);
+  expect(await stepsOf(timeline)).toEqual(["answered", "read", "read-documents", "check"]);
+  await expect(timeline.locator('[data-step="read"]')).toHaveText("Read “Credit report draft”");
+  const read = timeline.locator('[data-step="read-documents"]');
+  await expect(read).toContainText("Read “Lease 2026”");
+  const source = read.getByTestId("answer-step-source");
+  await expect(source).toHaveText("Lease 2026p. 1");
+  await screenshot(window, "steps-read-documents-en");
+
+  await core(window).language("zh-CN");
+  await expect(line).toHaveText("读了“Credit report draft”和“Lease 2026”");
+  await expect(read).toContainText("读了“Lease 2026”");
+  await screenshot(window, "steps-read-documents-zh");
+
+  // Like a search's source, it opens its Document beside the Mind, at its page.
+  await pointAndClick(window, source);
+  await expect(window.getByTestId("viewer-title")).toHaveText("Lease 2026");
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("1");
+  await app.close();
+});
+
+test("with a Chinese lease and the Chinese interface, the line names 租赁合同-2026 beside the open Mind, and a Mind with no lease says only that it read the Mind", async () => {
+  const { app, window } = await start({ documents: false });
+  await core(window).language("zh-CN");
+  await core(window).mind("授信委员会报告（草稿）");
+  const before = await ask(window, "春潮什么时候出现？");
+  await expect(before.getByTestId("answer-steps")).toHaveText("读了“授信委员会报告（草稿）”");
+
+  await writeFile(join(sources, "租赁合同-2026.txt"), LEASE_ZH);
+  await addDocuments(window, [join(sources, "租赁合同-2026.txt")]);
+  const answer = await ask(window, "租赁合同-2026 里的租期、月租金和押金分别是多少？不用搜索");
+  await expect(answer.getByTestId("answer-steps")).toHaveText(
+    "读了“授信委员会报告（草稿）”和“租赁合同-2026”",
+  );
+  const timeline = await openSteps(window, answer);
+  expect(await stepsOf(timeline)).toEqual(["answered", "read", "read-documents", "check"]);
+  await expect(timeline.locator('[data-step="read-documents"]')).toContainText(
+    "读了“租赁合同-2026”",
+  );
+  await expect(timeline.getByTestId("answer-step-source")).toContainText("租赁合同-2026");
+  await app.close();
+});
+
+test("a search that finds nothing says nothing was found, and names no Document or Mind as read, in English and Chinese", async () => {
+  const { app, window } = await start();
+  await core(window).mind("Lit review: tides");
+  const answer = await ask(window, "Quokka zebra?");
+
+  const line = answer.getByTestId("answer-steps");
+  await expect(line).toHaveText("Searched All Documents · nothing found");
+  const timeline = await openSteps(window, answer);
+  expect(await stepsOf(timeline)).toEqual(["reasoning", "read", "search"]);
+  await expect(timeline.getByTestId("answer-step-found")).toHaveText("0 passages found, 0 used");
+  await expect(timeline.getByTestId("answer-step-source")).toHaveCount(0);
+
+  await core(window).language("zh-CN");
+  await expect(line).toHaveText("已搜索全部文档 · 没有找到相关内容");
+  await app.close();
 });
 
 test("an empty conversation says once what it reads and searches, following focus; nothing under the header, and only Copy · Add to note under an Answer", async () => {
