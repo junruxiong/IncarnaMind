@@ -36,7 +36,6 @@ import { isPanelWindow, serveMeetingPanel } from "./meetings/panel";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } from "./platform";
-import { filesAskedFor } from "./singleInstance";
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { realHomeProblem } from "./testHome";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
@@ -67,7 +66,8 @@ const logger = startLogging(app.getPath("userData"));
 const ownsDataFolder = app.requestSingleInstanceLock();
 if (!ownsDataFolder) {
   logger.info("app.anotherCopyRunning");
-  app.quit();
+  // Not `quit`: its `app.quit` line in the log would read as the running copy's.
+  app.exit(0);
 }
 
 // Whether Skill scripts run in the OS sandbox, found out while Electron starts.
@@ -120,11 +120,11 @@ const appWindows = () =>
 const listeningWindows = () =>
   BrowserWindow.getAllWindows().filter((window) => !isCaptureWindow(window));
 
-/** The app's window in front of the User: restored, shown and focused, a new one if all were closed. */
 function showFront(): void {
   const [front] = appWindows();
   if (!front) {
-    if (app.isReady()) createWindow();
+    // Before the core is there, the start in progress makes the first window itself.
+    if (core) createWindow();
     return;
   }
   if (front.isMinimized()) front.restore();
@@ -133,25 +133,9 @@ function showFront(): void {
   app.focus({ steal: true });
 }
 
-/** Files a second launch asked to open, kept until the core is there to add them. */
-const askedFor: string[] = [];
-
-function addAskedFor(): void {
-  const files = askedFor.splice(0);
-  if (!core || files.length === 0) return;
-  core.addDocuments(files).then(
-    ({ skipped }) => {
-      if (skipped.length > 0) logger.warn("app.openFiles.skipped", { count: skipped.length });
-    },
-    (error: unknown) => logger.exception("app.openFiles.failed", error),
-  );
-}
-
-app.on("second-instance", (_event, argv, workingDirectory) => {
+app.on("second-instance", () => {
   logger.info("app.secondLaunch");
   showFront();
-  askedFor.push(...filesAskedFor(argv, workingDirectory));
-  addAskedFor();
 });
 
 function isFromOurRenderer(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
@@ -314,7 +298,6 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
-  addAskedFor();
   guardQuit(core, () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null);
   if (taskKinds.length > 0) {
     const started = core;

@@ -22,6 +22,7 @@ import type { Core, CoreApi, ExternalService, Language } from "../core";
 import { translate } from "../shared/i18n";
 import { systemBrowser } from "./platform";
 import { RELEASES_PAGE } from "./startupError";
+import { restartToInstall } from "./updateRestart";
 
 /** Where update checks go. */
 const GITHUB_RELEASES: Readonly<ExternalService> = {
@@ -74,7 +75,11 @@ async function checkForUpdates(core: SettingsSource): Promise<void> {
 
   await result.downloadPromise;
   const { language } = await core.getSettings();
-  if (await ask(language, "ready", version)) autoUpdater.quitAndInstall();
+  if (await ask(language, "ready", version)) {
+    restartToInstall(autoUpdater, () => {
+      if (process.platform === "linux") app.releaseSingleInstanceLock();
+    });
+  }
 }
 
 /**
