@@ -404,7 +404,7 @@ describe("Pausing my microphone", () => {
 
     await expect(
       core.setMeetingMicrophone({ meetingId: meeting.id, paused: "yes" as unknown as boolean }),
-    ).rejects.toThrow(/true or false/);
+    ).rejects.toThrow(/can only be paused or resumed/);
     // Pausing it twice is pausing it once.
     const again = await core.setMeetingMicrophone({ meetingId: meeting.id, paused: true });
     expect(again.microphonePausedAtMs).toBe(0);

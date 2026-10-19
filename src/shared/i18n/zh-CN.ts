@@ -3510,6 +3510,7 @@ export const zhCN = {
   "error.meeting.notPaused": "这个会议没有暂停。",
   "error.meeting.notBeingRecorded": "这个会议不在录制中。",
   "error.meeting.helpButton": "这不是这场会议的帮助按钮。",
+  "error.meeting.microphone": "麦克风只能暂停或恢复。",
   "error.meeting.template": "这不是会议模板。请从模板菜单中选择。",
   "error.comparison.noQuestion": "先添加一个要对比的问题。",
   "error.comparison.tooManyQuestions": "对比表最多可以有 {max} 个问题。",

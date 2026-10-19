@@ -860,7 +860,8 @@ export function createMeetings(options: MeetingsOptions) {
       const { meetingId, paused } = parseInput(input);
       const row = rowOf(meetingId);
       if (!isLiveRow(row)) throw new InvalidInputError({ key: "error.meeting.notBeingRecorded" });
-      if (typeof paused !== "boolean") throw new InvalidInputError("paused must be true or false.");
+      if (typeof paused !== "boolean")
+        throw new InvalidInputError({ key: "error.meeting.microphone" });
       if (paused === microphonePausedAt.has(row.id)) return toMeeting(row);
       const capturing = live?.meetingId === row.id ? live : null;
       const atMs = capturing ? meetingTime(capturing) : recordedOf(periodsOf(row));
