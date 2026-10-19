@@ -330,7 +330,10 @@ test("every provider's line on what it does with the data is one line beside its
         );
         await expect(line).toContainText(provider.dataUse.summary[words]);
         expect(await oneLine(line), `${provider.id} in Settings, ${value}`).toBe(true);
-        await expect(line.getByRole("link")).toHaveAttribute("href", provider.dataUse.url ?? "");
+        await expect(line.getByRole("link")).toHaveAttribute(
+          "href",
+          (words === "zh" && provider.dataUse.zhUrl) || (provider.dataUse.url ?? ""),
+        );
         checked += 1;
         await settings.getByTestId("models-back").click();
       }

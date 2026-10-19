@@ -9,6 +9,7 @@ import type {
 import type { Language } from "../../../../core/language";
 import {
   catalogProviderOf,
+  dataUseOf,
   endpointOf,
   fieldValueOf,
   isPreset,
@@ -263,7 +264,10 @@ export function ProviderPage({
       </header>
 
       {provider.service ? (
-        <ProviderSendsLine provider={provider.service.name} dataUse={catalog?.dataUse} />
+        <ProviderSendsLine
+          provider={provider.service.name}
+          dataUse={catalog && dataUseOf(catalog, true)}
+        />
       ) : (
         <p className="text-[13px] leading-5">
           <OnThisComputer>{t("providers.choice.local")}</OnThisComputer>

@@ -183,9 +183,18 @@ test("LM Studio and Unsloth Studio are On this computer in Add a provider, besid
     await expect(form.getByTestId("provider-sends")).toContainText(
       "Sends your questions and document text to Unsloth Studio.",
     );
+    // The app's own line says it runs here, which is no longer so: the line is any server's.
+    const dataUse = form.getByTestId("provider-data-use");
+    await expect(dataUse).toContainText("Depends on the server: check its terms.");
+    await expect(dataUse).not.toContainText("Runs on this computer");
+    await expect(dataUse.getByRole("link")).toHaveCount(0);
+    await setLanguage(window, "zh-CN");
+    await expect(dataUse).toContainText("取决于服务器，请查看其条款");
+    await setLanguage(window, "en");
     await form.getByTestId("provider-field").fill("127.0.0.1:8888");
     await form.getByLabel(/^API key/).focus();
     await expect(form.getByTestId("provider-sends")).toHaveCount(0);
+    await expect(dataUse).toHaveCount(0);
     if (process.env.INCARNAMIND_SCREENSHOTS) {
       await settings.screenshot({
         path: `${process.env.INCARNAMIND_SCREENSHOTS}/preset-local-en.png`,

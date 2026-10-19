@@ -30,6 +30,7 @@ import { OVERRIDES } from "../../src/core/providers/catalog/overrides";
 import { PRESETS } from "../../src/core/providers/catalog/presets";
 import {
   catalogProvider,
+  dataUseOf,
   fieldAccepts,
   fieldUrl,
   isPreset,
@@ -393,7 +394,7 @@ describe("The providers of #178", () => {
     }
   });
 
-  test("each says whether it may train on API data: Mistral may, with an opt-out; Kimi's, DeepSeek's, Z.ai's and SiliconFlow's terms don't say", () => {
+  test("each says whether it may train on API data: Mistral and Kimi may, with an opt-out; DeepSeek's, Z.ai's and SiliconFlow's terms don't say", () => {
     const training = Object.fromEntries(
       added.map((id) => [id, catalogProvider(id)?.dataUse.training]),
     );
@@ -403,7 +404,7 @@ describe("The providers of #178", () => {
       xai: "no",
       deepseek: "unknown",
       qwen: "no",
-      kimi: "unknown",
+      kimi: "opt-out",
       glm: "unknown",
       siliconflow: "unknown",
     });
@@ -412,15 +413,59 @@ describe("The providers of #178", () => {
     );
   });
 
-  test("Anthropic's data line names the models that need 30-day retention, and no link uses an address that has moved", () => {
-    for (const model of ["Fable", "Mythos"]) {
-      expect(catalogProvider("anthropic")?.dataUse.summary.en, model).toContain(model);
-      expect(catalogProvider("anthropic")?.dataUse.summary.zh, model).toContain(model);
-    }
+  test("Anthropic's data line says content is kept up to 30 days and longer if flagged, and no link uses an address that has moved", () => {
+    const { summary, sources } = catalogProvider("anthropic")?.dataUse ?? {};
+    expect(summary?.en).toMatch(/30 days.*longer if flagged/);
+    expect(summary?.zh).toMatch(/30 天.*更久/);
+    expect(summary?.en).not.toMatch(/\bonly\b/);
+    expect(sources).toContain(
+      "https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data",
+    );
     const links = CATALOG_PROVIDERS.flatMap((each) => [each.docsUrl, each.dataUse.url]);
     expect(
       links.filter((url) => /docs\.anthropic\.com|platform\.openai\.com\/docs/.test(url ?? "")),
     ).toEqual([]);
+  });
+
+  test("Kimi's data line says it may train on what you send unless agreed otherwise in writing", () => {
+    const { summary, sources } = catalogProvider("kimi")?.dataUse ?? {};
+    expect(summary?.en).toMatch(/train.*unless agreed otherwise in writing/);
+    expect(summary?.zh).toMatch(/训练.*除非另有书面约定/);
+    expect(sources).toEqual(["https://platform.kimi.com/docs/agreement/modeluse"]);
+  });
+
+  test("a claim that rests on another page keeps its address in the catalog", () => {
+    const second = Object.fromEntries(
+      CATALOG_PROVIDERS.filter((each) => each.dataUse.sources || each.dataUse.zhUrl).map((each) => [
+        each.id,
+        [...(each.dataUse.sources ?? []), each.dataUse.zhUrl ?? ""].filter(Boolean),
+      ]),
+    );
+    expect(Object.keys(second).sort()).toEqual([
+      "anthropic",
+      "bedrock",
+      "deepseek",
+      "glm",
+      "kimi",
+      "siliconflow",
+      "together",
+    ]);
+    for (const url of Object.values(second).flat()) expect(url).toMatch(/^https:\/\//);
+    expect(catalogProvider("siliconflow")?.dataUse.url).toContain("docs.siliconflow.com/en/");
+  });
+
+  test("a local app's data line gives way to a server's when its address is on another computer", () => {
+    const server = catalogProvider("openai-compatible")?.dataUse;
+    for (const id of ["lmstudio", "unsloth"]) {
+      const provider = catalogProvider(id);
+      expect(provider && dataUseOf(provider, false), id).toBe(provider?.dataUse);
+      expect(provider && dataUseOf(provider, true), id).toBe(server);
+    }
+    expect(server?.summary.en).toMatch(/^Depends on the server/);
+    for (const id of ["ollama", "anthropic", "openai-compatible"]) {
+      const provider = catalogProvider(id);
+      expect(provider && dataUseOf(provider, true), id).toBe(provider?.dataUse);
+    }
   });
 
   test("every provider's data-use line fits one line at 900px beside its link, states no price or plan, and a hosted provider links its own page", () => {

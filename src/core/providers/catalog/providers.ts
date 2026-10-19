@@ -13,7 +13,14 @@
  */
 import type { ChatProviderKind } from "../../api";
 import { PRESETS } from "./presets";
-import type { CatalogProvider, Endpoint, EndpointField, ProviderOptions, Role } from "./types";
+import type {
+  CatalogProvider,
+  DataUse,
+  Endpoint,
+  EndpointField,
+  ProviderOptions,
+  Role,
+} from "./types";
 
 const GLOBAL = { en: "Global", zh: "全球" };
 
@@ -92,10 +99,13 @@ const PROVIDERS = [
     dataUse: {
       training: "no",
       summary: {
-        en: "No training without your permission; kept only for Fable and Mythos models (30 days).",
-        zh: "未经你许可不用于训练；仅 Fable 和 Mythos 模型会保留 30 天。",
+        en: "No training without your permission; kept up to 30 days, longer if flagged.",
+        zh: "未经你许可不用于训练；最多保留 30 天，被标记的内容可能更久。",
       },
       url: "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention",
+      sources: [
+        "https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data",
+      ],
     },
     notes: [
       {
@@ -109,7 +119,7 @@ const PROVIDERS = [
       url: "https://support.claude.com/en/articles/17154008",
       link: "details",
     },
-    checked: "2026-10-18",
+    checked: "2026-10-19",
   },
   {
     id: "openai",
@@ -293,8 +303,8 @@ const PROVIDERS = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Sent only to providers that don't collect your data, which leaves out some models.",
-        zh: "只发给不收集你数据的服务，因此部分模型无法使用。",
+        en: "OpenRouter uses only providers it lists as not collecting data, leaving out some models.",
+        zh: "OpenRouter 只用其标明不收集数据的服务，部分模型无法使用。",
       },
       url: "https://openrouter.ai/docs/guides/routing/provider-selection",
     },
@@ -406,6 +416,9 @@ const PROVIDERS = [
         zh: "隐私政策允许用于训练，数据存储在中国；API 条款对此未作说明。",
       },
       url: "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+      sources: [
+        "https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html",
+      ],
     },
     checked: "2026-10-18",
   },
@@ -504,12 +517,13 @@ const PROVIDERS = [
       images: "kimi-k2.6",
     },
     dataUse: {
-      training: "unknown",
+      training: "opt-out",
       summary: {
-        en: "May use what you send to improve its service; its terms don't say if that is training.",
-        zh: "可能用你发送的内容改进服务；条款没有说明是否包括训练。",
+        en: "May use what you send to train and improve its models unless agreed otherwise in writing.",
+        zh: "可能用你发送的内容训练和改进模型，除非另有书面约定。",
       },
       url: "https://platform.kimi.ai/docs/agreement/modeluse",
+      sources: ["https://platform.kimi.com/docs/agreement/modeluse"],
     },
     keyLine: {
       en: "If Kimi refuses requests, check your Kimi account",
@@ -517,7 +531,7 @@ const PROVIDERS = [
       url: "https://platform.kimi.ai/docs/pricing/chat",
       link: "pricing",
     },
-    checked: "2026-10-18",
+    checked: "2026-10-19",
   },
   {
     id: "glm",
@@ -565,6 +579,7 @@ const PROVIDERS = [
         zh: "Z.ai 称不存储你的内容；智谱开放平台可能用匿名化数据训练。",
       },
       url: "https://docs.z.ai/legal-agreement/privacy-policy",
+      sources: ["https://docs.bigmodel.cn/cn/terms/privacy-policy"],
     },
     notes: [
       {
@@ -629,7 +644,8 @@ const PROVIDERS = [
         en: "China policy: no training, no stored inputs or outputs. International policy: doesn't say.",
         zh: "中国站政策称不训练、不保留输入和输出；国际站政策未说明。",
       },
-      url: "https://docs.siliconflow.cn/cn/legals/privacy-policy",
+      url: "https://docs.siliconflow.com/en/legals/privacy-policy",
+      zhUrl: "https://docs.siliconflow.cn/docs/legals/privacy-policy",
     },
     notes: [
       {
@@ -657,8 +673,8 @@ const PROVIDERS = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Local models send nothing out; cloud models go to ollama.com, which doesn't train on them.",
-        zh: "本机模型不会外传；云端模型发往 ollama.com，称不用于训练。",
+        en: "Local models stay local; cloud-model questions go to ollama.com, which says no training.",
+        zh: "本地模型不外传；云端模型的提问发往 ollama.com，称不训练。",
       },
       url: "https://ollama.com/privacy",
     },
@@ -712,6 +728,20 @@ const kinds = new Map<string, ChatProviderKind>(PROVIDERS.map((each) => [each.id
 /** The provider with this catalog id, if the catalog has it. */
 export const catalogProvider = (id: string | null | undefined): CatalogProvider | undefined =>
   id ? byId.get(id) : undefined;
+
+/**
+ * What a provider does with what it is sent. A local app's own line holds only
+ * while its server runs on this computer: at an address `elsewhere` it is any
+ * server's, so it says that. Ollama has no address, so its line stands.
+ */
+export function dataUseOf(provider: CatalogProvider, elsewhere: boolean): DataUse {
+  const canBeElsewhere =
+    provider.group === "local" && provider.endpoints.some((endpoint) => endpoint.field);
+  return (
+    (elsewhere && canBeElsewhere && catalogProvider("openai-compatible")?.dataUse) ||
+    provider.dataUse
+  );
+}
 
 /**
  * The catalog provider a provider kind stands for: each kind is one, except
