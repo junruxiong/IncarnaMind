@@ -582,8 +582,12 @@ function copilotStandIn(): CoreAdapters["copilotProfiles"] {
  * so no device is ever opened (INCARNAMIND_TEST_AUDIO=fake), its computer's
  * sound allowed, denied or silent (INCARNAMIND_TEST_AUDIO_SYSTEM). They reach
  * it as `globalThis.incarnamindFakeAudio`, e.g. to change the microphone.
+ * INCARNAMIND_TEST_AUDIO=none is a copy with no capture at all.
  */
-function audioCapture(log: Logger): AudioCapture {
+function audioCapture(log: Logger): AudioCapture | undefined {
+  if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_AUDIO === "none") {
+    return undefined;
+  }
   if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_AUDIO === "fake") {
     const system = process.env.INCARNAMIND_TEST_AUDIO_SYSTEM;
     const fake = createFakeCapture({

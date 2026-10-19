@@ -218,7 +218,7 @@ async function laptopMeeting(transcriber: Transcriber) {
     transcriptionModelSource: NO_TRANSCRIPTION_FILES,
     now: clock.now,
   });
-  await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+  await core.updateSettings({ device: { meetingNoticeAccepted: true } });
   await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
 
   const { far, spans } = turns(clip("en-far"), 3);

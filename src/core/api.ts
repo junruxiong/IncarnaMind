@@ -2005,12 +2005,6 @@ export interface DeviceSettings {
    * shown on this device: it shows at most twice (docs/agents/interaction.md, rule 14).
    */
   suggestionOffers: number;
-  /**
-   * Meetings can be recorded on this device (Settings → Meetings). Off by
-   * default while recording is new: transcription and telling speakers apart
-   * come after it.
-   */
-  meetingsEnabled: boolean;
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
   /**
@@ -7763,6 +7757,8 @@ export const MEETING_AUDIO_KEPT_MS = 24 * 60 * 60 * 1000;
 export interface CreateMeetingInput {
   /** An empty Mind to hold it. Not given: a new Mind, named for the day. */
   mindId?: string;
+  /** The Folder a new Mind goes in; not with `mindId`. Not given: none. */
+  folderId?: string | null;
 }
 
 export interface StartMeetingInput {
@@ -9462,8 +9458,8 @@ export interface CoreApi {
   listMeetings(): Promise<Meeting[]>;
   /**
    * A Meeting ready to record, in a new Mind named for the day or in an empty
-   * Mind given: its Mind shows the start block. Needs meetings turned on in
-   * Settings, and a Mind with no Meeting.
+   * Mind given: its Mind shows the start block. Needs a Mind with no Meeting,
+   * and a copy that can record audio.
    */
   createMeeting(input?: CreateMeetingInput): Promise<Meeting>;
   /** Takes back a Meeting that hasn't started ("Don't record; keep this as a note"): its Mind stays. */
