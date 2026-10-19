@@ -384,7 +384,7 @@ export async function runCase(
   const givenToMinds = answer.toolCalls.flatMap((call) =>
     ["add_to_mind", "create_mind", "edit_mind"].includes(call.tool) &&
     typeof call.input.content === "string"
-      ? [call.input.content]
+      ? [{ content: call.input.content, landed: call.status === "done" && !call.mindProblem }]
       : [],
   );
   const outcome: RequestOutcome = {

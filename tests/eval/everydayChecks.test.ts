@@ -295,7 +295,7 @@ describe("Standing on its own, and the example unasked", () => {
         expected: { write: false, cite: false, coverAll: false },
         answer: { text, citations: [], toolCalls: [], steps: null },
         addedToPage,
-        givenToMinds,
+        givenToMinds: givenToMinds?.map((content) => ({ content, landed: true })),
         writtenInMinds,
       }),
     ).map((failure) => failure.kind);
@@ -354,14 +354,17 @@ describe("Standing on its own, and the example unasked", () => {
     }
     const rewritten = outcome({
       expected: { write: true, cite: false, coverAll: false },
-      givenToMinds: ["Key results. Highlights are below[^8]:"],
+      givenToMinds: [{ content: "Key results. Highlights are below[^8]:", landed: true }],
       writtenInMinds: ["Key results. All of them."],
     });
     expect(requestFailures(rewritten).map((failure) => failure.kind)).not.toContain("content-lost");
     expect(rewrittenLater(rewritten)).toEqual([{ given: "Highlights are below[^8]:", now: null }]);
     const cut = outcome({
       expected: { write: true, cite: false, coverAll: false },
-      givenToMinds: ["It fuses mobility and POIs, which geography can miss [^2]."],
+      givenToMinds: [
+        { content: "It fuses mobility and POIs, which geography can miss [^2].", landed: true },
+        { content: "A call the app refused, which wrote nothing.", landed: false },
+      ],
       writtenInMinds: ["Pay is 5k.", "It fuses mobility and POIs."],
     });
     expect(rewrittenLater(cut)).toEqual([

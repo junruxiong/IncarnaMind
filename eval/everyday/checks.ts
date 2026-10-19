@@ -84,8 +84,8 @@ export interface RequestOutcome {
   writtenInMinds?: readonly string[];
   /** Its reply as Add to note puts it in a page; the reply as written when not given. */
   addedToPage?: string;
-  /** The `content` each of its calls of add_to_mind, create_mind and edit_mind gave, as the guard reads it. */
-  givenToMinds?: readonly string[];
+  /** The `content` each of its calls of add_to_mind, create_mind and edit_mind gave, as the guard reads it, and whether it went into a Mind. */
+  givenToMinds?: readonly { content: string; landed: boolean }[];
   /** The app asked the model again inside the turn, so the User never read its first try. */
   askedAgain?: boolean;
   scoped: readonly { id: string; name: string }[];
@@ -295,8 +295,8 @@ function namedAsUncovered(reply: string, name: string): boolean {
  * Blocks it changed, which must be none.
  */
 export function takenOut(outcome: RequestOutcome): { removed: string[]; changed: string[] } {
-  const took = (outcome.givenToMinds ?? []).map((input) =>
-    guardTook(input, withoutPointersBack(input).markdown),
+  const took = (outcome.givenToMinds ?? []).map(({ content }) =>
+    guardTook(content, withoutPointersBack(content).markdown),
   );
   return {
     removed: [
@@ -321,7 +321,8 @@ const wordsOf = (text: string) =>
 export function rewrittenLater(outcome: RequestOutcome): { given: string; now: string | null }[] {
   const written = outcome.writtenInMinds ?? [];
   const given = (outcome.givenToMinds ?? [])
-    .map((input) => withoutSearchTalk(withoutPointersBack(input).markdown).markdown)
+    .filter(({ landed }) => landed)
+    .map(({ content }) => withoutSearchTalk(withoutPointersBack(content).markdown).markdown)
     .join("\n\n");
   return leftOut(given, written.join("\n\n")).map((sentence) => {
     const words = wordsOf(sentence);
