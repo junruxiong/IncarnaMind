@@ -25,7 +25,7 @@ export function EditStatus({ mindId }: { mindId: string }) {
   const pending = useEdits((state) => state.pending[mindId]);
   const problem = useEdits((state) => state.problems[mindId]);
 
-  if (pending?.inMenu || problem?.inMenu) return null;
+  if (pending?.menu || problem?.menu) return null;
   if (pending) {
     const language =
       TRANSLATE_LANGUAGES.find((each) => each.prompt === pending.language)?.name ??

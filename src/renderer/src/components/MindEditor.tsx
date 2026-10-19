@@ -92,6 +92,7 @@ import { TableKeys } from "../editor/tableCommands";
 import { TitleLine } from "../editor/titleLine";
 import { SmartTypography } from "../editor/typography";
 import type { EditWithAiField } from "../editor/useEditField";
+import { useMenuEditLine } from "../editor/useMenuEditLine";
 import { useVerification } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { useCountSettings, WordCount } from "../editor/WordCount";
@@ -550,6 +551,7 @@ function MindEditorView({
     ];
   }, [mindId, doc, hasDocuments]);
 
+  useMenuEditLine(editor, mindId, readOnly);
   const editField = useMemo(
     (): EditWithAiField => ({
       mindId,
@@ -614,7 +616,7 @@ function MindEditorView({
   // An edit asked in the selection menu changes the text in place, with no line that moves it.
   useEffect(() => {
     const placeNow = (place: ReturnType<typeof writingPlaceOf>) =>
-      useEdits.getState().pending[mindId]?.inMenu ? null : place;
+      useEdits.getState().pending[mindId]?.menu ? null : place;
     setWritingPlace(editor, placeNow(writingPlaceOf(mindId)));
     return onMindWriting(({ mindId: changed, place }) => {
       if (changed === mindId) setWritingPlace(editor, placeNow(place));

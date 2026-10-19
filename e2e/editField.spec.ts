@@ -245,36 +245,168 @@ test("an edit from the menu shows no Writing… line, and nothing around the tex
   await app.close();
 });
 
-test("the edit's state shows in one place: the menu while it is open, the sidebar's status once it has closed", async () => {
+async function hideSidebar(window: Page) {
+  const toggle = window.getByTestId("sidebar-toggle").first();
+  await toggle.focus();
+  await window.keyboard.press("Enter");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+}
+
+/** Whether any part of the element is inside the window and is what is drawn there. */
+const onScreen = (target: Locator) =>
+  target.evaluateAll((all) =>
+    all.some((each) => {
+      const box = each.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) return false;
+      const x = Math.min(Math.max(box.left + box.width / 2, 0), window.innerWidth - 1);
+      const y = Math.min(Math.max(box.top + box.height / 2, 0), window.innerHeight - 1);
+      if (box.right <= 0 || box.left >= window.innerWidth) return false;
+      const hit = document.elementFromPoint(x, y);
+      return hit !== null && (each.contains(hit) || hit.contains(each));
+    }),
+  );
+
+for (const sidebar of ["shown", "hidden"] as const) {
+  test(`once the menu is closed, a running menu edit reports in its Undo line's spot after 300 ms, and the Undo line replaces it in place, with the sidebar ${sidebar}`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setWindowSize(app, window, 1280, 820);
+    await newMind(window);
+    const editor = window.getByTestId("mind-editor");
+    await editor.click();
+    await window.keyboard.type("The tides here are very strong and really regular.");
+    await window.keyboard.press("Enter");
+    await window.keyboard.type("Notes:");
+    const paragraphs = editor.locator(":scope > p");
+    if (sidebar === "hidden") await hideSidebar(window);
+    await editor.click();
+
+    await slideSelect(window, paragraphs.first(), "The tides here are very strong");
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("Shorten this slowly");
+    // The clock is the page's own: when Enter is pressed, and when each line first shows.
+    await window.evaluate(() => {
+      type Frame = {
+        t: number;
+        running: number[] | null;
+        applied: number[] | null;
+        text: number[][];
+      };
+      const frames: Frame[] = [];
+      const state = { enterAt: 0, frames };
+      (globalThis as unknown as { __run: typeof state }).__run = state;
+      addEventListener(
+        "keydown",
+        (event) => {
+          if (event.key === "Enter") state.enterAt = performance.now();
+        },
+        { capture: true, once: true },
+      );
+      const rect = (selector: string) => {
+        const each = document.querySelector(selector);
+        if (!each) return null;
+        const box = each.getBoundingClientRect();
+        return [box.left, box.top, box.width, box.height];
+      };
+      const tick = () => {
+        frames.push({
+          t: performance.now(),
+          running: rect('[data-testid="menu-edit-line"]'),
+          applied: rect('[data-testid="applied-line"]'),
+          text: [...document.querySelectorAll('[data-testid="mind-editor"] > p')].map((each) => {
+            const box = each.getBoundingClientRect();
+            return [box.top, box.height];
+          }),
+        });
+        if (!document.querySelector('[data-testid="applied-line"]')) requestAnimationFrame(tick);
+      };
+      tick();
+    });
+    await window.keyboard.press("Enter");
+    await expect(window.getByTestId("selection-edit-working")).toBeVisible();
+    await pointAndClick(window, paragraphs.last());
+    await expect(window.getByTestId("selection-edit-working")).toHaveCount(0);
+
+    const running = editor.getByTestId("menu-edit-line");
+    await expect(running).toBeVisible();
+    await expect(running).toContainText("Making the changes…");
+    expect(await onScreen(running)).toBe(true);
+    expect(await onScreen(running.getByTestId("menu-edit-stop"))).toBe(true);
+    await expect(window.getByTestId("edit-status")).toHaveCount(0);
+    await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+    await expect(window.getByTestId("mind-writing")).toHaveCount(0);
+    await expect(window.getByTestId("sidebar-toggle-dot")).toHaveCount(0);
+    await expect(editor.getByTestId("applied-line")).toBeVisible({ timeout: 40_000 });
+
+    const { enterAt, frames } = await window.evaluate(
+      () =>
+        (
+          globalThis as unknown as {
+            __run: {
+              enterAt: number;
+              frames: {
+                t: number;
+                running: number[] | null;
+                applied: number[] | null;
+                text: number[][];
+              }[];
+            };
+          }
+        ).__run,
+    );
+    const shown = frames.filter((frame) => frame.running !== null);
+    const first = shown[0];
+    const last = shown.at(-1);
+    const landed = frames.find((frame) => frame.applied !== null);
+    if (!first || !last || !landed)
+      throw new Error("The running or the Undo line was never drawn.");
+    // Nothing shows for the first 300 ms of the request, which starts after Enter.
+    expect(first.t - enterAt).toBeGreaterThanOrEqual(300);
+    // The Undo line takes the running line's box, and nothing around it moves with the swap.
+    expect(landed.applied).toEqual(last.running);
+    expect(landed.text).toEqual(last.text);
+    await app.close();
+  });
+}
+
+test("Stop on the running line, or Esc in the text, stops a menu edit with the text as it was, with the sidebar hidden too", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await setWindowSize(app, window, 1280, 820);
   const original = "The tides here are very strong and really regular.";
-  const { editor, note } = await mindWith(window, original);
-  const working = window.getByTestId("selection-edit-working");
-  const inSidebar = window.getByTestId("edit-status");
-
-  await slideSelect(window, note, "The tides here are very strong");
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("Shorten this slowly");
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type(original);
   await window.keyboard.press("Enter");
-  await expect(working).toBeVisible();
-  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
-  await expect(inSidebar).toHaveCount(0);
-  await expect(window.getByTestId("mind-writing")).toHaveCount(0);
+  await window.keyboard.type("Notes:");
+  const paragraphs = editor.locator(":scope > p");
+  await hideSidebar(window);
+  await editor.click();
+  const running = editor.getByTestId("menu-edit-line");
 
-  // A click in the text closes the menu: the state moves to the sidebar's status, and nowhere else.
-  await pointAndClick(window, note);
-  await expect(working).toHaveCount(0);
-  await expect(inSidebar).toHaveCount(1);
-  await expect(inSidebar).toContainText("Making the changes…");
-  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
-  await expect(window.getByTestId("mind-writing")).toHaveCount(0);
+  const start = async () => {
+    await slideSelect(window, paragraphs.first(), "The tides here are very strong");
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("Shorten this slowly");
+    await window.keyboard.press("Enter");
+    await expect(window.getByTestId("selection-edit-working")).toBeVisible();
+    await pointAndClick(window, paragraphs.last());
+    await expect(running).toBeVisible();
+  };
 
-  await pointAndClick(window, window.getByTestId("edit-status-stop"));
-  await expect(inSidebar).toHaveCount(0);
-  await expect(note).toHaveText(original);
+  await start();
+  await pointAndClick(window, running.getByTestId("menu-edit-stop"));
+  await expect(running).toHaveCount(0);
+  await expect(paragraphs.first()).toHaveText(original);
+  await expect(editor.getByTestId("applied-line")).toHaveCount(0);
+
+  await start();
+  await window.keyboard.press("Escape");
+  await expect(running).toHaveCount(0);
+  await expect(paragraphs.first()).toHaveText(original);
   await expect(editor.getByTestId("applied-line")).toHaveCount(0);
   await app.close();
 });
@@ -311,7 +443,7 @@ test("a second request while one runs can't send, and says why in the menu it wa
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("selection-edit-working")).toBeVisible();
   await slideSelect(window, paragraphs.nth(3), "Neap tides are weaker");
-  await expect(window.getByTestId("edit-status")).toHaveCount(1);
+  await expect(editor.getByTestId("menu-edit-line")).toHaveCount(1);
 
   // The second one is asked in the menu that opened over the other words.
   await window.keyboard.press("ControlOrMeta+j");
@@ -477,49 +609,75 @@ test("a request that gives nothing shows its line in the menu, with the field an
   await app.close();
 });
 
-test("a failure shows once: Try again in the menu asks again, and the line moves to the sidebar's status when the menu closes", async () => {
+for (const sidebar of ["shown", "hidden"] as const) {
+  test(`a failure shows once: in the menu while it is open, then in the Undo line's spot when it closes, where Try again works, with the sidebar ${sidebar}`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    // A model its provider doesn't know: every request to it fails.
+    await useLocalChatModel(window, "fake-not-found");
+    await setWindowSize(app, window, 1280, 820);
+    const original = "The tides here are very strong.";
+    const { editor, note } = await mindWith(window, original);
+    if (sidebar === "hidden") await hideSidebar(window);
+    await editor.click();
+    const menu = window.getByTestId("selection-menu");
+    const field = menu.getByTestId("selection-edit-field");
+    const problem = window.getByTestId("edit-problem");
+
+    await slideSelect(window, note, "The tides here are very strong");
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("replace tides with seas");
+    await window.keyboard.press("Enter");
+    await expect(problem).toHaveCount(1);
+    await expect(menu.getByTestId("edit-problem")).toContainText("Edit with AI didn't work");
+    await expect(field).toHaveValue("replace tides with seas");
+
+    // Try again from the menu asks again and fails again, still one line.
+    await pointAndClick(window, menu.getByRole("button", { name: "Try again" }));
+    await expect(menu.getByTestId("edit-problem")).toHaveCount(1);
+    await expect(problem).toHaveCount(1);
+
+    // Esc closes the menu: the line is now in the page, in plain words, in view, and nowhere else.
+    await window.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(problem).toHaveCount(1);
+    await expect(editor.getByTestId("edit-problem")).toContainText("Edit with AI didn't work");
+    expect(await onScreen(problem)).toBe(true);
+    await expect(window.getByTestId("edit-status-problem")).toHaveCount(0);
+    await expect(window.getByTestId("sidebar-toggle-dot")).toHaveCount(0);
+    expect(await selectedInMind(editor)).toBe("The tides here are very strong");
+    const spot = await problem.boundingBox();
+
+    // With a model that answers, Try again changes the text in place, and the Undo line takes the spot.
+    await useLocalChatModel(window);
+    await pointAndClick(window, problem.getByTestId("menu-edit-action"));
+    await expect(note).toHaveText("The seas here are very strong.");
+    await expect(problem).toHaveCount(0);
+    const undo = await editor.getByTestId("applied-line").boundingBox();
+    expect(undo?.y).toBe(spot?.y);
+    expect(undo?.height).toBe(spot?.height);
+    await expect(editor.getByTestId("applied-count")).toHaveText("Changed 1 paragraph");
+    await app.close();
+  });
+}
+
+test("Close on the failure line takes it away", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
-  // A model its provider doesn't know: every request to it fails.
   await useLocalChatModel(window, "fake-not-found");
   await setWindowSize(app, window, 1280, 820);
-  const original = "The tides here are very strong.";
-  const { editor, note } = await mindWith(window, original);
-  const menu = window.getByTestId("selection-menu");
-  const field = menu.getByTestId("selection-edit-field");
-  const problem = window.getByTestId("edit-problem");
-  const inSidebar = window.getByTestId("edit-status-problem");
-
+  const { editor, note } = await mindWith(window, "The tides here are very strong.");
   await slideSelect(window, note, "The tides here are very strong");
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("replace tides with seas");
   await window.keyboard.press("Enter");
-  await expect(problem).toHaveCount(1);
-  await expect(menu.getByTestId("edit-problem")).toContainText("Edit with AI didn't work");
-  await expect(field).toHaveValue("replace tides with seas");
-  await expect(inSidebar).toHaveCount(0);
-
-  // Try again asks again, with the working line meanwhile, and the line comes back once it fails again.
-  const tryAgain = menu.getByRole("button", { name: "Try again" });
-  await pointAndClick(window, tryAgain);
-  await expect(menu.getByTestId("edit-problem")).toHaveCount(1);
-  await expect(problem).toHaveCount(1);
-  await expect(field).toHaveValue("replace tides with seas");
-
-  // Esc closes the menu: the line is now in the sidebar's status and nowhere else.
+  await expect(window.getByTestId("edit-problem")).toHaveCount(1);
   await window.keyboard.press("Escape");
-  await expect(menu).toHaveCount(0);
-  await expect(problem).toHaveCount(0);
-  await expect(inSidebar).toHaveCount(1);
-  await expect(inSidebar).toContainText("Edit with AI didn't work");
-  expect(await selectedInMind(editor)).toBe("The tides here are very strong");
-
-  // With a model that answers, its Try again changes the text in place and the line goes.
-  await useLocalChatModel(window);
-  await pointAndClick(window, window.getByTestId("edit-status-action"));
-  await expect(note).toHaveText("The seas here are very strong.");
-  await expect(inSidebar).toHaveCount(0);
-  await expect(editor.getByTestId("applied-count")).toHaveText("Changed 1 paragraph");
+  const line = editor.getByTestId("edit-problem");
+  await expect(line).toBeVisible();
+  await pointAndClick(window, line.getByTestId("menu-edit-close"));
+  await expect(window.getByTestId("edit-problem")).toHaveCount(0);
+  await expect(note).toHaveText("The tides here are very strong.");
   await app.close();
 });
 

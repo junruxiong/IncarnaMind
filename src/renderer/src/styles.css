@@ -3878,6 +3878,19 @@
       color: var(--color-ink);
     }
   }
+  .mind-editor .applied-line .edit-pending-dot {
+    margin-right: 0;
+  }
+  .mind-editor .applied-line--problem {
+    color: var(--color-ink-meta);
+  }
+  .applied-problem-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-attention);
+  }
   .mind-editor .applied-restore-holder {
     margin-inline-start: 6px;
     font-family: var(--font-sans);

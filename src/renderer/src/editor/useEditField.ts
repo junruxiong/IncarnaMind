@@ -49,7 +49,7 @@ export function useEditField(editor: Editor, edit: EditWithAiField | undefined, 
     const instruction = text.trim();
     if (!edit || instruction === "" || working.current) return;
     if (useEdits.getState().pending[edit.mindId]) {
-      noteBusy(edit.mindId, true);
+      noteBusy(edit.mindId, { blockId: null, at: Date.now() });
       setPhase("settled");
       return;
     }

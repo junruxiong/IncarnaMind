@@ -24,7 +24,6 @@ export function EditField({
   editor: Editor;
   edit: EditWithAiField;
   field: Field;
-  /** ⌘J, as the menu's keys write it. */
   keys: string;
   onLeave(event: FocusEvent<HTMLInputElement>): void;
   onHandOff(): void;

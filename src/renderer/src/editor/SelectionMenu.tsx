@@ -276,8 +276,7 @@ export function SelectionMenu({
       editor.view.dispatch(editor.state.tr.setMeta(PLUGIN_KEY, "show"));
       editor.view.dispatch(editor.state.tr.setMeta(PLUGIN_KEY, "updatePosition"));
     };
-    // ⌘J puts the cursor in the Edit with AI field, opening the menu if it is closed; where the
-    // menu can't open over the selection (all of the Mind), it is left to the composer.
+    // Over a selection of all of the Mind the menu can't open, and ⌘J is left to the composer.
     const takeEditField = (event: Event) => {
       const anywhere = event instanceof CustomEvent && event.detail?.anywhere === true;
       const current = fieldNow.current;

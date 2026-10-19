@@ -221,7 +221,6 @@ export const LINK_EDIT = "link-edit";
 export const requestLinkEdit = (editor: Editor): boolean =>
   editor.view.dom.dispatchEvent(new CustomEvent(LINK_EDIT));
 
-/** What the editor's element is told when ⌘J asks for the Edit with AI field of the selection menu. */
 export const EDIT_FIELD = "edit-field";
 
 /**

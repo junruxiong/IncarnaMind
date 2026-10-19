@@ -381,7 +381,7 @@ test("text typed elsewhere while a slow edit streams in stays, and one ⌘Z take
   await expect(line.getByTestId("applied-count")).toHaveText("Changed 3 paragraphs", {
     timeout: 30_000,
   });
-  await expect(window.getByTestId("edit-status")).toHaveCount(0);
+  await expect(window.getByTestId("menu-edit-line")).toHaveCount(0);
   await expect(paragraphs.last()).toHaveText("Notes: typed meanwhile");
 
   await editor.focus();
