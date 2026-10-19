@@ -120,7 +120,7 @@ async function meetingOn(route: Route, service: Service) {
     transcriptionKeyFetch: async () => new Response(null, { status: 200 }),
     now: clock.now,
   });
-  await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+  await core.updateSettings({ device: { meetingNoticeAccepted: true } });
   await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
   if (route === "soniox") {
     await core.setTranscriptionKey({ route: "soniox", apiKey: "soniox-test-key" });

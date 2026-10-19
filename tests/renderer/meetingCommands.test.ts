@@ -49,12 +49,9 @@ afterEach(() => {
   stores.useAppStore.setState({ settings: null, layout: null });
 });
 
-const meetingsOn = (on = true) =>
+const canRecord = (can = true) =>
   stores.useAppStore.setState({
-    settings: {
-      device: { meetingsEnabled: on },
-      meetingAudio: "both",
-    } as unknown as Settings,
+    settings: { device: {}, meetingAudio: can ? "both" : "none" } as unknown as Settings,
   });
 
 const meeting = (id: string, mindId: string, status: Meeting["status"]): Meeting =>
@@ -95,7 +92,7 @@ const command = (id: CommandId) => {
 
 describe("the meeting commands", () => {
   test("are named in English and Chinese, and Pause/Resume says which it will do", () => {
-    meetingsOn();
+    canRecord();
     expect(labelOf(command("meeting.record"), IN_MIND, en)).toBe("Record a meeting");
     expect(labelOf(command("meeting.record"), IN_MIND, zh)).toBe("录制会议");
     expect(labelOf(command("meeting.stop"), IN_MIND, en)).toBe("Stop recording");
@@ -125,13 +122,14 @@ describe("the meeting commands", () => {
     });
   });
 
-  test("are offered only while Meetings are on, and Pause/Resume and Stop only while a meeting is live", () => {
-    meetingsOn(false);
-    for (const id of ["meeting.record", "meeting.pauseResume", "meeting.stop"] as const) {
+  test("Record is always offered, and Pause/Resume and Stop only where this copy can record and a meeting is live", () => {
+    canRecord(false);
+    expect(offered(command("meeting.record"), IN_MIND)).toBe(true);
+    for (const id of ["meeting.pauseResume", "meeting.stop"] as const) {
       expect(offered(command(id), IN_MIND), id).toBe(false);
     }
 
-    meetingsOn();
+    canRecord();
     expect(isEnabled(command("meeting.record"), IN_MIND)).toBe(true);
     for (const id of ["meeting.pauseResume", "meeting.stop"] as const) {
       expect(offered(command(id), IN_MIND), id).toBe(true);
@@ -152,7 +150,7 @@ describe("the meeting commands", () => {
   });
 
   test("act on the meeting in view, else on the one recording, from any Mind", async () => {
-    meetingsOn();
+    canRecord();
     const pause = vi.fn(async () => {});
     const resume = vi.fn(async () => {});
     const stop = vi.fn(async () => {});
@@ -188,12 +186,12 @@ describe("Mark (#139)", () => {
     expect(mark.reversible).toBe(true);
   });
 
-  test("is offered while Meetings are on, and works only while audio is recorded", () => {
+  test("is offered where this copy can record, and works only while audio is recorded", () => {
     const mark = command("meeting.mark");
-    meetingsOn(false);
+    canRecord(false);
     expect(offered(mark, IN_MIND)).toBe(false);
 
-    meetingsOn();
+    canRecord();
     expect(offered(mark, IN_MIND)).toBe(true);
     expect(mark.enabled?.(IN_MIND)).toEqual({ reason: "meetings.command.noneLive" });
 
@@ -208,7 +206,7 @@ describe("Mark (#139)", () => {
 
 describe("Recording details (#161)", () => {
   test("show and hide the details of the meeting in view once it has started, named in both languages", async () => {
-    meetingsOn();
+    canRecord();
     const details = command("meeting.details");
     expect(details.reversible).toBe(true);
     expect(details.enabled?.(IN_MIND)).toEqual({ reason: "meetings.health.none" });
@@ -231,9 +229,9 @@ describe("Recording details (#161)", () => {
     expect(stores.useMeetings.getState().detailsShown).toEqual({ m1: false });
   });
 
-  test("are offered in a meeting's Mind even once Meetings are turned off", () => {
+  test("are offered in a meeting's Mind even where this copy can't record", () => {
     const details = command("meeting.details");
-    meetingsOn(false);
+    canRecord(false);
     expect(offered(details, IN_MIND)).toBe(false);
     stores.useMeetings.setState({ meetings: [meeting("m1", "mind-1", "stopped")] });
     showing("mind-1");
@@ -267,19 +265,19 @@ describe("Delete audio (#609)", () => {
     expect(zh("meetings.audio.confirm")).toContain("永久删除");
   });
 
-  test("is offered while Meetings are on, or in a Meeting's Mind once they are off", () => {
-    meetingsOn(false);
+  test("is offered where this copy can record, or in a Meeting's Mind where it can't", () => {
+    canRecord(false);
     expect(offered(deleteAudio(), IN_MIND)).toBe(false);
     stores.useMeetings.setState({ meetings: [withAudio("m1", "mind-1", "stopped")] });
     showing("mind-1");
     expect(offered(deleteAudio(), IN_MIND)).toBe(true);
-    meetingsOn();
+    canRecord();
     stores.useMeetings.setState({ meetings: [] });
     expect(offered(deleteAudio(), IN_MIND)).toBe(true);
   });
 
   test("says why it can't run: no Meeting in view, a recording, or audio that is already gone", () => {
-    meetingsOn();
+    canRecord();
     expect(deleteAudio().enabled?.(IN_MIND)).toEqual({
       reason: "meetings.command.noMeetingInView",
     });
@@ -310,7 +308,7 @@ describe("Delete audio (#609)", () => {
   });
 
   test("asks about the Meeting in view, or the Mind it is aimed at, and deletes nothing itself", async () => {
-    meetingsOn();
+    canRecord();
     const deleteMeetingAudio = vi.fn(async () => {});
     stores.useMeetings.setState({
       deleteAudio: deleteMeetingAudio,
@@ -330,7 +328,7 @@ describe("Delete audio (#609)", () => {
   });
 
   test("asks nothing where it can't run", async () => {
-    meetingsOn();
+    canRecord();
     stores.useMeetings.setState({
       meetings: [withAudio("m1", "mind-1", "stopped", { kept: false })],
     });

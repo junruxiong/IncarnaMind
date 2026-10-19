@@ -24,7 +24,7 @@ async function meetingCore(
 ) {
   const capture = createFakeCapture(captureOptions);
   const core = startCore(dataDir, { audioCapture: capture, now: clock.now });
-  await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+  await core.updateSettings({ device: { meetingNoticeAccepted: true } });
   /** `ms` of audio from every source asked for, as captured, the clock moving with it. */
   const record = (ms: number, sources: ("microphone" | "system")[] = ["microphone", "system"]) => {
     for (let at = 0; at < ms; at += 500) {
@@ -375,13 +375,18 @@ describe("A Meeting's audio is kept for at most a day", () => {
 });
 
 describe("What a Meeting needs", () => {
-  test("Meetings turned on, and the recording notice read, before recording starts", async () => {
+  test("A copy that can record offers a Meeting at once, in a Folder given, and the recording notice is read before it starts", async () => {
     const dataDir = await createTempDataFolder();
+    const nothing = startCore(await createTempDataFolder());
+    await expect(nothing.createMeeting()).rejects.toThrow(/can't record audio/);
+
     const capture = createFakeCapture();
     const core = startCore(dataDir, { audioCapture: capture });
-    await expect(core.createMeeting()).rejects.toThrow(/turned off/);
-
-    await core.updateSettings({ device: { meetingsEnabled: true } });
+    const folder = await core.createLibraryGroup({ name: "Clients", description: "Client calls." });
+    const filed = await core.createMeeting({ folderId: folder.id });
+    expect((await core.listMinds()).find((mind) => mind.id === filed.mindId)?.folderId).toBe(
+      folder.id,
+    );
     const { id } = await core.createMeeting();
     await expect(core.startMeeting({ meetingId: id })).rejects.toThrow(/notice/);
     expect(capture.started).toBe(0);
@@ -463,7 +468,7 @@ describe("What a Meeting needs", () => {
       audioCapture: createFakeCapture(),
       embedder,
     });
-    await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+    await core.updateSettings({ device: { meetingNoticeAccepted: true } });
     await core.saveEmbeddingProvider({ kind: "built-in" });
     const paragraphs = Array.from(
       { length: 40 },

@@ -4,14 +4,15 @@ import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
+  closeSettings,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  openSettings,
   recordMeeting,
   removeDataFolder,
   setLanguage,
   setWindowSize,
-  turnOnMeetings,
   useOutputLocation,
 } from "./app";
 
@@ -59,29 +60,28 @@ test("with a Soniox key, the first recording's sheet offers it under Other ways�
   await acceptPlainTextKeys(window);
 
   // Settings › Meetings: a Soniox key of its own, checked before it is kept.
-  await turnOnMeetings(window, async () => {
-    const settings = window.getByTestId("settings");
-    const row = settings.getByTestId("transcription-key-soniox");
-    await row.getByTestId("transcription-key-add").click();
-    const input = row.getByTestId("transcription-key-input");
-    await expect(input).toBeFocused();
-    await input.fill("soniox-wrong-key");
-    await input.press("Enter");
-    await expect(row.getByTestId("transcription-key-problem")).toContainText(
-      "Soniox didn’t accept this key.",
-    );
-    await input.fill("soniox-test-key");
-    await row.getByTestId("transcription-key-save").click();
-    await expect(row.getByTestId("transcription-key-saved")).toHaveText("Saved");
-    // Offered, not chosen: this computer stays until the User picks, and the line says what a pick sends.
-    const route = settings.getByTestId("meetings-route");
-    await expect(route.locator("option:not([hidden])")).toHaveText(["On this computer", "Soniox"]);
-    await expect(route).toHaveValue("");
-    await expect(settings.getByTestId("meetings-route-line")).toHaveText(
-      "A cloud service gets the meeting’s audio while you record.",
-    );
-    await shot(window, "settings-meetings-key-en");
-  });
+  const settings = await openSettings(window, "meetings");
+  const row = settings.getByTestId("transcription-key-soniox");
+  await row.getByTestId("transcription-key-add").click();
+  const input = row.getByTestId("transcription-key-input");
+  await expect(input).toBeFocused();
+  await input.fill("soniox-wrong-key");
+  await input.press("Enter");
+  await expect(row.getByTestId("transcription-key-problem")).toContainText(
+    "Soniox didn’t accept this key.",
+  );
+  await input.fill("soniox-test-key");
+  await row.getByTestId("transcription-key-save").click();
+  await expect(row.getByTestId("transcription-key-saved")).toHaveText("Saved");
+  // Offered, not chosen: this computer stays until the User picks, and the line says what a pick sends.
+  const route = settings.getByTestId("meetings-route");
+  await expect(route.locator("option:not([hidden])")).toHaveText(["On this computer", "Soniox"]);
+  await expect(route).toHaveValue("");
+  await expect(settings.getByTestId("meetings-route-line")).toHaveText(
+    "A cloud service gets the meeting’s audio while you record.",
+  );
+  await shot(window, "settings-meetings-key-en");
+  await closeSettings(window);
 
   // The first Start: one line for this computer, the cloud a quiet link away.
   const start = await recordMeeting(window);

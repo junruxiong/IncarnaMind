@@ -584,8 +584,12 @@ function copilotStandIn(): CoreAdapters["copilotProfiles"] {
  * recording played once (INCARNAMIND_TEST_AUDIO_FILE, a 16 kHz mono 16-bit WAV),
  * for checking transcription by hand. They reach it as
  * `globalThis.incarnamindFakeAudio`, e.g. to change the microphone.
+ * INCARNAMIND_TEST_AUDIO=none is a copy with no capture at all.
  */
-function audioCapture(log: Logger): AudioCapture {
+function audioCapture(log: Logger): AudioCapture | undefined {
+  if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_AUDIO === "none") {
+    return undefined;
+  }
   if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_AUDIO === "fake") {
     const system = process.env.INCARNAMIND_TEST_AUDIO_SYSTEM;
     const recording = process.env.INCARNAMIND_TEST_AUDIO_FILE;
