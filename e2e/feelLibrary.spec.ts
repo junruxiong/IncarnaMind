@@ -73,7 +73,7 @@ test("scrolling the Library with 2,000 Documents", async () => {
   });
   await feel.step("show all 2,000", async () => {
     await pointAndClick(window, library.getByTestId("library-show-all"));
-    await expect(library.getByTestId("library-document")).not.toHaveCount(8);
+    await expect(library.getByTestId("library-document").nth(8)).toBeVisible();
   });
   const firstName =
     (await library.getByTestId("library-document-name").first().textContent()) ?? "";

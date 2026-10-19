@@ -57,7 +57,7 @@ The feel check (`e2e/feel.ts`, and the specs `e2e/feel*.spec.ts`) holds the main
 - **Focus:** after a close, a create or a delete, focus isn't on the target the step names (the opener, the new thing's name, the next item).
 - **Input to next paint** over 500 ms, or a **long task** over 1 s. The target is 100 ms on a laptop. CI's runners are two to five times slower, so these ceilings fail only a real freeze. Every run reports both times for every step. Only CI fails them: a busy laptop varies too much, so a local table marks a slow step "fails on CI".
 
-It can't see everything:
+It can't see everything (#1331 adds what it can):
 
 - **The 500 ms after an input.** Chromium marks every shift in the 500 ms after a click or a key as the User's own, and the check doesn't count those. So a shift the User's action set off somewhere else, or a jump while typing, goes unseen. A green feel check doesn't mean nothing moved: look at the video too.
 - **A flash or a lost scroll position**, since nothing moves. The videos show both.
@@ -70,7 +70,7 @@ npx electron-vite build --mode test
 npx playwright test e2e/feelSidebar.spec.ts --workers=1
 ```
 
-Each flow's table goes to `test-results/feel/<flow>.md`, and its video to `<flow>.mp4`. Without ffmpeg, the frames are kept in `<flow>-frames/` instead. On CI, the tables are also in the job summary.
+Each flow's table goes to `test-results/feel/<flow>.md`, and its video to `<flow>.mp4`. Without ffmpeg, the frames are kept in `<flow>-frames/` instead. Each Playwright run clears `test-results/`, so read a spec's tables before you run the next. On CI, the tables are also in the job summary.
 
 When it fails:
 
@@ -79,7 +79,7 @@ When it fails:
 3. If `main` does it too, file it as its own issue. Then add an entry for it to `KNOWN` in `e2e/feel.ts`, bounded by what was measured. Anything worse, or in another step, still fails.
    - Focus: where it landed.
    - Shift: what moved, and the largest score. The bound holds under 0.001 too, so a listed shift that grows fails even while it is small.
-   - Time: half again the slowest measured, since a busy runner varies that much.
+   - Time: twice the slowest measured on CI, since runners vary two to five times.
    - Mark it `sometimes` when it depends on timing and doesn't happen on every run.
 4. The pull request that fixes a known problem removes its entry. A shift or focus entry whose problem no longer happens fails the check, so the list stays true. A known time, or a problem marked `sometimes`, may not happen on every run. The non-required job "Feel check, known problems that didn't happen" lists those on each run, so their entries go once their issues close.
 

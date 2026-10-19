@@ -55,7 +55,8 @@ test("the sidebar: open, rename in place, move, delete and Undo, and a new Mind 
     await expect(field).toBeFocused();
     await field.fill("Budget");
     await window.keyboard.press("Enter");
-    await expect(mindRow(window, "Budget")).toBeVisible();
+    // Changed last, it goes to the top: focus is read once the list has moved it there.
+    await expect(window.getByTestId("mind-row").first()).toContainText("Budget");
   });
   await feel.expectFocus(
     "rename in place",
