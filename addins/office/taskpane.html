@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IncarnaMind</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://officeapis.public.onecdn.static.microsoft/1/office.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>IncarnaMind</h1>
+      <p id="status" role="status">Connecting…</p>
+
+      <section id="pairing" hidden>
+        <label for="code">Pairing code shown in IncarnaMind</label>
+        <input id="code" inputmode="numeric" autocomplete="off" maxlength="6" />
+        <button id="pair" type="button">Pair</button>
+      </section>
+
+      <section id="paired" hidden>
+        <p id="folder"></p>
+        <button id="run" type="button"></button>
+        <button id="unpair" type="button">Disconnect</button>
+        <p id="result" role="status"></p>
+      </section>
+
+      <section id="diagnostics">
+        <button id="test" type="button">Test the connection</button>
+        <textarea id="report" readonly rows="12" aria-label="Connection report"></textarea>
+      </section>
+    </main>
+    <script src="taskpane.js"></script>
+  </body>
+</html>

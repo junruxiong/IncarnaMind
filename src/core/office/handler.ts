@@ -49,11 +49,13 @@ interface Listener {
 }
 
 class Refusal extends Error {
-  constructor(
-    readonly status: number,
-    readonly reason: string,
-  ) {
+  readonly status: number;
+  readonly reason: string;
+
+  constructor(status: number, reason: string) {
     super(reason);
+    this.status = status;
+    this.reason = reason;
   }
 }
 

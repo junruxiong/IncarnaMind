@@ -1,0 +1,35 @@
+body {
+  margin: 0;
+  font: 14px/1.4 system-ui, sans-serif;
+  color: #1b1d21;
+  background: #fff;
+}
+main {
+  padding: 16px;
+}
+h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+label,
+button,
+input,
+textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+  font: inherit;
+}
+input,
+textarea,
+button {
+  padding: 6px 8px;
+}
+textarea {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+[hidden] {
+  display: none;
+}

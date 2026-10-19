@@ -24,8 +24,11 @@ interface StoredPairing extends OfficePairing {
 export type PairingRefusal = "no-code" | "expired" | "wrong" | "locked";
 
 export class PairingRefusedError extends Error {
-  constructor(readonly reason: PairingRefusal) {
+  readonly reason: PairingRefusal;
+
+  constructor(reason: PairingRefusal) {
     super(`Pairing refused: ${reason}.`);
+    this.reason = reason;
   }
 }
 

@@ -4,7 +4,7 @@ import { request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TLSSocket } from "node:tls";
-import { createOfficeBridge, type OfficeBridgeAddress } from "../../src/core/office";
+import { createOfficeBridge, type OfficeBridgeAddress } from "../../src/core/office/index";
 
 export function memorySecrets() {
   const kept = new Map<string, string>();
@@ -25,13 +25,19 @@ export interface RunningBridge {
 }
 
 export async function startBridge(
-  options: { extraOrigins?: string[]; secrets?: ReturnType<typeof memorySecrets> } = {},
+  options: {
+    extraOrigins?: string[];
+    secrets?: ReturnType<typeof memorySecrets>;
+    staticDir?: string;
+  } = {},
 ): Promise<RunningBridge> {
   const folder = await mkdtemp(join(tmpdir(), "office-bridge-"));
-  const staticDir = join(folder, "pages");
-  await mkdir(join(staticDir, "assets"), { recursive: true });
-  await writeFile(join(staticDir, "taskpane.html"), "<!doctype html><title>pane</title>");
-  await writeFile(join(staticDir, "taskpane.js"), "// pane");
+  const staticDir = options.staticDir ?? join(folder, "pages");
+  if (!options.staticDir) {
+    await mkdir(join(staticDir, "assets"), { recursive: true });
+    await writeFile(join(staticDir, "taskpane.html"), "<!doctype html><title>pane</title>");
+    await writeFile(join(staticDir, "taskpane.js"), "// pane");
+  }
   const secrets = options.secrets ?? memorySecrets();
   const clock = { now: 1_000 };
   const bridge = createOfficeBridge({
