@@ -73,7 +73,7 @@ registerMenu("folder", [
 
 registerMenu("tag", ["tag.open", "tag.manage", "tag.rename", "tag.delete"]);
 
-registerMixedMenu(["selection.moveTo", "selection.delete"]);
+registerMixedMenu(["selection.moveTo", "folder.newWith", "selection.delete"]);
 
 registerMenu("linkedFolder", [
   "linkedFolder.pause",

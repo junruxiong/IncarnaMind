@@ -223,8 +223,8 @@ test("a Mind of one's own made on the first open isn't listed under Examples (#1
   await expect(section).toHaveText("Examples");
   await newMind(window);
   await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
-  // With no Folder yet, the Minds are just "Minds".
-  await expect(section).toHaveText("Minds");
+  // "Not in a Folder", though there is no Folder yet.
+  await expect(section).toHaveText("Not in a Folder");
   await app.close();
 });
 
