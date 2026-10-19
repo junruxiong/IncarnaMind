@@ -123,6 +123,7 @@ async function paneFlow(browser: Browser, fake: Fake, options: { blockWebSocket?
     const { code } = live.bridge.beginPairing();
     await page.fill("#code", "000000" === code ? "111111" : "000000");
     await page.click("#pair");
+    await page.waitForFunction(() => document.getElementById("status")?.textContent !== "Type the code IncarnaMind shows to pair this pane.");
     const wrong = await status(page);
     await page.fill("#code", code);
     await page.click("#pair");
@@ -241,12 +242,13 @@ const TARGETS = (https: number, plain: number) => ({
   "WebSocket ws://localhost": `ws://localhost:${plain}/ws`,
 });
 
-async function reachFrom(browser: Browser, origin: string, trusted: boolean) {
+async function reachFrom(browser: Browser, origin: string, trusted: boolean, permissions: string[] = []) {
   const live = await startBridge({ staticDir: STATIC_DIR, extraOrigins: [origin] });
   const plain = await plainMount([origin]);
   const context = await browser.newContext({ ignoreHTTPSErrors: trusted });
   const notes: string[] = [];
   try {
+    if (permissions.length > 0) await context.grantPermissions(permissions, { origin });
     const page = await context.newPage();
     page.on("console", (message) => notes.push(`console: ${message.text().split("\n")[0]}`));
     page.on("requestfailed", (request) =>
@@ -306,10 +308,11 @@ async function reachFrom(browser: Browser, origin: string, trusted: boolean) {
   }
 }
 
-async function iframeIn(browser: Browser, origin: string, platform: Fake["platform"]) {
+async function iframeIn(browser: Browser, origin: string, platform: Fake["platform"], permissions: string[] = []) {
   const live = await startBridge({ staticDir: STATIC_DIR });
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   try {
+    if (permissions.length > 0) await context.grantPermissions(permissions, { origin });
     await context.route(OFFICE_CDN, (route) =>
       route.fulfill({ status: 200, contentType: "text/javascript", body: "" }),
     );
@@ -418,10 +421,14 @@ function macSecurityFramework() {
   const verify = (certificate: string, name: string) => {
     const run = spawnSync(
       "/usr/bin/security",
-      ["verify-cert", "-c", certificate, "-r", ca, "-p", "ssl", "-s", name, "-L"],
+      ["verify-cert", "-c", certificate, "-r", ca, "-p", "ssl", "-s", name, "-v"],
       { encoding: "utf8", env: { ...process.env, HOME: folder } },
     );
-    return `${run.status === 0 ? "valid" : "invalid"}: ${(run.stdout + run.stderr).trim().split("\n").slice(-2).join(" | ")}`;
+    const text = run.stdout + run.stderr;
+    const result = /TrustResultValue = (\d+)/.exec(text)?.[1];
+    const reason = /has errors: ([^"]*)/.exec(text)?.[1]?.trim();
+    // 4 is kSecTrustResultUnspecified (trusted through the anchor); 5 is a trust failure.
+    return `TrustResultValue ${result}${reason ? `: ${reason}` : ""}`;
   };
   return {
     "server certificate for localhost": verify(server, "localhost"),
@@ -457,6 +464,14 @@ async function runAll(name: string, browser: Browser) {
   await step("app-served pane framed by Office on the web (PC platform value)", () =>
     iframeIn(browser, OFFICE_ON_THE_WEB, "PC"),
   );
+  if (name === "chromium") {
+    await step("hosted pane reaching the app, certificate trusted, Local Network Access allowed", () =>
+      reachFrom(browser, HOSTED, true, ["local-network-access"]),
+    );
+    await step("app-served pane framed by Office on the web, Local Network Access allowed", () =>
+      iframeIn(browser, OFFICE_ON_THE_WEB, "PC", ["local-network-access"]),
+    );
+  }
   await step("custom URL scheme", () => customScheme(browser));
   if (name === "chromium") await step("DNS rebinding (host resolver maps rebind.test)", () => rebinding(browser));
   return out;

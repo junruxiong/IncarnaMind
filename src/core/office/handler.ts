@@ -9,7 +9,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import type { Logger } from "../adapters";
-import { isRecord } from "../errors";
 import {
   OFFICE_HOSTS,
   type OfficeHost,
@@ -58,6 +57,9 @@ class Refusal extends Error {
     this.reason = reason;
   }
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const bearer = (request: IncomingMessage): string | null => {
   const value = request.headers.authorization;

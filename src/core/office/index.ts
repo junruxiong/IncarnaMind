@@ -73,11 +73,12 @@ export function loopbackOrigins(port: number, extra: readonly string[] = []): Se
 }
 
 export function pageSecurityPolicy(port: number): string {
-  const sockets = LOOPBACK_HOSTNAMES.map((name) => `wss://${name}:${port}`).join(" ");
+  // A bracketed IPv6 host is not a valid CSP source (WebKit ignores it), and 'self' covers ::1.
+  const sockets = ["localhost", "127.0.0.1"].map((name) => `wss://${name}:${port}`).join(" ");
   return [
     "default-src 'none'",
     "script-src 'self' https://officeapis.public.onecdn.static.microsoft",
-    "style-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     `connect-src 'self' ${sockets} https://officeapis.public.onecdn.static.microsoft`,
     "frame-ancestors 'self' https://*.office.com https://*.officeapps.live.com https://*.office365.com https://*.microsoft365.com https://*.sharepoint.com",
