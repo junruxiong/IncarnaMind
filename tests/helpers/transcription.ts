@@ -22,6 +22,7 @@ import {
   type FakeTranscriberOptions,
   failingOver,
 } from "../../src/core/transcription/fake";
+import { createFakeCloud } from "../../src/core/transcription/fakeCloud";
 import type { SpeechEngine } from "../../src/core/transcription/speech";
 import { manualClock, startCore } from "./core";
 import { scriptedModels } from "./models";
@@ -38,7 +39,8 @@ export const NO_TRANSCRIPTION_FILES = {
  * turn of the event loop as they would between processes. `crash` kills the
  * running one, as an out-of-memory would. `engine` runs another engine, the
  * real one in the live tests. `options.failover` has it say it moved its
- * streams to the cloud and back.
+ * streams to the cloud and back. Streams opened with a cloud service go to the
+ * pretend one, as `options.cloud` says.
  */
 export function inProcessTranscriber(
   options: FakeTranscriberOptions = {},
@@ -62,7 +64,10 @@ export function inProcessTranscriber(
           if (open) for (const listener of responses) listener(response);
         }),
     };
-    serveTranscriber(engine, options.failover ? failingOver(port, options.failover) : port);
+    serveTranscriber(engine, options.failover ? failingOver(port, options.failover) : port, {
+      connect: createFakeCloud(options.cloud),
+      detectors: async () => createFakeSpeechEngine(options).detector,
+    });
     kill = () => {
       open = false;
       for (const listener of exits) listener(null);
@@ -127,12 +132,13 @@ export async function transcribingCore(
     audioCapture: capture,
     transcriber: engineHost.transcriber,
     transcriptionModelSource: NO_TRANSCRIPTION_FILES,
+    transcriptionKeyFetch: async () => new Response(null, { status: 200 }),
     now: clock.now,
     ...(models && { createChatModel: models.createChatModel }),
     ...(createChatModel && { createChatModel }),
     ...(log && { log }),
   });
-  await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+  await core.updateSettings({ device: { meetingNoticeAccepted: true } });
   await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
   const record = (ms: number, sources: ("microphone" | "system")[] = ["microphone", "system"]) => {
     for (let at = 0; at < ms; at += 500) {

@@ -1,4 +1,4 @@
-import { registerMenu } from "./menus";
+import { registerMenu, registerMixedMenu } from "./menus";
 
 // Later features add their items with registerMenu: Move to… (#229, #212), Add to note (#201), History (#300), Tag colour and merge (#205).
 
@@ -19,7 +19,7 @@ registerMenu("mind", [
   "mind.outline",
   ...EXPORTS,
   "mind.history",
-  "mind.checkAll",
+  "mind.check",
   "mind.checkContradictions",
   "mind.citationStyle",
   "mind.style",
@@ -74,6 +74,8 @@ registerMenu("folder", [
 
 registerMenu("tag", ["tag.open", "tag.manage", "tag.rename", "tag.delete"]);
 
+registerMixedMenu(["selection.moveTo", "selection.delete"]);
+
 registerMenu("linkedFolder", [
   "linkedFolder.pause",
   "linkedFolder.layout",
@@ -98,7 +100,7 @@ registerMenu(
     "mind.openOriginal",
     ...EXPORTS,
     "mind.history",
-    "mind.checkAll",
+    "mind.check",
     "mind.checkContradictions",
     "mind.style",
     "mind.moveTo",

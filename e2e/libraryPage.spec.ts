@@ -749,14 +749,13 @@ test("a Folder opened from the sidebar brings its section into view, open, with 
     await pointAndClick(window, target.getByTestId("library-section-toggle"));
     await expect(rowsOf(target)).toHaveCount(0);
     await library.evaluate((element) => element.querySelector(":scope > div")?.scrollTo(0, 0));
-    // A Tag filter from the sidebar that none of its Documents has gives way too.
-    await pointAndClick(window, window.getByTestId("tag-filter-menu"));
+    // A Tag filter from the sidebar's Tags that none of its Documents has gives way too.
+    const tagFilter = library.locator('[data-testid="library-filter"][data-facet="tag"]');
     await pointAndClick(
       window,
-      window.getByTestId("tag-filters").getByTestId("tag-filter").filter({ hasText: "Slides" }),
+      window.getByTestId("sidebar-tag").filter({ hasText: "Slides" }).getByTestId("row-text"),
     );
-    await window.keyboard.press("Escape");
-    await expect(window.getByTestId("tag-filter-active")).toContainText("Slides");
+    await expect(tagFilter).toContainText("Slides");
     await expect(target).toHaveCount(0);
 
     const folder = sidebarFolder(window, last.name);
@@ -768,7 +767,7 @@ test("a Folder opened from the sidebar brings its section into view, open, with 
     await expect(rowsOf(target)).toHaveCount(last.documents.length);
     // The page still shows every Folder.
     await expect(sections(library)).toHaveCount(FOLDERS.length + 1);
-    await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
+    await expect(tagFilter).toHaveCount(0);
   } finally {
     await app.close();
   }
@@ -834,7 +833,7 @@ test("an empty Library offers one Add Documents, its ways in, and a place to dro
     await expect(
       window.getByTestId("library-add-documents-items").getByRole("menuitem"),
     ).toHaveText([
-      "Files…",
+      /^Files…(⌘O|Ctrl\+O)$/,
       "A folder that stays in sync…",
       "A web page…",
       "Find sources…",
