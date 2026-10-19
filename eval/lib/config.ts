@@ -123,7 +123,10 @@ function positiveInteger(env: Env, name: string, fallback: number): number {
   return parsed;
 }
 
-function chatSettings(env: Env, role: "CHAT" | "JUDGE" = "CHAT"): ChatSettings | null {
+export function chatSettings(
+  env: Env,
+  role: "CHAT" | "JUDGE" | "HARNESS_CHECK" = "CHAT",
+): ChatSettings | null {
   const kind = value(env, `${role}_KIND`);
   const modelId = value(env, `${role}_MODEL`);
   const apiKey = value(env, `${role}_KEY`);
