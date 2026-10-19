@@ -10,7 +10,7 @@ import { buttonStyle } from "../components/ui";
 import { startContradictionCheck, useContradictions } from "../contradictions";
 import { useLanguage, useT } from "../i18n";
 import { frontTabOfMind } from "../layoutSlice";
-import { startCardCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
+import { startCheckThisMind, useMindCheck, useMindCheckRun } from "../mindCheck";
 import { useFade } from "../motion";
 import { useAppStore } from "../store";
 import { useGroupsMerged } from "../useWindowWidth";
@@ -18,6 +18,7 @@ import { checkClaims, stopVerify } from "../verify";
 import { useWatchAddedDocuments } from "./AddedDocumentsLine";
 import { type Badge, type BadgeInput, badgeOf } from "./badgeState";
 import { ContradictionAsk, ContradictionLine } from "./ContradictionLine";
+import { changedTitle, useChangedSentences } from "./changedSentences";
 import { shownClaims } from "./claimChecks";
 import { HEALTH_PARTS } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
@@ -159,6 +160,7 @@ function CheckActions({
 }) {
   const t = useT();
   const running = useChecks((state) => state.running[mindId] !== undefined);
+  const changed = useChangedSentences(doc, mindId, running);
   const askingContradictions = useContradictions((state) => state.asking[mindId] !== undefined);
   if (askingMind) return <MindCheckAsk mindId={mindId} />;
   if (askingContradictions) return <ContradictionAsk doc={doc} mindId={mindId} />;
@@ -168,8 +170,9 @@ function CheckActions({
         type="button"
         data-testid="badge-check-mind"
         disabled={running}
+        title={changed === null ? undefined : changedTitle(t, changed)}
         className={buttonStyle("primary", "sm")}
-        onClick={() => void startCardCheck(mindId)}
+        onClick={() => void startCheckThisMind(mindId)}
       >
         {t("mindCheck.command")}
       </button>

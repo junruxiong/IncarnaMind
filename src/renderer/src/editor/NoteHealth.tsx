@@ -122,9 +122,8 @@ const ROWS: readonly HealthPart[] = [
 /**
  * The check badge's card for a Mind (#96, #909): one row a part of its
  * health, each moving to the next such sentence or Citation, round to the
- * first; the claims no check has looked at, with Check all; what is
- * running, with Stop, or why a check gave nothing, with the one thing that
- * helps; and the files the checks couldn't read, if any.
+ * first; what is running, with Stop, or why a check gave nothing, with the
+ * one thing that helps; and the files the checks couldn't read, if any.
  */
 export function HealthCard({
   editor,
