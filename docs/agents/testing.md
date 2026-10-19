@@ -55,7 +55,7 @@ The feel check (`e2e/feel.ts`, and the specs `e2e/feel*.spec.ts`) holds the main
 
 - **Shift:** the layout shifts that no recent input caused sum to more than 0.001, and the table names what moved.
 - **Focus:** after a close, a create or a delete, focus isn't on the target the step names (the opener, the new thing's name, the next item).
-- **Input to next paint** over 500 ms, or a **long task** over 1 s. The target is 100 ms on a laptop. CI's runners are two to five times slower, so these ceilings fail only a real freeze. Every run reports both times for every step.
+- **Input to next paint** over 500 ms, or a **long task** over 1 s. The target is 100 ms on a laptop. CI's runners are two to five times slower, so these ceilings fail only a real freeze. Every run reports both times for every step. Only CI fails them: a busy laptop varies too much, so a local table marks a slow step "fails on CI".
 
 It can't see everything:
 
@@ -76,8 +76,12 @@ When it fails:
 
 1. Read the flow's table and watch its video at that step.
 2. Fix it if your change caused it.
-3. If `main` does it too, file it as its own issue. Then add an entry for it to `KNOWN` in `e2e/feel.ts`, bounded by what was measured: where focus landed, or what moved and the largest score, or the largest time. Anything worse, or in another step, still fails.
-4. The pull request that fixes a known problem removes its entry. A shift or focus entry whose problem no longer happens fails the check, so the list stays true. A known time, or a focus problem that depends on timing, may not happen on every run. The non-required job "Feel check, known problems that didn't happen" lists those on each run, so their entries go once their issues close.
+3. If `main` does it too, file it as its own issue. Then add an entry for it to `KNOWN` in `e2e/feel.ts`, bounded by what was measured. Anything worse, or in another step, still fails.
+   - Focus: where it landed.
+   - Shift: what moved, and the largest score. The bound holds under 0.001 too, so a listed shift that grows fails even while it is small.
+   - Time: half again the slowest measured, since a busy runner varies that much.
+   - Mark it `sometimes` when it depends on timing and doesn't happen on every run.
+4. The pull request that fixes a known problem removes its entry. A shift or focus entry whose problem no longer happens fails the check, so the list stays true. A known time, or a problem marked `sometimes`, may not happen on every run. The non-required job "Feel check, known problems that didn't happen" lists those on each run, so their entries go once their issues close.
 
 ## The interaction rules are checked for you
 

@@ -22,20 +22,23 @@ export const FEEL_FOLDER = join(__dirname, "..", "test-results", "feel");
 
 /**
  * A problem main has today, filed as its issue, bounded by what was measured: one that is worse,
- * or in another step, still fails. A time's bound is half again the slowest measured, since a busy
- * runner varies that much. Remove the entry in the pull request that closes the issue.
+ * or in another step, still fails. A shift's bound holds under `SHIFT_LIMIT` too. A time's bound
+ * is half again the slowest measured, since a busy runner varies that much. `sometimes`: it
+ * depends on timing, so a run without it doesn't make the entry stale. Remove the entry in the
+ * pull request that closes the issue.
  */
-type Known = { flow: string; step: string; issue: number } & (
+type Known = { flow: string; step: string; issue: number; sometimes?: true } & (
   | { kind: "shift"; moved: readonly string[]; max: number }
   | {
       kind: "focus";
       /** Where focus lands instead: "body", or a test id. */
       landed: string;
-      /** It depends on timing, so a run without it doesn't make the entry stale. */
-      sometimes?: true;
     }
   | { kind: "input" | "long-task"; max: number }
 );
+
+/** Slow steps fail only on CI, whose ceilings they were set for: a busy laptop varies too much. */
+const TIMES_FAIL = process.env.CI !== undefined;
 
 export const KNOWN: readonly Known[] = [
   { flow: "assistant-place", step: "dock bottom", kind: "focus", landed: "body", issue: 1316 },
@@ -51,6 +54,14 @@ export const KNOWN: readonly Known[] = [
     issue: 1322,
   },
   { flow: "sidebar", step: "delete", kind: "focus", landed: "body", issue: 1311 },
+  {
+    flow: "first-open",
+    step: "ask a Question",
+    kind: "shift",
+    moved: ["assistant-answer", "assistant-question"],
+    max: 0.0008,
+    issue: 1330,
+  },
   {
     flow: "first-open",
     step: "check the Mind",
@@ -74,6 +85,15 @@ export const KNOWN: readonly Known[] = [
     ],
     max: 0.0062,
     issue: 1325,
+  },
+  {
+    flow: "library-2000",
+    step: "add 2,000 Documents",
+    kind: "shift",
+    moved: ["library-row-count", "document-list-item"],
+    max: 0.0126,
+    sometimes: true,
+    issue: 1329,
   },
   { flow: "library-2000", step: "show all 2,000", kind: "input", max: 2100, issue: 1313 },
   { flow: "library-2000", step: "show all 2,000", kind: "long-task", max: 1900, issue: 1313 },
@@ -283,7 +303,10 @@ export async function feelOf(window: Page, flow: string): Promise<Feel> {
     steps.push({ name, shifts, input, longTasks, focus: null });
     // Summed over the step: two small shifts in one frame move as much as one big one.
     const shifted = shifts.reduce((sum, each) => sum + each.value, 0);
-    if (shifted > SHIFT_LIMIT) {
+    const bounded = KNOWN.some(
+      (known) => known.flow === flow && known.step === name && known.kind === "shift",
+    );
+    if (shifted > SHIFT_LIMIT || (bounded && shifted > 0)) {
       const moved = [...new Set(shifts.flatMap((each) => each.moved))];
       problems.push({ kind: "shift", step: name, value: shifted, moved });
     }
@@ -317,10 +340,12 @@ export async function feelOf(window: Page, flow: string): Promise<Feel> {
         problems.some((problem) => problem.step === known.step && problem.kind === known.kind);
       // A time depends on the runner, and some focus on timing: those may not happen every run.
       const always = (known: Known) =>
-        (known.kind === "shift" || known.kind === "focus") &&
-        !(known.kind === "focus" && known.sometimes);
+        (known.kind === "shift" || known.kind === "focus") && !known.sometimes;
+      const fails = (problem: Problem) =>
+        !knownFor(problem) &&
+        (TIMES_FAIL || (problem.kind !== "input" && problem.kind !== "long-task"));
       const missing = listed.filter((each) => !happened(each));
-      const report = tableOf(flow, steps, problems, knownFor, missing);
+      const report = tableOf(flow, steps, problems, knownFor, fails, missing);
       await mkdir(FEEL_FOLDER, { recursive: true });
       await writeFile(join(FEEL_FOLDER, `${flow}.md`), report);
       await writeFile(
@@ -332,7 +357,7 @@ export async function feelOf(window: Page, flow: string): Promise<Feel> {
       const named = (known: Known) => `#${known.issue} (${flow} › ${known.step}, ${known.kind})`;
       return {
         failing: problems
-          .filter((problem) => !knownFor(problem))
+          .filter(fails)
           .map((problem) => `${problem.step}: ${problem.kind} ${detailOf(problem)}`),
         stale: missing
           .filter(always)
@@ -350,6 +375,7 @@ function tableOf(
   steps: readonly StepRecord[],
   problems: readonly Problem[],
   knownFor: (problem: Problem) => Known | undefined,
+  fails: (problem: Problem) => boolean,
   missing: readonly Known[],
 ): string {
   const cell = (step: StepRecord) => {
@@ -359,7 +385,12 @@ function tableOf(
         .filter((problem) => problem.step === step.name)
         .map((problem) => {
           const known = knownFor(problem);
-          return `${known ? `known #${known.issue}` : "**fails**"}: ${problem.kind} ${detailOf(problem)}`;
+          const mark = known
+            ? `known #${known.issue}`
+            : fails(problem)
+              ? "**fails**"
+              : "fails on CI";
+          return `${mark}: ${problem.kind} ${detailOf(problem)}`;
         }),
       ...missing
         .filter((known) => known.step === step.name)
