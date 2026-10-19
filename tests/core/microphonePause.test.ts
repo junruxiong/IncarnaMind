@@ -97,7 +97,7 @@ async function playCall({
     transcriptionModelSource: NO_TRANSCRIPTION_FILES,
     now: clock.now,
   });
-  await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+  await core.updateSettings({ device: { meetingNoticeAccepted: true } });
   await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
   const { id } = await core.createMeeting();
   await core.startMeeting({ meetingId: id, systemAudio: true });

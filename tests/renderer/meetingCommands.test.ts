@@ -180,7 +180,7 @@ describe("Pause my mic", () => {
     ({ id: "m1", mindId: "mind-1", status, microphonePausedAtMs }) as Meeting;
 
   test("is named in English and Chinese, says which it will do, and is undone by itself", () => {
-    meetingsOn();
+    canRecord();
     const mic = command("meeting.microphone");
     stores.useMeetings.setState({ meetings: [micOf("recording", null)] });
     expect(labelOf(mic, IN_MIND, en)).toBe("Pause my mic");
@@ -193,7 +193,7 @@ describe("Pause my mic", () => {
 
   test("shows the global shortcut the meeting holds for it, ⌃⌥M or Ctrl+Shift+U by default", () => {
     const settings = {
-      device: { meetingsEnabled: true, meetingHelpKeys: {} },
+      device: { meetingHelpKeys: {} },
       meetingAudio: "both",
     } as unknown as Settings;
     stores.useAppStore.setState({ settings });
@@ -214,12 +214,12 @@ describe("Pause my mic", () => {
     expect(command("meeting.microphone").globalKeys?.()).toBeNull();
   });
 
-  test("is offered while Meetings are on, and works while a meeting records or is paused", () => {
+  test("is offered where this copy can record, and works while a meeting records or is paused", () => {
     const mic = command("meeting.microphone");
-    meetingsOn(false);
+    canRecord(false);
     expect(offered(mic, IN_MIND)).toBe(false);
 
-    meetingsOn();
+    canRecord();
     expect(offered(mic, IN_MIND)).toBe(true);
     expect(mic.enabled?.(IN_MIND)).toEqual({ reason: "meetings.command.noneLive" });
     stores.useMeetings.setState({ meetings: [micOf("ready", null)] });
@@ -232,7 +232,7 @@ describe("Pause my mic", () => {
   });
 
   test("pauses the microphone of the meeting in view, or resumes it when it is paused", async () => {
-    meetingsOn();
+    canRecord();
     const setMicrophonePaused = vi.fn(async () => {});
     stores.useMeetings.setState({ setMicrophonePaused, meetings: [micOf("recording", null)] });
     showing("mind-1");

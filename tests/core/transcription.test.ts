@@ -255,10 +255,9 @@ describe("The microphone and the computer's sound as two tracks", () => {
     // Ten minutes on: no block holds the pause, and the first one starts where the microphone does.
     expect(tracks.resumeMicrophone(600_000)).toBeNull();
     expect(tracks.atMs).toBe(600_000);
-    const first = [
-      tracks.add("microphone", tone(7000, 16_000), 600_000),
-      tracks.flush(),
-    ].filter((each) => each !== null);
+    const first = [tracks.add("microphone", tone(7000, 16_000), 600_000), tracks.flush()].filter(
+      (each) => each !== null,
+    );
     expect(first[0]?.atMs).toBe(600_000);
     expect(first.reduce((sum, each) => sum + (each.microphone?.length ?? 0), 0)).toBe(16_000);
     expect(first[0]?.microphone?.[0]).toBe(7000);

@@ -15,7 +15,6 @@ import {
   setLanguage,
   setWindowSize,
   startRecording,
-  turnOnMeetings,
 } from "./app";
 
 /**
@@ -52,7 +51,6 @@ const capture = (app: ElectronApplication) =>
 
 /** A meeting recording from both sides, its first line in. */
 async function recordingMeeting(window: Page): Promise<Locator> {
-  await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   await expect(bar.getByTestId("meeting-transcript-toggle")).toBeEnabled({ timeout: 20_000 });
   return bar;
