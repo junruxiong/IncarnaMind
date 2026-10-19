@@ -3569,7 +3569,7 @@ export const en = {
   "commands.ask.why.delete.one":
     "It goes to Recently deleted, where you can restore it for {days} days. The assistant always asks before it deletes.",
   "commands.ask.read": "The assistant read text you didn't write.",
-  "commands.ask.item.renamed": "{name} (renamed to “{renamed}” in this answer)",
+  "commands.ask.item.renamed": "{name} (renamed to “{renamed}” in this conversation)",
   "commands.kept.folder": "Kept the Folder “{name}”: you've filed things in it since.",
   "commands.kept.tag": "Kept the Tag “{name}”: you've tagged other Documents with it since.",
   "commands.ask.allow": "Allow",
@@ -4188,6 +4188,20 @@ export const en = {
     "Transcribing on this computer: “Keep everything on this computer” is on.",
   "meetings.line.openSettings.mac": "Open System Settings",
   "meetings.line.openSettings.other": "Open Settings",
+  "meetings.guide.title.microphone": "Allow the microphone",
+  "meetings.guide.title.system": "Allow the computer’s sound",
+  "meetings.guide.where.microphone": "Privacy & Security › Microphone",
+  "meetings.guide.where.system": "Privacy & Security › Screen & System Audio Recording",
+  "meetings.guide.step1": "Find IncarnaMind in the list.",
+  "meetings.guide.step2": "Switch it on.",
+  "meetings.guide.waiting": "Waiting for you…",
+  "meetings.guide.done.microphone":
+    "Done. Stop the recording and start it again to record your voice.",
+  "meetings.guide.done.system":
+    "Done. Quit and reopen IncarnaMind, then record again, to record the computer’s sound.",
+  "meetings.guide.inline":
+    "In System Settings, open {where}, find IncarnaMind in the list and switch it on.",
+  "meetings.guide.close": "Close (Esc)",
   "meetings.transcript.name": "Transcript · {meeting}",
   "meetings.transcript.nameAlone": "Transcript",
   "meetings.bar.showTranscript": "Show transcript",

@@ -597,6 +597,7 @@ function audioCapture(log: Logger): AudioCapture | undefined {
       realTime: 100,
       system: system === "denied" || system === "silent" ? system : "allowed",
       ...(recording && { recording: wavSamples(readFileSync(recording)) }),
+      microphone: process.env.INCARNAMIND_TEST_AUDIO_MICROPHONE === "denied" ? "denied" : "allowed",
     });
     (globalThis as { incarnamindFakeAudio?: FakeCapture }).incarnamindFakeAudio = fake;
     return fake;

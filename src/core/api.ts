@@ -7023,7 +7023,7 @@ export const COMMAND_AT_ONCE = 20;
  * save a Mind as a file in a folder other than the Output location; read a folder's files
  * (`files`, by name, nothing outside it) and add them to the Library; or change things inside
  * IncarnaMind that need the User's say (`reason`). `items` are the first of them, each by the
- * name the User knew it by, with `renamed` when this Answer renamed it.
+ * name the User knew it by, with `renamed` when the Conversation's commands renamed it.
  */
 export type CommandAsk =
   | {

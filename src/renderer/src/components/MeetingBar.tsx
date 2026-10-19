@@ -9,6 +9,7 @@ import { useT } from "../i18n";
 import { helpKeysLabel, useMeetingHelp } from "../meetingHelp";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
+import { useGuideInPlace } from "../permissionGuide";
 import { useAppStore } from "../store";
 import { hideTranscript, showTranscript, useDocumentTab } from "../transcripts";
 import { CaptureDetailsToggle } from "./CaptureDetails";
@@ -192,6 +193,7 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
   const t = useT();
   const problem = useMeetings((state) => state.problems[meeting.id]);
   const gapsSeen = useMeetings((state) => state.gapsSeen[meeting.id] ?? 0);
+  const inPlace = useGuideInPlace();
   const { openSettings, resume, dismissGaps } = useMeetings.getState();
   const settings = (source: AudioSource): ProblemAction => ({
     label: t(isMacOS() ? "meetings.line.openSettings.mac" : "meetings.line.openSettings.other"),
@@ -275,6 +277,22 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
           {line.text}
         </ProblemLine>
       ))}
+      {inPlace && (
+        <ProblemLine
+          testId="meeting-line-guide"
+          role="status"
+          className="meeting-line"
+          action={{
+            label: t("move.dismiss"),
+            testId: "meeting-line-guide-close",
+            onClick: () => files.closePermissionGuide(),
+          }}
+        >
+          {inPlace.status === "granted"
+            ? t(`meetings.guide.done.${inPlace.source}`)
+            : t("meetings.guide.inline", { where: t(`meetings.guide.where.${inPlace.source}`) })}
+        </ProblemLine>
+      )}
     </>
   );
 }

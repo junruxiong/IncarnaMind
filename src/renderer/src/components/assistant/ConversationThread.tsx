@@ -225,7 +225,8 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         </>
       )}
       {onItsWay && (
-        // Its line shows at rest, as an Answer's being written does.
+        // Its line shows at rest, as an Answer's being written does, with room kept for its first
+        // line of text, so the Question above doesn't move when the Answer starts.
         <div
           data-testid="assistant-answer-on-its-way"
           data-status="streaming"
@@ -245,6 +246,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
               nextScope.filter((chip) => !chip.deleted),
             )}
           />
+          <div aria-hidden="true" className="assistant-answer-first-line" />
           <WritingLine
             // Stopped before it started: it says so at once, and stops as it starts.
             status={
