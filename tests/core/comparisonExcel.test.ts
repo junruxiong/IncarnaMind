@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { cellIndex } from "../../src/core/documents/formats/sheetLayout";
 import { readWorkbook } from "../../src/core/documents/formats/xlsx";
+import { translate } from "../../src/shared/i18n";
 import { compareReports, copyRows, REPORT_QUESTIONS as QUESTIONS } from "../helpers/comparisons";
 import { addAndProcess } from "../helpers/documents";
 import { part, unzip } from "../helpers/docx";
@@ -138,6 +139,6 @@ describe("A comparison table exported to Excel", () => {
     const { core, mind } = await compareReports();
     await expect(
       core.saveComparisonExport({ mindId: mind.id, tableId: "no-such-table" }),
-    ).rejects.toThrow("That comparison table isn't in this Mind.");
+    ).rejects.toThrow(translate("en", "error.comparison.notFound"));
   });
 });
