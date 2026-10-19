@@ -21,7 +21,8 @@ import {
  * A request to write from a Mind whose scope holds 2 of the User's 7 Documents says so above
  * its reply, with Use all (#1149): that writes the new Mind's text again from all 7 in its
  * place, which ⌘Z there takes back, and the Mind's scope stays. In English with Tab and Enter,
- * in Chinese from ⌘K. The model is the smoke tests' fake.
+ * in Chinese from ⌘K. A chart asked for is drawn again from the new table (#1091). The model
+ * is the smoke tests' fake.
  */
 
 let dataDir: string;
@@ -42,19 +43,28 @@ const tab = (window: Page, title: string) =>
     .locator('[data-testid="tab-group"][data-focused] [data-testid="mind-tab"]')
     .filter({ hasText: title });
 
-/** Seven leases, the first two in the Folder "Two leases", and the Mind "Lease notes" there. */
+/**
+ * Seven leases, the first two in the Folder "Two leases", and the Mind "Lease notes" there.
+ * `rent`: each says its unit's monthly rent, a figure to chart.
+ */
 async function addLeases(
   app: ElectronApplication,
   window: Page,
   language: "en" | "zh-CN",
-  { empty = false } = {},
+  { empty = false, rent = false } = {},
 ) {
   await setLanguage(window, language);
   await setWindowSize(app, window, 1600, 900);
   const paths = await Promise.all(
     LEASES.map(async (name, index) => {
       const path = join(sources, `${name}.md`);
-      await writeFile(path, `# ${name}\n\nThe lease rent for unit ${index + 1} is due monthly.\n`);
+      const unit = index + 1;
+      await writeFile(
+        path,
+        rent
+          ? `# ${name}\n\nThe monthly rent for unit ${unit} is €${(1000 + unit * 100).toLocaleString("en")}.\n`
+          : `# ${name}\n\nThe lease rent for unit ${unit} is due monthly.\n`,
+      );
       return path;
     }),
   );
@@ -176,4 +186,36 @@ test("in an empty Mind the request filled, Use all writes it again there, and �
 
   await expect(editor).toContainText("Written from Lease 1, Lease 2.");
   await expect(editor).not.toContainText("Lease 7");
+});
+
+test("a chart from 2 of the 7 leases, written again with Use all, is drawn from the new table, and ⌘Z brings back the table and chart of 2", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addLeases(app, window, "en", { rent: true });
+
+  const answer = await askInAssistant(window, "Make a bar chart of rent by lease");
+
+  const editor = window.getByTestId("mind-editor");
+  const chart = editor.getByTestId("chart");
+  const points = chart.getByTestId("chart-point");
+  const rows = editor.locator("table").first().locator("tr");
+  await expect(points).toHaveCount(2);
+  await expect(rows).toHaveCount(3);
+  await expect(chart.getByTestId("chart-changed")).toHaveCount(0);
+  await answer.getByTestId("answer-written-from-all").click();
+  const rewritten = assistantAnswers(window).last();
+  await expect(rewritten).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(chart).toHaveCount(1);
+  await expect.poll(() => points.count()).toBeGreaterThan(2);
+  await expect(rows).toHaveCount((await points.count()) + 1);
+  await expect(chart.getByTestId("chart-changed")).toHaveCount(0);
+
+  await editor.focus();
+  await window.keyboard.press("ControlOrMeta+z");
+
+  await expect(chart).toHaveCount(1);
+  await expect(points).toHaveCount(2);
+  await expect(rows).toHaveCount(3);
+  await expect(editor).toContainText("My notes on the leases.");
 });

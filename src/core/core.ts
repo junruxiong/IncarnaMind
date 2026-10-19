@@ -1141,7 +1141,10 @@ export function createCore(adapters: CoreAdapters): Core {
           pages: [],
         }),
       );
-    return [...unread, ...files];
+    // By name, the same in every interface language: the order they were added in can tie.
+    return [...unread, ...files].sort(
+      (a, b) => a.name.localeCompare(b.name, "en", { numeric: true }) || a.id.localeCompare(b.id),
+    );
   };
   // What checks and comparison tables search (#80): as Answers do, without IncarnaMind's own
   // files and the document being checked. Answers themselves search everything, as before.
