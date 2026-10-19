@@ -474,6 +474,21 @@ export function createTranscripts(options: TranscriptsOptions) {
     for (const echo of echoedBy(cue, state.cues)) state.cues.splice(state.cues.indexOf(echo), 1);
   }
 
+  // A stretch caught up after Stop can overlap what a cloud service or an engine before a restart
+  // already gave text for, up to where it stopped: the same side's same words at the same time
+  // are kept once. The other side's are left to echo removal.
+  function alreadySaid(state: State, cue: Cue): boolean {
+    const length = Math.max(1, cue.endMs - cue.startMs);
+    return state.cues.some((each) => {
+      const shared = Math.min(each.endMs, cue.endMs) - Math.max(each.startMs, cue.startMs);
+      return (
+        isTheirs(each.speaker) === isTheirs(cue.speaker) &&
+        shared > length / 2 &&
+        repeats(cue.text, [each.text])
+      );
+    });
+  }
+
   function shownPartial(state: State): MeetingTranscript["partial"] {
     const all = [...state.partials.values()];
     const theirs = all.filter((each) => isTheirs(each.speaker)).map((each) => each.text);
@@ -504,9 +519,8 @@ export function createTranscripts(options: TranscriptsOptions) {
     if (live && state.partials.get(segment.stream)?.id === segment.id) {
       state.partials.delete(segment.stream);
     }
-    if (segment.text) {
-      addCue(state, { startMs, endMs: baseMs + segment.endMs, text: segment.text, speaker });
-    }
+    const cue = { startMs, endMs: baseMs + segment.endMs, text: segment.text, speaker };
+    if (segment.text && (live || !alreadySaid(state, cue))) addCue(state, cue);
     if (segment.failed) {
       health.add(state.meetingId, {
         kind: "notTranscribed",
