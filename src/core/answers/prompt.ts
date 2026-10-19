@@ -701,6 +701,28 @@ export function loadedSkillText(
     .join("\n");
 }
 
+const NAMES_A_LANGUAGE =
+  /\blanguage\b|English|Chinese|Mandarin|Cantonese|Spanish|French|German|Japanese|Korean|Portuguese|Russian|Arabic|Italian|Hindi|语言|中文|英文|英语|日语|日文|法语|德语|西班牙语|韩语/i;
+
+/** What the built-in Skills say (#892), which is what the note says: no language of their own. */
+const NO_LANGUAGE_OF_ITS_OWN =
+  /\blanguage (?:that |which )?the Question is written in|\bthe Question's language|\blanguage of the (?:Question|report)\b|\b(?:another|other|that) languages?\b/gi;
+
+/** Whether a Skill's instructions name a language to write in other than the Question's, so its choice stands (#1273). */
+export function skillSetsLanguage(instructions: string): boolean {
+  return NAMES_A_LANGUAGE.test(instructions.replace(NO_LANGUAGE_OF_ITS_OWN, ""));
+}
+
+/**
+ * Said after a search's Passages while the Answer follows a Skill that names no language: the
+ * Skill and the Passages both come after the instructions' own language line, and whatever
+ * language they are in must not win over the Question's (#1273). `language` is the line
+ * `languageInstruction` made.
+ */
+export function skillLanguageNote(language: string): string {
+  return `The Skill's instructions don't change the language of your Answer. ${language.replace(/^- /, "")}`;
+}
+
 const SCRIPTS =
   "When a Skill's instructions say to run one of its scripts, call run_skill_script with the Skill's name, the script's path and its arguments. The User approves each run first and may deny it: then carry on without it, don't run it again, and say what wasn't done.";
 
