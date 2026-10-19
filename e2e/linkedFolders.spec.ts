@@ -449,7 +449,7 @@ test("after unlinking, a Citation of a Document in the folder still says its quo
   const removed = window.getByTestId("viewer-removed");
   await expect(removed).toContainText("Spring tides happen at new moon and at full moon.");
   await expect(removed).toContainText(
-    "This Document’s folder was unlinked. IncarnaMind kept the text your Citation quotes.",
+    "This Document’s Linked folder was unlinked. IncarnaMind kept the text your Citation quotes.",
   );
   await expect(removed).not.toContainText("deleted");
   await screenshot(window, "unlinked-citation");
@@ -582,7 +582,7 @@ test("a Linked folder that moved is located from its menu, and its Document and 
   await interceptOpenDialog(app, sources);
   await (await openLinkedFolderMenu(located)).getByTestId("linkedFolder.locate").click();
   await expect(window.getByRole("alert")).toHaveText(
-    /^That didn’t work: That folder doesn’t hold “Library 2026”'s files\. Choose the folder that does\./,
+    /^That didn’t work: That folder doesn’t hold “Library 2026”’s files\. Choose the folder that does\./,
   );
   await expect(located).toHaveAttribute("data-state", "idle");
   await expect(item).toHaveAttribute("data-file-status", "available");
@@ -689,7 +689,7 @@ test("linking a folder that overlaps a Linked folder says what happens: they mer
   const dialog = window.getByTestId("link-folder-dialog");
   await expect(dialog.getByRole("heading")).toHaveText("Already in IncarnaMind");
   await expect(dialog.getByTestId("link-folder-inside")).toContainText(
-    "This folder is inside the Linked “2026”",
+    "This folder is inside the Linked folder “2026”",
   );
   await expect(dialog.getByTestId("link-folder-confirm")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Close" }).click();

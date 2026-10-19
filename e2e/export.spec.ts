@@ -624,7 +624,7 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   const counts = library.getByTestId("folder-counts-own-files");
   await expect(counts).toBeChecked();
   await expect(counts).toBeDisabled();
-  await expect(library).toContainText("Counted in every folder");
+  await expect(library).toContainText("Counted in every Folder");
 
   // On again: a new folder leaves them out unless it says otherwise; in Chinese too.
   await window.evaluate(() =>

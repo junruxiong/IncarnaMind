@@ -339,7 +339,7 @@ test("Empty states: nothing to check against, then no claims found", async () =>
 test("a provider failure while finding the claims is worded like an Answer's, with its next step (#764)", async () => {
   const running = await launch();
   const { app, window } = running;
-  // The scripted model fails as one its provider doesn't know.
+  // The scripted model fails as one its provider doesn’t know.
   await useLocalChatModel(window, "ghost-claims-not-found");
   await readyToVerify(running);
   await setWindowSize(app, window, 1440, 900);
@@ -348,7 +348,7 @@ test("a provider failure while finding the claims is worded like an Answer's, wi
 
   const failure = window.getByTestId("answer-error");
   await expect(failure).toHaveAttribute("data-error-kind", "model");
-  await expect(failure).toContainText("doesn't know");
+  await expect(failure).toContainText("doesn’t know");
   await expect(failure.getByTestId("answer-error-action")).toBeVisible();
   await expect(window.getByTestId("verify-problem")).toHaveCount(0);
   await app.close();
