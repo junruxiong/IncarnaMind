@@ -2,7 +2,6 @@ import { create } from "zustand";
 import type {
   CheckRecordFormat,
   ExportFormat,
-  ExportMindOptions,
   ExportPreferences,
   SavedComparisonExport,
   SavedExport,
@@ -10,6 +9,7 @@ import type {
   SentenceChecksExported,
   WordExportReport,
 } from "../../core/api";
+import { optionsFor } from "../../shared/exportOptions";
 import type { MessageKey } from "../../shared/i18n";
 import { core } from "./core";
 import { errorMessage } from "./errors";
@@ -48,32 +48,6 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
 
 export const exportPreferences = (): ExportPreferences =>
   useAppStore.getState().settings?.user.exportOptions ?? DEFAULT_PREFERENCES;
-
-/** Whether a format has the Include Questions option: Markdown keeps them, and a source pack has none. */
-export const hasQuestionsOption = (
-  format: ExportFormat,
-): format is Exclude<ExportFormat, "markdown" | "source-pack"> =>
-  format !== "markdown" && format !== "source-pack";
-
-/** What an export of `format` asks the core for. */
-export const optionsFor = (
-  format: ExportFormat,
-  preferences: ExportPreferences,
-): ExportMindOptions => {
-  if (format === "docx") return { format, ...preferences.docx };
-  if (format === "source-pack") return { format };
-  if (format === "share-page") {
-    return {
-      format,
-      ...preferences["share-page"],
-      theirChanges: preferences.theirChanges ?? "shown",
-    };
-  }
-  const theirChanges = preferences.theirChanges ?? "shown";
-  return hasQuestionsOption(format)
-    ? { format, includeQuestions: preferences[format].includeQuestions, theirChanges }
-    : { format, theirChanges };
-};
 
 /** A comparison table saved as an Excel workbook (#132). */
 export const COMPARISON_EXCEL = "comparison-xlsx";

@@ -347,6 +347,7 @@ test("empty states from the + menu, and the monthly cap: every cell left says it
   // No Documents: the sheet says so, and nothing can be made.
   await newMind(window);
   await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
   await pointAndClick(window, window.getByTestId("plus-compare-documents"));
   const sheet = window.getByTestId("compare-sheet");
   await expect(sheet.getByTestId("compare-sheet-no-documents")).toContainText("这里还没有文档。");
@@ -357,6 +358,7 @@ test("empty states from the + menu, and the monthly cap: every cell left says it
   // From the + menu once there are Documents: no Question yet, so it says what's missing.
   await addSuppliers(window);
   await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
   await pointAndClick(window, window.getByTestId("plus-compare-documents"));
   await expect(sheet).toBeVisible();
   await expect(sheet.getByTestId("compare-sheet-note")).toHaveText("每列一个问题，先添加一个。");

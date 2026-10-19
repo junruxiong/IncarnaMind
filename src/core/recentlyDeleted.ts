@@ -296,6 +296,7 @@ export function createRecentlyDeleted(options: {
         const restored = {
           minds: false,
           mindIds: [] as string[],
+          mindsDeletedAt: [] as { id: string; deletedAt: string }[],
           conversations: false,
           documents: [] as string[],
           folders: false,
@@ -323,6 +324,7 @@ export function createRecentlyDeleted(options: {
               content.restore(ref.id, row.deleted_at);
               restored.minds = true;
               restored.mindIds.push(ref.id);
+              restored.mindsDeletedAt.push({ id: ref.id, deletedAt: row.deleted_at });
             } else if (kind === "conversation") {
               conversations.restore(ref.id);
               restored.conversations = true;
@@ -354,6 +356,7 @@ export function createRecentlyDeleted(options: {
         for (const id of tags.revert(links)) restored.tagged.add(id);
         return restored;
       });
+      for (const { id, deletedAt } of done.mindsDeletedAt) content.restored(id, deletedAt);
       if (done.minds) options.mindsChanged();
       if (done.mindIds.length > 0) options.mindsRestored(done.mindIds);
       if (done.conversations) options.conversationsChanged();

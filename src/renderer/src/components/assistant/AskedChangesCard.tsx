@@ -7,7 +7,7 @@ import {
   useWrittenOnTop,
 } from "../../askedChanges";
 import type { ChangedMind } from "../../changedMinds";
-import { changeFact, leftText } from "../../changeFacts";
+import { changeFact, keptText, leftText } from "../../changeFacts";
 import { useT } from "../../i18n";
 import { showChanges, type Waiting } from "../../mindChanges";
 import { PencilLineIcon } from "../lineIcons";
@@ -96,6 +96,7 @@ function AskedRow({
     outcome === "held" || (typeof waiting === "number" && waiting > 0)
       ? leftText(t, row, waiting)
       : null;
+  const kept = keptText(t, row);
   return (
     <div className="mind-changes-head">
       <PencilLineIcon aria-hidden="true" className="mind-changes-icon" />
@@ -107,6 +108,12 @@ function AskedRow({
           <span data-testid="mind-changes-left" className="mind-changes-count">
             {" "}
             {left}
+          </span>
+        )}
+        {kept && (
+          <span data-testid="mind-changes-kept" className="mind-changes-count">
+            {" "}
+            {kept}
           </span>
         )}
         {outcome === "applied" && (
@@ -194,7 +201,7 @@ function AppliedActions({
   );
 }
 
-const Dot = () => (
+export const Dot = () => (
   <span aria-hidden="true" className="mind-changes-dot">
     {" · "}
   </span>

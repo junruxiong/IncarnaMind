@@ -183,8 +183,15 @@ describe("a question about deleting", () => {
   // Deleting a Mind, Chat, Document, Folder or Tag asks nothing: it goes to Recently deleted,
   // with Undo. Only what can't be taken back asks, and says what is lost: a command marked
   // `reversible: { confirm }`, whose text and question share a key prefix
-  // (`deleted.confirm.*`, `linkedFolders.unlink.*`).
+  // (`deleted.confirm.*`, `linkedFolders.unlink.*`). The one exception is a delete the
+  // assistant starts, which always waits for the User (DESIGN.md, Approval; #1274).
   const KNOWN: Record<string, string> = {};
+  const ASSISTANT_DELETES = [
+    "commands.ask.change.document.delete",
+    "commands.ask.change.document.delete.one",
+    "commands.ask.change.mind.delete",
+    "commands.ask.change.mind.delete.one",
+  ];
   const ASKS = /^(Delete|Remove|Unlink|Empty|Erase)\b[^?]*\?/;
 
   function questions(
@@ -198,7 +205,7 @@ describe("a question about deleting", () => {
         ([key, text]) => ASKS.test(text) && !prefixes.some((prefix) => key.startsWith(prefix)),
       )
       .map(([key]) => key);
-    return violations(found, [], known);
+    return violations(found, ASSISTANT_DELETES, known);
   }
 
   const asking = () =>

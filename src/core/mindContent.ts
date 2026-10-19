@@ -444,12 +444,22 @@ export function createMindContent(
       if (!mind.unsaved || store(mindId, mind, [])) unload(mindId);
     },
 
-    /** Brings back the content `remove` marked deleted at `deletedAt`, what still waits included. */
+    /**
+     * Brings back the content `remove` marked deleted at `deletedAt`, in the transaction that
+     * restores the Mind; `restored` follows once that commits.
+     */
     restore(mindId: string, deletedAt: string): void {
       db.run(
         "UPDATE mind_updates SET deleted_at = NULL, updated_at = ? WHERE mind_id = ? AND deleted_at = ?",
         [now(), mindId, deletedAt],
       );
+    },
+
+    /**
+     * The Mind's restore committed: what still waits is live again, and the unsaved-changes
+     * notice hears of it. Only now: had the restore rolled back, the Mind is still deleted.
+     */
+    restored(mindId: string, deletedAt: string): void {
       const mind = loaded.get(mindId);
       if (mind?.deletedAt !== deletedAt) return;
       mind.deletedAt = null;

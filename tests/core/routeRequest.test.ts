@@ -873,6 +873,44 @@ describe("Routing everyday requests", () => {
     expect(routeRequest(request, WITH_TEXT)).toMatchObject({ kind: "write", newMind: true });
   });
 
+  // protects=a request for a chart, in English or Chinese, writes into the Mind in focus with the kind it names, the one named last when two are, or none; fails_when=it reads as a Question, goes to a new Mind, or gets the wrong kind; no_claim=none beyond protects.
+  test.each([
+    ["make a bar chart of revenue by quarter", "bar"],
+    ["Make a chart of revenue by quarter as a line chart", "line"],
+    ["Draw a pie chart of costs", "pie"],
+    ["make a scatter chart of rent against size", "scatter"],
+    ["plot revenue by quarter", null],
+    ["画一个各季度收入的柱状图", "bar"],
+    ["画一个各季度收入的折线图", "line"],
+    ["把收入做成饼图", "pie"],
+    ["生成一个图表", null],
+  ] as const)("%s asks for a chart in the Mind in focus, of kind %s", (request, kind) => {
+    expect(routeRequest(request, FIRST)).toEqual({
+      kind: "write",
+      newMind: false,
+      chart: { kind },
+    });
+  });
+
+  // protects=a chart of a table already in the Mind ("chart this table") is read as such, so the table isn't written again (#1091 review); fails_when=it reads as a new table to write; no_claim=none beyond protects.
+  test.each([
+    ["chart this table", null],
+    ["Make a bar chart of this table", "bar"],
+    ["把这个表格画成柱状图", "bar"],
+  ] as const)("%s charts the table there, of kind %s", (request, kind) => {
+    expect(routeRequest(request, FIRST).chart).toEqual({ kind, existing: true });
+  });
+
+  // protects=a Question about a chart, or a change to one, isn't a request for a new chart (#1091); fails_when=one of them routes as a chart; no_claim=none beyond protects.
+  test.each([
+    "what does the chart show?",
+    "can you make a bar chart?",
+    "make the chart a line chart",
+    "这个图表说明了什么？",
+  ])("%s asks for no chart", (request) => {
+    expect(routeRequest(request, FIRST).chart).toBeUndefined();
+  });
+
   // protects=adding the last Answer to my notes writes it into the Mind in focus, not a new one; fails_when=it makes a new Mind; no_claim=none beyond protects.
   test.each(["add it to my notes", "把这个加到我的笔记里"])(
     "%s writes into the Mind in focus",

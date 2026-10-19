@@ -9,6 +9,7 @@ import {
   dismissChatSetup,
   launchApp,
   openDocumentMenu,
+  openManageTags,
   pointAndClick,
   removeDataFolder,
   setWindowSize,
@@ -135,9 +136,8 @@ test("deleting a Mind, a Document, a Folder and a Tag asks nothing and lands in 
   await screenshot(undoLine(window), "undo-line-en");
   await noQuestion(window);
 
-  // A Tag, in Manage Tags, from the sidebar's Tags menu.
-  await pointAndClick(window, window.getByTestId("tag-filter-menu"));
-  await pointAndClick(window, window.getByTestId("manage-tags"));
+  // A Tag, in Manage Tags, from ⌘K.
+  await openManageTags(window);
   const slides = window.locator('[data-testid="tag-row"]', { hasText: "Vendor" });
   await pointAndClick(window, slides.getByTestId("delete-tag"));
   await expect(slides).toHaveCount(0);
