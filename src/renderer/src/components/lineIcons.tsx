@@ -33,6 +33,14 @@ export function PlusLineIcon(props: IconProps) {
   );
 }
 
+export function HomeLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H5.5A1.5 1.5 0 0 1 4 19z" />
+    </LineIcon>
+  );
+}
+
 /** Search: a magnifier. */
 export function SearchLineIcon(props: IconProps) {
   return (

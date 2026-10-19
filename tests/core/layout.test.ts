@@ -28,7 +28,9 @@ function describeLayout(layout: WindowLayout, names: Record<string, string>): st
         const name =
           tab.item.kind === "library"
             ? "Library"
-            : (names[tab.item.kind === "mind" ? tab.item.mindId : tab.item.documentId] ?? "?");
+            : tab.item.kind === "home"
+              ? "Home"
+              : (names[tab.item.kind === "mind" ? tab.item.mindId : tab.item.documentId] ?? "?");
         return `${tab.id === group.activeTabId ? "*" : ""}${tab.pinned ? "^" : ""}${tab.preview ? "~" : ""}${name}`;
       })
       .join(" "),

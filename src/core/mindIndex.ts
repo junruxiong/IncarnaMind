@@ -304,6 +304,25 @@ export function createMindIndex(options: {
       }));
     },
 
+    /** Each Mind's first few lines of text, top to bottom, as typed a moment ago. */
+    firstLines(count: number): Map<string, string[]> {
+      readChanged();
+      const lines = new Map<string, string[]>();
+      const rows = db.all<{ mind_id: string; text: string }>(
+        `SELECT b.mind_id, b.text FROM mind_blocks b JOIN minds m ON m.id = b.mind_id
+         WHERE b.deleted_at IS NULL AND m.deleted_at IS NULL AND trim(b.text) <> ''
+         ORDER BY b.mind_id, b.position`,
+      );
+      for (const row of rows) {
+        const kept = lines.get(row.mind_id) ?? [];
+        if (kept.length >= count) continue;
+        const line = row.text.split("\n").find((each) => each.trim() !== "");
+        if (line) kept.push(line.trim());
+        lines.set(row.mind_id, kept);
+      }
+      return lines;
+    },
+
     /** Reads the Minds just stored to, and stops. Run before the database closes. */
     close(): void {
       if (closed) return;

@@ -287,3 +287,37 @@ describe("searching the words in Documents", () => {
     expect(await found()).toEqual([logDoc?.id, rotaDoc?.id].sort());
   });
 });
+
+describe("each Mind's line under its name, for Home's Recent", () => {
+  test("is the first line that isn't its name, as typed a moment ago; a Mind with none is left out", async () => {
+    const core = startCore(await createTempDataFolder());
+    const [titled] = await mindWith(core, [
+      heading(1, "Supplier review"),
+      note("Aldermoor Freight runs the cold chain."),
+      note("Termination needs ninety days' notice."),
+    ]);
+    const [untitled, client] = await mindWith(core, [
+      note("Notes from the stand-up about the Leeds account."),
+      note("Hiring plan next week."),
+    ]);
+    const [empty] = await mindWith(core, []);
+
+    const snippets = await core.listMindSnippets();
+    expect(snippets).toEqual(
+      expect.arrayContaining([
+        { mindId: titled, text: "Aldermoor Freight runs the cold chain." },
+        { mindId: untitled, text: "Hiring plan next week." },
+      ]),
+    );
+    expect(snippets.map((each) => each.mindId)).not.toContain(empty);
+
+    writeMind(client, [
+      note("Notes from the stand-up about the Leeds account."),
+      note("下周讨论招聘计划。"),
+    ]);
+    await client.settled();
+    expect(await core.listMindSnippets()).toEqual(
+      expect.arrayContaining([{ mindId: untitled, text: "下周讨论招聘计划。" }]),
+    );
+  });
+});

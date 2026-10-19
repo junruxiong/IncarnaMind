@@ -1,0 +1,161 @@
+import type { DocumentKind, LibraryGroup } from "../../../../core/api";
+import { displayName } from "../../../../shared/documentNames";
+import { mindName } from "../../../../shared/naming";
+import { commands } from "../../commands/registry";
+import { timeAgo } from "../../dates";
+import { useFolderDrop } from "../../folderDrag";
+import { useMinuteClock } from "../../home";
+import { useLanguage, useT } from "../../i18n";
+import { FORMAT_LABELS } from "../../libraryFilters";
+import { useAppStore } from "../../store";
+import { useRename } from "../../useRename";
+import { InlineName } from "../InlineName";
+import { DocumentLineIcon, FolderLineIcon, MindLineIcon, PlusLineIcon } from "../lineIcons";
+import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
+import { dropIntoClass } from "../sidebarRows";
+
+const cardClass =
+  "group relative flex min-h-[132px] min-w-0 flex-col gap-1 rounded-[10px] bg-sheet px-3.5 py-3 text-left shadow-[inset_0_0_0_1px_var(--color-rule)] hover:shadow-[inset_0_0_0_1px_var(--color-rule-strong)]";
+
+export function FolderCards() {
+  const t = useT();
+  const groups = useAppStore((state) => state.library?.groups) ?? [];
+  if (groups.length === 0) return null;
+  return (
+    <section data-testid="home-folders" className="mb-7">
+      <h2 className="mb-1.5 text-label font-semibold text-ink-meta">{t("library.groups")}</h2>
+      <div className="grid grid-cols-3 gap-3 @max-[760px]/home:grid-cols-2 @max-[480px]/home:grid-cols-1">
+        {groups.map((folder) => (
+          <FolderCard key={folder.id} folder={folder} />
+        ))}
+        <button
+          type="button"
+          data-testid="home-new-folder"
+          onClick={() => void commands.run("folder.new").catch(useAppStore.getState().reportError)}
+          className="flex min-h-[132px] items-center justify-center gap-2 rounded-[10px] border border-dashed border-rule-strong text-ui text-ink-meta hover:bg-frame hover:text-ink"
+        >
+          <PlusLineIcon className="size-4" />
+          {t("menu.newFolder")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+interface Item {
+  id: string;
+  name: string;
+  at: string;
+  kind: DocumentKind | null;
+}
+
+function FolderCard({ folder }: { folder: LibraryGroup }) {
+  const t = useT();
+  const language = useLanguage();
+  const now = useMinuteClock();
+  const minds = useAppStore((state) => state.minds);
+  const documents = useAppStore((state) => state.documents);
+  const assignments = useAppStore((state) => state.library?.assignments);
+  const object = { kind: "folder", id: folder.id } as const;
+  const objectMenu = useObjectMenu(object);
+  const rename = useRename<HTMLButtonElement>(`home-folder:${folder.id}`);
+  const drop = useFolderDrop(folder.id);
+  const filed = new Set(
+    (assignments ?? []).filter((each) => each.groupId === folder.id).map((each) => each.documentId),
+  );
+  const ownMinds = minds.filter((mind) => mind.folderId === folder.id);
+  const ownDocuments = documents.filter((each) => filed.has(each.id));
+  const items: Item[] = [
+    ...ownMinds.map((mind) => ({
+      id: mind.id,
+      name: mindName(mind) || t("mind.untitled"),
+      at: mind.updatedAt,
+      kind: null,
+    })),
+    ...ownDocuments.map((each) => ({
+      id: each.id,
+      name: displayName(each),
+      at: each.createdAt,
+      kind: each.kind,
+    })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  const kinds = [...new Set(ownDocuments.map((each) => each.kind))].slice(0, 5);
+  const latest = items[0]?.at;
+
+  return (
+    <div
+      data-testid="home-folder-card"
+      data-folder-id={folder.id}
+      data-drop-target={drop.active ? "true" : undefined}
+      {...(rename.renaming ? {} : objectMenu.rowProps)}
+      {...drop.handlers}
+      title={folder.description || undefined}
+      className={`${cardClass} ${drop.active ? dropIntoClass : ""}`}
+    >
+      <div className="flex min-w-0 items-center gap-2 font-semibold text-ink">
+        <FolderLineIcon className="size-4 shrink-0 text-ink-meta" />
+        {rename.renaming ? (
+          <InlineName
+            value={folder.name}
+            label={t("folder.renameLabel", { name: folder.name })}
+            {...rename.field((name) => useAppStore.getState().renameFolder(folder.id, name))}
+          />
+        ) : (
+          <button
+            type="button"
+            ref={rename.nameProps.ref}
+            data-row-main
+            data-testid="home-folder-open"
+            onClick={() => useAppStore.getState().openLibrary(folder.id)}
+            onKeyDown={rename.nameProps.onKeyDown}
+            // The whole card is what a click on it opens.
+            className="min-w-0 flex-1 truncate rounded-sm text-left after:absolute after:inset-0 after:rounded-[10px]"
+          >
+            {folder.name}
+          </button>
+        )}
+        {!rename.renaming && (
+          <div className="relative shrink-0 opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 has-[[aria-expanded=true]]:opacity-100">
+            <ObjectMenu
+              target={object}
+              label={t("folder.more", { name: folder.name })}
+              tabIndex={-1}
+              here={{ "folder.rename": rename.start }}
+            />
+          </div>
+        )}
+      </div>
+      <p data-testid="home-folder-counts" className="mb-1 text-label text-ink-meta">
+        {ownMinds.length === 1 ? t("home.minds.one") : t("home.minds", { count: ownMinds.length })}
+        {" · "}
+        {ownDocuments.length === 1
+          ? t("library.count.one")
+          : t("library.count", { count: ownDocuments.length })}
+      </p>
+      {items.slice(0, 2).map((item) => (
+        <p
+          key={item.id}
+          data-testid="home-folder-item"
+          className="flex min-w-0 items-center gap-1.5 text-[13px] text-ink-secondary"
+        >
+          {item.kind ? (
+            <DocumentLineIcon kind={item.kind} className="size-3.5 shrink-0 text-ink-meta" />
+          ) : (
+            <MindLineIcon className="size-3.5 shrink-0 text-ink-meta" />
+          )}
+          <span className="truncate">{item.name}</span>
+        </p>
+      ))}
+      <p className="mt-auto flex items-center gap-1 pt-1.5 text-label text-ink-meta">
+        <span data-testid="home-folder-active" className="min-w-0 flex-1 truncate">
+          {latest ? t("home.active", { time: timeAgo(new Date(latest), now, language, t) }) : ""}
+        </span>
+        {kinds.map((kind) => (
+          <span key={kind} title={t(FORMAT_LABELS[kind])}>
+            <DocumentLineIcon kind={kind} className="size-3.5" />
+          </span>
+        ))}
+      </p>
+    </div>
+  );
+}

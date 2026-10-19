@@ -51,6 +51,7 @@ import { errorMessage } from "./errors";
 import {
   createLayoutSlice,
   currentMindIdOf,
+  focusedGroupOf,
   followLayout,
   groupsMerged,
   type LayoutSlice,
@@ -179,6 +180,11 @@ export interface AppState extends LayoutSlice {
    * its tab where it is open, else a new tab in the focused group, or to the side.
    */
   openLibrary(filter?: string, options?: { side?: boolean }): void;
+  /**
+   * Shows Home (one tab per window): its tab where it is open, else a new one
+   * in the focused group, or first in it with `first`, as at a launch.
+   */
+  openHome(options?: { side?: boolean; first?: boolean }): Promise<void>;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
   /** The first-run example Mind and its Documents (onboarding). Null until loaded. */
@@ -750,6 +756,19 @@ export const useAppStore = create<AppState>()((set, get) => {
           : {}),
       });
     },
+    openHome: async (options) => {
+      const { layout } = get();
+      const group = layout ? focusedGroupOf(layout) : null;
+      await get().changeLayout({
+        type: "open",
+        item: { kind: "home" },
+        where: options?.side
+          ? { in: "side" }
+          : options?.first && group?.tabs[0]
+            ? { in: "group", before: group.tabs[0].id }
+            : { in: "place" },
+      });
+    },
     openLibrary: (filter = "all", options) => {
       set({ libraryFilter: filter });
       void get().changeLayout({
@@ -836,6 +855,13 @@ export const useAppStore = create<AppState>()((set, get) => {
           askedOwnAtLaunch: settings.device.gettingStarted.askedOwn,
           status: { kind: "ready" },
         });
+        // Minds made before this setting existed count as an earlier launch.
+        if (!offered?.mindId && (settings.device.openedBefore || minds.length > 0)) {
+          await get().openHome({ first: true });
+        }
+        if (!settings.device.openedBefore) {
+          void get().updateSettings({ device: { openedBefore: true } });
+        }
         await get().refreshLibrary();
         tickIndexed(connectors.length);
       } catch (error) {
@@ -1534,7 +1560,7 @@ export const allExamples = (state: Pick<AppState, "examples" | "otherExamples">)
 const madeExamples = (state: Pick<AppState, "examples" | "otherExamples">): Examples[] =>
   allExamples(state).filter(isMade);
 
-const exampleMindIds = (state: Pick<AppState, "examples" | "otherExamples">): string[] =>
+export const exampleMindIds = (state: Pick<AppState, "examples" | "otherExamples">): string[] =>
   allExamples(state).flatMap((each) => (each.mindId ? [each.mindId] : []));
 
 /** Ticks "Add your Documents" once there are Documents of the User's own, or Connectors. */

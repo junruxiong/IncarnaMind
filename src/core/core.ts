@@ -3028,6 +3028,17 @@ export function createCore(adapters: CoreAdapters): Core {
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
     searchMinds: async (query) => mindIndex.search(query),
+    listMindSnippets: async () => {
+      const lines = mindIndex.firstLines(2);
+      return minds.list().flatMap((mind) => {
+        // A long first line is the name cut short: the line under it is the one to show.
+        const name = mindName(mind).replace(/[\s…]+$/u, "");
+        const text = (lines.get(mind.id) ?? []).find(
+          (line) => name === "" || !line.startsWith(name),
+        );
+        return text ? [{ mindId: mind.id, text }] : [];
+      });
+    },
     searchDocumentText: async (query, options) => documents.searchText(query, options),
     renameConversation: async (conversationId, title) => {
       const conversation = conversations.rename(conversationId, title);

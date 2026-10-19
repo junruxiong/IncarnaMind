@@ -60,6 +60,7 @@ describe("Settings", () => {
         sidebarHidden: false,
         chatSetupDismissed: false,
         sandboxNoticeDismissed: false,
+        openedBefore: false,
         gettingStarted: {
           started: false,
           citationChecked: false,
@@ -165,6 +166,7 @@ describe("Settings", () => {
       sidebarHidden: false,
       chatSetupDismissed: false,
       sandboxNoticeDismissed: false,
+      openedBefore: false,
       gettingStarted: {
         started: false,
         citationChecked: false,
@@ -239,6 +241,7 @@ describe("Settings", () => {
       sidebarHidden: true,
       chatSetupDismissed: true,
       sandboxNoticeDismissed: true,
+      openedBefore: true,
       gettingStarted: {
         started: true,
         citationChecked: true,

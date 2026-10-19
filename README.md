@@ -61,6 +61,8 @@ Windows releases will be signed through the SignPath Foundation's free signing f
 
 **Write and ask in one place.** A Mind is a notebook for one topic. Beside it sits the assistant: ask it about the Mind you're in or your files, and the Answer comes back there, in a conversation, with its citations checked. Your draft stays as you wrote it until you pick **Add to note**, which puts the Answer at your cursor as text you can edit, citations and all.
 
+**Start from Home.** From the second launch on, IncarnaMind opens on Home: your latest Minds with their first line, your Folders as cards showing what changed in each, and what needs you, such as Documents still being read. **New Mind** starts a page in one click, and the ▾ beside it holds the other ways to start. The first launch opens a checked example instead.
+
 **Check every answer.** Answers cite where each claim came from and carry the quote, which is checked against that place: a green check if it's there, an amber mark if it isn't, and a click opens the page with the quote highlighted. Unfold an Answer's steps to see what it searched and which sources it used.
 
 **Take notes in a meeting.** Start recording and a live transcript runs beside your Mind, transcribed on this computer. When the call ends, save it as a Document, and your notes can cite what was said. During the call, a small panel can suggest what to say and answer their question from your Documents.
