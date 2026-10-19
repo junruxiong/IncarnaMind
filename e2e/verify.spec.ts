@@ -84,6 +84,7 @@ async function readyToVerify({ app, window }: Awaited<ReturnType<typeof launch>>
 /** "Verify a document…" from the + menu. */
 async function verifyFromPlusMenu(window: Page, label: string) {
   await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
   const item = window.getByTestId("plus-verify-document");
   await expect(item).toHaveText(label);
   await pointAndClick(window, item);

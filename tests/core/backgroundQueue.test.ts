@@ -490,7 +490,7 @@ describe("Background work gives way to Answers", { timeout: 30_000 }, () => {
 
   test("a Meeting starting stops a tagging call to a local model, which runs again once it stops", async () => {
     const { core, fake } = await setUp(LOCAL);
-    await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+    await core.updateSettings({ device: { meetingNoticeAccepted: true } });
     fake.tagging.hold();
     const document = await addDocument(core);
     await fake.tagging.requested();

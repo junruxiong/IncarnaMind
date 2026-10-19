@@ -9,7 +9,6 @@ import {
   removeDataFolder,
   setLanguage,
   startRecording,
-  turnOnMeetings,
 } from "./app";
 
 /*
@@ -52,7 +51,6 @@ const settingsOpened = (app: ElectronApplication) =>
 
 async function recordWithSoundDenied(app: ElectronApplication, window: Page) {
   await dismissChatSetup(window);
-  await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   await expect(window.getByTestId("meeting-line-system")).toBeVisible();
   return { app, bar };
@@ -120,7 +118,6 @@ test("the microphone: the guide names it, ✕ closes it, and so does Esc once it
     permissionGuide: "beside",
   });
   await dismissChatSetup(window);
-  await turnOnMeetings(window);
   await startRecording(window, await recordMeeting(window), { notice: true });
   await pointAndClick(window, window.getByTestId("meeting-settings-microphone"));
   await expect.poll(() => settingsOpened(app)).toEqual(["microphone"]);

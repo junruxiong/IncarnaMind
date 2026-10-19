@@ -9,21 +9,17 @@ import {
   rowTitleClass,
   ruledListClass,
   ruledRow,
-  ruledRowClass,
   sectionTitleClass,
 } from "./ui";
 
 /**
- * Settings → Meetings → Recording: the switch that turns recording on (it is
- * new, and off until transcripts and speakers come), and what is recorded;
- * then help during the call.
+ * Settings → Meetings → Recording: what is recorded; then help during the call.
  */
 export function MeetingsSettings() {
   const t = useT();
   const device = useAppStore((state) => state.settings?.device);
   const canRecord = useAppStore((state) => state.settings?.meetingAudio);
   const updateSettings = useAppStore((state) => state.updateSettings);
-  const enabledId = useId();
   const whatId = useId();
   const routeId = useId();
   if (!device || !canRecord) return null;
@@ -35,34 +31,6 @@ export function MeetingsSettings() {
       <section data-testid="meetings-settings" className="flex flex-col">
         <h4 className={`mb-2 ${sectionTitleClass}`}>{t("meetings.settings.title")}</h4>
         <div className={ruledListClass}>
-          <div className={ruledRowClass}>
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <label htmlFor={enabledId} className={rowTitleClass}>
-                {t("meetings.settings.enabled")}
-              </label>
-              <p id={`${enabledId}-description`} className={rowTextClass}>
-                {t(
-                  canRecord === "none"
-                    ? "meetings.settings.cantRecord"
-                    : "meetings.settings.enabledBody",
-                )}
-              </p>
-            </div>
-            <input
-              id={enabledId}
-              type="checkbox"
-              role="switch"
-              aria-checked={device.meetingsEnabled}
-              aria-describedby={`${enabledId}-description`}
-              data-testid="meetings-enabled"
-              checked={device.meetingsEnabled}
-              disabled={canRecord === "none"}
-              onChange={(event) =>
-                void updateSettings({ device: { meetingsEnabled: event.target.checked } })
-              }
-              className="switch"
-            />
-          </div>
           <div className={ruledRow("center")}>
             <div className="flex min-w-0 flex-col gap-0.5">
               <label htmlFor={whatId} className={rowTitleClass}>
@@ -70,11 +38,13 @@ export function MeetingsSettings() {
               </label>
               <p className={rowTextClass}>
                 {t(
-                  microphoneOnly
-                    ? "meetings.line.systemUnavailable"
-                    : both
-                      ? "meetings.settings.whatBoth"
-                      : "meetings.settings.whatMe",
+                  canRecord === "none"
+                    ? "meetings.settings.cantRecord"
+                    : microphoneOnly
+                      ? "meetings.line.systemUnavailable"
+                      : both
+                        ? "meetings.settings.whatBoth"
+                        : "meetings.settings.whatMe",
                 )}
               </p>
             </div>
