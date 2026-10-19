@@ -184,6 +184,40 @@ describe("an Answer's steps", () => {
     expect(rows[2]).toEqual({ kind: "failed-search", call: failed });
   });
 
+  // protects=a question the assistant asked has a row while it waits and once answered (#1374); fails_when=a refused question, or one left open when the Answer stopped, says it waits; no_claim=the row's words.
+  test("a question has a row while it waits and once answered, none when it was refused or left open", () => {
+    const question = {
+      question: "Which Documents?",
+      detail: null,
+      options: [
+        { label: "A", description: "", recommended: true, preselected: true },
+        { label: "B", description: "", recommended: false, preselected: false },
+      ],
+      multiple: false,
+      other: false,
+    };
+    const ask = (id: string, extra: Partial<AnswerToolCall>): AnswerToolCall => ({
+      id,
+      tool: "ask_user",
+      source: "asks",
+      input: {},
+      status: "done",
+      resultCount: null,
+      ...extra,
+    });
+    const waiting = ask("q1", { status: "running", asked: { ...question, answer: null } });
+    const answered = ask("q2", {
+      asked: { ...question, answer: { skipped: false, chosen: ["A"], wrote: null } },
+    });
+    const refused = ask("q3", { status: "failed" });
+    const leftOpen = ask("q4", { status: "failed", asked: { ...question, answer: null } });
+    const rows = stepRows(input({ toolCalls: [waiting, answered, refused, leftOpen] }));
+    expect(rows.filter((row) => row.kind === "call")).toEqual([
+      { kind: "call", call: waiting },
+      { kind: "call", call: answered },
+    ]);
+  });
+
   // protects=reasoning shows as "{model} thought for Ns" with its summary, and a model without one gets "Answered by" with no summary; fails_when=a summary shows for a model that gave none, or the times aren't whole seconds of at least 1; no_claim=none beyond protects.
   test("no reasoning: answered by the model; with a summary, thought for whole seconds, at least 1", () => {
     expect(stepRows(input())[0]).toEqual({

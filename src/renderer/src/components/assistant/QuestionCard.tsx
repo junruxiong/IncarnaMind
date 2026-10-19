@@ -31,8 +31,8 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
   const titleId = useId();
   const keys = keysLabel(CONTINUE_KEYS, isMacOS());
 
-  const go = (chosen: ReadonlySet<number>) => {
-    const words = wrote.trim();
+  // In a single choice a row goes on alone, and words typed in Other… untick the row: never both.
+  const go = (chosen: ReadonlySet<number>, words: string) => {
     if (chosen.size === 0 && !words) return;
     answer(request.requestId, {
       skipped: false,
@@ -42,7 +42,7 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
   };
   const pick = (index: number) => {
     if (!multiple) {
-      go(new Set([index]));
+      go(new Set([index]), "");
       return;
     }
     const next = new Set(ticked);
@@ -97,7 +97,7 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
       ((isCommand(event) && (multiple || other)) || (multiple && onRow && !isCommand(event)))
     ) {
       event.preventDefault();
-      go(ticked);
+      go(ticked, wrote.trim());
       return;
     }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -110,7 +110,6 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
   };
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the question's keys, heard while the focus is in it.
     <section
       ref={card}
       aria-labelledby={titleId}
@@ -183,13 +182,16 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
               value={wrote}
               placeholder={t("asks.other")}
               spellCheck={false}
-              onChange={(event) => setWrote(event.target.value)}
+              onChange={(event) => {
+                setWrote(event.target.value);
+                if (!multiple && event.target.value.trim() !== "") setTicked(new Set());
+              }}
               onKeyDown={(event) => {
                 // Enter while an input method composes picks its word; it never sends.
                 if (event.key !== "Enter" || event.nativeEvent.isComposing || isCommand(event))
                   return;
                 event.preventDefault();
-                go(ticked);
+                go(ticked, wrote.trim());
               }}
             />
           </label>
@@ -200,7 +202,7 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
           <button
             type="button"
             data-testid="question-continue"
-            onClick={() => go(ticked)}
+            onClick={() => go(ticked, wrote.trim())}
             className="approval-button approval-button--primary"
           >
             {t("asks.continue")}

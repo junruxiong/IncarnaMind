@@ -34,7 +34,11 @@ const { add, remove } = waitingRequests<ApprovalRequest>(useApprovals);
 
 core.on("approval.requested", (request) => add([request]));
 core.on("approval.resolved", ({ requestId }) => remove(requestId));
-core.listApprovalRequests().then(add, () => undefined);
+core
+  .listApprovalRequests()
+  .then(add, (error: unknown) =>
+    console.error("The approvals waiting for the User couldn't be listed.", error),
+  );
 
 /** The requests waiting for one Answer, oldest first. */
 export const waitingFor = (

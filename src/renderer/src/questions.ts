@@ -31,4 +31,8 @@ const { add, remove } = waitingRequests<UserQuestionRequest>(useQuestions);
 
 core.on("question.asked", (request) => add([request]));
 core.on("question.answered", ({ requestId }) => remove(requestId));
-core.listUserQuestions().then(add, () => undefined);
+core
+  .listUserQuestions()
+  .then(add, (error: unknown) =>
+    console.error("The questions waiting for the User couldn't be listed.", error),
+  );

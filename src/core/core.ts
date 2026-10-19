@@ -1031,7 +1031,6 @@ export function createCore(adapters: CoreAdapters): Core {
     },
   });
 
-  // The assistant's questions to the User, waiting in the tray (#1374).
   const questions = createQuestions(events);
 
   // Requests to one service kept apart, as its operator asks: Look up and Find sources share them.

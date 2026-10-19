@@ -152,6 +152,10 @@ const mindRow = ({ answer, askedFrom, selection }: StepsInput) =>
  * of the Citations last. A call still waiting for the User has no row: its
  * approval card shows instead.
  */
+// A question the Tool refused, or one left open when its Answer stopped, waits for nothing now.
+const unansweredQuestion = (call: AnswerToolCall) =>
+  call.source === "asks" && call.status !== "running" && !call.asked?.answer;
+
 export function stepRows(input: StepsInput): StepRow[] {
   const { answer } = input;
   const rows: StepRow[] = [];
@@ -166,7 +170,7 @@ export function stepRows(input: StepsInput): StepRow[] {
   let joining: Extract<StepRow, { kind: "search" }> | null = null;
   let calculated = 0;
   for (const call of answer.toolCalls) {
-    if (call.approval === "waiting") continue;
+    if (call.approval === "waiting" || unansweredQuestion(call)) continue;
     if (isCalculated(call)) {
       calculated = call.resultCount ?? 0;
       continue;

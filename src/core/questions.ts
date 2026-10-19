@@ -15,7 +15,6 @@ interface Waiting {
 const text = (value: unknown): string | null =>
   typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 
-/** The answer as the bridge gave it, checked against what the question offered. */
 function answerTo(question: UserQuestion, value: unknown): UserAnswer {
   if (typeof value !== "object" || value === null) {
     throw new InvalidInputError({ key: "error.question.answer" });

@@ -3478,7 +3478,6 @@
     line-height: 20px;
     color: var(--color-ink-secondary);
   }
-  /* The assistant's question with options (#1374): rows under the question, the recommended one first. */
   .choice-options {
     display: flex;
     flex-direction: column;
@@ -7543,12 +7542,13 @@
       .approval-head {
         padding-block: 8px 4px;
       }
-      .approval-title {
+      /* A question's own words and its line say what the ticked rows are: its options scroll instead. */
+      .approval-card:not(.choice-card) .approval-title {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .approval-explanation {
+      .approval-card:not(.choice-card) .approval-explanation {
         display: none;
       }
     }
