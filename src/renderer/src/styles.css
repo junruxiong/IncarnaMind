@@ -6242,6 +6242,8 @@
     color: var(--color-ink-secondary);
   }
   .assistant-answer {
+    --answer-line: 22px;
+
     position: relative;
     display: flex;
     flex-direction: column;
@@ -6264,6 +6266,9 @@
   [data-just-linked] {
     animation: block-just-added 1600ms ease-in both;
   }
+  .assistant-answer-first-line {
+    height: var(--answer-line);
+  }
   .mind-editor.assistant-answer-text {
     --editor-gutter: 0px;
 
@@ -6272,7 +6277,7 @@
     padding-left: 0;
     font-family: var(--font-sans);
     font-size: 14px;
-    line-height: 22px;
+    line-height: var(--answer-line);
     color: var(--color-ink-answer);
     cursor: text;
 
