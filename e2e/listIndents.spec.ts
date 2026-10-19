@@ -65,15 +65,36 @@ const near = (value: number, expected: number) =>
     `${value} is not within 1px of ${expected}`,
   ).toBeLessThanOrEqual(1);
 
-/** The bullet or checkbox of an item, from the text edge: where it is drawn, not where the text is. */
+/** Where an item's bullet or checkbox is drawn, which is not where its text is. */
 const markerLeft = (item: Locator) =>
   item.evaluate((li) => {
     const box = li.querySelector(":scope > label");
     if (box) return box.getBoundingClientRect().left;
-    const before = getComputedStyle(li, "::before");
     const text = li.querySelector(":scope > p");
-    if (!text || before.content === "none") return Number.NaN;
-    return text.getBoundingClientRect().left + Number.parseFloat(before.left);
+    if (!text) return Number.NaN;
+    const before = getComputedStyle(text, "::before");
+    return before.content === "none"
+      ? Number.NaN
+      : text.getBoundingClientRect().left + Number.parseFloat(before.left);
+  });
+
+/** How far a number ends before its text, and how far a bullet's centre is from its first line's, as drawn. */
+const numberGap = (item: Locator) =>
+  item.evaluate((li) => {
+    const text = li.querySelector(":scope > p") as HTMLElement;
+    const before = getComputedStyle(text, "::before");
+    return (
+      text.getBoundingClientRect().left -
+      (li.getBoundingClientRect().right - Number.parseFloat(before.right))
+    );
+  });
+
+const bulletOffCentre = (item: Locator) =>
+  item.evaluate((li) => {
+    const text = li.querySelector(":scope > p") as HTMLElement;
+    const before = getComputedStyle(text, "::before");
+    const line = Number.parseFloat(getComputedStyle(text).lineHeight);
+    return Number.parseFloat(before.marginTop) + Number.parseFloat(before.height) / 2 - line / 2;
   });
 
 async function openMind(language: "en" | "zh-CN", width: number, body: string) {
@@ -161,8 +182,20 @@ for (const { language, width, body, items, long } of SETTINGS) {
     const again = await linesOf(level1);
     for (const start of again) near(start, again[0] ?? 0);
 
+    // The bullet stays on its first line's centre when the paragraph's line is taller (Aa › Line spacing).
+    near(await bulletOffCentre(first), 0);
+    await first.locator("> p").evaluate((p) => {
+      p.style.lineHeight = "2.5";
+    });
+    near(await bulletOffCentre(first), 0);
+
     await window.keyboard.press("Enter");
+    await window.keyboard.press("Tab");
     await expect(editor.locator("li")).toHaveCount(4);
+    await expect(editor.locator("ul ul > li")).toHaveCount(2);
+    await window.keyboard.press("Backspace");
+    await expect(editor.locator("li")).toHaveCount(4);
+    await expect(editor.locator("ul ul > li")).toHaveCount(1);
     await window.keyboard.press("Backspace");
     await expect(editor.locator("li")).toHaveCount(3);
     await app.close();
@@ -180,6 +213,8 @@ for (const { language, width, body, items, long } of SETTINGS) {
     await expect(editor.locator("ol ol > li")).toHaveText(items[1]);
     near((await textLeft(editor.locator("ol > li").first())) - edgeLeft, 48);
     near((await textLeft(editor.locator("ol ol > li"))) - edgeLeft, 96);
+    near(await numberGap(editor.locator("ol > li").first()), 8);
+    near(await numberGap(editor.locator("ol ol > li")), 8);
     await screenshot(window, `numbers-${language}-${width}`);
     await window.keyboard.press(UNDO);
     await expect(editor.locator("ol ol")).toHaveCount(0);

@@ -33,7 +33,6 @@ describe("pasting a list from Word", () => {
       ["Spring tides", ["UL", [["At new moon"], ["At full moon"]]]],
       ["Neap tides"],
     ]);
-    // The marker, its spaces and Word's empty o:p are gone.
     expect(root.textContent).toBe("Spring tidesAt new moonAt full moonNeap tides");
   });
 
@@ -60,6 +59,46 @@ describe("pasting a list from Word", () => {
     expect(list?.childCount).toBe(2);
     expect(list?.firstChild?.textContent).toBe("OneTwo");
     expect(list?.firstChild?.lastChild?.type.name).toBe("bulletList");
+  });
+
+  test.each([
+    ["1、", "Chinese numbers"],
+    ["（1）", "Chinese numbers in brackets"],
+    ["一、", "Chinese numerals"],
+    ["1.1.", "legal numbering"],
+    ["a)", "letters"],
+  ])("a list numbered %s (%s) stays paragraphs with its numbers typed", (marker) => {
+    const html = `${number(1, marker, "First")}${number(1, marker, "Second")}`;
+    const root = document.createElement("div");
+    root.innerHTML = listsFromWord(html, document);
+    expect(root.querySelectorAll("ul, ol")).toHaveLength(0);
+    expect(
+      [...root.querySelectorAll("p")].map((each) => each.textContent?.replace(/\s+/g, "")),
+    ).toEqual([`${marker}First`, `${marker}Second`]);
+  });
+
+  test("a numbered list that starts after 1 keeps its first number, and any bullet glyph is a bullet", () => {
+    const root = document.createElement("div");
+    root.innerHTML = listsFromWord(
+      `${number(1, "3.", "Third")}${number(1, "4.", "Fourth")}`,
+      document,
+    );
+    expect(root.querySelector("ol")?.getAttribute("start")).toBe("3");
+    for (const glyph of ["·", "o", "§", "\uf0b7"]) {
+      const bulleted = document.createElement("div");
+      bulleted.innerHTML = listsFromWord(
+        `<p style='mso-list:l0 level1 lfo1'><span style='mso-list:Ignore'>${glyph}</span>Item</p>`,
+        document,
+      );
+      expect(bulleted.querySelectorAll("ul > li > p")).toHaveLength(1);
+    }
+  });
+
+  test("a run with a style the editor can't draw among its levels stays paragraphs, the next run is a list", () => {
+    const html = `${number(1, "1.", "One")}${number(2, "a.", "Sub")}<p>Between.</p>${bullet(1, "Bullet")}`;
+    const root = document.createElement("div");
+    root.innerHTML = listsFromWord(html, document);
+    expect([...root.children].map((each) => each.tagName)).toEqual(["P", "P", "P", "UL"]);
   });
 
   test("HTML with no Word list in it, a Google Docs list among it, comes back as it was", () => {
