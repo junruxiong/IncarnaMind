@@ -2290,6 +2290,9 @@
     font-weight: 600;
     color: var(--color-ink-meta);
   }
+  .model-menu-group-hint {
+    padding: 0 8px 2px;
+  }
   .model-menu-item {
     display: grid;
     grid-template-columns: 16px minmax(0, 1fr) auto;
