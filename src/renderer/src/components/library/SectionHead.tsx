@@ -1,6 +1,8 @@
 import type { HTMLAttributes, ReactNode } from "react";
+import type { DropEffect, DropProps } from "../../dragDrop";
 import { useT } from "../../i18n";
 import { ChevronDownLineIcon } from "../lineIcons";
+import { dropIntoClass } from "../sidebarRows";
 
 /**
  * The head of a section of the Library page, as a toggle in a Notion page:
@@ -19,6 +21,7 @@ export function SectionHead({
   end,
   testId,
   rowProps,
+  drop,
 }: {
   /** Its name in words, for the chevron's label. */
   label: string;
@@ -33,6 +36,7 @@ export function SectionHead({
   end?: ReactNode;
   testId: string;
   rowProps?: HTMLAttributes<HTMLDivElement>;
+  drop?: { over: DropEffect | null; props: DropProps };
 }) {
   const t = useT();
   return (
@@ -43,8 +47,12 @@ export function SectionHead({
       data-testid={testId}
       data-open={open ? "true" : "false"}
       title={tip || undefined}
+      data-drop-target={drop?.over ? "true" : undefined}
       {...rowProps}
-      className="group/head flex h-9 items-center gap-2 rounded-t-md border-b border-rule-strong pr-1.5 pl-1 select-none hover:bg-frame"
+      {...drop?.props}
+      className={`group/head flex h-9 items-center gap-2 rounded-t-md border-b border-rule-strong pr-1.5 pl-1 select-none ${
+        drop?.over ? `rounded-md ${dropIntoClass}` : "hover:bg-frame"
+      }`}
     >
       <button
         type="button"

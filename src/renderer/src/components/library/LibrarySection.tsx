@@ -8,6 +8,8 @@ import type {
 } from "../../../../core/api";
 import { organizeModelOf } from "../../../../shared/libraryModels";
 import { core } from "../../core";
+import { useDropTarget } from "../../dragDrop";
+import { folderTarget } from "../../folderDrag";
 import { useLanguage, useT } from "../../i18n";
 import { useLibraryFolds, useRevealed } from "../../libraryFolds";
 import {
@@ -145,6 +147,11 @@ function FolderHead({
     useRequests.getState().clear("editFolder");
   }, [editFolder, folder.id]);
   const arrows = foldKeys(folder.id, open);
+  const drop = useDropTarget(
+    `library-folder:${folder.id}`,
+    folderTarget(folder.id),
+    open ? undefined : () => useLibraryFolds.getState().setOpen(folder.id, true),
+  );
   let name: ReactNode;
   if (rename.renaming) {
     name = (
@@ -191,6 +198,7 @@ function FolderHead({
         tip={folder.description}
         testId="library-section-head"
         rowProps={rename.renaming ? {} : objectMenu.rowProps}
+        drop={drop}
         end={
           !rename.renaming && (
             <ObjectMenu
@@ -217,6 +225,11 @@ function LooseHead({ documents, open }: { documents: readonly Document[]; open: 
   const t = useT();
   const label = t("library.unsorted");
   const toggle = () => useLibraryFolds.getState().toggle(NOT_IN_A_FOLDER);
+  const drop = useDropTarget(
+    "library-folder:none",
+    folderTarget(null),
+    open ? undefined : () => useLibraryFolds.getState().setOpen(NOT_IN_A_FOLDER, true),
+  );
   return (
     <SectionHead
       label={label}
@@ -239,6 +252,7 @@ function LooseHead({ documents, open }: { documents: readonly Document[]; open: 
       count={documents.length}
       testId="library-section-head"
       end={<Organize documents={documents} />}
+      drop={drop}
     />
   );
 }
