@@ -18,7 +18,7 @@
  * One verify run, finding or checking, goes at a time.
  */
 import { randomUUID } from "node:crypto";
-import type * as Y from "yjs";
+import * as Y from "yjs";
 import { isClaim } from "../../../shared/sentences";
 import { setTextOrigin } from "../../../shared/textOrigins";
 import {
@@ -43,6 +43,7 @@ import {
   type VerifyClaimsResult,
   type VerifyDocumentResult,
 } from "../../api";
+import type { PdfPagePart } from "../../documents/extract";
 import { parseModel } from "../../edits";
 import { InvalidInputError, isRecord, NotFoundError } from "../../errors";
 import type { MindContent } from "../../mindContent";
@@ -50,10 +51,10 @@ import { parseFolderChoice, parseMindId } from "../../minds";
 import type { PreparedChatModel } from "../../providers/chat";
 import { createElement } from "../blocks";
 import type { ClaimCheckRequest } from "./claimCheck";
-import { paragraphsOf } from "./claims";
 import { claimsAmong } from "./findClaims";
 import { runChecks } from "./runChecks";
-import { everySentence, markSentence } from "./sentences";
+import { everySentence, markSentence, type SelectedSentence } from "./sentences";
+import { documentBlocks, tableClaim } from "./verifyTables";
 
 /** A Document whose text is read: its Passages can be searched and its pages read. */
 const READ: readonly DocumentStatus[] = ["waiting-for-model", "embedding", "ready"];
@@ -78,6 +79,8 @@ export interface VerifyOptions {
   document(documentId: string): Document;
   onStatus(listener: (document: Document) => void): () => void;
   readText(documentId: string): DocumentText;
+  /** A PDF's pages that hold a table, laid out (#1368); none when it can't be read again. */
+  readTables(documentId: string): Promise<ReadonlyMap<number, PdfPagePart[]>>;
   createMind(title: string, folderId: string | null): Mind;
   defaultModel(): ChatModelChoice | null;
   prepare(choice: ChatModelChoice | null): Promise<Prepared>;
@@ -126,6 +129,13 @@ function parseRequest(input: unknown) {
     allDocuments: input.allDocuments === true,
     model: parseModel(input.model),
   };
+}
+
+/** What a sentence claims, and what its words refer to; undefined for a table's cell that claims nothing alone. */
+function claimOf(sentence: SelectedSentence): { claim: string; context: string } | undefined {
+  const row = tableClaim(sentence);
+  if (row === "not-a-claim") return undefined;
+  return row ?? { claim: sentence.text, context: sentence.context };
 }
 
 export function createVerify(options: VerifyOptions) {
@@ -193,18 +203,24 @@ export function createVerify(options: VerifyOptions) {
     if (signal.aborted) return { kind: "cancelled" };
 
     const sentences = content.read(mindId, (blocks) =>
-      everySentence(blocks)
-        .filter((each) => each.blockId in verification.pages && isClaim(each.text))
-        .map(({ blockId, text }) => ({ blockId, text })),
+      everySentence(blocks).flatMap((sentence) => {
+        if (!(sentence.blockId in verification.pages)) return [];
+        const said = claimOf(sentence)?.claim;
+        return said !== undefined && isClaim(said)
+          ? [{ blockId: sentence.blockId, text: sentence.text, said }]
+          : [];
+      }),
     );
     const found = await claimsAmong(
       ready.prepared,
-      sentences.map((each) => each.text),
+      sentences.map((each) => each.said),
       "someone-else",
       signal,
     );
     if (found.kind !== "found") return found;
-    const claims = sentences.filter((_, index) => found.claims.has(index));
+    const claims = sentences
+      .filter((_, index) => found.claims.has(index))
+      .map(({ blockId, text }) => ({ blockId, text }));
     content.edit(mindId, (blocks) => {
       const settings = blocks.doc?.getMap<unknown>(MIND_SETTINGS_FIELD);
       const now = settings && readVerification(settings);
@@ -262,7 +278,8 @@ export function createVerify(options: VerifyOptions) {
           checkedAt: startedAt,
         };
         markSentence(sentence.element, sentence.from, sentence.to, marked);
-        return [{ id: marked.id, claim: sentence.text, context: sentence.context }];
+        const said = claimOf(sentence) ?? { claim: sentence.text, context: sentence.context };
+        return [{ id: marked.id, ...said }];
       });
       if (marked.length > 0) options.recordUnread(blocks, requestId, unread);
       return marked;
@@ -301,27 +318,25 @@ export function createVerify(options: VerifyOptions) {
         return { ok: false, reason: now.status === "no-text" ? "no-text" : "unreadable" };
       }
       const text = options.readText(document.id);
-      const paragraphs = paragraphsOf(text.pages);
-      if (paragraphs.length === 0) return { ok: false, reason: "no-text" };
+      const found = documentBlocks(text.pages, await options.readTables(document.id));
+      if (found.length === 0) return { ok: false, reason: "no-text" };
 
       const { name } = options.document(document.id);
       const mind = options.createMind(name, folderId);
       content.edit(mind.id, (blocks) => {
         const doc = blocks.doc;
         if (!doc) return;
-        const elements = paragraphs.map(({ text, heading }) =>
-          createElement({
-            type: heading ? "heading" : "paragraph",
-            ...(heading && { attrs: { level: 2 } }),
-            content: [{ type: "text", text }],
-          }),
-        );
+        const elements = found.map(({ node }) => createElement(node));
         blocks.insert(0, elements);
         const pages: Record<string, number> = {};
         elements.forEach((element, index) => {
-          const id = element.getAttribute(BLOCK_ID_ATTRIBUTE);
-          const page = paragraphs[index]?.page;
-          if (typeof id === "string" && page !== undefined) pages[id] = page;
+          const page = found[index]?.page;
+          if (page === undefined) return;
+          // A table's cells too, so each figure in it is a claim with its page.
+          for (const each of [element, ...element.createTreeWalker(() => true)]) {
+            const id = each instanceof Y.XmlElement ? each.getAttribute(BLOCK_ID_ATTRIBUTE) : null;
+            if (typeof id === "string") pages[id] = page;
+          }
         });
         setTextOrigin(doc, Object.keys(pages), "checked-document");
         writeVerification(doc.getMap(MIND_SETTINGS_FIELD), {

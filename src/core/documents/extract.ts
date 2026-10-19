@@ -14,6 +14,7 @@ import { isRecord } from "../errors";
 import { ExtractionError, extractUnits } from "./formats";
 import { type FigureReading, readWebPage, webUnits } from "./formats/web";
 import { passwordProblem } from "./pdfPasswords";
+import { tablesIn } from "./pdfTables";
 import { printedPageNames } from "./printedPages";
 import { scannedUnit } from "./scan/layout";
 import { type CanvasFactory, isScanned, pagePicture } from "./scan/pages";
@@ -299,6 +300,47 @@ export async function pdfMetadata(
       firstPages,
       firstPageLines,
     };
+  } finally {
+    await task.destroy();
+  }
+}
+
+/** A part of a PDF page as Verify lays it out (#1368): its text, or a table's cells. */
+export type PdfPagePart =
+  | { kind: "text"; text: string }
+  | { kind: "table"; rows: string[][]; numeric: boolean[] };
+
+/** The pages of a PDF that hold a table, each as its parts in reading order. Throws if it can't be opened. */
+export async function pdfTablePages(
+  bytes: Uint8Array,
+  password?: string,
+): Promise<Map<number, PdfPagePart[]>> {
+  const { getDocument } = await loadPdfJs();
+  const task = getDocument({
+    data: new Uint8Array(bytes),
+    ...(password !== undefined && { password }),
+    ...pdfjsDataUrls(),
+    cMapPacked: true,
+    verbosity: 0,
+  });
+  try {
+    const document = await task.promise;
+    const pages = new Map<number, PdfPagePart[]>();
+    for (let number = 1; number <= document.numPages; number++) {
+      const page = await document.getPage(number);
+      const parts = tablesIn((await page.getTextContent()).items);
+      page.cleanup();
+      if (!parts) continue;
+      pages.set(
+        number,
+        parts.flatMap((part): PdfPagePart[] => {
+          if (part.kind === "table") return [part];
+          const text = pageText(part.items);
+          return text === "" ? [] : [{ kind: "text", text }];
+        }),
+      );
+    }
+    return pages;
   } finally {
     await task.destroy();
   }

@@ -13,7 +13,7 @@ import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
 import { textOriginOf } from "../../src/shared/textOrigins";
 import { verificationOf } from "../../src/shared/verification";
-import { checkGenerate, checkingModel, type Plan, sentenceOf } from "../helpers/checks";
+import { checkGenerate, checkingModel, isCheckRun, type Plan, sentenceOf } from "../helpers/checks";
 import { shownPassages } from "../helpers/citations";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -373,6 +373,88 @@ describe("Verify a document", () => {
       ["heading", "2 Progress"],
       ["paragraph", "Forty-two operatives worked on site during March."],
     ]);
+  });
+
+  // protects=a verified PDF's tables keep their rows and columns, and each row is checked as one claim with its label and headings (#1368); fails_when=a table is flattened into a paragraph, a figure runs into the next label, or a row's claim reaches the model without its label and headings; no_claim=tables in scanned pages.
+  test("a PDF's tables are tables in its Mind, and each row is a claim said with its columns' headings", async () => {
+    const FIXED_ASSETS = "固定资产 — 期末余额: 9,470; 期初余额: 8,860";
+    const NET_PROFIT = "净利润 — 本年金额: 1,620; 上年金额: 1,215";
+    const LEDGER = "Fleet ledger.md";
+    const calls: ModelCall[] = [];
+    const { core, sources } = await setUp(
+      checkingModel(
+        {
+          [FIXED_ASSETS]: {
+            verdict: "supported",
+            quote: "固定资产期末余额 9,470 万元",
+            says: "The fleet ledger gives 9,470 at the year's end.",
+          },
+          [NET_PROFIT]: { verdict: "contradicted", quote: "净利润 1,580 万元" },
+        },
+        calls,
+      ),
+    );
+    await addAndProcess(core, [
+      await writeSourceFile(
+        sources,
+        LEDGER,
+        "# 车队台账\n\n2025 年固定资产期末余额 9,470 万元。净利润 1,580 万元。\n",
+      ),
+    ]);
+    const statement = join(sources, "2025年度财务报表.pdf");
+    await copyFile(join(__dirname, "../fixtures/organize/files/2025年度财务报表.pdf"), statement);
+    const { mind, client } = await verified(core, statement);
+
+    const blocks: JSONContent[] = readMind(client).toJSON().content ?? [];
+    expect(blocks.map((block) => block.type)).toEqual([
+      "paragraph",
+      "paragraph",
+      "table",
+      "paragraph",
+      "table",
+      "paragraph",
+      "table",
+      "heading",
+      "paragraph",
+    ]);
+    const cells = (table: JSONContent | undefined) =>
+      (table?.content ?? []).map((row) =>
+        (row.content ?? []).map((cell) => [cell.type, cell.content?.[0]?.content?.[0]?.text ?? ""]),
+      );
+    const balance = cells(blocks[2]);
+    expect(balance[0]).toEqual([
+      ["tableHeader", "项目"],
+      ["tableHeader", "期末余额"],
+      ["tableHeader", "期初余额"],
+    ]);
+    expect(balance[3]).toEqual([
+      ["tableCell", "固定资产"],
+      ["tableCell", "9,470"],
+      ["tableCell", "8,860"],
+    ]);
+    expect(balance).toHaveLength(9);
+    expect(blocks[3]?.content?.[0]?.text).toBe("二、利润表（2025 年度）");
+
+    expect(await core.findClaims(request(mind.id))).toEqual({ kind: "found", claims: 2 });
+    await client.settled();
+    expect(verificationOf(client.doc)?.claims?.map((claim) => claim.text)).toEqual([
+      "固定资产",
+      "净利润",
+    ]);
+    // Each row's page is the PDF's, so the PDF beside it turns there.
+    const pages = verificationOf(client.doc)?.pages ?? {};
+    for (const claim of verificationOf(client.doc)?.claims ?? []) {
+      expect(pages[claim.blockId]).toBe(1);
+    }
+
+    expect(await core.verifyClaims(request(mind.id))).toMatchObject({ kind: "checked", claims: 2 });
+    const checks = await shownChecks(core, client);
+    expect(checks.map((each) => [each.sentence, each.shown])).toEqual([
+      ["固定资产", { state: "supported" }],
+      ["净利润", { state: "contradicted" }],
+    ]);
+    const asked = calls.filter(isCheckRun).map(sentenceOf);
+    expect(new Set(asked)).toEqual(new Set([FIXED_ASSETS, NET_PROFIT]));
   });
 
   test("a PDF with no text, or one that can't be read, makes no Mind and says why", async () => {

@@ -308,6 +308,58 @@ test("In Chinese and a narrow window: the same, in Chinese", async () => {
   await expect(pageMenu.getByTestId("page-from")).toHaveText("来自 Harbour report");
 });
 
+// The organize fixtures' annual statement: three tables of figures under their captions (#1368).
+const STATEMENT = join(__dirname, "../tests/fixtures/organize/files/2025年度财务报表.pdf");
+
+for (const [language, width] of [
+  ["en", 1440],
+  ["zh-CN", 900],
+] as const) {
+  test(`a PDF's tables keep their rows and columns, and each row's mark is level with it (${language}, ${width}px)`, async () => {
+    await writeFile(join(sources, "Fleet ledger.md"), "# 车队台账\n\n车队共有冷链车 42 台。\n");
+    const running = await launch();
+    const { app, window } = running;
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, width, 820);
+    await addDocuments(window, [join(sources, "Fleet ledger.md")]);
+    await interceptOpenDialog(app, STATEMENT);
+    await verifyFromPlusMenu(window, language === "en" ? "Verify a document…" : "核对文档…");
+
+    const editor = window.getByTestId("mind-editor");
+    const tables = editor.locator("table");
+    await expect(tables).toHaveCount(3);
+    const row = tables.first().locator("tr").filter({ hasText: "固定资产" });
+    await expect(row.locator("td")).toHaveText(["固定资产", "9,470", "8,860"]);
+    await expect(tables.first().locator("th")).toHaveText(["项目", "期末余额", "期初余额"]);
+    await expect(editor.locator("p").filter({ hasText: "3,145应收账款" })).toHaveCount(0);
+    // The figures line up in their column: each under the one above it.
+    const [above, below] = await Promise.all([
+      tables.first().locator("tr").nth(1).locator("td").nth(1).boundingBox(),
+      row.locator("td").nth(1).boundingBox(),
+    ]);
+    expect(Math.abs((above?.x ?? 0) - (below?.x ?? 1))).toBeLessThan(1);
+    expect(below?.y ?? 0).toBeGreaterThan(above?.y ?? 0);
+    await screenshot(window, `verify-tables-${language}`);
+
+    const card = await checkCard(window);
+    await pointAndClick(window, card.getByTestId("verify-check"));
+    await expect(card.getByTestId("verify-done")).toBeVisible({ timeout: 30_000 });
+    // The row is one claim, marked on its label: one mark a row, level with it.
+    const claimed = row.locator("td").first().locator("[data-claim-check]");
+    await expect(claimed).toHaveText("固定资产");
+    await expect(row.locator("td").nth(1).locator("[data-claim-check]")).toHaveCount(0);
+    const id = await claimed.getAttribute("data-claim-check");
+    const mark = window.locator(`[data-testid="claim-mark"][data-claim="${id}"]`);
+    await expect(mark).toHaveAttribute("data-check", "unsupported");
+    const [markBox, rowBox] = await Promise.all([mark.boundingBox(), row.boundingBox()]);
+    const middle = (markBox?.y ?? 0) + (markBox?.height ?? 0) / 2;
+    expect(middle).toBeGreaterThan(rowBox?.y ?? 0);
+    expect(middle).toBeLessThan((rowBox?.y ?? 0) + (rowBox?.height ?? 0));
+    await screenshot(window, `verify-tables-checked-${language}`);
+  });
+}
+
 test("Empty states: nothing to check against, then no claims found", async () => {
   const running = await launch();
   const { app, window } = running;

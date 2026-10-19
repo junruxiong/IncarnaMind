@@ -95,6 +95,7 @@ export interface ChecksOptions
     | "document"
     | "onStatus"
     | "readText"
+    | "readTables"
     | "createMind"
     | "recordAiUse"
     | "unread"
