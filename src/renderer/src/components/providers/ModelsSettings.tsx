@@ -140,7 +140,7 @@ export function ModelsSettings() {
       <ProviderDirectory
         providers={providers}
         onBack={back}
-        onOpen={(catalogId) => setView(pageFor(catalogId, null))}
+        onOpen={(catalogId, endpoint) => setView(pageFor(catalogId, endpoint))}
       />
     );
   } else if (view.page === "add") {

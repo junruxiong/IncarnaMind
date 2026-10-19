@@ -490,6 +490,7 @@ const PROVIDERS = [
     name: { en: "Kimi (Moonshot AI)", zh: "Kimi（月之暗面）" },
     support: "best-effort",
     group: "china",
+    alsoListedIn: "international",
     adapter: "moonshotai",
     endpoints: [
       {

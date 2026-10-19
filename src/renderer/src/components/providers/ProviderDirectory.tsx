@@ -9,11 +9,17 @@ import { kindOfCatalogId } from "../../../../core/providers/catalog/providers";
 import { useLanguage, useT } from "../../i18n";
 import { SearchLineIcon } from "../lineIcons";
 import { SettingsBackLink } from "../SettingsBackLink";
-import { directoryGroups } from "./directoryGroups";
+import { type DirectoryGroup, directoryGroups } from "./directoryGroups";
 import { ProviderLogo } from "./ProviderLogo";
 import { keyProviderName } from "./shared";
 
 const headClass = "text-[13px] leading-5 font-semibold text-ink";
+
+/** Under International or China, a provider opens on the region the heading names, where it has one. */
+const regionOf = (entry: CatalogProvider, group: DirectoryGroup): string | null => {
+  const region = group === "international" ? "intl" : group === "china" ? "cn" : null;
+  return region !== null && entry.endpoints.some((each) => each.id === region) ? region : null;
+};
 
 export function ProviderDirectory({
   providers,
@@ -22,7 +28,7 @@ export function ProviderDirectory({
 }: {
   providers: readonly ChatProvider[];
   onBack(): void;
-  onOpen(catalogId: string): void;
+  onOpen(catalogId: string, endpoint: string | null): void;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -85,7 +91,7 @@ export function ProviderDirectory({
                   entry.id !== "openai-compatible" &&
                   providers.some((each) => (each.catalogId ?? each.kind) === entry.id)
                 }
-                onOpen={() => onOpen(entry.id)}
+                onOpen={() => onOpen(entry.id, regionOf(entry, group))}
               />
             ))}
           </div>

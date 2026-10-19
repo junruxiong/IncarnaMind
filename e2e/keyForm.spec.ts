@@ -382,6 +382,47 @@ test("a way that can't be used yet says why, with the next step: Ollama not runn
   }
 });
 
+test("Kimi is listed under International and under China, and each opens its form on that region (#1348)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    const settings = await openSettings(window, "models");
+    const region = (form: Locator) => form.getByRole("combobox", { name: /^(Region|地域)/ });
+    const open = async (group: string) => {
+      await settings.getByTestId("models-add-provider").click();
+      await settings.getByTestId("provider-directory-search").fill("kimi");
+      const tiles = settings.locator(
+        `[data-testid="provider-directory-group"][data-group="${group}"]`,
+      );
+      await tiles.locator('[data-catalog-id="kimi"]').click();
+      return region(settings.getByTestId("provider-add").getByTestId("provider-form"));
+    };
+
+    await settings.getByTestId("models-add-provider").click();
+    await settings.getByTestId("provider-directory-search").fill("kimi");
+    await expect(settings.getByTestId("provider-directory-group")).toHaveCount(2);
+    await expect(settings.getByTestId("provider-directory-group").first()).toHaveAttribute(
+      "data-group",
+      "international",
+    );
+    await settings.getByTestId("models-back").click();
+
+    await expect(await open("international")).toHaveValue("intl");
+    await settings.getByTestId("models-back").click();
+    await expect(await open("china")).toHaveValue("cn");
+    await settings.getByTestId("models-back").click();
+
+    await language(window, "zh-CN");
+    await settings.getByTestId("models-add-provider").click();
+    await settings.getByTestId("provider-directory-search").fill("kimi");
+    await expect(settings.getByTestId("provider-directory-group")).toHaveCount(2);
+    await settings.getByTestId("models-back").click();
+    await expect(await open("international")).toHaveValue("intl");
+  } finally {
+    await app.close();
+  }
+});
+
 /**
  * An OpenAI-compatible server that refuses one key and answers with the other, and answers a
  * third with Anthropic's 400 for a model that needs 30-day data retention.

@@ -154,6 +154,8 @@ export interface CatalogProvider {
   name: Localized;
   support: Support;
   group: "international" | "china" | "local" | "other";
+  /** A provider with a region in each (Kimi) is listed under the other heading too. */
+  alsoListedIn?: "international" | "china";
   adapter: Adapter;
   /**
    * Its API, one per region, the first the default. Empty for a server the
