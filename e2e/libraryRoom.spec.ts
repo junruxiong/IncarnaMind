@@ -32,25 +32,24 @@ test.afterEach(async () => {
 const WORTH_ROOM = 320;
 const LEAST_ROOM = 160;
 
+/** What a name is cut by, at most, before the page gives up the chips instead: a few letters. */
+const A_FEW_LETTERS = 24;
+
 /**
- * The names of the rows on screen that have less room than they are asked for, or, `fully` off,
- * than it takes to read their start.
+ * The names of the rows on screen that have less room than they are asked for, by more than
+ * `slack` px.
  */
-function namesCut(library: Locator, fully = true) {
+function namesCut(library: Locator, slack = 0) {
   return library.evaluate(
-    (root, [worth, least, whole]) =>
+    (root, [worth, least, extra]) =>
       [...root.querySelectorAll('[data-testid="library-document-name"]')]
         .filter((name) => {
           const box = name.getBoundingClientRect();
-          const wanted = whole
-            ? name.scrollWidth <= (worth ?? 0)
-              ? name.scrollWidth
-              : (least ?? 0)
-            : Math.min(name.scrollWidth, least ?? 0);
-          return box.width > 0 && box.height > 0 && name.clientWidth + 1 < wanted;
+          const wanted = name.scrollWidth <= (worth ?? 0) ? name.scrollWidth : (least ?? 0);
+          return box.width > 0 && box.height > 0 && name.clientWidth + 1 + (extra ?? 0) < wanted;
         })
         .map((name) => name.textContent),
-    [WORTH_ROOM, LEAST_ROOM, fully ? 1 : 0],
+    [WORTH_ROOM, LEAST_ROOM, slack],
   );
 }
 
@@ -58,12 +57,12 @@ const NARROWEST = "added format narrowest";
 
 /**
  * Whether no name is cut for want of room: or, with the page down to Tags in their narrowest
- * room and their chips, every name still shows its start.
+ * room and their chips, none is cut by more than a few letters.
  */
 async function namesHaveRoom(library: Locator) {
   if ((await namesCut(library)).length === 0) return true;
   const hide = await library.locator("[data-hide]").getAttribute("data-hide");
-  return hide === NARROWEST && (await namesCut(library, false)).length === 0;
+  return hide === NARROWEST && (await namesCut(library, A_FEW_LETTERS)).length === 0;
 }
 
 /** The rows on screen that have Tags but show none of them: a narrow page keeps at least a chip. */
@@ -127,14 +126,23 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(first.getByTestId("library-document-format")).toBeVisible();
     await expect(first.getByTestId("library-document-added")).toBeVisible();
 
-    // Narrow again, with the assistant beside the page: Added and Format have gone first, the Tags
-    // keep a chip on every row that has one, and only the one name too long for any row is cut.
+    // Narrow again, with the assistant beside the page: Added and Format have gone first, and the
+    // Tags keep a chip on every row that has one.
     await setWindowSize(app, window, 1100, 900);
     await placeAssistant(window, { folded: false });
     await expect(first).toBeVisible();
     await expect(first.getByTestId("library-document-added")).toBeHidden();
     await expect(first.getByTestId("library-document-format")).toBeHidden();
     await expect.poll(() => rowsWithoutTheirChips(library)).toEqual([]);
+
+    // With a Document open beside the page there is no room for chips and names both: the chips go.
+    await placeAssistant(window, { folded: true });
+    await pointAndClick(window, library.getByTestId("library-document-name").first());
+    await expect(window.getByTestId("viewer")).toBeVisible();
+    await expect(first).toBeVisible();
+    await expect(first.getByTestId("library-document-added")).toBeHidden();
+    await expect(first.getByTestId("library-document-format")).toBeHidden();
+    await expect(library.locator('[data-testid="tag-chip"]:visible')).toHaveCount(0);
 
     // What they said is the name's tooltip.
     const tip = await first

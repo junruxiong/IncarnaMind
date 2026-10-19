@@ -22,11 +22,11 @@ const WORTH_ROOM = 320;
 /** What a name wider than that is asked for: enough to read its start. */
 const LEAST_ROOM = 160;
 
-const isCut = (name: HTMLElement) =>
-  name.clientWidth + 1 < (name.scrollWidth <= WORTH_ROOM ? name.scrollWidth : LEAST_ROOM);
+/** Cut by this much or less, a name is left cut to keep the chips: a few letters, not a few words. */
+const A_FEW_LETTERS = 24;
 
-const cantShowItsStart = (name: HTMLElement) =>
-  name.clientWidth + 1 < Math.min(name.scrollWidth, LEAST_ROOM);
+const isCut = (name: HTMLElement, slack = 0) =>
+  name.clientWidth + 1 + slack < (name.scrollWidth <= WORTH_ROOM ? name.scrollWidth : LEAST_ROOM);
 
 /**
  * The least step at which `fits`, looked for from `from`, the one in force: up while it doesn't,
@@ -49,9 +49,9 @@ const namesOf = (page: HTMLElement) => [...page.querySelectorAll<HTMLElement>("[
 
 /**
  * Gives up the columns past a Document's name, Added first, then Format, then some of the Tags'
- * room, only as far as it takes for no name to be cut, and their chips only when a name can't
- * show its start (`data-hide` on the page, read by the columns' classes), so every row's columns
- * keep the same edges. It measures again only when the page's width or a name changes.
+ * room, only as far as it takes for no name to be cut, and their chips only when keeping them
+ * would cut a name by more than a few letters (`data-hide` on the page, read by the columns'
+ * classes), so every row's columns keep the same edges. It measures again only when the page's width or a name changes.
  */
 export function useFittingColumns(page: RefObject<HTMLElement | null>): void {
   useLayoutEffect(() => {
@@ -67,7 +67,7 @@ export function useFittingColumns(page: RefObject<HTMLElement | null>): void {
         (step) => {
           element.dataset.hide = STEPS[step] ?? "";
           if (step === STEPS.length - 1) return true;
-          return !names.some(step === NARROWEST ? cantShowItsStart : isCut);
+          return !names.some((name) => isCut(name, step === NARROWEST ? A_FEW_LETTERS : 0));
         },
       );
       element.dataset.hide = STEPS[settled] ?? "";
