@@ -572,7 +572,7 @@ export function searchToolDescription(languages: readonly DocumentLanguage[]): s
   const names = languages.map((each) =>
     languages.length > 1 ? `${each.language} (${each.documents})` : each.language,
   );
-  return `${base} The Documents are in ${listed(names)}. Search finds Passages best in their own language: when the Question is in another language than the Documents it may be about, search with the query translated into their language too.`;
+  return `${base} The Documents are in ${listed(names)}. Search finds Passages best in their own language: when the Question is in another language than the Documents it may be about, search with the query translated into their language too. Only the query is in their language: write the reply in the Question's.`;
 }
 /** A Citation marker ("[^1]") or a figure marker ("[=1]"): the Answer is being written. */
 const MARKER = /\[[\^=]\d{1,4}\]/;
