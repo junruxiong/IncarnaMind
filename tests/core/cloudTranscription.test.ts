@@ -6,7 +6,9 @@ import { readVtt } from "../../src/core/documents/formats/vtt";
 import { InvalidInputError } from "../../src/core/errors";
 import { FAKE_LINES } from "../../src/core/transcription/fake";
 import { FAKE_CLOUD_LINES } from "../../src/core/transcription/fakeCloud";
+import { askAndFinish, citingModel, onlyCitation, type ShownPassage } from "../helpers/citations";
 import { createTempDataFolder } from "../helpers/core";
+import { connectToMind } from "../helpers/mindClient";
 import { transcribingCore, transcriptOf, until } from "../helpers/transcription";
 
 const SECOND = 1000;
@@ -43,10 +45,44 @@ describe("Cloud transcription with the User's own key", { timeout: 60_000 }, () 
     const saved = await until(core, meeting.id, (transcript) => transcript.state === "saved");
     const { cues } = readVtt(readFileSync(saved.savedPath as string, "utf8"));
     expect(cues.every((cue) => FAKE_CLOUD_LINES.includes(cue.text))).toBe(true);
-    // The microphone in a call is the User's own; the call's voices are numbered as told apart.
-    expect(new Set(cues.map((cue) => cue.speaker))).toEqual(
-      new Set(["Me", "Speaker 1", "Speaker 2"]),
-    );
+    // The microphone in a call is the User's own; the other side's voices are numbered as told apart.
+    expect(new Set(cues.map((cue) => cue.speaker))).toEqual(new Set(["Me", "Them 1", "Them 2"]));
+  });
+
+  test("in a room, with no computer sound, the voices it told apart are numbered, never the User, and a Citation names them", async () => {
+    const dataDir = await createTempDataFolder();
+    const quote = FAKE_CLOUD_LINES[0] as string;
+    const { core, record } = await transcribingCore(dataDir, {
+      capture: { system: "denied" },
+      model: citingModel({
+        query: "budget",
+        records: (passages: ShownPassage[]) => [
+          { marker: 1, passage: passages[0]?.id, quote: `[0:00] ${quote}` },
+        ],
+        answer: "The budget holds [^1].",
+      }),
+    });
+    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+    await chooseSoniox(core);
+    const meeting = await core.createMeeting();
+    await core.startMeeting({ meetingId: meeting.id, systemAudio: false });
+    await until(core, meeting.id, (transcript) => transcript.cloud === "soniox");
+    record(9 * SECOND, ["microphone"]);
+    const live = await until(core, meeting.id, (transcript) => transcript.lines >= 3);
+    await core.stopMeeting(meeting.id);
+    const saved = await until(core, meeting.id, (transcript) => transcript.state === "saved");
+    const { cues } = readVtt(readFileSync(saved.savedPath as string, "utf8"));
+    expect(new Set(cues.map((cue) => cue.speaker))).toEqual(new Set(["Speaker 1", "Speaker 2"]));
+
+    const mind = await core.createMind({ title: "Budget" });
+    const client = await connectToMind(core, mind.id);
+    const { answerId } = await askAndFinish(core, client, mind.id, "Does the budget hold?");
+    expect(onlyCitation(client, answerId)).toMatchObject({
+      documentId: live.documentId,
+      location: { kind: "time", speaker: cues.find((cue) => cue.text === quote)?.speaker },
+      check: "found",
+    });
+    expect(onlyCitation(client, answerId).location).not.toMatchObject({ speaker: "Me" });
   });
 
   test("the connection dropping hands the live audio to this computer: the gap is marked, the bar says when, and Stop fills it in", async () => {

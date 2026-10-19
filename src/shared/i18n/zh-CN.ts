@@ -4040,6 +4040,7 @@ export const zhCN = {
   "transcript.speaker.them": "对方",
   "transcript.speaker.unknown": "发言人 ?",
   "transcript.speaker.numbered": "发言人 {n}",
+  "transcript.speaker.themNumbered": "对方 {n}",
   "transcript.recording": "录制中…",
   "transcript.lines.one": "{count} 句",
   "transcript.lines.other": "{count} 句",

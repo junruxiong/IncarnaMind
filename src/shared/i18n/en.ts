@@ -4219,6 +4219,7 @@ export const en = {
   "transcript.speaker.them": "Them",
   "transcript.speaker.unknown": "Speaker ?",
   "transcript.speaker.numbered": "Speaker {n}",
+  "transcript.speaker.themNumbered": "Them {n}",
   "transcript.recording": "Recording…",
   "transcript.lines.one": "{count} line",
   "transcript.lines.other": "{count} lines",
