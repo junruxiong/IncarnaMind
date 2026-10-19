@@ -9,6 +9,7 @@ import {
   leaveText,
   newMind,
   openSettings,
+  paletteFound,
   pointAndClick,
   removeDataFolder,
   setLanguage,
@@ -60,9 +61,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await window.keyboard.press("ControlOrMeta+k");
     await expect(window.getByTestId("palette-search")).toBeFocused();
     await window.keyboard.type(RECORD[language]);
-    await expect(
-      window.getByTestId("palette-item").filter({ hasText: RECORD[language] }),
-    ).toHaveCount(1);
+    await expect(paletteFound(window).filter({ hasText: RECORD[language] })).toHaveCount(1);
     await window.keyboard.press("Escape");
 
     // Words people look for: "transcribe" and "call", 录音 and 转写.
@@ -70,9 +69,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await window.keyboard.press("ControlOrMeta+k");
       await expect(window.getByTestId("palette-search")).toBeFocused();
       await window.keyboard.type(word);
-      await expect(
-        window.getByTestId("palette-item").filter({ hasText: RECORD[language] }),
-      ).toHaveCount(1);
+      await expect(paletteFound(window).filter({ hasText: RECORD[language] })).toHaveCount(1);
       await window.keyboard.press("Escape");
     }
 

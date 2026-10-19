@@ -42,7 +42,6 @@ import { useUnreadFiles } from "../unreadFiles";
 import { FindSourcesPanel } from "./FindSourcesPanel";
 import { LibrarySelectionBar } from "./LibrarySelection";
 import { DeletedSection } from "./library/DeletedSection";
-import { DocumentMoveTo } from "./library/DocumentMoveTo";
 import { StarterFolders } from "./library/FolderForm";
 import { LibraryBar } from "./library/LibraryBar";
 import { LibraryEmpty } from "./library/LibraryEmpty";
@@ -373,7 +372,6 @@ export function LibraryPane() {
           {!narrowing && <DeletedSection />}
         </div>
       </div>
-      <DocumentMoveTo />
     </section>
   );
 }

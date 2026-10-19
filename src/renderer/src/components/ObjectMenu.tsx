@@ -1,5 +1,6 @@
-import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useRef } from "react";
 import type { CommandId } from "../../../shared/commands";
+import { showPlace } from "../commands/here";
 import { menuKeysLabel } from "../commands/keymap";
 import { buildMenu, buildMixedMenu, type MenuEntry, type MenuItem } from "../commands/menus";
 import {
@@ -165,11 +166,20 @@ export function ObjectMenu({
   foot?: ReactNode;
 }) {
   const t = useT();
+  const { kind, id } = target;
   // The first item, though a switch at its foot is checked.
   const menu = usePopoverMenu({ focus: "first", ...(align && { align }) });
   const { buttonProps } = useObjectMenu(target);
   const prefix = testId ?? TEST_ID_PREFIX[target.kind];
   const button = menu.buttonProps.ref;
+  const hereNow = useRef(here);
+  hereNow.current = here;
+  useEffect(() => {
+    const element = button.current;
+    if (!element) return;
+    const alone: ObjectRef = { kind, id };
+    return showPlace(element, () => ({ ...tagsHere(alone, element, []), ...hereNow.current }));
+  }, [button, kind, id]);
   // Selected, the menu is for the whole selection; else for this one alone.
   const held = useSelection((state) => (state.keys.has(keyOf(target)) ? state : null));
 
