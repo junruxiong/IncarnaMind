@@ -9,6 +9,7 @@ import {
   addProviderForm,
   assistantAnswers,
   closeSettings,
+  continueSetup,
   createDataFolder,
   interceptOpenExternal,
   launchApp,
@@ -457,7 +458,7 @@ test("Use this key shows a refused key in place, and with a good one saves and t
     await form.getByTestId("provider-use-key").click();
     await expect(form).toBeHidden();
     await closeSettings(window);
-    await expect(card).toBeHidden();
+    await continueSetup(window);
     // The waiting Question was asked: the conversation holds its Answer (the server only answers
     // the connection test, so how it ends is not the point).
     await expect(assistantAnswers(window).first()).toBeVisible({ timeout: 15_000 });

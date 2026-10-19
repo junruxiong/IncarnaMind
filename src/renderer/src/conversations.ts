@@ -225,13 +225,23 @@ function askWaitingQuestion(): void {
 }
 
 core.on("chatReadiness.changed", (readiness) => {
-  if (!readiness.ready) return;
+  if (!readiness.ready) {
+    // The model that worked is gone: the card asks for one again.
+    useModelSetup.setState({ ready: false });
+    return;
+  }
   const { wanted, waiting } = useModelSetup.getState();
-  useModelSetup.setState({ wanted: false });
-  // The setup card goes with the focus in it: the composer, where the User asks next, takes it.
-  if (wanted || waiting) useComposer.getState().requestFocus();
-  askWaitingQuestion();
+  // The setup card stays, saying what each job uses, until the User continues.
+  if (wanted || waiting) useModelSetup.setState({ ready: true });
 });
+
+/** Continue on the setup card: the Question that waited is asked, and the composer takes the card's place. */
+export function continueSetup(): void {
+  useModelSetup.setState({ wanted: false, ready: false });
+  // The setup card goes with the focus in it: the composer, where the User asks next, takes it.
+  useComposer.getState().requestFocus();
+  askWaitingQuestion();
+}
 
 /**
  * Writes an Answer of the open conversation again; why it couldn't be is kept under its id.
