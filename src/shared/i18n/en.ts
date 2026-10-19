@@ -1779,6 +1779,7 @@ export const en = {
   "providers.list.separator": ", ",
   "providers.kind.short.qwen": "Qwen",
   "providers.kind.short.deepseek": "DeepSeek",
+  "providers.kind.short.kimi": "Kimi",
 
   "providers.kind.openai": "OpenAI",
   "providers.kind.anthropic": "Anthropic",
@@ -1803,6 +1804,10 @@ export const en = {
   "providers.form.apiKeySaved": "A key is saved. Leave this empty to keep it.",
   "providers.form.keyRefused": "{provider} refused this key ({when}).",
   "providers.form.keyRefusedNow": "{provider} refused this key.",
+  "providers.form.keyOther": "This looks like {service}’s key.",
+  "providers.form.keyUnknown": "This doesn’t look like {provider}’s key.",
+  "providers.form.keyUse": "Use {service}",
+  "providers.form.keyAnyway": "Use it for {provider} anyway",
   "providers.form.region": "Region",
   "providers.region.cn": "China",
   "providers.region.intl": "International",

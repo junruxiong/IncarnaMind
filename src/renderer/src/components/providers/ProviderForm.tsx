@@ -7,6 +7,7 @@ import type {
 } from "../../../../core/api";
 import type { DataUse } from "../../../../core/providers/catalog";
 import { catalogMenu } from "../../../../core/providers/catalog";
+import { keyFits, serviceOfKey } from "../../../../core/providers/catalog/keyForms";
 import {
   catalogProvider,
   dataUseOf,
@@ -31,7 +32,7 @@ import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
 import { useAppStore } from "../../store";
 import { MetaLine } from "../MetaLine";
-import { LineAction, type ProblemAction, ProblemMark } from "../ProblemLine";
+import { LineAction, type ProblemAction, ProblemLine, ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
   errorTextClass,
@@ -171,6 +172,8 @@ export function ProviderForm({
     ) && !jev?.enabled;
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
+  /** The provider and key the User chose to use together although the key looks like another's. */
+  const [agreed, setAgreed] = useState<string | null>(null);
 
   useEffect(() => {
     core.getSecretStorage().then(setSecretStorage, () => undefined);
@@ -239,13 +242,22 @@ export function ProviderForm({
                 ? "providers.form.needsModel"
                 : null;
   const complete = kind !== null && missing === null && (!local || server.status?.running === true);
+  // A key that looks like another service's goes nowhere until the User says so (#1384).
+  const given = apiKey.trim();
+  const checksKey = given !== "" && kind !== null && kind !== "openai-compatible" && !local;
+  const looksLike = checksKey ? serviceOfKey(given) : null;
+  const otherService = looksLike !== null && looksLike !== kind ? looksLike : null;
+  const keyIsOthers = checksKey && (keyFits(kind, given) === false || otherService !== null);
+  const keyUnsure = keyIsOthers && agreed !== `${kind}\n${given}`;
 
   const shortName = (option: CatalogId) =>
     option === "qwen"
       ? t("providers.kind.short.qwen")
       : option === "deepseek"
         ? t("providers.kind.short.deepseek")
-        : keyProviderName(option, t, language);
+        : option === "kimi"
+          ? t("providers.kind.short.kimi")
+          : keyProviderName(option, t, language);
 
   const chip = (option: CatalogId) => (
     <label
@@ -278,6 +290,13 @@ export function ProviderForm({
     );
     setTest(null);
     setError(null);
+  };
+
+  /** Moves to the service a key looks like, with the key: it was pasted for it. */
+  const switchTo = (next: CatalogId) => {
+    const pasted = apiKey;
+    choose(next);
+    key.type(pasted);
   };
 
   useEffect(() => {
@@ -332,7 +351,7 @@ export function ProviderForm({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    void run();
+    if (!keyUnsure) void run();
   };
 
   const acceptPlainText = async () => {
@@ -399,7 +418,12 @@ export function ProviderForm({
         <fieldset>
           <legend className="sr-only">{t("providers.form.label")}</legend>
           <div className="flex flex-wrap gap-1">
-            {[...rowKinds, ...(moreOpen ? underMore : [])].map(chip)}
+            {[
+              ...rowKinds,
+              ...(moreOpen ? underMore : []),
+              // A service the key's form named, which this list doesn't offer, is shown once chosen.
+              ...(kind && !offered.includes(kind) ? [kind] : []),
+            ].map(chip)}
             {underMore.length > 0 && !moreOpen && (
               <button
                 type="button"
@@ -528,6 +552,38 @@ export function ProviderForm({
               <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
             )}
           </label>
+          {keyUnsure && kind && (
+            <ProblemLine
+              testId="provider-key-wrong"
+              role="status"
+              action={
+                otherService
+                  ? {
+                      label: t("providers.form.keyUse", { service: shortName(otherService) }),
+                      testId: "provider-key-use-service",
+                      onClick: () => switchTo(otherService),
+                    }
+                  : {
+                      label: t("providers.form.keyAnyway", { provider: shortName(kind) }),
+                      testId: "provider-key-anyway",
+                      onClick: () => setAgreed(`${kind}\n${given}`),
+                    }
+              }
+              also={
+                otherService
+                  ? {
+                      label: t("providers.form.keyAnyway", { provider: shortName(kind) }),
+                      testId: "provider-key-anyway",
+                      onClick: () => setAgreed(`${kind}\n${given}`),
+                    }
+                  : undefined
+              }
+            >
+              {otherService
+                ? t("providers.form.keyOther", { service: shortName(otherService) })
+                : t("providers.form.keyUnknown", { provider: shortName(kind) })}
+            </ProblemLine>
+          )}
           {catalog && (
             <KeyHelp
               key={`${kind}:${endpoint?.id}`}
@@ -622,7 +678,7 @@ export function ProviderForm({
             <button
               type="submit"
               data-testid="provider-use-key"
-              disabled={!complete || keyBlocked || busy !== null}
+              disabled={!complete || keyBlocked || keyUnsure || busy !== null}
               className={primaryButtonClass}
             >
               {busy
