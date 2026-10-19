@@ -47,6 +47,7 @@ export function MeetingNoticeDialog() {
             {kept}
           </p>
           <p className={dialogTextClass}>{t("meetings.notice.tell")}</p>
+          <p className={dialogTextClass}>{t("meetings.notice.model")}</p>
         </div>
         <div className={dialogActionsClass}>
           <button type="button" onClick={cancelNotice} className={buttonClass}>
