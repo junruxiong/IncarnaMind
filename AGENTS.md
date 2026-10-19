@@ -29,6 +29,7 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
    - `src/core` is the product and never imports Electron; Biome enforces this. Pass a capability in as an adapter instead.
    - `src/main` is the Electron shell.
    - The renderer reaches the core only through the bridge (`src/shared/bridge.ts`).
+   - Keep the core portable to other hosts and ready for sync ([`docs/agents/portability.md`](docs/agents/portability.md)). Node built-ins go through adapters, `fetch` is passed in, the core API stays structured-clone-safe, OAuth takes its redirect from the host, and secrets never sync.
 4. **Keep files focused.** Put a new feature in its own component, hook or core module rather than growing `App.tsx` or another long file.
 5. **Fix types; don't silence them.** TypeScript is strict. No `any`, no `@ts-ignore`, and no `!` assertion just to quiet the compiler.
 6. **Never swallow an error.** A failure the User can act on becomes a problem in plain words, where it happened (`DESIGN.md`, Problems). Log the rest with enough context to find it.

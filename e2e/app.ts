@@ -709,6 +709,22 @@ export function savedLine(name: string, folder: string, language: "en" | "zh-CN"
     : `Saved “${name}” in ${basename(folder)}`;
 }
 
+/** Opens the assistant's ⋯ and its Move assistant row, whose submenu has the places it docks. */
+export async function openMoveAssistant(window: Page): Promise<void> {
+  await window.getByTestId("assistant-more").click();
+  await window.getByTestId("assistant-menu-move").click();
+  await expect(window.getByTestId("assistant-menu-docks")).toBeVisible();
+}
+
+/** Docks or floats the assistant from its ⋯ › Move assistant. */
+export async function moveAssistant(
+  window: Page,
+  place: "right" | "left" | "bottom" | "float",
+): Promise<void> {
+  await openMoveAssistant(window);
+  await pointAndClick(window, window.getByTestId(`assistant-menu-${place}`));
+}
+
 /** The result line's saved file, once it says it saved one. */
 export async function savedPath(window: Page, name: string): Promise<string> {
   const done = window.getByTestId("export-result").getByTestId("export-done");
@@ -723,6 +739,12 @@ export async function tabMenu(window: Page): Promise<Locator> {
   const menu = tab.getByTestId("tab-actions");
   await expect(menu).toBeVisible();
   return menu;
+}
+
+/** Splits the shown tab to the right from its menu, as a person does: a copy of it in a new group. */
+export async function splitFromTabMenu(window: Page): Promise<void> {
+  const menu = await tabMenu(window);
+  await pointAndClick(window, menu.getByTestId("tab.split"));
 }
 
 /** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
@@ -750,9 +772,15 @@ export async function importWordFile(
   await expect(dialog).toBeHidden();
 }
 
-/** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
+/** The Export button's menu, then Export options…, which opens the sheet. */
+export async function openExportOptions(window: Page): Promise<void> {
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await pointAndClick(window, window.getByTestId("export-options"));
+}
+
+/** Export options…, from the Export button's menu; resolves once the sheet shows `title`. */
 export async function openOptions(window: Page, title: string): Promise<void> {
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await openExportOptions(window);
   await expect(window.getByTestId("export-dialog").getByRole("heading")).toHaveText(title);
 }
 
@@ -1432,7 +1460,10 @@ export async function pointAndClick(
   {
     button = "left",
     modifiers = [],
-  }: { button?: "left" | "right"; modifiers?: readonly ("ControlOrMeta" | "Shift")[] } = {},
+  }: {
+    button?: "left" | "right" | "middle";
+    modifiers?: readonly ("ControlOrMeta" | "Shift")[];
+  } = {},
 ): Promise<void> {
   // A list that redraws as the click begins swaps the element for an equal one: look again.
   let box: Awaited<ReturnType<Locator["boundingBox"]>> = null;

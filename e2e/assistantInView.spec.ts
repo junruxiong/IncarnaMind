@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  moveAssistant,
   nameMind,
   newMind,
   removeDataFolder,
@@ -43,8 +44,7 @@ test.afterEach(async () => {
 type Place = "bottom" | "float" | "right";
 
 async function placeAs(window: Page, place: Place) {
-  await window.getByTestId("assistant-more").click();
-  await window.getByTestId(`assistant-menu-${place}`).click();
+  await moveAssistant(window, place);
   await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", place);
 }
 

@@ -163,6 +163,7 @@ describe("shortcuts", () => {
       const keys = [
         keysOn(shortcut.keys, mac),
         ...(!mac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
+        ...(shortcut.also ? [shortcut.also] : []),
       ];
       return keys.map((each) => keysForm(each, mac));
     };
