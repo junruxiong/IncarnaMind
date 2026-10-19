@@ -10,7 +10,8 @@
  * What main does wrong today is listed in `KNOWN` with its issue, so the check is strict for
  * everything else; a listed problem that no longer happens fails too, so the list stays true.
  */
-import { appendFile, mkdir, rename, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import { type LaunchOptions, launchApp } from "./app";
@@ -280,31 +281,85 @@ function tableOf(
   ].join("\n");
 }
 
+/** Films the window from now: each painted frame to disk, with when it was painted. */
+async function film(window: Page, folder: string): Promise<() => Promise<void>> {
+  await rm(folder, { recursive: true, force: true });
+  await mkdir(folder, { recursive: true });
+  const session = await window.context().newCDPSession(window);
+  const frames: { file: string; at: number }[] = [];
+  const writing: Promise<void>[] = [];
+  session.on("Page.screencastFrame", ({ data, metadata, sessionId }) => {
+    const file = `${String(frames.length).padStart(5, "0")}.jpg`;
+    frames.push({ file, at: metadata.timestamp ?? 0 });
+    writing.push(writeFile(join(folder, file), Buffer.from(data, "base64")));
+    void session.send("Page.screencastFrameAck", { sessionId }).catch(() => undefined);
+  });
+  await session.send("Page.startScreencast", { format: "jpeg", quality: 70, everyNthFrame: 1 });
+  return async () => {
+    await session.send("Page.stopScreencast").catch(() => undefined);
+    await session.detach().catch(() => undefined);
+    await Promise.all(writing);
+    // Each frame stays on screen until the next was painted: ffmpeg's concat list keeps that time.
+    const list = frames.flatMap((frame, index) => {
+      const next = frames[index + 1];
+      return [
+        `file '${frame.file}'`,
+        `duration ${next ? Math.max(next.at - frame.at, 0.001) : 0.5}`,
+      ];
+    });
+    const last = frames.at(-1);
+    if (last) list.push(`file '${last.file}'`);
+    await writeFile(join(folder, "frames.txt"), `${list.join("\n")}\n`);
+  };
+}
+
+/** Makes the frames a video when ffmpeg is there (CI installs it); the frames stay either way. */
+function encode(folder: string, video: string): Promise<void> {
+  return new Promise((resolve) => {
+    const ffmpeg = spawn(
+      "ffmpeg",
+      ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", "frames.txt"].concat([
+        "-vf",
+        "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+        "-fps_mode",
+        "vfr",
+        "-pix_fmt",
+        "yuv420p",
+        video,
+      ]),
+      { cwd: folder, stdio: "ignore" },
+    );
+    ffmpeg.on("error", () => resolve());
+    ffmpeg.on("close", () => resolve());
+  });
+}
+
 export interface FeelRun {
   app: ElectronApplication;
   window: Page;
   feel: Feel;
   flow: string;
+  stopFilming(): Promise<void>;
 }
 
-/** Launches the app for a flow, recording a video of its window. */
+/** Launches the app for a flow, filming its window. */
 export async function startFeel(
   dataDir: string,
   flow: string,
   options: LaunchOptions = {},
 ): Promise<FeelRun> {
   await mkdir(FEEL_FOLDER, { recursive: true });
-  const { app, window } = await launchApp(dataDir, { ...options, ...(process.env.FEEL_NO_VIDEO ? {} : { recordVideo: FEEL_FOLDER }) });
-  return { app, window, feel: await feelOf(window, flow), flow };
+  const { app, window } = await launchApp(dataDir, options);
+  const stopFilming = await film(window, join(FEEL_FOLDER, `${flow}-frames`));
+  return { app, window, feel: await feelOf(window, flow), flow, stopFilming };
 }
 
-/** Ends a flow: its report, its video under its name, then what fails. */
-export async function endFeel({ app, window, feel, flow }: FeelRun): Promise<void> {
+/** Ends a flow: its report and its video, then what fails. */
+export async function endFeel({ app, feel, flow, stopFilming }: FeelRun): Promise<void> {
   const { failing, stale } = await feel.finish();
-  const video = window.video();
+  await stopFilming();
   await app.close();
-  const path = await video?.path();
-  if (path) await rename(path, join(FEEL_FOLDER, `${flow}.webm`));
+  await encode(join(FEEL_FOLDER, `${flow}-frames`), join(FEEL_FOLDER, `${flow}.mp4`));
   expect(
     failing,
     "Fix what the feel check found, or file it and list it in KNOWN (e2e/feel.ts)",

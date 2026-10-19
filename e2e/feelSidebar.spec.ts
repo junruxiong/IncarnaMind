@@ -86,12 +86,12 @@ test("the sidebar: open, rename in place, move, delete and Undo, and a new Mind 
     await row.hover();
     await pointAndClick(window, row.getByTestId("mind-menu"));
     await pointAndClick(window, row.getByTestId("mind-actions").getByTestId("mind.moveTo"));
-    const picker = window.getByTestId("move-to-picker");
+    const picker = window.locator('[data-testid="move-to-picker"]:visible');
     await pointAndClick(
       window,
       picker.getByTestId("move-to-option").filter({ hasText: "Finance" }),
     );
-    await expect(picker).toBeHidden();
+    await expect(picker).toHaveCount(0);
     await expect(sidebarFolder(window, "Finance")).toContainText("Budget");
   });
   await feel.expectFocus("move to a Folder", mindRow(window, "Budget").getByTestId("mind-menu"));
