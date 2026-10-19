@@ -25,12 +25,19 @@ export interface Cue {
 
 /**
  * Why a stretch of a Meeting has no text: transcription restarted after a
- * crash, the computer slept, IncarnaMind wasn't running, or the audio was
- * deleted before it could catch up.
+ * crash, the computer slept, IncarnaMind wasn't running, the audio was
+ * deleted before it could catch up, or the cloud service's connection dropped
+ * (#141).
  */
-export type GapReason = "restarted" | "sleep" | "interrupted" | "lost";
+export type GapReason = "restarted" | "sleep" | "interrupted" | "lost" | "cloud";
 
-export const GAP_REASONS: readonly GapReason[] = ["restarted", "sleep", "interrupted", "lost"];
+export const GAP_REASONS: readonly GapReason[] = [
+  "restarted",
+  "sleep",
+  "interrupted",
+  "lost",
+  "cloud",
+];
 
 export interface TranscriptGap {
   fromMs: number;
