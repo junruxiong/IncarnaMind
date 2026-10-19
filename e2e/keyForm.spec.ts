@@ -407,7 +407,7 @@ for (const { value, first, other, anyway, notAnthropic } of [
     first: "DeepSeek",
     other: "OpenAI",
     anyway: "仍用于 DeepSeek",
-    notAnthropic: "这不是 Anthropic 的密钥：它的密钥以 sk-ant- 开头。请选择它所属的服务。",
+    notAnthropic: "这不是 Anthropic 的密钥：Anthropic 的密钥以 sk-ant- 开头。请选择它所属的服务。",
   },
 ] as const) {
   test(`a key goes only to its own service: its prefix picks the service, a key the chosen one can't have is never sent, and nothing goes before the User agrees (${value})`, async () => {
