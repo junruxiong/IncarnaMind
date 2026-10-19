@@ -1,10 +1,13 @@
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
+  DATABASE_FILE,
   type Executor,
   type ExportPreferences,
   type GettingStarted,
   InvalidInputError,
 } from "../../src/core";
+import { openDatabase } from "../../src/core/storage";
 import { createTempDataFolder, startCore } from "../helpers/core";
 
 /**
@@ -36,6 +39,23 @@ const PDF_EXPORT = {
 } as const;
 
 describe("Settings", () => {
+  test("the old switch for recording meetings, on or off, is ignored", async () => {
+    for (const old of [true, false]) {
+      const dataDir = await createTempDataFolder();
+      startCore(dataDir).close();
+      const db = openDatabase(join(dataDir, DATABASE_FILE));
+      const at = new Date().toISOString();
+      db.run(
+        "INSERT INTO device_settings (id, key, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        [crypto.randomUUID(), "meetingsEnabled", JSON.stringify(old), at, at],
+      );
+      db.close();
+      const core = startCore(dataDir);
+      expect(Object.keys((await core.getSettings()).device)).not.toContain("meetingsEnabled");
+      core.close();
+    }
+  });
+
   test("a new data folder starts with the defaults", async () => {
     const core = startCore(await createTempDataFolder());
 
@@ -71,8 +91,8 @@ describe("Settings", () => {
         skillScriptsEnabled: true,
         skillScriptTimeoutSeconds: 60,
         suggestionOffers: 0,
-        meetingsEnabled: false,
         meetingSystemAudio: true,
+        transcriptionRoute: null,
         meetingNoticeAccepted: false,
         meetingPanel: true,
         meetingPanelHidden: true,
@@ -175,8 +195,8 @@ describe("Settings", () => {
       skillScriptsEnabled: true,
       skillScriptTimeoutSeconds: 60,
       suggestionOffers: 0,
-      meetingsEnabled: false,
       meetingSystemAudio: true,
+      transcriptionRoute: null,
       meetingNoticeAccepted: false,
       meetingPanel: true,
       meetingPanelHidden: true,
@@ -248,8 +268,8 @@ describe("Settings", () => {
       skillScriptsEnabled: false,
       skillScriptTimeoutSeconds: 15,
       suggestionOffers: 1,
-      meetingsEnabled: true,
       meetingSystemAudio: false,
+      transcriptionRoute: "local" as const,
       meetingNoticeAccepted: true,
       meetingPanel: false,
       meetingPanelHidden: false,
@@ -358,6 +378,10 @@ describe("Settings", () => {
     {
       name: "a way to show someone's changes that isn't one",
       patch: { user: { exportOptions: { ...DEFAULT_EXPORT, theirChanges: "hidden" } } },
+    },
+    {
+      name: "a place to transcribe meetings that isn't one",
+      patch: { device: { transcriptionRoute: "carrier-pigeon" } },
     },
     {
       name: "a default model without a model",

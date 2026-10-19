@@ -27,6 +27,7 @@
     "eval:hard": "vitest run --config eval/hard/vitest.config.ts",
     "eval:word": "vitest run --config eval/word/vitest.config.ts",
     "eval:everyday": "vitest run --config eval/everyday/vitest.config.ts",
+    "eval:harness": "vitest run --config eval/harness/vitest.config.ts",
     "eval:word:fetch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON eval/word/fetch-extended.ts",
     "eval:dump": "vitest run --config eval/dumps/vitest.config.ts",
     "eval:references": "vitest run --config eval/references/vitest.config.ts",

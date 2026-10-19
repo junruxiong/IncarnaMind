@@ -55,6 +55,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const messages = useConversations((state) => state.messages);
   const asking = useConversations((state) => state.asking);
   const waitingQuestion = useModelSetup((state) => state.waiting);
+  const modelWorks = useModelSetup((state) => state.ready);
   const askingQuote = useConversations((state) => state.askingQuote);
   const onItsWay = useAnswerOnItsWay();
   const stopWanted = useConversations((state) => state.stopWanted);
@@ -201,9 +202,11 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       {waitingQuestion && (
         <>
           <QuestionBubble text={waitingQuestion.text} quote="" />
-          <p data-testid="assistant-waiting-model" className="assistant-empty">
-            {t("setup.waiting")}
-          </p>
+          {!modelWorks && (
+            <p data-testid="assistant-waiting-model" className="assistant-empty">
+              {t("setup.waiting")}
+            </p>
+          )}
         </>
       )}
       {plan && (
@@ -222,7 +225,8 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         </>
       )}
       {onItsWay && (
-        // Its line shows at rest, as an Answer's being written does.
+        // Its line shows at rest, as an Answer's being written does, with room kept for its first
+        // line of text, so the Question above doesn't move when the Answer starts.
         <div
           data-testid="assistant-answer-on-its-way"
           data-status="streaming"
@@ -242,6 +246,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
               nextScope.filter((chip) => !chip.deleted),
             )}
           />
+          <div aria-hidden="true" className="assistant-answer-first-line" />
           <WritingLine
             // Stopped before it started: it says so at once, and stops as it starts.
             status={
