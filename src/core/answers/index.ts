@@ -145,6 +145,7 @@ import {
   type ToolProviderKind,
 } from "../tools";
 import type { Findable } from "../tools/commands/find";
+import { type CommandRename, renamesIn } from "../tools/commands/policy";
 import type { CommandsHost } from "../tools/commands/run";
 import type { CommandSteps } from "../tools/commands/steps";
 import { commandTools } from "../tools/commands/tools";
@@ -856,7 +857,10 @@ export function createAnswers(options: AnswersOptions) {
       MindToolsOptions,
       "focused" | "folderId" | "origin" | "lastAnswer" | "remake"
     > &
-      RequestContext;
+      RequestContext & {
+        /** What the commands of the Conversation's earlier Answers renamed, oldest first. */
+        renames: readonly CommandRename[];
+      };
   }): void {
     const { home, answerId, model, context, forcedSkill } = input;
     const scoped = input.scoped ?? input.documentIds !== null;
@@ -1837,6 +1841,7 @@ export function createAnswers(options: AnswersOptions) {
               focusedMindId: focusedId,
               namesWebPage: options.documents.searchableNames(documentIds, LISTED_DOCUMENTS)
                 .webPage,
+              renames: input.assistant.renames,
               runId: randomUUID(),
               steps: commands.steps,
               found: (toolCallId, found) => commandsFound.set(toolCallId, found),
@@ -2425,6 +2430,7 @@ export function createAnswers(options: AnswersOptions) {
         followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
         lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier) !== null,
         remake,
+        renames: renamesIn(turn.earlier),
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
