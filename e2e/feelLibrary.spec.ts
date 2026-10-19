@@ -22,13 +22,16 @@ import { endFeel, startFeel } from "./feel";
 
 let dataDir: string;
 let sources: string;
+let out: string;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();
   sources = await createDataFolder();
+  out = await createDataFolder();
 });
 test.afterEach(async () => {
   await removeDataFolder(dataDir);
   await removeDataFolder(sources);
+  await removeDataFolder(out);
 });
 
 const COUNT = 2000;
@@ -97,36 +100,29 @@ test("scrolling the Library with 2,000 Documents", async () => {
 });
 
 test("Export as Word", async () => {
-  const out = await createDataFolder();
-  try {
-    const run = await startFeel(dataDir, "export");
-    const { app, window, feel } = run;
-    await setWindowSize(app, window, 1440, 900);
-    await dismissChatSetup(window);
-    await useOutputLocation(window, out);
-    await mindWrittenBefore(window, "Harbour log", [
-      { heading: "Arrivals" },
-      { note: "Three ships came in on Monday, and two left on Tuesday." },
-    ]);
-    await pointAndClick(
-      window,
-      window.getByTestId("mind-list-item").filter({ hasText: "Harbour log" }),
-    );
-    await expect(window.locator('[data-testid="mind-editor"]:visible')).toContainText(
-      "Three ships",
-    );
+  const run = await startFeel(dataDir, "export");
+  const { app, window, feel } = run;
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await useOutputLocation(window, out);
+  await mindWrittenBefore(window, "Harbour log", [
+    { heading: "Arrivals" },
+    { note: "Three ships came in on Monday, and two left on Tuesday." },
+  ]);
+  await pointAndClick(
+    window,
+    window.getByTestId("mind-list-item").filter({ hasText: "Harbour log" }),
+  );
+  await expect(window.locator('[data-testid="mind-editor"]:visible')).toContainText("Three ships");
 
-    await feel.step("export as Word", async () => {
-      await exportFromMenu(window, "docx");
-      await expect(window.getByTestId("export-result").getByTestId("export-done")).toContainText(
-        "Saved “Harbour log.docx”",
-        { timeout: 30_000 },
-      );
-    });
-    await feel.expectFocus("export as Word", window.getByTestId("export-mind"));
+  await feel.step("export as Word", async () => {
+    await exportFromMenu(window, "docx");
+    await expect(window.getByTestId("export-result").getByTestId("export-done")).toContainText(
+      "Saved “Harbour log.docx”",
+      { timeout: 30_000 },
+    );
+  });
+  await feel.expectFocus("export as Word", window.getByTestId("export-mind"));
 
-    await endFeel(run);
-  } finally {
-    await removeDataFolder(out);
-  }
+  await endFeel(run);
 });

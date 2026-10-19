@@ -83,14 +83,17 @@ async function observe(window: Page): Promise<void> {
       const classes = [...element.classList].slice(0, 2).join(".");
       return `${element.tagName.toLowerCase()}${classes ? `.${classes}` : ""}`;
     };
+    // TypeScript's DOM types have no layout shift yet.
+    const isShift = (
+      entry: PerformanceEntry,
+    ): entry is PerformanceEntry & {
+      value: number;
+      hadRecentInput: boolean;
+      sources?: { node: Node | null }[];
+    } => "value" in entry && "hadRecentInput" in entry;
     new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        const shift = entry as PerformanceEntry & {
-          value: number;
-          hadRecentInput: boolean;
-          sources?: { node: Node | null }[];
-        };
-        if (shift.hadRecentInput) continue;
+      for (const shift of list.getEntries()) {
+        if (!isShift(shift) || shift.hadRecentInput) continue;
         feel.shifts.push({
           at: shift.startTime,
           value: shift.value,
@@ -103,13 +106,18 @@ async function observe(window: Page): Promise<void> {
         feel.longTasks.push({ at: entry.startTime, duration: entry.duration });
       }
     }).observe({ type: "longtask", buffered: true });
+    // Every input slower than a frame, not only those over the default 104 ms.
+    const events: PerformanceObserverInit & { durationThreshold: number } = {
+      type: "event",
+      buffered: true,
+      durationThreshold: 16,
+    };
     new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        const event = entry as PerformanceEntry & { interactionId?: number };
-        if (!event.interactionId) continue;
+      for (const event of list.getEntries()) {
+        if (!(event instanceof PerformanceEventTiming) || event.interactionId === 0) continue;
         feel.events.push({ at: event.startTime, duration: event.duration });
       }
-    }).observe({ type: "event", buffered: true, durationThreshold: 16 } as PerformanceObserverInit);
+    }).observe(events);
   });
 }
 
@@ -137,7 +145,7 @@ const entriesBetween = (window: Page, from: number, to: number) =>
   );
 
 /** What has focus, as a step's check names it: its test id, else its tag; "body" for none. */
-export const focused = (window: Page) =>
+const focused = (window: Page) =>
   window.evaluate(() => {
     const element = document.activeElement;
     if (!element || element === document.body) return "body";
