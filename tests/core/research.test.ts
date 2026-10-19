@@ -614,7 +614,7 @@ describe("Research", { timeout: 30_000 }, () => {
     expect(
       (await core.listTaskSteps(task.id)).some((step) => step.text.includes("discounters")),
     ).toBe(false);
-    await expect(core.tellTask(task.id, "Too late")).rejects.toThrow("can't be told");
+    await expect(core.tellTask(task.id, "Too late")).rejects.toThrow("can’t be told");
   });
 
   test("at the monthly cap it pauses and lists the steps it has still to do", async () => {

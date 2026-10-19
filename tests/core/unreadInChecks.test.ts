@@ -225,7 +225,7 @@ describe("What a check couldn't read", () => {
 
 describe("The AI use statement", () => {
   test.each([
-    ["en", "When these sentences were checked, 3 files they were checked against couldn't be read"],
+    ["en", "When these sentences were checked, 3 files they were checked against couldn’t be read"],
     ["zh-CN", "核对这些说法时，有 3 个文件未能读取"],
   ] as const)("lists what the checks couldn't read, with why (%s)", async (language, intro) => {
     const { core, folderId } = await withUnreadFiles();

@@ -27,7 +27,7 @@ describe("startupDialog", () => {
 
   it("keeps the message of any other start-up failure", () => {
     const dialog = startupDialog(new Error("disk full"), "en");
-    expect(dialog.title).toBe("IncarnaMind couldn't start");
+    expect(dialog.title).toBe("IncarnaMind couldn’t start");
     expect(dialog.detail).toContain("disk full");
     expect(dialog.buttons).toEqual([]);
   });

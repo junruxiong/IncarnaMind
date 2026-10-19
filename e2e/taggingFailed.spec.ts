@@ -53,10 +53,10 @@ test("Documents that couldn't reach the model: one line with Retry, and tagged a
   await addDocuments(window, [await unreachable("Invoice 51")]);
   await expect(item(window, "Invoice 51")).toHaveAttribute("data-tagging", "failed");
   const failed = footer.getByTestId("tagging-failed");
-  await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn't be tagged");
+  await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn’t be tagged");
   await expect(failed).toHaveAttribute(
     "title",
-    /^Can't reach the AI model\. Tagging resumes when you're online\./,
+    /^Can’t reach the AI model\. Tagging resumes when you’re online\./,
   );
   await failed.getByTestId("tagging-failed-retry").click();
   await expect(item(window, "Invoice 51")).toHaveAttribute("data-tagging", "tagged");
@@ -145,7 +145,7 @@ test("With Organize filing new Documents, a failure for a Document the tagger ho
       automatic: true,
     });
   }, providerId);
-  await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn't be tagged");
+  await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn’t be tagged");
   await expect(failed.getByTestId("tagging-failed-retry")).toBeVisible();
 
   // A Document added now is Organize's: it fails there, and says so in Organize's row alone.
@@ -153,7 +153,7 @@ test("With Organize filing new Documents, a failure for a Document the tagger ho
   await writeFile(own, "Invoice 72. Nothing in the way.\n");
   await window.getByTestId("add-documents-input").setInputFiles([own]);
   await expect(item(window, "Invoice 72")).toHaveAttribute("data-tagging", "failed");
-  await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn't be tagged");
+  await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn’t be tagged");
   await footer.getByTestId("status-more").click();
   await expect(
     footer.getByTestId("status-others").getByTestId("organization-attention"),
