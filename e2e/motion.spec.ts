@@ -136,7 +136,7 @@ test("Reduced, chosen in Settings, fades a menu without moving it; Off shows and
   await expect(motion.getByRole("heading")).toHaveText("Motion");
   await expect(motion.getByRole("radio")).toHaveCount(3);
   await expect(motion.getByRole("radio", { name: "On" })).toBeChecked();
-  await expect(motion).toContainText("Until you choose, this follows your system's setting.");
+  await expect(motion).toContainText("Until you choose, this follows your system’s setting.");
 
   await motion.getByRole("radio", { name: "Reduced" }).check();
   await expect(window.locator("html")).toHaveAttribute("data-motion", "reduced");

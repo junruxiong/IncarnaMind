@@ -104,7 +104,7 @@ describe("What a write's check left to do", () => {
     expect(words("en", of({ request: "w", cited: 13, sent: 12, checked: 10, failed: 2 }))).toEqual([
       {
         kind: "failed",
-        text: "2 sentences couldn't be checked",
+        text: "2 sentences couldn’t be checked",
         details: [],
         action: { label: "Check again", does: "check" },
       },
@@ -145,7 +145,7 @@ describe("What a write's check left to do", () => {
     });
     const [en] = words("en", limited);
     expect(en).toMatchObject({ kind: "plan-limit", action: null });
-    expect(en?.text).toBe("2 sentences couldn't be checked: plan limit reached");
+    expect(en?.text).toBe("2 sentences couldn’t be checked: plan limit reached");
     expect(en?.details[0]).toMatch(/^Resumes at .*\d/);
     expect(words("zh-CN", limited)[0]?.details[0]).toMatch(/ 恢复$/);
   });
@@ -168,14 +168,14 @@ describe("What a write's check left to do", () => {
     ).toEqual([
       {
         kind: "consent-revoked",
-        text: "3 sentences couldn't be checked: you turned off sending to this service",
+        text: "3 sentences couldn’t be checked: you turned off sending to this service",
         action: null,
       },
     ]);
     expect(
       lines("en", { ...write, failed: 1, blocked: { reason: "consent-revoked", count: 1 } })[0]
         ?.text,
-    ).toBe("1 sentence couldn't be checked: you turned off sending to this service");
+    ).toBe("1 sentence couldn’t be checked: you turned off sending to this service");
     expect(
       lines("zh-CN", { ...write, failed: 3, blocked: { reason: "consent-revoked", count: 3 } })[0]
         ?.text,
@@ -190,13 +190,13 @@ describe("What a write's check left to do", () => {
     ).toEqual([
       {
         kind: "local-mode",
-        text: "2 sentences couldn't be checked: everything stays on this computer",
+        text: "2 sentences couldn’t be checked: everything stays on this computer",
         action: null,
       },
     ]);
     expect(
       lines("en", { ...write, failed: 1, blocked: { reason: "local-mode", count: 1 } })[0]?.text,
-    ).toBe("1 sentence couldn't be checked: everything stays on this computer");
+    ).toBe("1 sentence couldn’t be checked: everything stays on this computer");
     expect(
       lines("zh-CN", { ...write, failed: 2, blocked: { reason: "local-mode", count: 2 } })[0]?.text,
     ).toBe("2 句未能核对：所有内容都留在这台电脑上");
@@ -210,12 +210,12 @@ describe("What a write's check left to do", () => {
     ).toEqual([
       {
         kind: "consent-revoked",
-        text: "2 sentences couldn't be checked: you turned off sending to this service",
+        text: "2 sentences couldn’t be checked: you turned off sending to this service",
         action: null,
       },
       {
         kind: "failed",
-        text: "1 sentence couldn't be checked",
+        text: "1 sentence couldn’t be checked",
         action: { label: "Check again", does: "check" },
       },
     ]);

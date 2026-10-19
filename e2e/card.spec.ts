@@ -231,7 +231,7 @@ test("the + menu in the sidebar header offers New Mind, Add Documents…, New Fo
     /Record a meeting/,
     /Compare Documents…/,
     /Verify a document…/,
-    /From starter folders…/,
+    /From starter Folders…/,
     /Add a web page…/,
     /Find sources…/,
     /Link a folder…/,

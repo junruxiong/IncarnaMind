@@ -131,10 +131,10 @@ describe("what a Linked folder's row says", () => {
       "Reading is paused",
     );
     expect(rowStateLabel({ kind: "online-only", files: 1 }, en, "en")?.full).toBe(
-      "1 online-only file isn't downloaded, so it isn't read",
+      "1 online-only file isn’t downloaded, so it isn’t read",
     );
     expect(rowStateLabel({ kind: "online-only", files: 1200 }, en, "en")?.full).toBe(
-      "1,200 online-only files aren't downloaded, so they aren't read",
+      "1,200 online-only files aren’t downloaded, so they aren’t read",
     );
   });
 });
@@ -181,6 +181,6 @@ describe("names and labels", () => {
     expect(missing && en(missing.reason)).toBe("The file is missing from its folder.");
     const unavailable = fileStatusLabel("unavailable");
     expect(unavailable && en(unavailable.short)).toBe("Unavailable");
-    expect(unavailable && en(unavailable.reason)).toBe("The file can't be reached right now.");
+    expect(unavailable && en(unavailable.reason)).toBe("The file can’t be reached right now.");
   });
 });

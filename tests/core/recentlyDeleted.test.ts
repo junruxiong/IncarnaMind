@@ -352,7 +352,7 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
       "已有同名标签“Paper”，请先将其重命名，再恢复。",
     );
     await expect(core.restore([{ kind: "tag", id: "no-such-tag" }])).rejects.toMatchObject({
-      message: "That isn't in Recently deleted.",
+      message: "That isn’t in Recently deleted.",
       wording: { key: "error.restore.unknown" },
     });
   });
@@ -557,7 +557,7 @@ describe("Recently deleted", { timeout: 30_000 }, () => {
     clock.advance(10 * DAY);
     expect(ids(await core.listDeleted())).toEqual([tag.id, recent.id]);
     await expect(core.restore([{ kind: "mind", id: old.id }])).rejects.toThrow(
-      "“Old” was deleted more than 30 days ago, so it can't be restored.",
+      "“Old” was deleted more than 30 days ago, so it can’t be restored.",
     );
     await core.restore([{ kind: "mind", id: recent.id }]);
     expect(ids(await core.listMinds())).toEqual([recent.id]);
@@ -576,11 +576,11 @@ describe("Recently deleted", { timeout: 30_000 }, () => {
     clock.advance(1000);
     await core.deleteDocument(document.id);
     await expect(core.deletePermanently([{ kind: "mind", id: "no-such-mind" }])).rejects.toThrow(
-      "That isn't in Recently deleted.",
+      "That isn’t in Recently deleted.",
     );
     const mind = await core.createMind({ title: "Kept" });
     await expect(core.deletePermanently([{ kind: "mind", id: mind.id }])).rejects.toThrow(
-      "“Kept” isn't deleted, so it can't be deleted permanently.",
+      "“Kept” isn’t deleted, so it can’t be deleted permanently.",
     );
 
     clock.advance(1000);
@@ -604,7 +604,7 @@ describe("Recently deleted", { timeout: 30_000 }, () => {
     }
     expect(await core.listDeleted()).toEqual([]);
     await expect(core.restore([{ kind: "document", id: document.id }])).rejects.toThrow(
-      "“Tides” was deleted permanently, so it can't be restored.",
+      "“Tides” was deleted permanently, so it can’t be restored.",
     );
     expect(await readFile(path)).toEqual(bytes);
   });
@@ -637,7 +637,7 @@ describe("Recently deleted", { timeout: 30_000 }, () => {
       queryDatabase(dataDir, "SELECT 1 FROM mind_updates WHERE mind_id = ?", [old.id]),
     ).toEqual([]);
     await expect(reopened.restore([{ kind: "mind", id: old.id }])).rejects.toThrow(
-      "“Old” was deleted permanently, so it can't be restored.",
+      "“Old” was deleted permanently, so it can’t be restored.",
     );
     await reopened.restore([{ kind: "mind", id: recent.id }]);
     expect(ids(await reopened.listMinds())).toEqual([recent.id]);
