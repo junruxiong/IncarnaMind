@@ -407,7 +407,7 @@ test("A check reads the text as it stands and says which sentences with changes 
   await checkAll(window, line, "Spring tides", "6 months.", "find-support");
 
   const waiting = window.getByTestId("checks-waiting");
-  await expect(waiting).toContainText("2 sentences with changes waiting weren't checked");
+  await expect(waiting).toContainText("2 sentences with changes waiting weren’t checked");
   await expect(marks(window)).toHaveCount(1);
   await expect(marks(window)).toHaveAttribute("data-check", "supported");
   await screenshot(window, "check-waiting-en");
@@ -496,7 +496,7 @@ test("Check against Documents on sentences that all have changes waiting sends n
   await checkAll(window, line, "Penguins", "6 months.", "check-against-documents");
 
   const waiting = window.getByTestId("checks-waiting");
-  await expect(waiting).toContainText("2 sentences with changes waiting weren't checked");
+  await expect(waiting).toContainText("2 sentences with changes waiting weren’t checked");
   await expect(marks(window)).toHaveCount(0);
   await expect(window.getByTestId("checks-problem")).toHaveCount(0);
 
@@ -516,7 +516,7 @@ test("After the User accepts one change by hand and goes to another tab and back
   await askForTwoChanges(window, line);
   await checkAll(window, line, "Spring tides", "6 months.", "find-support");
   const waiting = window.getByTestId("checks-waiting");
-  await expect(waiting).toContainText("2 sentences with changes waiting weren't checked");
+  await expect(waiting).toContainText("2 sentences with changes waiting weren’t checked");
 
   await pointAndClick(window, line.locator("del.proposal-delete").first());
   await pointAndClick(window, window.getByTestId("change-bar").getByTestId("change-accept"));
@@ -530,7 +530,7 @@ test("After the User accepts one change by hand and goes to another tab and back
   await expect(waiting).toHaveCount(0);
   await pointAndClick(window, tabs.first());
   await expect(line).toContainText(PENGUINS_A);
-  await expect(waiting).toContainText("2 sentences with changes waiting weren't checked");
+  await expect(waiting).toContainText("2 sentences with changes waiting weren’t checked");
 
   await motionSettled(window);
   await pointAndClick(window, waiting.getByTestId("checks-accept-and-check"));

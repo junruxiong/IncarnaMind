@@ -52,6 +52,7 @@ export function SectionHead({
         data-testid="library-section-toggle"
         aria-expanded={open}
         aria-label={t(open ? "library.collapse" : "library.expand", { name: label })}
+        title={t(open ? "library.collapse" : "library.expand", { name: label })}
         onClick={onToggle}
         className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-ink-meta hover:bg-hover hover:text-ink"
       >
