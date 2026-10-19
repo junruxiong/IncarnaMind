@@ -142,8 +142,8 @@ export function TabStrip({
       <button
         type="button"
         data-testid="new-tab"
-        aria-label={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
-        title={t("tabs.new.about", { shortcut: shortcutLabel("tab.new") })}
+        aria-label={t("tabs.new", { shortcut: shortcutLabel("mind.new") })}
+        title={t("tabs.new.about", { shortcut: shortcutLabel("mind.new") })}
         onClick={() => void createMind({ titled: true, groupId: group.id })}
         className="tab-new"
       >
