@@ -121,7 +121,7 @@ async function meetingOn(route: Route, service: Service) {
     transcriptionKeyFetch: async () => new Response(null, { status: 200 }),
     now: clock.now,
   });
-  await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+  await core.updateSettings({ device: { meetingNoticeAccepted: true } });
   await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
   if (route === "soniox") {
     await core.setTranscriptionKey({ route: "soniox", apiKey: "soniox-test-key" });
@@ -218,6 +218,22 @@ describe("Nothing more goes to the cloud once the User says no", { timeout: 60_0
       // This computer transcribes the stretch instead, after Stop.
       const saved = await until(core, meeting.id, (each) => each.state === "saved");
       expect(saved.lines).toBeGreaterThan(0);
+    });
+
+    test(`${route}: audio held for a connection that never opened isn't counted toward the cap`, async () => {
+      const service = counting();
+      service.holdOpen = true;
+      const { core, record, meeting } = await meetingOn(route, service);
+      await until(core, meeting.id, (each) => each.cloud === route);
+      record(12 * SECOND);
+      await settle();
+      await core.stopMeeting(meeting.id);
+      await until(core, meeting.id, (each) => each.state === "saved");
+      service.release();
+      await settle();
+      expect(service.sentSinceMark()).toBe(0);
+      const { spent } = await core.getCostSummary();
+      expect(spent.reduce((sum, each) => sum + each.amount, 0)).toBe(0);
     });
   }
 

@@ -39,10 +39,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isTheirs,
-  numberedSpeaker,
+  roomVoice,
   SPEAKER_ME,
   SPEAKER_THEM,
   SPEAKER_UNKNOWN,
+  theirVoice,
 } from "../../shared/speakers";
 import type {
   CloudLoss,
@@ -241,6 +242,9 @@ const speakerOf = (source: AudioSource, callSound: boolean) =>
 
 const lengthOf = (audio: TrackedAudio) => audio.microphone.length / SAMPLE_RATE_MS;
 
+const msOf = (chunks: readonly Int16Array[]) =>
+  chunks.reduce((sum, samples) => sum + samples.length / SAMPLE_RATE_MS, 0);
+
 type Leaving = "dropped" | "refused" | "cap" | "user" | "local-mode";
 
 /** The engine couldn't start, or stopped, while what was left was being transcribed. */
@@ -421,6 +425,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     live: boolean;
     source: AudioSource;
     speaker: string;
+    callSound: boolean;
     reading?: Reading;
   } | null {
     for (const state of states.values()) {
@@ -434,6 +439,7 @@ export function createTranscripts(options: TranscriptsOptions) {
             live: true,
             source,
             speaker: speakerOf(source, live.callSound()),
+            callSound: live.callSound(),
           };
         }
       }
@@ -445,6 +451,8 @@ export function createTranscripts(options: TranscriptsOptions) {
           baseMs: reading.baseMs,
           source: reading.source,
           speaker: reading.speaker(),
+          // Its microphone is "Me" exactly when the computer's sound was recorded with it.
+          callSound: reading.source === "system" || reading.speaker() === SPEAKER_ME,
           reading,
         };
       }
@@ -452,16 +460,25 @@ export function createTranscripts(options: TranscriptsOptions) {
     return null;
   }
 
-  // The microphone's lines stay "Me", so they are never taken for the other side and echo removal
-  // still applies. Labels are per stream: a new session's "1" is a new person.
-  function voiceOf(state: State, stream: string, source: AudioSource, label: string): string {
-    if (source === "microphone") return SPEAKER_ME;
+  // In a call the microphone is the User's: its lines stay "Me", so echo removal still applies.
+  // The other side's voices are "Them 1", "Them 2"; a room's are "Speaker 1", "Speaker 2", never
+  // taken for the other side. Labels are per stream: a new session's "1" is a new person.
+  function voiceOf(
+    state: State,
+    stream: string,
+    source: AudioSource,
+    callSound: boolean,
+    label: string,
+  ): string {
+    if (source === "microphone" && callSound) return SPEAKER_ME;
     const voices = state.voices ?? {};
     state.voices = voices;
     const key = `${stream}:${label}`;
-    const number = voices[key] ?? Object.keys(voices).length + 1;
+    const side = `:${source}:`;
+    const number =
+      voices[key] ?? Object.keys(voices).filter((each) => each.includes(side)).length + 1;
     voices[key] = number;
-    return numberedSpeaker(number);
+    return source === "system" ? theirVoice(number) : roomVoice(number);
   }
 
   function addCue(state: State, cue: Cue): void {
@@ -504,7 +521,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     if (!found) return;
     const { state, baseMs, live } = found;
     const speaker = segment.speaker
-      ? voiceOf(state, segment.stream, found.source, segment.speaker)
+      ? voiceOf(state, segment.stream, found.source, found.callSound, segment.speaker)
       : found.speaker;
     const startMs = baseMs + segment.startMs;
     if (!segment.final) {
@@ -696,6 +713,10 @@ export function createTranscripts(options: TranscriptsOptions) {
       leaveCloud(found.state, live, leaving);
       return;
     }
+    if (!counted(live, msOf(own.waiting))) {
+      leaveCloud(found.state, live, "cap");
+      return;
+    }
     const waiting = own.waiting;
     delete own.waiting;
     for (const samples of waiting) transcriber.push(stream, samples);
@@ -768,11 +789,10 @@ export function createTranscripts(options: TranscriptsOptions) {
     options.changed();
   }
 
-  function counted(live: Live, audio: TrackedAudio): boolean {
+  // Counted as it is sent, not while held for a connection that may never open.
+  function counted(live: Live, ms: number): boolean {
     const cloud = live.cloud;
     if (!cloud) return true;
-    const sources = SOURCES.filter((source) => audio[source]).length;
-    const ms = lengthOf(audio) * sources;
     while (cloud.aheadMs < ms) {
       if (!cloud.meter.add(COUNTED_AHEAD_MS)) return false;
       cloud.aheadMs += COUNTED_AHEAD_MS;
@@ -783,7 +803,11 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   function pushTracks(state: State, live: Live, audio: TrackedAudio): void {
     if (live.engine !== "local") {
-      const leaving = gateClosed(live) ?? (counted(live, audio) ? null : "cap");
+      const sent = SOURCES.flatMap((source) => {
+        const samples = audio[source];
+        return samples && live.streams[source] && !live.streams[source].waiting ? [samples] : [];
+      });
+      const leaving = gateClosed(live) ?? (counted(live, msOf(sent)) ? null : "cap");
       if (leaving) {
         leaveCloud(state, live, leaving);
         if (live.started) pushTracks(state, live, audio);

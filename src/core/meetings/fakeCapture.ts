@@ -18,6 +18,8 @@ export interface FakeCaptureOptions {
   systemAudio?: boolean;
   /** What the computer's sound does when asked for: plays, is denied, or gives only silence. */
   system?: "allowed" | "denied" | "silent";
+  /** What the microphone does when asked for: records (by default), or is denied. */
+  microphone?: "allowed" | "denied";
   /** Makes audio by itself, as captured, every `realTime` ms. */
   realTime?: number;
   /** The computer's sound plays these samples once, then silence; the microphone is quiet meanwhile. */
@@ -59,6 +61,7 @@ export interface FakeCapture extends AudioCapture {
 export function createFakeCapture(options: FakeCaptureOptions = {}): FakeCapture {
   const systemAudio = options.systemAudio ?? true;
   const system = options.system ?? "allowed";
+  const microphone = options.microphone ?? "allowed";
   let sink: AudioSink | null = null;
   let started = 0;
   /** Samples made so far per source, so the tone carries on across pushes. */
@@ -106,8 +109,11 @@ export function createFakeCapture(options: FakeCaptureOptions = {}): FakeCapture
     start(request, given) {
       started++;
       sink = given;
-      wanted = { microphone: true, system: request.systemAudio && system !== "denied" };
-      given.state("microphone", "recording");
+      wanted = {
+        microphone: microphone !== "denied",
+        system: request.systemAudio && system !== "denied",
+      };
+      given.state("microphone", microphone === "denied" ? "denied" : "recording");
       if (request.systemAudio) given.state("system", system === "denied" ? "denied" : "recording");
       const tick = options.realTime;
       if (tick) {

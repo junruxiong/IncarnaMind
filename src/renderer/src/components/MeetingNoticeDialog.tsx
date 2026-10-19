@@ -1,5 +1,6 @@
 import { useGap, useT } from "../i18n";
 import { useMeetings } from "../meetings";
+import { useAppStore } from "../store";
 import { useAudioKeptKey } from "../transcriptionServices";
 import { TranscriptionRouteChoice } from "./meetings/TranscriptionRouteChoice";
 import {
@@ -29,6 +30,11 @@ export function MeetingNoticeDialog() {
     waiting?.systemAudio === false ? "meetings.notice.microphone" : "meetings.notice.both",
   );
   const kept = t(useAudioKeptKey());
+  const transcribedHere = useAppStore(
+    (state) =>
+      (state.settings?.device.transcriptionRoute ?? "local") === "local" ||
+      state.embedding?.localOnly === true,
+  );
 
   return (
     <dialog
@@ -50,6 +56,7 @@ export function MeetingNoticeDialog() {
             {kept}
           </p>
           <p className={dialogTextClass}>{t("meetings.notice.tell")}</p>
+          {transcribedHere && <p className={dialogTextClass}>{t("meetings.notice.model")}</p>}
         </div>
         {/* Mounted as the sheet opens, so it reads the keys as they are now. */}
         {waiting && <TranscriptionRouteChoice />}

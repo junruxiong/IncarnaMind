@@ -2,12 +2,13 @@ import { describe, expect, test } from "vitest";
 import { translate } from "../../src/shared/i18n";
 import {
   isTheirs,
-  numberedSpeaker,
+  roomVoice,
   SPEAKER_ME,
   SPEAKER_THEM,
   SPEAKER_UNKNOWN,
   speakerKey,
   speakerName,
+  theirVoice,
 } from "../../src/shared/speakers";
 
 describe("The words for who said a live line (#941)", () => {
@@ -28,11 +29,17 @@ describe("The words for who said a live line (#941)", () => {
     expect(speakerKey("Speaker 1")).toBeNull();
   });
 
-  test("someone a cloud service told apart is numbered, worded in the interface's language, and is the other side", () => {
-    const speaker = numberedSpeaker(2);
-    expect(speakerName(speaker, (key, params) => translate("en", key, params))).toBe("Speaker 2");
-    expect(speakerName(speaker, (key, params) => translate("zh-CN", key, params))).toBe("发言人 2");
-    expect([speaker, SPEAKER_THEM].every(isTheirs)).toBe(true);
-    expect([SPEAKER_ME, SPEAKER_UNKNOWN, "Dana", null].some(isTheirs)).toBe(false);
+  test("voices a cloud service told apart are numbered and worded in the interface's language; only the other side's count as theirs", () => {
+    const en = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) =>
+      translate("en", key, params);
+    const zh = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) =>
+      translate("zh-CN", key, params);
+    expect(speakerName(theirVoice(2), en)).toBe("Them 2");
+    expect(speakerName(theirVoice(2), zh)).toBe("对方 2");
+    expect(speakerName(roomVoice(2), en)).toBe("Speaker 2");
+    expect(speakerName(roomVoice(2), zh)).toBe("发言人 2");
+    expect([theirVoice(2), SPEAKER_THEM].every(isTheirs)).toBe(true);
+    // In a room anyone may be the User: a room's voices are never the other side.
+    expect([roomVoice(2), SPEAKER_ME, SPEAKER_UNKNOWN, "Dana", null].some(isTheirs)).toBe(false);
   });
 });
