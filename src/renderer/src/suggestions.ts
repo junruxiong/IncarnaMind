@@ -11,10 +11,9 @@ import { MIND_SETTINGS_FIELD, type Suggestion } from "../../core/api";
 import { withShownName } from "../../shared/citations";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { citationLocation, formatLocation } from "../../shared/locations";
-import { searchedScope, useComposer } from "./composer";
+import { composerScope, useComposer } from "./composer";
 import { core } from "./core";
 import { sentencesIn } from "./editor/suggestionPlace";
-import { folderHoldsDocuments } from "./scopeDocuments";
 import { useAppStore } from "./store";
 
 /** How many times the offer shows on a device, at most. */
@@ -81,11 +80,7 @@ export async function askForSuggestion(
     !offerDeclined(doc);
   if (!on && !mayOffer) return null;
   const folderId = minds.find((mind) => mind.id === mindId)?.folderId ?? null;
-  const scope = searchedScope(
-    useComposer.getState().draft(mindId),
-    folderId,
-    folderHoldsDocuments(useAppStore.getState(), folderId),
-  );
+  const scope = composerScope(useComposer.getState().draft(mindId), folderId);
   const outcome = await core.suggestNext({ ...request, mindId, scope });
   // As they are now, after the reply: another Mind may have offered, or this one said Not now.
   const stillMayOffer =

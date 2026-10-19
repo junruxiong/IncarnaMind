@@ -61,21 +61,27 @@ export const holdsText = (document: Pick<Document, "status" | "fileStatus">): bo
   document.status !== "failed" &&
   document.status !== "no-text";
 
-/**
- * A Mind's own Search scope (#1359): its Folder while the Folder holds a Document, else every
- * Document, so a Mind filed into an empty Folder still searches what the User has.
- */
-export const ownSearchScope = (
-  folderId: string | null,
-  folderHoldsDocuments: boolean,
-): SearchScope => ({
-  folderIds: folderId !== null && folderHoldsDocuments ? [folderId] : [],
-  tagIds: [],
-  documentIds: [],
-});
+/** The Folder a Search scope is, when it is one Folder alone; null otherwise. */
+export const oneFolderOf = (scope: SearchScope | null): string | null =>
+  scope && scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
+    ? (scope.folderIds[0] ?? null)
+    : null;
 
-/** Whether a Search scope is that one Folder and nothing else: a Mind's own, when it is the Mind's. */
-export const isOnlyFolder = (scope: SearchScope, folderId: string): boolean =>
-  scope.folderIds.length === 1 &&
-  scope.folderIds[0] === folderId &&
-  scope.tagIds.length + scope.documentIds.length === 0;
+/**
+ * What a Question from a Mind in `folderId` searches (#1359). `chosen` is the scope the User
+ * set, null for none: the Mind's own, its Folder. The Mind's own Folder gives way to every
+ * Document (no scope) while it holds none, so a Mind filed into an empty Folder still searches
+ * what the User has; any other scope stays as chosen. Where new Minds are filed doesn't follow.
+ */
+export function mindSearchScope(
+  chosen: SearchScope | null,
+  folderId: string | null,
+  folderHoldsDocument: boolean,
+): SearchScope {
+  if (chosen !== null && (folderId === null || oneFolderOf(chosen) !== folderId)) return chosen;
+  return {
+    folderIds: folderId !== null && folderHoldsDocument ? [folderId] : [],
+    tagIds: [],
+    documentIds: [],
+  };
+}

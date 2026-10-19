@@ -166,11 +166,6 @@ const documentRow = (scope: Page | Locator, name: string) =>
 const notInAFolder = (window: Page) => window.getByTestId("not-in-a-folder");
 const notInAFolderHeading = (window: Page) => window.getByTestId("not-in-a-folder-section-heading");
 
-/**
- * The composer's scope for the open Mind's next Question: its Folder's chip while the Folder holds
- * a Document; every Document while it holds none, the chip's title naming it (#1359); every
- * Document for a Mind Not in a Folder (null).
- */
 async function expectScope(
   window: Page,
   folder: string | null,

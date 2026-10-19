@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ConversationAnswer, ConversationQuestion, Task } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
+import { mindSearchScope } from "../../../../shared/searchScope";
 import { type AddTarget, addAnswer, openTable } from "../../addToNote";
 import { notesToAdd } from "../../answerEditors";
 import { readsLine, stepsScope } from "../../assistantContext";
 import { readMindHandle } from "../../commands/handles";
-import { NO_MIND, searchedScope, useComposer } from "../../composer";
+import { NO_MIND, useComposer } from "../../composer";
 import {
   conversationLabel,
   useAnswerOnItsWay,
@@ -348,11 +349,7 @@ function useNextScope(mindId: string | null): ScopeChip[] {
   const documents = useAppStore((state) => state.documents);
   const folderHolds = useFolderHoldsDocuments(mind?.folderId ?? null);
   if (mindId !== null && !mind) return [];
-  const scope = searchedScope(
-    draft ?? { text: "", scope: null, skill: null, pastes: [] },
-    mind?.folderId ?? null,
-    folderHolds,
-  );
+  const scope = mindSearchScope(draft?.scope ?? null, mind?.folderId ?? null, folderHolds);
   return scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
 }
 

@@ -63,7 +63,7 @@ import {
   recordProposalRequest,
   resolveProposals,
 } from "../../shared/proposals";
-import { hasSearchScope, isOnlyFolder, searchScopeOf } from "../../shared/searchScope";
+import { hasSearchScope, oneFolderOf, searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
@@ -73,6 +73,7 @@ import {
   type AnswerSteps,
   type AnswerToolCall,
   type AnswerUsage,
+  type AskedFrom,
   type AskResult,
   BLOCK_ID_ATTRIBUTE,
   type ChatModelChoice,
@@ -376,18 +377,16 @@ export interface CellAnswer {
   error: ProviderError | null;
 }
 
-/** No Search scope: every Document. */
-/** Tells the model its Question's Search scope holds no Documents, so it answers from what it has (#748). */
-/**
- * With nothing to search, a model wrote what a Document says, uncited, into the User's Mind and
- * blamed its Tools (#1359): it is told why there is no search, and what to do instead.
- */
+// With nothing to search, a model wrote what a Document says, uncited, into the User's Mind and
+// blamed its Tools (#1359).
 const NOTHING_TO_CITE =
   "That is why no Tool searches or cites Documents in this Answer; none failed, so never say a Tool is unavailable. Answer from the Mind you read, the conversation and the request itself. When the request needs what a Document says (to quote, cite, summarise or compare it), write nothing into a Mind and never state what a Document says: answer in one sentence, in the User's language, giving that reason.";
 
+/** Tells the model its Question's Search scope holds no Documents, so it answers from what it has (#748). */
 const EMPTY_SCOPE_NOTE = `The User limited this Question to a Search scope (Folders, Tags or Documents) that holds no Documents, so there is nothing to search. ${NOTHING_TO_CITE} The line under your Answer offers to search all their Documents instead.`;
 
-const NO_DOCUMENTS_NOTE = `The User has added no Documents of their own (the examples IncarnaMind made aren't theirs), so there is nothing to search. ${NOTHING_TO_CITE} They can add Documents to the Library.`;
+const noDocumentsNote = (examples: boolean) =>
+  `The User has added no Documents of their own${examples ? " (the examples IncarnaMind made aren't theirs)" : ""}, so there is nothing to search. ${NOTHING_TO_CITE} They can add Documents to the Library.`;
 
 const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
@@ -407,6 +406,7 @@ const holdsNothing = (blocks: Y.XmlFragment): boolean =>
 function lastAnswerOf(
   conversationId: string,
   earlier: readonly ConversationMessage[],
+  filedIn: (scope: SearchScope | null, askedFrom: AskedFrom | null) => string | null,
 ): MindToolsOptions["lastAnswer"] {
   const at = earlier.findLastIndex((message) => message.kind === "answer");
   const answer = earlier[at];
@@ -417,7 +417,7 @@ function lastAnswerOf(
   return {
     blocks,
     origin: { from: messageReference(conversationId, answer.id), question: question?.text ?? "" },
-    folderId: question?.kind === "question" ? oneFolderOf(question.scope) : null,
+    folderId: question?.kind === "question" ? filedIn(question.scope, question.askedFrom) : null,
   };
 }
 
@@ -425,12 +425,6 @@ const followsAChange = (answer: ConversationAnswer | undefined) =>
   answer !== undefined &&
   (answer.steps?.withoutMindTools === true ||
     answer.toolCalls.some((call) => call.mindChange && changesAMind(call.mindChange)));
-
-/** The Folder a Search scope is, when it is one Folder alone; null otherwise. */
-const oneFolderOf = (scope: SearchScope | null): string | null =>
-  scope && scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
-    ? (scope.folderIds[0] ?? null)
-    : null;
 
 export interface AnswersOptions {
   content: MindContent;
@@ -482,8 +476,9 @@ export interface AnswersOptions {
    * Mind; null: every Document.
    */
   unscopedDocuments?(mindId: string | null): string[] | null;
-  /** Whether an in-app Folder holds a Document (`holdsText`): a Mind's own scope is it only then (#1359). */
-  folderHoldsDocuments(folderId: string): boolean;
+  /** What a Question from a Mind searches, by the one rule (`mindSearchScope`); null: every Document. */
+  searchedScope(scope: SearchScope | null, mindId: string | null): SearchScope | null;
+  mindFolder(mindId: string): string | null;
   /** The Document a Mind imported from Word was also added as (#720); null for none. */
   workingCopyOf?(mindId: string): string | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
@@ -1974,11 +1969,9 @@ export function createAnswers(options: AnswersOptions) {
           [
             base,
             mode === "no-documents"
-              ? input.emptyScope
-                ? scoped
-                  ? EMPTY_SCOPE_NOTE
-                  : NO_DOCUMENTS_NOTE
-                : ""
+              ? scoped && input.emptyScope
+                ? EMPTY_SCOPE_NOTE
+                : noDocumentsNote(input.emptyScope)
               : documentInstructions(
                   mode,
                   options.documents.searchableNames(documentIds, LISTED_DOCUMENTS),
@@ -2442,14 +2435,14 @@ export function createAnswers(options: AnswersOptions) {
           // Where the cursor is counts only as a selection when text is selected.
           blockIds: question.focus?.selection ? question.focus.blockIds : [],
         },
-        folderId: oneFolderOf(question.scope),
+        folderId: filedIn(question.scope, question.askedFrom),
         origin: { from: messageReference(conversation.id, answer.id), question: question.text },
-        lastAnswer: lastAnswerOf(conversation.id, turn.earlier),
+        lastAnswer: lastAnswerOf(conversation.id, turn.earlier, filedIn),
         followsAChange: followsAChange(
           turn.earlier.findLast((message) => message.kind === "answer"),
         ),
         followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
-        lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier) !== null,
+        lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier, filedIn) !== null,
         remake,
         renames: renamesIn(turn.earlier),
       },
@@ -2457,25 +2450,17 @@ export function createAnswers(options: AnswersOptions) {
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
   }
 
+  // A Mind the assistant makes is filed where the User works, however far the search widened (#1359).
+  const filedIn = (scope: SearchScope | null, askedFrom: AskedFrom | null) =>
+    oneFolderOf(scope) ??
+    (askedFrom && !askedFrom.deleted ? options.mindFolder(askedFrom.mindId) : null);
+
   const someOfTheDocuments = (documentIds: string[] | null, mindId: string | null) => {
     if (documentIds === null) return null;
     const total = options.documents.searchableCount(options.unscopedDocuments?.(mindId) ?? null);
     const documents = options.documents.searchableCount(documentIds);
     return documents > 0 && documents < total ? { documents, total } : null;
   };
-
-  /**
-   * What a Question asked in the assistant searches: the scope as asked, but the Mind's own Folder
-   * gives way to every Document while it holds none (#1359), as the composer shows it. A Mind
-   * filed into an empty Folder would otherwise search nothing.
-   */
-  const searchedScope = (scope: SearchScope | null, folderId: string | null) =>
-    scope !== null &&
-    folderId !== null &&
-    isOnlyFolder(scope, folderId) &&
-    !options.folderHoldsDocuments(folderId)
-      ? null
-      : scope;
 
   /** The Documents of a Search scope as it is now, and whether it covers none to search. */
   const scopeNow = (scope: SearchScope | null, mindId: string | null) => {
@@ -2637,7 +2622,7 @@ export function createAnswers(options: AnswersOptions) {
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
       // From here on nothing awaits, so the conversation and the Mind can't change underneath.
-      const scope = searchedScope(question.scope, question.mind?.folderId ?? null);
+      const scope = options.searchedScope(question.scope, question.mind?.id ?? null);
       const { documentIds, emptyScope } = scopeNow(scope, question.mind?.id ?? null);
       const mind = mindToRead(question.mind?.id ?? null, question.focus, question.text);
       const turn = options.conversations.add({ ...question, scope }, ready.model, readOf(mind));

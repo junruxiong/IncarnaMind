@@ -4,10 +4,15 @@
  * Folder still finds and cites what the User has. A scope the User chose stays
  * as chosen; with nothing in it, the model is told why it can't search.
  */
+import { randomUUID } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import type { AskInConversationInput, ConversationAnswer, SearchScope } from "../../src/core/api";
-import { answerEnded, citingModel, setUpWithDocuments } from "../helpers/citations";
-import { promptOf } from "../helpers/models";
+import { changesIn } from "../helpers/assistant";
+import { checkReply, isCheckRun } from "../helpers/checks";
+import { answerEnded, citingModel, setUpWithDocuments, shownPassages } from "../helpers/citations";
+import { connectToMind } from "../helpers/mindClient";
+import { note, writeMind } from "../helpers/minds";
+import { type ModelCall, promptOf, type ScriptedReply, scriptedModel } from "../helpers/models";
 
 const DPA = {
   name: "DPA - Copperleaf.txt",
@@ -52,6 +57,31 @@ async function ask(
   if (answer?.kind !== "answer" || question?.kind !== "question") throw new Error("Not asked.");
   return { answer: answer as ConversationAnswer, question };
 }
+
+/** Searches, then writes what it found into a new note, cited. */
+const makesANote = () =>
+  scriptedModel((call: ModelCall): ScriptedReply => {
+    if (isCheckRun(call)) return checkReply(call, {});
+    const search = call.results.find((result) => result.tool === "search_documents");
+    if (!search) {
+      return { calls: [{ tool: "search_documents", input: { query: "Copperleaf clause 3" } }] };
+    }
+    if (call.results.some((result) => result.tool === "create_mind")) return { text: "Made it." };
+    const passage = shownPassages(search.text).find((each) => each.document === "DPA - Copperleaf");
+    return {
+      calls: [
+        {
+          tool: "cite",
+          input: { citations: [{ marker: 1, passage: passage?.id, quote: CLAUSE }] },
+        },
+        {
+          tool: "create_mind",
+          input: { title: "DPA summary", content: `${CLAUSE} [^1]` },
+          streamInput: true,
+        },
+      ],
+    };
+  });
 
 const instructions = (model: ReturnType<typeof citing>) =>
   promptOf(model, 0).find((message) => message.role === "system")?.text ?? "";
@@ -126,5 +156,84 @@ describe("A Mind's own Search scope in the assistant", { timeout: 30_000 }, () =
     expect(told).toContain("never say a Tool is unavailable");
     expect(told).toContain("never state what a Document says");
     expect(answer.citations).toHaveLength(0);
+  });
+
+  // protects=a note the assistant makes from a Mind in an empty Folder is filed in that Folder, though the search widened to every Document; fails_when=it lands Not in a Folder; no_claim=none beyond protects.
+  test("a note made from a Mind in an empty Folder is filed in that Folder", async () => {
+    const model = makesANote();
+    const { core } = await setUpWithDocuments(model, [DPA]);
+    const contracts = await core.createLibraryGroup({ name: "Contracts", description: "" });
+    const mind = await core.createMind({ title: "Vendor notes", folderId: contracts.id });
+
+    const result = await core.askInConversation({
+      text: "Summarise the DPA into a new note",
+      mindId: mind.id,
+      scope: folderScope(contracts.id),
+    });
+    if (!result.asked) throw new Error("Not asked.");
+    await answerEnded(core, result.answerId);
+    const { messages } = await core.getConversation(result.conversation.id);
+    const answer = messages.find((message) => message.id === result.answerId);
+    if (answer?.kind !== "answer") throw new Error("No Answer.");
+
+    const [made] = changesIn(answer);
+    expect(made).toMatchObject({ created: true, cited: 1 });
+    const note = (await core.listMinds()).find((each) => each.id === made?.mindId);
+    expect(note?.folderId).toBe(contracts.id);
+  });
+
+  // protects=with no Documents and no examples at all, the model is still told there is nothing to search and not to blame its Tools; fails_when=it is told nothing; no_claim=how a real model words its reply.
+  test("with no Documents at all, the model is told why it can't search", async () => {
+    const model = citing();
+    const { core, mind } = await setUpWithDocuments(model, []);
+
+    await ask(core, { text: "Summarise the DPA, with Citations.", mindId: mind.id });
+
+    const told = instructions(model);
+    expect(told).toContain("The User has added no Documents of their own, so there is nothing");
+    expect(told).toContain("never say a Tool is unavailable");
+  });
+});
+
+describe("A Mind's own Search scope everywhere else", { timeout: 30_000 }, () => {
+  // protects=suggestions while writing take the same rule: a Mind in an empty Folder counts every Document; fails_when=it reports no Documents; no_claim=the suggestion itself.
+  test("suggestions count every Document while the Mind's Folder holds none", async () => {
+    const { core } = await setUpWithDocuments(citing(), [DPA]);
+    const contracts = await core.createLibraryGroup({ name: "Contracts", description: "" });
+    const mind = await core.createMind({ title: "Vendor notes", folderId: contracts.id });
+
+    const outcome = await core.suggestNext({
+      requestId: randomUUID(),
+      mindId: mind.id,
+      paragraph: "Copperleaf processes personal data. It does so only on instructions.",
+      scope: folderScope(contracts.id),
+    });
+
+    expect(outcome).toEqual({ kind: "off", scopeHasDocuments: true });
+  });
+
+  // protects=Check against Documents takes the same rule: a Mind in an empty Folder checks against every Document, as its chip says (#1359); fails_when=it says there is nothing to check against; no_claim=the verdict.
+  test("checks a sentence against every Document while the Mind's Folder holds none", async () => {
+    const model = scriptedModel(
+      (call: ModelCall): ScriptedReply =>
+        isCheckRun(call) ? checkReply(call, {}) : { text: "No." },
+    );
+    const { core } = await setUpWithDocuments(model, [DPA]);
+    const contracts = await core.createLibraryGroup({ name: "Contracts", description: "" });
+    const mind = await core.createMind({ title: "Vendor notes", folderId: contracts.id });
+    const client = await connectToMind(core, mind.id);
+    const sentence = note(CLAUSE);
+    writeMind(client, [sentence]);
+    await client.settled();
+
+    const result = await core.checkSentences({
+      requestId: randomUUID(),
+      mindId: mind.id,
+      action: "check-against-documents",
+      from: { blockId: String(sentence.attrs?.id), offset: 0 },
+      to: { blockId: String(sentence.attrs?.id), offset: CLAUSE.length },
+    });
+
+    expect(result.kind).toBe("checked");
   });
 });

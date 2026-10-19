@@ -66,8 +66,6 @@ export interface ScopeChip {
 /** The most choices of one kind the picker lists at once; typing narrows them. */
 const MAX_CHOICES_PER_KIND = 50;
 
-/** Whether a search can use the Document now. */
-
 /**
  * How many Documents each Folder and Tag holds that can be searched (#764): an in-app
  * Folder's filed Documents (suggested ones too, as a search counts them), a
