@@ -165,7 +165,7 @@ test("most sentences unsupported says so once; an unsupported card offers its th
   const marks = window.getByTestId("claim-mark");
   await expect(marks).toHaveCount(2);
   const covered = (await checkCard(window)).getByTestId("checks-uncovered");
-  await expect(covered).toContainText("Your Documents don't cover most of this");
+  await expect(covered).toContainText("Your Documents don’t cover most of this");
   await expect(covered.getByTestId("checks-add-files")).toHaveText("Add files…");
   await window.keyboard.press("Escape");
   await expect(window.getByTestId("check-card")).toHaveCount(0);

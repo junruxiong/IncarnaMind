@@ -202,7 +202,7 @@ describe("the example Mind", { timeout: 30_000 }, () => {
     const core = startCore(await createTempDataFolder());
     expect((await core.getExamples()).ready).toBeNull();
     await expect(core.askReadyQuestion()).rejects.toThrow(
-      "The example's Documents are still being read. Try again in a moment.",
+      "The example’s Documents are still being read. Try again in a moment.",
     );
     expect(await core.listConversations()).toEqual([]);
   });

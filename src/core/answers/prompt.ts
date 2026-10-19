@@ -111,6 +111,17 @@ export function webInstructions(offered: boolean): string {
   ].join("\n");
 }
 
+export function commandInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    'You can also do in the app what the User asks of their Documents and Minds, with list_commands and run_command: rename, move to a Folder, tag, delete (to Recently deleted), export a Mind as a file, and add files from a folder ("rename these by date", "move the leases into Real estate", "tag every invoice Finance", "export this Mind as Word", "add the PDFs in ~/Downloads/deals", "把发票都加上财务标签").',
+    "- First find what to act on with list_commands, by the words of the request, then run a command on exactly what it found, by id, one call per command. Never act on something it didn't find, and never guess an id. If nothing matches, say so and change nothing.",
+    "- Renaming by date: use the dates list_commands gives, as YYYY-MM-DD before the name, unless the User says otherwise.",
+    "- A Question about the Documents isn't a command: answer it. Writing into a Mind is the Minds' Tools' work.",
+    "- Say only what the calls returned, in a sentence or two: what changed, and what didn't and why. A command that failed or that the User didn't allow didn't happen: never say it did. The User can undo the changes with Undo.",
+  ].join("\n");
+}
+
 /** The Document the Mind in focus is the working copy of (#1036), by name; empty for none. */
 export function workingCopyNote(original: string | null): string {
   if (original === null) return "";
@@ -688,6 +699,28 @@ export function loadedSkillText(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+const NAMES_A_LANGUAGE =
+  /\blanguage\b|English|Chinese|Mandarin|Cantonese|Spanish|French|German|Japanese|Korean|Portuguese|Russian|Arabic|Italian|Hindi|语言|中文|英文|英语|日语|日文|法语|德语|西班牙语|韩语/i;
+
+/** What the built-in Skills say (#892), which is what the note says: no language of their own. */
+const NO_LANGUAGE_OF_ITS_OWN =
+  /\blanguage (?:that |which )?the Question is written in|\bthe Question's language|\blanguage of the (?:Question|report)\b|\b(?:another|other|that) languages?\b/gi;
+
+/** Whether a Skill's instructions name a language to write in other than the Question's, so its choice stands (#1273). */
+export function skillSetsLanguage(instructions: string): boolean {
+  return NAMES_A_LANGUAGE.test(instructions.replace(NO_LANGUAGE_OF_ITS_OWN, ""));
+}
+
+/**
+ * Said after a search's Passages while the Answer follows a Skill that names no language: the
+ * Skill and the Passages both come after the instructions' own language line, and whatever
+ * language they are in must not win over the Question's (#1273). `language` is the line
+ * `languageInstruction` made.
+ */
+export function skillLanguageNote(language: string): string {
+  return `The Skill's instructions don't change the language of your Answer. ${language.replace(/^- /, "")}`;
 }
 
 const SCRIPTS =

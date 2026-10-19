@@ -18,6 +18,7 @@ import { isLive, useMeetings } from "../../meetings";
 import { useModelSetup } from "../../modelSetup";
 import { togglePlanView, useResearch } from "../../research";
 import { type ScopeChip, scopeChips } from "../../scope";
+import { skillTitle } from "../../skills";
 import { useAppStore } from "../../store";
 import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
 import { loadTasks, useTasks } from "../../tasks";
@@ -225,7 +226,8 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         </>
       )}
       {onItsWay && (
-        // Its line shows at rest, as an Answer's being written does.
+        // Its line shows at rest, as an Answer's being written does, with room kept for its first
+        // line of text, so the Question above doesn't move when the Answer starts.
         <div
           data-testid="assistant-answer-on-its-way"
           data-status="streaming"
@@ -245,6 +247,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
               nextScope.filter((chip) => !chip.deleted),
             )}
           />
+          <div aria-hidden="true" className="assistant-answer-first-line" />
           <WritingLine
             // Stopped before it started: it says so at once, and stops as it starts.
             status={
@@ -319,7 +322,7 @@ function QuestionBubble({
         {skill && (
           <span data-testid="assistant-question-skill" className="assistant-question-skill">
             <SparkLineIcon aria-hidden="true" className="size-3" />
-            {skill}
+            {skillTitle(skill, t)}
           </span>
         )}
         {research && (

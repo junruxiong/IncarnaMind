@@ -144,7 +144,7 @@ describe("A Citation's badge", () => {
       }).zh,
     ).toBe("未在“§ Tides”中找到引文");
     expect(words({ ...found, check: "checking" }).en).toBe("checking…");
-    expect(words({ ...found, check: "cant-check", checkReason: "no-text" }).en).toBe("Can't check");
+    expect(words({ ...found, check: "cant-check", checkReason: "no-text" }).en).toBe("Can’t check");
     for (const check of ["found", "not-found", "cant-check", "checking"] as const) {
       expect(words({ ...found, check }).en).not.toMatch(/verif/i);
     }

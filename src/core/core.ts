@@ -5,6 +5,7 @@ import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
+import { optionsFor } from "../shared/exportOptions";
 import { translate } from "../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
 import { holdsOnlyItsTitle } from "../shared/madeMind";
@@ -231,10 +232,14 @@ import { chatClassifier } from "./tags/classify";
 import { createJevTagging, decisionModelTagger } from "./tags/jev";
 import { createRateLimitPause } from "./tags/rateLimit";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
+import type { CommandsHost } from "./tools/commands/run";
+import { createCommandSteps } from "./tools/commands/steps";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
 import { createPublicFetch } from "./tools/web/fetcher";
+import { createCloudTranscription } from "./transcription/cloud/routes";
 import {
   createTranscriptionModel,
+  KEEPS_UP,
   QWEN3_ASR_0_6B,
   TRANSCRIPTION_SPEED,
 } from "./transcription/model";
@@ -844,6 +849,8 @@ export function createCore(adapters: CoreAdapters): Core {
   if (documents.searchableCount() > 0) rerank.prepare();
   /** Set once outside agents exist: Local mode pauses them. */
   let agentsLocalModeChanged = () => {};
+  /** Where meeting audio may go changed: a live cloud stream whose gate closed stops now (#141). */
+  let transcriptionGateChanged = () => {};
   /** Set once Connectors exist: Local mode pauses those on other computers. */
   let connectorsLocalModeChanged = () => {};
   /**
@@ -861,6 +868,7 @@ export function createCore(adapters: CoreAdapters): Core {
         () => new LocalModeError(),
       );
     }
+    transcriptionGateChanged();
     if (wasLocal !== embedding.localOnly()) {
       usageData.localModeChanged();
       privacyChanged();
@@ -1186,6 +1194,33 @@ export function createCore(adapters: CoreAdapters): Core {
 
   const answerEngine =
     adapters.answerEngine ?? createAiSdkAnswerEngine({ runEngine: adapters.runEngine });
+  // The assistant's commands go through the core's own interface, as the window's clicks do (#1110).
+  let api: Core | null = null;
+  const commandSteps = createCommandSteps();
+  const commandsHost: CommandsHost = {
+    get core() {
+      if (!api) throw new Error("The core isn't ready for commands yet.");
+      return api;
+    },
+    outputFolder: async () => outputs.settings().location,
+    exportMind: async (mindId, format, folder, approved) => {
+      const options = optionsFor(format, settings.get().user.exportOptions);
+      const { fileName, data, word } = await mindExports.export(mindId, options);
+      // The window shows first what a Word file can't keep (#105); the assistant can't.
+      if (word && word.notKept.length > 0) {
+        throw new InvalidInputError({ key: "error.commands.wordLoses" });
+      }
+      const file = await outputs.save({
+        name: fileName,
+        data,
+        ownFile: ownFileOf(options),
+        ...(folder !== null && { folder, approved }),
+      });
+      recordExport(options);
+      return file;
+    },
+  };
+
   const answers = createAnswers({
     content,
     events,
@@ -1245,6 +1280,20 @@ export function createCore(adapters: CoreAdapters): Core {
     ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     web: webSearch,
+    commands: {
+      host: commandsHost,
+      findable: async () => {
+        const { core } = commandsHost;
+        const [listed, mindsNow, libraryNow, tagsNow] = await Promise.all([
+          core.listDocuments(),
+          core.listMinds(),
+          core.getLibrary(),
+          core.listTags(),
+        ]);
+        return { documents: listed, minds: mindsNow, library: libraryNow, tags: tagsNow };
+      },
+      steps: commandSteps,
+    },
     // The assistant changes Minds and makes them, as Proposals (#202).
     minds: {
       list: () =>
@@ -2455,11 +2504,8 @@ export function createCore(adapters: CoreAdapters): Core {
       id: transcriptionHost.origin,
       name: transcriptionHost.host === "huggingface.co" ? "Hugging Face" : transcriptionHost.host,
     },
-    // Where this copy transcribes, once Meetings are on.
-    listed: () =>
-      transcriber !== undefined &&
-      transcriptionSource.files.length > 0 &&
-      settings.get().device.meetingsEnabled,
+    // Where this copy transcribes.
+    listed: () => transcriber !== undefined && transcriptionSource.files.length > 0,
   });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
   const chatGptSignIn = new URL(
@@ -2639,21 +2685,41 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: meetingsChanged,
   });
   const transcriber = adapters.transcriber;
+  const transcriptionModel =
+    transcriber &&
+    createTranscriptionModel({
+      dataDir,
+      transcriber,
+      ...(adapters.transcriptionModelSource && { source: adapters.transcriptionModelSource }),
+      speed: () => {
+        const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
+        return isRecord(value) ? (value as Record<string, number>) : {};
+      },
+      emitStatus: () => meetingsChanged(),
+    });
+  // Where meeting audio is transcribed (#141): this computer, or the cloud service the User chose.
+  const cloudTranscription = createCloudTranscription({
+    settings,
+    secrets,
+    consent,
+    meter,
+    localOnly: () => embedding.localOnly(),
+    providerKey: (catalogId) => chat.apiKeyOf(catalogId),
+    log: adapters.log ?? silentLogger,
+    ...(adapters.transcriptionKeyFetch && { fetch: adapters.transcriptionKeyFetch }),
+    vadFile: async () => {
+      if (!transcriptionModel) throw new Error("This copy can't transcribe.");
+      return transcriptionModel.vadFile();
+    },
+  });
   const transcripts =
     transcriber &&
+    transcriptionModel &&
     createTranscripts({
       dataDir,
       transcriber,
-      model: createTranscriptionModel({
-        dataDir,
-        transcriber,
-        ...(adapters.transcriptionModelSource && { source: adapters.transcriptionModelSource }),
-        speed: () => {
-          const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
-          return isRecord(value) ? (value as Record<string, number>) : {};
-        },
-        emitStatus: () => meetingsChanged(),
-      }),
+      model: transcriptionModel,
+      cloud: cloudTranscription,
       documents: {
         add: (id, name, file) => documents.addSnapshot(id, name, file, () => {}, "transcript"),
         file: (documentId, folderId) => library.assign(documentId, folderId),
@@ -2700,12 +2766,11 @@ export function createCore(adapters: CoreAdapters): Core {
     dataDir,
     now,
     capture: adapters.audioCapture,
-    enabled: () => settings.get().device.meetingsEnabled,
     noticeAccepted: () => settings.get().device.meetingNoticeAccepted,
     systemAudioByDefault: () => settings.get().device.meetingSystemAudio,
     language: () => settings.get().language,
-    createMind: (title) => {
-      const mind = minds.create(parseCreateMindInput({ title }));
+    createMind: (title, folderId) => {
+      const mind = minds.create(parseCreateMindInput({ title, folderId }));
       startInWritingStyle(mind.id);
       mindsChanged();
       return mind;
@@ -2730,6 +2795,7 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
+  transcriptionGateChanged = () => transcripts?.recheckCloud();
   meetingHelpOf = (mindId, question) => {
     const meeting = meetings.liveOf(mindId);
     if (!meeting) return null;
@@ -2936,7 +3002,7 @@ export function createCore(adapters: CoreAdapters): Core {
   tasks.settleOrphans();
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
-  return {
+  api = {
     createMind: async (input) =>
       makeMind(parseCreateMindInput(input), { headed: isRecord(input) && input.headed === true }),
     checkWordFile: async (path, folderId) => wordImports.check(path, folderId),
@@ -3075,8 +3141,16 @@ export function createCore(adapters: CoreAdapters): Core {
           change = { ...patch, user };
         }
       }
+      const route =
+        isRecord(patch) && isRecord(patch.device) ? patch.device.transcriptionRoute : undefined;
+      if (route !== undefined) await cloudTranscription.check(route);
       const languageWas = settings.get().language;
       const updated = settings.update(change);
+      // Choosing a cloud service where its line says meeting audio goes to it is the consent (ADR-0022).
+      if (route !== undefined) {
+        cloudTranscription.chose(updated.device.transcriptionRoute);
+        transcriptionGateChanged();
+      }
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
@@ -3150,7 +3224,11 @@ export function createCore(adapters: CoreAdapters): Core {
         linkedFolderId,
       });
     },
-    renameDocument: async (id, name) => documents.rename(id, name),
+    renameDocument: async (id, name) => {
+      const renamed = documents.rename(id, name);
+      events.emit("documents.renamed", [renamed]);
+      return renamed;
+    },
     deleteDocument: async (id) => {
       await documents.delete(id);
       activity.documentDeleted(id as string);
@@ -3299,12 +3377,17 @@ export function createCore(adapters: CoreAdapters): Core {
     listChatProviders: () => chat.list(),
     saveChatProvider: async (input) => {
       const provider = await chat.save(input);
+      await cloudTranscription.refreshKeys();
+      transcriptionGateChanged();
       settingsChanged();
       await dataFlowsChanged();
       return provider;
     },
     deleteChatProvider: async (id) => {
       await chat.delete(id);
+      // A transcription route that used this provider's key has none now.
+      await cloudTranscription.refreshKeys();
+      transcriptionGateChanged();
       settingsChanged();
       await readinessChanged();
     },
@@ -3490,6 +3573,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     revokeConsent: async (flowId, serviceId) => {
       consent.revoke(flowId, serviceId);
+      if (typeof flowId === "string" && typeof serviceId === "string") {
+        cloudTranscription.revoked(flowId, serviceId);
+      }
+      transcriptionGateChanged();
+      settingsChanged();
       await dataFlowsChanged();
     },
     listRegisteredDataFlows: () => consent.listRegistered(),
@@ -3583,6 +3671,8 @@ export function createCore(adapters: CoreAdapters): Core {
     assignDocumentGroup: async (id, groupId) => library.assign(id, groupId),
     restoreAssignment: async (id, previous) => library.restoreAssignment(id, previous),
     restore: async (refs) => recentlyDeleted.restore(refs),
+    undoCommands: async (run) => commandSteps.undo(run),
+    redoCommands: async (run) => commandSteps.redo(run),
     listDeleted: async () => recentlyDeleted.list(),
     deletePermanently: async (refs) => {
       recentlyDeleted.deletePermanently(refs);
@@ -3905,6 +3995,20 @@ export function createCore(adapters: CoreAdapters): Core {
     stopMeeting: async (meetingId) => meetings.stop(meetingId),
     deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
+    listTranscriptionServices: () => cloudTranscription.list(),
+    setTranscriptionKey: (input) => cloudTranscription.setKey(input),
+    getTranscriptionSpeed: async () => {
+      const speed = settings.readDeviceValue(TRANSCRIPTION_SPEED);
+      const ratio =
+        transcriptionModel && isRecord(speed) ? speed[transcriptionModel.definition.id] : undefined;
+      return { keepsUp: typeof ratio === "number" ? ratio <= KEEPS_UP : null };
+    },
+    removeTranscriptionKey: async (route) => {
+      const listed = await cloudTranscription.removeKey(route);
+      transcriptionGateChanged();
+      settingsChanged();
+      return listed;
+    },
     openAudioSettings: (source) => meetings.openSettings(source),
     askMeetingHelp,
     setMeetingTemplate: async (input) => {
@@ -4023,6 +4127,7 @@ export function createCore(adapters: CoreAdapters): Core {
       db.close();
     },
   };
+  return api;
 }
 
 /** The account's name, or "" where the OS can't say (`userInfo` throws for a user without one). */

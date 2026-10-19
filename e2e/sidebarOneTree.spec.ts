@@ -585,9 +585,9 @@ const NEW_MENU_ROWS: readonly MessageKey[] = [
   "menu.newFolder",
   "sidebar.plus.more",
 ];
-// Record a meeting is left out: it is offered only once meetings are turned on.
 const MORE_ROWS: readonly MessageKey[] = [
   "wordImport.command",
+  "meetings.record",
   "command.compareDocuments",
   "verify.command",
   "folder.fromStarters",
@@ -601,6 +601,7 @@ const IN_PALETTE: readonly MessageKey[] = [
   "menu.newFolder",
   "sidebar.plus.linkFolder",
   "wordImport.command",
+  "meetings.record",
   "command.compareDocuments",
   "verify.command",
   "library.chooseStarters",
