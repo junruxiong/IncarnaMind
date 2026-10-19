@@ -226,7 +226,6 @@ describe("shortcuts", () => {
     const add = commands.get("documents.add")?.shortcut;
     expect(add && keysLabel(keysOn(add.keys, true), true)).toBe("⌘O");
     expect(add && keysLabel(keysOn(add.keys, false), false)).toBe("Ctrl+O");
-    expect(add?.notInText).toBe(true);
     expect(commands.get("linkedFolder.add")?.shortcut).toBeUndefined();
   });
 

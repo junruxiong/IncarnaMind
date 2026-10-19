@@ -1,3 +1,4 @@
+import { MENU_COMMANDS } from "../../../shared/commands";
 import { useAppStore } from "../store";
 import { type Command, fromMenu } from "./registry";
 
@@ -6,7 +7,7 @@ const store = () => useAppStore.getState();
 export const addDocumentCommands: readonly Command[] = [
   {
     ...fromMenu("documents.add"),
-    shortcut: { keys: "CmdOrCtrl+O", notInText: true },
+    shortcut: { keys: MENU_COMMANDS["documents.add"].keys, notInText: true },
     keywords: ["documents.add.keywords"],
     group: "main",
     reversible: true,

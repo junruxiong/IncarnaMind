@@ -51,7 +51,6 @@ async function writeFolder(name: string): Promise<string> {
   return path;
 }
 
-/** Makes the system's open dialog count the times it is asked, and answer that nothing was chosen. */
 async function countPickers(app: ElectronApplication): Promise<void> {
   await app.evaluate(({ dialog }) => {
     const asked = { count: 0 };
@@ -154,7 +153,6 @@ test("⌘O opens the picker from the sidebar, a Mind and the Library, and does n
     await dismissChatSetup(window);
     await countPickers(app);
 
-    // In a Mind's text, and in a field: the keys keep to the text.
     await newMind(window);
     await enterContent(window);
     await window.keyboard.press("ControlOrMeta+o");
@@ -169,17 +167,14 @@ test("⌘O opens the picker from the sidebar, a Mind and the Library, and does n
     expect(await takesKeys(window)).toBe(true);
     expect(await pickersAsked(app)).toBe(0);
 
-    // From the Library, with the focus on its Add button.
     await window.getByTestId("library-add-documents").focus();
     await window.keyboard.press("ControlOrMeta+o");
     await expect.poll(() => pickersAsked(app)).toBe(1);
 
-    // From the sidebar.
     await leaveText(window);
     await window.keyboard.press("ControlOrMeta+o");
     await expect.poll(() => pickersAsked(app)).toBe(2);
 
-    // From a Mind, with the focus on its tab rather than in its text.
     await pointAndClick(window, window.getByTestId("mind-tab").first());
     await window.keyboard.press("ControlOrMeta+o");
     await expect.poll(() => pickersAsked(app)).toBe(3);
@@ -269,7 +264,6 @@ test("the File menu has Add Documents… on ⌘O and Link a folder…, no other 
     });
     await expect(documentItems(window, "Tides")).toHaveCount(1);
 
-    // From a field too: the menu item is not the keys.
     await window.getByTestId("open-library").click();
     await window.getByTestId("library-search").click();
     await expect(window.getByTestId("library-search")).toBeFocused();
