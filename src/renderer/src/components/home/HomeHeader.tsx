@@ -1,7 +1,7 @@
-import { formatWeekdayDate } from "../../../../shared/dates";
+import { formatWeekdayDate, partOfDay } from "../../../../shared/dates";
 import { menuKeysLabel } from "../../commands/keymap";
 import { commands } from "../../commands/registry";
-import { partOfDay, useHomeNeeds, useMinuteClock, useOwnMinds } from "../../home";
+import { useHomeNeeds, useMinuteClock, useOwnMinds } from "../../home";
 import { useLanguage, useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { PencilLineIcon } from "../lineIcons";

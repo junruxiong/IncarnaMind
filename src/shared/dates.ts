@@ -78,6 +78,12 @@ function format(
 }
 
 /** "12 October", "10月12日". */
+/** The part of the day a greeting names: morning until noon, afternoon until six, then evening. */
+export function partOfDay(now: Date): "morning" | "afternoon" | "evening" {
+  const hour = now.getHours();
+  return hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+}
+
 export function formatDay(moment: Moment, language: Language, options: DateOptions = {}): string {
   return format(moment, language, options, { day: "numeric", month: "long" });
 }

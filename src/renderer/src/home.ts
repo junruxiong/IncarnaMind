@@ -56,6 +56,3 @@ export function useMinuteClock(): Date {
   }, []);
   return now;
 }
-
-export const partOfDay = (now: Date): "morning" | "afternoon" | "evening" =>
-  now.getHours() < 12 ? "morning" : now.getHours() < 18 ? "afternoon" : "evening";

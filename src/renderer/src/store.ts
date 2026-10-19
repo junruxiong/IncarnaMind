@@ -464,6 +464,20 @@ function readList<T>(list: PushedList, request: Promise<T>, readAt: Map<PushedLi
 const pushedSince = (list: PushedList, readAt: Map<PushedList, number>) =>
   (lastPushed.get(list) ?? 0) > (readAt.get(list) ?? 0);
 
+const LOADED_KEY = "incarnamind.window.loaded";
+
+// A reload of the window (View › Reload) keeps the tab it showed; only a new window opens on Home.
+function windowLoadedBefore(): boolean {
+  try {
+    const before = sessionStorage.getItem(LOADED_KEY) !== null;
+    sessionStorage.setItem(LOADED_KEY, "1");
+    return before;
+  } catch {
+    // Not known, then: it opens on Home, as a new window does.
+    return false;
+  }
+}
+
 export const useAppStore = create<AppState>()((set, get) => {
   let libraryRequest = 0;
   /** The interface's words, outside React: for the lines the store writes (Undo's). */
@@ -858,8 +872,10 @@ export const useAppStore = create<AppState>()((set, get) => {
           askedOwnAtLaunch: settings.device.gettingStarted.askedOwn,
           status: { kind: "ready" },
         });
+        const reloaded = windowLoadedBefore();
         // Minds made before this setting existed count as an earlier launch.
-        if (!offered?.mindId && (settings.device.openedBefore || minds.length > 0)) {
+        const launchedBefore = settings.device.openedBefore || minds.length > 0;
+        if (!offered?.mindId && launchedBefore && !reloaded) {
           await get().openHome({ first: true });
         }
         if (!settings.device.openedBefore) {
