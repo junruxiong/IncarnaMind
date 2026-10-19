@@ -1,6 +1,6 @@
 """Judges round trips of workbooks with openpyxl (MIT): what each copy kept of its original.
 
-  python -I judge.py <originals folder> <copies folder> <out.json>
+  python judge.py <originals folder> <copies folder> <out.json>
 
 For every copy: whether it opens; every cell's value and formula; number formats, fonts,
 fills, borders, alignment, merged cells, column widths, row heights, sheet names and order;
@@ -97,6 +97,12 @@ def judge(job):
         info = json.load(open(edit))
         edited = (info["edit"]["sheet"], info["edit"]["ref"])
         skip_values = {tuple(k.rsplit("!", 1)) for k in info["expected"]} | {edited}
+    # A workbook saved with no results (XlsxWriter, openpyxl, ExcelJS write 0 or nothing), or one that
+    # asks Excel to recalculate on opening, has every
+    # formula recalculated by the first edit, so its stored results are meant to change.
+    formulas = [(ws.title, cell.coordinate) for ws in o.worksheets for row in ws.iter_rows() for cell in row if cell.data_type == "f"]
+    asks = b'fullCalcOnLoad="1"' in zipfile.ZipFile(original).read("xl/workbook.xml")
+    placeholders = bool(edit) and bool(formulas) and (asks or all(ov[sheet][ref].value in (None, 0, "") for sheet, ref in formulas))
     cells = values_lost = formulas_lost = formats_lost = 0
     examples = []
     for ws in o.worksheets:
@@ -112,7 +118,7 @@ def judge(job):
                     if formula_of(cell.value) != formula_of(other.value) and not (cell.data_type != "f" and same_value(cell.value, other.value)):
                         formulas_lost += 1
                         if len(examples) < 6: examples.append(("formula/value", ws.title, ref, str(cell.value)[:60], str(other.value)[:60]))
-                    if (ws.title, ref) not in skip_values and not same_value(wv[ref].value, wcv[ref].value):
+                    if (ws.title, ref) not in skip_values and not (placeholders and cell.data_type == "f") and not same_value(wv[ref].value, wcv[ref].value):
                         values_lost += 1
                         if len(examples) < 6: examples.append(("stored value", ws.title, ref, str(wv[ref].value)[:60], str(wcv[ref].value)[:60]))
                 if look(cell) != look(other):
@@ -158,7 +164,7 @@ def judge(job):
 def judge_in_child(job):
     """Each file in a process of its own, at most two minutes: a workbook can hang or crash openpyxl."""
     original, copy, edit = job
-    args = [sys.executable, "-I", os.path.abspath(__file__), "--one", original, copy] + ([edit] if edit else [])
+    args = [sys.executable, os.path.abspath(__file__), "--one", original, copy] + ([edit] if edit else [])
     try:
         done = subprocess.run(args, capture_output=True, text=True, timeout=120)
         return json.loads(done.stdout.strip().splitlines()[-1])
