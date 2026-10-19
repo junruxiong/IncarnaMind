@@ -337,6 +337,24 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
     ]);
   });
 
+  // protects=a merge's Undo (#1361) links the inner folder again and its Undo at once unlinks it with its files; fails_when=a file added on its own inside a newly linked folder stays on its own until the first scan; no_claim=what the scan reads.
+  test("a folder linked takes the files added on their own inside it at once, keeping their ids", async () => {
+    const library = await createSourceFolder();
+    const core = startCore(await createTempDataFolder());
+    const [single] = await addAndProcess(core, [
+      await writeSourceFile(library, "A/notes.md", TIDES),
+    ]);
+    if (!single) throw new Error("Nothing was added.");
+
+    const linked = await core.addLinkedFolder(library);
+
+    expect(await core.listDocuments()).toEqual([
+      expect.objectContaining({ id: single.id, linkedFolderId: linked.id }),
+    ]);
+    await core.removeLinkedFolder(linked.id);
+    expect(await core.listDocuments()).toEqual([]);
+  });
+
   test("unlinking a folder removes its Documents and Folders from the index", async () => {
     const library = await createSourceFolder();
     await writeSourceFile(library, "A/a.md", TIDES);

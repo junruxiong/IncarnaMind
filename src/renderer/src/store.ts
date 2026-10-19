@@ -405,10 +405,22 @@ const upsert = (documents: Document[], item: Document) =>
     ? documents.map((each) => (each.id === item.id ? item : each))
     : [item, ...documents];
 
-const linkSteps = new Map<string, Undoable>();
+/** What a link's Undo takes back: the folder linked, and what was in the Library before it. */
+interface LinkStep {
+  linkedFolderId: string;
+  path: string;
+  took: Taken;
+}
 
-const within = (folder: string, path: string) =>
-  path === folder || path.startsWith(`${folder}/`) || path.startsWith(`${folder}\\`);
+interface Taken {
+  documentIds: string[];
+  linkedFolders: { path: string; layout: LinkedFolderLayout }[];
+}
+
+const linkSteps = new Map<Undoable, LinkStep>();
+
+const inside = (folder: string, path: string) =>
+  path !== folder && (path.startsWith(`${folder}/`) || path.startsWith(`${folder}\\`));
 
 /** Puts a Linked folder in the list in place, if it's there. New ones arrive with the core's event. */
 const replaceLinked = (linkedFolders: LinkedFolder[], linked: LinkedFolder) =>
@@ -498,14 +510,42 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
   const push = (change: Undoable) => useUndo.getState().push(change);
-  const takenOver = async (path: string) => {
+  const takenOver = async (path: string): Promise<Taken> => {
     const [documents, linked] = await Promise.all([core.listDocuments(), core.listLinkedFolders()]);
     return {
       documentIds: documents.map((each) => each.id),
       linkedFolders: linked
-        .filter((each) => each.path !== path && within(path, each.path))
+        .filter((each) => inside(path, each.path))
         .map((each) => ({ path: each.path, layout: each.layout })),
     };
+  };
+  const unlinkStep = async (link: LinkStep) => {
+    const linked = await core.listLinkedFolders();
+    const now =
+      linked.find((each) => each.id === link.linkedFolderId) ??
+      linked.find((each) => each.path === link.path);
+    if (!now) throw new UndoRefused((t) => t("error.linkedFolder.notFound"), null);
+    link.path = now.path;
+    await core.removeLinkedFolder(now.id, { keep: link.took.documentIds });
+    // The Linked folders it merged are linked again, their Documents keeping their ids.
+    for (const inner of link.took.linkedFolders) {
+      const back = await core.addLinkedFolder(inner.path);
+      showLinked(await core.setLinkedFolderLayout(back.id, inner.layout));
+      for (const other of linkSteps.values()) {
+        if (other.path === inner.path) other.linkedFolderId = back.id;
+      }
+    }
+  };
+  const withdrawLinkSteps = (linkedFolderId: string) => {
+    const gone = [...linkSteps].filter(([, link]) => link.linkedFolderId === linkedFolderId);
+    for (let next = gone.pop(); next; next = gone.pop()) {
+      const [step, link] = next;
+      if (!linkSteps.delete(step)) continue;
+      useUndo.getState().withdraw(step);
+      // The folders it merged went with it.
+      const merged = new Set(link.took.linkedFolders.map((each) => each.path));
+      gone.push(...[...linkSteps].filter(([, inner]) => merged.has(inner.path)));
+    }
   };
   const showLinked = (linked: LinkedFolder) =>
     set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
@@ -1366,28 +1406,19 @@ export const useAppStore = create<AppState>()((set, get) => {
         // Set now, before its first scan ends, so the scan's own suggestion doesn't replace it.
         const shown = await core.setLinkedFolderLayout(linked.id, layout);
         set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, shown) }));
-        let took = before;
-        // By its path: a merge's Undo links a folder inside it again, under a new id.
+        const link: LinkStep = { linkedFolderId: linked.id, path: preview.path, took: before };
         const step = folderLinked(
           linkedFolderName(preview.path),
+          () => unlinkStep(link),
           async () => {
-            const now = (await core.listLinkedFolders()).find((each) => each.path === preview.path);
-            if (!now) return;
-            await core.removeLinkedFolder(now.id, { keep: took.documentIds });
-            // The Linked folders it merged are linked again, their Documents keeping their ids.
-            for (const inner of took.linkedFolders) {
-              const back = await core.addLinkedFolder(inner.path);
-              showLinked(await core.setLinkedFolderLayout(back.id, inner.layout));
-            }
-          },
-          async () => {
-            took = await takenOver(preview.path);
-            const again = await core.addLinkedFolder(preview.path);
+            link.took = await takenOver(link.path);
+            const again = await core.addLinkedFolder(link.path);
+            link.linkedFolderId = again.id;
             showLinked(await core.setLinkedFolderLayout(again.id, layout));
             useRequests.getState().ask({ showLinked: again.id });
           },
         );
-        linkSteps.set(preview.path, step);
+        linkSteps.set(step, link);
         push(step);
       }),
 
@@ -1452,15 +1483,8 @@ export const useAppStore = create<AppState>()((set, get) => {
     // The list, its Folders and Documents follow the core's events.
     removeLinkedFolder: (linkedFolderId) =>
       attempt(async () => {
-        const path = get().linkedFolders.find((each) => each.id === linkedFolderId)?.path;
         await core.removeLinkedFolder(linkedFolderId);
-        if (path === undefined) return;
-        // Its link's Undo, and those of the folders it merged, have nothing left to take back.
-        for (const [linked, step] of linkSteps) {
-          if (!within(path, linked)) continue;
-          linkSteps.delete(linked);
-          useUndo.getState().withdraw(step);
-        }
+        withdrawLinkSteps(linkedFolderId);
       }),
 
     toggleTagFilter(tagId) {

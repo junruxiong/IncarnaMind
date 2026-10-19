@@ -1518,7 +1518,8 @@ export function createLibrary(options: LibraryOptions) {
     /**
      * Links a folder (see `CoreApi.addLinkedFolder`). Nested Linked folders
      * are merged into the outer one: a folder inside one adds nothing, and
-     * one around others takes their place, their Documents keeping their ids.
+     * one around others takes their place. The Documents already inside it,
+     * theirs and files added on their own, are its at once, keeping their ids.
      */
     async add(input: unknown): Promise<LinkedFolder> {
       const path = await resolveFolder(input);
@@ -1527,13 +1528,13 @@ export function createLibrary(options: LibraryOptions) {
       if (outer) return toLinkedFolder(outer);
       const at = now();
       const id = randomUUID();
+      const taken: string[] = [];
       db.transaction(() => {
         db.run(
           `INSERT INTO linked_folders (id, path, created_at, updated_at) VALUES (?, ?, ?, ?)`,
           [id, path, at, at],
         );
         for (const inner of linked.filter((row) => isInside(path, row.path))) {
-          // Its Documents become the new one's at its first scan: same paths.
           stopWatcher(inner.id);
           statuses.delete(inner.id);
           onlineOnly.delete(inner.id);
@@ -1545,7 +1546,21 @@ export function createLibrary(options: LibraryOptions) {
           ]);
           folders.removeAll(inner.id, at);
         }
+        const owner = folderRow(id);
+        if (!owner) return;
+        // Taken now rather than at its first scan, so unlinking it straight away takes them too.
+        for (const document of documentsUnder(path)) {
+          db.run(`UPDATE documents SET ${PLACE_COLUMNS}, updated_at = ? WHERE id = ?`, [
+            ...placeValues(placeOf(document.path, owner)),
+            at,
+            document.id,
+          ]);
+          taken.push(document.id);
+        }
       });
+      const foldersChanged = taken.length > 0 && syncFolders(id);
+      if (taken.length > 0) hooks.moved(taken);
+      if (foldersChanged) hooks.foldersChanged();
       statuses.set(id, "scanning");
       request({ folders: [id] });
       announceFolders();

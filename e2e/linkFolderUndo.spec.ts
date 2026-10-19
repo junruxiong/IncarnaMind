@@ -1,12 +1,14 @@
 import { existsSync } from "node:fs";
-import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
+import { translate } from "../src/shared/i18n";
 import {
   addDocuments,
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  interceptOpenDialog,
   launchApp,
   leaveText,
   linkedFolderRow,
@@ -154,6 +156,77 @@ test("Undo of a link that merged a Linked folder links that folder again, its Do
   await app.close();
 });
 
+test("⌘Z ⌘Z pressed at once after a merge takes back both links, and nothing is left behind", async () => {
+  const folder = await folderOfNotes();
+  const { app, window } = await launchApp(dataDir);
+  await start(app, window);
+  await linkFolderFromSidebar(app, window, join(folder, "Inner"));
+  await expect.poll(async () => (await library(window)).documents).toHaveLength(1);
+  await linkFolderFromSidebar(app, window, folder);
+  await expect.poll(async () => (await library(window)).documents).toHaveLength(3);
+  await expect(linkedFolderRow(window, "Deals")).toHaveAttribute("data-state", "idle");
+
+  await leaveText(window);
+  await window.keyboard.press("ControlOrMeta+z");
+  await window.keyboard.press("ControlOrMeta+z");
+
+  await expect.poll(() => library(window)).toEqual({ linked: [], documents: [] });
+  await expect.poll(() => undoItem(app)).toEqual({ label: "Undo", enabled: false });
+  await app.close();
+});
+
+/** "Deals", linked, then renamed on disk to "Deals 2026" and located there from its menu. */
+async function linkAndLocate(app: ElectronApplication, window: Page): Promise<string> {
+  const folder = await folderOfNotes();
+  await linkFolderFromSidebar(app, window, folder);
+  await expect.poll(async () => (await library(window)).documents).toHaveLength(3);
+  const moved = `${folder} 2026`;
+  await rename(folder, moved);
+  const row = linkedFolderRow(window, "Deals");
+  await expect(row).toHaveAttribute("data-state", "unavailable", { timeout: 15_000 });
+  await interceptOpenDialog(app, moved);
+  await (await openLinkedFolderMenu(row)).getByTestId("linkedFolder.locate").click();
+  await expect(linkedFolderRow(window, "Deals 2026")).toHaveAttribute("data-state", "idle", {
+    timeout: 15_000,
+  });
+  return moved;
+}
+
+test("after Locate, ⌘Z unlinks the folder where it is now, and ⇧⌘Z links it there again", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await start(app, window);
+  const moved = await linkAndLocate(app, window);
+
+  await leaveText(window);
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(linkedFolderRow(window, "Deals 2026")).toHaveCount(0);
+  await expect.poll(() => library(window)).toEqual({ linked: [], documents: [] });
+  await expect(window.getByTestId("undo-line")).not.toContainText(
+    translate("en", "undo.refused", { reason: "" }),
+  );
+
+  await window.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(linkedFolderRow(window, "Deals 2026")).toHaveCount(1);
+  await expect.poll(async () => (await library(window)).linked).toEqual([moved]);
+  await app.close();
+});
+
+test("after Locate, unlinking from the folder's menu takes the link's Undo away", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await start(app, window);
+  await makeFolder(window);
+  await linkAndLocate(app, window);
+
+  const menu = await openLinkedFolderMenu(linkedFolderRow(window, "Deals 2026"));
+  await menu.getByTestId("linkedFolder.unlink").click();
+  await window.getByTestId("confirm-unlink-folder").click();
+  await expect(linkedFolderRow(window, "Deals 2026")).toHaveCount(0);
+
+  await leaveText(window);
+  await expect.poll(() => undoItem(app)).toEqual({ label: "Undo New Folder", enabled: true });
+  await app.close();
+});
+
 test("unlinking a folder that merged another takes both links' Undo away", async () => {
   const folder = await folderOfNotes();
   const { app, window } = await launchApp(dataDir);
@@ -189,10 +262,7 @@ test("unlinking from the folder's menu takes the link's Undo away", async () => 
   await app.close();
 });
 
-for (const [language, refused] of [
-  ["en", "Couldn’t do it again: "],
-  ["zh-CN", "无法重做："],
-] as const) {
+for (const language of ["en", "zh-CN"] as const) {
   test(`a Redo after the folder was deleted says why in plain words, and nothing is lost (${language})`, async () => {
     const folder = await folderOfNotes();
     const { app, window } = await launchApp(dataDir);
@@ -207,7 +277,7 @@ for (const [language, refused] of [
     await window.keyboard.press("ControlOrMeta+Shift+z");
 
     const line = window.getByTestId("undo-line");
-    await expect(line).toContainText(refused);
+    await expect(line).toContainText(translate(language, "redo.refused", { reason: "" }));
     await expect(line).not.toContainText("Error");
     expect(await library(window)).toEqual({ linked: [], documents: [] });
     await app.close();
