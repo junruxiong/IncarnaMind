@@ -3492,6 +3492,8 @@ export interface LinkedFolderPreview {
   insideLinkedFolderId: string | null;
   /** Linked folders inside it, which linking it would merge into it (their Documents keep their ids). */
   containsLinkedFolderIds: string[];
+  /** Documents added on their own from inside it, which linking it makes its own. */
+  addedOnTheirOwn: number;
 }
 
 export interface SkippedFile {

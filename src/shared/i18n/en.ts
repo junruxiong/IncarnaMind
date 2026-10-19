@@ -290,6 +290,9 @@ export const en = {
   "menu.showExamples": "Show the examples again",
   "undo.mindStarted": "Started “{name}”",
   "undo.mindMade": "Made a new Mind",
+  "undo.folderLinked": "Linked “{name}”",
+  "undo.folderLinkedKept":
+    "Linked “{name}”. It took over Documents you had added from it, so Undo can't take it back: to unlink it, use its ⋯ menu.",
   "undo.linkedFolderPaused": "Paused reading in “{name}”",
   "undo.linkedFolderResumed": "Resumed reading in “{name}”",
   "undo.linkedFolderFlat": "Showing “{name}” as a flat list",
@@ -3751,6 +3754,7 @@ export const en = {
   "menu.quit": "Quit IncarnaMind",
   "menu.file": "File",
   "menu.newMind": "New Mind",
+  "menu.linkFolder": "Link Folder",
   "menu.newFolder": "New Folder",
   "menu.closeTab": "Close Tab",
   "menu.reopenTab": "Reopen Closed Tab",

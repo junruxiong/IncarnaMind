@@ -81,6 +81,24 @@ export function mindMade(
   };
 }
 
+/** A folder linked: undone by unlinking it, which touches nothing on disk, done again by linking it again. */
+export function folderLinked(
+  shown: string,
+  unlink: () => Promise<unknown>,
+  link: () => Promise<unknown>,
+): Undoable {
+  return {
+    said: (t) => t("undo.folderLinked", { name: shown }),
+    name: (t) => t("menu.linkFolder"),
+    undo: async () => {
+      await unlink();
+    },
+    redo: async () => {
+      await link();
+    },
+  };
+}
+
 /** A Linked folder paused or resumed: undone and done again by setting it as it was and as it is. */
 export function linkedFolderPaused(
   shown: string,

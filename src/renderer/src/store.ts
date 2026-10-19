@@ -38,6 +38,7 @@ import { mindName } from "../../shared/naming";
 import { tagLinks } from "../../shared/tagLinks";
 import {
   deleted,
+  folderLinked,
   linkedFolderPaused,
   linkedFolderShown,
   mindMade,
@@ -1350,6 +1351,23 @@ export const useAppStore = create<AppState>()((set, get) => {
         // Set now, before its first scan ends, so the scan's own suggestion doesn't replace it.
         const shown = await core.setLinkedFolderLayout(linked.id, layout);
         set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, shown) }));
+        const name = linkedFolderName(preview.path);
+        // Unlinking takes its Documents with it: those it took over would go too.
+        if (preview.containsLinkedFolderIds.length > 0 || preview.addedOnTheirOwn > 0) {
+          useUndo.getState().cut((t) => t("undo.folderLinkedKept", { name }));
+          return;
+        }
+        let id = linked.id;
+        push(
+          folderLinked(
+            name,
+            () => core.removeLinkedFolder(id),
+            async () => {
+              id = (await core.addLinkedFolder(preview.path)).id;
+              showLinked(await core.setLinkedFolderLayout(id, layout));
+            },
+          ),
+        );
       }),
 
     // The dialog's own close (Esc, or after linking) calls this too: only a folder still asked about counts.

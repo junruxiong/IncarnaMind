@@ -283,6 +283,9 @@ export const zhCN = {
   "menu.showExamples": "重新显示示例",
   "undo.mindStarted": "已新建“{name}”",
   "undo.mindMade": "已新建 Mind",
+  "undo.folderLinked": "已添加同步文件夹“{name}”",
+  "undo.folderLinkedKept":
+    "已添加同步文件夹“{name}”。它接管了你之前从中添加的文档，所以无法撤销；要移除它，请用它的 ⋯ 菜单。",
   "undo.linkedFolderPaused": "已暂停读取“{name}”",
   "undo.linkedFolderResumed": "已继续读取“{name}”",
   "undo.linkedFolderFlat": "已将“{name}”显示为平铺列表",
@@ -3601,6 +3604,7 @@ export const zhCN = {
   "menu.quit": "退出 IncarnaMind",
   "menu.file": "文件",
   "menu.newMind": "新建 Mind",
+  "menu.linkFolder": "添加同步文件夹",
   "menu.newFolder": "新建文件夹",
   "menu.closeTab": "关闭标签页",
   "menu.reopenTab": "重新打开关闭的标签页",

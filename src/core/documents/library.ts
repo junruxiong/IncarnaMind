@@ -1512,6 +1512,9 @@ export function createLibrary(options: LibraryOptions) {
         containsLinkedFolderIds: linked
           .filter((row) => row.path !== path && isInside(path, row.path))
           .map((row) => row.id),
+        addedOnTheirOwn: outer
+          ? 0
+          : files.filter((file) => documentAt(file.path)?.linked_folder_id === null).length,
       };
     },
 
