@@ -140,11 +140,11 @@ async function runCommand(
     await pointAt(window, row);
     await pointAndClick(window, row.getByTestId("mind-menu"));
     const menu = row.getByTestId("mind-actions");
-    // In the menu's order: right after the export items.
+    // In the menu's order: right after Export….
     const ids = await menu
       .getByRole("menuitem")
       .evaluateAll((items) => items.map((item) => item.getAttribute("data-testid")));
-    expect(ids.indexOf("mind.aiUseStatement")).toBe(ids.indexOf("mind.exportOptions") + 1);
+    expect(ids.indexOf("mind.aiUseStatement")).toBe(ids.indexOf("mind.exportMenu") + 1);
     await expect(menu.getByTestId("mind.aiUseStatement")).toHaveText(text.command);
     await screenshot(window, `${shot}-menu`);
     await pointAndClick(window, menu.getByTestId("mind.aiUseStatement"));

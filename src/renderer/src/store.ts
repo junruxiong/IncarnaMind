@@ -272,9 +272,10 @@ export interface AppState extends LayoutSlice {
   updateGettingStarted(patch: Partial<GettingStarted>): void;
   /**
    * Shows a Mind: its tab where it is open, else a new tab in the focused
-   * group after the shown one; with `side` (⌘-click), in the group to the right.
+   * group after the shown one; with `newTab`, a new tab in the focused group
+   * even where it is open.
    */
-  openMind(id: string, options?: { side?: boolean }): void;
+  openMind(id: string, options?: { newTab?: boolean }): void;
   /** Closes a tab, offering to reopen it; if it was shown, the tab after it (or else before it) is. */
   closeTab(tabId: string): void;
   /** ⇧⌘T: reopens the tab closed last, where it was. */
@@ -1126,7 +1127,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       void get().changeLayout({
         type: "open",
         item: { kind: "mind", mindId: id },
-        where: options?.side ? { in: "side" } : { in: "place" },
+        where: options?.newTab ? { in: "group" } : { in: "place" },
       });
     },
 

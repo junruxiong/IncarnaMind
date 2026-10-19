@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type AnswerSearchTuning,
+  type ChatModelFactory,
   type Core,
   type CoreAdapters,
   type CrossEncoder,
@@ -87,6 +88,8 @@ export interface LibraryOptions {
   answerSearch?: Pick<AnswerSearchTuning, "rerankDepth" | "maxPassages">;
   /** Time each step of the Answers asked (see ./timing); nothing sent to the model changes. */
   recordTimings?: boolean;
+  /** Wraps the chat model factory the core asks with, for a run that watches or stands in for its requests. */
+  chatModels?: (inner: ChatModelFactory) => ChatModelFactory;
 }
 
 export interface EvalWebPage {
@@ -269,13 +272,13 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
   };
   const timings = options.recordTimings ? createTimingRecorder() : null;
   const answerSearch = answerSearchOf(options.answerSearch ?? {}, timings);
+  const timed = timings ? timings.chatModels(createAiSdkChatModel) : createAiSdkChatModel;
+  const chatModels = options.chatModels?.(timed) ?? (timings ? timed : null);
   const core = createCore({
     ...adapters,
     ...(answerSearch && { answerSearch }),
-    ...(timings && {
-      createChatModel: timings.chatModels(createAiSdkChatModel),
-      answerEngine: timings.engine,
-    }),
+    ...(chatModels && { createChatModel: chatModels }),
+    ...(timings && { answerEngine: timings.engine }),
   });
   const close = async () => {
     core.close();
