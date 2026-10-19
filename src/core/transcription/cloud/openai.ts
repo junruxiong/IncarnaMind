@@ -28,11 +28,9 @@ export const OPENAI_TRANSCRIPTION_URL = "wss://api.openai.com/v1/realtime?intent
 const SERVICE_RATE = 24_000;
 /** What is sent from before the detector heard speech start: it notices a little late. */
 const LEAD_IN_MS = 1200;
-/** What is kept for the lead-in. */
 const KEPT_MS = 2000;
 /** The service refuses a commit of less audio than this. */
 const MIN_TURN_MS = 100;
-/** The languages a Meeting is expected in: the app's two. */
 const LANGUAGES = ["en", "zh"];
 /** Errors that end the stream: the key refused, or the service won't take more for now. */
 const REFUSALS = new Set(["invalid_api_key", "account_deactivated"]);
@@ -196,7 +194,6 @@ export function createOpenAiStream(
     turns.splice(turns.indexOf(turn), 1);
   }
 
-  /** The turn an id belongs to: the one its commit named, else the oldest without one. */
   function turnOf(item: string): Turn | undefined {
     const named = committedOrder.find((turn) => turn.item === item);
     if (named) return named;
@@ -296,12 +293,10 @@ export function createOpenAiStream(
     keptFrom += drop;
   }
 
-  /** The kept audio from `from` to what has been received. */
   function since(from: number): Int16Array {
     return kept.subarray(Math.max(0, from - keptFrom));
   }
 
-  /** Sends the open turn what it hasn't had of the audio received. */
   function append(): void {
     if (!open) return;
     const samples = since(Math.max(sent, open.start));

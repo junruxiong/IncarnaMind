@@ -1,6 +1,7 @@
 import { useId } from "react";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
+import { useAudioKeptKey } from "../transcriptionServices";
 import { HelpSettings } from "./meetings/HelpSettings";
 import { TranscriptionRouteSelect } from "./meetings/TranscriptionRouteSelect";
 import { TranscriptionKeyRows, TranscriptionRouteLine } from "./meetings/TranscriptionSettings";
@@ -27,6 +28,7 @@ export function MeetingsSettings() {
   const enabledId = useId();
   const whatId = useId();
   const routeId = useId();
+  const keptKey = useAudioKeptKey();
   if (!device || !canRecord) return null;
   const microphoneOnly = canRecord !== "both";
   const both = device.meetingSystemAudio && !microphoneOnly;
@@ -116,7 +118,7 @@ export function MeetingsSettings() {
           </div>
           <TranscriptionKeyRows />
         </div>
-        <p className={hintClass}>{t("meetings.audio.kept")}</p>
+        <p className={hintClass}>{t(keptKey)}</p>
       </section>
       <HelpSettings />
     </>

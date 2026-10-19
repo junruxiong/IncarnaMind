@@ -2001,30 +2001,24 @@ export type CloudTranscriptionRoute = Exclude<TranscriptionRoute, "local">;
 /** A cloud transcription service, as Settings and the first-meeting sheet offer it. */
 export interface TranscriptionServiceStatus {
   route: CloudTranscriptionRoute;
-  /** "OpenAI", "Soniox": where meeting audio goes. */
   name: string;
   /** Who gets the audio, as the consent line names it ("Alibaba Cloud" for Qwen). */
   recipient: Localized;
   model: string;
-  /** What an hour of audio costs at list price, in the key's region where it has one. */
+  /** At list price: in the key's region, for a service that has regions. */
   perHour: Money;
-  /** The region the key is for, where the service has them (Qwen's, as in Settings › Models). */
+  /** The region the key is for, named as in Settings › Models. */
   region: Localized | null;
-  /** What the service's own agreement says it does with the audio, where we have checked it. */
   dataUse: { summary: Localized; url: Localized } | null;
-  /** "provider": it uses the key of the chat provider of the same name; "own": a key of its own. */
+  /** "provider": it uses the key of the chat provider of the same name in Settings › Models. */
   key: "provider" | "own";
-  /** A key is there to use. */
   hasKey: boolean;
-  /** It names speakers as it transcribes. */
   liveSpeakers: boolean;
-  /** Where to get a key of its own. */
   keyUrl: string | null;
 }
 
 export interface SetTranscriptionKeyInput {
   route: CloudTranscriptionRoute;
-  /** The key, checked with the service before it is kept. */
   apiKey: string;
 }
 
@@ -9415,6 +9409,11 @@ export interface CoreApi {
   /** Forgets a transcription service's own key; meeting audio is then transcribed on this computer. */
   removeTranscriptionKey(route: CloudTranscriptionRoute): Promise<TranscriptionServiceStatus[]>;
   /**
+   * Whether this computer keeps up with live speech, as the last Meeting transcribed here
+   * measured it; null before one has been. The speed probe (#462) will measure it sooner.
+   */
+  getTranscriptionSpeed(): Promise<{ keepsUp: boolean | null }>;
+  /**
    * Tries the Meeting's Transcript again after a problem (`MeetingTranscript.problem`):
    * downloads or starts the speech-to-text model, or saves the WebVTT file again.
    */
@@ -9990,6 +9989,7 @@ const methods: Record<CoreApiMethod, true> = {
   listTranscriptionServices: true,
   setTranscriptionKey: true,
   removeTranscriptionKey: true,
+  getTranscriptionSpeed: true,
   retryTranscript: true,
   openAudioSettings: true,
   askMeetingHelp: true,

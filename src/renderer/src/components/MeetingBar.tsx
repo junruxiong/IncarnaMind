@@ -10,6 +10,7 @@ import { helpKeysLabel, useMeetingHelp } from "../meetingHelp";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
 import { useAppStore } from "../store";
+import { ROUTE_LABELS } from "../transcriptionServices";
 import { hideTranscript, showTranscript, useDocumentTab } from "../transcripts";
 import { CaptureDetailsToggle } from "./CaptureDetails";
 import {
@@ -242,10 +243,26 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
   }
   const fellBack = meeting.transcript?.fellBack;
   if (fellBack) {
+    const provider = t(ROUTE_LABELS[fellBack.route]);
+    const time = clockTime(fellBack.atMs);
     lines.push({
       key: "cloud",
-      text: t(fellBack.reason === "cap" ? "meetings.line.cloudCap" : "meetings.line.cloudDropped", {
-        time: clockTime(fellBack.atMs),
+      text: t(
+        fellBack.reason === "refused" && fellBack.route === "qwen"
+          ? "meetings.line.cloudRefusedRegion"
+          : FELL_BACK[fellBack.reason],
+        { provider, time },
+      ),
+      ...(fellBack.reason === "refused" && {
+        action: {
+          label: t("meetings.key.replace"),
+          testId: "meeting-line-change-key",
+          // Soniox's key is its own, in Meetings; the others use their provider's, in Models.
+          onClick: () =>
+            useAppStore
+              .getState()
+              .openSettings(fellBack.route === "soniox" ? "meetings" : "models"),
+        },
       }),
     });
   }
@@ -267,8 +284,17 @@ function MeetingLines({ meeting }: { meeting: Meeting }) {
   );
 }
 
-/** Lines that say what happened, rather than something to put right. */
 const STATUS_LINES: ReadonlySet<string> = new Set(["gap", "interrupted", "cloud"]);
+
+const FELL_BACK: Record<
+  NonNullable<NonNullable<Meeting["transcript"]>["fellBack"]>["reason"],
+  MessageKey
+> = {
+  dropped: "meetings.line.cloudDropped",
+  refused: "meetings.line.cloudRefused",
+  cap: "meetings.line.cloudCap",
+  "local-mode": "meetings.line.cloudLocalMode",
+};
 
 const MICROPHONE_LINES: Partial<Record<MeetingSourceState, MessageKey>> = {
   denied: "meetings.line.microphoneDenied",

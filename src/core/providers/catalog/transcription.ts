@@ -33,7 +33,6 @@ export interface TranscriptionService {
   route: CloudTranscriptionRoute;
   name: string;
   model: string;
-  /** List price for an hour of audio sent. */
   perHour: Money;
   /** The price in a region (by the id of the provider's endpoint in the catalog), where it differs. */
   perHourIn?: Readonly<Record<string, Money>>;
@@ -42,9 +41,7 @@ export interface TranscriptionService {
   dataUse?: TranscriptionDataUse;
   /** "provider": the key of the chat provider of the same name in Settings › Models. */
   key: "provider" | "own";
-  /** It tells speakers apart as it transcribes. */
   liveSpeakers: boolean;
-  /** Where the User gets a key of its own. */
   keyUrl?: string;
   /** When a person last checked this entry against the service's own pages (YYYY-MM-DD). */
   checked: string;
@@ -57,7 +54,6 @@ export const TRANSCRIPTION_SERVICES: Readonly<
     route: "openai",
     name: "OpenAI",
     model: OPENAI_LIVE_TRANSCRIPTION_MODEL,
-    // $0.017 a minute.
     perHour: { currency: "USD", amount: 1.02 },
     service: { id: "https://api.openai.com", name: "OpenAI" },
     recipient: { en: "OpenAI", zh: "OpenAI" },

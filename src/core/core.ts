@@ -236,6 +236,7 @@ import { createPublicFetch } from "./tools/web/fetcher";
 import { createCloudTranscription } from "./transcription/cloud/routes";
 import {
   createTranscriptionModel,
+  KEEPS_UP,
   QWEN3_ASR_0_6B,
   TRANSCRIPTION_SPEED,
 } from "./transcription/model";
@@ -3950,6 +3951,12 @@ export function createCore(adapters: CoreAdapters): Core {
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
     listTranscriptionServices: () => cloudTranscription.list(),
     setTranscriptionKey: (input) => cloudTranscription.setKey(input),
+    getTranscriptionSpeed: async () => {
+      const speed = settings.readDeviceValue(TRANSCRIPTION_SPEED);
+      const ratio =
+        transcriptionModel && isRecord(speed) ? speed[transcriptionModel.definition.id] : undefined;
+      return { keepsUp: typeof ratio === "number" ? ratio <= KEEPS_UP : null };
+    },
     removeTranscriptionKey: async (route) => {
       const listed = await cloudTranscription.removeKey(route);
       transcriptionGateChanged();
