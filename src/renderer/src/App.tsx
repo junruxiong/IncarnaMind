@@ -9,6 +9,7 @@ import { Workbench } from "./components/assistant/Workbench";
 import { CitationStylePickerHost } from "./components/CitationStylePicker";
 import { CommandPalette } from "./components/CommandPalette";
 import { ConsentDialog } from "./components/ConsentDialog";
+import { DropLabel } from "./components/DropLabel";
 import { ErrorNotices } from "./components/ErrorNotices";
 import { FeedbackDialog } from "./components/FeedbackDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
@@ -280,6 +281,7 @@ function Workspace() {
           cardOverlay={fileDrop.active && fileDrop.links ? <DropOverlay links /> : null}
         />
         <TabNoticeLine />
+        <DropLabel />
         <CommandPalette />
         <SettingsDialog />
         <HistoryView />

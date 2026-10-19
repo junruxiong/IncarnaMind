@@ -1,12 +1,14 @@
 import type { HTMLAttributes, ReactNode } from "react";
+import type { DropEffect, DropProps } from "../../dragDrop";
 import { useT } from "../../i18n";
 import { ChevronDownLineIcon } from "../lineIcons";
+import { dropIntoClass } from "../sidebarRows";
 
 /**
  * The head of a section of the Library page, as a toggle in a Notion page:
  * the chevron that folds it, its icon, its name, how many it holds, a line
  * about it and, at its end, what it offers. It rules the section off from
- * the next in the strong rule.
+ * the next in the strong rule. With `drop`, it takes what is dragged onto it.
  */
 export function SectionHead({
   label,
@@ -19,6 +21,7 @@ export function SectionHead({
   end,
   testId,
   rowProps,
+  drop,
 }: {
   /** Its name in words, for the chevron's label. */
   label: string;
@@ -32,6 +35,7 @@ export function SectionHead({
   end?: ReactNode;
   testId: string;
   rowProps?: HTMLAttributes<HTMLDivElement>;
+  drop?: { over: DropEffect | null; props: DropProps };
 }) {
   const t = useT();
   return (
@@ -41,8 +45,12 @@ export function SectionHead({
       role="row"
       data-testid={testId}
       data-open={open ? "true" : "false"}
+      data-drop-target={drop?.over ? "true" : undefined}
       {...rowProps}
-      className="group/head flex h-9 items-center gap-2 rounded-t-md border-b border-rule-strong pr-1.5 pl-1 select-none hover:bg-frame"
+      {...drop?.props}
+      className={`group/head flex h-9 items-center gap-2 rounded-t-md border-b border-rule-strong pr-1.5 pl-1 select-none ${
+        drop?.over ? `rounded-md ${dropIntoClass}` : "hover:bg-frame"
+      }`}
     >
       <button
         type="button"

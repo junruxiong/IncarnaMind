@@ -99,15 +99,11 @@ describe("dragging", () => {
   // Undo and has a menu twin. The note's own dragging stays ProseMirror's, undone by the note's
   // ⌘Z: its block handle, and the Word blocks and pictures that move inside the text.
   const LAYER = [
+    "src/renderer/src/dragDrop.ts",
     "src/renderer/src/editor/BlockHandle.tsx",
     "src/renderer/src/editor/wordSchema.ts",
   ];
-  const KNOWN: Record<string, string> = {
-    "src/renderer/src/components/MindRow.tsx":
-      "a Mind drags onto a Folder before the layer, which #233 moves onto it",
-    "src/renderer/src/components/DocumentsSection.tsx":
-      "a Document drags onto a Folder before the layer, which #212 moves onto it",
-  };
+  const KNOWN: Record<string, string> = {};
   // The attribute turned on; `draggable={false}` and `draggable: false` keep something still.
   const DRAGGABLE = /\bdraggable\b(?!\s*(?:=\s*\{\s*false\s*\}|:\s*false))/;
 
