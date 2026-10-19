@@ -18,7 +18,7 @@ export type ShortcutKeys = Keys | { readonly mac: Keys; readonly other: Keys };
  * keymap binds the keys.
  */
 export const MENU_COMMANDS = {
-  "mind.new": { label: "menu.newMind", keys: "CmdOrCtrl+N" },
+  "mind.new": { label: "menu.newMind", keys: "CmdOrCtrl+T" },
   "folder.new": { label: "menu.newFolder", keys: "CmdOrCtrl+Shift+N" },
   "documents.add": { label: "sidebar.plus.addDocuments", keys: "CmdOrCtrl+O" },
   "linkedFolder.add": { label: "sidebar.plus.linkFolder", keys: undefined },

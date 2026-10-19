@@ -51,14 +51,6 @@ const GROUP_NAMES: Record<ModelGroup, MessageKey> = {
   cloud: "composer.model.group.cloud",
 };
 
-/** What each group's models are like, on their second line. */
-const HINTS: Record<ModelGroup, MessageKey> = {
-  keys: "composer.model.hint.keys",
-  plan: "composer.model.hint.plan",
-  local: isMacOS() ? "composer.model.hint.localMac" : "composer.model.hint.local",
-  cloud: "composer.model.hint.cloud",
-};
-
 /** How a model is reached, after its name in the chip's tooltip. */
 const VIA: Record<ModelGroup, MessageKey> = {
   keys: "composer.model.via.keys",
@@ -108,8 +100,8 @@ function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
 /**
  * The composer's quiet model chip, before the Search scope: the model the
  * Mind's next Questions are asked with, and a menu to choose another, grouped
- * by where it runs (your keys, the ChatGPT plan, this computer), each with a
- * one-line hint. A choice is remembered for the Mind (`setMindModel`); a Mind
+ * by where it runs (your keys, the ChatGPT plan, this computer), with a hint
+ * only on a model that needs one. A choice is remembered for the Mind (`setMindModel`); a Mind
  * with none uses the default for new Minds, which the menu names at its foot.
  * Until the User is signed in with ChatGPT, the plan's group offers "Continue
  * with ChatGPT"; while its model is chosen, it says the plan is in use, with
@@ -281,7 +273,6 @@ export function ModelChip({
                 }
               }}
             >
-              <p className="model-menu-intro">{t("composer.model.intro")}</p>
               <input
                 ref={search}
                 type="search"
@@ -320,7 +311,6 @@ export function ModelChip({
                             key={`${each.id}\n${modelId}`}
                             provider={each}
                             modelId={modelId}
-                            hint={t(HINTS[group])}
                             checked={same({ providerId: each.id, modelId }, current)}
                             unavailable={localMode}
                             onChoose={choose}
@@ -335,16 +325,24 @@ export function ModelChip({
                   // biome-ignore lint/a11y/useSemanticElements: a group of a menu's items, which a fieldset can't hold.
                   <div key={group} role="group" aria-label={t(GROUP_NAMES[group])}>
                     <p aria-hidden="true" className="model-menu-heading">
-                      {t(GROUP_NAMES[group])}
+                      {group === "local" ? (
+                        <OnThisComputer>{t(GROUP_NAMES[group])}</OnThisComputer>
+                      ) : (
+                        t(GROUP_NAMES[group])
+                      )}
                     </p>
+                    {group === "cloud" && (
+                      <p className="model-menu-hint model-menu-group-hint">
+                        {t("composer.model.hint.cloud")}
+                      </p>
+                    )}
                     {inGroup.flatMap(({ provider: each, models }) =>
                       models.map((modelId) => (
                         <ModelItem
                           key={`${each.id}\n${modelId}`}
                           provider={each}
                           modelId={modelId}
-                          hint={t(untestedHintKey(each) ?? HINTS[group])}
-                          onThisComputer={group === "local"}
+                          hint={untestedHintKey(each) ? t("providers.untested") : null}
                           checked={same({ providerId: each.id, modelId }, current)}
                           // Local mode: only a model on this computer can be asked.
                           unavailable={localMode && group !== "local"}
@@ -394,23 +392,21 @@ export function ModelChip({
 }
 
 /**
- * One model in the menu: its name (its id on hover), a hint, and who runs it. `unavailable`: listed
- * but not chosen, with the reason as its hint (a cloud model in local mode).
+ * One model in the menu: its name (its id on hover), who runs it, and, only when it needs one, a
+ * hint (not yet tested for Citations). Where models run is said once, by their group's heading.
+ * `unavailable`: listed but not chosen, with the reason as its hint (a cloud model in local mode).
  */
 function ModelItem({
   provider,
   modelId,
-  hint,
-  onThisComputer = false,
+  hint = null,
   checked,
   unavailable,
   onChoose,
 }: {
   provider: ChatProvider;
   modelId: string;
-  hint: string;
-  /** The hint says it stays on this computer: it takes that mark. */
-  onThisComputer?: boolean;
+  hint?: string | null;
   checked: boolean;
   unavailable: boolean;
   onChoose(choice: ChatModelChoice): void;
@@ -439,15 +435,11 @@ function ModelItem({
       />
       <span className="model-menu-name">
         <span className="truncate">{shown.name}</span>
-        <span className="model-menu-hint">
-          {unavailable ? (
-            t("composer.model.localModeOff")
-          ) : onThisComputer ? (
-            <OnThisComputer>{hint}</OnThisComputer>
-          ) : (
-            hint
-          )}
-        </span>
+        {(unavailable || hint) && (
+          <span className="model-menu-hint">
+            {unavailable ? t("composer.model.localModeOff") : hint}
+          </span>
+        )}
       </span>
       <span className="model-menu-provider">{providerName(provider, t)}</span>
     </button>

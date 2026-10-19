@@ -47,6 +47,8 @@ export interface Shortcut {
   notInText?: true;
   /** The same command's second keys on Windows and Linux: Ctrl+Y redoes there, as Ctrl+Shift+Z does. */
   alsoOther?: Keys;
+  /** More keys that run it too but that nothing shows: ⌘N still makes a Mind, though ⌘T is the one shown. */
+  also?: Keys;
   /** Keys only macOS has (Finder's ⌃⌘N): elsewhere the command has none, and stays in menus and ⌘K. */
   macOnly?: true;
 }
@@ -142,6 +144,7 @@ export const commands = {
     if (registered.has(command.id)) throw new Error(`Two commands are called ${command.id}.`);
     if (command.shortcut) checkKeys(command.shortcut.keys);
     if (command.shortcut?.alsoOther) checkKeys(command.shortcut.alsoOther);
+    if (command.shortcut?.also) checkKeys(command.shortcut.also);
     registered.set(command.id, command);
     return () => {
       if (registered.get(command.id) === command) registered.delete(command.id);
