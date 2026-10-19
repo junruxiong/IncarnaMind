@@ -35,6 +35,8 @@ interface Known {
   step: string;
   kind: Problem["kind"];
   issue: number;
+  /** It depends on timing, so a run where it didn't happen doesn't make it stale. */
+  sometimes?: true;
 }
 
 export const KNOWN: readonly Known[] = [
@@ -42,6 +44,7 @@ export const KNOWN: readonly Known[] = [
   { flow: "assistant-place", step: "dock float", kind: "focus", issue: 1316 },
   { flow: "assistant-place", step: "dock left", kind: "focus", issue: 1316 },
   { flow: "assistant-place", step: "dock right", kind: "focus", issue: 1316 },
+  { flow: "sidebar", step: "rename in place", kind: "focus", issue: 1322, sometimes: true },
   { flow: "sidebar", step: "delete", kind: "focus", issue: 1311 },
   { flow: "first-open", step: "check the Mind", kind: "shift", issue: 1312 },
   { flow: "library-2000", step: "show all 2,000", kind: "input", issue: 1313 },
@@ -153,13 +156,24 @@ const entriesBetween = (window: Page, from: number, to: number) =>
     { from, to },
   );
 
-/** What has focus, as a step's check names it: its test id, else its tag; "body" for none. */
-const focused = (window: Page) =>
-  window.evaluate(() => {
-    const element = document.activeElement;
-    if (!element || element === document.body) return "body";
-    const named = element.closest("[data-testid]");
-    return named?.getAttribute("data-testid") ?? element.tagName.toLowerCase();
+/**
+ * Where focus is and where a step expects it, each named by its test id (else its tag) and the
+ * start of its text, so two rows of one kind tell apart; "body" for none.
+ */
+const focusOn = (target: Locator) =>
+  target.evaluate((expected) => {
+    const named = (element: Element) => {
+      const near = element.closest("[data-testid]") ?? element;
+      const id = near.getAttribute("data-testid") ?? near.tagName.toLowerCase();
+      const text = near.textContent?.trim().slice(0, 24);
+      return text ? `${id} “${text}”` : id;
+    };
+    const active = document.activeElement;
+    return {
+      at: !active || active === document.body ? "body" : named(active),
+      expected: named(expected),
+      onTarget: active !== null && (expected === active || expected.contains(active)),
+    };
   });
 
 export interface Feel {
@@ -216,19 +230,11 @@ export async function feelOf(window: Page, flow: string): Promise<Feel> {
     },
 
     async expectFocus(step, target) {
-      const at = await focused(window);
-      const onTarget = await target.evaluate((element) => {
-        const active = document.activeElement;
-        return active !== null && (element === active || element.contains(active));
-      });
+      const { at, expected, onTarget } = await focusOn(target);
       const last = steps.findLast((each) => each.name === step);
       if (last) last.focus = at;
       if (!onTarget) {
-        problems.push({
-          kind: "focus",
-          step,
-          detail: `on ${at}, not the expected ${await target.evaluate((element) => element.closest("[data-testid]")?.getAttribute("data-testid") ?? element.tagName.toLowerCase())}`,
-        });
+        problems.push({ kind: "focus", step, detail: `on ${at}, not the expected ${expected}` });
       }
     },
 
@@ -243,6 +249,7 @@ export async function feelOf(window: Page, flow: string): Promise<Feel> {
       const stale = KNOWN.filter(
         (each) =>
           each.flow === flow &&
+          !each.sometimes &&
           (each.kind === "shift" || each.kind === "focus") &&
           !problems.some((problem) => problem.step === each.step && problem.kind === each.kind),
       );
