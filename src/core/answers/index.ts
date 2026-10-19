@@ -623,8 +623,14 @@ export interface DocumentsForAnswers
   searchableCount(documentIds: readonly string[] | null): number;
   /** Every live Document's names: what a Citation in the Question context names its Document by. */
   names(): readonly LiveDocument[];
-  /** How many Documents there are to search, and the names of the `limit` most recently added, newest first. */
-  searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
+  /**
+   * How many Documents there are to search, and the names of the `limit` most recently added,
+   * newest first; `webPage`: one of them is a saved web page, named by its own title.
+   */
+  searchableNames(
+    documentIds: readonly string[] | null,
+    limit: number,
+  ): ListedDocuments & { webPage: boolean };
   /** The Documents to search, the most text first. */
   searchableBySize(documentIds: readonly string[] | null): SizedDocument[];
   /** The live Passages of a live Document at positions `from` to `to`, in reading order. */
@@ -1345,8 +1351,13 @@ export function createAnswers(options: AnswersOptions) {
       return denied;
     };
 
+    /**
+     * Commands are checked one at a time, each after the User answered the one before, so a call
+     * that would take the Answer past its limit is counted after those before it.
+     */
+    let commandTurn: Promise<unknown> = Promise.resolve();
     // Whether it asks is the commands' policy's (../tools/commands/policy, #1110).
-    const commandGate = async (
+    const commandGate = (
       commands: ReturnType<typeof commandTools>,
       { id: toolCallId, input, tainted, thirdParty }: GatedCall,
     ): Promise<string | null> => {
@@ -1359,28 +1370,30 @@ export function createAnswers(options: AnswersOptions) {
         resultCount: null,
       };
       callStarted(card);
-      const { checked, ask: asked } = await commands.check(toolCallId, input, {
-        tainted,
-        readThirdParty: thirdParty.length > 0,
-        focusedMindId: mindIn,
-      });
-      if (!asked) return null;
-      const denied = await ask(
-        {
-          ...place,
-          answerId,
-          toolCallId,
-          subject: { kind: "command", command: checked.command },
-          tool: COMMAND_TOOLS.run,
-          ask: asked,
-          effects: checked.effects,
-          tainted,
-          ...readReasons(thirdParty),
-        },
-        card,
-      );
-      if (denied !== null) commands.drop(toolCallId);
-      return denied;
+      const gated = async (): Promise<string | null> => {
+        const { checked, ask: asked, readTitles } = await commands.check(toolCallId, input);
+        if (!asked) return null;
+        const denied = await ask(
+          {
+            ...place,
+            answerId,
+            toolCallId,
+            subject: { kind: "command", command: checked.command },
+            tool: COMMAND_TOOLS.run,
+            ask: asked,
+            effects: checked.effects,
+            tainted: tainted || readTitles,
+            ...readReasons(thirdParty),
+          },
+          card,
+        );
+        if (denied === null) commands.allowed(toolCallId);
+        else commands.drop(toolCallId);
+        return denied;
+      };
+      const next = commandTurn.then(gated, gated);
+      commandTurn = next.catch(() => undefined);
+      return next;
     };
 
     /**
@@ -1822,6 +1835,8 @@ export function createAnswers(options: AnswersOptions) {
               host: commands.host,
               findable: () => commands.findable(),
               focusedMindId: focusedId,
+              namesWebPage: options.documents.searchableNames(documentIds, LISTED_DOCUMENTS)
+                .webPage,
               runId: randomUUID(),
               steps: commands.steps,
               found: (toolCallId, found) => commandsFound.set(toolCallId, found),

@@ -16,6 +16,8 @@ export interface Found {
   dates: { added: string; created: string | null; modified: string | null } | null;
   folder: string | null;
   tags: string[];
+  /** A saved web page: its name is its title, which someone else wrote. */
+  webPage: boolean;
 }
 
 export interface FindInput {
@@ -49,6 +51,7 @@ function all(kind: CommandTarget, { documents, minds, library, tags }: Findable)
       dates: null,
       folder: folderOf(mind.folderId),
       tags: [],
+      webPage: false,
     }));
   }
   return documents.map((document) => ({
@@ -62,6 +65,7 @@ function all(kind: CommandTarget, { documents, minds, library, tags }: Findable)
     },
     folder: folderOf(filedIn.get(document.id)),
     tags: document.tags.flatMap((each) => tagNames.get(each.tagId) ?? []),
+    webPage: document.web !== null,
   }));
 }
 

@@ -3,11 +3,14 @@
  * app's commands. `list_commands` finds the Documents or Minds a command would act on, matched
  * exactly, and says which commands apply; `run_command` runs one. Only the commands marked for
  * the assistant (`ASSISTANT_COMMANDS`) can run. What a call does decides whether it asks the User
- * first: a change inside IncarnaMind runs at once and the Run's changes are one step of Undo;
- * saving a file outside the Output location and reading a folder's files wait for the User at
- * the Answer's gate (`check`).
+ * first (./policy): a few changes inside IncarnaMind run at once and the Run's changes are one
+ * step of Undo; the rest wait for the User at the Answer's gate (`check`).
  */
-import { ASSISTANT_COMMANDS, type AssistantCommandId } from "../../../shared/commands";
+import {
+  ASSISTANT_COMMANDS,
+  type AssistantCommandId,
+  isAppCommand,
+} from "../../../shared/commands";
 import {
   COMMAND_AT_ONCE,
   type CommandAsk,
@@ -19,7 +22,7 @@ import {
 import { TranslatableError } from "../../errors";
 import { COMMAND_TOOLS, type Tool, type ToolProviderInfo } from "../index";
 import { type Findable, type FindInput, find, foundLine, foundOf } from "./find";
-import { askOf, type CommandContext } from "./policy";
+import { askOf } from "./policy";
 import {
   type CheckedCommand,
   COMMAND_EXPORT_FORMATS,
@@ -69,6 +72,8 @@ export interface CommandToolsOptions {
   findable(): Promise<Findable>;
   /** The Mind the User is in, which `list_commands` points out. */
   focusedMindId: string | null;
+  /** The Run's instructions name a saved web page, whose title someone else wrote. */
+  namesWebPage: boolean;
   /** The Run the calls are part of: its changes are one step of Undo in `steps`. */
   runId: string;
   steps: CommandSteps;
@@ -90,17 +95,29 @@ export function commandTools(options: CommandToolsOptions): {
   tools: Tool[];
   /**
    * Checks a call of `run_command` at the Answer's gate and keeps it for its run: what it would
-   * do, and whether it asks first. Throws, the card saying why, for one that can't run.
+   * do, whether it asks first, and whether the Run had read a web page's title by then. Throws,
+   * the card saying why, for one that can't run. One call at a time: the count of the Answer's
+   * changes decides the next.
    */
   check(
     toolCallId: string,
     input: Record<string, unknown>,
-    context: CommandContext,
-  ): Promise<{ checked: CheckedCommand; ask: CommandAsk | null }>;
+  ): Promise<{ checked: CheckedCommand; ask: CommandAsk | null; readTitles: boolean }>;
+  /** The User allowed a call `check` asked about: one past the Answer's limit starts its count again. */
+  allowed(toolCallId: string): void;
   /** The User didn't allow a call `check` kept: it never runs. */
   drop(toolCallId: string): void;
 } {
   const checked = new Map<string, CheckedCommand>();
+  /** The asks of the calls waiting for the User, by call. */
+  const asks = new Map<string, CommandAsk>();
+  /** How many things the Answer changed without asking, since the User last allowed more. */
+  let changed = 0;
+  /** Each call's share of `changed`, until it ran: one that fails changed nothing. */
+  const counted = new Map<string, number>();
+  /** What the things the Answer renamed were called before it, by id. */
+  const before = new Map<string, string>();
+  let readTitles = options.namesWebPage;
   // A model calls several at once: two that would each make the same Tag or Folder must not race.
   let turn: Promise<unknown> = Promise.resolve();
   const inTurn = <T>(run: () => Promise<T>): Promise<T> => {
@@ -141,6 +158,7 @@ export function commandTools(options: CommandToolsOptions): {
         return `No ${one} matches, so no command can act on one. Say so, and change nothing.`;
       }
       const shown = found.slice(0, MAX_LISTED);
+      if (shown.some((each) => each.webPage)) readTitles = true;
       return [
         `Found ${found.length === 1 ? `1 ${one}` : `${found.length} ${many}`}:`,
         ...shown.map((each) => foundLine(each, options.focusedMindId)),
@@ -154,7 +172,7 @@ export function commandTools(options: CommandToolsOptions): {
 
   const runTool: Tool = {
     name: COMMAND_TOOLS.run,
-    description: `Runs one of the app's commands for the User, on ${nouns.document[1]} or ${nouns.mind[1]} ${COMMAND_TOOLS.list} found, by id. For Documents: ${commandList("document")}. For Minds: ${commandList("mind")}. To add files: ${commandList("library")}. A change inside IncarnaMind runs at once and the User can undo it. These wait for the User to allow them: a file saved anywhere but the Output location itself, files added from a folder, a change of more than ${COMMAND_AT_ONCE} things, a delete after you read the Documents or the web, and deleting the Mind the User is in. Say only what each call returned.`,
+    description: `Runs one of the app's commands for the User, on ${nouns.document[1]} or ${nouns.mind[1]} ${COMMAND_TOOLS.list} found, by id. For Documents: ${commandList("document")}. For Minds: ${commandList("mind")}. To add files: ${commandList("library")}. A change inside IncarnaMind runs at once and the User can undo it. These wait for the User to allow them: a file saved anywhere but the Output location itself, files added from a folder, every delete, and a change that would take this answer past ${COMMAND_AT_ONCE} things changed. Say only what each call returned.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -181,8 +199,14 @@ export function commandTools(options: CommandToolsOptions): {
       try {
         ran = await inTurn(() => command.run());
       } catch (error) {
+        changed -= counted.get(toolCallId) ?? 0;
         options.failed(toolCallId, problemOf(command.command, error));
         throw error;
+      } finally {
+        counted.delete(toolCallId);
+      }
+      for (const item of ran.done.items) {
+        if (item.renamed !== undefined && !before.has(item.id)) before.set(item.id, item.name);
       }
       if (ran.step) options.steps.add(options.runId, ran.step);
       options.ran(toolCallId, { ...ran.done, command: command.command, run: options.runId });
@@ -192,19 +216,30 @@ export function commandTools(options: CommandToolsOptions): {
 
   return {
     tools: [listTool, runTool],
-    async check(toolCallId, input, context) {
+    async check(toolCallId, input) {
       try {
         const command = await checkCommand(parseCommandInput(input), options.host);
-        const ask = askOf(command, context);
+        const ask = askOf(command, { changed, before });
         checked.set(toolCallId, command);
-        return { checked: command, ask };
+        if (ask) asks.set(toolCallId, ask);
+        else if (isAppCommand(command.command)) {
+          changed += command.items.length;
+          counted.set(toolCallId, command.items.length);
+        }
+        return { checked: command, ask, readTitles };
       } catch (error) {
         options.failed(toolCallId, problemOf(String(input.command ?? ""), error));
         throw error;
       }
     },
+    allowed: (toolCallId) => {
+      const ask = asks.get(toolCallId);
+      asks.delete(toolCallId);
+      if (ask?.kind === "change" && ask.reason === "many") changed = 0;
+    },
     drop: (toolCallId) => {
       checked.delete(toolCallId);
+      asks.delete(toolCallId);
     },
   };
 }

@@ -6990,20 +6990,20 @@ export interface ToolApprovalRequest extends ApprovalRequestBase {
 }
 
 /**
- * Why a change inside IncarnaMind waits for the User (#1110): it changes more than
- * `COMMAND_AT_ONCE` things, it deletes after its Answer read text the User didn't write here
- * (Passages, a Connector's reply, a web page), or it deletes the Mind the User is in.
+ * Why a change inside IncarnaMind waits for the User (#1110): it would take the Answer's changes
+ * past `COMMAND_AT_ONCE`, or it deletes, which the assistant never does without asking.
  */
-export type CommandAskReason = "many" | "afterReading" | "focusedMind";
+export type CommandAskReason = "many" | "delete";
 
-/** How many things one call of a command may change before it asks the User first (#1110). */
+/** How many things one Answer's commands may change before the next change asks the User first (#1110). */
 export const COMMAND_AT_ONCE = 20;
 
 /**
  * What a command the assistant runs for the User would do, as its approval shows it (#1110):
  * save a Mind as a file in a folder other than the Output location; read a folder's files
  * (`files`, by name, nothing outside it) and add them to the Library; or change things inside
- * IncarnaMind that need the User's say (`reason`), `names` the first of them.
+ * IncarnaMind that need the User's say (`reason`). `items` are the first of them, each by the
+ * name the User knew it by, with `renamed` when this Answer renamed it.
  */
 export type CommandAsk =
   | {
@@ -7011,9 +7011,11 @@ export type CommandAsk =
       command: AppCommandId;
       reason: CommandAskReason;
       count: number;
-      names: string[];
+      items: CommandItem[];
       /** The Folder or Tag it would put them in, by name. */
       into: string | null;
+      /** How many things the Answer changed without asking before this call. */
+      changed: number;
     }
   | {
       kind: "export";
@@ -7032,9 +7034,23 @@ export interface CommandKept {
   name: string;
 }
 
+/** What `undoCommands` took back (#1110). */
+export interface CommandsUndone {
+  /** The Folders and Tags the Run made that its Undo left in place, from every try so far. */
+  kept: CommandKept[];
+  /**
+   * Why some of its changes weren't taken back, each in English; null: all of them were.
+   * `again`: trying again may take back the rest, once the User fixed the cause (restored a
+   * Document, say). False once a try again took back nothing more.
+   */
+  failed: { reasons: string[]; again: boolean } | null;
+}
+
 /**
  * A command the assistant runs for the User (#1110) waiting for their approval: it would
- * write outside IncarnaMind or read a folder of theirs. It offers no "always allow".
+ * write outside IncarnaMind, read a folder of theirs, delete, or change more than an Answer
+ * changes at once. It offers no "always allow". `tainted`: its Run had read text the User didn't
+ * write: Passages, a Connector's reply, a web page or a web page's title.
  */
 export interface CommandApprovalRequest extends ApprovalRequestBase {
   subject: Extract<ApprovalSubject, { kind: "command" }>;
@@ -8073,11 +8089,10 @@ export interface CoreApi {
   restore(refs: RestoreRef[]): Promise<void>;
   /**
    * Takes back every change the commands of one of the assistant's Runs made (#1110), the last
-   * first: `CommandDone.run`. Returns the Folders and Tags it made that it left in place. A change
-   * that can't be taken back is skipped, the rest are, and it throws, saying which: called again,
-   * it tries those left. Throws NotFoundError for a Run of an earlier session.
+   * first: `CommandDone.run`. A change that can't be taken back is skipped and the rest are;
+   * called again, it tries those left. Throws NotFoundError for a Run of an earlier session.
    */
-  undoCommands(run: string): Promise<CommandKept[]>;
+  undoCommands(run: string): Promise<CommandsUndone>;
   /** Makes again the changes `undoCommands` took back, as far as it can, saying what it couldn't. */
   redoCommands(run: string): Promise<void>;
   /** What can be restored: the Minds, conversations, Documents, Folders and Tags deleted in the last `RECENTLY_DELETED_DAYS`, newest first. */

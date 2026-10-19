@@ -47,6 +47,8 @@ export type CommandsCore = Pick<
   | "revertDocumentTags"
   | "deleteDocument"
   | "deleteMind"
+  | "deletePermanently"
+  | "listConversations"
   | "addDocuments"
   | "previewMindExport"
 >;
@@ -252,13 +254,28 @@ const inApp = (
   run: () => Promise<Ran>,
 ): CheckedCommand => ({ command, effects: IN_APP, items, into, outside: null, run });
 
-/** Whether a Folder holds anything: Documents filed in it, or Minds. */
+/** Whether a Folder holds anything: Documents filed in it, Minds or conversations. */
 async function holdsAny(core: CommandsCore, folderId: string): Promise<boolean> {
-  const [library, minds] = await Promise.all([core.getLibrary(), core.listMinds()]);
+  const [library, minds, conversations] = await Promise.all([
+    core.getLibrary(),
+    core.listMinds(),
+    core.listConversations({ folderId }),
+  ]);
   return (
     library.assignments.some((each) => each.groupId === folderId) ||
-    minds.some((mind) => mind.folderId === folderId)
+    minds.some((mind) => mind.folderId === folderId) ||
+    conversations.length > 0
   );
+}
+
+/**
+ * Removes for good a Folder or Tag a command made just now for a change that then failed: the
+ * User never saw it, so it doesn't wait in Recently deleted.
+ */
+async function unmake(core: CommandsCore, kind: "folder" | "tag", id: string): Promise<void> {
+  if (kind === "folder") await core.deleteLibraryGroup(id);
+  else await core.deleteTag(id);
+  await core.deletePermanently([{ kind, id }]);
 }
 
 async function folderNamed(core: CommandsCore, name: string) {
@@ -300,7 +317,7 @@ function moveTo(command: "document.moveTo" | "mind.moveTo"): Checker {
       try {
         move = await core.moveToFolder({ ...moving, folderId: folder.id });
       } catch (error) {
-        if (made) await core.deleteLibraryGroup(folder.id);
+        if (made) await unmake(core, "folder", folder.id);
         throw error;
       }
       const moved = new Set(
@@ -419,7 +436,7 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
       try {
         if (ids.length > 0) await core.addTagToDocuments(ids, tag.id);
       } catch (error) {
-        if (made) await core.deleteTag(tag.id);
+        if (made) await unmake(core, "tag", tag.id);
         throw error;
       }
       /** Whether its Undo removed the Tag it made; false: kept for Documents the User tagged since. */

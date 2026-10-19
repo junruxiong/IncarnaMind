@@ -44,11 +44,14 @@ export interface UndoFix {
   run(): Promise<void>;
 }
 
-/** An undo or a redo the core can't do yet, with the fix that lets it: it stays on the stack. */
+/**
+ * An undo or a redo the core can't do, said in the interface's words: with the fix that lets it,
+ * it stays on the stack; with none, it never can and leaves it.
+ */
 export class UndoRefused extends Error {
   constructor(
     readonly said: Words,
-    readonly fix: UndoFix,
+    readonly fix: UndoFix | null,
   ) {
     super(said((key, params) => translate("en", key, params)));
     this.name = "UndoRefused";
@@ -82,7 +85,10 @@ interface UndoState {
   withdraw(change: Undoable): void;
   /** Hides the line; the stack stays. */
   dismiss(): void;
-  /** Shows again what a change on the line says, once it says more: a request's later commands. */
+  /**
+   * A change already made has more to it, made just now: a request's later commands. It goes
+   * back on top, past what the User did meanwhile, so ⌘Z takes it back first, and shows its line.
+   */
   renew(change: Undoable): void;
 }
 
@@ -185,7 +191,11 @@ export const useUndo = create<UndoState>()((set, get) => {
       set({ line: null });
     },
     renew(change) {
-      set((state) => (state.line?.change === change ? { line: { ...state.line, change } } : {}));
+      set((state) => ({
+        done: [...state.done.filter((each) => each !== change), change],
+        undone: [],
+        line: lineOf(change),
+      }));
     },
   };
 });

@@ -3520,18 +3520,25 @@ export const en = {
   "commands.ask.change.mind.moveTo.one": "Move “{name}” to “{folder}”?",
   "commands.ask.change.document.tags": "Tag {count} Documents “{tag}”?",
   "commands.ask.change.document.tags.one": "Tag “{name}” “{tag}”?",
-  "commands.ask.change.document.delete": "Move {count} Documents to Recently deleted?",
-  "commands.ask.change.document.delete.one": "Move “{name}” to Recently deleted?",
-  "commands.ask.change.mind.delete": "Move {count} Minds to Recently deleted?",
-  "commands.ask.change.mind.delete.one": "Move “{name}” to Recently deleted?",
-  "commands.ask.why.many": "The assistant asks before changing more than {max} things at once.",
-  "commands.ask.why.afterReading":
-    "This Answer read text you didn't write here, which could have asked for this.",
-  "commands.ask.why.focusedMind": "It's the Mind you're in.",
+  "commands.ask.change.document.delete": "Delete {count} Documents?",
+  "commands.ask.change.document.delete.one": "Delete “{name}”?",
+  "commands.ask.change.mind.delete": "Delete {count} Minds?",
+  "commands.ask.change.mind.delete.one": "Delete “{name}”?",
+  "commands.ask.why.many": "The assistant asks before one answer changes more than {max} things.",
+  "commands.ask.why.many.changed":
+    "The assistant asks before one answer changes more than {max} things. This one has changed {changed} already.",
+  "commands.ask.why.delete":
+    "They go to Recently deleted, where you can restore them for {days} days. The assistant always asks before it deletes.",
+  "commands.ask.why.delete.one":
+    "It goes to Recently deleted, where you can restore it for {days} days. The assistant always asks before it deletes.",
+  "commands.ask.read": "The assistant read text you didn't write.",
+  "commands.ask.item.renamed": "{name} (renamed to “{renamed}” in this answer)",
   "commands.kept.folder": "Kept the Folder “{name}”: you've filed things in it since.",
   "commands.kept.tag": "Kept the Tag “{name}”: you've tagged other Documents with it since.",
   "commands.ask.allow": "Allow",
   "commands.ask.deny": "Don't allow",
+  "commands.ask.delete": "Delete",
+  "commands.ask.keep": "Don't delete",
   "error.files.outside":
     "IncarnaMind saves new files only in the output location or an allowed Linked folder.",
   "error.files.notChosen": "You didn't choose where to save new files, so nothing was saved.",

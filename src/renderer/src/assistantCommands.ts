@@ -1,15 +1,14 @@
 /**
  * The changes the assistant's commands made (#1110) are one step of Undo per Run, in the window
  * whose Question asked for them, as the User's own changes to the Library are. The step goes on
- * the stack as the Run's first change lands, so a change the User makes meanwhile comes after
- * it, and the undo line says what changed ("Renamed 3 Documents · Undo"). ⌘Z, that line or the
- * Answer's card takes all of it back; one that can't be taken back is tried again from the line.
+ * the stack as the Run's first change lands, and back on top as each later one does, and the
+ * undo line says what changed ("Renamed 3 Documents · Undo"). ⌘Z, that line or the Answer's card
+ * takes all of it back; what couldn't be is tried again from the line, while trying can help.
  */
 import { create } from "zustand";
 import type { CommandDone, CommandKept } from "../../core/api";
 import { runText, undoable } from "./commandFacts";
 import { core } from "./core";
-import { describeError } from "./errors";
 import type { Words } from "./lineNames";
 import { useAppStore } from "./store";
 import { type Undoable, UndoRefused, useUndo } from "./undo";
@@ -52,20 +51,27 @@ function stepOf(run: string, done: readonly CommandDone[]): Undoable {
     said: (t) => runText(t, done),
     undoneNote: () => (kept.length > 0 ? keptWords(kept) : null),
     undo: async () => {
-      try {
-        kept = await core.undoCommands(run);
-      } catch (error) {
-        const { message, wording } = describeError(error);
-        // What could be taken back was: trying again takes back what is left.
-        throw new UndoRefused((t) => (wording ? t(wording.key, wording.values) : message), {
-          label: (t) => t("checks.tryAgain"),
-          run: async () => undefined,
-        });
+      const undone = await core.undoCommands(run);
+      kept = undone.kept;
+      const { failed } = undone;
+      // All of it taken back, or what is left never can be: the card offers Undo no more.
+      if (!failed?.again) {
+        useCommandRuns.setState((state) => ({
+          undone: { ...state.undone, [run]: true },
+          kept: { ...state.kept, [run]: kept },
+        }));
       }
-      useCommandRuns.setState((state) => ({
-        undone: { ...state.undone, [run]: true },
-        kept: { ...state.kept, [run]: kept },
-      }));
+      if (!failed) return;
+      const said: Words = (t) =>
+        [
+          t("error.commands.undoPartly", { reasons: failed.reasons.join(" ") }),
+          ...(kept.length > 0 ? [keptWords(kept)(t)] : []),
+        ].join(" ");
+      // What could be taken back was: trying again takes back what is left.
+      throw new UndoRefused(
+        said,
+        failed.again ? { label: (t) => t("checks.tryAgain"), run: async () => undefined } : null,
+      );
     },
     redo: async () => {
       await core.redoCommands(run);

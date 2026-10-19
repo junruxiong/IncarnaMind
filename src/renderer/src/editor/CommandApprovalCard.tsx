@@ -1,12 +1,17 @@
 import { useId } from "react";
-import { COMMAND_AT_ONCE, type CommandApprovalRequest, type CommandAsk } from "../../../core/api";
+import {
+  COMMAND_AT_ONCE,
+  type CommandApprovalRequest,
+  type CommandAsk,
+  type CommandItem,
+  RECENTLY_DELETED_DAYS,
+} from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { useApprovals } from "../approvals";
 import { FORMAT_LABELS } from "../exports";
 import { useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import type { Translate } from "../objects";
-import { ThirdPartyLine } from "./ThirdPartyLine";
 import { withShortcut } from "./withShortcut";
 
 type Change = Extract<CommandAsk, { kind: "change" }>;
@@ -31,11 +36,23 @@ const CHANGE: Readonly<Record<Change["command"], [MessageKey, MessageKey]>> = {
   "mind.delete": ["commands.ask.change.mind.delete", "commands.ask.change.mind.delete.one"],
 };
 
-const WHY: Readonly<Record<Change["reason"], MessageKey>> = {
-  many: "commands.ask.why.many",
-  afterReading: "commands.ask.why.afterReading",
-  focusedMind: "commands.ask.why.focusedMind",
-};
+function whyOf(t: Translate, ask: Change): string {
+  if (ask.reason === "delete") {
+    return t(ask.count === 1 ? "commands.ask.why.delete.one" : "commands.ask.why.delete", {
+      days: RECENTLY_DELETED_DAYS,
+    });
+  }
+  return t(ask.changed > 0 ? "commands.ask.why.many.changed" : "commands.ask.why.many", {
+    max: COMMAND_AT_ONCE,
+    changed: ask.changed,
+  });
+}
+
+/** A thing by the name the User knew, and the one this Answer gave it. */
+const itemLine = (t: Translate, item: CommandItem) =>
+  item.renamed === undefined
+    ? item.name
+    : t("commands.ask.item.renamed", { name: item.name, renamed: item.renamed });
 
 /** The card's question, why it asks, the path it reaches (if any) and the names it lists. */
 function wordsOf(
@@ -70,16 +87,21 @@ function wordsOf(
     case "change": {
       const [many, one] = CHANGE[ask.command];
       const into = ask.into ?? "";
+      const [first] = ask.items;
       return {
         title: t(ask.count === 1 ? one : many, {
           count: ask.count,
-          name: ask.names[0] ?? "",
+          name: first?.name ?? "",
           folder: into,
           tag: into,
         }),
-        why: t(WHY[ask.reason], { max: COMMAND_AT_ONCE }),
+        why: whyOf(t, ask),
         path: null,
-        names: ask.count === 1 ? [] : ask.names,
+        // One thing is named in the title, unless this Answer renamed it.
+        names:
+          ask.count === 1 && first?.renamed === undefined
+            ? []
+            : ask.items.map((item) => itemLine(t, item)),
       };
     }
   }
@@ -88,8 +110,10 @@ function wordsOf(
 /**
  * A command of the assistant's waiting for the User (#1110), as the approval cards are: what it
  * would do, saving a Mind as a file outside the Output location, reading a folder's files to add
- * them, or a change inside IncarnaMind that needs their say, and why it asks; the folder and the
- * names it reaches; and Allow or Don't allow. Never "always": each such call asks.
+ * them, or a change inside IncarnaMind that needs their say, and why it asks; whether the
+ * assistant had read text the User didn't write; the folder and the names it reaches; and Allow
+ * or Don't allow, for a delete Delete or Don't delete (DESIGN.md, Approval). Never "always":
+ * each such call asks.
  */
 export function CommandApprovalCard({
   request,
@@ -103,7 +127,9 @@ export function CommandApprovalCard({
   const titleId = useId();
   const { ask } = request;
   const { title, why, path, names } = wordsOf(t, ask);
-  const allow = t("commands.ask.allow");
+  const deletes = ask.kind === "change" && ask.reason === "delete";
+  const allow = t(deletes ? "commands.ask.delete" : "commands.ask.allow");
+  const read = request.tainted || (request.thirdParty?.length ?? 0) > 0;
   return (
     <div
       contentEditable={false}
@@ -113,6 +139,7 @@ export function CommandApprovalCard({
       data-tool={request.tool}
       data-kind="command"
       data-ask={ask.kind}
+      data-reason={ask.kind === "change" ? ask.reason : undefined}
       className="approval-card"
     >
       <div className="approval-head">
@@ -121,7 +148,11 @@ export function CommandApprovalCard({
           <span className="approval-title-text">{title}</span>
         </p>
         <p className="approval-explanation">{why}</p>
-        <ThirdPartyLine request={request} />
+        {read && (
+          <p data-testid="approval-read" className="approval-explanation">
+            {t("commands.ask.read")}
+          </p>
+        )}
       </div>
       {(path !== null || names.length > 0) && (
         <div className="approval-details">
@@ -161,7 +192,7 @@ export function CommandApprovalCard({
           onClick={() => respond(request.requestId, "deny")}
           className="approval-button approval-button--ghost"
         >
-          {t("commands.ask.deny")}
+          {t(deletes ? "commands.ask.keep" : "commands.ask.deny")}
         </button>
       </div>
     </div>

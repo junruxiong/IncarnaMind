@@ -116,18 +116,18 @@ The assistant can do what the User does with the app's commands. A **Commands** 
   - A test pins the table and what each entry does.
 - **The core runs them**, through its own public interface, as the window's clicks do. The renderer's command list stays the window's.
 - **Whether a call asks is decided in one place**, from what the command's entry says it does and what checking the call found, never by the command's own code.
-  - **A change inside the Library runs at once.** This holds even after the Run read Passages or third-party text, and so departs from #78's rule that new side-effecting Tools ask unless a scope grant covers them: the Library is now that grant. Each Run's changes are one step of Undo for the session. That step goes on the stack as the Run's first change lands, so a change the User makes meanwhile comes after it.
+  - **A change inside the Library runs at once.** This holds even after the Run read Passages or third-party text, and so departs from #78's rule that new side-effecting Tools ask unless a scope grant covers them: the Library is now that grant. Each Run's changes are one step of Undo for the session. That step goes on the stack as the Run's first change lands, and back on top as each later one lands, so ⌘Z takes back what just landed first.
   - **Except these, which ask:**
-    - a call that changes more than 20 things;
-    - a delete after the Run read Passages, a Connector's reply or third-party text;
-    - a delete of the Mind the User is in.
+    - **Every delete the assistant starts**, whatever the Run read, since a web page's title or a Document's text could ask for it. One card lists what would go, each by the name the User knew, with what this Answer renamed it, and offers Delete and Don't delete. It is the one exception to Undo instead of confirmations, and only for the assistant's deletes: the User's own still happen at once, with Undo.
+    - **A change that would take one Answer past 20 changes**, counted across all its calls, renames included. Calls are checked one at a time. Once the User allows one, the count starts again.
   - **Export into the Output location itself runs at once.** The Output location is a new scope, the folder the User chose for new files. A folder inside it may be one a sync service shares, so it asks, as any other folder does.
   - **Reading a folder's files always asks.** The ask lists the files right in that folder, of the kinds asked for, and reads nothing a link leads to outside it.
-  - **An ask offers only Allow or Don't allow.** It never offers "always", and no stored policy applies to a command.
+  - **An ask offers only Allow or Don't allow** (Delete or Don't delete for a delete). It never offers "always", and no stored policy applies to a command.
+  - **An ask says when its Run had read text the User didn't write**: Passages, a Connector's reply, a web page, or a saved web page's title among the names it was given. This helps the User judge the request, but doesn't change what asks.
   - None of the marked commands sends anything off the computer. A later one that does asks the same way.
 - **Undo is all or nothing per change, and leaves the User's own things alone.**
-  - A command that fails part way takes back what it did.
-  - An Undo that can't take back one change takes back the rest, says which failed, and takes back what is left when tried again. Redo then makes it all again.
-  - Undo leaves a Folder or Tag the Run made in place, and says so, when the User has put their own things in it since.
+  - A command that fails part way takes back what it did. A Folder or Tag it made for that change is removed for good, so it never waits in Recently deleted.
+  - An Undo that can't take back one change takes back the rest, says which failed and what it kept, and takes back what is left when tried again. Once a try again takes back nothing more, it stops offering one, so ⌘Z reaches older changes. Redo then makes it all again.
+  - Undo leaves a Folder or Tag the Run made in place, and says so, when the User has put their own things in it since: Documents, Minds or conversations.
 - **Reported from results.** The card under the reply says only what each `run_command` call returned, including the failed and the denied ones.
 - **Not for every Run.** Check Runs and outside agents aren't offered them.
