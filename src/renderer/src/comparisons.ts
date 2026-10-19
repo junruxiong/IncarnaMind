@@ -16,14 +16,13 @@ import type { ObjectRef } from "./objects";
 import { selectedOn } from "./selection";
 import { useAppStore } from "./store";
 
-/** Where a sheet takes its Documents from: a Folder, every Document ("all"), or those selected in the Library ("selected"). */
+// "all" and "selected" never clash with a Folder's id, which is a UUID.
 export type SheetSource = string | "all" | "selected";
 
 export interface CompareSheet {
   /** The Block the table goes after (where the cursor was); null: the Mind's end. */
   afterBlockId: string | null;
   source: SheetSource;
-  /** The Library's selection when the source "selected" was taken, by id. */
   selected: readonly string[];
   /** The Documents ticked, by id. */
   checked: readonly string[];
@@ -123,9 +122,7 @@ function startingIds(source: SheetSource, offered: Document[]): string[] {
 /**
  * Compare Documents… (⌘K, "/", the + menu): opens the sheet in `mindId`, or
  * in the Mind in front, or in a new Mind when none is, its table to go after
- * `afterBlockId`. It starts from the Documents selected in the Library, all
- * ticked; else from the Mind's Folder or All Documents, with Documents ticked
- * only when there are few, so the one button never spends on a whole Library.
+ * `afterBlockId`.
  */
 export async function startCompareDocuments(
   mindId: string | null,

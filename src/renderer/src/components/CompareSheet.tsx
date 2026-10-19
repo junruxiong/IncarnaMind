@@ -28,17 +28,7 @@ import { ReadinessLine } from "./providers/ChatReadinessNotice";
 import { buttonStyle, menuClass, menuItemClass } from "./ui";
 import { usePopoverMenu } from "./usePopoverMenu";
 
-/**
- * Compare Documents (#98; the canvas board Final-37-Compare-Start): at the
- * foot of the Mind, the Documents of a Folder, All Documents or the Library's
- * selection, two to a row, with a header checkbox to tick all or none; the
- * Questions, one per column, "+ Question" adding one; "Anything else the
- * table should show?"; and, at its foot, the estimate for a cloud model
- * billed per token (none for a plan or this computer, #83), the
- * "Compare Documents" chip (× closes it), the model chip and "Make the
- * table". A large run asks first, in the foot's place. Esc closes the sheet
- * (or the question), ⌘↵ makes the table or asks.
- */
+/** Compare Documents (#98; the canvas board Final-37-Compare-Start), docked at the foot of the Mind. */
 export function CompareSheet({
   mindId,
   doc,
@@ -96,8 +86,12 @@ export function CompareSheet({
   const questionsHint = asked.length === 0 ? "comparison.sheet.noQuestions" : null;
   const blocked = documents.length === 0 || documentsHint !== null || questionsHint !== null;
   // The question before a run is about these Documents, Questions and this model, and goes when any change.
-  const runKey = `${checked.map((document) => document.id).join()}|${asked.length}|${model?.providerId}|${model?.modelId}`;
+  const modelKey = `${model?.providerId}|${model?.modelId}`;
+  const runKey = `${checked.map((document) => document.id).join()}|${asked.length}|${modelKey}`;
   const confirming = askedFor === runKey;
+  // The last estimate stays on show while the next loads, so a tick doesn't move the foot.
+  const estimated = estimate?.model === modelKey ? estimate : null;
+  const exact = estimated?.cells === cells ? estimated : null;
 
   // The first Question's field takes the focus as the sheet opens.
   const open = sheet !== undefined;
@@ -117,21 +111,21 @@ export function CompareSheet({
     field.focus();
   });
 
-  // The estimate, again as the cells or the model change; none for a plan or this computer.
   useEffect(() => {
-    if (!open || cells === 0) {
+    if (!open) {
       setEstimate(null);
       return;
     }
+    if (cells === 0) return;
     let current = true;
     estimateCells(cells, model).then((run) => {
-      if (current && run) setEstimate({ cells, run, line: estimateLine(run, t, language) });
-      else if (current) setEstimate(null);
+      if (!current) return;
+      setEstimate(run && { cells, model: modelKey, run, line: estimateLine(run, t, language) });
     });
     return () => {
       current = false;
     };
-  }, [open, cells, model, t, language]);
+  }, [open, cells, model, modelKey, t, language]);
 
   // `indeterminate` is a property of the element, not an attribute.
   useEffect(() => {
@@ -161,7 +155,7 @@ export function CompareSheet({
   // The estimate may not be in yet for the Questions just typed: a run is asked about on its own.
   const requestMake = async () => {
     if (blocked || sheet.making) return;
-    const run = estimate?.cells === cells ? estimate.run : await estimateCells(cells, model);
+    const run = exact ? exact.run : await estimateCells(cells, model);
     if (asksFirst(checked.length, run)) setAskedFor(runKey);
     else await make();
   };
@@ -228,6 +222,7 @@ export function CompareSheet({
       ? t("comparison.sheet.documentsSelected")
       : t("comparison.sheet.documentsIn", { folder: folderName });
   const hintFor = (key: string) => `${hintIds}${key}`;
+  const cellsToFill = t("comparison.sheet.ask.cells", { count: cells });
 
   return (
     <section
@@ -238,69 +233,6 @@ export function CompareSheet({
       onKeyDown={onKeyDown}
     >
       <div className="compare-sheet-body">
-        <div className="compare-sheet-documents">
-          <div className="compare-sheet-heading">
-            <span className="compare-sheet-scope">
-              {documents.length > 0 && (
-                <input
-                  ref={selectAll}
-                  type="checkbox"
-                  data-testid="compare-sheet-select-all"
-                  className="compare-sheet-select-all"
-                  aria-label={t(
-                    someTicked ? "comparison.sheet.selectNone" : "comparison.sheet.selectAll",
-                  )}
-                  title={t(
-                    someTicked ? "comparison.sheet.selectNone" : "comparison.sheet.selectAll",
-                  )}
-                  checked={allTicked}
-                  onChange={() => (someTicked ? tick([]) : tickAll())}
-                />
-              )}
-              <SourceMenu label={heading} onChoose={(next) => chooseCompareSource(mindId, next)} />
-            </span>
-            <span data-testid="compare-sheet-counted" className="compare-sheet-count">
-              {t("comparison.sheet.counted", { checked: checked.length, total: documents.length })}
-            </span>
-          </div>
-          {documents.length === 0 ? (
-            <ProblemLine
-              role="status"
-              testId="compare-sheet-no-documents"
-              action={{
-                label: t("sidebar.plus.addDocuments"),
-                onClick: () => void useAppStore.getState().pickDocuments(),
-              }}
-            >
-              {t("comparison.sheet.noDocuments")}
-            </ProblemLine>
-          ) : (
-            <ul className="compare-sheet-list">
-              {documents.map((document) => (
-                <li key={document.id}>
-                  <label className="compare-sheet-document" title={document.name}>
-                    <input
-                      type="checkbox"
-                      data-testid="compare-sheet-document"
-                      checked={sheet.checked.includes(document.id)}
-                      onChange={() => toggle(document.id)}
-                    />
-                    <span className="truncate">{document.name}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
-          {documentsHint && (
-            <p
-              id={hintFor("documents")}
-              data-testid="compare-sheet-hint-documents"
-              className="compare-sheet-hint"
-            >
-              {t(documentsHint, { max: MAX_COMPARISON_DOCUMENTS })}
-            </p>
-          )}
-        </div>
         <div className="compare-sheet-questions">
           <div className="compare-sheet-heading">
             <span>{t("comparison.sheet.questions")}</span>
@@ -365,6 +297,69 @@ export function CompareSheet({
             </p>
           )}
         </div>
+        <div className="compare-sheet-documents">
+          <div className="compare-sheet-heading">
+            <span className="compare-sheet-scope">
+              {documents.length > 0 && (
+                <input
+                  ref={selectAll}
+                  type="checkbox"
+                  data-testid="compare-sheet-select-all"
+                  className="compare-sheet-select-all"
+                  aria-label={t(
+                    someTicked ? "comparison.sheet.selectNone" : "comparison.sheet.selectAll",
+                  )}
+                  title={t(
+                    someTicked ? "comparison.sheet.selectNone" : "comparison.sheet.selectAll",
+                  )}
+                  checked={allTicked}
+                  onChange={() => (someTicked ? tick([]) : tickAll())}
+                />
+              )}
+              <SourceMenu label={heading} onChoose={(next) => chooseCompareSource(mindId, next)} />
+            </span>
+            <span data-testid="compare-sheet-counted" className="compare-sheet-count">
+              {t("comparison.sheet.counted", { checked: checked.length, total: documents.length })}
+            </span>
+          </div>
+          {documents.length === 0 ? (
+            <ProblemLine
+              role="status"
+              testId="compare-sheet-no-documents"
+              action={{
+                label: t("sidebar.plus.addDocuments"),
+                onClick: () => void useAppStore.getState().pickDocuments(),
+              }}
+            >
+              {t("comparison.sheet.noDocuments")}
+            </ProblemLine>
+          ) : (
+            <ul className="compare-sheet-list">
+              {documents.map((document) => (
+                <li key={document.id}>
+                  <label className="compare-sheet-document" title={document.name}>
+                    <input
+                      type="checkbox"
+                      data-testid="compare-sheet-document"
+                      checked={sheet.checked.includes(document.id)}
+                      onChange={() => toggle(document.id)}
+                    />
+                    <span className="truncate">{document.name}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          {documentsHint && (
+            <p
+              id={hintFor("documents")}
+              data-testid="compare-sheet-hint-documents"
+              className="compare-sheet-hint"
+            >
+              {t(documentsHint, { max: MAX_COMPARISON_DOCUMENTS })}
+            </p>
+          )}
+        </div>
       </div>
       <input
         data-testid="compare-sheet-instruction"
@@ -397,7 +392,7 @@ export function CompareSheet({
                 count: checked.length,
               },
             )}
-            estimate={estimate?.cells === cells ? estimate.line : null}
+            estimate={exact?.line ?? { parts: [cellsToFill], title: cellsToFill }}
             check={{
               label: t("comparison.sheet.make"),
               testId: "compare-sheet-ask-make",
@@ -412,13 +407,14 @@ export function CompareSheet({
         </div>
       ) : (
         <>
-          {!blocked && estimate?.cells === cells && estimate.line && (
+          {estimated?.line && (
             <p
               data-testid="compare-sheet-estimate"
               className="compare-sheet-estimate"
-              title={estimate.line.title}
+              title={estimated.line.title}
+              aria-hidden={blocked}
             >
-              {joinMeta(estimate.line.parts)}
+              {joinMeta(estimated.line.parts)}
             </p>
           )}
           <div className="compare-sheet-foot">
@@ -457,7 +453,6 @@ export function CompareSheet({
   );
 }
 
-/** "Documents in {Folder} ⌄": the Folder to take them from, All Documents, or those selected in the Library. */
 function SourceMenu({ label, onChoose }: { label: string; onChoose(source: SheetSource): void }) {
   const t = useT();
   const groups = useAppStore((state) => state.library?.groups) ?? [];
@@ -532,6 +527,7 @@ function SourceMenu({ label, onChoose }: { label: string; onChoose(source: Sheet
 
 interface RunEstimated {
   cells: number;
+  model: string;
   run: RunEstimate;
   line: EstimateLine | null;
 }

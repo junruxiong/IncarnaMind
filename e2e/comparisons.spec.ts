@@ -347,7 +347,6 @@ test("empty states from the + menu, and the monthly cap: every cell left says it
   await screenshot(window, "compare-cost-cap-zh-900");
 });
 
-/** A Library of `count` small text Documents, "Supplier 01" and on. */
 async function addLibrary(window: Page, count: number): Promise<void> {
   const paths: string[] = [];
   for (let each = 1; each <= count; each++) {
@@ -359,7 +358,6 @@ async function addLibrary(window: Page, count: number): Promise<void> {
   await addDocuments(window, paths);
 }
 
-/** A new Mind, and the sheet opened from the + menu. */
 async function openSheetFromPlusMenu(window: Page): Promise<Locator> {
   await newMind(window);
   await pointAndClick(window, window.getByTestId("plus-menu"));
@@ -377,9 +375,10 @@ const WORDS = {
     tick: "Tick the Documents to compare.",
     addQuestion: "Add a Question for each column.",
     ask: (count: number) => `Compare ${count} Documents?`,
+    cells: (count: number) => `${count} cells to fill`,
     title: (documents: number) => `Comparison table · ${documents} Documents × 1 Question`,
     selectAll: "Select all Documents",
-    selectNone: "Select none",
+    selectNone: "Clear selection",
     selectedFromLibrary: "Documents selected in the Library",
   },
   "zh-CN": {
@@ -387,10 +386,11 @@ const WORDS = {
     tick: "勾选要对比的文档。",
     addQuestion: "每列一个问题，先添加一个。",
     ask: (count: number) => `对比 ${count} 个文档？`,
+    cells: (count: number) => `要填写 ${count} 个单元格`,
     title: (documents: number) => `对比表 · ${documents} 个文档 × 1 个问题`,
     selectAll: "全选文档",
-    selectNone: "取消全选",
-    selectedFromLibrary: "资料库中选中的文档",
+    selectNone: "取消选择",
+    selectedFromLibrary: "资料库中已选的文档",
   },
 } as const;
 
@@ -422,7 +422,6 @@ for (const { language, width } of SCOPE_VARIANTS) {
     const estimate = sheet.getByTestId("compare-sheet-estimate");
     const ask = sheet.getByTestId("compare-sheet-ask");
 
-    // Nothing ticked: the one button can't spend on all the files, and each missing thing says so where it goes.
     await expect(boxes).toHaveCount(22);
     await expect(counted).toHaveText(words.counted(0, 22));
     await expect(ticked).toHaveCount(0);
@@ -432,12 +431,10 @@ for (const { language, width } of SCOPE_VARIANTS) {
     await expect(sheet.getByTestId("compare-sheet-hint-questions")).toHaveText(words.addQuestion);
     await screenshot(window, `compare-scope-start-${language}-${width}`);
 
-    // A Question alone isn't enough.
     await typeQuestions(window, ["Termination notice"]);
     await expect(sheet.getByTestId("compare-sheet-hint-questions")).toHaveCount(0);
     await expect(make).toBeDisabled();
 
-    // One Document ticked: the button is ready, and the estimate is plainly above it.
     await pointAndClick(window, boxes.first());
     await expect(counted).toHaveText(words.counted(1, 22));
     await expect(make).toBeEnabled();
@@ -457,7 +454,6 @@ for (const { language, width } of SCOPE_VARIANTS) {
     await expect(estimate).toBeInViewport();
     await screenshot(window, `compare-scope-estimate-${language}-${width}`);
 
-    // The header checkbox clears what is ticked, then ticks all; by mouse.
     await expect(selectAll).toHaveAccessibleName(words.selectNone);
     await pointAndClick(window, selectAll);
     await expect(ticked).toHaveCount(0);
@@ -468,15 +464,20 @@ for (const { language, width } of SCOPE_VARIANTS) {
     await expect(selectAll).toBeChecked();
     await expect(selectAll).toHaveJSProperty("indeterminate", false);
 
-    // By keyboard: Space on the header checkbox clears, and ⌘A in the list ticks all again.
-    await selectAll.focus();
+    await pointAndClick(window, sheet.getByTestId("compare-sheet-question").first());
+    await window.keyboard.press("Tab");
+    await expect(sheet.getByTestId("compare-sheet-add-question")).toBeFocused();
+    await window.keyboard.press("Tab");
+    await expect(selectAll).toBeFocused();
     await window.keyboard.press("Space");
     await expect(ticked).toHaveCount(0);
-    await boxes.nth(3).focus();
+    await window.keyboard.press("Tab");
+    await expect(sheet.getByTestId("compare-sheet-source")).toBeFocused();
+    await window.keyboard.press("Tab");
+    await expect(boxes.first()).toBeFocused();
     await window.keyboard.press("ControlOrMeta+a");
     await expect(ticked).toHaveCount(22);
 
-    // More than 20 Documents: the button asks first, in the foot's place, with the estimate and the number.
     await pointAndClick(window, make);
     await expect(ask).toBeVisible();
     await expect(ask).toContainText(words.ask(22));
@@ -486,12 +487,10 @@ for (const { language, width } of SCOPE_VARIANTS) {
     await expect(window.getByTestId("comparison-table")).toHaveCount(0);
     await screenshot(window, `compare-scope-ask-${language}-${width}`);
 
-    // Choose Documents goes back to the list, nothing made, the ticks kept.
     await pointAndClick(window, sheet.getByTestId("compare-sheet-ask-choose"));
     await expect(ask).toHaveCount(0);
     await expect(selectAll).toBeFocused();
     await expect(ticked).toHaveCount(22);
-    // ⌘↵ asks; pressed again it doesn't answer. Esc closes the question, not the sheet.
     await window.keyboard.press("ControlOrMeta+Enter");
     await expect(ask).toBeVisible();
     await window.keyboard.press("ControlOrMeta+Enter");
@@ -502,12 +501,10 @@ for (const { language, width } of SCOPE_VARIANTS) {
     await expect(sheet).toBeVisible();
     await window.keyboard.press("ControlOrMeta+Enter");
     await expect(ask).toBeVisible();
-    // Changing what is ticked closes the question.
     await pointAndClick(window, boxes.nth(5));
     await expect(ask).toHaveCount(0);
     await expect(counted).toHaveText(words.counted(21, 22));
 
-    // Twenty Documents is not a large run: nothing is asked, and the table is made.
     await pointAndClick(window, boxes.nth(6));
     await expect(counted).toHaveText(words.counted(20, 22));
     await pointAndClick(window, make);
@@ -517,6 +514,54 @@ for (const { language, width } of SCOPE_VARIANTS) {
     await expect(sheet).toHaveCount(0);
   });
 }
+
+test("a tick doesn't move the sheet: the estimate stays on show while the next one loads", async () => {
+  test.setTimeout(120_000);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 900, 860);
+  await acceptPlainTextKeys(window);
+  await bridge(window).cloudModel();
+  await addLibrary(window, 12);
+
+  const sheet = await openSheetFromPlusMenu(window);
+  const boxes = sheet.getByTestId("compare-sheet-document");
+  const estimate = sheet.getByTestId("compare-sheet-estimate");
+  await typeQuestions(window, ["Termination notice"]);
+  await pointAndClick(window, boxes.first());
+  await expect(estimate).toContainText("About $");
+
+  // A flash lasts a frame or two, so it is sampled on every frame rather than polled for.
+  await window.evaluate(() => {
+    const sampler = { running: true, frames: [] as { estimate: boolean; height: number }[] };
+    (globalThis as unknown as { sampler: typeof sampler }).sampler = sampler;
+    const sample = () => {
+      const box = document.querySelector('[data-testid="compare-sheet"]')?.getBoundingClientRect();
+      sampler.frames.push({
+        estimate: document.querySelector('[data-testid="compare-sheet-estimate"]') !== null,
+        height: Math.round(box?.height ?? -1),
+      });
+      if (sampler.running) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  for (const index of [1, 2, 3, 4, 5]) await pointAndClick(window, boxes.nth(index));
+  await expect(sheet.getByTestId("compare-sheet-counted")).toHaveText("6 of 12");
+  await expect(estimate).toContainText("18 model calls");
+  await pointAndClick(window, sheet.getByTestId("compare-sheet-select-all"));
+  await expect(sheet.getByTestId("compare-sheet-counted")).toHaveText("0 of 12");
+  const frames = await window.evaluate(() => {
+    const { sampler } = globalThis as unknown as {
+      sampler: { running: boolean; frames: { estimate: boolean; height: number }[] };
+    };
+    sampler.running = false;
+    return sampler.frames;
+  });
+  expect(frames.length).toBeGreaterThan(10);
+  expect(frames.every((frame) => frame.estimate)).toBe(true);
+  expect(new Set(frames.map((frame) => frame.height)).size).toBe(1);
+  await expect(estimate).toBeHidden();
+});
 
 test("a large run goes on once it is asked about: Enter on the question makes the table", async () => {
   test.setTimeout(120_000);
@@ -530,14 +575,14 @@ test("a large run goes on once it is asked about: Enter on the question makes th
   await typeQuestions(window, ["Termination notice"]);
   await pointAndClick(window, sheet.getByTestId("compare-sheet-select-all"));
   await expect(sheet.getByTestId("compare-sheet-counted")).toHaveText("22 of 22");
-  // A model on this computer has no estimate, and 22 Documents is still a large run.
   await pointAndClick(window, sheet.getByTestId("compare-sheet-make"));
   const ask = sheet.getByTestId("compare-sheet-ask");
-  await expect(ask).toContainText("Compare 22 Documents?");
+  await expect(ask).toContainText(WORDS.en.ask(22));
+  await expect(ask).toContainText(WORDS.en.cells(22));
   await expect(sheet.getByTestId("compare-sheet-ask-make")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("comparison-table").getByTestId("comparison-title")).toHaveText(
-    "Comparison table · 22 Documents × 1 Question",
+    WORDS.en.title(22),
   );
   await expect(sheet).toHaveCount(0);
 });
@@ -562,7 +607,6 @@ test("the Documents selected in the Library are offered as the scope, and start 
   await expect(counted).toHaveText("3 of 3");
   await expect(sheet.getByTestId("compare-sheet-document")).toHaveCount(3);
 
-  // All Documents: eight, so none ticked; the menu still offers the selection.
   await pointAndClick(window, source);
   await pointAndClick(window, window.getByRole("menuitem", { name: "All Documents" }));
   await expect(counted).toHaveText("0 of 8");

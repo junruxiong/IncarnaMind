@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { Document, RunEstimate } from "../../src/core/api";
 import {
+  ASK_ABOVE_CALLS,
   ASK_ABOVE_COST,
   ASK_ABOVE_DOCUMENTS,
   asksFirst,
@@ -96,9 +97,13 @@ describe("Compare Documents starts with a safe set ticked", () => {
 });
 
 describe("A large run asks first", () => {
-  const perToken = (amount: number | null, currency: "USD" | "CNY" = "USD"): RunEstimate => ({
+  const perToken = (
+    amount: number | null,
+    currency: "USD" | "CNY" = "USD",
+    calls = 3,
+  ): RunEstimate => ({
     billing: "per-token",
-    calls: 3,
+    calls,
     tokens: 1_000,
     cost: amount === null ? null : { amount, currency },
     spentTowardCap: null,
@@ -122,10 +127,14 @@ describe("A large run asks first", () => {
     expect(asksFirst(3, perToken(0.0095))).toBe(false);
   });
 
-  test("a plan, this computer and a model with no known price ask only by the number of Documents", () => {
+  test("a plan and this computer ask only by the number of Documents", () => {
     expect(asksFirst(3, { billing: "plan" })).toBe(false);
     expect(asksFirst(3, { billing: "free" })).toBe(false);
-    expect(asksFirst(3, perToken(null))).toBe(false);
     expect(asksFirst(3, null)).toBe(false);
+  });
+
+  test("a model with no known price asks by its model calls instead", () => {
+    expect(asksFirst(3, perToken(null, "USD", ASK_ABOVE_CALLS))).toBe(false);
+    expect(asksFirst(3, perToken(null, "USD", ASK_ABOVE_CALLS + 1))).toBe(true);
   });
 });

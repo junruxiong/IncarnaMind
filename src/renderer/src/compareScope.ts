@@ -12,15 +12,19 @@ export const ASK_ABOVE_DOCUMENTS = 20;
  */
 export const ASK_ABOVE_COST: Readonly<Record<Currency, number>> = { USD: 0.5, CNY: 3.5 };
 
+/**
+ * A model with no known price has no cost to ask by: this many model calls is
+ * about what the cost limit buys at the 0.6 cents a call a cloud model measured.
+ */
+export const ASK_ABOVE_CALLS = 80;
+
 export const startingChecks = <T>(offered: readonly T[]): readonly T[] =>
   offered.length <= TICKED_AT_START_MAX ? offered : [];
 
-/** Whether the run asks before it starts: `estimate` is null for a plan, this computer, or a cost not known. */
+/** `estimate` is null only when `estimateRun` failed. */
 export function asksFirst(documents: number, estimate: RunEstimate | null): boolean {
   if (documents > ASK_ABOVE_DOCUMENTS) return true;
-  return (
-    estimate?.billing === "per-token" &&
-    estimate.cost !== null &&
-    estimate.cost.amount > ASK_ABOVE_COST[estimate.cost.currency]
-  );
+  if (estimate?.billing !== "per-token") return false;
+  if (estimate.cost === null) return estimate.calls > ASK_ABOVE_CALLS;
+  return estimate.cost.amount > ASK_ABOVE_COST[estimate.cost.currency];
 }

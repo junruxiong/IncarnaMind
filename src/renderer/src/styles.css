@@ -9054,6 +9054,10 @@
     padding: 14px 16px 12px;
     border-bottom: 1px solid var(--color-rule);
   }
+  .compare-sheet-documents {
+    /* Drawn first, though after the Questions in the Tab order: Tab from a Question reaches select all. */
+    order: -1;
+  }
   .compare-sheet-heading {
     display: flex;
     align-items: center;
@@ -9222,6 +9226,10 @@
     font-size: 13px;
     line-height: 18px;
     color: var(--color-ink);
+
+    &[aria-hidden="true"] {
+      visibility: hidden;
+    }
   }
   .compare-sheet-foot {
     display: flex;
