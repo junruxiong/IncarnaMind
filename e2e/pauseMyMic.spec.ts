@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
+import { readVtt } from "../src/core/documents/formats/vtt";
 import type { FakeCapture } from "../src/core/meetings/fakeCapture";
 import {
   createDataFolder,
@@ -11,6 +14,7 @@ import {
   pointAndClick,
   pressHeldKeys,
   recordMeeting,
+  recordMeetingNow,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -33,6 +37,9 @@ const mac = process.platform === "darwin";
 /** The shortcut by default: ⌃⌥M on macOS, Ctrl+Shift+U elsewhere. */
 const MIC_KEYS = mac ? "Ctrl+Alt+M" : "Ctrl+Shift+U";
 const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Shift+U";
+
+/** Lines come every couple of seconds of sound, a few seconds behind it. */
+const LINES_WITHIN = { timeout: 30_000 };
 
 let dataDir: string;
 test.beforeEach(async () => {
@@ -223,7 +230,7 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
     .poll(async () => {
       const lines = await linesOf(transcript);
       return lines.filter((each) => each.speaker === "Them" && each.start >= since).length;
-    })
+    }, LINES_WITHIN)
     .toBeGreaterThanOrEqual(2);
 
   // ⌘K has the same words and the shortcut, and resumes it.
@@ -277,9 +284,10 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
     .poll(async () => {
       const marks = await marksOf(transcript);
       const lines = await linesOf(transcript);
-      const last = marks.at(-1)?.to ?? Number.POSITIVE_INFINITY;
+      // A mark's times are whole seconds, rounded down.
+      const last = (marks.at(-1)?.to ?? Number.POSITIVE_INFINITY) + 1000;
       return lines.filter((each) => each.speaker === "Me" && each.start >= last).length;
-    })
+    }, LINES_WITHIN)
     .toBeGreaterThanOrEqual(1);
 
   // Stopped, the Transcript keeps its marks, and no Me line is inside one.
@@ -289,22 +297,28 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   await expect(window.getByTestId("meeting-transcript-line")).toContainText("Transcript saved", {
     timeout: 20_000,
   });
-  const marks = await marksOf(transcript);
-  const [firstMark] = marks;
-  if (!firstMark) throw new Error("The Transcript marks no stretch.");
-  expect(marks.length).toBeGreaterThanOrEqual(3);
-  const lines = await linesOf(transcript);
-  for (const { from, to } of marks) {
+  expect((await marksOf(transcript)).length).toBeGreaterThanOrEqual(3);
+  // In the saved file, to the millisecond: no Me line starts or runs into a stretch, the other side goes on.
+  const [stopped] = await window.evaluate(() =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listMeetings(),
+  );
+  const { cues, gaps } = readVtt(readFileSync(stopped?.transcript?.savedPath ?? "", "utf8"));
+  const stretches = gaps.filter((gap) => gap.reason === "micPaused");
+  expect(stretches.length).toBe((await marksOf(transcript)).length);
+  for (const { fromMs, toMs } of stretches) {
     expect(
-      lines.filter((each) => each.speaker === "Me" && each.start >= from && each.start < to),
+      cues.filter((cue) => cue.speaker === "Me" && cue.endMs > fromMs && cue.startMs < toMs),
     ).toEqual([]);
   }
+  const [firstStretch] = stretches;
   expect(
-    lines.filter((each) => each.speaker === "Them" && each.start >= firstMark.from).length,
+    cues.filter((cue) => cue.speaker === "Them" && cue.startMs >= (firstStretch?.fromMs ?? 0))
+      .length,
   ).toBeGreaterThanOrEqual(2);
 
   // A new meeting starts with the microphone on.
-  const second = await startRecording(window, await recordMeeting(window));
+  // The notice is read: Record starts at once.
+  const second = await recordMeetingNow(window);
   const secondMic = second.getByTestId("meeting-mic");
   await expect(secondMic).toHaveAttribute("aria-pressed", "false");
   await expect(second.getByTestId("meeting-line-microphone-paused")).toHaveCount(0);
@@ -355,7 +369,7 @@ test("Pause my mic in Chinese: the tooltips, the line, ⌘K and the mark in Chin
     .poll(async () => {
       const lines = await linesOf(transcript);
       return lines.filter((each) => each.speaker === "对方" && each.start >= since).length;
-    })
+    }, LINES_WITHIN)
     .toBeGreaterThanOrEqual(1);
   await fromPalette(window, "恢复我的麦克风");
   await expect(mic).toHaveAttribute("aria-pressed", "false");
