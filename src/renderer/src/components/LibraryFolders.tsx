@@ -3,7 +3,8 @@ import { create } from "zustand";
 import type { Document, LibraryGroup, Mind } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
-import { useFolderDrop, useMoveDrag } from "../folderDrag";
+import { useDropTarget } from "../dragDrop";
+import { folderTarget, useDraggedOutOfFolder } from "../folderDrag";
 import { useLanguage, useT } from "../i18n";
 import { currentMindIdOf, currentTabOf } from "../layoutSlice";
 import { useRequests } from "../requests";
@@ -125,7 +126,7 @@ export const useFolds = create<Folds>()((set, get) => {
  * hover. Each section shows only with something in it, but Not in a Folder
  * also shows while something is dragged out of a Folder, to take the drop.
  * Minds and Documents drag onto a Folder, or onto Not in a Folder's heading
- * to leave theirs (see `useFolderDrop`); a Folder renames in place
+ * to leave theirs (see `folderTarget`); a Folder renames in place
  * (double-click or F2, as in Finder) and has its menu (⋯ or a right-click).
  * The keys that walk the tree, → and ← among them, are `useTreeKeyboard`'s.
  */
@@ -187,7 +188,7 @@ export function LibraryFolders({
     [groups, sidebarSort, language],
   );
 
-  const draggingOut = useMoveDrag((state) => state.outOfFolder);
+  const draggingOut = useDraggedOutOfFolder();
   const looseMinds = mindsByFolder.get(null) ?? NO_MINDS;
   const looseDocuments = documentsByFolder.get(null) ?? NO_DOCUMENTS;
   const newFolderLabel = t("sidebar.newFolderKeys", { keys: shortcutLabel("folder.new") });
@@ -329,8 +330,9 @@ function FolderGroup({
       currentTabOf(state.layout)?.item.kind === "library" && state.libraryFilter === folder.id,
   );
   const toggle = () => useFolds.getState().toggle(folder.id);
-  const drop = useFolderDrop(
-    folder.id,
+  const drop = useDropTarget(
+    `sidebar-folder:${folder.id}`,
+    folderTarget(folder.id),
     expanded ? undefined : () => useFolds.getState().reveal(folder.id),
   );
   const object = { kind: "folder", id: folder.id } as const;
@@ -370,13 +372,13 @@ function FolderGroup({
       data-count={documents.length}
       data-minds={minds.length}
       data-expanded={expanded}
-      data-drop-target={drop.active ? "true" : undefined}
+      data-drop-target={drop.over ? "true" : undefined}
       {...select.refProps}
     >
       <div
         {...(rename.renaming ? {} : objectMenu.rowProps)}
-        {...drop.handlers}
-        className={`${rowClass(lit, "app", several && select.selected)} ${drop.active ? dropIntoClass : ""}`}
+        {...drop.props}
+        className={`${rowClass(lit, "app", several && select.selected)} ${drop.over ? dropIntoClass : ""}`}
       >
         {rename.renaming ? (
           <span className="flex h-full w-full min-w-0 items-center gap-2 pr-1 pl-2">
@@ -462,7 +464,7 @@ function NotInAFolder({
   quiet: boolean;
 }) {
   const t = useT();
-  const drop = useFolderDrop(null);
+  const drop = useDropTarget("sidebar-folder:none", folderTarget(null));
   const examplesOnly = useAppStore((state) => {
     const examples = allExamples(state);
     return (

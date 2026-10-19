@@ -795,7 +795,7 @@ function dayOf(at: string, language: Language): string {
  * "accessed" date citation styles read: "Tides, Tide Wiki, § History, ¶ 3,
  * https://tides.example/history, accessed 3 October 2026".
  */
-function footnoteOf(
+export function footnoteOf(
   attributes: Partial<CitationAttributes>,
   documents: readonly LiveDocument[],
   kept: readonly KeptCitationText[],
