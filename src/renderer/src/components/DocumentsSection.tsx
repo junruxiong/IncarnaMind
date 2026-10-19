@@ -326,7 +326,10 @@ const DocumentRow = memo(function DocumentRow({
               {shownName}
             </span>
             <NotCitedLabel item={item} />
-            <TagMarks chips={chips} />
+            <TagMarks
+              chips={chips}
+              reserved={item.tagging === "pending" || item.tagging === "tagging"}
+            />
           </span>
           <DocumentStatusLabel item={item} />
         </button>

@@ -124,6 +124,15 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /** Whether the Meeting's fake microphone is denied: no tone, and the line that says so. */
+  microphone?: "allowed" | "denied";
+  /**
+   * Where the guide for a permission added by hand opens, whatever the screen: in a window
+   * beside System Settings, or as text in the app's window. Without it, the system decides.
+   */
+  permissionGuide?: "beside" | "inline";
+  /** A copy with no way to record audio: Record says so. */
+  noAudioEngine?: boolean;
   /** What a Meeting's fake speech-to-text engine does: slow, failing to read stretches, failing over. */
   transcriber?: FakeTranscriberOptions;
   /**
@@ -215,6 +224,9 @@ export async function launchApp(
     copilot,
     keepWindow = false,
     computerSound = "allowed",
+    microphone = "allowed",
+    permissionGuide,
+    noAudioEngine = false,
     transcriber,
     scans,
     web,
@@ -261,8 +273,11 @@ export async function launchApp(
   if (sandboxNotice === "environment") env.ELECTRON_DISABLE_SANDBOX = "1";
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
-  env.INCARNAMIND_TEST_AUDIO = "fake";
+  env.INCARNAMIND_TEST_AUDIO = noAudioEngine ? "none" : "fake";
   env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
+  env.INCARNAMIND_TEST_AUDIO_MICROPHONE = microphone;
+  delete env.INCARNAMIND_TEST_GUIDE;
+  if (permissionGuide) env.INCARNAMIND_TEST_GUIDE = permissionGuide;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
   if (usageData) {
@@ -653,17 +668,6 @@ export async function closeSettings(window: Page): Promise<void> {
   await expect(settings).toBeHidden();
 }
 
-/** Settings → Meetings → Record meetings, by its switch; `whileOpen` runs before Settings closes. */
-export async function turnOnMeetings(window: Page, whileOpen?: () => Promise<void>): Promise<void> {
-  const settings = await openSettings(window, "meetings");
-  const recording = settings.getByTestId("meetings-enabled");
-  await recording.hover();
-  await recording.click();
-  await expect(recording).toBeChecked();
-  await whileOpen?.();
-  await closeSettings(window);
-}
-
 /** The + menu's "Record a meeting": a new Mind with the start block. */
 export async function recordMeeting(window: Page): Promise<Locator> {
   const plus = window.getByTestId("plus-menu");
@@ -674,6 +678,18 @@ export async function recordMeeting(window: Page): Promise<Locator> {
   const start = window.getByTestId("meeting-start");
   await expect(start).toBeVisible();
   return start;
+}
+
+/** The + menu's "Record a meeting" once the recording notice is read: recording at once, in one action. */
+export async function recordMeetingNow(window: Page): Promise<Locator> {
+  const plus = window.getByTestId("plus-menu");
+  await plus.hover();
+  await plus.click();
+  await window.getByTestId("plus-more").click();
+  await window.getByRole("menuitem", { name: "Record a meeting" }).click();
+  const bar = window.getByTestId("meeting-bar");
+  await expect(bar).toHaveAttribute("data-status", "recording");
+  return bar;
 }
 
 /** Starts recording from the start block; the first time, through the one-time notice. */

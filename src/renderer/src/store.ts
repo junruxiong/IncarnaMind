@@ -35,6 +35,7 @@ import { displayName } from "../../shared/documentNames";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
+import { tagLinks } from "../../shared/tagLinks";
 import {
   deleted,
   linkedFolderPaused,
@@ -42,7 +43,6 @@ import {
   mindMade,
   renamed,
   retagged,
-  tagLinks,
 } from "./changes";
 import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
@@ -1671,6 +1671,9 @@ core.on("documents.removed", (removed) => documentUpdates.remove(removed));
 
 // Documents whose files moved to another Folder on disk.
 core.on("documents.moved", (moved) => documentUpdates.upsert(moved));
+
+// Renamed here, in another window or by the assistant.
+core.on("documents.renamed", (renamed) => documentUpdates.upsert(renamed));
 
 // Tags change through this window or another: follow the list, and drop a deleted Tag from the filter.
 core.on("tags.changed", (tags) => {
