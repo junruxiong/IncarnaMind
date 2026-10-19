@@ -8,7 +8,7 @@ import type {
 import { citedLocation } from "../../../../shared/citations";
 import { isTranscriptLocation } from "../../../../shared/locations";
 import { HELP_SHAPE, helpLabel } from "../../../../shared/meetingHelp";
-import { SPEAKER_ME, SPEAKER_THEM } from "../../../../shared/speakers";
+import { isTheirs, SPEAKER_ME } from "../../../../shared/speakers";
 import { core } from "../../core";
 import {
   quoted,
@@ -160,7 +160,7 @@ export function HelpHeading({
   const t = useT();
   const said = heard
     ? t(
-        heard.speaker === SPEAKER_THEM
+        isTheirs(heard.speaker)
           ? "meetings.help.theySaid"
           : heard.speaker === SPEAKER_ME
             ? "meetings.help.youSaid"

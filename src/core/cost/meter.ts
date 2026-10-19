@@ -24,6 +24,9 @@
  *   plan's own limit is its cap. An Ollama Cloud model's used-up allowance
  *   (HTTP 402) becomes a plan limit, the same stop as the ChatGPT plan's.
  * - A model on this computer is free and isn't recorded.
+ * - Audio sent to a cloud transcription service (#141) is billed by the hour:
+ *   it is counted before it is sent, and audio that would pass the cap isn't
+ *   counted or sent (`audio`).
  *
  * Records stay in this computer's database; nothing here is sent anywhere.
  */
@@ -467,6 +470,49 @@ export function createMeter(options: {
           },
         },
       });
+    },
+
+    /**
+     * Audio sent to a cloud transcription service on one stretch of recording, one record a
+     * month, its cost growing as audio is counted. `add` counts audio about to be sent, and
+     * says false, counting nothing, when it would take the month past the cap.
+     */
+    audio(use: { providerId: string; modelId: string; perHour: Money }) {
+      let row: { id: string; month: string } | null = null;
+      return {
+        add(ms: number): boolean {
+          const at = now();
+          const month = monthStart(at);
+          const amount = (use.perHour.amount * Math.max(0, ms)) / 3_600_000;
+          const { currency } = use.perHour;
+          return db.transaction(() => {
+            const cap = options.cap();
+            if (cap) {
+              const spent = againstCap(cap.currency, month);
+              // A month already at the cap sends nothing more, however little.
+              if (spent >= cap.amount) return false;
+              if (spent + inCurrency(amount, currency, cap.currency) > cap.amount) return false;
+            }
+            const stamp = at.toISOString();
+            if (row?.month === month) {
+              db.run("UPDATE model_requests SET cost = cost + ?, updated_at = ? WHERE id = ?", [
+                amount,
+                stamp,
+                row.id,
+              ]);
+            } else {
+              row = { id: randomUUID(), month };
+              db.run(
+                `INSERT INTO model_requests (id, provider_id, model_id, flow, billing, status, currency,
+                   cost, created_at, updated_at)
+                 VALUES (?, ?, ?, 'transcription', 'per-token', 'settled', ?, ?, ?, ?)`,
+                [row.id, use.providerId, use.modelId, currency, amount, stamp, stamp],
+              );
+            }
+            return true;
+          });
+        },
+      };
     },
 
     /**
