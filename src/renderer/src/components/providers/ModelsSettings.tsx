@@ -27,6 +27,7 @@ import { PlansSettings } from "./PlansSettings";
 import { ProviderDirectory } from "./ProviderDirectory";
 import { logoIdOf, ProviderLogo } from "./ProviderLogo";
 import { ProviderPage, providerName, type RemovedProvider } from "./ProviderPage";
+import { defaultRegion } from "./shared";
 
 type View =
   | { page: "list" }
@@ -40,6 +41,7 @@ const DIRECTORY_TARGET = ["add-provider"] as const;
 const catalogIdOf = (provider: ChatProvider) => provider.catalogId ?? provider.kind;
 
 export function ModelsSettings() {
+  const language = useLanguage();
   const readiness = useAppStore((state) => state.chatReadiness);
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
@@ -113,7 +115,9 @@ export function ModelsSettings() {
 
   const pageFor = (catalogId: string, endpoint: string | null): View => {
     const catalog = catalogProvider(catalogId);
-    const region = catalog ? (endpointOf(catalog, endpoint)?.id ?? null) : null;
+    const region = catalog
+      ? (endpointOf(catalog, endpoint ?? defaultRegion(catalogId, language))?.id ?? null)
+      : null;
     // A server the User gives can be added again at another address.
     const saved =
       catalogId === "openai-compatible"

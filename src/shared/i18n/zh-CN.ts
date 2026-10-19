@@ -1713,6 +1713,7 @@ export const zhCN = {
   "providers.list.separator": "、",
   "providers.kind.short.qwen": "通义千问",
   "providers.kind.short.deepseek": "DeepSeek",
+  "providers.kind.short.kimi": "Kimi",
 
   "providers.kind.openai": "OpenAI",
   "providers.kind.anthropic": "Anthropic",
@@ -1737,6 +1738,10 @@ export const zhCN = {
   "providers.form.apiKeySaved": "已保存密钥。留空即保留原密钥。",
   "providers.form.keyRefused": "{provider} 拒绝了这个密钥（{when}）。",
   "providers.form.keyRefusedNow": "{provider} 拒绝了这个密钥。",
+  "providers.form.keyIs": "这是 {service} 的密钥",
+  "providers.form.keyNot": "这不是 {provider} 的密钥：{provider} 的密钥以 {prefixes} 开头。",
+  "providers.form.keyNot.pick": "请选择它所属的服务。",
+  "providers.form.keyAnyway": "仍用于 {provider}",
   "providers.form.region": "地域",
   "providers.region.cn": "中国",
   "providers.region.intl": "国际",
