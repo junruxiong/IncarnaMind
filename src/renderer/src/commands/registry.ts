@@ -39,8 +39,16 @@ export interface Shortcut {
    * focus isn't in text: there they keep their meaning, the text's own undo.
    */
   outsideText?: true;
+  /**
+   * Keys that do nothing while the focus is in text, so a picker never opens over what the User
+   * is typing; the key is still taken, so the menu doesn't run it on macOS. Unlike `outsideText`,
+   * the menu item and ⌘K run the command from anywhere.
+   */
+  notInText?: true;
   /** The same command's second keys on Windows and Linux: Ctrl+Y redoes there, as Ctrl+Shift+Z does. */
   alsoOther?: Keys;
+  /** More keys that run it too but that nothing shows: ⌘N still makes a Mind, though ⌘T is the one shown. */
+  also?: Keys;
   /** Keys only macOS has (Finder's ⌃⌘N): elsewhere the command has none, and stays in menus and ⌘K. */
   macOnly?: true;
 }
@@ -136,6 +144,7 @@ export const commands = {
     if (registered.has(command.id)) throw new Error(`Two commands are called ${command.id}.`);
     if (command.shortcut) checkKeys(command.shortcut.keys);
     if (command.shortcut?.alsoOther) checkKeys(command.shortcut.alsoOther);
+    if (command.shortcut?.also) checkKeys(command.shortcut.also);
     registered.set(command.id, command);
     return () => {
       if (registered.get(command.id) === command) registered.delete(command.id);

@@ -57,7 +57,7 @@ import {
   WINDOW_ID,
 } from "./layoutSlice";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
-import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
+import { NEEDS_REVIEW } from "./libraryFilters";
 import { folderName as linkedFolderName } from "./linkedFolders";
 import {
   foldersMovedFrom,
@@ -74,9 +74,10 @@ import {
 } from "./moves";
 import { untitledFolderName } from "./newFolder";
 import { useNotices } from "./notices";
+import type { ObjectRef } from "./objects";
 import { useRequests } from "./requests";
 import { resolveSettingsPage, type SettingsPage, type SettingsTarget } from "./settingsPages";
-import { type Undoable, UndoRefused, useUndo } from "./undo";
+import { asOneStep, type Undoable, UndoRefused, useUndo } from "./undo";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -224,11 +225,12 @@ export interface AppState extends LayoutSlice {
   moveToFolder(items: MoveItems, folderId: string | null): Promise<void>;
   /**
    * Makes "Untitled Folder" (numbered if that is taken) and asks the sidebar to
-   * open its name field. With `items`, the Minds and Documents go into it at
-   * once. One step to undo, with its first name (`nameNewFolder`). Resolves to
-   * the Folder's id, or null if it couldn't be made.
+   * open its name field, or, given a `name`, makes it with that name. With
+   * `items`, the Minds and Documents go into it at once. One step to undo, with
+   * its first name (`nameNewFolder`). Resolves to the Folder's id, or null if
+   * it couldn't be made.
    */
-  createFolder(items?: MoveItems): Promise<string | null>;
+  createFolder(items?: MoveItems, name?: string): Promise<string | null>;
   /** Names the Folder just made: part of making it, so one Undo takes both back. */
   nameNewFolder(folderId: string, name: string): Promise<void>;
   /** Renames a Folder, keeping its description. */
@@ -237,6 +239,8 @@ export interface AppState extends LayoutSlice {
   editFolder(folderId: string, input: LibraryGroupInput): Promise<void>;
   /** Deletes a Folder, with Undo: its Documents and Minds go to Not in a Folder. */
   deleteFolder(folderId: string): Promise<void>;
+  /** Deletes the Minds, Documents and Folders given, together, with one Undo. */
+  deleteSelection(items: readonly ObjectRef[]): Promise<void>;
   /** Lists a Mind just made and opens it in a new tab after the shown one, in the focused group or `groupId`. */
   showNewMind(mind: Mind, groupId?: string): Promise<void>;
   /** Called once the new Mind's text has the focus. */
@@ -272,9 +276,10 @@ export interface AppState extends LayoutSlice {
   updateGettingStarted(patch: Partial<GettingStarted>): void;
   /**
    * Shows a Mind: its tab where it is open, else a new tab in the focused
-   * group after the shown one; with `side` (⌘-click), in the group to the right.
+   * group after the shown one; with `newTab`, a new tab in the focused group
+   * even where it is open.
    */
-  openMind(id: string, options?: { side?: boolean }): void;
+  openMind(id: string, options?: { newTab?: boolean }): void;
   /** Closes a tab, offering to reopen it; if it was shown, the tab after it (or else before it) is. */
   closeTab(tabId: string): void;
   /** ⇧⌘T: reopens the tab closed last, where it was. */
@@ -402,32 +407,6 @@ const upsert = (documents: Document[], item: Document) =>
 /** Puts a Linked folder in the list in place, if it's there. New ones arrive with the core's event. */
 const replaceLinked = (linkedFolders: LinkedFolder[], linked: LinkedFolder) =>
   linkedFolders.map((each) => (each.id === linked.id ? linked : each));
-
-/** The last list `selectVisibleDocuments` filtered, and what from. */
-let visible: { documents: Document[]; tagFilter: readonly string[]; shown: Document[] } | null =
-  null;
-
-/**
- * The Documents the sidebar lists: all of them, or those with a Tag it
- * filters by. The same array until the Documents or the filter change, so it
- * needn't be compared item by item at each change to the store (#156).
- */
-export const selectVisibleDocuments = (state: AppState): Document[] => {
-  const { documents, tagFilter } = state;
-  if (tagFilter.length === 0) return documents;
-  if (visible?.documents !== documents || visible.tagFilter !== tagFilter) {
-    visible = {
-      documents,
-      tagFilter,
-      shown: documents.filter((item) => matchesTags(item, tagFilter)),
-    };
-  }
-  return visible.shown;
-};
-
-/** What the Tag filter is, as a key: folds made while filtering belong to it. Null without one. */
-export const selectTagFilterKey = (state: AppState): string | null =>
-  state.tagFilter.length === 0 ? null : [...state.tagFilter].sort().join(" ");
 
 /**
  * The core's per-Document events (status, Tags, moves, removals, Library
@@ -963,14 +942,16 @@ export const useAppStore = create<AppState>()((set, get) => {
         );
       }),
 
-    createFolder: async (items) => {
+    createFolder: async (items, named) => {
       let madeId: string | null = null;
       await attempt(async () => {
         const { minds, documents, library } = get();
-        const name = untitledFolderName(
-          t,
-          (library?.groups ?? []).map((group) => group.name),
-        );
+        const name =
+          named?.trim() ||
+          untitledFolderName(
+            t,
+            (library?.groups ?? []).map((group) => group.name),
+          );
         const folder = await core.createLibraryGroup({ name, description: "" });
         await get().refreshLibrary();
         const chosen = items ? itemsOf(items) : null;
@@ -987,7 +968,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         const step = stepNamed(name);
         justMade = { id: folder.id, step, stepNamed };
         push(step);
-        useRequests.getState().ask({ nameFolder: folder.id });
+        if (!named?.trim()) useRequests.getState().ask({ nameFolder: folder.id });
         madeId = folder.id;
       });
       return madeId;
@@ -1051,6 +1032,24 @@ export const useAppStore = create<AppState>()((set, get) => {
         await remove();
         if (folder) push(deleted(folder.name, [{ kind: "folder", id: folderId }], remove));
       }),
+
+    deleteSelection: (items) => {
+      const ids = (kind: ObjectRef["kind"]) =>
+        items.flatMap((each) => (each.kind === kind ? [each.id] : []));
+      const count = items.length;
+      // A Folder last: what was in it is put back into it once it is back.
+      return asOneStep(
+        {
+          said: (t) => t("object.deleted.items", { count }),
+          name: (t) => t("selection.delete", { count }),
+        },
+        async () => {
+          for (const id of ids("mind")) await get().deleteMind(id);
+          if (ids("document").length > 0) await get().deleteDocuments(ids("document"));
+          for (const id of ids("folder")) await get().deleteFolder(id);
+        },
+      );
+    },
 
     openExamples: () =>
       attempt(async () => {
@@ -1126,7 +1125,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       void get().changeLayout({
         type: "open",
         item: { kind: "mind", mindId: id },
-        where: options?.side ? { in: "side" } : { in: "place" },
+        where: options?.newTab ? { in: "group" } : { in: "place" },
       });
     },
 

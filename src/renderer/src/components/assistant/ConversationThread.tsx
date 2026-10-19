@@ -55,6 +55,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const messages = useConversations((state) => state.messages);
   const asking = useConversations((state) => state.asking);
   const waitingQuestion = useModelSetup((state) => state.waiting);
+  const modelWorks = useModelSetup((state) => state.ready);
   const askingQuote = useConversations((state) => state.askingQuote);
   const onItsWay = useAnswerOnItsWay();
   const stopWanted = useConversations((state) => state.stopWanted);
@@ -162,13 +163,12 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         !plan &&
         !tasks.some(asked) && (
           <>
-            <p data-testid="assistant-reads" title={reads} className="assistant-reads">
-              <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
-              <span className="assistant-reads-text">{reads}</span>
-            </p>
-            <p data-testid="assistant-empty" className="assistant-empty">
-              {t("assistant.empty")}
-            </p>
+            <div data-testid="assistant-empty" className="assistant-empty">
+              <p data-testid="assistant-reads" title={reads} className="assistant-reads">
+                <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
+                <span className="assistant-reads-text">{reads}</span>
+              </p>
+            </div>
             {listening && <MeetingStarters />}
           </>
         )}
@@ -202,9 +202,11 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       {waitingQuestion && (
         <>
           <QuestionBubble text={waitingQuestion.text} quote="" />
-          <p data-testid="assistant-waiting-model" className="assistant-empty">
-            {t("setup.waiting")}
-          </p>
+          {!modelWorks && (
+            <p data-testid="assistant-waiting-model" className="assistant-empty">
+              {t("setup.waiting")}
+            </p>
+          )}
         </>
       )}
       {plan && (

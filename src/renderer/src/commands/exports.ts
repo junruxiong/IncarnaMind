@@ -1,6 +1,7 @@
 import { CHECK_RECORD_FORMATS, EXPORT_FORMATS } from "../../../core/api";
 import { exportAiUseStatement } from "../aiUseStatement";
 import { useExportDialog } from "../exportDialog";
+import { requestExportMenu } from "../exportMenuRequest";
 import {
   exportCheckRecord,
   exportMind,
@@ -39,6 +40,23 @@ function mindOf(ctx: CommandContext): string | null {
  * In ⌘K, and in the Mind's and its tab's menus (./objectMenus).
  */
 export const exportCommands: readonly Command[] = [
+  {
+    // The Mind's menus have this one item for exporting: it shows the Mind and opens the
+    // Export button's menu, whose list is the short one.
+    id: "mind.exportMenu",
+    label: "export.menu",
+    keywords: ["export.keywords"],
+    group: "main",
+    // Only opens a menu; nothing is saved until a format is chosen.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindOf(ctx);
+      if (!mindId) return;
+      useAppStore.getState().openMind(mindId);
+      requestExportMenu(mindId);
+    },
+  },
   {
     id: "mind.export",
     label: (_ctx, t) => t("export.as", { format: t(FORMAT_LABELS[exportPreferences().format]) }),

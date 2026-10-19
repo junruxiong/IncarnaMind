@@ -10,8 +10,10 @@ import {
   launchApp,
   nameMind,
   newMind as newMindFromMenu,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
+  splitFromTabMenu,
   WINDOW_SIZE,
 } from "./app";
 
@@ -92,20 +94,26 @@ test("Minds open as tabs; the sidebar shows an open one, opens another in a new 
   await expect(titlesOf(window)).toHaveText(["Beta", "Gamma"]);
   await expect(activeTab(window)).toContainText("Gamma");
 
-  // ⌘-click (Ctrl-click) selects it and opens nothing; the menu's "Open to the side" opens it in the group to the right.
+  // ⌘-click (Ctrl-click) selects it and opens nothing.
   const groups = window.getByTestId("tab-group");
   await sidebarMind(window, "Alpha").click({ modifiers: ["ControlOrMeta"] });
   await expect(groups).toHaveCount(1);
+  await expect(titlesOf(window)).toHaveText(["Beta", "Gamma"]);
   // The open Mind and Alpha are selected, so their menu has only what applies to both; Esc clears.
   await window.keyboard.press("Escape");
-  await sidebarMind(window, "Alpha").click({ button: "right" });
-  await window.getByTestId("mind.openSide").click();
-  await expect(groups).toHaveCount(2);
-  await expect(groups.nth(1).getByTestId("tab-title")).toHaveText(["Alpha"]);
-  await groups.nth(1).getByTestId("tab-close").click();
+  // The menu's "Open in new tab" and a middle click each open it in a new tab of the same group.
+  await pointAndClick(window, sidebarMind(window, "Alpha"), { button: "right" });
+  await pointAndClick(window, window.getByTestId("mind.openTab"));
+  await expect(titlesOf(window)).toHaveText(["Beta", "Gamma", "Alpha"]);
+  await expect(activeTab(window)).toContainText("Alpha");
   await expect(groups).toHaveCount(1);
-  // A middle click opens it to the right as well.
-  await sidebarMind(window, "Alpha").click({ button: "middle" });
+  await tabNamed(window, "Alpha").getByTestId("tab-close").click();
+  await expect(titlesOf(window)).toHaveText(["Beta", "Gamma"]);
+  await pointAndClick(window, sidebarMind(window, "Alpha"), { button: "middle" });
+  await expect(titlesOf(window)).toHaveText(["Beta", "Gamma", "Alpha"]);
+  await expect(groups).toHaveCount(1);
+  // Split to the right, in the tab's menu, is the one way to put it beside.
+  await splitFromTabMenu(window);
   await expect(groups).toHaveCount(2);
   await expect(groups.nth(1).getByTestId("tab-title")).toHaveText(["Alpha"]);
   await app.close();
@@ -453,7 +461,7 @@ test("the application menu makes a new Mind, opens Settings, and closes, reopens
   await app.close();
 });
 
-test("a Mind is renamed in place from its sidebar row, and Not in a Folder folds away", async () => {
+test("a Mind is renamed in place from its sidebar row", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   for (const name of ["Alpha notes", "Beta research"]) {
@@ -494,11 +502,5 @@ test("a Mind is renamed in place from its sidebar row, and Not in a Folder folds
   await expect(field).toBeFocused();
   await window.keyboard.press("Escape");
 
-  // Folded, Not in a Folder gives its room to the rest.
-  const toggle = window.getByTestId("not-in-a-folder-toggle");
-  await toggle.click();
-  await expect(rows).toHaveCount(0);
-  await toggle.click();
-  await expect(rows).toHaveCount(2);
   await app.close();
 });

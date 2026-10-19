@@ -175,6 +175,30 @@ export const useUndo = create<UndoState>()((set, get) => {
   };
 });
 
+/**
+ * Runs changes that each go on the stack as they are made, then leaves them there as one step:
+ * Undo takes them back last first, Redo does them again in order.
+ */
+export async function asOneStep(
+  words: Pick<Undoable, "said" | "name">,
+  run: () => Promise<void>,
+): Promise<void> {
+  const before = useUndo.getState().done.length;
+  await run();
+  const steps = useUndo.getState().done.slice(before);
+  if (steps.length < 2) return;
+  for (const step of steps) useUndo.getState().withdraw(step);
+  useUndo.getState().push({
+    ...words,
+    undo: async () => {
+      for (const step of [...steps].reverse()) await step.undo();
+    },
+    redo: async () => {
+      for (const step of steps) await step.redo?.();
+    },
+  });
+}
+
 export const useAnswerLine = (answerId: string) =>
   useUndo((state) =>
     state.line?.change?.shownAt === answerUndoPlace(answerId) ? state.line : null,

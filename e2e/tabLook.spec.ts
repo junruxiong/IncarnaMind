@@ -12,6 +12,7 @@ import {
   pointAndClick,
   removeDataFolder,
   setWindowSize,
+  splitFromTabMenu,
 } from "./app";
 
 /*
@@ -84,8 +85,8 @@ for (const language of ["en", "zh-CN"] as const) {
     const sidebar = window.getByTestId("sidebar");
     const beta = sidebar.getByTestId("mind-row").filter({ hasText: "Beta" });
     await expect(beta).toHaveCount(1);
-    await pointAndClick(window, beta, { button: "right" });
-    await pointAndClick(window, window.getByTestId("mind.openSide"));
+    await splitFromTabMenu(window);
+    await pointAndClick(window, beta);
     await expect(groups).toHaveCount(2);
 
     for (const focus of [1, 0]) {

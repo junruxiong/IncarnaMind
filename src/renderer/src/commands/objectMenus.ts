@@ -1,17 +1,13 @@
-import { registerMenu } from "./menus";
+import { registerMenu, registerMixedMenu } from "./menus";
 
 // Later features add their items with registerMenu: Move to… (#229, #212), Add to note (#201), History (#300), Tag colour and merge (#205).
 
-/** Export as… the last format (⇧⌘E), each other format, the options sheet (#100), the AI use statement (#739), then the check record (#738). */
+/**
+ * Export… (the Export button's short menu: the formats, its options), then the AI use statement
+ * (#739) and the check record (#738). The formats themselves are in that menu and in ⌘K.
+ */
 const EXPORTS = [
-  "mind.export",
-  "mind.exportAs.docx",
-  "mind.exportAs.pdf",
-  "mind.exportAs.source-pack",
-  "mind.exportAs.html",
-  "mind.exportAs.share-page",
-  "mind.exportAs.markdown",
-  "mind.exportOptions",
+  "mind.exportMenu",
   "mind.aiUseStatement",
   "mind.checkRecord.pdf",
   "mind.checkRecord.csv",
@@ -19,11 +15,11 @@ const EXPORTS = [
 
 registerMenu("mind", [
   "mind.open",
-  "mind.openSide",
+  "mind.openTab",
   "mind.outline",
   ...EXPORTS,
   "mind.history",
-  "mind.checkAll",
+  "mind.check",
   "mind.checkContradictions",
   "mind.citationStyle",
   "mind.style",
@@ -77,6 +73,8 @@ registerMenu("folder", [
 
 registerMenu("tag", ["tag.open", "tag.manage", "tag.rename", "tag.delete"]);
 
+registerMixedMenu(["selection.moveTo", "selection.delete"]);
+
 registerMenu("linkedFolder", [
   "linkedFolder.pause",
   "linkedFolder.layout",
@@ -101,11 +99,10 @@ registerMenu(
     "mind.openOriginal",
     ...EXPORTS,
     "mind.history",
-    "mind.checkAll",
+    "mind.check",
     "mind.checkContradictions",
     "mind.style",
     "mind.moveTo",
-    "mind.delete",
   ],
   0,
 );
@@ -124,6 +121,8 @@ registerMenu(
   ],
   1,
 );
+// Delete is last, after the tab's own items.
+registerMenu("tab", ["mind.delete"], 2);
 
 registerMenu("answer", ["answer.copy", "answer.regenerate", "block.delete"]);
 

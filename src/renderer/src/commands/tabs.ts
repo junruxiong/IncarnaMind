@@ -70,16 +70,6 @@ const focusGroupCommands = [1, 2, 3].map(
 
 export const tabCommands: readonly Command[] = [
   {
-    id: "tab.new",
-    label: "command.tab.new",
-    shortcut: { keys: "CmdOrCtrl+T" },
-    // The same as New Mind, which ⌘K offers.
-    palette: false,
-    group: "main",
-    reversible: true,
-    run: () => store().createMind({ titled: true }),
-  },
-  {
     ...fromMenu("tab.close"),
     menuLabel: "tabs.menu.close",
     group: "danger",
@@ -103,7 +93,7 @@ export const tabCommands: readonly Command[] = [
   },
   {
     ...fromMenu("tab.split"),
-    menuLabel: "tabs.menu.side",
+    menuLabel: "tabs.menu.split",
     group: "open",
     reversible: true,
     when: (ctx) => targetOf(ctx) !== null,
