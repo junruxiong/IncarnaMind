@@ -5,7 +5,6 @@ import type {
   SecretStorageStatus,
   TestChatConnectionInput,
 } from "../../../../core/api";
-import type { Language } from "../../../../core/language";
 import type { DataUse } from "../../../../core/providers/catalog";
 import { catalogMenu } from "../../../../core/providers/catalog";
 import { serviceOfKey } from "../../../../core/providers/catalog/keyForms";
@@ -48,7 +47,7 @@ import { KeyHelp } from "./KeyHelp";
 import { KeyCheckLine, useKeyCheck } from "./keyCheck";
 import { LocalServerLine, useLocalServer } from "./LocalServerLine";
 import { SendsLine } from "./SendsLine";
-import { keyProviderName, testErrorKey, useProviderKey } from "./shared";
+import { defaultRegion, keyProviderName, testErrorKey, useProviderKey } from "./shared";
 import { useJevSettings } from "./useJevSettings";
 
 type CatalogId = string;
@@ -70,10 +69,6 @@ const fieldDefault = (kind: CatalogId): string => {
   const provider = catalogProvider(kind);
   return (provider && endpointOf(provider, "")?.field?.default) ?? "";
 };
-
-/** A Kimi key belongs to the region it was made in: the interface's language says which. */
-const defaultRegion = (kind: CatalogId, language: Language): string =>
-  kind === "kimi" ? (language === "zh-CN" ? "cn" : "intl") : "";
 
 /** The "Another model…" choice of the model list. */
 const OTHER_MODEL = "\u0000other";

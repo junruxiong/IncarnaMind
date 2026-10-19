@@ -483,6 +483,26 @@ for (const { value, first, other, anyway, notAnthropic } of [
   });
 }
 
+test("Kimi's form opens on the region of the interface's language: International in English, China in Chinese", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const settings = await openSettings(window, "models");
+    for (const [value, region] of [
+      ["en", "intl"],
+      ["zh-CN", "cn"],
+    ] as const) {
+      await language(window, value);
+      const form = await addProviderForm(settings, "kimi");
+      await expect(form.getByRole("combobox", { name: /^(Region|地域)/ })).toHaveValue(region);
+      await settings.getByTestId("models-back").click();
+    }
+  } finally {
+    await app.close();
+  }
+});
+
 test("in Settings, a key that is not the page's service goes nowhere on Add a provider and on a provider's page, and the page stays the provider's", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
