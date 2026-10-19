@@ -29,7 +29,7 @@ import {
 
 /*
  * Undo, the remaining gaps (#606): a Mind made from a Document, in a Folder, with ⌘N or the
- * sidebar's + is taken back by ⌘Z to Recently deleted and made again by ⇧⌘Z; a run of typing in
+ * sidebar's + says nothing and leaves nothing for ⌘Z to take back (Delete does); a run of typing in
  * a multi-line field is one step; pausing a Linked folder and changing its layout are taken
  * back. Each is checked in the core, through the bridge. Set INCARNAMIND_SCREENSHOTS to a folder
  * to also save screenshots.
@@ -79,32 +79,6 @@ const deletedMindIds = (window: Page) =>
     (await core.listDeleted()).filter((item) => item.kind === "mind").map((item) => item.id),
   );
 
-/** Runs a command that makes a Mind, and gives the Mind it made. */
-async function madeBy(window: Page, make: () => Promise<void>, line: string): Promise<string> {
-  const before = await mindIds(window);
-  await make();
-  await expect(undoMessage(window)).toHaveText(line);
-  await expect.poll(async () => (await mindIds(window)).length).toBe(before.length + 1);
-  const made = (await mindIds(window)).find((id) => !before.includes(id));
-  if (!made) throw new Error("No Mind was made.");
-  return made;
-}
-
-/** ⌘Z sends the Mind to Recently deleted and ⇧⌘Z makes it again, twice over, with the line each time. */
-async function takenBackAndMadeAgain(window: Page, made: string, line: string): Promise<void> {
-  const withIt = await mindIds(window);
-  for (let round = 0; round < 2; round++) {
-    await leaveText(window);
-    await undo(window);
-    await expect.poll(() => mindIds(window)).toEqual(withIt.filter((id) => id !== made));
-    expect(await deletedMindIds(window)).toContain(made);
-    await redo(window);
-    await expect.poll(() => mindIds(window)).toEqual(withIt);
-    expect(await deletedMindIds(window)).not.toContain(made);
-    await expect(undoMessage(window)).toHaveText(line);
-  }
-}
-
 const documentRow = (window: Page, name: string) =>
   window.getByTestId("document-list-item").filter({ hasText: name });
 
@@ -127,8 +101,8 @@ async function startWithADocument(language: "en" | "zh-CN" = "en") {
   return running;
 }
 
-/** A Mind with no name leaves no line and nothing to undo: Delete takes it back. */
-async function madeQuietly(window: Page, make: () => Promise<void>): Promise<void> {
+/** A Mind made leaves no line and nothing for ⌘Z to take back, whichever way it is made: Delete takes it back. */
+async function madeQuietly(window: Page, make: () => Promise<void>): Promise<string> {
   const before = await mindIds(window);
   await make();
   await expect.poll(async () => (await mindIds(window)).length).toBe(before.length + 1);
@@ -137,9 +111,12 @@ async function madeQuietly(window: Page, make: () => Promise<void>): Promise<voi
   await undo(window);
   expect((await mindIds(window)).length).toBe(before.length + 1);
   expect(await deletedMindIds(window)).toHaveLength(0);
+  const made = (await mindIds(window)).find((id) => !before.includes(id));
+  if (!made) throw new Error("No Mind was made.");
+  return made;
 }
 
-test("Ask about a Document with no Mind to ask in, New Mind here, ⌘N and +: each makes a Mind with no line and nothing for ⌘Z to take back; Start a Mind from a Document says its name and is taken back and made again, twice over", async () => {
+test("Ask about a Document with no Mind to ask in, New Mind here, ⌘N, + and Start a Mind from a Document: each makes a Mind with no line and nothing for ⌘Z to take back", async () => {
   const { window } = await startWithADocument();
 
   // With no Mind, asking about a Document makes one.
@@ -155,58 +132,18 @@ test("Ask about a Document with no Mind to ask in, New Mind here, ⌘N and +: ea
   await madeQuietly(window, () => window.keyboard.press("ControlOrMeta+n"));
   await madeQuietly(window, () => newMind(window));
 
-  const started = await madeBy(
-    window,
-    () => documentMenuCommand(window, "Tides", "document.startMind"),
-    "Started “Tides”",
-  );
-  await takenBackAndMadeAgain(window, started, "Started “Tides”");
+  // Named after the Document, it is no more news than one with no name.
+  await madeQuietly(window, () => documentMenuCommand(window, "Tides", "document.startMind"));
 });
 
-const LINES = {
-  en: { started: "Started “Tides”" },
-  "zh-CN": { started: "已新建“Tides”" },
-} as const;
-
-for (const language of ["en", "zh-CN"] as const) {
-  test(`the line of a Mind made holds at 900 and 1,600px, in ${language}`, async () => {
-    const { app, window } = await startWithADocument(language);
-    const lines = LINES[language];
-    await documentMenuCommand(window, "Tides", "document.startMind");
-    await expect(undoMessage(window)).toHaveText(lines.started);
-    await screenshot(window, `start-a-mind-${language}-1600`);
-    await setWindowSize(app, window, 900, 660);
-    await leaveText(window);
-    await undo(window);
-    await redo(window);
-    await expect(undoMessage(window)).toHaveText(lines.started);
-    await expect(window.getByTestId("undo-line")).toBeInViewport();
-    await screenshot(window, `start-a-mind-${language}-900`);
-
-    const finance = sidebarFolder(window, "Finance");
-    await finance.getByTestId("folder-row").click({ button: "right" });
-    await finance.getByTestId("folder.newMind").click();
-    await expect(undoMessage(window)).toHaveCount(0);
-    await expect(window.getByTestId("sidebar").getByTestId("mind-row")).toHaveCount(2);
-  });
-}
-
-test("a line already showing follows a switch of language, in its words, its name and its Undo", async () => {
+test("a line already showing follows a switch of language, in its words and its Undo", async () => {
   const { window } = await startWithADocument();
   const undoButton = window.getByTestId("undo-action");
-
-  // A line with a name in it, there and back.
-  const before = await mindIds(window);
-  await documentMenuCommand(window, "Tides", "document.startMind");
-  await expect(undoMessage(window)).toHaveText("Started “Tides”");
-  await setLanguage(window, "zh-CN");
-  await expect(undoMessage(window)).toHaveText("已新建“Tides”");
-  await setLanguage(window, "en");
-  await expect(undoMessage(window)).toHaveText("Started “Tides”");
+  const started = await madeQuietly(window, () =>
+    documentMenuCommand(window, "Tides", "document.startMind"),
+  );
 
   // A line of plain words, with Undo's accessible name: Undo still takes the change back.
-  const started = (await mindIds(window)).find((id) => !before.includes(id));
-  if (!started) throw new Error("No Mind was made.");
   const font = async () =>
     (await coreOf(window)).evaluate(
       async (core, mindId) => (await core.getMindStyle(mindId)).font,

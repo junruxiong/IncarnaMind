@@ -98,8 +98,13 @@ const NO_UNDO_YET: Record<string, string> = {
   "folder.organize": "what it suggests is taken back in To review (#241), not by ⌘Z",
 };
 
-/** Commands that only make a Mind: it gets no undo line, because Delete takes it back (#1191). */
-const MAKES_A_MIND = new Set(["document.ask", "folder.ask", "folder.newMind"]);
+/** Commands that only make a Mind: it gets no undo line and no ⌘Z step, because Delete takes it back (#1191). */
+const MAKES_A_MIND = new Set([
+  "document.ask",
+  "document.startMind",
+  "folder.ask",
+  "folder.newMind",
+]);
 
 let dataDir: string;
 let homeDir: string;

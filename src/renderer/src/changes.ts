@@ -60,28 +60,6 @@ export function deleted(
   };
 }
 
-/**
- * A Mind started with a title, from Documents or a Folder: undone by sending it to Recently
- * deleted, as deleting it does, done again by bringing it back as it is, with what was written in
- * it since.
- */
-export function mindMade(
-  shown: string,
-  remove: () => Promise<unknown>,
-  bringBack: () => Promise<unknown>,
-): Undoable {
-  return {
-    said: (t) => t("undo.mindStarted", { name: shown }),
-    name: (t) => t("menu.newMind"),
-    undo: async () => {
-      await remove();
-    },
-    redo: async () => {
-      await bringBack();
-    },
-  };
-}
-
 /** A Linked folder paused or resumed: undone and done again by setting it as it was and as it is. */
 export function linkedFolderPaused(
   shown: string,

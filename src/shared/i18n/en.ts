@@ -288,7 +288,6 @@ export const en = {
   "undo.examplesRemoved": "Removed the examples",
   "undo.examplesShown": "Showed the examples",
   "menu.showExamples": "Show the examples again",
-  "undo.mindStarted": "Started “{name}”",
   "undo.linkedFolderPaused": "Paused reading in “{name}”",
   "undo.linkedFolderResumed": "Resumed reading in “{name}”",
   "undo.linkedFolderFlat": "Showing “{name}” as a flat list",

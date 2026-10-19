@@ -281,7 +281,6 @@ export const zhCN = {
   "undo.examplesRemoved": "已移除示例",
   "undo.examplesShown": "已显示示例",
   "menu.showExamples": "重新显示示例",
-  "undo.mindStarted": "已新建“{name}”",
   "undo.linkedFolderPaused": "已暂停读取“{name}”",
   "undo.linkedFolderResumed": "已继续读取“{name}”",
   "undo.linkedFolderFlat": "已将“{name}”显示为平铺列表",

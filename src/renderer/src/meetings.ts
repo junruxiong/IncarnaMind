@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import type { AudioSource, Meeting, Settings } from "../../core/api";
 import { meetingTimeAt } from "../../shared/blockTimes";
-import { mindMade } from "./changes";
 import { core, files } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
@@ -187,28 +186,26 @@ function dropTakeBack(meetingId: string): void {
 }
 
 /**
- * Offers Undo for the Mind a Record just made: it takes the Mind back while nothing has been
- * recorded, or just after a recording began. Once audio is saved, or the line has gone, it
- * doesn't offer it any more: Undo never deletes a recorded Meeting or its audio.
+ * Offers Undo for the recording a Record just began, which takes its Mind back while nothing has
+ * been recorded. Once audio is saved, or the line has gone, it doesn't offer it any more: Undo
+ * never deletes a recorded Meeting or its audio. A Record that made a Mind and began nothing says
+ * nothing: Delete takes the Mind back.
  */
 function takeBackable(meeting: Meeting, recording: boolean): void {
-  const takeBack = async () => {
-    const now = useMeetings.getState().meetings.find((each) => each.id === meeting.id);
-    if (now && capturedAnything(now)) return;
-    await core.deleteMind(meeting.mindId);
+  if (!recording) return;
+  const change = {
+    said: (t: Translate) => t("meetings.record.undo"),
+    name: (t: Translate) => t("meetings.record"),
+    undo: async () => {
+      const now = useMeetings.getState().meetings.find((each) => each.id === meeting.id);
+      if (now && capturedAnything(now)) return;
+      await core.deleteMind(meeting.mindId);
+    },
+    redo: async () => {
+      await core.restore([{ kind: "mind", id: meeting.mindId }]);
+      useAppStore.getState().openMind(meeting.mindId);
+    },
   };
-  const bringBack = async () => {
-    await core.restore([{ kind: "mind", id: meeting.mindId }]);
-    useAppStore.getState().openMind(meeting.mindId);
-  };
-  const change = recording
-    ? {
-        said: (t: Translate) => t("meetings.record.undo"),
-        name: (t: Translate) => t("meetings.record"),
-        undo: takeBack,
-        redo: bringBack,
-      }
-    : mindMade("", takeBack, bringBack);
   takeBackableRecords.set(meeting.id, { change, seen: false });
   useUndo.getState().push(change);
 }
