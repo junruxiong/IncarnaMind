@@ -97,8 +97,41 @@ const watchSidebar = (window: Page) =>
 const watched = (window: Page) =>
   window.evaluate(() => (globalThis as unknown as { watch: Watch }).watch);
 
-/** Six Documents, with names long enough to be cut in the sidebar; one has a Chinese name. */
-async function sixDocuments(): Promise<string[]> {
+/** Every Document has been read and had its Tagging end: the work the footer's status is about is done. */
+const untilTagged = (window: Page) =>
+  expect
+    .poll(() =>
+      window
+        .getByTestId("document-list-item")
+        .evaluateAll((rows) =>
+          rows.every(
+            (row) =>
+              row.getAttribute("data-tagging") !== "pending" &&
+              row.getAttribute("data-tagging") !== "tagging",
+          ),
+        ),
+    )
+    .toBe(true);
+
+/** The statuses the footer showed for less than `leastMs`, by their text, from the sampled frames. */
+function shownTooShort(frames: Watch["frames"], leastMs: number): string[] {
+  const short: string[] = [];
+  let runStart: number | null = null;
+  let text = "";
+  for (const frame of frames) {
+    if (frame.status !== "" && runStart === null) {
+      runStart = frame.at;
+      text = frame.status;
+    } else if (frame.status === "" && runStart !== null) {
+      if (frame.at - runStart < leastMs) short.push(text);
+      runStart = null;
+    }
+  }
+  return short;
+}
+
+/** Documents with names long enough to be cut in the sidebar, one a Chinese name; six unless fewer are asked for. */
+async function someDocuments(count = 6): Promise<string[]> {
   const names = [
     "Harbour sediment survey, east basin transects, combined field notes, part 1",
     "Harbour sediment survey, east basin transects, combined field notes, part 2",
@@ -108,7 +141,7 @@ async function sixDocuments(): Promise<string[]> {
     "Harbour sediment survey, east basin transects, combined field notes, part 6",
   ];
   const paths: string[] = [];
-  for (const [index, name] of names.entries()) {
+  for (const [index, name] of names.slice(0, count).entries()) {
     const path = join(sources, `${name}.md`);
     await writeFile(
       path,
@@ -121,9 +154,9 @@ async function sixDocuments(): Promise<string[]> {
 
 for (const language of ["en", "zh-CN"] as const) {
   for (const width of [1100, 1440]) {
-    test(`adding six Documents moves no row of the sidebar, through processing and Tagging; a status shows only after 300 ms, and a Tag's dot has its place kept (${language}, ${width}px)`, async () => {
+    test(`adding six Documents moves no row of the sidebar, through processing and Tagging; a status shows only after 300 ms and stays 500 ms, and a Tag's dot has its place kept (${language}, ${width}px)`, async () => {
       test.setTimeout(120_000);
-      const paths = await sixDocuments();
+      const paths = await someDocuments();
       const { app, window } = await launchApp(dataDir, { fakeChat: true });
       await setWindowSize(app, window, width, 900);
       await dismissChatSetup(window);
@@ -138,20 +171,8 @@ for (const language of ["en", "zh-CN"] as const) {
 
       await window.getByTestId("add-documents-input").setInputFiles(paths);
       await expectReadyDocuments(window, 6);
-      await expect
-        .poll(() =>
-          window
-            .getByTestId("document-list-item")
-            .evaluateAll((rows) =>
-              rows.every(
-                (row) =>
-                  row.getAttribute("data-tagging") !== "pending" &&
-                  row.getAttribute("data-tagging") !== "tagging",
-              ),
-            ),
-        )
-        .toBe(true);
-      await window.waitForTimeout(600);
+      await untilTagged(window);
+      await expect(window.getByTestId("sidebar-status")).toHaveText("");
       const seen = await watched(window);
 
       // The User's own action: their files arriving, and the sidebar making room for them, at once.
@@ -159,20 +180,8 @@ for (const language of ["en", "zh-CN"] as const) {
       const unasked = seen.shifts.filter((shift) => shift.at > arrived + 100);
       expect(unasked, "layout shifts in the sidebar's rows").toEqual([]);
 
-      // A status shows only after it has lasted 300 ms.
-      let runStart: number | null = null;
-      let text = "";
-      const short: string[] = [];
-      for (const frame of seen.frames) {
-        if (frame.status !== "" && runStart === null) {
-          runStart = frame.at;
-          text = frame.status;
-        } else if (frame.status === "" && runStart !== null) {
-          if (frame.at - runStart < 300) short.push(text);
-          runStart = null;
-        }
-      }
-      expect(short, "a status shown for under 300 ms").toEqual([]);
+      // A status shows only after 300 ms, and stays at least 500 ms (a frame is about 17 ms).
+      expect(shownTooShort(seen.frames, 480), "a status shown for under 500 ms").toEqual([]);
 
       // Once a Document is read, its name keeps its width while its Tags arrive; one that ends
       // with none only gets the room back its dot's place held.
@@ -197,6 +206,30 @@ for (const language of ["en", "zh-CN"] as const) {
       await app.close();
     });
   }
+}
+
+for (const count of [3, 4, 5]) {
+  test(`a status for ${count} Documents is shown for 500 ms or not at all, however long their work lasts`, async () => {
+    test.setTimeout(120_000);
+    const paths = await someDocuments(count);
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await setWindowSize(app, window, 1440, 900);
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await newMind(window);
+    await expect(window.getByTestId("undo-line").getByTestId("undo-message")).toHaveCount(0, {
+      timeout: 15_000,
+    });
+    await watchSidebar(window);
+
+    await window.getByTestId("add-documents-input").setInputFiles(paths);
+    await expectReadyDocuments(window, count);
+    await untilTagged(window);
+    await expect(window.getByTestId("sidebar-status")).toHaveText("");
+    const seen = await watched(window);
+    expect(shownTooShort(seen.frames, 480), "a status shown for under 500 ms").toEqual([]);
+    await app.close();
+  });
 }
 
 test("the Question doesn't jump when its Answer starts", async () => {

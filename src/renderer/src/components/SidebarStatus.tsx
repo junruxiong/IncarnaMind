@@ -86,14 +86,17 @@ interface Status {
  * the most pressing status, and "+N" for the others, which lists them above
  * the row. Its 28px are kept even when there is nothing to say, so the tree
  * above moves only for a status that takes two lines. A status that is only
- * progress shows after it has lasted 300 ms, so none flashes; a failure or a
- * question shows at once.
+ * progress shows after it has lasted 300 ms and stays at least 500 ms once shown,
+ * so none flashes; a failure or a question shows at once.
  */
 export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean }) {
   const statuses = useStatuses();
-  const settled = useSettled(
+  const shown = useSettled(
     statuses.filter((status) => !isProblem(status)).map((status) => status.testId),
   );
+  // A status the work has left stays its last 500 ms as it was.
+  const seen = useRef(new Map<string, Status>());
+  for (const status of statuses) seen.current.set(status.testId, status);
   const alerting = statuses.some((status) => status.alerts === true);
   useEffect(() => {
     useTaggingAlert.setState({ needsYou: alerting });
@@ -104,9 +107,15 @@ export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean
     },
     [],
   );
-  const [first, ...others] = statuses.filter((status) =>
-    problemsOnly ? isProblem(status) : isProblem(status) || settled.has(status.testId),
-  );
+  const kept = [...shown]
+    .filter((id) => !statuses.some((status) => status.testId === id))
+    .flatMap((id) => seen.current.get(id) ?? []);
+  const [first, ...others] = [
+    ...statuses.filter((status) =>
+      problemsOnly ? isProblem(status) : isProblem(status) || shown.has(status.testId),
+    ),
+    ...(problemsOnly ? [] : kept),
+  ];
   if (problemsOnly && !first) return null;
   return (
     <div data-testid="sidebar-status" className="flex min-h-7 shrink-0 flex-col">
