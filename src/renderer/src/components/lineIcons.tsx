@@ -383,6 +383,15 @@ export function ComputerLineIcon(props: IconProps) {
   );
 }
 
+/** A cloud service, for what leaves this computer for one (#141): a cloud. */
+export function CloudLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.75 4.75 0 0 1-.25 9.5z" />
+    </LineIcon>
+  );
+}
+
 /** Recording a meeting, as an action ("Record a meeting", "Start recording"): a ring and a dot. */
 export function RecordingLineIcon(props: IconProps) {
   return (

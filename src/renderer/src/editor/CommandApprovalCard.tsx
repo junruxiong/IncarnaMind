@@ -48,7 +48,7 @@ function whyOf(t: Translate, ask: Change): string {
   });
 }
 
-/** A thing by the name the User knew, and the one this Answer gave it. */
+/** A thing by the name the User knew, and the one the Conversation gave it. */
 const itemLine = (t: Translate, item: CommandItem) =>
   item.renamed === undefined
     ? item.name
@@ -88,6 +88,7 @@ function wordsOf(
       const [many, one] = CHANGE[ask.command];
       const into = ask.into ?? "";
       const [first] = ask.items;
+      const more = ask.count - ask.items.length;
       return {
         title: t(ask.count === 1 ? one : many, {
           count: ask.count,
@@ -97,11 +98,14 @@ function wordsOf(
         }),
         why: whyOf(t, ask),
         path: null,
-        // One thing is named in the title, unless this Answer renamed it.
+        // One thing is named in the title, unless the Conversation renamed it.
         names:
           ask.count === 1 && first?.renamed === undefined
             ? []
-            : ask.items.map((item) => itemLine(t, item)),
+            : [
+                ...ask.items.map((item) => itemLine(t, item)),
+                ...(more > 0 ? [t("commands.more", { count: more })] : []),
+              ],
       };
     }
   }
