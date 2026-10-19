@@ -3953,6 +3953,12 @@ export type ComparisonResult =
   | { started: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   | { started: false; reason: "consent-declined" };
 
+/** What saving a comparison table as an Excel workbook did (`CoreApi.saveComparisonExport`). */
+export type SavedComparisonExport =
+  /** Saved, with how many Citations the workbook holds and how many of them aren't "Quote found". */
+  | { status: "saved"; file: SavedFile; citations: number; unverifiedCitations: number }
+  | Exclude<SavedExport, { status: "saved" }>;
+
 /** A comparison table whose cells are being filled ("comparison.filling"). */
 export interface ComparisonFilling extends ComparisonTableRef {
   filling: boolean;
@@ -9252,6 +9258,13 @@ export interface CoreApi {
    * version, the model and the time. Nothing is sent anywhere.
    */
   saveCheckRecord(mindId: string, format: CheckRecordFormat): Promise<SavedExport>;
+  /**
+   * Saves a comparison table as an Excel workbook (#132) into the Output location, as
+   * `saveMindExport` does. A Document a row, a Question a column: each cell its Answer's text,
+   * or a number or date with its words as written in its note when the Answer is a single
+   * figure, and its Citations in its note; and a Sources sheet, a Citation a row.
+   */
+  saveComparisonExport(input: ComparisonTableRef): Promise<SavedComparisonExport>;
 
   /**
    * Formats Citations and their Bibliography in a citation style (#289), from the cited
@@ -9877,6 +9890,7 @@ const methods: Record<CoreApiMethod, true> = {
   setSharePageTextOnly: true,
   saveMindExport: true,
   saveCheckRecord: true,
+  saveComparisonExport: true,
   formatCitations: true,
   getMindCitationStyle: true,
   setMindCitationStyle: true,
