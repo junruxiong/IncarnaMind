@@ -7,6 +7,12 @@ const FROM_WORD = /urn:schemas-microsoft-com:office:word|class=["']?Mso|mso-list
 
 const LIST = /mso-list:\s*(l\d+)\s+level(\d+)\s+(lfo\d+)/i;
 
+const isElement = (node: Node): node is Element => node.nodeType === 1;
+
+// Whitespace between Word's paragraphs, and its comments, hold nothing to keep.
+const holdsNothing = (node: Node) =>
+  node.nodeType === 8 || (node.nodeType === 3 && (node.textContent ?? "").trim() === "");
+
 interface ListParagraph {
   element: Element;
   /** The number or bullet Word typed before the words, in the span it styles `mso-list:Ignore`. */
@@ -16,7 +22,9 @@ interface ListParagraph {
   level: number;
 }
 
-function listParagraphOf(element: Element): ListParagraph | null {
+function listParagraphOf(node: Node): ListParagraph | null {
+  if (!isElement(node)) return null;
+  const element = node;
   const found = element.tagName === "P" ? LIST.exec(element.getAttribute("style") ?? "") : null;
   if (!found) return null;
   const marker = element.querySelector('[style*="mso-list:Ignore" i]');
@@ -33,9 +41,9 @@ function listParagraphOf(element: Element): ListParagraph | null {
  * Each run of list paragraphs as the editor's lists when it can draw every marker in the run; a
  * run with any other numbering style stays paragraphs, each with its number typed before its words.
  */
-function listBlocks(children: readonly Element[], document: Document) {
+function listBlocks(children: readonly Node[], document: Document) {
   const found = children.map(listParagraphOf);
-  const blocks: { node: Element; list: WordListPlace | null }[] = [];
+  const blocks: { node: Node; list: WordListPlace | null }[] = [];
   for (let at = 0; at < children.length; ) {
     let end = at;
     while (end < children.length && found[end]) end++;
@@ -99,10 +107,10 @@ export function fromWord(html: string): string {
     if (empty.textContent === "") empty.remove();
   }
   const lists = (container: Element) => {
-    const children = [...container.children];
-    if (!children.some((child) => LIST.test(child.getAttribute("style") ?? ""))) return;
+    const children = [...container.childNodes].filter((node) => !holdsNothing(node));
+    if (!children.some((child) => listParagraphOf(child))) return;
     container.replaceChildren(
-      ...groupWordLists<Element>(listBlocks(children, document), {
+      ...groupWordLists<Node>(listBlocks(children, document), {
         list: (place) => {
           const list = document.createElement(place.ordered ? "ol" : "ul");
           if (place.ordered && place.number !== 1) list.setAttribute("start", String(place.number));
@@ -111,10 +119,10 @@ export function fromWord(html: string): string {
         item: (list, block) => {
           const item = document.createElement("li");
           item.append(block);
-          list.append(item);
+          if (isElement(list)) list.append(item);
         },
         nest: (parent, list) => {
-          parent.lastElementChild?.append(list);
+          if (isElement(parent)) parent.lastElementChild?.append(list);
         },
       }),
     );

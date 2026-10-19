@@ -145,6 +145,15 @@ describe("pasting what Word copies", () => {
     expect(items(inner)).toEqual(["Detail"]);
   });
 
+  test("words beside a list, outside any paragraph, are kept", () => {
+    const doc = pasted(word(`Loose words before${listParagraph("l0", 1, "1.", "First")}and after`));
+    expect(blocks(doc)).toEqual([
+      { type: "paragraph", text: "Loose words before" },
+      { type: "orderedList", text: "First" },
+      { type: "paragraph", text: "and after" },
+    ]);
+  });
+
   test("a paragraph between two runs ends the first", () => {
     const doc = pasted(
       word(

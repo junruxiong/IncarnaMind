@@ -1,7 +1,7 @@
 /** From 1, and 0 for a Title; null for a style that isn't a heading's: "heading 2", "Title". */
 export function headingLevelOfStyleName(name: string): number | null {
-  const lower = name.trim().toLowerCase();
-  const heading = /^heading ?(\d)$/.exec(lower);
+  const lower = name.toLowerCase();
+  const heading = /^heading (\d)$/.exec(lower);
   if (heading) return Number(heading[1]);
   if (lower === "title") return 0;
   return null;
