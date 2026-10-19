@@ -205,7 +205,7 @@ function Uses({
 }) {
   const t = useT();
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="flex flex-col gap-2 pt-1.5">
       {uses.map((use) => {
         const waiting = partly && use.status.consent !== "accepted";
         return (
