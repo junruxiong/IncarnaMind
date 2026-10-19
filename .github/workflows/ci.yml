@@ -154,8 +154,9 @@ jobs:
           sudo chown root:root node_modules/electron/dist/chrome-sandbox
           sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
       # Chinese faces, as a Linux system with Chinese has (DESIGN.md, Typography): the runner has
-      # none, so a printed PDF would hold no Chinese for the export specs to read back.
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
+      # none, so a printed PDF would hold no Chinese for the export specs to read back. ffmpeg
+      # makes the feel check's films of each flow into videos (e2e/feel.ts).
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk ffmpeg
       # The app needs a display: a virtual one, bigger than the window the specs set
       # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
       - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- $(node scripts/smoke-shard.mjs ${{ matrix.shard }} 8)
@@ -166,6 +167,17 @@ jobs:
           name: smoke-test-results-linux-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
+      # The feel check's report and video of each flow, to look at frame by frame (#1242).
+      - name: Upload the feel check's videos
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: feel-linux-${{ matrix.shard }}
+          path: |
+            test-results/feel/*.mp4
+            test-results/feel/*.md
+          if-no-files-found: ignore
+          retention-days: 14
 
   # Branch protection requires this name, so the shards can change without touching it.
   smoke:

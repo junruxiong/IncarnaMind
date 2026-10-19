@@ -221,9 +221,12 @@ export async function feelOf(window: Page, flow: string): Promise<Feel> {
         KNOWN.find(
           (each) => each.flow === flow && each.step === problem.step && each.kind === problem.kind,
         );
+      // A time depends on the runner, so a known slow step may not be slow this run: only a shift
+      // or a focus that no longer happens is stale.
       const stale = KNOWN.filter(
         (each) =>
           each.flow === flow &&
+          (each.kind === "shift" || each.kind === "focus") &&
           !problems.some((problem) => problem.step === each.step && problem.kind === each.kind),
       );
       const report = tableOf(flow, steps, problems, known);

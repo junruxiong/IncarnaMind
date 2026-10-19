@@ -94,7 +94,7 @@ test("the sidebar: open, rename in place, move, delete and Undo, and a new Mind 
     await expect(picker).toHaveCount(0);
     await expect(sidebarFolder(window, "Finance")).toContainText("Budget");
   });
-  await feel.expectFocus("move to a Folder", mindRow(window, "Budget").getByTestId("mind-menu"));
+  await feel.expectFocus("move to a Folder", mindRow(window, "Budget"));
 
   await feel.step("delete", async () => {
     const row = mindRow(window, "Alpha");
