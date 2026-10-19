@@ -156,6 +156,17 @@ jobs:
       # Chinese faces, as a Linux system with Chinese has (DESIGN.md, Typography): the runner has
       # none, so a printed PDF would hold no Chinese for the export specs to read back.
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
+      # ffmpeg makes the feel check's films into videos (e2e/feel.ts). Without it the frames are
+      # kept, so a mirror that fails here doesn't fail the check.
+      - name: Install ffmpeg for the feel check's videos
+        continue-on-error: true
+        run: |
+          for attempt in 1 2 3; do
+            sudo apt-get install -y -qq --no-install-recommends ffmpeg && exit 0
+            sleep 15
+            sudo apt-get update -qq
+          done
+          exit 1
       # The app needs a display: a virtual one, bigger than the window the specs set
       # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
       - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- $(node scripts/smoke-shard.mjs ${{ matrix.shard }} 8)
@@ -166,6 +177,41 @@ jobs:
           name: smoke-test-results-linux-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
+      # The feel check's report and video of each flow, to look at frame by frame (#1242).
+      - name: Upload the feel check's videos
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: feel-linux-${{ matrix.shard }}
+          path: |
+            test-results/feel/*.mp4
+            test-results/feel/*.md
+            test-results/feel/*.unseen.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # A known slow step, or focus that depends on timing, doesn't fail when it doesn't happen, so
+  # its entry could outlive its issue. This lists them on every run, without failing (e2e/feel.ts).
+  feel-known:
+    name: Feel check, known problems that didn't happen
+    if: always() && needs.smoke-shard.result != 'skipped'
+    needs: smoke-shard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: feel-linux-*
+          path: feel
+          merge-multiple: true
+      - name: List them
+        run: |
+          shopt -s nullglob
+          for file in feel/*.unseen.txt; do
+            while IFS= read -r line; do
+              echo "::warning title=Known feel problem didn't happen::$line. Once its issue is closed, remove its entry in KNOWN (e2e/feel.ts)."
+              echo "- $line" >> "$GITHUB_STEP_SUMMARY"
+            done < "$file"
+          done
 
   # Branch protection requires this name, so the shards can change without touching it.
   smoke:
