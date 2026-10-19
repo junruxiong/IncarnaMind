@@ -3,7 +3,7 @@ import { create } from "zustand";
 import type { AudioSource, Meeting, Settings } from "../../core/api";
 import { meetingTimeAt } from "../../shared/blockTimes";
 import { mindMade } from "./changes";
-import { core } from "./core";
+import { core, files } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { currentMindIdOf } from "./layoutSlice";
@@ -165,7 +165,11 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     discard: (meetingId) => attempt(meetingId, () => core.discardMeeting(meetingId)),
     deleteAudio: (meetingId) => attempt(meetingId, () => core.deleteMeetingAudio(meetingId)),
     retryTranscript: (meetingId) => attempt(meetingId, () => core.retryTranscript(meetingId)),
-    openSettings: (meetingId, source) => attempt(meetingId, () => core.openAudioSettings(source)),
+    openSettings: (meetingId, source) =>
+      attempt(meetingId, async () => {
+        await core.openAudioSettings(source);
+        await files.showPermissionGuide(source);
+      }),
     dismissGaps(meetingId) {
       const meeting = get().meetings.find((each) => each.id === meetingId);
       set((state) => ({
