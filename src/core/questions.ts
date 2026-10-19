@@ -71,7 +71,9 @@ export function createQuestions(events: ReturnType<typeof createEventHub>) {
     list: (): UserQuestionRequest[] => [...waiting.values()].map((each) => each.request),
 
     answer(requestId: unknown, value: unknown): void {
-      if (typeof requestId !== "string") throw new InvalidInputError("requestId must be text.");
+      if (typeof requestId !== "string") {
+        throw new InvalidInputError({ key: "error.question.answer" });
+      }
       const entry = waiting.get(requestId);
       if (!entry) return;
       const answer = answerTo(entry.request.question, value);
