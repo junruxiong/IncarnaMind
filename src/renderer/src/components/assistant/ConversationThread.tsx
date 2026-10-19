@@ -163,13 +163,12 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         !plan &&
         !tasks.some(asked) && (
           <>
-            <p data-testid="assistant-reads" title={reads} className="assistant-reads">
-              <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
-              <span className="assistant-reads-text">{reads}</span>
-            </p>
-            <p data-testid="assistant-empty" className="assistant-empty">
-              {t("assistant.empty")}
-            </p>
+            <div data-testid="assistant-empty" className="assistant-empty">
+              <p data-testid="assistant-reads" title={reads} className="assistant-reads">
+                <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
+                <span className="assistant-reads-text">{reads}</span>
+              </p>
+            </div>
             {listening && <MeetingStarters />}
           </>
         )}

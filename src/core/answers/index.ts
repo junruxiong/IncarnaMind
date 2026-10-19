@@ -377,11 +377,6 @@ const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 const changesAMind = (change: MindChange) =>
   change.created || change.revised === true || change.proposals > 0;
 
-const blank = (blocks: Y.XmlFragment): boolean =>
-  blocks
-    .toArray()
-    .every((block) => !(block instanceof Y.XmlElement) || plainText(block).trim() === "");
-
 const holdsNothing = (blocks: Y.XmlFragment): boolean =>
   blocks
     .toArray()
@@ -1654,12 +1649,9 @@ export function createAnswers(options: AnswersOptions) {
       const minds = outside ? undefined : options.minds;
       const focusedId = input.assistant?.focused?.mindId ?? null;
       // A new piece fills the empty Mind the User is in rather than making another (#1109).
-      const route =
-        routed?.fillsEmpty && minds && focusedId && minds.read(focusedId, holdsNothing)
-          ? { ...routed, newMind: false }
-          : routed;
-      const focusedBlank =
-        minds !== undefined && focusedId !== null && minds.read(focusedId, blank);
+      const focusedEmpty =
+        minds !== undefined && focusedId !== null && minds.read(focusedId, holdsNothing);
+      const route = routed?.fillsEmpty && focusedEmpty ? { ...routed, newMind: false } : routed;
       const requested =
         route && (route.kind === "write" || route.kind === "edit")
           ? { change: route.kind, newMind: route.newMind }
@@ -1674,6 +1666,7 @@ export function createAnswers(options: AnswersOptions) {
               paragraph: paragraphAsked(context.question),
               ...input.assistant,
               language: answerLanguage(context.question),
+              figure: (marker) => (calculating ? figures.figure(marker) : null),
               blocksOf: (text) => {
                 let found = 0;
                 let notFound = 0;
@@ -1880,7 +1873,7 @@ export function createAnswers(options: AnswersOptions) {
             webInstructions(withWebTools),
             workingCopyNote(original?.name ?? null),
             mindInstructions(withMindTools, route),
-            emptyMindNote(withMindTools, focusedBlank),
+            emptyMindNote(withMindTools, focusedEmpty),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             help

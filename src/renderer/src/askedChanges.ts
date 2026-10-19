@@ -84,7 +84,8 @@ export function applyWhatWasAsked(answerId: string, { keepWritten = false } = {}
   for (const [key, each] of asked) {
     if (each.answerId !== answerId) continue;
     asked.delete(key);
-    if (keepWritten && (each.facts.created || each.facts.wrote > 0)) continue;
+    const { created, wrote, tables, charts } = each.facts;
+    if (keepWritten && (created || wrote + tables + charts > 0)) continue;
     const followed = each.applied?.followed;
     if (followed?.onTop()) followed.undo();
     else if (followed && followed.state() !== "undone") stayed.push(key);
