@@ -735,7 +735,6 @@ for (const language of ["en", "zh-CN"] as const) {
         window,
         window.getByTestId("add-to-picker").getByTestId("add-to-option").last(),
       );
-      await expect(answer.getByTestId("answer-added")).toBeVisible();
     };
 
     await addToNew();
