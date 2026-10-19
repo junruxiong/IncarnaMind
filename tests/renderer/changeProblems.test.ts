@@ -105,20 +105,20 @@ describe("Why a call changed nothing, on its row", () => {
       adding: true,
     };
     expect(problemText(en, place, "Q3 review")).toBe(
-      "Couldn't add to “Q3 review”: more than one place is called “Summary”",
+      "Couldn’t add to “Q3 review”: more than one place is called “Summary”",
     );
     expect(problemText(zh, place, "Q3 review")).toBe(
       "无法添加到“Q3 review”：有多个位置叫“Summary”",
     );
     expect(problemText(en, { ...place, adding: false }, "Q3 review")).toBe(
-      "Couldn't change “Q3 review”: more than one place is called “Summary”",
+      "Couldn’t change “Q3 review”: more than one place is called “Summary”",
     );
   });
 
   // protects=the waiting reason names the count, and the Chinese reads as Chinese apps say it; fails_when=the count or the Mind is lost; no_claim=none beyond protects.
   test("the waiting reason names the Mind and how many wait", () => {
     expect(problemText(en, waiting, "Q3 review")).toBe(
-      "Couldn't change “Q3 review”: 12 changes are waiting there",
+      "Couldn’t change “Q3 review”: 12 changes are waiting there",
     );
     expect(problemText(zh, waiting, "Q3 review")).toBe(
       "无法修改“Q3 review”：其中有 12 处修订待确认",
@@ -132,7 +132,7 @@ describe("Why a call changed nothing, on its row", () => {
   test("a table that couldn't be made says nothing was added", () => {
     const problem: MindProblem = { kind: "no-table", mindId: "a" };
     expect(problemText(en, problem, "Q3 review")).toBe(
-      "Couldn't make the table, so nothing was added to “Q3 review”",
+      "Couldn’t make the table, so nothing was added to “Q3 review”",
     );
     expect(problemText(zh, problem, "Q3 review")).toBe(
       "未能生成表格，因此没有向“Q3 review”添加内容",
