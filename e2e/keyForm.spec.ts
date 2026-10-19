@@ -514,7 +514,7 @@ test("the ChatGPT wait offers the sign-in page again, and after five minutes say
     await card.getByTestId("setup-chatgpt").click();
     await expect.poll(() => urlsOpened(app)).toHaveLength(1);
     await expect(card).toContainText("Finish signing in in your browser");
-    await expect(card).toContainText("Nothing extra to pay");
+    await expect(card).toContainText("OpenAI may ask you to allow IncarnaMind.");
     await card.getByTestId("chatgpt-reopen").click();
     await expect.poll(() => urlsOpened(app)).toHaveLength(2);
     await expect(card.getByTestId("chatgpt-late")).toHaveCount(0);

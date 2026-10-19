@@ -665,7 +665,7 @@ function ProviderCostLine({ providerId }: { providerId: string }) {
       {setAside && (
         <>
           {" · "}
-          <span data-testid="chat-provider-set-aside" title={t("cost.setAside.hint")}>
+          <span data-testid="chat-provider-set-aside" title={t("cost.setAside.tip")}>
             {setAside}
           </span>
         </>
