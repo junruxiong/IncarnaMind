@@ -161,6 +161,7 @@ Keys are read from these variables only, never from `OPENAI_API_KEY` and the lik
 | `INCARNAMIND_EVAL_CHAT_MODEL` | none | The model id. |
 | `INCARNAMIND_EVAL_CHAT_KEY` | none | Required for `anthropic`, `openai` and `google`. |
 | `INCARNAMIND_EVAL_CHAT_BASE_URL` | none | Required for `openai-compatible`; Ollama's address for `ollama`. |
+| `INCARNAMIND_EVAL_CHAT_ENDPOINT` | its first | A hosted provider's endpoint, by its id in the app's catalog: `intl` for Kimi International (`api.moonshot.ai`), for example. The run uses the app's own provider for the kind, as Settings does, so it sends what the app sends. The judge's `INCARNAMIND_EVAL_JUDGE_ENDPOINT` works the same way. |
 | `INCARNAMIND_EVAL_CHAT_NUM_CTX` | the app's choice | `ollama` only: the context window (`num_ctx`) every request carries, instead of the one the app chooses from this computer's memory, so local runs are comparable. The output cap follows it, as in the app. |
 | `INCARNAMIND_EVAL_CHAT_CITING` | the app's rule | `ollama` only: `tools`, `structured-output` or `none`, how the model cites instead of the app's rule (`citingMode`), to compare the citing modes. |
 | `INCARNAMIND_EVAL_EMBED_KIND` | none | `openai` or `google`. Turns on the cloud embedding run. |
