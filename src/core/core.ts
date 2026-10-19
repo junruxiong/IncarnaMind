@@ -2452,11 +2452,8 @@ export function createCore(adapters: CoreAdapters): Core {
       id: transcriptionHost.origin,
       name: transcriptionHost.host === "huggingface.co" ? "Hugging Face" : transcriptionHost.host,
     },
-    // Where this copy transcribes, once Meetings are on.
-    listed: () =>
-      transcriber !== undefined &&
-      transcriptionSource.files.length > 0 &&
-      settings.get().device.meetingsEnabled,
+    // Where this copy transcribes.
+    listed: () => transcriber !== undefined && transcriptionSource.files.length > 0,
   });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
   const chatGptSignIn = new URL(
@@ -2697,12 +2694,11 @@ export function createCore(adapters: CoreAdapters): Core {
     dataDir,
     now,
     capture: adapters.audioCapture,
-    enabled: () => settings.get().device.meetingsEnabled,
     noticeAccepted: () => settings.get().device.meetingNoticeAccepted,
     systemAudioByDefault: () => settings.get().device.meetingSystemAudio,
     language: () => settings.get().language,
-    createMind: (title) => {
-      const mind = minds.create(parseCreateMindInput({ title }));
+    createMind: (title, folderId) => {
+      const mind = minds.create(parseCreateMindInput({ title, folderId }));
       startInWritingStyle(mind.id);
       mindsChanged();
       return mind;

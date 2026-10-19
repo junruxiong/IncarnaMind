@@ -132,7 +132,7 @@ export async function transcribingCore(
     ...(createChatModel && { createChatModel }),
     ...(log && { log }),
   });
-  await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+  await core.updateSettings({ device: { meetingNoticeAccepted: true } });
   await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
   const record = (ms: number, sources: ("microphone" | "system")[] = ["microphone", "system"]) => {
     for (let at = 0; at < ms; at += 500) {

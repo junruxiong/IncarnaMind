@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import type { AudioSource, Meeting, Settings } from "../../core/api";
 import { meetingTimeAt } from "../../shared/blockTimes";
+import { mindMade } from "./changes";
 import { core } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
+import { currentMindIdOf } from "./layoutSlice";
 import { useAppStore } from "./store";
+import { useUndo } from "./undo";
 
 interface MeetingsState {
   meetings: Meeting[];
@@ -13,14 +16,21 @@ interface MeetingsState {
   problems: Readonly<Record<string, string>>;
   /** The Meeting whose Start waits for the User to read the one-time recording notice. */
   noticeFor: { meetingId: string; systemAudio: boolean } | null;
+  /** Record was chosen where this copy can't record audio: the sidebar's footer says so until it is dismissed. */
+  cantRecord: boolean;
   /** The gaps the User has dismissed, by Meeting: how many of its gaps they have seen. */
   gapsSeen: Readonly<Record<string, number>>;
   /** The Meetings whose recording details are shown (#161). */
   detailsShown: Readonly<Record<string, boolean>>;
   /** Lists the Meetings, at startup; the core's events keep the list after that. */
   load(): Promise<void>;
-  /** "Record a meeting": a new Mind, in a tab of its own, with the start block. */
+  /**
+   * "Record a meeting": the Meeting recording now, opened, or else a new Mind in a tab of its
+   * own, in the Folder of the Mind in view; it starts recording at once once the User has read
+   * the one-time notice, and shows the start block before.
+   */
   record(): Promise<void>;
+  clearCantRecord(): void;
   /** Start recording, after the one-time notice if this device hasn't shown it. */
   start(meetingId: string, systemAudio: boolean): Promise<void>;
   /** The notice was read: recording starts, and the notice isn't shown again. */
@@ -57,6 +67,7 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     meetings: [],
     problems: {},
     noticeFor: null,
+    cantRecord: false,
     gapsSeen: {},
     detailsShown: {},
 
@@ -69,18 +80,44 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     },
 
     async record() {
+      const recording = get().meetings.find((each) => each.status === "recording");
+      if (recording) {
+        useAppStore.getState().openMind(recording.mindId);
+        return;
+      }
+      const { settings, layout, minds } = useAppStore.getState();
+      if (!settings || settings.meetingAudio === "none") {
+        set({ cantRecord: true });
+        return;
+      }
       try {
-        const meeting = await core.createMeeting();
+        const inView = currentMindIdOf(layout);
+        const folderId = minds.find((each) => each.id === inView)?.folderId ?? null;
+        const meeting = await core.createMeeting(folderId ? { folderId } : undefined);
+        useUndo.getState().push(
+          mindMade(
+            "",
+            () => core.deleteMind(meeting.mindId),
+            async () => {
+              await core.restore([{ kind: "mind", id: meeting.mindId }]);
+              useAppStore.getState().openMind(meeting.mindId);
+            },
+          ),
+        );
         // A tab of its own, as New Mind opens one: never in place of the Mind the User is in.
         await useAppStore.getState().changeLayout({
           type: "open",
           item: { kind: "mind", mindId: meeting.mindId },
           where: { in: "group" },
         });
+        if (settings.device.meetingNoticeAccepted)
+          await get().start(meeting.id, meeting.systemAudio);
       } catch (error) {
         useAppStore.getState().reportError(error);
       }
     },
+
+    clearCantRecord: () => set({ cantRecord: false }),
 
     async start(meetingId, systemAudio) {
       if (!useAppStore.getState().settings?.device.meetingNoticeAccepted) {
@@ -132,9 +169,9 @@ function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record
 
 core.on("meetings.changed", (meetings) => useMeetings.setState({ meetings }));
 
-/** Meetings are turned on in Settings, and this copy can record. */
+/** This copy can record audio. */
 export const canRecordMeetings = (settings: Settings | null): boolean =>
-  !!settings?.device.meetingsEnabled && settings.meetingAudio !== "none";
+  !!settings && settings.meetingAudio !== "none";
 
 /** The Mind's Meeting, if it has one. */
 export const useMeetingOf = (mindId: string): Meeting | undefined =>

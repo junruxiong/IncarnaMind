@@ -200,7 +200,6 @@ const deviceScope: Scope<DeviceSettings> = {
     skillScriptsEnabled: true,
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
     suggestionOffers: 0,
-    meetingsEnabled: false,
     meetingSystemAudio: true,
     meetingNoticeAccepted: false,
     meetingPanel: true,
@@ -218,7 +217,6 @@ const deviceScope: Scope<DeviceSettings> = {
     skillScriptTimeoutSeconds: isScriptTimeout,
     suggestionOffers: (value): value is number =>
       typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100,
-    meetingsEnabled: isBoolean,
     meetingSystemAudio: isBoolean,
     meetingNoticeAccepted: isBoolean,
     meetingPanel: isBoolean,

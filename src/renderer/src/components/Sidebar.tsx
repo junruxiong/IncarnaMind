@@ -5,7 +5,6 @@ import { TableIcon } from "../editor/icons";
 import { useFindSources } from "../findSources";
 import { useFirstOpen } from "../firstOpen";
 import { useT } from "../i18n";
-import { canRecordMeetings } from "../meetings";
 import { usePruneSelection } from "../selection";
 import { useAppStore } from "../store";
 import { linksIn, useWebPages } from "../webPages";
@@ -139,7 +138,7 @@ function pasteLinks(event: ClipboardEvent<HTMLElement>) {
 
 /**
  * The one "+" menu, the one place to add: New Mind, Import a Word file…,
- * Record a meeting (once Meetings are turned on), Compare Documents…, Verify
+ * Record a meeting, Compare Documents…, Verify
  * a document…, New Folder,
  * Add Documents…, Add a web page…,
  * Find sources… and Link a folder…. Opened by keyboard or mouse, its items
@@ -152,7 +151,6 @@ function PlusMenu() {
   const pickDocuments = useAppStore((state) => state.pickDocuments);
   const picking = useAppStore((state) => state.pickingDocuments);
   const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
-  const meetingsOn = useAppStore((state) => canRecordMeetings(state.settings));
   const reportError = useAppStore((state) => state.reportError);
 
   /** Closes the menu, then does it. */
@@ -201,18 +199,16 @@ function PlusMenu() {
           <DocumentLineIcon kind="docx" className="size-4 shrink-0 text-ink-meta" />
           <span className="flex-1">{t("wordImport.command")}</span>
         </button>
-        {meetingsOn && (
-          <button
-            type="button"
-            role="menuitem"
-            data-testid="plus-record-meeting"
-            onClick={choose(() => void commands.run("meeting.record").catch(reportError))}
-            className={`${menuItemClass} pl-2`}
-          >
-            <RecordingLineIcon className="size-4 shrink-0 text-ink-meta" />
-            <span className="flex-1">{t("meetings.record")}</span>
-          </button>
-        )}
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-record-meeting"
+          onClick={choose(() => void commands.run("meeting.record").catch(reportError))}
+          className={`${menuItemClass} pl-2`}
+        >
+          <RecordingLineIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("meetings.record")}</span>
+        </button>
         <button
           type="button"
           role="menuitem"

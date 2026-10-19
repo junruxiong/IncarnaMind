@@ -97,9 +97,8 @@ export const meetingCommands: readonly Command[] = [
     id: "meeting.record",
     label: "meetings.record",
     group: "main",
-    // A new Mind, whose start block's ✕ takes the Meeting back.
+    // A new Mind, which ⌘Z takes back.
     reversible: true,
-    when: meetingsOn,
     run: () => useMeetings.getState().record(),
   },
   {

@@ -8,7 +8,7 @@ import { commands } from "../commands/registry";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
 import { saidInLine } from "../lineNames";
-import { useCapturing } from "../meetings";
+import { useCapturing, useMeetings } from "../meetings";
 import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
@@ -264,6 +264,7 @@ function useStatuses(): Status[] {
   const t = useT();
   const language = useLanguage();
   const skipped = useAppStore((state) => state.skippedFiles);
+  const cantRecord = useMeetings((state) => state.cantRecord);
   const alreadyAdded = useAppStore((state) => state.alreadyAdded);
   const model = useAppStore((state) => state.embeddingModel);
   const embedding = useAppStore((state) => state.embedding);
@@ -539,6 +540,26 @@ function useStatuses(): Status[] {
             },
           }),
       dismiss: () => dismiss(problem),
+    });
+  }
+
+  if (cantRecord) {
+    const text = t("meetings.settings.cantRecord");
+    statuses.push({
+      testId: "cant-record",
+      tone: "waiting",
+      short: text,
+      full: text,
+      wraps: true,
+      action: {
+        label: t("meetings.cantRecord.notes"),
+        testId: "cant-record-notes",
+        run() {
+          useMeetings.getState().clearCantRecord();
+          void useAppStore.getState().createMind({ titled: true });
+        },
+      },
+      dismiss: () => useMeetings.getState().clearCantRecord(),
     });
   }
 
