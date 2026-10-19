@@ -12,7 +12,11 @@ export function DropLabel() {
       data-testid="drop-label"
       aria-hidden="true"
       className="pointer-events-none fixed z-[70] max-w-72 truncate rounded-md bg-ink px-2 py-1 text-[12px] leading-4 font-semibold text-white shadow-[0_4px_12px_rgba(23,25,28,0.18)]"
-      style={{ left: at.x - 12, top: at.y + 20 }}
+      // Kept inside the window near its right and bottom edges; 288px is its widest.
+      style={{
+        left: Math.max(4, Math.min(at.x - 12, window.innerWidth - 292)),
+        top: Math.min(at.y + 20, window.innerHeight - 28),
+      }}
     >
       {said(t)}
     </div>
