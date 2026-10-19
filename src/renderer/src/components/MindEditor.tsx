@@ -112,7 +112,7 @@ import { useMindTools } from "../mindTools";
 import { onMindWriting, writingPlaceOf } from "../mindWriting";
 import { firstOpenOf } from "../nudges";
 import { holdShownPage } from "../shownPages";
-import { skillDescription } from "../skills";
+import { skillDescription, skillTitle } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { CompareSheet } from "./CompareSheet";
@@ -378,6 +378,7 @@ function MindEditorView({
                 useComposer.getState().update(mindId, { skill });
                 useComposer.getState().requestFocus();
               },
+              (skill) => skillTitle(skill.name, (key, params) => translate(language, key, params)),
             );
             const compare = compareSlashItem(
               (afterBlockId) => void startCompareDocuments(mindId, afterBlockId),

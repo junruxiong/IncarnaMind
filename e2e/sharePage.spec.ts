@@ -360,7 +360,7 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
   await sheet.getByTestId("export-format").selectOption("share-page");
   const contents = sheet.getByTestId("share-contents");
   await expect(contents.locator("p").first()).toHaveText(
-    "In the file: 5 quotes and 2 page pictures from 5 Documents. Anyone with the file can read these; Documents aren't included.",
+    "In the file: 5 quotes and 2 page pictures from 5 Documents. Anyone with the file can read these; Documents aren’t included.",
   );
   await expect(contents.getByTestId("share-document")).toHaveCount(5);
   await expect(contents.getByTestId("share-size")).toHaveText(/^The file will be about \d/);

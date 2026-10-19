@@ -101,7 +101,7 @@ test("a request to write is answered in the assistant with the line; Add to Mind
     "Answer to: write a summary page",
   );
   const line = answer.getByTestId("answer-no-mind-tools");
-  await expect(line).toHaveText("This model can't write into your Mind itself. · Add to Mind");
+  await expect(line).toHaveText("This model can’t write into your Mind itself. · Add to Mind");
   await expect(editor.locator("p")).toHaveText(["The quarter was good."]);
   await screenshot(window, "no-mind-tools-line");
 
@@ -165,7 +165,7 @@ for (const language of ["en", "zh-CN"] as const) {
 
     await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", "bottom");
     await expect(answer.getByTestId("answer-no-mind-tools")).toContainText(
-      english ? "This model can't write into your Mind itself." : "这个模型不能自己写进你的 Mind。",
+      english ? "This model can’t write into your Mind itself." : "这个模型不能自己写进你的 Mind。",
     );
     await expectFits(window, answer);
     await app.close();

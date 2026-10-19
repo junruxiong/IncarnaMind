@@ -127,8 +127,13 @@ test("the microphone: the guide names it, ✕ closes it, and so does Esc once it
   await expect(card).toContainText("Allow the microphone");
   await expect(card).toContainText("Privacy & Security › Microphone");
   const closed = guide.waitForEvent("close");
-  await guide.getByTestId("permission-guide-close").click();
+  // The window closes under the click: Playwright then says the page went away.
+  await guide
+    .getByTestId("permission-guide-close")
+    .click()
+    .catch(() => undefined);
   await closed;
+  await expect.poll(() => guideOf(app)).toBeUndefined();
 
   await pointAndClick(window, window.getByTestId("meeting-settings-microphone"));
   const again = await guideWindow(app);
@@ -137,6 +142,7 @@ test("the microphone: the guide names it, ✕ closes it, and so does Esc once it
   // The window closes under the key press: Playwright says the page went away.
   await again.keyboard.press("Escape").catch(() => undefined);
   await closedAgain;
+  await expect.poll(() => guideOf(app)).toBeUndefined();
   await grant(app, "microphone");
   await app.close();
 });

@@ -77,7 +77,7 @@ describe("a failed Answer's problem line", () => {
       fix: { kind: "ollama", label: "localModel.open" },
     });
     expect(translate("en", "answer.error.ollama-not-running")).toBe(
-      "Ollama isn't running on this computer",
+      "Ollama isn’t running on this computer",
     );
     expect(translate("zh-CN", "answer.error.ollama-not-running")).toBe(
       "Ollama 没有在这台电脑上运行",
@@ -204,7 +204,7 @@ describe("a failed Answer's problem line", () => {
       "The key for claude-sonnet-5.5 was refused",
     );
     expect(translate("en", ANSWER_PROBLEMS.network.line, { model: "m", service: "OpenAI" })).toBe(
-      "Couldn't reach OpenAI. Check your internet connection",
+      "Couldn’t reach OpenAI. Check your internet connection",
     );
     expect(
       translate("zh-CN", ANSWER_PROBLEMS.network.line, { model: "m", service: "OpenAI" }),
@@ -240,7 +240,7 @@ describe("why a file couldn't be saved", () => {
   test('the reasons read after "Couldn\'t save:" in both languages', () => {
     expect(
       translate("en", "export.failed.save", { reason: translate("en", "export.failed.readOnly") }),
-    ).toBe("Couldn't save: the folder is read-only");
+    ).toBe("Couldn’t save: the folder is read-only");
     expect(
       translate("zh-CN", "export.failed.save", {
         reason: translate("zh-CN", "export.failed.readOnly"),
