@@ -19,9 +19,12 @@
  * - **Changed in place**: asked to make text in the Mind longer, it changes
  *   that text, not adding a second version beside it, nor leaving it as it
  *   was (#1061).
- * - **It stands on its own**: nothing that goes into a page, its reply as Add
- *   to note puts it or what it wrote into a Mind, points to an earlier Answer
- *   ("covered in my earlier answer", "见上一条回答").
+ * - **About the Question asked**: after the example's Answer, the reply
+ *   says nothing of an earlier Answer.
+ * - **Nothing lost on the way into a page**: a sentence left out of the reply
+ *   as Add to note puts it, or of what a call gave to write into a Mind, is
+ *   only a pointer to an earlier Answer ("covered in my earlier answer",
+ *   "见上一条回答"); the pointers left there are counted.
  * - **No word of the example unasked**: asked about the User's own Documents
  *   after the example's Answer, nothing it wrote mentions the example's.
  * - **Only the text's dates**: every date the reply gives is one the
@@ -46,7 +49,9 @@ export interface Expected {
   only?: number;
   /** It asks to change text already in the Mind: adding a new version beside it fails. */
   inPlace?: true;
-  /** Nothing in its reply as Add to note puts it, or in what it writes into a Mind, points to an earlier Answer. */
+  /** Asked after the example's Answer: its reply, in the panel, says nothing of an earlier Answer. */
+  noEarlier?: true;
+  /** The report counts the pointers to an earlier Answer left in its reply as Add to note puts it, and in what it writes into a Mind. */
   standsAlone?: true;
   /** Asked about the User's own Documents after the example's Answer: nothing it writes mentions the example's. */
   noExample?: true;
@@ -91,7 +96,7 @@ export type RequestFailure =
   | { kind: "beside" }
   | { kind: "untouched" }
   | { kind: "as-text"; sources: string[] }
-  | { kind: "points-back"; said: string }
+  | { kind: "earlier"; said: string }
   | { kind: "example"; said: string }
   | { kind: "content-lost"; sentences: string[] }
   | { kind: "date-not-in-text"; dates: string[] };
@@ -112,7 +117,7 @@ const POINTS_BACK = new RegExp(
   "i",
 );
 
-/** Whether text points to an earlier Answer, as `standsAlone` reads it. */
+/** Whether text points to an earlier Answer, as `noEarlier` and `standsAlone` read it. */
 export const pointsBack = (text: string): boolean => POINTS_BACK.test(text);
 
 function proseSentences(text: string): string[] {
@@ -260,9 +265,8 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
     failures.push({ kind: "as-text", sources: [...outcome.sourcesAsText] });
   }
   const inMinds = outcome.writtenInMinds ?? [];
-  const inPage = [outcome.addedToPage ?? answer.text, ...inMinds].join("\n\n");
-  const pointer = expected.standsAlone ? inPage.match(POINTS_BACK)?.[0] : undefined;
-  if (pointer) failures.push({ kind: "points-back", said: pointer });
+  const earlier = expected.noEarlier ? answer.text.match(POINTS_BACK)?.[0] : undefined;
+  if (earlier) failures.push({ kind: "earlier", said: earlier });
   const written = [answer.text, ...inMinds].join("\n\n");
   const example = expected.noExample ? written.match(EXAMPLE)?.[0] : undefined;
   if (example) failures.push({ kind: "example", said: example });
@@ -296,8 +300,8 @@ export function failureLine(failure: RequestFailure): string {
       return "left the text it was asked to change as it was";
     case "as-text":
       return `wrote sources into a Mind as text: ${failure.sources.map((source) => `“${source}”`).join(", ")}`;
-    case "points-back":
-      return `points to an earlier Answer: “${failure.said}”`;
+    case "earlier":
+      return `talks about an earlier Answer: “${failure.said}”`;
     case "example":
       return `mentions the example unasked: “${failure.said}”`;
     case "content-lost":

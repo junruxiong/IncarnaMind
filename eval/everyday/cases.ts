@@ -55,6 +55,7 @@ const ABOUT_THE_QUESTION = {
   write: false,
   cite: false,
   coverAll: false,
+  noEarlier: true,
   standsAlone: true,
   noExample: true,
 } as const;

@@ -5,7 +5,7 @@
  * own net.
  */
 import { describe, expect, test } from "vitest";
-import { type RequestOutcome, requestFailures } from "../../eval/everyday/checks";
+import { pointersIn, type RequestOutcome, requestFailures } from "../../eval/everyday/checks";
 import { judgeClaims, verdictIn } from "../../eval/everyday/judge";
 import { languageRates, rowRates } from "../../eval/everyday/rates";
 import type { AnswerToolCall } from "../../src/core";
@@ -261,62 +261,65 @@ describe("Only what was asked changes", () => {
 });
 
 describe("Standing on its own, and the example unasked", () => {
-  const failed = (
-    text: string,
-    writtenInMinds: string[] = [],
-    addedToPage?: string,
-    givenToMinds?: string[],
-  ) =>
+  const failed = (text: string) =>
     requestFailures(
       outcome({
         expected: {
           write: false,
           cite: false,
           coverAll: false,
+          noEarlier: true,
           standsAlone: true,
           noExample: true,
         },
         answer: { text, citations: [], toolCalls: [], steps: null },
-        writtenInMinds,
+      }),
+    ).map((failure) => failure.kind);
+  const lost = (
+    text: string,
+    addedToPage?: string,
+    givenToMinds?: string[],
+    writtenInMinds?: string[],
+  ) =>
+    requestFailures(
+      outcome({
+        expected: { write: false, cite: false, coverAll: false },
+        answer: { text, citations: [], toolCalls: [], steps: null },
         addedToPage,
         givenToMinds,
+        writtenInMinds,
       }),
     ).map((failure) => failure.kind);
 
-  // protects=a reply that points to an earlier Answer fails, in English and in Chinese, and one that says it all again doesn't; fails_when=it passes, or an ordinary reply that says "earlier" or "忽略" fails; no_claim=none beyond protects.
-  test("a reply that points to an earlier Answer fails", () => {
+  // protects=asked after the example's Answer, a reply that talks about an earlier Answer fails, in English and in Chinese, and one that says it all again doesn't; fails_when=it passes, or an ordinary reply that says "earlier" or "忽略" fails; no_claim=none beyond protects.
+  test("a reply that talks about an earlier Answer fails", () => {
     expect(failed("GraphST leverages spatial information to ignore the noise.")).toEqual([]);
     expect(failed("GraphST 利用空间信息，忽略了噪声。")).toEqual([]);
     expect(failed("An earlier study found the same effect.")).toEqual([]);
-    expect(failed("Its results are covered in my earlier answer.")).toEqual(["points-back"]);
-    expect(failed("Its datasets are listed above.")).toEqual(["points-back"]);
-    expect(failed("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual(["points-back"]);
-    expect(failed("居家办公的规定见上一条回答。")).toEqual(["points-back"]);
-    expect(failed("数据集见上文。")).toEqual(["points-back"]);
+    expect(failed("Its results are covered in my earlier answer.")).toEqual(["earlier"]);
+    expect(failed("Its datasets are listed above.")).toEqual(["earlier"]);
+    expect(failed("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual(["earlier"]);
+    expect(failed("居家办公的规定见上一条回答。")).toEqual(["earlier"]);
+    expect(failed("数据集见上文。")).toEqual(["earlier"]);
   });
 
-  // protects=text it wrote into a Mind is held to it as the reply is; fails_when=a pointer written into the page passes; no_claim=none beyond protects.
-  test("a pointer in what it wrote into a Mind fails", () => {
+  // protects=the pointers counted in what goes into a page are its sentences that point back, in English and in Chinese; fails_when=one is missed, or an ordinary sentence is counted; no_claim=none beyond protects.
+  test("pointers left in a page are counted by sentence", () => {
     expect(
-      failed("Done.", ["## Summary", "Its results are covered in my earlier answer."]),
-    ).toEqual(["points-back"]);
-  });
-
-  // protects=the reply is held to it as Add to note puts it in a page, where its pointer was cut, not as it stays in the panel; fails_when=a pointer left in the panel fails, or one in the page passes; no_claim=none beyond protects.
-  test("the reply is held to it as Add to note puts it in a page", () => {
-    const reply = "Its results are strong. They are covered in my earlier answer.";
-    expect(failed(reply, [], "Its results are strong.")).toEqual([]);
-    expect(failed("Its results are strong.", [], reply)).toEqual(["points-back"]);
+      pointersIn(
+        "## Summary\n\nIts results are strong. They are covered in my earlier answer.\n\n- 数据集见上文。\n- An earlier study found the same effect.",
+      ),
+    ).toEqual(["They are covered in my earlier answer.", "数据集见上文。"]);
   });
 
   // protects=a sentence that says more than a pointer, left out of a page, fails as content lost, from the reply or from what a call gave to write into a Mind, in English and Chinese; one that was only a pointer passes; fails_when=lost content passes, or a pointer taken out fails; no_claim=none beyond protects.
   test("content left out of a page fails", () => {
     const correction = "I made an error in my previous answer and the total excludes VAT.";
-    expect(failed(`Pay is 5k. ${correction}`, [], "Pay is 5k.")).toEqual(["content-lost"]);
-    expect(failed("Pay is 5k. See my earlier answer.", [], "Pay is 5k.")).toEqual([]);
-    expect(failed("Done.", ["月薪一万。"], undefined, ["月薪一万。年假见上文。"])).toEqual([]);
+    expect(lost(`Pay is 5k. ${correction}`, "Pay is 5k.")).toEqual(["content-lost"]);
+    expect(lost("Pay is 5k. See my earlier answer.", "Pay is 5k.")).toEqual([]);
+    expect(lost("Done.", undefined, ["月薪一万。年假见上文。"], ["月薪一万。"])).toEqual([]);
     expect(
-      failed("Done.", ["月薪一万。"], undefined, ["月薪一万。合同写道：“租金见上文。”"]),
+      lost("Done.", undefined, ["月薪一万。合同写道：“租金见上文。”"], ["月薪一万。"]),
     ).toEqual(["content-lost"]);
   });
 
@@ -327,10 +330,10 @@ describe("Standing on its own, and the example unasked", () => {
       "example",
     ]);
     expect(failed("It claims this. My first answer cited a facilities agreement.")).toEqual([
-      "points-back",
+      "earlier",
       "example",
     ]);
-    expect(failed("它的主张是这样。请忽略之前的杠杆率数字。")).toEqual(["points-back", "example"]);
+    expect(failed("它的主张是这样。请忽略之前的杠杆率数字。")).toEqual(["earlier", "example"]);
   });
 });
 

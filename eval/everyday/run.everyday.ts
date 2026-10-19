@@ -553,7 +553,7 @@ function report(
     results.filter((each) => each.failures.some((failure) => failure.kind === kind)).length;
   const dead = failing("dead-markers");
   const shaped = failing("tool-text");
-  const heldTo = (key: "standsAlone" | "noExample") =>
+  const heldTo = (key: "standsAlone" | "noExample" | "noEarlier") =>
     results.filter(
       (each) => !each.error && CASES.find((one) => one.id === each.id)?.expected[key] === true,
     );
@@ -670,9 +670,9 @@ function report(
     "",
     "## Standing on its own",
     "",
-    `${failing("points-back")} of ${expecting("standsAlone")} Answers held to it point to an earlier Answer in what goes into a page: the reply as Add to note puts it, or what they wrote into a Mind. Counting the replies in the panel, where they stay as the model wrote them: ${pointingInPanel}. ${failing("example")} of ${expecting("noExample")} mention the example unasked.`,
+    `Pointers left: ${pointersLeft} sentences that point to an earlier Answer stay in what goes into a page (the reply as Add to note puts it, or what was written into a Mind), in ${heldTo("standsAlone").filter((each) => each.pointersLeft > 0).length} of the ${expecting("standsAlone")} Answers held to it. Each says more than the pointer, so it is kept as written. Counting the replies in the panel, where they stay as the model wrote them: ${pointingInPanel} point back.`,
     "",
-    `Pointers left: ${pointersLeft} sentences that point to an earlier Answer stay in what goes into a page, over the ${expecting("standsAlone")} Answers held to it. Each says more than the pointer, so it is kept as written.`,
+    `${failing("earlier")} of ${heldTo("noEarlier").length} replies asked after the example's Answer talk about an earlier Answer. ${failing("example")} of ${expecting("noExample")} mention the example unasked.`,
     "",
     `Content lost: ${lost.length} sentences that say more than a pointer were left out of a page, over all ${results.length} Answers. Taking pointers out of the replies left out ${markersLeftOut} Citation markers.`,
     "",
