@@ -1,4 +1,5 @@
 // #892: the Answer follows the Question's language, and quoted words are never a translation.
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   documentInstructions,
@@ -207,8 +208,20 @@ describe("A Skill that names a language (#1273)", () => {
   test.each([
     "Summarize the tides in three bullet points.",
     "Cite every figure with its page.",
+    "Write in the language the Question is written in, even when the Documents are in another language.",
+    "Write it in the language of the Question, and translate the headings too.",
+    "Answer in the Question's language.",
     "",
   ])("and one that names none is not: %s", (instructions) => {
+    expect(skillSetsLanguage(instructions)).toBe(false);
+  });
+});
+
+describe("The built-in Skills (#1273)", () => {
+  const names = readdirSync("resources/skills");
+
+  test.each(names)("%s names no language but the Question's, so it gets the note", (name) => {
+    const instructions = readFileSync(`resources/skills/${name}/SKILL.md`, "utf8");
     expect(skillSetsLanguage(instructions)).toBe(false);
   });
 });

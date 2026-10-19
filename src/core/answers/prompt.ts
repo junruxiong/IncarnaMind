@@ -704,9 +704,13 @@ export function loadedSkillText(
 const NAMES_A_LANGUAGE =
   /\blanguage\b|English|Chinese|Mandarin|Cantonese|Spanish|French|German|Japanese|Korean|Portuguese|Russian|Arabic|Italian|Hindi|语言|中文|英文|英语|日语|日文|法语|德语|西班牙语|韩语/i;
 
-/** Whether a Skill's instructions say which language to write in, so its choice stands (#1273). */
+/** What the built-in Skills say (#892), which is what the note says: no language of their own. */
+const NO_LANGUAGE_OF_ITS_OWN =
+  /\blanguage (?:that |which )?the Question is written in|\bthe Question's language|\blanguage of the (?:Question|report)\b|\b(?:another|other|that) languages?\b/gi;
+
+/** Whether a Skill's instructions name a language to write in other than the Question's, so its choice stands (#1273). */
 export function skillSetsLanguage(instructions: string): boolean {
-  return NAMES_A_LANGUAGE.test(instructions);
+  return NAMES_A_LANGUAGE.test(instructions.replace(NO_LANGUAGE_OF_ITS_OWN, ""));
 }
 
 /**
