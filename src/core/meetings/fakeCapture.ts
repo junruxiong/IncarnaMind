@@ -54,7 +54,6 @@ export interface FakeCapture extends AudioCapture {
   /** How many captures have started, and whether one runs now. */
   readonly started: number;
   readonly running: boolean;
-  /** The microphone is on while a capture runs: off, it sends nothing. */
   readonly microphoneOn: boolean;
   /** The sources the System Settings link was opened for. */
   readonly settingsOpened: readonly AudioSource[];

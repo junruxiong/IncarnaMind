@@ -394,7 +394,6 @@ export function RecordingLineIcon(props: IconProps) {
   );
 }
 
-/** The User's microphone, on. */
 export function MicLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
@@ -404,7 +403,6 @@ export function MicLineIcon(props: IconProps) {
   );
 }
 
-/** The User's microphone, paused: struck through. */
 export function MicOffLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>

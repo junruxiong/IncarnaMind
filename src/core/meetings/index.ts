@@ -185,7 +185,6 @@ export function createMeetings(options: MeetingsOptions) {
   /** For the call's help, kept in memory: it matters only while the Meeting is live. */
   const help = new Map<string, MeetingHelp>();
   const templates = new Map<string, MeetingHelpTemplate>();
-  /** Where in the Meeting's time each live Meeting's microphone was paused, while it is. */
   const microphonePausedAt = new Map<string, number>();
 
   const rowOf = (meetingId: unknown): MeetingRow => {
@@ -855,7 +854,6 @@ export function createMeetings(options: MeetingsOptions) {
       changed();
     },
 
-    /** Pauses the microphone of a Meeting that records or is paused, or resumes it. */
     setMicrophonePaused(input: unknown): Meeting {
       const { meetingId, paused } = parseInput(input);
       const row = rowOf(meetingId);
@@ -915,6 +913,10 @@ export function createMeetings(options: MeetingsOptions) {
       if (live) {
         endMicrophonePause(live.meetingId, meetingTime(live));
         end(live);
+      }
+      // A call paused with its microphone is cut off as it is: the stretch is marked up to there.
+      for (const meetingId of [...microphonePausedAt.keys()]) {
+        endMicrophonePause(meetingId, recordedOf(periodsOf(rowOf(meetingId))));
       }
     },
   };

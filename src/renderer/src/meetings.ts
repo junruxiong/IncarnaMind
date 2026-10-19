@@ -39,7 +39,6 @@ interface MeetingsState {
   cancelNotice(): void;
   pause(meetingId: string): Promise<void>;
   resume(meetingId: string): Promise<void>;
-  /** Pauses the Meeting's microphone, or resumes it; the computer's sound is recorded either way. */
   setMicrophonePaused(meetingId: string, paused: boolean): Promise<void>;
   stop(meetingId: string): Promise<void>;
   discard(meetingId: string): Promise<void>;

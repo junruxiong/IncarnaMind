@@ -436,7 +436,7 @@ describe("Pausing my microphone, in the Transcript", { timeout: 60_000 }, () => 
     const saved = await until(core, meeting.id, (transcript) => transcript.state === "saved");
     const { cues, gaps } = readVtt(readFileSync(saved.savedPath as string, "utf8"));
 
-    expect(gaps).toEqual([{ fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "micPaused" }]);
+    expect(gaps).toEqual([{ fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "muted" }]);
     const mine = cues.filter((cue) => cue.speaker === "Me");
     const theirs = cues.filter((cue) => cue.speaker === "Them");
     expect(mine.some((cue) => cue.startMs < PAUSED_AT)).toBe(true);
@@ -454,8 +454,19 @@ describe("Pausing my microphone, in the Transcript", { timeout: 60_000 }, () => 
     await core.stopMeeting(meeting.id);
     const saved = await until(core, meeting.id, (transcript) => transcript.state === "saved");
     const { gaps } = readVtt(readFileSync(saved.savedPath as string, "utf8"));
-    expect(gaps).toEqual([{ fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "micPaused" }]);
+    expect(gaps).toEqual([{ fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "muted" }]);
     expect((await core.listMeetings())[0]?.microphonePausedAtMs).toBeNull();
+  });
+
+  test("quitting with the call paused too marks the stretch up to where the recording stopped", async () => {
+    const dataDir = await createTempDataFolder();
+    const { core, meeting } = await pausedCall(dataDir, { resumes: false });
+    await core.pauseMeeting(meeting.id);
+    core.close();
+    const { gaps } = readVtt(
+      readFileSync(join(dataDir, "Transcripts", `${meeting.id}.vtt`), "utf8"),
+    );
+    expect(gaps).toEqual([{ fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "muted" }]);
   });
 
   test("quitting with it paused marks the stretch up to then", async () => {
@@ -465,6 +476,6 @@ describe("Pausing my microphone, in the Transcript", { timeout: 60_000 }, () => 
     const { gaps } = readVtt(
       readFileSync(join(dataDir, "Transcripts", `${meeting.id}.vtt`), "utf8"),
     );
-    expect(gaps).toEqual([{ fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "micPaused" }]);
+    expect(gaps).toEqual([{ fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "muted" }]);
   });
 });

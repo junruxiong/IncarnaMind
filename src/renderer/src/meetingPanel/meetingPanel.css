@@ -140,7 +140,6 @@ body {
   color: var(--color-ink-meta);
 }
 
-/* One line under the header: the meta tone, its first words in ink, its action after a dot. */
 .panel-subline {
   display: flex;
   align-items: center;

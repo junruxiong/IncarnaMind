@@ -369,7 +369,6 @@ export const flushUsageData = (app: ElectronApplication) =>
     await hooks.flush();
   });
 
-/** The floating panel's window, once it has opened and drawn. */
 export async function panelOf(app: ElectronApplication): Promise<Page> {
   const find = () => app.windows().find((page) => page.url().includes("meetingPanel.html"));
   await expect.poll(() => find() !== undefined, { timeout: 15_000 }).toBe(true);
@@ -382,11 +381,9 @@ export async function panelOf(app: ElectronApplication): Promise<Page> {
 export const panelOpen = (app: ElectronApplication) =>
   app.windows().some((page) => !page.isClosed() && page.url().includes("meetingPanel.html"));
 
-/** Whether the main process holds this global shortcut now. */
 export const heldGlobalKeys = (app: ElectronApplication, keys: string) =>
   app.evaluate(({ globalShortcut }, asked) => globalShortcut.isRegistered(asked), keys);
 
-/** Presses a held shortcut ("panel", "mic" or a help button's kind), as the system would with another app in front. */
 export const pressHeldKeys = (app: ElectronApplication, kind: string) =>
   app.evaluate((_electron, pressed) => {
     (

@@ -24,6 +24,7 @@ import {
 } from "../components/meetings/HelpSuggestion";
 import { LevelBars } from "../components/meetings/LevelBars";
 import { MicrophoneButton } from "../components/meetings/MicrophoneButton";
+import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation } from "../components/providers/ChatReadinessNotice";
 import { core } from "../core";
 import { errorMessage } from "../errors";
@@ -283,9 +284,9 @@ function Panel({
         </p>
       )}
       {problem && (
-        <p role="alert" data-testid="panel-problem" className="panel-subline">
+        <ProblemLine testId="panel-problem" className="px-3.5 pb-2">
           {problem}
-        </p>
+        </ProblemLine>
       )}
       {choosing && (
         <TemplateChoice

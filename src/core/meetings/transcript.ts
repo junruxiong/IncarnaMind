@@ -136,6 +136,14 @@ interface LiveStream {
   waiting?: Int16Array[];
 }
 
+interface Finishing {
+  stream: string;
+  reading: Reading;
+  /** Settles once its last lines are in, or it is dropped. */
+  done: Promise<void>;
+  drop(): void;
+}
+
 interface Live {
   stream: string;
   engine: "local" | CloudTranscriptionRoute;
@@ -148,8 +156,8 @@ interface Live {
   streams: Partial<Record<AudioSource, LiveStream>>;
   /** The microphone's streams opened since `stream` began: each pause ends one and the next audio starts another. */
   microphoneStreams: number;
-  /** Microphone streams ended by a pause, until their last lines are in. */
-  draining: Promise<void>[];
+  /** Microphone streams a pause ended, until their last lines are in: a closed gate drops them too. */
+  finishing: Finishing[];
   started: boolean;
   /** Audio waiting for the engine to start. */
   held: TrackedAudio[];
@@ -863,8 +871,11 @@ export function createTranscripts(options: TranscriptsOptions) {
       speaker: () => speakerOf("microphone", callSound),
     };
     state.catchUps.set(own.stream, reading);
-    const drained: Promise<void> = transcriber
-      .finish(own.stream)
+    let drop = () => {};
+    const dropped = new Promise<void>((resolve) => {
+      drop = resolve;
+    });
+    const done: Promise<void> = Promise.race([transcriber.finish(own.stream), dropped])
       .then(
         () => {
           if (reading.lost)
@@ -880,16 +891,22 @@ export function createTranscripts(options: TranscriptsOptions) {
       )
       .finally(() => {
         state.catchUps.delete(own.stream);
-        live.draining = live.draining.filter((each) => each !== drained);
+        live.finishing = live.finishing.filter((each) => each.done !== done);
         if (closed) return;
         writeLines(state);
         options.changed();
       });
-    live.draining.push(drained);
+    live.finishing.push({ stream: own.stream, reading, done, drop });
   }
 
   function dropStreams(live: Live): void {
     for (const own of Object.values(live.streams)) transcriber.drop(own.stream);
+    for (const each of live.finishing) {
+      transcriber.drop(each.stream);
+      // Its stretch is transcribed from the audio after Stop, as any stream lost is.
+      each.reading.lost = true;
+      each.drop();
+    }
   }
 
   function send(state: State, live: Live, audio: TrackedAudio): void {
@@ -989,7 +1006,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     for (const part of parts) {
       covered = addRange(covered, { fromMs: part.offsetMs, toMs: part.offsetMs + part.durationMs });
     }
-    const pauses = state.gaps.filter((gap) => gap.reason === "micPaused");
+    const pauses = state.gaps.filter((gap) => gap.reason === "muted");
     for (const pause of pauses) covered = addRange(covered, pause);
     let at = range.fromMs;
     for (const each of [...covered, { fromMs: range.toMs, toMs: range.toMs }]) {
@@ -1167,7 +1184,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     const done: Promise<void> = Promise.all([
       before,
       ...ending.map(({ stream }) => transcriber.finish(stream)),
-      ...live.draining,
+      ...live.finishing.map((each) => each.done),
     ])
       .then(
         () => {
@@ -1306,7 +1323,7 @@ export function createTranscripts(options: TranscriptsOptions) {
         tracks: createTracks(offsetMs),
         streams: {},
         microphoneStreams: 0,
-        draining: [],
+        finishing: [],
         started: false,
         held: [],
         pushedMs: offsetMs,
@@ -1348,12 +1365,11 @@ export function createTranscripts(options: TranscriptsOptions) {
       if (state?.live) feed(state, state.live.tracks.resumeMicrophone(atMs));
     },
 
-    /** The User's microphone was paused from `fromMs` to `toMs` in the Meeting's time: the Transcript marks the stretch. */
     markMicrophonePause(meetingId: string, fromMs: number, toMs: number): void {
       if (toMs <= fromMs) return;
       const state = load(meetingId);
       if (state.savedPath) return;
-      state.gaps.push({ fromMs, toMs, reason: "micPaused" });
+      state.gaps.push({ fromMs, toMs, reason: "muted" });
       writeLines(state, { now: true });
       options.changed();
     },

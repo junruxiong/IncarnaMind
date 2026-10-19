@@ -30,7 +30,7 @@ export interface Cue {
  * (#141), or the User paused their microphone (the other side's lines go on
  * through it).
  */
-export type GapReason = "restarted" | "sleep" | "interrupted" | "lost" | "cloud" | "micPaused";
+export type GapReason = "restarted" | "sleep" | "interrupted" | "lost" | "cloud" | "muted";
 
 export const GAP_REASONS: readonly GapReason[] = [
   "restarted",
@@ -38,7 +38,7 @@ export const GAP_REASONS: readonly GapReason[] = [
   "interrupted",
   "lost",
   "cloud",
-  "micPaused",
+  "muted",
 ];
 
 export interface TranscriptGap {
@@ -59,7 +59,7 @@ export const CUES_PER_BLOCK = 40;
 
 const TIMING =
   /^((?:\d{1,}:)?\d{2}:\d{2}\.\d{3})[ \t]+-->[ \t]+((?:\d{1,}:)?\d{2}:\d{2}\.\d{3})(?:[ \t].*)?$/;
-const GAP = /^NOTE gap ((?:\d+:)?\d{2}:\d{2}\.\d{3}) to ((?:\d+:)?\d{2}:\d{2}\.\d{3}) ([A-Za-z]+)$/;
+const GAP = /^NOTE gap ((?:\d+:)?\d{2}:\d{2}\.\d{3}) to ((?:\d+:)?\d{2}:\d{2}\.\d{3}) ([a-z]+)$/;
 const ENTITIES: Readonly<Record<string, string>> = {
   amp: "&",
   lt: "<",

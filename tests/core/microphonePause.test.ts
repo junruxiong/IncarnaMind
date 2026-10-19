@@ -42,21 +42,28 @@ const RESUMED_AT = 11_500;
  * A capture that `leaks` goes on sending microphone frames, as ones already on their way do.
  * The engine starts `at` the start of the call, as a model that loads slowly does at 14 s, or
  * only after Stop, when what was left is transcribed from the audio on disk. With `route`, the
- * streams go to the pretend cloud service the User chose, with their key.
+ * streams go to the pretend cloud service the User chose, with their key; its connections drop
+ * after `cloudDropsAfterMs` of audio, and `holdFinish` keeps the microphone's finished streams
+ * from answering until the call is over, as a service slow to say its last words does.
  */
 async function playCall({
   pause,
   leaks = false,
   at: engineStarts = "start",
   route,
+  cloudDropsAfterMs,
+  holdFinish = false,
 }: {
   pause: boolean;
   leaks?: boolean;
   at?: "start" | "14 s" | "stop";
   route?: "soniox";
+  cloudDropsAfterMs?: number;
+  holdFinish?: boolean;
 }) {
   const dataDir = await createTempDataFolder();
   const clock = manualClock();
+  const start = clock.now().toISOString();
   const captured: { sink: AudioSink | null } = { sink: null };
   const microphone = { on: true, switches: [] as boolean[] };
   const capture: AudioCapture = {
@@ -83,12 +90,23 @@ async function playCall({
     ready = resolve;
   });
   if (engineStarts === "start") ready();
-  const engine = inProcessTranscriber({}, async () => {
-    await loads;
-    return createFakeSpeechEngine();
-  });
+  const engine = inProcessTranscriber(
+    { ...(cloudDropsAfterMs !== undefined && { cloud: { dropAfterMs: cloudDropsAfterMs } }) },
+    async () => {
+      await loads;
+      return createFakeSpeechEngine();
+    },
+  );
   const pushed: Record<string, Int16Array[]> = {};
   const opened: string[] = [];
+  const finished: { stream: string; atMs: number; pushesBefore: number }[] = [];
+  const dropped: { stream: string; atMs: number }[] = [];
+  let answerFinishes = () => {};
+  const finishesMayAnswer = new Promise<void>((resolve) => {
+    answerFinishes = resolve;
+  });
+  const pushesTo = (stream: string) => pushed[stream]?.length ?? 0;
+  const callTime = () => Date.parse(clock.now().toISOString()) - Date.parse(start);
   const core = startCore(dataDir, {
     audioCapture: capture,
     transcriber: {
@@ -100,6 +118,15 @@ async function playCall({
       open(stream, cloud) {
         opened.push(stream);
         engine.transcriber.open(stream, cloud);
+      },
+      finish(stream) {
+        finished.push({ stream, atMs: callTime(), pushesBefore: pushesTo(stream) });
+        const answer = engine.transcriber.finish(stream);
+        return holdFinish ? answer.then(() => finishesMayAnswer) : answer;
+      },
+      drop(stream) {
+        dropped.push({ stream, atMs: callTime() });
+        engine.transcriber.drop(stream);
       },
     },
     transcriptionModelSource: NO_TRANSCRIPTION_FILES,
@@ -138,13 +165,25 @@ async function playCall({
     captured.sink?.audio("system", SYSTEM.slice(from, from + FRAME));
     await nextTurn();
   }
+  answerFinishes();
   await core.stopMeeting(id);
   ready();
   const saved = await until(core, id, (transcript) => transcript.state === "saved");
   if (!saved.savedPath) throw new Error("The Transcript wasn't saved.");
   const transcript = readVtt(readFileSync(saved.savedPath, "utf8"));
   const parts = listParts(meetingFolder(dataDir, id));
-  return { core, id, pushed, opened, microphone, heardByCapture, transcript, parts };
+  return {
+    core,
+    id,
+    pushed,
+    opened,
+    finished,
+    dropped,
+    microphone,
+    heardByCapture,
+    transcript,
+    parts,
+  };
 }
 
 type Played = Awaited<ReturnType<typeof playCall>>;
@@ -181,16 +220,25 @@ const said = (played: Played, speaker: string) =>
 
 const isMicrophone = (stream: string) => /:microphone(:\d+)?$/.test(stream);
 
+/** The first microphone stream was finished by the pause, and nothing was sent to it after that. */
+function expectFirstStreamFinishedAtThePause(played: Played) {
+  const first = Object.keys(played.pushed).find(isMicrophone);
+  const finish = played.finished.find((each) => each.stream === first);
+  expect(first).toBeDefined();
+  expect(finish).toBeDefined();
+  expect(finish?.atMs).toBeGreaterThanOrEqual(PAUSED_AT);
+  expect(finish?.atMs).toBeLessThan(RESUMED_AT);
+  expect(played.pushed[first ?? ""]?.length).toBe(finish?.pushesBefore);
+}
+
 describe("Pausing the microphone, in the capture pipeline, with recorded voices", () => {
   test("nothing from the microphone reaches the audio, the transcriber or the Transcript for the stretch, and the other side is recorded and transcribed as before", async () => {
     const baseline = await playCall({ pause: false });
     const paused = await playCall({ pause: true });
 
     expect(heardLive(paused)).toBe(true);
-    // The capture was told to stop the microphone at its source, and to start it again.
     expect(paused.microphone.switches).toEqual([false, true]);
 
-    // The microphone's audio on disk has the stretch missing, and nothing else.
     const micParts = paused.parts.filter((part) => part.source === "microphone");
     expect(micParts.length).toBeGreaterThan(0);
     for (const part of micParts) {
@@ -201,13 +249,12 @@ describe("Pausing the microphone, in the capture pipeline, with recorded voices"
       (paused.heardByCapture / RATE) * 1000,
     );
 
-    // The transcriber was sent the microphone's voice outside the stretch only: no silence for it either.
     const sentMicrophone = streamsOf(paused, "microphone").flat();
     expect(samplesIn(sentMicrophone)).toBeLessThanOrEqual(paused.heardByCapture + FRAME);
     expect(samplesIn(sentMicrophone)).toBeGreaterThanOrEqual(paused.heardByCapture - FRAME);
     expect(streamsOf(paused, "microphone").length).toBe(2);
+    expectFirstStreamFinishedAtThePause(paused);
 
-    // No "Me" line in the stretch; the line after it is the User's second answer.
     const me = said(paused, "Me");
     expect(me.length).toBeGreaterThan(0);
     for (const line of me) {
@@ -218,10 +265,9 @@ describe("Pausing the microphone, in the capture pipeline, with recorded voices"
       true,
     );
     expect(paused.transcript.gaps).toEqual([
-      { fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "micPaused" },
+      { fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "muted" },
     ]);
 
-    // The computer's sound: the same audio went to disk and to the transcriber, and the same lines came out.
     expect(partsHash(paused, "system")).toEqual(partsHash(baseline, "system"));
     expect(hashOf(streamsOf(paused, "system").flat())).toBe(
       hashOf(streamsOf(baseline, "system").flat()),
@@ -271,7 +317,7 @@ describe("Pausing the microphone, in the capture pipeline, with recorded voices"
     }
     expect(said(afterwards, "Me").length).toBeGreaterThan(0);
     expect(afterwards.transcript.gaps).toEqual([
-      { fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "micPaused" },
+      { fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "muted" },
     ]);
     expect(said(afterwards, "Them")).toEqual(said(baseline, "Them"));
   });
@@ -280,6 +326,7 @@ describe("Pausing the microphone, in the capture pipeline, with recorded voices"
 
     expect(Object.keys(paused.pushed).every((stream) => paused.opened.includes(stream))).toBe(true);
     expect(paused.opened.filter(isMicrophone).length).toBe(2);
+    expectFirstStreamFinishedAtThePause(paused);
     expect(paused.opened.filter((stream) => stream.endsWith(":system")).length).toBe(1);
     const sentMicrophone = samplesIn(streamsOf(paused, "microphone").flat());
     expect(sentMicrophone).toBeLessThanOrEqual(paused.heardByCapture + FRAME);
@@ -293,12 +340,35 @@ describe("Pausing the microphone, in the capture pipeline, with recorded voices"
       expect(line.startMs >= RESUMED_AT || line.endMs <= PAUSED_AT).toBe(true);
     }
     expect(paused.transcript.gaps).toEqual([
-      { fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "micPaused" },
+      { fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "muted" },
     ]);
     expect(paused.transcript.cues.filter((cue) => cue.speaker?.startsWith("Them")).length).toBe(
       (await playCall({ pause: false, route: "soniox" })).transcript.cues.filter((cue) =>
         cue.speaker?.startsWith("Them"),
       ).length,
     );
+  });
+  test("a cloud connection lost while the microphone's finished stream waits for its last words drops that stream too, and Stop still saves", async () => {
+    const lost = await playCall({
+      pause: true,
+      route: "soniox",
+      cloudDropsAfterMs: 8000,
+      holdFinish: true,
+    });
+
+    const first = Object.keys(lost.pushed).find(isMicrophone);
+    const drop = lost.dropped.find((each) => each.stream === first);
+    expect(drop).toBeDefined();
+    expect(drop?.atMs).toBeGreaterThanOrEqual(PAUSED_AT);
+    expect(drop?.atMs).toBeLessThan(RESUMED_AT);
+    expect(lost.transcript.gaps).toContainEqual({
+      fromMs: PAUSED_AT,
+      toMs: RESUMED_AT,
+      reason: "muted",
+    });
+    for (const line of said(lost, "Me")) {
+      expect(line.startMs >= RESUMED_AT || line.endMs <= PAUSED_AT).toBe(true);
+    }
+    expect(said(lost, "Me").some((line) => line.endMs <= PAUSED_AT)).toBe(true);
   });
 });

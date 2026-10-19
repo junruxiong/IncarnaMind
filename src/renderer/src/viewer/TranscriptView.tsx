@@ -33,7 +33,7 @@ import { ViewerHeader } from "./ViewerHeader";
 /** Within this of the bottom, the view follows new lines as they come. */
 const FOLLOW_PX = 48;
 
-const GAP_REASONS: Record<Exclude<GapReason, "micPaused">, MessageKey> = {
+const GAP_REASONS: Record<Exclude<GapReason, "muted">, MessageKey> = {
   restarted: "transcript.gap.restarted",
   sleep: "transcript.gap.sleep",
   interrupted: "transcript.gap.interrupted",
@@ -467,7 +467,7 @@ function TranscriptContent({
                     >
                       <span className="transcript-time">{paddedClockTime(row.gap.fromMs)}</span>
                       <span>
-                        {row.gap.reason === "micPaused" ? (
+                        {row.gap.reason === "muted" ? (
                           <>
                             <MicOffLineIcon className="mr-1.5 inline size-3.5 align-[-2px]" />
                             {t("meetings.mic.pausedSpan", {

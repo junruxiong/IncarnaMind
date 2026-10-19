@@ -34,7 +34,6 @@ async function shot(page: Page | Locator, name: string): Promise<void> {
 }
 
 const mac = process.platform === "darwin";
-/** The shortcut by default: ⌃⌥M on macOS, Ctrl+Shift+U elsewhere. */
 const MIC_KEYS = mac ? "Ctrl+Alt+M" : "Ctrl+Shift+U";
 const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Shift+U";
 
@@ -56,14 +55,12 @@ const capture = (app: ElectronApplication) =>
     return { running: fake.running, microphoneOn: fake.microphoneOn };
   });
 
-/** A meeting recording from both sides, its first line in. */
 async function recordingMeeting(window: Page): Promise<Locator> {
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   await expect(bar.getByTestId("meeting-transcript-toggle")).toBeEnabled({ timeout: 20_000 });
   return bar;
 }
 
-/** Runs a command from ⌘K by its name. */
 async function fromPalette(window: Page, name: string): Promise<void> {
   await window.keyboard.press("ControlOrMeta+k");
   await expect(window.getByTestId("palette-search")).toBeFocused();
@@ -114,13 +111,11 @@ async function pressedAfter(
   );
 }
 
-/** "12:05" read back, in ms. */
 const msOf = (clock: string) => {
   const [minutes = 0, seconds = 0] = clock.split(":").map(Number);
   return (minutes * 60 + seconds) * 1000;
 };
 
-/** Every line of the open Transcript: who said it, and where it starts, in ms. */
 const linesOf = (transcript: Locator) =>
   transcript.getByTestId("transcript-line").evaluateAll((items) =>
     items.map((item) => ({
@@ -129,13 +124,11 @@ const linesOf = (transcript: Locator) =>
     })),
   );
 
-/** What a mark in the Transcript says, apart from the time that starts its row. */
 const wordsOf = (row: Locator) => row.locator(":scope > :last-child");
 
-/** The stretches the Transcript marks, in ms, from its "My mic paused 12:05–12:40" rows. */
 async function marksOf(transcript: Locator): Promise<{ from: number; to: number }[]> {
   const texts = await transcript
-    .locator('[data-testid="transcript-gap"][data-reason="micPaused"]')
+    .locator('[data-testid="transcript-gap"][data-reason="muted"]')
     .allTextContents();
   return texts.flatMap((text) => {
     const found = /(\d+:\d\d)\s*–\s*(\d+:\d\d)/.exec(text);
@@ -143,7 +136,6 @@ async function marksOf(transcript: Locator): Promise<{ from: number; to: number 
   });
 }
 
-/** Every control sits inside the bar, on rows that hold their words. */
 async function expectBarHolds(bar: Locator): Promise<void> {
   await expect
     .poll(() =>
@@ -181,7 +173,6 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   const bar = await recordingMeeting(window);
   const mic = bar.getByTestId("meeting-mic");
 
-  // Beside the timer, before Pause: not pressed, and it says the other side is still recorded.
   await expect(mic).toHaveAttribute("aria-pressed", "false");
   await expect(mic).toHaveAccessibleName("Pause my mic");
   await expect(mic).toHaveAttribute(
@@ -208,8 +199,6 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   await expect(speakers.filter({ hasText: /^Them$/ }).first()).toBeVisible({ timeout: 20_000 });
   await shot(window, "mic-before-en");
 
-  // The button pauses it: pressed, named for what it is now, with the line in the bar and the
-  // live mark in the Transcript, each with Resume.
   expect(
     await pressedAfter(window, "meeting-mic", true, () => pointAndClick(window, mic)),
   ).toBeLessThan(100);
@@ -225,7 +214,6 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   await expect(bar).toHaveAttribute("data-status", "recording");
   await shot(window, "mic-paused-en");
 
-  // The other side is still recorded and transcribed; nothing of the User's comes meanwhile.
   await expect
     .poll(async () => {
       const lines = await linesOf(transcript);
@@ -233,7 +221,6 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
     }, LINES_WITHIN)
     .toBeGreaterThanOrEqual(2);
 
-  // ⌘K has the same words and the shortcut, and resumes it.
   await window.keyboard.press("ControlOrMeta+k");
   await window.keyboard.type("my mic");
   await expect(
@@ -247,11 +234,10 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   await expect(line).toBeHidden();
   await expect(open).toBeHidden();
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
-  const span = transcript.locator('[data-testid="transcript-gap"][data-reason="micPaused"]');
+  const span = transcript.locator('[data-testid="transcript-gap"][data-reason="muted"]');
   await expect(wordsOf(span)).toHaveText(/^My mic paused \d\d:\d\d–\d\d:\d\d$/);
   await shot(window, "mic-after-en");
 
-  // The shortcut, held only while recording, pauses it from another app.
   await pressHeldKeys(app, "mic");
   await expect(mic).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(false);
@@ -259,15 +245,12 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   await expect(mic).toHaveAttribute("aria-pressed", "false");
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
 
-  // The button works from the keyboard, too, and keeps the focus.
   await mic.focus();
   expect(
     await pressedAfter(window, "meeting-mic", true, () => window.keyboard.press("Enter")),
   ).toBeLessThan(100);
   await expect(mic).toBeFocused();
 
-  // Pause recording still stops both sides, and the keys go back to other apps; the microphone
-  // stays paused when recording goes on, and its button resumes it.
   await window.keyboard.press("ControlOrMeta+Shift+KeyP");
   await expect(bar).toHaveAttribute("data-status", "paused");
   await expect.poll(async () => (await capture(app)).running).toBe(false);
@@ -290,7 +273,6 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
     }, LINES_WITHIN)
     .toBeGreaterThanOrEqual(1);
 
-  // Stopped, the Transcript keeps its marks, and no Me line is inside one.
   await bar.getByTestId("meeting-stop").click();
   await expect(bar).toBeHidden();
   await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(false);
@@ -298,12 +280,11 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
     timeout: 20_000,
   });
   expect((await marksOf(transcript)).length).toBeGreaterThanOrEqual(3);
-  // In the saved file, to the millisecond: no Me line starts or runs into a stretch, the other side goes on.
   const [stopped] = await window.evaluate(() =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listMeetings(),
   );
   const { cues, gaps } = readVtt(readFileSync(stopped?.transcript?.savedPath ?? "", "utf8"));
-  const stretches = gaps.filter((gap) => gap.reason === "micPaused");
+  const stretches = gaps.filter((gap) => gap.reason === "muted");
   expect(stretches.length).toBe((await marksOf(transcript)).length);
   for (const { fromMs, toMs } of stretches) {
     expect(
@@ -316,8 +297,6 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
       .length,
   ).toBeGreaterThanOrEqual(2);
 
-  // A new meeting starts with the microphone on.
-  // The notice is read: Record starts at once.
   const second = await recordMeetingNow(window);
   const secondMic = second.getByTestId("meeting-mic");
   await expect(secondMic).toHaveAttribute("aria-pressed", "false");
@@ -376,13 +355,9 @@ test("Pause my mic in Chinese: the tooltips, the line, ⌘K and the mark in Chin
   await expect(wordsOf(transcript.getByTestId("transcript-gap"))).toHaveText(
     /^我的麦克风在 \d\d:\d\d–\d\d:\d\d 暂停$/,
   );
-  await expect(transcript.getByTestId("transcript-gap")).toHaveAttribute(
-    "data-reason",
-    "micPaused",
-  );
+  await expect(transcript.getByTestId("transcript-gap")).toHaveAttribute("data-reason", "muted");
   await shot(window, "mic-after-zh");
 
-  // ⌘K names it by what it does now.
   await window.keyboard.press("ControlOrMeta+k");
   await window.keyboard.type("麦克风");
   await expect(
@@ -426,7 +401,6 @@ test("Pause my mic in the floating panel: the header's button and the line under
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(false);
   await shot(panel.locator("body"), "mic-panel-paused-en");
 
-  // The line is under the header, and the header holds its controls in Chinese too.
   await setLanguage(window, "zh-CN");
   await expect(line).toHaveText(/^我的麦克风自 \d+:\d\d 起已暂停·恢复$/);
   await expect(mic).toHaveAttribute("title", `恢复我的麦克风（${MIC_LABEL}）`);
@@ -438,7 +412,6 @@ test("Pause my mic in the floating panel: the header's button and the line under
   expect(closeBox.x + closeBox.width).toBeLessThanOrEqual(header.x + header.width + 1);
   await shot(panel.locator("body"), "mic-panel-paused-zh");
 
-  // Resume, in the panel, resumes it in the bar and in the capture.
   await pointAndClick(panel, panel.getByTestId("panel-mic-resume"));
   await expect(line).toHaveCount(0);
   await expect(mic).toHaveAttribute("aria-pressed", "false");

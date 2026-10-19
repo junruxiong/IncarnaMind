@@ -7644,7 +7644,6 @@ export interface SetMeetingTemplateInput {
 
 export interface SetMeetingMicrophoneInput {
   meetingId: string;
-  /** True stops the microphone, as the User does when they mute themselves in the call; false starts it again. */
   paused: boolean;
 }
 
