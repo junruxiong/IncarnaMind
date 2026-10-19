@@ -3,15 +3,20 @@ import { TRANSCRIPTION_ROUTES, type TranscriptionRoute } from "../../../../core/
 import type { MessageKey } from "../../../../shared/i18n";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { useTranscriptionServicesList } from "../../transcriptionServices";
 
 export const ROUTE_LABELS: Record<TranscriptionRoute, MessageKey> = {
   local: "meetings.route.local",
+  openai: "meetings.route.openai",
+  soniox: "meetings.route.soniox",
 };
 
 /**
  * Where meeting audio is transcribed, one setting wherever it is shown (Settings › Models,
  * Settings › Meetings, the first-run list). Unchosen it reads as this computer, and choosing that
  * stores it: a choice made on purpose is not the same as none (the first meeting asks only for none).
+ * A cloud service is offered once there is a key for it (#141); choosing it is the consent to send
+ * it meeting audio.
  */
 export function TranscriptionRouteSelect({
   id,
@@ -42,6 +47,13 @@ export function TranscriptionRouteSelect({
   useEffect(() => {
     if (focusOnShow) field.current?.focus();
   }, [focusOnShow]);
+  const services = useTranscriptionServicesList();
+  const offered = TRANSCRIPTION_ROUTES.filter(
+    (each) =>
+      each === "local" ||
+      each === value ||
+      services.some((service) => service.route === each && service.hasKey),
+  );
   return (
     <select
       ref={field}
@@ -72,7 +84,7 @@ export function TranscriptionRouteSelect({
           {t(ROUTE_LABELS.local)}
         </option>
       )}
-      {TRANSCRIPTION_ROUTES.map((each) => (
+      {offered.map((each) => (
         <option key={each} value={each}>
           {t(ROUTE_LABELS[each])}
         </option>

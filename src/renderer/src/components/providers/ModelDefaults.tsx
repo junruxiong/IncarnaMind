@@ -11,6 +11,7 @@ import { useLanguage, useT } from "../../i18n";
 import { useModelNames } from "../../modelNames";
 import { useAppStore } from "../../store";
 import { TranscriptionRouteSelect } from "../meetings/TranscriptionRouteSelect";
+import { TranscriptionRouteConsent } from "../meetings/TranscriptionSettings";
 import { fieldClass, ruledListClass, sectionTitleClass } from "../ui";
 import { providerName } from "./ProviderPage";
 
@@ -147,6 +148,7 @@ export function ModelDefaults({
           <TranscriptionRouteSelect id={`${id}-meetings`} className={jobSelectClass} />
         </JobRow>
       </div>
+      <TranscriptionRouteConsent />
     </section>
   );
 }

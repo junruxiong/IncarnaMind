@@ -8,6 +8,7 @@ import { isLive, useMeetingOf, useMeetings } from "../meetings";
 import { clockTime } from "../meetingTime";
 import { useRequests } from "../requests";
 import { useAppStore } from "../store";
+import { useAudioKeptKey } from "../transcriptionServices";
 import { CaptureDetails, CaptureDetailsLine, CaptureProblem } from "./CaptureDetails";
 import { CloseLineIcon, RecordingLineIcon } from "./lineIcons";
 import { MeetingBar } from "./MeetingBar";
@@ -56,6 +57,7 @@ export function MeetingInMind({ mindId }: { mindId: string }) {
  */
 function MeetingStart({ meeting }: { meeting: Meeting }) {
   const t = useT();
+  const keptKey = useAudioKeptKey();
   const audioId = useId();
   const canRecord = useAppStore((state) => state.settings?.meetingAudio ?? "none");
   const [systemAudio, setSystemAudio] = useState(meeting.systemAudio);
@@ -151,7 +153,7 @@ function MeetingStart({ meeting }: { meeting: Meeting }) {
               </span>
             )}
           </p>
-          <p className="text-[12px] leading-[18px] text-ink-meta">{t("meetings.audio.kept")}</p>
+          <p className="text-[12px] leading-[18px] text-ink-meta">{t(keptKey)}</p>
         </div>
       </div>
       {problem && <ProblemLine testId="meeting-start-problem">{problem}</ProblemLine>}

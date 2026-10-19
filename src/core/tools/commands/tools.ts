@@ -22,7 +22,7 @@ import {
 import { TranslatableError } from "../../errors";
 import { COMMAND_TOOLS, type Tool, type ToolProviderInfo } from "../index";
 import { type Findable, type FindInput, find, foundLine, foundOf } from "./find";
-import { askOf } from "./policy";
+import { askOf, type CommandRename, renamesOf } from "./policy";
 import {
   type CheckedCommand,
   COMMAND_EXPORT_FORMATS,
@@ -74,6 +74,8 @@ export interface CommandToolsOptions {
   focusedMindId: string | null;
   /** The Run's instructions name a saved web page, whose title someone else wrote. */
   namesWebPage: boolean;
+  /** The renames of the Conversation's earlier Answers, oldest first (`renamesIn`). */
+  renames: readonly CommandRename[];
   /** The Run the calls are part of: its changes are one step of Undo in `steps`. */
   runId: string;
   steps: CommandSteps;
@@ -114,8 +116,7 @@ export function commandTools(options: CommandToolsOptions): {
   let changed = 0;
   /** Each call's share of `changed`, until it ran: one that fails changed nothing. */
   const counted = new Map<string, number>();
-  /** What the things the Answer renamed were called before it, by id. */
-  const before = new Map<string, string>();
+  const renames = [...options.renames];
   let readTitles = options.namesWebPage;
   // A model calls several at once: two that would each make the same Tag or Folder must not race.
   let turn: Promise<unknown> = Promise.resolve();
@@ -204,9 +205,7 @@ export function commandTools(options: CommandToolsOptions): {
       } finally {
         counted.delete(toolCallId);
       }
-      for (const item of ran.done.items) {
-        if (item.renamed !== undefined && !before.has(item.id)) before.set(item.id, item.name);
-      }
+      renames.push(...renamesOf(ran.done.items));
       if (ran.step) options.steps.add(options.runId, ran.step);
       options.ran(toolCallId, { ...ran.done, command: command.command, run: options.runId });
       return ran.said;
@@ -218,7 +217,7 @@ export function commandTools(options: CommandToolsOptions): {
     async check(toolCallId, input) {
       try {
         const command = await checkCommand(parseCommandInput(input), options.host);
-        const ask = askOf(command, { changed, before });
+        const ask = askOf(command, { changed, renames });
         checked.set(toolCallId, command);
         if (ask) asks.set(toolCallId, ask);
         else if (isAppCommand(command.command)) {

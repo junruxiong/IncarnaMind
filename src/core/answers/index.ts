@@ -145,6 +145,7 @@ import {
   type ToolProviderKind,
 } from "../tools";
 import type { Findable } from "../tools/commands/find";
+import { type CommandRename, renamesIn } from "../tools/commands/policy";
 import type { CommandsHost } from "../tools/commands/run";
 import type { CommandSteps } from "../tools/commands/steps";
 import { commandTools } from "../tools/commands/tools";
@@ -232,6 +233,8 @@ import {
   mindInstructions,
   signInNeededInstructions,
   skillInstructions,
+  skillLanguageNote,
+  skillSetsLanguage,
   sourcesInstructions,
   webInstructions,
   withPassageNotes,
@@ -856,7 +859,10 @@ export function createAnswers(options: AnswersOptions) {
       MindToolsOptions,
       "focused" | "folderId" | "origin" | "lastAnswer" | "remake"
     > &
-      RequestContext;
+      RequestContext & {
+        /** What the commands of the Conversation's earlier Answers renamed, oldest first. */
+        renames: readonly CommandRename[];
+      };
   }): void {
     const { home, answerId, model, context, forcedSkill } = input;
     const scoped = input.scoped ?? input.documentIds !== null;
@@ -1675,6 +1681,15 @@ export function createAnswers(options: AnswersOptions) {
       // the Documents' and the Skills'. A Connector's Tool asks the User first unless it needn't
       // (see `gate`).
       const provided: Tool[] = [];
+      // The Question's language stays the Answer's while the Skill it follows names none; a help
+      // button and a check have their own rules for it (#1273).
+      const keepsQuestionsLanguage = !help && input.toolSet !== "check";
+      let skillNamesNoLanguage = false;
+      const followed = <T extends { instructions: string }>(skill: T): T => {
+        skillNamesNoLanguage = !skillSetsLanguage(skill.instructions);
+        return skill;
+      };
+      if (forced) followed(forced);
       for (const provider of outside ? [] : options.toolProviders) {
         // Find sources' Tool only for a Question that asks for papers or other sources.
         if (provider.kind === "sources" && !asksForSources(context.question)) continue;
@@ -1837,6 +1852,7 @@ export function createAnswers(options: AnswersOptions) {
               focusedMindId: focusedId,
               namesWebPage: options.documents.searchableNames(documentIds, LISTED_DOCUMENTS)
                 .webPage,
+              renames: input.assistant.renames,
               runId: randomUUID(),
               steps: commands.steps,
               found: (toolCallId, found) => commandsFound.set(toolCallId, found),
@@ -1874,7 +1890,7 @@ export function createAnswers(options: AnswersOptions) {
           ? skillTools({
               loadable: listed.length > 0,
               useSkill: async (name) =>
-                loadedSkillText(await opened.load(name), { withFiles: true, scripts }),
+                loadedSkillText(followed(await opened.load(name)), { withFiles: true, scripts }),
               skill: (name) => opened.skill(name),
               readSkillFile: (skill, path) => opened.readFile(skill, path),
               ...(scripts && {
@@ -2004,6 +2020,9 @@ export function createAnswers(options: AnswersOptions) {
         gate,
         streamsInput,
         toolSet: input.toolSet ?? (help ? "documents" : undefined),
+        ...(keepsQuestionsLanguage && {
+          languageNote: () => (skillNamesNoLanguage ? skillLanguageNote(language) : null),
+        }),
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         structuredOutput: givesStructuredOutput(prepared.capabilities),
@@ -2425,6 +2444,7 @@ export function createAnswers(options: AnswersOptions) {
         followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
         lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier) !== null,
         remake,
+        renames: renamesIn(turn.earlier),
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };

@@ -579,6 +579,41 @@ describe("What the assistant's commands ask the User first (#1110)", {
     ]);
   });
 
+  // protects=a rename in one Answer and a delete in the next: the card still names the Document as the User knew it, and once that rename is undone, by its name now; fails_when=the card shows only the name an earlier Answer gave it, or an undone rename; no_claim=renames in other conversations.
+  test("the delete card follows the conversation's renames back to the name the User knew", async () => {
+    const turns: Record<string, Step[]> = {
+      Rename: [find("Lease"), run("document.rename", { name: "Empty duplicate" })],
+      Delete: [find("Empty duplicate"), run("document.delete")],
+      Remove: [find("Lease"), run("document.delete")],
+    };
+    const model = scriptedModel((call) => {
+      const asked = Object.keys(turns).findLast((word) => call.prompt.includes(`${word} it`));
+      const steps = turns[asked ?? ""] ?? [];
+      const made = call.results.filter((each) => /_commands?$/.test(each.tool)).length;
+      const step = steps[made];
+      return step ? { calls: [step(call.results)] } : { text: "Done." };
+    });
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const asked = deny(core);
+
+    const renamed = await askAssistant(core, { text: "Rename it", mindId: mind.id });
+    const conversationId = renamed.conversationId;
+    await askAssistant(core, { conversationId, text: "Delete it", mindId: mind.id });
+    await core.undoCommands(runOf(renamed));
+    await askAssistant(core, { conversationId, text: "Remove it", mindId: mind.id });
+
+    expect(asked.map((request) => "ask" in request && request.ask)).toEqual([
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({ name: "Lease Harbour Street", renamed: "Empty duplicate" }),
+        ],
+      }),
+      expect.objectContaining({
+        items: [{ kind: "document", id: expect.any(String), name: "Lease Harbour Street" }],
+      }),
+    ]);
+  });
+
   // protects=a stored "always" for a command, synced from elsewhere, never lets one run without asking; fails_when=an export elsewhere runs at once; no_claim=Connectors' and Skills' policies.
   test("a stored always policy for a command is never applied", async () => {
     const elsewhere = await createTempDataFolder();
