@@ -1,6 +1,10 @@
 // #892: the Answer follows the Question's language, and quoted words are never a translation.
 import { describe, expect, test } from "vitest";
-import { documentInstructions, mindInstructions } from "../../src/core/answers/prompt";
+import {
+  documentInstructions,
+  mindInstructions,
+  skillSetsLanguage,
+} from "../../src/core/answers/prompt";
 import {
   askAndFinish,
   citeFeedback,
@@ -186,5 +190,25 @@ describe("A translation inside quotation marks", () => {
     expect(citeFeedback(model)).toMatch(
       /the quote is a translation: copy it from P1 in the Passage's own language/,
     );
+  });
+});
+
+describe("A Skill that names a language (#1273)", () => {
+  test.each([
+    "Write the summary in French.",
+    "Answer in the language of the contract.",
+    "Reply in English whatever the Question says.",
+    "用中文写摘要。",
+    "Respond in Japanese.",
+  ])("is read as one: %s", (instructions) => {
+    expect(skillSetsLanguage(instructions)).toBe(true);
+  });
+
+  test.each([
+    "Summarize the tides in three bullet points.",
+    "Cite every figure with its page.",
+    "",
+  ])("and one that names none is not: %s", (instructions) => {
+    expect(skillSetsLanguage(instructions)).toBe(false);
   });
 });

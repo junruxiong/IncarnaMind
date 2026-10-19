@@ -223,6 +223,8 @@ import {
   mindInstructions,
   signInNeededInstructions,
   skillInstructions,
+  skillLanguageNote,
+  skillSetsLanguage,
   sourcesInstructions,
   webInstructions,
   withPassageNotes,
@@ -1591,6 +1593,15 @@ export function createAnswers(options: AnswersOptions) {
       // the Documents' and the Skills'. A Connector's Tool asks the User first unless it needn't
       // (see `gate`).
       const provided: Tool[] = [];
+      // The Question's language stays the Answer's while the Skill it follows names none; a help
+      // button and a check have their own rules for it (#1273).
+      const keepsQuestionsLanguage = !help && input.toolSet !== "check";
+      let skillNamesNoLanguage = false;
+      const followed = <T extends { instructions: string }>(skill: T): T => {
+        skillNamesNoLanguage = !skillSetsLanguage(skill.instructions);
+        return skill;
+      };
+      if (forced) followed(forced);
       for (const provider of outside ? [] : options.toolProviders) {
         // Find sources' Tool only for a Question that asks for papers or other sources.
         if (provider.kind === "sources" && !asksForSources(context.question)) continue;
@@ -1774,7 +1785,7 @@ export function createAnswers(options: AnswersOptions) {
           ? skillTools({
               loadable: listed.length > 0,
               useSkill: async (name) =>
-                loadedSkillText(await opened.load(name), { withFiles: true, scripts, language }),
+                loadedSkillText(followed(await opened.load(name)), { withFiles: true, scripts }),
               skill: (name) => opened.skill(name),
               readSkillFile: (skill, path) => opened.readFile(skill, path),
               ...(scripts && {
@@ -1867,7 +1878,7 @@ export function createAnswers(options: AnswersOptions) {
               asked.each,
               options.documents.searchableCount(documentIds),
             ),
-            skillInstructions(listed, forced, withSkillTools, scripts, language),
+            skillInstructions(listed, forced, withSkillTools, scripts),
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
@@ -1896,6 +1907,9 @@ export function createAnswers(options: AnswersOptions) {
         gate,
         streamsInput,
         toolSet: input.toolSet ?? (help ? "documents" : undefined),
+        ...(keepsQuestionsLanguage && {
+          languageNote: () => (skillNamesNoLanguage ? skillLanguageNote(language) : null),
+        }),
         thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         structuredOutput: givesStructuredOutput(prepared.capabilities),

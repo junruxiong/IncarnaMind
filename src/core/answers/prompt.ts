@@ -675,36 +675,37 @@ function skillFiles(files: readonly SkillFile[], scripts: boolean): string {
   ].join("\n");
 }
 
-/**
- * What a Skill's text says of the language, once it is loaded: it comes late in the
- * conversation, after the Passages, so whatever language those or the Skill are in must not
- * win over the Question's (#1273). `language` is the line `languageInstruction` made.
- */
-export function skillLanguageNote(language: string): string {
-  return `The Skill's instructions don't change the language of your Answer. ${language.replace(/^- /, "")}`;
-}
-
-/**
- * A Skill's instructions, as `use_skill` gives them, or as a forced Skill is loaded up front,
- * with the language the Answer is written in (#892) said again right after them.
- */
+/** A Skill's instructions, as `use_skill` gives them, or as a forced Skill is loaded up front. */
 export function loadedSkillText(
   skill: LoadedSkill,
-  {
-    withFiles,
-    scripts = false,
-    language,
-  }: { withFiles: boolean; scripts?: boolean; language?: string },
+  { withFiles, scripts = false }: { withFiles: boolean; scripts?: boolean },
 ): string {
   return [
     `<skill name="${attribute(skill.name)}">`,
     skill.instructions,
     "</skill>",
-    ...(language ? [skillLanguageNote(language)] : []),
     ...(withFiles ? [skillFiles(skill.files, scripts)] : []),
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+const NAMES_A_LANGUAGE =
+  /\blanguage\b|English|Chinese|Mandarin|Cantonese|Spanish|French|German|Japanese|Korean|Portuguese|Russian|Arabic|Italian|Hindi|语言|中文|英文|英语|日语|日文|法语|德语|西班牙语|韩语/i;
+
+/** Whether a Skill's instructions say which language to write in, so its choice stands (#1273). */
+export function skillSetsLanguage(instructions: string): boolean {
+  return NAMES_A_LANGUAGE.test(instructions);
+}
+
+/**
+ * Said after a search's Passages while the Answer follows a Skill that names no language: the
+ * Skill and the Passages both come after the instructions' own language line, and whatever
+ * language they are in must not win over the Question's (#1273). `language` is the line
+ * `languageInstruction` made.
+ */
+export function skillLanguageNote(language: string): string {
+  return `The Skill's instructions don't change the language of your Answer. ${language.replace(/^- /, "")}`;
 }
 
 const SCRIPTS =
@@ -721,17 +722,12 @@ export function skillInstructions(
   forced: LoadedSkill | null,
   skillTools: boolean,
   scripts = false,
-  language?: string,
 ): string {
   const parts: string[] = [];
   if (forced) {
     parts.push(
       `For this Question the User chose the Skill "${forced.name}": follow its instructions.`,
-      loadedSkillText(forced, {
-        withFiles: skillTools,
-        scripts: skillTools && scripts,
-        ...(language && { language }),
-      }),
+      loadedSkillText(forced, { withFiles: skillTools, scripts: skillTools && scripts }),
     );
   }
   if (skillTools && listed.length > 0) {

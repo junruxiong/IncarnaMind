@@ -369,6 +369,8 @@ export interface AnswerRequest {
   streamsInput?(tool: Tool): boolean;
   /** Which Tools the Run is offered. Absent: "answer", every Tool. */
   toolSet?: ToolSet;
+  /** What a search says of the Answer's language after its Passages (see `DocumentToolsHooks`). */
+  languageNote?(): string | null;
   /**
    * The Run counts as having read third-party text from its start: its
    * Question context holds some, or (a check Run) it reads the document it
@@ -1288,6 +1290,8 @@ interface DocumentToolsHooks {
   failed?(toolCallId: string, error: unknown): void;
   /** The model gave these records: the engine places their markers if it leaves them out. */
   cited(records: readonly CitationRecordInput[]): void;
+  /** What to say of the Answer's language after a search's Passages, if anything, asked for each search. */
+  languageNote?(): string | null;
 }
 
 /**
@@ -1350,7 +1354,9 @@ export function documentTools(
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount, found.passageIds);
         // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
-        return withPassageNotes(result.text, documents.unreadDocuments?.() ?? []);
+        const passages = withPassageNotes(result.text, documents.unreadDocuments?.() ?? []);
+        const note = hooks.languageNote?.();
+        return note ? `${passages}\n\n${note}` : passages;
       },
     },
     cite: {
@@ -1471,6 +1477,7 @@ async function* toolLoop(
             },
             failed: (toolCallId, error) => failures.set(toolCallId, classifyProviderError(error)),
             cited: (records) => cited.push(...records),
+            ...(request.languageNote && { languageNote: request.languageNote }),
           },
           request.toolSet,
         )
