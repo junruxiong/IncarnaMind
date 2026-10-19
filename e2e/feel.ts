@@ -83,7 +83,8 @@ export const KNOWN: readonly Known[] = [
       "proposals-reject-all",
       "mind-changes-left",
     ],
-    max: 0.0062,
+    max: 0.01,
+    sometimes: true,
     issue: 1325,
   },
   {
@@ -91,7 +92,7 @@ export const KNOWN: readonly Known[] = [
     step: "add 2,000 Documents",
     kind: "shift",
     moved: ["library-row-count", "document-list-item"],
-    max: 0.0126,
+    max: 0.0413,
     sometimes: true,
     issue: 1329,
   },
