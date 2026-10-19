@@ -291,15 +291,17 @@ test("a Linked folder's layout, Folders or a flat list, is chosen when linking a
 
   const row = linkedFolderRow(window, "storage");
   const documents = linkedRows(window);
+  // All 20 in Not in a Folder, which lists the first five, then "Show 15 more".
+  const loose = window.getByTestId("not-in-a-folder");
   await expect(row).toHaveAttribute("data-layout", "tree");
-  await expect(documents).toHaveCount(20);
+  await expect(loose).toHaveAttribute("data-count", "20");
   await expect(documents.first()).toHaveAttribute("data-depth", "0");
 
   // A flat list, from its menu; its row stays one row, and its files where they were.
   let menu = await openLinkedFolderMenu(row);
   await menu.getByTestId("linkedFolder.layout").click();
   await expect(row).toHaveAttribute("data-layout", "flat");
-  await expect(documents).toHaveCount(20);
+  await expect(loose).toHaveAttribute("data-count", "20");
   await screenshot(window.getByTestId("sidebar"), "row-flat");
 
   // And back.

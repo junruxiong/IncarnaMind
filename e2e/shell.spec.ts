@@ -334,9 +334,9 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
   const papers = linkedFolderRow(window, "Papers");
   await expect(papers).toHaveAttribute("data-state", "indexing");
   await showSourceLocations(window);
-  // Its files' rows come in, in Not in a Folder, as they are found and read: measured once ten
-  // rows are there.
-  await expect.poll(() => treeRows(window).count()).toBeGreaterThanOrEqual(10);
+  // Its files' rows come in, in Not in a Folder, as they are found and read: measured once its
+  // first five are listed there, beside the three Linked folders' rows.
+  await expect.poll(() => treeRows(window).count()).toBeGreaterThanOrEqual(8);
   await expectRowsAligned(window);
   await screenshot(window, "linked-folders-indexing", sidebar());
 

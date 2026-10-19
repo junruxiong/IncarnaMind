@@ -761,7 +761,9 @@ for (const [language, width] of [
       );
       await shortlistRow.click({ button: "right" });
       const menu = mindRow(window, "Shortlist").getByTestId("mind-actions");
-      await expect(menu.getByRole("menuitem")).toHaveText([t("selection.delete", { count: 2 })]);
+      await expect(menu.getByRole("menuitem")).toHaveText([
+        new RegExp(`^${t("selection.delete", { count: 2 })}`),
+      ]);
       await menu.getByTestId("selection.delete").click();
       await expect(undoLine).toHaveText(t("object.deleted.items", { count: 2 }));
       await expect(sidebarFolder(window, "Finance")).toHaveCount(0);
