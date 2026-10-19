@@ -589,7 +589,7 @@ const JOBS = {
     ready: "“Ollama”可以使用了",
     title: "各项任务使用的模型",
     change: "更改",
-    meetings: "在本机",
+    meetings: "在这台电脑上",
     noReader: "还没有能读图的模型",
     changeQuick: "更改快速任务",
   },
