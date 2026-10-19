@@ -480,8 +480,8 @@ for (const [language, width] of [
     await expect(window.getByTestId("check-card").getByTestId("health-unsupported")).toBeVisible();
     await motionSettled(window);
 
+    await expect.poll(async () => (await places()).length).toBeGreaterThan(0);
     const seen = await places();
-    expect(seen.length).toBeGreaterThan(0);
     expect(seen.every(({ x, y }) => x === seen[0]?.x && y === seen[0]?.y)).toBe(true);
   });
 }
