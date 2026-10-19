@@ -55,7 +55,7 @@ const LANGUAGES = {
     found: /Quote found/,
     notFound: /Quote not found/,
     contradicted: /Contradicted/,
-    cantCheck: /Can't check/,
+    cantCheck: /Can’t check/,
     marks: ["Supported", "Unsupported", "Contradicted", "Supported"].map(
       (state) => `Sentence check: ${state}`,
     ),

@@ -354,7 +354,7 @@ test("a sentence past the most one write checks says why, in English and Chinese
   for (const [language, reason, now] of [
     [
       "en",
-      "Not checked yet: only the first 12 cited sentences are checked as they're written",
+      "Not checked yet: only the first 12 cited sentences are checked as they’re written",
       "Check now",
     ],
     ["zh-CN", "尚未核对：写入时只核对前 12 句带引用的话", "立即核对"],

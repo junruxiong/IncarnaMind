@@ -5,7 +5,7 @@ describe("The court decision card's words", () => {
   test("when no Document holds the decision", () => {
     expect(translate("en", "claim.courtDecision.title")).toBe("This cites a court decision.");
     expect(translate("en", "claim.courtDecision.body")).toBe(
-      "IncarnaMind can't check that this case exists or says this. Check it in your legal research service before you rely on it.",
+      "IncarnaMind can’t check that this case exists or says this. Check it in your legal research service before you rely on it.",
     );
     expect(translate("zh-CN", "claim.courtDecision.title")).toBe("本句引用了法院判决。");
     expect(translate("zh-CN", "claim.courtDecision.body")).toBe(
@@ -39,7 +39,7 @@ describe("The court decision card's words", () => {
 
   test("when a Supported sentence cites a case in no Document: the card line and the export's short form", () => {
     expect(translate("en", "claim.citedCaseUnchecked")).toBe(
-      "Not checked: the cited case isn't in your Documents. Check it in your legal research service before you rely on it.",
+      "Not checked: the cited case isn’t in your Documents. Check it in your legal research service before you rely on it.",
     );
     expect(translate("zh-CN", "claim.citedCaseUnchecked")).toBe(
       "未核对：引用的判决不在你的文档中。依赖前请在你的法律数据库中查证。",

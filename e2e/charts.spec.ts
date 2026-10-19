@@ -63,7 +63,7 @@ const WORDS = {
     source: "values, each quoted from Acme",
     uncited: "1 with no Citation",
     noCitation: "No Citation",
-    noUnit: "1 cell has no unit, so it isn't drawn",
+    noUnit: "1 cell has no unit, so it isn’t drawn",
     noUnitCard: "No unit, so not drawn",
     noUnitNote: "no unit",
     uncitedSeveral: "3 with no Citation",
