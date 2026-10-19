@@ -2344,6 +2344,8 @@ export const en = {
   "composer.scope.all": "All Documents",
   "composer.scope.allLabel": "Search scope: all your Documents. Limit it (@)",
   "composer.scope.allTitle": "Searches all your Documents. Type @ to limit it",
+  "composer.scope.allEmptyFolder":
+    "“{folder}” has no Documents yet, so all your Documents are searched. Type @ to limit it",
   "composer.scope.change": "{name}. Change the Search scope (@)",
   "composer.skills.label": "Skills",
   "composer.skills.manage": "Manage Skills…",

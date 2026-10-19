@@ -3,7 +3,7 @@
  * read the same way by the core, which resolves it when the Question is asked,
  * and by the editor, which shows it as chips.
  */
-import type { QuestionAttributes, SearchScope } from "../core/api";
+import type { Document, QuestionAttributes, SearchScope } from "../core/api";
 
 /** What a Search scope can name. */
 export type ScopeKind = "folder" | "tag" | "document";
@@ -54,3 +54,28 @@ export function scopeIds(scope: SearchScope, kind: ScopeKind): string[] {
 export function hasSearchScope(scope: SearchScope): boolean {
   return scope.folderIds.length + scope.tagIds.length + scope.documentIds.length > 0;
 }
+
+/** Whether a Document counts among a Folder's or a Tag's: it is there, and has text to search or soon will. */
+export const holdsText = (document: Pick<Document, "status" | "fileStatus">): boolean =>
+  document.fileStatus !== "missing" &&
+  document.status !== "failed" &&
+  document.status !== "no-text";
+
+/**
+ * A Mind's own Search scope (#1359): its Folder while the Folder holds a Document, else every
+ * Document, so a Mind filed into an empty Folder still searches what the User has.
+ */
+export const ownSearchScope = (
+  folderId: string | null,
+  folderHoldsDocuments: boolean,
+): SearchScope => ({
+  folderIds: folderId !== null && folderHoldsDocuments ? [folderId] : [],
+  tagIds: [],
+  documentIds: [],
+});
+
+/** Whether a Search scope is that one Folder and nothing else: a Mind's own, when it is the Mind's. */
+export const isOnlyFolder = (scope: SearchScope, folderId: string): boolean =>
+  scope.folderIds.length === 1 &&
+  scope.folderIds[0] === folderId &&
+  scope.tagIds.length + scope.documentIds.length === 0;

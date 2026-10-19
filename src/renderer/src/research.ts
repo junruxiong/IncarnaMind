@@ -18,8 +18,9 @@ import type {
 } from "../../core/api";
 import { MAX_RESEARCH_STEPS } from "../../shared/research";
 import { searchesTheWeb } from "../../shared/webSearch";
-import { composerScope, useComposer } from "./composer";
+import { searchedScope, useComposer } from "./composer";
 import { core } from "./core";
+import { folderHoldsDocuments } from "./scopeDocuments";
 import { useAppStore } from "./store";
 import { useTasks } from "./tasks";
 
@@ -235,8 +236,13 @@ export async function startResearch(
   if (!card || card.starting || card.planning) return false;
   const steps = stepsOf(card);
   if (steps.length === 0) return false;
-  const folderId = useAppStore.getState().minds.find((each) => each.id === mindId)?.folderId;
-  const scope = composerScope(useComposer.getState().draft(mindId), folderId ?? null);
+  const state = useAppStore.getState();
+  const folderId = state.minds.find((each) => each.id === mindId)?.folderId ?? null;
+  const scope = searchedScope(
+    useComposer.getState().draft(mindId),
+    folderId,
+    folderHoldsDocuments(state, folderId),
+  );
   updatePlan(mindId, { starting: true, problem: null });
   try {
     const result = await core.startResearch({

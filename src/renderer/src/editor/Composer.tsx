@@ -29,6 +29,7 @@ import {
   isLongPaste,
   NO_MIND,
   type Paste,
+  searchedScope,
   useComposer,
 } from "../composer";
 import {
@@ -53,6 +54,7 @@ import {
   useWebReach,
 } from "../research";
 import type { ScopeChoice } from "../scope";
+import { folderHoldsDocuments, useFolderHoldsDocuments } from "../scopeDocuments";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { tellTask, useTasks } from "../tasks";
@@ -138,7 +140,11 @@ export function Composer({
   const folderId = useAppStore(
     (state) => state.minds.find((each) => each.id === mindId)?.folderId ?? null,
   );
-  const scope = composerScope(draft, folderId);
+  const folderHolds = useFolderHoldsDocuments(folderId);
+  const folderName = useAppStore(
+    (state) => state.library?.groups.find((each) => each.id === folderId)?.name ?? null,
+  );
+  const scope = searchedScope(draft, folderId, folderHolds);
   // The Mind in focus changes under the one composer: what was typed with no Mind goes with the
   // User into the Mind that opens, whose draft is empty; the rest of its state starts over.
   const was = useRef(key);
@@ -409,7 +415,11 @@ export function Composer({
         text: paste.text,
       });
       const now = useComposer.getState().draft(key);
-      const nowScope = composerScope(now, folderId);
+      const nowScope = searchedScope(
+        now,
+        folderId,
+        folderHoldsDocuments(useAppStore.getState(), folderId),
+      );
       const ids = scopeIds(nowScope, "document");
       update({
         pastes: now.pastes.filter((each) => each.id !== paste.id),
@@ -493,7 +503,11 @@ export function Composer({
       mindId,
       text,
       focus: selection.focus(),
-      scope: composerScope(current, folderId),
+      scope: searchedScope(
+        current,
+        folderId,
+        folderHoldsDocuments(useAppStore.getState(), folderId),
+      ),
       model: mind ? mindModelOf(mind.doc) : useComposer.getState().modelWithoutMind,
       forcedSkill: draft.skill,
     });
@@ -874,7 +888,11 @@ export function Composer({
               type="button"
               data-testid="composer-scope-all"
               aria-label={t("composer.scope.allLabel")}
-              title={t("composer.scope.allTitle")}
+              title={
+                folderName !== null && !folderHolds
+                  ? t("composer.scope.allEmptyFolder", { folder: folderName })
+                  : t("composer.scope.allTitle")
+              }
               onClick={openScopePicker}
               className="composer-chip composer-scope-all"
             >

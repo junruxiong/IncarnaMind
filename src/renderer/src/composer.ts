@@ -2,7 +2,7 @@ import type { Editor } from "@tiptap/core";
 import type * as Y from "yjs";
 import { create } from "zustand";
 import type { ChatModelChoice, SearchScope } from "../../core/api";
-import { hasSearchScope } from "../../shared/searchScope";
+import { hasSearchScope, ownSearchScope } from "../../shared/searchScope";
 
 /** What the composer holds for one Mind until it is asked: the text, the Search scope and a Skill. */
 export interface Draft {
@@ -52,6 +52,17 @@ export const folderScope = (folderId: string | null): SearchScope =>
  */
 export const composerScope = (draft: Draft, folderId: string | null): SearchScope =>
   draft.scope ?? folderScope(folderId);
+
+/**
+ * What the composer's next Question searches (#1359): the scope the User chose, else the Mind's
+ * own (`ownSearchScope`), its Folder while that holds a Document and every Document while it
+ * holds none. `composerScope` keeps the Folder for what isn't a search, such as a new note.
+ */
+export const searchedScope = (
+  draft: Draft,
+  folderId: string | null,
+  folderHoldsDocuments: boolean,
+): SearchScope => draft.scope ?? ownSearchScope(folderId, folderHoldsDocuments);
 
 /**
  * The scope to keep for a Mind once the User changes it: null (the Mind's

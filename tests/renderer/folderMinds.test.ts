@@ -6,7 +6,12 @@ import type {
   LibrarySnapshot,
   Mind,
 } from "../../src/core/api";
-import { chosenScope, composerScope, NO_SCOPE } from "../../src/renderer/src/composer";
+import {
+  chosenScope,
+  composerScope,
+  NO_SCOPE,
+  searchedScope,
+} from "../../src/renderer/src/composer";
 import {
   movedLocally,
   moveMessage,
@@ -91,6 +96,16 @@ describe("the composer's Search scope", () => {
     });
     // In no Folder, nothing chosen is the Mind's own: it follows the Mind into one.
     expect(chosenScope(NO_SCOPE, null)).toBeNull();
+  });
+
+  // protects=a Mind filed into a Folder with no Documents searches every Document, as its chip shows, until the Folder holds one; a scope the User chose stays (#1359); fails_when=the next Question searches the empty Folder, or a chosen scope widens; no_claim=what the core searches, which tests/core/ownSearchScope.test.ts covers.
+  test("a Mind's own Folder with no Documents searches every Document until it holds one", () => {
+    expect(searchedScope(draft, "contracts", false)).toEqual(NO_SCOPE);
+    expect(searchedScope(draft, "contracts", true).folderIds).toEqual(["contracts"]);
+    // A new note still goes into the Mind's Folder.
+    expect(composerScope(draft, "contracts").folderIds).toEqual(["contracts"]);
+    const chosen = { folderIds: ["contracts"], tagIds: ["urgent"], documentIds: [] };
+    expect(searchedScope({ ...draft, scope: chosen }, "contracts", false)).toEqual(chosen);
   });
 });
 

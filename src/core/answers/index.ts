@@ -63,7 +63,7 @@ import {
   recordProposalRequest,
   resolveProposals,
 } from "../../shared/proposals";
-import { hasSearchScope, searchScopeOf } from "../../shared/searchScope";
+import { hasSearchScope, isOnlyFolder, searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
@@ -378,11 +378,16 @@ export interface CellAnswer {
 
 /** No Search scope: every Document. */
 /** Tells the model its Question's Search scope holds no Documents, so it answers from what it has (#748). */
-const EMPTY_SCOPE_NOTE =
-  "The User limited this Question to a Search scope (Folders, Tags or Documents) that holds no Documents, so there is nothing to search. Answer from the Mind you read, the conversation and the request itself. If the Answer needs the User's Documents, say so plainly in one sentence: do not guess what they hold.";
+/**
+ * With nothing to search, a model wrote what a Document says, uncited, into the User's Mind and
+ * blamed its Tools (#1359): it is told why there is no search, and what to do instead.
+ */
+const NOTHING_TO_CITE =
+  "That is why no Tool searches or cites Documents in this Answer; none failed, so never say a Tool is unavailable. Answer from the Mind you read, the conversation and the request itself. When the request needs what a Document says (to quote, cite, summarise or compare it), write nothing into a Mind and never state what a Document says: answer in one sentence, in the User's language, giving that reason.";
 
-const NO_DOCUMENTS_NOTE =
-  "The User has added no Documents of their own (the examples IncarnaMind made aren't theirs), so there is nothing to search. Answer from the Mind you read, the conversation and the request itself. If the Answer needs the User's Documents, say so plainly in one sentence: do not guess what they hold.";
+const EMPTY_SCOPE_NOTE = `The User limited this Question to a Search scope (Folders, Tags or Documents) that holds no Documents, so there is nothing to search. ${NOTHING_TO_CITE} The line under your Answer offers to search all their Documents instead.`;
+
+const NO_DOCUMENTS_NOTE = `The User has added no Documents of their own (the examples IncarnaMind made aren't theirs), so there is nothing to search. ${NOTHING_TO_CITE} They can add Documents to the Library.`;
 
 const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
@@ -477,6 +482,8 @@ export interface AnswersOptions {
    * Mind; null: every Document.
    */
   unscopedDocuments?(mindId: string | null): string[] | null;
+  /** Whether an in-app Folder holds a Document (`holdsText`): a Mind's own scope is it only then (#1359). */
+  folderHoldsDocuments(folderId: string): boolean;
   /** The Document a Mind imported from Word was also added as (#720); null for none. */
   workingCopyOf?(mindId: string): string | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
@@ -2457,6 +2464,19 @@ export function createAnswers(options: AnswersOptions) {
     return documents > 0 && documents < total ? { documents, total } : null;
   };
 
+  /**
+   * What a Question asked in the assistant searches: the scope as asked, but the Mind's own Folder
+   * gives way to every Document while it holds none (#1359), as the composer shows it. A Mind
+   * filed into an empty Folder would otherwise search nothing.
+   */
+  const searchedScope = (scope: SearchScope | null, folderId: string | null) =>
+    scope !== null &&
+    folderId !== null &&
+    isOnlyFolder(scope, folderId) &&
+    !options.folderHoldsDocuments(folderId)
+      ? null
+      : scope;
+
   /** The Documents of a Search scope as it is now, and whether it covers none to search. */
   const scopeNow = (scope: SearchScope | null, mindId: string | null) => {
     const documentIds =
@@ -2617,9 +2637,10 @@ export function createAnswers(options: AnswersOptions) {
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
       // From here on nothing awaits, so the conversation and the Mind can't change underneath.
-      const { documentIds, emptyScope } = scopeNow(question.scope, question.mind?.id ?? null);
+      const scope = searchedScope(question.scope, question.mind?.folderId ?? null);
+      const { documentIds, emptyScope } = scopeNow(scope, question.mind?.id ?? null);
       const mind = mindToRead(question.mind?.id ?? null, question.focus, question.text);
-      const turn = options.conversations.add(question, ready.model, readOf(mind));
+      const turn = options.conversations.add({ ...question, scope }, ready.model, readOf(mind));
       return startInConversation(turn, ready, documentIds, emptyScope, mind);
     },
 

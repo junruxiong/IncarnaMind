@@ -1,7 +1,23 @@
 import { useEffect, useState } from "react";
 import type { SearchScope } from "../../core/api";
 import { core } from "./core";
-import { useAppStore } from "./store";
+import { type ScopeLibrary, scopeCounts } from "./scope";
+import { type AppState, useAppStore } from "./store";
+
+const libraryOf = (state: AppState): ScopeLibrary => ({
+  folders: state.folders,
+  groups: state.library?.groups,
+  tags: state.tags,
+  documents: state.documents,
+  assignments: state.library?.assignments,
+});
+
+/** Whether an in-app Folder holds a Document now, as its chip counts them (#1359). */
+export const folderHoldsDocuments = (state: AppState, folderId: string | null): boolean =>
+  folderId !== null && (scopeCounts(libraryOf(state)).get(folderId) ?? 0) > 0;
+
+export const useFolderHoldsDocuments = (folderId: string | null): boolean =>
+  useAppStore((state) => folderHoldsDocuments(state, folderId));
 
 /**
  * Whether a Search scope holds no Document that can be searched now (#748):
