@@ -845,6 +845,8 @@ export function createCore(adapters: CoreAdapters): Core {
   if (documents.searchableCount() > 0) rerank.prepare();
   /** Set once outside agents exist: Local mode pauses them. */
   let agentsLocalModeChanged = () => {};
+  /** Where meeting audio may go changed: a live cloud stream whose gate closed stops now (#141). */
+  let transcriptionGateChanged = () => {};
   /** Set once Connectors exist: Local mode pauses those on other computers. */
   let connectorsLocalModeChanged = () => {};
   /**
@@ -862,6 +864,7 @@ export function createCore(adapters: CoreAdapters): Core {
         () => new LocalModeError(),
       );
     }
+    transcriptionGateChanged();
     if (wasLocal !== embedding.localOnly()) {
       usageData.localModeChanged();
       privacyChanged();
@@ -2660,6 +2663,7 @@ export function createCore(adapters: CoreAdapters): Core {
     meter,
     localOnly: () => embedding.localOnly(),
     providerKey: (catalogId) => chat.apiKeyOf(catalogId),
+    log: adapters.log ?? silentLogger,
     ...(adapters.transcriptionKeyFetch && { fetch: adapters.transcriptionKeyFetch }),
     vadFile: async () => {
       if (!transcriptionModel) throw new Error("This copy can't transcribe.");
@@ -2750,6 +2754,7 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
+  transcriptionGateChanged = () => transcripts?.recheckCloud();
   meetingHelpOf = (mindId, question) => {
     const meeting = meetings.liveOf(mindId);
     if (!meeting) return null;
@@ -3101,7 +3106,10 @@ export function createCore(adapters: CoreAdapters): Core {
       const languageWas = settings.get().language;
       const updated = settings.update(change);
       // Choosing a cloud service where its line says meeting audio goes to it is the consent (ADR-0022).
-      if (route !== undefined) cloudTranscription.chose(updated.device.transcriptionRoute);
+      if (route !== undefined) {
+        cloudTranscription.chose(updated.device.transcriptionRoute);
+        transcriptionGateChanged();
+      }
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
@@ -3324,12 +3332,17 @@ export function createCore(adapters: CoreAdapters): Core {
     listChatProviders: () => chat.list(),
     saveChatProvider: async (input) => {
       const provider = await chat.save(input);
+      await cloudTranscription.refreshKeys();
+      transcriptionGateChanged();
       settingsChanged();
       await dataFlowsChanged();
       return provider;
     },
     deleteChatProvider: async (id) => {
       await chat.delete(id);
+      // A transcription route that used this provider's key has none now.
+      await cloudTranscription.refreshKeys();
+      transcriptionGateChanged();
       settingsChanged();
       await readinessChanged();
     },
@@ -3515,6 +3528,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     revokeConsent: async (flowId, serviceId) => {
       consent.revoke(flowId, serviceId);
+      if (typeof flowId === "string" && typeof serviceId === "string") {
+        cloudTranscription.revoked(flowId, serviceId);
+      }
+      transcriptionGateChanged();
+      settingsChanged();
       await dataFlowsChanged();
     },
     listRegisteredDataFlows: () => consent.listRegistered(),
@@ -3934,7 +3952,8 @@ export function createCore(adapters: CoreAdapters): Core {
     setTranscriptionKey: (input) => cloudTranscription.setKey(input),
     removeTranscriptionKey: async (route) => {
       const listed = await cloudTranscription.removeKey(route);
-      events.emit("settings.changed", settings.get());
+      transcriptionGateChanged();
+      settingsChanged();
       return listed;
     },
     openAudioSettings: (source) => meetings.openSettings(source),

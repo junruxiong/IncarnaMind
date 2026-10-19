@@ -12,6 +12,8 @@ export interface CloudStreamReport {
   progress(doneMs: number): void;
   /** It ended before it was finished; nothing more is reported. */
   lost(loss: CloudLoss): void;
+  /** The service is ready for audio. */
+  opened(): void;
 }
 
 export interface CloudStreamHandle {

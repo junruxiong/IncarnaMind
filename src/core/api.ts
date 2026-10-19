@@ -7653,11 +7653,16 @@ export interface MeetingTranscript {
   /** The cloud service transcribing the live audio now (#141); null: this computer. */
   cloud: CloudTranscriptionRoute | null;
   /**
-   * The cloud service the User chose stopped while this stretch of recording went on, and this
-   * computer took over: where, in the Meeting's time, and why ("dropped": the connection was
-   * lost or the service refused; "cap": the month's spending reached the cap). Null otherwise.
+   * This computer took over from the cloud service the User chose, during this stretch of
+   * recording: where, in the Meeting's time, and why. "dropped": the connection was lost;
+   * "refused": the service didn't accept the key; "cap": the month reached the cap;
+   * "local-mode": “Keep everything on this computer” is on. Null otherwise.
    */
-  fellBack: { route: CloudTranscriptionRoute; atMs: number; reason: "dropped" | "cap" } | null;
+  fellBack: {
+    route: CloudTranscriptionRoute;
+    atMs: number;
+    reason: "dropped" | "refused" | "cap" | "local-mode";
+  } | null;
   /** The WebVTT file in the Output location, once saved. */
   savedPath: string | null;
   /** Its save took the default Output location, none being chosen yet (`SavedFile.defaulted`). */

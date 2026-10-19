@@ -16,8 +16,8 @@ export const SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket";
 
 /** A line this long ends even without a pause, so its final text never waits long. */
 const LONGEST_LINE_MS = 20_000;
-/** The key is wrong, the account has no balance, or it may not use the service. */
-const REFUSALS = new Set([401, 402, 403]);
+/** The key is wrong, or may not use the service. */
+const REFUSALS = new Set([401, 403]);
 
 interface Token {
   text: string;
@@ -64,6 +64,7 @@ export function createSonioxStream(options: CloudStreamOptions): CloudStreamHand
 
   const socket = options.connect(SONIOX_URL, options.apiKey, {
     open() {
+      if (ended) return;
       socket.send(
         JSON.stringify({
           model: options.model,
@@ -78,6 +79,7 @@ export function createSonioxStream(options: CloudStreamOptions): CloudStreamHand
       started = true;
       clearTimeout(connectTimer);
       for (const audio of waiting.splice(0)) socket.send(audio);
+      report.opened();
     },
     message: heard,
     closed() {
@@ -93,6 +95,8 @@ export function createSonioxStream(options: CloudStreamOptions): CloudStreamHand
 
   function end(): void {
     ended = true;
+    // What waited for the connection is never sent once the stream has ended.
+    waiting.length = 0;
     clearTimeout(connectTimer);
     if (finishTimer) clearTimeout(finishTimer);
     finishing?.resolve();
@@ -149,7 +153,10 @@ export function createSonioxStream(options: CloudStreamOptions): CloudStreamHand
       return;
     }
     if (typeof message.error_code === "number") {
-      if (REFUSALS.has(message.error_code)) refused = true;
+      refused = REFUSALS.has(message.error_code);
+      end();
+      socket.close();
+      report.lost(refused ? "refused" : "dropped");
       return;
     }
     const tokens = (Array.isArray(message.tokens) ? message.tokens : [])

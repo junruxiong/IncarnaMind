@@ -707,6 +707,11 @@ export interface TranscriberListener {
   switched(change: EngineSwitch): void;
   /** A cloud stream ended before it was finished (see `CloudLoss`): its audio not yet transcribed is lost. */
   lost(stream: string, loss: CloudLoss): void;
+  /**
+   * A cloud stream's connection is ready for audio. The core holds the stream's audio until
+   * then, so what the User stops before it opens never leaves the core.
+   */
+  opened(stream: string): void;
 }
 
 export interface EngineSwitch {

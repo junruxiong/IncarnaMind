@@ -34,8 +34,9 @@ const KEPT_MS = 2000;
 const MIN_TURN_MS = 100;
 /** The languages a Meeting is expected in: the app's two. */
 const LANGUAGES = ["en", "zh"];
-/** Errors that mean the key or the account can't be used, not a passing fault. */
-const REFUSALS = new Set(["invalid_api_key", "insufficient_quota", "account_deactivated"]);
+/** Errors that end the stream: the key refused, or the service won't take more for now. */
+const REFUSALS = new Set(["invalid_api_key", "account_deactivated"]);
+const STOPS = new Set([...REFUSALS, "insufficient_quota", "rate_limit_exceeded"]);
 
 interface Turn {
   id: number;
@@ -121,6 +122,7 @@ export function createOpenAiStream(
 
   const socket = options.connect(OPENAI_TRANSCRIPTION_URL, options.apiKey, {
     open() {
+      if (ended) return;
       socket.send(
         JSON.stringify({
           type: "session.update",
@@ -151,6 +153,8 @@ export function createOpenAiStream(
 
   function end(): void {
     ended = true;
+    // What waited for the connection is never sent once the stream has ended.
+    waiting.length = 0;
     clearTimeout(connectTimer);
     if (finishTimer) clearTimeout(finishTimer);
     finishing?.resolve();
@@ -218,6 +222,7 @@ export function createOpenAiStream(
         ready = true;
         clearTimeout(connectTimer);
         for (const message of waiting.splice(0)) socket.send(message);
+        report.opened();
         return;
       }
       case "input_audio_buffer.committed": {
@@ -270,7 +275,12 @@ export function createOpenAiStream(
       }
       case "error": {
         const code = event.error?.code;
-        if (typeof code === "string" && REFUSALS.has(code)) refused = true;
+        if (typeof code !== "string" || !STOPS.has(code)) return;
+        // The service may keep the socket open after it, transcribing nothing.
+        refused = REFUSALS.has(code);
+        end();
+        socket.close();
+        report.lost(refused ? "refused" : "dropped");
         return;
       }
     }

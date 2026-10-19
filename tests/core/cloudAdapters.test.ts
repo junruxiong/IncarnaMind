@@ -91,7 +91,9 @@ function collect() {
   const segments: SpeechSegment[] = [];
   const progress: number[] = [];
   const losses: CloudLoss[] = [];
+  const opened = { count: 0 };
   return {
+    opened,
     segments,
     progress,
     losses,
@@ -100,6 +102,9 @@ function collect() {
       segment: (each: SpeechSegment) => segments.push(each),
       progress: (doneMs: number) => progress.push(doneMs),
       lost: (loss: CloudLoss) => losses.push(loss),
+      opened: () => {
+        opened.count++;
+      },
     },
   };
 }
@@ -174,6 +179,8 @@ describe("OpenAI's live transcription, played back as it was recorded", () => {
     expect(appended / 24_000).toBeGreaterThan(30);
     expect(appended / 24_000).toBeLessThan(36);
     expect(heard.losses).toEqual([]);
+    // Ready for audio once the session is set up, not merely connected.
+    expect(heard.opened.count).toBe(1);
   });
 
   test("each turn's final text is its own completed transcript, at the time its speech was heard; partial text comes first", async () => {
@@ -284,7 +291,7 @@ describe("Soniox's real-time transcription, played back as it was recorded", () 
   }
 
   test("starts with its settings, then sends the audio as it comes, and an empty frame to end it", async () => {
-    const { service, finished } = run(soniox.messages);
+    const { service, heard, finished } = run(soniox.messages);
     await finished;
     expect(service.url).toBe("wss://stt-rt.soniox.com/transcribe-websocket");
     expect(JSON.parse(service.sent[0] as string)).toEqual({
@@ -300,6 +307,7 @@ describe("Soniox's real-time transcription, played back as it was recorded", () 
     // What came before the connection opened went first, then the rest.
     expect(audio.reduce((sum, each) => sum + each.byteLength, 0)).toBe(2 * RATE * 2);
     expect(service.sent.at(-1)).toBe("");
+    expect(heard.opened.count).toBe(1);
   });
 
   test("a line ends where the service heard a pause, with who said it; its words in English and Chinese as sent", async () => {
