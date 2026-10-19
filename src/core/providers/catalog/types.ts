@@ -77,14 +77,19 @@ export type Role = "answers" | "strongest" | "quickTasks" | "images" | "tagging"
 export interface DataUse {
   /**
    * Whether it may train its models on API data: "no"; "opt-out" (it may,
-   * unless the User turns it off); "free-tier" (on a free plan only);
-   * "unknown" (it depends on the server, or its terms don't say).
+   * unless the User turns it off or agrees otherwise in writing); "free-tier"
+   * (on a free plan only); "unknown" (it depends on the server, or its terms
+   * don't say).
    */
   training: "no" | "opt-out" | "free-tier" | "unknown";
   /** One plain line, shown where the User picks the provider. */
   summary: Localized;
   /** The provider's own page on it (terms, privacy policy or data-retention page), when there is one place for it; shown as "Data use". */
   url?: string;
+  /** The page to open from the Chinese interface, when `url` is English only and the provider has one in Chinese. */
+  zhUrl?: string;
+  /** Other pages of the provider that a claim in `summary` rests on, for the next re-read; the app doesn't show them. */
+  sources?: readonly string[];
 }
 
 export type ProviderOptions = Record<string, Record<string, unknown>>;
