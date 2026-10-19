@@ -16,9 +16,12 @@ import { useTabPlace } from "./tabs/tabItems";
 export function TranscriptLines({
   meeting,
   className = "meeting-line",
+  over = false,
 }: {
   meeting: Meeting;
   className?: string;
+  /** In the meeting bar, a line that comes and goes with the engine hangs below the bar, so the page never moves. */
+  over?: boolean;
 }) {
   const t = useT();
   const place = useTabPlace();
@@ -115,11 +118,12 @@ export function TranscriptLines({
     line = { text: t("meetings.transcript.empty"), role: "status" };
   }
   if (!line) return null;
+  const hangs = over && (state === "preparing" || state === "behind" || state === "finishing");
   return (
     <ProblemLine
       testId="meeting-transcript-line"
       role={line.role}
-      className={className}
+      className={hangs ? `${className} meeting-line-over` : className}
       action={line.action}
       also={line.also}
     >

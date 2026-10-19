@@ -138,54 +138,49 @@ test("the first time, Redo after the take-back does nothing: a Mind with no Meet
   await app.close();
 });
 
-test("Record moves nothing on the new Mind's page when its bar comes: the room is kept from the first paint", async () => {
-  const { app, window } = await launchApp(dataDir);
-  await dismissChatSetup(window);
-  await readNotice(window);
-  await window.evaluate(() => {
-    const frames: { top: number; stage: string; lines: number }[] = [];
-    (globalThis as unknown as { frames: typeof frames }).frames = frames;
-    const tick = () => {
-      const editor = document.querySelector('[data-testid="mind-editor"]');
-      const bar = document.querySelector('[data-testid="meeting-bar"]');
-      const stage = bar
-        ? "bar"
-        : document.querySelector('[data-testid="meeting-bar-room"]')
-          ? "room"
-          : document.querySelector('[data-testid="meeting-start"]')
-            ? "start"
-            : "";
-      if (editor && stage) {
-        const lines = [...(bar?.children ?? [])]
-          .filter((child) => child.getAttribute("data-testid") !== "meeting-controls")
-          .reduce((sum, child) => sum + child.getBoundingClientRect().height + 2, 0);
-        frames.push({ top: Math.round(editor.getBoundingClientRect().top), stage, lines });
-      }
+for (const width of [900, 1100, 1440]) {
+  test(`Record moves nothing on the new Mind's page, from the click to a settled bar, at ${width}px`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    await setWindowSize(app, window, width, 900);
+    await dismissChatSetup(window);
+    await readNotice(window);
+    await window.evaluate(() => {
+      const frames: { top: number; stage: string }[] = [];
+      (globalThis as unknown as { frames: typeof frames }).frames = frames;
+      const tick = () => {
+        const editor = document.querySelector('[data-testid="mind-editor"]');
+        const stage = document.querySelector('[data-testid="meeting-bar"]')
+          ? "bar"
+          : document.querySelector('[data-testid="meeting-bar-room"]')
+            ? "room"
+            : document.querySelector('[data-testid="meeting-start"]')
+              ? "start"
+              : "";
+        if (editor && stage)
+          frames.push({ top: Math.round(editor.getBoundingClientRect().top), stage });
+        requestAnimationFrame(tick);
+      };
       requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
+    });
+
+    await pointAndClick(window, window.getByTestId("plus-menu"));
+    await pointAndClick(window, window.getByTestId("plus-more"));
+    await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+    await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
+    await expect(window.getByTestId("meeting-bar-room")).toHaveCount(0);
+    // The engine's "starting" line is done by now, or still hanging below the bar.
+    await expect(window.getByTestId("meeting-transcript-line")).toHaveCount(0);
+
+    const frames = await window.evaluate(
+      () => (globalThis as unknown as { frames: { top: number; stage: string }[] }).frames,
+    );
+    expect(frames.some((frame) => frame.stage === "room")).toBe(true);
+    expect(frames.filter((frame) => frame.stage === "start")).toEqual([]);
+    const tops = frames.map((frame) => frame.top);
+    expect(Math.max(...tops) - Math.min(...tops), JSON.stringify(frames)).toBeLessThanOrEqual(1);
+    await app.close();
   });
-
-  await pointAndClick(window, window.getByTestId("plus-menu"));
-  await pointAndClick(window, window.getByTestId("plus-more"));
-  await pointAndClick(window, window.getByTestId("plus-record-meeting"));
-  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
-  await expect(window.getByTestId("meeting-bar-room")).toHaveCount(0);
-
-  const frames = await window.evaluate(
-    () =>
-      (globalThis as unknown as { frames: { top: number; stage: string; lines: number }[] }).frames,
-  );
-  expect(frames.some((frame) => frame.stage === "room")).toBe(true);
-  // The start block never shows between the room and the bar, and the text stays where it was
-  // but for the bar's own status lines, which come with the transcript's engine.
-  expect(frames.filter((frame) => frame.stage === "start")).toEqual([]);
-  const room = frames.find((frame) => frame.stage === "room")?.top ?? 0;
-  for (const frame of frames) {
-    expect(Math.abs(frame.top - frame.lines - room), JSON.stringify(frames)).toBeLessThanOrEqual(1);
-  }
-  await app.close();
-});
+}
 
 test("once a recording has run and stopped, ⌘Z never takes its Meeting or audio back", async () => {
   const { app, window } = await launchApp(dataDir);

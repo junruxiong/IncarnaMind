@@ -15,7 +15,6 @@ interface MeetingsState {
   problems: Readonly<Record<string, string>>;
   /** The Meeting whose Start waits for the User to read the one-time recording notice. */
   noticeFor: { meetingId: string; systemAudio: boolean } | null;
-  /** The Meetings a Record is starting, by id, until they record: their Mind keeps the bar's room meanwhile. */
   starting: Readonly<Record<string, true>>;
   /** Record was chosen where this copy can't record audio: the sidebar's footer says so until it is dismissed. */
   cantRecord: boolean;

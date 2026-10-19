@@ -2002,10 +2002,21 @@
     background: var(--color-sheet);
     font-family: var(--font-sans);
   }
-  /* The bar's room (its border, padding and one row of controls) while a Record starts, so the text doesn't move when it comes. */
   .meeting-bar-room {
-    height: 42px;
-    margin: 0 -16px 24px;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  /* Hangs in the 24px the bar keeps below it, over no text. */
+  .meeting-bar .meeting-line-over {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 2px;
+    padding: 0 16px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .meeting-line {
     padding: 0 4px 2px;
