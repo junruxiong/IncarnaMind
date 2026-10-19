@@ -51,7 +51,8 @@ export function MeetingNoticeDialog() {
           </p>
           <p className={dialogTextClass}>{t("meetings.notice.tell")}</p>
         </div>
-        <TranscriptionRouteChoice />
+        {/* Mounted as the sheet opens, so it reads the keys as they are now. */}
+        {waiting && <TranscriptionRouteChoice />}
         <div className={dialogActionsClass}>
           <button type="button" onClick={cancelNotice} className={buttonClass}>
             {t("meetings.notice.cancel")}
