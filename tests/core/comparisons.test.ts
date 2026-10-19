@@ -2,21 +2,11 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
 import * as Y from "yjs";
-import {
-  type CitationAttributes,
-  type Core,
-  type CoreEvents,
-  InvalidInputError,
-  MIND_CONTENT_FIELD,
-} from "../../src/core";
+import { type CitationAttributes, InvalidInputError, MIND_CONTENT_FIELD } from "../../src/core";
 import { CLOUD_CELLS_AT_ONCE } from "../../src/core/comparisons";
 import { readBlocks } from "../../src/core/mindText";
-import {
-  answerEnded,
-  type ShownPassage,
-  setUpWithDocuments,
-  shownPassages,
-} from "../helpers/citations";
+import { answerEnded, setUpWithDocuments } from "../helpers/citations";
+import { cellModel, compare, fillEnded } from "../helpers/comparisons";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
 import { footnotesOf, part, textOf, unzip } from "../helpers/docx";
@@ -32,12 +22,7 @@ import {
   shownWithAiText,
   writeMind,
 } from "../helpers/minds";
-import {
-  type ModelCall,
-  type ScriptedReply,
-  scriptedModel,
-  scriptedModels,
-} from "../helpers/models";
+import { scriptedModels } from "../helpers/models";
 
 /** Three suppliers' terms, a line each. */
 const CORVANE =
@@ -51,69 +36,6 @@ const SUPPLIERS = [
   { name: "Halvard.txt", contents: HALVARD },
   { name: "Lumeric.txt", contents: LUMERIC },
 ];
-
-/** What a cell's request asks: its Question, and the Document its row is. */
-function cellAsked(call: ModelCall): { question: string; document: string } {
-  const user = call.options.prompt
-    .filter((message) => message.role === "user")
-    .map((message) =>
-      typeof message.content === "string"
-        ? message.content
-        : message.content.map((part) => ("text" in part ? part.text : "")).join(""),
-    )
-    .join("\n");
-  return {
-    question: user.split("\n\n").at(-1) ?? "",
-    document: /its row is the Document "([^"]+)"/.exec(user)?.[1] ?? "",
-  };
-}
-
-/** The line of a Passage that shares a word of four letters or more with the Question. */
-function lineFor(passages: readonly ShownPassage[], question: string) {
-  const words = question
-    .toLowerCase()
-    .split(/\W+/)
-    .filter((word) => word.length >= 4);
-  for (const passage of passages) {
-    for (const line of passage.text.split("\n")) {
-      if (words.some((word) => line.toLowerCase().includes(word))) return { passage, line };
-    }
-  }
-  return null;
-}
-
-/**
- * A model that writes cells as a careful one does: it searches the Question,
- * cites the line that answers it and answers with that line, or replies
- * NOT_FOUND when the Document has none. `before` may answer a request first.
- */
-function cellModel(
-  before?: (call: ModelCall, asked: ReturnType<typeof cellAsked>) => ScriptedReply | null,
-) {
-  return scriptedModel((call) => {
-    const asked = cellAsked(call);
-    const early = before?.(call, asked);
-    if (early) return early;
-    const searches = call.results.filter((result) => result.tool === "search_documents");
-    if (searches.length === 0) {
-      return { calls: [{ tool: "search_documents", input: { query: asked.question } }] };
-    }
-    const found = lineFor(shownPassages(searches.at(-1)?.text ?? ""), asked.question);
-    if (!found) return { text: "NOT_FOUND" };
-    if (!call.results.some((result) => result.tool === "cite")) {
-      return {
-        calls: [
-          {
-            tool: "cite",
-            input: { citations: [{ marker: 1, passage: found.passage.id, quote: found.line }] },
-          },
-        ],
-      };
-    }
-    const value = (found.line.split(": ")[1] ?? found.line).replace(/\.$/, "");
-    return { text: `${value} [^1]` };
-  });
-}
 
 interface ShownCell {
   status: string;
@@ -153,33 +75,6 @@ function tableIn(client: MindClient) {
     proposal: found.attrs.proposal as { kind: string } | null,
     rows,
   };
-}
-
-/** Resolves once the table's fill has ended. */
-const fillEnded = (core: Core, tableId: string) =>
-  new Promise<void>((resolve) => {
-    const stop = core.on("comparison.filling", (event) => {
-      if (event.tableId === tableId && !event.filling) {
-        stop();
-        resolve();
-      }
-    });
-  });
-
-/** Asks for a comparison table and waits for it to fill. */
-async function compare(
-  core: Core,
-  client: MindClient,
-  input: Parameters<Core["compareDocuments"]>[0],
-) {
-  const filling: CoreEvents["comparison.filling"][] = [];
-  const stop = core.on("comparison.filling", (event) => filling.push(event));
-  const result = await core.compareDocuments(input);
-  if (!result.started) throw new Error(`The table wasn't made: ${JSON.stringify(result)}`);
-  if (filling.at(-1)?.filling !== false) await fillEnded(core, result.tableId);
-  stop();
-  await client.settled();
-  return result.tableId;
 }
 
 /** A core with a cloud model billed per token, allowed to be sent to, and the suppliers' terms added. */
