@@ -418,10 +418,19 @@ describe("making a Mind", () => {
 
   const top = () => useUndo.getState().done.at(-1);
 
-  test("is one change, resolved to, which Undo sends to Recently deleted and Redo brings back", async () => {
+  test("one with no name leaves no line and nothing to undo, as Delete takes it back", async () => {
     const change = await useAppStore.getState().createMind();
+    expect(change).toBeUndefined();
+    expect(top()).toBeUndefined();
+    expect(useUndo.getState().line).toBeNull();
+    expect(method("openMind")).not.toHaveBeenCalled();
+  });
+
+  test("one started with a name is one change, which Undo sends to Recently deleted and Redo brings back", async () => {
+    method("createMind").mockResolvedValue({ ...made, title: "Tides" });
+    const change = await useAppStore.getState().createMind({ title: "Tides" });
     expect(change).toBe(top());
-    expect(said(change)).toBe("Made a new Mind");
+    expect(said(change)).toBe("Started “Tides”");
     expect(named(change)).toBe("New Mind");
     await useUndo.getState().undo();
     expect(method("deleteMind")).toHaveBeenCalledWith("n");
@@ -439,20 +448,6 @@ describe("making a Mind", () => {
     await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
     expect(said(top())).toBe("已新建“Tides”");
     expect(named(top())).toBe("新建 Mind");
-    method("createMind").mockResolvedValue(made);
-    await useAppStore.getState().createMind();
-    expect(said(top())).toBe("已新建 Mind");
-  });
-
-  test("its line follows a switch of language, and Undo still works", async () => {
-    await useAppStore.getState().createMind();
-    expect(said(top())).toBe("Made a new Mind");
-    expect(named(top())).toBe("New Mind");
-    useAppStore.setState({ settings: { language: "zh-CN" } as never });
-    expect(said(top())).toBe("已新建 Mind");
-    expect(named(top())).toBe("新建 Mind");
-    await useUndo.getState().undo();
-    expect(method("deleteMind")).toHaveBeenCalledWith("n");
   });
 
   test("a line with a name in it follows a switch of language, the name cut as before", async () => {
@@ -483,12 +478,12 @@ describe("making a Mind", () => {
   test("asking about Documents makes a Mind only when there is none to ask in", async () => {
     const scope = { folderIds: [], tagIds: [], documentIds: ["a"] };
     const bridge = { kind: "documents" as const, title: "a", count: 1, scope };
-    const change = await useAppStore.getState().askAbout(bridge);
-    expect(said(change)).toBe("Made a new Mind");
-    useUndo.setState({ done: [], undone: [], line: null });
-    useAppStore.setState({ minds: [made] });
-    expect(await useAppStore.getState().askAbout(bridge)).toBeUndefined();
+    await useAppStore.getState().askAbout(bridge);
+    expect(method("createMind")).toHaveBeenCalledTimes(1);
     expect(useUndo.getState().done).toEqual([]);
+    useAppStore.setState({ minds: [made] });
+    await useAppStore.getState().askAbout(bridge);
+    expect(method("createMind")).toHaveBeenCalledTimes(1);
   });
 });
 

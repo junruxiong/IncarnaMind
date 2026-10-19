@@ -18,6 +18,8 @@ import { UNDO_SHOWN_MS, type UndoLineState, useUndo } from "../undo";
 
 const lineClass =
   "mx-2 flex min-w-0 shrink-0 gap-1 pt-0.5 pb-1 pl-2 text-[12px] leading-4 text-ink-secondary";
+const changeLineClass =
+  "mx-2 min-w-0 shrink-0 pt-0.5 pb-1 pl-2 text-[12px] leading-4 text-ink-secondary";
 const actionClass =
   "h-6 shrink-0 rounded-md px-1 text-[12px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink";
 
@@ -142,7 +144,6 @@ function ChangeLine({
   line: RefObject<HTMLDivElement | null>;
 }) {
   const { within } = said;
-  const message = useRef<HTMLSpanElement>(null);
   const [columns, setColumns] = useState(NAME_IN_LINE_COLUMNS);
   const [, measureAgain] = useReducer((times: number) => times + 1, 0);
   const language = useLanguage();
@@ -152,12 +153,16 @@ function ChangeLine({
     setColumns(NAME_IN_LINE_COLUMNS);
   }
 
-  // After every render, as the room can change without the columns.
+  // After every render, as the room can change without the columns. The whole line is measured:
+  // "· Undo" goes with the message's last word, so it can push that word to a line of its own.
   useLayoutEffect(() => {
-    const element = message.current;
+    const element = line.current;
     if (!element || columns <= LEAST_NAME_COLUMNS) return;
     const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
-    if (element.getBoundingClientRect().height > lineHeight * MAX_LINES + 1) {
+    const padding =
+      Number.parseFloat(getComputedStyle(element).paddingTop) +
+      Number.parseFloat(getComputedStyle(element).paddingBottom);
+    if (element.getBoundingClientRect().height - padding > lineHeight * MAX_LINES + 1) {
       setColumns(columns - 2);
     }
   });
@@ -180,20 +185,15 @@ function ChangeLine({
 
   const shown = within(columns);
   const whole = said.fullMessage ?? said.message;
+  // No-break spaces join the message's last word, the dot and Undo, so a wrapped line never leaves
+  // "· Undo" alone at the end of its second line.
   return (
-    <div ref={line} className={`${lineClass} items-end`}>
-      <span
-        ref={message}
-        data-testid="undo-message"
-        title={shown === whole ? undefined : whole}
-        className="min-w-0 break-words"
-      >
+    <div ref={line} className={`${changeLineClass} break-words`}>
+      <span data-testid="undo-message" title={shown === whole ? undefined : whole}>
         {shown}
       </span>
-      <span aria-hidden="true" className="shrink-0">
-        ·
-      </span>
-      <span className="-my-1 flex shrink-0">{undo}</span>
+      <span aria-hidden="true">{"\u00A0·\u00A0"}</span>
+      <span className="-my-1 inline-block align-middle">{undo}</span>
     </div>
   );
 }

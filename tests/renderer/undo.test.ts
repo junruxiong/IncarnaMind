@@ -216,14 +216,14 @@ describe("the lines follow the interface language", () => {
   test("a line made in English reads in Chinese once the language switches, and Undo still works", async () => {
     const log: string[] = [];
     push({
-      said: (t) => t("undo.mindMade"),
+      said: (t) => t("undo.mindStarted", { name: "Tides" }),
       undo: async () => {
         log.push("undo");
       },
     });
-    expect(shown()).toBe("Made a new Mind");
+    expect(shown()).toBe("Started “Tides”");
     language = "zh-CN";
-    expect(shown()).toBe("已新建 Mind");
+    expect(shown()).toBe("已新建“Tides”");
     await undo();
     expect(log).toEqual(["undo"]);
   });

@@ -61,8 +61,9 @@ export function deleted(
 }
 
 /**
- * A Mind made: undone by sending it to Recently deleted, as deleting it does, done again by
- * bringing it back as it is, with what was written in it since. One with a title is said by its name.
+ * A Mind started with a title, from Documents or a Folder: undone by sending it to Recently
+ * deleted, as deleting it does, done again by bringing it back as it is, with what was written in
+ * it since.
  */
 export function mindMade(
   shown: string,
@@ -70,7 +71,7 @@ export function mindMade(
   bringBack: () => Promise<unknown>,
 ): Undoable {
   return {
-    said: (t) => (shown ? t("undo.mindStarted", { name: shown }) : t("undo.mindMade")),
+    said: (t) => t("undo.mindStarted", { name: shown }),
     name: (t) => t("menu.newMind"),
     undo: async () => {
       await remove();

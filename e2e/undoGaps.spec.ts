@@ -127,17 +127,33 @@ async function startWithADocument(language: "en" | "zh-CN" = "en") {
   return running;
 }
 
-test("Ask about a Document with no Mind to ask in, Start a Mind from it, New Mind here, ⌘N and +: each is taken back to Recently deleted by ⌘Z and made again by ⇧⌘Z, twice over", async () => {
+/** A Mind with no name leaves no line and nothing to undo: Delete takes it back. */
+async function madeQuietly(window: Page, make: () => Promise<void>): Promise<void> {
+  const before = await mindIds(window);
+  await make();
+  await expect.poll(async () => (await mindIds(window)).length).toBe(before.length + 1);
+  await expect(undoMessage(window)).toHaveCount(0);
+  await leaveText(window);
+  await undo(window);
+  expect((await mindIds(window)).length).toBe(before.length + 1);
+  expect(await deletedMindIds(window)).toHaveLength(0);
+}
+
+test("Ask about a Document with no Mind to ask in, New Mind here, ⌘N and +: each makes a Mind with no line and nothing for ⌘Z to take back; Start a Mind from a Document says its name and is taken back and made again, twice over", async () => {
   const { window } = await startWithADocument();
-  const made = "Made a new Mind";
 
   // With no Mind, asking about a Document makes one.
-  const asked = await madeBy(
-    window,
-    () => documentMenuCommand(window, "Tides", "document.ask"),
-    made,
-  );
-  await takenBackAndMadeAgain(window, asked, made);
+  await madeQuietly(window, () => documentMenuCommand(window, "Tides", "document.ask"));
+
+  const finance = sidebarFolder(window, "Finance");
+  await madeQuietly(window, async () => {
+    await finance.getByTestId("folder-row").click({ button: "right" });
+    await finance.getByTestId("folder.newMind").click();
+  });
+  expect(await read(window, async (core) => (await core.listMinds()).length)).toBe(2);
+
+  await madeQuietly(window, () => window.keyboard.press("ControlOrMeta+n"));
+  await madeQuietly(window, () => newMind(window));
 
   const started = await madeBy(
     window,
@@ -145,29 +161,11 @@ test("Ask about a Document with no Mind to ask in, Start a Mind from it, New Min
     "Started “Tides”",
   );
   await takenBackAndMadeAgain(window, started, "Started “Tides”");
-
-  const finance = sidebarFolder(window, "Finance");
-  const here = await madeBy(
-    window,
-    async () => {
-      await finance.getByTestId("folder-row").click({ button: "right" });
-      await finance.getByTestId("folder.newMind").click();
-    },
-    made,
-  );
-  expect(await read(window, async (core) => (await core.listMinds()).length)).toBe(3);
-  await takenBackAndMadeAgain(window, here, made);
-
-  const byKeys = await madeBy(window, () => window.keyboard.press("ControlOrMeta+n"), made);
-  await takenBackAndMadeAgain(window, byKeys, made);
-
-  const byPlus = await madeBy(window, () => newMind(window), made);
-  await takenBackAndMadeAgain(window, byPlus, made);
 });
 
 const LINES = {
-  en: { started: "Started “Tides”", made: "Made a new Mind" },
-  "zh-CN": { started: "已新建“Tides”", made: "已新建 Mind" },
+  en: { started: "Started “Tides”" },
+  "zh-CN": { started: "已新建“Tides”" },
 } as const;
 
 for (const language of ["en", "zh-CN"] as const) {
@@ -188,10 +186,8 @@ for (const language of ["en", "zh-CN"] as const) {
     const finance = sidebarFolder(window, "Finance");
     await finance.getByTestId("folder-row").click({ button: "right" });
     await finance.getByTestId("folder.newMind").click();
-    await expect(undoMessage(window)).toHaveText(lines.made);
-    await leaveText(window);
-    await undo(window);
-    await expect(window.getByTestId("sidebar").getByTestId("mind-row")).toHaveCount(1);
+    await expect(undoMessage(window)).toHaveCount(0);
+    await expect(window.getByTestId("sidebar").getByTestId("mind-row")).toHaveCount(2);
   });
 }
 
@@ -227,36 +223,23 @@ test("a line already showing follows a switch of language, in its words, its nam
   await expect(undoButton).toHaveAttribute("aria-label", /衬线/);
   await pointAndClick(window, undoButton);
   await expect.poll(font).toBe("default");
-
-  await newMind(window);
-  await expect(undoMessage(window)).toHaveText("已新建 Mind");
-  await setLanguage(window, "en");
-  await expect(undoMessage(window)).toHaveText("Made a new Mind");
-  await expect(undoButton).toHaveAttribute("aria-label", /Made a new Mind/);
 });
 
-test("⌘N twice in a row makes two Minds, and ⌘Z twice and ⇧⌘Z twice take them back and make them again, one at a time", async () => {
+test("⌘N twice in a row makes two Minds with no line, and ⌘Z takes neither back: Delete does", async () => {
   const { window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await window.keyboard.press("ControlOrMeta+n");
   await window.keyboard.press("ControlOrMeta+n");
   await expect.poll(() => mindIds(window)).toHaveLength(2);
-  const both = await mindIds(window);
+  await expect(undoMessage(window)).toHaveCount(0);
 
   await leaveText(window);
   await undo(window);
-  await expect.poll(() => mindIds(window)).toHaveLength(1);
-  await undo(window);
-  await expect.poll(() => mindIds(window)).toHaveLength(0);
-  expect((await deletedMindIds(window)).sort()).toEqual(both);
-  await redo(window);
-  await expect.poll(() => mindIds(window)).toHaveLength(1);
-  await redo(window);
-  await expect.poll(() => mindIds(window)).toEqual(both);
+  expect(await mindIds(window)).toHaveLength(2);
   expect(await deletedMindIds(window)).toHaveLength(0);
 });
 
-test("a Mind made, then written in, goes to Recently deleted with its text, and comes back with it", async () => {
+test("a Mind made, then written in, goes to Recently deleted with its text when deleted, and ⌘Z brings it back with it", async () => {
   const { window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
@@ -266,16 +249,13 @@ test("a Mind made, then written in, goes to Recently deleted with its text, and 
   await window.keyboard.type("Ferries run at noon");
   await expect(editor).toContainText("Ferries run at noon");
 
-  // The rename is the last step, then the Mind: the text goes with it, and is kept.
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.delete"));
+  await expect.poll(() => mindIds(window)).toHaveLength(0);
+  expect(await deletedMindIds(window)).toHaveLength(1);
   await leaveText(window);
   await undo(window);
   await expect.poll(() => mindIds(window)).toHaveLength(1);
-  await undo(window);
-  await expect.poll(() => mindIds(window)).toHaveLength(0);
-  expect(await deletedMindIds(window)).toHaveLength(1);
-  await redo(window);
-  await redo(window);
-  await expect.poll(() => mindIds(window)).toHaveLength(1);
+  await pointAndClick(window, window.getByTestId("mind-list-item"));
   await expect(frontMindName(window)).toHaveText("Ferries");
   await expect(window.getByTestId("mind-editor")).toContainText("Ferries run at noon");
 });
@@ -430,20 +410,15 @@ test("quitting between the change and its Undo leaves the change made, and ⌘Z 
   const { row } = await linkPapers(first.window, first.app);
   await (await openLinkedFolderMenu(row)).getByTestId("linkedFolder.pause").click();
   await expect(undoMessage(first.window)).toHaveText("Paused reading in “Papers”");
-  await newMind(first.window);
-  await expect(undoMessage(first.window)).toHaveText("Made a new Mind");
   await first.app.close();
 
   const { window } = await launchApp(dataDir);
   await showSourceLocations(window);
-  expect(await mindIds(window)).toHaveLength(1);
   await expect
     .poll(() => read(window, async (core) => (await core.listLinkedFolders())[0]?.status))
     .toBe("paused");
   await leaveText(window);
   await undo(window);
   await expect(undoMessage(window)).toHaveCount(0);
-  expect(await mindIds(window)).toHaveLength(1);
-  expect(await deletedMindIds(window)).toHaveLength(0);
   expect((await read(window, (core) => core.listLinkedFolders()))[0]?.status).toBe("paused");
 });

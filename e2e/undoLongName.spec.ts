@@ -85,6 +85,15 @@ function outsideSidebar(line: Locator): Promise<string[]> {
   });
 }
 
+/** How many lines the words of `target` take: the distinct tops of their boxes. */
+function linesOf(target: Locator): Promise<number> {
+  return target.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+  });
+}
+
 async function chooseFromRow(window: Page, command: string): Promise<void> {
   const row = window.getByTestId("library-document");
   await row.hover();
@@ -142,18 +151,15 @@ async function expectWholeLine(
   }
 
   // At the default sidebar width the line is two lines at most, and everything is inside the line.
-  const [lineBox, messageElement, messageBox, undoBox, sidebarBox] = await Promise.all([
+  const [lineBox, messageLines, messageBox, undoBox, sidebarBox] = await Promise.all([
     boxOf(line),
-    message.evaluate((element) => ({
-      height: element.getBoundingClientRect().height,
-      lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
-    })),
+    linesOf(message),
     textBoxOf(message),
     textBoxOf(undo),
     boxOf(sidebar),
   ]);
   expect(sidebarBox.width).toBeCloseTo(248, 0);
-  expect(messageElement.height).toBeLessThanOrEqual(messageElement.lineHeight * 2 + 1);
+  expect(messageLines).toBeLessThanOrEqual(2);
   expect(await outsideSidebar(message)).toEqual([]);
   expect(await outsideSidebar(undo)).toEqual([]);
   for (const box of [messageBox, undoBox]) {
@@ -162,10 +168,19 @@ async function expectWholeLine(
     expect(box.y).toBeGreaterThanOrEqual(lineBox.y - 0.5);
     expect(box.y + box.height).toBeLessThanOrEqual(lineBox.y + lineBox.height + 0.5);
   }
-  // Undo is after the message, and level with its last line.
-  expect(undoBox.x).toBeGreaterThanOrEqual(messageBox.x + messageBox.width - 0.5);
-  expect(undoBox.y + undoBox.height / 2).toBeGreaterThan(
-    messageBox.y + messageBox.height - messageElement.lineHeight,
+  // "· Undo" follows the message's last words on the line they end: never alone at the end of a second line.
+  const last = await message.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const rects = [...range.getClientRects()];
+    const rect = rects[rects.length - 1];
+    if (!rect) throw new Error("The message has no text.");
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
+  expect(last.width).toBeGreaterThan(0);
+  expect(undoBox.x).toBeGreaterThanOrEqual(last.x + last.width - 0.5);
+  expect(Math.abs(undoBox.y + undoBox.height / 2 - (last.y + last.height / 2))).toBeLessThan(
+    last.height,
   );
 }
 
@@ -224,11 +239,7 @@ for (const language of ["en", "zh-CN"] as const) {
 /** The line fits its room: two lines at most, all of it inside the sidebar. */
 async function expectFits(line: Locator): Promise<void> {
   const message = line.getByTestId("undo-message");
-  const { height, lineHeight } = await message.evaluate((element) => ({
-    height: element.getBoundingClientRect().height,
-    lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
-  }));
-  expect(height).toBeLessThanOrEqual(lineHeight * 2 + 1);
+  expect(await linesOf(message)).toBeLessThanOrEqual(2);
   expect(await outsideSidebar(message)).toEqual([]);
   expect(await outsideSidebar(line.getByTestId("undo-action"))).toEqual([]);
 }

@@ -872,15 +872,20 @@ export const useAppStore = create<AppState>()((set, get) => {
           ...((options?.title || options?.titled) && { headed: true }),
           ...(options?.folderId && { folderId: options.folderId }),
         });
-        made = mindMade(
-          mindName(mind),
-          () => core.deleteMind(mind.id),
-          async () => {
-            await core.restore([{ kind: "mind", id: mind.id }]);
-            get().openMind(mind.id);
-          },
-        );
-        push(made);
+        // One with no name needs no line, and drops the line of the change before it: Delete takes it back.
+        const name = mindName(mind);
+        if (!name) useUndo.getState().dismiss();
+        else {
+          made = mindMade(
+            name,
+            () => core.deleteMind(mind.id),
+            async () => {
+              await core.restore([{ kind: "mind", id: mind.id }]);
+              get().openMind(mind.id);
+            },
+          );
+          push(made);
+        }
         set(
           options?.startQuestion
             ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
