@@ -98,6 +98,9 @@ const NO_UNDO_YET: Record<string, string> = {
   "folder.organize": "what it suggests is taken back in To review (#241), not by ⌘Z",
 };
 
+/** Commands that only make a Mind: it gets no undo line, because Delete takes it back (#1191). */
+const MAKES_A_MIND = new Set(["document.ask", "folder.ask", "folder.newMind"]);
+
 let dataDir: string;
 let homeDir: string;
 let sources: string;
@@ -210,6 +213,19 @@ function withoutTakenBack(state: unknown, before: unknown): unknown {
     ...(state as object),
     deleted: waiting(state).filter((item) => waited.has(item.id)),
   };
+}
+
+const mindIdsOf = (state: unknown): string[] =>
+  typeof state === "object" && state !== null && "minds" in state && Array.isArray(state.minds)
+    ? state.minds.map((mind: { id: string }) => mind.id)
+    : [];
+
+/** Takes back the Minds a command made, as a person does: by deleting them. */
+async function deleteMadeMinds(window: Page, before: unknown): Promise<void> {
+  const known = new Set(mindIdsOf(before));
+  for (const id of mindIdsOf(await coreState(window))) {
+    if (!known.has(id)) await read(window, (core, mindId) => core.deleteMind(mindId), id);
+  }
 }
 
 /** ⌘Z where it goes to the app's changes: out of any text; in the note, to the note's own. */
@@ -409,14 +425,22 @@ async function checkCommand(
     return "ran";
   }
 
-  // The note keeps its own undo, with no line.
-  if (changed && !stage.inNote) {
+  if (MAKES_A_MIND.has(commandId)) {
+    expect.soft(changed, `${commandId} makes a Mind`).toBe(true);
     expect
-      .soft(await undoOffered(window), `${commandId} changed the core, with no Undo`)
-      .toBe(true);
+      .soft(await undoOffered(window), `${commandId} makes a Mind and says nothing`)
+      .toBe(false);
+    await deleteMadeMinds(window, before);
+  } else {
+    // The note keeps its own undo, with no line.
+    if (changed && !stage.inNote) {
+      expect
+        .soft(await undoOffered(window), `${commandId} changed the core, with no Undo`)
+        .toBe(true);
+    }
+    if (changed || (await undoOffered(window))) await takeBack(window, stage);
+    else await window.keyboard.press("Escape");
   }
-  if (changed || (await undoOffered(window))) await takeBack(window, stage);
-  else await window.keyboard.press("Escape");
   await expect
     .configure({ soft: true })
     .poll(async () => withoutTakenBack(await settled(window, readState), before), {

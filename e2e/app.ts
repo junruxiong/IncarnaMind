@@ -1332,6 +1332,17 @@ export function textBoxOf(target: Locator) {
   });
 }
 
+/** The box of the last line of an element's words, in CSS pixels. */
+export function lastLineBoxOf(target: Locator) {
+  return target.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const rect = [...range.getClientRects()].at(-1);
+    if (!rect) throw new Error("The element has no text.");
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
+}
+
 /** The rendered width of an element, in CSS pixels. */
 export async function widthOf(locator: Locator): Promise<number> {
   const box = await locator.boundingBox();

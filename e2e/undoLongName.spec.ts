@@ -6,6 +6,7 @@ import {
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  lastLineBoxOf,
   launchApp,
   motionSettled,
   pointAndClick,
@@ -169,14 +170,7 @@ async function expectWholeLine(
     expect(box.y + box.height).toBeLessThanOrEqual(lineBox.y + lineBox.height + 0.5);
   }
   // "· Undo" follows the message's last words on the line they end: never alone at the end of a second line.
-  const last = await message.evaluate((element) => {
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    const rects = [...range.getClientRects()];
-    const rect = rects[rects.length - 1];
-    if (!rect) throw new Error("The message has no text.");
-    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-  });
+  const last = await lastLineBoxOf(message);
   expect(last.width).toBeGreaterThan(0);
   expect(undoBox.x).toBeGreaterThanOrEqual(last.x + last.width - 0.5);
   expect(Math.abs(undoBox.y + undoBox.height / 2 - (last.y + last.height / 2))).toBeLessThan(
