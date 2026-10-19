@@ -303,6 +303,7 @@ async function film(window: Page, folder: string): Promise<() => Promise<void>> 
     const file = `${String(frames.length).padStart(5, "0")}.jpg`;
     frames.push({ file, at: metadata.timestamp ?? 0 });
     writing.push(writeFile(join(folder, file), Buffer.from(data, "base64")));
+    // A frame can arrive as the window closes, when there is nothing left to acknowledge.
     void session.send("Page.screencastFrameAck", { sessionId }).catch(() => undefined);
   });
   await session.send("Page.startScreencast", { format: "jpeg", quality: 70, everyNthFrame: 1 });
@@ -340,8 +341,16 @@ function encode(folder: string, video: string): Promise<void> {
       ]),
       { cwd: folder, stdio: "ignore" },
     );
-    ffmpeg.on("error", () => resolve());
-    ffmpeg.on("close", () => resolve());
+    let missing = false;
+    ffmpeg.on("error", (error) => {
+      missing = true;
+      console.warn(`No video of ${video}, its frames are in ${folder}: ${error.message}`);
+      resolve();
+    });
+    ffmpeg.on("close", (code) => {
+      if (code !== 0 && !missing) console.warn(`ffmpeg stopped with ${code} making ${video}`);
+      resolve();
+    });
   });
 }
 
