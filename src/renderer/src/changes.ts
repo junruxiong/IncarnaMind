@@ -5,7 +5,7 @@
  * links back as they were. Each says what happened in the words of the undo
  * line, and what it was, for the Edit menu.
  */
-import type { Document, LinkedFolderLayout, RestoreRef, TagLinkState } from "../../core/api";
+import type { LinkedFolderLayout, RestoreRef, TagLinkState } from "../../core/api";
 import { core } from "./core";
 import type { Words } from "./lineNames";
 import type { Translate } from "./objects";
@@ -118,26 +118,6 @@ export function linkedFolderShown(
       await setLayout(after);
     },
   };
-}
-
-/** How each Document carries the Tag now, to put back with `revertDocumentTags`. */
-export function tagLinks(
-  documents: readonly Pick<Document, "id" | "tags">[],
-  documentIds: readonly string[],
-  tagId: string,
-): TagLinkState[] {
-  return documentIds.map((documentId) => {
-    const link = documents
-      .find((document) => document.id === documentId)
-      ?.tags.find((each) => each.tagId === tagId);
-    return {
-      documentId,
-      tagId,
-      link: link
-        ? { source: link.source, confidence: link.confidence, needsReview: link.needsReview }
-        : null,
-    };
-  });
 }
 
 /**

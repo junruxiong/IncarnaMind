@@ -150,7 +150,7 @@ export function NewMenu({ place = "sidebar" }: { place?: "sidebar" | "home" }) {
         data-testid={testId("plus-menu-items")}
         className={menuClass}
       >
-        {/* Made as it opens: whether meetings are on, or the assistant is there to chat in, is read then. */}
+        {/* Made as it opens: what each command offers is read then. */}
         {menu.open && (
           <>
             {NEW_ITEMS.map(item)}

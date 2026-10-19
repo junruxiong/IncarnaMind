@@ -203,7 +203,6 @@ const deviceScope: Scope<DeviceSettings> = {
     skillScriptsEnabled: true,
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
     suggestionOffers: 0,
-    meetingsEnabled: false,
     meetingSystemAudio: true,
     transcriptionRoute: null,
     meetingNoticeAccepted: false,
@@ -223,7 +222,6 @@ const deviceScope: Scope<DeviceSettings> = {
     skillScriptTimeoutSeconds: isScriptTimeout,
     suggestionOffers: (value): value is number =>
       typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100,
-    meetingsEnabled: isBoolean,
     meetingSystemAudio: isBoolean,
     transcriptionRoute: (value): value is TranscriptionRoute | null =>
       value === null || TRANSCRIPTION_ROUTES.some((route) => route === value),
