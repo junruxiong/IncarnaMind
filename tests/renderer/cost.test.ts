@@ -49,7 +49,7 @@ describe("Cost in words", () => {
       "本月已花 $0.01",
     );
     expect(translate("en", "cost.setAside.tip")).toBe(
-      "Kept aside so running work can't go over your monthly limit",
+      "Kept aside so running work can’t go over your monthly limit",
     );
     expect(translate("zh-CN", "cost.setAside.tip")).toBe(
       "预留出来，避免进行中的任务超出你的月度上限",

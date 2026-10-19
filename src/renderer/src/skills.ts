@@ -52,7 +52,6 @@ const BUILT_IN_TITLES: Readonly<Record<string, MessageKey>> = {
   "summarise-document": "skills.builtIn.summarise-document.title",
 };
 
-/** A Built-in Skill is called by its title in the interface's language; any other by its name. */
 export function skillTitle(
   name: string,
   t: (key: MessageKey, params?: MessageParams) => string,

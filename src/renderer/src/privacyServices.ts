@@ -1,6 +1,5 @@
 import type { DataFlowStatus, ExternalService, RegisteredDataFlow } from "../../core/api";
 
-/** One use of a service: a flow that goes to it, what that sends, and the User's decision on it. */
 export interface ServiceUse {
   flow: RegisteredDataFlow["id"];
   sends: RegisteredDataFlow["sends"];
@@ -20,7 +19,6 @@ export type ServiceDecision =
   | { kind: "sendsMore" }
   | { kind: "not-asked" };
 
-/** The flows regrouped by the service they go to, in the order each service first appears. */
 export function groupByService(flows: readonly RegisteredDataFlow[]): ServiceGroup[] {
   const groups = new Map<string, ServiceGroup>();
   for (const flow of flows) {

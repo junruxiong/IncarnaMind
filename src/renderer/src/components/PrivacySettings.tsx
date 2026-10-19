@@ -30,14 +30,6 @@ import {
 
 const reportError = (failure: unknown) => useAppStore.getState().reportError(failure);
 
-/**
- * Settings → Privacy: everything IncarnaMind sends from this computer, in one
- * place. The services that receive anything, each with the User's decision on
- * it (stop, allow); "Keep everything on this computer"; network traffic that
- * carries nothing of the User's (with the switches for update checks and,
- * when this copy can send it, usage data); what Skill scripts can do; and
- * crash reports when this copy can send them.
- */
 export function PrivacySettings() {
   const t = useT();
   const sandboxOff = useRunsWithoutSandbox();

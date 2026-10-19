@@ -22,11 +22,6 @@ async function allowAll(service: string, uses: readonly ServiceUse[]): Promise<v
   for (const use of uses) await core.allowDataFlow(use.flow, service);
 }
 
-/**
- * The services IncarnaMind sends anything to, a row for each: the User's
- * decision on it said once, what it receives behind Details, and Stop allowing,
- * which has its Undo line under the list.
- */
 export function PrivacyServices({ flows }: { flows: readonly RegisteredDataFlow[] }) {
   return (
     <div className="flex flex-col">
@@ -193,7 +188,6 @@ const waitingStatus = (use: ServiceUse) =>
       ? "consent.settings.status.sendsMore"
       : "consent.settings.status.not-asked";
 
-/** What each use sends; where only some uses are allowed, the ones that aren't can be allowed here. */
 function Uses({
   uses,
   partly,

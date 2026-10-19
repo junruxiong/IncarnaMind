@@ -2215,7 +2215,7 @@ export const en = {
   "privacy.tabs.privacy": "Privacy",
   "privacy.intro": "IncarnaMind collects no usage data.",
   "privacy.flows.intro":
-    "Your files are read on this computer. Only these services receive anything:",
+    "Your files are read on this computer. Only these services receive anything.",
   "privacy.flows.none": "None. Everything stays on this computer.",
   "privacy.flows.intro.details":
     "Nothing goes to a service you haven't allowed, or at all while “Keep everything on this computer” is on. Where a provider offers it, IncarnaMind asks it not to store your requests.",
@@ -2721,7 +2721,7 @@ export const en = {
   "cost.cap.currency": "Currency",
   "cost.provider.thisMonth": "This month: {spent} spent",
   "cost.setAside": "{amount} set aside for work in progress",
-  "cost.setAside.tip": "Kept aside so running work can't go over your monthly limit",
+  "cost.setAside.tip": "Kept aside so running work can’t go over your monthly limit",
   "cost.provider.unpriced": "This month: {tokens} tokens, price unknown",
 
   "citation.label": "Citation {number}: {document}. {badge}",

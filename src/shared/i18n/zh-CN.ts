@@ -2137,7 +2137,7 @@ export const zhCN = {
   "privacy.tabs.general": "通用",
   "privacy.tabs.privacy": "隐私",
   "privacy.intro": "IncarnaMind 不收集任何使用数据。",
-  "privacy.flows.intro": "你的文件在这台电脑上读取。只有这些服务会收到内容：",
+  "privacy.flows.intro": "你的文件在这台电脑上读取。只有这些服务会收到内容。",
   "privacy.flows.none": "没有。所有内容都留在这台电脑上。",
   "privacy.flows.intro.details":
     "没有允许的服务不会收到任何内容，开启“所有内容都留在这台电脑上”时一律不会发送。服务提供该选项时，IncarnaMind 会要求它不要保存你的请求。",

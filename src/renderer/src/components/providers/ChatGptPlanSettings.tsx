@@ -142,6 +142,7 @@ export function ChatGptPlanRow() {
               onClick={signIn}
               disabled={status === null || !storage.canSave}
               size="sm"
+              variant="secondary"
             />
           )
         ) : (
