@@ -242,6 +242,9 @@ const speakerOf = (source: AudioSource, callSound: boolean) =>
 
 const lengthOf = (audio: TrackedAudio) => audio.microphone.length / SAMPLE_RATE_MS;
 
+const msOf = (chunks: readonly Int16Array[]) =>
+  chunks.reduce((sum, samples) => sum + samples.length / SAMPLE_RATE_MS, 0);
+
 type Leaving = "dropped" | "refused" | "cap" | "user" | "local-mode";
 
 /** The engine couldn't start, or stopped, while what was left was being transcribed. */
@@ -710,6 +713,10 @@ export function createTranscripts(options: TranscriptsOptions) {
       leaveCloud(found.state, live, leaving);
       return;
     }
+    if (!counted(live, msOf(own.waiting))) {
+      leaveCloud(found.state, live, "cap");
+      return;
+    }
     const waiting = own.waiting;
     delete own.waiting;
     for (const samples of waiting) transcriber.push(stream, samples);
@@ -782,11 +789,10 @@ export function createTranscripts(options: TranscriptsOptions) {
     options.changed();
   }
 
-  function counted(live: Live, audio: TrackedAudio): boolean {
+  // Counted as it is sent, not while held for a connection that may never open.
+  function counted(live: Live, ms: number): boolean {
     const cloud = live.cloud;
     if (!cloud) return true;
-    const sources = SOURCES.filter((source) => audio[source]).length;
-    const ms = lengthOf(audio) * sources;
     while (cloud.aheadMs < ms) {
       if (!cloud.meter.add(COUNTED_AHEAD_MS)) return false;
       cloud.aheadMs += COUNTED_AHEAD_MS;
@@ -797,7 +803,11 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   function pushTracks(state: State, live: Live, audio: TrackedAudio): void {
     if (live.engine !== "local") {
-      const leaving = gateClosed(live) ?? (counted(live, audio) ? null : "cap");
+      const sent = SOURCES.flatMap((source) => {
+        const samples = audio[source];
+        return samples && live.streams[source] && !live.streams[source].waiting ? [samples] : [];
+      });
+      const leaving = gateClosed(live) ?? (counted(live, msOf(sent)) ? null : "cap");
       if (leaving) {
         leaveCloud(state, live, leaving);
         if (live.started) pushTracks(state, live, audio);

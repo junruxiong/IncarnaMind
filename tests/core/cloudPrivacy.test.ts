@@ -216,6 +216,22 @@ describe("Nothing more goes to the cloud once the User says no", { timeout: 60_0
       const saved = await until(core, meeting.id, (each) => each.state === "saved");
       expect(saved.lines).toBeGreaterThan(0);
     });
+
+    test(`${route}: audio held for a connection that never opened isn't counted toward the cap`, async () => {
+      const service = counting();
+      service.holdOpen = true;
+      const { core, record, meeting } = await meetingOn(route, service);
+      await until(core, meeting.id, (each) => each.cloud === route);
+      record(12 * SECOND);
+      await settle();
+      await core.stopMeeting(meeting.id);
+      await until(core, meeting.id, (each) => each.state === "saved");
+      service.release();
+      await settle();
+      expect(service.sentSinceMark()).toBe(0);
+      const { spent } = await core.getCostSummary();
+      expect(spent.reduce((sum, each) => sum + each.amount, 0)).toBe(0);
+    });
   }
 
   test("a key the service refuses says so, and the next Meeting goes to this computer until the key changes", async () => {
