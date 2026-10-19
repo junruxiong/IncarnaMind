@@ -18,7 +18,10 @@ export function officeBridgeAdapter(): CoreAdapters["officeBridge"] {
   };
 }
 
-/** Shows a pairing code until the User is done; "New code" replaces the one on screen. */
+/**
+ * Shows a pairing code until the User is done. "New code" replaces the one on
+ * screen; "Disconnect add-ins" ends every pairing, so a pane stops at once.
+ */
 export async function showPairingCode(
   bridge: NonNullable<Core["officeBridge"]>,
   authorityFile: string,
@@ -29,9 +32,12 @@ export async function showPairingCode(
       type: "info",
       message: `Pairing code ${code}`,
       detail: `Type it into the IncarnaMind pane in Word or Excel within two minutes.\n\nThe certificate to trust is ${authorityFile}`,
-      buttons: ["New code", "Done"],
-      defaultId: 1,
+      buttons: ["New code", "Disconnect add-ins", "Done"],
+      defaultId: 2,
     });
-    if (response === 1) return;
+    if (response === 2) return;
+    if (response === 1) {
+      for (const pairing of await bridge.pairings()) await bridge.unpair(pairing.id);
+    }
   }
 }
