@@ -2,6 +2,7 @@ import type { VirtualElement } from "@floating-ui/dom";
 import { type Editor, posToDOMRect } from "@tiptap/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEdits } from "../editWithAi";
+import { holdSelection } from "./heldSelection";
 import { editTarget } from "./proposalReview";
 
 /** What the Mind lends the selection menu for its Edit with AI… field. */
@@ -77,7 +78,8 @@ export function useEditField(editor: Editor, edit: EditWithAiField | undefined, 
     sent.current = null;
     setPhase("idle");
     setText("");
-  }, []);
+    holdSelection(editor, false, "edit-field");
+  }, [editor]);
 
   /** While the AI works the menu stays under the text it is working on, as it was. */
   const anchor = useCallback((): VirtualElement | null => {

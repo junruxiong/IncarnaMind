@@ -66,10 +66,12 @@ async function mindWith(window: Page, lines: readonly string[]) {
   return { editor, paragraphs };
 }
 
-/** ⌘J over what is selected, saying what to change. */
+/** ⌘J over what is selected, saying what to change: in the selection menu's field, or in the composer where the menu can't open (all of the Mind). */
 async function askToChange(window: Page, instruction: string) {
   await window.keyboard.press("ControlOrMeta+j");
-  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await expect
+    .poll(() => window.evaluate(() => document.activeElement?.getAttribute("data-testid")))
+    .toMatch(/^(selection-edit-field|composer-input)$/);
   await window.keyboard.type(instruction);
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("edit-pending")).toHaveCount(0);

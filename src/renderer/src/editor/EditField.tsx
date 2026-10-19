@@ -51,7 +51,7 @@ export function EditField({
   };
 
   return (
-    <>
+    <div className="selection-edit-foot">
       <div className="selection-edit">
         <input
           ref={field.input}
@@ -99,7 +99,7 @@ export function EditField({
           onRetry={field.asked}
         />
       )}
-    </>
+    </div>
   );
 }
 

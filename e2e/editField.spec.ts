@@ -59,7 +59,10 @@ test("typing in the menu's Edit with AI field and pressing Enter changes the tex
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await setWindowSize(app, window, 1280, 820);
-  const { editor, note } = await mindWith(window, "The tides here are very strong and really regular.");
+  const { editor, note } = await mindWith(
+    window,
+    "The tides here are very strong and really regular.",
+  );
   const menu = window.getByTestId("selection-menu");
   const field = menu.getByTestId("selection-edit-field");
   const line = editor.getByTestId("applied-line");
@@ -112,7 +115,10 @@ test("the field shows the AI working, with Stop, while the cursor is back in the
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await setWindowSize(app, window, 1280, 820);
-  const { editor, note } = await mindWith(window, "The tides here are very strong and really regular.");
+  const { editor, note } = await mindWith(
+    window,
+    "The tides here are very strong and really regular.",
+  );
   const menu = window.getByTestId("selection-menu");
   const working = window.getByTestId("selection-edit-working");
 
@@ -148,18 +154,23 @@ test("⌘J puts the cursor in the field; Esc takes it back to the text with the 
   const { editor, note } = await mindWith(window, "Spring tides are strongest at new moon.");
   const menu = window.getByTestId("selection-menu");
   const field = menu.getByTestId("selection-edit-field");
-  // With the assistant folded, no composer line shows the work either.
-  await window.getByTestId("assistant-fold").click();
-  await expect(window.getByTestId("composer-input")).toBeHidden();
+  const select = async () => {
+    await editor.click();
+    await focusSettled(window, editor);
+    await window.keyboard.press("End");
+    for (let index = 0; index < "at new moon.".length; index++) {
+      await window.keyboard.press("Shift+ArrowLeft");
+    }
+    await expect(menu).toBeVisible();
+  };
+
+  // The composer's chip keeps the selection drawn; with the chip left out, only the field does.
+  await select();
+  await pointAndClick(window, window.getByTestId("composer-selection-remove"));
+  await expect(window.getByTestId("composer-selection")).toHaveCount(0);
 
   // Selected with the keyboard, the menu is under it: ⌘J goes into the field.
-  await editor.click();
-  await focusSettled(window, editor);
-  await window.keyboard.press("End");
-  for (let index = 0; index < "at new moon.".length; index++) {
-    await window.keyboard.press("Shift+ArrowLeft");
-  }
-  await expect(menu).toBeVisible();
+  await select();
   await window.keyboard.press("ControlOrMeta+j");
   await expect(field).toBeFocused();
   await expect(note.locator(".held-selection")).toHaveText("at new moon.");
@@ -298,5 +309,27 @@ test("with no model chosen, the field shows what the assistant would: the setup 
   await expect(menu.getByTestId("edit-problem")).toBeVisible();
   await expect(menu.getByTestId("selection-edit-field")).toHaveValue("make it shorter");
   await expect(note).toHaveText("The tides here are very strong.");
+  await app.close();
+});
+
+test("in a short window the menu fits the Mind's view, and the field stays in sight at its foot", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 900, 560);
+  const { note } = await mindWith(window, "The tides here are very strong and really regular.");
+  const menu = window.getByTestId("selection-menu");
+  const field = menu.getByTestId("selection-edit-field");
+
+  await slideSelect(window, note, "The tides here are very strong");
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(field).toBeFocused();
+  const view = await window.locator(".mind-scroller").boundingBox();
+  const inMenu = await menu.boundingBox();
+  const typed = await field.boundingBox();
+  if (!view || !inMenu || !typed) throw new Error("The menu isn't visible.");
+  expect(inMenu.height).toBeLessThanOrEqual(view.height);
+  expect(typed.y).toBeGreaterThanOrEqual(view.y);
+  expect(typed.y + typed.height).toBeLessThanOrEqual(view.y + view.height + 1);
   await app.close();
 });

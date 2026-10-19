@@ -5003,10 +5003,16 @@
   }
 
   /* The menu under selected text: Turn into, the format buttons, and the AI section. */
+  .selection-menu-frame {
+    /* Over the fade that ends the page above the check badge and the count. */
+    z-index: 1;
+  }
   .selection-menu {
     width: 280px;
+    max-height: max(var(--selection-menu-room, 100vh), 140px);
     padding: 4px;
     border-radius: 10px;
+    overflow-y: auto;
   }
   .selection-turn {
     font-weight: 500;
@@ -5067,12 +5073,19 @@
     color: var(--color-ink-meta);
   }
   /* "Edit with AI…" at the menu's foot, and the line that takes the menu's place while the AI works. */
+  .selection-edit-foot {
+    position: sticky;
+    bottom: 0;
+    margin: 0 -4px -4px;
+    padding: 4px;
+    border-radius: 0 0 10px 10px;
+    background: var(--color-sheet);
+  }
   .selection-edit {
     display: flex;
     align-items: center;
     gap: 4px;
     height: 32px;
-    margin: 4px 4px 2px;
     padding: 0 3px 0 10px;
     border-radius: 6px;
     box-shadow: inset 0 0 0 1px var(--color-rule-strong);
@@ -5112,7 +5125,7 @@
     }
   }
   .selection-problem {
-    padding: 4px 8px 4px;
+    padding: 4px 4px 0;
   }
   .selection-working {
     width: 280px;

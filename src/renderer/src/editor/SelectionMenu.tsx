@@ -133,6 +133,13 @@ const controlsOf = (menu: HTMLElement | null) =>
     ) ?? [],
   );
 
+/** A short Mind view can't hold the whole menu: its rows scroll, the Edit with AI field stays in sight at its foot. */
+function fitToView(frame: HTMLElement | null) {
+  const view = frame?.closest(".mind-scroller");
+  // The 8px padding at both ends of the view, and the 8px offset that comes after the slide.
+  frame?.style.setProperty("--selection-menu-room", view ? `${view.clientHeight - 24}px` : "100vh");
+}
+
 /** The selection the User closed the menu over, which keeps it closed until the selection changes, even for an update already waiting. */
 const dismissedOver = new WeakMap<Editor, string>();
 const selectionKey = (editor: Editor) =>
@@ -208,7 +215,6 @@ export function SelectionMenu({
   const actions = useRef(ai);
   actions.current = ai;
 
-  /** Out of the menu: the cursor is back in the text if it was in the menu, and the menu closes. */
   const closeMenu = useCallback(() => {
     const active = document.activeElement;
     if (!active || active === document.body || frame.current?.contains(active)) {
@@ -276,7 +282,8 @@ export function SelectionMenu({
       const current = fieldNow.current;
       const inField = current.input.current === document.activeElement;
       if (!withField.current || !current.input.current || current.working.current) return;
-      if (!anywhere && !inField && !editor.view.hasFocus()) return;
+      const inMenu = frame.current?.contains(document.activeElement) === true;
+      if (!anywhere && !inMenu && !editor.view.hasFocus()) return;
       if (!inField) {
         if (selectionForEdit(editor.state) === null) return;
         dismissedOver.delete(editor);
@@ -348,7 +355,9 @@ export function SelectionMenu({
     shift: { crossAxis: true, padding: 8 },
     onShow: () => {
       shown.current = true;
+      fitToView(frame.current);
     },
+    onUpdate: () => fitToView(frame.current),
     onHide: () => {
       shown.current = false;
       fieldNow.current.reset();
@@ -440,7 +449,6 @@ export function SelectionMenu({
     editor.commands.focus();
   };
 
-  /** The cursor went to something outside the menu and the text: the menu is done. */
   const leaveField = (event: FocusEvent<HTMLInputElement>) => {
     const next = event.relatedTarget;
     if (!(next instanceof Element) || field.working.current) return;
