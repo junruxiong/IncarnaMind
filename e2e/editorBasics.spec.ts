@@ -505,7 +505,7 @@ test("a Document dragged from the sidebar onto the composer joins the Question's
     const chips = composer.getByTestId("scope-chip");
     const before = await chips.count();
     const row = window.getByTestId("open-document").filter({ hasText: "Tides" });
-    const drag = async () => {
+    const drag = async (lights: boolean) => {
       const from = await row.boundingBox();
       const to = await composer.boundingBox();
       if (!from || !to) throw new Error("Not laid out.");
@@ -515,16 +515,17 @@ test("a Document dragged from the sidebar onto the composer joins the Question's
       await window.mouse.move(from.x + 30, from.y + from.height / 2 + 6, { steps: 3 });
       await window.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 });
       await window.mouse.move(to.x + to.width / 2 + 4, to.y + to.height / 2 + 2, { steps: 3 });
-      // The composer shows it takes it while the Document is over it.
-      await expect(composer).toHaveAttribute("data-dropping", "true");
+      // The composer shows it takes it while the Document is over it, and never when it would add nothing.
+      if (lights) await expect(composer).toHaveAttribute("data-dropping", "true");
+      else await expect(composer).not.toHaveAttribute("data-dropping", "true");
       await window.mouse.up();
       await expect(composer).not.toHaveAttribute("data-dropping", "true");
     };
-    await drag();
+    await drag(true);
     await expect(chips).toHaveCount(before + 1);
     await expect(chips.filter({ hasText: "Tides" })).toHaveCount(1);
-    // The same Document again adds nothing.
-    await drag();
+    // The same Document again: already in the scope, so the composer doesn't light, and nothing is added.
+    await drag(false);
     await expect(chips).toHaveCount(before + 1);
   } finally {
     await removeDataFolder(sources);
