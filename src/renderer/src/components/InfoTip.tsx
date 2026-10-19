@@ -1,10 +1,6 @@
 import { InfoLineIcon } from "./lineIcons";
 
-/**
- * What would be a helper line under a control, as a tooltip beside its label
- * (DESIGN.md, Words on screen): the ⓘ says there is one, and the words are
- * its accessible name too.
- */
+/** What would be a helper line under a control, as a tooltip beside its label (DESIGN.md, Words on screen). */
 export function InfoTip({ text, id, testId }: { text: string; id?: string; testId?: string }) {
   return (
     <span

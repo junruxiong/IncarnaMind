@@ -6,13 +6,13 @@ import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { ProblemMark } from "../ProblemLine";
 import {
-  buttonClass,
+  buttonStyle,
   errorTextClass,
-  ghostButtonClass,
   noticeClass,
-  primaryButtonClass,
+  rowButtonsClass,
   rowTextClass,
   rowTitleClass,
+  ruledRowClass,
 } from "../ui";
 import {
   CHATGPT_RECIPIENT,
@@ -91,47 +91,68 @@ export function ChatGptPlanRow() {
     });
 
   return (
-    <li data-testid="chatgpt-settings" className="flex flex-col gap-3 py-3.5">
-      <div className="flex flex-col gap-1">
+    <li data-testid="chatgpt-settings" className={ruledRowClass}>
+      <div className="flex min-w-0 flex-col gap-0.5">
         <span className={rowTitleClass}>{t("plans.chatgpt.title")}</span>
-        <p className={rowTextClass}>{t("chatgpt.description")}</p>
-        <SendsLine provider={CHATGPT_RECIPIENT} />
+        {signedIn ? (
+          <p data-testid="chatgpt-account" className={rowTextClass}>
+            <AccountLine account={status.account} />
+          </p>
+        ) : (
+          <>
+            <p className={rowTextClass}>{t("chatgpt.description")}</p>
+            <SendsLine provider={CHATGPT_RECIPIENT} />
+            {status && status.account.state === "expired" && (
+              <p data-testid="chatgpt-account" className={rowTextClass}>
+                <AccountLine account={status.account} />
+              </p>
+            )}
+          </>
+        )}
+        {signedIn && inUse && (
+          <p data-testid="chatgpt-in-use" className={rowTextClass}>
+            {t("chatgpt.inUse")}
+            <span aria-hidden="true"> · </span>
+            <ManageUsageLink />
+          </p>
+        )}
+        {!signedIn && !waiting && <ChatGptStorageNotice storage={storage} />}
+        {(waiting || sign.failure) && (
+          <div className="mt-2">
+            <ChatGptSignInState sign={sign} />
+          </div>
+        )}
+        {unconfirmed && !signedIn && (
+          <p role="note" data-testid="chatgpt-sign-out-unconfirmed" className={noticeClass}>
+            {t("chatgpt.signedOut.unconfirmed")} <ManageUsageLink />
+          </p>
+        )}
+        {test && <TestResult result={test} />}
+        {error && (
+          <p role="alert" data-testid="chatgpt-settings-error" className={errorTextClass}>
+            <ProblemMark />
+            {error}
+          </p>
+        )}
       </div>
-
-      {status && (
-        <p data-testid="chatgpt-account" className="text-ui text-ink-secondary">
-          <AccountLine account={status.account} />
-        </p>
-      )}
-
-      {waiting ? (
-        <ChatGptSignInState sign={sign} />
-      ) : !signedIn ? (
-        <div className="flex flex-col items-start gap-2">
-          <ChatGptStorageNotice storage={storage} />
-          <ContinueWithChatGptButton
-            onClick={signIn}
-            disabled={status === null || !storage.canSave}
-          />
-          <ChatGptSignInState sign={sign} />
-        </div>
-      ) : (
-        <>
-          {inUse && (
-            <p data-testid="chatgpt-in-use" className="text-[13px] leading-5 text-ink-secondary">
-              {t("chatgpt.inUse")}
-              <span aria-hidden="true"> · </span>
-              <ManageUsageLink />
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
+      <div className={rowButtonsClass}>
+        {!signedIn ? (
+          !waiting && (
+            <ContinueWithChatGptButton
+              onClick={signIn}
+              disabled={status === null || !storage.canSave}
+              size="sm"
+            />
+          )
+        ) : (
+          <>
             {!inUse && (
               <button
                 type="button"
                 data-testid="chatgpt-use"
                 disabled={busy !== null || planModel === ""}
                 onClick={() => void use()}
-                className={primaryButtonClass}
+                className={buttonStyle("primary", "sm")}
               >
                 {t("chatgpt.use")}
               </button>
@@ -141,7 +162,7 @@ export function ChatGptPlanRow() {
               data-testid="chatgpt-test"
               disabled={busy !== null || planModel === ""}
               onClick={() => void testConnection()}
-              className={buttonClass}
+              className={buttonStyle("secondary", "sm")}
             >
               {busy === "testing" ? t("providers.form.testing") : t("providers.form.test")}
             </button>
@@ -150,26 +171,13 @@ export function ChatGptPlanRow() {
               data-testid="chatgpt-sign-out"
               disabled={busy !== null}
               onClick={() => void signOut()}
-              className={ghostButtonClass}
+              className={buttonStyle("ghost", "sm")}
             >
               {t("chatgpt.signOut")}
             </button>
-          </div>
-        </>
-      )}
-
-      {unconfirmed && !signedIn && (
-        <p role="note" data-testid="chatgpt-sign-out-unconfirmed" className={noticeClass}>
-          {t("chatgpt.signedOut.unconfirmed")} <ManageUsageLink />
-        </p>
-      )}
-      {test && <TestResult result={test} />}
-      {error && (
-        <p role="alert" data-testid="chatgpt-settings-error" className={errorTextClass}>
-          <ProblemMark />
-          {error}
-        </p>
-      )}
+          </>
+        )}
+      </div>
     </li>
   );
 }

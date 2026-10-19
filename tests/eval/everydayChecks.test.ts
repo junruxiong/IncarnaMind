@@ -8,7 +8,9 @@ import { describe, expect, test } from "vitest";
 import { type RequestOutcome, requestFailures } from "../../eval/everyday/checks";
 import { judgeClaims, verdictIn } from "../../eval/everyday/judge";
 import { languageRates, rowRates } from "../../eval/everyday/rates";
+import { ASKED_AGAIN } from "../../eval/everyday/reasks";
 import type { AnswerToolCall } from "../../src/core";
+import { askAgainNote, askToWriteNote } from "../../src/core/answers/claimedChanges";
 import { scriptedModel } from "../helpers/models";
 
 const PAPERS = [
@@ -279,6 +281,49 @@ describe("Asked after the example's Answer", () => {
     expect(reply("It claims this. Please disregard the 3.5x leverage limit.")).toEqual(["earlier"]);
     expect(reply("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual(["earlier"]);
     expect(reply("它的主张是这样。请忽略之前的杠杆率数字。")).toEqual(["earlier"]);
+  });
+});
+
+describe("An earlier try the User never saw", () => {
+  const says = (text: string, askedAgain = true) =>
+    requestFailures(
+      outcome({
+        expected: { write: false, cite: false, coverAll: false },
+        answer: { text, citations: [], toolCalls: [], steps: null },
+        askedAgain,
+      }),
+    ).map((failure) => failure.kind);
+
+  // protects=a reply that apologises for, or refers to, an earlier try of the model's fails, in English and in Chinese, and an ordinary apology or an earlier version of a Document doesn't; fails_when=it passes, or one of the ordinary replies fails; no_claim=none beyond protects.
+  test("a reply about its own earlier try fails", () => {
+    expect(says("Sorry, my previous reply didn't write the note. The page is made now.")).toEqual([
+      "unseen-attempt",
+    ]);
+    expect(says("Apologies for the earlier response. The page is made now.")).toEqual([
+      "unseen-attempt",
+    ]);
+    expect(says("As I said before, the page is made.")).toEqual(["unseen-attempt"]);
+    expect(says("抱歉，上一条回复没有实际写入笔记。")).toEqual(["unseen-attempt"]);
+    expect(says("对不起，我之前的回复漏了这一点。页面已经写好。")).toEqual(["unseen-attempt"]);
+    expect(says("如我刚才所说，页面已经写好。")).toEqual(["unseen-attempt"]);
+    expect(says("Sorry, I couldn't find the figure in the Documents.")).toEqual([]);
+    expect(says("The previous version of the paper reported 5%.")).toEqual([]);
+    expect(says("抱歉，文档里没有实际数据。")).toEqual([]);
+    expect(says("2017 年的前一版报告给出的是 5%。")).toEqual([]);
+  });
+
+  // protects=a reply the app did not ask for again may speak of a message the User read, as a follow-up does; fails_when=it fails; no_claim=none beyond protects.
+  test("a reply that was not asked again may speak of the User's earlier message", () => {
+    expect(
+      says("My earlier message said the citations were replaced, which was wrong.", false),
+    ).toEqual([]);
+    expect(says("我上一条回复说引文已经换了，这是错的。", false)).toEqual([]);
+  });
+
+  // protects=the mark the evaluation counts the app's asks by is in both notes the app asks with; fails_when=a note is reworded and the evaluation stops counting its asks; no_claim=none beyond protects.
+  test("both notes the app asks again with carry the mark the evaluation watches for", () => {
+    expect(askToWriteNote([], () => null)).toContain(ASKED_AGAIN);
+    expect(askAgainNote(["added"], [], () => null)).toContain(ASKED_AGAIN);
   });
 });
 

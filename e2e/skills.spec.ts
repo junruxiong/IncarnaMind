@@ -61,7 +61,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await section.getByTestId("skill-import").click();
   await section.getByTestId("skill-import-folder").click();
   const preview = section.getByTestId("skill-preview");
-  await expect(preview.getByTestId("skill-preview-name")).toHaveText("Tide tables");
+  await expect(preview.getByTestId("skill-preview-name")).toHaveText("tide-tables");
   await expect(preview.getByTestId("skill-preview-description")).toHaveText(DESCRIPTION);
   await expect(preview).toContainText("Licence: MIT");
   await preview.getByText(/^3 files/).click();

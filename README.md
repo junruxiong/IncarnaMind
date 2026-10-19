@@ -29,7 +29,7 @@
   <!-- After the first release, add: <a href="https://github.com/IncarnaMind/IncarnaMind/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/IncarnaMind/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="Six screens in turn: two sentences of a draft selected, with Check against Documents in the menu; the same draft checked, each sentence marked supported, unsupported or contradicted, with a count under the title; a Citation opened beside the note, its quote highlighted on the PDF page; a lender update someone else wrote, opened to verify, with Check 8 claims; its claims checked, one contradicted by the facilities agreement on page 3; and the checked draft in the Chinese interface."></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="Six screens in turn: a draft in a Mind with two sentences selected and Check against Documents in the selection menu; the same draft checked, one mark in the margin for each sentence (contradicted, supported, unsupported) and the check badge in the page's corner with its counts; a Citation opened beside the Mind, its quote highlighted on the PDF page; a lender update someone else wrote, opened beside its text to verify, with Check 8 claims offered; its result, one claim contradicted by the facilities agreement and the card saying what the Document says; and the checked draft in the Chinese interface."></p>
 
 <p align="center"><sub>Everything shown is in the app today.</sub></p>
 

@@ -11,7 +11,6 @@ import { noticeClass, rowTextClass, rowTitleClass, ruledRowClass } from "../ui";
 const PRIVACY_UNDO_PLACE = "settings:privacy";
 const TARGET = ["local-mode"] as const;
 
-/** "Keep everything on this computer", and what it doesn't cover, with the Undo line of turning it on or off. */
 export function LocalOnlySetting() {
   const t = useT();
   const id = useId();
@@ -30,6 +29,7 @@ export function LocalOnlySetting() {
   if (localOnly === undefined) return null;
 
   const change = async (enabled: boolean) => {
+    if (busy) return;
     setBusy(true);
     try {
       await core.setLocalOnly(enabled);
@@ -71,7 +71,7 @@ export function LocalOnlySetting() {
           aria-describedby={`${id}-description`}
           checked={localOnly}
           aria-checked={localOnly}
-          disabled={busy}
+          aria-busy={busy}
           onChange={(event) => void change(event.target.checked)}
           className="switch"
         />

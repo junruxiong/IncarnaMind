@@ -46,7 +46,7 @@ export function ContinueWithChatGptButton({
 }: {
   onClick(): void;
   disabled?: boolean;
-  size?: "md" | "lg";
+  size?: "sm" | "md" | "lg";
   testId?: string;
 }) {
   const t = useT();

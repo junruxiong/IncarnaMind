@@ -562,7 +562,6 @@ export function WarningLineIcon(props: IconProps) {
   );
 }
 
-/** More to know: a circled "i". */
 export function InfoLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>

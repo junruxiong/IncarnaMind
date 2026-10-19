@@ -280,7 +280,7 @@ export function SkillsSettings() {
               type="button"
               data-testid="skill-restore-built-ins"
               title={t("skills.settings.restoreBuiltIns.hint", {
-                names: removedBuiltIns.join(", "),
+                names: removedBuiltIns.map((name) => skillTitle(name, t)).join(", "),
               })}
               disabled={busy !== null}
               onClick={() => void restoreBuiltInSkills()}

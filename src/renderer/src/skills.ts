@@ -52,29 +52,21 @@ const BUILT_IN_TITLES: Readonly<Record<string, MessageKey>> = {
   "summarise-document": "skills.builtIn.summarise-document.title",
 };
 
-/**
- * What a Skill is called on screen: a Built-in Skill's title in the interface's
- * language, any other's name with its hyphens read as spaces. The name stays
- * what files and Answers know it by.
- */
+/** A Built-in Skill is called by its title in the interface's language; any other by its name. */
 export function skillTitle(
   name: string,
   t: (key: MessageKey, params?: MessageParams) => string,
 ): string {
   const key = BUILT_IN_TITLES[name];
-  if (key) return t(key);
-  const words = name.replace(/-+/g, " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  return key ? t(key) : name;
 }
 
-/** The one short line Settings shows for each Built-in Skill; the longer description is behind Details. */
 const BUILT_IN_SHORT_LINES: Readonly<Record<string, MessageKey>> = {
   "literature-review": "skills.builtIn.literature-review.short",
   "mind-to-report": "skills.builtIn.mind-to-report.short",
   "summarise-document": "skills.builtIn.summarise-document.short",
 };
 
-/** A Built-in Skill's short line in the interface's language; null for any other Skill. */
 export function skillShortLine(
   skill: { name: string; builtIn: boolean },
   t: (key: MessageKey, params?: MessageParams) => string,

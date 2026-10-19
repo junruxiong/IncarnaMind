@@ -124,14 +124,20 @@ test("Make this a Skill: the model drafts it from the Mind, the User edits it in
   await app.close();
 });
 
-test("Make this a Skill from the assistant's ⋯ menu and ⌘K; an empty Mind says there is nothing to learn from", async () => {
+/** ⌘K, "Make this a Skill", Enter: as the User types it. */
+async function makeSkillFromPalette(window: Page) {
+  await window.keyboard.press("ControlOrMeta+k");
+  await window.keyboard.type("Make this a Skill");
+  await window.keyboard.press("Enter");
+}
+
+test("Make this a Skill from ⌘K; an empty Mind says there is nothing to learn from", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
 
   await newMind(window);
-  await window.getByTestId("assistant-more").click();
-  await window.getByTestId("assistant-menu-make-skill").click();
+  await makeSkillFromPalette(window);
   const empty = window.getByTestId("make-skill-empty");
   await expect(empty).toContainText("nothing in this Mind to make a Skill from");
   await empty.getByRole("button", { name: "Close" }).click();
@@ -139,8 +145,7 @@ test("Make this a Skill from the assistant's ⋯ menu and ⌘K; an empty Mind sa
 
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Notes on the Halvard contract.");
-  await window.getByTestId("assistant-more").click();
-  await window.getByTestId("assistant-menu-make-skill").click();
+  await makeSkillFromPalette(window);
   const editor = window.getByTestId("make-skill-editor");
   await expect(editor.getByTestId("make-skill-editor-name")).toHaveValue("scripted-review");
 
@@ -219,11 +224,11 @@ test("a Skill name that is taken, an empty field and a too-long description are 
   await section.getByTestId("skill-import").click();
   await section.getByTestId("skill-import-zip").click();
   const preview = section.getByTestId("skill-preview");
-  await expect(preview.getByTestId("skill-preview-name")).toHaveText("Harbour notes");
+  await expect(preview.getByTestId("skill-preview-name")).toHaveText("harbour-notes");
   await expect(preview.getByTestId("skill-preview-description")).toHaveText(
     "When I ask about harbour notes.",
   );
-  await expect(preview.getByTestId("skill-preview-replaces")).toContainText("Harbour notes");
+  await expect(preview.getByTestId("skill-preview-replaces")).toContainText("harbour-notes");
   await preview.getByText(/^1 file/).click();
   await expect(preview.getByTestId("skill-preview-file")).toHaveText([/SKILL\.md/]);
   await preview.getByTestId("skill-import-confirm").click();
@@ -280,7 +285,7 @@ test("in Chinese and in a narrow window: the Skills page, the draft and the pick
 
   await window.getByRole("button", { name: "设置" }).click();
   await window.getByTestId("settings-nav-skills").click();
-  await expect(window.getByTestId("skills-yours")).toContainText("Scripted review");
+  await expect(window.getByTestId("skills-yours")).toContainText("scripted-review");
   await shot(window, "skills-page-zh-narrow");
   await window.getByRole("button", { name: "关闭设置" }).click();
   await window.keyboard.press("ControlOrMeta+j");

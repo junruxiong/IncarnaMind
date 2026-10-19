@@ -911,9 +911,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   /** The Mind a call means: the one it names, else the one in focus; or why there is none. */
   const targetOf = (input: Record<string, unknown>): ChangeableMind | Refusal => {
     const all = minds.list();
-    const wanted = optional(input.mind);
-    if (wanted !== null) return findMind(all, wanted);
     const inFocus = focused && all.find((mind) => mind.id === focused.mindId);
+    const wanted = optional(input.mind);
+    if (wanted !== null) {
+      // Every Mind with no name reads "Untitled" to the model: that name means the one in focus.
+      return inFocus && nameKey(inFocus.name) === nameKey(wanted) ? inFocus : findMind(all, wanted);
+    }
     return (
       inFocus ??
       new Refusal(

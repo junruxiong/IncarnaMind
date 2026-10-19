@@ -226,6 +226,12 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   await expect(options.filter({ hasText: "Chapter 2 outline" })).toHaveCount(1);
   await expect(options.last()).toContainText("New Mind");
   await screenshot(window, "assistant-add-to-picker");
+  // Esc closes it and the focus goes back to the control that opened it.
+  await window.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+  await expect(answer.getByTestId("answer-add-to")).toBeFocused();
+  await pointAndClick(window, answer.getByTestId("answer-add-to"));
+  await expect(picker).toBeVisible();
   await window.keyboard.type("chapter");
   await expect(options).toHaveCount(2);
   await window.keyboard.press("Enter");
