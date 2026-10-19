@@ -36,6 +36,7 @@ import { isPanelWindow, serveMeetingPanel } from "./meetings/panel";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } from "./platform";
+import { filesAskedFor } from "./singleInstance";
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { realHomeProblem } from "./testHome";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
@@ -60,6 +61,14 @@ if (dataDirOverride) app.setPath("userData", resolve(dataDirOverride));
 
 // The log in the data folder's `logs/`, from the start, so it has what goes wrong at startup too.
 const logger = startLogging(app.getPath("userData"));
+
+// One copy to a data folder: a second would write the same database. Electron's lock is keyed on
+// `userData`, which is set above, so a test on a data folder of its own takes a lock of its own.
+const ownsDataFolder = app.requestSingleInstanceLock();
+if (!ownsDataFolder) {
+  logger.info("app.anotherCopyRunning");
+  app.quit();
+}
 
 // Whether Skill scripts run in the OS sandbox, found out while Electron starts.
 const scriptExecutor = chooseExecutor(logger);
@@ -111,6 +120,40 @@ const appWindows = () =>
 const listeningWindows = () =>
   BrowserWindow.getAllWindows().filter((window) => !isCaptureWindow(window));
 
+/** The app's window in front of the User: restored, shown and focused, a new one if all were closed. */
+function showFront(): void {
+  const [front] = appWindows();
+  if (!front) {
+    if (app.isReady()) createWindow();
+    return;
+  }
+  if (front.isMinimized()) front.restore();
+  front.show();
+  front.focus();
+  app.focus({ steal: true });
+}
+
+/** Files a second launch asked to open, kept until the core is there to add them. */
+const askedFor: string[] = [];
+
+function addAskedFor(): void {
+  const files = askedFor.splice(0);
+  if (!core || files.length === 0) return;
+  core.addDocuments(files).then(
+    ({ skipped }) => {
+      if (skipped.length > 0) logger.warn("app.openFiles.skipped", { count: skipped.length });
+    },
+    (error: unknown) => logger.exception("app.openFiles.failed", error),
+  );
+}
+
+app.on("second-instance", (_event, argv, workingDirectory) => {
+  logger.info("app.secondLaunch");
+  showFront();
+  askedFor.push(...filesAskedFor(argv, workingDirectory));
+  addAskedFor();
+});
+
 function isFromOurRenderer(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   const url = event.senderFrame?.url ?? "";
   return rendererUrl ? url.startsWith(rendererUrl) : url.startsWith("file://");
@@ -140,13 +183,7 @@ function exposeCore(core: Core): void {
     for (const window of listeningWindows()) {
       if (!window.isDestroyed()) window.webContents.send(EVENT_CHANNEL, name, payload);
     }
-    if (name === "agents.citationShown") {
-      const [front] = appWindows();
-      if (front?.isMinimized()) front.restore();
-      front?.show();
-      front?.focus();
-      app.focus({ steal: true });
-    }
+    if (name === "agents.citationShown") showFront();
   });
 }
 
@@ -249,6 +286,7 @@ async function showStartupError(error: unknown): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  if (!ownsDataFolder) return;
   showDevelopmentDockIcon();
   const createChatModel = await testChatModel();
   const taskKinds = await testTaskKinds();
@@ -276,6 +314,7 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
+  addAskedFor();
   guardQuit(core, () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null);
   if (taskKinds.length > 0) {
     const started = core;
