@@ -18,6 +18,7 @@ import { useSubmenu } from "../components/usePopoverMenu";
 import { files } from "../core";
 import { showFileLabelKey } from "../fileInfo";
 import { useFirstOpen } from "../firstOpen";
+import { moveIntoFolder } from "../folderDrag";
 import { useLanguage, useT } from "../i18n";
 import { fileStatusLabel } from "../linkedFolders";
 import { useMindStylePanel } from "../mindStylePanel";
@@ -203,7 +204,7 @@ export function PageMenu({
           current={mind?.folderId ?? null}
           onChoose={(folderId) => {
             if (folderId !== mind?.folderId) {
-              void useAppStore.getState().moveToFolder({ mindIds: [mindId] }, folderId);
+              void moveIntoFolder({ mindIds: [mindId] }, folderId);
             }
           }}
           onClose={() => setMoving(null)}

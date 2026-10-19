@@ -22,7 +22,7 @@ import { ExportMenu } from "./ExportMenu";
 import { GroupMenu, StripButton } from "./TabMenus";
 import { focusTab, splitToTheRight } from "./tabActions";
 import { MeetingTabTime, TabIcon, useTabTitle } from "./tabItems";
-import type { TabDrag } from "./useTabDrag";
+import { type TabDrag, useTabSource } from "./useTabDrag";
 
 /*
  * A group's tab strip (DESIGN.md, Components: Mind tabs, which now hold
@@ -133,8 +133,7 @@ export function TabStrip({
               selected={selected}
               // A divider on a tab's right edge: not on the last, nor next to the shown one.
               divider={!selected && next !== undefined && next.id !== shownId}
-              dragged={drag.dragged?.tabId === tab.id}
-              drag={drag}
+              dragged={drag.draggedTabId === tab.id}
             />
           );
         })}
@@ -182,14 +181,14 @@ interface TabProps {
   selected: boolean;
   divider: boolean;
   dragged: boolean;
-  drag: TabDrag;
 }
 
 /** One tab: its icon, its title (italic while a preview), and ✕, or a pin for a pinned one. */
-function Tab({ tab, groupId, selected, divider, dragged, drag }: TabProps) {
+function Tab({ tab, groupId, selected, divider, dragged }: TabProps) {
   const t = useT();
   const title = useTabTitle(tab.item);
   const renaming = useAppStore((state) => state.renamingTabId === tab.id);
+  const source = useTabSource(tab.id, title);
   const { changeLayout, closeTab, renameTab } = useAppStore.getState();
   const isMind = tab.item.kind === "mind";
   const objectMenu = useObjectMenu({ kind: "tab", id: tab.id });
@@ -232,11 +231,9 @@ function Tab({ tab, groupId, selected, divider, dragged, drag }: TabProps) {
       data-dragging={dragged || undefined}
       style={{ "--tab-label-min": `${tabLabelEm(title)}em` } as CSSProperties}
       className="tab"
-      onPointerDown={(event) => {
-        if (!renaming && !fromInside(event)) drag.onTabPointerDown(event, tab.id);
-      }}
+      {...(renaming ? {} : source)}
       onClick={(event) => {
-        if (!drag.justDragged() && !renaming && !fromInside(event)) show();
+        if (!renaming && !fromInside(event)) show();
       }}
       onDoubleClick={(event) => {
         if (fromInside(event) || (event.target as Element).closest("button")) return;
