@@ -82,7 +82,7 @@ export function askTool(options: AskToolOptions): Tool {
   let turn: Promise<unknown> = Promise.resolve();
   return {
     name: ASK_TOOLS.ask,
-    description: `Asks the User one question with 2 to 4 options, and waits for their answer. Ask only when the answer changes what you write or which Documents you read, and the choice is one only the User can make: which Folder, which Documents, which language, whether to search all Documents. Never ask what you can decide yourself, or what the User already said. One question at a time, at most ${ASKS_PER_ANSWER} in an answer. Mark the option you would go with as recommended. Let the User write their own answer (other) when the options may not cover it.`,
+    description: `Asks the User one question with 2 to 4 options, and waits for their answer. Ask only when the answer changes what you write or which Documents you read, and the choice is one only the User can make: which Folder, which Documents, which language, whether to search all Documents. When the User names Documents vaguely (\"the main documents\", \"the important ones\") and more than two could be meant, ask which, the newest ticked (preselected), rather than guessing. Never ask what you can decide yourself, or what the User already said. One question at a time, at most ${ASKS_PER_ANSWER} in an answer. Mark the option you would go with as recommended. Let the User write their own answer (other) when the options may not cover it.`,
     inputSchema: {
       type: "object",
       properties: {
