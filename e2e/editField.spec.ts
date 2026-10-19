@@ -172,17 +172,20 @@ test("an edit from the menu shows no Writing… line, and nothing around the tex
   const lines = [
     "Spring tides are strongest at new moon.",
     "The tides here are very strong and really regular.",
-    "Neap tides are weaker, and the water barely moves.",
+    "The moon is really bright over the harbour tonight.",
     "The harbour is busy in spring.",
   ];
   for (const [index, line] of lines.entries()) {
     await window.keyboard.type(line);
     if (index < lines.length - 1) await window.keyboard.press("Enter");
   }
-  const target = editor.locator(":scope > p").nth(1);
-  await slideSelect(window, target, "The tides here are very strong");
+  const paragraphs = editor.locator(":scope > p");
+  await slideSelect(window, paragraphs.nth(1), "The tides here", {
+    line: paragraphs.nth(2),
+    words: "bright over the harbour tonight.",
+  });
   await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("replace tides with waves slowly");
+  await window.keyboard.type("Shorten this slowly");
 
   // Every frame from just before Enter until the change is applied: where each paragraph is,
   // whether a Writing… line is on the page, and where the working line is.
@@ -201,7 +204,7 @@ test("an edit from the menu shows no Writing… line, and nothing around the tex
         boxes,
         writing: document.querySelectorAll('[data-testid="mind-writing"]').length,
         applied: document.querySelector('[data-testid="applied-line"]') !== null,
-        pill: pill ? pill.getBoundingClientRect().top : null,
+        pill: pill ? [pill.getBoundingClientRect().left, pill.getBoundingClientRect().top] : null,
       });
       if (!document.querySelector('[data-testid="applied-line"]')) requestAnimationFrame(tick);
     };
@@ -213,7 +216,12 @@ test("an edit from the menu shows no Writing… line, and nothing around the tex
     () =>
       (
         globalThis as unknown as {
-          __frames: { boxes: number[][]; writing: number; applied: boolean; pill: number | null }[];
+          __frames: {
+            boxes: number[][];
+            writing: number;
+            applied: boolean;
+            pill: number[] | null;
+          }[];
         }
       ).__frames,
   );
@@ -224,10 +232,16 @@ test("an edit from the menu shows no Writing… line, and nothing around the tex
   for (const frame of streaming) {
     expect(frame.writing).toBe(0);
     expect(frame.boxes).toEqual(first.boxes);
-    const [top = 0, height = 0] = frame.boxes[1] ?? [];
-    if (frame.pill !== null) expect(frame.pill).toBeGreaterThanOrEqual(top + height - 1);
+    const [top = 0, height = 0] = frame.boxes[2] ?? [];
+    if (frame.pill !== null) expect(frame.pill[1]).toBeGreaterThanOrEqual(top + height - 1);
   }
-  await expect(target).toHaveText("The waves here are very strong and really regular.");
+  // The working line doesn't slide sideways as the words come in.
+  const lefts = new Set(
+    streaming.flatMap((frame) => (frame.pill ? [Math.round(frame.pill[0] ?? 0)] : [])),
+  );
+  expect([...lefts]).toHaveLength(1);
+  await expect(paragraphs.nth(1)).toHaveText("The tides here are strong and regular.");
+  await expect(paragraphs.nth(2)).toHaveText("The moon is bright over the harbour tonight.");
   await app.close();
 });
 

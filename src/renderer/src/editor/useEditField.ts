@@ -1,10 +1,10 @@
 import type { VirtualElement } from "@floating-ui/dom";
 import { type Editor, posToDOMRect } from "@tiptap/core";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { noteBusy, setMenuShows, useEdits } from "../editWithAi";
+import { selectionForEdit } from "./editSelection";
 import { holdSelection } from "./heldSelection";
-import { editTarget } from "./proposalReview";
+import { blockAt } from "./writingPlace";
 
 export interface EditWithAiField {
   mindId: string;
@@ -14,15 +14,6 @@ export interface EditWithAiField {
 }
 
 export type EditPhase = "idle" | "working" | "settled";
-
-// The working line goes after the Block's end, so it never lies over the text being changed.
-function endOfBlock(doc: ProseMirrorNode, pos: number): number {
-  const $pos = doc.resolve(pos);
-  for (let depth = $pos.depth; depth > 0; depth--) {
-    if ($pos.node(depth).isTextblock) return $pos.end(depth);
-  }
-  return pos;
-}
 
 /**
  * What the selection menu's Edit with AI… field is doing: what is typed, the
@@ -39,6 +30,13 @@ export function useEditField(editor: Editor, edit: EditWithAiField | undefined, 
   const pill = useRef<HTMLDivElement>(null);
   const working = useRef(false);
   const sent = useRef<{ from: number; to: number } | null>(null);
+  // The working line is under the last Block of the text being changed, at its left edge: it never
+  // lies over the text and doesn't slide as the new words come in. A Block's id outlives the rewrite
+  // that collapses the text's range, and its last box stands in while it is rewritten.
+  const place = useRef<{ blockId: string | null; box: DOMRect | null }>({
+    blockId: null,
+    box: null,
+  });
   const pending = useEdits((state) => (mindId ? state.pending[mindId] : undefined));
 
   const asked = () => {
@@ -56,6 +54,7 @@ export function useEditField(editor: Editor, edit: EditWithAiField | undefined, 
       return;
     }
     const { from, to } = editor.state.selection;
+    place.current = { blockId: selectionForEdit(editor.state)?.to.blockId ?? null, box: null };
     asked();
     edit.send(editor, instruction);
     sent.current = { from, to };
@@ -103,13 +102,16 @@ export function useEditField(editor: Editor, edit: EditWithAiField | undefined, 
   }, [editor]);
 
   const anchor = useCallback((): VirtualElement | null => {
-    const target = working.current ? editTarget(editor.state) : null;
-    if (!target) return null;
-    const { doc } = editor.state;
-    const clamp = (pos: number) => Math.min(pos, doc.content.size);
+    if (!working.current) return null;
     return {
-      getBoundingClientRect: () =>
-        posToDOMRect(editor.view, clamp(target.from), endOfBlock(doc, clamp(target.to))),
+      getBoundingClientRect: () => {
+        const { blockId } = place.current;
+        const block = blockId ? blockAt(editor.state.doc, blockId) : null;
+        const dom = block ? editor.view.nodeDOM(block.pos) : null;
+        if (dom instanceof HTMLElement) place.current.box = dom.getBoundingClientRect();
+        const { from, to } = editor.state.selection;
+        return place.current.box ?? posToDOMRect(editor.view, from, to);
+      },
     };
   }, [editor]);
 
