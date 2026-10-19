@@ -34,6 +34,8 @@
  *   Documents' text writes, or is named as a file's (./dates).
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
+import { withoutPointersBack } from "../../src/core/answers/pointersBack";
+import { withoutSearchTalk } from "../../src/core/answers/searchTalk";
 import { toolTextIn } from "../../src/core/answers/toolText";
 import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
 import { markersWithoutCitation } from "../../src/shared/answerBlocks";
@@ -80,7 +82,7 @@ export interface RequestOutcome {
   writtenInMinds?: readonly string[];
   /** Its reply as Add to note puts it in a page; the reply as written when not given. */
   addedToPage?: string;
-  /** The Markdown its calls gave to write into Minds, without what search-talk filtering takes out. */
+  /** The `content` each of its calls of add_to_mind, create_mind and edit_mind gave, as the guard reads it. */
   givenToMinds?: readonly string[];
   /** The app asked the model again inside the turn, so the User never read its first try. */
   askedAgain?: boolean;
@@ -117,7 +119,7 @@ const POINTS_BACK = new RegExp(
     String.raw`\bearlier in (?:this|our|the) (?:conversation|chat)\b`,
     String.raw`\b(?:as|see|covered|described|explained|discussed|listed|noted|mentioned|set out|shown) above\b`,
     "(?:上一条|上条|前一条|上一个|上一次|之前|先前|前面|刚才|上面|第一个)的?(?:回答|回复|答复|答案)",
-    "(?:见|参见|详见|请见|如|参阅)上文|上文(?:已|所述|提到)|如上所述|如前所述|前文(?:已|所述|提到)",
+    "(?:见|参见|详见|请见|如|参阅|参考)(?:上文|前文)|(?:上文|前文)(?:已|所述|提到|说明)|如上所述|如前所述|同上",
     "(?:请|应)?(?:忽略|无视)(?:我|之前|先前|上一)",
   ].join("|"),
   "i",
@@ -155,18 +157,11 @@ export function leftOut(given: string, written: string): string[] {
   return proseSentences(given).filter((sentence) => !there.includes(lettersOf(sentence)));
 }
 
-/**
- * The Blocks of `given` that `written` holds nothing of: no sentence, line or
- * table cell, read as letters and digits only. For text written into a Mind,
- * where the app may still rewrite a sentence it checked, a Block lost whole
- * is what a page lost.
- */
-export function blocksLeftOut(given: string, written: string): string[] {
-  const there = lettersOf(written);
+function blocksIn(text: string): string[] {
   const blocks: string[] = [];
   let block: string[] = [];
   let fenced = false;
-  for (const line of [...given.split("\n"), ""]) {
+  for (const line of [...text.split("\n"), ""]) {
     if (/^\s*(?:```|~~~)/.test(line)) fenced = !fenced;
     if (fenced || line.trim() !== "") block.push(line);
     else if (block.length > 0) {
@@ -174,12 +169,23 @@ export function blocksLeftOut(given: string, written: string): string[] {
       block = [];
     }
   }
-  return blocks.filter((each) => {
-    const parts = each
-      .split(/(?<=[.!?。！？]["”’)」』]*(?:\[\^\d{1,4}\])*)\s*|\n|\|/u)
-      .filter((part) => lettersOf(part).length >= 2);
-    return parts.length > 0 && !parts.some((part) => there.includes(lettersOf(part)));
-  });
+  return blocks;
+}
+
+/**
+ * How the guard's `output` differs from its `input`, Block by Block: the
+ * Blocks it took out, and those of its output that aren't an input Block
+ * kept word for word and in order.
+ */
+export function guardTook(input: string, output: string): { removed: string[]; changed: string[] } {
+  const kept = blocksIn(output);
+  const removed: string[] = [];
+  let at = 0;
+  for (const block of blocksIn(input)) {
+    if (block === kept[at]) at++;
+    else removed.push(block);
+  }
+  return { removed, changed: kept.slice(at) };
 }
 
 // The words a pointer is made of, so what a sentence says besides is what's left.
@@ -252,14 +258,36 @@ function namedAsUncovered(reply: string, name: string): boolean {
     .some((sentence) => key(sentence).includes(key(name)) && NOT_COVERED.test(sentence));
 }
 
-/** What was taken out on the way into a page: of the reply, by Add to note, and of what its calls gave to write into Minds. */
-export const takenOut = (outcome: RequestOutcome): string[] => [
-  ...(outcome.addedToPage === undefined ? [] : leftOut(outcome.answer.text, outcome.addedToPage)),
-  ...blocksLeftOut(
-    (outcome.givenToMinds ?? []).join("\n\n"),
+/**
+ * What the guard took out on the way into a page: sentences of the reply, by
+ * Add to note, and Blocks of what the calls gave to write into Minds, with the
+ * Blocks it changed, which must be none.
+ */
+export function takenOut(outcome: RequestOutcome): { removed: string[]; changed: string[] } {
+  const took = (outcome.givenToMinds ?? []).map((input) =>
+    guardTook(input, withoutPointersBack(input).markdown),
+  );
+  return {
+    removed: [
+      ...(outcome.addedToPage === undefined ? [] : leftOut(outcome.answer.text, outcome.addedToPage)),
+      ...took.flatMap((each) => each.removed),
+    ],
+    changed: took.flatMap((each) => each.changed),
+  };
+}
+
+/**
+ * The sentences the guard and search-talk filtering left in what the calls
+ * gave that the Mind no longer holds as written: the model's edit_mind, or
+ * the app's check of the sentences written, rewrote them after the guard.
+ */
+export const rewrittenLater = (outcome: RequestOutcome): string[] =>
+  leftOut(
+    (outcome.givenToMinds ?? [])
+      .map((input) => withoutSearchTalk(withoutPointersBack(input).markdown).markdown)
+      .join("\n\n"),
     (outcome.writtenInMinds ?? []).join("\n\n"),
-  ),
-];
+  );
 
 /** The ways one request failed its guards; none when it passed. */
 export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
@@ -324,7 +352,8 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
   const written = [answer.text, ...inMinds].join("\n\n");
   const example = expected.noExample ? written.match(EXAMPLE)?.[0] : undefined;
   if (example) failures.push({ kind: "example", said: example });
-  const lost = lostContent(takenOut(outcome));
+  const took = takenOut(outcome);
+  const lost = [...lostContent(took.removed), ...took.changed];
   if (lost.length > 0) failures.push({ kind: "content-lost", sentences: lost });
   const unseen = outcome.askedAgain ? aboutAnUnseenAttempt(answer.text) : null;
   if (unseen) failures.push({ kind: "unseen-attempt", said: unseen });

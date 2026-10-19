@@ -89,6 +89,7 @@ async function runModel(
             reply: "",
             page: "",
             removed: [],
+            rewritten: [],
             pointersLeft: 0,
             calls: [],
             changes: [],

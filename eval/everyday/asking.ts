@@ -22,7 +22,6 @@ import {
   messageReference,
 } from "../../src/core";
 import { forPage } from "../../src/core/answers/pointersBack";
-import { withoutSearchTalk } from "../../src/core/answers/searchTalk";
 import { toolRecordLines } from "../../src/core/answers/toolRecord";
 import { plainText } from "../../src/core/mindText";
 import type { createAiSdkChatModel } from "../../src/core/providers/models";
@@ -43,6 +42,7 @@ import {
   type RequestFailure,
   type RequestOutcome,
   requestFailures,
+  rewrittenLater,
   takenOut,
 } from "./checks";
 import { DATED_TEXTS } from "./dated";
@@ -115,11 +115,11 @@ export interface CaseResult {
   model: string;
   failures: RequestFailure[];
   reply: string;
-  /** The reply as Add to note puts it in a page. */
   page: string;
-  /** What was taken out on the way into a page: sentences, by Add to note, and Blocks of what it wrote into Minds. */
+  /** What the guard took out: sentences of the reply, by Add to note, and Blocks of what the calls gave to write into Minds. */
   removed: string[];
-  /** Sentences that point to an earlier Answer, left in what goes into a page. */
+  /** Sentences of what the calls gave that the model's edit_mind or the app's own check rewrote after the guard. */
+  rewritten: string[];
   pointersLeft: number;
   calls: string[];
   /** The Mind's Blocks that changed, as they read before and once its changes are accepted. */
@@ -381,15 +381,10 @@ export async function runCase(
   }
   const changedBlocks = changes.map((change) => change.block);
   const page = forPage(answer.text, each.request);
-  // edit_mind after it rewrites what add_to_mind gave, so the page is the model's revision of it.
-  const revised = answer.toolCalls.some((call) => call.tool === "edit_mind" && call.mindChange);
   const givenToMinds = answer.toolCalls.flatMap((call) =>
-    !revised &&
-    (call.tool === "add_to_mind" || call.tool === "create_mind") &&
-    call.status === "done" &&
-    call.mindChange &&
+    ["add_to_mind", "create_mind", "edit_mind"].includes(call.tool) &&
     typeof call.input.content === "string"
-      ? [withoutSearchTalk(call.input.content).markdown]
+      ? [call.input.content]
       : [],
   );
   const outcome: RequestOutcome = {
@@ -416,7 +411,8 @@ export async function runCase(
     failures,
     reply: answer.text,
     page,
-    removed: takenOut(outcome),
+    removed: takenOut(outcome).removed,
+    rewritten: rewrittenLater(outcome),
     pointersLeft: pointersIn([page, ...writtenInMinds].join("\n\n")).length,
     calls: record,
     changes,
