@@ -68,6 +68,13 @@ export const oneFolderOf = (scope: SearchScope | null): string | null =>
     : null;
 
 /**
+ * Where a new Mind made from a Question goes: the one Folder its scope names, else the Folder
+ * of the Mind it came from, however far the search widened (#1359).
+ */
+export const filingFolder = (scope: SearchScope | null, mindFolderId: string | null) =>
+  oneFolderOf(scope) ?? mindFolderId;
+
+/**
  * What a Question from a Mind in `folderId` searches (#1359). `chosen` is the scope the User
  * set, null for none: the Mind's own, its Folder. The Mind's own Folder gives way to every
  * Document (no scope) while it holds none, so a Mind filed into an empty Folder still searches

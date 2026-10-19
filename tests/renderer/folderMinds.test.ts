@@ -17,7 +17,7 @@ import {
 } from "../../src/renderer/src/moves";
 import { scopeChips, scopeCounts } from "../../src/renderer/src/scope";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
-import { hasSearchScope, mindSearchScope } from "../../src/shared/searchScope";
+import { filingFolder, hasSearchScope, mindSearchScope } from "../../src/shared/searchScope";
 
 /**
  * Folders are projects (#111), as the window shows them: the composer's
@@ -106,6 +106,15 @@ describe("the composer's Search scope", () => {
     expect(mindSearchScope(chosen, "contracts", false)).toEqual(chosen);
     expect(mindSearchScope(folder("board"), "contracts", false)).toEqual(folder("board"));
     expect(mindSearchScope(NO_SCOPE, "contracts", true)).toEqual(NO_SCOPE);
+  });
+
+  // protects=a new note from a Mind goes into the Folder its scope names, else the Mind's own Folder, whether the chip was removed, a Tag picked or the Folder is empty; the composer's "Create a new note called …" and the assistant file the same way (#1359); fails_when=a note lands Not in a Folder because the search widened; no_claim=none beyond protects.
+  test("a new note goes into the Folder its scope names, else the Mind's own", () => {
+    expect(filingFolder(composerScope(draft, "contracts"), "contracts")).toBe("contracts");
+    expect(filingFolder(NO_SCOPE, "contracts")).toBe("contracts");
+    expect(filingFolder({ ...NO_SCOPE, tagIds: ["urgent"] }, "contracts")).toBe("contracts");
+    expect(filingFolder(folder("board"), "contracts")).toBe("board");
+    expect(filingFolder(NO_SCOPE, null)).toBeNull();
   });
 });
 

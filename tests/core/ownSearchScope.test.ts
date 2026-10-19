@@ -190,7 +190,7 @@ describe("A Mind's own Search scope in the assistant", { timeout: 30_000 }, () =
     await ask(core, { text: "Summarise the DPA, with Citations.", mindId: mind.id });
 
     const told = instructions(model);
-    expect(told).toContain("The User has added no Documents of their own, so there is nothing");
+    expect(told).toContain("None of the User's own Documents can be searched yet, so there is nothing");
     expect(told).toContain("never say a Tool is unavailable");
   });
 });

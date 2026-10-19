@@ -44,10 +44,7 @@ const EMPTY_DRAFT: Draft = { text: "", scope: null, skill: null, pastes: [] };
 export const folderScope = (folderId: string | null): SearchScope =>
   folderId === null ? NO_SCOPE : { folderIds: [folderId], tagIds: [], documentIds: [] };
 
-/**
- * What the composer asks with: the scope the User chose, else the Mind's Folder. The core decides
- * what that searches (`mindSearchScope`), when the Question is asked.
- */
+/** The core decides what this searches (`mindSearchScope`), when the Question is asked. */
 export const composerScope = (draft: Draft, folderId: string | null): SearchScope =>
   draft.scope ?? folderScope(folderId);
 

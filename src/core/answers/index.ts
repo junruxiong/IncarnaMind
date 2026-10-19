@@ -63,7 +63,7 @@ import {
   recordProposalRequest,
   resolveProposals,
 } from "../../shared/proposals";
-import { hasSearchScope, oneFolderOf, searchScopeOf } from "../../shared/searchScope";
+import { filingFolder, hasSearchScope, searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
@@ -386,7 +386,7 @@ const NOTHING_TO_CITE =
 const EMPTY_SCOPE_NOTE = `The User limited this Question to a Search scope (Folders, Tags or Documents) that holds no Documents, so there is nothing to search. ${NOTHING_TO_CITE} The line under your Answer offers to search all their Documents instead.`;
 
 const noDocumentsNote = (examples: boolean) =>
-  `The User has added no Documents of their own${examples ? " (the examples IncarnaMind made aren't theirs)" : ""}, so there is nothing to search. ${NOTHING_TO_CITE} They can add Documents to the Library.`;
+  `None of the User's own Documents can be searched yet${examples ? " (the examples IncarnaMind made aren't theirs)" : ""}, so there is nothing to search. ${NOTHING_TO_CITE} They can add Documents to the Library.`;
 
 const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
@@ -2450,10 +2450,11 @@ export function createAnswers(options: AnswersOptions) {
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
   }
 
-  // A Mind the assistant makes is filed where the User works, however far the search widened (#1359).
   const filedIn = (scope: SearchScope | null, askedFrom: AskedFrom | null) =>
-    oneFolderOf(scope) ??
-    (askedFrom && !askedFrom.deleted ? options.mindFolder(askedFrom.mindId) : null);
+    filingFolder(
+      scope,
+      askedFrom && !askedFrom.deleted ? options.mindFolder(askedFrom.mindId) : null,
+    );
 
   const someOfTheDocuments = (documentIds: string[] | null, mindId: string | null) => {
     if (documentIds === null) return null;

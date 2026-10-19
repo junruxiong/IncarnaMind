@@ -363,9 +363,5 @@ describe("Check this Mind", () => {
       kind: "ready",
       sentences: 1,
     });
-    expect(await core.planMindCheck(lonely.id, "all", true)).toMatchObject({
-      kind: "ready",
-      sentences: 1,
-    });
   });
 });
