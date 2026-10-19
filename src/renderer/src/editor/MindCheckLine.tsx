@@ -120,31 +120,3 @@ export function CheckedWhen({ run }: { run: MindCheckRun }) {
     />
   );
 }
-
-/**
- * The check card's way to check what changed: "Check all" while some
- * sentences were never checked, "Check again" while some checks need a re-check.
- */
-export function MindCheckAction({
-  unchecked,
-  recheck,
-  onCheck,
-}: {
-  unchecked: number;
-  recheck: number;
-  onCheck: () => void;
-}) {
-  const t = useT();
-  if (unchecked === 0 && recheck === 0) return null;
-  return (
-    <button
-      type="button"
-      data-testid="health-check"
-      className="check-row-action"
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={onCheck}
-    >
-      {t(unchecked > 0 ? "health.checkAll" : "claim.checkAgain")}
-    </button>
-  );
-}
