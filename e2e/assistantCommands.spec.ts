@@ -175,7 +175,7 @@ test("a delete the assistant starts asks first, naming what goes, and Don't dele
     "It goes to Recently deleted, where you can restore it for 30 days. The assistant always asks before it deletes.",
   );
   await expect(card.getByTestId("approval-allow-once")).toContainText("Delete");
-  await expect(card.getByTestId("approval-deny")).toHaveText("Don't delete");
+  await expect(card.getByTestId("approval-deny")).toHaveText("Don’t delete");
   await expect(card.getByTestId("approval-always-allow")).toHaveCount(0);
   await screenshot(window, "commands-delete-asks-en");
   await pointAndClick(window, card.getByTestId("approval-deny"));
@@ -185,6 +185,35 @@ test("a delete the assistant starts asks first, naming what goes, and Don't dele
     "Not allowed, so nothing changed",
   );
   await expect(window.getByTestId("mind-row").filter({ hasText: "Deal notes" })).toBeVisible();
+  await app.close();
+});
+
+test("a delete of 60 Documents names the first 50 and says how many more", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  const paths = await Promise.all(
+    Array.from({ length: 60 }, async (_, index) => {
+      const path = join(sources, `Draft ${String(index + 1).padStart(2, "0")}.md`);
+      await writeFile(path, `# Draft ${index + 1}\n\nA first go.\n`);
+      return path;
+    }),
+  );
+  await addDocuments(window, paths);
+  await newMind(window);
+
+  const card = await askAndWait(window, "Delete the drafts");
+  await expect(card).toContainText("Delete 60 Documents?");
+  const names = card.getByTestId("approval-file");
+  await expect(names).toHaveCount(51);
+  await expect(names.last()).toHaveText("and 10 more");
+  await screenshot(window, "commands-delete-60-en");
+  await pointAndClick(window, card.getByTestId("approval-deny"));
+  await expect(assistantAnswers(window).last()).toHaveAttribute("data-status", "done", {
+    timeout: 15_000,
+  });
+  expect((await library(window)).names).toHaveLength(60);
   await app.close();
 });
 
@@ -198,7 +227,7 @@ test("a command that fails says so on the card and changes nothing", async () =>
   const answer = await askInAssistant(window, "Delete the document with id nope");
 
   await expect(answer.getByTestId("command-changes-unrun")).toHaveText(
-    "Didn't run: There is no Document with the id nope.",
+    "Didn’t run: There is no Document with the id nope.",
   );
   await expect(answer.getByTestId("command-changes-title")).toHaveCount(0);
   expect(await library(window)).toEqual(before);

@@ -53,6 +53,9 @@ const EDIT = { write: true, cite: false, coverAll: false } as const;
 const NOTHING = { write: false, cite: false, coverAll: false } as const;
 const ABOUT_THE_QUESTION = { write: false, cite: false, coverAll: false, noEarlier: true } as const;
 const TEXT_DATES = { write: false, cite: true, coverAll: false, textDates: true } as const;
+// The contracts and minutes have English and Chinese versions in the set: the reply follows the Question's language (#1273).
+const TEXT_DATES_EN = { ...TEXT_DATES, language: "en" } as const;
+const TEXT_DATES_ZH = { ...TEXT_DATES, language: "zh-CN" } as const;
 
 const READING_GROUP = {
   title: "Reading group",
@@ -823,7 +826,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "Summarise the employment contract.",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_EN,
     summary: true,
   },
   {
@@ -832,7 +835,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "When was the employment contract signed?",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_EN,
   },
   {
     id: "dates-contract-key-dates",
@@ -840,7 +843,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "What are the key dates in the employment contract?",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_EN,
   },
   {
     id: "dates-nda-effective",
@@ -848,7 +851,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "When does the mutual NDA take effect?",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_EN,
   },
   {
     id: "dates-minutes",
@@ -856,7 +859,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "When did the board meet, and what did it decide?",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_EN,
   },
   {
     id: "dates-contract-summary-zh",
@@ -864,7 +867,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "总结一下这份劳动合同。",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_ZH,
     summary: true,
   },
   {
@@ -873,7 +876,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "这份劳动合同是什么时候签订的？",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_ZH,
   },
   {
     id: "dates-contract-key-dates-zh",
@@ -881,7 +884,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "劳动合同里有哪些关键日期？",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_ZH,
   },
   {
     id: "dates-nda-effective-zh",
@@ -889,7 +892,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "保密协议什么时候生效？",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_ZH,
   },
   {
     id: "dates-minutes-zh",
@@ -897,6 +900,6 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "董事会是哪天开的会？做了什么决定？",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_ZH,
   },
 ];

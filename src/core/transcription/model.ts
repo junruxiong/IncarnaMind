@@ -264,6 +264,18 @@ export function createTranscriptionModel(options: TranscriptionModelOptions) {
     onReady(listener: () => void): void {
       readyListeners.add(listener);
     },
+    /** Silero VAD's file, downloaded first if it isn't yet: a cloud service's turns need it alone (#141). */
+    async vadFile(): Promise<string> {
+      if (!isModelDownloaded(vadFolder, vadSource.files)) {
+        await downloadModel({
+          directory: vadFolder,
+          source: vadSource,
+          signal: lifetime.signal,
+          onProgress: () => {},
+        });
+      }
+      return files().vad;
+    },
     /** Starts the engine with the model. False, with the failure in the status, if it can't. */
     async load(): Promise<boolean> {
       if (status.state !== "ready") return false;

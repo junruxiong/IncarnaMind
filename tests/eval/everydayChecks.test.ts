@@ -5,7 +5,7 @@
  * own net.
  */
 import { describe, expect, test } from "vitest";
-import { type RequestOutcome, requestFailures } from "../../eval/everyday/checks";
+import { chineseShare, type RequestOutcome, requestFailures } from "../../eval/everyday/checks";
 import { judgeClaims, verdictIn } from "../../eval/everyday/judge";
 import { languageRates, rowRates } from "../../eval/everyday/rates";
 import { ASKED_AGAIN } from "../../eval/everyday/reasks";
@@ -324,6 +324,33 @@ describe("An earlier try the User never saw", () => {
   test("both notes the app asks again with carry the mark the evaluation watches for", () => {
     expect(askToWriteNote([], () => null)).toContain(ASKED_AGAIN);
     expect(askAgainNote(["added"], [], () => null)).toContain(ASKED_AGAIN);
+  });
+});
+
+describe("The Question's language (#892, #1273)", () => {
+  const summary = (text: string, language: "en" | "zh-CN") =>
+    requestFailures(
+      outcome({
+        expected: { write: false, cite: false, coverAll: false, language },
+        answer: { text, citations: [], toolCalls: [], steps: null },
+        scoped: [],
+      }),
+    ).filter((failure) => failure.kind === "wrong-language");
+
+  // protects=an English summary of a contract that also has a Chinese version passes in English and fails in Chinese, and the other way round; quoted words and Citation markers don't count; fails_when=a Chinese summary of an English Question passes, or an English one that quotes the Chinese contract fails; no_claim=how well a real model keeps to the language, which the eval's summary cases ask.
+  test("a reply in the other language fails, quoted words and markers aside", () => {
+    const english =
+      "## Employment contract\nThe term is three years from the start date.[^1] Notice is one month.[^2]";
+    const chinese =
+      "## 劳动合同\n合同期限为三年，自起始日期算起。[^1] 解除合同须提前一个月通知。[^2]";
+    expect(summary(english, "en")).toEqual([]);
+    expect(summary(chinese, "zh-CN")).toEqual([]);
+    expect(summary(chinese, "en")).toMatchObject([{ kind: "wrong-language", wanted: "en" }]);
+    expect(summary(english, "zh-CN")).toMatchObject([{ kind: "wrong-language", wanted: "zh-CN" }]);
+    const quoting =
+      "The contract says “合同期限为三年，自起始日期算起。” which is three years from the start date.";
+    expect(chineseShare(quoting)).toBe(0);
+    expect(summary(quoting, "en")).toEqual([]);
   });
 });
 

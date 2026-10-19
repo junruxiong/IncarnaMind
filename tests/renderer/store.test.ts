@@ -668,7 +668,7 @@ describe("making a Folder", () => {
 
   test("a Folder the core can't make is a problem in place, with no step to undo", async () => {
     method("createLibraryGroup").mockRejectedValue(
-      new Error("A folder with this name already exists."),
+      new Error("A Folder with this name already exists."),
     );
     expect(await useAppStore.getState().createFolder()).toBeNull();
     expect(useUndo.getState().done).toEqual([]);

@@ -124,6 +124,13 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /** Whether the Meeting's fake microphone is denied: no tone, and the line that says so. */
+  microphone?: "allowed" | "denied";
+  /**
+   * Where the guide for a permission added by hand opens, whatever the screen: in a window
+   * beside System Settings, or as text in the app's window. Without it, the system decides.
+   */
+  permissionGuide?: "beside" | "inline";
   /** A copy with no way to record audio: Record says so. */
   noAudioEngine?: boolean;
   /** What a Meeting's fake speech-to-text engine does: slow, failing to read stretches, failing over. */
@@ -217,6 +224,8 @@ export async function launchApp(
     copilot,
     keepWindow = false,
     computerSound = "allowed",
+    microphone = "allowed",
+    permissionGuide,
     noAudioEngine = false,
     transcriber,
     scans,
@@ -266,6 +275,9 @@ export async function launchApp(
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = noAudioEngine ? "none" : "fake";
   env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
+  env.INCARNAMIND_TEST_AUDIO_MICROPHONE = microphone;
+  delete env.INCARNAMIND_TEST_GUIDE;
+  if (permissionGuide) env.INCARNAMIND_TEST_GUIDE = permissionGuide;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
   if (usageData) {

@@ -170,7 +170,7 @@ test("a Citation shows its Document's current name after a rename on disk and in
     // Deleted: the name it was cited with, and its Open shows the quote it kept.
     await bridge(window).remove();
     await expect.poll(() => bridge(window).names()).toEqual([]);
-    await expect(chip).toHaveAttribute("aria-label", /^Citation 1: Ferry, p\. 2\. Can't check/);
+    await expect(chip).toHaveAttribute("aria-label", /^Citation 1: Ferry, p\. 2\. Can’t check/);
     await window.mouse.move(0, 0);
     await chip.focus();
     await expect(card).toBeVisible();
