@@ -49,6 +49,8 @@ set -a; . ./.env.local; set +a   # OPENAI_API_KEY, SONIOX_API_KEY, QWEN_API_KEY 
 INCARNAMIND_EVAL_CLIPS=~/.cache/incarnamind-eval/fleurs npx vitest run --config eval/transcription/vitest.config.ts eval/transcription/routes.transcription.ts
 ```
 
+It checks that each route works in both languages, not which is best: 8 clips per language is 141 English words and 231 Chinese characters, errors cluster by clip, OpenAI varies from run to run, its lead-in was tuned on these clips, and numbers and Traditional characters aren't folded. A ranking waits for #85's meeting set.
+
 2026-10-19, Apple M2 Max, the three routes at once (load average about 40):
 
 | Route | English (WER) | Chinese (CER) | Both taking turns |
@@ -59,4 +61,3 @@ INCARNAMIND_EVAL_CLIPS=~/.cache/incarnamind-eval/fleurs npx vitest run --config 
 
 - OpenAI varies most from run to run. Another run of the same code gave 6.4%, 4.8% and 6.7%.
 - Before its turns started 1.2 s ahead of the detector, OpenAI cut first words, and Chinese was 7.8%.
-- Soniox's published Mandarin figure (1.25%) holds on this set.
