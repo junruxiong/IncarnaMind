@@ -208,6 +208,7 @@ test("a delete of 60 Documents names the first 50 and says how many more", async
   const names = card.getByTestId("approval-file");
   await expect(names).toHaveCount(51);
   await expect(names.last()).toHaveText("and 10 more");
+  await screenshot(window, "commands-delete-60-en");
   await pointAndClick(window, card.getByTestId("approval-deny"));
   await expect(assistantAnswers(window).last()).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
