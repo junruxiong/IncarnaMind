@@ -2,10 +2,14 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import type { AudioSource, Meeting, Settings } from "../../core/api";
 import { meetingTimeAt } from "../../shared/blockTimes";
+import { mindMade } from "./changes";
 import { core } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
+import { currentMindIdOf } from "./layoutSlice";
+import type { Translate } from "./objects";
 import { useAppStore } from "./store";
+import { UNDO_SHOWN_MS, type Undoable, useUndo } from "./undo";
 
 interface MeetingsState {
   meetings: Meeting[];
@@ -13,14 +17,21 @@ interface MeetingsState {
   problems: Readonly<Record<string, string>>;
   /** The Meeting whose Start waits for the User to read the one-time recording notice. */
   noticeFor: { meetingId: string; systemAudio: boolean } | null;
+  /** Record was chosen where this copy can't record audio: the sidebar's footer says so until it is dismissed. */
+  cantRecord: boolean;
   /** The gaps the User has dismissed, by Meeting: how many of its gaps they have seen. */
   gapsSeen: Readonly<Record<string, number>>;
   /** The Meetings whose recording details are shown (#161). */
   detailsShown: Readonly<Record<string, boolean>>;
   /** Lists the Meetings, at startup; the core's events keep the list after that. */
   load(): Promise<void>;
-  /** "Record a meeting": a new Mind, in a tab of its own, with the start block. */
+  /**
+   * "Record a meeting": the Meeting recording now, opened, or else a new Mind in a tab of its
+   * own, in the Folder of the Mind in view; it starts recording at once once the User has read
+   * the one-time notice, and shows the start block before.
+   */
   record(): Promise<void>;
+  clearCantRecord(): void;
   /** Start recording, after the one-time notice if this device hasn't shown it. */
   start(meetingId: string, systemAudio: boolean): Promise<void>;
   /** The notice was read: recording starts, and the notice isn't shown again. */
@@ -59,6 +70,7 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     meetings: [],
     problems: {},
     noticeFor: null,
+    cantRecord: false,
     gapsSeen: {},
     detailsShown: {},
 
@@ -71,18 +83,38 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     },
 
     async record() {
+      const recording = get().meetings.find((each) => each.status === "recording");
+      if (recording) {
+        useAppStore.getState().openMind(recording.mindId);
+        return;
+      }
+      const { settings, layout, minds } = useAppStore.getState();
+      if (!settings) return;
+      if (settings.meetingAudio === "none") {
+        set({ cantRecord: true });
+        return;
+      }
       try {
-        const meeting = await core.createMeeting();
+        const inView = currentMindIdOf(layout);
+        const folderId = minds.find((each) => each.id === inView)?.folderId ?? null;
+        const meeting = await core.createMeeting(folderId ? { folderId } : undefined);
+        const starts = settings.device.meetingNoticeAccepted;
+        takeBackable(meeting, starts);
+        // The notes come first in a meeting: the text has the cursor, as in a Mind made with ⌘T.
+        useAppStore.setState({ bodyToFocus: meeting.mindId });
         // A tab of its own, as New Mind opens one: never in place of the Mind the User is in.
         await useAppStore.getState().changeLayout({
           type: "open",
           item: { kind: "mind", mindId: meeting.mindId },
           where: { in: "group" },
         });
+        if (starts) await get().start(meeting.id, meeting.systemAudio);
       } catch (error) {
         useAppStore.getState().reportError(error);
       }
     },
+
+    clearCantRecord: () => set({ cantRecord: false }),
 
     async start(meetingId, systemAudio) {
       if (!useAppStore.getState().settings?.device.meetingNoticeAccepted) {
@@ -156,11 +188,76 @@ function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record
   return rest;
 }
 
-core.on("meetings.changed", (meetings) => useMeetings.setState({ meetings }));
+/** The Record whose new Mind Undo can still take back, by Meeting. */
+const takeBackableRecords = new Map<
+  string,
+  { change: Undoable; seen: boolean; timer?: ReturnType<typeof setTimeout> }
+>();
 
-/** Meetings are turned on in Settings, and this copy can record. */
+const capturedAnything = (meeting: Meeting) =>
+  meeting.audio.kept ||
+  meeting.recordedMs > 0 ||
+  meeting.status === "paused" ||
+  meeting.status === "stopped";
+
+function dropTakeBack(meetingId: string): void {
+  const pending = takeBackableRecords.get(meetingId);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  takeBackableRecords.delete(meetingId);
+  useUndo.getState().withdraw(pending.change);
+}
+
+/**
+ * Offers Undo for the Mind a Record just made: it takes the Mind back while nothing has been
+ * recorded, or just after a recording began. Once audio is saved, or the line has gone, it
+ * doesn't offer it any more: Undo never deletes a recorded Meeting or its audio.
+ */
+function takeBackable(meeting: Meeting, recording: boolean): void {
+  const takeBack = async () => {
+    const now = useMeetings.getState().meetings.find((each) => each.id === meeting.id);
+    if (now && capturedAnything(now)) return;
+    await core.deleteMind(meeting.mindId);
+  };
+  const bringBack = async () => {
+    await core.restore([{ kind: "mind", id: meeting.mindId }]);
+    useAppStore.getState().openMind(meeting.mindId);
+  };
+  const change = recording
+    ? {
+        said: (t: Translate) => t("meetings.record.undo"),
+        name: (t: Translate) => t("meetings.record"),
+        undo: takeBack,
+        redo: bringBack,
+      }
+    : mindMade("", takeBack, bringBack);
+  takeBackableRecords.set(meeting.id, { change, seen: false });
+  useUndo.getState().push(change);
+}
+
+function settleTakeBacks(meetings: readonly Meeting[]): void {
+  for (const [meetingId, pending] of takeBackableRecords) {
+    const meeting = meetings.find((each) => each.id === meetingId);
+    if (!meeting) {
+      if (pending.seen) dropTakeBack(meetingId);
+      continue;
+    }
+    pending.seen = true;
+    if (capturedAnything(meeting)) dropTakeBack(meetingId);
+    else if (meeting.recordingSince !== null && !pending.timer) {
+      pending.timer = setTimeout(() => dropTakeBack(meetingId), UNDO_SHOWN_MS);
+    }
+  }
+}
+
+core.on("meetings.changed", (meetings) => {
+  useMeetings.setState({ meetings });
+  settleTakeBacks(meetings);
+});
+
+/** This copy can record audio. */
 export const canRecordMeetings = (settings: Settings | null): boolean =>
-  !!settings?.device.meetingsEnabled && settings.meetingAudio !== "none";
+  !!settings && settings.meetingAudio !== "none";
 
 /** The Mind's Meeting, if it has one. */
 export const useMeetingOf = (mindId: string): Meeting | undefined =>

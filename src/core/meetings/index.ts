@@ -52,6 +52,7 @@ import {
 } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Language } from "../language";
+import { parseFolderChoice } from "../minds";
 import type { Database } from "../storage";
 import {
   listParts,
@@ -148,12 +149,11 @@ export interface MeetingsOptions {
   dataDir: string;
   now: () => string;
   capture: AudioCapture | undefined;
-  enabled(): boolean;
   noticeAccepted(): boolean;
   /** The "What is recorded" choice in Settings. */
   systemAudioByDefault(): boolean;
   language(): Language;
-  createMind(title: string): Mind;
+  createMind(title: string, folderId: string | null): Mind;
   mindExists(mindId: string): boolean;
   changed(meetings: Meeting[]): void;
   /** Whether audio is being captured, each time that changes. */
@@ -651,9 +651,8 @@ export function createMeetings(options: MeetingsOptions) {
     list,
 
     create(input: unknown): Meeting {
-      if (!options.enabled()) throw new InvalidInputError({ key: "error.meeting.off" });
       if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
-      const { mindId } = parseInput(input);
+      const { mindId, folderId } = parseInput(input);
       if (mindId !== undefined && (typeof mindId !== "string" || !options.mindExists(mindId))) {
         throw new NotFoundError({ key: "error.mind.notFound" });
       }
@@ -666,7 +665,10 @@ export function createMeetings(options: MeetingsOptions) {
       const id = randomUUID();
       const at = now();
       db.transaction(() => {
-        const mind = typeof mindId === "string" ? mindId : options.createMind(meetingTitle()).id;
+        const mind =
+          typeof mindId === "string"
+            ? mindId
+            : options.createMind(meetingTitle(), parseFolderChoice(folderId)).id;
         db.run(
           `INSERT INTO meetings (id, mind_id, status, system_audio, created_at, updated_at)
            VALUES (?, ?, 'ready', ?, ?, ?)`,
@@ -695,7 +697,6 @@ export function createMeetings(options: MeetingsOptions) {
       if (systemAudio !== undefined && typeof systemAudio !== "boolean") {
         throw new InvalidInputError("systemAudio must be true or false.");
       }
-      if (!options.enabled()) throw new InvalidInputError({ key: "error.meeting.off" });
       if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
       if (!options.noticeAccepted()) {
         throw new InvalidInputError({ key: "error.meeting.noticeUnread" });

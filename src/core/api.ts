@@ -40,6 +40,7 @@ export type {
  * the renderer import it.
  */
 import type { CitationForm, CitationStyleId, StyleCatalogue } from "../shared/citationStyles";
+import type { AppCommandId, AssistantCommandId } from "../shared/commands";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
 import type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate } from "../shared/meetingHelp";
 import type { MindStyle } from "../shared/mindStyle";
@@ -829,9 +830,10 @@ export interface AnswerToolCall {
    * `{ query, from_year?, to_year?, open_access_only? }`); "web", web search
    * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128);
    * "minds", the Minds' Tools of an Answer in the assistant (#202:
-   * `read_mind`, `edit_mind`, `add_to_mind`, `create_mind`, see `mindChange`).
+   * `read_mind`, `edit_mind`, `add_to_mind`, `create_mind`, see `mindChange`); "commands",
+   * the commands it runs for the User (#1110: `list_commands`, `run_command`, see `command`).
    */
-  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds";
+  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds" | "commands";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -890,6 +892,50 @@ export interface AnswerToolCall {
   mindChange?: MindChange;
   /** A Minds' Tool that changed nothing: why, as its card says. Absent otherwise. */
   mindProblem?: MindProblem;
+  /** `list_commands`, once it ended: the Documents or Minds it found (#1110). Absent otherwise. */
+  found?: CommandsFound;
+  /** `run_command`, once it ran: what it changed, from what the command returned (#1110). */
+  command?: CommandDone;
+  /** `run_command` that changed nothing: why (#1110). Absent otherwise. */
+  commandProblem?: CommandProblem;
+}
+
+/** What the assistant finds and runs commands on (#1110). */
+export type CommandTarget = "document" | "mind";
+
+/** What `list_commands` found (#1110): how many, and what matched them, each as given. */
+export interface CommandsFound {
+  kind: CommandTarget;
+  count: number;
+  by: { name?: string; tag?: string; folder?: string };
+}
+
+/** A Document or Mind a command changed, by its name before; `renamed`: the name it took. */
+export interface CommandItem {
+  kind: CommandTarget;
+  id: string;
+  name: string;
+  renamed?: string;
+}
+
+/** What a call of `run_command` did (#1110), from what its command returned. */
+export interface CommandDone {
+  command: AssistantCommandId;
+  /** The Run it was part of: one Undo takes back every change of the Run (`undoCommands`). */
+  run: string;
+  items: CommandItem[];
+  /** The Folder or Tag it put them in, as named then; `made`: the command made it. */
+  into?: { kind: "folder" | "tag"; id: string; name: string; made: boolean };
+  /** The file an export saved. */
+  file?: Pick<SavedFile, "path" | "name" | "folder" | "inDefaultFolder">;
+}
+
+/** Why a call of `run_command` changed nothing (#1110). */
+export interface CommandProblem {
+  command: string;
+  /** In English, for the log; `wording` says it in the interface language when there is one. */
+  message: string;
+  wording: ErrorWording | null;
 }
 
 /**
@@ -1959,12 +2005,6 @@ export interface DeviceSettings {
    * shown on this device: it shows at most twice (docs/agents/interaction.md, rule 14).
    */
   suggestionOffers: number;
-  /**
-   * Meetings can be recorded on this device (Settings → Meetings). Off by
-   * default while recording is new: transcription and telling speakers apart
-   * come after it.
-   */
-  meetingsEnabled: boolean;
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
   /**
@@ -6765,7 +6805,9 @@ export type ConnectorRegistrySearch =
 /**
  * What an approval policy is about:
  * - "tool": one Tool of one Connector;
- * - "skill-script": the scripts of one Skill.
+ * - "skill-script": the scripts of one Skill;
+ * - "command": a command the assistant runs for the User (#1110), which no policy covers: it
+ *   asks every time it reaches outside IncarnaMind.
  */
 export type ApprovalSubject =
   | {
@@ -6774,7 +6816,8 @@ export type ApprovalSubject =
       /** The Tool's name as the Connector gives it. */
       tool: string;
     }
-  | { kind: "skill-script"; skillId: string };
+  | { kind: "skill-script"; skillId: string }
+  | { kind: "command"; command: AssistantCommandId };
 
 export type ApprovalSubjectKind = ApprovalSubject["kind"];
 
@@ -6847,7 +6890,10 @@ export interface ApprovalResponseOptions {
  * a Skill script (`subject.kind` tells which). Its Answer is paused until they
  * decide; stopping the Answer, or closing IncarnaMind, denies it.
  */
-export type ApprovalRequest = ToolApprovalRequest | SkillScriptApprovalRequest;
+export type ApprovalRequest =
+  | ToolApprovalRequest
+  | SkillScriptApprovalRequest
+  | CommandApprovalRequest;
 
 interface ApprovalRequestBase extends AnswerPlace {
   requestId: string;
@@ -6898,6 +6944,8 @@ export type EffectScope =
   | { kind: "service"; serviceId: string; name: string } // an external service, as consent names it
   | { kind: "host"; host: string } // a web host
   | { kind: "mind"; mindId: string } // one of the User's Minds
+  | { kind: "library" } // the Library: its Documents' names, Folders and Tags, Recently deleted
+  | { kind: "output" } // the Output location, the folder the User chose for new files
   | { kind: "anywhere" };
 
 /**
@@ -6933,6 +6981,75 @@ export interface ToolApprovalRequest extends ApprovalRequestBase {
    * switched it to "ask". False: the Tool may change something.
    */
   readOnly: boolean;
+}
+
+/**
+ * Why a change inside IncarnaMind waits for the User (#1110): it would take the Answer's changes
+ * past `COMMAND_AT_ONCE`, or it deletes, which the assistant never does without asking.
+ */
+export type CommandAskReason = "many" | "delete";
+
+/** How many things one Answer's commands may change before the next change asks the User first (#1110). */
+export const COMMAND_AT_ONCE = 20;
+
+/**
+ * What a command the assistant runs for the User would do, as its approval shows it (#1110):
+ * save a Mind as a file in a folder other than the Output location; read a folder's files
+ * (`files`, by name, nothing outside it) and add them to the Library; or change things inside
+ * IncarnaMind that need the User's say (`reason`). `items` are the first of them, each by the
+ * name the User knew it by, with `renamed` when this Answer renamed it.
+ */
+export type CommandAsk =
+  | {
+      kind: "change";
+      command: AppCommandId;
+      reason: CommandAskReason;
+      count: number;
+      items: CommandItem[];
+      /** The Folder or Tag it would put them in, by name. */
+      into: string | null;
+      /** How many things the Answer changed without asking before this call. */
+      changed: number;
+    }
+  | {
+      kind: "export";
+      mind: { id: string; name: string };
+      format: ExportFormat;
+      /** Absolute, links followed. */
+      folder: string;
+      /** The name it would be saved under; the next free one if that is taken. */
+      fileName: string;
+    }
+  | { kind: "add"; folder: string; files: string[] };
+
+/** A Folder or Tag the commands of a Run made, left in place by their Undo: the User filed things in it since. */
+export interface CommandKept {
+  kind: "folder" | "tag";
+  name: string;
+}
+
+/** What `undoCommands` took back (#1110). */
+export interface CommandsUndone {
+  /** The Folders and Tags the Run made that its Undo left in place, from every try so far. */
+  kept: CommandKept[];
+  /**
+   * Why some of its changes weren't taken back, each in English; null: all of them were.
+   * `again`: trying again may take back the rest, once the User fixed the cause (restored a
+   * Document, say). False once a try again took back nothing more.
+   */
+  failed: { reasons: string[]; again: boolean } | null;
+}
+
+/**
+ * A command the assistant runs for the User (#1110) waiting for their approval: it would
+ * write outside IncarnaMind, read a folder of theirs, delete, or change more than an Answer
+ * changes at once. It offers no "always allow". `tainted`: its Run had read text the User didn't
+ * write: Passages, a Connector's reply, a web page or a web page's title.
+ */
+export interface CommandApprovalRequest extends ApprovalRequestBase {
+  subject: Extract<ApprovalSubject, { kind: "command" }>;
+  tool: "run_command";
+  ask: CommandAsk;
 }
 
 // ---------------------------------------------------------------------------
@@ -7651,6 +7768,8 @@ export const MEETING_AUDIO_KEPT_MS = 24 * 60 * 60 * 1000;
 export interface CreateMeetingInput {
   /** An empty Mind to hold it. Not given: a new Mind, named for the day. */
   mindId?: string;
+  /** The Folder a new Mind goes in; not with `mindId`. Not given: none. */
+  folderId?: string | null;
 }
 
 export interface StartMeetingInput {
@@ -7975,6 +8094,14 @@ export interface CoreApi {
    * Linked folder unlinked). Never touches the User's files.
    */
   restore(refs: RestoreRef[]): Promise<void>;
+  /**
+   * Takes back every change the commands of one of the assistant's Runs made (#1110), the last
+   * first: `CommandDone.run`. A change that can't be taken back is skipped and the rest are;
+   * called again, it tries those left. Throws NotFoundError for a Run of an earlier session.
+   */
+  undoCommands(run: string): Promise<CommandsUndone>;
+  /** Makes again the changes `undoCommands` took back, as far as it can, saying what it couldn't. */
+  redoCommands(run: string): Promise<void>;
   /** What can be restored: the Minds, conversations, Documents, Folders and Tags deleted in the last `RECENTLY_DELETED_DAYS`, newest first. */
   listDeleted(): Promise<DeletedItem[]>;
   /**
@@ -9342,8 +9469,8 @@ export interface CoreApi {
   listMeetings(): Promise<Meeting[]>;
   /**
    * A Meeting ready to record, in a new Mind named for the day or in an empty
-   * Mind given: its Mind shows the start block. Needs meetings turned on in
-   * Settings, and a Mind with no Meeting.
+   * Mind given: its Mind shows the start block. Needs a Mind with no Meeting,
+   * and a copy that can record audio.
    */
   createMeeting(input?: CreateMeetingInput): Promise<Meeting>;
   /** Takes back a Meeting that hasn't started ("Don't record; keep this as a note"): its Mind stays. */
@@ -9513,6 +9640,8 @@ export interface CoreEvents {
   "documents.moved": Document[];
   /** Documents removed from the index, by the User or with their Linked folder: their ids. */
   "documents.removed": string[];
+  /** A Document renamed, by the User or the assistant (#1110), whole as it is named now. */
+  "documents.renamed": Document[];
   /** The Documents whose PDF password is kept changed (#763): their ids now. */
   "documentPasswords.changed": string[];
   /** Folders appeared or went with the folders on disk: the list as `listFolders` now returns it. */
@@ -9858,6 +9987,8 @@ const methods: Record<CoreApiMethod, true> = {
   moveToFolder: true,
   restoreAssignment: true,
   restore: true,
+  undoCommands: true,
+  redoCommands: true,
   listDeleted: true,
   deletePermanently: true,
   listTags: true,

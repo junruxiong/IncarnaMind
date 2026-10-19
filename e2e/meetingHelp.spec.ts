@@ -17,7 +17,6 @@ import {
   removeDataFolder,
   setWindowSize,
   startRecording,
-  turnOnMeetings,
   useLocalChatModel,
 } from "./app";
 
@@ -61,7 +60,6 @@ const core = (window: Page) =>
 
 /** A meeting recording from both sides, its first lines in. */
 async function recordingMeeting(window: Page) {
-  await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   await expect(bar.getByTestId("meeting-transcript-toggle")).toBeEnabled({ timeout: 20_000 });
   return bar;
