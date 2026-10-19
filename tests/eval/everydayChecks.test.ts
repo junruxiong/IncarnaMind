@@ -314,15 +314,21 @@ describe("Standing on its own, and the example unasked", () => {
     ).toEqual(["They are covered in my earlier answer.", "数据集见上文。"]);
   });
 
-  // protects=a sentence that says more than a pointer, left out of a page, fails as content lost, from the reply or from what a call gave to write into a Mind, in English and Chinese; one that was only a pointer passes; fails_when=lost content passes, or a pointer taken out fails; no_claim=none beyond protects.
+  // protects=content left out of a page fails: a sentence of the reply that says more than a pointer, or a Block of what a call gave to write into a Mind lost whole, in English and Chinese; a pointer taken out passes, and so does a sentence the app rewrote inside a Block that stayed; fails_when=lost content passes, or a pointer taken out or a rewritten sentence fails; no_claim=none beyond protects.
   test("content left out of a page fails", () => {
     const correction = "I made an error in my previous answer and the total excludes VAT.";
     expect(lost(`Pay is 5k. ${correction}`, "Pay is 5k.")).toEqual(["content-lost"]);
     expect(lost("Pay is 5k. See my earlier answer.", "Pay is 5k.")).toEqual([]);
-    expect(lost("Done.", undefined, ["月薪一万。年假见上文。"], ["月薪一万。"])).toEqual([]);
+    expect(lost("Done.", undefined, ["月薪一万。\n\n年假见上文。"], ["月薪一万。"])).toEqual([]);
     expect(
-      lost("Done.", undefined, ["月薪一万。合同写道：“租金见上文。”"], ["月薪一万。"]),
+      lost("Done.", undefined, ["月薪一万。\n\n合同写道：“租金见上文。”"], ["月薪一万。"]),
     ).toEqual(["content-lost"]);
+    expect(lost("Done.", undefined, ["Pay is 5k.\n\n- Bonus is 1k."], ["Pay is 5k."])).toEqual([
+      "content-lost",
+    ]);
+    expect(
+      lost("Done.", undefined, ["Key results. Highlights are below[^8]:"], ["Key results. All."]),
+    ).toEqual([]);
   });
 
   // protects=a reply about the User's own Documents that mentions the example fails, in English and in Chinese; fails_when=it passes; no_claim=none beyond protects.

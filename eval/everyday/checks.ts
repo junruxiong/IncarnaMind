@@ -155,6 +155,33 @@ export function leftOut(given: string, written: string): string[] {
   return proseSentences(given).filter((sentence) => !there.includes(lettersOf(sentence)));
 }
 
+/**
+ * The Blocks of `given` that `written` holds nothing of: no sentence, line or
+ * table cell, read as letters and digits only. For text written into a Mind,
+ * where the app may still rewrite a sentence it checked, a Block lost whole
+ * is what a page lost.
+ */
+export function blocksLeftOut(given: string, written: string): string[] {
+  const there = lettersOf(written);
+  const blocks: string[] = [];
+  let block: string[] = [];
+  let fenced = false;
+  for (const line of [...given.split("\n"), ""]) {
+    if (/^\s*(?:```|~~~)/.test(line)) fenced = !fenced;
+    if (fenced || line.trim() !== "") block.push(line);
+    else if (block.length > 0) {
+      blocks.push(block.join("\n"));
+      block = [];
+    }
+  }
+  return blocks.filter((each) => {
+    const parts = each
+      .split(/(?<=[.!?。！？]["”’)」』]*(?:\[\^\d{1,4}\])*)\s*|\n|\|/u)
+      .filter((part) => lettersOf(part).length >= 2);
+    return parts.length > 0 && !parts.some((part) => there.includes(lettersOf(part)));
+  });
+}
+
 // The words a pointer is made of, so what a sentence says besides is what's left.
 const POINTER_WORDS = new Set(
   (
@@ -228,7 +255,7 @@ function namedAsUncovered(reply: string, name: string): boolean {
 /** What was taken out on the way into a page: of the reply, by Add to note, and of what its calls gave to write into Minds. */
 export const takenOut = (outcome: RequestOutcome): string[] => [
   ...(outcome.addedToPage === undefined ? [] : leftOut(outcome.answer.text, outcome.addedToPage)),
-  ...leftOut(
+  ...blocksLeftOut(
     (outcome.givenToMinds ?? []).join("\n\n"),
     (outcome.writtenInMinds ?? []).join("\n\n"),
   ),

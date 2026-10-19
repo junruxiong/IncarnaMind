@@ -117,7 +117,7 @@ export interface CaseResult {
   reply: string;
   /** The reply as Add to note puts it in a page. */
   page: string;
-  /** Sentences taken out on the way into a page, by Add to note or in what it wrote into Minds. */
+  /** What was taken out on the way into a page: sentences, by Add to note, and Blocks of what it wrote into Minds. */
   removed: string[];
   /** Sentences that point to an earlier Answer, left in what goes into a page. */
   pointersLeft: number;

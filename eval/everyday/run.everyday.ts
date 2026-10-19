@@ -290,9 +290,9 @@ function report(
     "",
     `${failing("earlier")} of ${heldTo("noEarlier").length} replies asked after the example's Answer talk about an earlier Answer. ${failing("example")} of ${heldTo("noExample").length} mention the example unasked.`,
     "",
-    `Content lost: ${lost.length} sentences that say more than a pointer were left out of a page, over all ${results.length} Answers. Taking pointers out of the replies left out ${markersLeftOut} Citation markers.`,
+    `Content lost: ${lost.length} sentences or Blocks that say more than a pointer were left out of a page, over all ${results.length} Answers. Taking pointers out of the replies left out ${markersLeftOut} Citation markers.`,
     "",
-    "Every sentence taken out on the way into a page, to read by hand:",
+    "Everything taken out on the way into a page, to read by hand:",
     "",
     ...results.flatMap((each) =>
       each.removed.map((sentence) => `- ${each.id}, ${each.model}: “${sentence}”`),
