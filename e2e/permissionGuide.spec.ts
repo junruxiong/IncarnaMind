@@ -133,6 +133,7 @@ test("the microphone: the guide names it, ✕ closes it, and so does Esc once it
     .click()
     .catch(() => undefined);
   await closed;
+  await expect.poll(() => guideOf(app)).toBeUndefined();
 
   await pointAndClick(window, window.getByTestId("meeting-settings-microphone"));
   const again = await guideWindow(app);
@@ -141,6 +142,7 @@ test("the microphone: the guide names it, ✕ closes it, and so does Esc once it
   // The window closes under the key press: Playwright says the page went away.
   await again.keyboard.press("Escape").catch(() => undefined);
   await closedAgain;
+  await expect.poll(() => guideOf(app)).toBeUndefined();
   await grant(app, "microphone");
   await app.close();
 });
