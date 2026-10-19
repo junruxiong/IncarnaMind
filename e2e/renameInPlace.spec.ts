@@ -12,6 +12,7 @@ import {
   removeDataFolder,
   setWindowSize,
   sidebarFolder,
+  tagDocument,
 } from "./app";
 
 /*
@@ -119,6 +120,8 @@ test("a Folder renames in its section of the Library, and a Tag in the sidebar: 
       await core.createTag({ name: "Moons" });
     });
     await addDocuments(window, await writeTexts("Tides"));
+    await tagDocument(window, "Tides", "Tides");
+    await tagDocument(window, "Tides", "Moons");
 
     // The Folder's section in the Library: its name, by double-click and by F2.
     await sidebarFolder(window, "Finance").getByTestId("folder-row").click({ button: "right" });
@@ -141,7 +144,6 @@ test("a Folder renames in its section of the Library, and a Tag in the sidebar: 
     await expect(window.getByRole("dialog")).toHaveCount(0);
 
     // A Tag, by F2 and by double-click.
-    await window.getByTestId("browse-views").getByRole("button", { name: "Tags" }).click();
     const tags = window.getByTestId("sidebar-tag");
     const tides = tags.filter({ hasText: "Tides" });
     await tides.getByRole("treeitem").first().focus();

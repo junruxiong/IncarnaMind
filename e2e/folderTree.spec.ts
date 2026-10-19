@@ -1,16 +1,18 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   assistantAnswers,
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
+  dragOnto,
   launchApp,
   nameMind,
   newMind,
   openSteps,
+  pointAt,
   removeDataFolder,
   sidebarFolder,
 } from "./app";
@@ -65,15 +67,6 @@ const bridge = (window: Page) => ({
     ),
 });
 
-/** Moves the mouse onto an element in small steps, as a person does. */
-async function slideTo(window: Page, target: Locator): Promise<{ x: number; y: number }> {
-  const box = await target.boundingBox();
-  if (!box) throw new Error("The element isn't visible.");
-  const point = { x: box.x + Math.min(40, box.width / 2), y: box.y + box.height / 2 };
-  await window.mouse.move(point.x, point.y, { steps: 8 });
-  return point;
-}
-
 const notInAFolder = (window: Page) => window.getByTestId("not-in-a-folder");
 const mindRow = (window: Page, title: string) =>
   window.getByTestId("mind-row").filter({ hasText: title });
@@ -107,14 +100,17 @@ test("each Folder lists its Minds above its Documents and opens in place; a Mind
     await expect(folder).toHaveAttribute("data-expanded", "false");
     await expect(folder.getByTestId("browse-count")).toHaveText("1");
     await expect(notInAFolder(window)).toContainText("Not in a Folder");
-    await expect(window.getByTestId("not-in-a-folder-hint")).toHaveText("Searches everything");
+    await expect(window.getByTestId("not-in-a-folder-section-heading")).toHaveAttribute(
+      "title",
+      "Searches everything",
+    );
     await expect(
       notInAFolder(window).getByTestId("document-list-item").getByTestId("row-text"),
     ).toHaveText("Spring menu");
 
     // Clicked, the Folder opens in place: the main area stays as it was.
     await expect(window.getByTestId("mind-none-open")).toBeVisible();
-    await slideTo(window, folder.getByTestId("folder-row"));
+    await pointAt(window, folder.getByTestId("folder-row"));
     await window.mouse.down();
     await window.mouse.up();
     await expect(folder).toHaveAttribute("data-expanded", "true");
@@ -213,16 +209,14 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     const research = sidebarFolder(window, "Research");
     const undoLine = window.getByTestId("undo-line");
 
-    // ↑ and ↓ move through the tree's rows: the Folders, Not in a Folder, then its Mind.
+    // ↑ and ↓ move through the tree's rows: the Folders, then the Mind in Not in a Folder.
     await finance.getByTestId("folder-row").focus();
     await window.keyboard.press("ArrowDown");
     await expect(research.getByTestId("folder-row")).toBeFocused();
     await window.keyboard.press("ArrowDown");
-    await expect(window.getByTestId("not-in-a-folder-toggle")).toBeFocused();
-    await window.keyboard.press("ArrowDown");
     await expect(shortlist.getByTestId("mind-list-item")).toBeFocused();
     await window.keyboard.press("ArrowUp");
-    await expect(window.getByTestId("not-in-a-folder-toggle")).toBeFocused();
+    await expect(research.getByTestId("folder-row")).toBeFocused();
 
     // Its menu's "Move to…": a Folder picker with a field to find one.
     await shortlist.hover();
@@ -258,7 +252,8 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       "Research",
     ]);
     await window.keyboard.type("fin");
-    await expect(picker.getByTestId("move-to-option")).toHaveText(["Finance"]);
+    // A name no Folder has exactly is offered as a new Folder too, after those it finds.
+    await expect(picker.getByTestId("move-to-option")).toHaveText(["Finance", "New Folder “fin”"]);
     await window.keyboard.press("Enter");
     await expect(picker).toBeHidden();
     // In Finance, which opens to show it, and a line to take it back.
@@ -300,12 +295,15 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(notInAFolder(window).getByTestId("mind-list-item")).toHaveText("Shortlist");
 
     // Dragged with the mouse onto a Folder, which lights up while it's over it.
-    await slideTo(window, shortlist.getByTestId("row-text"));
-    await window.mouse.down();
-    await slideTo(window, research.getByTestId("folder-row"));
-    await expect(research).toHaveAttribute("data-drop-target", "true");
-    await expect(finance).not.toHaveAttribute("data-drop-target", "true");
-    await window.mouse.up();
+    await dragOnto(
+      window,
+      shortlist.getByTestId("row-text"),
+      research.getByTestId("folder-row"),
+      async () => {
+        await expect(research).toHaveAttribute("data-drop-target", "true");
+        await expect(finance).not.toHaveAttribute("data-drop-target", "true");
+      },
+    );
     await expect(research).not.toHaveAttribute("data-drop-target", "true");
     await expect(research.getByTestId("mind-list-item")).toHaveText("Shortlist");
     await expect(undoLine.getByTestId("undo-message")).toHaveText("Moved “Shortlist” to Research");
@@ -385,7 +383,10 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       }),
     );
     await expect(notInAFolder(window)).toContainText("不在文件夹中");
-    await expect(window.getByTestId("not-in-a-folder-hint")).toHaveText("搜索全部文档");
+    await expect(window.getByTestId("not-in-a-folder-section-heading")).toHaveAttribute(
+      "title",
+      "搜索全部文档",
+    );
     await screenshot(window, "folder-tree-zh");
   } finally {
     await app.close();
