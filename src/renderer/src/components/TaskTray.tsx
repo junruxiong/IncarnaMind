@@ -4,13 +4,16 @@ import { useShallow } from "zustand/react/shallow";
 import type { ApprovalRequest, Task, TaskEffect } from "../../../core/api";
 import { useApprovals } from "../approvals";
 import { keysLabel } from "../commands/keys";
+import { useConversations } from "../conversations";
 import { ApprovalCard } from "../editor/AnswerView";
 import { withShortcut } from "../editor/withShortcut";
 import { useT } from "../i18n";
 import { saidInLine } from "../lineNames";
 import type { Translate } from "../objects";
+import { useQuestions } from "../questions";
 import { useResearch } from "../research";
 import { answerTaskAsk, loadTasks, useTasks } from "../tasks";
+import { QuestionCard } from "./assistant/QuestionCard";
 import { QueuedMessages } from "./QueuedMessages";
 import { ResearchPlanCard } from "./ResearchPlanCard";
 import { ResearchPlanView } from "./ResearchPlanView";
@@ -150,12 +153,13 @@ function TaskAskView({ task }: { task: Task }) {
  * The Task tray (#126, narrowed by #657; DESIGN.md, Task tray): joined to the
  * top of the assistant's composer, only what waits for the User, nearest the
  * keyboard. Top to bottom: the plan card before a Task starts, the one
- * waiting ask, then queued messages, which wrap. Progress is in the thread
+ * waiting ask (a Task's, else the assistant's question in the open
+ * conversation, #1374), then queued messages, which wrap. Progress is in the thread
  * (`TaskProgress`). The plan card is Research's (#130). It takes at most 40%
  * of the column, and at least room for the ask's buttons; the ask scrolls
  * inside with its buttons pinned. Nothing in it goes into the Mind.
  */
-export function TaskTray({ mindId }: { mindId: string }) {
+export function TaskTray({ mindId }: { mindId: string | null }) {
   const t = useT();
   useEffect(loadTasks, []);
   const asking = useTasks((state) =>
@@ -163,8 +167,12 @@ export function TaskTray({ mindId }: { mindId: string }) {
       (task) => task.mindId === mindId && task.finishedAt === null && task.ask !== null,
     ),
   );
-  const planning = useResearch((state) => state.plans[mindId] !== undefined);
-  const viewingId = useResearch((state) => state.viewing[mindId]);
+  const openId = useConversations((state) => state.openId);
+  const question = useQuestions((state) =>
+    Object.values(state.waiting).find((each) => each.conversationId === openId),
+  );
+  const planning = useResearch((state) => mindId !== null && state.plans[mindId] !== undefined);
+  const viewingId = useResearch((state) => (mindId === null ? undefined : state.viewing[mindId]));
   const viewing = useTasks((state) => {
     const task = viewingId ? state.tasks[viewingId] : undefined;
     return task && task.finishedAt === null ? task : undefined;
@@ -178,7 +186,12 @@ export function TaskTray({ mindId }: { mindId: string }) {
   );
   const tray = useRef<HTMLElement>(null);
   const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
-  const present = asking !== undefined || planning || viewing !== undefined || queued.length > 0;
+  const present =
+    asking !== undefined ||
+    question !== undefined ||
+    planning ||
+    viewing !== undefined ||
+    queued.length > 0;
 
   useLayoutEffect(() => {
     const element = tray.current;
@@ -207,9 +220,17 @@ export function TaskTray({ mindId }: { mindId: string }) {
       className="task-tray"
       style={{ maxHeight }}
     >
-      {planning && <ResearchPlanCard mindId={mindId} />}
+      {planning && mindId !== null && <ResearchPlanCard mindId={mindId} />}
       {!planning && viewing && <ResearchPlanView task={viewing} />}
-      {asking && <TaskAskView task={asking} />}
+      {asking ? (
+        <TaskAskView task={asking} />
+      ) : (
+        question && (
+          <div data-testid="task-ask" className="task-ask">
+            <QuestionCard key={question.requestId} request={question} />
+          </div>
+        )
+      )}
       {queued.map((task) => (
         <QueuedMessages key={task.id} task={task} />
       ))}

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { ApprovalDecision, ApprovalRequest, ApprovalResponseOptions } from "../../core/api";
 import { core } from "./core";
 import { useAppStore } from "./store";
+import { waitingRequests } from "./waitingRequests";
 
 interface ApprovalsState {
   /**
@@ -29,22 +30,7 @@ export const useApprovals = create<ApprovalsState>()(() => ({
   },
 }));
 
-const add = (requests: readonly ApprovalRequest[]) =>
-  useApprovals.setState((state) => ({
-    waiting: {
-      ...state.waiting,
-      ...Object.fromEntries(requests.map((request) => [request.requestId, request])),
-    },
-  }));
-
-function remove(requestId: string) {
-  useApprovals.setState((state) => {
-    if (!(requestId in state.waiting)) return state;
-    const waiting = { ...state.waiting };
-    delete waiting[requestId];
-    return { waiting };
-  });
-}
+const { add, remove } = waitingRequests<ApprovalRequest>(useApprovals);
 
 core.on("approval.requested", (request) => add([request]));
 core.on("approval.resolved", ({ requestId }) => remove(requestId));

@@ -24,6 +24,7 @@ import { APICallError } from "ai";
 import type { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelSpec } from "../../core";
 import { answerReply, CITED_ANSWER, skillNamed } from "./answers";
+import { asksReply } from "./asks";
 import { CHECK_RUN, checkReply } from "./checks";
 import { commandsReply } from "./commands";
 import { helpReply } from "./meetingHelp";
@@ -117,6 +118,8 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   if (/blank reply/i.test(question)) return { text: "" };
   /** What the calls made first said, in order. */
   const said: string[] = [];
+  const asks = asksReply(prompt, question, names);
+  if (asks) return asks;
   const commands = commandsReply(prompt, question, names);
   if (commands) return commands;
   const minds = mindsReply(prompt, question, names);
