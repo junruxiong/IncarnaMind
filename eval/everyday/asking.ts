@@ -121,6 +121,8 @@ export interface CaseResult {
   removed: string[];
   /** Sentences of what the calls gave that the model's edit_mind or the app's own check rewrote after the guard, and what the Mind holds now. */
   rewritten: { given: string; now: string | null }[];
+  /** Calls that copied the last Answer into a Mind (`answer: true`). */
+  copies: number;
   pointersLeft: number;
   calls: string[];
   /** The Mind's Blocks that changed, as they read before and once its changes are accepted. */
@@ -412,6 +414,7 @@ export async function runCase(
     page,
     removed: takenOut(outcome).removed,
     rewritten: rewrittenLater(outcome),
+    copies: givenToMinds.filter((given) => given.question !== undefined).length,
     pointersLeft: pointersIn([page, ...writtenInMinds].join("\n\n")).length,
     calls: record,
     changes,

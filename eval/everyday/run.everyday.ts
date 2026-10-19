@@ -90,6 +90,7 @@ async function runModel(
             page: "",
             removed: [],
             rewritten: [],
+            copies: 0,
             pointersLeft: 0,
             calls: [],
             changes: [],
@@ -291,7 +292,7 @@ function report(
     "",
     `${failing("earlier")} of ${heldTo("noEarlier").length} replies asked after the example's Answer talk about an earlier Answer. ${failing("example")} of ${heldTo("noExample").length} mention the example unasked.`,
     "",
-    `The guard: it took out ${results.reduce((total, each) => total + each.removed.length, 0)} sentences and Blocks on the way into a page, over all ${results.length} Answers, and content lost is ${lost.length}: what it took that says more than a pointer, and the Blocks it changed. Taking pointers out of the replies left out ${markersLeftOut} Citation markers. Each thing it took, to read by hand:`,
+    `The guard: it took out ${results.reduce((total, each) => total + each.removed.length, 0)} Blocks on the way into a page, over all ${results.length} Answers and the ${results.reduce((total, each) => total + each.copies, 0)} copies of the last Answer into a Mind, and content lost is ${lost.length}: what it took that says more than a pointer, and the Blocks it changed. Taking pointers out of the replies left out ${markersLeftOut} Citation markers. Each thing it took, to read by hand:`,
     "",
     ...results.flatMap((each) =>
       each.removed.map((taken) => `- ${each.id}, ${each.model}: “${taken}”`),
