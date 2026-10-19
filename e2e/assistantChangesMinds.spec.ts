@@ -329,6 +329,39 @@ test("Reject all keeps a Mind the assistant made once the User has written in it
   await expect(made).toHaveCount(1);
 });
 
+// protects=the bar of the last change goes under it, not over the heading above that it would cover; fails_when=the bar sits over the line above (#1358); no_claim=the bar of a change between two lines of text, which stays over it.
+test("a change's bar goes under the change when above it would cover text and nothing is below", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setLanguage(window, "en");
+  await setWindowSize(app, window, 1440, 900);
+  await writeMind(window, "Q3 review", ["The quarter was good."]);
+  await askInAssistant(window, "Can you make a new note called Fieldwork plan with a summary");
+  await pointAndClick(
+    window,
+    window.getByTestId("mind-tab").filter({ hasText: "Fieldwork plan with a summary" }),
+  );
+  await expect(window.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
+
+  const editor = window.getByTestId("mind-editor");
+  const paragraph = editor.locator("p").last();
+  // At the end of its words, which the heading's bar, under the heading, doesn't reach.
+  const words = await paragraph.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const box = range.getBoundingClientRect();
+    return { x: box.right - 8, y: box.top + box.height / 2 };
+  });
+  await window.mouse.move(words.x, words.y, { steps: 8 });
+  const bar = window.getByTestId("change-bar");
+  await expect(bar).toContainText("Change 2 of 2");
+  const [text, shown] = await Promise.all([paragraph.boundingBox(), bar.boundingBox()]);
+  if (!text || !shown) throw new Error("Something isn't visible.");
+  expect(shown.y).toBeGreaterThanOrEqual(text.y + text.height);
+  await app.close();
+});
+
 test("Reject all keeps a Mind the assistant made once something of it was accepted", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
