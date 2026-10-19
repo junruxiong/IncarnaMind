@@ -2029,11 +2029,31 @@ export interface DeviceSettings {
 }
 
 /**
- * Where a Meeting's audio is turned into text: on this computer, for now. The cloud routes
- * (#141, #463) are added here, each served by the keys and sign-ins it names.
+ * Where a Meeting's audio is turned into text: on this computer, or by a cloud service with the
+ * User's own key (#141): OpenAI with the key of the OpenAI provider in Settings › Models, Soniox
+ * with a key of its own. #463 adds Qwen.
  */
-export const TRANSCRIPTION_ROUTES = ["local"] as const;
+export const TRANSCRIPTION_ROUTES = ["local", "openai", "soniox"] as const;
 export type TranscriptionRoute = (typeof TRANSCRIPTION_ROUTES)[number];
+export type CloudTranscriptionRoute = Exclude<TranscriptionRoute, "local">;
+
+/** A cloud transcription service, as Settings and the first-meeting sheet offer it. */
+export interface TranscriptionServiceStatus {
+  route: CloudTranscriptionRoute;
+  name: string;
+  model: string;
+  perHour: Money;
+  /** "provider": it uses the key of the chat provider of the same name in Settings › Models. */
+  key: "provider" | "own";
+  hasKey: boolean;
+  liveSpeakers: boolean;
+  keyUrl: string | null;
+}
+
+export interface SetTranscriptionKeyInput {
+  route: CloudTranscriptionRoute;
+  apiKey: string;
+}
 
 /**
  * How the window moves on a device (DESIGN.md, Motion): as the system's own
@@ -6087,6 +6107,7 @@ export const dataKinds = [
   "verified-document",
   "references",
   "connector-search",
+  "meeting-audio",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -6138,6 +6159,10 @@ export type DataKind = (typeof dataKinds)[number];
  * - "connector-registry": the words the User types in Settings › Connectors'
  *   search, to the official MCP Registry, which finds community Connectors
  *   (#148). Asked the first time they search; none in local mode.
+ * - "transcription": a Meeting's audio while it records, other people's
+ *   voices included, to the cloud transcription service the User chose in
+ *   Settings › Meetings or on the first-meeting sheet (#141). Choosing it
+ *   allows it; none in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -6155,6 +6180,7 @@ export const dataFlowIds = [
   "agents",
   "web-search",
   "connector-registry",
+  "transcription",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -7682,8 +7708,11 @@ export type AudioLossCause = "full" | "denied" | "error" | "closed" | "stalled";
 /** Where a Meeting's speech is turned into text: on this computer, or by a cloud service (#141). */
 export type TranscriptionEngine = "local" | "cloud";
 
-/** Why transcription moved to another engine: the one before fell behind or failed, or the User chose. */
-export type EngineSwitchReason = "behind" | "failed" | "user";
+/**
+ * Why transcription moved to another engine: the one before fell behind or failed, the User
+ * chose, or the cloud service's audio reached the monthly cap.
+ */
+export type EngineSwitchReason = "behind" | "failed" | "user" | "cap";
 
 /**
  * Where a Meeting's Transcript is (#136):
@@ -7732,6 +7761,19 @@ export interface MeetingTranscript {
   partial: { startMs: number; text: string; speaker: string } | null;
   /** The speech-to-text model, while it is downloading or failed to. */
   model: TranscriptionModelStatus | null;
+  /** The cloud service transcribing the live audio now (#141); null: this computer. */
+  cloud: CloudTranscriptionRoute | null;
+  /**
+   * This computer took over from the cloud service the User chose, during this stretch of
+   * recording: where, in the Meeting's time, and why. "dropped": the connection was lost;
+   * "refused": the service didn't accept the key; "cap": the month reached the cap;
+   * "local-mode": “Keep everything on this computer” is on. Null otherwise.
+   */
+  fellBack: {
+    route: CloudTranscriptionRoute;
+    atMs: number;
+    reason: "dropped" | "refused" | "cap" | "local-mode";
+  } | null;
   /** The WebVTT file in the Output location, once saved. */
   savedPath: string | null;
   /** Its save took the default Output location, none being chosen yet (`SavedFile.defaulted`). */
@@ -9477,6 +9519,20 @@ export interface CoreApi {
   stopMeeting(meetingId: string): Promise<Meeting>;
   /** Deletes the Meeting's audio on this computer now; a recording goes on keeping what comes next. */
   deleteMeetingAudio(meetingId: string): Promise<Meeting>;
+  /** The cloud services that can transcribe meeting audio (#141), and whether each has a key. */
+  listTranscriptionServices(): Promise<TranscriptionServiceStatus[]>;
+  /**
+   * Keeps a transcription service's own key (Soniox), in the keychain, once the service accepts
+   * it. Throws `InvalidInputError` when it refuses the key.
+   */
+  setTranscriptionKey(input: SetTranscriptionKeyInput): Promise<TranscriptionServiceStatus[]>;
+  /** Forgets a transcription service's own key; meeting audio is then transcribed on this computer. */
+  removeTranscriptionKey(route: CloudTranscriptionRoute): Promise<TranscriptionServiceStatus[]>;
+  /**
+   * Whether this computer keeps up with live speech, as the last Meeting transcribed here
+   * measured it; null before one has been. The speed probe (#462) will measure it sooner.
+   */
+  getTranscriptionSpeed(): Promise<{ keepsUp: boolean | null }>;
   /**
    * Tries the Meeting's Transcript again after a problem (`MeetingTranscript.problem`):
    * downloads or starts the speech-to-text model, or saves the WebVTT file again.
@@ -10054,6 +10110,10 @@ const methods: Record<CoreApiMethod, true> = {
   resumeMeeting: true,
   stopMeeting: true,
   deleteMeetingAudio: true,
+  listTranscriptionServices: true,
+  setTranscriptionKey: true,
+  removeTranscriptionKey: true,
+  getTranscriptionSpeed: true,
   retryTranscript: true,
   openAudioSettings: true,
   askMeetingHelp: true,
