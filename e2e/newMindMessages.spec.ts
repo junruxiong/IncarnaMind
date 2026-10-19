@@ -30,35 +30,40 @@ const MESSAGES = [
   '[data-testid="undo-message"]',
   '[data-testid="model-setup"]',
   '[data-testid="first-open-steps"]',
+  '[data-testid="start-guide"]',
   '[data-testid="assistant-empty"]',
 ].join(", ");
 
-for (const [language, width] of [
-  ["en", 900],
-  ["en", 1440],
-  ["zh-CN", 900],
-  ["zh-CN", 1440],
-] as const) {
-  test(`a new Mind shows at most two messages and no “made” line, at ${width} px in ${language}`, async () => {
-    const { app, window } = await launchApp(dataDir);
-    await dismissChatSetup(window);
-    await setWindowSize(app, window, width, 760);
-    await setLanguage(window, language);
-    await newMind(window);
+for (const examples of [false, true]) {
+  for (const [language, width] of [
+    ["en", 900],
+    ["en", 1440],
+    ["zh-CN", 900],
+    ["zh-CN", 1440],
+  ] as const) {
+    test(`a new Mind shows at most two messages and no “made” line, ${examples ? "with" : "without"} the examples, at ${width} px in ${language}`, async () => {
+      const { app, window } = await launchApp(dataDir, { examples });
+      await dismissChatSetup(window);
+      await setWindowSize(app, window, width, 760);
+      await setLanguage(window, language);
+      await newMind(window);
 
-    await expect(window.getByTestId("chat-readiness")).toBeVisible();
-    await expect(window.getByTestId("undo-message")).toHaveCount(0);
-    await expect(window.getByTestId("undo-line")).not.toContainText(/Made a new Mind|已新建 Mind/);
-    const shown = await window.locator(MESSAGES).evaluateAll(
-      (elements) =>
-        elements.filter((element) => {
-          const box = element.getBoundingClientRect();
-          return box.width > 0 && box.height > 0;
-        }).length,
-    );
-    expect(shown).toBeLessThanOrEqual(2);
-    await app.close();
-  });
+      await expect(window.getByTestId("chat-readiness")).toBeVisible();
+      await expect(window.getByTestId("undo-message")).toHaveCount(0);
+      await expect(window.getByTestId("undo-line")).not.toContainText(
+        /Made a new Mind|已新建 Mind/,
+      );
+      const shown = await window.locator(MESSAGES).evaluateAll(
+        (elements) =>
+          elements.filter((element) => {
+            const box = element.getBoundingClientRect();
+            return box.width > 0 && box.height > 0;
+          }).length,
+      );
+      expect(shown).toBeLessThanOrEqual(2);
+      await app.close();
+    });
+  }
 }
 
 test("a new Mind is taken back by deleting it, which offers Undo", async () => {
