@@ -146,9 +146,13 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
       onKeyDown={onKeyDown}
     >
       <div className="approval-head">
-        <p id={titleId} className="approval-title">
+        <p className="approval-title">
           <span aria-hidden="true" className="approval-dot" />
-          <span data-testid="question-text" className="approval-title-text choice-question">
+          <span
+            id={titleId}
+            data-testid="question-text"
+            className="approval-title-text choice-question"
+          >
             {question.question}
           </span>
           {(cut || whole) && (

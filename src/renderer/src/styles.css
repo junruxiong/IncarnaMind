@@ -3594,7 +3594,7 @@
     font-size: 12px;
     color: var(--color-ink-meta);
   }
-  /* What is asked stays at the top, two lines of it until More opens it; only the rows scroll, and the buttons stay at the foot (#1400). */
+  /* A long question is cut short so its rows and buttons stay in reach (#1374); More reads it whole. */
   .choice-card .approval-title {
     align-items: flex-start;
 
@@ -3608,7 +3608,7 @@
     -webkit-line-clamp: 2;
     overflow: hidden;
   }
-  .choice-more {
+  .choice-card .choice-more {
     flex: none;
     margin-left: auto;
     font-size: 12px;
@@ -7578,8 +7578,8 @@
       .approval-card:not(.choice-card) .approval-explanation {
         display: none;
       }
-      /* Here its line is cut to one too, so a row has room; More opens both, and then the rows give way. */
-      .choice-card {
+      /* The bottom dock leaves the card about 160 px: a whole row keeps its room under the question cut short, and the question opened scrolls above it. */
+      .approval-card.choice-card {
         .approval-head {
           flex: none;
         }
@@ -7600,10 +7600,11 @@
           }
           .approval-explanation {
             display: block;
+            -webkit-line-clamp: none;
+            overflow: visible;
           }
           .choice-options {
-            flex: 1 1 0;
-            min-height: 0;
+            flex: 1 1 36px;
           }
         }
       }

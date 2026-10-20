@@ -207,7 +207,8 @@ export function TaskTray({ mindId }: { mindId: string | null }) {
       const thread = choosing ? MIN_THREAD_ASKING : MIN_THREAD;
       const room = Math.max(MIN_ROOM, column.clientHeight - composer - thread);
       const share = Math.floor(column.clientHeight * TRAY_SHARE);
-      setMaxHeight(Math.min(room, Math.max(share, MIN_TRAY)));
+      // A question takes what room the column has, as the prototype's card shows every row.
+      setMaxHeight(choosing ? room : Math.min(room, Math.max(share, MIN_TRAY)));
     };
     fitTray();
     const observer = new ResizeObserver(fitTray);

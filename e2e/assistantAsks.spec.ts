@@ -163,7 +163,6 @@ const uncovered = (target: Locator) =>
     return seen !== null && element.contains(seen);
   });
 
-/** Whether nothing covers the first line of the question: its top left corner is the question. */
 const questionShows = (question: Locator) =>
   question.evaluate((element) => {
     const box = element.getBoundingClientRect();
@@ -211,7 +210,11 @@ for (const [language, asked, more, less] of [
       await expect(toggle).toHaveText(less);
       await expect(toggle).toHaveAttribute("aria-expanded", "true");
       expect(await clamped(question)).toBe(false);
+      expect(await clamped(card.locator(".approval-explanation"))).toBe(false);
       expect(await uncovered(card.getByTestId("question-continue"))).toBe(true);
+      await window.keyboard.press("2");
+      await expect(rows.nth(1)).toHaveAttribute("aria-checked", "false");
+      expect(await uncovered(rows.nth(1))).toBe(true);
       await pointAndClick(window, toggle);
       await expect(toggle).toHaveText(more);
       expect(await clamped(question)).toBe(true);
@@ -219,6 +222,22 @@ for (const [language, asked, more, less] of [
     });
   }
 }
+
+test("with the assistant at the side, a long question shows every row and Other, as the prototype does", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setUp(app, window);
+  await setWindowSize(app, window, 1440, 900);
+
+  const card = await ask(window, "Summarise the main documents for the board");
+  for (const row of await card.getByTestId("question-option").all()) {
+    expect(await uncovered(row)).toBe(true);
+  }
+  expect(await uncovered(card.getByTestId("question-other"))).toBe(true);
+  await expect(card).toHaveAccessibleName(/rather than why it was decided\?$/);
+  await app.close();
+});
 
 test("Esc skips: the Answer goes on with the two newest and says so", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
