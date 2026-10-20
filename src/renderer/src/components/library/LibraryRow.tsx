@@ -83,6 +83,10 @@ function deleteFrom(row: HTMLElement | null, documentId: string): void {
   const ids = documentsToMove(documentId);
   const gone = new Set(ids);
   const grid = row?.closest('[role="grid"]');
+  // With every row gone, Add Documents: the focus stays in the Library, where ⌘Z still works.
+  const add = row
+    ?.closest('[data-testid="library"]')
+    ?.querySelector<HTMLElement>('[data-testid="library-add-documents"]');
   const rows = [...(grid?.querySelectorAll<HTMLElement>("[data-document-id]") ?? [])];
   const at = rows.findIndex((each) => each.dataset.documentId === documentId);
   const stays = (each: HTMLElement) => !gone.has(each.dataset.documentId ?? "");
@@ -95,10 +99,12 @@ function deleteFrom(row: HTMLElement | null, documentId: string): void {
       surface: "library",
     })
     .then(() => {
-      if (!nextId) return;
-      grid
-        ?.querySelector<HTMLElement>(`[data-document-id="${CSS.escape(nextId)}"] [data-row-main]`)
-        ?.focus();
+      const target = nextId
+        ? grid?.querySelector<HTMLElement>(
+            `[data-document-id="${CSS.escape(nextId)}"] [data-row-main]`,
+          )
+        : add;
+      target?.focus();
     })
     .catch(useAppStore.getState().reportError);
 }
@@ -178,7 +184,7 @@ export const LibraryRow = memo(function LibraryRow({
       openTags(row.current, doc.id);
     } else if (isDeleteKey(event)) {
       event.preventDefault();
-      deleteFrom(row.current, doc.id);
+      if (!event.repeat) deleteFrom(row.current, doc.id);
     }
   };
 

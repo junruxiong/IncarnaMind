@@ -306,11 +306,14 @@ describe("changes the User can take back", () => {
     await useUndo.getState().undo();
     expect(method("restore")).toHaveBeenCalledWith([{ kind: "document", id: "a" }]);
     await useUndo.getState().redo();
-    expect(method("deleteDocument")).toHaveBeenCalledTimes(2);
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(2);
   });
 
-  test("several Documents deleted together are one change, said by their count", async () => {
+  // protects=deleting several Documents is one call to the core and one change, said by their count (#1349); fails_when=the core is asked once per Document, which took 90 s for 1,700; no_claim=how long the core takes.
+  test("several Documents deleted together are one call and one change, said by their count", async () => {
     await useAppStore.getState().deleteDocuments(["a", "b"]);
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(1);
+    expect(method("deleteDocuments")).toHaveBeenCalledWith(["a", "b"]);
     expect(said(top())).toBe("Moved 2 Documents to Recently deleted");
     expect(named(top())).toBe("Delete 2 Documents");
     expect(useAppStore.getState().documents.map((each) => each.id)).toEqual(["c"]);
@@ -319,6 +322,82 @@ describe("changes the User can take back", () => {
       { kind: "document", id: "a" },
       { kind: "document", id: "b" },
     ]);
+  });
+
+  const slow = () => {
+    let finish: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    return { done, finish };
+  };
+  const note = () => useUndo.getState().line?.note?.(words);
+  const ids = () => useAppStore.getState().documents.map((each) => each.id);
+
+  // protects=a delete still going after a second says so where its result will show, until it is done, and its Undo puts every row back at once, in its place, before the core answers (#1349); fails_when=nothing shows meanwhile, the note outlives the delete, or the rows wait for the core; no_claim=how long the core takes.
+  test("a delete that takes longer than a second says so until it is done, and its Undo puts the rows back at once", async () => {
+    const deleting = slow();
+    method("deleteDocuments").mockReturnValue(deleting.done);
+    const deleted = useAppStore.getState().deleteDocuments(["a", "b"]);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(note()).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(note()).toBe("Moving 2 Documents to Recently deleted…");
+    deleting.finish();
+    await deleted;
+    expect(said(useUndo.getState().line?.change)).toBe("Moved 2 Documents to Recently deleted");
+    expect(ids()).toEqual(["c"]);
+
+    const restoring = slow();
+    method("restore").mockReturnValue(restoring.done);
+    const undone = useUndo.getState().undo();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ids()).toEqual(["a", "b", "c"]);
+    restoring.finish();
+    await undone;
+    expect(ids()).toEqual(["a", "b", "c"]);
+  });
+
+  // protects=an Undo the core refuses takes the rows it put back out again, and says why; fails_when=the rows stay though the Documents are still deleted; no_claim=none beyond protects.
+  test("an Undo the core refuses takes the rows out again", async () => {
+    await useAppStore.getState().deleteDocuments(["a", "b"]);
+    method("restore").mockRejectedValue(new Error("The folder was unlinked."));
+    await useUndo.getState().undo();
+    expect(ids()).toEqual(["c"]);
+    expect(useUndo.getState().line?.problem?.step).toBe("undo");
+  });
+
+  // protects=a second ⌘⌫ on the same Documents while the first delete runs finds nothing left to delete, and says nothing wrong (#1349); fails_when=the core is asked twice and the second fails with "There is no such Document"; no_claim=none beyond protects.
+  test("a second delete of the same Documents during the first does nothing", async () => {
+    const deleting = slow();
+    method("deleteDocuments").mockReturnValue(deleting.done);
+    const first = useAppStore.getState().deleteDocuments(["a", "b"]);
+    const second = useAppStore.getState().deleteDocuments(["a", "b"]);
+    deleting.finish();
+    await first;
+    await second;
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(1);
+    expect(said(useUndo.getState().line?.change)).toBe("Moved 2 Documents to Recently deleted");
+  });
+
+  // protects=⌘Z pressed while a delete is still running takes back that delete once it lands, never an earlier change (#1349); fails_when=the earlier change is undone and the Documents stay deleted; no_claim=none beyond protects.
+  test("⌘Z pressed while a delete is running takes back that delete, not an earlier change", async () => {
+    method("renameMind").mockResolvedValue({ ...mind, title: "Budget" });
+    await useAppStore.getState().renameMind("m", "Budget");
+    const deleting = slow();
+    method("deleteDocuments").mockReturnValue(deleting.done);
+    const deleted = useAppStore.getState().deleteDocuments(["a", "b"]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const undone = useUndo.getState().undo();
+    deleting.finish();
+    await deleted;
+    await undone;
+    expect(method("restore")).toHaveBeenCalledWith([
+      { kind: "document", id: "a" },
+      { kind: "document", id: "b" },
+    ]);
+    expect(method("renameMind")).toHaveBeenCalledTimes(1);
+    expect(ids()).toEqual(["a", "b", "c"]);
   });
 
   test("a Tag added is undone by putting each link back as it was, with who chose it", async () => {
