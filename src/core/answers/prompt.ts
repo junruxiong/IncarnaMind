@@ -210,6 +210,16 @@ export function emptyMindNote(offered: boolean, empty: boolean): string {
   return "- The Mind in <mind> is open and still empty: it is the page the User is in. A request to write something goes into it; never say that no Mind is open.";
 }
 
+const ASKS_SHORT =
+  /\b(?:short|brief|quick|concise)\s+(?:[\p{L}-]+\s+)?(?:summary|overview|answer|reply|note|description|explanation|version|report|memo|outline|recap|abstract)\b|\bbriefly\b|\bin short\b|\bkeep it (?:short|brief)\b|简短|简要|简述|简明|简单(?:地|的)?(?:总结|概括|介绍|说明|摘要|概述)/iu;
+
+/** A short piece asked for (#1334): models wrote a page of it. */
+export function shortNote(question: string): string {
+  return ASKS_SHORT.test(question)
+    ? "The User asked for it short: five lines at most, in your reply or in a Mind, each heading and list item counting as a line."
+    : "";
+}
+
 /**
  * A Question asked while the meeting the User is in records (#144): the live transcript goes
  * with it (see ./liveTranscript), and is what Questions about the call are answered from.
