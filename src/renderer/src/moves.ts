@@ -185,6 +185,13 @@ export function moveMessage(
   return t(`move.done.${what.kind}`, { count: what.count, folder: folderName });
 }
 
+/** What a drop on a Folder would do, as its target says it: "Move to Finance", "Move 3 Documents to Finance". */
+export function moveLabel(t: Translate, items: MoveItems, folderName: string): string {
+  const what = whatMoves(t, items, { minds: [], documents: [] });
+  if ("name" in what) return t("drop.moveTo", { folder: folderName });
+  return t(`drop.moveTo.${what.kind}`, { count: what.count, folder: folderName });
+}
+
 /**
  * What the line says once a Folder is made: "Made “Chapter 2”", and with what
  * went into it, "Made “Chapter 2” with 3 Documents".

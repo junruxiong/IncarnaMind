@@ -2,11 +2,12 @@ import { type KeyboardEvent, useRef } from "react";
 import type { Mind } from "../../../core/api";
 import { mindName } from "../../../shared/naming";
 import { useCitationStylePicker } from "../citationStylePicker";
+import { useDragSource } from "../dragDrop";
 import { useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { useMindStatus } from "../mindStatus";
 import { useSelectable, useSeveralSelected } from "../selection";
-import { dragFromRow, moveFromMenu, useSidebarMove } from "../sidebarMoves";
+import { moveFromMenu, rowDrag, useSidebarMove } from "../sidebarMoves";
 import { useAppStore } from "../store";
 import { isMoveToKey, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
@@ -51,6 +52,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
   const lit = select.selected;
   const several = useSeveralSelected("sidebar");
   const treeItem = useTreeItem({ depth, selected: select.selected });
+  const dragSource = useDragSource(() => rowDrag(object, "sidebar"));
 
   if (rename.renaming) {
     return (
@@ -87,8 +89,7 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
       data-folder-id={mind.folderId ?? ""}
       role="none"
       {...select.refProps}
-      draggable
-      onDragStart={(event) => dragFromRow(event, object)}
+      {...dragSource}
       {...objectMenu.rowProps}
       ref={row}
       className={rowClass(lit, "app", several)}

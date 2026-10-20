@@ -61,6 +61,7 @@ import {
   CLAIM_CHECK_MARK,
   COMPARISON_ROW_NODE,
   COMPARISON_TABLE_NODE,
+  type ComparisonQuestion,
   DOCUMENT_CHIP_NODE,
   FOOTNOTE_NODE,
   GENERATED_MARK,
@@ -610,6 +611,55 @@ function readTable(table: Y.XmlElement, options: ReadOptions): TableCell[][] {
   return rows;
 }
 
+/** A comparison table's cell as read: its Answer, or what it says in the Answer's place. */
+export type ComparisonCellReading =
+  | { kind: "answer"; content: Block[] }
+  | { kind: "words"; text: string }
+  | { kind: "empty" };
+
+/** A comparison table as read (#98): its Questions, then a row per Document, a cell per Question. */
+export interface ComparisonReading {
+  questions: ComparisonQuestion[];
+  rows: {
+    documentId: string;
+    /** The Document's name, or that its source was removed. */
+    name: string;
+    cells: ComparisonCellReading[];
+  }[];
+}
+
+export function readComparisonTable(table: Y.XmlElement, options: ReadOptions): ComparisonReading {
+  const say = options.comparisonText ?? ((key, params) => translate("en", key, params));
+  const questions = comparisonQuestionsOf(table.getAttributes());
+  const rows: ComparisonReading["rows"] = [];
+  for (const row of table.toArray()) {
+    if (!(row instanceof Y.XmlElement) || row.nodeName !== COMPARISON_ROW_NODE) continue;
+    const name = stringAttribute(row, "documentName");
+    const documentId = stringAttribute(row, "documentId");
+    const removed = options.documentRemoved?.(documentId) ?? false;
+    const cells = new Map<string, Y.XmlElement>();
+    for (const each of row.toArray()) {
+      if (each instanceof Y.XmlElement) cells.set(stringAttribute(each, "questionId"), each);
+    }
+    rows.push({
+      documentId,
+      name: removed ? say("comparison.row.removed", { name }) : name,
+      cells: questions.map((question): ComparisonCellReading => {
+        const element = cells.get(question.id);
+        if (!element) return { kind: "empty" };
+        const state = comparisonCellOf(element.getAttributes());
+        if (state.status === "done") {
+          return { kind: "answer", content: readChildren(element.toArray(), options) };
+        }
+        if (!state.problem) return { kind: "words", text: "…" };
+        const { key, params } = cellProblemMessage(state.problem);
+        return { kind: "words", text: say(key, params) };
+      }),
+    });
+  }
+  return { questions, rows };
+}
+
 /**
  * A comparison table as a table: a heading row ("Document", then its
  * Questions), then a row per Document, its name first, each cell its Answer,
@@ -627,35 +677,19 @@ function readComparison(table: Y.XmlElement, options: ReadOptions): TableCell[][
   const words = (text: string): Block[] => [
     { kind: "paragraph", content: [{ kind: "text", text, marks: NO_MARKS }] },
   ];
-  const questions = comparisonQuestionsOf(table.getAttributes());
-  const rows: TableCell[][] = [
+  const { questions, rows } = readComparisonTable(table, options);
+  return [
     [
       cell(words(say("comparison.document")), true),
       ...questions.map((question) => cell(words(question.text), true)),
     ],
+    ...rows.map((row) => [
+      cell(words(row.name)),
+      ...row.cells.map((each) =>
+        cell(each.kind === "answer" ? each.content : each.kind === "words" ? words(each.text) : []),
+      ),
+    ]),
   ];
-  for (const row of table.toArray()) {
-    if (!(row instanceof Y.XmlElement) || row.nodeName !== COMPARISON_ROW_NODE) continue;
-    const name = stringAttribute(row, "documentName");
-    const removed = options.documentRemoved?.(stringAttribute(row, "documentId")) ?? false;
-    const cells = new Map<string, Y.XmlElement>();
-    for (const each of row.toArray()) {
-      if (each instanceof Y.XmlElement) cells.set(stringAttribute(each, "questionId"), each);
-    }
-    rows.push([
-      cell(words(removed ? say("comparison.row.removed", { name }) : name)),
-      ...questions.map((question) => {
-        const element = cells.get(question.id);
-        if (!element) return cell([]);
-        const state = comparisonCellOf(element.getAttributes());
-        if (state.status === "done") return cell(readChildren(element.toArray(), options));
-        if (!state.problem) return cell(words("…"));
-        const { key, params } = cellProblemMessage(state.problem);
-        return cell(words(say(key, params)));
-      }),
-    ]);
-  }
-  return rows;
 }
 
 /**
