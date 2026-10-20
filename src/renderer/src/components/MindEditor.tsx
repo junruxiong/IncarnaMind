@@ -61,6 +61,7 @@ import { FindInMind } from "../editor/findInMind";
 import { FootnoteKeys } from "../editor/footnoteSchema";
 import { HeldSelection } from "../editor/heldSelection";
 import { LinkBubble } from "../editor/LinkBubble";
+import { ListKeys } from "../editor/listKeys";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { MindOutline } from "../editor/MindOutline";
@@ -339,6 +340,7 @@ function MindEditorView({
         CopyCitations,
         FootnoteKeys,
         DocumentChipKeys,
+        ListKeys,
         MeetingNotes.configure({
           mindId,
           doc,

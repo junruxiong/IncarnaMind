@@ -2,7 +2,8 @@ import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useT } from "../i18n";
 import { useSettingsTarget } from "../settingsTarget";
 import { useAppStore } from "../store";
-import { fieldClass, sectionNoteClass, sectionTitleClass } from "./ui";
+import { InfoTip } from "./InfoTip";
+import { fieldClass, sectionTitleClass } from "./ui";
 
 const TARGET = ["author-name"] as const;
 
@@ -44,12 +45,12 @@ export function AuthorNameSettings() {
 
   return (
     <section ref={section} data-testid="author-name-settings">
-      <label htmlFor={id} className={sectionTitleClass}>
-        {t("settings.authorName")}
-      </label>
-      <p id={`${id}-note`} className={sectionNoteClass}>
-        {t("settings.authorName.body")}
-      </p>
+      <div className="mb-2 flex items-center">
+        <label htmlFor={id} className={sectionTitleClass}>
+          {t("settings.authorName")}
+        </label>
+        <InfoTip id={`${id}-note`} text={t("settings.authorName.tip")} />
+      </div>
       <input
         ref={field}
         id={id}

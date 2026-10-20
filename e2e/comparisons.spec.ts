@@ -233,11 +233,52 @@ test("“+ Question” adds a column that fills; Expand fills the card with the 
   expect(Math.abs(expanded.y - card.y)).toBeLessThan(2);
   expect(expanded.height).toBeGreaterThan(card.height - 2);
   await screenshot(window, "compare-expanded-en-1600");
+
+  // Export to Excel, in the expanded title line beside "+ Question": the result line says where
+  // it went.
+  await table.getByTestId("comparison-export-excel").hover();
+  await screenshot(window, "compare-excel-hover-en-1600");
+  await pointAndClick(window, table.getByTestId("comparison-export-excel"));
+  const result = window.getByTestId("export-result");
+  await expect(result).toHaveAttribute("data-state", "saved", { timeout: 20_000 });
+  await expect(result).toContainText("Shortlist contract terms.xlsx");
+  await screenshot(window, "compare-excel-saved-en-1600");
+  // Esc collapses the table first; the line stays until the next Esc.
+  await window.keyboard.press("Escape");
+  await expect(table).not.toHaveAttribute("data-expanded", "true");
+  await expect(result).toHaveAttribute("data-state", "saved");
+  await window.keyboard.press("Escape");
+  await expect(result).toHaveCount(0);
+
+  // The same from ⌘K, by keyboard, with the table not expanded: the next free name.
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type("Export table to Excel");
+  await expect(window.getByTestId("palette-item").first()).toContainText("Export table to Excel");
+  await screenshot(window, "compare-excel-palette-en-1600");
+  await window.keyboard.press("Enter");
+  await expect(result).toHaveAttribute("data-state", "saved", { timeout: 20_000 });
+  await expect(result).toContainText("Shortlist contract terms 2.xlsx");
+  await screenshot(window, "compare-excel-saved-keyboard-en-1600");
+  await window.keyboard.press("Escape");
+
+  // Narrow, in English and Chinese, the expanded title line keeps Export to Excel in the card.
+  await setWindowSize(app, window, 900, 860);
+  await pointAndClick(window, table.getByTestId("comparison-expand"));
+  for (const language of ["en", "zh-CN"] as const) {
+    await bridge(window).language(language);
+    const exportButton = table.getByTestId("comparison-export-excel");
+    await expect(exportButton).toHaveText(language === "en" ? "Export to Excel" : "导出到 Excel");
+    const [box, frame] = [await exportButton.boundingBox(), await scroller.boundingBox()];
+    if (!box || !frame) throw new Error("The button or the card isn't on screen.");
+    expect(box.x + box.width).toBeLessThanOrEqual(frame.x + frame.width);
+    await screenshot(window, `compare-excel-expanded-${language}-900`);
+  }
+  await bridge(window).language("en");
   await window.keyboard.press("Escape");
   await expect(table).not.toHaveAttribute("data-expanded", "true");
 
   // Scrolled sideways, the Document column stays where it was; the Questions move.
-  await setWindowSize(app, window, 900, 860);
   for (const question of ["Liability cap", "Auto-renewal", "Price increase limit"]) {
     await pointAndClick(
       window,

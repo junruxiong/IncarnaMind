@@ -36,14 +36,7 @@ import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
 import { tagLinks } from "../../shared/tagLinks";
-import {
-  deleted,
-  linkedFolderPaused,
-  linkedFolderShown,
-  mindMade,
-  renamed,
-  retagged,
-} from "./changes";
+import { deleted, linkedFolderPaused, linkedFolderShown, renamed, retagged } from "./changes";
 import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
@@ -202,8 +195,8 @@ export interface AppState extends LayoutSlice {
   /**
    * Creates a Mind, in a Folder if given, and opens it in a new tab after the
    * shown one, in the focused group or `groupId`, with its title focused, or
-   * with a Question started in it (with a Search scope, if given). Undo sends it
-   * to Recently deleted; redo brings it back and shows it. Resolves to that change.
+   * with a Question started in it (with a Search scope, if given). It says nothing
+   * and leaves nothing to undo: ⌘Z stays the editor's own, and Delete takes the Mind back.
    */
   createMind(options?: {
     startQuestion?: boolean;
@@ -216,13 +209,14 @@ export interface AppState extends LayoutSlice {
     groupId?: string;
     /** Runs once it is made and shown, with its id. */
     made?(mindId: string): void;
-  }): Promise<Undoable | undefined>;
+  }): Promise<void>;
   /**
    * Moves Minds and Documents into a Folder, or out of every Folder (null):
    * shown at once, then as the core has it, with "Moved … · Undo" (and ⌘Z).
-   * The sidebar's drag and drop and "Move to…" share it.
+   * Drops on a Folder and "Move to…" share it. Resolves to the change it put on
+   * the undo stack, or null when nothing moved.
    */
-  moveToFolder(items: MoveItems, folderId: string | null): Promise<void>;
+  moveToFolder(items: MoveItems, folderId: string | null): Promise<Undoable | null>;
   /**
    * Makes "Untitled Folder" (numbered if that is taken) and asks the sidebar to
    * open its name field, or, given a `name`, makes it with that name. With
@@ -252,16 +246,15 @@ export interface AppState extends LayoutSlice {
   /**
    * "Ask about this Folder" in the Library: a Question with the bridge's
    * Search scope at the end of the most recent Mind (see `mindToAskIn`), or
-   * of a new Mind if there is none, with the cursor in it. Resolves to the
-   * change of that new Mind (see `createMind`); a Question in a Mind already
-   * there is the note's own to undo.
+   * of a new Mind if there is none, with the cursor in it. A Question in a Mind
+   * already there is the note's own to undo.
    */
-  askAbout(bridge: LibraryBridge): Promise<Undoable | undefined>;
+  askAbout(bridge: LibraryBridge): Promise<void>;
   /**
    * "Start a Mind from this Folder": a new Mind titled as the Library's
    * sheet, whose first Block is a Question with the bridge's Search scope.
    */
-  startMindFrom(bridge: LibraryBridge): Promise<Undoable | undefined>;
+  startMindFrom(bridge: LibraryBridge): Promise<void>;
   /** Opens the first-run example Mind, making the examples again if they were removed. */
   openExamples(): Promise<void>;
   /** Makes the first-run example again and opens it, with Undo. */
@@ -379,8 +372,8 @@ export interface AppState extends LayoutSlice {
   setTagFilter(tagIds: readonly string[]): void;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
   removeDocumentTag(documentId: string, tagId: string): Promise<void>;
-  /** Puts a Tag on several Documents at once, or takes it off them. */
-  addTagToDocuments(documentIds: readonly string[], tagId: string): Promise<void>;
+  /** Puts a Tag on several Documents at once, resolving to the change it put on the undo stack. */
+  addTagToDocuments(documentIds: readonly string[], tagId: string): Promise<Undoable | null>;
   removeTagFromDocuments(documentIds: readonly string[], tagId: string): Promise<void>;
   /** Creates a Tag; the list follows the core's event. Throws what the core throws. */
   createTag(name: string, description?: string): Promise<Tag>;
@@ -484,7 +477,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
   /** Runs an action, reporting a failure instead of throwing. */
-  const attempt = async (action: () => Promise<void>) => {
+  const attempt = async (action: () => Promise<unknown>) => {
     try {
       await action();
     } catch (error) {
@@ -611,7 +604,9 @@ export const useAppStore = create<AppState>()((set, get) => {
       added ? core.addTagToDocuments(ids, tagId) : core.removeTagFromDocuments(ids, tagId);
     await again();
     const tag = get().tags.find((each) => each.id === tagId)?.name ?? "";
-    push(retagged({ added, tag, names }, before, again));
+    const change = retagged({ added, tag, names }, before, again);
+    push(change);
+    return change;
   };
 
   /** Closes a tab, then says so with Reopen. */
@@ -844,22 +839,12 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     createMind: async (options) => {
-      let made: Undoable | undefined;
       await attempt(async () => {
         const mind = await core.createMind({
           ...(options?.title && { title: options.title }),
           ...((options?.title || options?.titled) && { headed: true }),
           ...(options?.folderId && { folderId: options.folderId }),
         });
-        made = mindMade(
-          mindName(mind),
-          () => core.deleteMind(mind.id),
-          async () => {
-            await core.restore([{ kind: "mind", id: mind.id }]);
-            get().openMind(mind.id);
-          },
-        );
-        push(made);
         set(
           options?.startQuestion
             ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
@@ -868,7 +853,6 @@ export const useAppStore = create<AppState>()((set, get) => {
         await get().showNewMind(mind, options?.groupId);
         options?.made?.(mind.id);
       });
-      return made;
     },
 
     showNewMind: async (mind, groupId) => {
@@ -902,7 +886,6 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (!mindId) return get().createMind({ startQuestion: true, scope });
       get().openMind(mindId);
       set({ questionToStart: { mindId, scope } });
-      return undefined;
     },
 
     // From a Folder as it is, the new Mind is the Folder's.
@@ -914,8 +897,9 @@ export const useAppStore = create<AppState>()((set, get) => {
         folderId: kind === "folder" ? (scope.folderIds[0] ?? null) : null,
       }),
 
-    moveToFolder: (items, folderId) =>
-      attempt(async () => {
+    moveToFolder: async (items, folderId) => {
+      let change: Undoable | null = null;
+      await attempt(async () => {
         const { minds, documents, library } = get();
         // Only what isn't there already: dropping a Mind back on its own Folder moves nothing.
         const folderOf = new Map(
@@ -930,17 +914,18 @@ export const useAppStore = create<AppState>()((set, get) => {
         if (mindIds.length + documentIds.length === 0) return;
         const moving = { mindIds, documentIds };
         const done = await move(moving, folderId);
-        push(
-          moveChange({
-            moving,
-            folderId,
-            folderName: library?.groups.find((group) => group.id === folderId)?.name ?? "",
-            named: namesOfMoving(moving, { minds, documents }),
-            names: namesOfFolders(library, [folderId, ...foldersMovedFrom(done)]),
-            done,
-          }),
-        );
-      }),
+        change = moveChange({
+          moving,
+          folderId,
+          folderName: library?.groups.find((group) => group.id === folderId)?.name ?? "",
+          named: namesOfMoving(moving, { minds, documents }),
+          names: namesOfFolders(library, [folderId, ...foldersMovedFrom(done)]),
+          done,
+        });
+        push(change);
+      });
+      return change;
+    },
 
     createFolder: async (items, named) => {
       let madeId: string | null = null;
@@ -1434,7 +1419,13 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     removeDocumentTag: (documentId, tagId) => attempt(() => retag(false, [documentId], tagId)),
 
-    addTagToDocuments: (documentIds, tagId) => attempt(() => retag(true, documentIds, tagId)),
+    addTagToDocuments: async (documentIds, tagId) => {
+      let change: Undoable | null = null;
+      await attempt(async () => {
+        change = await retag(true, documentIds, tagId);
+      });
+      return change;
+    },
 
     removeTagFromDocuments: (documentIds, tagId) => attempt(() => retag(false, documentIds, tagId)),
 
