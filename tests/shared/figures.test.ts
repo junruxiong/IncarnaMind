@@ -134,6 +134,15 @@ const GOLDEN: { name: string; context: FigureContext; cases: Case[] }[] = [
     ],
   },
   {
+    name: "German scale words",
+    context: { language: "de" },
+    cases: [
+      ["1,2 Mio. €", [f("1,2 Mio. €", 1200000, { unit: "EUR", scale: "Mio." })]],
+      ["3,4 Mrd. €", [f("3,4 Mrd. €", 3400000000, { unit: "EUR", scale: "Mrd." })]],
+      ["250 Tsd. EUR", [f("250 Tsd. EUR", 250000, { unit: "EUR", scale: "Tsd." })]],
+    ],
+  },
+  {
     name: "Indian grouping and scales",
     context: { language: "en-IN" },
     cases: [

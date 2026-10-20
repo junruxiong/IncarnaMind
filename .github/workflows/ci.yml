@@ -113,6 +113,41 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # A comparison table exported to Excel (#132; eval/excel/opens.excel.ts) opens in LibreOffice
+  # headless, and SUM and AVERAGE added under it work out its figures. Not a required check; it
+  # installs LibreOffice, which the other jobs don't need.
+  excel-exports:
+    name: Excel exports open in LibreOffice
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      INCARNAMIND_EXCEL_REQUIRE_LIBREOFFICE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install LibreOffice Calc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-calc
+      - run: npm run eval:excel
+        env:
+          INCARNAMIND_EXCEL_OUT: ${{ runner.temp }}/excel-exports
+      # The workbooks and how LibreOffice draws them, for a person to open in Excel.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: excel-exports
+          path: ${{ runner.temp }}/excel-exports
+          retention-days: 30
+          if-no-files-found: ignore
+
   # Every pull request runs the smoke test on Linux, where runners are plentiful; macOS runs
   # it every night (nightly.yml), for what only macOS has, such as the traffic lights.
   # The suite is split into shards that run at once, balanced by how long each spec takes
