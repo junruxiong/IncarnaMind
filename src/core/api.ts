@@ -4039,6 +4039,12 @@ export type ComparisonResult =
   | { started: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   | { started: false; reason: "consent-declined" };
 
+/** What saving a comparison table as an Excel workbook did (`CoreApi.saveComparisonExport`). */
+export type SavedComparisonExport =
+  /** Saved, with how many of the workbook's Citations aren't "Quote found", which the result line says. */
+  | { status: "saved"; file: SavedFile; unverifiedCitations: number }
+  | Exclude<SavedExport, { status: "saved" }>;
+
 /** A comparison table whose cells are being filled ("comparison.filling"). */
 export interface ComparisonFilling extends ComparisonTableRef {
   filling: boolean;
@@ -6244,6 +6250,119 @@ export interface RegisteredDataFlow {
    * e.g. chat with a model on this computer.
    */
   services: DataFlowStatus[];
+}
+
+// ---------------------------------------------------------------------------
+// Page setup
+// ---------------------------------------------------------------------------
+
+/** How a page number is written: Word's `decimal`, `lowerRoman`, `upperRoman`, `lowerLetter` and `upperLetter`. */
+export type PageNumberFormat =
+  | "decimal"
+  | "lowerRoman"
+  | "upperRoman"
+  | "lowerLetter"
+  | "upperLetter";
+
+/** One run in a header or footer: text, a tab to a position the page sets, or a field that the page it is drawn on fills in. */
+export type PageFurnitureRun =
+  | { kind: "text"; text: string; bold?: true; italic?: true }
+  | {
+      kind: "field";
+      /** The page's number, the pages in the document, or the pages in the section. */
+      field: "PAGE" | "NUMPAGES" | "SECTIONPAGES";
+      /** The field's own `\* roman`-style switch; null: the section's number format. */
+      format: PageNumberFormat | null;
+      bold?: true;
+      italic?: true;
+    }
+  /** Word's absolute position tab (`w:ptab`): the text after it starts at the margin's left, centre or right. */
+  | {
+      kind: "alignedTab";
+      align: "left" | "center" | "right";
+      relativeTo: "margin" | "indent";
+    };
+
+/** A tab stop of a paragraph, from its style and itself as Word resolves them: `position` is from the text area's left edge, in twips. */
+export interface PageTabStop {
+  position: number;
+  align: "left" | "center" | "right" | "decimal" | "bar";
+  leader?: "dot" | "hyphen" | "underscore" | "heavy" | "middleDot";
+}
+
+export interface PageFurnitureParagraph {
+  /** From the paragraph or its style, as Word resolves it. */
+  align: "left" | "center" | "right" | "justify";
+  runs: PageFurnitureRun[];
+  /** Where the tabs ("\t") in the runs stop. Absent: none are set, so Word's default stops. */
+  tabStops?: PageTabStop[];
+  /** It is in a text box anchored in the paragraph before it, as a page number often is. */
+  inTextBox?: true;
+  /** It is a frame (`w:framePr`), which Word places beside the text, such as a page number at the margin: where is not read yet. */
+  framed?: true;
+}
+
+/** A header or a footer: its paragraphs, tables flattened to their paragraphs, a text box's after the one it is anchored in. */
+export interface PageFurniture {
+  paragraphs: PageFurnitureParagraph[];
+  /** How many pictures and shapes it holds that are not read yet (a logo): none is drawn. Absent: none. */
+  pictures?: number;
+}
+
+/** A header or footer for each kind of page: most pages, the first, and the even ones. */
+export interface PageFurnitureSet {
+  default: PageFurniture | null;
+  /** Used where the section has a different first page. */
+  first: PageFurniture | null;
+  /** Used where the document has different odd and even pages. */
+  even: PageFurniture | null;
+}
+
+/** One section of a document's pages. Lengths are in twips (twentieths of a point, 1,440 to the inch). */
+export interface PageSection {
+  /**
+   * The place ("w:sectPr#3") of the section break atom that ends it in the Mind,
+   * as `WordAtomAttributes.source` has it; null for the last section, which ends with the document.
+   */
+  breakPlace: string | null;
+  /** Where its first page starts: on a new page, on the same page, or on the next odd or even one. */
+  start: "nextPage" | "continuous" | "evenPage" | "oddPage";
+  width: number;
+  height: number;
+  /** From the box: landscape where it is wider than tall, as Word draws it, whatever `w:orient` says. */
+  orientation: "portrait" | "landscape";
+  margins: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+    gutter: number;
+    /** From the page's top edge to its header, and from its bottom edge to its footer. */
+    header: number;
+    footer: number;
+  };
+  /** The first page has its own header and footer. */
+  differentFirstPage: boolean;
+  pageNumbers: {
+    /** The number the section's first page takes; null: it carries on from the section before. */
+    start: number | null;
+    format: PageNumberFormat;
+  };
+  /** As this section has them: a header or footer the file doesn't give it is the section before's. */
+  headers: PageFurnitureSet;
+  footers: PageFurnitureSet;
+}
+
+/**
+ * How a Mind's pages are set up, for Page view: what the Word file it was imported
+ * from says, or, for a Mind that wasn't, the size and margins of the native export. Pages are
+ * layout only: none of this is in the Mind's content, its sync or its Questions.
+ */
+export interface PageSetup {
+  source: "word" | "native";
+  /** Odd and even pages have different headers and footers. */
+  oddAndEven: boolean;
+  sections: PageSection[];
 }
 
 // ---------------------------------------------------------------------------
@@ -9449,6 +9568,13 @@ export interface CoreApi {
    * version, the model and the time. Nothing is sent anywhere.
    */
   saveCheckRecord(mindId: string, format: CheckRecordFormat): Promise<SavedExport>;
+  /**
+   * Saves a comparison table as an Excel workbook (#132) into the Output location, as
+   * `saveMindExport` does. A Document a row, a Question a column: each cell its Answer's text,
+   * or a number or date with its words as written in its note when the Answer is a single
+   * figure, and its Citations in its note; and a Sources sheet, a Citation a row.
+   */
+  saveComparisonExport(input: ComparisonTableRef): Promise<SavedComparisonExport>;
 
   /**
    * Formats Citations and their Bibliography in a citation style (#289), from the cited
@@ -9480,6 +9606,12 @@ export interface CoreApi {
   getMindStyle(mindId: string): Promise<MindStyle>;
   /** Sets the Mind's font and text size together, so Undo can put both back. */
   setMindStyle(mindId: string, style: MindStyle): Promise<MindStyle>;
+  /**
+   * The pages of a Mind, for Page view (#803): each section's size, orientation and margins, and its
+   * headers and footers with their page fields, as the Word file it was imported from has them; for
+   * any other Mind, the native export's paper (A4 or Letter by region) and margins in one section.
+   */
+  getPageSetup(mindId: string): Promise<PageSetup>;
 
   /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
   getOutputSettings(): Promise<OutputSettings>;
@@ -10093,6 +10225,7 @@ const methods: Record<CoreApiMethod, true> = {
   setSharePageTextOnly: true,
   saveMindExport: true,
   saveCheckRecord: true,
+  saveComparisonExport: true,
   formatCitations: true,
   getMindCitationStyle: true,
   setMindCitationStyle: true,
@@ -10100,6 +10233,7 @@ const methods: Record<CoreApiMethod, true> = {
   openCitationStyleLicences: true,
   getMindStyle: true,
   setMindStyle: true,
+  getPageSetup: true,
   getOutputSettings: true,
   setOutputLocation: true,
   setLinkedFolderWriting: true,

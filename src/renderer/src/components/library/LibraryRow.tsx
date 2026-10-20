@@ -3,6 +3,7 @@ import type { Document, ReferenceField, ReferenceRecord } from "../../../../core
 import { displayName, sourceOf } from "../../../../shared/documentNames";
 import { missingDetails, needsCheck } from "../../../../shared/references";
 import { commands } from "../../commands/registry";
+import { useDragSource } from "../../dragDrop";
 import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
 import { addedLabel, foundLine, type SearchMatch } from "../../libraryPage";
@@ -10,6 +11,7 @@ import { atPassage, passagePlace } from "../../palette";
 import { usePeekKey } from "../../peek";
 import { missingList } from "../../referenceEditing";
 import { useSelectable } from "../../selection";
+import { rowDrag } from "../../sidebarMoves";
 import { useAppStore } from "../../store";
 import { isDeleteKey, isMoveToKey, isTagsKey, TREE_ROW } from "../../treeKeys";
 import { typesText } from "../../undo";
@@ -115,7 +117,8 @@ const OWN_CLICKS = "button:not([data-row-main]), input, a, [role=menu], [role=di
  * problem's word, and "Suggested" while Organize's Folder waits), its Tags, its
  * format and when it was added, then ⋯; the checkbox hangs in the margin. A
  * click anywhere but its Tags, checkbox and ⋯ opens it beside the list; ⌘-click
- * and Shift-click select. Memoised (#156): while Organize goes through
+ * and Shift-click select. It drags onto a Folder or a Tag, with the rows
+ * selected with it. Memoised (#156): while Organize goes through
  * thousands of Documents, only the rows whose Document changed are drawn again.
  */
 export const LibraryRow = memo(function LibraryRow({
@@ -166,6 +169,7 @@ export const LibraryRow = memo(function LibraryRow({
     if (anchor) useDocumentMove.getState().show({ anchor, documentIds: documentsToMove(doc.id) });
   };
   const menuButton = () => row.current?.querySelector<HTMLElement>("[data-object-menu]") ?? null;
+  const dragSource = useDragSource(() => rowDrag({ kind: "document", id: doc.id }, "library"));
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     objectMenu.rowProps.onKeyDown(event);
@@ -203,7 +207,10 @@ export const LibraryRow = memo(function LibraryRow({
       className={`${pageRowClass(select.selected)} cursor-default`}
     >
       <LibrarySelectBox document={doc} />
-      <div className="flex min-h-[39px] items-center gap-4 pr-1.5 pl-3">
+      <div
+        {...(rename.renaming ? {} : dragSource)}
+        className="flex min-h-[39px] items-center gap-4 pr-1.5 pl-3"
+      >
         <div className="flex min-w-0 flex-1 items-center">
           <span aria-hidden="true" className="w-5 shrink-0" />
           <div className={`min-w-0 flex-1 ${match ? "py-1.5" : ""}`}>

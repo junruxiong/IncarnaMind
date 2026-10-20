@@ -12,6 +12,7 @@ import { commands } from "../commands/registry";
 import { useDocumentFolder, useUnitCount } from "../documentFacts";
 import { documentStatusText } from "../documentStatus";
 import { addedDate, documentSummary } from "../fileInfo";
+import { moveIntoFolder } from "../folderDrag";
 import { useLanguage, useT } from "../i18n";
 import { type Box, enterFrom } from "../motion";
 import {
@@ -337,7 +338,7 @@ function PeekCard({ target }: { target: PeekTarget }) {
         current={folder?.id ?? null}
         onChoose={(folderId) => {
           if (folderId !== (folder?.id ?? null)) {
-            void useAppStore.getState().moveToFolder({ documentIds: [document.id] }, folderId);
+            void moveIntoFolder({ documentIds: [document.id] }, folderId);
           }
         }}
         onClose={() => setMoving(null)}
