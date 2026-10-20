@@ -134,7 +134,7 @@ test("without a model, Documents are ready to search, and one notice, not one pe
   await expect(settings).toHaveAttribute("data-page", "models");
   await expect(settings.getByTestId("model-defaults")).toBeVisible();
   await expect(settings.getByTestId("tagging-automatic-line")).toHaveText(
-    "No model to tag with yet: set up an AI model, or install Tev1 in Ollama.",
+    "No model to tag with yet. Set one up.",
   );
   await expect(settings.getByTestId("jev-settings")).toBeAttached();
   await closeSettings(window);

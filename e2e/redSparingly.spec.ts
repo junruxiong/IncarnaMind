@@ -73,7 +73,7 @@ test("a refused key and a variable with no name read in ink after the amber mark
 
     const settings = await openSettings(window, "models");
     const form = await addProviderForm(settings, "openai");
-    await form.getByLabel(/^API key/).fill("sk-wrong-key");
+    await form.getByLabel(/^API key/).fill("sk-proj-wrong-key");
     await form.getByTestId("provider-use-key").click();
     const refused = form.getByTestId("connection-test");
     await expect(refused).toContainText("This key isn’t valid for OpenAI");
