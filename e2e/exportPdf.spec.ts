@@ -611,7 +611,7 @@ test("Export as HTML saves one .html file whose footnotes link both ways, and th
   try {
     for (const width of [1280, 390]) {
       await setWindowSize(app, reader, width, 844);
-      await expect(reader.locator("main > p").first()).toHaveText(
+      await expect(reader.locator("main > p").filter({ has: reader.locator("#ref-1") })).toHaveText(
         "Spring tides happen at new moon1. 大潮出现在新月前后2,3。",
       );
       expect(
