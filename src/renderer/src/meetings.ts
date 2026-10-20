@@ -6,7 +6,6 @@ import { core, files } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { currentMindIdOf } from "./layoutSlice";
-import { offerTakeBack, settleTakeBacks } from "./recordTakeBack";
 import { useAppStore } from "./store";
 
 interface MeetingsState {
@@ -99,7 +98,6 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
         const meeting = await core.createMeeting(folderId ? { folderId } : undefined);
         created = meeting.id;
         const starts = settings.device.meetingNoticeAccepted;
-        offerTakeBack(meeting, starts, () => get().meetings.find((each) => each.id === meeting.id));
         if (starts) set((state) => ({ starting: { ...state.starting, [meeting.id]: true } }));
         // The notes come first in a meeting: the text has the cursor, as in a Mind made with ⌘T.
         useAppStore.setState({ bodyToFocus: meeting.mindId });
@@ -188,7 +186,6 @@ core.on("meetings.changed", (meetings) => {
         .map((id) => [id, true as const]),
     ),
   }));
-  settleTakeBacks(meetings);
 });
 
 export const canRecordMeetings = (settings: Settings | null): boolean =>

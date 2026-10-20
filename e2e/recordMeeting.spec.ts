@@ -104,7 +104,7 @@ test("once the recording notice is read, Record records in one action, with the 
   await app.close();
 });
 
-test("the first time, ⌘Z right after Record takes the new Mind back", async () => {
+test("the first time, Record makes a Mind with no line, and ⌘Z right after it doesn't take it back: Delete does", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
 
@@ -114,28 +114,28 @@ test("the first time, ⌘Z right after Record takes the new Mind back", async ()
   await expect(window.getByTestId("meeting-start")).toBeVisible();
   expect(await mindsOf(window)).toHaveLength(1);
 
+  await expect(window.getByTestId("undo-message")).toHaveCount(0);
   await leaveText(window);
   await window.keyboard.press("ControlOrMeta+z");
-  await expect.poll(async () => (await mindsOf(window)).length).toBe(0);
+  expect(await mindsOf(window)).toHaveLength(1);
   await app.close();
 });
 
-test("the first time, Redo after the take-back does nothing: a Mind with no Meeting would come back", async () => {
+test("a Record that has begun a recording says nothing, and ⌘Z right after it doesn't take the Mind back", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
+  await readNotice(window);
 
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-more"));
   await pointAndClick(window, window.getByTestId("plus-record-meeting"));
-  await expect(window.getByTestId("meeting-start")).toBeVisible();
+  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
+  await expect(window.getByTestId("undo-message")).toHaveCount(0);
+
   await leaveText(window);
   await window.keyboard.press("ControlOrMeta+z");
-  await expect.poll(async () => (await mindsOf(window)).length).toBe(0);
-
-  await window.keyboard.press("ControlOrMeta+Shift+z");
-  // The core answers in the order it was asked: a restore Redo had sent would show here.
-  expect(await mindsOf(window)).toHaveLength(0);
-  expect(await meetings(window)).toEqual([]);
+  expect(await mindsOf(window)).toHaveLength(1);
+  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
   await app.close();
 });
 

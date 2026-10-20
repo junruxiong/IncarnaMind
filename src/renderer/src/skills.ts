@@ -61,6 +61,20 @@ export function skillTitle(
   return key ? t(key) : name;
 }
 
+const BUILT_IN_SHORT_LINES: Readonly<Record<string, MessageKey>> = {
+  "literature-review": "skills.builtIn.literature-review.short",
+  "mind-to-report": "skills.builtIn.mind-to-report.short",
+  "summarise-document": "skills.builtIn.summarise-document.short",
+};
+
+export function skillShortLine(
+  skill: { name: string; builtIn: boolean },
+  t: (key: MessageKey, params?: MessageParams) => string,
+): string | null {
+  const key = skill.builtIn ? BUILT_IN_SHORT_LINES[skill.name] : undefined;
+  return key ? t(key) : null;
+}
+
 /**
  * What a Skill does, for people: a Built-in Skill's in the interface's
  * language, any other's as its SKILL.md says (which is also what Answers read).
