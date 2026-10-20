@@ -441,6 +441,13 @@ export async function expectBarOneRow(bar: Locator): Promise<void> {
 export const panelOpen = (app: ElectronApplication) =>
   app.windows().some((page) => !page.isClosed() && page.url().includes("meetingPanel.html"));
 
+export const focusMainWindow = (app: ElectronApplication, focused: boolean) =>
+  app.evaluate((_electron, front) => {
+    (
+      globalThis as unknown as { incarnamindMainFocused(focused: boolean): void }
+    ).incarnamindMainFocused(front);
+  }, focused);
+
 export const heldGlobalKeys = (app: ElectronApplication, keys: string) =>
   app.evaluate(({ globalShortcut }, asked) => globalShortcut.isRegistered(asked), keys);
 

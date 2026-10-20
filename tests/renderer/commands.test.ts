@@ -11,6 +11,7 @@ import type { ObjectRef } from "../../src/renderer/src/objects";
 import { MENU_COMMANDS, type MenuCommandId } from "../../src/shared/commands";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 import { defaultHelpKeys, HELP_SHORTCUTS } from "../../src/shared/meetingHelp";
+import { editorShortcuts } from "../helpers/editor";
 
 /*
  * Every command the app has: no key bound twice where both commands could act,
@@ -206,6 +207,49 @@ describe("shortcuts", () => {
       for (const shortcut of HELP_SHORTCUTS) {
         const keys = defaultHelpKeys(shortcut, mac);
         expect(bound.has(keysForm(keys, mac)), `${shortcut}: ${keys}`).toBe(false);
+      }
+    },
+  );
+
+  // Ctrl+Shift+7 to 9 are the editor's list keys: the meeting's keys are held only while another app is in front (src/main/meetings/panel.ts), so they never reach the editor. See #1446.
+  const EDITOR_KEYS_NOT_HELD_IN_THE_APP = new Set([
+    "ctrl+shift+Digit7",
+    "ctrl+shift+Digit8",
+    "ctrl+shift+Digit9",
+  ]);
+
+  test.each(SYSTEMS)(
+    "no default meeting key is a key of the note editor, bar the list keys held only while another app is in front, on $name",
+    ({ mac }) => {
+      const editor = new Set<string>();
+      for (const shortcut of editorShortcuts()) {
+        const parts = shortcut.split("-");
+        const key = parts.pop() ?? "";
+        const code = /^[a-z]$/i.test(key)
+          ? `Key${key.toUpperCase()}`
+          : /^\d$/.test(key)
+            ? `Digit${key}`
+            : null;
+        if (!code) continue;
+        const has = (...names: string[]) => parts.some((part) => names.includes(part));
+        editor.add(
+          [
+            (has("Meta", "Cmd") || (mac && has("Mod"))) && "meta",
+            (has("Ctrl", "Control") || (!mac && has("Mod"))) && "ctrl",
+            has("Alt", "Option") && "alt",
+            has("Shift") && "shift",
+            code,
+          ]
+            .filter(Boolean)
+            .join("+"),
+        );
+      }
+      expect(editor.has("ctrl+shift+Digit9") || mac, "the editor's checklist key").toBe(true);
+      for (const shortcut of HELP_SHORTCUTS) {
+        const keys = defaultHelpKeys(shortcut, mac);
+        const form = keysForm(keys, mac);
+        if (EDITOR_KEYS_NOT_HELD_IN_THE_APP.has(form)) continue;
+        expect(editor.has(form), `${shortcut}: ${keys}`).toBe(false);
       }
     },
   );

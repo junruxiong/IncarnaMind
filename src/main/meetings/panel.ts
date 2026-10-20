@@ -10,14 +10,16 @@
  * own screen share where the system honours content protection (macOS,
  * Windows 10 2004 and later).
  *
- * The shortcuts are held only while a Meeting records: never while it is
- * paused or after it stops, so other apps get their keys back. A button's press
+ * The shortcuts are held only while a Meeting records and no main window has
+ * the focus: never while it is paused or after it stops, so other apps get
+ * their keys back. A button's press
  * goes to the panel, or, with none shown, to the app's window, which asks
  * there; Call help's shows or hides the panel, and Pause my mic's pauses or
  * resumes the Meeting's microphone.
  */
 import { join } from "node:path";
 import {
+  app,
   BrowserWindow,
   globalShortcut,
   type IpcMainEvent,
@@ -70,6 +72,18 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
   /** The panel's top right corner where the User left it, for the next one this session. */
   let corner: { right: number; top: number } | null = null;
   const held = new Map<HelpShortcut, string>();
+  /**
+   * Held while the call has the focus and dropped when a main window (a Mind, Library or Settings)
+   * does, since there they would take keys the User is typing (Ctrl+Shift+9 makes a checklist in
+   * the notes) and the bar's buttons and ⌘K reach the same actions. The panel is the meeting's own
+   * surface and never takes the focus from the call, so pointing at it keeps them held. A test
+   * build starts with another app in front, as a call is.
+   */
+  let frontOverride: boolean | null = options.testHooks ? false : null;
+  const mainFocused = () =>
+    frontOverride ??
+    options.appWindows().some((window) => !window.isDestroyed() && window.isFocused());
+  const keysWanted = () => liveMeeting()?.status === "recording" && !mainFocused();
   /**
    * Keys the system refused while recording: not asked for again, nor logged, on every Meeting
    * update, until those keys or the recording change.
@@ -129,15 +143,15 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     front?.webContents.send(FILES_CHANNELS.meetingHelp, kind);
   }
 
-  function holdKeys(recording: boolean): void {
+  function holdKeys(active: boolean): void {
     const wanted = new Map<HelpShortcut, string>();
-    if (recording && settings) {
+    if (active && settings) {
       for (const kind of HELP_SHORTCUTS) {
         const keys = helpKeysOf(kind, settings.device.meetingHelpKeys, mac);
         if (keys) wanted.set(kind, keys);
       }
     }
-    if (!recording) refused.clear();
+    if (!active) refused.clear();
     let changed = false;
     for (const [kind, keys] of held) {
       if (wanted.get(kind) === keys) continue;
@@ -257,7 +271,7 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     if (wanted && !panel) open();
     else if (!wanted && panel) panel.destroy();
     if (panel && settings) panel.setContentProtection(settings.device.meetingPanelHidden);
-    holdKeys(meeting?.status === "recording");
+    holdKeys(keysWanted());
   }
 
   const fromPanel = (event: IpcMainEvent | IpcMainInvokeEvent) =>
@@ -319,6 +333,9 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     tellShown();
   });
 
+  app.on("browser-window-focus", () => holdKeys(keysWanted()));
+  app.on("browser-window-blur", () => holdKeys(keysWanted()));
+
   core.on("meetings.changed", (listed) => {
     meetings = listed;
     sync();
@@ -341,6 +358,10 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
 
   if (options.testHooks) {
     Object.assign(globalThis, {
+      incarnamindMainFocused(focused: boolean) {
+        frontOverride = focused;
+        holdKeys(keysWanted());
+      },
       incarnamindPressHelpKeys(kind: HelpShortcut) {
         if (!held.has(kind)) throw new Error(`The shortcut for ${kind} isn't held.`);
         press(kind);

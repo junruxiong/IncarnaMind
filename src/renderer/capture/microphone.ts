@@ -14,7 +14,6 @@ export interface MicrophoneDevice {
   close(): Promise<void>;
 }
 
-/** Starts the microphone the way the main process asked: not at all where the OS refused it. */
 export function startMicrophone(
   microphone: { start(on: boolean): Promise<void> },
   request: CaptureStart,
@@ -42,7 +41,6 @@ export function createMicrophone(device: MicrophoneDevice) {
   }
 
   return {
-    /** The capture started, with the microphone on or already paused: it opens only if it is on. */
     start(on: boolean): Promise<void> {
       wanted = on;
       running = true;

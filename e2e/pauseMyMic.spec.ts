@@ -9,9 +9,11 @@ import {
   createDataFolder,
   dismissChatSetup,
   expectBarOneRow,
+  focusMainWindow,
   heldGlobalKeys,
   launchApp,
   panelOf,
+  panelOpen,
   pointAndClick,
   pressHeldKeys,
   recordMeeting,
@@ -20,6 +22,7 @@ import {
   setLanguage,
   setWindowSize,
   startRecording,
+  tabTo,
 } from "./app";
 
 /**
@@ -396,13 +399,15 @@ test("Pause my mic in the floating panel: the header's button and the line under
 });
 
 test("the recording bar never wraps: from 1,600 px down to 900 px, in English and Chinese, with the transcript beside it or not, it is one row of one height and keeps the state, Pause my mic, Pause and Stop", async () => {
-  test.setTimeout(240_000);
+  test.setTimeout(300_000);
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1600, 900);
   await dismissChatSetup(window);
   const bar = await recordingMeeting(window);
   const toggle = bar.getByTestId("meeting-transcript-toggle");
-  const folded = new Set<string>();
+  const more = bar.getByTestId("meeting-more");
+  const notes = window.getByTestId("mind-editor");
+  await notes.click();
 
   for (const language of ["en", "zh-CN"] as const) {
     await setLanguage(window, language);
@@ -412,31 +417,86 @@ test("the recording bar never wraps: from 1,600 px down to 900 px, in English an
         await pointAndClick(window, toggle);
       }
       await expect(toggle).toHaveAttribute("aria-pressed", String(beside));
-      for (let width = 1600; width >= 900; width -= 100) {
+      const folded: number[] = [];
+      for (let width = 1600; width >= 900; width -= 50) {
         await setWindowSize(app, window, width, 800);
         await window.mouse.move(1, 1);
         await expectBarOneRow(bar);
-        for (const id of ["meeting-mark", "meeting-call-help", "meeting-transcript-toggle"]) {
-          if (!(await bar.getByTestId(id).isVisible())) folded.add(id);
-        }
+        if (!(await bar.getByTestId("meeting-mark").isVisible())) folded.push(width);
       }
-      // The transcript beside the meeting leaves the bar its narrowest: what is hidden is in the ⋯.
-      await setWindowSize(app, window, 1100, 800);
+      if (!beside) continue;
+
+      // Where Mark has folded the ⋯ shows, and the keyboard reaches it and what it lists.
+      const [width] = folded;
+      expect(width).toBeDefined();
+      await setWindowSize(app, window, width ?? 1000, 800);
       await window.mouse.move(1, 1);
-      await expectBarOneRow(bar);
-      if (!(await bar.getByTestId("meeting-mark").isVisible())) {
-        const more = bar.getByTestId("meeting-more");
-        await pointAndClick(window, more);
-        const menu = window.getByTestId("meeting-more-menu");
-        await expect(menu.getByTestId("meeting-more-mark")).toBeEnabled();
-        await window.keyboard.press("Escape");
-        await expect(menu).toBeHidden();
-        await expect(more).toBeFocused();
-      }
+      await expect(more).toBeVisible();
+      await bar.getByTestId("meeting-pause").focus();
+      await tabTo(window, more);
+      await expect(more).toBeFocused();
+      await window.keyboard.press("Enter");
+      const menu = window.getByTestId("meeting-more-menu");
+      const items = menu.getByRole("menuitem");
+      await expect(items.first()).toBeFocused();
+      await expect(menu.getByTestId("meeting-more-mark")).toBeEnabled();
+      expect(await items.count()).toBeGreaterThanOrEqual(2);
+      await window.keyboard.press("ArrowDown");
+      await expect(items.nth(1)).toBeFocused();
+      await window.keyboard.press("ArrowUp");
+      await expect(items.first()).toBeFocused();
+      await window.keyboard.press("Escape");
+      await expect(menu).toBeHidden();
+      await expect(more).toBeFocused();
+      await window.keyboard.press("Enter");
+      await expect(items.first()).toBeFocused();
+      await window.keyboard.press("Enter");
+      await expect(menu).toBeHidden();
+      await expect(notes.locator("li p[data-meeting-time]").last()).toHaveText("");
+      await shot(bar, `mic-bar-folded-${language}`);
     }
   }
-  await shot(bar, "mic-bar-narrow");
-  // The sweep did reach narrow bars: Mark was folded into the ⋯ somewhere, and the bar held.
-  expect(folded.has("meeting-mark")).toBe(true);
+  await app.close();
+});
+
+test("the meeting's keys are held only while no main window has the focus: with a Mind in front the key is the editor's and the microphone stays on, and with the panel or another app in front it pauses the microphone", async () => {
+  test.setTimeout(120_000);
+  const { app, window } = await launchApp(dataDir);
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  const bar = await recordingMeeting(window);
+  const panel = await panelOf(app);
+  const mic = bar.getByTestId("meeting-mic");
+  const notes = window.getByTestId("mind-editor");
+
+  await focusMainWindow(app, true);
+  await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(false);
+  await notes.click();
+  await window.keyboard.type("Agenda");
+  await window.keyboard.press("ControlOrMeta+Shift+9");
+  await expect(notes.locator('ul[data-type="taskList"]')).toBeVisible();
+  await expect(mic).toHaveAttribute("aria-pressed", "false");
+  expect(await capture(app)).toMatchObject({ microphoneOn: true });
+  await expect(pressHeldKeys(app, "mic")).rejects.toThrow(/isn't held/);
+
+  // The panel pointed at, which is another app in front for the keys: the key pauses the microphone.
+  await focusMainWindow(app, false);
+  await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(true);
+  await pointAndClick(panel, panel.getByTestId("panel-template"));
+  await pointAndClick(panel, panel.getByTestId("panel-template"));
+  await pressHeldKeys(app, "mic");
+  await expect(mic).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await capture(app)).microphoneOn).toBe(false);
+
+  await pointAndClick(window, bar.getByTestId("meeting-call-help"));
+  await expect.poll(() => panelOpen(app)).toBe(false);
+  await pressHeldKeys(app, "mic");
+  await expect(mic).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
+
+  await focusMainWindow(app, true);
+  await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(false);
+  await focusMainWindow(app, false);
+  await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(true);
   await app.close();
 });

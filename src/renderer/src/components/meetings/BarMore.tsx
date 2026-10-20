@@ -6,7 +6,6 @@ import { MoreLineIcon } from "../lineIcons";
 import { menuClass, menuItemClass, menuItemUnavailableClass } from "../ui";
 import { usePopoverMenu } from "../usePopoverMenu";
 
-/** The bar's buttons that fold into its ⋯ as it narrows, first to go first, by their `data-fold` and their commands. */
 const FOLDING = [
   { fold: "mark", id: "meeting.mark" },
   { fold: "help", id: "meeting.panel" },

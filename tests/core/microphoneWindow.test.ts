@@ -71,7 +71,6 @@ function windowCapture() {
     capture,
     pages,
     page: () => pages.at(-1) as (typeof pages)[number],
-    /** A tick of sound: the computer's, and the microphone's only while it is open. */
     tick() {
       if (pages.at(-1)?.isOpen()) sink?.audio("microphone", TONE);
       sink?.audio("system", TONE);
@@ -115,7 +114,6 @@ async function call() {
   return { core, id, window, microphoneSamples, settle, play, microphone };
 }
 
-/** The User resumes their microphone: exactly one open, and their voice reaches the transcriber. */
 async function expectResumed(played: Awaited<ReturnType<typeof call>>) {
   const { window, microphoneSamples, play, microphone } = played;
   expect(window.page().opens).toBe(0);

@@ -1,4 +1,4 @@
-import { Editor, type Extensions } from "@tiptap/core";
+import { Editor, type Extensions, getExtensionField, getSchemaTypeByName } from "@tiptap/core";
 import Collaboration from "@tiptap/extension-collaboration";
 import type { PluginView, Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
@@ -19,6 +19,25 @@ export function headlessEditor(extensions = editorExtensions()): Editor {
   editor.view.updateState(editor.state.reconfigure({ plugins: editor.extensionManager.plugins }));
   onTestFinished(() => editor.destroy());
   return editor;
+}
+
+/** The keys the Mind editor's extensions bind, as Tiptap writes them ("Mod-Shift-9"). */
+export function editorShortcuts(): string[] {
+  const editor = headlessEditor();
+  return editor.extensionManager.extensions.flatMap((extension) => {
+    const add = getExtensionField<() => Record<string, unknown>>(
+      extension,
+      "addKeyboardShortcuts",
+      {
+        name: extension.name,
+        options: extension.options,
+        storage: editor.extensionStorage[extension.name as keyof typeof editor.extensionStorage],
+        editor,
+        type: getSchemaTypeByName(extension.name, editor.schema),
+      },
+    );
+    return add ? Object.keys(add()) : [];
+  });
 }
 
 /**

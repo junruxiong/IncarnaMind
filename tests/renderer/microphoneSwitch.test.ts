@@ -192,7 +192,6 @@ describe("The capture page's microphone, and a pause while it starts", () => {
 });
 
 describe("What the main process tells the capture page about the microphone", () => {
-  /** The page as the main process reaches it: each message goes where the page's own rule sends it. */
   function pageOf(fake: ReturnType<typeof fakeDevice>) {
     const microphone = createMicrophone(fake.device);
     const messages: string[] = [];
