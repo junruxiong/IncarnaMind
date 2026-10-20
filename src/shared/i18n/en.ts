@@ -610,9 +610,10 @@ export const en = {
   "claim.unsupported.covers.other":
     "Your Citations support {covered}, not the parts about {uncovered}.",
   "claim.unsupported.noReason": "The check gave no reason",
-  "check.currency.reason": "The Document gives {amount} without a currency.",
-  "check.currency.covered": "the amount, {amount}",
-  "check.currency.uncovered": "the currency ({currency})",
+  "claim.unsupported.currency.reason": "The Document gives {amount} without a currency.",
+  "claim.unsupported.currency.covered": "the amount, {amount}",
+  "claim.unsupported.currency.uncovered": "the currency ({currency})",
+  "claim.unsupported.unit": "The Document gives {amount}, not {figure}.",
   "claim.openCitation": "Open citation {number}",
   "claim.cutUnsupported": "Cut the unsupported part",
   "claim.keepAsView": "Keep as my view",

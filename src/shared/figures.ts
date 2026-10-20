@@ -97,6 +97,8 @@ export interface Figure extends Reading {
    * a Citation shows, and what the check finds again.
    */
   chars: string;
+  /** Its own currency as written, apart from the number: "£", "US$", "英镑", "GBP". */
+  currency: string | null;
   /** Written as approximate or as a bound: "约", "c.", "about", "~", "近", "逾", "超过", "左右". */
   approximate: boolean;
   /** The other end of a range ("2–3%": 0.03); `value` is the first. */
@@ -1273,6 +1275,7 @@ interface Draft extends Span {
   unitAt: Span | null;
   /** Codes the currency may be, when more than one ("¥"). */
   currencies: string[];
+  currencyAt: Span | null;
   loosePoints: string | null;
   /** "pct" in a Chinese Document: a percent, or percentage points. */
   percentOrPoints: boolean;
@@ -1368,6 +1371,7 @@ function readAround(
     unit: found.percent !== null ? { kind: "percent" } : { kind: "plain" },
     unitAt: null,
     currencies: [],
+    currencyAt: null,
     loosePoints: null,
     percentOrPoints: false,
     approximate: false,
@@ -1387,12 +1391,15 @@ function readAround(
   };
   const currencyBefore = (at: number) => {
     const match = CURRENCY_BEFORE.exec(s.slice(floor, at));
-    return match ? { from: floor + match.index, codes: currencyCodes(match[0], settled) } : null;
+    if (!match) return null;
+    const from = floor + match.index;
+    return { from, to: from + match[0].trimEnd().length, codes: currencyCodes(match[0], settled) };
   };
   takeSign();
   const currency = currencyBefore(left);
   if (currency) {
     draft.currencies = currency.codes;
+    draft.currencyAt = currency;
     left = currency.from;
   }
   takeSign();
@@ -1474,6 +1481,7 @@ function readAround(
     if (draft.currencies.length === 0 || codes.every((code) => draft.currencies.includes(code)))
       draft.currencies = codes;
     else draft.currencies = [...new Set([...draft.currencies, ...codes])];
+    draft.currencyAt ??= currencyAfter.at;
     if (found.capitals) {
       const jiao = take(/([壹贰叁肆伍陆柒捌玖])角/y);
       const fen = take(/([壹贰叁肆伍陆柒捌玖])分/y);
@@ -1587,6 +1595,7 @@ function readAround(
       draft.negative = true;
       if (outer) {
         draft.currencies = outer.codes;
+        draft.currencyAt = outer;
         draft.unit = { kind: "currency", code: outer.codes[0] as string };
       }
       draft.from = outer?.from ?? bracket;
@@ -1704,6 +1713,7 @@ function rangeAfter(
       to.unitAt = from.unitAt;
       to.unitExponent = from.unitExponent;
       to.currencies = from.currencies;
+      to.currencyAt = from.currencyAt;
       to.loosePoints = from.loosePoints;
     }
     if (to.scaleWord === null && from.scaleWord !== null && to.core.percent === null) {
@@ -1831,6 +1841,7 @@ function finish(
     start,
     end,
     chars: text.slice(start, end),
+    currency: draft.currencyAt ? written(draft.currencyAt) : null,
     approximate: draft.approximate,
     rangeTo,
     footnote: draft.footnote ? written(draft.footnote) : null,
@@ -1869,6 +1880,7 @@ function dateFigures(s: string, span: Span): Draft[] {
       unit: { kind: "plain" },
       unitAt: null,
       currencies: [],
+      currencyAt: null,
       loosePoints: null,
       percentOrPoints: false,
       approximate: false,
@@ -1940,6 +1952,60 @@ export function readFigures(text: string, context: FigureContext = {}): Figure[]
     at = next;
   }
   return drafts.map((draft) => finish(draft, prepared, text, [...statements, ...header]));
+}
+
+/** The currencies a figure may be in: its own, or each that its "¥" may be. */
+export function currenciesOf(figure: Figure): string[] {
+  const readings = [figure, ...figure.ambiguous.flatMap((each) => each.readings)];
+  return [
+    ...new Set(readings.flatMap(({ unit }) => (unit.kind === "currency" ? [unit.code] : []))),
+  ];
+}
+
+/** A currency named in words or by its code, which, apart from any number, says what amounts are in. */
+const CURRENCY_WORDS =
+  /(?<![A-Za-z])(?:U\.S\. dollars|US dollars?|Hong Kong dollars|HK dollars|Australian dollars|Canadian dollars|Singapore dollars|dollars|euros?|yuan|[Rr]enminbi|yen|pounds sterling|sterling|pounds|rupees|RMB|Rmb|USD|CNY|HKD|EUR|GBP|JPY|AUD|CAD|SGD|TWD|CHF|INR|KRW|NZD|MOP|BRL|RUB|SEK|NOK|DKK|ZAR|MXN|THB|MYR|IDR|PHP|VND|TRY|SAR|AED)(?![A-Za-z])|新加坡元|瑞士法郎|新台币|澳门元|澳门币|人民币|美元|港元|港币|欧元|日元|英镑|澳元|加元|韩元|卢布/g;
+/** A column's currency in its heading: "Salary (£)", "金额（US$）". */
+const CURRENCY_HEADING = new RegExp(`[(（](${CURRENCY_TOKEN.source})[)）]`, "g");
+const NUMBER_CHAR = new RegExp(`[\\d\uff10-\uff19${CN_NUMERAL_CHARS}百千万亿]`);
+
+/** Whether a number stands right before or after `from`–`to`: "54,000 US dollars", "人民币54,000元". */
+function besideNumber(text: string, from: number, to: number): boolean {
+  const before = text
+    .slice(Math.max(0, from - 2), from)
+    .replace(/[ \u00a0]$/, "")
+    .at(-1);
+  const after = text.slice(to, to + 2).replace(/^[ \u00a0]/, "")[0];
+  return [before, after].some((char) => char !== undefined && NUMBER_CHAR.test(char));
+}
+
+/**
+ * The currencies `text` names, by ISO 4217 code: on its figures ("£54,000"), in a unit it states
+ * ("单位：人民币元", "Salary (£)") and in its words ("paid in pounds sterling", "币种：人民币").
+ * `wordsOnly`: in its words alone, what a Document says of all its amounts; a sign, or a code on
+ * one figure, says nothing of another figure elsewhere.
+ */
+export function namedCurrencies(
+  text: string,
+  context: FigureContext = {},
+  { wordsOnly = false }: { wordsOnly?: boolean } = {},
+): Set<string> {
+  const settled = settle(context);
+  const named = new Set<string>();
+  const add = (codes: readonly string[]) => {
+    for (const code of codes) named.add(code);
+  };
+  for (const match of text.matchAll(CURRENCY_WORDS)) {
+    if (!besideNumber(text, match.index, match.index + match[0].length))
+      add(currencyCodes(match[0], settled));
+  }
+  if (wordsOnly) return named;
+  for (const match of text.matchAll(CURRENCY_HEADING)) add(currencyCodes(match[1] ?? "", settled));
+  for (const figure of readFigures(text, context)) add(currenciesOf(figure));
+  for (const stated of readStatedUnits(text, context)) {
+    if (stated.unit.kind === "currency") add([stated.unit.code]);
+  }
+  return named;
 }
 
 /** The end of a run of digits and separators that isn't a number, so none of it is read. */

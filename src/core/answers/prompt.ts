@@ -259,7 +259,7 @@ const CITED_SAYS_ONLY_ITS_QUOTE =
  * currency, unit or scale the Document doesn't state reads as one it does.
  */
 const FIGURES_AS_STATED =
-  '- Give a figure only the currency, unit and scale its Passage states: "salary is 54,000" stays "54,000 (currency not stated)" / "54,000（未注明币种）", never "£54,000".';
+  '- A figure taken from a Passage keeps exactly the currency, unit and scale its Document gives it: "salary is 54,000" stays "54,000 (currency not stated)" / "54,000（未注明币种）", never "£54,000"; "2 percentage points" never becomes "2%".';
 
 /**
  * A premise the Passages don't support, and Passages that disagree (#548):

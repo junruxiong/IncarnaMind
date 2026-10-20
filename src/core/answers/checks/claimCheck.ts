@@ -75,7 +75,7 @@ import {
   readsAsRefusal,
   readVerdict,
 } from "./prompt";
-import { addedCurrency } from "./units";
+import { unitNotStated } from "./units";
 
 export interface ClaimCheckDependencies {
   /** The interface language: what a check's sentence is written in. */
@@ -224,22 +224,29 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       }),
     };
 
-    const currencyNotStated = (evidence: Citation): UnsupportedReason | null => {
+    const unstatedUnit = (evidence: Citation): UnsupportedReason | null => {
       const text = (from: number | null, to: number | null) =>
         scoped
           .pageTexts(evidence.documentId, evidence.contentHash, from, to)
           .map((unit) => unit.text)
           .join("\n");
-      const cited =
-        evidence.pageFrom === null ? evidence.quote : text(evidence.pageFrom, evidence.pageTo);
-      const added = addedCurrency(request.claim, cited, text(null, null));
-      if (!added) return null;
+      const found = unitNotStated(request.claim, {
+        cited: () =>
+          evidence.pageFrom === null ? evidence.quote : text(evidence.pageFrom, evidence.pageTo),
+        document: () => text(null, null),
+      });
+      if (!found) return null;
       const t = (key: MessageKey, params?: MessageParams) =>
         translate(deps.language(), key, params);
+      const { amount } = found;
+      if (found.kind === "unit") {
+        const reason = t("claim.unsupported.unit", { amount, figure: found.figure });
+        return { reason, covered: null, uncovered: null };
+      }
       return {
-        reason: t("check.currency.reason", { amount: added.amount }),
-        covered: t("check.currency.covered", { amount: added.amount }),
-        uncovered: t("check.currency.uncovered", { currency: added.currency }),
+        reason: t("claim.unsupported.currency.reason", { amount }),
+        covered: t("claim.unsupported.currency.covered", { amount }),
+        uncovered: t("claim.unsupported.currency.uncovered", { currency: found.currency }),
       };
     };
     const facts = () => ({
@@ -378,15 +385,15 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       (await askForEvidence(request, verdict, session, signal));
     if (signal.aborted) return notChecked("stopped");
     if (!evidence) return byCalculation ?? notChecked("no-evidence");
-    const currency = byCalculation ? null : currencyNotStated(evidence);
-    if (currency && verdict.verdict !== "contradicted") return unsupported(currency);
+    const unit = byCalculation ? null : unstatedUnit(evidence);
+    if (unit && verdict.verdict !== "contradicted") return unsupported(unit);
     if (verdict.verdict === "contradicted") {
       const judged = await confirmContradiction(request, evidence, session, signal);
       if (signal.aborted) return notChecked("stopped");
       // The Passage is about something else: what is nearest may still say something different.
       if (judged === "neither") return byCalculation ?? unsupported();
       if (judged === "same") {
-        if (currency) return unsupported(currency);
+        if (unit) return unsupported(unit);
         return (
           byCalculation ?? {
             verdict: "supported",
