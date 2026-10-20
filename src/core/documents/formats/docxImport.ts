@@ -63,7 +63,16 @@ import {
   type WordReview,
 } from "./docxPackage";
 import { dataUrlOf, imageTypeOf } from "./images";
-import { child, descendants, elements, onOff, parseXml, walk, type XmlElement } from "./xml";
+import {
+  child,
+  descendants,
+  elements,
+  onOff,
+  ordinalsOf,
+  parseXml,
+  walk,
+  type XmlElement,
+} from "./xml";
 
 /** The largest picture made editable; a larger one is kept as is. */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -674,12 +683,9 @@ class Reader {
 
   /** Gives every element its place among the elements of its name, in document order. */
   private numberElements(root: XmlElement): void {
-    const counts = new Map<string, number>();
+    for (const [element, ordinal] of ordinalsOf(root)) this.ordinals.set(element, ordinal);
     const paraIds = new Set<string>();
     for (const element of walk(root)) {
-      const count = counts.get(element.name) ?? 0;
-      counts.set(element.name, count + 1);
-      this.ordinals.set(element, count);
       const named = this.byName.get(element.name);
       if (named) named.push(element);
       else this.byName.set(element.name, [element]);
