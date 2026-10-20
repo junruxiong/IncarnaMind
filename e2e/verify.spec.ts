@@ -333,7 +333,6 @@ for (const [language, width] of [
     await expect(row.locator("td")).toHaveText(["固定资产", "9,470", "8,860"]);
     await expect(tables.first().locator("th")).toHaveText(["项目", "期末余额", "期初余额"]);
     await expect(editor.locator("p").filter({ hasText: "3,145应收账款" })).toHaveCount(0);
-    // The figures line up in their column: each under the one above it.
     const [above, below] = await Promise.all([
       tables.first().locator("tr").nth(1).locator("td").nth(1).boundingBox(),
       row.locator("td").nth(1).boundingBox(),
@@ -345,7 +344,6 @@ for (const [language, width] of [
     const card = await checkCard(window);
     await pointAndClick(window, card.getByTestId("verify-check"));
     await expect(card.getByTestId("verify-done")).toBeVisible({ timeout: 30_000 });
-    // The row is one claim, marked on its label: one mark a row, level with it.
     const claimed = row.locator("td").first().locator("[data-claim-check]");
     await expect(claimed).toHaveText("固定资产");
     await expect(row.locator("td").nth(1).locator("[data-claim-check]")).toHaveCount(0);

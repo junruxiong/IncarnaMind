@@ -14,10 +14,10 @@ import { isRecord } from "../errors";
 import { ExtractionError, extractUnits } from "./formats";
 import { type FigureReading, readWebPage, webUnits } from "./formats/web";
 import { passwordProblem } from "./pdfPasswords";
-import { tablesIn } from "./pdfTables";
 import { printedPageNames } from "./printedPages";
 import { scannedUnit } from "./scan/layout";
 import { type CanvasFactory, isScanned, pagePicture } from "./scan/pages";
+import { findTables, type TableGrid, textItemOf, textLayerRows } from "./tables";
 import { PICTURE_LIMITS, pictureSize, pictureType } from "./web/pictures";
 
 export { ExtractionError };
@@ -214,18 +214,16 @@ function pageLines(items: readonly object[], height: number): PageLine[] {
     baseline = null;
   };
   for (const item of items) {
-    if (!("str" in item) || typeof item.str !== "string") continue;
-    const transform: number[] =
-      "transform" in item && Array.isArray(item.transform) ? item.transform : [];
-    const [a = 0, b = 0, c = 0, d = 0, , f = 0] = transform;
-    if (Math.abs(b) < 0.01 && Math.abs(c) < 0.01 && a > 0) {
-      text += item.str;
-      if (item.str.trim() !== "") {
-        size = Math.max(size, Math.round(Math.abs(d) * 10) / 10);
-        baseline ??= f;
+    const placed = textItemOf(item);
+    if (!placed) continue;
+    if (placed.level) {
+      text += placed.str;
+      if (placed.str.trim() !== "") {
+        size = Math.max(size, Math.round(placed.fontSize * 10) / 10);
+        baseline ??= placed.baseline;
       }
     }
-    if ("hasEOL" in item && item.hasEOL === true) end();
+    if (placed.eol) end();
   }
   end();
   return lines;
@@ -305,16 +303,48 @@ export async function pdfMetadata(
   }
 }
 
-/** A part of a PDF page as Verify lays it out (#1368): its text, or a table's cells. */
-export type PdfPagePart =
-  | { kind: "text"; text: string }
-  | { kind: "table"; rows: string[][]; numeric: boolean[] };
+/** A part of a page as Verify lays it out (#1368): its text, or a table. */
+export type PagePart = { kind: "text"; text: string } | { kind: "table"; grid: TableGrid };
 
-/** The pages of a PDF that hold a table, each as its parts in reading order. Throws if it can't be opened. */
+/** A page's text around its tables, in reading order; null when it has none. */
+export function textLayerParts(items: readonly object[]): PagePart[] | null {
+  const rows = textLayerRows(items);
+  const tables = findTables(rows);
+  if (tables.length === 0) return null;
+  const tableOf = new Map<object, (typeof tables)[number]>();
+  tables.forEach((table) => {
+    for (const row of rows.slice(table.first, table.last + 1)) {
+      for (const item of row.items) tableOf.set(item, table);
+    }
+  });
+  const parts: PagePart[] = [];
+  const shown = new Set<(typeof tables)[number]>();
+  let text: object[] = [];
+  const flush = () => {
+    const words = pageText(text);
+    if (words !== "") parts.push({ kind: "text", text: words });
+    text = [];
+  };
+  for (const item of items) {
+    const table = tableOf.get(item);
+    if (!table) {
+      text.push(item);
+      continue;
+    }
+    if (shown.has(table)) continue;
+    flush();
+    shown.add(table);
+    parts.push({ kind: "table", grid: table.grid });
+  }
+  flush();
+  return parts;
+}
+
+/** The pages of a PDF's text layer that hold a table, each as its parts. Throws if it can't be opened. */
 export async function pdfTablePages(
   bytes: Uint8Array,
   password?: string,
-): Promise<Map<number, PdfPagePart[]>> {
+): Promise<Map<number, PagePart[]>> {
   const { getDocument } = await loadPdfJs();
   const task = getDocument({
     data: new Uint8Array(bytes),
@@ -325,20 +355,12 @@ export async function pdfTablePages(
   });
   try {
     const document = await task.promise;
-    const pages = new Map<number, PdfPagePart[]>();
+    const pages = new Map<number, PagePart[]>();
     for (let number = 1; number <= document.numPages; number++) {
       const page = await document.getPage(number);
-      const parts = tablesIn((await page.getTextContent()).items);
+      const parts = textLayerParts((await page.getTextContent()).items);
       page.cleanup();
-      if (!parts) continue;
-      pages.set(
-        number,
-        parts.flatMap((part): PdfPagePart[] => {
-          if (part.kind === "table") return [part];
-          const text = pageText(part.items);
-          return text === "" ? [] : [{ kind: "text", text }];
-        }),
-      );
+      if (parts) pages.set(number, parts);
     }
     return pages;
   } finally {

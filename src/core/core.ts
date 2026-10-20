@@ -1727,6 +1727,7 @@ export function createCore(adapters: CoreAdapters): Core {
     document: (documentId) => documents.get(documentId),
     onStatus: (listener) => events.on("document.status", listener),
     readText: (documentId) => documents.readText(documentId),
+    readScanned: (documentId) => documents.readScannedText(documentId),
     async readTables(documentId) {
       if (documents.get(documentId).kind !== "pdf") return new Map();
       try {

@@ -38,12 +38,13 @@ import {
   MIND_SETTINGS_FIELD,
   type Mind,
   type RecordAiUseInput,
+  type ScannedText,
   type SearchScope,
   type UnreadFile,
   type VerifyClaimsResult,
   type VerifyDocumentResult,
 } from "../../api";
-import type { PdfPagePart } from "../../documents/extract";
+import type { PagePart } from "../../documents/extract";
 import { parseModel } from "../../edits";
 import { InvalidInputError, isRecord, NotFoundError } from "../../errors";
 import type { MindContent } from "../../mindContent";
@@ -79,8 +80,10 @@ export interface VerifyOptions {
   document(documentId: string): Document;
   onStatus(listener: (document: Document) => void): () => void;
   readText(documentId: string): DocumentText;
-  /** A PDF's pages that hold a table, laid out (#1368); none when it can't be read again. */
-  readTables(documentId: string): Promise<ReadonlyMap<number, PdfPagePart[]>>;
+  /** A PDF's text-layer pages that hold a table, laid out (#1368); none when it can't be read again. */
+  readTables(documentId: string): Promise<ReadonlyMap<number, PagePart[]>>;
+  /** A PDF's scanned pages, with where each recognized line is. */
+  readScanned(documentId: string): ScannedText;
   createMind(title: string, folderId: string | null): Mind;
   defaultModel(): ChatModelChoice | null;
   prepare(choice: ChatModelChoice | null): Promise<Prepared>;
@@ -131,7 +134,6 @@ function parseRequest(input: unknown) {
   };
 }
 
-/** What a sentence claims, and what its words refer to; undefined for a table's cell that claims nothing alone. */
 function claimOf(sentence: SelectedSentence): { claim: string; context: string } | undefined {
   const row = tableClaim(sentence);
   if (row === "not-a-claim") return undefined;
@@ -318,7 +320,11 @@ export function createVerify(options: VerifyOptions) {
         return { ok: false, reason: now.status === "no-text" ? "no-text" : "unreadable" };
       }
       const text = options.readText(document.id);
-      const found = documentBlocks(text.pages, await options.readTables(document.id));
+      const found = documentBlocks(
+        text.pages,
+        await options.readTables(document.id),
+        options.readScanned(document.id).pages,
+      );
       if (found.length === 0) return { ok: false, reason: "no-text" };
 
       const { name } = options.document(document.id);
@@ -329,14 +335,20 @@ export function createVerify(options: VerifyOptions) {
         const elements = found.map(({ node }) => createElement(node));
         blocks.insert(0, elements);
         const pages: Record<string, number> = {};
-        elements.forEach((element, index) => {
-          const page = found[index]?.page;
+        const record = (element: Y.XmlElement, page: number | undefined) => {
           if (page === undefined) return;
-          // A table's cells too, so each figure in it is a claim with its page.
           for (const each of [element, ...element.createTreeWalker(() => true)]) {
             const id = each instanceof Y.XmlElement ? each.getAttribute(BLOCK_ID_ATTRIBUTE) : null;
             if (typeof id === "string") pages[id] = page;
           }
+        };
+        elements.forEach((element, index) => {
+          const shown = found[index]?.pages ?? [];
+          record(element, shown[0]);
+          // A table over two pages: each row's cells have the page the row is on.
+          element.toArray().forEach((row, at) => {
+            if (row instanceof Y.XmlElement) record(row, shown[at]);
+          });
         });
         setTextOrigin(doc, Object.keys(pages), "checked-document");
         writeVerification(doc.getMap(MIND_SETTINGS_FIELD), {
