@@ -8,6 +8,7 @@ import {
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  lastLineBoxOf,
   launchApp,
   newMind,
   pointAt,
@@ -191,14 +192,14 @@ for (const language of ["en", "zh-CN"] as const) {
         const characters = [...name];
         await renameInTab(window, name);
         await expect(undo).toBeVisible();
-        const [messageBox, undoBox, sidebarBox] = await Promise.all([
-          textBoxOf(message),
+        const [lastBox, undoBox, sidebarBox] = await Promise.all([
+          lastLineBoxOf(message),
           textBoxOf(undo),
           boxOf(sidebar),
         ]);
-        // Undo ends inside the sidebar, after the message, and nothing is cut at its end.
+        // Undo ends inside the sidebar, after the message's last words, and nothing is cut at its end.
         expect(undoBox.x + undoBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width);
-        expect(undoBox.x).toBeGreaterThanOrEqual(messageBox.x + messageBox.width - 0.5);
+        expect(undoBox.x).toBeGreaterThanOrEqual(lastBox.x + lastBox.width - 0.5);
         // The name is cut in the middle: its start and its end show, and the tooltip has all of it.
         const said = (await message.textContent()) ?? "";
         expect(said).toContain(characters.slice(0, 3).join(""));

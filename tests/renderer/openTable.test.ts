@@ -79,7 +79,8 @@ describe("Open as a table", () => {
     expect(pushed).toHaveLength(0);
     fill.release();
     await opening;
-    expect(pushed).toHaveLength(1);
+    // A Mind made says nothing and leaves no step for ⌘Z: Delete takes it back.
+    expect(pushed).toHaveLength(0);
   });
 
   test("a second click while one is under way makes no second Mind", async () => {
@@ -90,7 +91,6 @@ describe("Open as a table", () => {
     fill.release();
     await first;
     expect(calls.filter((call) => call === "createMind")).toHaveLength(1);
-    expect(pushed).toHaveLength(1);
   });
 
   test("once it is done, the next one opens its own Mind", async () => {
