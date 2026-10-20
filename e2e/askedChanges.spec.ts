@@ -257,12 +257,17 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
   await expect(editor).toBeFocused();
 
   await askInAssistant(window, "Rewrite the intro to be clearer");
+  const spoken = window.getByTestId("proposal-spoken");
+  await pointAndClick(window, editor.locator("ins.proposal-insert", { hasText: "Gulls" }));
+  await expect(spoken).toContainText("Suggested change");
   await pointAndClick(window, line.getByTestId("applied-apply"));
   await expect(paragraphs).toHaveText([
     "Gulls wheel over the quay at dawn.",
     "Boats rest on the mud at low water.",
   ]);
   await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ paragraphs?$/);
+  // Applied, nothing waits: a screen reader isn't left with the suggestion (#893).
+  await expect(spoken).not.toContainText("Suggested change");
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+z");
   await expect(paragraphs).toHaveText(NOTES);

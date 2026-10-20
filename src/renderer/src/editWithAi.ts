@@ -84,8 +84,11 @@ interface EditsState {
   problems: Readonly<Record<string, EditProblem>>;
   /** By Mind: the selection the composer is saying what to change in, quoted. */
   editing: Readonly<Record<string, { quote: string }>>;
-  /** By Mind: what a screen reader is told about Proposals, with a count to say it again. */
-  spoken: Readonly<Record<string, { text: string; at: number }>>;
+  /**
+   * By Mind: what a screen reader is told about Proposals, with a count to say it again, and the
+   * Proposal it describes, if it does: that is said only while the cursor is in it.
+   */
+  spoken: Readonly<Record<string, { text: string; at: number; about?: string }>>;
 }
 
 export const useEdits = create<EditsState>()(() => ({
@@ -111,9 +114,9 @@ const t = translateNow;
 
 let spokenAt = 0;
 /** Tells a screen reader, through the Mind's live region (see `ProposalBars`). */
-export function speak(mindId: string, text: string): void {
+export function speak(mindId: string, text: string, about?: string): void {
   spokenAt += 1;
-  set("spoken", mindId, { text, at: spokenAt });
+  set("spoken", mindId, { text, at: spokenAt, ...(about !== undefined && { about }) });
 }
 
 export const dismissEditProblem = (mindId: string) => set("problems", mindId, null);

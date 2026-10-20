@@ -543,11 +543,13 @@ function Spoken({ editor, mindId }: { editor: Editor; mindId: string }) {
     speak(
       mindId,
       describe(proposal, t, made ? (made.author ?? t("proposal.unknownAuthor")) : null),
+      proposal.id,
     );
   }, [focused, editor, mindId, t]);
+  const current = spoken?.about === undefined || spoken.about === focused;
   return (
     <div role="status" aria-live="polite" data-testid="proposal-spoken" className="sr-only">
-      {spoken?.text}
+      {current && spoken?.text}
     </div>
   );
 }
