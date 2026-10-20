@@ -1411,3 +1411,289 @@ describe("A model not measured to use calculate answers as before", { timeout: 6
     expect(answerIn(client, answerId).textContent).toBe("Revenue grew 20.4% .");
   });
 });
+
+/**
+ * A workbook with one table: a heading row, then a row for each amount in column B, a cell with the
+ * number format given and the number it stores, as a Budget table's cells are: "+23,770m" shows
+ * where 23770 is stored.
+ */
+function amountsBook(table: {
+  heading: string;
+  format: string;
+  rows: { label: string; stored: number; format?: string }[];
+  /** Words in the table's own language, which settle how its numbers are written. */
+  notes?: string;
+}): Buffer {
+  const formats = [table.format, ...table.rows.flatMap((row) => (row.format ? [row.format] : []))];
+  const escaped = (code: string) => code.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  const styles = [
+    `<numFmts count="${formats.length}">${formats
+      .map((code, at) => `<numFmt numFmtId="${164 + at}" formatCode="${escaped(code)}"/>`)
+      .join("")}</numFmts>`,
+    `<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>`,
+    `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>`,
+    `<borders count="1"><border><left/><right/><top/><bottom/></border></borders>`,
+    `<cellXfs count="${formats.length + 1}"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>${formats
+      .map(
+        (_, at) =>
+          `<xf numFmtId="${164 + at}" fontId="0" fillId="0" borderId="0" applyNumberFormat="1"/>`,
+      )
+      .join("")}</cellXfs>`,
+  ].join("");
+  const text = (ref: string, value: string) =>
+    `<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`;
+  const rows = table.rows
+    .map((row, at) => {
+      const style = row.format ? formats.indexOf(row.format) + 1 : 1;
+      return `<row r="${at + 2}">${text(`A${at + 2}`, row.label)}<c r="B${at + 2}" s="${style}"><v>${row.stored}</v></c></row>`;
+    })
+    .join("");
+  return xlsxPackage({
+    sheets: [
+      {
+        name: "Table",
+        xml: `<sheetData><row r="1">${text("A1", table.heading)}${text("B1", "2025-26")}</row>${rows}${table.notes ? `<row r="${table.rows.length + 2}">${text(`A${table.rows.length + 2}`, table.notes)}</row>` : ""}</sheetData>`,
+      },
+    ],
+    styles,
+  });
+}
+
+describe("A Calculated figure keeps the scale its inputs are worked in (#1442)", {
+  timeout: 60_000,
+}, () => {
+  /** Asks for `formula` over the table's two rows; the Answer writes `answer` where the marker is. */
+  async function calculated(
+    book: Buffer,
+    figure: { formula: string; unitQuote?: string; scale?: string; as?: string; decimals?: number },
+    inputs: { name: string; row: number; number: string; line: string }[],
+    answer: string,
+    asked = "What is the net?",
+  ) {
+    const model = calculatingModel({
+      queries: ["table"],
+      steps: [
+        (passages) => {
+          const passage = passageOf(passages, "Table");
+          return [
+            {
+              tool: "calculate",
+              input: {
+                figures: [
+                  {
+                    marker: 1,
+                    label: "Net",
+                    formula: figure.formula,
+                    ...(figure.as && { as: figure.as }),
+                    ...(figure.scale && { scale: figure.scale }),
+                    ...(figure.decimals !== undefined && { decimals: figure.decimals }),
+                    inputs: inputs.map((input) => ({
+                      name: input.name,
+                      label: input.name,
+                      passage,
+                      location: `Table, row ${input.row}`,
+                      quote: input.line,
+                      number: input.number,
+                      ...(figure.unitQuote && { unitQuote: figure.unitQuote }),
+                    })),
+                  },
+                ],
+              },
+            },
+          ];
+        },
+      ],
+      answer,
+    });
+    const { core } = await setUpCalculating(model, [{ name: "Table.xlsx", contents: book }]);
+    return (await askAndRead(core, asked)).answer;
+  }
+
+  const MILLIONS = amountsBook({
+    heading: "£ million",
+    format: '+#,##0"m";-#,##0"m"',
+    rows: [
+      { label: "Employer NICs", stored: 23770 },
+      { label: "Employee NICs", stored: -9295 },
+    ],
+  });
+  const NET = [
+    { name: "autumn", row: 2, number: "+23,770m", line: "Employer NICs\t+23,770m" },
+    { name: "spring", row: 3, number: "-9,295m", line: "Employee NICs\t-9,295m" },
+  ];
+
+  test("cells that show £ million as '+23,770m' give a net shown in millions, not '0 million' or '14 thousand'", async () => {
+    const own = await calculated(MILLIONS, { formula: "autumn + spring" }, NET, "The net is [=1].");
+    expect(own.figures).toMatchObject([
+      {
+        value: 14_475_000_000,
+        shown: "14,475m",
+        inputs: [
+          { number: { chars: "+23,770m", value: 23_770_000_000 }, cell: { stored: 23770 } },
+          { number: { chars: "-9,295m", value: -9_295_000_000 }, cell: { stored: -9295 } },
+        ],
+      },
+    ]);
+
+    // As Claude Sonnet 5.5 did, asking for the scale by name; and as GPT-6.1 Sol did, in a number.
+    const named = await calculated(
+      MILLIONS,
+      { formula: "autumn + spring", scale: "million" },
+      NET,
+      "The net is [=1].",
+    );
+    expect(named.figures[0]?.shown).toBe("14,475 million");
+    const plain = await calculated(
+      MILLIONS,
+      { formula: "autumn + spring", as: "number", decimals: 0 },
+      NET,
+      "The net is [=1].",
+    );
+    expect(plain.figures[0]?.shown).toBe("14,475m");
+  });
+
+  test("the same when the workbook's words settle how its numbers are written", async () => {
+    const book = amountsBook({
+      heading: "Table 5.1: the costs and yields of the measures, in pounds million",
+      format: '+#,##0"m";-#,##0"m"',
+      rows: [
+        { label: "Employer National Insurance contributions: increase the rate", stored: 23770 },
+        { label: "Employee National Insurance contributions: cut the main rate", stored: -9295 },
+      ],
+      notes:
+        "The costs of the measures are those the Office for Budget Responsibility certified, and they are shown in pounds million for each year of the forecast.",
+    });
+    const answer = await calculated(
+      book,
+      { formula: "autumn + spring" },
+      [
+        {
+          name: "autumn",
+          row: 2,
+          number: "+23,770m",
+          line: "Employer National Insurance contributions: increase the rate\t+23,770m",
+        },
+        {
+          name: "spring",
+          row: 3,
+          number: "-9,295m",
+          line: "Employee National Insurance contributions: cut the main rate\t-9,295m",
+        },
+      ],
+      "The net is [=1].",
+    );
+    expect(answer.figures).toMatchObject([{ value: 14_475_000_000, shown: "14,475m" }]);
+    expect(answer.figures[0]?.inputs[0]?.number.value).toBe(23_770_000_000);
+  });
+
+  test("billions and millions together, from cells that store the numbers before 'bn' and 'm': the smaller scale, so no input's digits are lost", async () => {
+    const book = amountsBook({
+      heading: "Revenue",
+      format: '0.0"bn"',
+      rows: [
+        { label: "Product", stored: 1.2 },
+        { label: "Services", stored: 300, format: '0"m"' },
+      ],
+    });
+    const answer = await calculated(
+      book,
+      { formula: "product + services" },
+      [
+        { name: "product", row: 2, number: "1.2bn", line: "Product\t1.2bn" },
+        { name: "services", row: 3, number: "300m", line: "Services\t300m" },
+      ],
+      "Revenue came to [=1].",
+    );
+    expect(answer.figures[0]?.value).toBe(1_500_000_000);
+    expect(answer.figures[0]?.shown).toBe("1,500m");
+  });
+
+  test("万元 written after a cell's number is worked in yuan and shown in 万元, in Chinese", async () => {
+    const book = amountsBook({
+      heading: "合并利润表",
+      format: '#,##0.00"万元"',
+      rows: [
+        { label: "营业收入 2025年", stored: 152340.56 },
+        { label: "营业收入 2024年", stored: 121883.2 },
+      ],
+      notes: "本公司营业收入同比增长，主要来自新增客户的收入，以上数字均以万元列示。",
+    });
+    const answer = await calculated(
+      book,
+      { formula: "y2025 - y2024" },
+      [
+        {
+          name: "y2025",
+          row: 2,
+          number: "152,340.56万元",
+          line: "营业收入 2025年\t152,340.56万元",
+        },
+        {
+          name: "y2024",
+          row: 3,
+          number: "121,883.20万元",
+          line: "营业收入 2024年\t121,883.20万元",
+        },
+      ],
+      "营业收入增加了[=1]。",
+      "营业收入增加了多少？",
+    );
+    expect(answer.figures[0]?.value).toBe(304_573_600);
+    expect(answer.figures[0]?.shown).toBe("30,457.36万元");
+  });
+
+  /** Cells that show plain numbers under a heading that states the unit: "(£m)", "($bn)", "单位：万元". */
+  const headed = (heading: string, stored: [number, number], format = "#,##0") =>
+    amountsBook({
+      heading,
+      format,
+      rows: [
+        { label: "Revenue", stored: stored[0] },
+        { label: "Costs", stored: stored[1] },
+      ],
+    });
+
+  test.each([
+    {
+      heading: "Table 5.1 (£m)",
+      format: "#,##0",
+      stored: [23770, 9295] as [number, number],
+      numbers: ["23,770", "9,295"],
+      shown: "£14,475m",
+      value: 14_475_000_000,
+    },
+    {
+      heading: "Revenue ($bn)",
+      format: "0.0",
+      stored: [1.2, 0.3] as [number, number],
+      numbers: ["1.2", "0.3"],
+      shown: "$900 million",
+      value: 900_000_000,
+    },
+  ])(
+    "plain cells under the heading '$heading' are worked in its unit, and the result keeps it",
+    async (table) => {
+      const answer = await calculated(
+        headed(table.heading, table.stored, table.format),
+        { formula: "revenue - costs", unitQuote: table.heading },
+        [
+          {
+            name: "revenue",
+            row: 2,
+            number: table.numbers[0] as string,
+            line: `Revenue\t${table.numbers[0]}`,
+          },
+          {
+            name: "costs",
+            row: 3,
+            number: table.numbers[1] as string,
+            line: `Costs\t${table.numbers[1]}`,
+          },
+        ],
+        "The net is [=1].",
+      );
+      expect(answer.figures[0]?.value).toBe(table.value);
+      expect(answer.figures[0]?.shown).toBe(table.shown);
+    },
+  );
+});

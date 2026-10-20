@@ -23,7 +23,8 @@
  *   亿): inputs are in base units with their page's scale applied, so the
  *   figure would be 10,000 times too small (#577); `scale` shows it in 亿.
  * In a workbook, the formula uses the number a cell stores (#435), not the one
- * it shows rounded. A deduction a statement writes in brackets is negative, so
+ * it shows rounded, in the scale its text writes ("+23,770m" over a stored
+ * 23770, #1442). A deduction a statement writes in brackets is negative, so
  * a sum that subtracts it is recorded all the same, with a line telling the
  * model it adds (#978).
  */
@@ -287,6 +288,17 @@ const shifted = (value: number, exponent: number) =>
 const exponentOf = (value: number, of: number) =>
   of === 0 || value === 0 ? 0 : Math.round(Math.log10(Math.abs(value / of)));
 
+/**
+ * The number a cell stores, as a reading of its text is worked in. A number format that writes the
+ * scale as text ('+#,##0"m"') stores the number before it, 23770 for "+23,770m".
+ */
+function storedAs(reading: Reading, stored: number): number {
+  const written = reading.scale === 1 ? 0 : exponentOf(reading.scale, 1);
+  return written > 0 && exponentOf(reading.value, stored) === written
+    ? shifted(stored, written)
+    : stored;
+}
+
 /** A scale or unit stated apart from a number, and how the number reads under it. */
 interface Stated {
   statement: string;
@@ -533,7 +545,10 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       if (stored !== null && (choice.kind === "sign" || choice.kind === "separator")) {
         // The cell's stored number settles what its shown text doesn't.
         const nearest = choice.readings.reduce((best, each) =>
-          Math.abs(each.value - stored) < Math.abs(best.value - stored) ? each : best,
+          Math.abs(each.value - storedAs(each, stored)) <
+          Math.abs(best.value - storedAs(best, stored))
+            ? each
+            : best,
         );
         reading = nearest;
         chosen = choice.readings.indexOf(nearest) + 1;
@@ -615,7 +630,7 @@ export function createCalculationSession(options: CalculationSessionOptions) {
     const shown = under
       ? { ...under, value: shifted(reading.value, scaleBy), decimals: reading.decimals }
       : reading;
-    const stored = cell?.stored ?? null;
+    const stored = cell?.stored == null ? null : storedAs(reading, cell.stored);
     const value =
       stored === null ? shown.value : shifted(stored, exponentOf(shown.value, reading.value));
     return {
