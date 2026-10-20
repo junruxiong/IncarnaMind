@@ -256,3 +256,55 @@ test("a Mind renames in its tab by double-click and F2, and Enter that confirms 
     await app.close();
   }
 });
+
+test("a Mind renamed in the sidebar keeps the focus on it when its new name moves it up, even when frames come late", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 700);
+    await dismissChatSetup(window);
+    await (await coreOf(window)).evaluate(async (core) => {
+      for (const title of ["Alpha", "Bravo", "Charlie"]) await core.createMind({ title });
+    });
+    const rows = window.getByTestId("mind-row");
+    const item = (title: string) => rows.filter({ hasText: title }).getByTestId("mind-list-item");
+    await expect(rows).toHaveText([/Charlie/, /Bravo/, /Alpha/]);
+    await item("Bravo").focus();
+
+    // Frames come only when the test lets them, as on a slow computer: the list has moved before the next one.
+    type Frames = { one(): void; rest(): void };
+    await window.evaluate(() => {
+      const held: FrameRequestCallback[] = [];
+      const real = globalThis.requestAnimationFrame;
+      const run = () => {
+        for (const callback of held.splice(0)) callback(performance.now());
+      };
+      globalThis.requestAnimationFrame = (callback) => held.push(callback);
+      (globalThis as unknown as { frames: Frames }).frames = {
+        one: run,
+        rest() {
+          while (held.length > 0) run();
+          globalThis.requestAnimationFrame = real;
+        },
+      };
+    });
+    const frames = (which: keyof Frames) =>
+      window.evaluate(
+        (name) => (globalThis as unknown as { frames: Frames }).frames[name](),
+        which,
+      );
+
+    await window.keyboard.press("F2");
+    const field = window.getByTestId("mind-rename");
+    await expect(field).toBeFocused();
+    await frames("one");
+    await field.fill("Budget");
+    await window.keyboard.press("Enter");
+    await expect(rows).toHaveText([/Budget/, /Charlie/, /Alpha/]);
+    await frames("rest");
+
+    await expect(item("Budget")).toBeFocused();
+    await expect(item("Charlie")).not.toBeFocused();
+  } finally {
+    await app.close();
+  }
+});
