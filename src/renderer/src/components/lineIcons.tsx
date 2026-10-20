@@ -587,3 +587,12 @@ export function WarningLineIcon(props: IconProps) {
     </LineIcon>
   );
 }
+
+export function InfoLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11v5M12 8v.01" />
+    </LineIcon>
+  );
+}

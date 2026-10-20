@@ -181,7 +181,9 @@ export function ConnectorForm({
             <summary className="cursor-pointer select-none hover:text-ink">
               {t("remoteConnectors.form.client")}
             </summary>
-            <p className={hintClass}>{t("remoteConnectors.client.hint")}</p>
+            <p className={hintClass}>
+              {t("remoteConnectors.client.hint")} {t("remoteConnectors.client.redirect")}
+            </p>
             <label className={`mt-2 ${fieldLabelClass}`}>
               {t("remoteConnectors.client.id")}
               <input

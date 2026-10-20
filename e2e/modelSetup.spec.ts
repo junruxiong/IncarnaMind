@@ -415,7 +415,7 @@ for (const dock of ["bottom", "float"] as const) {
 
         await pointAndClick(window, card.getByTestId("setup-key"));
         const form = card.getByTestId("provider-form");
-        await form.getByLabel(/^API /).fill("not-a-key");
+        await form.getByLabel(/^API /).fill("sk-ant-not-a-key");
         const action = form.getByTestId("provider-use-key");
         const foot = form.locator("[data-setup-foot]");
         await expect(foot).toHaveCount(1);
