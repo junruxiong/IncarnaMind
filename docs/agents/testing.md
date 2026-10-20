@@ -89,7 +89,7 @@ Three checks hold every object and command to `docs/agents/interaction.md`, read
 
 - `tests/renderer/conformance.test.ts`: every kind in `OBJECT_KINDS` has a registered menu, in the order of rule 5; every command has English and Chinese labels, a group, `reversible` set, and a shortcut or a ⌘K entry.
 - `tests/renderer/conformanceStatic.test.ts`: no "Back to…" label, no confirmation of a delete that no irreversible command stands behind, no right-click listener outside `useObjectMenu`, no `draggable` outside the drag layer.
-- `e2e/conformance.spec.ts`: for each kind, on the built app with a slid mouse: right-click and ⋯ open one menu, rename in place, and every reversible command from the menu followed by ⌘Z puts the core back, read through the bridge.
+- `e2e/conformance.spec.ts`: for each kind, on the built app with a slid mouse: right-click and ⋯ open one menu, rename in place, and every reversible command from the menu followed by ⌘Z puts the core back, read through the bridge. A command that only makes a Mind is the exception: it says nothing and leaves nothing for ⌘Z, and the check takes the Mind back by deleting it.
 
 A new kind of object needs a menu (`registerMenu`) and a stage in the e2e (how to make one and show it); the type-check fails until it has one. A reversible command that changes the core returns an `Undoable`. What `main` doesn't do yet is listed with its issue (`NO_MENU_YET`, `NO_UNDO_YET`, the known lists in the static test), never skipped: a fix takes its line out, and a stale line fails.
 
