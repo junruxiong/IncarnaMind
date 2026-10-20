@@ -162,12 +162,11 @@ test("the Answers default applies on a fresh install, and changing it in Setting
 
   // Another Answers default: it is the last pick now, so the next Mind starts on it.
   const settings = await openSettings(window, "models");
-  await expect(
-    settings.getByText(
-      "New Minds and conversations start with the model you last chose; until then, with this one.",
-    ),
-  ).toBeVisible();
-  await settings.getByTestId("model-default-chatModel").selectOption(`${providerId}\n${OPUS}`);
+  const answers = settings.getByTestId("model-default-chatModel");
+  await expect(answers).toHaveAccessibleDescription(
+    "New Minds and conversations start with the model you last chose; until then, with this one.",
+  );
+  await answers.selectOption(`${providerId}\n${OPUS}`);
   await expect.poll(() => lastPick(window)).toEqual({ providerId, modelId: OPUS });
   expect((await settingsOf(window)).user.chatModel).toEqual({ providerId, modelId: OPUS });
   await settings.getByRole("button", { name: "Close Settings" }).click();
@@ -178,9 +177,9 @@ test("the Answers default applies on a fresh install, and changing it in Setting
   await setLanguage(window, "zh-CN");
   await window.getByRole("button", { name: "设置" }).click();
   const settingsZh = await showSettingsPage(window, "models");
-  await expect(
-    settingsZh.getByText("新的 Mind 和对话先用你上次选的模型；还没选过，就用这个。"),
-  ).toBeVisible();
+  await expect(settingsZh.getByTestId("model-default-chatModel")).toHaveAccessibleDescription(
+    "新的 Mind 和对话先用你上次选的模型；还没选过，就用这个。",
+  );
 });
 
 test("when the provider of the last pick is removed, a new Mind falls back to the default and its chip says what is used", async () => {
