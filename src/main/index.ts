@@ -36,6 +36,7 @@ import { isPanelWindow, serveMeetingPanel } from "./meetings/panel";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } from "./platform";
+import { claimStart } from "./startClaim";
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { realHomeProblem } from "./testHome";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
@@ -63,7 +64,10 @@ const logger = startLogging(app.getPath("userData"));
 
 // One copy to a data folder: a second would write the same database. Electron's lock is keyed on
 // `userData`, which is set above, so a test on a data folder of its own takes a lock of its own.
-const ownsDataFolder = app.requestSingleInstanceLock();
+// Two copies asking in the same millisecond can both get it, so the one that makes the start
+// claim first goes on (#1352).
+const startClaim = app.requestSingleInstanceLock() ? claimStart(app.getPath("userData")) : null;
+const ownsDataFolder = startClaim?.held ?? false;
 if (!ownsDataFolder) {
   logger.info("app.anotherCopyRunning");
   // Not `quit`: its `app.quit` line in the log would read as the running copy's.
@@ -293,10 +297,12 @@ app.whenReady().then(async () => {
       ...(taskKinds.length > 0 && { taskKinds }),
     });
   } catch (error) {
+    startClaim?.release();
     await showStartupError(error);
     app.quit();
     return;
   }
+  startClaim?.release();
   exposeCore(core);
   const settleQuit = guardQuit(
     core,
