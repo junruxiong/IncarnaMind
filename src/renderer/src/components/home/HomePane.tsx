@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import { useHomeView, useMinuteClock } from "../../home";
+import { rowsIn, useSelectionOrder } from "../../selection";
 import { ComingUp } from "./ComingUp";
 import { FolderCards } from "./FolderCards";
 import { HomeHeader } from "./HomeHeader";
@@ -11,9 +12,15 @@ export function HomePane() {
   useLayoutEffect(() => {
     if (scroller.current) scroller.current.scrollTop = useHomeView.getState().scrollTop;
   }, []);
+  // ⌘A takes the list the focus is in: Recent or the Folders.
+  useSelectionOrder("home", () => {
+    const list = document.activeElement?.closest("[aria-multiselectable]");
+    return rowsIn(list && scroller.current?.contains(list) ? list : scroller.current);
+  });
   return (
     <section
       data-testid="home"
+      data-surface="home"
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sheet text-ui text-ink"
     >
       <div

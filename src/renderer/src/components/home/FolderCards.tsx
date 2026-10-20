@@ -7,8 +7,10 @@ import { timeAgo } from "../../dates";
 import { useDropTarget } from "../../dragDrop";
 import { useFolderContents } from "../../folderContents";
 import { folderTarget } from "../../folderDrag";
+import { homeClick, homeMiddleClick } from "../../home";
 import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
+import { useSelectable } from "../../selection";
 import { useAppStore } from "../../store";
 import { useRename } from "../../useRename";
 import { InlineName } from "../InlineName";
@@ -16,8 +18,12 @@ import { DocumentLineIcon, FolderLineIcon, MindLineIcon, PlusLineIcon } from "..
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { dropIntoClass } from "../sidebarRows";
 
-const cardClass =
-  "group relative flex min-h-[132px] min-w-0 flex-col gap-1 rounded-[10px] bg-sheet px-3.5 py-3 text-left shadow-[inset_0_0_0_1px_var(--color-rule)] hover:shadow-[inset_0_0_0_1px_var(--color-rule-strong)]";
+const cardClass = (selected: boolean) =>
+  `group relative flex min-h-[132px] min-w-0 flex-col gap-1 rounded-[10px] px-3.5 py-3 text-left ${
+    selected
+      ? "bg-accent-wash shadow-[inset_0_0_0_1px_var(--color-accent)]"
+      : "bg-sheet shadow-[inset_0_0_0_1px_var(--color-rule)] hover:shadow-[inset_0_0_0_1px_var(--color-rule-strong)]"
+  }`;
 
 const NO_MINDS: readonly Mind[] = [];
 const NO_DOCUMENTS: readonly Document[] = [];
@@ -30,7 +36,13 @@ export function FolderCards({ now }: { now: Date }) {
   return (
     <section data-testid="home-folders" className="mb-7">
       <h2 className="mb-1.5 text-label font-semibold text-ink-meta">{t("library.groups")}</h2>
-      <div className="grid grid-cols-3 gap-3 @max-[760px]/home:grid-cols-2 @max-[480px]/home:grid-cols-1">
+      {/* biome-ignore lint/a11y/useSemanticElements: cards that select as the sidebar's rows do, not a table. */}
+      <div
+        role="grid"
+        aria-multiselectable="true"
+        aria-label={t("library.groups")}
+        className="grid grid-cols-3 gap-3 @max-[760px]/home:grid-cols-2 @max-[480px]/home:grid-cols-1"
+      >
         {orderedGroups.map((folder) => (
           <FolderCard
             key={folder.id}
@@ -78,6 +90,9 @@ function FolderCard({
   const objectMenu = useObjectMenu(object);
   const rename = useRename<HTMLButtonElement>(`home-folder:${folder.id}`);
   const drop = useDropTarget(`home-folder:${folder.id}`, folderTarget(folder.id));
+  const openLibrary = useAppStore((state) => state.openLibrary);
+  const open = () => openLibrary(folder.id);
+  const select = useSelectable(object, "home", open);
   const untitled = t("mind.untitled");
   const items = useMemo<Item[]>(
     () =>
@@ -104,14 +119,18 @@ function FolderCard({
   const latest = items[0]?.at;
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: a card that selects as the sidebar's rows do, not a table row.
+    // biome-ignore lint/a11y/useFocusableInteractive: its name's button takes the focus.
     <div
+      role="row"
       data-testid="home-folder-card"
       data-folder-id={folder.id}
       data-drop-target={drop.over ? "true" : undefined}
+      {...select.rowProps}
       {...(rename.renaming ? {} : objectMenu.rowProps)}
       {...drop.props}
       title={folder.description || undefined}
-      className={`${cardClass} ${drop.over ? dropIntoClass : ""}`}
+      className={`${cardClass(select.selected)} ${drop.over ? dropIntoClass : ""}`}
     >
       <div className="flex min-w-0 items-center gap-2 font-semibold text-ink">
         <FolderLineIcon className="size-4 shrink-0 text-ink-meta" />
@@ -127,7 +146,8 @@ function FolderCard({
             ref={rename.nameProps.ref}
             data-row-main
             data-testid="home-folder-open"
-            onClick={() => useAppStore.getState().openLibrary(folder.id)}
+            onClick={homeClick(select, open)}
+            {...homeMiddleClick(() => openLibrary(folder.id, { behind: true }))}
             onKeyDown={rename.nameProps.onKeyDown}
             // The whole card is what a click on it opens.
             className="min-w-0 flex-1 truncate rounded-sm text-left after:absolute after:inset-0 after:rounded-[10px]"

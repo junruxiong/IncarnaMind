@@ -235,6 +235,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   );
   expect(folderMenu).toEqual([
     "folder.open",
+    "folder.openTab",
     "—",
     "folder.newMind",
     "folder.new",

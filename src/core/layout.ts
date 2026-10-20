@@ -233,6 +233,7 @@ export function parseLayoutChange(value: unknown): LayoutChange {
       const preview = optionalBoolean(value.preview, "preview");
       const focus = optionalBoolean(value.focus, "focus");
       const keep = optionalBoolean(value.keep, "keep");
+      const behind = optionalBoolean(value.behind, "behind");
       return {
         type: "open",
         item: parseItem(value.item),
@@ -240,6 +241,7 @@ export function parseLayoutChange(value: unknown): LayoutChange {
         ...(preview !== undefined && { preview }),
         ...(focus !== undefined && { focus }),
         ...(keep !== undefined && { keep }),
+        ...(behind !== undefined && { behind }),
         ...(value.place !== undefined && { place: parsePlace(value.place) }),
       };
     }
@@ -483,7 +485,8 @@ function open(
 ): void {
   const { item, place } = change;
   const where = change.where ?? { in: "place" };
-  const focus = change.focus !== false;
+  const behind = change.behind === true;
+  const focus = change.focus !== false && !behind;
   const preview = change.preview === true && item.kind === "document";
   const update = (tab: LayoutTab) => {
     if (change.preview === false || change.keep === true) tab.preview = false;
@@ -494,7 +497,7 @@ function open(
   };
   const reveal = (group: LayoutGroup, tab: LayoutTab) => {
     update(tab);
-    show(layout, group, tab, focus);
+    if (!behind) show(layout, group, tab, focus);
   };
 
   const from =
@@ -560,7 +563,7 @@ function open(
     };
     const at = before ? target.tabs.findIndex((each) => each.id === before) : -1;
     insert(target, tab, before === undefined ? undefined : at === -1 ? target.tabs.length : at);
-    show(layout, target, tab, focus);
+    if (!behind || target.activeTabId === null) show(layout, target, tab, focus);
   }
 }
 

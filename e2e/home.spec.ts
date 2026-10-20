@@ -409,3 +409,134 @@ for (const [language, width] of [
     }
   });
 }
+
+const menuIds = (menu: Locator) =>
+  menu
+    .getByRole("menuitem")
+    .evaluateAll((items) => items.map((item) => item.getAttribute("data-testid") ?? ""));
+
+for (const [language, width] of [
+  ["en", 1440],
+  ["en", 900],
+  ["zh-CN", 1440],
+  ["zh-CN", 900],
+] as const) {
+  test(`Recent rows and Folder cards select as the sidebar's rows do: ⌘-click, Shift-click, ⌘A and Esc, the count in the menu, and a middle click opening a tab behind Home (${language}, ${width}px)`, async () => {
+    const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);
+    let { app, window } = await launchApp(dataDir);
+    await makeFolder(window, "Finance");
+    await makeFolder(window, "Research");
+    await makeMinds(window, ["Ideas", "Tides", "Moorings"]);
+    await app.close();
+    ({ app, window } = await launchApp(dataDir));
+    try {
+      await setWindowSize(app, window, width, 900);
+      await setLanguage(window, language);
+      await expectHomeInFront(window);
+      const selected = window.locator('[data-surface="home"] [aria-selected="true"]');
+      const card = (name: string) =>
+        window.getByTestId("home-folder-card").filter({ hasText: name });
+
+      await recentRow(window, "Moorings")
+        .getByTestId("home-recent-open")
+        .click({
+          modifiers: ["ControlOrMeta"],
+        });
+      await recentRow(window, "Ideas")
+        .getByTestId("home-recent-open")
+        .click({
+          modifiers: ["ControlOrMeta"],
+        });
+      await expect(selected).toHaveCount(2);
+      await expect(recentRow(window, "Moorings")).toHaveAttribute("aria-selected", "true");
+      await expect(window.getByTestId("home")).toBeVisible();
+      await recentRow(window, "Ideas").click({ button: "right" });
+      const rowMenu = recentRow(window, "Ideas").getByTestId("mind-actions");
+      await expect(rowMenu.getByTestId("folder.newWith")).toContainText(
+        t("folder.newWith.minds", { count: 2 }),
+      );
+      await window.keyboard.press("Escape");
+      await expect(rowMenu).toBeHidden();
+
+      await card("Research")
+        .getByTestId("home-folder-open")
+        .click({ modifiers: ["ControlOrMeta"] });
+      await expect(selected).toHaveCount(3);
+      await card("Research").click({ button: "right", position: { x: 40, y: 90 } });
+      const cardMenu = card("Research").getByTestId("folder-actions");
+      await expect(cardMenu.getByTestId("selection.delete")).toContainText(
+        t("selection.delete", { count: 3 }),
+      );
+      await window.keyboard.press("Escape");
+      await card("Research")
+        .getByTestId("home-folder-open")
+        .click({ modifiers: ["ControlOrMeta"] });
+      await expect(card("Research")).toHaveAttribute("aria-selected", "false");
+      await expect(selected).toHaveCount(2);
+      await window.keyboard.press("Escape");
+      await expect(selected).toHaveCount(0);
+
+      await recentRow(window, "Moorings")
+        .getByTestId("home-recent-open")
+        .click({
+          modifiers: ["ControlOrMeta"],
+        });
+      await recentRow(window, "Ideas")
+        .getByTestId("home-recent-open")
+        .click({
+          modifiers: ["Shift"],
+        });
+      await expect(selected).toHaveCount(3);
+      await window.keyboard.press("Escape");
+      await expect(selected).toHaveCount(0);
+      await recentRow(window, "Tides").getByTestId("home-recent-open").focus();
+      await window.keyboard.press("ControlOrMeta+a");
+      await expect(selected).toHaveCount(3);
+      await expect(
+        window.locator('[data-testid="home-folder-card"][aria-selected="true"]'),
+      ).toHaveCount(0);
+
+      await window
+        .getByTestId("sidebar")
+        .getByTestId("mind-list-item")
+        .filter({ hasText: "Tides" })
+        .click({ modifiers: ["ControlOrMeta"] });
+      await expect(selected).toHaveCount(0);
+      await expect(
+        window.getByTestId("sidebar").getByTestId("mind-list-item").filter({ hasText: "Tides" }),
+      ).toHaveAttribute("aria-selected", "true");
+      await recentRow(window, "Tides")
+        .getByTestId("home-recent-open")
+        .click({
+          modifiers: ["ControlOrMeta"],
+        });
+      await expect(selected).toHaveCount(1);
+      await expect(
+        window.getByTestId("sidebar").getByTestId("mind-list-item").filter({ hasText: "Tides" }),
+      ).toHaveAttribute("aria-selected", "false");
+      await window.keyboard.press("Escape");
+
+      await recentRow(window, "Moorings").click({ button: "right" });
+      expect(
+        (await menuIds(recentRow(window, "Moorings").getByTestId("mind-actions"))).slice(0, 2),
+      ).toEqual(["mind.open", "mind.openTab"]);
+      await window.keyboard.press("Escape");
+      await card("Finance").click({ button: "right", position: { x: 40, y: 90 } });
+      expect((await menuIds(card("Finance").getByTestId("folder-actions"))).slice(0, 2)).toEqual([
+        "folder.open",
+        "folder.openTab",
+      ]);
+      await window.keyboard.press("Escape");
+
+      await recentRow(window, "Tides").getByTestId("home-recent-open").click({ button: "middle" });
+      await expect(window.getByTestId("mind-tab").filter({ hasText: "Tides" })).toHaveCount(1);
+      await expectHomeInFront(window);
+      await card("Finance").getByTestId("home-folder-open").click({ button: "middle" });
+      await expect(window.getByTestId("library-tab")).toHaveCount(1);
+      await expectHomeInFront(window);
+      await screenshot(window, `home-selection-${language}-${width}`);
+    } finally {
+      await app.close();
+    }
+  });
+}

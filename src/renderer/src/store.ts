@@ -51,6 +51,7 @@ import { errorMessage } from "./errors";
 import {
   createLayoutSlice,
   currentMindIdOf,
+  focusedGroupOf,
   followLayout,
   groupsMerged,
   type LayoutSlice,
@@ -178,11 +179,11 @@ export interface AppState extends LayoutSlice {
    * Shows the Library (one tab per window), at a Folder's section if given:
    * its tab where it is open, else a new tab in the focused group, or to the side.
    */
-  openLibrary(filter?: string, options?: { side?: boolean }): void;
+  openLibrary(filter?: string, options?: { side?: boolean; behind?: boolean }): void;
   /**
    * Shows Home (one tab per window): its tab where it is open, else a new one
-   * in the focused group, or with `first`, as at a launch, the first group's
-   * first tab after its pinned ones.
+   * in the focused group; with `first`, as at a launch, just before the tab
+   * that group shows.
    */
   openHome(options?: { side?: boolean; first?: boolean }): Promise<void>;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
@@ -286,7 +287,8 @@ export interface AppState extends LayoutSlice {
    * group after the shown one; with `newTab`, a new tab in the focused group
    * even where it is open.
    */
-  openMind(id: string, options?: { newTab?: boolean }): void;
+  /** `behind`: in a new tab behind the one shown, as a middle-click opens it. */
+  openMind(id: string, options?: { newTab?: boolean; behind?: boolean }): void;
   /** Closes a tab, offering to reopen it; if it was shown, the tab after it (or else before it) is. */
   closeTab(tabId: string): void;
   /** ⇧⌘T: reopens the tab closed last, where it was. */
@@ -774,17 +776,21 @@ export const useAppStore = create<AppState>()((set, get) => {
       });
     },
     openHome: async (options) => {
-      const first = get().layout?.groups[0];
+      const { layout } = get();
+      const group = layout ? focusedGroupOf(layout) : null;
+      const shown = group?.tabs.find((tab) => tab.id === group.activeTabId);
       await get().changeLayout({
         type: "open",
         item: { kind: "home" },
         where: options?.side
           ? { in: "side" }
-          : options?.first && first
+          : options?.first && group
             ? {
                 in: "group",
-                groupId: first.id,
-                before: first.tabs.find((tab) => !tab.pinned)?.id,
+                groupId: group.id,
+                // Just before the tab that was in front, so closing Home shows it again.
+                before:
+                  shown && !shown.pinned ? shown.id : group.tabs.find((tab) => !tab.pinned)?.id,
               }
             : { in: "place" },
       });
@@ -795,6 +801,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         type: "open",
         item: { kind: "library" },
         where: options?.side ? { in: "side" } : { in: "place" },
+        ...(options?.behind && { behind: true }),
       });
     },
     skills: [],
@@ -1176,7 +1183,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       void get().changeLayout({
         type: "open",
         item: { kind: "mind", mindId: id },
-        where: options?.newTab ? { in: "group" } : { in: "place" },
+        where: options?.newTab || options?.behind ? { in: "group" } : { in: "place" },
+        ...(options?.behind && { behind: true }),
       });
     },
 

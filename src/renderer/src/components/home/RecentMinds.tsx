@@ -2,8 +2,9 @@ import { useRef } from "react";
 import type { Mind } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
 import { timeAgo } from "../../dates";
-import { useHomeView, useMindSnippets, useOwnMinds } from "../../home";
+import { homeClick, homeMiddleClick, useHomeView, useMindSnippets, useOwnMinds } from "../../home";
 import { useLanguage, useT } from "../../i18n";
+import { useSelectable } from "../../selection";
 import { moveFromMenu } from "../../sidebarMoves";
 import { useAppStore } from "../../store";
 import { useRename } from "../../useRename";
@@ -23,11 +24,17 @@ export function RecentMinds({ now }: { now: Date }) {
   return (
     <section data-testid="home-recent" className="mb-7">
       <h2 className="mb-1.5 text-label font-semibold text-ink-meta">{t("home.recent")}</h2>
-      <ul className="border-t border-rule">
+      {/* biome-ignore lint/a11y/useSemanticElements: rows of a list that selects as the sidebar does, not a table. */}
+      <div
+        role="grid"
+        aria-multiselectable="true"
+        aria-label={t("home.recent")}
+        className="border-t border-rule"
+      >
         {shown.map((mind) => (
           <RecentRow key={mind.id} mind={mind} snippet={snippets.get(mind.id)} now={now} />
         ))}
-      </ul>
+      </div>
       {minds.length > FIRST_ROWS && (
         <button
           type="button"
@@ -54,14 +61,22 @@ function RecentRow({ mind, snippet, now }: { mind: Mind; snippet?: string; now: 
     (state) => state.library?.groups.find((group) => group.id === mind.folderId)?.name ?? "",
   );
   const title = mindName(mind) || t("mind.untitled");
-  const row = useRef<HTMLLIElement>(null);
+  const row = useRef<HTMLDivElement>(null);
+  const openMind = useAppStore((state) => state.openMind);
+  const select = useSelectable(object, "home", () => openMind(mind.id));
   return (
-    <li
+    // biome-ignore lint/a11y/useSemanticElements: a row of a list that selects as the sidebar does, not a table row.
+    // biome-ignore lint/a11y/useFocusableInteractive: its name's button takes the focus.
+    <div
       ref={row}
+      role="row"
       data-testid="home-recent-row"
       data-mind-id={mind.id}
+      {...select.rowProps}
       {...(rename.renaming ? {} : objectMenu.rowProps)}
-      className="group relative flex min-h-[52px] items-center border-b border-rule hover:bg-frame has-[:focus-visible]:bg-frame"
+      className={`group relative flex min-h-[52px] items-center border-b border-rule ${
+        select.selected ? "bg-accent-wash" : "hover:bg-frame has-[:focus-visible]:bg-frame"
+      }`}
     >
       {rename.renaming ? (
         <span className="flex min-w-0 flex-1 items-center gap-3 px-2">
@@ -81,9 +96,8 @@ function RecentRow({ mind, snippet, now }: { mind: Mind; snippet?: string; now: 
           data-row-main
           data-testid="home-recent-open"
           title={title}
-          onClick={(event) =>
-            useAppStore.getState().openMind(mind.id, { newTab: event.metaKey || event.ctrlKey })
-          }
+          onClick={homeClick(select, () => openMind(mind.id))}
+          {...homeMiddleClick(() => openMind(mind.id, { behind: true }))}
           onKeyDown={rename.nameProps.onKeyDown}
           className="flex min-h-[52px] min-w-0 flex-1 items-center gap-3 rounded-sm py-1.5 pr-1 pl-2 text-left -outline-offset-2"
         >
@@ -123,11 +137,11 @@ function RecentRow({ mind, snippet, now }: { mind: Mind; snippet?: string; now: 
             tabIndex={-1}
             here={{
               "mind.rename": rename.start,
-              "mind.moveTo": () => moveFromMenu(row.current, object),
+              "mind.moveTo": () => moveFromMenu(row.current, object, "home"),
             }}
           />
         </div>
       )}
-    </li>
+    </div>
   );
 }

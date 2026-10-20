@@ -103,6 +103,37 @@ describe("Tabs and groups", () => {
     expect(shown(await change({ type: "open", item: beta }))).toEqual(["Alpha Gamma *Beta"]);
   });
 
+  test("a tab opened behind the shown one leaves it in front and the focus where it was", async () => {
+    const { mind, change, shown } = await setUp();
+    const alpha = await mind("Alpha");
+    const beta = await mind("Beta");
+    const gamma = await mind("Gamma");
+
+    await change({ type: "open", item: { kind: "home" } });
+    const opened = await change({
+      type: "open",
+      item: alpha,
+      where: { in: "group" },
+      behind: true,
+    });
+    expect(shown(opened)).toEqual(["*Home Alpha"]);
+    expect(shown(await change({ type: "open", item: alpha, behind: true }))).toEqual([
+      "*Home Alpha",
+    ]);
+    const library = await change({ type: "open", item: { kind: "library" }, behind: true });
+    expect(shown(library)).toEqual(["*Home Library Alpha"]);
+    const split = await change({ type: "open", item: beta, where: { in: "side" } });
+    expect(focusedIndex(split)).toBe(1);
+    const behindHome = await change({
+      type: "open",
+      item: gamma,
+      where: { in: "group", groupId: split.groups[0]?.id },
+      behind: true,
+    });
+    expect(shown(behindHome)).toEqual(["*Home Gamma Library Alpha", "*Beta"]);
+    expect(focusedIndex(behindHome)).toBe(1);
+  });
+
   test("a Mind that isn't there doesn't open", async () => {
     const { change } = await setUp();
 

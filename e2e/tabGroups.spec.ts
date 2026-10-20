@@ -391,7 +391,7 @@ test("a pinned tab stays at the left of its group; ⌘W and a middle click leave
   await expect(titlesIn(group)).toHaveText(["Alpha", "Beta"]);
 });
 
-test("groups, tabs, previews, pins and widths come back after a restart, with Home in front of the first group", async () => {
+test("groups, tabs, previews, pins, widths and the focused group come back after a restart, Home in front of the tab that was, and ⌘W on it shows that tab again", async () => {
   let session = await launchApp(dataDir);
   let { window } = session;
   await dismissChatSetup(window);
@@ -415,16 +415,18 @@ test("groups, tabs, previews, pins and widths come back after a restart, with Ho
   session = await launchApp(dataDir);
   window = session.window;
   await expect(groupsOf(window)).toHaveCount(2);
-  await expect(titlesIn(groupAt(window, 0))).toHaveText(["Beta", "Home", "Alpha"]);
+  await expect(titlesIn(groupAt(window, 0))).toHaveText(["Beta", "Alpha"]);
   await expect(tabNamed(window, "Beta")).toHaveAttribute("data-pinned", "true");
-  await expect(groupAt(window, 0).getByTestId("home-tab")).not.toHaveAttribute("data-pinned");
-  await expect(groupAt(window, 0).getByTestId("home-tab")).toHaveAttribute("aria-selected", "true");
-  await expect(groupAt(window, 0)).toHaveAttribute("data-focused", "true");
-  await expect(titlesIn(groupAt(window, 1))).toHaveText(["Field notes"]);
+  await expect(titlesIn(groupAt(window, 1))).toHaveText(["Home", "Field notes"]);
+  await expect(groupAt(window, 1).getByTestId("home-tab")).toHaveAttribute("aria-selected", "true");
+  await expect(groupAt(window, 1)).toHaveAttribute("data-focused", "true");
   await expect(groupAt(window, 1).getByTestId("document-tab")).toHaveAttribute(
     "data-preview",
     "true",
   );
+  await window.keyboard.press("ControlOrMeta+w");
+  await expect(groupAt(window, 1).getByTestId("home-tab")).toHaveCount(0);
+  await expect(groupAt(window, 1)).toHaveAttribute("data-focused", "true");
   await expect(groupAt(window, 1).getByTestId("viewer-title")).toHaveText("Field notes");
   await expect
     .poll(async () => Math.abs((await widthOf(groupAt(window, 0))) - (widths[0] ?? 0)))
