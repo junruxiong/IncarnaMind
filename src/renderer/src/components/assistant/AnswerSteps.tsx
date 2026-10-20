@@ -14,11 +14,19 @@ import {
   type LiveStep,
   liveStep,
   liveStepKey,
+  type ReadDocument,
   type StepRow,
   type StepSource,
   stepRows,
 } from "../../answerSteps";
-import { checkedWords, checkingWords } from "../../answerStepWords";
+import {
+  checkedWords,
+  checkingWords,
+  documentsReadText,
+  foldedWords,
+  mindLabel,
+  mindStepText,
+} from "../../answerStepWords";
 import { useAnswers } from "../../answers";
 import { stepsScope } from "../../assistantContext";
 import { commandCallText } from "../../commandFacts";
@@ -77,7 +85,8 @@ export function AnswerSteps({
   const t = useT();
   const phase = useAnswers((state) => state.phases[answer.id]);
   const askedFrom = question?.askedFrom ?? null;
-  const meeting = useAskedInMeeting(question);
+  const askedInMeeting = useAskedInMeeting(question);
+  const meeting = answer.steps?.sent ? answer.steps.sent.transcript === true : askedInMeeting;
   const selection = (question?.focus?.selection ?? "").trim() !== "";
   const scopeOf = useStepsScopeOf(question);
   const [open, setOpen] = useState(false);
@@ -268,93 +277,8 @@ function runningText(
   return t("skills.answer.loading", { name: skillTitle(skill, t) });
 }
 
-const mindLabel = (t: Translate, mind: AskedFrom) => mind.name || t("mind.untitled");
-
-/** A step about the Mind: the one read, or the one asked from and not read. */
-type MindStep = Extract<FoldedLine, { kind: "read" | "asked" }>;
-
-/**
- * "Read “{Mind}”", "Read your selection in “{Mind}”" when the Question was about
- * one, "Read part of “{Mind}”" when it was cut to fit, or "Asked from {Mind}"; with `name` where the Mind's name goes.
- */
-function mindStepText(t: Translate, step: MindStep, name = mindLabel(t, step.mind)): string {
-  if (step.kind === "asked") {
-    return step.mind.deleted ? t("steps.asked.deleted") : t("steps.asked", { mind: name });
-  }
-  if (step.mind.deleted) return t("steps.read.deleted");
-  if (step.mind.partial) return t("steps.read.part", { mind: name });
-  return t(step.selection ? "steps.read.selection" : "steps.read", { mind: name });
-}
-
 /** A share read as a whole percent, at least 1 and at most 99: "about 40%" is part, never none or all. */
 const percentOf = (share: number) => Math.min(99, Math.max(1, Math.round(share * 100)));
-
-function passagesText(t: Translate, count: number): string {
-  return count === 1 ? t("steps.passages.one") : t("steps.passages", { count });
-}
-
-function sourcesText(t: Translate, count: number): string {
-  if (count === 0) return t("steps.sources.none");
-  return count === 1 ? t("steps.sources.one") : t("steps.sources", { count });
-}
-
-function documentsReadText(
-  t: Translate,
-  documents: readonly StepSource[],
-  documentOf: (source: StepSource) => string,
-  mind: string | null = null,
-): string {
-  const [first] = documents;
-  const document = documents.length === 1 && first ? documentOf(first) : null;
-  const count = documents.length;
-  if (mind === null) {
-    return document === null
-      ? t("steps.readDocuments", { count })
-      : t("steps.readDocuments.one", { document });
-  }
-  return document === null
-    ? t("steps.readDocuments.mind", { mind, count })
-    : t("steps.readDocuments.mind.one", { mind, document });
-}
-
-function foldedText(
-  t: Translate,
-  line: FoldedLine,
-  scope: (extra: number) => string,
-  modelOf: (modelId: string) => string,
-  documentOf: (source: StepSource) => string,
-): string {
-  switch (line.kind) {
-    case "searched":
-      return t("steps.searched", {
-        scope: scope(line.extraScopes),
-        sources: sourcesText(t, line.sources),
-      });
-    case "read-passages": {
-      const passages = passagesText(t, line.passages);
-      if (line.citedAfterChecking === 0) return t("steps.readNoneMatched", { passages });
-      return line.citedAfterChecking === 1
-        ? t("steps.readCited.one", { passages })
-        : t("steps.readCited", { passages, count: line.citedAfterChecking });
-    }
-    case "searched-web":
-      return t("steps.searchedWeb", { sources: sourcesText(t, line.sources) });
-    case "listened":
-      return t("steps.listened", { sources: sourcesText(t, line.sources) });
-    case "read-documents":
-      return documentsReadText(
-        t,
-        line.documents,
-        documentOf,
-        line.mind && !line.mind.deleted ? mindLabel(t, line.mind) : null,
-      );
-    case "read":
-    case "asked":
-      return mindStepText(t, line);
-    case "answered":
-      return t("steps.answered", { model: modelOf(line.model) });
-  }
-}
 
 /** Stands for the Mind's name in a line, to split the line around it. */
 const NAME = "\u0001";
@@ -380,30 +304,37 @@ function FoldedToggle({
   const t = useT();
   const nameOf = useModelNames();
   const documentOf = useDocumentNames();
-  const documentKind = useAppStore((state) =>
-    line.kind === "read-documents" && line.documents.length === 1
-      ? state.documents.find((document) => document.id === line.documents[0]?.documentId)?.kind
-      : undefined,
-  );
+  const documentKind = useOnlyDocumentKind(line.kind === "read-documents" ? line.documents : []);
+  const words = { scope: scopeOf, modelOf: (id: string) => nameOf(id).name, documentOf };
   const label =
     askedAgain === undefined
-      ? foldedText(t, line, scopeOf, (id) => nameOf(id).name, documentOf)
+      ? foldedWords(t, line, words)
       : askedAgain === 1
         ? t("coverage.askedAgain.one")
         : t("coverage.askedAgain", { count: askedAgain });
   const step =
-    askedAgain === undefined && (line.kind === "read" || line.kind === "asked") ? line : null;
+    askedAgain !== undefined
+      ? null
+      : line.kind === "read" || line.kind === "asked"
+        ? line
+        : line.kind === "read-documents"
+          ? line.read
+          : null;
   const mind = step?.mind;
-  const icon = mind ? (
-    <MindLineIcon className="answer-steps-icon" />
-  ) : line.kind === "answered" ? (
-    <SparkLineIcon className="answer-steps-icon" />
-  ) : line.kind === "read-documents" ? (
-    <DocumentLineIcon kind={documentKind ?? "text"} className="answer-steps-icon" />
-  ) : (
-    <SearchIcon className="answer-steps-icon" />
-  );
-  const parts = step && !step.mind.deleted ? mindStepText(t, step, NAME).split(NAME) : [];
+  const icon =
+    line.kind === "read-documents" ? (
+      <DocumentLineIcon kind={documentKind ?? "text"} className="answer-steps-icon" />
+    ) : mind ? (
+      <MindLineIcon className="answer-steps-icon" />
+    ) : line.kind === "answered" ? (
+      <SparkLineIcon className="answer-steps-icon" />
+    ) : (
+      <SearchIcon className="answer-steps-icon" />
+    );
+  const parts =
+    step && !step.mind.deleted
+      ? foldedWords(t, line, { ...words, mindName: NAME }).split(NAME)
+      : [];
   if (mind && parts.length === 2) {
     const [before, after] = parts;
     return (
@@ -687,15 +618,11 @@ function SearchStep({ row, scope }: { row: Extract<StepRow, { kind: "search" }>;
 
 function ReadDocumentsStep({ row }: { row: Extract<StepRow, { kind: "read-documents" }> }) {
   const t = useT();
-  const documentOf = useDocumentNames();
-  const kind = useAppStore((state) =>
-    row.documents.length === 1
-      ? state.documents.find((document) => document.id === row.documents[0]?.documentId)?.kind
-      : undefined,
-  );
+  const nameOf = useDocumentNames();
+  const kind = useOnlyDocumentKind(row.documents);
   return (
     <Step kind={row.kind} icon={<DocumentLineIcon kind={kind ?? "text"} />}>
-      <p className="answer-step-title">{documentsReadText(t, row.documents, documentOf)}</p>
+      <p className="answer-step-title">{documentsReadText(t, row.documents, nameOf)}</p>
       <SourceList sources={row.sources} />
     </Step>
   );
@@ -730,9 +657,19 @@ function SourceList({ sources }: { sources: StepSource[] }) {
   );
 }
 
-function useDocumentNames(): (source: StepSource) => string {
+function useDocumentNames(): (document: ReadDocument) => string | null {
   const documents = useAppStore((state) => state.documents);
-  return (source) => shownDocumentName(source, documents) || source.documentName;
+  return ({ documentId, name }) =>
+    shownDocumentName({ documentId, documentName: name }, documents) || name;
+}
+
+/** The kind of the one Document `documents` holds, for its icon; none for several. */
+function useOnlyDocumentKind(documents: readonly ReadDocument[]) {
+  return useAppStore((state) =>
+    documents.length === 1
+      ? state.documents.find((document) => document.id === documents[0]?.documentId)?.kind
+      : undefined,
+  );
 }
 
 /** A source of a step: its Document and Location, which open beside the Mind as its Citation does. */

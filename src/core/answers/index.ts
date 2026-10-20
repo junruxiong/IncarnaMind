@@ -915,6 +915,8 @@ export function createAnswers(options: AnswersOptions) {
     let mindRequest = input.mind?.request;
     /** It listened to a meeting's live transcript: the Question went with it. */
     let listening = false;
+    /** The Documents whose whole text went with the Question; null until the assistant's request is built. */
+    let sentDocuments: Set<string> | null = null;
     const { help } = input;
     let foundAhead = false;
     /** The language the call's newest lines are in, which a help Answer is written in. */
@@ -988,6 +990,12 @@ export function createAnswers(options: AnswersOptions) {
         ...(withoutMindTools && { withoutMindTools: true as const }),
         ...(coverage && { coverage }),
         ...(writtenFrom && { writtenFrom }),
+        ...(sentDocuments && {
+          sent: {
+            documents: [...sentDocuments],
+            ...(listening && { transcript: true as const }),
+          },
+        }),
       };
     };
     let skills: SkillSession | null = null;
@@ -1658,6 +1666,7 @@ export function createAnswers(options: AnswersOptions) {
           passagesOf,
           (passages) => blockOf(passages, session.measure),
         );
+        sentDocuments = new Set(given?.passages.map((passage) => passage.documentId));
         if (given) {
           messages = withBeforeQuestion(messages, blockOf(given.passages, session.show));
           // Someone else wrote a saved web page: given up front, it is read as a search reads it (#78).
@@ -2061,6 +2070,10 @@ export function createAnswers(options: AnswersOptions) {
           case "mind-cut":
             if (read) read = event.share === 0 ? null : { ...read, partial: true };
             readShare = event.share;
+            writeSoon();
+            break;
+          case "documents-dropped":
+            sentDocuments?.clear();
             writeSoon();
             break;
           case "quotes-retried":
