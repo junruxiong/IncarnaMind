@@ -21,7 +21,6 @@ import {
   sectionTitleClass,
 } from "../ui";
 import { AddProvider, MODELS_UNDO_PLACE } from "./AddProvider";
-import { ChatGptPlanSettings } from "./ChatGptPlanSettings";
 import { ReadinessExplanation } from "./ChatReadinessNotice";
 import { ModelDefaults } from "./ModelDefaults";
 import { PlansSettings } from "./PlansSettings";
@@ -201,7 +200,6 @@ export function ModelsSettings() {
             onAdd={() => open({ page: "directory" }, "add-provider")}
           />
           <PlansSettings />
-          <ChatGptPlanSettings />
           <TaggingSettings />
         </>
       )}
