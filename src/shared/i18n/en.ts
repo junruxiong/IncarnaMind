@@ -4262,6 +4262,7 @@ export const en = {
   "transcript.gap.sleep": "the computer was asleep",
   "transcript.gap.interrupted": "IncarnaMind was closed",
   "transcript.gap.lost": "its audio was deleted",
+  "transcript.gap.uncaptured": "no audio was captured",
   "transcript.gap.cloud": "the cloud dropped",
   "transcript.follow": "Jump to live",
   "meetings.duration.seconds": "{count} s",

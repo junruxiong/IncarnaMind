@@ -4080,6 +4080,7 @@ export const zhCN = {
   "transcript.gap.sleep": "电脑处于睡眠状态",
   "transcript.gap.interrupted": "IncarnaMind 已关闭",
   "transcript.gap.lost": "音频已删除",
+  "transcript.gap.uncaptured": "没有录到音频",
   "transcript.gap.cloud": "云端连接中断",
   "transcript.follow": "跳到最新",
   "meetings.duration.seconds": "{count} 秒",
