@@ -1395,6 +1395,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     resolveScope,
     workingCopyOf: (mindId) => wordImports.originalOf(mindId)?.documentIds?.[0] ?? null,
+    exampleDocuments: (mindId) => examples.documentsOf(mindId),
     unscopedDocuments: (mindId) => {
       const made = examples.made();
       if (made.documentIds.length === 0 || (mindId && made.mindIds.includes(mindId))) return null;

@@ -1330,14 +1330,19 @@ export async function expectReadyDocuments(window: Page, count: number): Promise
 
 /** Ends the first open (hides its steps), so the shell shows everything, as it does for a returning User. */
 export async function leaveFirstOpen(window: Page): Promise<void> {
-  await window.evaluate(async () => {
+  await markSteps(window, { hidden: true });
+  await expect(window.getByTestId("first-open-steps")).toHaveCount(0);
+}
+
+/** Marks steps of the first open done (or hides it), as the User doing them would. */
+export async function markSteps(window: Page, done: object): Promise<void> {
+  await window.evaluate(async (patch) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     const { device } = await bridge.getSettings();
     await bridge.updateSettings({
-      device: { gettingStarted: { ...device.gettingStarted, hidden: true } },
+      device: { gettingStarted: { ...device.gettingStarted, ...patch } },
     });
-  });
-  await expect(window.getByTestId("first-open-steps")).toHaveCount(0);
+  }, done);
 }
 
 /** The id of the Document listed in the sidebar under `name`. */
