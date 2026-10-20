@@ -225,7 +225,14 @@ export type Block = (
   | { kind: "heading"; level: number; content: Inline[]; format?: ParagraphFormat }
   | { kind: "code"; language: string; code: string }
   | { kind: "math"; latex: string }
-  | { kind: "list"; ordered: boolean; start: number; items: Block[][] }
+  | {
+      kind: "list";
+      ordered: boolean;
+      start: number;
+      items: Block[][];
+      /** A checklist's state, in the same order as its items; absent on ordinary lists. */
+      checked?: boolean[];
+    }
   | { kind: "quote"; content: Block[] }
   | { kind: "rule" }
   | { kind: "table"; rows: TableCell[][] }
@@ -528,7 +535,6 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
       ];
     case "blockMath":
       return [{ kind: "math", latex: stringAttribute(element, "latex") }];
-    // A checklist reads as a bulleted list: its ticks are for the User, not for what reads the text.
     case "bulletList":
     case "taskList":
     case "orderedList": {
@@ -540,11 +546,22 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
         .toArray()
         .filter((item): item is Y.XmlElement => item instanceof Y.XmlElement)
         .flatMap((item) => {
-          if (!options.review) return [readChildren(item.toArray(), options)];
-          const change = changeOf(item, options);
-          return change ? [withChange(readChildren(item.toArray(), options), change)] : [];
+          const change = options.review ? changeOf(item, options) : undefined;
+          if (options.review && !change) return [];
+          const attributes: Record<string, unknown> = item.getAttributes();
+          const checked = attributes.checked === true;
+          const content = readChildren(item.toArray(), options);
+          return [{ content: change ? withChange(content, change) : content, checked }];
         });
-      return [{ kind: "list", ordered, start, items }];
+      return [
+        {
+          kind: "list",
+          ordered,
+          start,
+          items: items.map((item) => item.content),
+          ...(element.nodeName === "taskList" && { checked: items.map((item) => item.checked) }),
+        },
+      ];
     }
     case "blockquote":
       return [{ kind: "quote", content: readChildren(element.toArray(), options) }];
