@@ -121,7 +121,11 @@ async function ask(window: Page, text: string): Promise<Locator> {
 /** Chooses a style in the open picker, typing to find it and pressing Enter, as a person would. */
 async function chooseStyle(window: Page, search: string, label: string): Promise<void> {
   const picker = window.getByTestId("citation-style-picker");
-  await expect(picker.getByTestId("citation-style-search")).toBeFocused();
+  const field = picker.getByTestId("citation-style-search");
+  await expect(field).toBeFocused();
+  // The catalogue's count is in the field once every style is listed: before it, the first match is
+  // the common list's, and Enter may take another's once the rest arrive.
+  await expect(field).toHaveAttribute("aria-label", /\d/);
   await window.keyboard.type(search);
   await expect(picker.getByTestId("citation-style-option-label").first()).toHaveText(label);
   await window.keyboard.press("Enter");

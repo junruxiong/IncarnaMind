@@ -61,6 +61,15 @@ if (dataDirOverride) app.setPath("userData", resolve(dataDirOverride));
 // The log in the data folder's `logs/`, from the start, so it has what goes wrong at startup too.
 const logger = startLogging(app.getPath("userData"));
 
+// One copy to a data folder: a second would write the same database. Electron's lock is keyed on
+// `userData`, which is set above, so a test on a data folder of its own takes a lock of its own.
+const ownsDataFolder = app.requestSingleInstanceLock();
+if (!ownsDataFolder) {
+  logger.info("app.anotherCopyRunning");
+  // Not `quit`: its `app.quit` line in the log would read as the running copy's.
+  app.exit(0);
+}
+
 // Whether Skill scripts run in the OS sandbox, found out while Electron starts.
 const scriptExecutor = chooseExecutor(logger);
 
@@ -111,6 +120,24 @@ const appWindows = () =>
 const listeningWindows = () =>
   BrowserWindow.getAllWindows().filter((window) => !isCaptureWindow(window));
 
+function showFront(): void {
+  const [front] = appWindows();
+  if (!front) {
+    // Before the core is there, the start in progress makes the first window itself.
+    if (core) createWindow();
+    return;
+  }
+  if (front.isMinimized()) front.restore();
+  front.show();
+  front.focus();
+  app.focus({ steal: true });
+}
+
+app.on("second-instance", () => {
+  logger.info("app.secondLaunch");
+  showFront();
+});
+
 function isFromOurRenderer(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   const url = event.senderFrame?.url ?? "";
   return rendererUrl ? url.startsWith(rendererUrl) : url.startsWith("file://");
@@ -140,13 +167,7 @@ function exposeCore(core: Core): void {
     for (const window of listeningWindows()) {
       if (!window.isDestroyed()) window.webContents.send(EVENT_CHANNEL, name, payload);
     }
-    if (name === "agents.citationShown") {
-      const [front] = appWindows();
-      if (front?.isMinimized()) front.restore();
-      front?.show();
-      front?.focus();
-      app.focus({ steal: true });
-    }
+    if (name === "agents.citationShown") showFront();
   });
 }
 
@@ -249,6 +270,7 @@ async function showStartupError(error: unknown): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  if (!ownsDataFolder) return;
   showDevelopmentDockIcon();
   const createChatModel = await testChatModel();
   const taskKinds = await testTaskKinds();
@@ -276,7 +298,10 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
-  guardQuit(core, () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null);
+  const settleQuit = guardQuit(
+    core,
+    () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null,
+  );
   if (taskKinds.length > 0) {
     const started = core;
     (globalThis as { incarnamindScriptedTask?: unknown }).incarnamindScriptedTask = {
@@ -300,7 +325,7 @@ app.whenReady().then(async () => {
   servePermissionGuide({ rendererUrl, appWindows, trusted: isFromOurRenderer, testHooks });
   installMenuInLanguage(core);
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
-  if (!testHooks) startAutoUpdates(core);
+  if (!testHooks) startAutoUpdates(core, settleQuit);
 
   app.on("activate", () => {
     if (appWindows().length === 0) createWindow();
