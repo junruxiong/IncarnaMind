@@ -70,18 +70,14 @@ describe("A key with a character that keys don't use", () => {
       key: "error.provider.keyCharacter",
       values: { character: "作" },
     });
-    expect(error.message).toBe(
-      "This key has a character keys don’t use (作). Paste it again.",
-    );
+    expect(error.message).toBe("This key has a character keys don’t use (作). Paste it again.");
     expect(
       translate(
         "zh-CN",
         error.wording?.key ?? "error.provider.keyCharacter",
         error.wording?.values,
       ),
-    ).toBe(
-      "密钥里有一个不该有的字符（作）。重新粘贴密钥。",
-    );
+    ).toBe("密钥里有一个不该有的字符（作）。重新粘贴密钥。");
   });
 
   test("names an invisible character by its code, not by a blank", () => {

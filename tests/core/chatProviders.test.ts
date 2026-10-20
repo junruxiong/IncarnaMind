@@ -354,6 +354,27 @@ describe("Test connection", () => {
     expect(result).toEqual({ ok: false, error: { kind, message } });
   });
 
+  // protects=a key a provider refuses is not tried with any other provider by itself (#1384); fails_when=a refusal makes a second model, for another service, get the key; no_claim=the key form's own check of whose key it looks like, which keyForms.test.ts and the keyForm smoke test cover.
+  test("a key that is refused is tested once, with the provider it was given for, and never with another", async () => {
+    const models = scriptedModels(failingModel(401, "Incorrect API key provided"));
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: models.createChatModel,
+    });
+    acceptConsentAutomatically(core);
+    const kimiKey = `sk-${"aZ3".repeat(16)}`;
+
+    const result = await core.testChatConnection({
+      kind: "anthropic",
+      apiKey: kimiKey,
+      modelId: "claude-haiku-5-5",
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { kind: "auth" } });
+    expect(models.specs).toHaveLength(1);
+    expect(models.specs[0]).toMatchObject({ kind: "anthropic", apiKey: kimiKey });
+    expect(models.model.doGenerateCalls).toHaveLength(1);
+  });
+
   test("a server that can't be reached is reported as a network problem", async () => {
     const core = startCore(await createTempDataFolder(), {
       createChatModel: scriptedModels(unreachableModel()).createChatModel,

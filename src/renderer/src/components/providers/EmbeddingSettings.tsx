@@ -14,8 +14,11 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+<<<<<<< HEAD
 import { DetailsLine } from "../DetailsLine";
 import { KeyCharacterLine } from "../KeyCharacterLine";
+=======
+>>>>>>> origin/main
 import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,
@@ -32,12 +35,10 @@ import {
   ghostButtonClass,
   hintClass,
   inputClass,
-  noticeClass,
   pageIntroClass,
   primaryButtonClass,
   rowButtonsClass,
   rowTextClass,
-  rowTitleClass,
   ruledListClass,
   ruledRowClass,
   successTextClass,
@@ -104,7 +105,7 @@ export function embeddingProviderLabel(provider: EmbeddingProvider, t: Translate
  * Settings → Search: embeddings, off by default, or the embedding
  * model search uses (the built-in one, or a provider chosen instead),
  * turning them on or off or switching model with a warning, its error and
- * rebuild, and local mode.
+ * rebuild.
  */
 export function EmbeddingSettingsSection() {
   const t = useT();
@@ -168,66 +169,10 @@ export function EmbeddingSettingsSection() {
             )}
           </div>
         </div>
-        <LocalOnlySetting localOnly={embedding.localOnly} />
       </div>
 
       {editing && <EmbeddingForm current={embedding} onDone={() => setEditing(false)} />}
     </section>
-  );
-}
-
-/** "Keep everything on this computer", and what it doesn't cover. */
-function LocalOnlySetting({ localOnly }: { localOnly: boolean }) {
-  const t = useT();
-  const id = useId();
-  const readiness = useAppStore((state) => state.chatReadiness);
-  const [busy, setBusy] = useState(false);
-  const chatService = readiness && "provider" in readiness ? readiness.provider.service : null;
-
-  const change = async (enabled: boolean) => {
-    setBusy(true);
-    try {
-      useAppStore.setState({ embedding: await core.setLocalOnly(enabled) });
-    } catch (failure) {
-      useAppStore.getState().reportError(failure);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className={ruledRowClass}>
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <label htmlFor={id} className={rowTitleClass}>
-          {t("embeddingProviders.localOnly.label")}
-        </label>
-        <DetailsLine
-          id={`${id}-description`}
-          testId="embedding-local-only-description"
-          className={rowTextClass}
-          details={t("embeddingProviders.localOnly.body.details")}
-        >
-          {t("embeddingProviders.localOnly.body")}
-        </DetailsLine>
-        {localOnly && chatService && (
-          <p className={`mt-1.5 ${noticeClass}`}>
-            {t("embeddingProviders.localOnly.cloudChat", { service: chatService.name })}
-          </p>
-        )}
-      </div>
-      <input
-        id={id}
-        type="checkbox"
-        role="switch"
-        data-testid="local-only"
-        aria-describedby={`${id}-description`}
-        checked={localOnly}
-        aria-checked={localOnly}
-        disabled={busy}
-        onChange={(event) => void change(event.target.checked)}
-        className="switch"
-      />
-    </div>
   );
 }
 

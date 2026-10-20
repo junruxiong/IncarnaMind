@@ -38,6 +38,7 @@ import {
   hintClass,
   successTextClass,
 } from "../ui";
+import { KeyCheckLine, useKeyCheck } from "./keyCheck";
 import { OtherModels } from "./OtherModels";
 import { KeyRefusedLine, ProviderSendsLine, TestResult } from "./ProviderForm";
 import { logoIdOf, ProviderLogo } from "./ProviderLogo";
@@ -112,6 +113,10 @@ export function ProviderPage({
   const takesKey = catalog !== undefined && catalog.apiKey !== "none";
   const keyUrl = endpoint?.keyUrl ?? catalog?.keyUrl;
   const key = useProviderKey();
+  const keyCheck = useKeyCheck(
+    takesKey && catalog.group !== "local" && catalog.id !== "openai-compatible" ? catalog.id : null,
+    key.apiKey,
+  );
   const keyField = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -152,8 +157,13 @@ export function ProviderPage({
 
   const saveKey = async (event: FormEvent) => {
     event.preventDefault();
+<<<<<<< HEAD
     const apiKey = key.text;
     if (apiKey === "" || key.stray || !someModel) return;
+=======
+    const apiKey = key.apiKey.trim();
+    if (apiKey === "" || !someModel || keyCheck.blocked) return;
+>>>>>>> origin/main
     setSaving(true);
     setKeyError(null);
     try {
@@ -308,7 +318,11 @@ export function ProviderPage({
             <button
               type="submit"
               data-testid="provider-page-save-key"
+<<<<<<< HEAD
               disabled={saving || !someModel || key.stray !== null}
+=======
+              disabled={saving || !someModel || keyCheck.blocked}
+>>>>>>> origin/main
               className={buttonClass}
             >
               {t("models.provider.saveKey")}
@@ -336,7 +350,16 @@ export function ProviderPage({
             </a>
           )}
         </div>
+<<<<<<< HEAD
         {key.stray && <KeyCharacterLine id={`${id}-stray`} stray={key.stray} />}
+=======
+        <KeyCheckLine
+          check={keyCheck.check}
+          provider={name}
+          nameOf={(catalogId) => keyProviderName(catalogId, t, language)}
+          onAnyway={() => keyCheck.agree()}
+        />
+>>>>>>> origin/main
         {refusedHere && refused && <KeyRefusedLine id={`${id}-refused`} refused={refused} />}
         {keyError && (
           <p
@@ -670,7 +693,7 @@ function ProviderCostLine({ providerId }: { providerId: string }) {
       {setAside && (
         <>
           {" · "}
-          <span data-testid="chat-provider-set-aside" title={t("cost.setAside.hint")}>
+          <span data-testid="chat-provider-set-aside" title={t("cost.setAside.tip")}>
             {setAside}
           </span>
         </>
