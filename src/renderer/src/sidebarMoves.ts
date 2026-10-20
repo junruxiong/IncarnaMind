@@ -1,19 +1,20 @@
-import type { DragEvent } from "react";
 import { create } from "zustand";
-import { startMoveDrag } from "./folderDrag";
+import type { ObjectDrag } from "./dragDrop";
+import { itemsOfRefs } from "./folderDrag";
 import { translateNow } from "./i18n";
 import { type MoveItems, movingName } from "./moves";
 import type { ObjectRef } from "./objects";
-import { selectedOn } from "./selection";
+import { type SelectSurface, selectedOn } from "./selection";
+import { refKey } from "./selectionModel";
 import { useAppStore } from "./store";
+import { findTab } from "./tabs";
 
-function movedFrom(row: ObjectRef): MoveItems {
-  const chosen = selectedOn("sidebar");
+const movable = (ref: ObjectRef) => ref.kind === "mind" || ref.kind === "document";
+
+function movedFrom(row: ObjectRef, surface: SelectSurface): ObjectRef[] {
+  const chosen = selectedOn(surface);
   const held = chosen.some((each) => each.kind === row.kind && each.id === row.id);
-  const items = held ? chosen : [row];
-  const idsOf = (kind: ObjectRef["kind"]) =>
-    items.flatMap((each) => (each.kind === kind ? [each.id] : []));
-  return { mindIds: idsOf("mind"), documentIds: idsOf("document") };
+  return (held ? chosen : [row]).filter(movable);
 }
 
 export function nameOfMoved(items: MoveItems): string {
@@ -21,9 +22,9 @@ export function nameOfMoved(items: MoveItems): string {
   return movingName(translateNow, items, { minds, documents });
 }
 
-export function dragFromRow(event: DragEvent<HTMLElement>, row: ObjectRef): void {
-  const items = movedFrom(row);
-  startMoveDrag(event, items, nameOfMoved(items));
+export function rowDrag(row: ObjectRef, surface: SelectSurface): ObjectDrag {
+  const refs = movedFrom(row, surface);
+  return { refs, name: nameOfMoved(itemsOfRefs(refs)), from: surface };
 }
 
 interface MoveRequest {
@@ -42,6 +43,47 @@ export function moveFromMenu(row: HTMLElement | null, object: ObjectRef): void {
   );
 }
 
+// In the window: the rows of a sidebar slid away still have boxes, off to its left.
+function shown(element: Element | null | undefined): element is HTMLElement {
+  if (!(element instanceof HTMLElement)) return false;
+  const box = element.getBoundingClientRect();
+  return (
+    box.width > 0 &&
+    box.right > 0 &&
+    box.left < window.innerWidth &&
+    box.bottom > 0 &&
+    box.top < window.innerHeight
+  );
+}
+
+function anchorFor(refs: readonly ObjectRef[]): HTMLElement | null {
+  for (const ref of refs) {
+    const menus = document.querySelectorAll(`[data-object-menu="${CSS.escape(refKey(ref))}"]`);
+    const row = Array.from(menus).find(shown);
+    if (row) return row;
+  }
+  const front = document.querySelector('[data-focused] [role="tab"][aria-selected="true"]');
+  if (shown(front)) return front;
+  return document.querySelector<HTMLElement>("[data-move-to-fallback]");
+}
+
+function shownBy(ref: ObjectRef): ObjectRef {
+  if (ref.kind !== "tab") return ref;
+  const item = findTab(useAppStore.getState().layout, ref.id)?.item;
+  if (item?.kind === "mind") return { kind: "mind", id: item.mindId };
+  if (item?.kind === "document") return { kind: "document", id: item.documentId };
+  return ref;
+}
+
+export function moveFromPalette(targets: readonly ObjectRef[]): void {
+  const refs = targets.map(shownBy);
+  const items = itemsOfRefs(refs.filter(movable));
+  requestAnimationFrame(() => {
+    const anchor = anchorFor(refs);
+    if (anchor) useSidebarMove.setState({ request: { anchor, items } });
+  });
+}
+
 // One picker for the whole sidebar: each row opening its own would leave several open at once.
 export const useSidebarMove = create<{
   request: MoveRequest | null;
@@ -50,7 +92,7 @@ export const useSidebarMove = create<{
 }>()((set) => ({
   request: null,
   show: (anchor, row) => {
-    if (anchor) set({ request: { anchor, items: movedFrom(row) } });
+    if (anchor) set({ request: { anchor, items: itemsOfRefs(movedFrom(row, "sidebar")) } });
   },
   hide: () => set({ request: null }),
 }));

@@ -8,6 +8,7 @@ import { useDismissOnEscape } from "../escapeDismiss";
 import { commentedChecks, trackedChanges, unmarkedChecks } from "../exportChecks";
 import { useExportDialog } from "../exportDialog";
 import {
+  COMPARISON_EXCEL,
   type ExportResult,
   exportAgain,
   exportMind,
@@ -140,20 +141,19 @@ function ResultBody({
     return () => clearTimeout(timer);
   }, [plain, held, dismiss]);
 
-  const saving = isCheckRecord(result.format)
-    ? t("checkRecord.saving")
-    : t("export.saving.line", { format: t(FORMAT_LABELS[result.format]) });
+  const saving =
+    result.format === COMPARISON_EXCEL
+      ? t("export.excel.saving")
+      : isCheckRecord(result.format)
+        ? t("checkRecord.saving")
+        : t("export.saving.line", { format: t(FORMAT_LABELS[result.format]) });
   const fix = (): ProblemAction | undefined => {
     if (result.state === "failed") {
       return {
         label: t("export.changeLocation"),
         testId: "export-change-location",
         onClick: () =>
-          void exportAgain(
-            result.mindId,
-            result.format,
-            async () => (await chooseOutputLocation()) !== null,
-          ),
+          void exportAgain(result, async () => (await chooseOutputLocation()) !== null),
       };
     }
     if (result.state === "not-allowed") {
@@ -162,7 +162,7 @@ function ResultBody({
         label: t("export.allow"),
         testId: "export-allow",
         onClick: () =>
-          void exportAgain(result.mindId, result.format, async () => {
+          void exportAgain(result, async () => {
             await core.setLinkedFolderWriting(linkedFolderId, true);
             return true;
           }),

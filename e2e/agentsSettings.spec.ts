@@ -459,6 +459,11 @@ test("Local mode pauses agents, and the page reads in Chinese at a narrow window
       "智能体已暂停：已开启“所有内容都留在这台电脑上”",
     );
     await shot(window, "agents-paused-zh-narrow");
+    // Its link goes to where the switch is.
+    await page.getByTestId("agents-paused").getByRole("button", { name: "隐私设置" }).click();
+    await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "privacy");
+    await expect(window.getByTestId("local-only")).toBeFocused();
+    await showSettingsPage(window, "agents");
     // The first-class agents and "Other agent" (其他智能体), and nothing spills out at either width.
     const list = page.getByTestId("agents-list");
     await expect(list.getByTestId("agent-client")).toHaveCount(7);

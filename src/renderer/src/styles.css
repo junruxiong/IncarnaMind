@@ -994,27 +994,6 @@
     animation: none;
   }
 
-  /* The tab, following the pointer. */
-  .tab-drag-ghost {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 60;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    max-width: 260px;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 6px;
-    background: var(--color-sheet);
-    box-shadow: var(--shadow-popover);
-    color: var(--color-ink);
-    font-size: 13px;
-    font-weight: 600;
-    white-space: nowrap;
-    pointer-events: none;
-  }
   /* Where a tab dropped on a strip will land. */
   .tab-drop-line {
     position: fixed;
@@ -2470,7 +2449,6 @@
       line-height: var(--text-body--line-height);
     }
 
-    /* Lists: the text keeps the edge; bullets and numbers hang in the margin. */
     :where(ul, ol) {
       margin: 0;
       padding: 0;
@@ -2497,7 +2475,51 @@
       padding-left: 24px;
     }
 
-    /* A checklist: the box hangs in the margin like a bullet; a done item is struck through. */
+    /*
+     * A Mind's own lists (the editor's blocks carry a data-id) are indented as DESIGN.md says. Their
+     * markers are drawn on the first paragraph, where its own line height centres them; a list
+     * a node view draws, and an Answer in the panel, keep the browser's.
+     */
+    &:not(.assistant-answer-text) {
+      :where(ul, ol)[data-id] {
+        padding-left: 48px;
+        list-style: none;
+      }
+      :where(ul, ol)[data-id] > li {
+        position: relative;
+      }
+      :where(ul, ol)[data-id] > li > p:first-child::before {
+        position: absolute;
+        color: var(--color-ink-secondary);
+        pointer-events: none;
+      }
+      ol[data-id] > li > p:first-child::before {
+        content: counter(list-item) ".";
+        right: calc(100% + 8px);
+        white-space: nowrap;
+      }
+      ul[data-id] > li:not([data-checked]) > p:first-child::before {
+        content: "";
+        left: -24px;
+        margin-top: calc(0.5lh - 3px);
+        box-sizing: border-box;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-ink-secondary);
+      }
+      ul[data-id] ul[data-id] > li:not([data-checked]) > p:first-child::before {
+        border: 1.5px solid var(--color-ink-secondary);
+        background: none;
+      }
+      ul[data-id] ul[data-id] ul[data-id] > li:not([data-checked]) > p:first-child::before {
+        border: none;
+        border-radius: 0;
+        background: var(--color-ink-secondary);
+      }
+    }
+
+    /* A checklist: the box sits where a bullet does; a done item is struck through. */
     ul:has(> li[data-checked]) {
       list-style: none;
     }
@@ -8757,6 +8779,7 @@
   }
   .comparison-action,
   .comparison-back,
+  .comparison-export,
   .comparison-add-question {
     display: inline-flex;
     flex: none;
@@ -9299,9 +9322,7 @@
   display: none;
 }
 
-/* While a tab or the assistant is dragged: no text is selected, and the pointer says so (last, so it wins). */
-body.tab-dragging,
-body.tab-dragging *,
+/* While the assistant is dragged: no text is selected, and the pointer says so (last, so it wins). */
 body.assistant-dragging,
 body.assistant-dragging * {
   cursor: grabbing;

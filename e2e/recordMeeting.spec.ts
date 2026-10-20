@@ -103,7 +103,7 @@ test("once the recording notice is read, Record records in one action, with the 
   await app.close();
 });
 
-test("the first time, ⌘Z right after Record takes the new Mind back", async () => {
+test("the first time, Record makes a Mind with no line, and ⌘Z right after it doesn't take it back: Delete does", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
 
@@ -113,9 +113,28 @@ test("the first time, ⌘Z right after Record takes the new Mind back", async ()
   await expect(window.getByTestId("meeting-start")).toBeVisible();
   expect(await mindsOf(window)).toHaveLength(1);
 
+  await expect(window.getByTestId("undo-message")).toHaveCount(0);
   await leaveText(window);
   await window.keyboard.press("ControlOrMeta+z");
-  await expect.poll(async () => (await mindsOf(window)).length).toBe(0);
+  expect(await mindsOf(window)).toHaveLength(1);
+  await app.close();
+});
+
+test("a Record that has begun a recording says nothing, and ⌘Z right after it doesn't take the Mind back", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await readNotice(window);
+
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
+  await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
+  await expect(window.getByTestId("undo-message")).toHaveCount(0);
+
+  await leaveText(window);
+  await window.keyboard.press("ControlOrMeta+z");
+  expect(await mindsOf(window)).toHaveLength(1);
+  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
   await app.close();
 });
 
