@@ -77,6 +77,8 @@ export type FoldedLine =
   | { kind: "read-passages"; passages: number; citedAfterChecking: number }
   | { kind: "searched-web"; sources: number }
   | { kind: "listened"; sources: number }
+  /** Asked during a meeting, but the live text had no line yet (#1366): nothing was heard. */
+  | { kind: "not-heard" }
   | { kind: "read"; mind: MindRead; share: number | null; selection?: true }
   | { kind: "asked"; mind: AskedFrom }
   | { kind: "answered"; model: string };
@@ -272,7 +274,9 @@ function extraScopes(calls: readonly AnswerToolCall[]): number {
 export function foldedLine(input: StepsInput): FoldedLine | null {
   const { answer, meeting } = input;
   const sources = sourceCount(answer.citations);
-  if (meeting) return { kind: "listened", sources };
+  if (meeting) {
+    return answer.steps?.nothingHeard ? { kind: "not-heard" } : { kind: "listened", sources };
+  }
   if (answer.toolCalls.some((call) => isSearch(call) && call.status === "done")) {
     // Never "no sources" once Passages were read: when the model cited nothing itself, what
     // was read, and what came of checking the Answer against it.

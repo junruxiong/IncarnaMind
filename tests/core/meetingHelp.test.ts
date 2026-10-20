@@ -127,6 +127,26 @@ describe("Help during the call", { timeout: 60_000 }, () => {
     ]);
   });
 
+  // protects=with the live text behind, no line yet, a button's Answer is told so and isn't given the button's exact form, and the Answer records that nothing was heard; fails_when=the model is told to base it on a transcript that isn't there, or the Answer reads as having listened; no_claim=what a real model writes (#1366).
+  test("with no line of the live text yet, the model is told it is behind, not to answer from a transcript", async () => {
+    const calls: ModelCall[] = [];
+    const dataDir = await createTempDataFolder();
+    const models = scriptedModels(helpingModel(calls));
+    const { core } = await transcribingCore(dataDir, { createChatModel: models.createChatModel });
+    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+    const meeting = await core.createMeeting();
+    await core.startMeeting({ meetingId: meeting.id, systemAudio: true });
+
+    const { answer } = await press(core, meeting, "answer");
+
+    const [first] = calls;
+    expect(first?.prompt).not.toContain("<live-transcript>");
+    expect(first?.system).toContain("the live text is behind");
+    expect(first?.system).toContain("never ask the User to type out what was said");
+    expect(first?.system).not.toContain("Reply in exactly this form");
+    expect(answer.steps?.nothingHeard).toBe(true);
+  });
+
   test("a second press goes on in the same conversation, the assistant's when it says so, and a deleted one starts anew", async () => {
     const { core, meeting } = await setUp();
     const first = await press(core, meeting, "say");

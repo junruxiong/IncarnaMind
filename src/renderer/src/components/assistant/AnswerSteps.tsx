@@ -321,6 +321,8 @@ function foldedText(
       return t("steps.searchedWeb", { sources: sourcesText(t, line.sources) });
     case "listened":
       return t("steps.listened", { sources: sourcesText(t, line.sources) });
+    case "not-heard":
+      return t("steps.notHeard");
     case "read":
     case "asked":
       return mindStepText(t, line);

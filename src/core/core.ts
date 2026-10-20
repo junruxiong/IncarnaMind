@@ -2896,8 +2896,9 @@ export function createCore(adapters: CoreAdapters): Core {
         (each) =>
           each.mindId === mindId && (each.status === "recording" || each.status === "paused"),
       );
-    const documentId = meeting?.transcript?.documentId;
-    if (!meeting || !documentId || !transcripts) return null;
+    if (!meeting) return null;
+    const documentId = meeting.transcript?.documentId;
+    if (!documentId || !transcripts) return [];
     await transcripts.refresh(meeting.id);
     await extracted(documentId, LIVE_TRANSCRIPT_WAIT_MS);
     return documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);

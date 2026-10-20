@@ -214,7 +214,14 @@ export function emptyMindNote(offered: boolean, empty: boolean): string {
  * A Question asked while the meeting the User is in records (#144): the live transcript goes
  * with it (see ./liveTranscript), and is what Questions about the call are answered from.
  */
-export function meetingInstructions(listening: boolean): string {
+export function meetingInstructions(listening: boolean, nothingHeard = false): string {
+  if (nothingHeard) {
+    return [
+      "The User is in a meeting that is being recorded, and asks this during the call. Nothing of the call has been transcribed yet: the live text is behind, and catches up once the meeting stops.",
+      "- Say so in one plain sentence in the User's language: the live text hasn't caught up, so you can't hear the call yet. Never say you can't see a transcript, and never ask the User to type out what was said.",
+      "- Then answer what you can without the call, from the Mind and the User's Documents, if the Question allows it.",
+    ].join("\n");
+  }
   if (!listening) return "";
   return [
     "The User is in a meeting that is being recorded, and asks this during the call.",

@@ -4697,6 +4697,7 @@ export const en = {
   "steps.searched": "Searched {scope} · {sources}",
   "steps.searchedWeb": "Searched the web · {sources}",
   "steps.listened": "Listened to the live transcript · {sources}",
+  "steps.notHeard": "The live text hasn’t caught up · nothing heard yet",
   "steps.sources": "{count} sources",
   "steps.sources.one": "1 source",
   "steps.sources.none": "no sources",

@@ -441,7 +441,8 @@ export interface AnswersOptions {
   readableMindName(mindId: string): string | null;
   /**
    * The live Transcript of the Meeting a Mind records now (#144), indexed up to now: its
-   * Passages in reading order; null when the Mind's Meeting isn't recording or has no lines yet.
+   * Passages in reading order, none while the live text hasn't made a line yet (#1366); null
+   * when the Mind's Meeting isn't recording.
    */
   liveTranscript(mindId: string): Promise<WindowedPassage[] | null>;
   /**
@@ -915,6 +916,8 @@ export function createAnswers(options: AnswersOptions) {
     let mindRequest = input.mind?.request;
     /** It listened to a meeting's live transcript: the Question went with it. */
     let listening = false;
+    /** Asked while a meeting records, with no line of its live transcript yet: the live text is behind. */
+    let nothingHeard = false;
     const { help } = input;
     let foundAhead = false;
     /** The language the call's newest lines are in, which a help Answer is written in. */
@@ -986,6 +989,7 @@ export function createAnswers(options: AnswersOptions) {
         ...(careful && { careful: true as const }),
         ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
         ...(withoutMindTools && { withoutMindTools: true as const }),
+        ...(nothingHeard && { nothingHeard: true as const }),
         ...(coverage && { coverage }),
         ...(writtenFrom && { writtenFrom }),
       };
@@ -1615,6 +1619,8 @@ export function createAnswers(options: AnswersOptions) {
           messages = withTranscript(messages, session.show(kept));
           listening = true;
           if (help) callLanguage = languageSaid(kept);
+        } else if (heard !== null) {
+          nothingHeard = true;
         }
         // Help gets what the User's Documents say about the newest lines at once, with no search
         // the model has to call first.
@@ -1992,9 +1998,9 @@ export function createAnswers(options: AnswersOptions) {
             mindInstructions(withMindTools, route),
             commandInstructions(withCommandTools),
             emptyMindNote(withMindTools, focusedEmpty),
-            meetingInstructions(listening),
+            meetingInstructions(listening, nothingHeard),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
-            help
+            help && !nothingHeard
               ? meetingHelpInstructions(help, {
                   found: foundAhead,
                   language: options.interfaceLanguage(),

@@ -5200,6 +5200,11 @@ export interface AnswerSteps {
    * `total` Documents (#1149). Absent: from all of them, or not a request to write.
    */
   writtenFrom?: { documents: number; total: number };
+  /**
+   * Asked while its Mind's Meeting records, with no line of the live Transcript to give the model
+   * yet: the live text is behind (#1366). Absent: it listened, or there was no Meeting recording.
+   */
+  nothingHeard?: true;
 }
 
 /**

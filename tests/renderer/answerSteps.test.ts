@@ -288,6 +288,17 @@ describe("an Answer's steps", () => {
     expect(foldedLine(steps)).toEqual({ kind: "listened", sources: 1 });
   });
 
+  // protects=an Answer asked during a meeting whose live text had no line yet says nothing was heard, not that it listened; fails_when=it says Listened to the live transcript; no_claim=whether it was asked during the recording is the caller's.
+  test("a meeting with the live text behind: nothing was heard", () => {
+    const steps = input(
+      { steps: { ...STEPS, nothingHeard: true } },
+      { askedFrom: MIND, meeting: true },
+    );
+    expect(foldedLine(steps)).toEqual({ kind: "not-heard" });
+    expect(en("steps.notHeard")).toBe("The live text hasn’t caught up · nothing heard yet");
+    expect(zh("steps.notHeard")).toBe("实时转写还没跟上 · 暂时没有听到内容");
+  });
+
   // protects=with no search the line says the Mind read, else the one it was asked from, or the model with no Mind; fails_when=it says Searched; no_claim=none beyond protects.
   test("no search: read the Mind in focus, asked from it, or answered by the model with none", () => {
     expect(foldedLine(input({ read: READ }, { askedFrom: MIND }))).toEqual({
