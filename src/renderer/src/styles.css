@@ -3594,7 +3594,33 @@
     font-size: 12px;
     color: var(--color-ink-meta);
   }
-  /* In the tray the head and the buttons stay, and the options scroll between them, two rows at least. */
+  /* What is asked stays at the top, two lines of it until More opens it; only the rows scroll, and the buttons stay at the foot (#1400). */
+  .choice-card .approval-title {
+    align-items: flex-start;
+
+    .approval-dot {
+      margin-top: 7px;
+    }
+  }
+  .choice-card:not([data-open]) .choice-question {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .choice-more {
+    flex: none;
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover {
+      color: var(--color-ink);
+    }
+  }
   .task-ask .choice-card {
     display: flex;
     flex-direction: column;
@@ -3603,6 +3629,7 @@
   .task-ask .choice-options {
     flex: 1 1 auto;
     min-height: 72px;
+    max-height: 40vh;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -7551,18 +7578,33 @@
       .approval-card:not(.choice-card) .approval-explanation {
         display: none;
       }
-      /* A long question would leave its rows no room between a stuck head and the buttons: here it scrolls away with them. */
+      /* Here its line is cut to one too, so a row has room; More opens both, and then the rows give way. */
       .choice-card {
-        overflow-y: auto;
-        scroll-padding-bottom: 48px;
-
         .approval-head {
-          position: static;
+          flex: none;
+        }
+        .approval-explanation {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 1;
+          overflow: hidden;
         }
         .choice-options {
-          flex: none;
-          min-height: 0;
-          overflow: visible;
+          min-height: 36px;
+        }
+        &[data-open] {
+          .approval-head {
+            flex: 0 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+          }
+          .approval-explanation {
+            display: block;
+          }
+          .choice-options {
+            flex: 1 1 0;
+            min-height: 0;
+          }
         }
       }
     }

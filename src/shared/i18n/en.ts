@@ -3577,6 +3577,8 @@ export const en = {
   "commands.kept.tag": "Kept the Tag “{name}”: you’ve tagged other Documents with it since.",
   "asks.recommended": "Recommended",
   "asks.other": "Other…",
+  "asks.more": "More",
+  "asks.less": "Less",
   "asks.continue": "Continue",
   "asks.skip": "Skip",
   "asks.hint.one": "Press a number to choose",

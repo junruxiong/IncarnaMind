@@ -3455,6 +3455,8 @@ export const zhCN = {
   "commands.kept.tag": "保留了标签“{name}”：之后你用它标记了其他文档。",
   "asks.recommended": "推荐",
   "asks.other": "其他…",
+  "asks.more": "展开",
+  "asks.less": "收起",
   "asks.continue": "继续",
   "asks.skip": "跳过",
   "asks.hint.one": "按数字键选择",

@@ -8,6 +8,7 @@ import {
   dismissChatSetup,
   launchApp,
   newMind,
+  pointAndClick,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -162,27 +163,62 @@ const uncovered = (target: Locator) =>
     return seen !== null && element.contains(seen);
   });
 
-test("at a narrow window a long question scrolls away with its rows, so a row is always in view", async () => {
-  const { app, window } = await launchApp(dataDir, { fakeChat: true });
-  await dismissChatSetup(window);
-  await useLocalChatModel(window);
-  await setUp(app, window);
-  await setWindowSize(app, window, 900, 700);
+/** Whether nothing covers the first line of the question: its top left corner is the question. */
+const questionShows = (question: Locator) =>
+  question.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const seen = document.elementFromPoint(box.x + 8, box.y + 6);
+    return seen !== null && element.contains(seen);
+  });
 
-  const card = await ask(window, "Summarise the main documents for the board");
-  await expect(card).toContainText("rather than why it was decided?");
-  const rows = card.getByTestId("question-option");
-  await expect(rows.first()).toBeFocused();
-  expect(await uncovered(rows.first())).toBe(true);
-  expect(await uncovered(card.getByTestId("question-continue"))).toBe(true);
-  await window.keyboard.press("ArrowDown");
-  await expect(rows.nth(1)).toBeFocused();
-  expect(await uncovered(rows.nth(1))).toBe(true);
-  await window.keyboard.press("ArrowDown");
-  await expect(rows.nth(2)).toBeFocused();
-  expect(await uncovered(rows.nth(2))).toBe(true);
-  await app.close();
-});
+const clamped = (question: Locator) =>
+  question.evaluate((element) => element.scrollHeight > element.clientHeight + 1);
+
+for (const [language, asked, more, less] of [
+  ["en", "Summarise the main documents for the board", "More", "Less"],
+  ["zh-CN", "为董事会总结主要的文档", "展开", "收起"],
+] as const) {
+  for (const height of [700, 560]) {
+    test(`a long question stays at the top, two lines with ${more}, while only its rows scroll (${language}, 900 × ${height})`, async () => {
+      const { app, window } = await launchApp(dataDir, { fakeChat: true });
+      await dismissChatSetup(window);
+      await useLocalChatModel(window);
+      await setUp(app, window, language);
+      await setWindowSize(app, window, 900, height);
+
+      const card = await ask(window, asked);
+      const question = card.getByTestId("question-text");
+      const rows = card.getByTestId("question-option");
+      await expect(rows.first()).toBeFocused();
+      expect(await clamped(question)).toBe(true);
+      expect(await questionShows(question)).toBe(true);
+      expect(await uncovered(rows.first())).toBe(true);
+      expect(await uncovered(card.getByTestId("question-continue"))).toBe(true);
+
+      await window.keyboard.press("3");
+      await expect(rows.nth(2)).toHaveAttribute("aria-checked", "true");
+      expect(await uncovered(rows.nth(2))).toBe(true);
+      for (const next of [rows.nth(1), rows.nth(2), card.getByTestId("question-other")]) {
+        await window.keyboard.press("ArrowDown");
+        await expect(next).toBeFocused();
+        expect(await uncovered(next)).toBe(true);
+        expect(await questionShows(question)).toBe(true);
+      }
+
+      const toggle = card.getByTestId("question-more");
+      await expect(toggle).toHaveText(more);
+      await pointAndClick(window, toggle);
+      await expect(toggle).toHaveText(less);
+      await expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(await clamped(question)).toBe(false);
+      expect(await uncovered(card.getByTestId("question-continue"))).toBe(true);
+      await pointAndClick(window, toggle);
+      await expect(toggle).toHaveText(more);
+      expect(await clamped(question)).toBe(true);
+      await app.close();
+    });
+  }
+}
 
 test("Esc skips: the Answer goes on with the two newest and says so", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });

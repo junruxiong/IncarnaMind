@@ -27,6 +27,8 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
     new Set(options.flatMap((option, index) => (option.preselected ? [index] : [])));
   const [ticked, setTicked] = useState<ReadonlySet<number>>(preselected);
   const [wrote, setWrote] = useState("");
+  const [whole, setWhole] = useState(false);
+  const [cut, setCut] = useState(false);
   const card = useRef<HTMLElement>(null);
   const titleId = useId();
   const keys = keysLabel(CONTINUE_KEYS, isMacOS());
@@ -49,6 +51,7 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
     if (next.has(index)) next.delete(index);
     else next.add(index);
     setTicked(next);
+    rows()[index]?.scrollIntoView({ block: "nearest" });
   };
   const skip = () => answer(request.requestId, { skipped: true });
   const rows = () => [
@@ -72,6 +75,10 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
     const element = card.current;
     if (!element) return;
     const observer = new ResizeObserver(() => {
+      if (!element.dataset.open) {
+        const texts = [...element.querySelectorAll(".choice-question, .approval-explanation")];
+        setCut(texts.some((each) => each.scrollHeight > each.clientHeight + 1));
+      }
       const active = document.activeElement;
       const row =
         active instanceof HTMLElement &&
@@ -134,13 +141,27 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
       aria-labelledby={titleId}
       data-testid="question-card"
       data-multiple={multiple || undefined}
+      data-open={whole || undefined}
       className="approval-card choice-card"
       onKeyDown={onKeyDown}
     >
       <div className="approval-head">
         <p id={titleId} className="approval-title">
           <span aria-hidden="true" className="approval-dot" />
-          <span className="approval-title-text">{question.question}</span>
+          <span data-testid="question-text" className="approval-title-text choice-question">
+            {question.question}
+          </span>
+          {(cut || whole) && (
+            <button
+              type="button"
+              data-testid="question-more"
+              aria-expanded={whole}
+              onClick={() => setWhole(!whole)}
+              className="choice-more"
+            >
+              {t(whole ? "asks.less" : "asks.more")}
+            </button>
+          )}
         </p>
         {question.detail && <p className="approval-explanation">{question.detail}</p>}
       </div>
