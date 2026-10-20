@@ -3953,6 +3953,8 @@ export interface Money {
   amount: number;
 }
 
+export const MAX_MONTHLY_CAP = 1_000_000;
+
 /**
  * The most IncarnaMind may spend in a calendar month on models billed per
  * token. Before each such request its most (its prompt and its output limit)
