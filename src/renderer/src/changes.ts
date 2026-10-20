@@ -7,9 +7,11 @@
  */
 import type { LinkedFolderLayout, RestoreRef, TagLinkState } from "../../core/api";
 import { core } from "./core";
+import { languageNow } from "./i18n";
 import type { Words } from "./lineNames";
+import { formatCount } from "./linkedFolders";
 import type { Translate } from "./objects";
-import { sayWhileSlow, type Undoable } from "./undo";
+import type { Undoable } from "./undo";
 
 /** A name the User gave, or the words for what it is called when it has none. */
 type Shown = string | Words;
@@ -42,24 +44,30 @@ export function deleted(
   shown: Shown,
   refs: RestoreRef[],
   remove: () => Promise<unknown>,
+  here?: { putBack(): void; takeOut(): void },
 ): Undoable {
   const count = refs.length;
+  const counted = () => formatCount(count, languageNow());
   return {
     said: (t) =>
       count > 1
-        ? t("object.deleted.documents", { count })
+        ? t("object.deleted.documents", { count: counted() })
         : t("object.deleted", { name: shownIn(t, shown) }),
     name: (t) =>
       count > 1
-        ? t("undo.name.delete.documents", { count })
+        ? t("undo.name.delete.documents", { count: counted() })
         : t("undo.name.delete", { name: shownIn(t, shown) }),
-    undo: () =>
-      count > 1
-        ? sayWhileSlow(
-            (t) => t("object.restoring.documents", { count }),
-            () => core.restore(refs),
-          )
-        : core.restore(refs),
+    undo: async () => {
+      if (!here) return core.restore(refs);
+      // Back on the page at once, as they went: the core follows, and a refusal takes them out again.
+      here.putBack();
+      try {
+        await core.restore(refs);
+      } catch (error) {
+        here.takeOut();
+        throw error;
+      }
+    },
     redo: async () => {
       await remove();
     },

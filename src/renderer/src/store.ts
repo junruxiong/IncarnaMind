@@ -48,6 +48,7 @@ import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
 import { errorMessage } from "./errors";
+import { languageNow } from "./i18n";
 import {
   createLayoutSlice,
   currentMindIdOf,
@@ -58,7 +59,7 @@ import {
 } from "./layoutSlice";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { NEEDS_REVIEW } from "./libraryFilters";
-import { folderName as linkedFolderName } from "./linkedFolders";
+import { formatCount, folderName as linkedFolderName } from "./linkedFolders";
 import {
   foldersMovedFrom,
   itemsOf,
@@ -77,7 +78,7 @@ import { useNotices } from "./notices";
 import type { ObjectRef } from "./objects";
 import { useRequests } from "./requests";
 import { resolveSettingsPage, type SettingsPage, type SettingsTarget } from "./settingsPages";
-import { asOneStep, sayWhileSlow, type Undoable, UndoRefused, useUndo } from "./undo";
+import { asOneStep, makeInTurn, sayWhileSlow, type Undoable, UndoRefused, useUndo } from "./undo";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -1277,29 +1278,53 @@ export const useAppStore = create<AppState>()((set, get) => {
       }),
 
     deleteDocuments: (ids) =>
-      attempt(async () => {
-        if (ids.length === 0) return;
-        const first = get().documents.find((each) => each.id === ids[0]);
-        const gone = new Set(ids);
-        const work = async () => {
-          await core.deleteDocuments([...ids]);
-          documentUpdates.flush();
-          set((state) => ({ documents: state.documents.filter((each) => !gone.has(each.id)) }));
-        };
-        const remove = () =>
-          ids.length > 1
-            ? sayWhileSlow((t) => t("object.deleting.documents", { count: ids.length }), work)
-            : work();
-        await remove();
-        const shown = first ? displayName(first) : "";
-        push(
-          deleted(
-            shown,
-            ids.map((id) => ({ kind: "document", id })),
-            remove,
-          ),
-        );
-      }),
+      attempt(() =>
+        makeInTurn(async () => {
+          const before = get().documents;
+          // A second ⌘⌫ waits for the first: what that one took is gone by now.
+          const asked = new Set(ids);
+          const live = before.filter((each) => asked.has(each.id)).map((each) => each.id);
+          if (live.length === 0) return;
+          const first = before.find((each) => each.id === live[0]);
+          const gone = new Set(live);
+          const removed = before.filter((each) => gone.has(each.id));
+          const at = new Map(before.map((each, index) => [each.id, index]));
+          const placeOf = (document: Document) => at.get(document.id) ?? before.length;
+          const takeOut = () =>
+            set((state) => ({ documents: state.documents.filter((each) => !gone.has(each.id)) }));
+          const putBack = () =>
+            set((state) => {
+              const here = new Set(state.documents.map((each) => each.id));
+              const back = [...state.documents, ...removed.filter((each) => !here.has(each.id))];
+              return { documents: back.sort((a, b) => placeOf(a) - placeOf(b)) };
+            });
+          const work = async () => {
+            await core.deleteDocuments(live);
+            documentUpdates.flush();
+            takeOut();
+          };
+          const remove = () =>
+            live.length > 1
+              ? sayWhileSlow(
+                  (t) =>
+                    t("object.deleting.documents", {
+                      count: formatCount(live.length, languageNow()),
+                    }),
+                  work,
+                )
+              : work();
+          await remove();
+          const shown = first ? displayName(first) : "";
+          push(
+            deleted(
+              shown,
+              live.map((id) => ({ kind: "document", id })),
+              remove,
+              { putBack, takeOut },
+            ),
+          );
+        }),
+      ),
 
     // Its status follows the core's "document.status" event too.
     retryDocument: (id) =>

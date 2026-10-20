@@ -103,11 +103,20 @@ const lineOf = (change: Undoable): UndoLineState => ({ id: ++lines, change });
 
 /** Undo and redo run one at a time, in the order asked, so a held ⌘Z steps back change by change. */
 let queue: Promise<void> = Promise.resolve();
-const inTurn = (step: () => Promise<void>): Promise<void> => {
+const inTurn = <T>(step: () => Promise<T>): Promise<T> => {
   const turn = queue.then(step);
-  queue = turn.catch(() => undefined);
+  queue = turn.then(
+    () => undefined,
+    () => undefined,
+  );
   return turn;
 };
+
+/**
+ * Makes a change that goes on the stack once it is done, in turn with Undo and Redo: a ⌘Z
+ * pressed while it runs waits for it, then takes it back, never an earlier change.
+ */
+export const makeInTurn = <T>(make: () => Promise<T>): Promise<T> => inTurn(make);
 
 export const useUndo = create<UndoState>()((set, get) => {
   /**

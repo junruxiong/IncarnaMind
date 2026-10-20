@@ -1,7 +1,6 @@
 /**
  * Deleting many Documents at once (#1349): one step for the core, however
- * many there are, so the Library, Recently deleted and Undo keep up. One by
- * one, 1,700 Documents took 90 seconds, with the window busy behind them.
+ * many there are, and one step back.
  */
 import { describe, expect, test } from "vitest";
 import { createTempDataFolder, startCore } from "../helpers/core";

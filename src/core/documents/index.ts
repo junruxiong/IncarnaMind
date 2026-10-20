@@ -2367,7 +2367,7 @@ export function createDocuments(options: DocumentsOptions) {
     /**
      * Removes Documents from the index, all in one step, or none when one isn't found. The
      * User's files aren't touched; only copies the old layout made in the data folder go with
-     * them. Returns their ids.
+     * them.
      */
     async delete(idsInput: unknown): Promise<string[]> {
       const ids = [...new Set((Array.isArray(idsInput) ? idsInput : [idsInput]).map(parseId))];
@@ -2396,44 +2396,51 @@ export function createDocuments(options: DocumentsOptions) {
      */
     restore(ids: readonly string[]): void {
       const at = now();
-      for (const id of ids) {
-        const row = db.get<DocumentRow & { deleted_at: string }>(
-          `SELECT ${COLUMNS}, deleted_at FROM documents WHERE id = ? AND deleted_at IS NOT NULL`,
-          [id],
-        );
-        if (!row) continue;
-        const deleted = [at, id, row.deleted_at] as const;
-        db.run("UPDATE documents SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, id]);
+      const rows = db.all<DocumentRow & { deleted_at: string }>(
+        `SELECT ${COLUMNS}, deleted_at FROM documents
+         WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NOT NULL`,
+        [JSON.stringify(ids)],
+      );
+      if (rows.length === 0) return;
+      const list = JSON.stringify(rows.map((row) => row.id));
+      // What went with each Document, by its own delete time: read from its row, so its parts go
+      // back before it does. One statement a table, however many there are (#1349).
+      const deletedWith = (table: string) =>
+        `(SELECT d.deleted_at FROM documents d WHERE d.id = ${table}.document_id)`;
+      db.run(
+        `UPDATE passages SET deleted_at = NULL, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?))
+           AND deleted_at = ${deletedWith("passages")}
+           AND content_hash IS (SELECT d.content_hash FROM documents d WHERE d.id = passages.document_id)`,
+        [at, list],
+      );
+      for (const table of ["document_pages", "web_pages", "web_page_pictures"]) {
         db.run(
-          `UPDATE passages SET deleted_at = NULL, updated_at = ?
-           WHERE document_id = ? AND deleted_at = ? AND content_hash IS ?`,
-          [...deleted, row.content_hash],
+          `UPDATE ${table} SET deleted_at = NULL, updated_at = ?
+           WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at = ${deletedWith(table)}`,
+          [at, list],
         );
-        db.run(
-          "UPDATE document_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          "UPDATE web_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          "UPDATE web_page_pictures SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
-           WHERE document_id = ? AND deleted_at = ?
-             AND NOT EXISTS (SELECT 1 FROM document_tags live
-                             WHERE live.document_id = document_tags.document_id
-                               AND live.tag_id = document_tags.tag_id AND live.deleted_at IS NULL)`,
-          deleted,
-        );
-        reindexName(id, row.name);
-        if (row.status === "extracting") setStatus(id, "queued");
+      }
+      db.run(
+        `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?))
+           AND deleted_at = ${deletedWith("document_tags")}
+           AND NOT EXISTS (SELECT 1 FROM document_tags live
+                           WHERE live.document_id = document_tags.document_id
+                             AND live.tag_id = document_tags.tag_id AND live.deleted_at IS NULL)`,
+        [at, list],
+      );
+      db.run(
+        `UPDATE documents SET deleted_at = NULL, updated_at = ?
+         WHERE id IN (SELECT value FROM json_each(?))`,
+        [at, list],
+      );
+      for (const row of rows) {
+        reindexName(row.id, row.name);
+        if (row.status === "extracting") setStatus(row.id, "queued");
         else if (["ready", "embedding", "waiting-for-model"].includes(row.status)) {
           const status = indexedStatus(row);
-          if (status !== null && status !== row.status) setStatus(id, status);
+          if (status !== null && status !== row.status) setStatus(row.id, status);
         }
       }
     },
