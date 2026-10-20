@@ -25,6 +25,7 @@
 import { generateText } from "ai";
 import { type CaseCitation, caseCitations, isOpinionOf } from "../../../shared/caseCitations";
 import type { FigureContext } from "../../../shared/figures";
+import { type MessageKey, type MessageParams, translate } from "../../../shared/i18n";
 import type {
   CheckedVersion,
   Citation,
@@ -74,6 +75,7 @@ import {
   readsAsRefusal,
   readVerdict,
 } from "./prompt";
+import { addedCurrency } from "./units";
 
 export interface ClaimCheckDependencies {
   /** The interface language: what a check's sentence is written in. */
@@ -222,6 +224,24 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       }),
     };
 
+    const currencyNotStated = (evidence: Citation): UnsupportedReason | null => {
+      const text = (from: number | null, to: number | null) =>
+        scoped
+          .pageTexts(evidence.documentId, evidence.contentHash, from, to)
+          .map((unit) => unit.text)
+          .join("\n");
+      const cited =
+        evidence.pageFrom === null ? evidence.quote : text(evidence.pageFrom, evidence.pageTo);
+      const added = addedCurrency(request.claim, cited, text(null, null));
+      if (!added) return null;
+      const t = (key: MessageKey, params?: MessageParams) =>
+        translate(deps.language(), key, params);
+      return {
+        reason: t("check.currency.reason", { amount: added.amount }),
+        covered: t("check.currency.covered", { amount: added.amount }),
+        uncovered: t("check.currency.uncovered", { currency: added.currency }),
+      };
+    };
     const facts = () => ({
       versions: [...read].map(
         ([documentId, contentHash]): CheckedVersion => ({ documentId, contentHash }),
@@ -358,12 +378,15 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       (await askForEvidence(request, verdict, session, signal));
     if (signal.aborted) return notChecked("stopped");
     if (!evidence) return byCalculation ?? notChecked("no-evidence");
+    const currency = byCalculation ? null : currencyNotStated(evidence);
+    if (currency && verdict.verdict !== "contradicted") return unsupported(currency);
     if (verdict.verdict === "contradicted") {
       const judged = await confirmContradiction(request, evidence, session, signal);
       if (signal.aborted) return notChecked("stopped");
       // The Passage is about something else: what is nearest may still say something different.
       if (judged === "neither") return byCalculation ?? unsupported();
       if (judged === "same") {
+        if (currency) return unsupported(currency);
         return (
           byCalculation ?? {
             verdict: "supported",

@@ -255,6 +255,13 @@ const CITED_SAYS_ONLY_ITS_QUOTE =
   '- A sentence with a Citation says only what its quote supports. Your inference, judgement or comparison goes in a sentence of its own with no marker, worded as a reading: "This suggests…" / "这意味着…".';
 
 /**
+ * A model read "54,000" in a UK contract as pounds and wrote "£54,000", cited (#1332): a
+ * currency, unit or scale the Document doesn't state reads as one it does.
+ */
+const FIGURES_AS_STATED =
+  '- Give a figure only the currency, unit and scale its Passage states: "salary is 54,000" stays "54,000 (currency not stated)" / "54,000（未注明币种）", never "£54,000".';
+
+/**
  * A premise the Passages don't support, and Passages that disagree (#548):
  * what a careful reader catches. The examples are in English and Chinese, so
  * an Answer in either has its model. `cite`: the Answer cites with markers.
@@ -476,6 +483,7 @@ export function documentInstructions(
         "- Write nothing before your Tool calls: only the Answer, after them.",
         notCovered(true),
         CITED_SAYS_ONLY_ITS_QUOTE,
+        FIGURES_AS_STATED,
         readingRules(true),
         ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
@@ -499,6 +507,7 @@ export function documentInstructions(
         ...(calculate ? [CALCULATIONS] : []),
         notCovered(true),
         CITED_SAYS_ONLY_ITS_QUOTE,
+        FIGURES_AS_STATED,
         readingRules(true),
       ].join("\n");
     case "none":
@@ -512,6 +521,7 @@ export function documentInstructions(
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),
+        FIGURES_AS_STATED,
         readingRules(false),
       ].join("\n");
   }
