@@ -362,6 +362,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Edit description…$/,
       /^Sort by…$/,
       /^RenameF2$/,
+      /^Get info(⌘I|Ctrl\+I)$/,
       /^Delete$/,
     ]);
     await folderActions.getByTestId("folder.delete").click();

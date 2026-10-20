@@ -2501,7 +2501,6 @@
       line-height: var(--text-body--line-height);
     }
 
-    /* Lists: the text keeps the edge; bullets and numbers hang in the margin. */
     :where(ul, ol) {
       margin: 0;
       padding: 0;
@@ -2528,7 +2527,51 @@
       padding-left: 24px;
     }
 
-    /* A checklist: the box hangs in the margin like a bullet; a done item is struck through. */
+    /*
+     * A Mind's own lists (the editor's blocks carry a data-id) are indented as DESIGN.md says. Their
+     * markers are drawn on the first paragraph, where its own line height centres them; a list
+     * a node view draws, and an Answer in the panel, keep the browser's.
+     */
+    &:not(.assistant-answer-text) {
+      :where(ul, ol)[data-id] {
+        padding-left: 48px;
+        list-style: none;
+      }
+      :where(ul, ol)[data-id] > li {
+        position: relative;
+      }
+      :where(ul, ol)[data-id] > li > p:first-child::before {
+        position: absolute;
+        color: var(--color-ink-secondary);
+        pointer-events: none;
+      }
+      ol[data-id] > li > p:first-child::before {
+        content: counter(list-item) ".";
+        right: calc(100% + 8px);
+        white-space: nowrap;
+      }
+      ul[data-id] > li:not([data-checked]) > p:first-child::before {
+        content: "";
+        left: -24px;
+        margin-top: calc(0.5lh - 3px);
+        box-sizing: border-box;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-ink-secondary);
+      }
+      ul[data-id] ul[data-id] > li:not([data-checked]) > p:first-child::before {
+        border: 1.5px solid var(--color-ink-secondary);
+        background: none;
+      }
+      ul[data-id] ul[data-id] ul[data-id] > li:not([data-checked]) > p:first-child::before {
+        border: none;
+        border-radius: 0;
+        background: var(--color-ink-secondary);
+      }
+    }
+
+    /* A checklist: the box sits where a bullet does; a done item is struck through. */
     ul:has(> li[data-checked]) {
       list-style: none;
     }
@@ -9086,6 +9129,10 @@
     padding: 14px 16px 12px;
     border-bottom: 1px solid var(--color-rule);
   }
+  .compare-sheet-documents {
+    /* Drawn first, though after the Questions in the Tab order: Tab from a Question reaches select all. */
+    order: -1;
+  }
   .compare-sheet-heading {
     display: flex;
     align-items: center;
@@ -9101,6 +9148,24 @@
   .compare-sheet-count {
     flex: none;
     font-weight: 400;
+    color: var(--color-ink-meta);
+  }
+  .compare-sheet-scope {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+  .compare-sheet-select-all {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    accent-color: var(--color-ink);
+  }
+  .compare-sheet-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 16px;
     color: var(--color-ink-meta);
   }
   .compare-sheet-source {
@@ -9230,17 +9295,32 @@
   .compare-sheet-problem {
     padding: 0 16px 4px;
   }
+  .compare-sheet-estimate {
+    padding: 0 16px 8px;
+    text-align: end;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink);
+
+    &[aria-hidden="true"] {
+      visibility: hidden;
+    }
+  }
   .compare-sheet-foot {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 0 8px 8px 12px;
   }
+  .compare-sheet-ask {
+    padding: 0 8px 8px;
+  }
   .compare-sheet-chip {
     display: inline-flex;
     flex: none;
     align-items: center;
     gap: 6px;
+    margin-right: auto;
     height: 26px;
     padding: 0 4px 0 8px;
     border: 1px solid var(--color-rule);
@@ -9262,15 +9342,6 @@
       background: var(--color-hover);
       color: var(--color-ink);
     }
-  }
-  .compare-sheet-note {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 12px;
-    color: var(--color-ink-meta);
   }
   @container mind (width < 760px) {
     .compare-sheet-body {

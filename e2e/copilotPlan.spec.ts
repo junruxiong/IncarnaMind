@@ -183,7 +183,7 @@ test("Settings › Models: the Copilot plan opens its notice before signing in, 
   const settings = await openSettings(window, "models");
   const row = settings.getByTestId("plans-copilot");
   await expect(row).toContainText("GitHub Copilot Pro, Pro+, Business or Enterprise");
-  await expect(row).toContainText("Answers count toward your plan’s usage limits.");
+  await expect(row).toContainText("Answers count toward your plan’s limits.");
 
   await pointAndClick(window, row.getByTestId("plans-copilot-sign-in"));
   await expect(row.getByTestId("copilot-notice-usage")).toHaveText(
@@ -235,7 +235,7 @@ test("Settings › Models: signed in but with no model listed, the row says so w
   await acceptPlainTextKeys(window);
   const settings = await openSettings(window, "models");
   const row = settings.getByTestId("plans-copilot");
-  await expect(row).toContainText("Answers count toward your plan’s usage limits.");
+  await expect(row).toContainText("Answers count toward your plan’s limits.");
   // By keyboard: the Models page above the row is still settling, which moves a pointer's target.
   await row.getByTestId("plans-copilot-sign-in").focus();
   await window.keyboard.press("Enter");
@@ -275,7 +275,7 @@ test("signed in, an Answer GitHub refuses offers Sign in again: a new code even 
   await acceptPlainTextKeys(window);
   const settings = await openSettings(window, "models");
   const row = settings.getByTestId("plans-copilot");
-  await expect(row).toContainText("Answers count toward your plan’s usage limits.");
+  await expect(row).toContainText("Answers count toward your plan’s limits.");
   // By keyboard: the Models page above the row is still settling, which moves a pointer's target.
   await row.getByTestId("plans-copilot-sign-in").focus();
   await window.keyboard.press("Enter");

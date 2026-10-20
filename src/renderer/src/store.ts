@@ -36,14 +36,7 @@ import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
 import { tagLinks } from "../../shared/tagLinks";
-import {
-  deleted,
-  linkedFolderPaused,
-  linkedFolderShown,
-  mindMade,
-  renamed,
-  retagged,
-} from "./changes";
+import { deleted, linkedFolderPaused, linkedFolderShown, renamed, retagged } from "./changes";
 import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
@@ -202,8 +195,8 @@ export interface AppState extends LayoutSlice {
   /**
    * Creates a Mind, in a Folder if given, and opens it in a new tab after the
    * shown one, in the focused group or `groupId`, with its title focused, or
-   * with a Question started in it (with a Search scope, if given). Undo sends it
-   * to Recently deleted; redo brings it back and shows it. Resolves to that change.
+   * with a Question started in it (with a Search scope, if given). It says nothing
+   * and leaves nothing to undo: ⌘Z stays the editor's own, and Delete takes the Mind back.
    */
   createMind(options?: {
     startQuestion?: boolean;
@@ -216,7 +209,7 @@ export interface AppState extends LayoutSlice {
     groupId?: string;
     /** Runs once it is made and shown, with its id. */
     made?(mindId: string): void;
-  }): Promise<Undoable | undefined>;
+  }): Promise<void>;
   /**
    * Moves Minds and Documents into a Folder, or out of every Folder (null):
    * shown at once, then as the core has it, with "Moved … · Undo" (and ⌘Z).
@@ -253,16 +246,15 @@ export interface AppState extends LayoutSlice {
   /**
    * "Ask about this Folder" in the Library: a Question with the bridge's
    * Search scope at the end of the most recent Mind (see `mindToAskIn`), or
-   * of a new Mind if there is none, with the cursor in it. Resolves to the
-   * change of that new Mind (see `createMind`); a Question in a Mind already
-   * there is the note's own to undo.
+   * of a new Mind if there is none, with the cursor in it. A Question in a Mind
+   * already there is the note's own to undo.
    */
-  askAbout(bridge: LibraryBridge): Promise<Undoable | undefined>;
+  askAbout(bridge: LibraryBridge): Promise<void>;
   /**
    * "Start a Mind from this Folder": a new Mind titled as the Library's
    * sheet, whose first Block is a Question with the bridge's Search scope.
    */
-  startMindFrom(bridge: LibraryBridge): Promise<Undoable | undefined>;
+  startMindFrom(bridge: LibraryBridge): Promise<void>;
   /** Opens the first-run example Mind, making the examples again if they were removed. */
   openExamples(): Promise<void>;
   /** Makes the first-run example again and opens it, with Undo. */
@@ -847,22 +839,12 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     createMind: async (options) => {
-      let made: Undoable | undefined;
       await attempt(async () => {
         const mind = await core.createMind({
           ...(options?.title && { title: options.title }),
           ...((options?.title || options?.titled) && { headed: true }),
           ...(options?.folderId && { folderId: options.folderId }),
         });
-        made = mindMade(
-          mindName(mind),
-          () => core.deleteMind(mind.id),
-          async () => {
-            await core.restore([{ kind: "mind", id: mind.id }]);
-            get().openMind(mind.id);
-          },
-        );
-        push(made);
         set(
           options?.startQuestion
             ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
@@ -871,7 +853,6 @@ export const useAppStore = create<AppState>()((set, get) => {
         await get().showNewMind(mind, options?.groupId);
         options?.made?.(mind.id);
       });
-      return made;
     },
 
     showNewMind: async (mind, groupId) => {
@@ -905,7 +886,6 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (!mindId) return get().createMind({ startQuestion: true, scope });
       get().openMind(mindId);
       set({ questionToStart: { mindId, scope } });
-      return undefined;
     },
 
     // From a Folder as it is, the new Mind is the Folder's.
