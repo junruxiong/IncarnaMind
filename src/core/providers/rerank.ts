@@ -35,7 +35,7 @@ import type { RerankingModel } from "../reranking";
 import type { Secrets } from "../secrets";
 import { createSendGate, gateStop } from "../sendGate";
 import type { SettingsStore } from "../settings";
-import { parseApiKey } from "./apiKey";
+import { parseApiKey, readApiKey, storedApiKey } from "./apiKey";
 import { classifyProviderError } from "./providerErrors";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
@@ -207,7 +207,7 @@ export function createRerank(options: {
       await consent.ensure("rerank", RERANK_SERVICES[kind]);
       const { ranking } = await rerank({
         model: gate.rerankingModel(
-          createModel({ kind, apiKey, modelId }),
+          createModel({ kind, apiKey: readApiKey(apiKey), modelId }),
           "rerank",
           RERANK_SERVICES[kind],
         ),
@@ -353,7 +353,8 @@ export function createRerank(options: {
             : null
           : parseModel(input.modelId);
       const apiKey =
-        parseApiKey(input?.apiKey) ?? (sameKind ? await secrets.tryGet(KEY_NAME) : null);
+        parseApiKey(input?.apiKey) ??
+        (sameKind ? storedApiKey(await secrets.tryGet(KEY_NAME)) : null);
       if (!apiKey)
         throw new InvalidInputError({
           key: "error.provider.keyMissing",

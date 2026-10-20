@@ -3486,8 +3486,7 @@ export const zhCN = {
   "error.provider.embeddingModelMissing": "输入搜索模型名称。",
   "error.provider.rerankModelMissing": "输入用于排序结果的模型名称。",
   "error.provider.keyMissing": "输入 {provider} 的 API 密钥。",
-  "error.provider.keyCharacter":
-    "这看起来不像密钥：其中有密钥不会用到的字符（{character}）。重新粘贴密钥。",
+  "error.provider.keyCharacter": "密钥里有一个不该有的字符（{character}）。重新粘贴密钥。",
   "error.provider.urlMissing": "输入 API 地址。",
   "error.provider.urlInvalid": "“{url}”不是有效的 API 地址。",
   "error.provider.urlScheme": "API 地址必须以 http:// 或 https:// 开头。",

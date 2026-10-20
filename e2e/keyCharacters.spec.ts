@@ -35,7 +35,6 @@ const language = (window: Page, value: "en" | "zh-CN") =>
     value,
   );
 
-/** An OpenAI-compatible server that answers every request and keeps the key each one came with. */
 async function recordingServer(): Promise<{
   server: Server;
   url: string;
@@ -90,25 +89,25 @@ test("a key with a Chinese word in it is said in place in plain words, in Englis
     const key = form.locator('input[type="password"]');
     const use = form.getByTestId("provider-use-key");
     const said = form.getByTestId("key-character-line");
+    const expectUnderKey = async () => {
+      const keyBox = await key.boundingBox();
+      const saidBox = await said.boundingBox();
+      const formBox = await form.boundingBox();
+      expect(saidBox?.y ?? 0).toBeGreaterThan((keyBox?.y ?? 0) + (keyBox?.height ?? 0) - 1);
+      expect((saidBox?.x ?? 0) + (saidBox?.width ?? 0)).toBeLessThanOrEqual(
+        (formBox?.x ?? 0) + (formBox?.width ?? 0) + 1,
+      );
+    };
 
     await key.fill("sk-test-1234作品-not-a-real-key");
-    await expect(said).toHaveText(
-      "That doesn’t look like a key: it has a character that keys don’t use (作). Paste the key again.",
-    );
+    await expect(said).toHaveText("This key has a character keys don’t use (作). Paste it again.");
     await expect(key).toHaveAttribute("aria-invalid", "true");
     await expect(use).toBeDisabled();
     await expect(form.getByTestId("connection-test")).toHaveCount(0);
     await expect(form).not.toContainText("ByteString");
     await key.press("Enter");
     await expect(said).toBeVisible();
-    // The line is under the key, inside the form, and the form still fits 900 px.
-    const keyBox = await key.boundingBox();
-    const saidBox = await said.boundingBox();
-    const formBox = await form.boundingBox();
-    expect(saidBox?.y ?? 0).toBeGreaterThan((keyBox?.y ?? 0) + (keyBox?.height ?? 0) - 1);
-    expect((saidBox?.x ?? 0) + (saidBox?.width ?? 0)).toBeLessThanOrEqual(
-      (formBox?.x ?? 0) + (formBox?.width ?? 0) + 1,
-    );
+    await expectUnderKey();
     if (process.env.INCARNAMIND_SCREENSHOTS) {
       await window.screenshot({
         path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-character-900-en.png`,
@@ -116,17 +115,22 @@ test("a key with a Chinese word in it is said in place in plain words, in Englis
     }
 
     await language(window, "zh-CN");
-    await expect(said).toHaveText(
-      "这看起来不像密钥：其中有密钥不会用到的字符（作）。重新粘贴密钥。",
-    );
+    await expect(said).toHaveText("密钥里有一个不该有的字符（作）。重新粘贴密钥。");
     await expect(form).not.toContainText("ByteString");
+    await expectUnderKey();
     if (process.env.INCARNAMIND_SCREENSHOTS) {
       await window.screenshot({
         path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-character-900-zh.png`,
       });
     }
 
-    // Pasting the key again clears the line in place, and the key goes to the server.
+    await key.fill("sk-12\u200B34");
+    await expect(said).toHaveText("密钥里有一个不该有的字符（U+200B）。重新粘贴密钥。");
+    await language(window, "en");
+    await expect(said).toHaveText(
+      "This key has a character keys don’t use (U+200B). Paste it again.",
+    );
+
     await key.fill("good-key");
     await expect(said).toHaveCount(0);
     await expect(key).not.toHaveAttribute("aria-invalid", "true");

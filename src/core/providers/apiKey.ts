@@ -1,7 +1,6 @@
 import { cleanApiKey, nameCharacter, strayKeyCharacter } from "../../shared/apiKey";
 import { InvalidInputError } from "../errors";
 
-/** A key holds a character that keys don't use, named by itself and never with the rest of the key. */
 export class KeyCharacterError extends InvalidInputError {
   constructor(character: string) {
     super({
@@ -15,9 +14,13 @@ export class KeyCharacterError extends InvalidInputError {
 export function readApiKey(text: string): string {
   const key = cleanApiKey(text);
   const stray = strayKeyCharacter(key);
-  if (stray) throw new KeyCharacterError(stray.character);
+  if (stray) throw new KeyCharacterError(stray);
   return key;
 }
+
+/** The key stored earlier, checked before it is sent: one saved by an earlier version may hold a character keys don't use. */
+export const storedApiKey = (text: string | null): string | null =>
+  text === null ? null : readApiKey(text);
 
 /** undefined: keep the stored key. Blank text counts as "keep". */
 export function parseApiKey(value: unknown): string | undefined {

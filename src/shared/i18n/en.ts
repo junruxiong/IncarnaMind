@@ -3611,7 +3611,7 @@ export const en = {
   "error.provider.rerankModelMissing": "Enter a model name for ordering results.",
   "error.provider.keyMissing": "Enter an API key for {provider}.",
   "error.provider.keyCharacter":
-    "That doesn’t look like a key: it has a character that keys don’t use ({character}). Paste the key again.",
+    "This key has a character keys don’t use ({character}). Paste it again.",
   "error.provider.urlMissing": "Enter the server’s URL.",
   "error.provider.urlInvalid": "“{url}” isn’t a valid server URL.",
   "error.provider.urlScheme": "The server URL must start with http:// or https://.",

@@ -1,5 +1,7 @@
 import { APICallError, RetryError } from "ai";
 import { describe, expect, test } from "vitest";
+import { KeyCharacterError } from "../../src/core/providers/apiKey";
+import { JevRequestError } from "../../src/core/providers/jev";
 import { classifyProviderError } from "../../src/core/providers/providerErrors";
 import { translate } from "../../src/shared/i18n";
 import { en } from "../../src/shared/i18n/en";
@@ -69,7 +71,7 @@ describe("A key with a character that keys don't use", () => {
       values: { character: "作" },
     });
     expect(error.message).toBe(
-      "That doesn’t look like a key: it has a character that keys don’t use (作). Paste the key again.",
+      "This key has a character keys don’t use (作). Paste it again.",
     );
     expect(
       translate(
@@ -77,12 +79,45 @@ describe("A key with a character that keys don't use", () => {
         error.wording?.key ?? "error.provider.keyCharacter",
         error.wording?.values,
       ),
-    ).toBe("这看起来不像密钥：其中有密钥不会用到的字符（作）。重新粘贴密钥。");
+    ).toBe(
+      "密钥里有一个不该有的字符（作）。重新粘贴密钥。",
+    );
   });
 
   test("names an invisible character by its code, not by a blank", () => {
-    expect(classifyProviderError(engine(0x200b)).wording?.values).toEqual({ character: "U+200B" });
+    for (const [code, named] of [
+      [0x200b, "U+200B"],
+      [0xfe0f, "U+FE0F"],
+      [0x2800, "U+2800"],
+      [0x3164, "U+3164"],
+    ] as const) {
+      expect(classifyProviderError(engine(code)).wording?.values).toEqual({ character: named });
+    }
     expect(classifyProviderError(engine(0x2019)).wording?.values).toEqual({ character: "\u2019" });
+  });
+
+  test("is found before the error Jev's request wraps it in", () => {
+    const wrapped = new JevRequestError(
+      "network",
+      `Couldn't reach https://api.typesafe.ai: ${engine(20316).message}`,
+    );
+    const error = classifyProviderError(wrapped);
+
+    expect(error.kind).toBe("auth");
+    expect(error.wording).toEqual({
+      key: "error.provider.keyCharacter",
+      values: { character: "作" },
+    });
+  });
+
+  test("is the same line when the core found the character first", () => {
+    const error = classifyProviderError(new KeyCharacterError("作"));
+
+    expect(error.kind).toBe("auth");
+    expect(error.wording).toEqual({
+      key: "error.provider.keyCharacter",
+      values: { character: "作" },
+    });
   });
 
   test("is found inside the AI SDK's retry error too", () => {

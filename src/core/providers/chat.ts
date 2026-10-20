@@ -32,7 +32,7 @@ import type { Secrets } from "../secrets";
 import { createSendGate, gateStop } from "../sendGate";
 import type { SettingsStore } from "../settings";
 import type { Database } from "../storage";
-import { parseApiKey as parseKey } from "./apiKey";
+import { parseApiKey as parseKey, storedApiKey } from "./apiKey";
 import {
   cloudWindow,
   type ModelCapabilities,
@@ -577,11 +577,12 @@ export function createChat(options: {
       };
     }
     const baseUrl = endpointUrl(kind, server.endpoint, server.catalogId) ?? server.baseUrl;
+    const checkedKey = storedApiKey(apiKey);
     if (kind === "ollama") {
       return {
         kind,
         baseUrl,
-        apiKey,
+        apiKey: checkedKey,
         modelId,
         ollama: profile?.settings ?? DEFAULT_OLLAMA_SETTINGS,
       };
@@ -589,7 +590,7 @@ export function createChat(options: {
     return {
       kind,
       baseUrl,
-      apiKey,
+      apiKey: checkedKey,
       modelId,
       // Only a provider's other regions say which they are; its first is the default.
       ...(server.endpoint &&
