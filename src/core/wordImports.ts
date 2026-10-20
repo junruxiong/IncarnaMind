@@ -93,6 +93,8 @@ export interface WordImportsOptions {
   /** A Document's link to its Mind changed: windows hear of it. */
   documentChanged(documentId: string): void;
   mindsChanged(): void;
+  /** A Mind just made for an import, before its Blocks are written. */
+  startMind(mindId: string): void;
   now(): string;
   log: Logger;
 }
@@ -402,6 +404,7 @@ export function createWordImports(options: WordImportsOptions) {
       } finally {
         keeping.delete(sha256);
       }
+      options.startMind(mind.id);
       content.edit(mind.id, (blocks) => {
         if (blocks.doc) {
           startWordImport(

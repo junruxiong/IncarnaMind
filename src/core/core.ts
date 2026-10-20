@@ -1669,26 +1669,24 @@ export function createCore(adapters: CoreAdapters): Core {
   });
 
   // Find support and Check against Documents (#96): check Runs that can only search and cite.
-  // The model a new Mind starts on is the one last chosen here. The Answers default needs no
-  // copy: a Mind with no choice follows it.
-  const modelForNewMind = (): ChatModelChoice | null => {
+  const startInWritingStyle = (mindId: string) => {
+    const style = settings.get().user.newMindStyle;
+    if (sameStyle(style, DEFAULT_MIND_STYLE)) return;
+    content.editSettings(mindId, (mindSettings) => writeMindStyle(mindSettings, style));
+  };
+  // The Answers default needs no copy: a Mind with no choice follows it.
+  const startOnLastModel = (mindId: string) => {
     const { device, user } = settings.get();
     const { lastChatModel } = device;
-    return lastChatModel &&
-      chat.exists(lastChatModel.providerId) &&
-      !sameModel(lastChatModel, user.chatModel)
-      ? lastChatModel
-      : null;
+    if (!lastChatModel || !chat.exists(lastChatModel.providerId)) return;
+    if (sameModel(lastChatModel, user.chatModel)) return;
+    content.editSettings(mindId, (mindSettings) => {
+      if (mindSettings.doc) setMindModel(mindSettings.doc, lastChatModel);
+    });
   };
   const startNewMind = (mindId: string) => {
-    const style = settings.get().user.newMindStyle;
-    const model = modelForNewMind();
-    const styled = !sameStyle(style, DEFAULT_MIND_STYLE);
-    if (!styled && !model) return;
-    content.editSettings(mindId, (mindSettings) => {
-      if (styled) writeMindStyle(mindSettings, style);
-      if (model && mindSettings.doc) setMindModel(mindSettings.doc, model);
-    });
+    startInWritingStyle(mindId);
+    startOnLastModel(mindId);
   };
   /** A new Mind, in the citation style last chosen for a Mind in its Folder, as its own choice (#289). */
   /**
@@ -2305,6 +2303,7 @@ export function createCore(adapters: CoreAdapters): Core {
     newVersion: (documentId, path) => documents.newVersionFrom(documentId, path),
     documentChanged: (documentId) => events.emit("document.status", documents.get(documentId)),
     mindsChanged,
+    startMind: startOnLastModel,
     now,
     log: adapters.log ?? silentLogger,
   });

@@ -1,8 +1,11 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { InvalidInputError } from "../../src/core";
 import { mindModelOf } from "../../src/shared/mindModel";
 import { createMemoryKeychain, createTempDataFolder, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
+import { paragraph, wordFile } from "../helpers/word";
 
 /*
  * The model the User last chose on this device (#1379): a new Mind starts on it, the Answers
@@ -73,6 +76,18 @@ describe("the model last chosen on this device", () => {
     });
     const mind = await core.createMind({ title: "Plain" });
     expect(await ownModel(core, mind.id)).toBeNull();
+  });
+
+  test("a Mind made from a Word file starts on it too", async () => {
+    const { core, dataDir, haiku } = await setUp();
+    await core.updateSettings({ device: { lastChatModel: haiku } });
+    const path = join(dataDir, "Memo.docx");
+    await writeFile(path, wordFile({ body: paragraph("A memo.") }));
+
+    const result = await core.importWordFile({ path, origin: "own" });
+
+    if (!result.ok) throw new Error(`Refused: ${result.refusal}`);
+    expect(await ownModel(core, result.mind.id)).toEqual(haiku);
   });
 
   test("on a provider that isn't saved is refused", async () => {
