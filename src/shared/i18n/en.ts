@@ -297,10 +297,12 @@ export const en = {
   "undo.examplesRemoved": "Removed the examples",
   "undo.examplesShown": "Showed the examples",
   "menu.showExamples": "Show the examples again",
+  "undo.folderLinked": "Linked “{name}”",
   "undo.linkedFolderPaused": "Paused reading in “{name}”",
   "undo.linkedFolderResumed": "Resumed reading in “{name}”",
   "undo.linkedFolderFlat": "Showing “{name}” as a flat list",
   "undo.linkedFolderTree": "Showing “{name}” as folders",
+  "undo.name.linkFolder": "Link “{name}”",
   "undo.name.move": "Move “{name}”",
   "undo.name.move.minds": "Move {count} Minds",
   "undo.name.move.documents": "Move {count} Documents",
@@ -3670,6 +3672,7 @@ export const en = {
     "The Library holds up to 100 Folders. Delete one, then restore this one.",
   "error.restore.notDeleted": "“{name}” isn’t deleted, so it can’t be deleted permanently.",
   "error.history.gone": "That version is no longer kept.",
+  "error.linkedFolder.keep": "IncarnaMind couldn’t tell which Documents to keep.",
   "error.linkedFolder.notThis":
     "That folder doesn’t hold “{name}”’s files. Choose the folder that does.",
   "error.linkedFolder.overlaps":

@@ -8625,9 +8625,11 @@ export interface CoreApi {
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
    * Units the Citations in Minds point to are kept, so those Citations can
-   * still be checked: "keptCitationTexts.changed" reports them.
+   * still be checked: "keptCitationTexts.changed" reports them. Its Documents
+   * in `options.keep` stay, as files added on their own: Undo of a link keeps
+   * those that were there before it (#1361).
    */
-  removeLinkedFolder(linkedFolderId: string): Promise<void>;
+  removeLinkedFolder(linkedFolderId: string, options?: { keep?: string[] }): Promise<void>;
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
   /**

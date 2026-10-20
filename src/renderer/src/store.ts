@@ -36,7 +36,14 @@ import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
 import { tagLinks } from "../../shared/tagLinks";
-import { deleted, linkedFolderPaused, linkedFolderShown, renamed, retagged } from "./changes";
+import {
+  deleted,
+  folderLinked,
+  linkedFolderPaused,
+  linkedFolderShown,
+  renamed,
+  retagged,
+} from "./changes";
 import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
@@ -397,6 +404,32 @@ const upsert = (documents: Document[], item: Document) =>
     ? documents.map((each) => (each.id === item.id ? item : each))
     : [item, ...documents];
 
+interface LinkStep {
+  linkedFolderId: string;
+  path: string;
+  before: LibraryBefore;
+}
+
+interface LibraryBefore {
+  documentIds: string[];
+  linkedFolders: { path: string; layout: LinkedFolderLayout }[];
+}
+
+const linkSteps = new Map<Undoable, LinkStep>();
+
+const inside = (folder: string, path: string) =>
+  path !== folder && (path.startsWith(`${folder}/`) || path.startsWith(`${folder}\\`));
+
+/** Moves the link steps' folders, and the folders they merged, from where a folder was to where it is now. */
+function moveLinkSteps(from: string, to: string): void {
+  const moved = (path: string) =>
+    path === from || inside(from, path) ? to + path.slice(from.length) : path;
+  for (const link of linkSteps.values()) {
+    link.path = moved(link.path);
+    for (const merged of link.before.linkedFolders) merged.path = moved(merged.path);
+  }
+}
+
 /** Puts a Linked folder in the list in place, if it's there. New ones arrive with the core's event. */
 const replaceLinked = (linkedFolders: LinkedFolder[], linked: LinkedFolder) =>
   linkedFolders.map((each) => (each.id === linked.id ? linked : each));
@@ -485,6 +518,45 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
   const push = (change: Undoable) => useUndo.getState().push(change);
+  const libraryBefore = async (path: string): Promise<LibraryBefore> => {
+    const [documents, linked] = await Promise.all([core.listDocuments(), core.listLinkedFolders()]);
+    return {
+      documentIds: documents.map((each) => each.id),
+      linkedFolders: linked
+        .filter((each) => inside(path, each.path))
+        .map((each) => ({ path: each.path, layout: each.layout })),
+    };
+  };
+  const unlinkStep = async (link: LinkStep) => {
+    const linked = await core.listLinkedFolders();
+    const now =
+      linked.find((each) => each.id === link.linkedFolderId) ??
+      linked.find((each) => each.path === link.path);
+    if (!now) throw new UndoRefused((t) => t("error.linkedFolder.notFound"), null);
+    if (now.path !== link.path) moveLinkSteps(link.path, now.path);
+    // A merged folder that can't be linked again refuses the Undo before anything changes.
+    for (const inner of link.before.linkedFolders) await core.previewLinkedFolder(inner.path);
+    await core.removeLinkedFolder(now.id, { keep: link.before.documentIds });
+    // The Linked folders it merged are linked again, their Documents keeping their ids.
+    for (const inner of link.before.linkedFolders) {
+      const back = await core.addLinkedFolder(inner.path);
+      showLinked(await core.setLinkedFolderLayout(back.id, inner.layout));
+      for (const other of linkSteps.values()) {
+        if (other.path === inner.path) other.linkedFolderId = back.id;
+      }
+    }
+  };
+  const withdrawLinkSteps = (linkedFolderId: string) => {
+    const gone = [...linkSteps].filter(([, link]) => link.linkedFolderId === linkedFolderId);
+    for (let next = gone.pop(); next; next = gone.pop()) {
+      const [step, link] = next;
+      if (!linkSteps.delete(step)) continue;
+      useUndo.getState().withdraw(step);
+      // The folders it merged went with it.
+      const merged = new Set(link.before.linkedFolders.map((each) => each.path));
+      gone.push(...[...linkSteps].filter(([, inner]) => merged.has(inner.path)));
+    }
+  };
   const showLinked = (linked: LinkedFolder) =>
     set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
 
@@ -1325,16 +1397,56 @@ export const useAppStore = create<AppState>()((set, get) => {
         const preview = get().linking?.preview;
         nextLink();
         if (!preview) return;
-        const linked = await core.addLinkedFolder(preview.path);
-        // Inside a Linked folder already: nothing was linked, so its layout stays as the User set it.
+        // Inside a Linked folder already: nothing is linked, so its layout stays as the User set it.
         if (preview.insideLinkedFolderId !== null) {
+          await core.addLinkedFolder(preview.path);
           useRequests.getState().ask({ showLinked: preview.insideLinkedFolderId });
           return;
         }
-        useRequests.getState().ask({ showLinked: linked.id });
-        // Set now, before its first scan ends, so the scan's own suggestion doesn't replace it.
-        const shown = await core.setLinkedFolderLayout(linked.id, layout);
-        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, shown) }));
+        const link: LinkStep = {
+          linkedFolderId: "",
+          path: preview.path,
+          before: { documentIds: [], linkedFolders: [] },
+        };
+        let linked: Promise<boolean> = Promise.resolve(false);
+        const step = folderLinked(
+          () => linkedFolderName(link.path),
+          async () => {
+            if (!(await linked)) {
+              throw new UndoRefused((t) => t("error.linkedFolder.notFound"), null);
+            }
+            await unlinkStep(link);
+          },
+          async () => {
+            link.before = await libraryBefore(link.path);
+            const again = await core.addLinkedFolder(link.path);
+            link.linkedFolderId = again.id;
+            showLinked(await core.setLinkedFolderLayout(again.id, layout));
+            useRequests.getState().ask({ showLinked: again.id });
+          },
+        );
+        // Its line shows at once, within 100 ms of the click, whatever the folder holds; its Undo waits for the link.
+        linkSteps.set(step, link);
+        push(step);
+        const linking = (async () => {
+          link.before = await libraryBefore(preview.path);
+          const added = await core.addLinkedFolder(preview.path);
+          link.linkedFolderId = added.id;
+          useRequests.getState().ask({ showLinked: added.id });
+          // Set now, before its first scan ends, so the scan's own suggestion doesn't replace it.
+          showLinked(await core.setLinkedFolderLayout(added.id, layout));
+        })();
+        linked = linking.then(
+          () => true,
+          () => false,
+        );
+        try {
+          await linking;
+        } catch (error) {
+          linkSteps.delete(step);
+          useUndo.getState().withdraw(step);
+          throw error;
+        }
       }),
 
     // The dialog's own close (Esc, or after linking) calls this too: only a folder still asked about counts.
@@ -1391,14 +1503,21 @@ export const useAppStore = create<AppState>()((set, get) => {
       attempt(async () => {
         const path = await files.pickLinkedFolder(linkedFolderId);
         if (!path) return;
+        const was = get().linkedFolders.find((each) => each.id === linkedFolderId)?.path;
         const linked = await core.locateLinkedFolder(linkedFolderId, path);
         set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
+        if (was !== undefined && was !== linked.path) {
+          moveLinkSteps(was, linked.path);
+          // The Edit menu and the undo line name a link's step by its folder's name now.
+          useUndo.setState({});
+        }
       }),
 
     // The list, its Folders and Documents follow the core's events.
     removeLinkedFolder: (linkedFolderId) =>
       attempt(async () => {
         await core.removeLinkedFolder(linkedFolderId);
+        withdrawLinkSteps(linkedFolderId);
       }),
 
     toggleTagFilter(tagId) {
