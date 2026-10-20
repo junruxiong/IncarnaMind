@@ -2323,7 +2323,11 @@ export function createCore(adapters: CoreAdapters): Core {
     tags,
     library,
     mindsChanged,
-    mindsRestored: (mindIds) => wordImports.resume(mindIds),
+    mindsRestored: (mindIds) => {
+      // Its lines left the index's memory with it, and nothing stores to it on the way back.
+      for (const mindId of mindIds) mindIndex.contentStored(mindId);
+      wordImports.resume(mindIds);
+    },
     conversationsChanged,
     tagsChanged,
     tagged: announceTagged,

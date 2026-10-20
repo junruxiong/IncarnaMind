@@ -13,7 +13,7 @@
  */
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
-import { cutTitle } from "../shared/naming";
+import { cutAtWord, cutTitle } from "../shared/naming";
 import { BLOCK_ID_ATTRIBUTE, type MindTextMatch } from "./api";
 import { keywordText } from "./documents/keywords";
 import { InvalidInputError } from "./errors";
@@ -52,12 +52,16 @@ export interface LeadingLine {
 }
 
 const LEADING_LINES = 2;
+/** Enough for a row that cuts it to one line, without carrying a pasted paragraph whole. */
+const LINE_LENGTH = 300;
 
-const firstLine = (text: string) =>
-  text
+const firstLine = (text: string) => {
+  const line = text
     .split("\n")
-    .find((line) => line.trim() !== "")
+    .find((each) => each.trim() !== "")
     ?.trim();
+  return line && cutAtWord(line, LINE_LENGTH);
+};
 
 function leadingLinesOf(blocks: readonly Pick<ReadBlock, "kind" | "text">[]): LeadingLine[] {
   const lines: LeadingLine[] = [];
@@ -117,7 +121,7 @@ export function createMindIndex(options: {
 }) {
   const { db, now, content } = options;
   const dirty = new Set<string>();
-  /** Each Mind's first lines, kept from when each was last read; null until first asked for. */
+  // Null until Home first asks for the lines.
   let leading: Map<string, LeadingLine[]> | null = null;
   /** The Minds the walk has still to read; null until they are looked up. */
   let unread: string[] | null = null;

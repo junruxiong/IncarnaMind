@@ -361,6 +361,45 @@ describe("each Mind's line under its name, for Home's Recent", () => {
     );
   });
 
+  test("a Mind restored from Recently deleted has its line again, in the same session and after a restart", async () => {
+    const dataDir = await createTempDataFolder();
+    const first = startCore(dataDir);
+    const [same] = await mindWith(first, [
+      heading(1, "Tides"),
+      note("Spring tides come twice a month."),
+    ]);
+    const [later] = await mindWith(first, [
+      heading(1, "Ferries"),
+      note("The last ferry leaves at ten."),
+    ]);
+    expect(await first.listMindSnippets()).toHaveLength(2);
+    await first.deleteMind(same);
+    await first.deleteMind(later);
+    await first.restore([{ kind: "mind", id: same }]);
+    expect(await first.listMindSnippets()).toEqual([
+      { mindId: same, text: "Spring tides come twice a month." },
+    ]);
+    first.close();
+
+    const core = startCore(dataDir);
+    expect(await core.listMindSnippets()).toHaveLength(1);
+    await core.restore([{ kind: "mind", id: later }]);
+    expect(await core.listMindSnippets()).toEqual(
+      expect.arrayContaining([{ mindId: later, text: "The last ferry leaves at ten." }]),
+    );
+  });
+
+  test("a long line is kept only to its start", async () => {
+    const core = startCore(await createTempDataFolder());
+    const sentence = "The harbour master publishes the tide tables every Monday morning. ";
+    const [log] = await mindWith(core, [heading(1, "Log"), note(sentence.repeat(30))]);
+
+    const [snippet] = await core.listMindSnippets();
+    expect(snippet?.mindId).toBe(log);
+    expect(snippet?.text.startsWith(sentence.trim())).toBe(true);
+    expect(Array.from(snippet?.text ?? "").length).toBeLessThanOrEqual(300);
+  });
+
   test("saving one Mind reads only that Mind again: the same work for a Library of 3 Minds or of 30", async () => {
     const small = await workOfOneSave(3);
     const large = await workOfOneSave(30);
