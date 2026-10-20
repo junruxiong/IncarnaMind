@@ -10,6 +10,7 @@ import { withShortcut } from "../editor/withShortcut";
 import { useT } from "../i18n";
 import { saidInLine } from "../lineNames";
 import type { Translate } from "../objects";
+import { useQuestionRoom } from "../questionRoom";
 import { useQuestions } from "../questions";
 import { useResearch } from "../research";
 import { answerTaskAsk, loadTasks, useTasks } from "../tasks";
@@ -30,6 +31,24 @@ const MIN_THREAD = 120;
 const MIN_THREAD_ASKING = 40;
 
 const ALLOW_KEYS = "CmdOrCtrl+Enter";
+
+/** How much taller the question's card is than it is drawn: its head and its rows, up to their cap. */
+function hiddenIn(card: HTMLElement): number {
+  const head = card.querySelector<HTMLElement>(".approval-head");
+  const options = card.querySelector<HTMLElement>(".choice-options");
+  const cap = options ? Number.parseFloat(getComputedStyle(options).maxHeight) : Number.NaN;
+  const rows = options
+    ? Math.max(
+        0,
+        Math.min(options.scrollHeight + options.clientTop, cap || Infinity) - options.offsetHeight,
+      )
+    : 0;
+  return (
+    (head ? head.scrollHeight - head.clientHeight : 0) +
+    rows +
+    (card.scrollHeight - card.clientHeight)
+  );
+}
 
 const isCommand = (event: { metaKey: boolean; ctrlKey: boolean }) =>
   isMacOS() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
@@ -200,6 +219,7 @@ export function TaskTray({ mindId }: { mindId: string | null }) {
     const element = tray.current;
     const column = element?.closest<HTMLElement>(".assistant-main");
     if (!present || !element || !column) return;
+    const assistant = column.closest<HTMLElement>(".assistant");
     const fitTray = () => {
       // The composer and the room under it, which the slot's padding keeps.
       const slot = element.parentElement?.getBoundingClientRect().height ?? 0;
@@ -209,11 +229,23 @@ export function TaskTray({ mindId }: { mindId: string | null }) {
       const share = Math.floor(column.clientHeight * TRAY_SHARE);
       // A question takes what room the column has, as the prototype's card shows every row.
       setMaxHeight(choosing ? room : Math.min(room, Math.max(share, MIN_TRAY)));
+      if (choosing && assistant) {
+        const card = element.querySelector<HTMLElement>(".choice-card");
+        const needs = element.offsetHeight + (card ? hiddenIn(card) : 0);
+        useQuestionRoom.setState({ fits: assistant.offsetHeight - room + needs });
+      }
     };
     fitTray();
     const observer = new ResizeObserver(fitTray);
     observer.observe(column);
-    return () => observer.disconnect();
+    if (choosing) {
+      observer.observe(element);
+      for (const part of element.querySelectorAll(".choice-card > *")) observer.observe(part);
+    }
+    return () => {
+      observer.disconnect();
+      if (choosing) useQuestionRoom.setState({ fits: null });
+    };
   }, [present, choosing]);
 
   if (!present) return null;

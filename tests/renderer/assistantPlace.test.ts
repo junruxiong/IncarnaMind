@@ -12,6 +12,8 @@ import {
   GAP,
   groupsMergedAt,
   HEADER,
+  QUESTION_LEAVES,
+  questionHeight,
   restoredSize,
   SIDE_MIN,
   SNAP_DISTANCE,
@@ -63,6 +65,14 @@ describe("sizes", () => {
     expect(bottomHeight(DEFAULT_ASSISTANT.height, room)).toBe(300);
     expect(bottomHeight(10, room)).toBe(BOTTOM_MIN);
     expect(bottomHeight(5000, room)).toBe(room - GAP - CARD_MIN_HEIGHT);
+  });
+
+  // protects=while a question waits, the bottom dock grows to the height it needs, up to the column less the card's tab strip, and never below the User's own height (#1400); fails_when=it stays short, covers the tabs, or shrinks; no_claim=how the height needed is measured.
+  test("a waiting question grows the bottom dock to fit it, leaving the card its tab strip", () => {
+    const room = 500;
+    expect(questionHeight(300, 420, room)).toBe(420);
+    expect(questionHeight(300, 900, room)).toBe(room - QUESTION_LEAVES);
+    expect(questionHeight(300, 200, room)).toBe(300);
   });
 
   test("a double-click restores the default size of where it is", () => {

@@ -27,13 +27,19 @@ test.afterEach(async () => {
 });
 
 const NAMES = ["Lease Harbour Street", "Lease Mill Lane", "Board minutes"];
+const FOUR = ["Lease Harbour Street", "Lease Mill Lane", "Boiler service report", "Board minutes"];
 
-/** Three Documents, added in this order, so the newest is Board minutes. */
-async function setUp(app: ElectronApplication, window: Page, language: "en" | "zh-CN" = "en") {
+/** Documents added in this order, three by default, so the newest is Board minutes. */
+async function setUp(
+  app: ElectronApplication,
+  window: Page,
+  language: "en" | "zh-CN" = "en",
+  names: readonly string[] = NAMES,
+) {
   await setLanguage(window, language);
   await setWindowSize(app, window, 1440, 900);
   const paths = await Promise.all(
-    NAMES.map(async (name) => {
+    names.map(async (name) => {
       const path = join(sources, `${name}.md`);
       await writeFile(path, `# ${name}\n\nSigned in 2026.\n`);
       return path;
@@ -173,36 +179,100 @@ const questionShows = (question: Locator) =>
 const clamped = (question: Locator) =>
   question.evaluate((element) => element.scrollHeight > element.clientHeight + 1);
 
+/** Whether `target` is drawn whole: inside every box that clips it, and not covered. */
+const whole = (target: Locator) =>
+  target.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    let top = 0;
+    let bottom = window.innerHeight;
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      if (getComputedStyle(parent).overflowY === "visible") continue;
+      const clip = parent.getBoundingClientRect();
+      top = Math.max(top, clip.top + parent.clientTop);
+      bottom = Math.min(bottom, clip.top + parent.clientTop + parent.clientHeight);
+    }
+    const seen = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    return (
+      box.top >= top - 1 && box.bottom <= bottom + 1 && seen !== null && element.contains(seen)
+    );
+  });
+
+const heightOf = async (target: Locator) => (await target.boundingBox())?.height ?? 0;
+
+/** While some rows are out of view, the tray takes all the room it has: none is left to the thread. */
+const roomUsed = (window: Page) =>
+  window.getByTestId("task-tray").evaluate((tray) => {
+    const options = tray.querySelector(".choice-options");
+    const scrolls = options !== null && options.scrollHeight > options.clientHeight + 1;
+    const height = tray.getBoundingClientRect().height;
+    return !scrolls || height >= Number.parseFloat(getComputedStyle(tray).maxHeight) - 1;
+  });
+
+/** Four Documents, so the question has four rows; and a Mind long enough to scroll, scrolled down. */
+async function setUpFour(
+  app: ElectronApplication,
+  window: Page,
+  language: "en" | "zh-CN",
+  height: number,
+) {
+  await setUp(app, window, language, FOUR);
+  await setWindowSize(app, window, 900, height);
+  await window.keyboard.type("Notes on the leases.");
+  for (let line = 0; line < 40; line++) await window.keyboard.press("Enter");
+  await window.keyboard.type("The last line.");
+  const scroller = window.locator(".mind-scroller:visible");
+  await scroller.evaluate((element) => {
+    element.scrollTop = 200;
+  });
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(200);
+  return scroller;
+}
+
 for (const [language, asked, more, less] of [
   ["en", "Summarise the main documents for the board", "More", "Less"],
   ["zh-CN", "为董事会总结主要的文档", "展开", "收起"],
 ] as const) {
-  for (const height of [700, 560]) {
-    test(`a long question stays at the top, two lines with ${more}, while only its rows scroll (${language}, 900 × ${height})`, async () => {
+  for (const [height, done] of [
+    [700, "skip"],
+    [560, "continue"],
+  ] as const) {
+    test(`docked at the bottom, the assistant grows to fit a long question of four described rows, which stays at the top, two lines with ${more}, and goes back after (${language}, 900 × ${height})`, async () => {
       const { app, window } = await launchApp(dataDir, { fakeChat: true });
       await dismissChatSetup(window);
       await useLocalChatModel(window);
-      await setUp(app, window, language);
-      await setWindowSize(app, window, 900, height);
+      const scroller = await setUpFour(app, window, language, height);
+      const assistant = window.getByTestId("assistant");
+      const own = await heightOf(assistant);
 
       const card = await ask(window, asked);
       const question = card.getByTestId("question-text");
       const rows = card.getByTestId("question-option");
+      await expect(rows).toHaveCount(4);
       await expect(rows.first()).toBeFocused();
+      // It grows at once, leaving the card its tab strip, and the Mind stays where it was.
+      await expect.poll(() => heightOf(assistant)).toBeGreaterThan(own);
+      expect(
+        await assistant.evaluate((element) => getComputedStyle(element).transitionDuration),
+      ).toBe("0s");
+      const strip = window.locator('[data-testid="tab-group"][data-focused] .tab-strip');
+      expect(await uncovered(strip)).toBe(true);
+      expect(await scroller.evaluate((element) => element.scrollTop)).toBe(200);
+
       expect(await clamped(question)).toBe(true);
       expect(await questionShows(question)).toBe(true);
-      expect(await uncovered(rows.first())).toBe(true);
+      expect(await whole(rows.first())).toBe(true);
+      expect(await whole(rows.first().locator(".choice-description"))).toBe(true);
+      expect(await roomUsed(window)).toBe(true);
       expect(await uncovered(card.getByTestId("question-continue"))).toBe(true);
-
-      await window.keyboard.press("3");
-      await expect(rows.nth(2)).toHaveAttribute("aria-checked", "true");
-      expect(await uncovered(rows.nth(2))).toBe(true);
-      for (const next of [rows.nth(1), rows.nth(2), card.getByTestId("question-other")]) {
+      for (const [index, next] of [rows.nth(1), rows.nth(2), rows.nth(3)].entries()) {
         await window.keyboard.press("ArrowDown");
         await expect(next).toBeFocused();
-        expect(await uncovered(next)).toBe(true);
+        expect(await whole(next), `row ${index + 2}`).toBe(true);
         expect(await questionShows(question)).toBe(true);
       }
+      await window.keyboard.press("ArrowDown");
+      await expect(card.getByTestId("question-other")).toBeFocused();
+      expect(await uncovered(card.getByTestId("question-other"))).toBe(true);
 
       const toggle = card.getByTestId("question-more");
       await expect(toggle).toHaveText(more);
@@ -210,32 +280,43 @@ for (const [language, asked, more, less] of [
       await expect(toggle).toHaveText(less);
       await expect(toggle).toHaveAttribute("aria-expanded", "true");
       expect(await clamped(question)).toBe(false);
-      expect(await clamped(card.locator(".approval-explanation"))).toBe(false);
+      const detail = card.locator(".approval-explanation");
+      expect(await clamped(detail)).toBe(false);
+      expect(await whole(detail)).toBe(true);
+      expect(await roomUsed(window)).toBe(true);
       expect(await uncovered(card.getByTestId("question-continue"))).toBe(true);
-      await window.keyboard.press("2");
-      await expect(rows.nth(1)).toHaveAttribute("aria-checked", "false");
-      expect(await uncovered(rows.nth(1))).toBe(true);
+      await window.keyboard.press("3");
+      await expect(rows.nth(2)).toHaveAttribute("aria-checked", "true");
+      expect(await whole(rows.nth(2))).toBe(true);
       await pointAndClick(window, toggle);
       await expect(toggle).toHaveText(more);
       expect(await clamped(question)).toBe(true);
+
+      if (done === "skip") await window.keyboard.press("Escape");
+      else await pointAndClick(window, card.getByTestId("question-continue"));
+      await expect(card).toHaveCount(0);
+      await expect.poll(() => heightOf(assistant)).toBe(own);
+      expect(await scroller.evaluate((element) => element.scrollTop)).toBe(200);
       await app.close();
     });
   }
 }
 
-test("with the assistant at the side, a long question shows every row and Other, as the prototype does", async () => {
+test("with the assistant at the side, a long question shows every described row and Other, as the prototype does", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await setUp(app, window);
-  await setWindowSize(app, window, 1440, 900);
+  await setUp(app, window, "en", FOUR);
+  const assistant = window.getByTestId("assistant");
+  const own = await heightOf(assistant);
 
   const card = await ask(window, "Summarise the main documents for the board");
   for (const row of await card.getByTestId("question-option").all()) {
-    expect(await uncovered(row)).toBe(true);
+    expect(await whole(row)).toBe(true);
   }
   expect(await uncovered(card.getByTestId("question-other"))).toBe(true);
   await expect(card).toHaveAccessibleName(/rather than why it was decided\?$/);
+  expect(await heightOf(assistant)).toBe(own);
   await app.close();
 });
 

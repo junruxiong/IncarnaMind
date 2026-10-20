@@ -3,6 +3,7 @@
  * more than two Documents, asks which ones, the two newest ticked, then writes a summary of those
  * chosen into the Mind in focus. Skipped, it goes on with the two newest and says so.
  * "Summarise the main ones" asks as Claude Haiku 5.5 did: one choice, one ticked, Other… allowed.
+ * Each option has a description, as the Tool asks for.
  */
 import { lastResult, type Prompt, type Reply, systemOf } from "./prompt";
 
@@ -10,6 +11,20 @@ const MAIN_DOCUMENTS =
   /\bsummari[sz]e the (?:main|key|important) documents\b|总结.*(?:主要|重要).*文档/i;
 const MAIN_ONES = /\bsummari[sz]e the main ones\b/i;
 const FOR_THE_BOARD = /\bfor the board\b|董事会/i;
+
+// Each option says why it may be chosen, as the Tool asks and Claude Sonnet 5.5 does.
+const DESCRIPTIONS = [
+  "The newest in your Library, with this quarter's figures.",
+  "Added just before it, and signed by both parties.",
+  "An older one, still a draft, with last year's terms.",
+  "The oldest here: it hasn't changed this year.",
+];
+const DESCRIPTIONS_ZH = [
+  "资料库里最新的一份，有本季度的数据。",
+  "在它之前添加，双方都已签署。",
+  "较早的一份，仍是草稿，用的是去年的条款。",
+  "这里最早的一份，今年没有改动。",
+];
 
 const namesIn = (system: string): string[] => {
   const list = /names, newest first:\n((?:- .+\n?)+)/.exec(system)?.[1] ?? "";
@@ -38,9 +53,17 @@ export function asksReply(
         multiple: false,
         other: true,
         options: [
-          { label: "The two newest", recommended: true, preselected: true },
-          { label: `All ${documents.length} Documents` },
-          { label: "Only the leases" },
+          {
+            label: "The two newest",
+            description: "The two added last, which most likely hold what changed.",
+            recommended: true,
+            preselected: true,
+          },
+          {
+            label: `All ${documents.length} Documents`,
+            description: "Every Document in the Library: the longest summary.",
+          },
+          { label: "Only the leases", description: "The two leases, side by side." },
         ],
       },
     };
@@ -68,6 +91,7 @@ export function asksReply(
         other: true,
         options: documents.slice(0, 4).map((name, index) => ({
           label: name,
+          description: (chinese ? DESCRIPTIONS_ZH : DESCRIPTIONS)[index],
           recommended: index === 0,
           preselected: index < 2,
         })),

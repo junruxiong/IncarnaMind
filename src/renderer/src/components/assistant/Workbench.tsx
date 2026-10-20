@@ -16,6 +16,7 @@ import {
   floatRect,
   GAP,
   isSide,
+  questionHeight,
   RAIL,
   type Rect,
   restoredSize,
@@ -28,6 +29,7 @@ import {
 import { ComposerDockContext } from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { useCardWidth } from "../../layoutSlice";
+import { useQuestionRoom } from "../../questionRoom";
 import { useQuietAssistant } from "../../quietAssistant";
 import { useAppStore } from "../../store";
 import { useWindowSize } from "../../useWindowWidth";
@@ -90,7 +92,12 @@ export function Workbench({
   const groups = useMemo(() => <TabGroups />, []);
 
   const width = sideWidth(shown.width, room.width);
-  const height = bottomHeight(shown.height, room.height);
+  const fits = useQuestionRoom((state) => state.fits);
+  const ownHeight = bottomHeight(shown.height, room.height);
+  const height =
+    fits !== null && dock === "bottom" && !folded
+      ? questionHeight(ownHeight, fits, room.height)
+      : ownHeight;
   const float = floatRect(shown.float, folded, viewport);
   const atWindowLeft = dock === "left" && sidebarHidden;
 

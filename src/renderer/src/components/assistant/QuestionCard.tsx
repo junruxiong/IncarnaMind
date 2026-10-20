@@ -75,6 +75,21 @@ export function QuestionCard({ request }: { request: UserQuestionRequest }) {
     const element = card.current;
     if (!element) return;
     const observer = new ResizeObserver(() => {
+      const options = element.querySelector<HTMLElement>(".choice-options");
+      if (options) {
+        const style = getComputedStyle(options);
+        const frame =
+          Number.parseFloat(style.paddingTop) +
+          Number.parseFloat(style.paddingBottom) +
+          options.clientTop;
+        const tallest = Math.max(
+          0,
+          ...[...options.querySelectorAll<HTMLElement>("[data-question-row]")].map(
+            (row) => row.offsetHeight,
+          ),
+        );
+        element.style.setProperty("--choice-row", `${tallest + frame}px`);
+      }
       if (!element.dataset.open) {
         const texts = [...element.querySelectorAll(".choice-question, .approval-explanation")];
         setCut(texts.some((each) => each.scrollHeight > each.clientHeight + 1));

@@ -7578,7 +7578,7 @@
       .approval-card:not(.choice-card) .approval-explanation {
         display: none;
       }
-      /* The bottom dock leaves the card about 160 px: a whole row keeps its room under the question cut short, and the question opened scrolls above it. */
+      /* Where even the grown dock is short (#1400), the tallest row keeps its room under the question. */
       .approval-card.choice-card {
         .approval-head {
           flex: none;
@@ -7590,7 +7590,7 @@
           overflow: hidden;
         }
         .choice-options {
-          min-height: 36px;
+          min-height: var(--choice-row, 36px);
         }
         &[data-open] {
           .approval-head {
@@ -7603,8 +7603,9 @@
             -webkit-line-clamp: none;
             overflow: visible;
           }
+          /* Short of room, the rows give way first, down to the tallest row, and only then the opened question scrolls. */
           .choice-options {
-            flex: 1 1 36px;
+            flex-shrink: 100;
           }
         }
       }
