@@ -1639,6 +1639,7 @@ export const zhCN = {
   "jev.form.sends": "会把文档内容发送给 Jev 用于打标签。",
 
   "settings.title": "设置",
+  "settings.help": "查看说明",
   "settings.pages.models": "模型",
   "settings.pages.search": "搜索",
   "settings.language": "界面语言",

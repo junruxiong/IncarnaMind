@@ -1696,6 +1696,7 @@ export const en = {
   "jev.form.sends": "Sends Document text to Jev for tagging.",
 
   "settings.title": "Settings",
+  "settings.help": "More information",
   "settings.pages.models": "Models",
   "settings.pages.search": "Search",
   "settings.language": "Interface language",
