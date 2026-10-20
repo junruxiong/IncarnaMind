@@ -28,6 +28,7 @@ import { ANALYSIS_SCHEME_PRIVILEGES } from "./analysis";
 import { showDevelopmentDockIcon, windowIcon } from "./appIcon";
 import { DOCUMENT_SCHEME_PRIVILEGES, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
+import { lockInstance } from "./instanceLock";
 import { handle } from "./ipc";
 import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
@@ -36,7 +37,6 @@ import { isPanelWindow, serveMeetingPanel } from "./meetings/panel";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } from "./platform";
-import { claimStart } from "./startClaim";
 import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { realHomeProblem } from "./testHome";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
@@ -62,17 +62,20 @@ if (dataDirOverride) app.setPath("userData", resolve(dataDirOverride));
 // The log in the data folder's `logs/`, from the start, so it has what goes wrong at startup too.
 const logger = startLogging(app.getPath("userData"));
 
-// One copy to a data folder: a second would write the same database. Electron's lock is keyed on
-// `userData`, which is set above, so a test on a data folder of its own takes a lock of its own.
-// Two copies asking in the same millisecond can both get it, so the one that makes the start
-// claim first goes on (#1352).
-const startClaim = app.requestSingleInstanceLock() ? claimStart(app.getPath("userData")) : null;
-const ownsDataFolder = startClaim?.held ?? false;
+// One copy to a data folder: a second would write the same database. The data folder's own lock
+// decides which copy runs; Electron's single-instance lock only brings the running copy's window
+// forward when a second start asks (#1352).
+const instanceLock = lockInstance(app.getPath("userData"), (what, error) =>
+  logger.exception(what, error),
+);
+app.requestSingleInstanceLock();
+const ownsDataFolder = instanceLock.held;
 if (!ownsDataFolder) {
   logger.info("app.anotherCopyRunning");
   // Not `quit`: its `app.quit` line in the log would read as the running copy's.
   app.exit(0);
 }
+app.on("quit", instanceLock.release);
 
 // Whether Skill scripts run in the OS sandbox, found out while Electron starts.
 const scriptExecutor = chooseExecutor(logger);
@@ -297,12 +300,10 @@ app.whenReady().then(async () => {
       ...(taskKinds.length > 0 && { taskKinds }),
     });
   } catch (error) {
-    startClaim?.release();
     await showStartupError(error);
     app.quit();
     return;
   }
-  startClaim?.release();
   exposeCore(core);
   const settleQuit = guardQuit(
     core,
@@ -331,7 +332,13 @@ app.whenReady().then(async () => {
   servePermissionGuide({ rendererUrl, appWindows, trusted: isFromOurRenderer, testHooks });
   installMenuInLanguage(core);
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
-  if (!testHooks) startAutoUpdates(core, settleQuit);
+  if (!testHooks) {
+    startAutoUpdates(core, settleQuit, () => {
+      if (process.platform !== "linux") return;
+      instanceLock.release();
+      app.releaseSingleInstanceLock();
+    });
+  }
 
   app.on("activate", () => {
     if (appWindows().length === 0) createWindow();
