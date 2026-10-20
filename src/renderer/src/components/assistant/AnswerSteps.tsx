@@ -369,9 +369,11 @@ function FoldedToggle({
           aria-hidden="true"
           aria-expanded={open}
           onClick={onToggle}
-          className={`answer-steps-toggle answer-steps-part ${after ? "" : "answer-steps-part--end"}`}
+          className={`answer-steps-toggle answer-steps-part ${
+            !after ? "answer-steps-part--end" : after.length > 1 ? "answer-steps-part--tail" : ""
+          }`}
         >
-          {after}
+          {after && after.length > 1 ? <span className="answer-steps-tail">{after}</span> : after}
           <ChevronRightLineIcon className="answer-steps-chevron" />
         </button>
       </div>

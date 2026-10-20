@@ -595,6 +595,41 @@ test("Documents sent whole are read whether or not the Answer cites them: the li
   await app.close();
 });
 
+test("at a 320px assistant a long Mind title and a long Document name are cut, the line stays on one line inside the Answer, and the whole line is its tooltip", async () => {
+  const { app, window } = await start({ documents: false });
+  const name = "Lease agreement for the north wing of the harbour offices 2026";
+  await writeFile(join(sources, `${name}.pdf`), LEASE);
+  await addDocuments(window, [join(sources, `${name}.pdf`)]);
+  await core(window).mind(LONG_FOLDER);
+  expect(Math.round((await window.getByTestId("assistant").boundingBox())?.width ?? 0)).toBe(320);
+  const answer = await ask(
+    window,
+    "What is the monthly rent in the lease? Answer without searching.",
+  );
+
+  const line = answer.getByTestId("answer-steps-line");
+  const whole = `Read “${LONG_FOLDER}” and “${name}”`;
+  await expect(line).toHaveAttribute("title", whole);
+  const box = await line.boundingBox();
+  expect(box?.height ?? 0).toBeLessThan(30);
+  const edge = await answer.boundingBox();
+  expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(
+    (edge?.x ?? 0) + (edge?.width ?? 0),
+  );
+  expect(await line.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  // The chevron is still on the line.
+  const chevron = await line.locator(".answer-steps-chevron").boundingBox();
+  expect((chevron?.x ?? 0) + (chevron?.width ?? 0)).toBeLessThanOrEqual(
+    (box?.x ?? 0) + (box?.width ?? 0) + 1,
+  );
+  await screenshot(window, "steps-read-documents-narrow-en");
+
+  await core(window).language("zh-CN");
+  await expect(line).toHaveAttribute("title", `读了“${LONG_FOLDER}”，还读了“${name}”`);
+  expect((await line.boundingBox())?.height ?? 0).toBeLessThan(30);
+  await app.close();
+});
+
 test("with a Chinese lease and the Chinese interface, the line names 租赁合同-2026 beside the open Mind, and a Mind with no lease says only that it read the Mind", async () => {
   const { app, window } = await start({ documents: false });
   await core(window).language("zh-CN");
