@@ -3,7 +3,7 @@ import { lockInstance } from "../../src/main/instanceLock";
 /**
  * One of the copies in tests/main/instanceLock.test.ts. `race`: asks for the lock at the start of
  * each round, together with the other copy, holds it a moment and says when it did; `hold`: takes
- * it, says so and waits to be killed.
+ * it, says so and waits to be killed; `try`: asks once and says what it got.
  */
 const [mode, folder, ...rest] = process.argv.slice(2);
 
@@ -15,22 +15,20 @@ const waitUntil = (until: bigint) => {
   }
 };
 
-if (mode === "hold") {
+if (mode === "try") {
+  const lock = lockInstance(folder ?? "", report);
+  console.log(JSON.stringify({ held: lock.held }));
+  lock.release();
+} else if (mode === "hold") {
   const lock = lockInstance(folder ?? "", report);
   console.log(JSON.stringify({ held: lock.held }));
   setInterval(() => undefined, 1_000);
 } else {
-  const [start, rounds, roundMs, holdMs, askMs] = rest.map(BigInt) as [
-    bigint,
-    bigint,
-    bigint,
-    bigint,
-    bigint,
-  ];
+  const [start, rounds, roundMs, holdMs] = rest.map(BigInt) as [bigint, bigint, bigint, bigint];
   const results: { held: boolean; from?: string; to?: string }[] = [];
   for (let round = 0n; round < rounds; round++) {
     waitUntil(start + round * roundMs * 1_000_000n);
-    const lock = lockInstance(folder ?? "", report, Number(askMs));
+    const lock = lockInstance(folder ?? "", report);
     if (!lock.held) {
       results.push({ held: false });
       continue;
