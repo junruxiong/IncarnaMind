@@ -1384,6 +1384,10 @@ export function textBoxOf(target: Locator) {
   });
 }
 
+/** ⌘K's rows for what it found, not its last row, which asks about the words typed. */
+export const paletteFound = (window: Page): Locator =>
+  window.locator('[data-testid="palette-item"]:not([data-kind="ask"])');
+
 export function lastLineBoxOf(target: Locator) {
   return target.evaluate((element) => {
     const range = document.createRange();

@@ -84,6 +84,8 @@ export interface Command {
   globalKeys?(): string | null;
   /** False keeps it out of ⌘K; it then needs a shortcut. */
   palette?: false;
+  /** Listed in ⌘K before anything is typed, where it applies, the lowest first and six at most. */
+  top?: number;
   group: CommandGroup;
   /** The kinds it acts on, as the selection or the focus. Without them, it acts on the window. */
   appliesTo?: readonly ObjectKind[];

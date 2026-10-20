@@ -18,6 +18,7 @@ import {
   linkedFolderRow,
   markSteps,
   newMind,
+  paletteFound,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -857,7 +858,7 @@ test("Remove the examples removes every example Mind made, and Undo brings them 
   await app.close();
 });
 
-const paletteItems = (window: Page) => window.getByTestId("palette").getByTestId("palette-item");
+const paletteItems = paletteFound;
 
 async function askPalette(window: Page, text: string): Promise<void> {
   await window.keyboard.press("ControlOrMeta+k");

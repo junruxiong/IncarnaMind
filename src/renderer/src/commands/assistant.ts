@@ -166,6 +166,7 @@ export const assistantCommands: readonly Command[] = [
     label: "command.composer.focus",
     shortcut: { keys: "CmdOrCtrl+J" },
     group: "main",
+    top: 10,
     reversible: true,
     when: isThere,
     run: askOrEdit,
