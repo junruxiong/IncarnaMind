@@ -295,8 +295,8 @@ describe("an Answer's steps", () => {
       { askedFrom: MIND, meeting: true },
     );
     expect(foldedLine(steps)).toEqual({ kind: "not-heard" });
-    expect(en("steps.notHeard")).toBe("The live text hasn’t caught up · nothing heard yet");
-    expect(zh("steps.notHeard")).toBe("实时转写还没跟上 · 暂时没有听到内容");
+    expect(en("steps.notHeard")).toBe("Nothing heard · the live text is behind");
+    expect(zh("steps.notHeard")).toBe("没听到内容 · 实时转写落后了");
   });
 
   // protects=with no search the line says the Mind read, else the one it was asked from, or the model with no Mind; fails_when=it says Searched; no_claim=none beyond protects.

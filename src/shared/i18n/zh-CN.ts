@@ -4505,7 +4505,7 @@ export const zhCN = {
   "steps.searched": "已搜索{scope} · {sources}",
   "steps.searchedWeb": "已联网搜索 · {sources}",
   "steps.listened": "已听实时转写 · {sources}",
-  "steps.notHeard": "实时转写还没跟上 · 暂时没有听到内容",
+  "steps.notHeard": "没听到内容 · 实时转写落后了",
   "steps.sources": "{count} 个来源",
   "steps.sources.one": "1 个来源",
   "steps.sources.none": "没有来源",
