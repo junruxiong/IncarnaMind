@@ -1,6 +1,7 @@
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
 import {
+  coreOf,
   createDataFolder,
   dismissChatSetup,
   focusSettled,
@@ -32,6 +33,49 @@ async function makeMinds(window: Page) {
     await newMind(window);
     await nameMind(window, name);
   }
+}
+
+async function holdNextMindOpening(app: ElectronApplication, mindId: string) {
+  await app.evaluate(({ ipcMain }, id) => {
+    // Electron has no public getter for an installed handler; hold the actual IPC reply, not a fake editor.
+    const handlers = (
+      ipcMain as unknown as {
+        _invokeHandlers: Map<string, (event: unknown, ...args: unknown[]) => unknown>;
+      }
+    )._invokeHandlers;
+    const original = handlers.get("core:openMind");
+    if (!original) throw new Error("The openMind handler is missing.");
+    let release = () => {};
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const held = { requested: false, release };
+    Object.assign(globalThis, { heldMindOpening: held });
+    ipcMain.removeHandler("core:openMind");
+    ipcMain.handle("core:openMind", async (event, requested) => {
+      if (requested === id) {
+        ipcMain.removeHandler("core:openMind");
+        ipcMain.handle("core:openMind", original);
+        held.requested = true;
+        await ready;
+      }
+      return original(event, requested);
+    });
+  }, mindId);
+  return {
+    waiting: () =>
+      app.evaluate(
+        () =>
+          (globalThis as unknown as { heldMindOpening: { requested: boolean } }).heldMindOpening
+            .requested,
+      ),
+    release: () =>
+      app.evaluate(() =>
+        (
+          globalThis as unknown as { heldMindOpening: { release(): void } }
+        ).heldMindOpening.release(),
+      ),
+  };
 }
 
 for (const language of ["en", "zh-CN"] as const) {
@@ -152,3 +196,52 @@ test("a delayed close focus handoff keeps a control the User has since focused",
     await app.close();
   }
 });
+
+for (const whileLoading of ["wait", "focus another editor", "close the loading tab"] as const) {
+  test(`closing from an editor waits for its replacement in the same pane: ${whileLoading}`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    let held: Awaited<ReturnType<typeof holdNextMindOpening>> | undefined;
+    try {
+      await setWindowSize(app, window, 1440, 900);
+      await dismissChatSetup(window);
+      await makeMinds(window);
+      await splitFromTabMenu(window);
+      await newMind(window);
+      await nameMind(window, "Delta");
+      const groups = window.getByTestId("tab-group");
+      const firstEditor = groups.nth(0).getByTestId("mind-editor");
+      const secondEditor = groups.nth(1).getByTestId("mind-editor");
+      await expect(firstEditor).toBeVisible();
+      const mindId = await (await coreOf(window)).evaluate(
+        async (core) => (await core.listMinds()).find((mind) => mind.title === "Gamma 🙂")?.id,
+      );
+      if (!mindId) throw new Error("The replacement Mind is missing.");
+      held = await holdNextMindOpening(app, mindId);
+      await pointAndClick(window, secondEditor);
+      await focusSettled(window, secondEditor);
+      await window.keyboard.press("ControlOrMeta+w");
+      await expect.poll(held.waiting).toBe(true);
+      await expect(secondEditor).toHaveCount(0);
+      await expect(firstEditor).not.toBeFocused();
+      if (whileLoading === "focus another editor") await firstEditor.focus();
+      if (whileLoading === "close the loading tab") {
+        await pointAndClick(window, groups.nth(1).getByTestId("tab-close"));
+        await expect(groups).toHaveCount(1);
+      }
+      await held.release();
+      if (whileLoading === "close the loading tab") {
+        await expect(activeTab(window)).toBeFocused();
+      } else {
+        await expect(secondEditor).toBeVisible();
+        await expect(whileLoading === "wait" ? secondEditor : firstEditor).toBeFocused();
+        await window.keyboard.insertText("still here");
+        await expect(whileLoading === "wait" ? secondEditor : firstEditor).toContainText(
+          "still here",
+        );
+      }
+    } finally {
+      await held?.release();
+      await app.close();
+    }
+  });
+}

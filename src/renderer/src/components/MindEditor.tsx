@@ -117,6 +117,7 @@ import { holdShownPage } from "../shownPages";
 import { skillDescription, skillTitle } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
+import { resumeTabCloseFocus } from "../tabFocus";
 import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useIsExample } from "./GettingStarted";
 import { CheckLineIcon, MineLineIcon, SearchLineIcon } from "./lineIcons";
@@ -458,6 +459,9 @@ function MindEditorView({
     () => (readOnly ? undefined : registerMindEditor(mindId, editor)),
     [editor, mindId, readOnly],
   );
+  useEffect(() => {
+    if (!editor.isDestroyed) resumeTabCloseFocus();
+  }, [editor]);
 
   // The commands on the Mind's text (⌘K, ⌘↵ and ⌘⌫ on its changes) act on the Mind last written in.
   useEffect(() => {
