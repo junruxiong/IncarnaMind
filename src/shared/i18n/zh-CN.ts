@@ -480,6 +480,7 @@ export const zhCN = {
   "editor.slash.bulletList": "无序列表",
   "editor.slash.numberedList": "有序列表",
   "editor.slash.checklist": "待办清单",
+  "editor.checklist.empty": "空白待办项",
   "editor.slash.quote": "引述",
   "editor.slash.divider": "分割线",
   "editor.block.handle": "拖动以移动，点击查看选项",

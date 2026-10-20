@@ -489,6 +489,7 @@ export const en = {
   "editor.slash.bulletList": "Bulleted list",
   "editor.slash.numberedList": "Numbered list",
   "editor.slash.checklist": "Checklist",
+  "editor.checklist.empty": "Empty checklist item",
   "editor.slash.quote": "Quote",
   "editor.slash.divider": "Divider",
   "editor.block.handle": "Drag to move, click for options",
