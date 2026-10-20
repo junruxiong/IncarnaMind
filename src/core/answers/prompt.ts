@@ -216,7 +216,7 @@ const ASKS_SHORT =
 /** A short piece asked for (#1334): models wrote a page of it. */
 export function shortNote(question: string): string {
   return ASKS_SHORT.test(question)
-    ? "The User asked for it short: five lines at most, in your reply or in a Mind, each heading and list item counting as a line."
+    ? "The User asked for it short: five lines at most in all, in your reply or in a Mind. A heading, a paragraph and each list item each count as a line, so leave out headings and lists of terms; keep to five lines however much the Documents say."
     : "";
 }
 
