@@ -313,6 +313,7 @@ for (const sidebar of ["shown", "hidden"] as const) {
     await slideSelect(window, paragraphs.first(), "The tides here are very strong");
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.type("Shorten this slowly");
+    await expect(window.getByTestId("applied-line")).toHaveCount(0);
     await watchPage(window);
     await window.keyboard.press("Enter");
     await expect(window.getByTestId("selection-edit-working")).toBeVisible();
@@ -335,9 +336,9 @@ for (const sidebar of ["shown", "hidden"] as const) {
     const first = shown[0];
     const last = shown.at(-1);
     const landed = looks.find((each) => each.applied !== null);
-    if (!first || !last || !landed) {
+    if (!first || !last || !landed || enterAt === 0) {
       throw new Error(
-        `The running or the Undo line was never seen: ${looks.length} looks, ${shown.length} with the running line.`,
+        `The running or the Undo line was never seen: Enter at ${enterAt}, ${looks.length} looks, ${shown.length} with the running line, the first look ${JSON.stringify(looks[0])}, the last ${JSON.stringify(looks.at(-1))}.`,
       );
     }
     // Nothing shows for the first 300 ms of the request, which starts after Enter.
