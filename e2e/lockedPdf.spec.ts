@@ -66,7 +66,7 @@ test("a locked PDF is unlocked in place: a wrong password says so, the right one
   await window.keyboard.type("not-it");
   await window.keyboard.press("Enter");
   await expect(locked.getByTestId("pdf-password-wrong")).toHaveText(
-    "That password doesn't open it.",
+    "That password doesn’t open it.",
   );
   await expect(field).toBeFocused();
   expect(

@@ -350,7 +350,7 @@ describe("The AI use statement", () => {
       ["Answers added to the document", haiku, "3"],
       ["Changes from Edit with AI accepted", "local-model", "1"],
       ["Writing suggestions accepted", "local-model", "1"],
-      ["Searches of the author's own Documents", haiku, "2"],
+      ["Searches of the author’s own Documents", haiku, "2"],
       ["Searches of public scholarly sources (Find sources)", haiku, "1"],
       ["Web searches", haiku, "1"],
       ["Sentences checked against the Documents", haiku, "6"],

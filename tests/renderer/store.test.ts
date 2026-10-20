@@ -418,57 +418,31 @@ describe("making a Mind", () => {
 
   const top = () => useUndo.getState().done.at(-1);
 
-  test("is one change, resolved to, which Undo sends to Recently deleted and Redo brings back", async () => {
-    const change = await useAppStore.getState().createMind();
-    expect(change).toBe(top());
-    expect(said(change)).toBe("Made a new Mind");
-    expect(named(change)).toBe("New Mind");
-    await useUndo.getState().undo();
-    expect(method("deleteMind")).toHaveBeenCalledWith("n");
-    await useUndo.getState().redo();
-    expect(method("restore")).toHaveBeenCalledWith([{ kind: "mind", id: "n" }]);
-    expect(useUndo.getState().done).toEqual([change]);
-  });
-
-  test("one started from Documents or a Folder is said by its name, in Chinese too", async () => {
-    method("createMind").mockResolvedValue({ ...made, title: "Tides" });
-    await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
+  test("a Mind made says nothing and leaves nothing for ⌘Z, however it is made: Delete takes it back", async () => {
+    const titled = { ...made, title: "Tides" };
+    const ways = [
+      () => useAppStore.getState().createMind(),
+      () => useAppStore.getState().createMind({ titled: true, folderId: "f" }),
+      () => {
+        method("createMind").mockResolvedValue(titled);
+        return useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
+      },
+    ];
+    for (const makeOne of ways) {
+      await makeOne();
+      expect(top()).toBeUndefined();
+      expect(useUndo.getState().line).toBeNull();
+    }
     expect(method("createMind")).toHaveBeenCalledWith({ title: "Tides", headed: true });
-    expect(said(top())).toBe("Started “Tides”");
-    useAppStore.setState({ settings: { language: "zh-CN" } as never });
-    await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
-    expect(said(top())).toBe("已新建“Tides”");
-    expect(named(top())).toBe("新建 Mind");
-    method("createMind").mockResolvedValue(made);
-    await useAppStore.getState().createMind();
-    expect(said(top())).toBe("已新建 Mind");
+    expect(method("deleteMind")).not.toHaveBeenCalled();
   });
 
-  test("its line follows a switch of language, and Undo still works", async () => {
+  test("a Mind made leaves the line of the change before it, and that change, as they were", async () => {
+    const before = { said: () => "Moved “Quarterly” to Finance", undo: async () => undefined };
+    useUndo.getState().push(before);
     await useAppStore.getState().createMind();
-    expect(said(top())).toBe("Made a new Mind");
-    expect(named(top())).toBe("New Mind");
-    useAppStore.setState({ settings: { language: "zh-CN" } as never });
-    expect(said(top())).toBe("已新建 Mind");
-    expect(named(top())).toBe("新建 Mind");
-    await useUndo.getState().undo();
-    expect(method("deleteMind")).toHaveBeenCalledWith("n");
-  });
-
-  test("a line with a name in it follows a switch of language, the name cut as before", async () => {
-    method("createMind").mockResolvedValue({ ...made, title: "Tides" });
-    await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
-    expect(said(top())).toBe("Started “Tides”");
-    useAppStore.setState({ settings: { language: "zh-CN" } as never });
-    expect(said(top())).toBe("已新建“Tides”");
-    const long = "Quarterly review of harbour dues and the wider coastal levy schedule 2026";
-    method("createMind").mockResolvedValue({ ...made, title: long });
-    await useAppStore.getState().createMind({ title: long, startQuestion: true });
-    const zh = said(top());
-    useAppStore.setState({ settings: { language: "en" } as never });
-    expect(zh).toMatch(/^已新建“Quarterly.*…/u);
-    expect(said(top())).toMatch(/^Started “Quarterly.*…/u);
-    expect(said(top())).not.toContain(long);
+    expect(top()).toBe(before);
+    expect(useUndo.getState().line?.change).toBe(before);
   });
 
   test("a Mind the core can't make is a problem, with no step to undo", async () => {
@@ -483,12 +457,12 @@ describe("making a Mind", () => {
   test("asking about Documents makes a Mind only when there is none to ask in", async () => {
     const scope = { folderIds: [], tagIds: [], documentIds: ["a"] };
     const bridge = { kind: "documents" as const, title: "a", count: 1, scope };
-    const change = await useAppStore.getState().askAbout(bridge);
-    expect(said(change)).toBe("Made a new Mind");
-    useUndo.setState({ done: [], undone: [], line: null });
-    useAppStore.setState({ minds: [made] });
-    expect(await useAppStore.getState().askAbout(bridge)).toBeUndefined();
+    await useAppStore.getState().askAbout(bridge);
+    expect(method("createMind")).toHaveBeenCalledTimes(1);
     expect(useUndo.getState().done).toEqual([]);
+    useAppStore.setState({ minds: [made] });
+    await useAppStore.getState().askAbout(bridge);
+    expect(method("createMind")).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -668,7 +642,7 @@ describe("making a Folder", () => {
 
   test("a Folder the core can't make is a problem in place, with no step to undo", async () => {
     method("createLibraryGroup").mockRejectedValue(
-      new Error("A folder with this name already exists."),
+      new Error("A Folder with this name already exists."),
     );
     expect(await useAppStore.getState().createFolder()).toBeNull();
     expect(useUndo.getState().done).toEqual([]);

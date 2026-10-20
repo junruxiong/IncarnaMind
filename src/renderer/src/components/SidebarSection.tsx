@@ -1,16 +1,8 @@
-import { type DragEvent, type ReactNode, useId } from "react";
+import { type ReactNode, useId } from "react";
+import type { DropEffect, DropProps } from "../dragDrop";
 import { useT } from "../i18n";
 import { ChevronDownLineIcon, ChevronRightLineIcon } from "./lineIcons";
 import { dropIntoClass } from "./sidebarRows";
-
-interface DropTarget {
-  active: boolean;
-  handlers: {
-    onDragOver(event: DragEvent): void;
-    onDragLeave(event: DragEvent): void;
-    onDrop(event: DragEvent): void;
-  };
-}
 
 /**
  * A section of the sidebar's tree. Its `actions` show only while the heading
@@ -35,7 +27,7 @@ export function SidebarSection({
   fold?: { open: boolean; toggle(): void };
   actions?: ReactNode;
   /** The heading takes a drop, with the "into" box while it would. */
-  drop?: DropTarget;
+  drop?: { over: DropEffect | null; props: DropProps };
   children: ReactNode;
 }) {
   const t = useT();
@@ -45,12 +37,12 @@ export function SidebarSection({
   return (
     <section data-testid={testId} className="mt-3">
       <div
-        {...drop?.handlers}
+        {...drop?.props}
         data-testid={`${testId}-heading`}
-        data-drop-target={drop?.active ? "true" : undefined}
+        data-drop-target={drop?.over ? "true" : undefined}
         title={tooltip}
         className={`group/section flex h-7 items-end gap-2 rounded-md pr-0.5 pb-1 pl-2 text-label ${
-          drop?.active ? dropIntoClass : ""
+          drop?.over ? dropIntoClass : ""
         }`}
       >
         {fold ? (

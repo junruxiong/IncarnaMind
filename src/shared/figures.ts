@@ -540,10 +540,17 @@ const EN_SCALES: Readonly<Record<string, number>> = {
   k: 3,
   lakh: 5,
   crore: 7,
+  // German reports: "1,2 Mio. €", "3,4 Mrd. €", "250 Tsd. €".
+  "mio.": 6,
+  mio: 6,
+  "mrd.": 9,
+  mrd: 9,
+  "tsd.": 3,
+  tsd: 3,
 };
 /** Scale words, with a space before the longer ones. Single letters only attached: "5 m" is often metres. */
 const EN_SCALE_AFTER =
-  /(?:[ \n]?(?:[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|[Ll]akh|[Cc]rore)s?|(?: ?(?:tn|trn|bn|Bn|BN|mn|Mn|MN|MM)|[kKmMbB])(?![A-Za-z0-9])|mm(?![A-Za-z0-9]))/y;
+  /(?:[ \n]?(?:[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|[Ll]akh|[Cc]rore)s?|[ \u00a0]?(?:Mio|Mrd|Tsd)(?:\.|(?![A-Za-z]))|(?: ?(?:tn|trn|bn|Bn|BN|mn|Mn|MN|MM)|[kKmMbB])(?![A-Za-z0-9])|mm(?![A-Za-z0-9]))/y;
 
 const CURRENCY_TOKEN =
   /(?:(?<![A-Za-z])(?:US|HK|AU|CA|NZ|SG|NT|MX|A|C|S|R)?\$|CN¥|JP¥|[¥€£₹₩₽₺฿₫₱]|(?<![A-Za-z])(?:USD|CNY|RMB|Rmb|HKD|EUR|GBP|JPY|AUD|CAD|SGD|TWD|CHF|INR|KRW|NZD|MOP|BRL|RUB|SEK|NOK|DKK|ZAR|MXN|THB|MYR|IDR|PHP|VND|TRY|SAR|AED|Rs\.?)|人民币|美元|港币|港元|欧元|日元|英镑)/;

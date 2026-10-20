@@ -213,7 +213,7 @@ describe("the problem line", () => {
     expect(problemText(one, zh)).toBe("1 个文档没有文字：扫描件");
     const two = problemOf([doc({ fileStatus: "missing" }), doc({ fileStatus: "missing" })]);
     if (!two) throw new Error("No problem found.");
-    expect(problemText(two, en)).toBe("2 Documents' files are missing");
+    expect(problemText(two, en)).toBe("2 Documents’ files are missing");
     expect(problemText(two, zh)).toBe("2 个文档的文件缺失");
   });
 
