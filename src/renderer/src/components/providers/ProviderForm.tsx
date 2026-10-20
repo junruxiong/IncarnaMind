@@ -13,6 +13,7 @@ import {
   catalogProvider,
   dataUseOf,
   endpointOf,
+  FIRST_RUN_BEST_EFFORT,
   fieldAccepts,
   fieldUrl,
   isPreset,
@@ -67,9 +68,6 @@ const ROW: Readonly<Record<Language, readonly CatalogId[]>> = {
   en: ["anthropic", "openai", "google", "deepseek", "kimi", "qwen"],
   "zh-CN": ["deepseek", "qwen", "kimi", "glm", "anthropic", "openai", "google"],
 };
-
-/** First run offers these two as well, though they are best-effort: its key line names them (#1375). */
-const FIRST_RUN_ALSO: readonly CatalogId[] = ["kimi", "glm"];
 
 /** What a provider's address field holds when it is chosen. */
 const fieldDefault = (kind: CatalogId): string => {
@@ -136,7 +134,7 @@ export function ProviderForm({
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
   onSaved(provider: ChatProvider): void;
-  /** Settings lists the best-effort providers too, under "More providers"; first run only the first-class ones. */
+  /** Lists every provider, the best-effort ones under "More…", as Settings does; without it, as first run does: the first-class ones and those the catalog marks `firstRun`. */
   withMoreProviders?: boolean;
   /** The provider chosen when the form opens: the one the User came from. DeepSeek in Chinese, else Anthropic. */
   initialKind?: CatalogId;
@@ -417,10 +415,9 @@ export function ProviderForm({
       className={inputClass}
     />
   );
-  // First run offers only the first-class providers (ADR-0019); Settings offers them all.
   const offered = withMoreProviders
     ? [...main, ...more]
-    : [...main, ...FIRST_RUN_ALSO.filter((each) => !main.includes(each))];
+    : [...main, ...FIRST_RUN_BEST_EFFORT.filter((each) => !main.includes(each))];
   const rowKinds = ROW[language].filter((each) => offered.includes(each));
   // A key that fits no service's prefix may be one the services under More… issue.
   const showMore =

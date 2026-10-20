@@ -53,5 +53,8 @@ A plan can also be reached through an experimental sign-in route, where the User
 
 ## Amendment: Kimi and GLM on the first-run key form (#1375)
 
-- The first-run key line names the providers that work for the language: DeepSeek, Qwen, Kimi and GLM in Chinese; OpenAI, Anthropic, Google, DeepSeek and Kimi in English. Each named provider opens its key form in one step, so Kimi and GLM, best-effort providers, are offered there too, though they still have no guide of their own and no release check.
-- The form's row of choices follows the language: in Chinese DeepSeek, Qwen, Kimi and GLM come first. Settings › Models is as before.
+This changes two earlier lines. Consequences says "The first-run setup lists only first-class providers", and the Add a provider amendment says "The tiers still decide what the first-run setup offers". Neither holds now: the first-run key form lists the first-class providers and Kimi and GLM, which the catalog marks with a `firstRun` field.
+
+- **Why.** In mainland China few first-class providers work (DeepSeek, Qwen and SiliconFlow), and Kimi and GLM are among the most used there. A first-run line that left them out sent those Users to Settings to find them.
+- **The line.** The first-run key line names the providers that work for the language: DeepSeek, Qwen, Kimi and GLM in Chinese; OpenAI, Anthropic, Google, DeepSeek and Kimi in English. Each named provider opens its key form in one step. The form's row of choices follows the language: in Chinese DeepSeek, Qwen, Kimi and GLM come first.
+- **What the tiers still decide.** Which providers have a key guide of their own, and which are tried by hand before a release. Kimi and GLM have neither.
