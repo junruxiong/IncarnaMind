@@ -54,6 +54,68 @@ async function mindWith(window: Page, text: string) {
   return { editor, note: editor.locator(":scope > p").first() };
 }
 
+interface Look {
+  t: number;
+  boxes: number[][];
+  writing: number;
+  working: number[] | null;
+  running: number[] | null;
+  applied: number[] | null;
+}
+
+/**
+ * Looks at the page after every change to it, from now on: where each paragraph, the working
+ * line, the running line and the Undo line are, and whether a Writing… line is drawn. A change
+ * to the page is what a person would see differ, and unlike a frame callback it still comes when
+ * the window isn't being painted, as on a busy runner. `enterAt` is when Enter was first pressed.
+ */
+async function watchPage(window: Page): Promise<void> {
+  await window.evaluate(() => {
+    const looks: Look[] = [];
+    const state = { enterAt: 0, looks };
+    (globalThis as unknown as { __watch: typeof state }).__watch = state;
+    addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key === "Enter") state.enterAt = performance.now();
+      },
+      { capture: true, once: true },
+    );
+    const rect = (selector: string) => {
+      const each = document.querySelector(selector);
+      if (!each) return null;
+      const box = each.getBoundingClientRect();
+      return [box.left, box.top, box.width, box.height];
+    };
+    const look = () => {
+      looks.push({
+        t: performance.now(),
+        boxes: [...document.querySelectorAll('[data-testid="mind-editor"] > p')].map((each) => {
+          const box = each.getBoundingClientRect();
+          return [box.top, box.height];
+        }),
+        writing: document.querySelectorAll('[data-testid="mind-writing"]').length,
+        working: rect('[data-testid="selection-edit-working"]'),
+        running: rect('[data-testid="menu-edit-line"]'),
+        applied: rect('[data-testid="applied-line"]'),
+      });
+    };
+    look();
+    new MutationObserver(look).observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: true,
+    });
+  });
+}
+
+async function watched(window: Page): Promise<{ enterAt: number; looks: Look[] }> {
+  return window.evaluate(
+    () => (globalThis as unknown as { __watch: { enterAt: number; looks: Look[] } }).__watch,
+  );
+}
+
 test("typing in the menu's Edit with AI field and pressing Enter changes the text in place, in English and in Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
@@ -187,57 +249,23 @@ test("an edit from the menu shows no Writing… line, and nothing around the tex
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Shorten this slowly");
 
-  // Every frame from just before Enter until the change is applied: where each paragraph is,
-  // whether a Writing… line is on the page, and where the working line is.
-  await window.evaluate(() => {
-    const frames: unknown[] = [];
-    (globalThis as unknown as { __frames: unknown[] }).__frames = frames;
-    const tick = () => {
-      const boxes = [...document.querySelectorAll('[data-testid="mind-editor"] > p')].map(
-        (each) => {
-          const { top, height } = each.getBoundingClientRect();
-          return [top, height];
-        },
-      );
-      const pill = document.querySelector('[data-testid="selection-edit-working"]');
-      frames.push({
-        boxes,
-        writing: document.querySelectorAll('[data-testid="mind-writing"]').length,
-        applied: document.querySelector('[data-testid="applied-line"]') !== null,
-        pill: pill ? [pill.getBoundingClientRect().left, pill.getBoundingClientRect().top] : null,
-      });
-      if (!document.querySelector('[data-testid="applied-line"]')) requestAnimationFrame(tick);
-    };
-    tick();
-  });
+  await watchPage(window);
   await window.keyboard.press("Enter");
   await expect(editor.getByTestId("applied-line")).toBeVisible({ timeout: 40_000 });
-  const frames = await window.evaluate(
-    () =>
-      (
-        globalThis as unknown as {
-          __frames: {
-            boxes: number[][];
-            writing: number;
-            applied: boolean;
-            pill: number[] | null;
-          }[];
-        }
-      ).__frames,
-  );
-  const streaming = frames.filter((frame) => !frame.applied);
+  const { looks } = await watched(window);
+  const streaming = looks.filter((each) => each.applied === null);
   const first = streaming[0];
-  if (!first) throw new Error("No frame was recorded before the change applied.");
-  expect(streaming.some((frame) => frame.pill !== null)).toBe(true);
-  for (const frame of streaming) {
-    expect(frame.writing).toBe(0);
-    expect(frame.boxes).toEqual(first.boxes);
-    const [top = 0, height = 0] = frame.boxes[2] ?? [];
-    if (frame.pill !== null) expect(frame.pill[1]).toBeGreaterThanOrEqual(top + height - 1);
+  if (!first) throw new Error("Nothing was looked at before the change applied.");
+  expect(streaming.some((each) => each.working !== null)).toBe(true);
+  for (const each of streaming) {
+    expect(each.writing).toBe(0);
+    expect(each.boxes).toEqual(first.boxes);
+    const [top = 0, height = 0] = each.boxes[2] ?? [];
+    if (each.working !== null) expect(each.working[1]).toBeGreaterThanOrEqual(top + height - 1);
   }
   // The working line doesn't slide sideways as the words come in.
   const lefts = new Set(
-    streaming.flatMap((frame) => (frame.pill ? [Math.round(frame.pill[0] ?? 0)] : [])),
+    streaming.flatMap((each) => (each.working ? [Math.round(each.working[0] ?? 0)] : [])),
   );
   expect([...lefts]).toHaveLength(1);
   await expect(paragraphs.nth(1)).toHaveText("The tides here are strong and regular.");
@@ -285,44 +313,7 @@ for (const sidebar of ["shown", "hidden"] as const) {
     await slideSelect(window, paragraphs.first(), "The tides here are very strong");
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.type("Shorten this slowly");
-    // The clock is the page's own: when Enter is pressed, and when each line first shows.
-    await window.evaluate(() => {
-      type Frame = {
-        t: number;
-        running: number[] | null;
-        applied: number[] | null;
-        text: number[][];
-      };
-      const frames: Frame[] = [];
-      const state = { enterAt: 0, frames };
-      (globalThis as unknown as { __run: typeof state }).__run = state;
-      addEventListener(
-        "keydown",
-        (event) => {
-          if (event.key === "Enter") state.enterAt = performance.now();
-        },
-        { capture: true, once: true },
-      );
-      const rect = (selector: string) => {
-        const each = document.querySelector(selector);
-        if (!each) return null;
-        const box = each.getBoundingClientRect();
-        return [box.left, box.top, box.width, box.height];
-      };
-      const tick = () => {
-        frames.push({
-          t: performance.now(),
-          running: rect('[data-testid="menu-edit-line"]'),
-          applied: rect('[data-testid="applied-line"]'),
-          text: [...document.querySelectorAll('[data-testid="mind-editor"] > p')].map((each) => {
-            const box = each.getBoundingClientRect();
-            return [box.top, box.height];
-          }),
-        });
-        if (!document.querySelector('[data-testid="applied-line"]')) requestAnimationFrame(tick);
-      };
-      tick();
-    });
+    await watchPage(window);
     await window.keyboard.press("Enter");
     await expect(window.getByTestId("selection-edit-working")).toBeVisible();
     await pointAndClick(window, paragraphs.last());
@@ -339,33 +330,21 @@ for (const sidebar of ["shown", "hidden"] as const) {
     await expect(window.getByTestId("sidebar-toggle-dot")).toHaveCount(0);
     await expect(editor.getByTestId("applied-line")).toBeVisible({ timeout: 40_000 });
 
-    const { enterAt, frames } = await window.evaluate(
-      () =>
-        (
-          globalThis as unknown as {
-            __run: {
-              enterAt: number;
-              frames: {
-                t: number;
-                running: number[] | null;
-                applied: number[] | null;
-                text: number[][];
-              }[];
-            };
-          }
-        ).__run,
-    );
-    const shown = frames.filter((frame) => frame.running !== null);
+    const { enterAt, looks } = await watched(window);
+    const shown = looks.filter((each) => each.running !== null);
     const first = shown[0];
     const last = shown.at(-1);
-    const landed = frames.find((frame) => frame.applied !== null);
-    if (!first || !last || !landed)
-      throw new Error("The running or the Undo line was never drawn.");
+    const landed = looks.find((each) => each.applied !== null);
+    if (!first || !last || !landed) {
+      throw new Error(
+        `The running or the Undo line was never seen: ${looks.length} looks, ${shown.length} with the running line.`,
+      );
+    }
     // Nothing shows for the first 300 ms of the request, which starts after Enter.
     expect(first.t - enterAt).toBeGreaterThanOrEqual(300);
     // The Undo line takes the running line's box, and nothing around it moves with the swap.
     expect(landed.applied).toEqual(last.running);
-    expect(landed.text).toEqual(last.text);
+    expect(landed.boxes).toEqual(last.boxes);
     await app.close();
   });
 }
