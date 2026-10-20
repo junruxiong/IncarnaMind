@@ -48,12 +48,13 @@ describe("A currency the Document doesn't state", () => {
     });
   });
 
-  // protects=only a currency the Document names counts: "元" inside 单元, a "$" on another figure elsewhere, "HK$" in the same Passage and a lowercase "php" don't name the one the sentence adds; fails_when=any of these hides the added currency; no_claim=none beyond protects.
+  // protects=only a currency the Document names counts: "元" inside 单元, a "$" on another figure elsewhere, "HK$" in the same Passage and a lowercase "php" don't name the one the sentence adds, and a scale its table states ("in thousands") doesn't hide it; fails_when=any of these hides the added currency; no_claim=none beyond protects.
   test.each([
     ["第三单元 薪酬\n年薪为 54,000，按月支付。", "年薪为 54,000元。", "元"],
     [`${STATED}. The relocation allowance is HK$8,000.`, "The annual salary is $54,000.", "$"],
     [STATED, "The annual salary is $54,000.", "$", `The signing bonus is $5,000.\n${STATED}.`],
     [STATED, "The annual salary is PHP 54,000.", "PHP", `The portal runs on php.\n${STATED}.`],
+    ["Revenue by region (in thousands)\nNorth\t54,000", "North's revenue was $54m.", "$"],
   ])("%j doesn't name it", (cited, claim, currency, document = cited) => {
     expect(unitNotStated(claim, read(cited, document))).toMatchObject({
       kind: "currency",
