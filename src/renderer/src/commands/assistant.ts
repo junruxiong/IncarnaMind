@@ -15,6 +15,7 @@ import {
   stopWriting,
   useConversations,
 } from "../conversations";
+import { requestEditField } from "../editor/selectionCommands";
 import { startEditing } from "../editWithAi";
 import { assistantTabOf, groupsMerged } from "../layoutSlice";
 import { useAppStore } from "../store";
@@ -65,12 +66,15 @@ export function focusComposer(): void {
 
 /**
  * ⌘J: the assistant's composer. From a note with text selected in it, the
- * composer says what to change in that text (Edit with AI…, #93), as Cursor's ⌘K does.
+ * Edit with AI… field of the selection menu takes the cursor; where that menu
+ * can't open (all of the Mind selected), the composer says what to change in
+ * the selection.
  */
 function askOrEdit(): void {
   const note = noteHandle.current;
-  if (note && !note.editor.isDestroyed && note.editor.view.hasFocus()) {
-    startEditing(note.editor, note.mindId);
+  if (note && !note.editor.isDestroyed) {
+    if (requestEditField(note.editor)) return;
+    if (note.editor.view.hasFocus()) startEditing(note.editor, note.mindId);
   }
   focusComposer();
 }
