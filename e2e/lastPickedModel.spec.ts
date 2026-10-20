@@ -14,6 +14,7 @@ import {
   pointAndClick,
   removeDataFolder,
   setWindowSize,
+  showSettingsPage,
 } from "./app";
 
 /**
@@ -176,10 +177,9 @@ test("the Answers default applies on a fresh install, and changing it in Setting
 
   await setLanguage(window, "zh-CN");
   await window.getByRole("button", { name: "设置" }).click();
+  const settingsZh = await showSettingsPage(window, "models");
   await expect(
-    window
-      .getByTestId("settings")
-      .getByText("新的 Mind 和对话先用你上次选的模型；还没选过，就用这个。"),
+    settingsZh.getByText("新的 Mind 和对话先用你上次选的模型；还没选过，就用这个。"),
   ).toBeVisible();
 });
 
