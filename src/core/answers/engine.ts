@@ -582,6 +582,12 @@ export function searchToolDescription(languages: readonly DocumentLanguage[]): s
 const MARKER = /\[[\^=]\d{1,4}\]/;
 
 /**
+ * A step that has read the Documents and has written this much with no Citation marker in it is
+ * the model thinking aloud, not an Answer: every sentence about Documents carries one (#1344).
+ */
+const NOTES_CHARS = 1_500;
+
+/**
  * What a one-pass attempt yields when its provider refused the request before
  * anything came back: the temperature, if one was sent, or else `feature`;
  * or, for a request sized to a window (`estimated` tokens), that it was too
@@ -1599,6 +1605,10 @@ async function* toolLoop(
   const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
   let searching = 0;
+  /** A search has been called: what the model writes now should carry Citations. */
+  let searched = false;
+  /** The model wrote notes instead of an Answer: its run is stopped and the Answer fails. */
+  const rambling = new AbortController();
   /** The reply that stands if the model, asked once more, fails: as it was before the last ask. */
   let standing: string | null = null;
   let again: readonly RunMessage[] | null = null;
@@ -1676,10 +1686,11 @@ async function* toolLoop(
         (call) => recording(offered.get(call.tool)) && askedForFixes.get(call.id) === false,
       ),
     temperature,
-    signal,
+    signal: AbortSignal.any([signal, rambling.signal]),
   });
   for await (const event of runs()) {
     if (signal.aborted) return;
+    if (rambling.signal.aborted) continue;
     switch (event.type) {
       case "reasoning":
         yield event;
@@ -1689,6 +1700,10 @@ async function* toolLoop(
         // A new step's text goes on from the last kept text in a new paragraph.
         if (stepText === "" && keptText !== "" && !/\s$/.test(keptText)) text = `\n\n${text}`;
         stepText += text;
+        if (searched && stepText.length > NOTES_CHARS && !MARKER.test(stepText)) {
+          rambling.abort();
+          break;
+        }
         yield* release(releasable(keptText + stepText));
         break;
       }
@@ -1710,6 +1725,7 @@ async function* toolLoop(
         if (!called) break;
         calls.set(event.id, called);
         stepTools.push(called);
+        if (called === search) searched = true;
         if (called === search && searching++ === 0) {
           yield { type: "phase", phase: "searching" };
         }
@@ -1840,6 +1856,13 @@ async function* toolLoop(
         return;
       }
     }
+  }
+  if (rambling.signal.aborted && !signal.aborted) {
+    if (released > 0) yield { type: "text-retracted", length: released };
+    yield {
+      type: "failed",
+      error: { kind: "no-answer", message: "The model wrote its notes instead of an Answer." },
+    };
   }
 }
 
