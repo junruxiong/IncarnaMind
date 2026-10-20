@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { displayName } from "../../../../shared/documentNames";
+import { moveIntoFolder } from "../../folderDrag";
 import { useT } from "../../i18n";
 import { selectedOn } from "../../selection";
 import { useAppStore } from "../../store";
@@ -62,13 +63,11 @@ export function DocumentMoveTo() {
       onChoose={(folderId) => {
         // From a row, the focus goes with what it moved; from the selection's bar, it stays there.
         const fromRow = request?.anchor.closest("[data-document-id]") != null;
-        void useAppStore
-          .getState()
-          .moveToFolder({ documentIds: [...ids] }, folderId)
-          .then(() => {
-            if (fromRow) requestAnimationFrame(() => focusRowOf(only));
-          });
+        void moveIntoFolder({ documentIds: [...ids] }, folderId).then(() => {
+          if (fromRow) requestAnimationFrame(() => focusRowOf(only));
+        });
       }}
+      onCreate={(name) => void useAppStore.getState().createFolder({ documentIds: [...ids] }, name)}
       onClose={() => useDocumentMove.getState().hide()}
     />
   );
