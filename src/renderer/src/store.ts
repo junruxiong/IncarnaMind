@@ -36,7 +36,14 @@ import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
 import { tagLinks } from "../../shared/tagLinks";
-import { deleted, linkedFolderPaused, linkedFolderShown, renamed, retagged } from "./changes";
+import {
+  deleted,
+  documentsAdded,
+  linkedFolderPaused,
+  linkedFolderShown,
+  renamed,
+  retagged,
+} from "./changes";
 import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
@@ -485,6 +492,13 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
   const push = (change: Undoable) => useUndo.getState().push(change);
+  /** Moves Documents to Recently deleted, those of them still there: one the User already deleted is left. */
+  const removeDocuments = async (ids: readonly string[]) => {
+    const live = new Set((await core.listDocuments()).map((each) => each.id));
+    for (const id of ids) if (live.has(id)) await core.deleteDocument(id);
+    documentUpdates.flush();
+    set((state) => ({ documents: state.documents.filter((each) => !ids.includes(each.id)) }));
+  };
   const showLinked = (linked: LinkedFolder) =>
     set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
 
@@ -662,7 +676,9 @@ export const useAppStore = create<AppState>()((set, get) => {
     documentUpdates.flush();
     const known = new Set(get().documents.map((each) => each.id));
     const result =
-      paths.length > 0 ? await core.addDocuments([...paths]) : { documents: [], skipped: [] };
+      paths.length > 0
+        ? await core.addDocuments([...paths])
+        : { documents: [], skipped: [], added: [] };
     const linkable: LinkingFolder[] = folders.map((path) => ({ path, preview: null, error: null }));
     const skipped = [...notOnDisk];
     for (const { path } of result.skipped) {
@@ -690,6 +706,16 @@ export const useAppStore = create<AppState>()((set, get) => {
       };
     });
     offerLinks(linkable);
+    const [first] = result.added;
+    if (first === undefined) return;
+    const shown = result.documents.find((each) => each.id === first);
+    push(
+      documentsAdded(
+        shown ? displayName(shown) : "",
+        result.added.map((id) => ({ kind: "document", id })),
+        () => removeDocuments(result.added),
+      ),
+    );
   };
 
   /** Dropped or picked files' paths, and the names of those that aren't on disk. */

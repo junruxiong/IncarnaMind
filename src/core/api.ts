@@ -3505,6 +3505,8 @@ export interface AddDocumentsResult {
   documents: Document[];
   /** Files that were not added. */
   skipped: SkippedFile[];
+  /** The Documents this call made new, in order. A file in the Library already is in `documents` and not here. */
+  added: string[];
   /** The batch of the new Documents: "documents.batch" events report its progress. */
   batchId: string;
 }

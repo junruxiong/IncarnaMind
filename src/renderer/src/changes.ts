@@ -60,6 +60,29 @@ export function deleted(
   };
 }
 
+/**
+ * Documents added: undone by moving the ones this add brought in to Recently deleted, done again
+ * by bringing those back. Those that were in the Library already are not in `refs`.
+ */
+export function documentsAdded(
+  shown: Shown,
+  refs: RestoreRef[],
+  remove: () => Promise<unknown>,
+): Undoable {
+  const count = refs.length;
+  return {
+    said: (t) =>
+      count > 1
+        ? t("undo.documentsAdded", { count })
+        : t("undo.documentAdded", { name: shownIn(t, shown) }),
+    name: (t) => t("undo.name.addDocuments"),
+    undo: async () => {
+      await remove();
+    },
+    redo: () => core.restore(refs),
+  };
+}
+
 /** A Linked folder paused or resumed: undone and done again by setting it as it was and as it is. */
 export function linkedFolderPaused(
   shown: string,

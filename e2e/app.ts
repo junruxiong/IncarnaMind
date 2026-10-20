@@ -1181,6 +1181,13 @@ export async function catchCopies(window: Page): Promise<void> {
 export const copied = (window: Page) =>
   window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
 
+/** What the Edit menu's Undo would take back now, by its label. */
+export const undoMenuItem = (app: ElectronApplication) =>
+  app.evaluate(({ Menu }) => {
+    const item = Menu.getApplicationMenu()?.getMenuItemById("edit.undo");
+    return { label: item?.label ?? "", enabled: item?.enabled ?? false };
+  });
+
 /** Switches the interface's language, as Settings does. */
 export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
   return window.evaluate(

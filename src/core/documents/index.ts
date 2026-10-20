@@ -2175,7 +2175,11 @@ export function createDocuments(options: DocumentsOptions) {
       added?: (documentId: string) => void,
     ): Promise<Omit<AddDocumentsResult, "batchId">> {
       const paths = parsePaths(input);
-      const results = await library.addFiles(paths, added);
+      const brought: string[] = [];
+      const results = await library.addFiles(paths, (documentId) => {
+        brought.push(documentId);
+        added?.(documentId);
+      });
       const documents: Document[] = [];
       const skipped: SkippedFile[] = [];
       results.forEach((result, at) => {
@@ -2189,7 +2193,7 @@ export function createDocuments(options: DocumentsOptions) {
           });
         }
       });
-      return { documents, skipped };
+      return { documents, skipped, added: brought };
     },
 
     /** See the library's `newVersionFrom`: a newer draft of a Word file imported before (#720). */
