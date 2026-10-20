@@ -38,19 +38,31 @@ export function readinessKey(readiness: Extract<ChatReadiness, { ready: false }>
 
 export const catalogIdOf = (provider: ChatProvider) => provider.catalogId ?? provider.kind;
 
+/** The region a click on a catalog entry means: the one asked for, else the interface language's own (Kimi), else its first. */
+export function regionFor(
+  catalogId: string,
+  endpoint: string | null,
+  language: Language,
+): string | null {
+  const catalog = catalogProvider(catalogId);
+  return catalog
+    ? (endpointOf(catalog, endpoint ?? defaultRegion(catalogId, language))?.id ?? null)
+    : null;
+}
+
 /**
  * The provider a click on a catalog entry opens, if one is saved: for a hosted provider the one
- * on the region asked for (its first when none), so a Kimi saved on China is not one on International.
- * A server the User gives can be added again at another address, so it is never "saved".
+ * on the region it means, so a Kimi saved on China is not one on International. A server the User
+ * gives can be added again at another address, so it is never "saved".
  */
 export function savedProviderFor(
   providers: readonly ChatProvider[],
   catalogId: string,
   endpoint: string | null,
+  language: Language,
 ): ChatProvider | undefined {
   if (catalogId === "openai-compatible") return undefined;
-  const catalog = catalogProvider(catalogId);
-  const region = catalog ? (endpointOf(catalog, endpoint)?.id ?? null) : null;
+  const region = regionFor(catalogId, endpoint, language);
   return providers.find(
     (each) => catalogIdOf(each) === catalogId && (region === null || each.endpoint === region),
   );
@@ -91,6 +103,10 @@ export function providerLabel(provider: ChatProvider, t: Translate, language: La
 /** Who receives the data, for messages like "Questions are off: you chose not to send to {service}". */
 export const serviceName = (provider: ChatProvider, t: Translate, language: Language) =>
   provider.service?.name ?? providerLabel(provider, t, language);
+
+/** A Kimi key belongs to the region it was made in: the interface's language says which. */
+export const defaultRegion = (catalogId: string, language: Language): string =>
+  catalogId === "kimi" ? (language === "zh-CN" ? "cn" : "intl") : "";
 
 /** The host of a server address, or null while it isn't one yet. */
 function hostOf(baseUrl: string): string | null {

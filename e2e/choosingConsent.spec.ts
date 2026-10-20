@@ -121,7 +121,7 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
     .click();
   await expectSends(form.getByTestId("provider-sends"), SENDS_EN);
   await acceptPlainTextKeys(window, form);
-  await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
+  await form.getByLabel(/^API key/).fill("sk-proj-not-a-real-key");
   await form.getByTestId("provider-sends").scrollIntoViewIfNeeded();
   await screenshot(window, "choosing-line-setup-en");
   await form.getByTestId("provider-use-key").click();

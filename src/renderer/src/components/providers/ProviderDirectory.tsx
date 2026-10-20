@@ -87,7 +87,7 @@ export function ProviderDirectory({
                 <Tile
                   key={entry.id}
                   entry={entry}
-                  added={savedProviderFor(providers, entry.id, region) !== undefined}
+                  added={savedProviderFor(providers, entry.id, region, language) !== undefined}
                   onOpen={() => onOpen(entry.id, region)}
                 />
               );

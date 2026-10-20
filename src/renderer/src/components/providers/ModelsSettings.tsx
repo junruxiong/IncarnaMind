@@ -28,7 +28,7 @@ import { PlansSettings } from "./PlansSettings";
 import { ProviderDirectory } from "./ProviderDirectory";
 import { logoIdOf, ProviderLogo } from "./ProviderLogo";
 import { ProviderPage, providerName, type RemovedProvider } from "./ProviderPage";
-import { catalogIdOf, savedProviderFor } from "./shared";
+import { catalogIdOf, regionFor, savedProviderFor } from "./shared";
 
 type View =
   | { page: "list" }
@@ -40,6 +40,7 @@ const ANSWERS_TARGET = ["chat-model"] as const;
 const DIRECTORY_TARGET = ["add-provider"] as const;
 
 export function ModelsSettings() {
+  const language = useLanguage();
   const readiness = useAppStore((state) => state.chatReadiness);
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
@@ -112,15 +113,10 @@ export function ModelsSettings() {
     groups?.find((each) => each.provider.id === providerId);
 
   const pageFor = (catalogId: string, endpoint: string | null): View => {
-    const saved = savedProviderFor(providers, catalogId, endpoint);
-    const catalog = catalogProvider(catalogId);
+    const saved = savedProviderFor(providers, catalogId, endpoint, language);
     return saved
       ? { page: "provider", providerId: saved.id }
-      : {
-          page: "add",
-          catalogId,
-          endpoint: catalog ? (endpointOf(catalog, endpoint)?.id ?? null) : null,
-        };
+      : { page: "add", catalogId, endpoint: regionFor(catalogId, endpoint, language) };
   };
 
   const added = (provider: ChatProvider) => {
