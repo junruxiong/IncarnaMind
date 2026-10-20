@@ -14,11 +14,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
-<<<<<<< HEAD
-import { DetailsLine } from "../DetailsLine";
 import { KeyCharacterLine } from "../KeyCharacterLine";
-=======
->>>>>>> origin/main
 import { ProblemMark } from "../ProblemLine";
 import {
   buttonClass,

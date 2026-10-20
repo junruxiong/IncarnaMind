@@ -169,3 +169,31 @@ test("a key with spaces and invisible characters around it is cleaned and tested
     fake.server.close();
   }
 });
+
+test("a key that names another service and holds an invisible character gets the character line, not the form's", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 900, 900);
+    await acceptPlainTextKeys(window);
+    const settings = await openSettings(window, "models");
+    const form = await addProviderForm(settings, "kimi");
+    const key = form.locator('input[type="password"]');
+    const said = form.getByTestId("key-character-line");
+    const wrong = form.getByTestId("provider-key-wrong");
+
+    await key.fill("sk-proj-abc123\u200Bdef456");
+    await expect(said).toContainText("(U+200B)");
+    await expect(wrong).toHaveCount(0);
+    await expect(form.getByTestId("provider-use-key")).toBeDisabled();
+
+    await key.fill("sk-proj-abc123def456");
+    await expect(said).toHaveCount(0);
+    await expect(wrong).toContainText("This is OpenAI’s key");
+
+    await key.fill("\u200Bsk-proj-abc123def456\u200B");
+    await expect(said).toHaveCount(0);
+    await expect(wrong).toContainText("This is OpenAI’s key");
+  } finally {
+    await app.close();
+  }
+});

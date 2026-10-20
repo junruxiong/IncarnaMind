@@ -22,6 +22,7 @@ import {
 } from "../../../../core/providers/catalog/providers";
 import type { Role } from "../../../../core/providers/catalog/types";
 import { serviceForUrl } from "../../../../core/providers/service";
+import { checkApiKey } from "../../../../shared/apiKey";
 import type { MessageKey } from "../../../../shared/i18n";
 import { gap } from "../../../../shared/i18n/join";
 import { modelName } from "../../../../shared/modelName";
@@ -245,15 +246,11 @@ export function ProviderForm({
               : modelId.trim() === ""
                 ? "providers.form.needsModel"
                 : null;
-<<<<<<< HEAD
   const complete =
     kind !== null &&
     missing === null &&
     key.stray === null &&
     (!local || server.status?.running === true);
-
-=======
-  const complete = kind !== null && missing === null && (!local || server.status?.running === true);
   const keyCheck = useKeyCheck(
     kind !== null && kind !== "openai-compatible" && !local ? kind : null,
     apiKey,
@@ -263,7 +260,6 @@ export function ProviderForm({
   useEffect(() => {
     if (keyLineShown) keyLine.current?.scrollIntoView({ block: "nearest" });
   }, [keyLineShown]);
->>>>>>> origin/main
   const shortName = (option: CatalogId) =>
     option === "qwen"
       ? t("providers.kind.short.qwen")
@@ -312,11 +308,14 @@ export function ProviderForm({
 
   const typeKey = (value: string) => {
     key.type(value, baseUrl);
+    const { key: given, stray } = checkApiKey(value);
     // Spaces around the same key change nothing, and leave an agreement to use it where it was.
-    if (value.trim() === apiKey.trim()) return;
+    if (given === key.text) return;
     setSwitchedFrom(null);
     const named =
-      only || kind === null || kind === "openai-compatible" || local ? null : serviceOfKey(value);
+      only || kind === null || kind === "openai-compatible" || local || stray !== null
+        ? null
+        : serviceOfKey(given);
     if (named !== null && named !== kind && offered.includes(named)) {
       choose(named, { keepKey: true, from: kind });
     }
@@ -426,7 +425,7 @@ export function ProviderForm({
   // A key that fits no service's prefix may be one the services under More… issue.
   const showMore =
     moreOpen ||
-    (!keyCheck.check.ok && keyCheck.check.service === null && apiKey.trim().startsWith("sk-"));
+    (!keyCheck.check.ok && keyCheck.check.service === null && key.text.startsWith("sk-"));
   const underMore = offered.filter((each) => !rowKinds.includes(each));
 
   return (
@@ -561,13 +560,8 @@ export function ProviderForm({
             <input
               type="password"
               value={apiKey}
-<<<<<<< HEAD
-              onChange={(event) => key.type(event.target.value, baseUrl)}
-              onBlur={() => local && key.text !== "" && void server.detect(apiKey, fieldUsed)}
-=======
               onChange={(event) => typeKey(event.target.value)}
-              onBlur={() => local && apiKey.trim() !== "" && void server.detect(apiKey, fieldUsed)}
->>>>>>> origin/main
+              onBlur={() => local && key.text !== "" && void server.detect(apiKey, fieldUsed)}
               autoComplete="off"
               spellCheck={false}
               ref={keyField}

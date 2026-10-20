@@ -157,13 +157,8 @@ export function ProviderPage({
 
   const saveKey = async (event: FormEvent) => {
     event.preventDefault();
-<<<<<<< HEAD
     const apiKey = key.text;
-    if (apiKey === "" || key.stray || !someModel) return;
-=======
-    const apiKey = key.apiKey.trim();
-    if (apiKey === "" || !someModel || keyCheck.blocked) return;
->>>>>>> origin/main
+    if (apiKey === "" || key.stray || !someModel || keyCheck.blocked) return;
     setSaving(true);
     setKeyError(null);
     try {
@@ -318,11 +313,7 @@ export function ProviderPage({
             <button
               type="submit"
               data-testid="provider-page-save-key"
-<<<<<<< HEAD
-              disabled={saving || !someModel || key.stray !== null}
-=======
-              disabled={saving || !someModel || keyCheck.blocked}
->>>>>>> origin/main
+              disabled={saving || !someModel || key.stray !== null || keyCheck.blocked}
               className={buttonClass}
             >
               {t("models.provider.saveKey")}
@@ -350,16 +341,13 @@ export function ProviderPage({
             </a>
           )}
         </div>
-<<<<<<< HEAD
         {key.stray && <KeyCharacterLine id={`${id}-stray`} stray={key.stray} />}
-=======
         <KeyCheckLine
           check={keyCheck.check}
           provider={name}
           nameOf={(catalogId) => keyProviderName(catalogId, t, language)}
           onAnyway={() => keyCheck.agree()}
         />
->>>>>>> origin/main
         {refusedHere && refused && <KeyRefusedLine id={`${id}-refused`} refused={refused} />}
         {keyError && (
           <p
