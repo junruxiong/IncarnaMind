@@ -308,7 +308,6 @@ test("In Chinese and a narrow window: the same, in Chinese", async () => {
   await expect(pageMenu.getByTestId("page-from")).toHaveText("来自 Harbour report");
 });
 
-// The organize fixtures' annual statement: three tables of figures under their captions (#1368).
 const STATEMENT = join(__dirname, "../tests/fixtures/organize/files/2025年度财务报表.pdf");
 
 for (const [language, width] of [

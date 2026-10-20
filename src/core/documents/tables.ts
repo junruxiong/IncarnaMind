@@ -41,7 +41,6 @@ export interface FoundTable {
 
 /** Wider than a space, narrower than a column's gap: in font sizes. */
 const WORD_GAP = 0.4;
-/** Two baselines this close, in font sizes, are one row. */
 const BASELINE = 0.5;
 const MIN_ROWS = 3;
 const MAX_HEADING = 80;
@@ -50,7 +49,6 @@ const MAX_CELL = 56;
 
 const widthOf = (text: string) =>
   [...text].reduce((width, character) => width + (CJK_EDGE.test(character) ? 2 : 1), 0);
-/** A table's headings take this many rows at most: rows above them aren't its. */
 const MAX_HEADING_ROWS = 3;
 
 const FIGURE =
@@ -69,7 +67,6 @@ const join = (a: string, b: string) =>
         ? a + b
         : `${a} ${b}`;
 
-/** A pdf.js text item's place: where it starts, how wide it is, its size, and whether it reads level. */
 export function textItemOf(item: object) {
   if (!("str" in item) || typeof item.str !== "string") return null;
   const transform = "transform" in item && Array.isArray(item.transform) ? item.transform : [];
@@ -108,7 +105,6 @@ export function textLayerRows(items: readonly object[]): (Row & { items: object[
   for (const item of items) {
     const placed = textItemOf(item);
     if (!placed?.level || placed.str.trim() === "") {
-      // A space or a line end stays with the row of the text before it.
       last?.items.push(item);
       continue;
     }
@@ -265,14 +261,27 @@ function gridOf(
   if (spans.length < 2) return null;
   // Over the row of headings next to the body, a row heads the columns only if it fills them, or
   // groups the ones right of the labels (2025 over Q1 and Q2): a form's fields above aren't headings.
+  // The labels' own heading may sit level with the groups, or centred in its merged cell between
+  // rows: it is theirs when a row above it heads the columns. A bullet's line starts left of them.
+  const overLabels = (fragment: Fragment) =>
+    fragment.right <= (spans[1]?.left ?? Number.POSITIVE_INFINITY);
+  const groups = (fragment: Fragment) => fragment.left > (spans[0]?.right ?? 0);
+  const overFigures = (fragment: Fragment) =>
+    fragment.left >= (spans[1]?.left ?? 0) - fragment.size && widthOf(fragment.text) <= MAX_CELL;
   let dropped = headingCount;
+  let top = headingCount;
   while (dropped > 0) {
     const row = rows[dropped - 1] ?? [];
-    const adjacent = dropped === headingCount;
-    const grouping = row.every((fragment) => fragment.left > (spans[0]?.right ?? 0));
-    if (!adjacent && row.length < spans.length && !grouping) break;
+    const heads =
+      dropped === headingCount ||
+      row.length >= spans.length ||
+      row.every(groups) ||
+      (row.some(groups) && row.every((fragment) => overLabels(fragment) || overFigures(fragment)));
+    if (heads) top = dropped - 1;
+    else if (!row.every(overLabels)) break;
     dropped--;
   }
+  dropped = top;
   const headingRows = rows.slice(dropped, headingCount);
 
   const body: TableGrid["rows"] = [];
@@ -287,7 +296,6 @@ function gridOf(
       if (column === 0 && /[:：]$/.test(text)) {
         body.push({ cells, section: true });
       } else {
-        // A label or a cell that wrapped onto a line of its own.
         previous.cells[column] = join(previous.cells[column] ?? "", text);
       }
       continue;
@@ -318,8 +326,11 @@ function gridOf(
       return;
     }
     // An upper heading names the columns from the one it starts over to the next one's.
-    const starts = row.map((fragment) => startColumn(fragment, spans));
-    row.forEach((fragment, at) => {
+    const groupings = row.filter((fragment) => !overLabels(fragment));
+    const starts = groupings.map((fragment) => startColumn(fragment, spans));
+    for (const fragment of row.filter(overLabels))
+      headings[0] = join(headings[0] ?? "", fragment.text);
+    groupings.forEach((fragment, at) => {
       const from = starts[at] ?? 0;
       const to = starts[at + 1] ?? spans.length;
       for (let column = from; column < Math.max(to, from + 1); column++) {
@@ -382,7 +393,10 @@ export function findTables(rows: readonly Row[]): FoundTable[] {
       .findIndex((row) =>
         row.fragments.some((each) => isFigure(each.text) && !YEAR.test(each.text.trim())),
       );
-    const first = at + Math.max(0, firstBody - MAX_HEADING_ROWS);
+    // Headings in two levels may break the run above its first row (a centred 2025 over Q1 and Q2):
+    // a run that starts with headings may take rows above it, never the table before's.
+    const lowest = firstBody > 0 ? (found.at(-1)?.last ?? -1) + 1 : at;
+    const first = Math.max(lowest, at + firstBody - MAX_HEADING_ROWS);
     const made =
       end - first >= MIN_ROWS ? gridOf(rows.slice(first, end).map((row) => row.fragments)) : null;
     if (made) {

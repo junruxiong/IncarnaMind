@@ -1,5 +1,5 @@
 {
-  "about": "Tables Verify reads from the text layer of PDF fixtures (#1368): each table's column headings and its rows' cells, as a person reads them off the page, and pages that hold no table though their text sits in columns. tests/eval/tableSet.test.ts scores the reader against them.",
+  "about": "Tables Verify reads from the text layer of PDF fixtures (#1368), and of two printed from HTML in files/: a two-level heading centred over its columns, as Word, Excel and HTML set merged cells, and headings set left: each table's column headings and its rows' cells, as a person reads them off the page, and pages that hold no table though their text sits in columns. tests/eval/tableSet.test.ts scores the reader against them.",
   "tables": [
     {
       "file": "tests/fixtures/organize/files/2025年度财务报表.pdf",
@@ -548,6 +548,78 @@
           "",
           "7.648",
           ""
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/Quarterly sales by channel.pdf",
+      "page": 1,
+      "headings": [
+        "Channel",
+        "2025 Q1",
+        "2025 Q2",
+        "2024 Q1",
+        "2024 Q2"
+      ],
+      "rows": [
+        [
+          "Retail",
+          "1,200",
+          "1,340",
+          "1,100",
+          "1,150"
+        ],
+        [
+          "Online",
+          "860",
+          "910",
+          "700",
+          "760"
+        ],
+        [
+          "Wholesale",
+          "430",
+          "455",
+          "480",
+          "470"
+        ],
+        [
+          "Total",
+          "2,490",
+          "2,705",
+          "2,280",
+          "2,380"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/Cash position.pdf",
+      "page": 1,
+      "headings": [
+        "Account",
+        "Closing balance",
+        "Opening balance"
+      ],
+      "rows": [
+        [
+          "Cash",
+          "3,820",
+          "3,145"
+        ],
+        [
+          "Deposits",
+          "1,250",
+          "1,400"
+        ],
+        [
+          "Overdraft",
+          "(220)",
+          "(310)"
+        ],
+        [
+          "Net cash",
+          "4,850",
+          "4,235"
         ]
       ]
     }

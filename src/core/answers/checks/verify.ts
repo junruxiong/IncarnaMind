@@ -3,9 +3,10 @@
  * User's Documents.
  *
  * 1. `verifyDocument` adds the PDF to the Library, or finds it there, waits
- *    until its text is read, and makes a Mind of it: a paragraph to a Block,
- *    each Block's page recorded, all of it third-party text (#78). The Mind's
- *    settings say which Document it verifies (src/shared/verification.ts).
+ *    until its text is read, and makes a Mind of it: its paragraphs, and its
+ *    tables as tables (#1368), with each Block's page and each table row's,
+ *    all of it third-party text (#78). The Mind's settings say which
+ *    Document it verifies (src/shared/verification.ts).
  * 2. `findClaims` has the model name its sentences that make claims (./claims)
  *    and records them there.
  * 3. `verifyClaims` checks each claim as Check against Documents does, with
@@ -82,7 +83,6 @@ export interface VerifyOptions {
   readText(documentId: string): DocumentText;
   /** A PDF's text-layer pages that hold a table, laid out (#1368); none when it can't be read again. */
   readTables(documentId: string): Promise<ReadonlyMap<number, PagePart[]>>;
-  /** A PDF's scanned pages, with where each recognized line is. */
   readScanned(documentId: string): ScannedText;
   createMind(title: string, folderId: string | null): Mind;
   defaultModel(): ChatModelChoice | null;
