@@ -22,7 +22,7 @@ import {
   citationStyleIn,
   setCitationStyle,
 } from "../shared/mindCitationStyle";
-import { mindModelOf } from "../shared/mindModel";
+import { mindModelOf, sameModel, setMindModel } from "../shared/mindModel";
 import {
   DEFAULT_MIND_STYLE,
   exportedFamily,
@@ -1669,10 +1669,26 @@ export function createCore(adapters: CoreAdapters): Core {
   });
 
   // Find support and Check against Documents (#96): check Runs that can only search and cite.
-  const startInWritingStyle = (mindId: string) => {
+  // The model a new Mind starts on is the one last chosen here. The Answers default needs no
+  // copy: a Mind with no choice follows it.
+  const modelForNewMind = (): ChatModelChoice | null => {
+    const { device, user } = settings.get();
+    const { lastChatModel } = device;
+    return lastChatModel &&
+      chat.exists(lastChatModel.providerId) &&
+      !sameModel(lastChatModel, user.chatModel)
+      ? lastChatModel
+      : null;
+  };
+  const startNewMind = (mindId: string) => {
     const style = settings.get().user.newMindStyle;
-    if (sameStyle(style, DEFAULT_MIND_STYLE)) return;
-    content.editSettings(mindId, (mindSettings) => writeMindStyle(mindSettings, style));
+    const model = modelForNewMind();
+    const styled = !sameStyle(style, DEFAULT_MIND_STYLE);
+    if (!styled && !model) return;
+    content.editSettings(mindId, (mindSettings) => {
+      if (styled) writeMindStyle(mindSettings, style);
+      if (model && mindSettings.doc) setMindModel(mindSettings.doc, model);
+    });
   };
   /** A new Mind, in the citation style last chosen for a Mind in its Folder, as its own choice (#289). */
   /**
@@ -1704,7 +1720,7 @@ export function createCore(adapters: CoreAdapters): Core {
     if (style !== null) {
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
     }
-    startInWritingStyle(mind.id);
+    startNewMind(mind.id);
     mindsChanged();
     usageData.record({ event: "mind_created", fields: {} });
     return mind;
@@ -2780,7 +2796,7 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     createMind: (title, folderId) => {
       const mind = minds.create(parseCreateMindInput({ title, folderId }));
-      startInWritingStyle(mind.id);
+      startNewMind(mind.id);
       mindsChanged();
       return mind;
     },
@@ -3133,10 +3149,16 @@ export function createCore(adapters: CoreAdapters): Core {
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),
     updateSettings: async (patch) => {
-      // The default chat model, and the quick-tasks and image models, must be on a saved provider.
+      // Each chat model chosen (default, last, quick tasks, images) must be on a saved provider.
       const user = isRecord(patch) && isRecord(patch.user) ? patch.user : {};
+      const device = isRecord(patch) && isRecord(patch.device) ? patch.device : {};
       const chatModel = user.chatModel;
-      for (const choice of [chatModel, user.quickTasksModel, user.imageModel]) {
+      for (const choice of [
+        chatModel,
+        user.quickTasksModel,
+        user.imageModel,
+        device.lastChatModel,
+      ]) {
         if (isChatModelChoice(choice) && !chat.exists(choice.providerId)) {
           throw new InvalidInputError("That chat provider doesn't exist.");
         }

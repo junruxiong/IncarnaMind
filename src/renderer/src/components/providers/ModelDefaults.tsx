@@ -228,14 +228,13 @@ export function RoleSelect({
     const choice = choiceOf(next);
     if (role === "chatModel" && !choice) return;
     setValue(next);
-    void updateSettings({
-      user:
-        role === "chatModel"
-          ? { chatModel: choice }
-          : role === "quickTasksModel"
-            ? { quickTasksModel: choice }
-            : { imageModel: choice },
-    });
+    void updateSettings(
+      role === "chatModel"
+        ? { user: { chatModel: choice }, device: { lastChatModel: choice } }
+        : {
+            user: role === "quickTasksModel" ? { quickTasksModel: choice } : { imageModel: choice },
+          },
+    );
     onChosen?.();
   };
 

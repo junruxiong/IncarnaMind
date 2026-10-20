@@ -2314,7 +2314,7 @@ export const zhCN = {
   "models.other.reason.computerUse": "需要计算机操作接口",
   "models.defaults.title": "默认模型",
   "models.defaults.answers": "回答",
-  "models.defaults.answers.tip": "新的 Mind 和对话都先用它，可以在输入框里切换。",
+  "models.defaults.answers.tip": "新的 Mind 和对话先用你上次选的模型；还没选过，就用这个。",
   "models.defaults.quickTasks": "快速任务",
   "models.defaults.quickTasks.tip": "改写搜索、推荐标签。小而便宜的模型就够用。",
   "models.defaults.images": "读取图片",

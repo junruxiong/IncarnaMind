@@ -209,6 +209,7 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingPanelHidden: true,
     meetingHelpKeys: {},
     motion: "system",
+    lastChatModel: null,
   },
   validators: {
     sidebarWidth: isPaneWidth,
@@ -229,6 +230,7 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingHelpKeys: isHelpKeys,
     motion: (value): value is MotionPreference =>
       MOTION_PREFERENCES.some((preference) => preference === value),
+    lastChatModel: isModelSetting,
   },
 };
 

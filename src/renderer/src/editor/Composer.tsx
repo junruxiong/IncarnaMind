@@ -506,7 +506,9 @@ export function Composer({
       text,
       focus: selection.focus(),
       scope: composerScope(current, folderId),
-      model: mind ? mindModelOf(mind.doc) : useComposer.getState().modelWithoutMind,
+      model: mind
+        ? mindModelOf(mind.doc)
+        : (useAppStore.getState().settings?.device.lastChatModel ?? null),
       forcedSkill: draft.skill,
     });
     if (asked) {
