@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -87,6 +87,28 @@ test("a copy that was killed outright leaves the data folder free for the next s
   const minds = await (await coreOf(next.window)).evaluate(async (api) => api.listMinds());
   expect(minds.map((each) => each.title)).toEqual(["Kept"]);
   await next.app.close();
+});
+
+// protects=lock files left as text are emptied at start, so the folder's lock works again, and a second start quits; fails_when=the text stays in them (the lock is off for good); no_claim=the race over such files, which the unit test covers.
+test("lock files that aren't databases are emptied, and the folder is locked all the same", async () => {
+  const text = "not a database, only text that is long enough ".repeat(8);
+  await writeFile(join(dataDir, "instance.lock"), text);
+  await writeFile(join(dataDir, "instance.owner"), text);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  const { execPath, argv, env } = await app.evaluate(() => ({
+    execPath: process.execPath,
+    argv: process.argv.slice(1),
+    env: { ...process.env } as Record<string, string>,
+  }));
+  const again = spawn(execPath, argv, { env, stdio: "ignore" });
+  const [code] = await exited(again);
+  expect(code).toBe(0);
+  expect(app.windows()).toHaveLength(1);
+  expect(await logOf(dataDir)).toContain("app.anotherCopyRunning");
+  expect((await stat(join(dataDir, "instance.lock"))).size).toBe(0);
+  expect((await stat(join(dataDir, "instance.owner"))).size).toBe(0);
+  await app.close();
 });
 
 const freePort = () =>

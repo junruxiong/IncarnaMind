@@ -1,9 +1,12 @@
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { lockInstance } from "../../src/main/instanceLock";
 
 /**
  * One of the copies in tests/main/instanceLock.test.ts. `race`: asks for the lock at the start of
  * each round, together with the other copy, holds it a moment and says when it did; `hold`: takes
- * it, says so and waits to be killed; `try`: asks once and says what it got.
+ * it, says so and waits to be killed; `try`: asks once and says what it got. `race` with
+ * `garbage` first writes text into one or both of the lock files, before each round.
  */
 const [mode, folder, ...rest] = process.argv.slice(2);
 
@@ -24,20 +27,44 @@ if (mode === "try") {
   console.log(JSON.stringify({ held: lock.held }));
   setInterval(() => undefined, 1_000);
 } else {
-  const [start, rounds, roundMs, holdMs] = rest.map(BigInt) as [bigint, bigint, bigint, bigint];
-  const results: { held: boolean; from?: string; to?: string }[] = [];
-  for (let round = 0n; round < rounds; round++) {
-    waitUntil(start + round * roundMs * 1_000_000n);
+  // Every round starts when all the copies are ready for it, so a copy that was slowed down in one
+  // round doesn't put the others out of step in the rest.
+  const [rounds, holdMs, copies, index] = rest.slice(0, 4).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+  ];
+  const garbage = rest[4] === "garbage";
+  const text = "not a database, only text that is long enough ".repeat(8);
+  const syncFolder = join(folder ?? "", "..", `${basename(folder ?? "")}-sync`);
+  mkdirSync(syncFolder, { recursive: true });
+  const ready = (round: number) => {
+    writeFileSync(join(syncFolder, `${round}-${index}`), "");
+    for (let other = 0; other < copies; other++) {
+      while (!existsSync(join(syncFolder, `${round}-${other}`))) {
+        // Spinning keeps the copies within microseconds of each other.
+      }
+    }
+  };
+  const results: { held: boolean; at: string; from?: string; to?: string }[] = [];
+  for (let round = 0; round < rounds; round++) {
+    if (garbage && index === 0) {
+      const kind = round % 3;
+      if (kind !== 1) writeFileSync(join(folder ?? "", "instance.lock"), text);
+      if (kind !== 0) writeFileSync(join(folder ?? "", "instance.owner"), text);
+    }
+    ready(round);
     const lock = lockInstance(folder ?? "", report);
+    const from = now();
     if (!lock.held) {
-      results.push({ held: false });
+      results.push({ held: false, at: String(from) });
       continue;
     }
-    const from = now();
-    waitUntil(from + holdMs * 1_000_000n);
+    waitUntil(from + BigInt(holdMs) * 1_000_000n);
     const to = now();
     lock.release();
-    results.push({ held: true, from: String(from), to: String(to) });
+    results.push({ held: true, at: String(from), from: String(from), to: String(to) });
   }
   console.log(JSON.stringify(results));
 }

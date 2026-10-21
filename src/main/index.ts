@@ -37,7 +37,7 @@ import { isPanelWindow, serveMeetingPanel } from "./meetings/panel";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } from "./platform";
-import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
+import { busyDialog, DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { realHomeProblem } from "./testHome";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
 import { guardQuit } from "./unsavedChanges";
@@ -70,6 +70,12 @@ const instanceLock = app.requestSingleInstanceLock()
   ? lockInstance(app.getPath("userData"), (what, error) => logger.exception(what, error))
   : null;
 const ownsDataFolder = instanceLock?.held ?? false;
+if (instanceLock?.timedOut) {
+  logger.error("app.dataFolderBusy", { folder: app.getPath("userData") });
+  const language = resolveLanguage("system", app.getPreferredSystemLanguages());
+  const { title, detail } = busyDialog(language);
+  dialog.showErrorBox(title, detail);
+}
 if (!ownsDataFolder) {
   logger.info("app.anotherCopyRunning");
   // Not `quit`: its `app.quit` line in the log would read as the running copy's.

@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
+import { rmSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -102,10 +103,13 @@ describe("one copy of the app holds a data folder", () => {
         const child = spawn(process.execPath, [bundle, "try", where], {
           stdio: ["ignore", "pipe", "inherit"],
         });
+        let out = "";
+        child.stdout.on("data", (chunk: Buffer) => {
+          out += chunk.toString();
+        });
         child.on("error", reject);
-        child.stdout.on("data", (line: Buffer) =>
-          resolve({ ...JSON.parse(line.toString()), after: Date.now() - began }),
-        );
+        // On its exit: it has let the folder go by then.
+        child.on("exit", () => resolve({ ...JSON.parse(out), after: Date.now() - began }));
       });
 
     // Another copy's try: it holds instance.lock for a moment and not instance.owner.
@@ -124,28 +128,51 @@ describe("one copy of the app holds a data folder", () => {
     owner.close();
   });
 
-  test("a lock file that isn't a database is reported, and the app starts all the same", async () => {
+  test("a folder busy with nobody holding it past the deadline is not started on, and says so", async () => {
     const where = await folder();
-    await writeFile(
-      join(where, "instance.lock"),
-      "not a database, only text that is long enough ".repeat(8),
-    );
-    const reported: string[] = [];
-    const lock = lockInstance(where, (what) => reported.push(what));
-    expect(reported).toEqual(["app.instanceLockFailed"]);
-    expect(lock.held).toBe(true);
+    const stopped = new DatabaseSync(join(where, "instance.lock"));
+    stopped.exec("PRAGMA locking_mode = EXCLUSIVE");
+    stopped.exec("BEGIN EXCLUSIVE");
+    const began = performance.now();
+    const lock = lockInstance(where, report, 300);
+    stopped.close();
+    expect(lock).toMatchObject({ held: false, timedOut: true });
+    expect(performance.now() - began).toBeGreaterThanOrEqual(300);
   });
 
-  // protects=two copies asking in the same instant never both hold the folder; fails_when=two holders overlap, or none holds it; no_claim=Electron's own lock.
-  test("two copies asking in the same instant, 400 times: one holds it each time", async () => {
+  test("a lock file that isn't a database is emptied and taken, and the next copy finds it held", async () => {
     const where = await folder();
-    const rounds = 400;
-    const start = process.hrtime.bigint() + 3_000_000_000n;
-    const run = () =>
-      new Promise<{ held: boolean; from?: string; to?: string }[]>((resolve, reject) => {
+    const text = "not a database, only text that is long enough ".repeat(8);
+    await writeFile(join(where, "instance.lock"), text);
+    await writeFile(join(where, "instance.owner"), text);
+    const lock = lockInstance(where, report);
+    expect(lock.held).toBe(true);
+    expect(lockInstance(where, report, 50)).toMatchObject({ held: false, timedOut: false });
+    lock.release();
+  });
+
+  /**
+   * `copies` processes asking for the folder together at the start of each of `rounds` rounds;
+   * `garbage`: with text in its lock files first. The rounds in which two held it at once, and
+   * those in which none did.
+   */
+  async function race(copies: number, rounds: number, garbage: boolean) {
+    type Result = { held: boolean; from?: string; to?: string };
+    const where = await folder();
+    const run = (index: number) =>
+      new Promise<Result[]>((resolve, reject) => {
         const child = spawn(
           process.execPath,
-          [bundle, "race", where, String(start), String(rounds), "60", "40"],
+          [
+            bundle,
+            "race",
+            where,
+            String(rounds),
+            "40",
+            String(copies),
+            String(index),
+            garbage && index === 0 ? "garbage" : "clean",
+          ],
           { stdio: ["ignore", "pipe", "inherit"] },
         );
         let out = "";
@@ -158,22 +185,35 @@ describe("one copy of the app holds a data folder", () => {
           else resolve(JSON.parse(out));
         });
       });
-    const [one, other] = await Promise.all([run(), run()]);
+    const results = await Promise.all(Array.from({ length: copies }, (_, copy) => run(copy)));
+    rmSync(`${where}-sync`, { recursive: true, force: true });
 
     const overlapping: number[] = [];
     const nobody: number[] = [];
     for (let round = 0; round < rounds; round++) {
-      const holders = [one[round], other[round]].filter((each) => each?.held);
+      const holders = results.flatMap((each) => (each[round]?.held ? [each[round]] : []));
       if (holders.length === 0) nobody.push(round);
-      const [a, b] = holders;
-      if (
-        a?.from &&
-        b?.from &&
-        BigInt(a.from) < BigInt(b.to ?? 0) &&
-        BigInt(b.from) < BigInt(a.to ?? 0)
-      )
-        overlapping.push(round);
+      const together = holders.some((a, at) =>
+        holders
+          .slice(at + 1)
+          .some(
+            (b) =>
+              BigInt(a?.from ?? 0) < BigInt(b?.to ?? 0) &&
+              BigInt(b?.from ?? 0) < BigInt(a?.to ?? 0),
+          ),
+      );
+      if (together) overlapping.push(round);
     }
-    expect({ overlapping, nobody }).toEqual({ overlapping: [], nobody: [] });
+    return { overlapping, nobody };
+  }
+
+  // protects=two copies asking in the same instant never both hold the folder, and one always does; fails_when=two holders overlap, or none holds it; no_claim=Electron's own lock.
+  test("two copies asking in the same instant, 400 times: one holds it each time", async () => {
+    expect(await race(2, 400, false)).toEqual({ overlapping: [], nobody: [] });
+  }, 120_000);
+
+  // protects=files that aren't databases are emptied and asked for again, and three copies racing over them still have one holder each time; fails_when=a garbage file turns the lock off, so two copies hold the folder; no_claim=Electron's own lock.
+  test("three copies racing over lock files full of text, 300 times: one holds it each time", async () => {
+    expect(await race(3, 300, true)).toEqual({ overlapping: [], nobody: [] });
   }, 120_000);
 });

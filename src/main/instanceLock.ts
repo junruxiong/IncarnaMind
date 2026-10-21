@@ -1,24 +1,28 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, truncateSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 const SQLITE_BUSY = 5;
+const SQLITE_NOTADB = 26;
 
-// A folder that stays busy with nobody holding it is a lock this can't make sense of: the app
-// starts, as it did before the lock, rather than never opening.
+// The folder staying busy with no copy holding it for this long means one has stopped between its
+// two locks, or something else holds `instance.lock`. Starting then could put two cores on one
+// database, so the app doesn't start.
 const GIVE_UP_AFTER_MS = 10_000;
 
 export interface InstanceLock {
   held: boolean;
+  /** The folder stayed busy until the deadline: nothing should start, and the User is told. */
+  timedOut: boolean;
   release(): void;
 }
 
 const sleep = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
-const isBusy = (error: unknown) =>
-  ((error as { errcode?: number }).errcode ?? 0) % 256 === SQLITE_BUSY;
+const code = (error: unknown) => ((error as { errcode?: number }).errcode ?? 0) % 256;
 
-/** Opens `file` and takes it exclusively until the connection is closed. */
+const NOT_HELD: InstanceLock = { held: false, timedOut: false, release: () => undefined };
+
 function takeExclusively(file: string): DatabaseSync {
   const db = new DatabaseSync(file);
   try {
@@ -32,7 +36,7 @@ function takeExclusively(file: string): DatabaseSync {
   }
 }
 
-/** Whether another copy holds `file` exclusively: a read, which takes only a shared lock, is refused. */
+// A read takes only a shared lock: a refusal means the file is held exclusively, by a copy that has the folder.
 function isHeld(file: string): boolean {
   const db = new DatabaseSync(file);
   try {
@@ -41,7 +45,7 @@ function isHeld(file: string): boolean {
     db.prepare("SELECT count(*) FROM sqlite_master").get();
     return false;
   } catch (error) {
-    if (isBusy(error)) return true;
+    if (code(error) === SQLITE_BUSY) return true;
     throw error;
   } finally {
     db.close();
@@ -56,38 +60,58 @@ function isHeld(file: string): boolean {
  * get it, and two cores then migrate one database (#1352).
  *
  * The copy that holds `instance.lock` also takes `instance.owner`, and nothing else does. A copy
- * that finds `instance.lock` busy reads `instance.owner`: held, a copy really has the folder and
- * this one gives up; free, the busy lock was another copy's try, which lets go in a moment, so
- * this one asks again. That way exactly one of two copies holds the folder, however the two are
- * scheduled. `report` gets a failure to lock that isn't another copy holding it; the app then
- * starts, as it did without the lock.
+ * that finds `instance.lock` busy lets go of everything it holds and reads `instance.owner`: held,
+ * a copy really has the folder and this one gives up; free, the busy lock was another copy's try,
+ * which lets go in a moment, so this one asks again. That way exactly one of two copies holds the
+ * folder, however the two are scheduled. A file that isn't a database is emptied in place and
+ * asked for again. `report` gets a failure that isn't one of these; the app then starts, as it did
+ * without the lock.
  */
 export function lockInstance(
   folder: string,
   report: (what: string, error: unknown) => void,
+  giveUpAfterMs = GIVE_UP_AFTER_MS,
 ): InstanceLock {
-  const give = Date.now() + GIVE_UP_AFTER_MS;
+  const lockFile = join(folder, "instance.lock");
+  const ownerFile = join(folder, "instance.owner");
+  const give = performance.now() + giveUpAfterMs;
   const held: DatabaseSync[] = [];
+  let emptyings = 0;
+  const emptied = (error: unknown, file: string) => {
+    if (code(error) !== SQLITE_NOTADB) return false;
+    // Emptying that doesn't make it a database is a failure to report, not a loop.
+    if (++emptyings > 6) throw error;
+    truncateSync(file, 0);
+    return true;
+  };
   try {
     mkdirSync(folder, { recursive: true });
     for (;;) {
+      let file = lockFile;
       try {
-        held.push(takeExclusively(join(folder, "instance.lock")));
-        held.push(takeExclusively(join(folder, "instance.owner")));
+        held.push(takeExclusively(lockFile));
+        file = ownerFile;
+        held.push(takeExclusively(ownerFile));
         return holding(held, report);
       } catch (error) {
         for (const db of held.splice(0)) db.close();
-        if (!isBusy(error)) throw error;
-        if (isHeld(join(folder, "instance.owner")))
-          return { held: false, release: () => undefined };
-        if (Date.now() >= give) throw error;
-        sleep(1 + Math.random() * 5);
+        if (emptied(error, file)) continue;
+        if (code(error) !== SQLITE_BUSY) throw error;
       }
+      try {
+        if (isHeld(ownerFile)) return NOT_HELD;
+      } catch (error) {
+        if (!emptied(error, ownerFile)) throw error;
+        continue;
+      }
+      if (performance.now() >= give)
+        return { held: false, timedOut: true, release: () => undefined };
+      sleep(1 + Math.random() * 5);
     }
   } catch (error) {
     for (const db of held.splice(0)) db.close();
     report("app.instanceLockFailed", error);
-    return { held: true, release: () => undefined };
+    return { held: true, timedOut: false, release: () => undefined };
   }
 }
 
@@ -98,6 +122,7 @@ function holding(
   let open = true;
   return {
     held: true,
+    timedOut: false,
     release() {
       if (!open) return;
       open = false;
