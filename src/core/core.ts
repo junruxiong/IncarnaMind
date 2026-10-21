@@ -171,7 +171,7 @@ import { createCaptureHealth } from "./meetings/health";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
-import { createMindIndex } from "./mindIndex";
+import { createMindIndex, lineUnderName } from "./mindIndex";
 import {
   createMinds,
   type NewMind,
@@ -2378,7 +2378,11 @@ export function createCore(adapters: CoreAdapters): Core {
     tags,
     library,
     mindsChanged,
-    mindsRestored: (mindIds) => wordImports.resume(mindIds),
+    mindsRestored: (mindIds) => {
+      // A Mind deleted before a restart has no lines in the index's memory, and a restore stores nothing.
+      for (const mindId of mindIds) mindIndex.contentStored(mindId);
+      wordImports.resume(mindIds);
+    },
     conversationsChanged,
     tagsChanged,
     tagged: announceTagged,
@@ -3160,6 +3164,13 @@ export function createCore(adapters: CoreAdapters): Core {
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
     searchMinds: async (query) => mindIndex.search(query),
+    listMindSnippets: async () => {
+      const leading = mindIndex.leadingLines();
+      return minds.list().flatMap((mind) => {
+        const text = lineUnderName(leading.get(mind.id) ?? [], mindName(mind));
+        return text ? [{ mindId: mind.id, text }] : [];
+      });
+    },
     searchDocumentText: async (query, options) => documents.searchText(query, options),
     renameConversation: async (conversationId, title) => {
       const conversation = conversations.rename(conversationId, title);

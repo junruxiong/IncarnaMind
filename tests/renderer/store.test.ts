@@ -937,6 +937,7 @@ describe("making a Folder", () => {
 
 describe("loading keeps a list the core pushed after reading it", () => {
   beforeEach(() => {
+    method("listMinds").mockResolvedValue([]);
     method("getSettings").mockResolvedValue({ device: { gettingStarted: { askedOwn: false } } });
     method("getExamples").mockResolvedValue({
       group: "credit",
