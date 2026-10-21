@@ -1924,6 +1924,12 @@ export function createCore(adapters: CoreAdapters): Core {
             : options.format === "markdown",
       },
     });
+  const modelInUseIn = (mindId: string) =>
+    chat.modelInUse(
+      content.readSettings(mindId, (mindSettings) =>
+        mindSettings.doc ? mindModelOf(mindSettings.doc) : null,
+      ),
+    );
   // Make this a Skill: the chat model drafts it from the Mind, on the chat flow's consent.
   const skillDrafts = createSkillDrafts({
     mindMarkdown: async (mindId) => {
@@ -1937,10 +1943,7 @@ export function createCore(adapters: CoreAdapters): Core {
         .map(({ question, answer }) => [`**${label}** ${question}`, answer].filter(Boolean));
       return [mind, ...asked.flat()].join("\n\n");
     },
-    modelFor: (mindId) =>
-      chat.modelInUse(
-        content.read(mindId, (blocks) => (blocks.doc ? mindModelOf(blocks.doc) : null)),
-      ),
+    modelFor: modelInUseIn,
     chat,
   });
   // New files: in the Output location, or inside a Linked folder the User allowed.
@@ -2863,6 +2866,7 @@ export function createCore(adapters: CoreAdapters): Core {
         text: translate(settings.get().language, helpLabel(kind)),
         mindId: meeting.mindId,
         scope: folderId ? { folderIds: [folderId], tagIds: [], documentIds: [] } : null,
+        model: modelInUseIn(meeting.mindId),
       });
     let asked: QuestionInput;
     if (input.conversationId !== undefined) asked = question(input.conversationId);

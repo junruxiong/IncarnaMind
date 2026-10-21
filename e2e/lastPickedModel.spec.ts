@@ -8,6 +8,7 @@ import {
   dismissChatSetup,
   frontMindName,
   launchApp,
+  motionSettled,
   nameMind,
   newMind,
   ollamaListing,
@@ -114,13 +115,18 @@ const setLanguage = async (window: Page, language: "zh-CN") =>
   );
 
 async function chooseInChip(window: Page, name: string): Promise<void> {
+  await motionSettled(window);
   await pointAndClick(window, chipOf(window));
   const menu = window.getByTestId("composer-model-menu");
-  await pointAndClick(window, menu.getByTestId("composer-model-option").filter({ hasText: name }));
+  const option = menu.getByTestId("composer-model-option").filter({ hasText: name });
+  await expect(option).toBeVisible();
+  await motionSettled(window);
+  await pointAndClick(window, option);
   await expect(menu).toBeHidden();
 }
 
 async function expectFoot(window: Page, text: string): Promise<void> {
+  await motionSettled(window);
   await pointAndClick(window, chipOf(window));
   const menu = window.getByTestId("composer-model-menu");
   await expect(menu).toContainText(text);
@@ -132,7 +138,6 @@ test("a model picked in one Mind is what a new Mind and an older one with no pic
   let window = await start();
   const providerId = await connectAnthropic(window, SONNET);
 
-  // A fresh install: nothing chosen yet, so the Answers default.
   await newMind(window);
   await nameMind(window, "Older");
   await expect(chipOf(window)).toHaveText("Claude Sonnet 5.5");
@@ -145,20 +150,17 @@ test("a model picked in one Mind is what a new Mind and an older one with no pic
   await expect.poll(() => lastPick(window)).toEqual({ providerId, modelId: HAIKU });
   expect((await settingsOf(window)).user.chatModel).toEqual({ providerId, modelId: SONNET });
 
-  // The Mind made before, which never had a pick of its own, follows it: chip and Answer.
   await openMindNamed(window, "Older");
   await expect(chipOf(window)).toHaveText("Claude Haiku 5.5");
   const older = await askInAssistant(window, "Which model answers?");
   await expect(await openSteps(window, older)).toContainText("Answered by Claude Haiku 5.5");
 
-  // So does a new Mind, and the menu's foot names it.
   await newMind(window);
   await expect(chipOf(window)).toHaveText("Claude Haiku 5.5");
   await expectFoot(window, "Default for new Minds: Claude Haiku 5.5");
   await setLanguage(window, "zh-CN");
   await expectFoot(window, "新 Mind 的默认模型：Claude Haiku 5.5");
 
-  // A Mind's own pick wins when the last pick moves on: it is kept, the others follow.
   await chooseInChip(window, "Claude Opus 5.5");
   await expect.poll(() => lastPick(window)).toEqual({ providerId, modelId: OPUS });
   await openMindNamed(window, "Picked");
@@ -187,7 +189,6 @@ test("the Answers default applies on a fresh install, and changing it in Setting
   await newMind(window);
   await expect(chipOf(window)).toHaveText("Claude Haiku 5.5");
 
-  // Another Answers default: it is the last pick now, so the next Mind starts on it.
   const settings = await openSettings(window, "models");
   const answers = settings.getByTestId("model-default-chatModel");
   await expect(answers).toHaveAccessibleDescription(

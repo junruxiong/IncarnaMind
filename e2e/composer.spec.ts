@@ -600,8 +600,6 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(await openSteps(window, answer)).toContainText("Answered by other-model");
 
-    // A new Mind starts on the model last chosen; by keyboard, the menu opens and closes again,
-    // and the default is chosen back.
     await pointAndClick(window, window.getByTestId("plus-menu"));
     await pointAndClick(window, window.getByTestId("plus-new-mind"));
     await nameMind(window, "Default model");
