@@ -170,12 +170,20 @@ test("A refused key stops Tagging after one request: one line says so, Check the
   }
   await setLanguage(window, "en");
 
+  // As on a refused Answer, Check the key opens that company's key field, with the refusal by it.
   await refused.getByTestId("tagging-key-refused-check").click();
   const settings = window.getByTestId("settings");
   await expect(settings).toHaveAttribute("data-page", "models");
-  await closeSettings(window);
+  const page = settings.getByTestId("provider-page");
+  await expect(page.getByTestId("provider-page-title")).toHaveText("OpenAI");
+  const key = page.getByTestId("provider-page-key");
+  await expect(key).toBeFocused();
+  await expect(page.getByTestId("provider-key-refused")).toHaveText("OpenAI refused this key.");
 
-  await useKey("sk-good");
+  await window.keyboard.type("sk-good");
+  await window.keyboard.press("Enter");
+  await expect(page.getByTestId("provider-key-refused")).toHaveCount(0);
+  await closeSettings(window);
   for (const name of ["Invoice 81", "Invoice 82", "Invoice 83", "Invoice 84"]) {
     await expect(item(window, name)).toHaveAttribute("data-tagging", "tagged");
   }

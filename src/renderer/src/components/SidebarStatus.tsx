@@ -7,6 +7,7 @@ import { organizeHeld, organizes, organizesNewDocuments } from "../../../shared/
 import { commands } from "../commands/registry";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
+import { useKeyRefusals } from "../keyRefusals";
 import { saidInLine } from "../lineNames";
 import { useCapturing, useMeetings } from "../meetings";
 import { downloadProgress } from "../modelDownload";
@@ -388,6 +389,10 @@ function useStatuses(): Status[] {
   );
   const taggingNeedsOk =
     taggingWaits && taggingService && !taggingService.allowed ? taggingService.service : null;
+  const refusedService = useTaggingService(
+    organizesNew ? "classification" : "tagging",
+    counts.keyRefused > 0,
+  );
   const places = useAppStore(
     useShallow((state) =>
       tagging || organizingNow ? taggingPlaces(state.documents, state.library) : [],
@@ -659,7 +664,7 @@ function useStatuses(): Status[] {
       action: {
         label: t("answer.error.checkKey"),
         testId: "tagging-key-refused-check",
-        run: () => openSettings("models"),
+        run: () => void useKeyRefusals.getState().checkService(refusedService?.service.id ?? null),
       },
     });
   }
