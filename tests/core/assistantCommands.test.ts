@@ -314,6 +314,34 @@ describe("Commands that reach outside IncarnaMind wait for the User (#1110)", {
     },
   );
 
+  // protects=a Word export the assistant starts waits for the User's one choice about marking the text IncarnaMind wrote: nothing is saved and the card says so, and once the User has chosen it saves; fails_when=the assistant's Word file marks or leaves the text out before the User chose, or says it saved; no_claim=the window's question.
+  test("a Word export waits for the choice about marking the text IncarnaMind wrote", async () => {
+    const model = calling(find("Tides", "mind"), run("mind.export", { format: "docx" }));
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const output = await createTempDataFolder();
+    await core.setOutputLocation(output);
+
+    const unanswered = await askAssistant(core, { text: "Export this to Word", mindId: mind.id });
+
+    expect(
+      commandCalls(unanswered).map((call) => [call.status, call.commandProblem?.wording?.key]),
+    ).toContainEqual(["failed", "error.commands.markAiTextAsk"]);
+    expect(await readdir(output)).toEqual([]);
+
+    const { user } = await core.getSettings();
+    await core.updateSettings({
+      user: {
+        exportOptions: {
+          ...user.exportOptions,
+          docx: { ...user.exportOptions.docx, markAiText: "leave" },
+        },
+      },
+    });
+    await askAssistant(core, { text: "Export this to Word", mindId: mind.id });
+
+    expect(await readdir(output)).toEqual(["Tides.docx"]);
+  });
+
   // protects=adding files from a folder asks first, listing the files of the kinds asked for that are right in it and nothing a link leads to outside it, then adds them, and Undo takes them out; fails_when=a file outside the folder is listed or read, or files are added before Allow; no_claim=how each file is processed.
   test("adding a folder's files asks first, then adds only those", async () => {
     const inbox = await createTempDataFolder();

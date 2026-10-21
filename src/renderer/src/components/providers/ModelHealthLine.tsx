@@ -1,10 +1,11 @@
 import { AnswerError } from "../../editor/AnswerView";
 import { useModelHealth } from "../../modelHealth";
+import { useModelInUse } from "../../modelInUse";
 import { useAppStore } from "../../store";
 
-/** Under the default Answers model: its provider's last real failure, as the failed Answer said it. */
+/** Under the Answers row: the last real failure of the provider of the model the assistant uses, as the failed Answer said it. */
 export function ModelHealthLine() {
-  const choice = useAppStore((state) => state.settings?.user.chatModel ?? null);
+  const choice = useModelInUse(null);
   const failure = useModelHealth((state) =>
     choice ? state.failures[choice.providerId] : undefined,
   );
