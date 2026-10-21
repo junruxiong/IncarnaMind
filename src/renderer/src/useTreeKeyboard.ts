@@ -61,6 +61,7 @@ function deleteFrom(row: HTMLElement): void {
     : [];
   const mixed = new Set(selection.map((each) => each.kind)).size > 1;
   const command = mixed ? "selection.delete" : DELETES[object.kind];
+  console.log("ZZ deleteFrom", JSON.stringify(object), JSON.stringify(selection), command);
   if (!command) return;
   commands
     .run(command, { selection, focus: object, surface: "sidebar" })
@@ -177,9 +178,11 @@ export function useTreeKeyboard(tree: RefObject<HTMLElement | null>) {
 
   return {
     onKeyDown(event: KeyboardEvent<HTMLElement>) {
+      console.log("ZZ tree keydown", event.key, event.defaultPrevented, (event.target as HTMLElement).tagName, (event.target as HTMLElement).getAttribute("role"), (event.target as HTMLElement).textContent);
       if (event.defaultPrevented || event.nativeEvent.isComposing || event.keyCode === 229) return;
       const row = event.target;
       if (!(row instanceof HTMLElement) || !row.matches(ROW)) return;
+      console.log("ZZ key", event.key, event.ctrlKey, (row as HTMLElement).textContent, document.activeElement?.textContent);
       if (isTreeDeleteKey(event)) {
         event.preventDefault();
         // A held key deletes the row it was pressed on, not the ones that come after it.

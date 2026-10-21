@@ -317,6 +317,12 @@ export const documentCommands: readonly Command[] = [
     appliesTo: ["document"],
     reversible: true,
     async run(ctx) {
+      console.log(
+        "ZZ document.delete run",
+        JSON.stringify(ctx.focus),
+        JSON.stringify(documentsOf(ctx).map((document) => document.name)),
+        JSON.stringify(store().documents.map((document) => document.name)),
+      );
       await store().deleteDocuments(documentsOf(ctx).map((document) => document.id));
     },
   },

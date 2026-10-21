@@ -169,7 +169,10 @@ export const commands = {
     const command = registered.get(id);
     if (!command) throw new Error(`There is no command ${id}.`);
     const ctx = { ...NO_CONTEXT, ...given };
-    if (!offered(command, ctx) || !isEnabled(command, ctx)) return undefined;
+    if (!offered(command, ctx) || !isEnabled(command, ctx)) {
+      console.log("ZZ not offered", id, JSON.stringify(ctx.focus), JSON.stringify(ctx.selection));
+      return undefined;
+    }
     const done: unknown = await command.run(ctx);
     // What a row's own action (`here`) hands back, such as a frame's handle, is no change to undo.
     const change = typeof done === "object" && done !== null ? (done as Undoable) : undefined;

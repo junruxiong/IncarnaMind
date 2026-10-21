@@ -114,7 +114,16 @@ const lineOf = (change: Undoable): UndoLineState => ({ id: ++lines, change });
 /** Undo and redo run one at a time, in the order asked, so a held ⌘Z steps back change by change. */
 let queue: Promise<void> = Promise.resolve();
 const inTurn = <T>(step: () => Promise<T>): Promise<T> => {
-  const turn = queue.then(step);
+  const asked = performance.now().toFixed(1);
+  console.log(`ZZ turn asked ${asked}`);
+  const turn = queue.then(async () => {
+    console.log(`ZZ turn start ${asked}`);
+    try {
+      return await step();
+    } finally {
+      console.log(`ZZ turn end ${asked}`);
+    }
+  });
   queue = turn.then(
     () => undefined,
     () => undefined,

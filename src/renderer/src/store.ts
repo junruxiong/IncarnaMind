@@ -442,11 +442,18 @@ const replaceLinked = (linkedFolders: LinkedFolder[], linked: LinkedFolder) =>
  * Library itself flushes them first, so nothing older lands on top of it.
  */
 const documentUpdates = createDocumentUpdates((changes) =>
-  useAppStore.setState((state) => ({
+  useAppStore.setState((state) => {
+    console.log(
+      "ZZ apply",
+      JSON.stringify([...changes.upserted.values()].map((each) => each.name)),
+      JSON.stringify([...changes.removed]),
+    );
+    return {
     documents: applyDocumentChanges(state.documents, changes.upserted, changes.removed),
     // Before the Library is loaded there is nothing to change: loading reads it whole.
     ...(state.library && { library: applyAssignments(state.library, changes.assignments) }),
-  })),
+    };
+  }),
 );
 
 /**
@@ -1352,22 +1359,27 @@ export const useAppStore = create<AppState>()((set, get) => {
       }),
 
     deleteDocuments: (ids) =>
+      console.log("ZZ deleteDocuments asked", JSON.stringify(ids)) ??
       attempt(() =>
         makeInTurn(async () => {
           const before = get().documents;
           // A second ⌘⌫ waits for the first: what that one took is gone by now.
           const asked = new Set(ids);
           const live = before.filter((each) => asked.has(each.id)).map((each) => each.id);
+          console.log("ZZ deleteDocuments turn", JSON.stringify(ids), JSON.stringify(live));
           if (live.length === 0) return;
           const first = before.find((each) => each.id === live[0]);
           const gone = new Set(live);
           const removed = before.filter((each) => gone.has(each.id));
           const at = new Map(before.map((each, index) => [each.id, index]));
           const placeOf = (document: Document) => at.get(document.id) ?? before.length;
-          const takeOut = () =>
+          const takeOut = () => {
+            console.log("ZZ takeOut", JSON.stringify(live));
             set((state) => ({ documents: state.documents.filter((each) => !gone.has(each.id)) }));
+          };
           const putBack = () =>
             set((state) => {
+              console.log("ZZ putBack", JSON.stringify(live));
               const here = new Set(state.documents.map((each) => each.id));
               const back = [...state.documents, ...removed.filter((each) => !here.has(each.id))];
               return { documents: back.sort((a, b) => placeOf(a) - placeOf(b)) };
@@ -1729,6 +1741,7 @@ followLayout((partial) => useAppStore.setState(partial));
 
 // Processing happens in the background: follow each Document's status as the core reports it.
 core.on("document.status", (changed) => {
+  console.log("ZZ event status", changed.name, changed.status);
   documentUpdates.upsert([changed]);
   const state = useAppStore.getState();
   if (isOwnDocument(changed, allExamples(state))) state.updateGettingStarted({ indexed: true });
@@ -1812,7 +1825,10 @@ core.on("keptCitationTexts.changed", (keptCitationTexts) => {
 });
 
 // Documents removed from the index, e.g. with their Linked folder.
-core.on("documents.removed", (removed) => documentUpdates.remove(removed));
+core.on("documents.removed", (removed) => {
+  console.log("ZZ event removed", JSON.stringify(removed));
+  documentUpdates.remove(removed);
+});
 
 // Documents whose files moved to another Folder on disk.
 core.on("documents.moved", (moved) => documentUpdates.upsert(moved));

@@ -621,6 +621,12 @@ test("Enter opens a row, Space peeks at a Document, F2 renames in place and Esc 
 
 test("⌘⌫ (Delete on Windows and Linux) moves the row to Recently deleted with the undo line, the focus goes on to the next row, and ⌘Z brings it back, twice and for a selection", async () => {
   const { app, window } = await launchApp(dataDir);
+  const logs: string[] = [];
+  const started = Date.now();
+  window.on("console", (message) => {
+    if (message.text().startsWith("ZZ")) logs.push(`${Date.now() - started} ${message.text()}`);
+  });
+  const step = (what: string) => logs.push(`${Date.now() - started} ZZ TEST ${what}`);
   try {
     await setWindowSize(app, window, 1400, 800);
     await dismissChatSetup(window);
@@ -652,20 +658,27 @@ test("⌘⌫ (Delete on Windows and Linux) moves the row to Recently deleted wit
     // The platform's own key, twice: each row goes in turn, and each is its own step of Undo.
     const key = process.platform === "darwin" ? "Meta+Backspace" : "Delete";
     await window.keyboard.press("End");
+    step("Delete 1");
     await window.keyboard.press(key);
     await expect(rows).toHaveCount(count - 1);
     await expect.poll(() => inTree(window)).toBe(true);
+    step("Delete 2");
     await window.keyboard.press(key);
     await expect(rows).toHaveCount(count - 2);
     await expect(line).toBeVisible();
+    step("Undo 1");
     await window.keyboard.press("ControlOrMeta+z");
     await expect(rows).toHaveCount(count - 1);
+    step("Undo 2");
     await window.keyboard.press("ControlOrMeta+z");
     await expect(rows).toHaveCount(count);
 
     // A held key deletes one row only: the press does, its repeats don't.
+    step("End");
     await window.keyboard.press("End");
+    step("Ctrl+Backspace");
     await window.keyboard.press("ControlOrMeta+Backspace");
+    step("expect 3");
     await expect(rows).toHaveCount(count - 1);
     await expect.poll(() => inTree(window)).toBe(true);
     await rows.last().dispatchEvent("keydown", {
@@ -729,6 +742,9 @@ test("⌘⌫ (Delete on Windows and Linux) moves the row to Recently deleted wit
     await expect(field).toBeFocused();
     await window.keyboard.press("Escape");
     await expect(loose(firstLoose)).toHaveCount(1);
+  } catch (error) {
+    console.log(`ZZLOGS\n${logs.join("\n")}`);
+    throw error;
   } finally {
     await app.close();
   }
