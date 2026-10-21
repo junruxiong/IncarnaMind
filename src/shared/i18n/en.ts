@@ -2700,7 +2700,7 @@ export const en = {
   "research.command": "Research…",
   "research.command.hint": "Searches the web and the Library, then drafts with Citations",
   "research.command.hint.libraryOnly":
-    "Searches the Library only, then drafts with Citations. {reason}",
+    "Searches the Library only, then drafts with Citations. {reason}.",
   "research.command.keywords": "deep research web sources",
   "research.needsMind": "Open a Mind to research for",
   "research.chip": "Research",
@@ -2725,7 +2725,6 @@ export const en = {
   "research.plan.time": "{from}–{to} min · {model}",
   "research.plan.start": "Start",
   "research.plan.cancel": "Cancel",
-  "research.plan.failed": "Couldn’t make a plan",
   "research.plan.failedBecause": "Couldn’t make a plan: {reason}",
   "research.plan.tryAgain": "Try again",
   "research.plan.noSteps": "Add a step to start",
@@ -3519,7 +3518,8 @@ export const en = {
   "error.research.plan": "Research needs a topic and a plan.",
   "error.research.model": "Choose a model to research with.",
   "error.research.plan.noSteps": "The model sent no steps.",
-  "error.research.plan.thoughtOnly": "The model only thought, and sent no steps.",
+  "error.research.plan.thoughtOnly":
+    "The model used its whole reply thinking and sent no steps. Write the steps yourself, or choose another model.",
   "error.question.notInMind": "That Question isn’t in this Mind.",
   "error.answer.notInConversation": "That Answer isn’t in this conversation.",
   "error.answer.questionGone": "The Question of this Answer has been deleted.",
