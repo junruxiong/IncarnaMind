@@ -50,6 +50,7 @@ import {
   openResearch,
   startResearch,
   useResearch,
+  useWebMissing,
   useWebReach,
 } from "../research";
 import type { ScopeChoice } from "../scope";
@@ -197,6 +198,10 @@ export function Composer({
   const [tellProblem, setTellProblem] = useState<string | null>(null);
   const chosenModel = useMindModel(mind?.doc ?? null);
   const webReach = useWebReach(chosenModel);
+  const webMissing = useWebMissing(webReach, chosenModel);
+  const researchHint = webMissing
+    ? t("research.command.hint.libraryOnly", { reason: webMissing })
+    : t("research.command.hint");
   const selection = useMindSelection(mind, editing !== undefined);
   const mindTitle = useAppStore((state) => {
     const own = state.minds.find((each) => each.id === mindId);
@@ -787,11 +792,7 @@ export function Composer({
           />
         )}
         {researching && !target && (
-          <span
-            data-testid="composer-research"
-            title={t("research.command.hint")}
-            className="question-skill"
-          >
+          <span data-testid="composer-research" title={researchHint} className="question-skill">
             <SearchLineIcon className="question-skill-icon" />
             <span className="truncate">{t("research.chip")}</span>
             <button
@@ -948,6 +949,7 @@ export function Composer({
               ref={list}
               id={listId}
               onResearch={mind ? chooseResearch : undefined}
+              researchHint={researchHint}
               skills={enabledSkills}
               describe={(each) => skillDescription(each, t)}
               query={picking.query}
