@@ -87,11 +87,6 @@ function wordsAfterThis(question: string): AfterThis | null {
   };
 }
 
-/**
- * The Documents whose names hold the words after "this", the most of them that any name holds;
- * `specific` when those words say more than a Document's word ("this employment agreement",
- * "这份劳动合同", not "this agreement" or "本合同").
- */
 function namedBy(
   { words, chinese }: AfterThis,
   documents: readonly NamedDocument[],
