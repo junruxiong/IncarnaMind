@@ -491,6 +491,7 @@ const PROVIDERS = [
     support: "best-effort",
     firstRun: true,
     group: "china",
+    alsoListedIn: "international",
     adapter: "moonshotai",
     endpoints: [
       {
