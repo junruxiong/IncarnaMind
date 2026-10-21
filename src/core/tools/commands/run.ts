@@ -66,8 +66,12 @@ export type CommandAsking = ((question: UserQuestion) => Promise<UserAnswer>) | 
 export interface MarkingSettled {
   /** The choice the file followed. */
   choice: MarkAiTextChoice;
-  /** Kept as the User's answer by this export: they gave it in the tray, or their request named it. */
-  kept: boolean;
+  /**
+   * Where it came from: the User gave it in the tray, or their request named it, and it is kept
+   * (`kept`); their request named it for this file only (`this-file`); or they chose it before
+   * (`earlier`). A Word export always says which, so the model never has to guess.
+   */
+  how: "kept" | "this-file" | "earlier";
 }
 
 export interface CommandsHost {
@@ -182,7 +186,13 @@ const plural = (count: number, one: string, many = `${one}s`) =>
 const markingSaid = (marking: MarkingSettled | null): string =>
   marking === null
     ? ""
-    : ` The text IncarnaMind wrote ${marking.choice === "mark" ? "is marked with comments" : "is left unmarked"}, as the User ${marking.kept ? "chose, and that choice is kept for every Word export" : "asked for this file"}.`;
+    : ` The text IncarnaMind wrote ${marking.choice === "mark" ? "is marked with comments" : "is left unmarked"} in this file, as the User ${
+        marking.how === "kept"
+          ? "chose just now, and that choice is kept for every Word export"
+          : marking.how === "this-file"
+            ? "asked for this file"
+            : "chose before for every Word export"
+      }.`;
 
 const same = (a: string, b: string) =>
   a.normalize("NFKC").trim().toLowerCase() === b.normalize("NFKC").trim().toLowerCase();

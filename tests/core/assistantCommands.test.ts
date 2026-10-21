@@ -9,7 +9,7 @@ import type {
   UserQuestionRequest,
 } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
-import { askAssistant } from "../helpers/assistant";
+import { askAssistant, lastResult } from "../helpers/assistant";
 import { answerEnded, askAndFinish, setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent } from "../helpers/core";
 import { waitForProcessing } from "../helpers/documents";
@@ -362,6 +362,10 @@ describe("Commands that reach outside IncarnaMind wait for the User (#1110)", {
     });
     expect((await core.getSettings()).user.exportOptions.docx.markAiText).toBe(kept);
     expect((await readdir(output)).sort()).toEqual(["Tides 2.docx", "Tides.docx"]);
+    // The second export, with the answer already kept, still says how the text was marked.
+    expect(lastResult(model)).toContain(
+      `${kept === "mark" ? "is marked with comments" : "is left unmarked"} in this file, as the User chose before for every Word export`,
+    );
     expect(commandCalls(answer).map((call) => call.status)).not.toContain("failed");
     expect(commandCalls(answer).find((call) => call.asked)?.asked?.answer).toMatchObject({
       chosen: [chose],
@@ -401,6 +405,10 @@ describe("Commands that reach outside IncarnaMind wait for the User (#1110)", {
     const answer = await askAssistant(core, { text: "Export this to Word", mindId: mind.id });
 
     expect(asked).toEqual([]);
+    // The second request names the other choice: followed for that file, the kept answer unchanged.
+    expect(lastResult(model)).toContain(
+      "is marked with comments in this file, as the User asked for this file",
+    );
     expect((await core.getSettings()).user.exportOptions.docx.markAiText).toBe("leave");
     expect((await readdir(output)).sort()).toEqual(["Tides 2.docx", "Tides.docx"]);
     expect(commandCalls(answer).map((call) => call.status)).not.toContain("failed");

@@ -1260,11 +1260,13 @@ export function createCore(adapters: CoreAdapters): Core {
               exportOptions: { ...preferences, docx: { ...preferences.docx, markAiText: choice } },
             },
           });
-          settled = { choice, kept: true };
+          settled = { choice, how: "kept" };
           options = optionsFor(format, settings.get().user.exportOptions);
         } else if (marking.named !== null && marking.named !== docx.markAiText && options) {
           options = { ...options, markAiText: marking.named === "mark" };
-          settled = { choice: marking.named, kept: false };
+          settled = { choice: marking.named, how: "this-file" };
+        } else {
+          settled = { choice: docx.markAiText, how: "earlier" };
         }
       }
       if (!options) throw new InvalidInputError({ key: "error.commands.markAiTextAsk" });
