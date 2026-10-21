@@ -1,5 +1,5 @@
 {
-  "about": "Tables Verify reads from the text layer of PDF fixtures (#1368), and of tables printed from HTML in files/: a two-level heading centred over its columns, as Word, Excel and HTML set merged cells, with the labels' heading in the middle or at the top of its merged cell; headings set left; a centred caption, title or page header just above one row of headings, or a caption, table number or page header set at both edges; Chinese statements whose title is centred above them, with their 编制单位 line; and one upper heading over every figure column (\"Year ended 31 December\"): each table's column headings and its rows' cells, as a person reads them off the page, and pages that hold no table though their text sits in columns. tests/eval/tableSet.test.ts scores the reader against them.",
+  "about": "Tables Verify reads from the text layer of PDF fixtures (#1368), and of tables printed from HTML in files/: a two-level heading centred over its columns, as Word, Excel and HTML set merged cells, with the labels' heading in the middle or at the top of its merged cell; headings set left; a centred caption, title or page header just above one row of headings, centred over the whole table or the page, or a caption, table number or page header set at both edges; Chinese statements whose title is centred above them, with their 编制单位 line; and one upper heading over every figure column (\"Year ended 31 December\"): each table's column headings and its rows' cells, as a person reads them off the page, and pages that hold no table though their text sits in columns. tests/eval/tableSet.test.ts scores the reader against them.",
   "tables": [
     {
       "file": "tests/fixtures/organize/files/2025年度财务报表.pdf",
@@ -943,6 +943,156 @@
           "Operating profit",
           "2,300",
           "1,950"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/Sales by channel and quarter, centred caption.pdf",
+      "page": 1,
+      "headings": [
+        "Channel",
+        "Q1",
+        "Q2",
+        "Q3"
+      ],
+      "rows": [
+        [
+          "Retail",
+          "1,200",
+          "1,340",
+          "1,280"
+        ],
+        [
+          "Online",
+          "860",
+          "910",
+          "990"
+        ],
+        [
+          "Wholesale",
+          "430",
+          "455",
+          "470"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/Sales by channel and quarter, caption 18 pt above.pdf",
+      "page": 1,
+      "headings": [
+        "Channel",
+        "Q1",
+        "Q2",
+        "Q3"
+      ],
+      "rows": [
+        [
+          "Retail",
+          "1,200",
+          "1,340",
+          "1,280"
+        ],
+        [
+          "Online",
+          "860",
+          "910",
+          "990"
+        ],
+        [
+          "Wholesale",
+          "430",
+          "455",
+          "470"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/Sales by channel, table at 70% under a page-centred caption.pdf",
+      "page": 1,
+      "headings": [
+        "Channel",
+        "Q1",
+        "Q2",
+        "Q3"
+      ],
+      "rows": [
+        [
+          "Retail",
+          "1,200",
+          "1,340",
+          "1,280"
+        ],
+        [
+          "Online",
+          "860",
+          "910",
+          "990"
+        ],
+        [
+          "Wholesale",
+          "430",
+          "455",
+          "470"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/各渠道季度销售额，居中表题.pdf",
+      "page": 1,
+      "headings": [
+        "项目",
+        "第一季度",
+        "第二季度",
+        "第三季度"
+      ],
+      "rows": [
+        [
+          "电商",
+          "1,200",
+          "1,340",
+          "1,280"
+        ],
+        [
+          "零售",
+          "860",
+          "910",
+          "990"
+        ],
+        [
+          "批发",
+          "430",
+          "455",
+          "470"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/华港控股有限公司2025年度销售表.pdf",
+      "page": 1,
+      "headings": [
+        "项目",
+        "第一季度",
+        "第二季度",
+        "第三季度"
+      ],
+      "rows": [
+        [
+          "电商",
+          "1,200",
+          "1,340",
+          "1,280"
+        ],
+        [
+          "零售",
+          "860",
+          "910",
+          "990"
+        ],
+        [
+          "批发",
+          "430",
+          "455",
+          "470"
         ]
       ]
     }

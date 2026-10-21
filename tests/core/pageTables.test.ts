@@ -119,6 +119,50 @@ describe("tables on a page", () => {
     expect(twoLevels[0]?.headings).toEqual(["Segment", "2025 Q1", "2025 Q2", "2024 Q1", "2024 Q2"]);
   });
 
+  // protects=over two-level headings, a piece wider than a cell, or one set past the table's last column, makes its line no heading row: a caption beside a year, a page number at the edge; fails_when=either is read into every column's heading; no_claim=a line of one piece, which the labelled set covers.
+  test("a line with a piece wider than a cell, or past the table, heads no columns", () => {
+    const body = [
+      ...line(700, [
+        ["Segment", 72],
+        ["Q1", 200],
+        ["Q2", 260],
+        ["Q1", 320],
+        ["Q2", 380],
+      ]),
+      ...line(686, [
+        ["Retail", 72],
+        ["1,200", 200],
+        ["1,340", 260],
+        ["1,100", 320],
+        ["1,150", 380],
+      ]),
+      ...line(672, [
+        ["Wholesale", 72],
+        ["800", 200],
+        ["760", 260],
+        ["700", 320],
+        ["720", 380],
+      ]),
+    ];
+    const plain = ["Segment", "Q1", "Q2", "Q1", "Q2"];
+    const wide = tables([
+      ...line(714, [
+        ["2025", 230],
+        ["Sales by segment and quarter, in thousands of euros, before tax", 330],
+      ]),
+      ...body,
+    ]);
+    expect(wide[0]?.headings).toEqual(plain);
+    const pastTheTable = tables([
+      ...line(714, [
+        ["2025", 230],
+        ["Page 3", 440],
+      ]),
+      ...body,
+    ]);
+    expect(pastTheTable[0]?.headings).toEqual(plain);
+  });
+
   test("a heading, a label or a cell that wraps onto the next line stays one", () => {
     const read = tables([
       ...line(700, [

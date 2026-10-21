@@ -241,9 +241,8 @@ function cellsOf(row: readonly Fragment[], spans: readonly Span[]): string[] | n
   return cells;
 }
 
-function gridOf(
-  rows: readonly (readonly Fragment[])[],
-): { grid: TableGrid; dropped: number } | null {
+function gridOf(lines: readonly Row[]): { grid: TableGrid; dropped: number } | null {
+  const rows = lines.map((line) => line.fragments);
   const hasFigure = (row: readonly Fragment[]) => row.some((fragment) => isFigure(fragment.text));
   // A year names a column more often than it fills one: "2025" over a column of figures.
   const hasData = (row: readonly Fragment[]) =>
@@ -276,21 +275,51 @@ function gridOf(
     fragment.left > (labels?.right ?? 0) &&
     fragment.left < (spans.at(-1)?.right ?? 0) &&
     widthOf(fragment.text) <= MAX_CELL;
-  const headsColumns = (row: readonly Fragment[]) => {
+  // A merged cell's heading sits on the rows' own pitch, no further above the row below it than
+  // that row is above the next, and centred over the columns it covers. A caption centred over the
+  // whole table sits left of its figure columns' middle by half the labels' column, and one centred
+  // on the page wherever the page's middle is.
+  const onPitch = (index: number, size: number) => {
+    const above = (lines[index + 1]?.y ?? 0) - (lines[index]?.y ?? 0);
+    const below = (lines[index + 2]?.y ?? Number.POSITIVE_INFINITY) - (lines[index + 1]?.y ?? 0);
+    return above <= below + size / 2;
+  };
+  // A column's cell reaches halfway across the gaps beside it: its figures may sit at either side.
+  const cellLeft = (column: number) =>
+    column === 0
+      ? (spans[0]?.left ?? 0)
+      : ((spans[column - 1]?.right ?? 0) + (spans[column]?.left ?? 0)) / 2;
+  const cellRight = (column: number) =>
+    column === spans.length - 1
+      ? (spans[column]?.right ?? 0)
+      : ((spans[column]?.right ?? 0) + (spans[column + 1]?.left ?? 0)) / 2;
+  const centredOver = (fragment: Fragment, columns: readonly number[]) => {
+    const middle = (cellLeft(columns[0] ?? 0) + cellRight(columns.at(-1) ?? 0)) / 2;
+    return Math.abs((fragment.left + fragment.right) / 2 - middle) <= fragment.size;
+  };
+  const headsColumns = (index: number) => {
+    const row = rows[index] ?? [];
     if (!row.every((fragment) => labelsHeading(fragment) || groupHeading(fragment))) return false;
     const [only, another] = row.filter((fragment) => !labelsHeading(fragment));
     if (another) return true;
     if (!only) return false;
-    // One heading over several columns ("Year ended 31 December" over 2025 and 2024), or over the
-    // only one beside the labels' heading.
-    const covered = overlapping(only, spans).length;
-    return covered >= 2 || (row.length >= 2 && covered >= spans.length - 1);
+    // One heading over every figure column ("Year ended 31 December" over 2025 and 2024), or over
+    // the only one beside the labels' heading. A caption runs over some of them, wherever it ends.
+    const covered = overlapping(only, spans);
+    if (covered.length >= 2) {
+      return (
+        covered.length === spans.length - 1 &&
+        centredOver(only, covered) &&
+        onPitch(index, only.size)
+      );
+    }
+    return row.length >= 2 && covered.length >= spans.length - 1;
   };
   let dropped = headingCount;
   let top = headingCount;
   while (dropped > 0) {
     const row = rows[dropped - 1] ?? [];
-    if (dropped === headingCount || headsColumns(row)) top = dropped - 1;
+    if (dropped === headingCount || headsColumns(dropped - 1)) top = dropped - 1;
     else if (!row.every(labelsHeading)) break;
     dropped--;
   }
@@ -412,8 +441,7 @@ export function findTables(rows: readonly Row[]): FoundTable[] {
     // a run that starts with headings may take rows above it, never the table before's.
     const lowest = firstBody > 0 ? (found.at(-1)?.last ?? -1) + 1 : at;
     const first = Math.max(lowest, at + firstBody - MAX_HEADING_ROWS);
-    const made =
-      end - first >= MIN_ROWS ? gridOf(rows.slice(first, end).map((row) => row.fragments)) : null;
+    const made = end - first >= MIN_ROWS ? gridOf(rows.slice(first, end)) : null;
     if (made) {
       found.push({ first: first + made.dropped, last: end - 1, grid: made.grid });
       at = end;
