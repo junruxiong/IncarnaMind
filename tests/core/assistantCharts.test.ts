@@ -4,7 +4,7 @@ import { markdownToBlocks } from "../../src/core/answers/markdown";
 import { calculatedCells, chartOfTable } from "../../src/core/tools/minds/charts";
 import { type ChartAttributes, readChart } from "../../src/shared/charts";
 import type { PlacedFigure } from "../../src/shared/figureMarkers";
-import { pendingProposals } from "../../src/shared/proposals";
+import { pendingProposals, proposalRequestOf } from "../../src/shared/proposals";
 import { askAssistant, changesIn, lastResult } from "../helpers/assistant";
 import { setUpWithDocuments, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
@@ -225,6 +225,10 @@ describe("A chart only draws what is cited", { timeout: 60_000 }, () => {
       QUARTERS.map(() => "found"),
     );
     expect(changesIn(answer).at(-1)).toMatchObject({ tables: 1, charts: 1 });
+    // Drawn once cite has recorded, the chart is the write the request is, whatever its words were.
+    expect(proposalRequestOf(client.doc, changesIn(answer).at(-1)?.request ?? "")).toMatchObject({
+      requested: "write",
+    });
   });
 
   // protects=a column the model typed, with no Citation and no calculation (a growth rate), keeps the table and draws no chart, the model and the User told why; fails_when=a chart draws figures nothing backs; no_claim=what a real model then says.
@@ -253,7 +257,7 @@ describe("A chart only draws what is cited", { timeout: 60_000 }, () => {
     const { core, mind, client } = await setUp(model);
 
     const answer = await askAssistant(core, {
-      text: "make a chart of revenue growth by quarter",
+      text: "Could you chart revenue growth by quarter?",
       mindId: mind.id,
     });
     await client.settled();
@@ -261,6 +265,10 @@ describe("A chart only draws what is cited", { timeout: 60_000 }, () => {
     expect(blocksOf(readMind(client)).types).toEqual(["paragraph", "table"]);
     expect(changesIn(answer)[0]).toMatchObject({ tables: 1, chartNotDrawn: "uncited" });
     expect(lastResult(model)).toContain("no Citation and come from no calculation");
+    // No chart was drawn, so nothing marks the request as a write the User asked for: its table waits.
+    expect(proposalRequestOf(client.doc, changesIn(answer)[0]?.request ?? "")).not.toHaveProperty(
+      "requested",
+    );
   });
 
   // protects=an uncited table of figures the model made up ("999, 888") draws no chart; fails_when=it charts them; no_claim=none beyond protects.

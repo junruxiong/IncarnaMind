@@ -90,24 +90,24 @@ const WORDS = {
     title: "Choose your AI",
     chatgpt: "Plus or Pro · no key needed",
     sends: "Sends your questions and document text to OpenAI. · Details",
-    key: "OpenAI, Anthropic, Google, DeepSeek and more",
+    key: "OpenAI, Anthropic, Google, DeepSeek, Kimi and more",
   },
   "zh-CN": {
     title: "选择你的 AI",
     chatgpt: "Plus 或 Pro（中国大陆不可用）· 无需密钥",
     sends: "会把你的问题和文档内容发送给 OpenAI。 · 详情",
-    key: "OpenAI、Anthropic、Google、DeepSeek 等",
+    key: "DeepSeek、通义千问、Kimi、智谱 GLM 等",
   },
 } as const;
 
-/** One line of text: no taller than its line height, with room for rounding. */
-async function expectOneLine(line: Locator): Promise<void> {
+/** At most `lines` lines of text, with room for rounding. */
+async function expectLines(line: Locator, lines = 1): Promise<void> {
   const [box, lineHeight] = await Promise.all([
     line.boundingBox(),
     line.evaluate((element) => Number.parseFloat(getComputedStyle(element).lineHeight)),
   ]);
   if (!box) throw new Error("The line isn't laid out.");
-  expect(box.height).toBeLessThan(lineHeight * 1.5);
+  expect(box.height).toBeLessThan(lineHeight * (lines + 0.5));
 }
 
 for (const [width, height] of [
@@ -130,8 +130,8 @@ for (const [width, height] of [
         await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(words.sends);
         await expect(card.getByTestId("setup-key-for")).toHaveText(words.key);
         if (width === 1440) {
-          await expectOneLine(card.getByTestId("setup-chatgpt-line"));
-          await expectOneLine(card.getByTestId("setup-key-for"));
+          await expectLines(card.getByTestId("setup-chatgpt-line"));
+          await expectLines(card.getByTestId("setup-key-for"), 2);
         }
         await expect(plan).toBeInViewport({ ratio: 1 });
         await expect(key).toBeInViewport({ ratio: 1 });

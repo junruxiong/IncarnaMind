@@ -489,6 +489,7 @@ const PROVIDERS = [
     id: "kimi",
     name: { en: "Kimi (Moonshot AI)", zh: "Kimi（月之暗面）" },
     support: "best-effort",
+    firstRun: true,
     group: "china",
     adapter: "moonshotai",
     endpoints: [
@@ -537,6 +538,7 @@ const PROVIDERS = [
     id: "glm",
     name: { en: "GLM (Zhipu / Z.ai)", zh: "智谱 GLM" },
     support: "best-effort",
+    firstRun: true,
     group: "china",
     adapter: "zai",
     // BigModel (mainland China) and Z.ai (international) are separate platforms with separate keys.
@@ -792,11 +794,16 @@ export const KEY_PROVIDERS: readonly string[] = CATALOG_PROVIDERS.filter(
     !LOCAL_PRESETS.includes(each.id),
 ).map((each) => each.id);
 
+/** The best-effort providers the first-run key form offers beside the first-class ones, by catalog id. */
+export const FIRST_RUN_BEST_EFFORT: readonly string[] = KEY_PROVIDERS.filter(
+  (id) => catalogProvider(id)?.firstRun === true,
+);
+
 /**
  * The providers to offer for a key, in the two groups the screens show: `main`,
  * the first-class ones and any best-effort one the User already set up (it
  * stays among their providers whatever its tier), and `more`, under "More
- * providers". The first-run setup shows `main` for a User with none set up.
+ * providers".
  */
 export function keyProviderGroups(setUp: readonly string[] = []): {
   main: string[];

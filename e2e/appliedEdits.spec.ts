@@ -4,6 +4,7 @@ import type { CoreBridge } from "../src/core/api";
 import {
   createDataFolder,
   dismissChatSetup,
+  focusSettled,
   launchApp,
   motionSettled,
   newMind,
@@ -376,8 +377,18 @@ test("text typed elsewhere while a slow edit streams in stays, and one ⌘Z take
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("selection-edit-working")).toBeVisible();
   await pointAndClick(window, paragraphs.last());
-  await window.keyboard.press("End");
+  await focusSettled(window, editor);
+  await expect(window.getByTestId("menu-edit-line")).toBeVisible();
+  await window.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+  await expect
+    .poll(() =>
+      paragraphs
+        .last()
+        .evaluate((paragraph) => paragraph.contains(getSelection()?.anchorNode ?? null)),
+    )
+    .toBe(true);
   await window.keyboard.type(" typed meanwhile");
+  await expect(paragraphs.last()).toHaveText("Notes: typed meanwhile");
   await expect(line.getByTestId("applied-count")).toHaveText("Changed 3 paragraphs", {
     timeout: 30_000,
   });
