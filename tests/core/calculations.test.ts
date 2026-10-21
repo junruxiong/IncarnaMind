@@ -1696,4 +1696,74 @@ describe("A Calculated figure keeps the scale its inputs are worked in (#1442)",
       expect(answer.figures[0]?.shown).toBe(table.shown);
     },
   );
+
+  describe("A bracketed negative finds its cell (#1451)", { timeout: 60_000 }, () => {
+    // protects=a negative a workbook writes in brackets, with or without a currency and a scale, or one a number format scales itself, is credited to its own cell, which stores its sign; fails_when=a figure's input has no cell, or a scaled cell's stored number isn't worked in at the scale it shows; no_claim=how a card shows the cell.
+    test.each([
+      {
+        name: "brackets from a number format",
+        format: "#,##0;(#,##0)",
+        cells: [-1234, -500],
+        stored: [-1234, -500],
+        shown: ["(1,234)", "(500)"],
+        value: -1734,
+        figure: "-1,734",
+      },
+      {
+        name: "brackets with a currency and a scale written in the format",
+        format: '"£"#,##0.0"m";("£"#,##0.0"m")',
+        cells: [-23.7, -1.3],
+        stored: [-23.7, -1.3],
+        shown: ["(£23.7m)", "(£1.3m)"],
+        value: -25_000_000,
+        figure: "-£25.0m",
+      },
+      {
+        name: "brackets and a scale the format applies itself",
+        format: '"£"#,##0.0,,"m";("£"#,##0.0,,"m")',
+        cells: [-23_700_000, -1_300_000],
+        stored: [-23_700_000, -1_300_000],
+        shown: ["(£23.7m)", "(£1.3m)"],
+        value: -25_000_000,
+        figure: "-£25.0m",
+      },
+      {
+        name: "a positive beside a negative: a cell whose text is its number stores nothing more",
+        format: "#,##0;(#,##0)",
+        cells: [-1234, 500],
+        stored: [-1234, null],
+        shown: ["(1,234)", "500"],
+        value: -734,
+        figure: "-734",
+      },
+    ])("$name", async (table) => {
+      const book = amountsBook({
+        heading: "Table",
+        format: table.format,
+        rows: [
+          { label: "A", stored: table.cells[0] as number },
+          { label: "B", stored: table.cells[1] as number },
+        ],
+      });
+      const answer = await calculated(
+        book,
+        { formula: "a + b" },
+        [
+          { name: "a", row: 2, number: table.shown[0] as string, line: `A\t${table.shown[0]}` },
+          { name: "b", row: 3, number: table.shown[1] as string, line: `B\t${table.shown[1]}` },
+        ],
+        "Together [=1].",
+      );
+      expect(answer.figures).toMatchObject([
+        {
+          value: table.value,
+          shown: table.figure,
+          inputs: [
+            { cell: { sheet: "Table", ref: "B2", stored: table.stored[0] } },
+            { cell: { sheet: "Table", ref: "B3", stored: table.stored[1] } },
+          ],
+        },
+      ]);
+    });
+  });
 });
