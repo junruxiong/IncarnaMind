@@ -54,7 +54,9 @@ const PIPE_ROW = /^ {0,3}\|/;
 const PARTIAL_DELIMITER = /^[ \t|:-]*$/;
 /** A line break written into a table cell, where a row can't break. */
 const BREAK_TAG = /<br[ \t]*\/?>/gi;
-const LIST_ITEM = /^( {0,3})([-*+]|\d{1,9}[.)])(?:([ \t]+)(.*))?$/;
+// Up to three spaces, as CommonMark; a numbered list indented three spaces a level more starts at that
+// level, as the Markdown export writes one (#1419).
+const LIST_ITEM = /^( {0,3}|(?: {3}){1,8} {0,2})([-*+]|\d{1,9}[.)])(?:([ \t]+)(.*))?$/;
 /** Holding back an unclosed formula or link stops after this many characters: it was plain text after all. */
 const MAX_PENDING = 300;
 
@@ -418,10 +420,14 @@ function parseList(
     }
   }
 
+  const startLevel = Math.min(8, Math.floor(firstMarker.indent / 3));
   const block: NodeJSON = ordered
     ? {
         type: "orderedList",
-        attrs: { start: Number.parseInt(firstMarker.marker, 10) || 1 },
+        attrs: {
+          start: Number.parseInt(firstMarker.marker, 10) || 1,
+          ...(startLevel > 0 && { startLevel }),
+        },
         content: items,
       }
     : { type: "bulletList", content: items };
