@@ -919,6 +919,10 @@ export function createAnswers(options: AnswersOptions) {
     let mindRequest = input.mind?.request;
     /** It listened to a meeting's live transcript: the Question went with it. */
     let listening = false;
+    /** The Documents whose whole text went with the Question; null until the assistant's request is built. */
+    let sentDocuments: Set<string> | null = null;
+    /** The Documents the live transcript came from: the "listened" step names them. */
+    const transcripts = new Set<string>();
     const { help } = input;
     let foundAhead = false;
     /** The language the call's newest lines are in, which a help Answer is written in. */
@@ -992,6 +996,12 @@ export function createAnswers(options: AnswersOptions) {
         ...(withoutMindTools && { withoutMindTools: true as const }),
         ...(coverage && { coverage }),
         ...(writtenFrom && { writtenFrom }),
+        ...(sentDocuments && {
+          sent: {
+            documents: [...sentDocuments],
+            ...(listening && { transcript: true as const }),
+          },
+        }),
       };
     };
     let skills: SkillSession | null = null;
@@ -1623,6 +1633,7 @@ export function createAnswers(options: AnswersOptions) {
         if (kept.length > 0) {
           messages = withTranscript(messages, session.show(kept));
           listening = true;
+          for (const passage of kept) transcripts.add(passage.documentId);
           if (help) callLanguage = languageSaid(kept);
         }
         // Help gets what the User's Documents say about the newest lines at once, with no search
@@ -1666,6 +1677,11 @@ export function createAnswers(options: AnswersOptions) {
           upFrontTokens(prepared.window),
           passagesOf,
           (passages) => blockOf(passages, session.measure),
+        );
+        sentDocuments = new Set(
+          given?.passages.flatMap((passage) =>
+            transcripts.has(passage.documentId) ? [] : [passage.documentId],
+          ),
         );
         if (given) {
           messages = withBeforeQuestion(messages, blockOf(given.passages, session.show));
@@ -2069,6 +2085,10 @@ export function createAnswers(options: AnswersOptions) {
           case "mind-cut":
             if (read) read = event.share === 0 ? null : { ...read, partial: true };
             readShare = event.share;
+            writeSoon();
+            break;
+          case "documents-dropped":
+            sentDocuments?.clear();
             writeSoon();
             break;
           case "quotes-retried":

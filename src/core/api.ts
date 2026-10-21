@@ -3954,6 +3954,8 @@ export interface Money {
   amount: number;
 }
 
+export const MAX_MONTHLY_CAP = 1_000_000;
+
 /**
  * The most IncarnaMind may spend in a calendar month on models billed per
  * token. Before each such request its most (its prompt and its output limit)
@@ -5202,6 +5204,12 @@ export interface AnswerSteps {
    * `total` Documents (#1149). Absent: from all of them, or not a request to write.
    */
   writtenFrom?: { documents: number; total: number };
+  /**
+   * What its request held besides the Mind it read (`ConversationAnswer.read`), by id: the
+   * Documents whose whole text went with the Question, and whether the live transcript of a
+   * meeting did. Absent: an Answer written before this was kept, or one that isn't in the assistant.
+   */
+  sent?: { documents: string[]; transcript?: true };
 }
 
 /**

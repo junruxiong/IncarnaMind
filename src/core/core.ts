@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
+import { cleanApiKey } from "../shared/apiKey";
 import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { optionsFor } from "../shared/exportOptions";
@@ -185,6 +186,7 @@ import { createOutputFiles } from "./outputFiles";
 import { PAPER as PAGE_PAPER } from "./pageDefaults";
 import { nativePageSetup } from "./pageSetup";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
+import { KeyCharacterError, storedApiKey } from "./providers/apiKey";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
@@ -228,7 +230,7 @@ import { createSkills } from "./skills";
 import { createSkillDrafts } from "./skills/draft";
 import { createScriptRunner } from "./skills/scripts";
 import { createSources, FIND_SOURCES_SENDS } from "./sources";
-import { createSourceHttp } from "./sources/http";
+import { createSourceHttp, SourceError } from "./sources/http";
 import { createPace, realTimers } from "./sources/pace";
 import { createSourceProviders, sourceKeySecret } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
@@ -1050,9 +1052,15 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     secrets,
-    providers: createSourceProviders(adapters.sourceProviders, (id) =>
-      secrets.tryGet(sourceKeySecret(id)),
-    ),
+    providers: createSourceProviders(adapters.sourceProviders, async (id) => {
+      try {
+        return storedApiKey(await secrets.tryGet(sourceKeySecret(id)));
+      } catch (error) {
+        if (error instanceof KeyCharacterError)
+          throw new SourceError("key-rejected", error.message);
+        throw error;
+      }
+    }),
     http: createSourceHttp(pace, paceTimers),
     folder: join(dataDir, "Sources"),
     checkFolder: (folderId) => {
@@ -3505,7 +3513,7 @@ export function createCore(adapters: CoreAdapters): Core {
           values: { provider: String(isRecord(input) ? input.catalogId : input) },
         });
       }
-      const apiKey = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey : null;
+      const apiKey = (typeof input.apiKey === "string" && cleanApiKey(input.apiKey)) || null;
       return localServers.detect(
         input.catalogId,
         apiKey,
