@@ -255,6 +255,12 @@ export interface ModelFacts {
   maxInput: number;
   /** The most it writes in one reply, in tokens. */
   maxOutput: number;
+  /**
+   * It refuses a thinking block once the request's tool list differs from the one the block was
+   * made with (Anthropic): the last step of an Answer keeps the Tools in its request and is told
+   * to call none, instead of choosing none, which drops them (#1344).
+   */
+  toolsEveryRequest: boolean;
   price: Price;
   /** How it cites, when that was measured or the server decides it (a small local model). */
   citing: Citing;

@@ -410,10 +410,15 @@ export async function forceQuit(app: ElectronApplication): Promise<void> {
   await exited;
 }
 
-/** Chooses the Edit menu's Undo or Redo, as the application menu has it now. */
-export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
+/** Chooses an editing command, as the application menu has it now. */
+export const clickEditItem = (
+  app: ElectronApplication,
+  id: "edit.undo" | "edit.redo" | "edit.selectAll",
+) =>
   app.evaluate(({ Menu }, itemId) => {
-    Menu.getApplicationMenu()?.getMenuItemById(itemId)?.click();
+    const item = Menu.getApplicationMenu()?.getMenuItemById(itemId);
+    if (!item) throw new Error(`No menu item ${itemId}.`);
+    item.click();
   }, id);
 
 /**
@@ -1718,7 +1723,7 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
  * Where `words` are drawn in a line of text: their left and right edges, and
  * their middle line. They may run across marks (AI text and the User's, bold).
  */
-async function wordsBox(line: Locator, words: string) {
+export async function wordsBox(line: Locator, words: string) {
   const box = await line.evaluate((element, wanted) => {
     const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     const texts: Text[] = [];

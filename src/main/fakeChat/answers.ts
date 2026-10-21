@@ -30,7 +30,8 @@
  * gets a lead-in before its content and a closing note after it (#702); one that says "without
  * searching" (不用搜索) cites the Passages given with it, as a model does that is given a short
  * Document's whole text, and calls no search.
- * One that asks how much something grew (增长) has the growth from the first
+ * One that says "边想边写" writes pages of working notes after its search, with no
+ * marker (#1344). One that asks how much something grew (增长) has the growth from the first
  * two numbers of its quote calculated, and writes it with its marker.
  * As models did (#1172), one for a "short summary" (简短的摘要) ends with a
  * paragraph pointing to an earlier Answer, and one about "home working"
@@ -90,6 +91,15 @@ const FOUND_PAGES = [
 
 /** The scripted Answer when it cited something: one sentence with a marker. */
 export const CITED_ANSWER = "Your Documents answer this [^1].\n\nThat is all.";
+
+/**
+ * A Question whose model, after its search, runs on for pages of working notes instead of an
+ * Answer (#1344): more than the backstop lets stand. The notes are Chinese, which has no spaces to
+ * stream a word at a time at: they arrive in one piece.
+ */
+const THINKING_ALOUD = /边想边写/;
+
+const WORKING_NOTES = "等一下，可能还有一份相同的文件。再搜一次确认一下。".repeat(600);
 
 const WITHOUT_SEARCHING = /\bwithout searching\b|不用搜索/i;
 
@@ -492,6 +502,7 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
       reasoning: reasoningFor(question),
     };
   }
+  if (THINKING_ALOUD.test(question)) return { text: WORKING_NOTES };
   if (WITHOUT_CITING.test(question)) return { text: uncitedAnswer(question) };
   if (CITING_AS_TEXT.test(question)) {
     return { text: citedAsText(question, recordsFor(searches.at(-1) ?? "", question)) };

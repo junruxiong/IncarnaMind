@@ -11,6 +11,7 @@ import { shortcutLabel } from "../../commands/keymap";
 import { useFirstOpen } from "../../firstOpen";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
+import { onMiddleClick } from "../../middleClick";
 import { useAppStore } from "../../store";
 import { focusTab } from "../../tabFocus";
 import { tabLabelEm } from "../../tabLabel";
@@ -251,13 +252,10 @@ function Tab({ tab, groupId, selected, divider, dragged }: TabProps) {
           show();
         } else objectMenu.rowProps.onKeyDown(event);
       }}
-      onMouseDown={(event) => {
-        if (event.button === 1) event.preventDefault(); // no autoscroll
-      }}
-      onAuxClick={(event) => {
-        // A middle click closes it, as in a browser; a pinned tab stays, as with ⌘W.
-        if (event.button === 1 && !tab.pinned && !fromInside(event)) closeTab(tab.id);
-      }}
+      // A middle click closes it, as in a browser; a pinned tab stays, as with ⌘W.
+      {...onMiddleClick((event) => {
+        if (!tab.pinned && !fromInside(event)) closeTab(tab.id);
+      })}
     >
       {/* The shown tab's feet, flaring into the page below; the others hide them. */}
       <span aria-hidden="true" data-side="left" className="tab-foot" />

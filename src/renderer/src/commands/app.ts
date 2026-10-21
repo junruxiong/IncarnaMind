@@ -105,6 +105,13 @@ const appCommands: readonly Command[] = [
     run: () => useAppStore.getState().createMind({ titled: true }),
   },
   {
+    id: "home.open",
+    label: "home.title",
+    group: "open",
+    reversible: true,
+    run: () => useAppStore.getState().openHome(),
+  },
+  {
     id: "word.import",
     label: "wordImport.command",
     group: "main",

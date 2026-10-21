@@ -11,7 +11,6 @@ import {
 } from "react";
 import type * as Y from "yjs";
 import type { AnswerPlace, SearchScope } from "../../../core/api";
-import { mindModelOf } from "../../../shared/mindModel";
 import { mindName } from "../../../shared/naming";
 import {
   filingFolder,
@@ -50,6 +49,7 @@ import { type Dragged, type Dropped, useDropTarget } from "../dragDrop";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import { modelInUseOf, useModelInUse } from "../modelInUse";
 import { newNoteTitle } from "../newNoteRequest";
 import {
   cancelResearch,
@@ -71,7 +71,7 @@ import { AnswerAnnouncer } from "./AnswerAnnouncer";
 import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
-import { ModelChip, useMindModel } from "./ModelChip";
+import { ModelChip } from "./ModelChip";
 import { useMindSelection } from "./mindSelection";
 import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
@@ -209,7 +209,7 @@ export function Composer({
   const target = mind && tellable(told) ? told : undefined;
   /** Why the last message couldn't reach its Task. */
   const [tellProblem, setTellProblem] = useState<string | null>(null);
-  const chosenModel = useMindModel(mind?.doc ?? null);
+  const chosenModel = useModelInUse(mind?.doc ?? null);
   const webReach = useWebReach(chosenModel);
   const webMissing = useWebMissing(webReach, chosenModel);
   const researchHint = webMissing
@@ -486,8 +486,8 @@ export function Composer({
       const topic = current.text.trim();
       if (!topic) return;
       update({ text: "", research: false });
-      if (plan) void changePlan(mind.mindId, topic, mindModelOf(mind.doc));
-      else openResearch(mind.mindId, topic, mindModelOf(mind.doc), webReach === "ready");
+      if (plan) void changePlan(mind.mindId, topic, modelInUseOf(mind.doc));
+      else openResearch(mind.mindId, topic, modelInUseOf(mind.doc), webReach === "ready");
       return;
     }
     // An Answer is being written, or its Question is on its way: Enter waits for it, as in
@@ -522,7 +522,7 @@ export function Composer({
       text,
       focus: selection.focus(),
       scope: composerScope(current, folderId),
-      model: mind ? mindModelOf(mind.doc) : useComposer.getState().modelWithoutMind,
+      model: modelInUseOf(mind?.doc ?? null),
       forcedSkill: draft.skill,
     });
     if (asked) {
@@ -583,7 +583,7 @@ export function Composer({
     }
     if (event.key === "Enter" && isCommand(event) && plan && mind) {
       event.preventDefault();
-      void startResearch(mind.mindId, mindModelOf(mind.doc));
+      void startResearch(mind.mindId, modelInUseOf(mind.doc));
       return;
     }
     // The waiting ask in the tray, nearest the keyboard: ⌘↵ allows, ⌘⌫ (with nothing typed) denies.

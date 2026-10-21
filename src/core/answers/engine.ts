@@ -397,6 +397,10 @@ export interface AnswerRequest {
    * known: requests are sent as they are.
    */
   window?: ContextWindow;
+  /** The most the model writes in one reply, in tokens, when the catalog says. */
+  maxOutput?: number;
+  /** The model needs the Tools in every request, the last step's too (`ModelFacts.toolsEveryRequest`). */
+  toolsEveryRequest?: boolean;
   /**
    * In structured output, ask the model once more for the quotes the check
    * doesn't find (see ./quoteRetry): a local model, never a cloud one.
@@ -584,6 +588,14 @@ export function searchToolDescription(languages: readonly DocumentLanguage[]): s
 }
 /** A Citation marker ("[^1]") or a figure marker ("[=1]"): the Answer is being written. */
 const MARKER = /\[[\^=]\d{1,4}\]/;
+
+/**
+ * A backstop: a step before the last that has read the Documents and has written this much with no
+ * Citation marker in it is a model running on, not an Answer (#1344). The last step may write an
+ * Answer with no marker, as it is told no Citation can be recorded then; it is capped instead
+ * (src/core/runs/aiSdkEngine.ts).
+ */
+const RUNAWAY_CHARS = 12_000;
 
 /**
  * What a one-pass attempt yields when its provider refused the request before
@@ -1609,6 +1621,8 @@ async function* toolLoop(
   const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
   let searching = 0;
+  let searched = false;
+  const rambling = new AbortController();
   /** The reply that stands if the model, asked once more, fails: as it was before the last ask. */
   let standing: string | null = null;
   let again: readonly RunMessage[] | null = null;
@@ -1665,6 +1679,10 @@ async function* toolLoop(
     tools: runTools,
     maxSteps: stepsLeft,
     cacheKey: request.cacheKey,
+    lastStep: {
+      ...(request.maxOutput !== undefined && { tokens: request.maxOutput }),
+      ...(request.toolsEveryRequest && { keepTools: true }),
+    },
     gate: async (call) => {
       const tool = offered.get(call.tool);
       return tool && request.gate
@@ -1686,10 +1704,11 @@ async function* toolLoop(
         (call) => recording(offered.get(call.tool)) && askedForFixes.get(call.id) === false,
       ),
     temperature,
-    signal,
+    signal: AbortSignal.any([signal, rambling.signal]),
   });
   for await (const event of runs()) {
     if (signal.aborted) return;
+    if (rambling.signal.aborted) continue;
     switch (event.type) {
       case "reasoning":
         yield event;
@@ -1699,6 +1718,15 @@ async function* toolLoop(
         // A new step's text goes on from the last kept text in a new paragraph.
         if (stepText === "" && keptText !== "" && !/\s$/.test(keptText)) text = `\n\n${text}`;
         stepText += text;
+        if (
+          searched &&
+          steps < maxSteps - 1 &&
+          stepText.length > RUNAWAY_CHARS &&
+          !MARKER.test(stepText)
+        ) {
+          rambling.abort();
+          break;
+        }
         yield* release(releasable(keptText + stepText));
         break;
       }
@@ -1720,6 +1748,7 @@ async function* toolLoop(
         if (!called) break;
         calls.set(event.id, called);
         stepTools.push(called);
+        if (called === search) searched = true;
         if (called === search && searching++ === 0) {
           yield { type: "phase", phase: "searching" };
         }
@@ -1850,6 +1879,13 @@ async function* toolLoop(
         return;
       }
     }
+  }
+  if (rambling.signal.aborted && !signal.aborted) {
+    if (released > 0) yield { type: "text-retracted", length: released };
+    yield {
+      type: "failed",
+      error: { kind: "no-answer", message: "The model ran on without an Answer." },
+    };
   }
 }
 

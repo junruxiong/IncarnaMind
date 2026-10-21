@@ -2121,6 +2121,10 @@ export function createAnswers(options: AnswersOptions) {
         structuredOutput: givesStructuredOutput(prepared.capabilities),
         takesTemperature: prepared.capabilities.facts.temperature,
         window: prepared.window,
+        ...(prepared.capabilities.facts.maxOutput !== undefined && {
+          maxOutput: prepared.capabilities.facts.maxOutput,
+        }),
+        ...(prepared.capabilities.facts.toolsEveryRequest && { toolsEveryRequest: true }),
         retryQuotes: prepared.retryQuotes,
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
         ...(input.assistant && {
