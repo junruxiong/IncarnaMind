@@ -491,6 +491,7 @@ const fadeOf = (open: Locator) =>
       rect.right > other.left &&
       rect.top < other.bottom &&
       rect.bottom > other.top;
+    const shown = getComputedStyle(fade).opacity !== "0";
     let underIcon = false;
     let inFade = false;
     const walker = document.createTreeWalker(heading ?? frame, NodeFilter.SHOW_TEXT);
@@ -499,10 +500,18 @@ const fadeOf = (open: Locator) =>
       range.selectNodeContents(node);
       for (const rect of range.getClientRects()) {
         underIcon ||= meets(rect, icon);
-        inFade ||= meets(rect, box);
+        inFade ||= shown && meets(rect, box);
       }
     }
     const row = heading?.getBoundingClientRect();
+    const last = heading?.lastElementChild;
+    let lastClear = false;
+    if (last) {
+      const range = document.createRange();
+      range.selectNodeContents(last);
+      const text = range.getBoundingClientRect();
+      lastClear = text.right <= icon.left + 0.5;
+    }
     return {
       reachesPastIcon:
         box.left <= icon.left - 28 + 0.5 &&
@@ -510,6 +519,9 @@ const fadeOf = (open: Locator) =>
         box.top <= icon.top + 0.5 &&
         row !== undefined &&
         box.bottom >= row.bottom - 0.5,
+      shown,
+      more: frame.hasAttribute("data-more-after"),
+      lastClear,
       underIcon,
       inFade,
     };
@@ -683,40 +695,60 @@ for (const language of ["en", "zh-CN"] as const) {
     });
   });
 
-  test(`a table that scrolls far fades its heading text out before the Expand at every scroll position, so the bare icon never cuts a heading, in ${language}`, async () => {
+  test(`a heading fades out before the Expand while the table has more to its right, and is fully clear at the end of the scroll, for a table that scrolls far and for nine rows, in ${language}`, async () => {
     test.setTimeout(240_000);
     const window = await start(language, 1600, 900);
-    const answer = await askInAssistant(
-      window,
-      language === "en" ? "Tides long headings" : "长标题 tides",
-    );
-    const frame = answer.getByTestId("assistant-answer-text").locator(".tableWrapper");
-    const open = answer.getByTestId("answer-open-table");
-    await expect(open).toBeVisible();
-    const reachOf = () => frame.evaluate((each) => each.scrollWidth - each.clientWidth);
+    const asked = [
+      { question: language === "en" ? "Tides long headings" : "长标题 tides", farthest: 300 },
+      { question: QUESTIONS[language].table, farthest: 0 },
+    ];
+    for (const { question } of asked) await askInAssistant(window, question);
+    const settled = () =>
+      window.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
 
     for (const width of [320, 280]) {
-      await test.step(`with the panel at ${width} px`, async () => {
-        await sizeAssistant(window, width);
-        const reach = await reachOf();
-        expect(reach).toBeGreaterThan(300);
-        let slidUnder = 0;
-        for (let left = 0; left < reach + 24; left += 24) {
-          await frame.evaluate(
-            (each, to) => each.scrollTo({ left: to, behavior: "instant" }),
-            left,
-          );
-          const seen = await fadeOf(open);
-          expect(seen.reachesPastIcon).toBe(true);
-          if (seen.inFade) slidUnder++;
-        }
-        // The same table scrolled to its middle and to its end: heading text did slide under it.
-        expect(slidUnder).toBeGreaterThan(0);
-        await frame.evaluate((each) =>
-          each.scrollTo({ left: each.scrollWidth, behavior: "instant" }),
-        );
-        expect(await overlayOf(open)).toMatchObject({ inCorner: true, covered: [] });
-      });
+      await sizeAssistant(window, width);
+      for (const [at, { farthest }] of asked.entries()) {
+        await test.step(`table ${at + 1} with the panel at ${width} px`, async () => {
+          const answer = assistantAnswers(window).nth(at);
+          const frame = answer.getByTestId("assistant-answer-text").locator(".tableWrapper");
+          const open = answer.getByTestId("answer-open-table");
+          await expect(open).toBeVisible();
+          const reach = await frame.evaluate((each) => each.scrollWidth - each.clientWidth);
+          expect(reach).toBeGreaterThan(farthest);
+          let slidUnder = 0;
+          const scrollTo = async (left: number) => {
+            await frame.evaluate(
+              (each, to) => each.scrollTo({ left: to, behavior: "instant" }),
+              left,
+            );
+            await settled();
+            return fadeOf(open);
+          };
+          for (let left = 0; left < reach; left += 24) {
+            const seen = await scrollTo(left);
+            expect(seen.reachesPastIcon).toBe(true);
+            // The fade shows exactly while there is more table to the right.
+            expect(seen.shown).toBe(seen.more);
+            if (seen.inFade) slidUnder++;
+          }
+          expect(slidUnder).toBeGreaterThan(0);
+          const end = await scrollTo(reach + 100);
+          expect(end).toMatchObject({
+            more: false,
+            shown: false,
+            inFade: false,
+            underIcon: false,
+            lastClear: true,
+          });
+          expect(await overlayOf(open)).toMatchObject({ inCorner: true, covered: [] });
+        });
+      }
     }
   });
 

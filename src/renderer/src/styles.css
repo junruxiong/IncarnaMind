@@ -6658,11 +6658,11 @@
       pointer-events: none;
     }
     /*
-     * Where a table starts, with no height: the Expand is laid over the table's top-right corner,
-     * on a fade of the heading row that reaches 28px past it, so heading text slides out under
-     * the fade, never under the bare icon, and a strip at the row's end stays clear when the
-     * table is scrolled to it. A table that widens mid-answer gains all this without pushing
-     * anything.
+     * Where a table starts, with no height: the Expand is laid over the table's top-right corner.
+     * While there is more table to its right, a fade of the heading row reaches 28px past it, so
+     * heading text slides out under the fade, never under the bare icon; scrolled to the end, the
+     * fade is gone and a strip of the row stays clear under the icon. A table that widens
+     * mid-answer gains all this without pushing anything.
      */
     .answer-table-slot {
       position: relative;
@@ -6683,7 +6683,11 @@
       width: 56px;
       height: 29px;
       background: linear-gradient(to right, transparent, var(--color-sheet) 28px);
+      opacity: 0;
       pointer-events: none;
+    }
+    .answer-table-slot:has(+ .tableWrapper[data-more-after]) .answer-table-fade {
+      opacity: 1;
     }
     .answer-table-open {
       position: absolute;
