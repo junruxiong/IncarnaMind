@@ -345,7 +345,6 @@ export async function launchApp(
   return { app, window };
 }
 
-/** Answers the first Word export's question "Mark it", unless it has an answer. */
 async function answerMarkAiText(window: Page): Promise<void> {
   await window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
