@@ -16,6 +16,8 @@ import {
   floatRect,
   GAP,
   isSide,
+  questionHeight,
+  questionMax,
   RAIL,
   type Rect,
   restoredSize,
@@ -28,6 +30,7 @@ import {
 import { ComposerDockContext } from "../../editor/mindContext";
 import { useT } from "../../i18n";
 import { useCardWidth } from "../../layoutSlice";
+import { useQuestionRoom } from "../../questionRoom";
 import { useQuietAssistant } from "../../quietAssistant";
 import { useAppStore } from "../../store";
 import { useWindowSize } from "../../useWindowWidth";
@@ -90,7 +93,12 @@ export function Workbench({
   const groups = useMemo(() => <TabGroups />, []);
 
   const width = sideWidth(shown.width, room.width);
-  const height = bottomHeight(shown.height, room.height);
+  const waits = useQuestionRoom((state) => state.fits !== null) && dock === "bottom" && !folded;
+  const fits = useQuestionRoom((state) => (state.resized ? null : state.fits));
+  // One largest height while a question waits, for its growth, the keys and a drag alike.
+  const tallest = waits ? questionMax(room.height) : bottomMax(room.height);
+  const ownHeight = bottomHeight(shown.height, room.height, tallest);
+  const height = waits && fits !== null ? questionHeight(ownHeight, fits, room.height) : ownHeight;
   const float = floatRect(shown.float, folded, viewport);
   const atWindowLeft = dock === "left" && sidebarHidden;
 
@@ -116,8 +124,15 @@ export function Workbench({
   /** Room the assistant takes from the card on its side, for what the window draws there. */
   const beside = quiet ? 0 : side ? (folded ? RAIL : width) + GAP : 0;
 
-  const resize = (next: Partial<AssistantPlace>) => setPreview(next);
+  const resizedNow = () => {
+    if (useQuestionRoom.getState().fits !== null) useQuestionRoom.setState({ resized: true });
+  };
+  const resize = (next: Partial<AssistantPlace>) => {
+    resizedNow();
+    setPreview(next);
+  };
   const keep = (next: Partial<AssistantPlace>) => {
+    resizedNow();
     setPreview(null);
     void placeAssistant(next);
   };
@@ -159,7 +174,7 @@ export function Workbench({
           gap
           width={side ? width : height}
           min={side ? SIDE_MIN : BOTTOM_MIN}
-          max={side ? sideMax(room.width) : bottomMax(room.height)}
+          max={side ? sideMax(room.width) : tallest}
           // The assistant is after the line, except on the left, where it is before it.
           direction={dock === "left" ? 1 : -1}
           onPreview={(px) => resize(side ? { width: px } : { height: px })}
