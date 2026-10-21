@@ -71,10 +71,12 @@ function place(
     Math.min(anchor.left - (atPoint ? 1 : 0), window.innerWidth - width - EDGE_PX),
   );
   const below = anchor.bottom + gap;
-  const top =
+  const wanted =
     below + height > window.innerHeight - EDGE_PX
       ? Math.max(EDGE_PX, anchor.top - gap - height)
       : below;
+  // Neither below nor above fits: the menu sits as high as the window lets all of it show.
+  const top = Math.max(EDGE_PX, Math.min(wanted, window.innerHeight - EDGE_PX - height));
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
   return { left, top, width, height };
