@@ -1044,7 +1044,8 @@ export function createLibrary(options: {
       });
       options.tagged([doc.id]);
       announce([doc.id]);
-      resume();
+      // A Document put back as waiting waits as it did: resuming now would organize it again at once (#1391).
+      if (status === "pending") resume();
     },
     // A new request id makes a run already under way for these Documents stale.
     accept(input: unknown): AssignmentChange[] {

@@ -54,6 +54,7 @@ export function useJobSummary(
   role: Role,
   groups: readonly ChatModelGroup[],
   roles: ModelRoles | null,
+  providers: readonly ChatProvider[] = [],
 ): string {
   const t = useT();
   const language = useLanguage();
@@ -62,15 +63,22 @@ export function useJobSummary(
   const modelOf = (choice: ChatModelChoice) => nameOf(choice.modelId, choice.providerId).name;
   const chosen = user?.[role];
   if (chosen) {
-    const group = groups.find((each) => each.provider.id === chosen.providerId);
-    return group
-      ? `${modelOf(chosen)} · ${providerName(group.provider, t, language)}`
+    const provider =
+      groups.find((each) => each.provider.id === chosen.providerId)?.provider ??
+      providers.find((each) => each.id === chosen.providerId);
+    return provider
+      ? `${modelOf(chosen)} · ${providerName(provider, t, language)}`
       : modelOf(chosen);
   }
   if (role === "chatModel") return t("models.defaults.noModel");
   const automatic = role === "quickTasksModel" ? roles?.quickTasks : roles?.images;
   if (automatic) return t("models.defaults.automatic", { model: modelOf(automatic) });
-  return t(role === "imageModel" ? "models.defaults.images.none" : "models.defaults.automaticNone");
+  const loaded = groups.length > 0;
+  return t(
+    role === "imageModel" && loaded
+      ? "models.defaults.images.none"
+      : "models.defaults.automaticNone",
+  );
 }
 
 /** One job's name on the left and what it uses on the right, in Settings and at first run. */
@@ -221,8 +229,9 @@ export function RoleSelect({
       ? null
       : ((role === "quickTasksModel" ? roles?.quickTasks : roles?.images) ?? null);
   const empty = options.length === 0;
-  // Nothing to choose, which the setup card's Change still opens, to say so: no dead end.
-  const none = empty && role === "imageModel";
+  // Nothing to choose, which the setup card's Change still opens, to say so: no dead end. Not
+  // said before the list has come, when nothing is known to read images or not.
+  const none = empty && role === "imageModel" && groups.length > 0;
 
   const choose = (next: string) => {
     const choice = choiceOf(next);

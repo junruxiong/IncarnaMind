@@ -1645,6 +1645,7 @@ export const zhCN = {
   "jev.form.sends": "会把文档内容发送给 Jev 用于打标签。",
 
   "settings.title": "设置",
+  "settings.help": "查看说明",
   "settings.pages.models": "模型",
   "settings.pages.search": "搜索",
   "settings.language": "界面语言",
@@ -2273,6 +2274,7 @@ export const zhCN = {
   "question.context.include": "提问时包含此笔记",
 
   "composer.placeholder": "提问，或说明要修改的内容…",
+  "composer.placeholder.followUp": "追问…",
   "composer.label": "提问，或说明要修改的内容（{shortcut}）",
   "composer.ask": "提问（Enter）",
   "composer.scope.all": "全部文档",
@@ -3092,8 +3094,7 @@ export const zhCN = {
   "aiStatement.citations.unsupported": "无依据",
   "aiStatement.citations.contradicted": "与文档矛盾",
   "aiStatement.citations.checking": "正在核对",
-  "aiStatement.sentences.intro":
-    "作者还对自己写的一些说法做过“查找出处”或“对照文档核对”，结果如下：",
+  "aiStatement.sentences.intro": "以下是“查找出处”或“对照文档核对”的结果：",
   "aiStatement.sentences.column.count": "说法（条）",
   "aiStatement.sentences.supported": "有依据",
   "aiStatement.sentences.unsupported": "无依据",
@@ -4725,6 +4726,9 @@ export const zhCN = {
   "mindCall.failed.noChart.needsTwo": "没有生成图表：散点图需要两列数字",
   "mindCall.failed.noChart.uncited": "没有生成图表：“{mind}”里的表格有些数字没有引用",
   "mindCall.failed.newMind": "未添加到“{mind}”：要的是新的 Mind",
+  "answer.stillReading.one": "还有 1 个文档正在读取：{name}",
+  "answer.stillReading": "还有 {count} 个文档正在读取",
+  "answer.stillReading.again": "读取完成后再问一次",
   "answer.writtenFrom": "来自 {count} 个文档（此 Mind 的范围，共 {total} 个）",
   "answer.writtenFrom.useAll": "改用全部",
   "command.answer.useAll": "改用全部文档重写回答",
