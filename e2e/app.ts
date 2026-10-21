@@ -2040,18 +2040,24 @@ export async function setSidebarWidth(window: Page, width: number): Promise<void
 
 /**
  * Sizes the assistant as a person does from the keyboard: on its resize line, ← widens and →
- * narrows, 10px a press and 50px with Shift. `width` is a whole number of presses from its width now.
+ * narrows, 10px a press and 50px with Shift. It presses until the width is `width`, which must
+ * be a whole number of presses away, and focuses the line before each press, so a press that
+ * lands elsewhere is made again rather than counted.
  */
 export async function sizeAssistant(window: Page, width: number): Promise<void> {
   const assistant = window.getByTestId("assistant");
   const widthNow = () => assistant.evaluate((el) => Math.round(el.getBoundingClientRect().width));
-  const change = width - (await widthNow());
-  const key = change > 0 ? "ArrowLeft" : "ArrowRight";
-  await window.getByTestId("assistant-resize").focus();
-  for (let step = 0; step < Math.trunc(Math.abs(change) / 50); step++) {
-    await window.keyboard.press(`Shift+${key}`);
+  for (let presses = 0; presses < 80; presses++) {
+    const now = await widthNow();
+    if (now === width) return;
+    const key = width > now ? "ArrowLeft" : "ArrowRight";
+    await window.getByTestId("assistant-resize").focus();
+    await window.keyboard.press(Math.abs(width - now) >= 50 ? `Shift+${key}` : key);
+    await expect
+      .poll(widthNow, { timeout: 2000 })
+      .not.toBe(now)
+      .catch(() => undefined);
   }
-  for (let step = 0; step < (Math.abs(change) % 50) / 10; step++) await window.keyboard.press(key);
   await expect.poll(widthNow).toBe(width);
 }
 
