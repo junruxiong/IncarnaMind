@@ -399,6 +399,7 @@ export const zhCN = {
   "undo.name.editTag": "编辑标签",
   "undo.name.editFolder": "编辑文件夹",
   "undo.name.newFolder": "新建文件夹",
+  "undo.name.organize": "整理",
   "undo.name.removeExamples": "移除示例",
   "undo.name.showExamples": "显示示例",
   "firstOpen.remove": "移除示例",
