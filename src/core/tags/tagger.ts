@@ -494,15 +494,9 @@ export function createTagger(options: TaggerOptions) {
       for (const { id, row } of rows) if (row.status === "ready") enqueue(id, true);
     },
 
-    /**
-     * The computer is back online: the Documents that couldn't reach the AI
-     * model are tagged again. Said again before they are tagged, it changes nothing.
-     */
-    backOnline(): void {
-      if (lifetime.signal.aborted || options.enabled?.() === false || !options.mightBeReady()) {
-        return;
-      }
-      const ids = db
+    /** The ready Documents whose tagging, or Organize's, couldn't reach the AI model, unless stopped. */
+    unreached(): string[] {
+      return db
         .all<{ id: string }>(
           `SELECT id FROM documents
            WHERE deleted_at IS NULL AND status = 'ready'
@@ -511,8 +505,6 @@ export function createTagger(options: TaggerOptions) {
         )
         .map((row) => row.id)
         .filter((id) => !options.stopped(id));
-      setStates(ids, "pending");
-      for (const id of ids) enqueue(id);
     },
 
     /** Stops: Documents keep their state, and the next start picks them up. */

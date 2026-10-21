@@ -23,6 +23,7 @@ import {
   createFakeClaudeBrowser,
   type FakeAnthropic,
 } from "../helpers/fakeAnthropic";
+import { createFakeGitHub, createRecordingBrowser } from "../helpers/fakeGitHub";
 import { waitForTagging } from "../helpers/tags";
 
 const LIMIT = {
@@ -250,5 +251,39 @@ describe("Tagging on a Claude plan", () => {
     pacing.advance(60 * 60_000);
     await waitForTagging(core, ids);
     expect(claudeTagging(fake)).toHaveLength(4);
+  });
+});
+
+describe("Tagging on a Copilot plan", () => {
+  test("the plan's limit fails the Document, for Retry, rather than waiting: Copilot's is a monthly allowance", async () => {
+    const fake = await createFakeGitHub();
+    onTestFinished(() => fake.close());
+    const core = startCore(await createTempDataFolder(), {
+      keychain: createMemoryKeychain(),
+      browser: createRecordingBrowser(),
+      createChatModel: createAiSdkChatModel,
+      copilotProfiles: { own: fake.profile("own"), editor: fake.profile("editor") },
+    });
+    const signIn = core.signInToCopilot({});
+    await vi.waitFor(async () => expect((await core.getCopilot()).deviceCode).not.toBeNull());
+    fake.approve();
+    expect(await signIn).toMatchObject({ ok: true });
+    core.on("consent.requested", (request) => void core.respondToConsent(request.requestId, true));
+    await core.saveChatProvider({ kind: "copilot", modelId: "gpt-5.5" });
+    fake.replies.push({
+      kind: "error",
+      status: 402,
+      body: JSON.stringify({ error: { message: "You have no premium requests left." } }),
+    });
+
+    const [document] = await add(core, ["One"]);
+    if (!document) throw new Error("Nothing was added.");
+    const [settled] = await waitForTagging(
+      core,
+      [document.id],
+      (each) => each.tagging === "failed" || each.tagging === "waiting-for-provider",
+    );
+
+    expect(settled).toMatchObject({ tagging: "failed", taggingError: { kind: "plan-limit" } });
   });
 });

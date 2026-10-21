@@ -3825,7 +3825,14 @@ export function createCore(adapters: CoreAdapters): Core {
       if (rest.length > 0) await byTagger(rest);
       if (held.length > 0 || rest.length === 0) library.classify(held);
     },
-    backOnline: async () => tagger.backOnline(),
+    // Both mark them pending before anything is awaited, so saying it again finds none.
+    backOnline: async () => {
+      const ids = tagger.unreached();
+      const held = organizesNewDocuments() ? ids.filter((id) => library.isOrganizing(id)) : [];
+      if (held.length > 0) library.classify(held);
+      const rest = ids.filter((id) => !held.includes(id));
+      if (rest.length > 0) tagger.retag(rest);
+    },
     stopTagging: async () => {
       const places = library.taggingPlaces();
       library.setTaggingStopped(places, true);
