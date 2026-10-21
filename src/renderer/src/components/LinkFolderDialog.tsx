@@ -22,9 +22,9 @@ const factClass = "text-[13px] leading-5 text-ink-secondary";
  * Before a folder is linked (ADR-0010, "Big folders"): its name and path, how
  * many supported files it holds and their size, roughly how long indexing
  * takes on this computer, how many online-only files it would skip, and what
- * happens with Linked folders it overlaps (or that it is linked already). Its
- * folders as they are on disk are shown in Source locations (#1250), not chosen here (#1507). Then "Link folder" or "Cancel". Open while the store has a
- * folder `linking`; several dropped at once are asked about in turn.
+ * happens with Linked folders it overlaps (or that it is linked already). Then
+ * "Link folder" or "Cancel". Open while the store has a folder `linking`;
+ * several dropped at once are asked about in turn.
  */
 export function LinkFolderDialog() {
   const linking = useAppStore((state) => state.linking);

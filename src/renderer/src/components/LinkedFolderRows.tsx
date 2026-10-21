@@ -110,7 +110,6 @@ function LinkedFolderRow({
         data-root="true"
         data-state={state.kind}
         data-status={linked.status}
-        data-layout={linked.layout}
         {...(justLinked && { "data-just-linked": "true" })}
         {...objectMenu.rowProps}
         className={`${rowClass(false, state.kind === "unavailable" ? "muted" : "item")} @container`}

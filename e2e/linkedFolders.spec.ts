@@ -196,7 +196,6 @@ test("Add folder… shows what linking would take, then the folder's row shows i
   await expect(dialog.getByTestId("link-folder-online-only")).toContainText(
     "2 online-only files are skipped for now",
   );
-  // How it shows on disk is Source locations' (#1250), not chosen here (#1507).
   await expect(dialog.getByTestId("link-folder-layout-tree")).toHaveCount(0);
   await expect(dialog.getByTestId("link-folder-merge")).toHaveCount(0);
   await screenshot(window, "link-dialog");
@@ -225,7 +224,6 @@ test("Add folder… shows what linking would take, then the folder's row shows i
     "Download and read 2 online-only files",
   );
   await expect(menu.getByTestId("linkedFolder.pause")).toHaveText("Pause reading");
-  await expect(menu.getByTestId("linkedFolder.layout")).toHaveText("Show as a flat list");
   await screenshot(window, "row-menu");
   // Show in Finder (Explorer, the file manager) shows the folder itself, never anything else.
   await menu.getByTestId("linkedFolder.reveal").click();
@@ -272,9 +270,8 @@ test("pausing a Linked folder holds its indexing until it is resumed", async () 
   await app.close();
 });
 
-test("a Linked folder of one-file folders is a flat list, each row naming its folder, and its menu changes it", async () => {
-  // Zotero's storage: a folder per item, one file in each. For twenty or more, linking
-  // makes it a flat list, as it suggests, with nothing to choose (#1507).
+test("a Linked folder of one-file folders is a flat list, each row naming its folder", async () => {
+  // Zotero's storage: a folder per item, one file in each. Twenty or more link as a flat list.
   const storage = join(sources, "storage");
   await writeTree(
     storage,
@@ -286,28 +283,15 @@ test("a Linked folder of one-file folders is a flat list, each row naming its fo
   await confirmLink(dialog);
   await showSourceLocations(window);
 
-  const row = linkedFolderRow(window, "storage");
   const documents = linkedRows(window);
   // All 20 in Not in a Folder, which lists the first five, then "Show 15 more"; each names its folder.
   const loose = window.getByTestId("not-in-a-folder");
-  await expect(row).toHaveAttribute("data-layout", "flat");
   await expect(loose).toHaveAttribute("data-count", "20");
   await expect(documents.first()).toHaveAttribute("data-depth", "0");
   await expect(documents.first().getByTestId("row-place")).toHaveText(/^KEY10\d\d$/);
   await screenshot(window.getByTestId("sidebar"), "row-flat");
-
-  // Folders, from its menu: its row stays one row, its files where they were, their names alone.
-  let menu = await openLinkedFolderMenu(row);
-  await expect(menu.getByTestId("linkedFolder.layout")).toHaveText("Show as folders");
-  await menu.getByTestId("linkedFolder.layout").click();
-  await expect(row).toHaveAttribute("data-layout", "tree");
-  await expect(loose).toHaveAttribute("data-count", "20");
-  await expect(documents.first().getByTestId("row-place")).toHaveCount(0);
-
-  // And back.
-  menu = await openLinkedFolderMenu(row);
-  await menu.getByTestId("linkedFolder.layout").click();
-  await expect(row).toHaveAttribute("data-layout", "flat");
+  const menu = await openLinkedFolderMenu(linkedFolderRow(window, "storage"));
+  await expect(menu.getByTestId("linkedFolder.layout")).toHaveCount(0);
   await app.close();
 });
 
@@ -358,6 +342,40 @@ test("two files with one name show where each is, and a Linked folder's row open
   await app.close();
 });
 
+// protects=at 1,100 px a short name in a folder with a long name stays whole, in the sidebar and the Library, and the place is cut instead, with the place in the Library row's tooltip (#1507); fails_when=the name shows "会…" while its place keeps the room, or the tooltip leaves the place out; no_claim=names longer than the row, which are cut as before.
+test("a long place gives way before the name, in the sidebar and the Library", async () => {
+  const minutes = join(sources, "纪要");
+  await writeTree(minutes, [
+    "二〇二五年第三季度董事会与审计委员会联席会议资料汇编/会议纪要.md",
+    "二〇二六年第一季度董事会与薪酬委员会联席会议资料汇编/会议纪要.md",
+  ]);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1100, 760);
+  await linkFolderFromSidebar(app, window, minutes);
+  await showSourceLocations(window);
+  const rows = linkedRows(window);
+  await expect(rows).toHaveCount(2, { timeout: 30_000 });
+  const whole = (name: Locator) =>
+    name.evaluateAll((all) => all.map((each) => each.scrollWidth <= each.clientWidth));
+  const cut = (place: Locator) =>
+    place.evaluateAll((all) => all.map((each) => each.scrollWidth > each.clientWidth));
+  expect(await whole(rows.getByTestId("row-text"))).toEqual([true, true]);
+  expect(await cut(rows.getByTestId("row-place"))).toEqual([true, true]);
+  await screenshot(window.getByTestId("sidebar"), "long-place-rows");
+
+  await linkedFolderRow(window, "纪要").getByTestId("linked-folder-open").click();
+  const library = window.getByTestId("library-document");
+  await expect(library).toHaveCount(2);
+  expect(await whole(library.getByTestId("library-document-name"))).toEqual([true, true]);
+  await expect(library.first().locator("[data-row-main]")).toHaveAttribute(
+    "title",
+    /^会议纪要 · 二〇二\S+汇编\n/,
+  );
+  await screenshot(window, "long-place-library");
+  await app.close();
+});
+
 test("a small library of one-file folders keeps its folders", async () => {
   const library = join(sources, "Reading");
   await writeTree(library, ["Week 1/Notes.txt", "Week 2/Notes.txt", "Week 3/Notes.txt"]);
@@ -366,7 +384,6 @@ test("a small library of one-file folders keeps its folders", async () => {
   const dialog = await previewLink(app, window, library);
   await confirmLink(dialog);
   await showSourceLocations(window);
-  await expect(linkedFolderRow(window, "Reading")).toHaveAttribute("data-layout", "tree");
   await expect
     .poll(() =>
       window.evaluate(
@@ -377,6 +394,12 @@ test("a small library of one-file folders keeps its folders", async () => {
       ),
     )
     .toBe(3);
+  // Each row names its folder too, until Source locations show the folders as on disk (#1250).
+  await expect(linkedRows(window).getByTestId("row-place")).toHaveText([
+    "Week 1",
+    "Week 2",
+    "Week 3",
+  ]);
   await app.close();
 });
 

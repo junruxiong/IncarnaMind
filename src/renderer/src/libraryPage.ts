@@ -269,7 +269,6 @@ export function organizeModel(
     .join(" · ");
 }
 
-/** By Folder: the Folders in the order given, then Not in a Folder. */
 /** The Source location option for the Documents added on their own (CONTEXT.md: Other Documents). */
 export const OTHER_DOCUMENTS = "other";
 
@@ -296,6 +295,7 @@ export function sourceFacet(
   };
 }
 
+/** By Folder: the Folders in the order given, then Not in a Folder. */
 export function folderFacet(
   folders: readonly Pick<LibraryGroup, "id" | "name">[],
   folderOf: (documentId: string) => string | null,

@@ -324,14 +324,17 @@ const DocumentRow = memo(function DocumentRow({
           <DocumentLineIcon kind={item.kind} className={rowIconClass(lit)} />
           {/* Takes what the status leaves; in it, the name gives way before the colours. */}
           <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span data-testid="row-text" className="min-w-0 truncate">
-              {shownName}
-            </span>
-            {place && (
-              <span data-testid="row-place" className="min-w-0 shrink-[2] truncate text-ink-meta">
-                {place}
+            {/* The place gives way before the name does. */}
+            <span className="flex min-w-0 items-center gap-2">
+              <span data-testid="row-text" className="max-w-full shrink-0 truncate">
+                {shownName}
               </span>
-            )}
+              {place && (
+                <span data-testid="row-place" className="min-w-0 truncate text-ink-meta">
+                  {place}
+                </span>
+              )}
+            </span>
             <NotCitedLabel item={item} />
             <TagMarks
               chips={chips}

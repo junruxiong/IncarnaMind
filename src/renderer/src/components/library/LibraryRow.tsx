@@ -3,7 +3,7 @@ import type { Document, ReferenceField, ReferenceRecord } from "../../../../core
 import { displayName, sourceOf } from "../../../../shared/documentNames";
 import { missingDetails, needsCheck } from "../../../../shared/references";
 import { commands } from "../../commands/registry";
-import { useDocumentPlace } from "../../documentPlaces";
+import { nameWithPlace, useDocumentPlace } from "../../documentPlaces";
 import { useDragSource } from "../../dragDrop";
 import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
@@ -234,27 +234,32 @@ export const LibraryRow = memo(function LibraryRow({
                   type="button"
                   {...TREE_ROW}
                   data-row-main=""
-                  title={[name, ...(name === source ? [] : [source]), `${format} · ${added}`].join(
-                    "\n",
-                  )}
+                  title={[
+                    nameWithPlace(name, where),
+                    ...(name === source ? [] : [source]),
+                    `${format} · ${added}`,
+                  ].join("\n")}
                   className="flex min-w-0 items-center gap-2 text-left focus-visible:outline-0"
                 >
                   <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
-                  <span
-                    data-testid="library-document-name"
-                    data-fit-name=""
-                    className="min-w-0 truncate text-ui text-ink"
-                  >
-                    {match ? <Marked text={name} ranges={match.ranges} /> : name}
-                  </span>
-                  {where && (
+                  {/* The place gives way before the name does. */}
+                  <span className="flex min-w-0 items-center gap-2">
                     <span
-                      data-testid="library-document-place"
-                      className="min-w-0 shrink-[2] truncate text-[12px] text-ink-meta"
+                      data-testid="library-document-name"
+                      data-fit-name=""
+                      className="max-w-full shrink-0 truncate text-ui text-ink"
                     >
-                      {where}
+                      {match ? <Marked text={name} ranges={match.ranges} /> : name}
                     </span>
-                  )}
+                    {where && (
+                      <span
+                        data-testid="library-document-place"
+                        className="min-w-0 truncate text-[12px] text-ink-meta"
+                      >
+                        {where}
+                      </span>
+                    )}
+                  </span>
                 </button>
               )}
               {foundAt && (
