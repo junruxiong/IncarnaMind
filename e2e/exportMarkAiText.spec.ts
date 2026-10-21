@@ -10,6 +10,7 @@ import {
   dismissChatSetup,
   exportFromMenu,
   launchApp,
+  motionSettled,
   nameMind,
   newMind,
   openOptions,
@@ -77,6 +78,9 @@ async function mindWithAiText(window: Page): Promise<Locator> {
   return editor;
 }
 
+/** Puts the cursor in the User's own line: the middle of the Mind may be the Answer's equation. */
+const focusMind = (editor: Locator) => editor.getByText("My own line.").click();
+
 /** What the User chose, which a test sets back to "not asked yet" with null. */
 const setAnswer = (window: Page, answer: MarkAiTextChoice | null) =>
   window.evaluate(async (chosen) => {
@@ -139,7 +143,7 @@ for (const language of ["en", "zh-CN"] as const) {
     expect(await comments("Tides.docx")).toContain(words.comment);
 
     // It doesn't ask again: ⇧⌘E and Export's menu save at once.
-    await editor.click();
+    await focusMind(editor);
     await window.keyboard.press("ControlOrMeta+Shift+E");
     await expect(done).toHaveText(savedLine("Tides 2.docx", out, language));
     await exportFromMenu(window, "docx");
@@ -148,7 +152,7 @@ for (const language of ["en", "zh-CN"] as const) {
 
     // Not answered again: ⇧⌘E asks too, the keys answer, and Leave it out leaves no comment.
     await setAnswer(window, null);
-    await editor.click();
+    await focusMind(editor);
     await window.keyboard.press("ControlOrMeta+Shift+E");
     await expect(result).toHaveAttribute("data-state", "ask-mark");
     await expect(mark).toBeFocused();
@@ -208,7 +212,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await screenshot(window, `mark-options-${language}-unasked`);
     await window.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
-    await editor.click();
+    await focusMind(editor);
     await window.keyboard.press("ControlOrMeta+Shift+E");
     await expect(result).toHaveAttribute("data-state", "ask-mark");
     await window.keyboard.press("Escape");
@@ -220,7 +224,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await screenshot(window, `mark-options-${language}-answered`);
     await sheet.getByTestId("export-save").click();
     await expect(sheet).toBeHidden();
-    await editor.click();
+    await focusMind(editor);
     await window.keyboard.press("ControlOrMeta+Shift+E");
     await expect(done).toHaveText(savedLine("Tides.docx", out, language));
     expect(await comments("Tides.docx")).toContain(words.comment);
@@ -267,12 +271,14 @@ test("Export as Word from ⌘K asks too, when the last format was PDF, and Word 
   await expect(result.getByTestId("export-done")).toHaveText(savedLine("Tides.pdf", out));
   await expect(window.getByTestId("export-mind")).toHaveAttribute("data-format", "pdf");
 
-  await editor.click();
+  await focusMind(editor);
   await window.keyboard.press("ControlOrMeta+k");
   await expect(window.getByTestId("palette")).toBeVisible();
   await window.keyboard.type("Export as Word");
   await window.keyboard.press("Enter");
+  await expect(window.getByTestId("palette")).toBeHidden();
   await expect(result).toHaveAttribute("data-state", "ask-mark");
+  await motionSettled(window);
   // Asking doesn't make Word the format Export uses: that waits for the export itself.
   await expect(window.getByTestId("export-mind")).toHaveAttribute("data-format", "pdf");
   expect(await readdir(out)).toEqual(["Tides.pdf"]);
