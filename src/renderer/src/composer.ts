@@ -64,6 +64,42 @@ export function chosenScope(scope: SearchScope, folderId: string | null): Search
   return isOwn ? null : hasSearchScope(scope) ? scope : NO_SCOPE;
 }
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isStrings = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((each) => typeof each === "string");
+
+function isDraft(value: unknown): value is Draft {
+  if (!isObject(value)) return false;
+  const { text, scope, skill, pastes } = value;
+  const validScope =
+    scope === null ||
+    (isObject(scope) &&
+      isStrings(scope.folderIds) &&
+      isStrings(scope.tagIds) &&
+      isStrings(scope.documentIds));
+  return (
+    typeof text === "string" &&
+    validScope &&
+    (skill === null || typeof skill === "string") &&
+    Array.isArray(pastes) &&
+    pastes.every(
+      (paste) => isObject(paste) && typeof paste.id === "string" && typeof paste.text === "string",
+    )
+  );
+}
+
+/** The drafts a reload left, as far as they read: one that doesn't is dropped, never fixed. */
+export function draftsFrom(value: unknown): Record<string, Draft> {
+  const drafts: Record<string, Draft> = {};
+  if (!isObject(value)) return drafts;
+  for (const [mindId, draft] of Object.entries(value)) {
+    if (isDraft(draft)) drafts[mindId] = draft;
+  }
+  return drafts;
+}
+
 interface ComposerState {
   /** By Mind id: switching tabs keeps what was typed in each Mind's composer. */
   drafts: Readonly<Record<string, Draft>>;

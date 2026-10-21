@@ -22,6 +22,11 @@ export interface TestHooks {
    */
   addPaths(paths: string[]): Promise<void>;
   /**
+   * Makes a part of the window fail while it draws, as an error in it would (#1500): it shows
+   * "This panel stopped working" with Reload, and the rest stays.
+   */
+  failPanel(name: "window" | "sidebar" | "card" | "assistant" | "overlays"): void;
+  /**
    * The command registry as plain data, for the conformance spec (e2e/conformance.spec.ts):
    * the menu groups in order, each kind's menu as command IDs with their sections, and what
    * each command is.
