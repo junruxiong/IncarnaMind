@@ -1,6 +1,4 @@
-import { useState } from "react";
-import type { LinkedFolderLayout, LinkedFolderPreview } from "../../../core/api";
-import type { MessageKey } from "../../../shared/i18n";
+import type { LinkedFolderPreview } from "../../../core/api";
 import { useLanguage, useT } from "../i18n";
 import { folderName, formatBytes, formatCount, formatDuration } from "../linkedFolders";
 import { type LinkingFolder, useAppStore } from "../store";
@@ -8,33 +6,14 @@ import { FolderLineIcon } from "./lineIcons";
 import { ProblemMark } from "./ProblemLine";
 import {
   buttonClass,
-  choiceListClass,
-  choiceRadioClass,
-  choiceRowClass,
-  choiceTextClass,
-  choiceTitleClass,
   dialogActionsClass,
   dialogBodyClass,
   dialogClass,
   dialogTitleClass,
   errorTextClass,
-  fieldLabelClass,
   primaryButtonClass,
 } from "./ui";
 import { useModal } from "./useModal";
-
-const LAYOUTS: readonly { value: LinkedFolderLayout; label: MessageKey; hint: MessageKey }[] = [
-  {
-    value: "tree",
-    label: "linkedFolders.preview.layout.tree",
-    hint: "linkedFolders.preview.layout.tree.hint",
-  },
-  {
-    value: "flat",
-    label: "linkedFolders.preview.layout.flat",
-    hint: "linkedFolders.preview.layout.flat.hint",
-  },
-];
 
 /** A line of the preview: 13/20 in the dialog's secondary ink. */
 const factClass = "text-[13px] leading-5 text-ink-secondary";
@@ -42,15 +21,14 @@ const factClass = "text-[13px] leading-5 text-ink-secondary";
 /**
  * Before a folder is linked (ADR-0010, "Big folders"): its name and path, how
  * many supported files it holds and their size, roughly how long indexing
- * takes on this computer, how many online-only files it would skip, whether
- * it shows as Folders or a flat list (the User's choice, the suggestion
- * picked), and what happens with Linked folders it overlaps (or that it is
- * linked already). Then "Link folder" or "Cancel". Open while the store has a
+ * takes on this computer, how many online-only files it would skip, and what
+ * happens with Linked folders it overlaps (or that it is linked already). Its
+ * folders as they are on disk are shown in Source locations (#1250), not chosen here (#1507). Then "Link folder" or "Cancel". Open while the store has a
  * folder `linking`; several dropped at once are asked about in turn.
  */
 export function LinkFolderDialog() {
   const linking = useAppStore((state) => state.linking);
-  // A dialog of its own for each folder: it starts from that folder's suggested layout.
+  // A dialog of its own for each folder.
   return linking && <LinkFolderModal key={linking.path} linking={linking} />;
 }
 
@@ -84,8 +62,6 @@ function LinkFolderForm({ linking, onCancel }: { linking: LinkingFolder; onCance
   const t = useT();
   const confirm = useAppStore((state) => state.confirmLinkedFolder);
   const { path, preview, error } = linking;
-  const [chosen, setChosen] = useState<LinkedFolderLayout | null>(null);
-  const layout = chosen ?? preview?.layout ?? "tree";
   const inside = preview?.insideLinkedFolderId != null;
 
   return (
@@ -119,40 +95,6 @@ function LinkFolderForm({ linking, onCancel }: { linking: LinkingFolder; onCance
         </p>
       )}
 
-      {preview && !inside && (
-        <fieldset>
-          <legend className={`mb-1.5 ${fieldLabelClass}`}>
-            {t("linkedFolders.preview.layout")}
-          </legend>
-          <div className={choiceListClass}>
-            {LAYOUTS.map((option) => (
-              <label key={option.value} className={choiceRowClass}>
-                <input
-                  type="radio"
-                  name="linked-folder-layout"
-                  value={option.value}
-                  data-testid={`link-folder-layout-${option.value}`}
-                  checked={layout === option.value}
-                  onChange={() => setChosen(option.value)}
-                  className={choiceRadioClass}
-                />
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="flex items-baseline gap-2">
-                    <span className={choiceTitleClass}>{t(option.label)}</span>
-                    {preview.layout === option.value && (
-                      <span className="text-label font-semibold text-ink-meta">
-                        {t("linkedFolders.preview.suggested")}
-                      </span>
-                    )}
-                  </span>
-                  <span className={choiceTextClass}>{t(option.hint)}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-      )}
-
       <div className={dialogActionsClass}>
         {inside ? (
           <button type="button" onClick={onCancel} className={buttonClass}>
@@ -167,7 +109,7 @@ function LinkFolderForm({ linking, onCancel }: { linking: LinkingFolder; onCance
               type="button"
               data-testid="link-folder-confirm"
               disabled={preview === null}
-              onClick={() => void confirm(layout)}
+              onClick={() => preview && void confirm(preview.layout)}
               className={primaryButtonClass}
             >
               {t("linkedFolders.preview.confirm")}

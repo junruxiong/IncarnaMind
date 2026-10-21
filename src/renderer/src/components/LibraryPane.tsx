@@ -28,6 +28,7 @@ import {
   searchMatches,
   sectionShows,
   sectionsOf,
+  sourceFacet,
 } from "../libraryPage";
 import { useTextSearch } from "../libraryTextSearch";
 import { queryWords } from "../matcher";
@@ -69,12 +70,15 @@ const FORMS = ["all", "starters"];
  * Recently deleted folded at the foot. A Folder opened from the sidebar brings
  * its section into view; the page still shows every Folder.
  */
+const SOURCE_REQUEST = /^source:(.+)$/;
+
 export function LibraryPane() {
   const t = useT();
   const language = useLanguage();
   const documents = useAppStore((state) => state.documents);
   const snapshot = useAppStore((state) => state.library);
   const tags = useAppStore((state) => state.tags);
+  const linkedFolders = useAppStore((state) => state.linkedFolders);
   const tagFilter = useAppStore(useShallow((state) => state.tagFilter));
   const request = useAppStore((state) => state.libraryFilter);
   const findingSources = useFindSources((state) => state.open);
@@ -101,8 +105,15 @@ export function LibraryPane() {
     [groups, sidebarSort, language],
   );
   const facets = useMemo<LibraryFacet<Document>[]>(
-    () => [tagFacet(tags), formatFacet, yearFacet, statusFacet, folderFacet(folders, folderOf)],
-    [tags, folders, folderOf],
+    () => [
+      tagFacet(tags),
+      formatFacet,
+      yearFacet,
+      statusFacet,
+      folderFacet(folders, folderOf),
+      sourceFacet(linkedFolders),
+    ],
+    [tags, folders, folderOf, linkedFolders],
   );
   const selection = useMemo<FilterSelection>(
     () => (tagFilter.length ? { ...facetFilter, tag: tagFilter } : facetFilter),
@@ -182,6 +193,15 @@ export function LibraryPane() {
   // A Folder, Not in a Folder or Recently deleted asked for (from the sidebar, a menu or ⌘K): its section opens and comes into view.
   useEffect(() => {
     if (FORMS.includes(request)) return;
+    // A Linked folder's row asked for its Documents: the Source location filter shows them.
+    const source = SOURCE_REQUEST.exec(request)?.[1];
+    if (source) {
+      setSearch("");
+      setFacetFilter({ source: [source] });
+      useAppStore.getState().setTagFilter([]);
+      useAppStore.setState({ libraryFilter: "all" });
+      return;
+    }
     const key =
       request === LIBRARY_DELETED
         ? RECENTLY_DELETED

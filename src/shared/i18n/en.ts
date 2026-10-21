@@ -13,6 +13,7 @@ export const en = {
   "library.search.hint": "Press / to search",
   "library.filter.add": "Filter",
   "library.filter.addLabel": "Add a filter",
+  "library.filter.source": "Source location",
   "library.filter.folder": "Folder",
   "library.filter.remove": "Remove the {filter} filter",
   "library.collapseAll": "Collapse all",
@@ -1261,13 +1262,6 @@ export const en = {
     "{names}, already linked, merge into this folder and keep their Tags and Citations.",
   "linkedFolders.preview.inside":
     "This folder is inside the Linked folder “{name}”, so its files are already in IncarnaMind.",
-  "linkedFolders.preview.layout": "Show it as",
-  "linkedFolders.preview.layout.tree": "Folders",
-  "linkedFolders.preview.layout.tree.hint": "Its subfolders, as they are on disk.",
-  "linkedFolders.preview.layout.flat": "A flat list",
-  "linkedFolders.preview.layout.flat.hint":
-    "One list of every Document. Suits Zotero-style storage folders.",
-  "linkedFolders.preview.suggested": "Suggested",
   "linkedFolders.preview.failed": "Couldn’t look in this folder: {message}",
   "linkedFolders.preview.cancel": "Cancel",
   "linkedFolders.preview.close": "Close",

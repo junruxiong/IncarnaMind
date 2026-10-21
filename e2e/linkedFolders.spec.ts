@@ -196,7 +196,8 @@ test("Add folder… shows what linking would take, then the folder's row shows i
   await expect(dialog.getByTestId("link-folder-online-only")).toContainText(
     "2 online-only files are skipped for now",
   );
-  await expect(dialog.getByTestId("link-folder-layout-tree")).toBeChecked();
+  // How it shows on disk is Source locations' (#1250), not chosen here (#1507).
+  await expect(dialog.getByTestId("link-folder-layout-tree")).toHaveCount(0);
   await expect(dialog.getByTestId("link-folder-merge")).toHaveCount(0);
   await screenshot(window, "link-dialog");
   // Nothing is linked before the User says so.
@@ -271,9 +272,9 @@ test("pausing a Linked folder holds its indexing until it is resumed", async () 
   await app.close();
 });
 
-test("a Linked folder's layout, Folders or a flat list, is chosen when linking and from its menu", async () => {
+test("a Linked folder of one-file folders is a flat list, each row naming its folder, and its menu changes it", async () => {
   // Zotero's storage: a folder per item, one file in each. For twenty or more, linking
-  // suggests a flat list.
+  // makes it a flat list, as it suggests, with nothing to choose (#1507).
   const storage = join(sources, "storage");
   await writeTree(
     storage,
@@ -282,33 +283,78 @@ test("a Linked folder's layout, Folders or a flat list, is chosen when linking a
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const dialog = await previewLink(app, window, storage);
-  await expect(dialog.getByTestId("link-folder-layout-flat")).toBeChecked();
-  await expect(dialog.getByText("Suggested")).toHaveCount(1);
-  // The User prefers its folders, as on disk.
-  await dialog.getByTestId("link-folder-layout-tree").check();
   await confirmLink(dialog);
   await showSourceLocations(window);
 
   const row = linkedFolderRow(window, "storage");
   const documents = linkedRows(window);
-  // All 20 in Not in a Folder, which lists the first five, then "Show 15 more".
+  // All 20 in Not in a Folder, which lists the first five, then "Show 15 more"; each names its folder.
   const loose = window.getByTestId("not-in-a-folder");
-  await expect(row).toHaveAttribute("data-layout", "tree");
-  await expect(loose).toHaveAttribute("data-count", "20");
-  await expect(documents.first()).toHaveAttribute("data-depth", "0");
-
-  // A flat list, from its menu; its row stays one row, and its files where they were.
-  let menu = await openLinkedFolderMenu(row);
-  await menu.getByTestId("linkedFolder.layout").click();
   await expect(row).toHaveAttribute("data-layout", "flat");
   await expect(loose).toHaveAttribute("data-count", "20");
+  await expect(documents.first()).toHaveAttribute("data-depth", "0");
+  await expect(documents.first().getByTestId("row-place")).toHaveText(/^KEY10\d\d$/);
   await screenshot(window.getByTestId("sidebar"), "row-flat");
 
-  // And back.
-  menu = await openLinkedFolderMenu(row);
+  // Folders, from its menu: its row stays one row, its files where they were, their names alone.
+  let menu = await openLinkedFolderMenu(row);
   await expect(menu.getByTestId("linkedFolder.layout")).toHaveText("Show as folders");
   await menu.getByTestId("linkedFolder.layout").click();
   await expect(row).toHaveAttribute("data-layout", "tree");
+  await expect(loose).toHaveAttribute("data-count", "20");
+  await expect(documents.first().getByTestId("row-place")).toHaveCount(0);
+
+  // And back.
+  menu = await openLinkedFolderMenu(row);
+  await menu.getByTestId("linkedFolder.layout").click();
+  await expect(row).toHaveAttribute("data-layout", "flat");
+  await app.close();
+});
+
+// protects=two Documents with one name show which folder each is in, in the sidebar, the Library and ⌘K, and a Linked folder's row opens the Library on its own Documents (#1507); fails_when=the rows read the same, or the row only focuses; no_claim=the folders as on disk, which are Source locations' (#1250).
+test("two files with one name show where each is, and a Linked folder's row opens the Library on its Documents", async () => {
+  const awkward = join(sources, "awkward");
+  await writeTree(awkward, [
+    "same-name/2025/Annual-Report.md",
+    "same-name/2025/notes.md",
+    "same-name/2026/Annual-Report.md",
+    "same-name/2026/notes.md",
+  ]);
+  const other = join(sources, "Other");
+  await writeTree(other, ["Budget.md"]);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await linkFolderFromSidebar(app, window, awkward);
+  await linkFolderFromSidebar(app, window, other);
+  await showSourceLocations(window);
+  await expect(linkedRows(window)).toHaveCount(5, { timeout: 30_000 });
+
+  const reports = linkedRows(window).filter({ hasText: "Annual-Report" });
+  await expect(reports).toHaveCount(2);
+  await expect(reports.getByTestId("row-place")).toHaveText(["2025", "2026"], {
+    useInnerText: true,
+  });
+  await expect(
+    linkedRows(window).filter({ hasText: "Budget" }).getByTestId("row-place"),
+  ).toHaveCount(0);
+  await screenshot(window.getByTestId("sidebar"), "same-name-rows");
+
+  // The row opens the Library on that Linked folder's Documents alone.
+  await linkedFolderRow(window, "awkward").getByTestId("linked-folder-open").click();
+  const library = window.getByTestId("library-document");
+  await expect(library).toHaveCount(4);
+  await expect(library.filter({ hasText: "Budget" })).toHaveCount(0);
+  await expect(
+    library.filter({ hasText: "notes" }).getByTestId("library-document-place"),
+  ).toHaveText(["2025", "2026"], { useInnerText: true });
+  await screenshot(window, "same-name-library");
+
+  // ⌘K names each with its folder.
+  await window.keyboard.press("ControlOrMeta+k");
+  await window.getByTestId("palette-search").fill("Annual-Report");
+  const found = window.getByTestId("palette").getByTestId("palette-item");
+  await expect(found.filter({ hasText: "Annual-Report · 2025" })).toHaveCount(1);
+  await expect(found.filter({ hasText: "Annual-Report · 2026" })).toHaveCount(1);
   await app.close();
 });
 
@@ -318,7 +364,6 @@ test("a small library of one-file folders keeps its folders", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const dialog = await previewLink(app, window, library);
-  await expect(dialog.getByTestId("link-folder-layout-tree")).toBeChecked();
   await confirmLink(dialog);
   await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Reading")).toHaveAttribute("data-layout", "tree");

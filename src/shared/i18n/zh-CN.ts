@@ -11,6 +11,7 @@ export const zhCN = {
   "library.search.hint": "按 / 搜索",
   "library.filter.add": "筛选",
   "library.filter.addLabel": "添加筛选条件",
+  "library.filter.source": "来源位置",
   "library.filter.folder": "文件夹",
   "library.filter.remove": "移除“{filter}”筛选",
   "library.collapseAll": "全部收起",
@@ -1230,13 +1231,6 @@ export const zhCN = {
     "已添加的同步文件夹{names}位于其中，将并入这里，保留标签和引用。",
   "linkedFolders.preview.inside":
     "这个文件夹位于同步文件夹“{name}”中，其中的文件已在 IncarnaMind 中。",
-  "linkedFolders.preview.layout": "显示为",
-  "linkedFolders.preview.layout.tree": "文件夹",
-  "linkedFolders.preview.layout.tree.hint": "按磁盘上的结构显示子文件夹。",
-  "linkedFolders.preview.layout.flat": "平铺列表",
-  "linkedFolders.preview.layout.flat.hint":
-    "所有文档显示在一个列表中。适合 Zotero 的 storage 这类文件夹。",
-  "linkedFolders.preview.suggested": "推荐",
   "linkedFolders.preview.failed": "无法读取这个文件夹：{message}",
   "linkedFolders.preview.cancel": "取消",
   "linkedFolders.preview.close": "关闭",

@@ -2,6 +2,7 @@ import { type ChangeEvent, type KeyboardEvent, memo, type ReactNode, useMemo, us
 import type { Document, DocumentStatus, Tag } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
+import { useDocumentPlace } from "../documentPlaces";
 import { documentStatusText } from "../documentStatus";
 import { useDragSource } from "../dragDrop";
 import { useFirstOpen } from "../firstOpen";
@@ -241,6 +242,7 @@ const DocumentRow = memo(function DocumentRow({
   const rename = useRename<HTMLButtonElement>(`sidebar-document:${item.id}`);
   const renameDocument = useAppStore((state) => state.renameDocument);
   const shownName = displayName(item);
+  const place = useDocumentPlace(item.id);
   const source = sourceOf(item);
   const chips = chipsOf(item.tags, tagsById);
   const tagNames =
@@ -305,7 +307,7 @@ const DocumentRow = memo(function DocumentRow({
           data-testid="open-document"
           aria-current={isOpen ? "true" : undefined}
           aria-description={tagNames}
-          title={[shownName === source ? shownName : `${shownName}\n${source}`, tagNames]
+          title={[shownName === source ? shownName : `${shownName}\n${source}`, place, tagNames]
             .filter(Boolean)
             .join("\n")}
           // A click opens it, in a preview beside the Mind or in the group already showing a Document;
@@ -325,6 +327,11 @@ const DocumentRow = memo(function DocumentRow({
             <span data-testid="row-text" className="min-w-0 truncate">
               {shownName}
             </span>
+            {place && (
+              <span data-testid="row-place" className="min-w-0 shrink-[2] truncate text-ink-meta">
+                {place}
+              </span>
+            )}
             <NotCitedLabel item={item} />
             <TagMarks
               chips={chips}

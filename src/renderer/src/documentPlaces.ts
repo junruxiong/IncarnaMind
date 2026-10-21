@@ -1,0 +1,54 @@
+/**
+ * Where a Document is, shown beside its name where the name alone doesn't say (#1507): among
+ * Documents that share a shown name, the folders that tell each apart (`whereShown`); in a
+ * Linked folder shown as a flat list, every Document's folder inside it. Worked out once per
+ * change of the Documents or Linked folders, for every row, the Library, ⌘K and Citation cards.
+ */
+import type { Document, LinkedFolder } from "../../core/api";
+import { whereShown } from "../../shared/documentNames";
+import { useAppStore } from "./store";
+
+let cached: {
+  documents: readonly Document[];
+  linkedFolders: readonly LinkedFolder[];
+  places: ReadonlyMap<string, string>;
+} | null = null;
+
+/** The folders between a Linked folder and its file, or null for a file at its top. */
+function foldersWithin(root: string, path: string): string | null {
+  const inside = path.slice(root.length).split(/[\\/]/).filter(Boolean).slice(0, -1);
+  return path.startsWith(root) && inside.length > 0 ? inside.join(" / ") : null;
+}
+
+export function placesOf(
+  documents: readonly Document[],
+  linkedFolders: readonly LinkedFolder[],
+): ReadonlyMap<string, string> {
+  if (cached?.documents === documents && cached.linkedFolders === linkedFolders) {
+    return cached.places;
+  }
+  const places = whereShown(documents);
+  const flat = new Map(
+    linkedFolders.filter((each) => each.layout === "flat").map((each) => [each.id, each.path]),
+  );
+  for (const document of documents) {
+    const root = document.linkedFolderId ? flat.get(document.linkedFolderId) : undefined;
+    if (!root || places.has(document.id)) continue;
+    const folders = foldersWithin(root, document.path);
+    if (folders) places.set(document.id, folders);
+  }
+  cached = { documents, linkedFolders, places };
+  return places;
+}
+
+/** Where a Document is, as its row shows it, or null when its name is enough. */
+export const useDocumentPlace = (documentId: string | null): string | null =>
+  useAppStore((state) =>
+    documentId === null
+      ? null
+      : (placesOf(state.documents, state.linkedFolders).get(documentId) ?? null),
+  );
+
+/** A Document's name with where it is, for one line of text: "Annual-Report · 2025". */
+export const nameWithPlace = (name: string, place: string | null): string =>
+  place ? `${name} · ${place}` : name;

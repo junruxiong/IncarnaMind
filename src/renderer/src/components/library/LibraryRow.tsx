@@ -3,6 +3,7 @@ import type { Document, ReferenceField, ReferenceRecord } from "../../../../core
 import { displayName, sourceOf } from "../../../../shared/documentNames";
 import { missingDetails, needsCheck } from "../../../../shared/references";
 import { commands } from "../../commands/registry";
+import { useDocumentPlace } from "../../documentPlaces";
 import { useDragSource } from "../../dragDrop";
 import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
@@ -142,6 +143,7 @@ export const LibraryRow = memo(function LibraryRow({
   const language = useLanguage();
   const place = useTabPlace();
   const name = displayName(doc);
+  const where = useDocumentPlace(doc.id);
   const source = sourceOf(doc);
   const format = t(FORMAT_LABELS[doc.kind]);
   const added = addedLabel(doc.createdAt, new Date(), language);
@@ -245,6 +247,14 @@ export const LibraryRow = memo(function LibraryRow({
                   >
                     {match ? <Marked text={name} ranges={match.ranges} /> : name}
                   </span>
+                  {where && (
+                    <span
+                      data-testid="library-document-place"
+                      className="min-w-0 shrink-[2] truncate text-[12px] text-ink-meta"
+                    >
+                      {where}
+                    </span>
+                  )}
                 </button>
               )}
               {foundAt && (

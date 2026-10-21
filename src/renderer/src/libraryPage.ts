@@ -8,11 +8,12 @@ import type {
   DocumentGroupAssignment,
   DocumentTextMatch,
   LibraryGroup,
+  LinkedFolder,
   TextRange,
 } from "../../core/api";
 import type { Language } from "../../core/language";
 import { formatShortDate } from "../../shared/dates";
-import { displayName } from "../../shared/documentNames";
+import { displayName, fileNameOf } from "../../shared/documentNames";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { modelName } from "../../shared/modelName";
 import { type LibraryFacet, type LibraryStatus, libraryStatus } from "./libraryFilters";
@@ -269,6 +270,32 @@ export function organizeModel(
 }
 
 /** By Folder: the Folders in the order given, then Not in a Folder. */
+/** The Source location option for the Documents added on their own (CONTEXT.md: Other Documents). */
+export const OTHER_DOCUMENTS = "other";
+
+/** What the Library asks for to show one Linked folder's Documents: its row's click (#1507). */
+export const sourceRequest = (linkedFolderId: string) => `source:${linkedFolderId}`;
+
+/** By Source location (#1507): each Linked folder, by its folder's name, then Other Documents. */
+export function sourceFacet(
+  linkedFolders: readonly Pick<LinkedFolder, "id" | "path">[],
+): LibraryFacet<Document> {
+  const names = new Map(linkedFolders.map((linked) => [linked.id, fileNameOf(linked.path)]));
+  const order = [...linkedFolders.map((linked) => linked.id), OTHER_DOCUMENTS];
+  return {
+    id: "source",
+    title: "library.filter.source",
+    values: (document) => [
+      document.linkedFolderId !== null && names.has(document.linkedFolderId)
+        ? document.linkedFolderId
+        : OTHER_DOCUMENTS,
+    ],
+    label: (value, t) =>
+      value === OTHER_DOCUMENTS ? t("info.from.own") : (names.get(value) ?? value),
+    compare: (a, b) => order.indexOf(a) - order.indexOf(b),
+  };
+}
+
 export function folderFacet(
   folders: readonly Pick<LibraryGroup, "id" | "name">[],
   folderOf: (documentId: string) => string | null,
