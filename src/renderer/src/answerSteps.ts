@@ -223,6 +223,10 @@ const mindRow = ({ answer, askedFrom, selection }: StepsInput) =>
       ? ({ kind: "asked", mind: askedFrom } as const)
       : null;
 
+// A question the Tool refused, or one left open when its Answer stopped, waits for nothing now.
+const unansweredQuestion = (call: AnswerToolCall) =>
+  call.source === "asks" && call.status !== "running" && !call.asked?.answer;
+
 /**
  * The rows of the unfolded timeline, in order: the model's reasoning (or
  * who answered), the Mind read, unless the folded line already says so and
@@ -255,7 +259,7 @@ export function stepRows(input: StepsInput): StepRow[] {
   let joining: Extract<StepRow, { kind: "search" }> | null = null;
   let calculated = 0;
   for (const call of answer.toolCalls) {
-    if (call.approval === "waiting") continue;
+    if (call.approval === "waiting" || unansweredQuestion(call)) continue;
     if (isCalculated(call)) {
       calculated = call.resultCount ?? 0;
       continue;

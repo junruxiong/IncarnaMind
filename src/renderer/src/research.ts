@@ -34,8 +34,7 @@ export type WebReach = "ready" | "off" | "local-mode" | "unsupported";
 export function useWebReach(model: ChatModelChoice | null): WebReach {
   const on = useAppStore((state) => state.settings?.user.webSearch === true);
   const localOnly = useAppStore((state) => state.embedding?.localOnly === true);
-  const fallback = useAppStore((state) => state.settings?.user.chatModel ?? null);
-  const providerId = (model ?? fallback)?.providerId ?? null;
+  const providerId = useResearchModel(model)?.providerId ?? null;
   const [kinds, setKinds] = useState<Readonly<Record<string, ChatProviderKind>>>({});
   const known = providerId !== null && kinds[providerId] !== undefined;
   useEffect(() => {
@@ -54,12 +53,17 @@ export function useWebReach(model: ChatModelChoice | null): WebReach {
   return on ? "ready" : "off";
 }
 
+/** The model research runs on: the chip's, else the default one. */
+export function useResearchModel(model: ChatModelChoice | null): ChatModelChoice | null {
+  const fallback = useAppStore((state) => state.settings?.user.chatModel ?? null);
+  return model ?? fallback;
+}
+
 /** Why research with `model` reads the Library only, in the interface's words; null when it can search the web. */
 export function useWebMissing(reach: WebReach, model: ChatModelChoice | null): string | null {
   const t = useT();
   const nameOf = useModelNames();
-  const fallback = useAppStore((state) => state.settings?.user.chatModel ?? null);
-  const shown = model ?? fallback;
+  const shown = useResearchModel(model);
   if (reach === "ready") return null;
   if (reach === "off") return t("research.plan.webOff");
   if (reach === "local-mode") return t("research.plan.localMode");
