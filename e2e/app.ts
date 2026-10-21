@@ -172,6 +172,12 @@ export interface LaunchOptions {
    * its sandbox, where the line must not show. The sandbox is on in the last two on Linux too.
    */
   sandboxNotice?: "switch" | "environment" | "on";
+  /**
+   * The first Word export asks whether to mark the text IncarnaMind wrote. Without this, a launch
+   * answers it "Mark it" if nobody has, so a test that exports to Word is not stopped by it;
+   * with it, the app is left asking.
+   */
+  askToMarkAiText?: boolean;
 }
 
 /**
@@ -236,6 +242,7 @@ export async function launchApp(
     contradictionWatchDelayMs,
     sandboxed = false,
     sandboxNotice,
+    askToMarkAiText = false,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -334,7 +341,19 @@ export async function launchApp(
       message: `the window is ${WINDOW_SIZE.width} × ${WINDOW_SIZE.height}: is the screen too short for it?`,
     });
   }
+  if (!askToMarkAiText) await answerMarkAiText(window);
   return { app, window };
+}
+
+/** Answers the first Word export's question "Mark it", unless it has an answer. */
+async function answerMarkAiText(window: Page): Promise<void> {
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const { exportOptions } = (await bridge.getSettings()).user;
+    if (exportOptions.docx.markAiText !== null) return;
+    const docx = { ...exportOptions.docx, markAiText: "mark" as const };
+    await bridge.updateSettings({ user: { exportOptions: { ...exportOptions, docx } } });
+  });
 }
 
 /**
@@ -1723,7 +1742,7 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
  * Where `words` are drawn in a line of text: their left and right edges, and
  * their middle line. They may run across marks (AI text and the User's, bold).
  */
-async function wordsBox(line: Locator, words: string) {
+export async function wordsBox(line: Locator, words: string) {
   const box = await line.evaluate((element, wanted) => {
     const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     const texts: Text[] = [];

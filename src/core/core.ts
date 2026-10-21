@@ -1238,6 +1238,7 @@ export function createCore(adapters: CoreAdapters): Core {
     outputFolder: async () => outputs.settings().location,
     exportMind: async (mindId, format, folder, approved) => {
       const options = optionsFor(format, settings.get().user.exportOptions);
+      if (!options) throw new InvalidInputError({ key: "error.commands.markAiTextAsk" });
       const { fileName, data, word } = await mindExports.export(mindId, options);
       // The window shows first what a Word file can't keep (#105); the assistant can't.
       if (word && word.notKept.length > 0) {

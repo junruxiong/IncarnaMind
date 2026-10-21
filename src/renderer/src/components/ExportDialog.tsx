@@ -22,6 +22,7 @@ import { useT } from "../i18n";
 import { chooseOutputLocation, outputFolderLabel } from "../outputFiles";
 import { useAppStore } from "../store";
 import { ChevronDownLineIcon, CloseLineIcon } from "./lineIcons";
+import { MarkAiTextRow } from "./MarkAiText";
 import { ProblemLine } from "./ProblemLine";
 import { SharePageContents } from "./SharePageContents";
 import {
@@ -140,12 +141,9 @@ function WordReviewRows({
           testId="export-track-changes"
         />
       )}
-      <SwitchRow
-        label={t("export.markAiText")}
-        hint={t("export.markAiText.hint")}
-        checked={draft.markAiText}
+      <MarkAiTextRow
+        value={draft.markAiText}
         onChange={(markAiText) => onChange({ ...draft, markAiText })}
-        testId="export-mark-ai-text"
       />
       <SwitchRow
         label={t("export.commentFailedChecks")}
