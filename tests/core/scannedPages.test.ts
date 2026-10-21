@@ -647,4 +647,71 @@ describe("Pages read before a quit or a crash are kept (#1504)", { timeout: 60_0
       core.close();
     }
   });
+
+  // protects=with two scans read at once (#1502's lane), a quit or a crash keeps each scan's own pages: the next read of each reads only what it hadn't, and neither takes the other's; fails_when=a scan starts again from page 1, reads a page twice, or keeps a page of the other; no_claim=the pages under way at the quit, which are read again.
+  test.each([["quit"], ["crash"]])(
+    "two scans read at once each keep their own pages after a %s",
+    async (how) => {
+      const dataDir = await createTempDataFolder();
+      const first = recognizerHolding(4);
+      const core = startCore(dataDir, { ...scanning(first.recognizer), scansAtOnce: 2 });
+      const sources = await createSourceFolder();
+      const files = [];
+      for (const name of ["Lease A.pdf", "Lease B.pdf"]) {
+        files.push(
+          await writeSourceFile(
+            sources,
+            name,
+            buildPdf(PAGES.map(() => ({ scan: picture("en-clean") }))),
+          ),
+        );
+      }
+      // Two versions, so neither file is a copy of the other.
+      await writeFile(
+        files[1] as string,
+        buildPdf(PAGES.map(() => ({ scan: picture("zh-clean") }))),
+      );
+      const { documents: added } = await core.addDocuments(files);
+      const ids = added.map((document) => document.id);
+      await waitForDocuments(core, (documents) => {
+        const reading = documents.filter((each) => ids.includes(each.id));
+        expect(reading.map((each) => each.status)).toEqual(["extracting", "extracting"]);
+        expect(reading.reduce((sum, each) => sum + (each.scan?.read ?? 0), 0)).toBe(4);
+      });
+      const keptBefore = ids.map((id) => liveUnits(dataDir, id).length);
+      expect(keptBefore.reduce((sum, count) => sum + count, 0)).toBe(4);
+      core.close();
+      if (how === "crash") {
+        const db = openDatabase(join(dataDir, DATABASE_FILE));
+        try {
+          for (const id of ids)
+            db.run("UPDATE documents SET status = 'extracting' WHERE id = ?", [id]);
+        } finally {
+          db.close();
+        }
+      }
+
+      const second = countingRecognizer(script);
+      const again = startCore(dataDir, { ...scanning(second.recognizer), scansAtOnce: 2 });
+      try {
+        if (how === "crash") {
+          for (const each of await again.listDocuments()) {
+            if (ids.includes(each.id)) {
+              expect(each).toMatchObject({ status: "failed", failure: { reason: "app-stopped" } });
+              await again.retryDocument(each.id);
+            }
+          }
+        }
+        const ready = await waitForProcessing(again, ids);
+        expect(ready.map((each) => each.status)).toEqual(["ready", "ready"]);
+        // Only what neither had read: each scan's own pages were kept for it.
+        expect(second.read).toHaveLength(8 - 4);
+        for (const document of ready) {
+          expect(unitsOf(dataDir, document).map((unit) => unit.page)).toEqual(PAGES);
+        }
+      } finally {
+        again.close();
+      }
+    },
+  );
 });

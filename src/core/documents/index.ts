@@ -430,6 +430,8 @@ export interface DocumentsOptions {
    * scanned pages are left with the little text they have, as before.
    */
   textRecognition?: TextRecognitionModel;
+  /** How many scans are read at once (./processor, `scansAtOnce`). */
+  scansAtOnce?: number;
   /** The password kept for a locked PDF (./pdfPasswords, #763); undefined when none is. */
   pdfPassword?(documentId: string): Promise<string | undefined>;
   linkedFolders: {
@@ -537,7 +539,8 @@ export function createDocuments(options: DocumentsOptions) {
       pageCount: row.page_count,
       status,
       progress: status === "embedding" ? progressOf(row) : null,
-      scan: status === "extracting" ? (scanProgress.get(row.id) ?? null) : null,
+      scan:
+        status === "extracting" || status === "queued" ? (scanProgress.get(row.id) ?? null) : null,
       failure: failed
         ? {
             reason: (row.failure_reason ?? "processing-error") as DocumentFailureReason,
@@ -998,6 +1001,7 @@ export function createDocuments(options: DocumentsOptions) {
   let checkFile = (_path: string) => {};
 
   const processor = createProcessor({
+    scansAtOnce: options.scansAtOnce,
     onStart(job) {
       const row = find(job.documentId);
       if (row?.status !== "queued") return undefined;
@@ -1005,6 +1009,13 @@ export function createDocuments(options: DocumentsOptions) {
       announce(job.documentId);
       // A job queued again while one before it ran keeps the pages that one read meanwhile.
       return job.scan ? { ...job, scan: { ...job.scan, keep: keptScans(row) } } : undefined;
+    },
+    onWaiting(job) {
+      // Queued, a quit doesn't count it as what stopped the app; its scan progress, kept, says
+      // it is a scan waiting its turn.
+      if (find(job.documentId)?.status !== "extracting") return;
+      setStatus(job.documentId, "queued");
+      announce(job.documentId);
     },
     onProgress(job, { contentHash, read, of, unit }) {
       scanProgress.set(job.documentId, {

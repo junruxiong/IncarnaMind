@@ -4,7 +4,7 @@
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
-import { homedir, tmpdir } from "node:os";
+import { availableParallelism, homedir, tmpdir, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import { Agent, fetch as undiciFetch } from "undici";
@@ -25,6 +25,7 @@ import {
   type UsageDataSender,
 } from "../core";
 import { runAnalysis } from "../core/analysis";
+import { scansAtOnce } from "../core/documents/processor";
 import type { PageFetch } from "../core/documents/web/fetch";
 import { createFakeCapture, type FakeCapture, wavSamples } from "../core/meetings/fakeCapture";
 import { type LocalServers, scriptedLocalServers } from "../core/providers/localServers";
@@ -202,6 +203,8 @@ const fakeEmbedder =
 
 /** With the fake models, what the fake text recognition model reads on each scanned page (#397). */
 const fakeScans = fakeEmbedder ? (process.env.INCARNAMIND_TEST_SCANS ?? null) : null;
+/** With the fake models, how many scans are read at once (#1502), whatever the computer. */
+const testScansAtOnce = fakeEmbedder ? Number(process.env.INCARNAMIND_TEST_SCANS_AT_ONCE ?? 0) : 0;
 
 /**
  * Test-only launch flags: the smoke tests transcribe Meetings with a fake
@@ -742,6 +745,8 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     textRecognizer: createUtilityProcessTextRecognizer(
       fakeEmbedder ? { fake: { script: fakeScans } } : {},
     ),
+    scansAtOnce:
+      testScansAtOnce > 0 ? testScansAtOnce : scansAtOnce(availableParallelism(), totalmem()),
     // The fake models have no files to download.
     ...(fakeEmbedder && {
       embeddingModelSource: { baseUrl: "http://localhost/", files: [] },

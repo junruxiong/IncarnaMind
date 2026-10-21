@@ -1322,8 +1322,10 @@ export const en = {
 
   "status.processing.one": "Processing 1 Document…",
   "status.processing.other": "Processing {count} Documents…",
-  "status.scanning.one": "Reading 1 scanned page…",
-  "status.scanning.other": "Reading {count} scanned pages…",
+  "status.scans.one": "Reading 1 scan…",
+  "status.scans.other": "Reading {count} scans…",
+  "status.scansWaiting.one": "Reading 1 scan, {waiting} waiting",
+  "status.scansWaiting.other": "Reading {count} scans, {waiting} waiting",
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
   "status.taggingWith.one": "Tagging 1 Document with {service}…",
