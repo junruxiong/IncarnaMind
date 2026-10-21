@@ -35,6 +35,7 @@ import { displayName } from "../../shared/documentNames";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
+import { filingFolder } from "../../shared/searchScope";
 import { tagLinks } from "../../shared/tagLinks";
 import {
   deleted,
@@ -202,10 +203,10 @@ export interface AppState extends LayoutSlice {
 
   load(): Promise<void>;
   /**
-   * Creates a Mind, in a Folder if given, and opens it in a new tab after the
-   * shown one, in the focused group or `groupId`, with its title focused, or
-   * with a Question started in it (with a Search scope, if given). It says nothing
-   * and leaves nothing to undo: ⌘Z stays the editor's own, and Delete takes the Mind back.
+   * Creates a Mind, in `folderId` if given, else where `filingFolder` says (#1362), and opens it
+   * in a new tab after the shown one, in the focused group or `groupId`, with its title focused,
+   * or with a Question started in it (with a Search scope, if given). It says nothing and leaves
+   * nothing to undo: ⌘Z stays the editor's own, and Delete takes the Mind back.
    */
   createMind(options?: {
     startQuestion?: boolean;
@@ -214,6 +215,7 @@ export interface AppState extends LayoutSlice {
     /** A new Mind to write in: its first line is an empty Heading 1, its title to be typed. */
     titled?: boolean;
     scope?: SearchScope | null;
+    /** Null: in no Folder, whichever Mind is in front. */
     folderId?: string | null;
     groupId?: string;
     /** Runs once it is made and shown, with its id. */
@@ -930,10 +932,16 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     createMind: async (options) => {
       await attempt(async () => {
+        const { layout, minds } = get();
+        const inFront = minds.find((each) => each.id === currentMindIdOf(layout));
+        const folderId =
+          options?.folderId === undefined
+            ? filingFolder(options?.scope ?? null, inFront?.folderId ?? null)
+            : options.folderId;
         const mind = await core.createMind({
           ...(options?.title && { title: options.title }),
           ...((options?.title || options?.titled) && { headed: true }),
-          ...(options?.folderId && { folderId: options.folderId }),
+          ...(folderId && { folderId }),
         });
         set(
           options?.startQuestion
