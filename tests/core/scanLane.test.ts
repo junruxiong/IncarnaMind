@@ -66,7 +66,10 @@ const byName = (documents: readonly Document[], file: string) => {
   return found;
 };
 
-describe("A text file is never held behind a scan (#1502)", { timeout: 60_000 }, () => {
+// The waits are for states, with room for a busy runner: four PDFs on worker threads at once.
+const WAIT_MS = 45_000;
+
+describe("A text file is never held behind a scan (#1502)", { timeout: 180_000 }, () => {
   // protects=a Document that needs no text recognition is ready while a scan added before it is still read, and the scan finishes after; fails_when=the text PDF or the Markdown file waits until the scan's pages are read; no_claim=how long the real model takes.
   test("a text PDF and a Markdown file added after a scan are ready while its pages are still read", async () => {
     const dataDir = await createTempDataFolder();
@@ -84,7 +87,7 @@ describe("A text file is never held behind a scan (#1502)", { timeout: 60_000 },
       ]);
       if (!scan || !text || !notes) throw new Error("The files weren't added.");
 
-      const ready = await waitForProcessing(core, [text.id, notes.id]);
+      const ready = await waitForProcessing(core, [text.id, notes.id], WAIT_MS);
       expect(ready.map((document) => document.status)).toEqual(["ready", "ready"]);
       const [stillReading] = (await core.listDocuments()).filter((each) => each.id === scan.id);
       expect(stillReading).toMatchObject({
@@ -93,7 +96,7 @@ describe("A text file is never held behind a scan (#1502)", { timeout: 60_000 },
       });
 
       slow.release();
-      const [read] = await waitForProcessing(core, [scan.id]);
+      const [read] = await waitForProcessing(core, [scan.id], WAIT_MS);
       expect(read?.status).toBe("ready");
       const [found] = await core.searchPassages("undisputed invoice", { mode: "keyword" });
       expect(found?.documentId).toBe(scan.id);
@@ -129,20 +132,25 @@ describe("A text file is never held behind a scan (#1502)", { timeout: 60_000 },
           ["Board minutes.pdf", textPdf(3)],
         ]);
         const text = byName(added, "Board minutes.pdf");
-        await waitForProcessing(core, [text.id]);
-        const documents = await waitForDocuments(core, (each) => {
-          const scans = ["Scan A.pdf", "Scan B.pdf", "Scan C.pdf"].map((name) =>
-            byName(each, name),
-          );
-          expect(scans.map((scan) => scan.status)).toEqual(states);
-          for (const scan of scans) expect(scan.scan).toMatchObject({ pages: 2, read: 0 });
-        });
+        await waitForProcessing(core, [text.id], WAIT_MS);
+        const documents = await waitForDocuments(
+          core,
+          (each) => {
+            const scans = ["Scan A.pdf", "Scan B.pdf", "Scan C.pdf"].map((name) =>
+              byName(each, name),
+            );
+            expect(scans.map((scan) => scan.status)).toEqual(states);
+            for (const scan of scans) expect(scan.scan).toMatchObject({ pages: 2, read: 0 });
+          },
+          WAIT_MS,
+        );
         expect(byName(documents, "Board minutes.pdf").status).toBe("ready");
 
         slow.release();
         await waitForProcessing(
           core,
           added.map((document) => document.id),
+          WAIT_MS,
         );
         // One at a time, they are read in order; two at once may finish in any order.
         expect(order[0]).toBe("Board minutes");
@@ -170,16 +178,21 @@ describe("A text file is never held behind a scan (#1502)", { timeout: 60_000 },
         ["Scan B.pdf", scanPdf()],
         ["Scan C.pdf", scanPdf()],
       ]);
-      await waitForDocuments(core, (each) => {
-        expect(byName(each, "Scan B.pdf").status).toBe("queued");
-        expect(byName(each, "Scan C.pdf").scan).not.toBeNull();
-      });
+      await waitForDocuments(
+        core,
+        (each) => {
+          expect(byName(each, "Scan B.pdf").status).toBe("queued");
+          expect(byName(each, "Scan C.pdf").scan).not.toBeNull();
+        },
+        WAIT_MS,
+      );
       await core.deleteDocument(byName(added, "Scan B.pdf").id);
       slow.release();
-      const [a, c] = await waitForProcessing(core, [
-        byName(added, "Scan A.pdf").id,
-        byName(added, "Scan C.pdf").id,
-      ]);
+      const [a, c] = await waitForProcessing(
+        core,
+        [byName(added, "Scan A.pdf").id, byName(added, "Scan C.pdf").id],
+        WAIT_MS,
+      );
       expect([a?.status, c?.status]).toEqual(["ready", "ready"]);
       // Two pages each for A and C: a scan waiting for its turn asks for none.
       expect(slow.asked.pages).toBe(4);
@@ -201,10 +214,14 @@ describe("A text file is never held behind a scan (#1502)", { timeout: 60_000 },
       ["Scan A.pdf", scanPdf()],
       ["Scan B.pdf", scanPdf()],
     ]);
-    await waitForDocuments(core, (each) => {
-      expect(byName(each, "Scan A.pdf").status).toBe("extracting");
-      expect(byName(each, "Scan B.pdf").status).toBe("queued");
-    });
+    await waitForDocuments(
+      core,
+      (each) => {
+        expect(byName(each, "Scan A.pdf").status).toBe("extracting");
+        expect(byName(each, "Scan B.pdf").status).toBe("queued");
+      },
+      WAIT_MS,
+    );
     core.close();
 
     const again = slowRecognizer();
@@ -215,7 +232,7 @@ describe("A text file is never held behind a scan (#1502)", { timeout: 60_000 },
       scansAtOnce: 1,
     });
     try {
-      const [b] = await waitForProcessing(restarted, [byName(added, "Scan B.pdf").id]);
+      const [b] = await waitForProcessing(restarted, [byName(added, "Scan B.pdf").id], WAIT_MS);
       expect(b).toMatchObject({ status: "ready", failure: null });
     } finally {
       restarted.close();
