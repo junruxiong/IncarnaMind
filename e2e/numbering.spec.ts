@@ -204,7 +204,8 @@ for (const { language, width, items: words } of SETTINGS) {
     await window.keyboard.press("Shift+Tab");
     await expect.poll(() => markers(editor)).toEqual([language === "en" ? "(a)" : "一、", second]);
 
-    // On the first item, with nothing to go under, Tab takes the list a level deeper.
+    // On the first item, with nothing to go under, Tab takes only that item a level deeper, as in
+    // Word; Shift-Tab brings it back into the one list.
     await clickEndOf(window, itemText(items(editor).first()));
     await expect
       .poll(() =>
@@ -216,9 +217,16 @@ for (const { language, width, items: words } of SETTINGS) {
     await window.keyboard.press("Tab");
     await expect
       .poll(() => markers(editor))
-      .toEqual(language === "en" ? ["(i)", "(ii)"] : ["（一）", "（二）"]);
-    near((await drawn(items(editor).first())).textLeft - left, 96, "the deeper list's text");
+      .toEqual(language === "en" ? ["(i)", "(a)"] : ["（一）", "一、"]);
+    near((await drawn(items(editor).first())).textLeft - left, 96, "the deeper item's text");
+    near((await drawn(items(editor).nth(1))).textLeft - left, 48, "the next item's text");
     await expect(editor).toBeFocused();
+    await window.keyboard.press("Shift+Tab");
+    await expect.poll(() => markers(editor)).toEqual([language === "en" ? "(a)" : "一、", second]);
+    await window.keyboard.press(UNDO);
+    await expect
+      .poll(() => markers(editor))
+      .toEqual(language === "en" ? ["(i)", "(a)"] : ["（一）", "一、"]);
     await window.keyboard.press(UNDO);
     await expect.poll(() => markers(editor)).toEqual([language === "en" ? "(a)" : "一、", second]);
     await screenshot(window, `numbering-typed-${language}-${width}`);

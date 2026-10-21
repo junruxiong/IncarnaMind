@@ -215,31 +215,57 @@ describe("A list that starts deeper", () => {
     expect(markers(editor)).toEqual(["(i)", "(ii)"]);
   });
 
-  // protects=Tab on a deeper list's first item takes the whole list a level deeper; Shift-Tab brings an item up a level, the items before it staying and those after it nesting under it, so each keeps its level; at the first level Shift-Tab takes the item out of the list as before; fails_when=a level is lost or an item moves two levels; no_claim=none beyond protects.
+  // protects=Tab on a list's first item takes only that item a level deeper, in a list of its own, as in Word, and Shift-Tab brings it back into the one list; on a one-item list the list goes deeper; Shift-Tab on a later item brings it up a level, the items before it staying and those after it nesting under it, so each keeps its level; at the first level Shift-Tab takes the item out as before; fails_when=a level is lost, an item moves two levels, or the items after the first move with it; no_claim=none beyond protects.
   test("Tab and Shift-Tab across the level a list starts at", () => {
     const editor = editorWith([
       ordered({ numbering: "clauses", startLevel: 1 }, item("A"), item("B"), item("C")),
     ]);
     caretIn(editor, "A");
     changeIndent(editor, 1);
-    expect(lists(editor)).toEqual([{ numbering: "clauses", startLevel: 2, items: 3 }]);
-    expect(markers(editor)).toEqual(["(A)", "(B)", "(C)"]);
+    expect(lists(editor)).toEqual([
+      { numbering: "clauses", startLevel: 2, items: 1 },
+      { numbering: "clauses", startLevel: 1, items: 2 },
+    ]);
+    expect(markers(editor)).toEqual(["(A)", "(i)", "(ii)"]);
+    expect(editor.state.selection.$from.parent.textContent).toBe("A");
+    changeIndent(editor, -1);
+    expect(lists(editor)).toEqual([{ numbering: "clauses", startLevel: 1, items: 3 }]);
+    expect(markers(editor)).toEqual(["(i)", "(ii)", "(iii)"]);
 
     caretIn(editor, "B");
     changeIndent(editor, -1);
     expect(lists(editor)).toEqual([
-      { numbering: "clauses", startLevel: 2, items: 1 },
       { numbering: "clauses", startLevel: 1, items: 1 },
+      { numbering: "clauses", startLevel: 0, items: 1 },
     ]);
-    // A stays at the third level, B comes up to the second, and C nests under B, still third.
-    expect(markers(editor)).toEqual(["(A)", "(i)", "(A)"]);
+    // A stays at the second level, B comes up to the first, and C nests under B, still second.
+    expect(markers(editor)).toEqual(["(i)", "(a)", "(i)"]);
     expect(editor.state.selection.$from.parent.textContent).toBe("B");
+
+    const single = editorWith([ordered({ numbering: "clauses" }, item("Only"))]);
+    caretIn(single, "Only");
+    changeIndent(single, 1);
+    expect(lists(single)).toEqual([{ numbering: "clauses", startLevel: 1, items: 1 }]);
 
     const flat = editorWith([ordered({}, item("X"), item("Y"))]);
     caretIn(flat, "Y");
     changeIndent(flat, -1);
     expect(markers(flat)).toEqual(["1."]);
     expect(flat.state.doc.lastChild?.type.name).toBe("paragraph");
+  });
+
+  // protects=lists side by side at different levels stay two lists, whatever is done beside them, until an edit (Backspace, Delete) joins them; fails_when=they join by themselves; no_claim=paste, which keeps the list pasted into.
+  test("lists at different levels side by side stay apart", () => {
+    const editor = editorWith([
+      ordered({ numbering: "clauses", startLevel: 1 }, item("A")),
+      ordered({ numbering: "clauses", startLevel: 0 }, item("B")),
+    ]);
+    caretIn(editor, "B", { end: true });
+    typeText(editor, " and more");
+    expect(lists(editor)).toEqual([
+      { numbering: "clauses", startLevel: 1, items: 1 },
+      { numbering: "clauses", startLevel: 0, items: 1 },
+    ]);
   });
 
   // protects=Enter on an empty item, or Backspace at its start, steps out one level in a list that starts deeper, and ends the list only at the first level; fails_when=the item leaves the list from a deeper level; no_claim=nested lists, whose step out is Tiptap's.

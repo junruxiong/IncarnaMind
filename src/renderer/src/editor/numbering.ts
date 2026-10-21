@@ -466,18 +466,29 @@ function outerItemAt(editor: Editor) {
 }
 
 /**
- * Tab where an item can't nest (the first item of a list): the whole list goes a level deeper, by
- * the level it starts at. False when the item nests as usual.
+ * Tab where an item can't nest (the first item of a list): only that item goes a level deeper, as
+ * in Word, in a one-item list of its own that starts a level deeper. The items after it stay a
+ * list where they were. False when the item nests as usual.
  */
 export function deepenList(editor: Editor): boolean {
   const at = outerItemAt(editor);
   if (!at || at.index > 0) return false;
-  const level = startLevelOf(at.list);
+  const { list, listPos } = at;
+  const level = startLevelOf(list);
   if (level >= DEEPEST_LEVEL) return true;
-  const tr = editor.state.tr.setNodeMarkup(at.listPos, undefined, {
-    ...at.list.attrs,
-    [START_LEVEL_ATTRIBUTE]: level + 1,
-  });
+  const deeper = { ...list.attrs, [START_LEVEL_ATTRIBUTE]: level + 1 };
+  const { from } = editor.state.selection;
+  const first = list.firstChild;
+  if (!first) return false;
+  const rest = list.content.cut(first.nodeSize);
+  const tr =
+    rest.size === 0
+      ? editor.state.tr.setNodeMarkup(listPos, undefined, deeper)
+      : editor.state.tr.replaceWith(listPos, listPos + list.nodeSize, [
+          list.type.create({ ...deeper, start: 1, [CONTINUES_ATTRIBUTE]: false }, first),
+          list.type.create(list.attrs, rest),
+        ]);
+  tr.setSelection(TextSelection.create(tr.doc, from));
   editor.view.dispatch(tr);
   return true;
 }
@@ -486,7 +497,7 @@ export function deepenList(editor: Editor): boolean {
  * Shift-Tab on an item of a list that starts deeper than the first level: the item comes up one
  * level, as lifting an item out of a nested list does. The items before it stay where they were,
  * and those after it nest under it, so each keeps its level. False at the first level, where the
- * item leaves the list as usual.
+ * item leaves the list as usual. Lists at different levels are never joined.
  */
 export function raiseFromStartLevel(editor: Editor): boolean {
   const at = outerItemAt(editor);
@@ -523,10 +534,26 @@ export function raiseFromStartLevel(editor: Editor): boolean {
       [raised],
     ),
   ];
+  // Up beside the list after it, at its level and in its scheme, it goes on in that list: a first
+  // item taken a level deeper (`deepenList`) and brought back is one list again.
+  const next = editor.state.doc.resolve(listPos + list.nodeSize).nodeAfter;
+  const joins =
+    next?.type === list.type &&
+    startLevelOf(next) === level - 1 &&
+    schemeOf(next) === schemeOf(list) &&
+    next.attrs[CONTINUES_ATTRIBUTE] !== true;
+  const last = lists.at(-1);
+  if (joins && next && last) {
+    lists[lists.length - 1] = list.type.create(last.attrs, last.content.append(next.content));
+  }
   const offsetInItem =
     editor.state.selection.from -
     (listPos + 1 + items.slice(0, index).reduce((sum, each) => sum + each.nodeSize, 0));
-  const tr = editor.state.tr.replaceWith(listPos, listPos + list.nodeSize, lists);
+  const tr = editor.state.tr.replaceWith(
+    listPos,
+    listPos + list.nodeSize + (joins && next ? next.nodeSize : 0),
+    lists,
+  );
   const raisedAt = listPos + (before.length ? (lists[0]?.nodeSize ?? 0) : 0) + 1;
   tr.setSelection(
     TextSelection.near(tr.doc.resolve(Math.min(raisedAt + offsetInItem, tr.doc.content.size))),
