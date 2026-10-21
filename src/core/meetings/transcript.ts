@@ -228,6 +228,8 @@ export interface TranscriptsOptions {
   recordSpeed(modelId: string, ratio: number): void;
   /** Each Meeting's capture health (#161): how fast live text came, restarts, falling behind, switches. */
   health: CaptureHealthRecords;
+  /** The Meeting's Transcript is finished: saved, its Document in its place, or with no lines (#142). */
+  saved?(meetingId: string): void;
   /** The cloud service the User chose for meeting audio (#141). Absent: always this computer. */
   cloud?: Pick<CloudTranscription, "start" | "sending" | "refuse">;
   changed(): void;
@@ -1051,6 +1053,7 @@ export function createTranscripts(options: TranscriptsOptions) {
   async function save(state: State): Promise<void> {
     if (state.cues.length === 0) {
       state.state = "empty";
+      options.saved?.(state.meetingId);
       return;
     }
     const document = state.documentId ? documents.find(state.documentId) : null;
@@ -1064,6 +1067,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     state.state = "saved";
     state.problem = null;
     log.info("transcript.saved", { meetingId: state.meetingId, lines: state.cues.length });
+    options.saved?.(state.meetingId);
   }
 
   function finishStreams(state: State, live: Live, endMs: number): void {

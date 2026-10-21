@@ -7395,11 +7395,19 @@ export interface SharePagePreferences {
  */
 export type TheirChangesShown = "shown" | "accepted";
 
-/** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
+/** What a Word file does with the text IncarnaMind wrote: marks it with a comment, or leaves it out. */
+export const MARK_AI_TEXT_CHOICES = ["mark", "leave"] as const;
+
+export type MarkAiTextChoice = (typeof MARK_AI_TEXT_CHOICES)[number];
+
+/**
+ * A Word export's own choices (#107). The switches are on until the User turns them off; marking
+ * AI text is the User's to answer, once: null until they have (see `ExportMindOptions`).
+ */
 export interface WordExportPreferences {
   includeQuestions: boolean;
   trackChanges: boolean;
-  markAiText: boolean;
+  markAiText: MarkAiTextChoice | null;
   commentFailedChecks: boolean;
 }
 
@@ -7805,8 +7813,47 @@ export interface Meeting {
   help: MeetingHelp | null;
   /** The kind of meeting the help buttons are for, as the User chose it; null: the general buttons only. */
   helpTemplate: MeetingHelpTemplate | null;
+  /** Its notes filled in from the Transcript after Stop (#142); null before Stop. */
+  fill: MeetingFill | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * The Mind's notes filled in from the Transcript after Stop (#142), with no question first:
+ * under each of the User's lines, or, with none, in sections. Every addition is AI text citing
+ * the Transcript's times; the User's own text never changes.
+ * - "waiting": for the Transcript to be finished and saved;
+ * - "filling": the model is writing;
+ * - "filled": written, and one Undo takes it all back;
+ * - "undone": taken back;
+ * - "failed": nothing was written, and `problem` says why; Try again fills it in;
+ * - "off": not run, and `problem` says why: "Keep everything on this computer" is on and the
+ *   Mind's model isn't on this computer, or the model isn't ready or allowed yet.
+ */
+export interface MeetingFill {
+  state: "waiting" | "filling" | "filled" | "undone" | "failed" | "off";
+  /** Under the User's lines ("notes"), or in sections because they wrote none. Null before it knows. */
+  mode: "notes" | "sections" | null;
+  /** The model that wrote it runs on this computer. */
+  local: boolean;
+  problem: MeetingFillProblem | null;
+}
+
+/**
+ * Why the notes weren't filled in:
+ * - "model": the model failed (`message`: its words, or a provider error's);
+ * - "stopped": IncarnaMind closed while they were being filled in;
+ * - "local-mode": "Keep everything on this computer" is on and the Mind's model isn't local;
+ * - "not-allowed": the User hasn't allowed sending to the model's service yet (`service`);
+ * - "no-model": no model is set up, or it needs a key or a sign-in;
+ * - "no-transcript": the Transcript has no lines.
+ */
+export interface MeetingFillProblem {
+  kind: "model" | "stopped" | "local-mode" | "not-allowed" | "no-model" | "no-transcript";
+  message: string;
+  /** For "not-allowed": the service's name, as the User knows it. */
+  service?: string;
 }
 
 export type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate };
@@ -9771,6 +9818,13 @@ export interface CoreApi {
    * downloads or starts the speech-to-text model, or saves the WebVTT file again.
    */
   retryTranscript(meetingId: string): Promise<Meeting>;
+  /**
+   * Fills the Meeting's notes in from its Transcript again (#142), after a problem or an Undo:
+   * on Try again. The model is the Answers one the User chose; nothing asks first.
+   */
+  fillMeetingNotes(meetingId: string): Promise<Meeting>;
+  /** Takes back what filling in added, leaving the notes as the User left them (#142). */
+  undoMeetingFill(meetingId: string): Promise<Meeting>;
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
   /**
@@ -10029,6 +10083,8 @@ export interface CoreEvents {
   "meetings.changed": Meeting[];
   /** About ten times a second while a Meeting's audio is captured: how loud each source is. */
   "meetings.level": MeetingLevel;
+  /** A notification that a Meeting's notes were filled in was clicked: its Mind is shown (#142). */
+  "meetings.notesShown": { mindId: string };
   /**
    * Connecting agents was turned on or off, Local mode paused or resumed them, or a pairing
    * was made, changed, used or removed: as `getAgents` now returns it.
@@ -10358,6 +10414,8 @@ const methods: Record<CoreApiMethod, true> = {
   removeTranscriptionKey: true,
   getTranscriptionSpeed: true,
   retryTranscript: true,
+  fillMeetingNotes: true,
+  undoMeetingFill: true,
   openAudioSettings: true,
   askMeetingHelp: true,
   setMeetingTemplate: true,

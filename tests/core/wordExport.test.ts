@@ -12,6 +12,7 @@ import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import { type Core, type Document, MIND_WORD_FIELD, WORD_ATOM_NODE } from "../../src/core";
 import { elements, parseXml, type XmlElement } from "../../src/core/documents/formats/xml";
+import { quitCopyOptions } from "../../src/shared/exportOptions";
 import { recordProposalRequest } from "../../src/shared/proposals";
 import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
 import { createTempDataFolder, startCore } from "../helpers/core";
@@ -519,6 +520,40 @@ describe("IncarnaMind's comments in an imported file (#107)", () => {
     expect(document).toContain(`<w:commentRangeStart w:id="${id}"/>`);
     expect(document).toContain(`<w:commentReference w:id="${id}"/>`);
     expect(comments).toContain("Written by IncarnaMind");
+  });
+});
+
+describe("The Word copy offered when quitting follows the User's answer about marking (#1536)", () => {
+  // protects=the quit-time copy of a Mind with text IncarnaMind wrote carries the comment on it only when the User chose Mark it, and none with Leave it out or no answer yet; fails_when=it marks for an answer of "leave" or none, or leaves out the mark for "mark"; no_claim=the save dialog.
+  test.each([
+    { answer: "mark" as const, marked: true },
+    { answer: "leave" as const, marked: false },
+    { answer: null, marked: false },
+  ])("with the answer $answer, the copy marked is $marked", async ({ answer, marked }) => {
+    const { core, mindId, client } = await setUp({ body: paragraph(run("Due in May.")) });
+    editMind(client, (blocks) => [
+      ...blocks,
+      {
+        type: "paragraph",
+        content: [{ ...text("Rent rises with inflation."), marks: [{ type: "generated" }] }],
+      },
+    ]);
+    await client.settled();
+    const { user } = await core.getSettings();
+    await core.updateSettings({
+      user: {
+        exportOptions: {
+          ...user.exportOptions,
+          docx: { ...user.exportOptions.docx, markAiText: answer },
+        },
+      },
+    });
+
+    const preferences = (await core.getSettings()).user.exportOptions;
+    const files = unzip((await core.exportMind(mindId, quitCopyOptions(preferences))).data);
+    const comments = files.get("word/comments.xml")?.toString("utf8") ?? "";
+
+    expect(comments.includes("Written by IncarnaMind")).toBe(marked);
   });
 });
 

@@ -10,6 +10,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { app, type BrowserWindow, dialog, type SaveDialogOptions } from "electron";
 import type { Core, UnsavedChanges } from "../core";
+import { quitCopyOptions } from "../shared/exportOptions";
 import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 import { systemReason } from "../shared/systemReasons";
 
@@ -30,7 +31,7 @@ export async function saveMindCopy(
   window: BrowserWindow | null,
   mindId: string,
 ): Promise<boolean> {
-  const [{ language }, minds] = await Promise.all([core.getSettings(), core.listMinds()]);
+  const [{ language, user }, minds] = await Promise.all([core.getSettings(), core.listMinds()]);
   const title = minds.find((mind) => mind.id === mindId)?.title ?? "";
   const options: SaveDialogOptions = {
     title: translate(language, "unsaved.saveCopy.title"),
@@ -41,7 +42,7 @@ export async function saveMindCopy(
     ? await dialog.showSaveDialog(window, options)
     : await dialog.showSaveDialog(options);
   if (canceled || !filePath) return false;
-  const { data } = await core.exportMind(mindId, { format: "docx" });
+  const { data } = await core.exportMind(mindId, quitCopyOptions(user.exportOptions));
   await writeFile(filePath, data);
   return true;
 }

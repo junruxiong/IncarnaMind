@@ -19,6 +19,7 @@ import { UnreadFilesLine } from "../components/UnreadFilesLine";
 import { buttonStyle } from "../components/ui";
 import { core } from "../core";
 import { type EstimateLine, estimateLine, runStopParts } from "../cost";
+import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { useModelInUse } from "../modelInUse";
 import { enter } from "../motion";
@@ -424,7 +425,7 @@ export function VerifyCard({
               void (claims === null ? findClaims(mindId, doc) : checkClaims(mindId, doc)),
           }}
         >
-          {t("verify.problem.error", { message: outcome.message })}
+          {t("verify.problem.error", { message: errorMessage(outcome.error, t) })}
         </ProblemLine>
       )}
       {running === null && <ReferencesLine editor={editor} mindId={mindId} />}

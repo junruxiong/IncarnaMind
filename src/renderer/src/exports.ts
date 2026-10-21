@@ -3,6 +3,7 @@ import type {
   CheckRecordFormat,
   ExportFormat,
   ExportPreferences,
+  MarkAiTextChoice,
   SavedComparisonExport,
   SavedExport,
   SavedMindExport,
@@ -38,7 +39,7 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
   docx: {
     includeQuestions: false,
     trackChanges: true,
-    markAiText: true,
+    markAiText: null,
     commentFailedChecks: true,
   },
   pdf: { includeQuestions: false },
@@ -93,6 +94,8 @@ export type ExportResult = { tableId?: string } & (
     }
   /** Not saved yet: what a Word file can't keep, for the User to see first (#105). */
   | { mindId: string; state: "review"; format: ExportFormat; word: WordExportReport }
+  /** Not started yet: a Word file waits for the User to say whether it marks the text IncarnaMind wrote. */
+  | { mindId: string; state: "ask-mark"; format: "docx" }
   | { mindId: string; state: "failed"; format: ExportKind; message: string }
   /** A source pack of a Mind with no Citations: nothing to make, and nothing went wrong. */
   | { mindId: string; state: "empty"; format: ExportFormat }
@@ -131,6 +134,24 @@ function begin(
       useExports.setState({ result: next });
     }
   };
+}
+
+function askToMark(mindId: string): void {
+  const { result } = useExports.getState();
+  if (result?.mindId === mindId && result.state === "saving") return;
+  useExports.setState({ result: { mindId, state: "ask-mark", format: "docx" } });
+}
+
+/** Keeps the User's answer to the question the Word export asked, then exports as they asked. */
+export async function answerMarkAiText(mindId: string, answer: MarkAiTextChoice): Promise<void> {
+  const preferences = exportPreferences();
+  await useAppStore.getState().updateSettings({
+    user: {
+      exportOptions: { ...preferences, docx: { ...preferences.docx, markAiText: answer } },
+    },
+  });
+  // A refusal is already said in a notice, and the question stays for another try.
+  if (exportPreferences().docx.markAiText === answer) await exportMind(mindId, "docx");
 }
 
 const NO_CHECKS: SentenceChecksExported = {
@@ -181,6 +202,8 @@ function savedResult(
  * the last one, which it becomes; the result line says how it went. `first` fixes what stopped
  * the last try (another Output location, allowing a Linked folder), unless it returns false.
  * `accept` is what a Word file can't keep that the User has seen and exports anyway (#105).
+ * Until the User has said whether Word marks the text IncarnaMind wrote, a Word export asks
+ * that first, in the result line, and exports once it is answered (`answerMarkAiText`).
  */
 export async function exportMind(
   mindId: string,
@@ -190,6 +213,11 @@ export async function exportMind(
 ): Promise<void> {
   const preferences = exportPreferences();
   const chosen = format ?? preferences.format;
+  const options = optionsFor(chosen, preferences);
+  if (!options) {
+    askToMark(mindId);
+    return;
+  }
   const settle = begin(mindId, chosen);
   if (!settle) return;
   if (chosen !== preferences.format) {
@@ -210,7 +238,7 @@ export async function exportMind(
       return;
     }
     const saved = await core.saveMindExport(mindId, {
-      ...optionsFor(chosen, preferences),
+      ...options,
       ...(accept && { accept: [...accept] }),
     });
     settle(
