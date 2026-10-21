@@ -12,6 +12,8 @@ import { core, files } from "../core";
 import { errorMessage } from "../errors";
 import { showFileLabelKey } from "../fileInfo";
 import { useT } from "../i18n";
+import { folderName } from "../linkedFolders";
+import { defaultFolderLabel } from "../outputFiles";
 import { formatSize, pickSkill, skillDescription, skillShortLine, skillTitle } from "../skills";
 import { useAppStore } from "../store";
 import { DetailsLine } from "./DetailsLine";
@@ -46,7 +48,7 @@ type Editing = { kind: "new" } | { kind: "edit"; skill: Skill; draft: SkillDraft
 
 /** How the last Export as zip went. */
 type Exported =
-  | { kind: "saved"; name: string; path: string }
+  | { kind: "saved"; name: string; path: string; folder: string; inDefaultFolder: boolean }
   | { kind: "not-allowed"; skill: Skill; linkedFolderId: string; folder: string }
   | { kind: "failed"; message: string };
 
@@ -135,7 +137,8 @@ export function SkillsSettings() {
     try {
       const result = await core.saveSkillExport(skill.id);
       if (result.status === "saved") {
-        setExported({ kind: "saved", name: result.file.name, path: result.file.path });
+        const { name, path, folder, inDefaultFolder } = result.file;
+        setExported({ kind: "saved", name, path, folder, inDefaultFolder });
       } else if (result.status === "not-allowed") {
         setExported({
           kind: "not-allowed",
@@ -317,7 +320,10 @@ function ExportStatus({
             void files.showSavedFile(exported.path).catch(useAppStore.getState().reportError),
         }}
       >
-        {t("skills.settings.exported", { name: exported.name })}
+        {t("skills.settings.exported", {
+          name: exported.name,
+          folder: exported.inDefaultFolder ? defaultFolderLabel(t) : folderName(exported.folder),
+        })}
       </ProblemLine>
     );
   }

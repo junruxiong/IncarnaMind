@@ -18,7 +18,6 @@ import type { Translate } from "../../shared/locations";
 import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
 import { pendingProposals } from "../../shared/proposals";
-import { readableQuoteText } from "../../shared/readableQuote";
 import type { SourceDocument } from "../../shared/sources";
 import type { UnitText } from "../../shared/units";
 import { wordFileOf, wordImportProgressOf } from "../../shared/wordFiles";
@@ -89,7 +88,7 @@ export interface ExportsDependencies {
   liveDocuments(): SourceDocument[];
   /** The text kept of Documents unlinked with their Linked folder: Citations quoting it still check. */
   keptCitationTexts(): KeptCitationText[];
-  /** A Citation's quote as its Document's text reads it, or null when the Document or the quote isn't there. */
+  /** A Citation's quote as a person reads it: from its Document's text, else from the quote alone; null when it has none. */
   readableQuote(attributes: Partial<CitationAttributes>): string | null;
   /** The interface language, which the export's own words are in. */
   language(): Language;
@@ -291,7 +290,7 @@ export function createExports(deps: ExportsDependencies) {
       language,
       paper: deps.paper(),
       title: preview.fileName.slice(0, -".pdf".length),
-      body: renderSourcePack(title, pages, language),
+      body: renderSourcePack(title, pages, language, deps.readableQuote),
       notes: [],
     });
     return {
@@ -811,9 +810,7 @@ export function footnoteOf(
     state.check === "not-found" || state.check === "unsupported" || state.check === "contradicted"
       ? {
           check: state.check,
-          quote: attributes.quote
-            ? (readableQuote(attributes) ?? readableQuoteText(attributes.quote))
-            : null,
+          quote: readableQuote(attributes),
           verdict: attributes.verdict ?? null,
         }
       : null;

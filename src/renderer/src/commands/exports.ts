@@ -10,6 +10,7 @@ import {
   RECORD_FORMAT_LABELS,
 } from "../exports";
 import { currentTabOf } from "../layoutSlice";
+import { chooseOutputLocation } from "../outputFiles";
 import { useAppStore } from "../store";
 import { findTab } from "../tabs";
 import type { Command, CommandContext } from "./registry";
@@ -112,6 +113,16 @@ export const exportCommands: readonly Command[] = [
     run: (ctx) => {
       const mindId = mindOf(ctx);
       if (mindId) return exportAiUseStatement(mindId);
+    },
+  },
+  {
+    id: "export.changeLocation",
+    label: "export.changeLocation",
+    keywords: ["export.changeLocation.keywords"],
+    group: "file",
+    reversible: true,
+    run: async () => {
+      await chooseOutputLocation();
     },
   },
   ...CHECK_RECORD_FORMATS.map(
