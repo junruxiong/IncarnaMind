@@ -23,6 +23,7 @@ import {
   stepsOf,
   updatePlan,
   useResearch,
+  useResearchModel,
   useWebMissing,
   useWebReach,
   type WebReach,
@@ -418,7 +419,7 @@ function PlanProblem({
 }) {
   const t = useT();
   const openSettings = useAppStore((state) => state.openSettings);
-  const fallback = useAppStore((state) => state.settings?.user.chatModel ?? null);
+  const shown = useResearchModel(model);
   const problem = card.problem;
   if (!problem) return null;
   if (problem.reason === "not-ready") {
@@ -441,18 +442,23 @@ function PlanProblem({
   const { error } = problem;
   const again = () => void planAgain(mindId, model);
   if (error.wording) {
+    // A model that spends its whole reply thinking does so again: another model is the way on.
+    const thinking = error.wording.key === "error.research.plan.thoughtOnly";
     return (
       <ProblemLine
         testId="research-plan-failed"
         className="research-plan-problem"
         title={error.message}
-        action={{ label: t("research.plan.tryAgain"), onClick: again }}
+        action={
+          thinking
+            ? { label: t("answer.error.chooseModel"), onClick: () => openSettings("models") }
+            : { label: t("research.plan.tryAgain"), onClick: again }
+        }
       >
         {t("research.plan.failedBecause", { reason: t(error.wording.key, error.wording.values) })}
       </ProblemLine>
     );
   }
-  const shown = model ?? fallback;
   return (
     <div data-testid="research-plan-failed" className="research-plan-problem">
       <AnswerError

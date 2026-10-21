@@ -329,12 +329,12 @@ test("with a model that can't search the web, Research says it reads the Library
     await window.keyboard.type("/res");
     const offer = window.getByTestId("slash-item-research");
     await expect(offer).toContainText(
-      "Searches the Library only, then drafts with Citations. fake-model can’t search the web",
+      "Searches the Library only, then drafts with Citations. fake-model can’t search the web.",
     );
     await window.keyboard.press("Enter");
     await expect(window.getByTestId("composer-research")).toHaveAttribute(
       "title",
-      "Searches the Library only, then drafts with Citations. fake-model can’t search the web",
+      "Searches the Library only, then drafts with Citations. fake-model can’t search the web.",
     );
     await window.keyboard.type("Spring tides, no plan");
     await window.keyboard.press("Enter");
@@ -358,6 +358,53 @@ test("with a model that can't search the web, Research says it reads the Library
     ollama.server.close();
   }
 });
+
+for (const [language, said, choose] of [
+  [
+    "en",
+    "Couldn’t make a plan: The model used its whole reply thinking and sent no steps. Write the steps yourself, or choose another model.",
+    "Choose another model",
+  ],
+  [
+    "zh-CN",
+    "未能制定计划：模型把回复全用在了思考上，没有给出步骤。你可以自己写步骤，或换一个模型。",
+    "换一个模型",
+  ],
+] as const) {
+  test(`a model that thinks through its whole plan reply says so, and offers another model rather than Try again (${language})`, async () => {
+    const ollama = await ollamaListing(["fake-model-always-thinks"]);
+    try {
+      const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
+      await dismissChatSetup(window);
+      await setWindowSize(app, window, 1100, 760);
+      await window.evaluate(async (baseUrl) => {
+        await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.saveChatProvider({
+          kind: "ollama",
+          baseUrl,
+          modelId: "fake-model-always-thinks",
+        });
+      }, ollama.url);
+      await newMind(window);
+      await window.keyboard.type("Tide notes");
+      await setLanguage(window, language);
+
+      await window.keyboard.press("ControlOrMeta+j");
+      await window.keyboard.type("/res");
+      await window.keyboard.press("Enter");
+      await window.keyboard.type("Spring tides");
+      await window.keyboard.press("Enter");
+
+      const failed = window.getByTestId("research-plan").getByTestId("research-plan-failed");
+      await expect(failed).toContainText(said);
+      await expect(failed.getByRole("button")).toHaveText(choose);
+      await pointAndClick(window, failed.getByRole("button"));
+      await expect(window.getByTestId("settings")).toHaveAttribute("data-page", "models");
+      await app.close();
+    } finally {
+      ollama.server.close();
+    }
+  });
+}
 
 test("the plan card follows the composer's model chip, says when the web can't be searched, fits 900px in Chinese, and Esc puts the topic back; Tell it… sends a message the Task reads at its next step, taken back with ↑ or ✕; Stop ends it", async () => {
   test.setTimeout(120_000);

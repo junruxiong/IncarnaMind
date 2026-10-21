@@ -22,7 +22,7 @@ import { isCell } from "./cells";
 import { fakeClaims, findsClaims } from "./claims";
 import { fakeConfirm } from "./confirm";
 import { editParts, fakeEdit } from "./edit";
-import { fakePlan } from "./plan";
+import { asksForPlan, fakePlan } from "./plan";
 import {
   type GenerateOptions,
   lastQuestion,
@@ -127,6 +127,15 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           responseHeaders: { "retry-after": "600" },
           isRetryable: true,
         });
+      }
+      // A model id ending "-always-thinks" thinks through its whole reply to a plan, as one with no off switch may (#1369).
+      if (spec.modelId.endsWith("-always-thinks") && asksForPlan(options)) {
+        return {
+          content: [{ type: "text", text: "" }],
+          finishReason: { unified: "length", raw: undefined },
+          usage: USAGE,
+          warnings: [],
+        };
       }
       return {
         content: [
