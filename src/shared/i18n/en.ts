@@ -675,8 +675,7 @@ export const en = {
   "claim.reason.malformed": "The model’s reply couldn’t be read.",
   "claim.reason.empty": "The model gave an empty reply.",
   "claim.reason.no-evidence": "Verdict hidden: the model’s quote isn’t in that Document.",
-  "claim.reason.unread":
-    "The model answered without reading your Documents, so its verdict isn’t shown. Check again.",
+  "claim.reason.unread": "Verdict hidden: the model didn’t read your Documents.",
   "claim.reason.rate-limit": "The model’s service is busy for now. Check again in a moment.",
   "claim.reason.cost-cap": "Checking it could pass your monthly cap.",
   "claim.reason.plan-limit": "Your plan’s usage limit is reached.",
