@@ -2832,6 +2832,7 @@ export const en = {
   "cost.cap.interrupted.one": "1 request was interrupted; its cost isn’t known.",
   "cost.cap.interrupted": "{count} requests were interrupted; their cost isn’t known.",
   "cost.cap.amount": "Monthly cap",
+  "cost.cap.problem": "Enter an amount from 0 to {max}. The active cap is still {cap}.",
   "cost.cap.currency": "Currency",
   "cost.provider.thisMonth": "This month: {spent} spent",
   "cost.setAside": "{amount} set aside for work in progress",
@@ -3442,6 +3443,8 @@ export const en = {
   "error.system.exists": "A file or folder with that name is already there.",
   "error.startup.title": "IncarnaMind couldn’t start",
   "error.startup.body": "Your data folder couldn’t be opened.\n\n{message}",
+  "error.startup.busy":
+    "IncarnaMind couldn’t open its data folder. Another copy may still be starting. Try again in a moment.",
   "error.startup.newer.title": "Update IncarnaMind to open your data",
   "error.startup.newer.body":
     "A newer IncarnaMind saved this data. Update to open it; nothing changed.",

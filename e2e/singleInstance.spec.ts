@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -75,6 +75,42 @@ test("a second start on the same data folder shows the first window and quits; a
   await next.app.close();
 });
 
+test("a copy that was killed outright leaves the data folder free for the next start", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await (await coreOf(window)).evaluate(async (api) => api.createMind({ title: "Kept" }));
+  const gone = once(app.process(), "exit");
+  app.process().kill("SIGKILL");
+  await gone;
+
+  const next = await launchApp(dataDir);
+  const minds = await (await coreOf(next.window)).evaluate(async (api) => api.listMinds());
+  expect(minds.map((each) => each.title)).toEqual(["Kept"]);
+  await next.app.close();
+});
+
+// protects=lock files left as text are emptied at start, so the folder's lock works again, and a second start quits; fails_when=the text stays in them (the lock is off for good); no_claim=the race over such files, which the unit test covers.
+test("lock files that aren't databases are emptied, and the folder is locked all the same", async () => {
+  const text = "not a database, only text that is long enough ".repeat(8);
+  await writeFile(join(dataDir, "instance.lock"), text);
+  await writeFile(join(dataDir, "instance.owner"), text);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  const { execPath, argv, env } = await app.evaluate(() => ({
+    execPath: process.execPath,
+    argv: process.argv.slice(1),
+    env: { ...process.env } as Record<string, string>,
+  }));
+  const again = spawn(execPath, argv, { env, stdio: "ignore" });
+  const [code] = await exited(again);
+  expect(code).toBe(0);
+  expect(app.windows()).toHaveLength(1);
+  expect(await logOf(dataDir)).toContain("app.anotherCopyRunning");
+  expect((await stat(join(dataDir, "instance.lock"))).size).toBe(0);
+  expect((await stat(join(dataDir, "instance.owner"))).size).toBe(0);
+  await app.close();
+});
+
 const freePort = () =>
   new Promise<number>((done, fail) => {
     const server = createServer();
@@ -134,7 +170,7 @@ for (const gap of [0, 20, 40, 60, 80]) {
     const [a, b] = ports as [number, number];
     const first = start(a);
     await new Promise((done) => setTimeout(done, gap));
-    const copies: [ChildProcess, ChildProcess] = [first, start(b)];
+    const copies: ChildProcess[] = [first, start(b)];
     try {
       // Either may take the lock: the one that doesn't quits, and the other is the app.
       const loserIndex = await Promise.race(
@@ -147,6 +183,13 @@ for (const gap of [0, 20, 40, 60, 80]) {
       const winnerPort = loserIndex === 0 ? b : a;
       await expect.poll(() => windowsOf(winnerPort), { timeout: 60_000 }).toBeGreaterThan(0);
       await new Promise((done) => setTimeout(done, 2_000));
+      expect(await windowsOf(winnerPort)).toBe(1);
+
+      // However the two raced for Electron's lock, a start after them quits too.
+      const later = start(await freePort());
+      copies.push(later);
+      const [laterCode] = await exited(later);
+      expect(laterCode).toBe(0);
       expect(await windowsOf(winnerPort)).toBe(1);
     } finally {
       for (const copy of copies) copy.kill("SIGKILL");
