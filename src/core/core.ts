@@ -628,6 +628,7 @@ export function createCore(adapters: CoreAdapters): Core {
       log: adapters.log ?? silentLogger,
       model: embedding.model,
       textRecognition: textRecognitionModel,
+      ...(adapters.scansAtOnce !== undefined && { scansAtOnce: adapters.scansAtOnce }),
       pdfPassword: (id) => pdfPasswords.of(id),
       folders,
       emitStatus: (document) => {

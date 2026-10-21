@@ -202,6 +202,8 @@ const fakeEmbedder =
 
 /** With the fake models, what the fake text recognition model reads on each scanned page (#397). */
 const fakeScans = fakeEmbedder ? (process.env.INCARNAMIND_TEST_SCANS ?? null) : null;
+/** With the fake models, how many scans are read at once (#1502), whatever the computer. */
+const testScansAtOnce = fakeEmbedder ? Number(process.env.INCARNAMIND_TEST_SCANS_AT_ONCE ?? 0) : 0;
 
 /**
  * Test-only launch flags: the smoke tests transcribe Meetings with a fake
@@ -742,6 +744,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     textRecognizer: createUtilityProcessTextRecognizer(
       fakeEmbedder ? { fake: { script: fakeScans } } : {},
     ),
+    ...(testScansAtOnce > 0 && { scansAtOnce: testScansAtOnce }),
     // The fake models have no files to download.
     ...(fakeEmbedder && {
       embeddingModelSource: { baseUrl: "http://localhost/", files: [] },
