@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import { Agent, fetch as undiciFetch } from "undici";
 import {
+  type AnalysisRuntime,
   type AudioCapture,
   type Browser,
   BUILT_IN_SKILLS_PACKAGED,
@@ -23,12 +24,15 @@ import {
   type OllamaApp,
   type UsageDataSender,
 } from "../core";
+import { runAnalysis } from "../core/analysis";
 import type { PageFetch } from "../core/documents/web/fetch";
-import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
+import { createFakeCapture, type FakeCapture, wavSamples } from "../core/meetings/fakeCapture";
 import { type LocalServers, scriptedLocalServers } from "../core/providers/localServers";
 import { type Resolve, systemResolve } from "../core/tools/web/addresses";
 import type { FakeTranscriberOptions } from "../core/transcription/fake";
 import { SHOW_AGENT_CONNECTION } from "../shared/agentConnection";
+import type { AnalysisJob } from "../shared/analysis";
+import { createElectronAnalysisRuntime } from "./analysis";
 import { createCitedPageCapture } from "./citedPageCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
@@ -203,8 +207,8 @@ const fakeScans = fakeEmbedder ? (process.env.INCARNAMIND_TEST_SCANS ?? null) : 
  * Test-only launch flags: the smoke tests transcribe Meetings with a fake
  * speech-to-text engine in the utility process, so no model is downloaded
  * (#136), slow, failing to read stretches or failing over as
- * INCARNAMIND_TEST_TRANSCRIBER_OPTIONS (JSON) asks (#161). Only a test build
- * honours them.
+ * INCARNAMIND_TEST_TRANSCRIBER_OPTIONS (JSON) asks (#161), and a pretend cloud
+ * service instead of OpenAI's or Soniox's (#141). Only a test build honours them.
  */
 const fakeTranscriber: FakeTranscriberOptions | undefined =
   import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_TRANSCRIBER === "fake"
@@ -254,6 +258,45 @@ function citationStylesFolder(): string {
   return app.isPackaged
     ? join(process.resourcesPath, "citation-styles")
     : join(app.getAppPath(), "resources", "citation-styles");
+}
+
+/**
+ * Pyodide and the packages Analyses run with (ADR-0023), found like the
+ * built-in Skills: in the packaged app's resources, otherwise where the build
+ * fetched them into the repository.
+ */
+function pythonFolder(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, "python")
+    : join(app.getAppPath(), "resources", "python");
+}
+
+/**
+ * The analysis sandbox. A test build also gives it to the smoke tests as
+ * `globalThis.incarnamindAnalysis`, which runs a job through the core's
+ * record of it, stopped after `stopAfterMs` when given: no part of the app
+ * runs Analyses yet.
+ */
+function analysisRuntime(log: Logger): AnalysisRuntime {
+  const runtime = createElectronAnalysisRuntime({
+    log,
+    rendererUrl: process.env.ELECTRON_RENDERER_URL,
+    folder: pythonFolder(),
+  });
+  if (import.meta.env.MODE === "test") {
+    (globalThis as { incarnamindAnalysis?: unknown }).incarnamindAnalysis = {
+      run: (job: AnalysisJob, stopAfterMs?: number) =>
+        runAnalysis(
+          runtime,
+          job,
+          stopAfterMs === undefined
+            ? new AbortController().signal
+            : AbortSignal.timeout(stopAfterMs),
+        ),
+      close: () => runtime.close(),
+    };
+  }
+  return runtime;
 }
 
 /**
@@ -486,18 +529,75 @@ function chatGptStandIn(): CoreAdapters["chatGptPlan"] {
 }
 
 /**
+ * Test-only launch flags: a local server standing in for Anthropic (#872), at
+ * this origin, where the Claude account signs in and asks
+ * (tests/helpers/fakeAnthropic.ts), and how long its sign-in waits, in
+ * milliseconds. Only a test build honours them.
+ */
+function claudeStandIn(): CoreAdapters["claudeAccount"] {
+  const origin = import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CLAUDE : undefined;
+  if (!origin) return undefined;
+  const timeout = Number(process.env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS);
+  return {
+    ...(Number.isInteger(timeout) && timeout > 0 && { signInTimeoutMs: timeout }),
+    experimental: true,
+    clientId: "test-client",
+    authorizeUrl: `${origin}/oauth/authorize`,
+    tokenUrl: `${origin}/v1/oauth/token`,
+    scopes: ["user:profile", "user:inference"],
+    authorizeParams: { code: "true" },
+    redirect: { kind: "page", uri: `${origin}/oauth/code/callback` },
+    tokenRequest: { format: "json", stateInExchange: true },
+    stateBytes: 32,
+    apiBaseUrl: `${origin}/v1`,
+  };
+}
+
+/**
+ * Test-only launch flag: a local server standing in for GitHub and Copilot, at
+ * this origin, where the experimental way of signing in with GitHub signs in
+ * and asks, so the smoke tests reach neither. Only a test build honours it.
+ */
+function copilotStandIn(): CoreAdapters["copilotProfiles"] {
+  const origin = import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_COPILOT : undefined;
+  if (!origin) return undefined;
+  return {
+    editor: {
+      experimental: true,
+      clientId: "test-editor-app",
+      deviceCodeUrl: `${origin}/login/device/code`,
+      tokenUrl: `${origin}/login/oauth/access_token`,
+      scopes: ["read:user"],
+      format: "json",
+      apiBaseUrl: origin,
+      accountUrl: `${origin}/user`,
+      tokenExchange: { url: `${origin}/copilot_internal/v2/token` },
+    },
+  };
+}
+
+/**
  * What records Meetings: the hidden capture window (ADR-0015). Test-only
  * launch flags: the smoke tests record a fake that makes a tone in real time,
  * so no device is ever opened (INCARNAMIND_TEST_AUDIO=fake), its computer's
- * sound allowed, denied or silent (INCARNAMIND_TEST_AUDIO_SYSTEM). They reach
- * it as `globalThis.incarnamindFakeAudio`, e.g. to change the microphone.
+ * sound allowed, denied or silent (INCARNAMIND_TEST_AUDIO_SYSTEM), or a
+ * recording played once (INCARNAMIND_TEST_AUDIO_FILE, a 16 kHz mono 16-bit WAV),
+ * for checking transcription by hand. They reach it as
+ * `globalThis.incarnamindFakeAudio`, e.g. to change the microphone.
+ * INCARNAMIND_TEST_AUDIO=none is a copy with no capture at all.
  */
-function audioCapture(log: Logger): AudioCapture {
+function audioCapture(log: Logger): AudioCapture | undefined {
+  if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_AUDIO === "none") {
+    return undefined;
+  }
   if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_AUDIO === "fake") {
     const system = process.env.INCARNAMIND_TEST_AUDIO_SYSTEM;
+    const recording = process.env.INCARNAMIND_TEST_AUDIO_FILE;
     const fake = createFakeCapture({
       realTime: 100,
       system: system === "denied" || system === "silent" ? system : "allowed",
+      ...(recording && { recording: wavSamples(readFileSync(recording)) }),
+      microphone: process.env.INCARNAMIND_TEST_AUDIO_MICROPHONE === "denied" ? "denied" : "allowed",
     });
     (globalThis as { incarnamindFakeAudio?: FakeCapture }).incarnamindFakeAudio = fake;
     return fake;
@@ -533,6 +633,8 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const usageData = createUsageDataSender();
   const chatGptStore = chatGptTestProfile(log);
   const chatGptPlan = chatGptStandIn();
+  const claudeAccount = claudeStandIn();
+  const copilotProfiles = copilotStandIn();
   const web = webStandIn();
   const standIn = standInPort();
   const connectorDirectory = testConnectorDirectory();
@@ -547,12 +649,18 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     ...(connectorRegistryUrl && { connectorRegistryUrl }),
     ...(chatGptStore && { chatGptStore }),
     ...(chatGptPlan && { chatGptPlan }),
+    ...(claudeAccount && { claudeAccount }),
+    ...(copilotProfiles && { copilotProfiles }),
     ...(web && { web }),
     ...(standIn !== undefined && { webPages: { fetch: standInPageFetch(standIn) } }),
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
     ...(referenceLookupUrl && {
-      referenceLookup: { crossref: referenceLookupUrl, arxiv: referenceLookupUrl },
+      referenceLookup: {
+        crossref: referenceLookupUrl,
+        arxiv: referenceLookupUrl,
+        openalex: referenceLookupUrl,
+      },
     }),
     ...(contradictionWatchDelay && {
       contradictionWatch: { delayMs: Number(contradictionWatchDelay) },
@@ -573,6 +681,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     log,
     audioCapture: audioCapture(log),
     capturePage: createCitedPageCapture({ rendererUrl: process.env.ELECTRON_RENDERER_URL }),
+    analysisRuntime: analysisRuntime(log),
     paths: {
       dataDir,
       builtInSkills: builtInSkillsFolder(),
@@ -623,6 +732,11 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
         model: { baseUrl: "http://localhost/", files: [] },
         vad: { baseUrl: "http://localhost/", files: [] },
       },
+      // The pretend cloud service takes any key but one that says it's wrong.
+      transcriptionKeyFetch: async (_url: string | URL | Request, init?: RequestInit) =>
+        new Response(null, {
+          status: new Headers(init?.headers).get("Authorization")?.includes("wrong") ? 401 : 200,
+        }),
     }),
     crossEncoder: createUtilityProcessCrossEncoder({ fake: fakeEmbedder }),
     textRecognizer: createUtilityProcessTextRecognizer(

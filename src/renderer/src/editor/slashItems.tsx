@@ -225,21 +225,21 @@ export function compareSlashItem(onCompare: (afterBlockId: string | null) => voi
 }
 
 /**
- * The slash menu's entries for the enabled Skills, labelled with their names
- * as they are. Choosing one forces the Skill on the Question the cursor is
- * in; in a Note, it goes to the composer as a chip, for the Question asked
+ * The slash menu's entries for the enabled Skills, labelled with their titles.
+ * Choosing one forces the Skill on the Question the cursor is in; in a Note, it goes to the composer as a chip, for the Question asked
  * there next (`onComposer`), and the composer takes the focus.
  */
 export function skillSlashItems(
   skills: readonly Skill[],
   describe: (skill: Skill) => string = (skill) => skill.description,
   onComposer: (skill: string) => void = () => undefined,
+  titleOf: (skill: Skill) => string = (skill) => skill.name,
 ): SlashItem[] {
   return skills
     .filter((skill) => skill.enabled)
     .map((skill) => ({
       id: `skill-${skill.name}`,
-      label: { text: skill.name },
+      label: { text: titleOf(skill) },
       hint: describe(skill),
       keywords: ["skill"],
       icon: <SkillIcon className="size-3.5" />,

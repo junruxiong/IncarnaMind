@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { ComparedBlock, ComparedPart, MindComparison } from "../../../../core/api";
 import { citationSource } from "../../../../shared/citations";
 import { useT } from "../../i18n";
+import { useWritingProperties } from "../../mindStyles";
 
 /** Each side's Citations and footnotes numbered together, in order, as the Mind numbers them. */
 function numbersOf(comparison: MindComparison) {
@@ -18,16 +19,19 @@ function numbersOf(comparison: MindComparison) {
  * can be changed. Screen readers hear "Removed:" and "Added:" before them.
  */
 export function ComparedRows({
+  mindId,
   comparison,
   firstChange,
 }: {
+  mindId: string;
   comparison: MindComparison;
   firstChange: (row: HTMLElement | null) => void;
 }) {
+  const writing = useWritingProperties(mindId);
   const numbers = numbersOf(comparison);
   const first = comparison.rows.findIndex((row) => row.changed);
   return (
-    <div className="history-rows">
+    <div className="history-rows" style={writing}>
       {comparison.rows.map((row, index) => (
         <div
           // biome-ignore lint/suspicious/noArrayIndexKey: rows are a fresh comparison each time, in order.

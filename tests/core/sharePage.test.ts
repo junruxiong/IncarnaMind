@@ -361,12 +361,14 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
     expect(document.querySelector(".shared-from")?.textContent).toBe(
       "Shared from IncarnaMind · 13 Oct 2026",
     );
-    expect(document.querySelector("h1")?.textContent).toBe("Credit memo: Northwind <Retail>");
+    // The page has no title line (#908): the name names the file and the browser's tab.
+    expect(document.querySelector("h1")).toBeNull();
+    expect(document.querySelector("title")?.textContent).toBe("Credit memo Northwind Retail");
     expect(document.querySelector(".shared-about")?.textContent).toBe(
-      "Each Citation's card shows its quote, where it is, and what the check found.",
+      "Each Citation’s card shows its quote, where it is, and what the check found.",
     );
     expect(document.querySelector(".shared-foot")?.textContent).toBe(
-      "Made with IncarnaMind · Checked on 13 Oct 2026: 9 of 11 quotes found on their pages. Each other Citation's card says why.",
+      "Made with IncarnaMind · Checked on 13 Oct 2026: 9 of 11 quotes found on their pages. Each other Citation’s card says why.",
     );
   });
 
@@ -393,9 +395,9 @@ describe("a web page to share (#72)", { timeout: 60_000 }, () => {
     expect(cardText(contradicted, ".card-verdict")).toBe("The results say 3.1 times, p. 2");
 
     const missing = document.getElementById("card-9");
-    expect(cardText(missing, ".card-heading")).toBe("Can't check");
+    expect(cardText(missing, ".card-heading")).toBe("Can’t check");
     expect(cardText(missing, ".card-source")).toBe("Tides, line 1");
-    expect(missing?.textContent).toContain("The source wasn't available when this was shared");
+    expect(missing?.textContent).toContain("The source wasn’t available when this was shared");
     expect(missing?.querySelector("mark.quote, img")).toBeNull();
   });
 
@@ -552,7 +554,11 @@ const card = (check: CitationCheck, more: Partial<CitationCard> = {}): CitationC
 /** The page for these cards, each behind a marker of its own. */
 function pageOf(
   cards: readonly CitationCard[],
-  { language = "en", footnote }: { language?: Language; footnote?: Partial<Footnote> } = {},
+  {
+    language = "en",
+    footnote,
+    font = null,
+  }: { language?: Language; footnote?: Partial<Footnote>; font?: string | null } = {},
 ) {
   const footnotes: Footnote[] = cards.map((each) => ({
     source: each.source,
@@ -560,7 +566,6 @@ function pageOf(
     ...footnote,
   }));
   const html = renderSharePage({
-    title: "Tides",
     blocks: [
       {
         kind: "paragraph",
@@ -578,9 +583,21 @@ function pageOf(
     cards: new Map(footnotes.map((each, index) => [each, cards[index] ?? card("found")])),
     pictures: [],
     checkedLine: false,
+    font,
+    lineSpacing: null,
   });
   return { html, document: parseHTML(html).document };
 }
+
+describe("a web page to share in the Mind's font", () => {
+  test("its policy allows the stylesheet it writes, the font's rule included", () => {
+    const { html, document } = pageOf([card("found")], { font: "JetBrains Mono" });
+    const styles = document.querySelector("style")?.textContent ?? "";
+    expect(styles).toContain('font-family:"JetBrains Mono"');
+    const hash = createHash("sha256").update(styles).digest("base64");
+    expect(html).toContain(`style-src 'sha256-${hash}'`);
+  });
+});
 
 const foot = (cards: readonly CitationCard[], language: Language = "en") =>
   pageOf(cards, { language }).document.querySelector(".shared-foot p")?.textContent;
@@ -591,13 +608,13 @@ describe("what a web page to share says of its checks", () => {
       "Made with IncarnaMind · Every quote was found on its page, checked on 13 Oct 2026.",
     );
     expect(foot([card("found"), card("cant-check"), card("checking")])).toBe(
-      "Made with IncarnaMind · Checked on 13 Oct 2026: 1 of 3 quotes found on their pages. Each other Citation's card says why.",
+      "Made with IncarnaMind · Checked on 13 Oct 2026: 1 of 3 quotes found on their pages. Each other Citation’s card says why.",
     );
     expect(foot([card("not-found")])).toBe(
-      "Made with IncarnaMind · Checked on 13 Oct 2026: the quote wasn't found on its page. Its card says why.",
+      "Made with IncarnaMind · Checked on 13 Oct 2026: the quote wasn’t found on its page. Its card says why.",
     );
     expect(foot([card("cant-check"), card("contradicted")])).toBe(
-      "Made with IncarnaMind · Checked on 13 Oct 2026: none of the 2 quotes was found on its page. Each Citation's card says why.",
+      "Made with IncarnaMind · Checked on 13 Oct 2026: none of the 2 quotes was found on its page. Each Citation’s card says why.",
     );
   });
 
@@ -671,14 +688,14 @@ describe("what a web page to share says of its checks", () => {
       expect(handlers).toEqual([]);
       expect(html).not.toMatch(/href="(javascript|mailto):/i);
       const card = document.getElementById("card-1");
-      expect(card?.querySelector(".card-heading")?.textContent).toBe("Can't check");
+      expect(card?.querySelector(".card-heading")?.textContent).toBe("Can’t check");
       expect(card?.querySelector(".card-source")?.textContent).toBe(`${hostile}, § ${hostile}`);
       expect(card?.querySelector("mark.quote")?.textContent).toBe(hostile);
       expect(card?.querySelector(".card-address")?.textContent).toBe("javascript:alert(1)");
       expect(card?.querySelector(".card-address a")).toBeNull();
       expect(card?.classList.contains("check-cant-check")).toBe(true);
       expect(document.querySelector("a.cite")?.getAttribute("data-check")).toBe("cant-check");
-      expect(document.getElementById("note-1")?.textContent).toContain(" · Can't check");
+      expect(document.getElementById("note-1")?.textContent).toContain(" · Can’t check");
     }
   });
 

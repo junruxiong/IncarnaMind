@@ -16,10 +16,13 @@ import {
   launchApp,
   type MindChild,
   mindNode,
+  nameMind,
   newMind,
   openOptions,
+  openSavedPage,
   pointAndClick,
   removeDataFolder,
+  requestsMade,
   savedPath,
   setLanguage,
   useLocalChatModel,
@@ -62,37 +65,6 @@ function citation(document: Document, quote: string, line: number, check: "found
 const paragraph = (...children: MindChild[]) =>
   mindNode("paragraph", { id: randomUUID() }, children);
 
-/**
- * Opens a saved page in a window of its own, in a session with the network off that records
- * every request it is asked for, as a reader opening the file in a browser would.
- */
-async function openOffline(app: ElectronApplication, path: string): Promise<Page> {
-  const opened = app.waitForEvent("window");
-  await app.evaluate(async ({ BrowserWindow, session }, file) => {
-    const offline = session.fromPartition("shared-page", { cache: false });
-    offline.enableNetworkEmulation({ offline: true });
-    const requested: string[] = [];
-    (globalThis as { sharedPageRequests?: string[] }).sharedPageRequests = requested;
-    offline.webRequest.onBeforeRequest((details, callback) => {
-      requested.push(details.url);
-      callback({ cancel: !details.url.startsWith("file:") });
-    });
-    const window = new BrowserWindow({
-      width: 1100,
-      height: 760,
-      useContentSize: true,
-      webPreferences: { session: offline, sandbox: true, contextIsolation: true },
-    });
-    await window.loadFile(file);
-  }, path);
-  const page = await opened;
-  await page.waitForLoadState("load");
-  return page;
-}
-
-const requestsMade = (app: ElectronApplication) =>
-  app.evaluate(() => (globalThis as { sharedPageRequests?: string[] }).sharedPageRequests ?? []);
-
 async function resize(app: ElectronApplication, page: Page, width: number, height: number) {
   const window = await app.browserWindow(page);
   await window.evaluate((win, size) => win.setContentSize(size.width, size.height), {
@@ -125,7 +97,7 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   const mindId = await window.getByTestId("mind-pane").getAttribute("data-mind-id");
   if (!mindId) throw new Error("No Mind is open.");
   await writeFile(
@@ -181,7 +153,7 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   await expect(window.getByTestId("export-mind")).toHaveAttribute("data-format", "share-page");
 
   await exportFromMenu(window);
-  const page = await openOffline(app, await savedPath(window, "Tides.html"));
+  const page = await openSavedPage(app, await savedPath(window, "Tides.html"));
 
   // Nothing but the file was asked for, and the page's policy refuses a request it tries.
   await expect(page.locator(".shared-foot a")).toHaveText("Citations checked with IncarnaMind");
@@ -334,7 +306,7 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
     join(library, "Tide Gauges.pdf"),
   ]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Gauges");
+  await nameMind(window, "Gauges");
   await addToNote(
     window,
     await askInAssistant(
@@ -357,7 +329,7 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
   await sheet.getByTestId("export-format").selectOption("share-page");
   const contents = sheet.getByTestId("share-contents");
   await expect(contents.locator("p").first()).toHaveText(
-    "In the file: 5 quotes and 2 page pictures from 5 Documents. Anyone you send it to can read them. The Documents themselves aren't included.",
+    "In the file: 5 quotes and 2 page pictures from 5 Documents. Anyone with the file can read these; Documents aren’t included.",
   );
   await expect(contents.getByTestId("share-document")).toHaveCount(5);
   await expect(contents.getByTestId("share-size")).toHaveText(/^The file will be about \d/);
@@ -374,7 +346,7 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
   await expect(sheet).toBeHidden();
 
   await exportFromMenu(window);
-  const page = await openOffline(app, await savedPath(window, "Gauges.html"));
+  const page = await openSavedPage(app, await savedPath(window, "Gauges.html"));
   const pictureOf = (name: string) =>
     page
       .locator("section.card", { has: page.locator(".card-source", { hasText: name }) })
@@ -419,7 +391,7 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
   await setLanguage(window, "zh-CN");
   await openOptions(window, "导出选项");
   await expect(sheet.getByTestId("share-contents").locator("p").first()).toHaveText(
-    "文件中包含：来自 5 个文档的 5 处引文和 2 张页面截图。收到文件的人都能看到这些内容；文档本身不会包含在内。",
+    "文件中包含：来自 5 个文档的 5 处引文和 2 张页面截图。收到文件的人都能看到这些，文档本身不包含在内。",
   );
   await app.close();
 });

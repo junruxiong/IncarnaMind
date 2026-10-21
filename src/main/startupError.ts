@@ -41,3 +41,11 @@ export function startupDialog(error: unknown, language: Language): StartupDialog
     cancelId: 0,
   };
 }
+
+/** What the User sees when another copy may still be starting on their data folder, so nothing starts (#1352). */
+export function busyDialog(language: Language): { title: string; detail: string } {
+  return {
+    title: translate(language, "error.startup.title"),
+    detail: translate(language, "error.startup.busy"),
+  };
+}

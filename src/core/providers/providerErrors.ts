@@ -1,11 +1,25 @@
 import { APICallError, RetryError, UnsupportedFunctionalityError } from "ai";
 import type { ProviderError, ProviderErrorKind, SignInRouteProblem } from "../api";
-import { ConsentDeclinedError, TranslatableError } from "../errors";
+import {
+  ConsentDeclinedError,
+  ConsentRevokedError,
+  LocalModeError,
+  TranslatableError,
+} from "../errors";
 import { OAuthTokenError } from "../oauth";
+import { KeyCharacterError } from "./apiKey";
 import { ChatGptPlanError, ChatGptSignInRequiredError } from "./chatgpt/errors";
 import { JevRequestError } from "./jev";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+function keyCharacterOf(message: string): KeyCharacterError | null {
+  const code =
+    /Cannot convert argument to a ByteString because the character at index \d+ has a value of (\d+)/.exec(
+      message,
+    )?.[1];
+  return code === undefined ? null : new KeyCharacterError(String.fromCharCode(Number(code)));
+}
 
 /** A local model can't take a request, found before anything is sent: e.g. it isn't a chat model. */
 export class LocalModelError extends Error {
@@ -104,6 +118,10 @@ export function contextOverflow(
   };
 }
 
+const refusesWithoutRetention = (error: APICallError) =>
+  error.statusCode === 400 &&
+  /must have data retention enabled/i.test(`${error.message} ${error.responseBody ?? ""}`);
+
 /**
  * Whether a provider refused a request because the model can't use `feature`:
  * e.g. Ollama's "model does not support tools", vLLM's "--enable-auto-tool-choice",
@@ -160,7 +178,22 @@ export function classifyProviderError(error: unknown): ProviderError {
       : retried;
   const message = messageOf(cause);
 
+  const badKey = cause instanceof KeyCharacterError ? cause : keyCharacterOf(message);
+  if (badKey) {
+    return {
+      kind: "auth",
+      message: badKey.message,
+      ...(badKey.wording && { wording: badKey.wording }),
+    };
+  }
   if (cause instanceof ConsentDeclinedError) return { kind: "consent-declined", message };
+  if (cause instanceof ConsentRevokedError || cause instanceof LocalModeError) {
+    return {
+      kind: cause instanceof LocalModeError ? "local-mode" : "consent-revoked",
+      message,
+      ...(cause.wording && { wording: cause.wording }),
+    };
+  }
   if (cause instanceof LocalModelError) return { kind: cause.kind, message };
   if (cause instanceof OllamaNotRunningError) {
     return {
@@ -191,8 +224,11 @@ export function classifyProviderError(error: unknown): ProviderError {
     // No status: the request never got a response.
     if (status === undefined) return { kind: "network", message };
     if (status === 401 || status === 403) return { kind: "auth", message };
-    // Google answers a bad key with 400 "API key not valid".
-    if (status === 400 && /api[ _-]?key/i.test(message)) return { kind: "auth", message };
+    if (refusesWithoutRetention(cause)) return { kind: "data-retention", message };
+    // Google answers a bad key with 400 "API key not valid", in the body when the message is only the status.
+    if (status === 400 && /api[ _-]?key/i.test(`${message} ${cause.responseBody ?? ""}`)) {
+      return { kind: "auth", message };
+    }
     if (status === 404) return { kind: "model", message };
     if (status === 429) return { kind: "rate-limit", message };
     return { kind: "provider", message };

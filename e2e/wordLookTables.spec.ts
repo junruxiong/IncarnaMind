@@ -1,13 +1,11 @@
-import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import { contractFile, resumeFile } from "../tests/helpers/wordLookFiles";
 import {
   createDataFolder,
   dismissChatSetup,
-  importWordFromMenu,
-  interceptOpenDialog,
+  importWordFile,
   launchApp,
   motionSettled,
   removeDataFolder,
@@ -30,15 +28,6 @@ test.afterEach(async () => {
   await removeDataFolder(home);
   await removeDataFolder(files);
 });
-
-async function importFile(app: ElectronApplication, window: Page, name: string, bytes: Buffer) {
-  const path = join(files, name);
-  await writeFile(path, bytes);
-  await interceptOpenDialog(app, path);
-  const dialog = await importWordFromMenu(window);
-  await dialog.getByTestId("word-import-confirm").click();
-  await expect(dialog).toBeHidden();
-}
 
 async function shot(window: Page, name: string) {
   if (!SCREENSHOTS) return;
@@ -100,7 +89,7 @@ test("the résumé's tables as the file draws them: layout tables without lines,
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "林晓_简历.docx", resumeFile());
+  await importWordFile(app, window, files, "林晓_简历.docx", resumeFile());
 
   const editor = window.getByTestId("mind-editor");
   const internship = editor.locator("table", { hasText: "某证券公司研究所" });
@@ -139,7 +128,7 @@ test("the résumé's tables as the file draws them: layout tables without lines,
   await shot(window, "word-look-tables-resume-1440");
 
   await setLanguage(window, "zh-CN");
-  await expect(window.getByTestId("mind-title")).toBeVisible();
+  await expect(window.getByTestId("page-menu")).toHaveAttribute("aria-label", /的更多操作$/);
   await shot(window, "word-look-tables-resume-zh-1440");
   // As on the 1,100 px board, with the assistant folded.
   await window.getByTestId("assistant-fold").click();
@@ -158,8 +147,15 @@ test("the résumé's tables as the file draws them: layout tables without lines,
     .click();
   const pane = window.locator('[data-testid="mind-pane"]:visible').first();
   const narrowSkills = pane.locator("table", { hasText: "语言" });
-  await expect.poll(() => zoomOf(frameIn(window))).toBeCloseTo(0.8, 3);
-  expect(await fitsItsFrame(narrowSkills)).toBe(false);
+  // Half the window zooms past 80%, as far as an 11 px body, and the tables wrap their cells to fit.
+  await expect.poll(() => zoomOf(frameIn(window))).toBeLessThan(0.8);
+  expect(
+    await narrowSkills
+      .locator("p")
+      .first()
+      .evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+  ).toBeGreaterThanOrEqual(11);
+  expect(await fitsItsFrame(narrowSkills)).toBe(true);
   const frame = pane.locator(".mind-editor-frame");
   const bullet = pane.locator("li p", { hasText: "跟踪 12 家" });
   const frameBox = await frame.boundingBox();
@@ -179,7 +175,13 @@ test("the contract's tables: the bordered definitions with a shaded heading row 
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "Supply agreement v5 (from Northwind).docx", contractFile());
+  await importWordFile(
+    app,
+    window,
+    files,
+    "Supply agreement v5 (from Northwind).docx",
+    contractFile(),
+  );
 
   const editor = window.getByTestId("mind-editor");
   const definitions = editor.locator("table", { hasText: "Meaning" });
@@ -215,7 +217,7 @@ test("the contract's tables: the bordered definitions with a shaded heading row 
   await expect.poll(() => fitsItsFrame(definitions)).toBe(true);
   await shot(window, "word-look-tables-contract-1100");
   await setLanguage(window, "zh-CN");
-  await expect(window.getByTestId("mind-title")).toBeVisible();
+  await expect(window.getByTestId("page-menu")).toHaveAttribute("aria-label", /的更多操作$/);
   await shot(window, "word-look-tables-contract-zh-1100");
 
   await window.getByTestId("group-menu").click();
@@ -246,7 +248,7 @@ test("a table look that arrives while the Mind is open, as the start-up backfill
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await importFile(app, window, "Supply agreement.docx", contractFile());
+  await importWordFile(app, window, files, "Supply agreement.docx", contractFile());
   await window.getByTestId("split-group").click();
   const panes = window.locator('[data-testid="mind-pane"]:visible');
   await expect(panes).toHaveCount(2);

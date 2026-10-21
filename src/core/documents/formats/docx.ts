@@ -21,6 +21,7 @@
  * are left out.
  */
 import { type TextUnit, UnitBuilder, type UnitComment } from "../../../shared/units";
+import { headingLevelOfStyleName } from "../../../shared/wordStyles";
 import { ExtractionError } from "./errors";
 import { child, elements, local, parseXml, type XmlElement } from "./xml";
 import { openPackage } from "./zip";
@@ -34,11 +35,9 @@ export const MAX_SECTION_CHARS = 6000;
  * for a style that isn't a heading's.
  */
 export function headingLevelOf(style: XmlElement): number | null {
-  const name = (child(style, "w:name")?.attrs["w:val"] ?? "").toLowerCase();
-  const heading = /^heading (\d)$/.exec(name);
+  const named = headingLevelOfStyleName(child(style, "w:name")?.attrs["w:val"] ?? "");
+  if (named !== null) return named;
   const outline = child(child(style, "w:pPr") ?? style, "w:outlineLvl")?.attrs["w:val"];
-  if (heading) return Number(heading[1]);
-  if (name === "title") return 0;
   if (outline !== undefined && Number(outline) < 9) return Number(outline) + 1;
   return null;
 }

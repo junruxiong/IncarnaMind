@@ -4,8 +4,20 @@ import { describe, expect, test, vi } from "vitest";
 import type { ClaimCheckAction, ClaimCheckAttributes, Core, Document } from "../../src/core";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
-import { checkingModel as checkingModelOf, type Plan, sentenceOf } from "../helpers/checks";
-import { type SourceFile, setUpWithDocuments } from "../helpers/citations";
+import {
+  checkGenerate,
+  checkingModel as checkingModelOf,
+  checkReply,
+  isCheckRun,
+  type Plan,
+  sentenceOf,
+} from "../helpers/checks";
+import {
+  answerEnded,
+  type SourceFile,
+  setUpWithDocuments,
+  shownPassages,
+} from "../helpers/citations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, sha256, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
@@ -83,6 +95,7 @@ const LEFT_CHECKING: ClaimCheckAttributes = {
   text: SUPPORTED,
   evidence: null,
   says: null,
+  unsupported: null,
   calculation: null,
   citedCaseUnchecked: false,
   citedCaseFound: false,
@@ -763,6 +776,184 @@ describe("A figure the Documents don't state, worked out (#707)", () => {
   });
 });
 
+describe("A memo's figure worked out from amounts in brackets (#978)", () => {
+  const STATEMENT = {
+    name: "Completion statement.md",
+    contents: [
+      "# Completion statement: 14 Mill Lane",
+      "",
+      "Sale price £385,000.00",
+      "",
+      "Less: estate agent's fee (£4,620.00)",
+      "",
+      "Less: legal fees (£1,500.00)",
+      "",
+      "Less: search and other costs (£804.00)",
+    ].join("\n"),
+  };
+  const input = (name: string, label: string, line: string, number: string) => ({
+    name,
+    label,
+    quote: line,
+    number,
+  });
+  const NET = {
+    inputs: [
+      input("price", "Sale price", "Sale price £385,000.00", "£385,000.00"),
+      input("agent", "Agent's fee", "estate agent's fee (£4,620.00)", "(£4,620.00)"),
+      input("legal", "Legal fees", "legal fees (£1,500.00)", "(£1,500.00)"),
+      input("other", "Other costs", "search and other costs (£804.00)", "(£804.00)"),
+    ],
+    formula: "price + agent + legal + other",
+  };
+
+  // protects=#978; fails_when=a correct net figure is Contradicted because a deduction in brackets was read as positive, or the card's inputs don't carry their sign; no_claim=a model that subtracts the brackets, which the line it is told and a hand check with Claude Haiku 5.5 cover.
+  test.each([
+    ["Net sale proceeds £378,076.", "£378,076", "supported"],
+    ["Net sale proceeds £391,924.", "£391,924", "contradicted"],
+  ])("“%s” is %s, by taking the deductions off", async (claim, stated, verdict) => {
+    const said = verdict === "supported" ? "contradicted" : "supported";
+    const plans = { [claim]: { verdict: said, calculation: { ...NET, stated } } } as const;
+    const setup = await setUpWithDocuments(checkingModel(plans), [STATEMENT]);
+    const saved = await setup.core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (saved.service) await setup.core.allowDataFlow("checks", saved.service.id);
+
+    const result = await setup.core.checkClaim({ claim });
+
+    expect(result).toMatchObject({
+      verdict,
+      calculation: { stated, figure: { shown: "£378,076.00" } },
+    });
+    if (result.verdict === "not-checked") throw new Error("Not checked.");
+    expect(result.calculation?.figure.inputs.map((each) => each.number.value)).toEqual([
+      385_000, -4_620, -1_500, -804,
+    ]);
+  });
+});
+
+describe("A count of people in brackets is a count (#1023)", () => {
+  const ACCOUNTS = {
+    name: "Statement of accounts.md",
+    contents: [
+      "# Statement of accounts",
+      "",
+      "£'000",
+      "",
+      "Revenue 45,300",
+      "",
+      "Administrative expenses (12,500)",
+      "",
+      "Headcount (250)",
+      "",
+      "Employees (1,250)",
+      "",
+      "Staff 人数（250）",
+      "",
+      "Impairment (£1.2m)",
+    ].join("\n"),
+  };
+  const HEADCOUNT = "Headcount (250)";
+  const IMPAIRMENT = "Impairment (£1.2m)";
+  const CLAIM = "We had 250 employees.";
+  const DEDUCTION = "Impairment was £1.2m, a deduction.";
+  const input = { name: "headcount", label: "Headcount", number: "(250)" };
+
+  // protects=#1023; fails_when=a headcount in brackets is read as minus 250, so a figure worked out from it is -250 and counted as negative, or an impairment in brackets with a currency and a scale is read as plus, so a correct sentence about either is Contradicted; no_claim=the wording of the Answer, which the scripted model writes.
+  test("the Answer to “What was the headcount?” says 250, “We had 250 employees.” is Supported, and an impairment in brackets is a deduction", async () => {
+    const plans: Record<string, Plan> = {
+      [CLAIM]: {
+        verdict: "contradicted",
+        calculation: {
+          inputs: [{ ...input, quote: HEADCOUNT }],
+          formula: "headcount",
+          stated: "250",
+        },
+      },
+      [DEDUCTION]: {
+        verdict: "contradicted",
+        calculation: {
+          inputs: [
+            { name: "impairment", label: "Impairment", quote: IMPAIRMENT, number: "(£1.2m)" },
+          ],
+          formula: "-impairment",
+          stated: "£1.2m",
+        },
+      },
+    };
+    const model = scriptedModel(
+      (call) => {
+        if (isCheckRun(call)) return checkReply(call, plans);
+        const searches = call.results.filter((result) => result.tool === "search_documents");
+        if (searches.length === 0) {
+          return { calls: [{ tool: "search_documents", input: { query: "headcount" } }] };
+        }
+        if (call.results.some((result) => result.tool === "calculate")) {
+          return { text: "We had [=1] employees[^1]." };
+        }
+        const passage = shownPassages(searches.at(-1)?.text ?? "").find((each) =>
+          each.text.includes(HEADCOUNT),
+        );
+        const figure = {
+          marker: 1,
+          label: "Headcount",
+          formula: "headcount",
+          inputs: [{ ...input, citation: 1 }],
+        };
+        return {
+          calls: [
+            {
+              tool: "cite",
+              input: {
+                citations: [{ marker: 1, passage: passage?.id, quote: HEADCOUNT }],
+              },
+            },
+            { tool: "calculate", input: { figures: [figure] } },
+          ],
+        };
+      },
+      { generate: checkGenerate(plans) },
+    );
+    const { core } = await setUpWithDocuments(model, [ACCOUNTS]);
+    const saved = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (saved.service) {
+      await core.allowDataFlow("chat", saved.service.id);
+      await core.allowDataFlow("checks", saved.service.id);
+    }
+
+    const asked = await core.askInConversation({ text: "What was the headcount?" });
+    if (!asked.asked) throw new Error("The Question wasn't asked.");
+    await answerEnded(core, asked.answerId);
+    const content = await core.getConversation(asked.conversation.id);
+    const answer = content.messages.find((message) => message.id === asked.answerId);
+    if (answer?.kind !== "answer") throw new Error("No Answer.");
+    expect(answer.figures[0]).toMatchObject({ shown: "250" });
+    expect(answer.figures[0]?.inputs.map((each) => each.number.value)).toEqual([250]);
+
+    const result = await core.checkClaim({ claim: CLAIM });
+    expect(result).toMatchObject({
+      verdict: "supported",
+      calculation: { stated: "250 employees" },
+    });
+    if (result.verdict === "not-checked") throw new Error("Not checked.");
+    expect(result.calculation?.figure.inputs.map((each) => each.number.value)).toEqual([250]);
+
+    const deduction = await core.checkClaim({ claim: DEDUCTION });
+    expect(deduction).toMatchObject({ verdict: "supported", calculation: { stated: "£1.2m" } });
+    if (deduction.verdict === "not-checked") throw new Error("Not checked.");
+    expect(deduction.calculation?.figure.inputs.map((each) => each.number.value)).toEqual([
+      -1_200_000,
+    ]);
+  });
+});
+
 describe("When the model can't check a sentence", () => {
   const failing = (reply: ScriptedReply): Plan => ({ reply });
   test.each<{ reason: ClaimCheckAttributes["reason"]; plan: Plan }>([
@@ -1025,5 +1216,98 @@ describe("What the check is told about dates and its own workings (#821)", () =>
     expect(system).toContain("file's own metadata");
     expect(system).toContain("never mention it unless the sentence itself is about a date");
     expect(system).toContain("Never mention the index, the search, the passages");
+  });
+});
+
+describe("Why a sentence is unsupported", () => {
+  const HALF = "Spring tides happen at new moon and at full moon, creating very high waters.";
+  const OWNER =
+    "教程讨论了训练速度、鲁棒性和内存需求之间的权衡：已有实验通常显示，拟牛顿方法比梯度下降更快；一阶优化方法通常更加稳健，但速度较慢。";
+
+  const reasonOf = async (reply: string, sentence = HALF) => {
+    const { core, client, check } = await mindWith(
+      [sentence],
+      checkingModel({ [sentence]: { reply: { text: reply } } }),
+    );
+    await check();
+    const [shown] = await shownChecks(core, client);
+    return shown?.check.unsupported;
+  };
+
+  test("asks for the reason, and for what the Passages cover and don't when part of the sentence is supported", async () => {
+    const calls: ModelCall[] = [];
+    const { check } = await mindWith([UNSUPPORTED], checkingModel(PLANS, calls));
+    await check();
+    expect(calls[0]?.system).toContain("For unsupported, one plain sentence in English");
+    expect(calls[0]?.system).toContain('"Covered: "');
+    expect(calls[0]?.system).toContain('"Not covered: "');
+  });
+
+  test("is kept with the check: the reason and the phrases", async () => {
+    expect(
+      await reasonOf(
+        "Verdict: unsupported\nTides gives the moon phases, not what they cause.\nCovered: the moon phases\nNot covered: the high waters",
+      ),
+    ).toEqual({
+      reason: "Tides gives the moon phases, not what they cause.",
+      covered: "the moon phases",
+      uncovered: "the high waters",
+    });
+  });
+
+  test("keeps the owner's sentence in Chinese, with its phrases in Chinese", async () => {
+    expect(
+      await reasonOf(
+        "Verdict: unsupported\n引用只比较了速度。\nCovered: 速度比较\nNot covered: 内存和鲁棒性",
+        OWNER,
+      ),
+    ).toEqual({ reason: "引用只比较了速度。", covered: "速度比较", uncovered: "内存和鲁棒性" });
+  });
+
+  test("keeps the reason alone when the reply names only one side", async () => {
+    expect(await reasonOf("Verdict: unsupported\nNot stated.\nNot covered: high waters")).toEqual({
+      reason: "Not stated.",
+      covered: null,
+      uncovered: "high waters",
+    });
+  });
+
+  test("is empty when the reply gives nothing", async () => {
+    expect(await reasonOf("Verdict: unsupported")).toEqual({
+      reason: null,
+      covered: null,
+      uncovered: null,
+    });
+  });
+
+  test("is none for a sentence that is supported or contradicted", async () => {
+    const { core, client, check } = await mindWith([SUPPORTED, CONTRADICTED]);
+    await check();
+    expect((await shownChecks(core, client)).map((each) => each.check.unsupported)).toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  test("is replaced when the sentence is checked again", async () => {
+    const plans: Record<string, Plan> = { [HALF]: { reply: { text: "Verdict: unsupported" } } };
+    const { core, client, check } = await mindWith([HALF], checkingModel(plans));
+    await check();
+    expect((await shownChecks(core, client))[0]?.check.unsupported).toEqual({
+      reason: null,
+      covered: null,
+      uncovered: null,
+    });
+    plans[HALF] = {
+      reply: {
+        text: "Verdict: unsupported\nNot stated.\nCovered: the moon phases\nNot covered: the high waters",
+      },
+    };
+    await check();
+    expect((await shownChecks(core, client))[0]?.check.unsupported).toEqual({
+      reason: "Not stated.",
+      covered: "the moon phases",
+      uncovered: "the high waters",
+    });
   });
 });

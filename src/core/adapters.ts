@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { AnalysisJob, AnalysisResult, AnalysisVersions } from "../shared/analysis";
 import type { DrawnPage, PageCaptureRequest } from "../shared/citedPage";
 import type { PrintDocument } from "../shared/printDocument";
 import type { AgentLauncher } from "./agents";
@@ -646,7 +647,23 @@ export interface SpeechSegment {
   decodeMs: number;
   /** The engine couldn't decode it: a final with no text. */
   failed?: true;
+  /** Who said it, as the engine tells speakers apart within the stream ("1", "2"): Soniox does. */
+  speaker?: string;
 }
+
+/**
+ * A stream's audio sent to a cloud transcription service instead (#141), with the User's key.
+ * OpenAI's live model needs our own voice activity detection: `vad` is Silero's file.
+ */
+export type CloudStream =
+  | { service: "openai"; model: string; apiKey: string; vad: string }
+  | { service: "soniox"; model: string; apiKey: string };
+
+/**
+ * Why a cloud stream ended before it was finished: the connection was lost ("dropped"), or the
+ * service refused the key or the account has no credit left ("refused").
+ */
+export type CloudLoss = "dropped" | "refused";
 
 /**
  * Turns speech into text off the core's thread (#136): the desktop app runs
@@ -668,6 +685,11 @@ export interface Transcriber {
   finish(stream: string): Promise<void>;
   /** Forgets a stream, and its audio not yet decoded. */
   drop(stream: string): void;
+  /**
+   * The stream's audio goes to a cloud service from now on, before any is pushed. If it can't,
+   * or the connection is lost, the listeners hear `lost` and the stream is gone.
+   */
+  open(stream: string, cloud: CloudStream): void;
   /** Hears every segment, and how far each stream is done: all its audio up to `doneMs` has given its final text. */
   listen(listener: TranscriberListener): void;
   /** Stops the engine and frees its memory. Loading again starts it afresh. */
@@ -683,6 +705,13 @@ export interface TranscriberListener {
   stopped(reason: string): void;
   /** The transcriber moved a stream to another engine, for the stream's audio from now on. */
   switched(change: EngineSwitch): void;
+  /** A cloud stream ended before it was finished (see `CloudLoss`): its audio not yet transcribed is lost. */
+  lost(stream: string, loss: CloudLoss): void;
+  /**
+   * A cloud stream's connection is ready for audio. The core holds the stream's audio until
+   * then, so what the User stops before it opens never leaves the core.
+   */
+  opened(stream: string): void;
 }
 
 export interface EngineSwitch {
@@ -700,6 +729,27 @@ export interface EngineSwitch {
 export interface Pictures {
   /** The SVG drawn at its own size in pixels (its `width` and `height`), as PNG bytes. */
   png(svg: string): Promise<Uint8Array>;
+}
+
+/**
+ * Runs Analyses (ADR-0023): code a model wrote, over inputs cited from the
+ * User's Documents, in a sandbox with no files and no network. The desktop
+ * app runs Python in a hidden, sandboxed window (src/main/analysis.ts); tests
+ * pass a fake (./analysis/fake). Each job names its language, so a second
+ * one can run behind the same port.
+ */
+export interface AnalysisRuntime {
+  /** The languages it runs, each with what it runs them with; none when it can't run on this computer. */
+  readonly languages: readonly AnalysisVersions[];
+  /**
+   * Runs a job in a namespace of its own, with the same seeds and no clock,
+   * to its end, its time limit or `signal`, one job at a time. Never rejects:
+   * a failure is how the result ends (an error in the code, timed out,
+   * stopped, out of memory, or unavailable).
+   */
+  run(job: AnalysisJob, signal: AbortSignal): Promise<AnalysisResult>;
+  /** Stops what is running and frees the interpreter's memory; the next run starts another. */
+  close(): void;
 }
 
 export interface CoreAdapters {
@@ -887,11 +937,11 @@ export interface CoreAdapters {
    */
   jevHostedUrl?: string;
   /**
-   * Where Look up (#286) asks Crossref's and arXiv's APIs. Defaults to
-   * theirs; tests point them at a local fake server. Consent still treats
-   * the requests as going to Crossref and arXiv.
+   * Where Look up (#286) and checking references ask Crossref's,
+   * arXiv's and OpenAlex's APIs. Defaults to theirs; tests point them at a
+   * local fake server. Consent still treats the requests as going to each.
    */
-  referenceLookup?: { crossref?: string; arxiv?: string };
+  referenceLookup?: { crossref?: string; arxiv?: string; openalex?: string };
   /**
    * Where Find sources (#296) asks each Source provider, by its id
    * ("openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed", "clinicaltrials", "ecfr", "govinfo"). Defaults to the real
@@ -963,6 +1013,11 @@ export interface CoreAdapters {
    */
   audioCapture?: AudioCapture;
   /**
+   * Runs Analyses (see `AnalysisRuntime`). Absent (tests that aren't about
+   * them, a host with no sandbox): Analyses can't run.
+   */
+  analysisRuntime?: AnalysisRuntime;
+  /**
    * Draws cited pages other than PDFs' (see `CapturePage`). The desktop app
    * draws them in a hidden window (src/main/citedPageCapture.ts). Absent
    * (tests that aren't about them): only PDFs' cited pages are saved.
@@ -979,6 +1034,11 @@ export interface CoreAdapters {
    * fake that needs none.
    */
   transcriptionModelSource?: { model: EmbeddingModelSource; vad: EmbeddingModelSource };
+  /**
+   * Asks a cloud transcription service whether it takes a key of its own (#141), before it is
+   * kept. The global `fetch` by default; tests answer without the network.
+   */
+  transcriptionKeyFetch?: typeof fetch;
   /** Where the core logs what happens (see `Logger`). None by default. */
   log?: Logger;
 }

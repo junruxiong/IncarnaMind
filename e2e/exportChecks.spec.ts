@@ -9,13 +9,14 @@ import {
   dismissChatSetup,
   exportFromMenu,
   launchApp,
+  nameMind,
   newMind,
+  openExportOptions,
   pointAndClick,
   removeDataFolder,
   setLanguage,
   setWindowSize,
   slideSelect,
-  tabMenu,
   useLocalChatModel,
   useOutputLocation,
 } from "./app";
@@ -54,7 +55,7 @@ test("a Contradicted sentence goes into a Word file as a comment and the line sa
   await useLocalChatModel(window);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Memo");
+  await nameMind(window, "Memo");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type(WRONG);
@@ -107,7 +108,7 @@ test("a Contradicted sentence goes into a Word file as a comment and the line sa
   await expect(result.getByTestId("export-unmarked")).toHaveCount(0);
 
   // Word with the option off: the same warning, and its fix opens the options.
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await openExportOptions(window);
   const sheet = window.getByTestId("export-dialog");
   await sheet.getByTestId("export-comment-failed-checks").uncheck();
   await sheet.getByTestId("export-save").click();

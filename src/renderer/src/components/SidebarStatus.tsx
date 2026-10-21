@@ -1,18 +1,23 @@
 import { type ReactNode, type ToggleEvent, useEffect, useId, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
+import { formatDateTime } from "../../../shared/dates";
 import type { MessageKey } from "../../../shared/i18n";
-import { organizes } from "../../../shared/libraryModels";
+import { organizeHeld, organizes, organizesNewDocuments } from "../../../shared/libraryModels";
 import { commands } from "../commands/registry";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
-import { useCapturing } from "../meetings";
+import { saidInLine } from "../lineNames";
+import { useCapturing, useMeetings } from "../meetings";
 import { downloadProgress } from "../modelDownload";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
+import { openSandboxHelp, useRunsWithoutSandbox } from "../sandbox";
+import { useSettled } from "../settling";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
+import { useTaggingAlert } from "../taggingAlert";
 import { useTaggingExplained } from "../taggingExplained";
-import { placesText, taggingPlaces } from "../taggingStop";
+import { placesText, resumeTagging, stoppedDocumentPlaces, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
 import { CloseLineIcon } from "./lineIcons";
@@ -64,6 +69,12 @@ interface Status {
   dismiss?: () => void;
   /** It may take two lines, its action said after it, so nothing it names is cut off. */
   wraps?: boolean;
+  /** It asks the User's consent, which is never hidden (ADR-0022). */
+  asks?: true;
+  /** The User's own Documents wait for them to act, so the quiet first open shows it too. */
+  needsYou?: true;
+  /** Tagging needs the User: a hidden sidebar's toggle shows a dot for it. Progress never does. */
+  alerts?: true;
 }
 
 /**
@@ -74,10 +85,38 @@ interface Status {
  * files, files that were in IncarnaMind already). One line:
  * the most pressing status, and "+N" for the others, which lists them above
  * the row. Its 28px are kept even when there is nothing to say, so the tree
- * above moves only for a status that takes two lines.
+ * above moves only for a status that takes two lines. A status that is only
+ * progress shows after it has lasted 300 ms and stays at least 500 ms once shown,
+ * so none flashes; a failure or a question shows at once.
  */
-export function SidebarStatus() {
-  const [first, ...others] = useStatuses();
+export function SidebarStatus({ problemsOnly = false }: { problemsOnly?: boolean }) {
+  const statuses = useStatuses();
+  const shown = useSettled(
+    statuses.filter((status) => !isProblem(status)).map((status) => status.testId),
+  );
+  // A status the work has left stays its last 500 ms as it was.
+  const seen = useRef(new Map<string, Status>());
+  for (const status of statuses) seen.current.set(status.testId, status);
+  const alerting = statuses.some((status) => status.alerts === true);
+  useEffect(() => {
+    useTaggingAlert.setState({ needsYou: alerting });
+  }, [alerting]);
+  useEffect(
+    () => () => {
+      useTaggingAlert.setState({ needsYou: false });
+    },
+    [],
+  );
+  const kept = [...shown]
+    .filter((id) => !statuses.some((status) => status.testId === id))
+    .flatMap((id) => seen.current.get(id) ?? []);
+  const [first, ...others] = [
+    ...statuses.filter((status) =>
+      problemsOnly ? isProblem(status) : isProblem(status) || shown.has(status.testId),
+    ),
+    ...(problemsOnly ? [] : kept),
+  ];
+  if (problemsOnly && !first) return null;
   return (
     <div data-testid="sidebar-status" className="flex min-h-7 shrink-0 flex-col">
       {first && (
@@ -88,6 +127,15 @@ export function SidebarStatus() {
     </div>
   );
 }
+
+// A failure, a one-off the User dismisses (skipped files, a web page not added), a consent
+// question, or the User's own files waiting for a model: the quiet first open hides the footer's
+// other news, never these (DESIGN.md, Problems).
+const isProblem = (status: Status) =>
+  status.tone === "error" ||
+  status.dismiss !== undefined ||
+  status.asks === true ||
+  status.needsYou === true;
 
 function StatusRow({ status, children }: { status: Status; children?: ReactNode }) {
   const t = useT();
@@ -233,11 +281,13 @@ function useStatuses(): Status[] {
   const t = useT();
   const language = useLanguage();
   const skipped = useAppStore((state) => state.skippedFiles);
+  const cantRecord = useMeetings((state) => state.cantRecord);
   const alreadyAdded = useAppStore((state) => state.alreadyAdded);
   const model = useAppStore((state) => state.embeddingModel);
   const embedding = useAppStore((state) => state.embedding);
   const library = useAppStore((state) => state.library);
   const organizing = organizes(library);
+  const organizesNew = organizesNewDocuments(library);
   const capturing = useCapturing();
   const counts = useAppStore(
     useShallow((state) => {
@@ -248,8 +298,11 @@ function useStatuses(): Status[] {
       // Only the User's own Documents: the examples need no model, so they alone don't ask for one.
       let waitingForTagger = 0;
       let waitingForPlan = 0;
+      let rateLimited = 0;
+      let rateLimitEnds: string | null = null;
       let failedTagging = 0;
       let unreached = 0;
+      const heldByOrganize = organizeHeld(state.library);
       // A paused Linked folder's Documents wait for the User: its row says so, not the footer.
       const paused = new Set(
         state.linkedFolders.filter((each) => each.status === "paused").map((each) => each.id),
@@ -261,14 +314,28 @@ function useStatuses(): Status[] {
             if (item.scan?.of === "scanned-pages") scannedPages += item.scan.pages - item.scan.read;
           }
         } else if (item.status === "ready") {
-          if (item.tagging === "pending" || item.tagging === "tagging") tagging++;
-          else if (
+          const held = heldByOrganize.has(item.id);
+          if (item.tagging === "pending" || item.tagging === "tagging") {
+            if (!held) tagging++;
+          } else if (
             item.tagging === "waiting-for-provider" &&
             isOwnDocument(item, allExamples(state))
           ) {
-            waitingForTagger++;
-            if (item.taggingError?.kind === "plan-limit") waitingForPlan++;
-          } else if (item.tagging === "failed" && isOwnDocument(item, allExamples(state))) {
+            if (item.taggingError?.kind === "rate-limit") {
+              rateLimited++;
+              const ends = item.taggingError.resetsAt ?? null;
+              if (ends !== null && (rateLimitEnds === null || ends > rateLimitEnds)) {
+                rateLimitEnds = ends;
+              }
+            } else {
+              if (!held) waitingForTagger++;
+              if (item.taggingError?.kind === "plan-limit") waitingForPlan++;
+            }
+          } else if (
+            item.tagging === "failed" &&
+            !held &&
+            isOwnDocument(item, allExamples(state))
+          ) {
             failedTagging++;
             if (item.taggingError?.kind === "network") unreached++;
           }
@@ -280,6 +347,8 @@ function useStatuses(): Status[] {
         tagging,
         waitingForTagger,
         waitingForPlan,
+        rateLimited,
+        rateLimitEnds,
         failedTagging,
         unreached,
       };
@@ -297,15 +366,20 @@ function useStatuses(): Status[] {
   const dismissSkipped = useAppStore((state) => state.dismissSkippedFiles);
   const dismissAlreadyAdded = useAppStore((state) => state.dismissAlreadyAdded);
   const openSettings = useAppStore((state) => state.openSettings);
-  const taggingWaits = !organizing && counts.waitingForTagger > 0;
-  const tagging = !organizing && counts.tagging > 0;
+  const updateSettings = useAppStore((state) => state.updateSettings);
+  const sandboxOff = useRunsWithoutSandbox();
+  const sandboxNoticeDismissed = useAppStore(
+    (state) => state.settings?.device.sandboxNoticeDismissed === true,
+  );
+  const taggingWaits = counts.waitingForTagger > 0;
+  const tagging = !organizesNew && counts.tagging > 0;
   const organizingNow =
     organizing &&
     !!library?.assignments.some(
       (item) => item.status === "pending" || item.status === "classifying",
     );
   const taggingService = useTaggingService(
-    organizing ? "classification" : "tagging",
+    organizingNow ? "classification" : "tagging",
     taggingWaits || tagging || organizingNow,
   );
   const taggingNeedsOk =
@@ -313,6 +387,14 @@ function useStatuses(): Status[] {
   const places = useAppStore(
     useShallow((state) =>
       tagging || organizingNow ? taggingPlaces(state.documents, state.library) : [],
+    ),
+  );
+  const stoppedPlaces = useAppStore(
+    useShallow((state) =>
+      stoppedDocumentPlaces(
+        state.documents.filter((each) => isOwnDocument(each, allExamples(state))),
+        state.library,
+      ),
     ),
   );
   const service = taggingService?.service.name;
@@ -418,13 +500,17 @@ function useStatuses(): Status[] {
     });
   }
 
-  if (!organizing && counts.failedTagging > 0) {
+  if (counts.failedTagging > 0) {
+    const held = organizeHeld(library);
     const failed = useAppStore
       .getState()
-      .documents.filter((each) => each.status === "ready" && each.tagging === "failed");
+      .documents.filter(
+        (each) => each.status === "ready" && each.tagging === "failed" && !held.has(each.id),
+      );
     statuses.push({
       testId: "tagging-failed",
       tone: "error",
+      alerts: true,
       short:
         counts.failedTagging === 1
           ? t("status.taggingFailed.one")
@@ -450,15 +536,17 @@ function useStatuses(): Status[] {
   for (const problem of pageProblems) {
     const refused = !canTryAgain(problem);
     const reason = t(reasonKey(problem.reason));
-    const short = problem.document
-      ? t("webPages.fetchAgainFailed", { name: problem.document.name, reason })
-      : t(refused ? "webPages.notAdded" : "webPages.couldNotFetch", { reason });
+    const { message: short, fullMessage = short } = saidInLine(t, (t) =>
+      problem.document
+        ? t("webPages.fetchAgainFailed", { name: problem.document.name, reason })
+        : t(refused ? "webPages.notAdded" : "webPages.couldNotFetch", { reason }),
+    );
     const { tryAgain, dismiss } = useWebPages.getState();
     statuses.push({
       testId: `web-page-problem:${problem.key}`,
       tone: refused ? "waiting" : "error",
       short,
-      full: `${short}\n${problem.address}\n${problem.message}`,
+      full: `${fullMessage}\n${problem.address}\n${problem.message}`,
       ...(refused
         ? {}
         : {
@@ -469,6 +557,26 @@ function useStatuses(): Status[] {
             },
           }),
       dismiss: () => dismiss(problem),
+    });
+  }
+
+  if (cantRecord) {
+    const text = t("meetings.settings.cantRecord");
+    statuses.push({
+      testId: "cant-record",
+      tone: "waiting",
+      short: text,
+      full: text,
+      wraps: true,
+      action: {
+        label: t("meetings.cantRecord.notes"),
+        testId: "cant-record-notes",
+        run() {
+          useMeetings.getState().clearCantRecord();
+          void useAppStore.getState().createMind({ titled: true });
+        },
+      },
+      dismiss: () => useMeetings.getState().clearCantRecord(),
     });
   }
 
@@ -498,6 +606,43 @@ function useStatuses(): Status[] {
     });
   }
 
+  if (sandboxOff && !sandboxNoticeDismissed) {
+    statuses.push({
+      testId: "no-sandbox",
+      tone: "waiting",
+      short: t("sandbox.off"),
+      full: t("sandbox.off"),
+      wraps: true,
+      action: { label: t("sandbox.off.fix"), testId: "no-sandbox-fix", run: openSandboxHelp },
+      dismiss: () => void updateSettings({ device: { sandboxNoticeDismissed: true } }),
+    });
+  }
+
+  if (counts.rateLimited > 0) {
+    const time = counts.rateLimitEnds ? formatDateTime(counts.rateLimitEnds, language) : "";
+    const limited = useAppStore
+      .getState()
+      .documents.filter(
+        (each) =>
+          each.status === "ready" &&
+          each.tagging === "waiting-for-provider" &&
+          each.taggingError?.kind === "rate-limit",
+      );
+    statuses.push({
+      testId: "tagging-rate-limited",
+      tone: "waiting",
+      short: t("status.taggingRateLimited", { time }),
+      full: t("status.taggingRateLimited.full", { time }),
+      wraps: true,
+      needsYou: true,
+      action: {
+        label: t("status.retry"),
+        testId: "tagging-rate-limited-retry",
+        run: () => void useAppStore.getState().retagDocuments(limited.map((each) => each.id)),
+      },
+    });
+  }
+
   if (counts.waitingForPlan > 0) {
     statuses.push({
       testId: "tagging-paused",
@@ -511,6 +656,8 @@ function useStatuses(): Status[] {
       tone: "waiting",
       short: t("status.taggingPermission"),
       full: t("jev.waiting.permission", { service: taggingNeedsOk.name }),
+      asks: true,
+      alerts: true,
       action: {
         label: t("privacy.flows.allow"),
         testId: "tagging-waiting-allow",
@@ -526,10 +673,30 @@ function useStatuses(): Status[] {
       tone: "waiting",
       short: t("status.taggingWaiting"),
       full: t("jev.waiting.notice"),
+      needsYou: true,
+      alerts: true,
       action: {
         label: t("status.choose"),
         testId: "tagging-waiting-setup",
         run: () => openSettings("models"),
+      },
+    });
+  }
+
+  if (stoppedPlaces.length > 0) {
+    statuses.push({
+      testId: "tagging-stopped",
+      tone: "waiting",
+      short: t("status.taggingStopped"),
+      full: t("tagging.stoppedIn", { places: placesText(stoppedPlaces, library, t, language) }),
+      needsYou: true,
+      action: {
+        label: t("tagging.resume"),
+        testId: "tagging-resume",
+        run: () =>
+          void resumeTagging(stoppedPlaces).catch((error: unknown) =>
+            useAppStore.getState().reportError(error),
+          ),
       },
     });
   }
@@ -597,20 +764,27 @@ function useStatuses(): Status[] {
   if (!capturing && tagging) {
     const text = service
       ? saysWhatIsSent
-        ? (counts.tagging === 1
-            ? t("status.taggingSends.one", { service })
-            : t("status.taggingSends.other", { count: counts.tagging, service })) + whatIsSent
+        ? counts.tagging === 1
+          ? t("status.taggingSends.one", { service })
+          : t("status.taggingSends.other", { count: counts.tagging, service })
         : counts.tagging === 1
           ? t("status.taggingWith.one", { service })
           : t("status.taggingWith.other", { count: counts.tagging, service })
       : counts.tagging === 1
         ? t("status.tagging.one")
         : t("status.tagging.other", { count: counts.tagging });
+    const short = service && saysWhatIsSent ? text + whatIsSent : text;
+    const full =
+      service && saysWhatIsSent
+        ? (counts.tagging === 1
+            ? t("status.taggingSends.full.one", { service })
+            : t("status.taggingSends.full.other", { count: counts.tagging, service })) + whatIsSent
+        : text;
     statuses.push({
       testId: "tagging-status",
       tone: "progress",
-      short: text,
-      full: text,
+      short,
+      full,
       wraps: true,
       action: stop,
     });
@@ -621,12 +795,15 @@ function useStatuses(): Status[] {
       (item) => item.status === "pending" || item.status === "classifying",
     ).length;
     const attention = library.assignments.filter(
-      (item) => item.status === "waiting" || item.status === "failed",
+      (item) =>
+        (item.status === "waiting" && item.error?.kind !== "rate-limit") ||
+        item.status === "failed",
     ).length;
     if (attention)
       statuses.push({
         testId: "organization-attention",
         tone: "waiting",
+        alerts: true,
         short: t("library.needsAttention"),
         full: t("library.waiting", { count: attention }),
         action: { label: t("library.review"), run: () => useAppStore.getState().openLibrary() },
@@ -634,20 +811,27 @@ function useStatuses(): Status[] {
     if (pending) {
       const text = service
         ? saysWhatIsSent
-          ? (pending === 1
-              ? t("library.progressSends.one", { service })
-              : t("library.progressSends.other", { count: pending, service })) + whatIsSent
+          ? pending === 1
+            ? t("library.progressSends.one", { service })
+            : t("library.progressSends.other", { count: pending, service })
           : pending === 1
             ? t("library.progressWith.one", { service })
             : t("library.progressWith.other", { count: pending, service })
         : pending === 1
           ? t("library.progress.one")
           : t("library.progress.other", { count: pending });
+      const short = service && saysWhatIsSent ? text + whatIsSent : text;
+      const full =
+        service && saysWhatIsSent
+          ? (pending === 1
+              ? t("library.progressSends.full.one", { service })
+              : t("library.progressSends.full.other", { count: pending, service })) + whatIsSent
+          : text;
       statuses.push({
         testId: "organization-progress",
         tone: "progress",
-        short: text,
-        full: text,
+        short,
+        full,
         wraps: true,
         action: stop,
       });

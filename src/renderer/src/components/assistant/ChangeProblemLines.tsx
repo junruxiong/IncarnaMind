@@ -4,6 +4,7 @@ import { unbackedClaimKey, waitingProblemOf } from "../../changeProblems";
 import { useT } from "../../i18n";
 import { showWaitingChanges, useWaitingIn } from "../../mindChanges";
 import { useAppStore } from "../../store";
+import { useAnswerLine } from "../../undo";
 import { ProblemLine } from "../ProblemLine";
 
 /**
@@ -67,6 +68,31 @@ export function UnbackedClaimLine({
       }}
     >
       {t(key)}
+    </ProblemLine>
+  );
+}
+
+export function NoMindToolsLine({
+  answerId,
+  onAdd,
+}: {
+  answerId: string;
+  onAdd(button: HTMLElement): void;
+}) {
+  const t = useT();
+  const added = useAnswerLine(answerId);
+  if (added) return null;
+  return (
+    <ProblemLine
+      role="status"
+      testId="answer-no-mind-tools"
+      action={{
+        label: t("answer.noMindTools.add"),
+        testId: "answer-no-mind-tools-add",
+        onClick: (event) => onAdd(event.currentTarget),
+      }}
+    >
+      {t("answer.noMindTools")}
     </ProblemLine>
   );
 }

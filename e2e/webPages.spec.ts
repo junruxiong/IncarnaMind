@@ -66,6 +66,7 @@ async function screenshot(target: Page | Locator, name: string): Promise<void> {
 /** "Add a web page…" from the sidebar's "+", with these addresses, one per line. Returns the dialog. */
 async function addWebPages(window: Page, addresses: string[]): Promise<Locator> {
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
   await dialog.getByTestId("add-web-page-addresses").fill(addresses.join("\n"));
@@ -114,7 +115,7 @@ test("a web page added from the + menu is a Document named by its title, opened 
   const results = dialog.getByTestId("add-web-page-result");
   await expect(results.filter({ hasText: `${site}/tea` })).toContainText("Added");
   await expect(dialog.getByTestId("add-web-page-problem")).toHaveText(
-    "Couldn't fetch: the page doesn't exist · Try again",
+    "Couldn’t fetch: the page doesn’t exist · Try again",
   );
   await screenshot(window, "add-web-page-results");
   await dialog.getByTestId("add-web-page-done").click();
@@ -171,17 +172,17 @@ test("a link pasted or dropped on a Folder in the sidebar is saved there; one th
   await expect(folder.getByTestId("document-list-item")).toContainText(TITLE);
 
   // Dragged over the window, the Folders stay in sight; dropped on one, it is saved there.
-  await dragLink(folder, `${site}/tea-dropped`, false);
+  await dragLink(row, `${site}/tea-dropped`, false);
   await expect(window.getByTestId("drop-overlay")).toContainText("drop it on a Folder");
   await expect(folder).toHaveAttribute("data-drop-target", "true");
   await screenshot(window, "web-page-drag");
-  await dragLink(folder, `${site}/tea-dropped`);
+  await dragLink(row, `${site}/tea-dropped`);
   await expect(window.getByTestId("drop-overlay")).toBeHidden();
   await expect(folder).toHaveAttribute("data-count", "2");
 
   await paste(window, `${site}/gone`);
   const problem = window.locator('[data-testid^="web-page-problem"]');
-  await expect(problem).toContainText("Couldn't fetch: the page doesn't exist");
+  await expect(problem).toContainText("Couldn’t fetch: the page doesn’t exist");
   await expect(problem.getByTestId("web-page-try-again")).toBeVisible();
   await screenshot(window, "web-page-pasted");
   await app.close();

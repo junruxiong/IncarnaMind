@@ -1730,6 +1730,64 @@ export const migrations: readonly Migration[] = [
         CHECK (origin IN ('user', 'search'));
     `,
   },
+  {
+    version: 96,
+    description: "Reference lookups kept, so checking a list again asks only about misses (#711)",
+    // OpenAlex's free allowance is per network and per day; a student re-checks the same list often.
+    // `service` is where the answer came from, which the check still names.
+    sql: `
+      CREATE TABLE reference_lookups (
+        id TEXT PRIMARY KEY NOT NULL,
+        service TEXT NOT NULL CHECK (service IN ('crossref', 'openalex', 'arxiv')),
+        kind TEXT NOT NULL,
+        lookup_key TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        -- 1: an answer that found the work cited, kept for good; 0: a miss, asked again after a while.
+        kept INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX reference_lookups_by_key
+        ON reference_lookups (service, kind, lookup_key) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 97,
+    description: "A failed Answer keeps which of its sign-in route's problems stopped it",
+    // A Claude account's or a Copilot plan's own problem (SignInRouteProblem, checked in code), so
+    // its line and ways back are the route's after a restart; NULL for any other failure.
+    sql: `
+      ALTER TABLE conversation_messages ADD COLUMN error_sign_in_route TEXT;
+    `,
+  },
+  {
+    version: 98,
+    description: "A Document's Folder keeps when it was filed there",
+    // When the Document joined the Folder's scope, for checks of a Mind there it could change
+    // (#993). NULL on a row filed before: its created_at stands for it.
+    sql: `
+      ALTER TABLE document_groups ADD COLUMN filed_at TEXT;
+    `,
+  },
+  {
+    version: 99,
+    description: "A Document waiting out a rate limit keeps when it resumes (#1127)",
+    // ISO 8601 UTC, beside the error kind and message the tagging state already keeps; NULL when
+    // the error carries no time.
+    sql: `
+      ALTER TABLE documents ADD COLUMN tagging_error_resets_at TEXT;
+    `,
+  },
+  {
+    version: 101,
+    description: "A provider's own model can be taken out of the model menu (#179)",
+    // 1: the User put the id in the menu (as before); 0: the User took one the provider offers
+    // in the menu by default out of it, with Settings › Models' "In the menu".
+    sql: `
+      ALTER TABLE chat_menu_models ADD COLUMN in_menu INTEGER NOT NULL DEFAULT 1;
+    `,
+  },
 ];
 
 /**

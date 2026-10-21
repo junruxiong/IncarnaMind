@@ -8,15 +8,16 @@ import {
   messageReference,
   PROPOSAL_ATTRIBUTE,
 } from "../../src/core";
-import { answerBlocks } from "../../src/renderer/src/answerBlocks";
+import { answerBlocks } from "../../src/shared/answerBlocks";
 import { allOrigins } from "../../src/shared/blockOrigins";
+import { withoutFraming } from "../../src/shared/noteBlocks";
 import { aiUseOfAccepted, pendingProposals, resolveProposals } from "../../src/shared/proposals";
 import { citingModel } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
 import { connectToMind } from "../helpers/mindClient";
 import { note, readMind, writeMind } from "../helpers/minds";
-import { scriptedModels } from "../helpers/models";
+import { scriptedModel, scriptedModels } from "../helpers/models";
 import { buildPdf } from "../helpers/pdf";
 
 /**
@@ -172,6 +173,34 @@ describe("Add to note into a Mind that isn't open", { timeout: 60_000 }, () => {
         blockIds: added.blockIds,
       }),
     ]);
+  });
+
+  // protects=#1061: the model's line about how it went about the request stays in the panel, and only the summaries go into the Mind, as the window's Add to note adds a whole Answer; fails_when=the explaining line reaches the Mind; no_claim=every way a model explains itself.
+  test("leaves out the model's line about how it went about the request", async () => {
+    const reply = [
+      "你没有说明是哪一份合同，所以我把四份文档各写了一段简短摘要。",
+      "## 合同 A",
+      "租期为两年，月租金为八千元。",
+      "## 合同 B",
+      "押金为两个月租金。",
+    ].join("\n\n");
+    const core = await setUp(scriptedModel(() => ({ text: reply })));
+    const answer = await askAndWait(core, { text: "写一下合同的摘要" });
+    const mind = await core.createMind({ title: "合同笔记" });
+
+    await core.addToNote({
+      mindId: mind.id,
+      blocks: withoutFraming(answerBlocks({ ...answer, status: "done" })),
+      origin: null,
+      model: answer.model,
+    });
+
+    const client = await connectToMind(core, mind.id);
+    await client.settled();
+    const text = readMind(client).textContent;
+    expect(text).not.toContain("你没有说明");
+    expect(text).toContain("租期为两年");
+    expect(text).toContain("押金为两个月租金");
   });
 
   test("takes only Notes, and a link back that is one", async () => {

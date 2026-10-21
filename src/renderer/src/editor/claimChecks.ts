@@ -10,6 +10,7 @@ import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { CLAIM_CHECK_MARK, type ClaimCheckAttributes } from "../../../core/api";
 import { type ClaimCheckShown, claimCheckShown, readClaimCheck } from "../../../shared/claimChecks";
+import { sentenceKey } from "../../../shared/mindCheck";
 import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 
 /** Every attribute a check's mark keeps: all of `ClaimCheckAttributes`, never read from pasted HTML. */
@@ -25,6 +26,7 @@ const ATTRIBUTES: readonly (keyof ClaimCheckAttributes)[] = [
   "text",
   "evidence",
   "says",
+  "unsupported",
   "calculation",
   "citedCaseUnchecked",
   "citedCaseFound",
@@ -32,6 +34,7 @@ const ATTRIBUTES: readonly (keyof ClaimCheckAttributes)[] = [
   "versions",
   "excluded",
   "checkedAt",
+  "kept",
 ];
 
 /**
@@ -118,14 +121,16 @@ export interface ClaimContext {
   folderId: string | null;
 }
 
-/** A check where it is, and how it shows. */
+/** A check where it is, and how it shows: never one the User keeps as their own view, which shows nothing. */
 export interface ShownClaim extends ClaimSpan {
-  shown: ClaimCheckShown;
+  shown: Exclude<ClaimCheckShown, { state: "kept" }>;
 }
 
 interface ClaimState {
   context: ClaimContext;
   claims: readonly ShownClaim[];
+  /** The sentences the User keeps as their own view (#1111), by `sentenceKey`. */
+  kept: ReadonlySet<string>;
   decorations: DecorationSet;
 }
 
@@ -136,17 +141,29 @@ const CONTEXT = "claimContext";
 
 const NO_CONTEXT: ClaimContext = { versions: null, folderId: null };
 
+/** The checks in a document as they show now, and the sentences the User keeps as their own view. */
+export function claimsOf(
+  doc: ProseMirrorNode,
+  context: ClaimContext,
+): Pick<ClaimState, "claims" | "kept"> {
+  const claims: ShownClaim[] = [];
+  const kept = new Set<string>();
+  for (const span of claimSpans(doc)) {
+    const shown = claimCheckShown(span.check, { ...context, text: span.sentence.text });
+    if (shown.state === "kept") kept.add(sentenceKey(span.sentence.text));
+    else claims.push({ ...span, shown });
+  }
+  return { claims, kept };
+}
+
 function stateOf(doc: ProseMirrorNode, context: ClaimContext): ClaimState {
-  const claims = claimSpans(doc).map((span) => ({
-    ...span,
-    shown: claimCheckShown(span.check, { ...context, text: span.sentence.text }),
-  }));
+  const { claims, kept } = claimsOf(doc, context);
   const washes = claims.flatMap(({ shown, from, to }) =>
     shown.state === "unsupported" || shown.state === "contradicted"
       ? [Decoration.inline(from, to, { class: `claim-wash claim-wash--${shown.state}` })]
       : [],
   );
-  return { context, claims, decorations: DecorationSet.create(doc, washes) };
+  return { context, claims, kept, decorations: DecorationSet.create(doc, washes) };
 }
 
 /** How the checks of a Mind's sentences cover its Documents (#764). */
@@ -205,6 +222,13 @@ export const sameCoverage = (a: Coverage, b: Coverage | null | undefined): boole
 /** The checks in the editor, as they show now. Empty without `ClaimChecks`. */
 export function shownClaims(state: EditorState): readonly ShownClaim[] {
   return claimsKey.getState(state)?.claims ?? [];
+}
+
+const NONE_KEPT: ReadonlySet<string> = new Set();
+
+/** The sentences the User keeps as their own view, by `sentenceKey`: not counted. */
+export function keptSentences(state: EditorState): ReadonlySet<string> {
+  return claimsKey.getState(state)?.kept ?? NONE_KEPT;
 }
 
 /** Compares the checks with the Documents and the Mind's Folder as they are now. */

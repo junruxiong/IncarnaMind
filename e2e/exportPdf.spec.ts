@@ -24,8 +24,10 @@ import {
   type MindChild,
   mindNode,
   motionSettled,
+  nameMind,
   newMind,
   openOptions,
+  openSavedPage,
   pathsOpened,
   pathsShown,
   pointAndClick,
@@ -33,7 +35,6 @@ import {
   savedLine,
   savedPath,
   setWindowSize,
-  tabMenu,
   useOutputLocation,
   WINDOW_SIZE,
 } from "./app";
@@ -119,7 +120,7 @@ const unspaced = (text: string) => text.replace(/\s+/g, "");
 /** Opens a new Mind titled `title`, and adds the two Documents it cites. Returns its id. */
 async function setUpMind(window: Page, folder: string, title: string) {
   await newMind(window);
-  await window.getByTestId("mind-title").fill(title);
+  await nameMind(window, title);
   const mindId = await window.getByTestId("mind-pane").getAttribute("data-mind-id");
   if (!mindId) throw new Error("No Mind is open.");
   await writeFile(join(folder, "Tides.txt"), "Spring tides happen at new moon.");
@@ -134,9 +135,9 @@ async function documentNamed(window: Page, name: string): Promise<Document> {
   return found;
 }
 
-/** Export as PDF, from the tab's menu, while Word is still the last format. */
+/** Export as PDF, from the Export button's menu, while Word is still the last format. */
 async function exportAsPdf(window: Page): Promise<void> {
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportAs.pdf"));
+  await exportFromMenu(window, "pdf");
 }
 
 let dataDir: string;
@@ -228,7 +229,6 @@ test("a Mind with English and Chinese Citations, a table and maths prints as a P
     year: "numeric",
   }).format(new Date(fetched));
   const golden = [
-    "Tides 潮汐",
     "Spring tides",
     "Spring tides happen at new moon and at full moon1.",
     "大潮出现在新月和满月前后2。",
@@ -323,7 +323,6 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
   // Under it, its caption, then its sources: each a footnote naming its Document and
   // Location, numbered with the rest, and the value with no Citation said in words.
   const golden = [
-    "Tides 潮汐",
     "Chart: Tidal range 潮差",
     "Source: 1,2 1 value has no Citation.",
     "1 Tides, p. 1",
@@ -345,7 +344,6 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
   expect(chineseText.map(unspaced)).toEqual([
     unspaced(
       [
-        "Tides 潮汐",
         "图表：Tidal range 潮差",
         "数据来源：1,2 1 个数值没有引用。",
         "1 Tides，第 1 页",
@@ -430,7 +428,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await pointAndClick(window, window.getByTestId("mind-editor"));
   await window.keyboard.type("Spring tides come twice a month.");
   const out = await createDataFolder();
@@ -459,7 +457,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   );
   // Word's review choices (#107), on to begin with; a Mind made here has no import to track edits since.
   await expect(sheet.getByTestId("export-pending-note")).toHaveText(
-    "Changes waiting for you go in as tracked changes by IncarnaMind.",
+    "Changes waiting for you go in as IncarnaMind’s tracked changes.",
   );
   await expect(sheet.getByTestId("export-mark-ai-text")).toBeChecked();
   await expect(sheet.getByTestId("export-comment-failed-checks")).toBeChecked();
@@ -512,7 +510,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   await exportFromMenu(window);
   const problem = result.getByTestId("export-problem");
   await expect(problem).toHaveText(
-    "Couldn't save: the folder isn't there any more · Change output location…",
+    "Couldn’t save: the folder isn’t there any more · Change output location…",
   );
   await interceptOpenDialog(app, out);
   await pointAndClick(window, problem.getByTestId("export-change-location"));
@@ -565,6 +563,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
 
 test("Export as HTML saves one .html file whose footnotes link both ways, and the sheet offers the format", async () => {
   const { app, window } = await launchApp(dataDir, { home });
+  await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
   await dismissChatSetup(window);
   const mindId = await setUpMind(window, sources, "Tides 潮汐");
   await expect
@@ -575,15 +574,22 @@ test("Export as HTML saves one .html file whose footnotes link both ways, and th
   await bridge(window).write(
     mindId,
     blocksUpdate([
-      paragraph("Spring tides happen at new moon", citation(tides, 1, "found"), "."),
+      paragraph(
+        "Spring tides happen at new moon",
+        citation(tides, 1, "found"),
+        ". 大潮出现在新月前后",
+        citation(chinese, 1, "found"),
+        citation(tides, 1, "found"),
+        "。",
+      ),
       paragraph("大潮出现在新月和满月前后", citation(chinese, 1, "not-found"), "。"),
     ]),
   );
-  await expect(window.getByTestId("mind-editor").getByTestId("citation")).toHaveCount(2);
+  await expect(window.getByTestId("mind-editor").getByTestId("citation")).toHaveCount(4);
   const out = await createDataFolder();
   await useOutputLocation(window, out);
 
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportAs.html"));
+  await exportFromMenu(window, "html");
   const path = await savedPath(window, "Tides 潮汐.html");
   const html = await readFile(path, "utf8");
   expect(html.startsWith("<!DOCTYPE html>")).toBe(true);
@@ -592,13 +598,37 @@ test("Export as HTML saves one .html file whose footnotes link both ways, and th
   expect(html).toContain('<a class="backref" href="#ref-2"');
   expect(html).not.toMatch(/<script|<link|src="http/);
 
+  const reader = await openSavedPage(app, path);
+  try {
+    for (const width of [1280, 390]) {
+      await setWindowSize(app, reader, width, 844);
+      await expect(reader.locator("main > p").filter({ has: reader.locator("#ref-1") })).toHaveText(
+        "Spring tides happen at new moon1. 大潮出现在新月前后2,3。",
+      );
+      expect(
+        await reader
+          .locator("sup.note-ref")
+          .evaluateAll((markers) =>
+            markers.map((marker) => getComputedStyle(marker, "::before").content),
+          ),
+      ).not.toContain('","');
+      await screenshot(reader, `html-citation-separators-${width}`);
+    }
+    await reader.locator("#ref-2 a").click();
+    await expect(reader).toHaveURL(/#note-2$/);
+    await reader.locator("#note-2 .backref").click();
+    await expect(reader).toHaveURL(/#ref-2$/);
+  } finally {
+    await reader.close();
+  }
+
   // Export now makes HTML, and the sheet offers the format with its note.
   await expect(window.getByTestId("export-mind")).toHaveAttribute("data-format", "html");
   await openOptions(window, "Export options");
   const sheet = window.getByTestId("export-dialog");
   await expect(sheet.getByTestId("export-format")).toHaveValue("html");
   await expect(sheet.getByTestId("export-format-note")).toHaveText(
-    "One file that opens in any browser. Citations become footnotes linked both ways.",
+    "Opens in any browser; Citations become linked footnotes.",
   );
   await app.close();
   await removeDataFolder(out);

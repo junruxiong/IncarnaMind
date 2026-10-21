@@ -10,11 +10,15 @@ import {
   useState,
 } from "react";
 import { type Box, enterFrom, exitToward } from "../motion";
+import { isSlidingTo, type Point } from "./submenuSlide";
 
 const GAP_PX = 4;
 const EDGE_PX = 8;
 /** Menu items of every kind: plain, radio and checkbox. */
 const ITEMS = '[role^="menuitem"]';
+
+/** A row crossed on the way to an open submenu takes over once the pointer has rested on it this long. */
+const SLIDE_REST_MS = 300;
 
 const itemsOf = (menu: HTMLElement | null) =>
   Array.from(menu?.querySelectorAll<HTMLElement>(ITEMS) ?? []);
@@ -105,12 +109,20 @@ function itemForKey(key: string, all: readonly HTMLElement[]): HTMLElement | und
   }
 }
 
+function openSubmenus(menu: HTMLElement | null): { trigger: HTMLElement; submenu: HTMLElement }[] {
+  return Array.from(
+    menu?.querySelectorAll<HTMLButtonElement>('[aria-haspopup="menu"]') ?? [],
+  ).flatMap((trigger) => {
+    const submenu = trigger.popoverTargetElement;
+    return submenu instanceof HTMLElement && submenu.matches(":popover-open")
+      ? [{ trigger, submenu }]
+      : [];
+  });
+}
+
 function closeSubmenusBut(menu: HTMLElement | null, item: Element): void {
-  for (const each of menu?.querySelectorAll<HTMLButtonElement>('[aria-haspopup="menu"]') ?? []) {
-    const submenu = each.popoverTargetElement;
-    if (each !== item && submenu instanceof HTMLElement && submenu.matches(":popover-open")) {
-      submenu.hidePopover();
-    }
+  for (const { trigger, submenu } of openSubmenus(menu)) {
+    if (trigger !== item) submenu.hidePopover();
   }
 }
 
@@ -201,6 +213,24 @@ export function usePopoverMenu({
   const touched = useRef(false);
   /** Whether it has grown from its button since it opened. */
   const entered = useRef(false);
+  const apex = useRef<Point | null>(null);
+  const crossing = useRef<{ row: Element; timer: number } | null>(null);
+
+  const stopCrossing = () => {
+    if (crossing.current) window.clearTimeout(crossing.current.timer);
+    crossing.current = null;
+  };
+  const keepWhileCrossing = (row: Element) => {
+    if (crossing.current) window.clearTimeout(crossing.current.timer);
+    const timer = window.setTimeout(() => {
+      crossing.current = null;
+      // The pointer may have reached the submenu since its last move over the menu.
+      for (const { submenu } of openSubmenus(menu.current)) {
+        if (!submenu.matches(":hover")) closeSubmenusBut(menu.current, row);
+      }
+    }, SLIDE_REST_MS);
+    crossing.current = { row, timer };
+  };
 
   // Once rendered with its items, and before it is drawn: placed. A click
   // renders it just before the popover shows, so it shows where it belongs;
@@ -227,6 +257,13 @@ export function usePopoverMenu({
     if (menu.current?.matches(":popover-open")) focusFirst(menu.current, first);
     else autofocusFirst(menu.current, first);
   }, [open, first, align]);
+
+  useEffect(() => {
+    if (open) return;
+    apex.current = null;
+    if (crossing.current) window.clearTimeout(crossing.current.timer);
+    crossing.current = null;
+  }, [open]);
 
   // Items that come after it opened, such as models still being listed then: placed again for
   // the menu's new size, and the checked one focused, as it would have been had it been there.
@@ -295,7 +332,42 @@ export function usePopoverMenu({
       },
       onPointerOver: (event: PointerEvent) => {
         const item = event.target instanceof Element ? event.target.closest(ITEMS) : null;
-        if (item) closeSubmenusBut(menu.current, item);
+        if (!item) return;
+        const onItsWay = openSubmenus(menu.current).some(
+          ({ trigger, submenu }) =>
+            trigger !== item &&
+            apex.current !== null &&
+            isSlidingTo(
+              { x: event.clientX, y: event.clientY },
+              apex.current,
+              submenu.getBoundingClientRect(),
+            ),
+        );
+        if (onItsWay) keepWhileCrossing(item);
+        else {
+          stopCrossing();
+          closeSubmenusBut(menu.current, item);
+        }
+      },
+      onPointerMove: (event: PointerEvent) => {
+        const point = { x: event.clientX, y: event.clientY };
+        const item = event.target instanceof Element ? event.target.closest(ITEMS) : null;
+        const open = openSubmenus(menu.current);
+        if (open.some(({ trigger }) => trigger === item)) {
+          apex.current = point;
+          stopCrossing();
+        } else if (item && crossing.current) {
+          const onItsWay = open.some(
+            ({ submenu }) =>
+              apex.current !== null &&
+              isSlidingTo(point, apex.current, submenu.getBoundingClientRect()),
+          );
+          if (onItsWay) keepWhileCrossing(item);
+          else {
+            stopCrossing();
+            closeSubmenusBut(menu.current, item);
+          }
+        }
       },
     },
   };

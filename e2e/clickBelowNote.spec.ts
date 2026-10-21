@@ -9,8 +9,10 @@ import {
   dismissChatSetup,
   documentIdOf,
   enterContent,
+  frontMindName,
   launchApp,
   mindWrittenBefore,
+  nameMind,
   newMind,
   openDocumentAt,
   removeDataFolder,
@@ -65,8 +67,14 @@ async function clickBelowNote(
   const last = await blocks(editor).last().boundingBox();
   const box = await editor.boundingBox();
   if (!last || !box) throw new Error("The Mind isn't visible.");
-  const x = box.x + box.width * across;
+  let x = box.x + box.width * across;
   const y = (under === "block" ? last.y + last.height : box.y + box.height) + 24;
+  // The check badge sits in the page's bottom right corner: a click on it opens its card, so aim beside it.
+  const shown = window.locator('[data-testid="check-badge"]:visible');
+  const badge = (await shown.count()) > 0 ? await shown.first().boundingBox() : null;
+  if (badge && x >= badge.x - 8 && y >= badge.y - 8 && y <= badge.y + badge.height + 8) {
+    x = badge.x - 12;
+  }
   const found = await editor.evaluate(
     (dom, point) => {
       const element = document.elementFromPoint(point.x, point.y);
@@ -128,7 +136,7 @@ for (const view of VIEWS) {
     }
     await expect(blocks(editor)).toHaveCount(6);
     await expect(blocks(editor).last()).toHaveText("Neap tides are weaker.!!");
-    await expect(window.getByTestId("mind-title")).toHaveValue("Tides");
+    await expect(frontMindName(window)).toHaveText("Tides");
 
     // How much one Undo takes depends on how far apart the words and each "!" were typed: all of
     // them, both "!", or only the last "!", which a second Undo takes.
@@ -148,7 +156,7 @@ test("a click under a table, inside the editor's own space, puts the cursor on a
   await dismissChatSetup(window);
   await setWindowSize(app, window, 1440, 660);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tide tables");
+  await nameMind(window, "Tide tables");
   await enterContent(window);
   await window.keyboard.type("Heights in metres.");
   const editor = window.getByTestId("mind-editor");
@@ -194,6 +202,5 @@ test("in an empty Mind a click under its line puts the cursor on it, and Chinese
   await window.keyboard.type("大潮在朔日和望日。");
   await expect(blocks(editor)).toHaveCount(1);
   await expect(blocks(editor).first()).toHaveText("大潮在朔日和望日。");
-  await expect(window.getByTestId("mind-title")).toHaveValue("");
   await app.close();
 });

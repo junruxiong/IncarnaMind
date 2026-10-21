@@ -46,6 +46,7 @@ import { RunItemError, runItems } from "../../runs/stop";
 import { type ClaimCheckRequest, recordJudged, runFailureOf } from "./claimCheck";
 import {
   everySentence,
+  keptAsView,
   markedSentences,
   markSentence,
   type SelectedSentence,
@@ -148,7 +149,11 @@ export function createContradictionWatch(options: WatchOptions) {
   function plan(mindId: string, range?: { from: TextPlace; to: TextPlace }): Plan {
     const folderId = options.mindFolder(mindId);
     const read = content.read(mindId, (blocks) => {
-      if (!range) return { ok: true as const, sentences: everySentence(blocks) };
+      if (!range) {
+        const marks = markedSentences(blocks);
+        const sentences = everySentence(blocks).filter((each) => !keptAsView(marks, each));
+        return { ok: true as const, sentences };
+      }
       return selectedSentences(blocks, [range]);
     });
     if (!read.ok) return { kind: read.reason };
@@ -225,6 +230,7 @@ export function createContradictionWatch(options: WatchOptions) {
         text: sentence.text,
         evidence: null,
         says: null,
+        unsupported: null,
         calculation: null,
         citedCaseUnchecked: false,
         citedCaseFound: false,

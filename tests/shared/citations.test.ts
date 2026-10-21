@@ -3,6 +3,7 @@ import type { CitationAttributes } from "../../src/core/api";
 import type { Language } from "../../src/core/language";
 import {
   badgeMessage,
+  citationAttributesOf,
   citationReference,
   citationSource,
   citationState,
@@ -143,7 +144,7 @@ describe("A Citation's badge", () => {
       }).zh,
     ).toBe("未在“§ Tides”中找到引文");
     expect(words({ ...found, check: "checking" }).en).toBe("checking…");
-    expect(words({ ...found, check: "cant-check", checkReason: "no-text" }).en).toBe("Can't check");
+    expect(words({ ...found, check: "cant-check", checkReason: "no-text" }).en).toBe("Can’t check");
     for (const check of ["found", "not-found", "cant-check", "checking"] as const) {
       expect(words({ ...found, check }).en).not.toMatch(/verif/i);
     }
@@ -335,7 +336,7 @@ describe("The words an Answer put in quotation marks that a Citation's page lack
       zh: "未在第 3 页找到引文",
     });
     expect(translate("en", "citation.reason.quoted-words-not-on-pages")).toContain(
-      "words in quotation marks",
+      "The quoted words",
     );
     expect(translate("zh-CN", "citation.reason.quoted-words-not-on-pages")).toContain("引号");
   });
@@ -526,5 +527,30 @@ describe("Finding a quote across pages in the viewer", () => {
     expect(findQuoteInPages(pages, "Neap tides are small.")).toEqual([
       { page: 1, piece: 0, start: 0, end: 21 },
     ]);
+  });
+});
+
+describe("a Citation's attributes as a node holds them", () => {
+  test("are read as the Citation they hold, with its Location from the pages", () => {
+    expect(citationAttributesOf({ ...found })).toEqual({
+      ...found,
+      checkReason: undefined,
+      location: { kind: "page", from: 12, to: 13 },
+    });
+  });
+
+  test("leave out what is missing or isn't the right type", () => {
+    expect(
+      citationAttributesOf({ documentId: 7, check: "maybe", pageFrom: "3", quote: ["x"] }),
+    ).toEqual({
+      passageId: null,
+      documentId: null,
+      documentName: null,
+      contentHash: null,
+      pageFrom: null,
+      pageTo: null,
+      location: null,
+      quote: null,
+    });
   });
 });

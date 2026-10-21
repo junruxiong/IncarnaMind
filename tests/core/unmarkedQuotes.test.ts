@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { createAiSdkAnswerEngine } from "../../src/core/answers/engine";
 import { matchUnmarked, parseAsked, settleOrphans } from "../../src/core/answers/unmarkedQuotes";
 import { askAndFinish, citationsIn, setUpWithDocuments } from "../helpers/citations";
 import { type ModelCall, type ScriptedReply, scriptedModel } from "../helpers/models";
@@ -159,6 +160,30 @@ describe("An Answer that quotes without markers (#760)", { timeout: 30_000 }, ()
     expect(finished.citedAfterChecking).toEqual({ count: 1, asked: true });
   });
 
+  // protects=the one request for Citations is one of the end-of-turn checks' asks (#946): with no step of the budget left it isn't made; fails_when=the model is asked past the step budget; no_claim=none beyond protects.
+  test("with no step left in the budget, the model isn't asked for Citations", async () => {
+    let requests = 0;
+    const model = quotingModel(LOOSE, () => {
+      requests++;
+      return { text: JSON.stringify({ citations: [] }) };
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [TEA], {
+      answerEngine: createAiSdkAnswerEngine({ maxSteps: 2 }),
+    });
+
+    const { answerId, finished } = await askAndFinish(
+      core,
+      client,
+      mind.id,
+      "How did tea reach Tibet?",
+    );
+
+    expect(requests).toBe(0);
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(citationsIn(client, answerId)).toEqual([]);
+    expect(finished.citedAfterChecking?.asked ?? false).toBe(false);
+  });
+
   // protects=the one request is made at most once, and an Answer it can't help stays uncited; an Answer that shares nothing with the Passages isn't asked about; fails_when=it asks twice, asks for a decline, or invents a Citation; no_claim=none beyond protects.
   test("asked and given nothing, the Answer stays uncited after one request; a decline isn't asked about", async () => {
     let requests = 0;
@@ -280,6 +305,15 @@ describe("Matching sentences to Passages", () => {
         { marker: 4, took: false, ...span("B two [^1].") },
       ]),
     ).toBe("A one [^1]. B two [^4]. C three .");
+  });
+
+  // protects=a footnote definition ("[^1]: Source, p. 1") keeps its marker when a sentence takes that number, so the line is dropped whole afterwards and no ": Source, p. 1" stays in the Answer; fails_when=the definition loses its marker and the rest of the line shows; no_claim=none beyond protects.
+  test("a footnote definition keeps its marker", () => {
+    const answer = "A one [^1]. B two [^1].\n\n[^1]: Tea history, p. 1";
+    const start = answer.indexOf("A one");
+    expect(
+      settleOrphans(answer, [{ marker: 1, took: true, start, end: start + "A one [^1].".length }]),
+    ).toBe("A one [^1]. B two .\n\n[^1]: Tea history, p. 1");
   });
 
   // protects=the reply to the one request is read leniently and only well-formed items are kept; fails_when=a malformed item throws or is kept; no_claim=none beyond protects.
