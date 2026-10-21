@@ -21,8 +21,8 @@ export type DocumentMeant =
 
 /** What the User has in view as they ask, by Document id. */
 export interface InView {
-  /** The Document open in the focused group. */
-  open: string | null;
+  /** The Documents shown in the window's groups, the focused group's first. */
+  open: readonly string[];
   /** What the selected text cites; null with nothing selected. */
   selected: readonly string[] | null;
   /** The Document the Mind in focus is the working copy of. */
@@ -33,10 +33,18 @@ export interface InView {
   lastAnswer: readonly string[];
 }
 
+// The words that say a Document, the same in both: a "this" before one of them, or before a
+// Document's name, points at a Document; "this" alone may be the last Answer, or the User's text.
+const EN_DOCUMENT =
+  /^(?:document|doc|file|pdf|agreement|contract|report|statement|spreadsheet|sheet|invoice|memo|letter|deck|presentation|paper|article|minutes|lease|policy|proposal|plan|brief|budget|filing|résumé|resume|cv)s?$/i;
+const ZH_DOCUMENT =
+  "(?:文件|文档|协议|合同|报告|报表|表格|表|发票|备忘录|函|信|演示|幻灯片|论文|文章|纪要|租约|政策|方案|计划|诉状|预算|简历|说明书|手册|章程)";
 const EN_THIS = /\bthis\b((?:\s+[\p{L}\p{N}'’-]+){0,3})/iu;
-// 该 and 此 alone, not in 应该 or 因此.
-const ZH_THIS =
-  /(?:这(?:份|篇|个|张|本|封)|(?<![应本活])该(?!不)|(?<![因如从彼借据至对凭特])此(?![外时后前次刻]))([\p{Script=Han}A-Za-z0-9]{0,16})/u;
+// 这份 and its kind; 此 not in 因此; 该 and 本 only before a Document's word, so not in 我该, 本周 or 成本.
+const ZH_THIS = new RegExp(
+  `(?:这(?:份|篇|个|张|本|封)|(?<![因如从彼借据至对凭特])此(?![外时后前次刻])|(?:(?<![我你他她们应本活谁])该|(?<![基成日根资样课书剧版文脚账])本)(?=(?:(?!的)[\\p{Script=Han}]){0,4}?${ZH_DOCUMENT}))([\\p{Script=Han}A-Za-z0-9]{0,16})`,
+  "u",
+);
 // What "this" means when it isn't a Document, the same in both: a folder, the User's own text, the chat, a time.
 const EN_NOT =
   /^(?:folder|directory|paragraph|section|sentence|page|note|notes|question|answer|chat|week|month|year|quarter|time)\b/i;
@@ -47,8 +55,14 @@ const SHORTEST_ZH_NAME = 2;
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** The words after "this", up to the first that can't be a name; null when the request doesn't say "this" of a Document. */
-function wordsAfterThis(question: string): { words: string[]; chinese: boolean } | null {
+interface AfterThis {
+  words: string[];
+  chinese: boolean;
+  /** A Document's word follows "this": "this agreement", "这份合同". */
+  saysDocument: boolean;
+}
+
+function wordsAfterThis(question: string): AfterThis | null {
   const english = EN_THIS.exec(question);
   if (english) {
     const after = (english[1] ?? "").trim();
@@ -58,18 +72,21 @@ function wordsAfterThis(question: string): { words: string[]; chinese: boolean }
       if (word === "" || EN_STOP.test(word)) break;
       words.push(word.toLocaleLowerCase());
     }
-    return { words, chinese: false };
+    return { words, chinese: false, saysDocument: words.some((word) => EN_DOCUMENT.test(word)) };
   }
   const chinese = ZH_THIS.exec(question);
   if (!chinese) return null;
   const run = chinese[1] ?? "";
   if (ZH_NOT.test(run)) return null;
-  return { words: run === "" ? [] : [run], chinese: true };
+  return {
+    words: run === "" ? [] : [run],
+    chinese: true,
+    saysDocument: new RegExp(`^(?:(?!的)[\\p{Script=Han}]){0,4}?${ZH_DOCUMENT}`, "u").test(run),
+  };
 }
 
-/** The Documents whose names hold the words after "this", the most words first; empty for none. */
 function namedBy(
-  { words, chinese }: { words: string[]; chinese: boolean },
+  { words, chinese }: AfterThis,
   documents: readonly NamedDocument[],
 ): NamedDocument[] {
   if (chinese) {
@@ -125,27 +142,41 @@ export function documentMeant(
   if (!after || inView.selected?.length === 0) return null;
   const all = documents();
   const byId = new Map(all.map((each) => [each.id, each]));
+  const among = (ids: readonly string[]) =>
+    ids.flatMap((id) => {
+      const found = byId.get(id);
+      return found ? [found] : [];
+    });
   const only = (ids: readonly string[]) => {
-    const found = ids.filter((id) => byId.has(id));
-    return found.length === 1 ? byId.get(found[0] ?? "") : undefined;
+    const [one, more] = among(ids);
+    return more ? undefined : one;
   };
-  const viewed = [
-    inView.open ? byId.get(inView.open) : undefined,
-    only(inView.selected ?? []),
-    inView.original ? byId.get(inView.original) : undefined,
-    only(inView.mind),
-    only(inView.lastAnswer),
-  ].filter((each): each is NamedDocument => each !== undefined);
+  const open = among(inView.open);
   const named = namedBy(after, all);
   const [first, second] = named;
   if (first && !second) return { kind: "one", document: first };
+  // "This" alone, with nothing on screen, is the last Answer or the User's own text.
+  const pointsAtDocument = after.saysDocument || first !== undefined;
+  const viewed = [
+    ...(open.length === 1 ? open : []),
+    only(inView.selected ?? []),
+    ...(pointsAtDocument
+      ? [
+          inView.original ? byId.get(inView.original) : undefined,
+          only(inView.mind),
+          only(inView.lastAnswer),
+        ]
+      : []),
+  ].filter((each): each is NamedDocument => each !== undefined);
   if (first) {
-    const seen = viewed.find((each) => named.includes(each));
+    const seen = [...open, ...viewed].find((each) => named.includes(each));
     if (seen) return { kind: "one", document: seen };
     return folder ? null : { kind: "which", documents: named };
   }
+  if (open.length > 1) return { kind: "which", documents: open };
   const [inSight] = viewed;
   if (inSight) return { kind: "one", document: inSight };
+  if (!pointsAtDocument) return null;
   const [alone, another] = all;
   if (alone && !another) return { kind: "one", document: alone };
   return alone && !folder ? { kind: "which", documents: [] } : null;
@@ -157,7 +188,7 @@ const ASKED_WHICH_AT_MOST = 5;
 export function documentMeantInstructions(meant: DocumentMeant | null): string {
   if (meant === null) return "";
   if (meant.kind === "one") {
-    return `By "this", the User means the Document "${meant.document.name}". Unless they name others too, answer or write about it alone, never about their other Documents, and search it by name (search_documents with its document).`;
+    return `By "this", the User means the Document "${meant.document.name}": answer or write about it, and search it by name (search_documents with its document). When the Question also asks about their other Documents, such as one like it or a comparison, search those too.`;
   }
   const names = meant.documents.map((each) => `"${each.name}"`);
   if (names.length === 0) {

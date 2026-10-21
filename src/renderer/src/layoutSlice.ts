@@ -158,6 +158,17 @@ export function assistantTabOf(layout: WindowLayout | null, merged: boolean): La
   return shown.map((group) => activeTabOf(group)).find((tab) => tab?.item.kind === "mind") ?? null;
 }
 
+/** The Documents shown in the groups on screen, the focused group's first (#1334). */
+export function documentsShownOf(layout: WindowLayout | null, merged: boolean): string[] {
+  if (!layout) return [];
+  const focused = focusedGroupOf(layout);
+  const shown = [focused, ...visibleGroupsOf(layout, merged).filter((group) => group !== focused)];
+  return shown.flatMap((group) => {
+    const item = activeTabOf(group)?.item;
+    return item?.kind === "document" ? [item.documentId] : [];
+  });
+}
+
 export function frontTabOfMind(
   layout: WindowLayout | null,
   mindId: string,

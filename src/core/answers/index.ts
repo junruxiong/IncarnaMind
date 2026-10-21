@@ -2414,7 +2414,6 @@ export function createAnswers(options: AnswersOptions) {
     }));
   };
 
-  /** What a Mind cites, and what the selected text in it cites (null with none selected). */
   const mindCites = (mindId: string, focus: MindFocus | null) =>
     options.content.read(mindId, (blocks) => {
       const top = blocks.toArray().filter((each) => each instanceof Y.XmlElement);
@@ -2437,7 +2436,7 @@ export function createAnswers(options: AnswersOptions) {
     emptyScope: boolean,
     mind: MindToRead | null,
     remake: string | null = null,
-    viewing: string | null = null,
+    inView: readonly string[] = [],
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
     const help = mind ? (options.meetingHelp?.(mind.mindId, question.text) ?? null) : null;
@@ -2520,7 +2519,7 @@ export function createAnswers(options: AnswersOptions) {
         remake,
         renames: renamesIn(turn.earlier),
         inView: {
-          open: viewing,
+          open: inView,
           ...(mind ? mindCites(mind.mindId, question.focus) : { selected: null, mind: [] }),
           lastAnswer: answerCited(turn.earlier.findLast((message) => message.kind === "answer")),
         },
@@ -2706,15 +2705,7 @@ export function createAnswers(options: AnswersOptions) {
       const { documentIds, emptyScope } = scopeNow(scope, question.mind?.id ?? null);
       const mind = mindToRead(question.mind?.id ?? null, question.focus, question.text);
       const turn = options.conversations.add({ ...question, scope }, ready.model, readOf(mind));
-      return startInConversation(
-        turn,
-        ready,
-        documentIds,
-        emptyScope,
-        mind,
-        null,
-        question.viewing,
-      );
+      return startInConversation(turn, ready, documentIds, emptyScope, mind, null, question.inView);
     },
 
     /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */

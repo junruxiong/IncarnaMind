@@ -26,7 +26,7 @@ const LEASES: NamedDocument[] = [
   { id: "l1", name: "Lease 1" },
   { id: "l2", name: "Lease 2" },
 ];
-const NOTHING: InView = { open: null, selected: null, original: null, mind: [], lastAnswer: [] };
+const NOTHING: InView = { open: [], selected: null, original: null, mind: [], lastAnswer: [] };
 
 const meant = (
   question: string,
@@ -63,9 +63,10 @@ describe("What “this” means", () => {
     ["Summarise this spreadsheet", "总结这张表"],
     ["What does this budget say?", "该预算说了什么？"],
     ["When does this end?", "此文件什么时候结束？"],
+    ["Summarise this document", "总结本文件"],
   ])("“%s” and “%s” mean the open Document", (english, chinese) => {
     for (const question of [english, chinese]) {
-      expect(meant(question, CONTRACTS, { open: "nda", lastAnswer: ["en"] }), question).toEqual({
+      expect(meant(question, CONTRACTS, { open: ["nda"], lastAnswer: ["en"] }), question).toEqual({
         kind: "one",
         document: NDA,
       });
@@ -87,7 +88,7 @@ describe("What “this” means", () => {
       kind: "one",
       document: LEASES[1],
     });
-    expect(meant("总结这个", LEASES, { lastAnswer: ["l1"] })).toEqual({
+    expect(meant("总结这份文件", LEASES, { lastAnswer: ["l1"] })).toEqual({
       kind: "one",
       document: LEASES[0],
     });
@@ -105,9 +106,63 @@ describe("What “this” means", () => {
 
   // protects=with nothing in view and no name to go by, the User is asked which, in both languages, but not in a Folder, which "this" leaves as its Documents; fails_when=a Document is picked unasked, or a Folder's Question asks; no_claim=none beyond protects.
   test("nothing in view and no name: which, but not in a Folder", () => {
-    for (const question of ["Summarise this one", "总结一下这个", "Summarise this document."]) {
+    for (const question of ["Summarise this document.", "总结这份文件"]) {
       expect(meant(question, [EN, NDA]), question).toEqual({ kind: "which", documents: [] });
       expect(meant(question, [EN, NDA], {}, true), question).toBeNull();
+    }
+  });
+
+  // protects=several Documents on screen and no name to pick one ask which, naming them; a name picks among them; fails_when=the focused one is taken unasked; no_claim=none beyond protects.
+  test("two Documents side by side: which, unless the words name one", () => {
+    expect(meant("Summarise this document", LEASES, { open: ["l1", "l2"] })).toEqual({
+      kind: "which",
+      documents: LEASES,
+    });
+    expect(meant("总结一下这个", LEASES, { open: ["l2", "l1"] })).toEqual({
+      kind: "which",
+      documents: [LEASES[1], LEASES[0]],
+    });
+    expect(
+      meant("Summarise this employment agreement", CONTRACTS, { open: ["nda", "en"] }),
+    ).toEqual({
+      kind: "one",
+      document: EN,
+    });
+  });
+
+  // protects=本 and 该 before a Document's word say "this" as 这份 does, the same as their English twin; 我该, 本周 and 成本 don't; fails_when=one twin means the open Document and the other nothing; no_claim=every Document word.
+  test("本合同 and 该合同 are “this contract”; 我该 and 本周 are not", () => {
+    for (const question of [
+      "When does this contract end?",
+      "本合同什么时候到期？",
+      "该合同什么时候到期？",
+      "总结本文件",
+    ]) {
+      expect(meant(question, LEASES, { open: ["l2"] }), question).toEqual({
+        kind: "one",
+        document: LEASES[1],
+      });
+    }
+    for (const question of [
+      "我该先读哪个文件？",
+      "本周有什么变化？",
+      "成本是多少？",
+      "你该怎么做？",
+    ]) {
+      expect(meant(question, LEASES, { open: ["l2"] }), question).toBeNull();
+    }
+  });
+
+  // protects="this" with no Document's word or name after it, and nothing on screen, is the last Answer or the User's text: it names no Document, so a Question about "another like this one" still reaches the others; fails_when=the last Answer's Document is named to the model; no_claim=none beyond protects.
+  test("“this” alone, with only the last Answer in view, names no Document", () => {
+    for (const question of [
+      "Is there another document like this one?",
+      "有没有和这个类似的文件？",
+      "Explain this in simpler terms",
+      "用更简单的话解释一下这个",
+      "What does this mean?",
+    ]) {
+      expect(meant(question, CONTRACTS, { lastAnswer: ["en"] }), question).toBeNull();
     }
   });
 
@@ -137,7 +192,7 @@ describe("What “this” means", () => {
 
   // protects=with text selected that cites no Document, "this" is that text; fails_when=a Document is meant instead; no_claim=none beyond protects.
   test("selected text with no Citation is what “this” means", () => {
-    expect(meant("Summarise this", CONTRACTS, { selected: [], open: "en" })).toBeNull();
+    expect(meant("Summarise this", CONTRACTS, { selected: [], open: ["en"] })).toBeNull();
   });
 });
 
@@ -254,7 +309,7 @@ describe("“This” through the core, as the assistant asks", { timeout: 60_000
     await askAssistant(core, {
       text: "Summarise this document.",
       mindId: mind.id,
-      viewing: nda.id,
+      inView: [nda.id],
     });
     expect(calls.at(-1)?.system).toContain('the User means the Document "Mutual NDA"');
 

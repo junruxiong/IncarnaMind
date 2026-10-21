@@ -3097,7 +3097,7 @@ export function createCore(adapters: CoreAdapters): Core {
           text: ready.question,
           mind: { id: ready.mindId, folderId: minds.get(ready.mindId).folderId },
           focus: null,
-          viewing: null,
+          inView: [],
           scope: null,
           model: null,
           forcedSkill: null,
