@@ -7,6 +7,7 @@
  * leaves the computer.
  */
 import { readFile, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer, type Server } from "node:https";
 import { join } from "node:path";
 import type { Logger } from "../adapters";
@@ -32,6 +33,11 @@ export interface OfficeBridgeAdapter {
   folderName?: string;
   /** Other origins allowed to call the API, such as a hosted task pane. */
   extraOrigins?: readonly string[];
+  /**
+   * "http" serves the pane and the API over plain loopback HTTP, with no certificate: the probe
+   * of whether Office for Mac loads an http://localhost pane at all (#1272). Default "https".
+   */
+  scheme?: "http" | "https";
 }
 
 export interface OfficeBridgeOptions {
@@ -68,13 +74,18 @@ export function loopbackHosts(port: number): Set<string> {
   return new Set(LOOPBACK_HOSTNAMES.map((name) => `${name}:${port}`));
 }
 
-export function loopbackOrigins(port: number, extra: readonly string[] = []): Set<string> {
-  return new Set([...LOOPBACK_HOSTNAMES.map((name) => `https://${name}:${port}`), ...extra]);
+export function loopbackOrigins(
+  port: number,
+  extra: readonly string[] = [],
+  scheme: "http" | "https" = "https",
+): Set<string> {
+  return new Set([...LOOPBACK_HOSTNAMES.map((name) => `${scheme}://${name}:${port}`), ...extra]);
 }
 
-export function pageSecurityPolicy(port: number): string {
+export function pageSecurityPolicy(port: number, scheme: "http" | "https" = "https"): string {
   // A bracketed IPv6 host is not a valid CSP source (WebKit ignores it), and 'self' covers ::1.
-  const sockets = ["localhost", "127.0.0.1"].map((name) => `wss://${name}:${port}`).join(" ");
+  const socket = scheme === "http" ? "ws" : "wss";
+  const sockets = ["localhost", "127.0.0.1"].map((name) => `${socket}://${name}:${port}`).join(" ");
   return [
     "default-src 'none'",
     "script-src 'self' https://officeapis.public.onecdn.static.microsoft",
@@ -118,18 +129,20 @@ export function createOfficeBridge(options: OfficeBridgeOptions) {
     }
   };
 
+  const scheme = adapter.scheme ?? "https";
   const listen = (
-    certificate: LoopbackCertificate,
-    local: LocalAuthority,
+    tls: { certificate: LoopbackCertificate; local: LocalAuthority } | null,
     address: string,
     port: number,
   ) =>
     new Promise<Server>((done, fail) => {
-      const server = createHttpsServer({
-        key: certificate.keyPem,
-        cert: `${certificate.certificatePem}${local.certificatePem}`,
-        minVersion: "TLSv1.2",
-      });
+      const server = tls
+        ? createHttpsServer({
+            key: tls.certificate.keyPem,
+            cert: `${tls.certificate.certificatePem}${tls.local.certificatePem}`,
+            minVersion: "TLSv1.2",
+          })
+        : (createHttpServer() as unknown as Server);
       server.once("error", fail);
       server.listen(port, address, () => {
         server.off("error", fail);
@@ -137,46 +150,56 @@ export function createOfficeBridge(options: OfficeBridgeOptions) {
       });
     });
 
-  return {
-    async start(): Promise<OfficeBridgeAddress> {
-      if (started) return started;
+  const open = async (): Promise<OfficeBridgeAddress> => {
+    let tls: { certificate: LoopbackCertificate; local: LocalAuthority } | null = null;
+    if (scheme === "https") {
       const local = await authority();
-      const certificate = issueLoopbackCertificate(local, new Date());
+      tls = { certificate: issueLoopbackCertificate(local, new Date()), local };
       await writeFile(adapter.authorityFile, local.certificatePem, { mode: 0o644 });
+    }
 
-      const first = await listen(certificate, local, "127.0.0.1", adapter.port);
-      servers.push(first);
-      const address = first.address();
-      const port = typeof address === "object" && address ? address.port : adapter.port;
-      try {
-        servers.push(await listen(certificate, local, "::1", port));
-      } catch (error) {
-        log.warn("office.noIpv6Loopback", { code: (error as NodeJS.ErrnoException).code ?? null });
-      }
+    const first = await listen(tls, "127.0.0.1", adapter.port);
+    servers.push(first);
+    const address = first.address();
+    const port = typeof address === "object" && address ? address.port : adapter.port;
+    try {
+      servers.push(await listen(tls, "::1", port));
+    } catch (error) {
+      log.warn("office.noIpv6Loopback", { code: (error as NodeJS.ErrnoException).code ?? null });
+    }
 
-      const handler = createOfficeHandler({
-        hosts: loopbackHosts(port),
-        origins: loopbackOrigins(port, adapter.extraOrigins),
-        pairings,
-        file,
-        folderName: adapter.folderName ?? "Example folder",
-        contentSecurityPolicy: pageSecurityPolicy(port),
-        log,
+    const handler = createOfficeHandler({
+      hosts: loopbackHosts(port),
+      origins: loopbackOrigins(port, adapter.extraOrigins, scheme),
+      pairings,
+      file,
+      folderName: adapter.folderName ?? "Example folder",
+      contentSecurityPolicy: pageSecurityPolicy(port, scheme),
+      log,
+    });
+    handlers.push(handler);
+    for (const server of servers) {
+      server.on("request", (request, response) => void handler.request(request, response));
+      server.on("upgrade", handler.upgrade);
+    }
+    started = {
+      port,
+      addresses: servers.map((server) => String((server.address() as { address: string }).address)),
+      authorityFile: adapter.authorityFile,
+    };
+    log.info("office.listening", { port, scheme });
+    return started;
+  };
+  let opening: Promise<OfficeBridgeAddress> | null = null;
+
+  return {
+    // The core starts it, and the pairing dialog waits for it: both get the one start.
+    start(): Promise<OfficeBridgeAddress> {
+      if (started) return Promise.resolve(started);
+      opening ??= open().finally(() => {
+        opening = null;
       });
-      handlers.push(handler);
-      for (const server of servers) {
-        server.on("request", (request, response) => void handler.request(request, response));
-        server.on("upgrade", handler.upgrade);
-      }
-      started = {
-        port,
-        addresses: servers.map((server) =>
-          String((server.address() as { address: string }).address),
-        ),
-        authorityFile: adapter.authorityFile,
-      };
-      log.info("office.listening", { port });
-      return started;
+      return opening;
     },
 
     beginPairing(): PairingCode {

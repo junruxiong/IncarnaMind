@@ -279,7 +279,14 @@ app.whenReady().then(async () => {
   }
   exposeCore(core);
   if (officeBridge && core.officeBridge) {
-    void showPairingCode(core.officeBridge, officeBridge.authorityFile);
+    const [window] = appWindows();
+    if (window) {
+      void showPairingCode(
+        core.officeBridge,
+        officeBridge.scheme === "http" ? null : officeBridge.authorityFile,
+        window,
+      );
+    }
   }
   guardQuit(core, () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null);
   if (taskKinds.length > 0) {

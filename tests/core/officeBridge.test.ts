@@ -5,9 +5,14 @@
  * vouches for loopback names only.
  */
 import { X509Certificate } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { request as httpsRequest } from "node:https";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createAuthority, issueLoopbackCertificate } from "../../src/core/office/certificate";
+import { createOfficeBridge } from "../../src/core/office/index";
 import {
   CODE_LIFETIME_MS,
   createPairings,
@@ -440,5 +445,65 @@ describe("the WebSocket", () => {
     socket.send({ type: "ping" });
     expect(await socket.next()).toEqual({ type: "pong" });
     socket.end();
+  });
+});
+
+describe("over plain loopback HTTP, for the probe of whether Office loads an http://localhost pane", () => {
+  // protects=the HTTP probe still refuses what HTTPS refuses: no token, another origin, and the https origin of the same port; it serves the pane with a policy that allows its own ws:// socket; fails_when=plain HTTP drops the pairing or the origin check; no_claim=what Office allows, which only a sideload shows.
+  it("serves the pane, pairs only with the code, and refuses an unpaired request", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "office-bridge-http-"));
+    await mkdir(join(folder, "assets"), { recursive: true });
+    await writeFile(join(folder, "taskpane.html"), "<!doctype html><title>pane</title>");
+    const bridge = createOfficeBridge({
+      adapter: {
+        port: 0,
+        staticDir: folder,
+        authorityFile: join(folder, "authority.pem"),
+        scheme: "http",
+      },
+      log: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      secrets: memorySecrets(),
+      clock: () => 1_000,
+      now: () => new Date(1_000).toISOString(),
+    });
+    const { port } = await bridge.start();
+    try {
+      const origin = `http://127.0.0.1:${port}`;
+      const pane = await fetch(`${origin}/taskpane.html`);
+      expect(pane.status).toBe(200);
+      expect(pane.headers.get("content-security-policy")).toContain(`ws://localhost:${port}`);
+      expect(existsSync(join(folder, "authority.pem"))).toBe(false);
+
+      expect((await fetch(`${origin}/api/session`, { headers: { Origin: origin } })).status).toBe(
+        401,
+      );
+      const wrong = await fetch(`${origin}/api/pair`, {
+        method: "POST",
+        headers: { Origin: origin, "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "000000", host: "word" }),
+      });
+      expect(wrong.status).not.toBe(200);
+
+      const { code } = bridge.beginPairing();
+      const asHttps = await fetch(`${origin}/api/pair`, {
+        method: "POST",
+        headers: { Origin: `https://127.0.0.1:${port}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ code, host: "word" }),
+      });
+      expect(asHttps.status).toBe(403);
+      const paired = await fetch(`${origin}/api/pair`, {
+        method: "POST",
+        headers: { Origin: origin, "Content-Type": "application/json" },
+        body: JSON.stringify({ code, host: "word" }),
+      });
+      expect(paired.status).toBe(200);
+      const { token } = (await paired.json()) as { token: string };
+      const session = await fetch(`${origin}/api/session`, {
+        headers: { Origin: origin, Authorization: `Bearer ${token}` },
+      });
+      expect(session.status).toBe(200);
+    } finally {
+      await bridge.close();
+    }
   });
 });

@@ -75,7 +75,7 @@
     return new Promise((resolve) => {
       let socket;
       try {
-        socket = new WebSocket(`wss://${location.host}/ws`);
+        socket = new WebSocket(`${location.protocol === "http:" ? "ws" : "wss"}://${location.host}/ws`);
       } catch (error) {
         report.websocket = `failed: ${describe(error)}`;
         return resolve(false);
