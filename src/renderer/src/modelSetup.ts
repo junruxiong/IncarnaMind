@@ -27,17 +27,13 @@ export const useModelSetup = create<{
 
 const KEPT = "incarnamind.setup.waiting";
 
-/**
- * A Question waiting for a model is kept on this computer, so quitting before Continue doesn't
- * lose it: the next start puts its words back in the composer they were typed in.
- */
 function keepWaiting(question: WaitingQuestion | null): void {
   try {
     if (question) {
       localStorage.setItem(KEPT, JSON.stringify({ mindId: question.mindId, text: question.text }));
     } else localStorage.removeItem(KEPT);
-  } catch {
-    // Not kept, then: what was typed is the composer's own, as before.
+  } catch (error) {
+    console.warn("A Question waiting for a model couldn't be kept on this computer.", error);
   }
 }
 
@@ -51,11 +47,13 @@ function restoreWaiting(): void {
     if (typeof text === "string" && useComposer.getState().draft(key).text === "") {
       useComposer.getState().update(key, { text });
     }
-  } catch {
-    // Nothing kept that can be read.
+  } catch (error) {
+    console.warn("The Question kept while waiting for a model couldn't be read.", error);
   }
 }
 
+// Quitting before Continue would lose a Question that waits for a model, so its words are kept and
+// put back in the composer they were typed in at the next start.
 restoreWaiting();
 useModelSetup.subscribe((state, before) => {
   if (state.waiting !== before.waiting) keepWaiting(state.waiting);

@@ -1289,6 +1289,8 @@ export function createCore(adapters: CoreAdapters): Core {
       passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
+      reading: (documentIds) =>
+        documents.reading(documentIds ?? undefined).map((each) => ({ name: each.name })),
       search: searchDocuments,
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
@@ -2789,6 +2791,8 @@ export function createCore(adapters: CoreAdapters): Core {
         return meeting ? minds.get(meeting.mindId).folderId : null;
       },
       partsOf: (meetingId) => listParts(meetingFolder(dataDir, meetingId)),
+      audioDeleted: (meetingId) =>
+        listMeetings?.().find((each) => each.id === meetingId)?.audio.deletedAt != null,
       recordSpeed: (modelId, ratio) => {
         const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
         settings.writeDeviceValue(TRANSCRIPTION_SPEED, {

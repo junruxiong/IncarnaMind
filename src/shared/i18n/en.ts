@@ -1703,6 +1703,7 @@ export const en = {
   "jev.form.sends": "Sends Document text to Jev for tagging.",
 
   "settings.title": "Settings",
+  "settings.help": "More information",
   "settings.pages.models": "Models",
   "settings.pages.search": "Search",
   "settings.language": "Interface language",
@@ -2358,6 +2359,7 @@ export const en = {
   "question.context.include": "Include in Question context",
 
   "composer.placeholder": "Ask, or say what to change…",
+  "composer.placeholder.followUp": "Ask a follow-up…",
   "composer.label": "Ask, or say what to change ({shortcut})",
   "composer.ask": "Ask (Enter)",
   "composer.scope.all": "All Documents",
@@ -4302,6 +4304,7 @@ export const en = {
   "transcript.gap.sleep": "the computer was asleep",
   "transcript.gap.interrupted": "IncarnaMind was closed",
   "transcript.gap.lost": "its audio was deleted",
+  "transcript.gap.uncaptured": "no audio was recorded",
   "transcript.gap.cloud": "the cloud dropped",
   "transcript.follow": "Jump to live",
   "meetings.duration.seconds": "{count} s",
@@ -4917,6 +4920,9 @@ export const en = {
   "mindCall.failed.noChart.uncited":
     "No chart: some figures in the table in “{mind}” have no Citation",
   "mindCall.failed.newMind": "Didn’t add to “{mind}”: a new Mind was asked for",
+  "answer.stillReading.one": "1 Document is still being read: {name}",
+  "answer.stillReading": "{count} Documents are still being read",
+  "answer.stillReading.again": "Ask again when it’s ready",
   "answer.writtenFrom": "From {count} of your {total} Documents (this Mind’s scope)",
   "answer.writtenFrom.useAll": "Use all",
   "command.answer.useAll": "Write the Answer again from all Documents",
