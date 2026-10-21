@@ -168,6 +168,7 @@ import type { TaggingClassifier } from "./library/types";
 import { createMeetings } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
 import { createCaptureHealth } from "./meetings/health";
+import { createSpeakerPass } from "./meetings/speakerPass";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
@@ -252,6 +253,7 @@ import {
   QWEN3_ASR_0_6B,
   TRANSCRIPTION_SPEED,
 } from "./transcription/model";
+import { createSpeakerModel } from "./transcription/speakerModel";
 import { createUnsavedChanges } from "./unsavedChanges";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
@@ -2753,6 +2755,22 @@ export function createCore(adapters: CoreAdapters): Core {
       return transcriptionModel.vadFile();
     },
   });
+  const speakerModel =
+    adapters.speakerSeparator &&
+    createSpeakerModel({
+      dataDir,
+      ...(adapters.speakerModelSource && { source: adapters.speakerModelSource }),
+      log: adapters.log ?? silentLogger,
+    });
+  const speakerPass =
+    adapters.speakerSeparator &&
+    speakerModel &&
+    createSpeakerPass({
+      separator: adapters.speakerSeparator,
+      model: speakerModel,
+      partsOf: (meetingId) => listParts(meetingFolder(dataDir, meetingId)),
+      log: adapters.log ?? silentLogger,
+    });
   const transcripts =
     transcriber &&
     transcriptionModel &&
@@ -2761,6 +2779,7 @@ export function createCore(adapters: CoreAdapters): Core {
       transcriber,
       model: transcriptionModel,
       cloud: cloudTranscription,
+      ...(speakerPass && { speakers: speakerPass }),
       documents: {
         add: (id, name, file) => documents.addSnapshot(id, name, file, () => {}, "transcript"),
         file: (documentId, folderId) => library.assign(documentId, folderId),
@@ -4145,6 +4164,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // What a Meeting has captured is saved before anything else stops.
       meetings.close();
       transcripts?.close();
+      speakerModel?.close();
       // Outside agents can't reach the core while it closes.
       void agents.close().catch((error: unknown) => console.error(error));
       // First, so stopping the Answers below starts no background work.
