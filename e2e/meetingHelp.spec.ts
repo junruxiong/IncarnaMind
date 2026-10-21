@@ -600,13 +600,14 @@ test("help during the call on Windows and Linux: no shortcut is held until the U
     .getByText(
       "No keys are set to start with. A key you set works over the meeting app, only while recording.",
     );
+  const hintZh = settings.getByText("默认没有快捷键。设置后，可在会议应用中使用，仅在录制时有效。");
   await expect(hint).toBeVisible();
   for (const row of await rows.all()) {
     await expect(row.getByTestId("help-keys")).toHaveText("No key set");
   }
   await expect(remove).toHaveCount(0);
   await expectRowsFit(settings, rows);
-  await shot(settings.getByTestId("help-settings"), "meeting-keys-none-en-900");
+  await shot(settings, "meeting-keys-none-en-900");
 
   await field("mic").click();
   await expect(field("mic")).toHaveText("Press the new keys…");
@@ -619,7 +620,8 @@ test("help during the call on Windows and Linux: no shortcut is held until the U
     "Pause my mic. The other side is still recorded (Ctrl+Alt+F8)",
   );
   await expectRowsFit(settings, rows);
-  await shot(settings.getByTestId("help-settings"), "meeting-keys-set-en-900");
+  await field("mic").scrollIntoViewIfNeeded();
+  await shot(settings, "meeting-keys-set-en-900");
 
   await field("say").click();
   await window.keyboard.press("Control+Alt+F8");
@@ -637,19 +639,20 @@ test("help during the call on Windows and Linux: no shortcut is held until the U
 
   await setLanguage(window, "zh-CN");
   await expect(hint).toBeHidden();
-  await expect(
-    settings.getByText("默认没有快捷键。设置后，可在会议应用中使用，仅在录制时有效。"),
-  ).toBeVisible();
+  await expect(hintZh).toBeVisible();
   await expect(field("say")).toHaveText("未设置快捷键");
   await expect(field("panel")).toHaveText("未设置快捷键");
   await expect(field("mic")).toHaveText("Ctrl+Alt+F8");
   await expect(remove).toHaveText("移除");
   await expectRowsFit(settings, rows);
-  await shot(settings.getByTestId("help-settings"), "meeting-keys-set-zh-900");
+  await field("mic").scrollIntoViewIfNeeded();
+  await shot(settings, "meeting-keys-set-zh-900");
 
   await remove.click();
   await expect(field("mic")).toHaveText("未设置快捷键");
   await expect(remove).toHaveCount(0);
+  await hintZh.scrollIntoViewIfNeeded();
+  await shot(settings, "meeting-keys-none-zh-900");
   await expect.poll(() => held(app, "Ctrl+Alt+F8")).toBe(false);
   await setLanguage(window, "en");
   await expect(field("mic")).toHaveText("No key set");
