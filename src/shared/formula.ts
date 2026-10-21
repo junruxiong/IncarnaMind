@@ -1171,9 +1171,10 @@ const spelt = (word: string) =>
 /**
  * The scale an amount is shown in, from `scales`, the scales its inputs were written in. Inputs
  * written in the Answer's language keep their scale: the largest of them that shows the result
- * exactly in the decimals its inputs written in that scale have ("$1.2bn + $300m" is $1.5bn), else
- * the smallest, so no input's digits are lost ("$1.2bn + $383m" is $1,583m, "1.2亿 + 3,500万" is
- * 15,500万); one step smaller while the result is under 1 in it ("0.3亿" is 3,000万). Inputs
+ * exactly in one decimal more than its inputs written in that scale have ("$2bn + $500m" is
+ * $2.5bn, "$1.2bn + $350m" is $1.55bn), else the smallest, so no input's digits are lost
+ * ("$1.2bn + $383m" is $1,583m, "2亿 + 5,120万" is 25,120万); one step smaller while the result is
+ * under 1 in it ("0.3亿" is 3,000万). Inputs
  * written in the other language give the largest of the Answer's own scales the result fills
  * ("$1.2bn" is 12亿美元). With `decimals` given, those are the decimals the result is judged in.
  */
@@ -1198,7 +1199,7 @@ function scaleFor(
     const same = byExponent.get(scale.exponent);
     byExponent.set(scale.exponent, {
       scale: same?.scale ?? scale,
-      decimals: Math.max(same?.decimals ?? 0, each.decimals),
+      decimals: Math.max(same?.decimals ?? 0, each.decimals + 1),
     });
   }
   if (start && start.exponent > 0) {

@@ -1587,32 +1587,69 @@ describe("A Calculated figure keeps the scale its inputs are worked in (#1442)",
   });
 
   test.each([
-    { services: 300, shown: "1.5bn", value: 1_500_000_000 },
-    { services: 383, shown: "1,583m", value: 1_583_000_000 },
+    { larger: 2, smaller: 500, shown: "£2.5bn", value: 2_500_000_000 },
+    { larger: 1.2, smaller: 350, shown: "£1.55bn", value: 1_550_000_000 },
+    { larger: 2, smaller: 512, shown: "£2,512m", value: 2_512_000_000 },
+    { larger: 1.2, smaller: 383, shown: "£1,583m", value: 1_583_000_000 },
   ])(
-    "billions and millions together ($services m), from cells that store the numbers before 'bn' and 'm': the larger scale when it loses no digits, else the smaller (#1482)",
+    "£$larger bn and £$smaller m together, from cells that store the numbers before 'bn' and 'm': the larger scale with one decimal more than its input has when that loses no digits, else the smaller (#1482)",
     async (case_) => {
+      const largerCell = `£${case_.larger}bn`;
       const book = amountsBook({
         heading: "Revenue",
-        format: '0.0"bn"',
+        format: Number.isInteger(case_.larger) ? '"£"0"bn"' : '"£"0.0"bn"',
         rows: [
-          { label: "Product", stored: 1.2 },
-          { label: "Services", stored: case_.services, format: '0"m"' },
+          { label: "Product", stored: case_.larger },
+          { label: "Services", stored: case_.smaller, format: '"£"0"m"' },
         ],
       });
       const answer = await calculated(
         book,
         { formula: "product + services" },
         [
-          { name: "product", row: 2, number: "1.2bn", line: "Product\t1.2bn" },
+          { name: "product", row: 2, number: largerCell, line: `Product\t${largerCell}` },
           {
             name: "services",
             row: 3,
-            number: `${case_.services}m`,
-            line: `Services\t${case_.services}m`,
+            number: `£${case_.smaller}m`,
+            line: `Services\t£${case_.smaller}m`,
           },
         ],
         "Revenue came to [=1].",
+      );
+      expect(answer.figures[0]?.value).toBe(case_.value);
+      expect(answer.figures[0]?.shown).toBe(case_.shown);
+    },
+  );
+
+  test.each([
+    { larger: 2, smaller: 5000, shown: "2.5亿元", value: 250_000_000 },
+    { larger: 1.2, smaller: 3500, shown: "1.55亿元", value: 155_000_000 },
+    { larger: 2, smaller: 5120, shown: "25,120万元", value: 251_200_000 },
+    { larger: 1.2, smaller: 3830, shown: "15,830万元", value: 158_300_000 },
+  ])(
+    "$larger亿元 and $smaller万元 together, in Chinese: 亿 with one decimal more than its input has when that loses no digits, else 万 (#1482)",
+    async (case_) => {
+      const larger = `${case_.larger.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(case_.larger) ? 0 : 1 })}亿元`;
+      const smaller = `${case_.smaller.toLocaleString("en-US")}万元`;
+      const book = amountsBook({
+        heading: "合并利润表",
+        format: Number.isInteger(case_.larger) ? '0"亿元"' : '0.0"亿元"',
+        rows: [
+          { label: "产品收入", stored: case_.larger },
+          { label: "服务收入", stored: case_.smaller, format: '#,##0"万元"' },
+        ],
+        notes: "本公司收入同比增长，主要来自新增客户的收入，以上数字均以亿元或万元列示。",
+      });
+      const answer = await calculated(
+        book,
+        { formula: "product + services" },
+        [
+          { name: "product", row: 2, number: larger, line: `产品收入\t${larger}` },
+          { name: "services", row: 3, number: smaller, line: `服务收入\t${smaller}` },
+        ],
+        "收入合计为[=1]。",
+        "收入合计是多少？",
       );
       expect(answer.figures[0]?.value).toBe(case_.value);
       expect(answer.figures[0]?.shown).toBe(case_.shown);
