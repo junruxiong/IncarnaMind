@@ -11,7 +11,7 @@
  *   never retries in a loop.
  */
 import { ChatGptPlanError, isPlanLimit } from "../providers/chatgpt/errors";
-import { ClaudeAccountError } from "../providers/providerErrors";
+import { SignInRouteError } from "../providers/providerErrors";
 import type { Pace, PaceTimers } from "../sources/pace";
 
 export const PLAN_PACE = {
@@ -27,8 +27,8 @@ interface PlanLimit {
   resetsAt: number | null;
 }
 
-const isClaudePlanLimit = (error: unknown): error is ClaudeAccountError =>
-  error instanceof ClaudeAccountError && error.problem === "plan-limit";
+const isClaudePlanLimit = (error: unknown): error is SignInRouteError =>
+  error instanceof SignInRouteError && error.problem === "plan-limit";
 
 /** Either plan's usage limit is reached: a request refused, or tagging waiting for it to reset. */
 export const reachedPlanLimit = (error: unknown): error is PlanLimit =>
@@ -58,7 +58,7 @@ const PLANS: Record<
     lane: "claude-plan-tagging",
     limit: isClaudePlanLimit,
     waiting: (until) =>
-      new ClaudeAccountError(
+      new SignInRouteError(
         "plan-limit",
         `Tagging waits for your Claude plan's limit to reset, until ${new Date(until).toISOString()}.`,
         until,

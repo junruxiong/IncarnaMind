@@ -32,6 +32,8 @@ export class SourceError extends Error {
     message: string,
     /** The status the service answered, when it answered one. */
     readonly status: number | null = null,
+    /** "rate-limited": when the service said it takes requests again, epoch milliseconds. */
+    readonly resetsAt: number | null = null,
   ) {
     super(message);
   }
@@ -67,6 +69,8 @@ export interface SourceRequest {
   headers?: Record<string, string>;
   /** "manual": a redirect isn't followed; its target is the response's `url`, with no body. */
   redirect?: "manual";
+  /** Called as each request is sent, after any wait for its lane; throws to send nothing. */
+  beforeSend?: () => void;
 }
 
 export interface SourceResponse {
@@ -86,6 +90,13 @@ function retryAfterMs(header: string | null, now: number): number | null {
   if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
   const date = Date.parse(header);
   return Number.isNaN(date) ? null : Math.max(0, date - now);
+}
+
+/** OpenAlex says how many seconds until its allowance resets; others give the moment, in epoch seconds. */
+function resetMs(header: string | null, now: number): number | null {
+  const seconds = Number(header);
+  if (!header || !Number.isFinite(seconds)) return null;
+  return seconds > 1e9 ? Math.max(0, seconds * 1000 - now) : seconds * 1000;
 }
 
 async function readBody(response: Response, maxBytes: number): Promise<Uint8Array> {
@@ -127,6 +138,7 @@ export interface SourceHttp {
 
 export function createSourceHttp(pace: Pace, timers: PaceTimers = realTimers): SourceHttp {
   async function once(url: string, request: SourceRequest): Promise<Response> {
+    request.beforeSend?.();
     const timeout = AbortSignal.timeout(request.timeoutMs ?? 20_000);
     try {
       return await fetch(url, {
@@ -164,10 +176,12 @@ export function createSourceHttp(pace: Pace, timers: PaceTimers = realTimers): S
           const wait = retryAfterMs(response.headers.get("retry-after"), timers.now());
           await response.body?.cancel().catch(() => undefined);
           if (wait === null || wait > MAX_RETRY_AFTER_MS) {
+            const reset = resetMs(response.headers.get("x-ratelimit-reset"), timers.now()) ?? wait;
             throw new SourceError(
               "rate-limited",
               `${url} answered ${response.status}.`,
               response.status,
+              reset === null ? null : timers.now() + reset,
             );
           }
           await timers.sleep(wait, request.signal);
@@ -234,5 +248,13 @@ export function createSourceHttp(pace: Pace, timers: PaceTimers = realTimers): S
       const { bytes } = await get(url, request);
       return new TextDecoder("utf-8").decode(bytes);
     },
+  };
+}
+
+/** `http`, whose every request first passes `check` (../sendGate) as it is sent. */
+export function gatedHttp(http: SourceHttp, check: () => void): SourceHttp {
+  return {
+    get: (url, request) => http.get(url, { ...request, beforeSend: check }),
+    text: (url, request) => http.text(url, { ...request, beforeSend: check }),
   };
 }

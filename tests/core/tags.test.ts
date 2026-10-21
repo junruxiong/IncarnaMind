@@ -420,6 +420,87 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     expect(tagged?.tagging).toBe("tagged");
   });
 
+  test("when no Tag fits, the model has been asked and the Document is tagged with none", async () => {
+    const { core, tagging } = await startTagging([]);
+    await core.saveChatProvider(LOCAL);
+
+    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
+    const [tagged] = await waitForTagging(core, [document.id]);
+
+    expect(tagged).toMatchObject({ tagging: "tagged", tags: [] });
+    expect(tagging.requests).toHaveLength(1);
+  });
+
+  test("with no Tags to choose from, no model is asked and the Document is checked once a Tag exists", async () => {
+    const { core, tagging } = await startTagging(["Paper"]);
+    await core.saveChatProvider(LOCAL);
+    for (const tag of await core.listTags()) await core.deleteTag(tag.id);
+
+    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
+    const [waiting] = await waitForTagging(
+      core,
+      [document.id],
+      (each) => each.tagging === "no-tags",
+    );
+
+    expect(waiting).toMatchObject({ status: "ready", tags: [] });
+    expect(tagging.requests).toEqual([]);
+
+    await core.createTag({ name: "Paper", description: "A research paper." });
+    const [tagged] = await waitForTagging(core, [document.id]);
+
+    expect(tagged?.tagging).toBe("tagged");
+    expect(await tagNamesOf(core, document.id)).toEqual(["Paper"]);
+    expect(tagging.requests).toHaveLength(1);
+  });
+
+  test("while Organize files new Documents by itself, a Document the tagger checked with no Tags is checked once a Tag exists", async () => {
+    const { core } = await startTagging(["Paper"]);
+    const provider = await core.saveChatProvider(LOCAL);
+    await core.createLibraryGroup({ name: "Papers", description: "Research papers" });
+    const classifier = {
+      kind: "chat",
+      choice: { providerId: provider.id, modelId: "local-model" },
+    } as const;
+    await core.saveLibrarySettings({ classifier, automatic: false });
+    for (const tag of await core.listTags()) await core.deleteTag(tag.id);
+    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
+    await waitForTagging(core, [document.id], (each) => each.tagging === "no-tags");
+
+    await core.saveLibrarySettings({ classifier, automatic: true });
+    await core.createTag({ name: "Paper", description: "A research paper." });
+    const [tagged] = await waitForTagging(core, [document.id]);
+
+    expect(tagged?.tagging).toBe("tagged");
+    expect(await tagNamesOf(core, document.id)).toEqual(["Paper"]);
+  });
+
+  test("a Document still waiting for a Tag when the app quits is checked at the next start, if a Tag exists by then", async () => {
+    const dataDir = await createTempDataFolder();
+    const first = await startTagging(["Paper"], dataDir);
+    await first.core.saveChatProvider(LOCAL);
+    for (const tag of await first.core.listTags()) await first.core.deleteTag(tag.id);
+    const document = await addDocument(first.core, "Attention.md", PAPER_TEXT);
+    await waitForTagging(first.core, [document.id], (each) => each.tagging === "no-tags");
+    first.core.close();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run(
+        `INSERT INTO tags (id, name, description, preset, colour, created_at, updated_at)
+         VALUES (?, 'Paper', 'A research paper.', NULL, 'teal', ?, ?)`,
+        [randomUUID(), AT, AT],
+      );
+    } finally {
+      db.close();
+    }
+
+    const second = await startTagging(["Paper"], dataDir);
+    const [tagged] = await waitForTagging(second.core, [document.id]);
+
+    expect(tagged?.tagging).toBe("tagged");
+    expect(await tagNamesOf(second.core, document.id)).toEqual(["Paper"]);
+  });
+
   test("removing the chat model sends Documents not yet tagged back to waiting", async () => {
     const { core, tagging } = await startTagging(["Paper"]);
     tagging.fail(new Error("The model is down."));
@@ -436,10 +517,10 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     const { core, tagging } = await startTagging(["Paper"]);
     tagging.fail(
       new APICallError({
-        message: "Too many requests",
+        message: "Internal server error",
         url: "http://127.0.0.1:11434/v1/chat/completions",
         requestBodyValues: {},
-        statusCode: 429,
+        statusCode: 500,
         isRetryable: false,
       }),
     );
@@ -447,7 +528,7 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     const document = await addDocument(core, "Attention.md", PAPER_TEXT);
 
     const [failed] = await waitForTagging(core, [document.id], (each) => each.tagging === "failed");
-    expect(failed?.taggingError).toEqual({ kind: "rate-limit", message: "Too many requests" });
+    expect(failed?.taggingError).toEqual({ kind: "provider", message: "Internal server error" });
     expect(failed?.status).toBe("ready");
 
     tagging.fail(null);
@@ -459,7 +540,7 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     const { core, tagging } = await startTagging(["Paper"]);
     const failure = (statusCode?: number) =>
       new APICallError({
-        message: statusCode ? "Too many requests" : "fetch failed",
+        message: statusCode ? "Invalid API key" : "fetch failed",
         url: "http://127.0.0.1:11434/v1/chat/completions",
         requestBodyValues: {},
         ...(statusCode && { statusCode }),
@@ -469,18 +550,23 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     tagging.fail(failure());
     const offline = await addDocument(core, "Attention.md", PAPER_TEXT);
     await waitForTagging(core, [offline.id], (each) => each.tagging === "failed");
-    tagging.fail(failure(429));
-    const limited = await addDocument(core, "Limited.md", PAPER_TEXT);
-    const [refused] = await waitForTagging(core, [limited.id], (each) => each.tagging === "failed");
-    expect(refused?.taggingError?.kind).toBe("rate-limit");
+    tagging.fail(failure(401));
+    const keyRefused = await addDocument(core, "Refused.md", PAPER_TEXT);
+    const [refused] = await waitForTagging(
+      core,
+      [keyRefused.id],
+      (each) => each.tagging === "failed",
+    );
+    expect(refused?.taggingError?.kind).toBe("auth");
+    const before = tagging.requests.length;
 
     tagging.fail(null);
     await Promise.all([core.backOnline(), core.backOnline()]);
     await waitForTagging(core, [offline.id]);
 
-    expect(tagging.requests).toHaveLength(3);
+    expect(tagging.requests).toHaveLength(before + 1);
     expect(await tagNamesOf(core, offline.id)).toEqual(["Paper"]);
-    expect((await core.listDocuments()).find((each) => each.id === limited.id)?.tagging).toBe(
+    expect((await core.listDocuments()).find((each) => each.id === keyRefused.id)?.tagging).toBe(
       "failed",
     );
   });

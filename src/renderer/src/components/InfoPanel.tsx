@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import type { Document, LinkedFolder } from "../../../core/api";
+import type { Document, LibraryGroup, LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
 import { mindName } from "../../../shared/naming";
 import { copyText } from "../copied";
@@ -10,7 +10,7 @@ import { providerErrorText } from "../errors";
 import { addedDate, documentSummary, fileDate, showFileLabelKey } from "../fileInfo";
 import { useLanguage, useT } from "../i18n";
 import { useInfo } from "../info";
-import { organizeModel, organizeState } from "../libraryPage";
+import { folderCounts, organizeModel, organizeState } from "../libraryPage";
 import {
   fileStatusLabel,
   folderName,
@@ -86,6 +86,11 @@ function Panel() {
       ? state.linkedFolders.find((each) => each.id === target.id)
       : undefined,
   );
+  const group = useAppStore((state) =>
+    target?.kind === "folder"
+      ? state.library?.groups.find((each) => each.id === target.id)
+      : undefined,
+  );
   const panel = useRef<HTMLDivElement>(null);
   const row = rowOf(from);
   useExitToward(panel, () => row ?? from);
@@ -100,12 +105,12 @@ function Panel() {
   }, []);
 
   // What it was about is gone (deleted, unlinked): nothing left to show.
-  const gone = !item && !linked;
+  const gone = !item && !linked && !group;
   useEffect(() => {
     if (gone) useInfo.getState().close();
   }, [gone]);
 
-  const name = item ? displayName(item) : linked ? folderName(linked.path) : "";
+  const name = item ? displayName(item) : linked ? folderName(linked.path) : (group?.name ?? "");
   return (
     <div
       ref={panel}
@@ -130,7 +135,13 @@ function Panel() {
       style={{ width: WIDTH_PX }}
       className={panelClass}
     >
-      {item ? <DocumentInfo document={item} /> : linked && <LinkedFolderInfo linked={linked} />}
+      {item ? (
+        <DocumentInfo document={item} />
+      ) : linked ? (
+        <LinkedFolderInfo linked={linked} />
+      ) : (
+        group && <FolderInfo group={group} />
+      )}
     </div>
   );
 }
@@ -140,7 +151,11 @@ function Header({ icon, name, line }: { icon: ReactNode; name: string; line: str
     <div className="flex items-center gap-2.5 border-b border-rule px-4 pt-3.5 pb-2.5">
       <span className="flex size-7 shrink-0 items-center justify-center text-ink-meta">{icon}</span>
       <div className="min-w-0 flex-1">
-        <p data-testid="info-name" className="truncate text-ui leading-5 font-semibold text-ink">
+        <p
+          data-testid="info-name"
+          title={name}
+          className="truncate text-ui leading-5 font-semibold text-ink"
+        >
           {name}
         </p>
         <p data-testid="info-summary" className="truncate text-[12px] leading-4 text-ink-meta">
@@ -374,6 +389,35 @@ function LinkedFolderInfo({ linked }: { linked: LinkedFolder }) {
         showLabel={t(showFileLabelKey(navigator.platform))}
         onShow={() => void useAppStore.getState().showLinkedFolder(linked.id)}
       />
+    </>
+  );
+}
+
+function FolderInfo({ group }: { group: LibraryGroup }) {
+  const t = useT();
+  const language = useLanguage();
+  const count = useAppStore(
+    (state) =>
+      folderCounts(
+        state.library?.groups ?? [],
+        state.documents,
+        state.library?.assignments ?? [],
+      ).get(group.id) ?? 0,
+  );
+  const documents = t(count === 1 ? "library.count.one" : "library.count", {
+    count: formatCount(count, language),
+  });
+  return (
+    <>
+      <Header icon={<FolderLineIcon className="size-7" />} name={group.name} line={documents} />
+      <Rows>
+        <Row label={t("info.description")} testId="info-description">
+          {group.description || <span className="text-ink-meta">{t("info.description.none")}</span>}
+        </Row>
+        <Row label={t("info.added")} testId="info-added">
+          {addedDate(group.createdAt, language)}
+        </Row>
+      </Rows>
     </>
   );
 }

@@ -17,13 +17,15 @@ export const EDIT_INSTRUCTIONS = [
   "When the passage is part of a sentence, the words just before it are between <before> and </before>, and the words just after it between <after> and </after>. They stay as they are.",
   "",
   "Reply with the new text of the passage. Then, on a last line of its own, say in a few words what is better now, for the reader, in the passage's language, between <why> and </why>, such as <why>Shorter, with the same facts and sources.</why> Don't mention markers there.",
-  "Nothing else: no preamble, no other explanation, no quotation marks around the text, no code fence, no Markdown formatting but the paragraph marks below.",
+  "Nothing else: no preamble, no other explanation, no quotation marks around the text, no code fence, no Markdown formatting but the paragraph marks and tables below.",
   "- The new text must fit between the words before and after it. Never repeat those words in it.",
   "- Keep every Citation marker, such as [1], and every footnote marker, such as [^1], right after the words it belongs to. Never add a marker the passage doesn't have, and never change a marker's number. Leave a marker out only if the words it belongs to are gone.",
   "- Keep each formula written as $…$ exactly as it is.",
   "- Keep the passage's paragraphs apart with a blank line. Don't join or split them unless the task asks for it.",
   "- A paragraph that starts with #, ## or ### is a heading, one with - a bullet, 1. a numbered item, > a quote; one with none is plain text. Start each of yours the same way, so a heading stays a heading and an item an item, unless the task asks otherwise.",
   "- A backslash before such a mark, as in \\1. Background, makes it plain text: keep the backslash.",
+  "- Write a table only when the task asks for one, as a Markdown table with a blank line before and after it: a heading row, a row of ---, then each row on a line of its own, its cells between | and |. A cell's markers go right after its words, as in a paragraph.",
+  "- A source is only ever one of the passage's markers. Never write a Document's name as a source, such as [Report, p. 2] or (Report, p. 2).",
   "- Write in the passage's language, unless the task is to translate it.",
   "- Change only what the task asks for. Keep names, numbers and facts as they are.",
 ].join("\n");
@@ -36,8 +38,8 @@ export const EXPLAIN_INSTRUCTIONS = [
   "Reply with the explanation and nothing else: two to four plain sentences for someone reading the passage for the first time, in the passage's language. No preamble, no markers, no Markdown formatting.",
 ].join("\n");
 
-/** What each action asks for; `instruction` is the language or the User's words. */
-function taskFor(action: EditAction, instruction: string): string {
+/** What each action asks for; `instruction` is the language, the User's words or the unsupported part; `cited`, what the passage's markers quote. */
+function taskFor(action: EditAction, instruction: string, cited: string): string {
   switch (action) {
     case "improve":
       return "Improve the writing: make it clearer, smoother and correct, with the same meaning and tone. Leave what is fine as it is.";
@@ -49,6 +51,11 @@ function taskFor(action: EditAction, instruction: string): string {
       return "Explain what the passage says.";
     case "instruction":
       return `Do what the User asks: ${instruction}`;
+    case "cut-unsupported":
+      return [
+        ...(cited ? [`Its markers' sources say only this: ${cited}.`] : []),
+        `They don't support this part of it: ${instruction}. Every word left must be backed by them: take out each claim, topic or framing they don't state, or rewrite its words so they no longer claim it. Keep what they do state in the passage's own words, each marker right after the words it backs.`,
+      ].join(" ");
   }
 }
 
@@ -63,9 +70,16 @@ export function editPrompt(input: {
   context: string;
   before?: string;
   after?: string;
+  /** What each Citation marker quotes: marker n is `quotes[n - 1]`. */
+  quotes?: readonly string[];
 }): string {
   const near = (tag: "before" | "after", words: string | undefined) =>
     words ? [`<${tag}>`, words, `</${tag}>`, ""] : [];
+  const cited = (input.quotes ?? [])
+    .flatMap((quote, index) =>
+      quote && input.passage.includes(`[${index + 1}]`) ? [`[${index + 1}] “${quote}”`] : [],
+    )
+    .join("; ");
   return [
     "<context>",
     input.context,
@@ -77,7 +91,7 @@ export function editPrompt(input: {
     "</passage>",
     "",
     ...near("after", input.after),
-    `<task action="${input.action}">${taskFor(input.action, input.instruction)}</task>`,
+    `<task action="${input.action}">${taskFor(input.action, input.instruction, cited)}</task>`,
   ].join("\n");
 }
 

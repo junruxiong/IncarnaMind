@@ -29,11 +29,11 @@
   <!-- After the first release, add: <a href="https://github.com/IncarnaMind/IncarnaMind/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/IncarnaMind/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="Six screens in turn: two sentences of a draft selected, with Check against Documents in the menu; the same draft checked, each sentence marked supported, unsupported or contradicted, with a count under the title; a Citation opened beside the note, its quote highlighted on the PDF page; a lender update someone else wrote, opened to verify, with Check 8 claims; its claims checked, one contradicted by the facilities agreement on page 3; and the checked draft in the Chinese interface."></p>
+<p align="center"><img src="docs/images/demo-tour-2026-10.gif" width="880" alt="Ten scenes in turn, in English except the last, with Claude Sonnet 5.5 as the model: a workspace of six Folders, a Linked folder and Tags, where a folder of new Documents is read and then sorted by Organize, each Document with a Suggested Folder and Tags; a Question about the leverage covenant asked in the assistant beside a Mind, answered with numbered Citations; a Citation opened beside the Mind, its quote highlighted on the PDF page; the assistant asked to chart gross margin by quarter, which adds a cited table and a bar chart to the Mind; the assistant asked to write a summary, which lands in a new Mind as grey AI text with Citations, Wrote 1 paragraph and Undo; Check this Mind, one mark per sentence in the margin and a Contradicted card saying what the Document says; Compare Documents filling a table of three term sheets, every cell cited; a meeting recording, with the notice to tell everyone you’re recording, the live transcript labelled Me and Them, and call help answering their question; the draft exported to Word, with the Saved line; and the same draft in the Chinese interface."></p>
 
 <p align="center"><sub>Everything shown is in the app today.</sub></p>
 
-**IncarnaMind** is a free, open-source desktop app for macOS, Windows and Linux where you write with AI and ask questions about your own documents (PDF, Word, PowerPoint, Excel and more). It can check every sentence and figure in a draft against those documents, whoever wrote it, and every answer cites the exact page it comes from. It works with the AI you already use: your ChatGPT plan or your own API key.
+**IncarnaMind** is a free, open-source desktop app for macOS, Windows and Linux where you write with AI and ask questions about your own documents (PDF, Word, PowerPoint, Excel and more). It can check every sentence and figure in a draft against those documents, whoever wrote it, and every answer cites the exact page it comes from. It works with the AI you already use: your ChatGPT, Claude or Copilot plan, or your own API key.
 
 ## Download
 
@@ -51,29 +51,29 @@ Windows releases will be signed through the SignPath Foundation's free signing f
 
 - **Windows** says "Windows protected your PC": the installer isn't code-signed yet. Click **More info**, then **Run anyway**.
 - **macOS** says it can't verify IncarnaMind: until the app is notarized, open it once and click **Done**, then **System Settings → Privacy & Security → Open Anyway**. Or run `xattr -dr com.apple.quarantine /Applications/IncarnaMind.app`. An unsigned Mac app can't update itself: IncarnaMind tells you when a new version is out and offers its download page.
-- **Linux**: run `chmod +x IncarnaMind-*.AppImage`. On Ubuntu 22.04 or later, also `sudo apt install libfuse2` (`libfuse2t64` on 24.04 and later).
+- **Linux**: the .deb for Ubuntu and Debian (recommended), or the AppImage. On Ubuntu 24.04 and later, the AppImage runs without the app's sandbox. To open the AppImage, run `chmod +x IncarnaMind-*.AppImage`. On Ubuntu 22.04 or later, also `sudo apt install libfuse2` (`libfuse2t64` on 24.04 and later).
 
 </details>
 
 ## What you can do
 
-**Check your draft before you send it.** Select sentences in a Mind and choose **Check against Documents**: each one comes back supported, unsupported or contradicted by your Documents, with the page one click away, and the line under the title counts what still needs a look. A PDF someone else wrote can be checked the same way, claim by claim: **+ → Verify a document…**.
+**Check your draft before you send it.** Select sentences in a Mind and choose **Check against Documents**: each one comes back supported, unsupported or contradicted by your Documents, with the page one click away, and the check badge in the page's corner counts what still needs a look. A PDF someone else wrote can be checked the same way, claim by claim: **+ → Verify a document…**.
 
 **Write and ask in one place.** A Mind is a notebook for one topic. Beside it sits the assistant: ask it about the Mind you're in or your files, and the Answer comes back there, in a conversation, with its citations checked. Your draft stays as you wrote it until you pick **Add to note**, which puts the Answer at your cursor as text you can edit, citations and all.
 
 **Check every answer.** Answers cite where each claim came from and carry the quote, which is checked against that place: a green check if it's there, an amber mark if it isn't, and a click opens the page with the quote highlighted. Unfold an Answer's steps to see what it searched and which sources it used.
 
-**Take notes in a meeting.** Start recording and a live transcript runs beside your Mind, transcribed on this computer. When the call ends, save it as a Document, and your notes can cite what was said.
+**Take notes in a meeting.** Start recording and a live transcript runs beside your Mind, transcribed on this computer. When the call ends, save it as a Document, and your notes can cite what was said. During the call, a small panel can suggest what to say and answer their question from your Documents.
 
 **Use the files you already have.** Link the folders you already use, even Zotero's storage folder: IncarnaMind reads the PDF, Word (comments included), PowerPoint, Excel, CSV, Markdown and plain-text files in them where they are, never moves or changes them, and keeps up as they change.
 
 **Find and add sources.** Search OpenAlex, arXiv and PubMed and add open-access papers as Documents, save a web page by its address so it can be cited and checked like a file, and import your references from Zotero or any CSL JSON, BibTeX or RIS file.
 
-**Write with AI you can check.** Tell the assistant what to change ("shorten the summary", "add today's decision to the project plan", "summarise these papers into a new note") and it changes the Mind, or makes a new one, as changes waiting for you to accept or reject, coming in paragraph by paragraph as it writes; a question still gets an answer. Or select text and choose Edit with AI, and each change says why it was made. Turn on suggestions as you write, and when you pause, grey text offers how the paragraph could go on, only where your Documents support it and always with a citation; Tab accepts.
+**Write with AI you can check.** Tell the assistant what to change ("shorten the summary", "add today's decision to the project plan", "summarise these papers into a new note") and it changes the Mind, or makes a new one, at once: its text is grey until you edit it, one Undo takes the change back, and Review changes shows what changed. A question still gets an answer. Or select text and choose Edit with AI, and each change says why it was made. Turn on suggestions as you write, and when you pause, grey text offers how the paragraph could go on, only where your Documents support it and always with a citation; Tab accepts.
 
 **Keep a big library tidy.** Tags are added for you, IncarnaMind suggests a Folder for each Document for you to accept, and the choices you make yourself are kept.
 
-**Choose your AI.** Already pay for ChatGPT Plus or Pro? Continue with ChatGPT and ask on your plan, no key needed. Or use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server.
+**Choose your AI.** Already pay for ChatGPT Plus or Pro, Claude, or GitHub Copilot? Sign in and ask on your plan, no key needed (the Copilot sign-in is experimental). Or use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server.
 
 **Hand it in.** Export a Mind to Word or Markdown, with its citations and bibliography in the style you pick: APA, MLA, Chicago, Harvard, IEEE, Vancouver, GB/T 7714 or IncarnaMind's numbered style. A citation that didn't pass the check is marked "[unverified]". Open a Word file as a Mind and export it back into the same file: the parts you didn't touch stay exactly as they were, and your edits can go in as tracked changes.
 
@@ -94,10 +94,11 @@ You don't need an account. Your Minds and the search index stay in one data fold
 <details>
 <summary><b>Questions</b></summary>
 
-- **Is it free?** Yes: it's open source under the Apache 2.0 licence. The AI model is billed by its provider: use the ChatGPT plan you already pay for, or your own API key and pay for what you use.
+- **Is it free?** Yes: it's open source under the Apache 2.0 licence. The AI model is billed by its provider: use the ChatGPT, Claude or Copilot plan you already pay for, or your own API key and pay for what you use.
 - **Do I need an API key?** Not if you have ChatGPT Plus or Pro: choose Continue with ChatGPT and ask on your plan. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, SiliconFlow or OpenRouter, and more in Settings, such as Kimi, GLM, Mistral, xAI or any OpenAI-compatible server.
-- **Is it an alternative to NotebookLM (now Gemini Notebook)?** Yes. IncarnaMind runs on your computer and reads your files where they are, and no account is needed. It works with the model you choose (your ChatGPT plan or your own key), every citation is checked against the page it quotes, your own sentences can be checked too, and a Mind exports to Word with its citations.
+- **Is it an alternative to NotebookLM (now Gemini Notebook)?** Yes. IncarnaMind runs on your computer and reads your files where they are, and no account is needed. It works with the model you choose (your ChatGPT, Claude or Copilot plan, or your own key), every citation is checked against the page it quotes, your own sentences can be checked too, and a Mind exports to Word with its citations.
 - **Can I use my ChatGPT plan?** Yes, with ChatGPT Plus or Pro. In **Settings → Models**, choose **Continue with ChatGPT** and sign in in your browser: Questions then go to OpenAI under your account and count against your plan's limits, with no key.
+- **Can I use my Claude or GitHub Copilot plan?** Yes. Under **Other ways**, or in **Settings → Models**, sign in with your Claude or GitHub account; each stays off until you do. Answers count toward your plan's usage limits. The Copilot sign-in is experimental.
 - **Does it work offline?** Reading your files and search do. Answers and checks need an AI model, which for most people means the internet. A local model through [Ollama](https://ollama.com) can answer offline, but more slowly and less reliably than a cloud model. Meaning-based search (embeddings) is optional and off by default.
 - **Will it change my files?** No. It reads them where they are, and writes only to its own data folder and the files you export.
 - **What does "Quote found" mean?** That the quoted words are in the place the citation names, not that they prove your sentence, which is why the page is one click away. "Can't check" means there's no text to compare against, as on a scanned page.

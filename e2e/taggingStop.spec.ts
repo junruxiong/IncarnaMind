@@ -12,10 +12,12 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
+  addProviderForm,
   closeSettings,
   createDataFolder,
   launchApp,
   motionSettled,
+  openDocumentTags,
   openSettings,
   removeDataFolder,
   runFromPalette,
@@ -77,15 +79,8 @@ const documentItem = (window: Page, name: string) =>
 
 async function pasteKey(window: Page): Promise<void> {
   const settings = await openSettings(window, "models");
-  await settings.getByTestId("chat-choice-api-key").check();
-  const form = settings.getByTestId("provider-form");
-  await form
-    .locator("label")
-    .filter({ hasText: /^Anthropic$/ })
-    .click();
-  await expect(form.getByTestId("provider-sends")).toContainText(
-    "Tagging starts when you save the key.",
-  );
+  const form = await addProviderForm(settings, "anthropic");
+  await expect(form.getByText("Tagging starts when you save the key.")).toBeVisible();
   await acceptPlainTextKeys(window, form);
   await form.getByLabel(/^API key/).fill("sk-ant-not-a-real-key");
   await form.getByTestId("provider-use-key").click();
@@ -115,14 +110,14 @@ test("the status names where Tagging goes; Stop keeps the Folder's new Documents
   await pasteKey(window);
   const status = footer.getByTestId("tagging-status");
   await expect(status.getByTestId("status-label")).toHaveText(
-    /^Tagging [2-4] Documents with Anthropic: each one's name, outline and short excerpts are sent$/,
+    /^Tagging [2-4] Documents with Anthropic · sends names and excerpts$/,
   );
   await expect(footer.getByTestId("tagging-waiting")).toHaveCount(0);
   const stop = status.getByTestId("tagging-stop");
   await expect(stop).toHaveText("Stop");
   await expect(stop).toHaveAttribute(
     "title",
-    `Stop, and don't tag new Documents in “${FOLDER}” with AI until you turn it back on`,
+    `Stop, and don’t tag new Documents in “${FOLDER}” with AI until you turn it back on`,
   );
   await screenshot(window, "tagging-status-stop-en");
 
@@ -202,7 +197,7 @@ test("in Chinese, the status names the company, and Stop names the Folder", asyn
   await openFolder(window, FOLDER);
   const status = window.getByTestId("sidebar-status").getByTestId("tagging-status");
   await expect(status.getByTestId("status-label")).toHaveText(
-    /^正在用 Anthropic 给 [2-4] 个文档打标签：会发送每个文档的名称、目录和简短摘录$/,
+    /^正在用 Anthropic 给 [2-4] 个文档打标签 · 会发送名称和摘录$/,
   );
   const stop = status.getByTestId("tagging-stop");
   await expect(stop).toHaveText("停止");
@@ -259,6 +254,65 @@ test("⌘K stops Tagging, and turns it back on for Documents not in a Folder", a
   await app.close();
 });
 
+test("after Stop, the status row and a new Document's Tag picker say Tagging stopped, and Resume tags it, in English and Chinese (#1129)", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1280, 800);
+  await saveAnthropicKey(window);
+  await window
+    .getByTestId("add-documents-input")
+    .setInputFiles(
+      await Promise.all(["Field notes", "Site visit", "Interview", "Survey"].map(slowFile)),
+    );
+  const footer = window.getByTestId("sidebar-status");
+  await expect(footer.getByTestId("tagging-status")).toBeVisible();
+  await runFromPalette(window, "Stop Tagging");
+  await expect(window.getByTestId("undo-message")).toHaveText(
+    "Stopped Tagging Documents not in a Folder",
+  );
+
+  await window.getByTestId("add-documents-input").setInputFiles([await slowFile("Expert report")]);
+  const report = documentItem(window, "Expert report");
+  await expect(report).toHaveAttribute("data-tagging", "stopped");
+  const row = footer.getByTestId("tagging-stopped");
+  await expect(row.getByTestId("status-label")).toHaveText("Tagging stopped");
+  await expect(row.getByTestId("tagging-resume")).toHaveText("Resume");
+  await openDocumentTags(report);
+  const line = report.getByTestId("document-tagging-why");
+  await expect(line).toHaveText("Tagging stopped·Resume");
+  await setLanguage(window, "zh-CN");
+  await expect(row.getByTestId("status-label")).toHaveText("已停止打标签");
+  await expect(row.getByTestId("tagging-resume")).toHaveText("继续");
+  await expect(line).toHaveText("已停止打标签·继续");
+  await setLanguage(window, "en");
+  await window.keyboard.press("Escape");
+
+  // Resume from the row, with the keyboard.
+  await row.getByTestId("tagging-resume").focus();
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("undo-message")).toHaveText(
+    "Tagging Documents not in a Folder with AI again",
+  );
+  await expect(stoppedItems(window)).toHaveCount(0);
+  await expect(report).toHaveAttribute("data-tagging", "tagged", { timeout: 20_000 });
+  await expect(row).toHaveCount(0);
+
+  // Stopped again, a new Document's own picker resumes it, with Tab and Enter.
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await core.setTaggingWithAi(null, false);
+  });
+  await window.getByTestId("add-documents-input").setInputFiles([await slowFile("Witness list")]);
+  const witness = documentItem(window, "Witness list");
+  await expect(witness).toHaveAttribute("data-tagging", "stopped");
+  await openDocumentTags(witness);
+  await expect(witness.getByTestId("tag-picker-input")).toBeFocused();
+  await window.keyboard.press("Tab");
+  await expect(witness.getByTestId("document-tagging-resume")).toBeFocused();
+  await window.keyboard.press("Enter");
+  await expect(witness).toHaveAttribute("data-tagging", "tagged", { timeout: 20_000 });
+  await app.close();
+});
+
 test("while Organize runs, the status names the company too, with Stop", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await setWindowSize(app, window, 1440, 900);
@@ -281,7 +335,11 @@ test("while Organize runs, the status names the company too, with Stop", async (
     ]);
   const progress = window.getByTestId("sidebar-status").getByTestId("organization-progress");
   await expect(progress.getByTestId("status-label")).toHaveText(
-    /^Organizing [2-5] Documents with Anthropic: each one's name, outline and short excerpts are sent \(page images for scans\)$/,
+    /^Organizing [2-5] Documents with Anthropic · sends names and excerpts \(page images for scans\)$/,
+  );
+  await expect(progress).toHaveAttribute(
+    "title",
+    /^Organizing [2-5] Documents with Anthropic: each one’s name, outline and short excerpts are sent \(page images for scans\)$/,
   );
   await screenshot(window, "organize-status-stop-en");
   await progress.getByTestId("tagging-stop").click();

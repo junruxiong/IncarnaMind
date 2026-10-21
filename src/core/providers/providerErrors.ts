@@ -1,11 +1,25 @@
 import { APICallError, RetryError, UnsupportedFunctionalityError } from "ai";
-import type { ClaudeAccountProblem, ProviderError, ProviderErrorKind } from "../api";
-import { ConsentDeclinedError, TranslatableError } from "../errors";
+import type { ProviderError, ProviderErrorKind, SignInRouteProblem } from "../api";
+import {
+  ConsentDeclinedError,
+  ConsentRevokedError,
+  LocalModeError,
+  TranslatableError,
+} from "../errors";
 import { OAuthTokenError } from "../oauth";
+import { KeyCharacterError } from "./apiKey";
 import { ChatGptPlanError, ChatGptSignInRequiredError } from "./chatgpt/errors";
 import { JevRequestError } from "./jev";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+function keyCharacterOf(message: string): KeyCharacterError | null {
+  const code =
+    /Cannot convert argument to a ByteString because the character at index \d+ has a value of (\d+)/.exec(
+      message,
+    )?.[1];
+  return code === undefined ? null : new KeyCharacterError(String.fromCharCode(Number(code)));
+}
 
 /** A local model can't take a request, found before anything is sent: e.g. it isn't a chat model. */
 export class LocalModelError extends Error {
@@ -49,27 +63,31 @@ export class PlanLimitError extends Error {
 }
 
 /**
- * The Claude account route stopped, for one of the reasons its own lines and
- * ways back explain (`CLAUDE_ACCOUNT_PROBLEMS`).
+ * A route signed in with the User's own account (a Claude account, Copilot)
+ * stopped, for one of the reasons its own lines and ways back explain (./signInRoutes).
  */
-export class ClaudeAccountError extends Error {
-  override name = "ClaudeAccountError";
+export class SignInRouteError extends Error {
+  override name = "SignInRouteError";
   constructor(
-    readonly problem: Exclude<ClaudeAccountProblem, "sign-in-cancelled">,
+    readonly problem: Exclude<SignInRouteProblem, "sign-in-cancelled">,
     message: string,
-    /** When the plan's limit resets (epoch milliseconds), when Anthropic says. */
+    /** When the plan's limit resets (epoch milliseconds), when the provider says. */
     readonly resetsAt: number | null = null,
   ) {
     super(message);
   }
 }
 
-const CLAUDE_ACCOUNT_KINDS: Record<ClaudeAccountError["problem"], ProviderErrorKind> = {
+const ROUTE_KINDS: Record<SignInRouteError["problem"], ProviderErrorKind> = {
   "signed-out": "not-signed-in",
   "sign-in-expired": "not-signed-in",
   refused: "blocked",
   "plan-limit": "plan-limit",
   "unexpected-response": "provider",
+  "no-plan": "blocked",
+  "policy-blocked": "blocked",
+  "model-unavailable": "model",
+  "rate-limited": "rate-limit",
 };
 
 /** When a reached limit resets, as ISO 8601, from an error that says (epoch milliseconds). */
@@ -99,6 +117,10 @@ export function contextOverflow(
     windowTokens: count(/context size \((\d+) tokens?\)/i),
   };
 }
+
+const refusesWithoutRetention = (error: APICallError) =>
+  error.statusCode === 400 &&
+  /must have data retention enabled/i.test(`${error.message} ${error.responseBody ?? ""}`);
 
 /**
  * Whether a provider refused a request because the model can't use `feature`:
@@ -138,8 +160,8 @@ export function refusesFeature(
  * Sorts a failed provider request into a kind the UI can explain: a bad key,
  * an unknown model, rate limiting, no connection, or the provider's own error.
  * For the ChatGPT plan, also a missing or expired sign-in, a reached plan
- * limit, or OpenAI refusing the sign-in; for a Claude account, the same and
- * an answer the route doesn't know (`claudeAccount`); for an Ollama Cloud model, its
+ * limit, or OpenAI refusing the sign-in; for a route signed in with the
+ * User's own account (Claude, Copilot), its own problems (`signInRoute`); for an Ollama Cloud model, its
  * used-up allowance; for any priced model, the monthly cap. Jev's errors come sorted already.
  * For a local model, a request too long for its context window.
  * Answers (#29) reuse it for errors shown inside an Answer.
@@ -151,12 +173,27 @@ export function classifyProviderError(error: unknown): ProviderError {
     retried instanceof Error &&
     (retried.cause instanceof ChatGptPlanError ||
       retried.cause instanceof PlanLimitError ||
-      retried.cause instanceof ClaudeAccountError)
+      retried.cause instanceof SignInRouteError)
       ? retried.cause
       : retried;
   const message = messageOf(cause);
 
+  const badKey = cause instanceof KeyCharacterError ? cause : keyCharacterOf(message);
+  if (badKey) {
+    return {
+      kind: "auth",
+      message: badKey.message,
+      ...(badKey.wording && { wording: badKey.wording }),
+    };
+  }
   if (cause instanceof ConsentDeclinedError) return { kind: "consent-declined", message };
+  if (cause instanceof ConsentRevokedError || cause instanceof LocalModeError) {
+    return {
+      kind: cause instanceof LocalModeError ? "local-mode" : "consent-revoked",
+      message,
+      ...(cause.wording && { wording: cause.wording }),
+    };
+  }
   if (cause instanceof LocalModelError) return { kind: cause.kind, message };
   if (cause instanceof OllamaNotRunningError) {
     return {
@@ -170,11 +207,11 @@ export function classifyProviderError(error: unknown): ProviderError {
   if (cause instanceof ChatGptSignInRequiredError) return { kind: "not-signed-in", message };
   if (cause instanceof ChatGptPlanError) return { kind: cause.kind, message, ...resetsAtOf(cause) };
   if (cause instanceof PlanLimitError) return { kind: "plan-limit", message, ...resetsAtOf(cause) };
-  if (cause instanceof ClaudeAccountError) {
+  if (cause instanceof SignInRouteError) {
     return {
-      kind: CLAUDE_ACCOUNT_KINDS[cause.problem],
+      kind: ROUTE_KINDS[cause.problem],
       message,
-      claudeAccount: cause.problem,
+      signInRoute: cause.problem,
       ...resetsAtOf(cause),
     };
   }
@@ -187,8 +224,11 @@ export function classifyProviderError(error: unknown): ProviderError {
     // No status: the request never got a response.
     if (status === undefined) return { kind: "network", message };
     if (status === 401 || status === 403) return { kind: "auth", message };
-    // Google answers a bad key with 400 "API key not valid".
-    if (status === 400 && /api[ _-]?key/i.test(message)) return { kind: "auth", message };
+    if (refusesWithoutRetention(cause)) return { kind: "data-retention", message };
+    // Google answers a bad key with 400 "API key not valid", in the body when the message is only the status.
+    if (status === 400 && /api[ _-]?key/i.test(`${message} ${cause.responseBody ?? ""}`)) {
+      return { kind: "auth", message };
+    }
     if (status === 404) return { kind: "model", message };
     if (status === 429) return { kind: "rate-limit", message };
     return { kind: "provider", message };

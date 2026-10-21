@@ -9,8 +9,8 @@
  *    check Run that can only search and cite.
  * 3. Each result is written onto its sentence's mark as it comes, with what
  *    it was made from: the sentence's text, the Document versions it read
- *    and the scope, so it shows "needs re-check" once any of them changes
- *    (src/shared/claimChecks.ts). A mark whose sentence was deleted meanwhile
+ *    and the scope, so it shows "needs re-check" once any of them changes, or
+ *    a Document its result rests on goes (src/shared/claimChecks.ts). A mark whose sentence was deleted meanwhile
  *    is simply gone. What the scope couldn't read as the request started is
  *    kept beside the Mind's Blocks, by request (src/shared/unreadFiles.ts).
  *
@@ -25,7 +25,10 @@
 
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { caseCitations } from "../../../shared/caseCitations";
 import { type LiveDocument, withShownName } from "../../../shared/citations";
+import { restsOn } from "../../../shared/claimChecks";
+import { oneFolderOf } from "../../../shared/searchScope";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import { recordCheckUnread } from "../../../shared/unreadFiles";
 import {
@@ -55,7 +58,13 @@ import type { Evidence } from "../../documents/evidence";
 import { parseCheckedDocument } from "../../documents/evidence";
 import type { RetainVersion, VersionRetention } from "../../documents/retention";
 import { parseModel, parsePlace } from "../../edits";
-import { ChatNotReadyError, ConsentDeclinedError, InvalidInputError, isRecord } from "../../errors";
+import {
+  ChatNotReadyError,
+  ConsentDeclinedError,
+  InvalidInputError,
+  isRecord,
+  LocalModeError,
+} from "../../errors";
 import type { Language } from "../../language";
 import type { MindContent } from "../../mindContent";
 import { parseMindId } from "../../minds";
@@ -63,10 +72,11 @@ import type { PreparedChatModel } from "../../providers/chat";
 import { parseSearchScope } from "../../scope";
 import type { AnswerEngine } from "../engine";
 import { type ClaimCheckDependencies, createClaimCheck, recordJudged } from "./claimCheck";
-import { createMindCheck } from "./mindCheck";
+import { createMindCheck, type MindCheckOptions } from "./mindCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
 import { createVerify, type VerifyOptions } from "./verify";
 import { createContradictionWatch, type WatchOptions } from "./watch";
+import { createWrittenCheck, type WrittenCheckOptions } from "./written";
 
 /**
  * What the "checks" flow sends: the sentences checked, with their paragraphs,
@@ -102,6 +112,8 @@ export interface ChecksOptions
   requireMind(mindId: string): void;
   /** The Folder the Mind is in; null for none. */
   mindFolder(mindId: string): string | null;
+  /** What a check from a Mind searches, by the one rule (`mindSearchScope`); null: every Document. */
+  searchedScope(scope: SearchScope | null, mindId: string): SearchScope | null;
   /** The file a Mind was imported from (#720), which its own checks never use as evidence. */
   originalOf(mindId: string): CheckedDocument | null;
   /** The default chat model, used when the Mind has none of its own. */
@@ -117,12 +129,15 @@ export interface ChecksOptions
   localOnly(): boolean;
   resolveScope(scope: SearchScope): string[] | null;
   evidence: Pick<Evidence, "scope" | "search">;
-  documents: ClaimCheckDependencies["documents"] & {
-    /** Every live Document's names: what the Citations a sentence already has are named by. */
-    names(): readonly LiveDocument[];
-  };
+  documents: ClaimCheckDependencies["documents"] &
+    MindCheckOptions["documents"] & {
+      /** Every live Document's names: what the Citations a sentence already has are named by. */
+      names(): readonly LiveDocument[];
+    };
   engine: AnswerEngine;
   retention: Pick<VersionRetention, "retain">;
+  /** Edit with AI's new text for a passage not in a Mind, for what the assistant writes (#1111). */
+  editText: WrittenCheckOptions["editText"];
   now(): Date;
 }
 
@@ -233,7 +248,10 @@ function withResult(
         detail: null,
         evidence: evidenceOf(result.evidence),
         says: result.says,
+        unsupported: result.unsupported,
         calculation: result.calculation,
+        citedCaseUnchecked: result.citedCaseUnchecked,
+        citedCaseFound: result.citedCaseFound,
       };
 }
 
@@ -274,6 +292,7 @@ export function createChecks(options: ChecksOptions) {
       if (error instanceof ChatNotReadyError) {
         return { ok: false, result: { kind: "not-ready", readiness: error.readiness } };
       }
+      if (error instanceof LocalModeError) return { ok: false, result: { kind: "local-mode" } };
       if (error instanceof ConsentDeclinedError) {
         const now = await chat.readiness(choice ?? undefined, "checks");
         return {
@@ -291,14 +310,9 @@ export function createChecks(options: ChecksOptions) {
    */
   function retainEvidence(mindId: string): void {
     const versions = content.read(mindId, (blocks) =>
-      markedSentences(blocks).flatMap(({ check }): RetainVersion[] => {
-        const inputs = check.calculation?.figure.inputs ?? [];
-        const shown = [
-          check.evidence,
-          ...inputs.flatMap((input) => [input.citation, input.unitStatement?.citation ?? null]),
-        ];
-        return shown.flatMap((evidence) =>
-          evidence?.documentId && evidence.contentHash
+      markedSentences(blocks).flatMap(({ check }): RetainVersion[] =>
+        restsOn(check).flatMap((evidence) =>
+          evidence.documentId && evidence.contentHash
             ? [
                 {
                   documentId: evidence.documentId,
@@ -309,8 +323,8 @@ export function createChecks(options: ChecksOptions) {
                 },
               ]
             : [],
-        );
-      }),
+        ),
+      ),
     );
     options.retention.retain("check-result", mindId, versions);
   }
@@ -345,16 +359,20 @@ export function createChecks(options: ChecksOptions) {
 
   /** Where a Mind's sentences are checked: its Folder, or every Document. */
   function scopeOf(mindId: string, allDocuments: boolean, checked?: CheckedDocument) {
-    const folderId = options.mindFolder(mindId);
-    const marked: ClaimCheckScope = { folderId, widened: allDocuments };
-    const wanted: SearchScope | null =
-      allDocuments || folderId === null
-        ? null
-        : { folderIds: [folderId], tagIds: [], documentIds: [] };
+    const own = options.mindFolder(mindId);
+    const wanted = allDocuments
+      ? null
+      : options.searchedScope(
+          own === null ? null : { folderIds: [own], tagIds: [], documentIds: [] },
+          mindId,
+        );
+    const folderId = oneFolderOf(wanted);
+    // An own Folder that holds no Document searches everything, as "Search all Documents" does.
+    const marked: ClaimCheckScope = { folderId: own, widened: allDocuments || own !== folderId };
     const scope = options.evidence.scope(wanted && options.resolveScope(wanted), checked);
     return {
       searchable: options.documents.searchableCount(scope.documentIds),
-      folderId: allDocuments ? null : folderId,
+      folderId,
       check: { scope, marked, wanted },
     };
   }
@@ -398,7 +416,10 @@ export function createChecks(options: ChecksOptions) {
           text: sentence.text,
           evidence: null,
           says: null,
+          unsupported: null,
           calculation: null,
+          citedCaseUnchecked: false,
+          citedCaseFound: false,
           scope,
           versions: [],
           excluded: [],
@@ -521,8 +542,23 @@ export function createChecks(options: ChecksOptions) {
     track,
   });
 
+  const checkWritten = createWrittenCheck({
+    ...options,
+    prepare: (answer) =>
+      prepareQuietly({ providerId: answer.provider.id, modelId: answer.modelId }),
+    claimCheck,
+    scopeOf: (mindId) => scopeOf(mindId, false, options.originalOf(mindId) ?? undefined),
+    citedNow,
+    withResult,
+    retainEvidence,
+    claimTimeLimitMs: options.watch.claimTimeLimitMs,
+  });
+
   return {
     ...verify,
+
+    /** What the assistant wrote in a Mind, checked before it lands (./written). */
+    checkWritten,
 
     async checkSentences(input: unknown): Promise<CheckSentencesResult> {
       const parsed = parseCheck(input);
@@ -563,7 +599,9 @@ export function createChecks(options: ChecksOptions) {
     planMindCheck: async (mindId: unknown, mode: unknown, allDocuments?: unknown) =>
       mindCheck.planMindCheck(mindId, mode, allDocuments === true),
 
+    findMindClaims: (input: unknown) => mindCheck.findMindClaims(input),
     checkMind: (input: unknown) => mindCheck.checkMind(input),
+    documentsAddedSinceChecks: (mindId: unknown) => mindCheck.documentsAddedSinceChecks(mindId),
 
     /** A Document's status changed: a new version has its Folder's Minds checked for contradictions. */
     documentChanged: (document: Document) => watch.documentChanged(document),
@@ -591,7 +629,10 @@ export function createChecks(options: ChecksOptions) {
           verdict: "unsupported",
           evidence: null,
           says: null,
+          unsupported: null,
           calculation: null,
+          citedCaseUnchecked: caseCitations(parsed.claim).length > 0,
+          citedCaseFound: false,
           versions: [],
           excluded: [],
         };

@@ -5,7 +5,7 @@
  * it to reset, sending nothing meanwhile. Through the core, against the fake
  * OpenAI and the fake Anthropic the plans' own tests use.
  */
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { type Core, createAiSdkChatModel } from "../../src/core";
 import { PLAN_PACE } from "../../src/core/library/planPace";
 import type { PaceTimers } from "../../src/core/sources/pace";
@@ -19,9 +19,9 @@ import {
 } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import {
+  createFakeAnthropic,
   createFakeClaudeBrowser,
   type FakeAnthropic,
-  startFakeAnthropic,
 } from "../helpers/fakeAnthropic";
 import { waitForTagging } from "../helpers/tags";
 
@@ -180,7 +180,8 @@ describe("Tagging on a ChatGPT plan", () => {
 /** Signed in with a Claude account, whose Claude Sonnet 5.5 answers Questions, with every consent accepted. */
 async function onClaudePlan() {
   const clock = manualClock();
-  const fake = await startFakeAnthropic();
+  const fake = await createFakeAnthropic();
+  onTestFinished(() => fake.close());
   const browser = createFakeClaudeBrowser(fake);
   const pacing = pacingClock();
   const core = startCore(await createTempDataFolder(), {

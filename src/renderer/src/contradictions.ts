@@ -1,10 +1,10 @@
 /**
  * Contradiction watch (#112), the window's side: "Check for contradictions"
  * (⌘K, the Mind's menu) checks the Mind's cited claims against the other
- * Documents in its Folder. On a model billed per token the line under the
- * Mind's title asks first, with the estimate; otherwise it starts at once.
- * While it runs, the line says so with Stop, as #96's checks do; then it says
- * what it found, or why there was nothing to check.
+ * Documents in its Folder. On a model billed per token the check badge's card
+ * asks first, with the estimate; otherwise it starts at once. While it runs,
+ * the badge says so with Stop, as #96's checks do; then the card says what it
+ * found, or why there was nothing to check.
  */
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
@@ -23,13 +23,13 @@ import {
   useChecks,
 } from "./checks";
 import { core } from "./core";
-import { estimateText } from "./cost";
+import { type EstimateLine, estimateLine } from "./cost";
 import { languageNow, translateNow } from "./i18n";
 import { useAppStore } from "./store";
 
 interface ContradictionsState {
   /** By Mind: the question asked before a run billed per token, with its estimate. */
-  asking: Readonly<Record<string, { claims: number; estimate: string }>>;
+  asking: Readonly<Record<string, { claims: number; estimate: EstimateLine }>>;
   /** By Mind: what the last run on demand found, until closed. */
   found: Readonly<Record<string, ContradictionCheckOutcome>>;
 }
@@ -52,9 +52,9 @@ function setFor<K extends keyof ContradictionsState>(
 const problemOf = (plan: Exclude<ContradictionCheckPlan, { kind: "ready" }>): CheckProblem =>
   plan.kind === "nothing" ? { kind: "no-cited" } : plan;
 
-/** What the line under the Mind's title shows, if anything. */
+/** What the check badge's card shows of it, if anything. */
 export type ContradictionLineShown =
-  | { kind: "asking"; claims: number; estimate: string }
+  | { kind: "asking"; claims: number; estimate: EstimateLine }
   | { kind: "found"; run: ContradictionCheckOutcome }
   | { kind: "watched"; run: ContradictionWatchRun };
 
@@ -119,8 +119,8 @@ export async function startContradictionCheck(mindId: string): Promise<void> {
     return;
   }
   const estimate = await core
-    .estimateRun({ items: plan.claims, ...(plan.model && { model: plan.model }) })
-    .then((result) => estimateText(result, translateNow, languageNow()))
+    .estimateRun({ items: plan.claims, each: "check", ...(plan.model && { model: plan.model }) })
+    .then((result) => estimateLine(result, translateNow, languageNow()))
     .catch(() => null);
   if (estimate === null) return checkContradictions(mindId);
   setFor("found", mindId, null);

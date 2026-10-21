@@ -379,6 +379,47 @@ export function pendingProposals(blocks: Y.XmlFragment): ProposalRef[] {
   return [...found.values()];
 }
 
+const TEXT_BLOCKS: ReadonlySet<string> = new Set(["paragraph", "heading"]);
+
+/**
+ * How many paragraphs and headings the Proposals that `belongs` takes change: those whose
+ * words they change, and those they add or remove whole, but for the cells of
+ * a table they add or remove. What a change's count counts (DESIGN.md, AI edits).
+ */
+export function changedParagraphs(
+  blocks: Y.XmlFragment,
+  belongs: (ref: ProposalRef) => boolean,
+): number {
+  const ours = (ref: ProposalRef | null) => ref !== null && belongs(ref);
+  const wordsChanged = (element: Y.XmlElement) =>
+    element
+      .toArray()
+      .some((child) =>
+        child instanceof Y.XmlText
+          ? (child.toDelta() as Run[]).some(
+              (run) =>
+                ours(readProposalRef(run.attributes?.[PROPOSAL_INSERT_MARK])) ||
+                ours(readProposalRef(run.attributes?.[PROPOSAL_DELETE_MARK])),
+            )
+          : child instanceof Y.XmlElement &&
+            ours(readProposalAttribute(child.getAttribute(PROPOSAL_ATTRIBUTE))),
+      );
+  let count = 0;
+  const visit = (parent: Y.XmlFragment | Y.XmlElement, whole: boolean) => {
+    for (const child of parent.toArray()) {
+      if (!(child instanceof Y.XmlElement)) continue;
+      const own = whole || ours(readProposalAttribute(child.getAttribute(PROPOSAL_ATTRIBUTE)));
+      // A table added or removed whole counts as a table, not by its cells.
+      if (child.nodeName === "table" && own) continue;
+      if (TEXT_BLOCKS.has(child.nodeName)) {
+        if (own || wordsChanged(child)) count++;
+      } else visit(child, own);
+    }
+  };
+  visit(blocks, false);
+  return count;
+}
+
 const requestsOf = (doc: Y.Doc) => doc.getMap<unknown>(MIND_PROPOSAL_REQUESTS_FIELD);
 
 const DECISION_KEYS = { accept: "accepted", reject: "rejected" } as const;
@@ -443,7 +484,9 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
   if (source === "answer") {
     return isText(record.answerId) ? { ...made, source, answerId: record.answerId } : null;
   }
-  if (source === "answer-added") return { ...made, source };
+  const requested =
+    record.requested === "edit" || record.requested === "write" ? record.requested : null;
+  if (source === "answer-added") return { ...made, source, ...(requested && { requested }) };
   if (source === "comparison-table") {
     return isText(record.tableId) ? { ...made, source, tableId: record.tableId } : null;
   }
@@ -458,6 +501,7 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
     ...(action && { action }),
     ...(typeof record.instruction === "string" && { instruction: record.instruction }),
     ...(isText(record.reason) && { reason: record.reason }),
+    ...(requested && { requested }),
   };
 }
 

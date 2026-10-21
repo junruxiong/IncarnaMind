@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "windows-installer": the NSIS installer built from the signed
+  app, zipped by actions/upload-artifact (docs/releasing.md, Windows signing). version is the
+  package.json version, which the Release workflow has checked against the tag.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="IncarnaMind-${version}-win-x64.exe" product-name="IncarnaMind" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

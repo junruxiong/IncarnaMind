@@ -16,7 +16,7 @@ import { access, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/pro
 import { dirname, join } from "node:path";
 import { normaliseAddress } from "../../../shared/webAddresses";
 import type { PageLook } from "../../adapters";
-import type { Document, SaveWebPageInput, WebPageResult } from "../../api";
+import type { Document, SaveWebPageInput, WebPageOrigin, WebPageResult } from "../../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../../errors";
 import type { Database } from "../../storage";
 import { hashBytes } from "../files";
@@ -25,11 +25,13 @@ import { type FetchLimits, fetchPage, type PageFetch } from "./fetch";
 import { type FetchedPicture, fetchPictures, type PictureLimits } from "./pictures";
 import { type ShownPicture, type Snapshot, snapshotOf, withPictures } from "./snapshot";
 import {
+  claimForUser,
   documentAtAddress,
   keptLookHashes,
   keptPictureHashes,
   lookName,
   looksUnderWay,
+  originOf,
   recordLook,
   recordPictures,
   recordVersion,
@@ -68,6 +70,8 @@ export interface WebPagesOptions {
   look?: PageLook;
   /** A save that doesn't say keeps the page as it looks: `UserSettings.keepWebPageLook`. */
   keepLookByDefault: () => boolean;
+  /** Aborted when the core closes: no look is started, and none that finishes late is kept. */
+  signal: AbortSignal;
   reportError?: (error: unknown) => void;
 }
 
@@ -131,7 +135,7 @@ function parseSaveInput(input: unknown): SaveWebPageInput {
 }
 
 export function createWebPages(options: WebPagesOptions) {
-  const { db, now, documents } = options;
+  const { db, now, documents, signal } = options;
   const folder = join(options.dataDir, "Web pages");
   const pictureFolder = join(folder, "pictures");
   const lookFolder = join(folder, "looks");
@@ -261,21 +265,25 @@ export function createWebPages(options: WebPagesOptions) {
 
   let looks: Promise<void> = Promise.resolve();
 
+  // A look still waiting at close stays "saving": the next start makes it.
   const queueLook = (documentId: string, contentHash: string, address: string) => {
     const look = options.look;
     if (!look) return;
     looks = looks
       .then(async () => {
+        if (signal.aborted) return;
         const made = await look.render(address).catch((error: unknown) => ({
           failure: "failed" as const,
           message: error instanceof Error ? error.message : String(error),
         }));
+        if (signal.aborted) return;
         if ("pdf" in made) {
           const lookHash = hashBytes(made.pdf);
           const file = join(lookFolder, lookName(lookHash));
           hold([lookHash], 1);
           try {
             await writeOnce(file, made.pdf);
+            if (signal.aborted) return;
             const at = now();
             const recorded = recordLook(
               db,
@@ -329,7 +337,13 @@ export function createWebPages(options: WebPagesOptions) {
   }
 
   /** Records a version written, and the pictures it shows. */
-  const record = (documentId: string, file: SnapshotFile, address: string, page: PageToWrite) => {
+  const record = (
+    documentId: string,
+    file: SnapshotFile,
+    address: string,
+    page: PageToWrite,
+    origin: WebPageOrigin,
+  ) => {
     const at = now();
     const version: WebPageVersion = {
       documentId,
@@ -340,6 +354,7 @@ export function createWebPages(options: WebPagesOptions) {
       published: page.snapshot.published,
       fetchedAt: at,
       picturesLeftOut: page.leftOut,
+      origin,
     };
     recordVersion(db, version, at);
     recordPictures(db, documentId, file.contentHash, page.pictures, at);
@@ -360,6 +375,7 @@ export function createWebPages(options: WebPagesOptions) {
       // picture, or has recorded it, meanwhile keeps it; one that holds it after finds it gone
       // and writes it again.
       const lookFiles = await readdir(lookFolder).catch(() => [] as string[]);
+      if (signal.aborted) return;
       const removeUnkept = (from: string, names: readonly string[], kept: Set<string>) => {
         for (const name of names) {
           const hash = name.split(".")[0] ?? "";
@@ -378,12 +394,14 @@ export function createWebPages(options: WebPagesOptions) {
     /**
      * See `CoreApi.saveWebPage`; the caller files it in its Folder. `added`
      * hears a new Document's id as it is stored, before it is processed.
-     * `fetch` fetches the page instead of the usual one: web search's (#128).
+     * `fetch` fetches the page instead of the usual one: web search's (#128). `origin` says who
+     * saves it; the User saving an address a search saved makes it theirs.
      */
     save(
       input: unknown,
       added?: (documentId: string) => void,
       fetch?: PageFetch,
+      origin: WebPageOrigin = "user",
     ): Promise<WebPageResult> {
       const { address: typed, html, keepLook } = parseSaveInput(input);
       const address = normaliseAddress(typed);
@@ -397,8 +415,14 @@ export function createWebPages(options: WebPagesOptions) {
         document: documents.get(id),
         existing: true,
       });
+      // A save that joins one a web search has under way is the User's too.
+      const claimed = (result: WebPageResult): WebPageResult => {
+        if (origin !== "user" || result.outcome !== "saved") return result;
+        claimForUser(db, result.document.id, now());
+        return { ...result, document: documents.get(result.document.id) };
+      };
       const known = documentAtAddress(db, address);
-      if (known) return Promise.resolve(saved(known));
+      if (known) return Promise.resolve(claimed(saved(known)));
       return once(address, async () => {
         try {
           return await withPage(await pageFor(address, html, fetch), async (page) => {
@@ -407,7 +431,7 @@ export function createWebPages(options: WebPagesOptions) {
             const id = randomUUID();
             const file = await write(join(folder, `${id}.html`), page.xhtml);
             const document = documents.addSnapshot(id, page.snapshot.title, file, () => {
-              record(id, file, address, page);
+              record(id, file, address, page, origin);
               added?.(id);
             });
             if (html === undefined && (keepLook ?? options.keepLookByDefault())) {
@@ -418,7 +442,7 @@ export function createWebPages(options: WebPagesOptions) {
         } catch (error) {
           return failed(address, error);
         }
-      });
+      }).then(claimed);
     },
 
     /** See `CoreApi.fetchWebPageAgain`. */
@@ -436,7 +460,7 @@ export function createWebPages(options: WebPagesOptions) {
           return await withPage(await pageFor(info.address, undefined), async (page) => {
             const current = documents.get(document.id);
             const file = await write(current.path, page.xhtml);
-            record(current.id, file, info.address, page);
+            record(current.id, file, info.address, page, originOf(db, current.id) ?? info.origin);
             const look = webPageInfo(db, current.id)?.look ?? null;
             // The page's own choice at its save, whatever the setting says now.
             const wanted = info.look !== null;

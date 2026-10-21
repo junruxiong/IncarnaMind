@@ -7,7 +7,7 @@
 import * as Y from "yjs";
 import { readClaimCheck } from "../../../shared/claimChecks";
 import { readProposalAttribute, readProposalRef } from "../../../shared/proposals";
-import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
+import { comparableSentence, INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 import {
   BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
@@ -50,7 +50,7 @@ export type SelectedSentences =
   | { ok: false; reason: "nothing" };
 
 /** A Block's text as checks read it. */
-function textOf(element: Y.XmlElement): string {
+export function textOf(element: Y.XmlElement): string {
   return layout(element)
     .map(({ node }) =>
       node instanceof Y.XmlText
@@ -266,16 +266,33 @@ export function markedSentences(blocks: Y.XmlFragment): MarkedSentence[] {
   return [...found.values()];
 }
 
-/** Every check in the Mind with the whole sentences its marked text is in, as they read now. */
-export function checkedSentences(
-  blocks: Y.XmlFragment,
-): { check: ClaimCheckAttributes; sentence: string }[] {
-  return markedSentences(blocks).map(({ element, from, to, check }) => {
+/** Whether the User keeps a sentence as their own view (#1111): a check's mark on it says so, and its words are as they were. */
+export function keptAsView(
+  marks: readonly MarkedSentence[],
+  sentence: Pick<SelectedSentence, "element" | "from" | "to" | "text">,
+): boolean {
+  return marks.some(
+    ({ element, from, to, check }) =>
+      check.kept === true &&
+      element === sentence.element &&
+      from < sentence.to &&
+      to > sentence.from &&
+      comparableSentence(check.text) === comparableSentence(sentence.text),
+  );
+}
+
+/**
+ * Every check in the Mind with the whole sentences its marked text is in, as they read now, and
+ * where its mark is (`MarkedSentence`).
+ */
+export function checkedSentences(blocks: Y.XmlFragment): (MarkedSentence & { sentence: string })[] {
+  return markedSentences(blocks).map((marked) => {
+    const { element, from, to } = marked;
     const text = textOf(element);
     const touched = sentenceSpans(text).filter((span) => span.from < to && span.to > from);
     const start = Math.min(from, touched[0]?.from ?? from);
     const end = Math.max(to, touched.at(-1)?.to ?? to);
-    return { check, sentence: text.slice(start, end) };
+    return { ...marked, sentence: text.slice(start, end) };
   });
 }
 

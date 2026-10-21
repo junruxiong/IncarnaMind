@@ -20,7 +20,7 @@ import {
 } from "../../documents/formats/xml";
 import { plain } from "../../referenceRecords/csl";
 import { SourceError } from "../http";
-import type { ProviderContext, ProviderWork, SourceProvider, SourceQuery } from "../types";
+import type { ProviderContext, ProviderWork, SearchingProvider, SourceQuery } from "../types";
 import { checkPdf } from "./common";
 
 export const ARXIV_URLS = { api: "https://export.arxiv.org", files: "https://arxiv.org" };
@@ -103,7 +103,7 @@ export function arxivQuery(query: SourceQuery): string {
   return terms.join(" AND ");
 }
 
-export function createArxiv(urls: { api: string; files: string } = ARXIV_URLS): SourceProvider {
+export function createArxiv(urls: { api: string; files: string } = ARXIV_URLS): SearchingProvider {
   const terms = {
     url: "https://info.arxiv.org/help/api/tou.html",
     intervalMs: ARXIV_INTERVAL_MS,

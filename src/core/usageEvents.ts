@@ -74,6 +74,7 @@ const PROVIDER_KINDS = [
   "ollama",
   "chatgpt",
   "claude-account",
+  "copilot",
 ] as const;
 const CITATION_CHECKS = [
   "checking",
@@ -116,8 +117,10 @@ const ANSWER_ERRORS = [
   "network",
   "provider",
   "consent-declined",
+  "consent-revoked",
   "local-mode",
   "ollama-not-running",
+  "data-retention",
   "not-signed-in",
   "plan-limit",
   "blocked",

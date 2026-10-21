@@ -7,6 +7,8 @@
  * `openLoopbackRedirect` (RFC 8252) is used on its own by remote Connectors,
  * whose sign-in the MCP SDK builds; `authorizeInBrowser` runs the whole flow
  * on it, or on a page of the server's own whose code the User pastes.
+ * `authorizeWithDevice` is the device flow (RFC 8628): the User types a code
+ * the app shows on the server's own page.
  */
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -59,7 +61,6 @@ export interface BrowserAuthorizationOptions {
   /** The token endpoint, for exchanging the code. */
   tokenUrl: string;
   clientId: string;
-  /** Space-separated scopes, if the server wants them. */
   scope?: string;
   redirect: RedirectShape;
   /** What a loopback redirect's browser tab shows when sign-in finishes, or fails. */
@@ -110,8 +111,8 @@ export interface OAuthTokens {
   /** Lifetime of the access token in seconds, as the server sent it. */
   expiresIn: number | null;
   scope: string | null;
-  /** The whole answer, for what a provider adds to it, such as the account signed in. */
-  response: Record<string, unknown>;
+  /** The account the answer names, where the server adds one (Anthropic's does). */
+  account: { email: string | null; organization: string | null };
 }
 
 export type OAuthFlowFailure =
@@ -190,35 +191,50 @@ function sendPage(response: ServerResponse, status: number, html: string): Promi
 export const nonEmptyText = (value: unknown) =>
   typeof value === "string" && value !== "" ? value : null;
 
-async function readTokenResponse(response: Response, action: string): Promise<OAuthTokens> {
+async function readJsonBody(response: Response): Promise<{ raw: string; body: unknown }> {
   const raw = await response.text();
-  let body: unknown;
   try {
-    body = JSON.parse(raw);
+    return { raw, body: JSON.parse(raw) };
   } catch {
-    body = undefined;
+    return { raw, body: undefined };
   }
-  if (!response.ok) {
-    const code = isRecord(body) ? nonEmptyText(body.error) : null;
-    const description = isRecord(body) ? nonEmptyText(body.error_description) : null;
-    throw new OAuthTokenError(
-      response.status,
-      code,
-      `The ${action} was refused (${response.status}): ${description ?? code ?? (raw.slice(0, 200) || response.statusText)}`,
-    );
-  }
-  const accessToken = isRecord(body) ? nonEmptyText(body.access_token) : null;
-  if (!isRecord(body) || !accessToken) {
-    throw new OAuthTokenError(null, null, `The ${action} response has no access token.`);
-  }
+}
+
+function tokenRefusal(response: Response, raw: string, body: unknown, action: string) {
+  const code = isRecord(body) ? nonEmptyText(body.error) : null;
+  const description = isRecord(body) ? nonEmptyText(body.error_description) : null;
+  return new OAuthTokenError(
+    response.status,
+    code,
+    `The ${action} was refused (${response.status}): ${description ?? code ?? (raw.slice(0, 200) || response.statusText)}`,
+  );
+}
+
+function tokensOf(body: Record<string, unknown>, accessToken: string): OAuthTokens {
   return {
     accessToken,
     refreshToken: nonEmptyText(body.refresh_token),
     idToken: nonEmptyText(body.id_token),
     expiresIn: typeof body.expires_in === "number" ? body.expires_in : null,
     scope: nonEmptyText(body.scope),
-    response: body,
+    account: {
+      email: isRecord(body.account) ? nonEmptyText(body.account.email_address) : null,
+      organization: isRecord(body.organization) ? nonEmptyText(body.organization.name) : null,
+    },
   };
+}
+
+async function readTokenResponse(response: Response, action: string): Promise<OAuthTokens> {
+  const { raw, body } = await readJsonBody(response);
+  // GitHub refuses with 200 and an `error`.
+  if (!response.ok || (isRecord(body) && nonEmptyText(body.error))) {
+    throw tokenRefusal(response, raw, body, action);
+  }
+  const accessToken = isRecord(body) ? nonEmptyText(body.access_token) : null;
+  if (!isRecord(body) || !accessToken) {
+    throw new OAuthTokenError(null, null, `The ${action} response has no access token.`);
+  }
+  return tokensOf(body, accessToken);
 }
 
 async function postToken(
@@ -227,10 +243,12 @@ async function postToken(
   params: Record<string, string>,
   format: TokenRequestFormat,
   signal?: AbortSignal,
+  headers?: Readonly<Record<string, string>>,
 ): Promise<Response> {
   return fetcher(url, {
     method: "POST",
     headers: {
+      ...headers,
       "content-type": format === "json" ? "application/json" : "application/x-www-form-urlencoded",
       accept: "application/json",
     },
@@ -666,5 +684,137 @@ export async function authorizeInBrowser(
     });
   } finally {
     await redirect.close();
+  }
+}
+
+/** What the User is shown to approve a device sign-in (RFC 8628 §3.2). */
+export interface DeviceCode {
+  /** The code the User types on the verification page. */
+  userCode: string;
+  verificationUri: string;
+  /** Seconds until the code expires. */
+  expiresIn: number;
+}
+
+export interface DeviceAuthorizationOptions {
+  deviceCodeUrl: string;
+  tokenUrl: string;
+  clientId: string;
+  /** Space-separated scopes, if the server wants them. */
+  scope?: string;
+  /** How the server takes a request. Defaults to a form (RFC 8628). */
+  format?: TokenRequestFormat;
+  headers?: Readonly<Record<string, string>>;
+  /** The code to show the User, before the browser opens its verification page. */
+  onCode(code: DeviceCode): void;
+  openBrowser(url: string): Promise<void>;
+  signal?: AbortSignal;
+  /** Waits before each poll; rejects when `signal` aborts. Tests pass one that doesn't wait. */
+  wait?(ms: number, signal?: AbortSignal): Promise<void>;
+  fetch?: typeof globalThis.fetch;
+}
+
+const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
+
+/** RFC 8628 §3.2: poll every five seconds when the server doesn't say. */
+const DEFAULT_POLL_INTERVAL_S = 5;
+
+/** RFC 8628 §3.5: a `slow_down` adds five seconds to every later poll. */
+const SLOW_DOWN_S = 5;
+
+const cancelledError = () => new OAuthFlowError("cancelled", "The sign-in was cancelled.");
+
+function waitFor(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(cancelledError());
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(cancelledError());
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * Rejects with `OAuthFlowError` when the User declines ("denied"), the code
+ * expires ("timed-out") or the caller aborts ("cancelled"), else `OAuthTokenError`.
+ */
+export async function authorizeWithDevice(
+  options: DeviceAuthorizationOptions,
+): Promise<OAuthTokens> {
+  const { signal } = options;
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const wait = options.wait ?? waitFor;
+  const format = options.format ?? "form";
+  const post = async (url: string, params: Record<string, string>) => {
+    try {
+      const response = await postToken(fetcher, url, params, format, signal, options.headers);
+      return { response, ...(await readJsonBody(response)) };
+    } catch (error) {
+      // Cancelling during a request aborts it: the sign-in was cancelled, it didn't fail.
+      if (signal?.aborted) throw cancelledError();
+      throw error;
+    }
+  };
+  if (signal?.aborted) throw cancelledError();
+
+  const {
+    response: started,
+    raw,
+    body,
+  } = await post(options.deviceCodeUrl, {
+    client_id: options.clientId,
+    ...(options.scope ? { scope: options.scope } : {}),
+  });
+  const deviceCode = isRecord(body) ? nonEmptyText(body.device_code) : null;
+  const userCode = isRecord(body) ? nonEmptyText(body.user_code) : null;
+  const verificationUri = isRecord(body) ? nonEmptyText(body.verification_uri) : null;
+  if (!started.ok || !isRecord(body) || !deviceCode || !userCode || !verificationUri) {
+    throw tokenRefusal(started, raw, body, "device sign-in");
+  }
+  const expiresIn = typeof body.expires_in === "number" ? body.expires_in : 900;
+  let interval =
+    (typeof body.interval === "number" ? body.interval : DEFAULT_POLL_INTERVAL_S) * 1000;
+  options.onCode({ userCode, verificationUri, expiresIn });
+  await options.openBrowser(nonEmptyText(body.verification_uri_complete) ?? verificationUri);
+
+  // Counted in the intervals waited: the server's own `expired_token` ends a longer wait anyway.
+  let waited = 0;
+  for (;;) {
+    if (waited >= expiresIn * 1000) {
+      throw new OAuthFlowError("timed-out", "The sign-in didn't finish in time.");
+    }
+    await wait(interval, signal);
+    waited += interval;
+    if (signal?.aborted) throw cancelledError();
+    const answer = await post(options.tokenUrl, {
+      client_id: options.clientId,
+      device_code: deviceCode,
+      grant_type: DEVICE_GRANT,
+    });
+    const polled = answer.response;
+    const error = isRecord(answer.body) ? nonEmptyText(answer.body.error) : null;
+    const accessToken = isRecord(answer.body) ? nonEmptyText(answer.body.access_token) : null;
+    if (polled.ok && !error && isRecord(answer.body) && accessToken) {
+      return tokensOf(answer.body, accessToken);
+    }
+    if (error === "authorization_pending") continue;
+    if (error === "slow_down") {
+      const next = isRecord(answer.body) ? answer.body.interval : undefined;
+      interval = typeof next === "number" ? next * 1000 : interval + SLOW_DOWN_S * 1000;
+      continue;
+    }
+    // GitHub names an expired code both ways.
+    if (error === "expired_token" || error === "token_expired") {
+      throw new OAuthFlowError("timed-out", "The sign-in code expired.");
+    }
+    if (error === "access_denied") {
+      throw new OAuthFlowError("denied", "The sign-in was refused.");
+    }
+    throw tokenRefusal(polled, answer.raw, answer.body, "device sign-in");
   }
 }

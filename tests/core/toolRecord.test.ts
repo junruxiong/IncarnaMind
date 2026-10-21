@@ -167,6 +167,7 @@ describe("A record within the context's budget", () => {
     status: "done",
     errorKind: null,
     errorMessage: null,
+    errorSignInRoute: null,
     citationSupport: null,
     toolCalls,
     textOrigin: null,

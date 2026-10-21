@@ -38,11 +38,15 @@ import {
   MEETING_AUDIO_KEPT_MS,
   type Meeting,
   type MeetingGap,
+  type MeetingHelp,
+  type MeetingHelpTemplate,
+  type MeetingLevel,
   type MeetingSourceState,
   type Mind,
 } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Language } from "../language";
+import { parseFolderChoice } from "../minds";
 import type { Database } from "../storage";
 import {
   listParts,
@@ -64,6 +68,16 @@ const SILENT_SAMPLES = MEETING_SAMPLE_RATE * 60;
 
 /** How often audio past its day is looked for. */
 const SWEEP_INTERVAL_MS = 60_000;
+
+const LEVEL_EVERY_MS = 100;
+
+/** Loudness from 0 to 1 for samples: their RMS on a scale where quiet speech is about a third. */
+function loudness(samples: Int16Array): number {
+  let sum = 0;
+  for (const sample of samples) sum += sample * sample;
+  const rms = Math.sqrt(sum / Math.max(1, samples.length)) / 32768;
+  return Math.min(1, Math.sqrt(rms * 8));
+}
 
 type EndedBy = "pause" | "stop" | "sleep" | "interrupted";
 
@@ -116,7 +130,12 @@ interface Live {
   ends: Map<AudioSource, number>;
   /** All-silent samples in a row from the computer's sound. */
   silent: number;
+  /** Some sound has come from the computer's sound: without it, a macOS that isn't allowing it can't be told from a quiet call. */
+  systemSignal: boolean;
   saveError: string | null;
+  /** The loudest each source has been since the level was last told, and when that was. */
+  levels: Record<AudioSource, number>;
+  levelAt: number;
 }
 
 export interface MeetingsOptions {
@@ -124,16 +143,17 @@ export interface MeetingsOptions {
   dataDir: string;
   now: () => string;
   capture: AudioCapture | undefined;
-  enabled(): boolean;
   noticeAccepted(): boolean;
   /** The "What is recorded" choice in Settings. */
   systemAudioByDefault(): boolean;
   language(): Language;
-  createMind(title: string): Mind;
+  createMind(title: string, folderId: string | null): Mind;
   mindExists(mindId: string): boolean;
   changed(meetings: Meeting[]): void;
   /** Whether audio is being captured, each time that changes. */
   onCapturingChange(capturing: boolean): void;
+  /** How loud each source is, about ten times a second while audio is captured. */
+  level?(level: MeetingLevel): void;
   /** Transcribes Meetings (#136); absent where this copy can't. */
   transcripts?: Transcripts;
   health: CaptureHealthRecords;
@@ -156,6 +176,9 @@ export function createMeetings(options: MeetingsOptions) {
   let live: Live | null = null;
   /** Whether each Meeting has audio on disk, looked up once. */
   const kept = new Map<string, boolean>();
+  /** For the call's help, kept in memory: it matters only while the Meeting is live. */
+  const help = new Map<string, MeetingHelp>();
+  const templates = new Map<string, MeetingHelpTemplate>();
 
   const rowOf = (meetingId: unknown): MeetingRow => {
     if (typeof meetingId !== "string" || meetingId === "") {
@@ -170,6 +193,8 @@ export function createMeetings(options: MeetingsOptions) {
   };
 
   const periodsOf = (row: MeetingRow): Period[] => JSON.parse(row.periods) as Period[];
+
+  const isLiveRow = (row: MeetingRow) => row.status === "recording" || row.status === "paused";
 
   const hasAudio = (meetingId: string): boolean => {
     let value = kept.get(meetingId);
@@ -219,6 +244,8 @@ export function createMeetings(options: MeetingsOptions) {
       saveError: current?.saveError ?? null,
       transcript: transcripts && row.status !== "ready" ? transcripts.of(row.id) : null,
       health: health.of(row.id),
+      help: help.get(row.id) ?? null,
+      helpTemplate: templates.get(row.id) ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -344,6 +371,7 @@ export function createMeetings(options: MeetingsOptions) {
       }
     }
     transcripts?.hear(current.meetingId, source, samples, run.startMs + msOf(run.samples));
+    tellLevel(current, source, samples);
     run.waiting.push(samples);
     run.waitingSamples += samples.length;
     run.samples += samples.length;
@@ -351,15 +379,25 @@ export function createMeetings(options: MeetingsOptions) {
       savePart(current, source, run, take(run, PART_SAMPLES));
     }
     if (source === "system") {
-      current.silent = samples.every((sample) => sample === 0)
-        ? current.silent + samples.length
-        : 0;
+      const quiet = samples.every((sample) => sample === 0);
+      current.silent = quiet ? current.silent + samples.length : 0;
+      if (!quiet) current.systemSignal = true;
     }
     setSource(
       current,
       source,
       source === "system" && current.silent >= SILENT_SAMPLES ? "silent" : "recording",
     );
+  }
+
+  function tellLevel(current: Live, source: AudioSource, samples: Int16Array): void {
+    if (!options.level) return;
+    current.levels[source] = Math.max(current.levels[source], loudness(samples));
+    const at = clock();
+    if (at - current.levelAt < LEVEL_EVERY_MS) return;
+    current.levelAt = at;
+    options.level({ meetingId: current.meetingId, ...current.levels });
+    current.levels = { microphone: 0, system: 0 };
   }
 
   function setSource(current: Live, source: AudioSource, state: MeetingSourceState): void {
@@ -394,7 +432,10 @@ export function createMeetings(options: MeetingsOptions) {
       runs: new Map(),
       ends: new Map(),
       silent: 0,
+      systemSignal: false,
       saveError: null,
+      levels: { microphone: 0, system: 0 },
+      levelAt: 0,
     };
     for (const part of listParts(current.folder)) {
       const end = part.offsetMs + part.durationMs;
@@ -402,7 +443,7 @@ export function createMeetings(options: MeetingsOptions) {
     }
     live = current;
     options.onCapturingChange(true);
-    transcripts?.begin(row.id, period.offsetMs);
+    transcripts?.begin(row.id, period.offsetMs, () => current.systemSignal);
     current.session = capture.start(
       { systemAudio: systemAudio && capture.systemAudio },
       {
@@ -589,9 +630,8 @@ export function createMeetings(options: MeetingsOptions) {
     list,
 
     create(input: unknown): Meeting {
-      if (!options.enabled()) throw new InvalidInputError({ key: "error.meeting.off" });
       if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
-      const { mindId } = parseInput(input);
+      const { mindId, folderId } = parseInput(input);
       if (mindId !== undefined && (typeof mindId !== "string" || !options.mindExists(mindId))) {
         throw new NotFoundError({ key: "error.mind.notFound" });
       }
@@ -604,7 +644,10 @@ export function createMeetings(options: MeetingsOptions) {
       const id = randomUUID();
       const at = now();
       db.transaction(() => {
-        const mind = typeof mindId === "string" ? mindId : options.createMind(meetingTitle()).id;
+        const mind =
+          typeof mindId === "string"
+            ? mindId
+            : options.createMind(meetingTitle(), parseFolderChoice(folderId)).id;
         db.run(
           `INSERT INTO meetings (id, mind_id, status, system_audio, created_at, updated_at)
            VALUES (?, ?, 'ready', ?, ?, ?)`,
@@ -633,7 +676,6 @@ export function createMeetings(options: MeetingsOptions) {
       if (systemAudio !== undefined && typeof systemAudio !== "boolean") {
         throw new InvalidInputError("systemAudio must be true or false.");
       }
-      if (!options.enabled()) throw new InvalidInputError({ key: "error.meeting.off" });
       if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
       if (!options.noticeAccepted()) {
         throw new InvalidInputError({ key: "error.meeting.noticeUnread" });
@@ -707,6 +749,8 @@ export function createMeetings(options: MeetingsOptions) {
         audio_expires_at: expiryOf(row.id, periods),
       });
       transcripts?.stop(row.id);
+      help.delete(row.id);
+      templates.delete(row.id);
       log.info("meeting.stopped", { meetingId: row.id });
       changed();
       return toMeeting(rowOf(row.id));
@@ -781,6 +825,31 @@ export function createMeetings(options: MeetingsOptions) {
       log.info("meeting.awake", { meetingId: row.id });
       changed();
     },
+
+    helped(meetingId: string, given: MeetingHelp): void {
+      if (!isLiveRow(rowOf(meetingId))) return;
+      help.set(meetingId, given);
+      changed();
+    },
+
+    setTemplate(meetingId: unknown, template: MeetingHelpTemplate | null): Meeting {
+      const row = rowOf(meetingId);
+      if (!isLiveRow(row)) throw new InvalidInputError({ key: "error.meeting.notBeingRecorded" });
+      if (template) templates.set(row.id, template);
+      else templates.delete(row.id);
+      changed();
+      return toMeeting(row);
+    },
+
+    liveOf(mindId: string): Meeting | null {
+      const row = db.get<MeetingRow>(
+        `SELECT ${COLUMNS} FROM meetings WHERE mind_id = ? AND deleted_at IS NULL AND status IN ('recording', 'paused')`,
+        [mindId],
+      );
+      return row ? toMeeting(row) : null;
+    },
+
+    get: (meetingId: unknown): Meeting => toMeeting(rowOf(meetingId)),
 
     sweep,
 

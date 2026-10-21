@@ -5,6 +5,8 @@
  * heading row ("| --- | :-: |") gives each column's alignment.
  */
 
+import { linkSources, type NamedSource } from "./namedSources";
+
 /** How a column's text is aligned; null: as the text flows. */
 export type TableAlign = "left" | "center" | "right" | null;
 
@@ -45,6 +47,66 @@ export function tableCellRanges(text: string): CellRange[] {
     while (to > from && /\s/.test(text[to - 1] as string)) to--;
     return { start: from, end: to };
   });
+}
+
+/**
+ * Each column's alignment, when a table starts at `lines[i]`: a row with a
+ * pipe, then a delimiter row with as many cells.
+ */
+export function tableStart(lines: readonly string[], i: number): TableAlign[] | null {
+  const head = lines[i];
+  const below = lines[i + 1];
+  if (head === undefined || below === undefined || !head.includes("|")) return null;
+  const align = delimiterRow(below);
+  return align && tableCellRanges(head).length === align.length ? align : null;
+}
+
+/** A line that reads as a table's row, its delimiter row or HTML table markup: what is left of a table that couldn't be made. */
+export const looksLikeTable = (line: string): boolean =>
+  /^\s*\|.*\|\s*$/.test(line) ||
+  /\|\s*:?-{3,}:?\s*\|/.test(line) ||
+  /<\/?(?:table|thead|tbody|tr|td|th)\b[^>]*>/i.test(line);
+
+/**
+ * A row's cells' text, as many as its table has columns: a missing one is
+ * empty, and the text of extra ones (`extra`) is kept in the last, after " | ".
+ */
+export function rowCells(line: string, columns: number): { cells: string[]; extra: number } {
+  const texts = tableCellRanges(line).map(({ start, end }) => line.slice(start, end));
+  const extras = texts.slice(columns).filter((text) => text !== "");
+  const cells = Array.from({ length: columns }, (_, column) => texts[column] ?? "");
+  if (extras.length > 0) cells[columns - 1] = [cells[columns - 1], ...extras].join(" | ");
+  return { cells, extra: extras.length };
+}
+
+/**
+ * The pipe tables of Markdown, with each row's bracketed sources linked
+ * (`linkSources`), and how many of them were left as text and how many
+ * extra cells rows have (`rowCells`).
+ */
+export function linkTableSources(
+  markdown: string,
+  link: (source: NamedSource) => string | null,
+): { markdown: string; unlinked: number; extraCells: number } {
+  const lines = markdown.split("\n");
+  let unlinked = 0;
+  let extraCells = 0;
+  for (let at = 0; at < lines.length; at++) {
+    const align = tableStart(lines, at);
+    if (!align) continue;
+    let row = at;
+    for (; row < lines.length; row++) {
+      const line = lines[row] ?? "";
+      if (row === at + 1) continue;
+      if (row > at + 1 && (line.trim() === "" || !line.includes("|"))) break;
+      extraCells += rowCells(line, align.length).extra;
+      const linked = linkSources(line, link);
+      lines[row] = linked.text;
+      unlinked += linked.unlinked;
+    }
+    at = row - 1;
+  }
+  return { markdown: lines.join("\n"), unlinked, extraCells };
 }
 
 /** Each column's alignment, when `text` is a table's delimiter row ("|:--|--:|"); otherwise null. */

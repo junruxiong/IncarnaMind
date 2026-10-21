@@ -188,16 +188,24 @@ export const segmentClass =
 
 // Menus ----------------------------------------------------------------------
 
+/** A popover menu's element, but its width: a picker that needs more room sets its own. */
+export const menuFrameClass =
+  "inset-auto m-0 max-h-[60vh] overflow-y-auto rounded-lg border-0 bg-sheet p-1 text-ui font-normal text-ink shadow-popover";
+
 /** A popover menu's element. */
-export const menuClass =
-  "inset-auto m-0 max-h-[60vh] w-max max-w-72 min-w-48 overflow-y-auto rounded-lg border-0 bg-sheet p-1 text-ui font-normal text-ink shadow-popover";
+export const menuClass = `${menuFrameClass} w-max max-w-72 min-w-48`;
 
 /** A menu's small heading. */
 export const menuTitleClass = "px-2 pt-1.5 pb-1 text-label font-semibold text-ink-meta";
 
+const menuItemBase =
+  "flex w-full items-center gap-2 rounded-md pr-2 text-left -outline-offset-2 hover:bg-hover focus-visible:bg-hover disabled:text-ink-placeholder disabled:hover:bg-transparent";
+
 /** A menu item: a 28px row, in the menu's ink unless it says otherwise. */
-export const menuItemClass =
-  "flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left -outline-offset-2 hover:bg-hover focus-visible:bg-hover disabled:text-ink-placeholder disabled:hover:bg-transparent";
+export const menuItemClass = `${menuItemBase} h-7`;
+
+/** A menu item whose text may wrap: 28px at least, taller for a second line. */
+export const tallMenuItemClass = `${menuItemBase} min-h-7 py-1`;
 
 /**
  * A menu item that can't be used right now (`aria-disabled`): it stays in

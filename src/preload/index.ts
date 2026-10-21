@@ -26,7 +26,32 @@ import {
   CITED_PAGE_CHANNELS,
   type CitedPageBridge,
 } from "../shared/citedPage";
+import type { GeneralHelpKind } from "../shared/meetingHelp";
+import {
+  type HeldKeys,
+  MEETING_PANEL_ARGUMENT,
+  MEETING_PANEL_BRIDGE_KEY,
+  MEETING_PANEL_CHANNELS,
+  type MeetingPanelBridge,
+  type PanelCommand,
+  type PanelState,
+} from "../shared/meetingPanel";
+import {
+  PERMISSION_GUIDE_ARGUMENT,
+  PERMISSION_GUIDE_BRIDGE_KEY,
+  PERMISSION_GUIDE_CHANNELS,
+  type PermissionGuideBridge,
+  type PermissionGuideState,
+} from "../shared/permissionGuide";
 import { titleBarOf } from "../shared/titleBar";
+
+function listen<T>(channel: string, listener: (value: T) => void): () => void {
+  const receive = (_event: unknown, value: T) => listener(value);
+  ipcRenderer.on(channel, receive);
+  return () => {
+    ipcRenderer.removeListener(channel, receive);
+  };
+}
 
 const methods = Object.fromEntries(
   coreApiMethods.map((method) => [
@@ -71,6 +96,7 @@ const files: FilesBridge = {
   showSavedFile: (path) => ipcRenderer.invoke(FILES_CHANNELS.showSavedFile, path),
   openSavedFile: (path) => ipcRenderer.invoke(FILES_CHANNELS.openSavedFile, path),
   pickOutputLocation: () => ipcRenderer.invoke(FILES_CHANNELS.pickOutputLocation),
+  saveMindCopy: (mindId) => ipcRenderer.invoke(FILES_CHANNELS.saveMindCopy, mindId),
   openDataFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openDataFolder),
   openLogsFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openLogsFolder),
   pickSkill: (kind) => ipcRenderer.invoke(FILES_CHANNELS.pickSkill, kind),
@@ -85,6 +111,7 @@ const files: FilesBridge = {
   pickPdfFile: () => ipcRenderer.invoke(FILES_CHANNELS.pickPdfFile),
   showLinkedFolder: (linkedFolderId) =>
     ipcRenderer.invoke(FILES_CHANNELS.showLinkedFolder, linkedFolderId),
+  runsWithoutSandbox: () => ipcRenderer.invoke(FILES_CHANNELS.runsWithoutSandbox),
   logError: (report) => ipcRenderer.send(FILES_CHANNELS.logError, report),
   onMenuCommand: (listener) => {
     const receive = (_event: unknown, command: MenuCommand) => listener(command);
@@ -95,6 +122,8 @@ const files: FilesBridge = {
   },
   setSidebarHidden: (hidden) => ipcRenderer.send(FILES_CHANNELS.sidebarHidden, hidden),
   setEditMenu: (state) => ipcRenderer.send(FILES_CHANNELS.editMenu, state),
+  setExportMenu: (mindName) => ipcRenderer.send(FILES_CHANNELS.exportMenu, mindName),
+  setExamplesRemoved: (removed) => ipcRenderer.send(FILES_CHANNELS.examplesRemoved, removed),
   titleBar: titleBarOf(process.platform),
   onFullScreenChange: (listener) => {
     const receive = (_event: unknown, fullScreen: boolean) => listener(fullScreen);
@@ -102,6 +131,23 @@ const files: FilesBridge = {
     return () => {
       ipcRenderer.removeListener(FILES_CHANNELS.fullScreen, receive);
     };
+  },
+  onMeetingHelp: (listener) => listen<GeneralHelpKind>(FILES_CHANNELS.meetingHelp, listener),
+  globalKeysFree: (keys) => ipcRenderer.invoke(FILES_CHANNELS.globalKeysFree, keys),
+  showMeetingPanel: (shown) => ipcRenderer.send(FILES_CHANNELS.showMeetingPanel, shown),
+  meetingPanelCommand: (command) => ipcRenderer.send(FILES_CHANNELS.meetingPanelCommand, command),
+  onMeetingPanel: (listener) => {
+    const stop = listen<PanelState>(FILES_CHANNELS.meetingPanel, listener);
+    ipcRenderer.send(FILES_CHANNELS.meetingPanelWanted);
+    return stop;
+  },
+  onSetUpModel: (listener) => listen<void>(FILES_CHANNELS.setUpModel, () => listener()),
+  showPermissionGuide: (source) => ipcRenderer.invoke(FILES_CHANNELS.showPermissionGuide, source),
+  closePermissionGuide: () => ipcRenderer.send(FILES_CHANNELS.closePermissionGuide),
+  onPermissionGuide: (listener) => {
+    const stop = listen<PermissionGuideState | null>(FILES_CHANNELS.permissionGuide, listener);
+    ipcRenderer.send(FILES_CHANNELS.permissionGuideWanted);
+    return stop;
   },
 };
 
@@ -117,4 +163,31 @@ if (process.argv.includes(CITED_PAGE_ARGUMENT)) {
   contextBridge.exposeInMainWorld(CITED_PAGE_BRIDGE_KEY, citedPage);
 } else {
   contextBridge.exposeInMainWorld(FILES_BRIDGE_KEY, files);
+}
+
+// The floating panel during a call has the file helpers too, for the window's error log.
+if (process.argv.includes(MEETING_PANEL_ARGUMENT)) {
+  const panel: MeetingPanelBridge = {
+    resize: (width, height) => ipcRenderer.send(MEETING_PANEL_CHANNELS.size, width, height),
+    close: () => ipcRenderer.send(MEETING_PANEL_CHANNELS.close),
+    setUp: () => ipcRenderer.send(MEETING_PANEL_CHANNELS.setUp),
+    keys: () => ipcRenderer.invoke(MEETING_PANEL_CHANNELS.keys),
+    onKeys: (listener) => listen<HeldKeys>(MEETING_PANEL_CHANNELS.keysChanged, listener),
+    onHelp: (listener) => listen<GeneralHelpKind>(MEETING_PANEL_CHANNELS.help, listener),
+    state: (state) => ipcRenderer.send(MEETING_PANEL_CHANNELS.state, state),
+    onCommand: (listener) => listen<PanelCommand>(MEETING_PANEL_CHANNELS.command, listener),
+  };
+  contextBridge.exposeInMainWorld(MEETING_PANEL_BRIDGE_KEY, panel);
+}
+
+// The guide beside System Settings has the file helpers too, for the window's error log.
+if (process.argv.includes(PERMISSION_GUIDE_ARGUMENT)) {
+  const guide: PermissionGuideBridge = {
+    resize: (width, height) => ipcRenderer.send(PERMISSION_GUIDE_CHANNELS.size, width, height),
+    close: () => ipcRenderer.send(PERMISSION_GUIDE_CHANNELS.close),
+    state: () => ipcRenderer.invoke(PERMISSION_GUIDE_CHANNELS.state),
+    onState: (listener) =>
+      listen<PermissionGuideState | null>(PERMISSION_GUIDE_CHANNELS.state, listener),
+  };
+  contextBridge.exposeInMainWorld(PERMISSION_GUIDE_BRIDGE_KEY, guide);
 }

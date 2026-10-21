@@ -44,6 +44,13 @@ describe("Cutting the Question context to a window", () => {
     expect(only?.content).not.toContain("Newest:");
   });
 
+  test("a Document's whole text given with the Question goes whole or not at all, never cut (#1036)", () => {
+    const whole = `<document-text>\nThe whole text of "Tides", as Passages.\n\n${passage("P1", 400)}\n</document-text>`;
+    const asked: AnswerMessage[] = [{ role: "user", content: `${whole}\n\n${question}` }];
+    expect(fitQuestionContext(asked, question, 600)).toEqual(asked);
+    expect(fitQuestionContext(asked, question, 300)).toEqual([{ role: "user", content: question }]);
+  });
+
   test("a conversation still starts with the User", () => {
     const fitted = fitQuestionContext(messages, question, 1_050) ?? [];
     expect(fitted[0]?.role).toBe("user");
@@ -76,6 +83,29 @@ describe("A window's budget", () => {
     if (!fit.ok) throw new Error(fit.error.message);
     expect(fit.estimated + 4_500 + window.outputTokens).toBeLessThanOrEqual(window.tokens);
     expect(fit.messages.at(-1)?.content).toBe("Why?");
+  });
+
+  // protects=a request that held Documents' whole text says when the window left it out, and says nothing when it kept it; fails_when=the text is dropped unreported, or reported while it is still in the request; no_claim=none beyond protects.
+  test("reports the Documents' whole text a window left out", () => {
+    const whole = `<document-text>\nThe whole text of "Tides", as Passages.\n\n${passage("P1", 1_500)}\n</document-text>`;
+    const asked = (question: string): AnswerMessage[] => [
+      { role: "user", content: `${whole}\n\n${question}` },
+    ];
+    const kept = createWindowBudget(window).fit({
+      instructions: "Answer well.",
+      messages: asked("Why?"),
+      question: "Why?",
+    });
+    expect(kept).toMatchObject({ ok: true });
+    expect(kept).not.toHaveProperty("documentsDropped");
+    const question = block("Long", 3_000);
+    const dropped = createWindowBudget(window).fit({
+      instructions: "Answer well.",
+      messages: asked(question),
+      question,
+      reserve: 2_000,
+    });
+    expect(dropped).toMatchObject({ ok: true, documentsDropped: true });
   });
 
   test("a request whose Question alone doesn't fit fails as too long", () => {

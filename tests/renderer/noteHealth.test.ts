@@ -7,14 +7,13 @@ import {
   CLAIM_CHECK_MARK,
   type ClaimCheckAttributes,
 } from "../../src/core/api";
-import { claimSpans, type ShownClaim } from "../../src/renderer/src/editor/claimChecks";
+import { claimsOf } from "../../src/renderer/src/editor/claimChecks";
 import {
   HEALTH_PARTS,
   type HealthPart,
   noteHealth,
 } from "../../src/renderer/src/editor/healthCounts";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
-import { claimCheckShown } from "../../src/shared/claimChecks";
 import { sentenceKey } from "../../src/shared/mindCheck";
 
 const schema = getSchema(noteExtensions());
@@ -40,6 +39,7 @@ function checked(
   sentence: string,
   state: ClaimCheckAttributes["state"],
   reason: ClaimCheckAttributes["reason"] = null,
+  more: Partial<ClaimCheckAttributes> = {},
 ): JSONContent {
   const check: ClaimCheckAttributes = {
     id: `check-${sentence.length}-${state}`,
@@ -53,11 +53,15 @@ function checked(
     text: sentence,
     evidence: null,
     says: null,
+    unsupported: null,
     calculation: null,
+    citedCaseUnchecked: false,
+    citedCaseFound: false,
     scope: { folderId: null, widened: false },
     versions: [],
     excluded: [],
     checkedAt: "2026-10-12T09:00:00.000Z",
+    ...more,
   };
   return text(sentence, [{ type: CLAIM_CHECK_MARK, attrs: check }]);
 }
@@ -66,33 +70,31 @@ const docOf = (...blocks: JSONContent[]) => schema.nodeFromJSON({ type: "doc", c
 
 /** The Mind's health as its header counts it, part by part. */
 function healthOf(doc: ProseMirrorNode): Record<HealthPart, number> {
-  const claims: ShownClaim[] = claimSpans(doc).map((span) => ({
-    ...span,
-    shown: claimCheckShown(span.check, {
-      text: span.sentence.text,
-      versions: null,
-      folderId: null,
-    }),
-  }));
-  const health = noteHealth(doc, claims, (attributes) => attributes.check);
+  const { claims, kept } = claimsOf(doc, { versions: null, folderId: null });
+  const health = noteHealth(doc, claims, (attributes) => attributes.check, kept);
   return Object.fromEntries(HEALTH_PARTS.map((part) => [part, health[part].length])) as Record<
     HealthPart,
     number
   >;
 }
 
-/** The sentences "Check all" would check: claims with no check, but those the last whole-Mind check found make none. */
-function uncheckedIn(doc: ProseMirrorNode, skipped: readonly string[] = []): number {
-  const claims: ShownClaim[] = claimSpans(doc).map((span) => ({
-    ...span,
-    shown: claimCheckShown(span.check, {
-      text: span.sentence.text,
-      versions: null,
-      folderId: null,
-    }),
-  }));
-  return noteHealth(doc, claims, (attributes) => attributes.check, new Set(skipped)).unchecked
-    .length;
+/**
+ * The sentences "not checked yet": claims with no check that have a Citation or that an Answer
+ * wrote (the blocks with the ids in `answered`), but not those the last whole-Mind check found make none.
+ */
+function uncheckedIn(
+  doc: ProseMirrorNode,
+  skipped: readonly string[] = [],
+  answered: readonly string[] = [],
+): number {
+  const { claims, kept } = claimsOf(doc, { versions: null, folderId: null });
+  return noteHealth(
+    doc,
+    claims,
+    (attributes) => attributes.check,
+    new Set([...skipped, ...kept]),
+    (blockId) => typeof blockId === "string" && answered.includes(blockId),
+  ).unchecked.length;
 }
 
 const NOTHING = {
@@ -155,6 +157,34 @@ describe("A Mind's health", () => {
     expect(healthOf(doc)).toEqual({ ...NOTHING, notFound: 1, notChecked: 1, recheck: 1 });
   });
 
+  // protects=a Citation's state shows only on its marker, so every Citation is counted and reachable, in sentences with a verdict too; fails_when=a Citation in an unsupported, contradicted or unchecked sentence stops counting, or such a sentence also counts as having no Citation; no_claim=how the card sets it.
+  test("counts every Citation, also those in a sentence with a verdict of its own", () => {
+    const doc = docOf(
+      paragraph(
+        checked("Online sales grew 12% in the quarter.", "unsupported"),
+        citation("not-found"),
+        citation("not-found"),
+        citation("found"),
+        text(" "),
+        checked("The facilities end in 2027, so refinancing is the first risk.", "contradicted"),
+        citation("not-found"),
+      ),
+      paragraph(
+        checked("The rate limit stopped this sentence's check.", "not-checked", "rate-limit"),
+        citation("found"),
+      ),
+    );
+
+    expect(healthOf(doc)).toEqual({
+      ...NOTHING,
+      found: 2,
+      notFound: 3,
+      unsupported: 1,
+      contradicted: 1,
+      notChecked: 1,
+    });
+  });
+
   test("leaves out changes still waiting, Questions, headings and short lines", () => {
     const change = { id: "c1", request: "r1", target: "x" };
     const doc = docOf(
@@ -175,6 +205,18 @@ describe("A Mind's health", () => {
     expect(healthOf(doc)).toEqual({ ...NOTHING, noCitation: 1 });
   });
 
+  // protects=a sentence the User keeps as their own view (#1111) counts as nothing to fix and isn't one to check, while its Citation still counts, until its words change; fails_when=it counts unsupported or unchecked, or its Citation stops counting; no_claim=how the card sets it.
+  test("leaves out a sentence kept as the User's own view, its Citation still counted, until it is edited", () => {
+    const sentence = "Online sales grew 12% in the quarter.";
+    const kept = checked(sentence, "unsupported", null, { kept: true });
+    const doc = docOf(paragraph(kept, citation("found")));
+    const edited = docOf(paragraph({ ...kept, text: "Online sales grew 15% in the quarter." }));
+
+    expect(healthOf(doc)).toEqual({ ...NOTHING, found: 1 });
+    expect(uncheckedIn(doc)).toBe(0);
+    expect(healthOf(edited)).toEqual({ ...NOTHING, recheck: 1 });
+  });
+
   test("follows the User's edits: a Citation added to a sentence counts it found", () => {
     const before = docOf(paragraph(text("Spring tides come at full moon.")));
     const after = docOf(
@@ -185,16 +227,44 @@ describe("A Mind's health", () => {
     expect(healthOf(after)).toEqual({ ...NOTHING, found: 1 });
   });
 
-  test("knows which claims were never checked, for Check all: not those checked, short ones, or those the last whole-Mind check found make no claim (#737)", () => {
+  test("knows which claims were never checked: those with a Citation or an Answer wrote, not plain notes, those checked, short ones, or those the last whole-Mind check found make no claim (#737)", () => {
     const opinion = "We think the tides are lovely in spring.";
     const doc = docOf(
       paragraph(checked("Spring tides come at full moon.", "supported")),
-      paragraph(text("Neap tides come at the quarter moons. "), text(opinion)),
+      paragraph(text("Neap tides come at the quarter moons "), citation("found"), text(". ")),
+      { type: "paragraph", attrs: { id: "answer" }, content: [text(opinion)] },
+      paragraph(text("The harbour master thinks the tides are lovely in spring.")),
       paragraph(text("Thanks!")),
       heading("A heading that claims a lot about tides"),
     );
 
-    expect(uncheckedIn(doc)).toBe(2);
-    expect(uncheckedIn(doc, [sentenceKey(opinion)])).toBe(1);
+    expect(uncheckedIn(doc, [], ["answer"])).toBe(2);
+    expect(uncheckedIn(doc, [sentenceKey(opinion)], ["answer"])).toBe(1);
+    // Without an Answer's text, only the cited claim is one to check.
+    expect(uncheckedIn(doc)).toBe(1);
+  });
+
+  test("a sentence is in one part only: a plain claim has no Citation, a cited or Answer-written one is not checked yet", () => {
+    const doc = docOf(
+      paragraph(text("Spring tides come at full moon.")),
+      paragraph(text("Neap tides come at the quarter moons "), citation("found"), text(".")),
+      {
+        type: "paragraph",
+        attrs: { id: "answer" },
+        content: [text("The harbour master thinks the tides are lovely in spring.")],
+      },
+    );
+    const { claims, kept } = claimsOf(doc, { versions: null, folderId: null });
+    const health = noteHealth(
+      doc,
+      claims,
+      (attributes) => attributes.check,
+      kept,
+      (blockId) => blockId === "answer",
+    );
+
+    expect(health.unchecked).toHaveLength(2);
+    expect(health.noCitation).toHaveLength(1);
+    for (const at of health.unchecked) expect(health.noCitation).not.toContain(at);
   });
 });

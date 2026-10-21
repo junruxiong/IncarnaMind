@@ -8,7 +8,9 @@ import {
   assistantAnswers,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
   launchApp,
+  nameMind,
   placeAssistant,
   pointAndClick,
   removeDataFolder,
@@ -67,8 +69,8 @@ const bridge = (window: Page) => ({
 async function newMind(window: Page, title: string) {
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
-  await window.getByTestId("mind-title").fill(title);
-  await window.getByTestId("mind-title").press("Enter");
+  await nameMind(window, title);
+  await enterContent(window);
   await window.keyboard.type("Notes.");
 }
 

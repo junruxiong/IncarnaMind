@@ -16,11 +16,9 @@ function send(command: MenuCommand): void {
 }
 
 /**
- * The application menu, in the interface language: New Mind (⌘N), New Folder
- * (⇧⌘N), Close Tab (⌘W), Reopen Closed Tab (⇧⌘T) and Settings… (⌘,) with the usual Edit, View
- * and Window items. As in a browser, ⌘W closes the tab and Shift+⌘W the
- * window. Reload and the developer tools are only in development and test
- * builds. Ctrl stands in for ⌘ on Windows and Linux.
+ * The application menu, in the interface language. As in a browser, ⌘W closes
+ * the tab and Shift+⌘W the window. Reload and the developer tools are only in
+ * development and test builds. Ctrl stands in for ⌘ on Windows and Linux.
  */
 export function installAppMenu(language: Language, { developer }: { developer: boolean }): void {
   installed = { language, developer };
@@ -30,6 +28,8 @@ export function installAppMenu(language: Language, { developer }: { developer: b
 /** What the menu was last built from, to build it again when the sidebar is hidden or shown. */
 let installed: { language: Language; developer: boolean } | null = null;
 let sidebarHidden = false;
+let exportedMind: string | null = null;
+let examplesRemoved = false;
 
 /** Until the window says where its focus is, Undo and Redo show as a field's: enabled, naming nothing. */
 let editMenu: EditMenuState = { text: "field", undo: null, redo: null };
@@ -49,6 +49,18 @@ export function isEditMenuState(value: unknown): value is EditMenuState {
   if (typeof value !== "object" || value === null) return false;
   const { text, undo, redo } = value as Record<string, unknown>;
   return isTextPlace(text) && isNamed(undo) && isNamed(redo);
+}
+
+export function setExamplesRemoved(removed: boolean): void {
+  if (removed === examplesRemoved) return;
+  examplesRemoved = removed;
+  if (installed) buildMenu();
+}
+
+export function setExportMenu(mindName: string | null): void {
+  if (mindName === exportedMind) return;
+  exportedMind = mindName;
+  if (installed) buildMenu();
 }
 
 /** Makes View say "Show Sidebar" while the sidebar is hidden, "Hide Sidebar" otherwise. */
@@ -125,6 +137,19 @@ function buildMenu(): void {
         command("mind.new"),
         command("folder.new"),
         { type: "separator" },
+        command("documents.add"),
+        command("linkedFolder.add"),
+        { type: "separator" },
+        {
+          ...command("mind.export", "menu.export"),
+          id: "mind.export",
+          label:
+            exportedMind === null
+              ? t("menu.export")
+              : translate(language, "menu.export.named", { name: exportedMind }),
+          enabled: exportedMind !== null,
+        },
+        { type: "separator" },
         command("tab.close"),
         command("tab.reopen"),
         { role: "close", label: t("menu.closeWindow"), accelerator: "Shift+CmdOrCtrl+W" },
@@ -155,7 +180,13 @@ function buildMenu(): void {
       submenu: [
         ...(developer
           ? ([
-              { role: "reload", label: t("menu.reload") },
+              // No ⌘R, the role's own keys: in a Mind ⌘R aligns right, as Users have it.
+              {
+                label: t("menu.reload"),
+                click: (_item, window) => {
+                  if (window instanceof BrowserWindow) window.webContents.reload();
+                },
+              },
               { role: "forceReload", label: t("menu.forceReload") },
               { role: "toggleDevTools", label: t("menu.devTools") },
               { type: "separator" },
@@ -174,7 +205,10 @@ function buildMenu(): void {
     {
       label: t("menu.help"),
       role: "help",
-      submenu: [command("help.feedback")],
+      submenu: [
+        { ...command("examples.show"), id: "examples.show", visible: examplesRemoved },
+        command("help.feedback"),
+      ],
     },
     {
       label: t("menu.window"),

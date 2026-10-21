@@ -37,7 +37,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 
 | English | Chinese | Notes |
 |---|---|---|
-| Mind | Mind | A product name, like Notion: no translation, no plural, no measure word in labels. "新建 Mind", "Mind（3）", "这个 Mind" in prose. Where the User first meets it (the example's banner, the first empty Mind, New Mind's tooltip) one sentence says what it is: "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。" |
+| Mind | Mind | A product name, like Notion: no translation, no plural, no measure word in labels. "新建 Mind", "Mind（3）", "这个 Mind" in prose. Where the User first meets it (the example's banner, the first empty Mind, New Mind's tooltip) one sentence says what it is: "Mind：在这里写作、向文档提问，每条引文都会核对。" |
 | Assistant | 助手 | The one per window. "显示助手", "收起助手". As Kimi, Doubao and Yuanbao call themselves (智能助手, AI 助手). |
 | Conversation | 对话 | New chat is "新对话", History "历史对话", counted with 个: "3 个对话". As Doubao, Yuanbao, DeepSeek, Qwen, Feishu, Cherry Studio and Open WebUI show it. |
 | Note | 笔记 | |
@@ -47,7 +47,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Question context | 上下文 | |
 | Search scope | 搜索范围 | "仅搜索", "缩小范围". |
 | Document | 文档 | Counted with 个. |
-| Missing Document | (status) 文件缺失 | Long form: "找不到文件：它已从所在文件夹中移除。" |
+| Missing Document | (status) 文件缺失 | Long form: "找不到文件：引用保留原文，搜索不再包含它。" |
 | Unavailable Document | (status) 无法访问 | |
 | Linked folder | 同步文件夹 | "添加同步文件夹…", "移除同步文件夹…". As Tencent Docs does. Say IncarnaMind only reads it wherever a Linked folder is added. |
 | Other Documents | 其他文档 | |
@@ -74,7 +74,10 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Import references | 导入引用信息… | From a CSL JSON, BibTeX or RIS file. Counted with 条: "导入了 3 条". |
 | Reference without a Document | 还没有文档 | Its list: "添加 PDF…" links it. |
 | Citation style | 引用格式 | "引用格式…", "引用格式已改为 APA 第 7 版". A style keeps its own name; its variant goes in full-width brackets, in the standard's words: "GB/T 7714—2015（顺序编码制）", "（著者-出版年制）". |
+| A citation style's form | 作者-年份, 作者, 编号, 代号, 脚注 | What the picker says after each style's name, for author-date, author, numeric, label and note. A label ("[Smi10]") is 代号, never 标签, which is a Tag. |
 | Bibliography | 参考文献 | Its heading in the Mind and in Chinese styles' exports. |
+| Style (a Mind's font and text size) | 样式 | "样式…" in the Mind's menu. Its parts: 字体 (font), 字号 (text size: 小、默认、大) and "设为新建 Mind 的默认样式". The three fonts are 默认, 衬线 and 等宽, as Notion's; a font the computer lacks is "此电脑未安装该字体". |
+| Format (the selection menu's Aa) | 格式 | As Word and WPS name formatting: 字体、字号; alignment 左对齐、居中、右对齐、两端对齐; 行距 with 单倍、1.15、1.5、双倍、自定义…; space around a paragraph 添加/移除段前间距, 添加/移除段后间距, as Google Docs words it; 增加缩进, 减少缩进 and 首行缩进 2 字符; 文字颜色 with 自动; 上标, 下标. A Mind's own line spacing in 样式 is 行距 too, its first choice 默认. |
 | Folder | 文件夹 | |
 | Source location | 文件位置 | The sidebar view of the files as they are on disk. |
 | Tag | 标签 | Tagging is 打标签; automatic tagging is 自动打标签. |
@@ -102,6 +105,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Claim | 说法 | What a check looks at, in an Answer, a Mind or a document someone else wrote. Counted with 条: "核对 24 条说法". Not 论断, an argued conclusion, or 主张, a party's claim in law: neither fits a sentence in a contract or a site report. |
 | Shorten (an AI edit) | 精简 | "精简", "正在精简…". Not 缩写, which means abbreviate. The others: 润色, 翻译, 解释. |
 | Find support | 查找出处 | Finds a Passage to cite and offers Add as Citation. 出处 is the word for a source a writer cites (注明出处); not 依据, which reads as a check. |
+| Check record | 核对记录 | "将核对记录导出为 PDF". The PDF or CSV of what a Mind's checks left. |
 | Check against Documents | 对照文档核对 | Gives a verdict: 有依据, 无依据 or 与文档矛盾. |
 | Verify (a document) | 核对文档 | The verb is 核对, as for a Citation. |
 | Need a look | 需要留意 | The claims that are unsupported or contradicted: "3 条需要留意". |
@@ -118,6 +122,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Meeting | 会议 | |
 | Transcript | 转写稿 | |
 | Speaker | 发言人 | |
+| Me, Them, Speaker ? (a live line before speakers are told apart) | 我, 对方, 发言人 ? | "Me" is the microphone, "Them" the computer's sound, "Speaker ?" a meeting in a room, with no computer sound. |
 | Granted folder | 授权文件夹 | |
 | Output location | 保存位置 | |
 | Usage data | 使用数据 | |
@@ -136,7 +141,8 @@ A figure in an Answer is written as reports write it, with no space between the 
 | Input (of a calculation) | 所用数据 | "所用数据均已找到". |
 | Calculation check | 核对计算 | The verb is 核对, as for a Citation: "正在核对数字…". |
 | Unchecked figure | 未核对的数字 | |
-| Analysis | 数据分析 | |
+| Analysis | 数据分析 | Can't run: "这台电脑上无法运行数据分析：…". |
+| Sandbox (where Skill scripts and Analyses run) | 沙盒 | Never 沙箱. |
 | Recalculate | 重新计算 | |
 | Run again | 重新运行 | |
 | percentage points | 个百分点 | A difference of two percents: "2.3个百分点", never "2.3%". |
@@ -178,7 +184,7 @@ The year is left out when it is this year, except in a Date, and a time today is
 |---|---|---|
 | Recently deleted | 回收站 | As Feishu, Yuque, Tencent Docs, WPS, DingTalk, Obsidian and Zotero. Restore: 恢复. Delete permanently: 彻底删除. |
 | Revoke (an allowed service) | 停止允许 | Not 撤销, which is Undo. For a service the User allowed to receive data (Privacy); approvals have their own words. |
-| Local mode | 所有内容都留在这台电脑上 | The one name, quoted: “所有内容都留在这台电脑上”; its button is 允许使用云端模型. Never 本地模式. |
+| Local mode | 所有内容都留在这台电脑上 | The one name, quoted: “所有内容都留在这台电脑上”; its button is 允许使用云端模型. Never 本地模式. A line that names it says what stopped, then the name: “未发送：已开启“所有内容都留在这台电脑上”。” |
 | Chat model | AI 模型 | In sentences and on Settings' labels. |
 | Embedding model | 搜索模型 · 按含义搜索 | "正在为搜索读取文档". Not 嵌入. |
 | Reranking | 把最相关的排在前面 | "最相关的排在前面" on Settings; never 重排序. |

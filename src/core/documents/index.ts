@@ -25,7 +25,8 @@ import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { LiveDocument } from "../../shared/citations";
-import { quoteInUnits } from "../../shared/locations";
+import { joinUnits, quoteInUnits } from "../../shared/locations";
+import { readableQuote } from "../../shared/readableQuote";
 import {
   type Anchor,
   anchorsOf,
@@ -156,6 +157,7 @@ interface DocumentRow {
   tagging_status: string;
   tagging_error_kind: string | null;
   tagging_error_message: string | null;
+  tagging_error_resets_at: string | null;
   embedding_model: string | null;
   path: string;
   linked_folder_id: string | null;
@@ -200,7 +202,7 @@ const toUnitText = (row: UnitRow): PageText => ({
 
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
-  tagging_error_message, embedding_model, path, linked_folder_id, file_status,
+  tagging_error_message, tagging_error_resets_at, embedding_model, path, linked_folder_id, file_status,
   creation_date, title, own_file, counted_as_evidence, not_cited, processing_version, file_mtime_ms,
   created_at, updated_at`;
 
@@ -359,6 +361,17 @@ export interface CitationSource {
   notCited: boolean;
 }
 
+/**
+ * A Document's date as Answers see it beside its Passages, and where it comes from:
+ * the Document ("document"), or its file's information ("file-created", "file-modified"),
+ * which says when the file was made or changed, never what the Document is dated (#1173).
+ */
+export interface DocumentDate {
+  /** ISO 8601 at the precision known: "2025-05-14", "2024-03" or "2019". */
+  date: string;
+  of: "document" | "file-created" | "file-modified";
+}
+
 /** A live Document's file, opened for reading. */
 export interface DocumentFile {
   document: Document;
@@ -442,6 +455,15 @@ export interface DocumentFilter {
   /** Leave out missing Documents: new searches don't look at them. */
   searchable?: boolean;
 }
+
+// A file named "2306.10683v1" says nothing of what is in it: the model gets its title too. A
+// title taken from a first line that is a sentence, as a text file's is, says no more than a search.
+const withTitle = (name: string, title: string | null) => {
+  const shown = title?.replace(/\s+/g, " ").trim() ?? "";
+  const same = (a: string) => a.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const heading = shown.length <= 160 && !/[.!?。！？]$/.test(shown);
+  return heading && shown && !same(name).includes(same(shown)) ? `${name} (“${shown}”)` : name;
+};
 
 export function createDocuments(options: DocumentsOptions) {
   const { db, dataDir, now, model, emitStatus } = options;
@@ -532,12 +554,15 @@ export function createDocuments(options: DocumentsOptions) {
       folderId: row.folder_id,
       tags: tagsOfDocument(db, row.id),
       tagging,
-      // Why it failed, or why it waits when that is worth saying (the ChatGPT plan's limit).
+      // Why it failed, or why it waits when that is worth saying (a plan's or a rate limit).
       taggingError:
         tagging === "failed" || (tagging === "waiting-for-provider" && row.tagging_error_kind)
           ? {
               kind: (row.tagging_error_kind ?? "unknown") as ProviderErrorKind,
               message: row.tagging_error_message ?? "",
+              ...(row.tagging_error_resets_at !== null && {
+                resetsAt: row.tagging_error_resets_at,
+              }),
             }
           : null,
       creationDate:
@@ -1834,22 +1859,68 @@ export function createDocuments(options: DocumentsOptions) {
     searchableCount,
 
     /**
+     * The live Documents with Passages to search (of all of them, or only of these) that
+     * joined after `since` (ISO 8601, UTC): added then, or, with `folderId`, filed into that
+     * Folder then. `joinedAt` says when.
+     */
+    searchableJoinedAfter(
+      documentIds: readonly string[] | undefined,
+      since: string,
+      folderId: string | null,
+    ): { id: string; joinedAt: string }[] {
+      const { where, params } = searchable(documentIds);
+      return db
+        .all<{ id: string; joined_at: string }>(
+          `SELECT id, joined_at FROM (
+             SELECT d.id, MAX(d.created_at, COALESCE((
+               SELECT COALESCE(a.filed_at, a.created_at) FROM document_groups a
+               WHERE a.document_id = d.id AND a.group_id = ? AND a.deleted_at IS NULL
+             ), d.created_at)) AS joined_at
+             FROM documents d WHERE ${where}
+           ) WHERE joined_at > ?`,
+          [folderId, ...params, since],
+        )
+        .map((row) => ({ id: row.id, joinedAt: row.joined_at }));
+    },
+
+    /**
      * How many live Documents have Passages to search (of all of them, or only
-     * of these), and the names of the `limit` most recently added, newest first.
+     * of these), and the names of the `limit` most recently added, newest
+     * first, each with its title when its name doesn't hold it; `webPage`: one
+     * of them is a saved web page, named by its own title.
      */
     searchableNames(
       documentIds: readonly string[] | undefined,
       limit: number,
-    ): { total: number; names: string[] } {
+    ): { total: number; names: string[]; webPage: boolean } {
       const { where, params } = searchable(documentIds);
-      const names = db
-        .all<{ name: string }>(
-          `SELECT d.name FROM documents d WHERE ${where}
-           ORDER BY d.created_at DESC, d.rowid DESC LIMIT ?`,
-          [...params, BigInt(limit)],
+      const rows = db.all<{ name: string; title: string | null; kind: string }>(
+        `SELECT d.name, d.title, d.kind FROM documents d WHERE ${where}
+         ORDER BY d.created_at DESC, d.rowid DESC LIMIT ?`,
+        [...params, BigInt(limit)],
+      );
+      return {
+        total: searchableCount(documentIds),
+        names: rows.map((row) => withTitle(row.name, row.title)),
+        webPage: rows.some((row) => row.kind === "web"),
+      };
+    },
+
+    /** The live Documents with Passages to search (of all of them, or only of these), the most text first: `size` characters. */
+    searchableBySize(
+      documentIds: readonly string[] | undefined,
+    ): { id: string; name: string; size: number }[] {
+      const { where, params } = searchable(documentIds);
+      return db
+        .all<{ id: string; name: string; size: bigint | number }>(
+          `SELECT d.id, d.name,
+             (SELECT coalesce(sum(length(p.text)), 0) FROM passages p
+               WHERE p.document_id = d.id AND p.deleted_at IS NULL) AS size
+           FROM documents d WHERE ${where}
+           ORDER BY size DESC, d.created_at DESC, d.rowid DESC`,
+          params,
         )
-        .map((row) => row.name);
-      return { total: searchableCount(documentIds), names };
+        .map((row) => ({ id: row.id, name: row.name, size: Number(row.size) }));
     },
 
     /**
@@ -1925,22 +1996,27 @@ export function createDocuments(options: DocumentsOptions) {
     /**
      * A live Document's date, as Answers see it beside its Passages (#548):
      * the date it states (its reference record's, else its creation date),
-     * else the day its file was last modified, in UTC. ISO 8601 at the
-     * precision known: "2025-05-14", "2024-03" or "2019". Null when nothing
+     * else the day its file was last modified, in UTC. Null when nothing
      * gives one, or the Document was deleted.
      */
-    documentDate(documentId: string): string | null {
+    documentDate(documentId: string): DocumentDate | null {
       const row = find(documentId);
       if (!row) return null;
       const issued = referenceOf(db, documentId)?.fields.issued;
-      if (issued) return issued;
+      if (issued) return { date: issued, of: "document" };
       // A date stored before it was known to be a placeholder (2000-01-01) isn't shown either.
       if (row.creation_date && !isPlaceholderDate(row.creation_date)) {
-        return row.creation_date.slice(0, 10);
+        // A year alone is the one written in the first Unit (see ./creationDate): file metadata
+        // gives a day. A web page's date is the one it says it was published on.
+        const stated = row.creation_date.length === 4 || row.kind === "web";
+        return {
+          date: row.creation_date.slice(0, 10),
+          of: stated ? "document" : "file-created",
+        };
       }
       if (row.file_mtime_ms === null) return null;
       const modified = new Date(row.file_mtime_ms).toISOString().slice(0, 10);
-      return isPlaceholderDate(modified) ? null : modified;
+      return isPlaceholderDate(modified) ? null : { date: modified, of: "file-modified" };
     },
 
     /**
@@ -2032,6 +2108,20 @@ export function createDocuments(options: DocumentsOptions) {
           anchors: unit.anchors ?? [],
         })),
       };
+    },
+
+    /** A Citation's quote as the Document's text reads it (see `CoreApi.readableQuote`). */
+    readableQuote(input: ScannedQuoteInput): string | null {
+      const row = find(parseId(input.documentId));
+      if (!row) return null;
+      const units = pageTexts(
+        row.id,
+        input.contentHash ?? row.content_hash,
+        input.pageFrom,
+        input.pageTo ?? input.pageFrom,
+      );
+      const ranges = quoteInUnits(units, cleanQuote(input.quote));
+      return ranges && ranges.length > 0 ? readableQuote(joinUnits(units).text, ranges) : null;
     },
 
     /** A Citation's quote read from a scan (see `CoreApi.readScannedQuote`). */
@@ -2275,18 +2365,28 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
-     * Removes a Document from the index. The User's file isn't touched; only a
-     * copy the old layout made in the data folder is removed with it.
+     * Removes Documents from the index, all in one step, or none when one isn't found. The
+     * User's files aren't touched; only copies the old layout made in the data folder go with
+     * them.
      */
-    async delete(idInput: unknown): Promise<void> {
-      const id = parseId(idInput);
-      const row = find(id);
-      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
-      removeFromIndex([id], now());
-      if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
-        await rm(row.path, { force: true }).catch(reportError);
+    async delete(idsInput: unknown): Promise<string[]> {
+      const ids = [...new Set((Array.isArray(idsInput) ? idsInput : [idsInput]).map(parseId))];
+      const rows = ids.map((id) => {
+        const row = find(id);
+        if (!row) throw new NotFoundError({ key: "error.document.notFound" });
+        return row;
+      });
+      removeFromIndex(ids, now());
+      for (const row of rows) {
+        if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
+          await rm(row.path, { force: true }).catch(reportError);
+        }
       }
-      library.documentsChanged(row.linked_folder_id);
+      // Once a Linked folder, not once a Document: 1,700 Documents took 90 s one by one (#1349).
+      for (const linkedFolderId of new Set(rows.map((row) => row.linked_folder_id))) {
+        library.documentsChanged(linkedFolderId);
+      }
+      return ids;
     },
 
     /**
@@ -2296,44 +2396,51 @@ export function createDocuments(options: DocumentsOptions) {
      */
     restore(ids: readonly string[]): void {
       const at = now();
-      for (const id of ids) {
-        const row = db.get<DocumentRow & { deleted_at: string }>(
-          `SELECT ${COLUMNS}, deleted_at FROM documents WHERE id = ? AND deleted_at IS NOT NULL`,
-          [id],
-        );
-        if (!row) continue;
-        const deleted = [at, id, row.deleted_at] as const;
-        db.run("UPDATE documents SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, id]);
+      const rows = db.all<DocumentRow & { deleted_at: string }>(
+        `SELECT ${COLUMNS}, deleted_at FROM documents
+         WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NOT NULL`,
+        [JSON.stringify(ids)],
+      );
+      if (rows.length === 0) return;
+      const list = JSON.stringify(rows.map((row) => row.id));
+      // What went with each Document, by its own delete time: read from its row, so its parts go
+      // back before it does. One statement a table, however many there are (#1349).
+      const deletedWith = (table: string) =>
+        `(SELECT d.deleted_at FROM documents d WHERE d.id = ${table}.document_id)`;
+      db.run(
+        `UPDATE passages SET deleted_at = NULL, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?))
+           AND deleted_at = ${deletedWith("passages")}
+           AND content_hash IS (SELECT d.content_hash FROM documents d WHERE d.id = passages.document_id)`,
+        [at, list],
+      );
+      for (const table of ["document_pages", "web_pages", "web_page_pictures"]) {
         db.run(
-          `UPDATE passages SET deleted_at = NULL, updated_at = ?
-           WHERE document_id = ? AND deleted_at = ? AND content_hash IS ?`,
-          [...deleted, row.content_hash],
+          `UPDATE ${table} SET deleted_at = NULL, updated_at = ?
+           WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at = ${deletedWith(table)}`,
+          [at, list],
         );
-        db.run(
-          "UPDATE document_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          "UPDATE web_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          "UPDATE web_page_pictures SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
-           WHERE document_id = ? AND deleted_at = ?
-             AND NOT EXISTS (SELECT 1 FROM document_tags live
-                             WHERE live.document_id = document_tags.document_id
-                               AND live.tag_id = document_tags.tag_id AND live.deleted_at IS NULL)`,
-          deleted,
-        );
-        reindexName(id, row.name);
-        if (row.status === "extracting") setStatus(id, "queued");
+      }
+      db.run(
+        `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?))
+           AND deleted_at = ${deletedWith("document_tags")}
+           AND NOT EXISTS (SELECT 1 FROM document_tags live
+                           WHERE live.document_id = document_tags.document_id
+                             AND live.tag_id = document_tags.tag_id AND live.deleted_at IS NULL)`,
+        [at, list],
+      );
+      db.run(
+        `UPDATE documents SET deleted_at = NULL, updated_at = ?
+         WHERE id IN (SELECT value FROM json_each(?))`,
+        [at, list],
+      );
+      for (const row of rows) {
+        reindexName(row.id, row.name);
+        if (row.status === "extracting") setStatus(row.id, "queued");
         else if (["ready", "embedding", "waiting-for-model"].includes(row.status)) {
           const status = indexedStatus(row);
-          if (status !== null && status !== row.status) setStatus(id, status);
+          if (status !== null && status !== row.status) setStatus(row.id, status);
         }
       }
     },

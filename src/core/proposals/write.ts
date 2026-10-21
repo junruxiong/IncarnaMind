@@ -11,6 +11,9 @@
  *   own: the words it removes stay, under `proposalDelete`, and the words it
  *   adds go after them, under `proposalInsert`. Paragraphs the new text adds
  *   or drops are Proposals on whole Blocks.
+ *   A Markdown table in the new text is a new table Block (#961), its cells'
+ *   markers the stretch's Citations; pipe lines that make no table are
+ *   written nowhere (`Written.unmadeTable`).
  * - `proposeAfter` adds new paragraphs under the stretch, each a Proposal.
  * - `proposeBlocks` writes new content for a whole element (an Answer
  *   written again) over what it holds: Blocks kept as they are, paragraphs
@@ -26,6 +29,8 @@
  */
 import * as Y from "yjs";
 import { INLINE_CODE_MARK } from "../../shared/aiText";
+import { looksLikeTable, rowCells, type TableAlign, tableStart } from "../../shared/markdownTables";
+import { citesSource, linkSources, type NamedSource } from "../../shared/namedSources";
 import {
   INLINE_NODES,
   NODE_CHARACTER,
@@ -64,6 +69,9 @@ const WRAPPERS: ReadonlySet<string> = new Set([
   "orderedList",
   "blockquote",
 ]);
+
+/** What a table holds, which a new table climbs out of to go beside: tables don't go in tables. */
+const TABLE_PARTS: ReadonlySet<string> = new Set(["table", "tableRow", "tableCell", "tableHeader"]);
 
 const MATH = "inlineMath";
 const BREAK = "hardBreak";
@@ -515,10 +523,99 @@ const MARKER = /\[\^(\d+)\]|\[(\d+)\]|\$([^$\n]+)\$|\n/g;
  * One of the new text's paragraphs: its tokens, and the kind of Block it is
  * by its marker. Null kind: the model wrote no markers at all, though it was
  * shown some, so the paragraph's kind is unknown and it may take any Block's.
+ * Only the new text has tables (`NewTable`).
  */
-interface NewParagraph {
+type NewParagraph = NewText | NewTable;
+
+interface NewText {
   kind: BlockKind | null;
   tokens: NewToken[];
+  table?: undefined;
+  open?: undefined;
+  /** It holds lines that read as a table's rows but make no table. */
+  unmade?: true;
+  notes: Notes;
+}
+
+interface NewTable {
+  kind: "table";
+  /** All its cells' words and inline nodes. */
+  tokens: NewToken[];
+  /** Each row's cells' tokens, the heading row first, and its columns' alignment. */
+  table: { align: TableAlign[]; rows: NewToken[][][] };
+  /** Its next row may still be coming: the line after it is the last, and has no "|" yet. */
+  open?: true;
+  unmade?: undefined;
+  notes: Notes;
+}
+
+/** What the new text had that the Mind doesn't get as it was written, for the model and the card. */
+export interface Notes {
+  /** Markers for none of the passage's Citations or footnotes: left out. */
+  unmatchedMarkers: number;
+  /** Sources in a table's cells written as a name in brackets that matched none of its Citations: kept as text. */
+  unlinkedSources: number;
+  /** Cells beyond a table's columns: their text kept in their row's last cell. */
+  extraCells: number;
+}
+
+const noNotes = (): Notes => ({ unmatchedMarkers: 0, unlinkedSources: 0, extraCells: 0 });
+
+export const someNotes = ({ unmatchedMarkers, unlinkedSources, extraCells }: Notes) => ({
+  ...(unmatchedMarkers > 0 && { unmatchedMarkers }),
+  ...(unlinkedSources > 0 && { unlinkedSources }),
+  ...(extraCells > 0 && { extraCells }),
+});
+
+const addNotes = (to: Notes, from: Notes): void => {
+  to.unmatchedMarkers += from.unmatchedMarkers;
+  to.unlinkedSources += from.unlinkedSources;
+  to.extraCells += from.extraCells;
+};
+
+const BREAK_TAG = /<br[ \t]*\/?>/gi;
+
+interface TableText {
+  align: TableAlign[];
+  rows: string[][];
+  extraCells: number;
+  open: boolean;
+}
+
+function tablesApart(text: string): (string | TableText)[] {
+  const lines = text.split("\n");
+  const parts: (string | TableText)[] = [];
+  let from = 0;
+  let at = 0;
+  while (at < lines.length) {
+    const align = tableStart(lines, at);
+    if (!align) {
+      at++;
+      continue;
+    }
+    parts.push(lines.slice(from, at).join("\n"));
+    const table: TableText = { align, rows: [], extraCells: 0, open: false };
+    const add = (line: string) => {
+      const { cells, extra } = rowCells(line, align.length);
+      table.rows.push(cells.map((cell) => cell.replace(/\\\|/g, "|").replace(BREAK_TAG, "\n")));
+      table.extraCells += extra;
+    };
+    add(lines[at] ?? "");
+    at += 2;
+    for (; at < lines.length; at++) {
+      const line = lines[at] ?? "";
+      if (line.trim() === "" || !line.includes("|")) {
+        // A row written without a leading "|" has none until its first cell is.
+        table.open = line.trim() !== "" && at === lines.length - 1;
+        break;
+      }
+      add(line);
+    }
+    parts.push(table);
+    from = at;
+  }
+  parts.push(lines.slice(from).join("\n"));
+  return parts;
 }
 
 /**
@@ -528,7 +625,7 @@ interface NewParagraph {
  * A formula the selection had is kept; another stays text. When the
  * selection was shown with its Blocks' markers, each paragraph's marker is
  * read off as its kind, and the escapes of text that looks like one are
- * taken off.
+ * taken off. A table is one paragraph of kind "table".
  */
 function newParagraphs(
   text: string,
@@ -558,7 +655,7 @@ function newParagraphs(
       node: { name: FOOTNOTE_NODE, attributes: source.getAttributes() as Attributes, source },
     };
   };
-  const tokensOf = (paragraph: string): NewToken[] => {
+  const tokensOf = (paragraph: string, notes: Notes): NewToken[] => {
     const tokens: NewToken[] = [];
     const words = (part: string) => {
       for (const word of splitWords(part)) tokens.push({ key: keyOf.text(word), text: word });
@@ -574,9 +671,11 @@ function newParagraphs(
         const n = Number(footnote ?? citation);
         const node = footnote !== undefined ? footnoteNode(n) : citationNode(n);
         if (node) tokens.push(node);
-        // Spaces left where an unknown marker was are one.
-        else if (/\s$/.test(paragraph.slice(0, match.index)) && /^\s/.test(paragraph.slice(at)))
-          at++;
+        else {
+          notes.unmatchedMarkers++;
+          // Spaces left where an unknown marker was are one.
+          if (/\s$/.test(paragraph.slice(0, match.index)) && /^\s/.test(paragraph.slice(at))) at++;
+        }
       } else if (formula !== undefined && formulas.has(formula)) {
         tokens.push({
           key: keyOf.math(formula),
@@ -593,26 +692,62 @@ function newParagraphs(
   const apart = selection.marked
     ? new RegExp(String.raw`\n[ \t]*\n+|\n(?=${BLOCK_MARKER})`)
     : /\n[ \t]*\n+/;
-  const paragraphs = text
-    .split(apart)
-    .map((paragraph) => paragraph.trim())
-    .filter((paragraph) => paragraph !== "")
-    .map((written) => {
-      if (!selection.marked) return { marker: null, paragraph: written };
-      const marker = readBlockMarker(written);
+  // Pipe lines the passage already had are the User's text, not a table that failed.
+  const had = new Set(selection.text.split("\n").map((line) => line.trim()));
+  const unmade = (paragraph: string) =>
+    paragraph.split("\n").some((line) => looksLikeTable(line) && !had.has(line.trim()));
+  const link = (source: NamedSource) => {
+    const index = selection.citations.findIndex((citation) => citesSource(citation, source));
+    return index < 0 ? null : `[${index + 1}]`;
+  };
+  type Part = TableText | { marker: ReturnType<typeof readBlockMarker>; paragraph: string };
+  const parts = tablesApart(text).flatMap((part): Part[] =>
+    typeof part !== "string"
+      ? [part]
+      : part
+          .split(apart)
+          .map((paragraph) => paragraph.trim())
+          .filter((paragraph) => paragraph !== "")
+          .map((written) => {
+            if (!selection.marked) return { marker: null, paragraph: written };
+            const marker = readBlockMarker(written);
+            return {
+              marker,
+              paragraph: unescapeMarkers(
+                marker ? written.slice(marker.length) : written,
+                marker !== null,
+              ),
+            };
+          }),
+  );
+  const anyMarker = parts.some((part) => "marker" in part && part.marker !== null);
+  return parts.map((part): NewParagraph => {
+    const notes = noNotes();
+    if ("rows" in part) {
+      notes.extraCells = part.extraCells;
+      const rows = part.rows.map((row) =>
+        row.map((cell) => {
+          const linked = linkSources(cell, link);
+          notes.unlinkedSources += linked.unlinked;
+          return tokensOf(linked.text, notes);
+        }),
+      );
       return {
-        marker,
-        paragraph: unescapeMarkers(
-          marker ? written.slice(marker.length) : written,
-          marker !== null,
-        ),
+        kind: "table",
+        tokens: rows.flat(2),
+        table: { align: part.align, rows },
+        ...(part.open && { open: true }),
+        notes,
       };
-    });
-  const anyMarker = paragraphs.some(({ marker }) => marker !== null);
-  return paragraphs.map(({ marker, paragraph }) => ({
-    kind: marker?.kind ?? (selection.marked && !anyMarker ? null : "paragraph"),
-    tokens: tokensOf(paragraph),
-  }));
+    }
+    const { marker, paragraph } = part;
+    return {
+      kind: marker?.kind ?? (selection.marked && !anyMarker ? null : "paragraph"),
+      tokens: tokensOf(paragraph, notes),
+      ...(unmade(paragraph) && { unmade: true }),
+      notes,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -623,6 +758,10 @@ export interface Written {
   proposals: ProposalRef[];
   /** Citations the Proposals would remove and add back nowhere. */
   droppedCitations: number;
+  /** The text holds lines that read as a table's rows but make no table: nothing from them on was written. */
+  unmadeTable?: true;
+  /** What the paragraphs written had that they don't hold as it was written. */
+  notes: Notes;
 }
 
 /** What a Proposal's marks and attributes hold: which it is, and the text it changes. */
@@ -889,19 +1028,53 @@ function addBeside(anchor: Y.XmlElement, elements: Y.XmlElement[], side: "after"
   parent.insert(side === "after" ? index + 1 : index, elements);
 }
 
-/** The list item, list or quote a Block sits in, as far out as they go. */
-function outermost(element: Y.XmlElement): Y.XmlElement {
+/** The list item, list or quote a Block sits in, as far out as they go; with `tables`, a table too. */
+function outermost(element: Y.XmlElement, tables = false): Y.XmlElement {
   let current = element;
-  while (current.parent instanceof Y.XmlElement && WRAPPERS.has(current.parent.nodeName)) {
+  while (
+    current.parent instanceof Y.XmlElement &&
+    (WRAPPERS.has(current.parent.nodeName) || (tables && TABLE_PARTS.has(current.parent.nodeName)))
+  ) {
     current = current.parent;
   }
   return current;
 }
 
-/** Where a new Block goes: next to a paragraph or heading, which is of this kind. */
+function addTable(
+  place: Place,
+  table: NonNullable<NewParagraph["table"]>,
+  ref: ProposalRef,
+  newId: () => string,
+): Y.XmlElement {
+  const element = createElement({ type: "table" });
+  element.insert(
+    0,
+    table.rows.map((cells, index) => {
+      const row = createElement({ type: "tableRow" });
+      row.insert(
+        0,
+        cells.map((tokens, column) => {
+          const align = table.align[column];
+          const cell = createElement({
+            type: index === 0 ? "tableHeader" : "tableCell",
+            attrs: { colspan: 1, rowspan: 1, ...(align && { align }) },
+          });
+          cell.insert(0, [textBlockOf(tokens, newId)]);
+          return cell;
+        }),
+      );
+      return row;
+    }),
+  );
+  setProposal(element, { ...refOf(ref), kind: "insert" });
+  addBeside(outermost(place.element, true), [element], place.side);
+  return element;
+}
+
+/** Where a new Block goes: next to a paragraph, heading or table, which is of this kind. */
 interface Place {
   element: Y.XmlElement;
-  kind: BlockKind;
+  kind: BlockKind | "table";
   side: "after" | "before";
 }
 
@@ -1011,11 +1184,15 @@ const noteCitation = (into: Set<string>, token: { key: string }) => {
 const droppedOf = (notes: CitationNotes) =>
   [...notes.removed].filter((marker) => !notes.added.has(marker)).length;
 
+// DESIGN.md › AI edits: "about 40% or more of a paragraph's words".
+const REWRITTEN_SHARE = 0.4;
+
 /**
- * Less than half the words kept: a paragraph written anew, better read as one
- * change than as a change at every other word.
+ * About 40% or more of the paragraph's words changed: written anew, read as
+ * one change, before and after whole, never old and new words interleaved.
+ * Words only added keep the rest as it was, read word by word.
  */
-function mostlyNew(steps: readonly Step[], old: readonly OldToken[], next: readonly NewToken[]) {
+function rewritten(steps: readonly Step[], old: readonly OldToken[]) {
   const isWord = (text: string | undefined) => text === undefined || !/^\s+$/.test(text);
   let kept = 0;
   let at = 0;
@@ -1024,18 +1201,15 @@ function mostlyNew(steps: readonly Step[], old: readonly OldToken[], next: reado
     if (step === "equal" && isWord(old[at]?.text)) kept++;
     at++;
   }
-  const words = Math.max(
-    old.filter((token) => isWord(token.text)).length,
-    next.filter((token) => isWord(token.text)).length,
-  );
-  return kept * 2 < words;
+  const words = old.filter((token) => isWord(token.text)).length;
+  return words > 0 && words - kept >= words * REWRITTEN_SHARE;
 }
 
 /**
  * Writes the changes from a segment's tokens to `tokens`, each place that
  * changed a Proposal of its own (`next`, given the text it changes), from the
- * end, so the places read before each are still right. With `whole`, a
- * paragraph mostly written anew is one change.
+ * end, so the places read before each are still right. A whole heading that
+ * changed at all, or a whole paragraph written anew, is one change.
  */
 function writeHunks(
   segment: Segment,
@@ -1043,14 +1217,17 @@ function writeHunks(
   next: (target: string) => ProposalRef,
   newId: () => string,
   notes: CitationNotes,
-  whole = false,
 ): void {
   const steps = diffSteps(
     segment.tokens.map((token) => token.key),
     tokens.map((token) => token.key),
   );
   let hunks = hunksOf(steps, joinsAcross(segment.tokens));
-  if (whole && hunks.length > 1 && mostlyNew(steps, segment.tokens, tokens)) {
+  if (
+    segment.whole &&
+    hunks.length > 0 &&
+    (segment.kind.startsWith("heading:") || rewritten(steps, segment.tokens))
+  ) {
     hunks = [{ oldFrom: 0, oldTo: segment.tokens.length, newFrom: 0, newTo: tokens.length }];
   }
   const refs = hunks.map((hunk) => next(targetOf(segment.tokens.slice(hunk.oldFrom, hunk.oldTo))));
@@ -1082,7 +1259,7 @@ function proposalsOf(request: string, newId: () => string) {
   return { proposals, next };
 }
 
-const HAN = /^\p{Script=Han}$/u;
+const HAN = /^\p{Script=Han}+$/u;
 
 /**
  * The words of a run, for telling how alike two runs are: no spaces or
@@ -1099,7 +1276,7 @@ function wordsOf(tokens: readonly { key: string; text?: string }[]): string[] {
   };
   for (const token of tokens) {
     if (token.text !== undefined && HAN.test(token.text)) {
-      run.push(token.text);
+      run.push(...token.text);
       continue;
     }
     endRun();
@@ -1129,6 +1306,95 @@ function likeness(old: readonly OldToken[], next: readonly NewToken[]): number {
 
 /** How alike a paragraph of unknown kind must be to one of the selection's to pair with it. */
 const UNKNOWN_KIND_LIKENESS = 0.3;
+/**
+ * How alike a new list item must be to one of the selection's to be its new
+ * version: less, and the old one is removed and the new one added (DESIGN.md,
+ * AI edits), so a bullet on a degree never reads as turning into one on a job.
+ */
+const COUNTERPART_LIKENESS = 0.25;
+const LIST_ITEMS: ReadonlySet<BlockKind> = new Set(["bullet", "numbered"]);
+
+const SCRIPTS: readonly [string, RegExp][] = [
+  ["cjk", /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u],
+  ["hangul", /\p{Script=Hangul}/u],
+  ["latin", /\p{Script=Latin}/u],
+  ["cyrillic", /\p{Script=Cyrillic}/u],
+  ["greek", /\p{Script=Greek}/u],
+  ["arabic", /\p{Script=Arabic}/u],
+  ["hebrew", /\p{Script=Hebrew}/u],
+];
+
+function scriptOf(tokens: readonly { text?: string }[]): string | null {
+  const counts = new Map<string, number>();
+  for (const token of tokens) {
+    for (const letter of token.text?.match(/\p{L}/gu) ?? []) {
+      const script = SCRIPTS.find(([, pattern]) => pattern.test(letter))?.[0] ?? "other";
+      counts.set(script, (counts.get(script) ?? 0) + 1);
+    }
+  }
+  let most: string | null = null;
+  for (const [script, count] of counts)
+    if (most === null || count > (counts.get(most) ?? 0)) most = script;
+  return most;
+}
+
+/**
+ * Whether a new paragraph can be the selection's paragraph written again. A
+ * paragraph or heading in its place can, however reworded; a list item, one
+ * of a list of separate things, only when close to it, or when the whole text
+ * is being translated, since a translation shares no words with it.
+ */
+function counterpart(segment: Segment, alike: number, translating: boolean): boolean {
+  return !LIST_ITEMS.has(segment.kind) || alike >= COUNTERPART_LIKENESS || translating;
+}
+
+/**
+ * The selection's paragraphs left unpaired that new paragraphs in the same
+ * place stand in for, between the same two pairs: one for one when there are
+ * as many of each, else those the new ones share any words with, most alike
+ * first. An edit that keeps what it left out still takes these out, so an
+ * item reworded or replaced is never there twice.
+ */
+function replacedIn(
+  between: readonly Segment[],
+  held: readonly NewParagraph[],
+  paired: readonly (number | null)[],
+): Segment[] {
+  const replaced: Segment[] = [];
+  let oldFrom = 0;
+  let newFrom = 0;
+  const gap = (oldTo: number, newTo: number) => {
+    const olds = between.slice(oldFrom, oldTo);
+    const news = held.slice(newFrom, newTo);
+    if (olds.length === news.length) {
+      replaced.push(...olds);
+      return;
+    }
+    const alike = olds
+      .flatMap((segment, i) =>
+        news.map((paragraph, j) => ({ i, j, alike: likeness(segment.tokens, paragraph.tokens) })),
+      )
+      .filter((each) => each.alike > 0)
+      .sort((a, b) => b.alike - a.alike);
+    const usedOld = new Set<number>();
+    const usedNew = new Set<number>();
+    for (const { i, j } of alike) {
+      if (usedOld.has(i) || usedNew.has(j)) continue;
+      usedOld.add(i);
+      usedNew.add(j);
+      replaced.push(olds[i] as Segment);
+    }
+  };
+  for (const [j, pair] of paired.entries()) {
+    if (pair === null || pair === undefined) continue;
+    gap(pair, j);
+    oldFrom = pair + 1;
+    newFrom = j + 1;
+  }
+  gap(between.length, held.length);
+  return replaced;
+}
+
 /** How alike a new paragraph of unknown kind must be to one of the selection's to take its kind. */
 const MOVED_LIKENESS = 0.5;
 
@@ -1160,6 +1426,7 @@ function kindByLikeness(segments: readonly Segment[], paragraph: NewParagraph): 
 function pairUp(
   segments: readonly Segment[],
   paragraphs: readonly NewParagraph[],
+  translating: boolean,
 ): (number | null)[] {
   const weight = (i: number, j: number): number | null => {
     const segment = segments[i] as Segment;
@@ -1168,6 +1435,7 @@ function pairUp(
     const alike = likeness(segment.tokens, paragraph.tokens);
     // Of unknown kind, only a paragraph like it can take a Block's place.
     if (paragraph.kind === null && alike < UNKNOWN_KIND_LIKENESS) return null;
+    if (!counterpart(segment, alike, translating)) return null;
     return 1 + 2 * alike;
   };
   const rows = segments.length;
@@ -1274,6 +1542,20 @@ export function createRewriteStream(
   /** Two were like none: the text is written anew, and each pairs in order. */
   let anew = false;
   const kept: Segment[] = [];
+  /** Of the selection's paragraphs, those new ones stand in for: they go, even when left-out ones are kept. */
+  const replaced = new Set<Segment>();
+  /** The new text's finished paragraphs so far. */
+  let seen: readonly NewParagraph[] = [];
+  const selectionScript = scriptOf(segments.flatMap((segment) => segment.tokens));
+  /** Most of the new text's paragraphs are in another script than the selection: a translation. */
+  const translating = () => {
+    const scripts = seen.map((paragraph) => scriptOf(paragraph.tokens)).filter((each) => each);
+    const other = scripts.filter((script) => script !== selectionScript).length;
+    return selectionScript !== null && other * 2 > scripts.length;
+  };
+  /** A finished paragraph reads as a table's rows but makes none: nothing more is written. */
+  let unmade = false;
+  const notesWritten = noNotes();
 
   const remove = (gone: readonly Segment[]) => {
     const blocks: Y.XmlElement[] = [];
@@ -1291,14 +1573,17 @@ export function createRewriteStream(
   /** The selection's paragraphs before `to` not paired go, or are kept. */
   const removeUpTo = (to: number) => {
     const passed = segments.slice(at, to).filter((segment) => segment.tokens.length > 0);
-    if (onLeftOut === "keep") kept.push(...passed);
-    else remove(passed);
+    if (onLeftOut === "keep") {
+      remove(passed.filter((segment) => replaced.has(segment)));
+      kept.push(...passed.filter((segment) => !replaced.has(segment)));
+    } else remove(passed);
     at = Math.max(at, to);
   };
 
   const pairWith = (paragraph: NewParagraph, index: number) => {
     const segment = segments[index];
     if (!segment) return;
+    addNotes(notesWritten, paragraph.notes);
     notes.characters.written += lengthOf(paragraph.tokens);
     removeUpTo(index);
     writeHunks(segment, paragraph.tokens, next, newId, notes);
@@ -1308,10 +1593,19 @@ export function createRewriteStream(
 
   const addNew = (paragraph: NewParagraph) => {
     if (!place) return;
-    const kind = paragraph.kind ?? kindByLikeness(segments, paragraph);
+    addNotes(notesWritten, paragraph.notes);
     for (const token of paragraph.tokens) noteCitation(notes.added, token);
     notes.characters.added += lengthOf(paragraph.tokens);
     notes.characters.written += lengthOf(paragraph.tokens);
+    if (paragraph.table) {
+      place = {
+        element: addTable(place, paragraph.table, next(""), newId),
+        kind: "table",
+        side: "after",
+      };
+      return;
+    }
+    const kind = paragraph.kind ?? kindByLikeness(segments, paragraph);
     const added = addBlock(place, kind, paragraph.tokens, next(""), newId);
     place = { element: added, kind, side: "after" };
   };
@@ -1320,13 +1614,20 @@ export function createRewriteStream(
   const writeHeld = (to: number) => {
     const from = at;
     const between = segments.slice(from, to);
+    const whole = translating();
     // As many new paragraphs as old ones between two that held their place: each rewrites its own.
     const inPlace =
       between.length === held.length &&
-      held.every(
-        (paragraph, index) => paragraph.kind === null || paragraph.kind === between[index]?.kind,
-      );
-    const paired = inPlace ? held.map((_, index) => index) : pairUp(between, held);
+      held.every((paragraph, index) => {
+        const segment = between[index];
+        return (
+          segment !== undefined &&
+          (paragraph.kind === null || paragraph.kind === segment.kind) &&
+          counterpart(segment, likeness(segment.tokens, paragraph.tokens), whole)
+        );
+      });
+    const paired = inPlace ? held.map((_, index) => index) : pairUp(between, held, whole);
+    for (const segment of replacedIn(between, held, paired)) replaced.add(segment);
     for (const [index, paragraph] of held.entries()) {
       const pair = paired[index];
       if (pair === null || pair === undefined) addNew(paragraph);
@@ -1382,12 +1683,21 @@ export function createRewriteStream(
      */
     write: (text: string, done = false): boolean =>
       wrote(() => {
+        if (unmade) return;
         const paragraphs = newParagraphs(text, selection, fresh(text));
+        const open = paragraphs.findIndex((paragraph) => paragraph.open);
+        const finished = done
+          ? paragraphs.length
+          : Math.min(paragraphs.length - 1, open < 0 ? paragraphs.length : open);
+        seen = paragraphs.slice(0, finished);
+        if (paragraphs.slice(taken, finished).some((paragraph) => paragraph.unmade)) {
+          unmade = true;
+          return;
+        }
         if (done && taken === 0) {
           held.push(...paragraphs);
           taken = paragraphs.length;
         }
-        const finished = done ? paragraphs.length : paragraphs.length - 1;
         for (; taken < finished; taken++) {
           const paragraph = paragraphs[taken];
           if (paragraph) take(paragraph);
@@ -1413,6 +1723,7 @@ export function createRewriteStream(
             addNew(paragraph);
             continue;
           }
+          addNotes(notesWritten, paragraph.notes);
           notes.characters.written += lengthOf(paragraph.tokens);
           writeHunks(segment, paragraph.tokens, next, newId, notes);
           place = { element: segment.element, kind: segment.kind, side: "after" };
@@ -1424,12 +1735,18 @@ export function createRewriteStream(
     /** The model is done: the selection's paragraphs it never reached go. */
     finish: (): boolean =>
       wrote(() => {
+        if (unmade) return;
         writeHeld(segments.length);
         removeUpTo(segments.length);
       }),
 
     /** The Proposals written so far. */
-    written: (): Written => ({ proposals: [...proposals], droppedCitations: droppedOf(notes) }),
+    written: (): Written => ({
+      proposals: [...proposals],
+      droppedCitations: droppedOf(notes),
+      ...(unmade && { unmadeTable: true }),
+      notes: { ...notesWritten },
+    }),
 
     /** Characters removed count the paragraphs it left out. */
     extent: () => ({
@@ -1486,7 +1803,8 @@ export function proposeAfter(
   const last = selection.segments.at(-1)?.element;
   let top: Y.XmlElement | null = last ?? null;
   while (top && top.parent instanceof Y.XmlElement) top = top.parent;
-  if (!top || top.parent !== blocks) return { proposals: [], droppedCitations: 0 };
+  if (!top || top.parent !== blocks)
+    return { proposals: [], droppedCitations: 0, notes: noNotes() };
   const { proposals, next } = proposalsOf(request, newId);
   const paragraphs = text
     .replace(/\s*\[\^?\d+\]/g, "")
@@ -1501,7 +1819,7 @@ export function proposeAfter(
     ),
   );
   addAfter(top, added);
-  return { proposals, droppedCitations: 0 };
+  return { proposals, droppedCitations: 0, notes: noNotes() };
 }
 
 // ---------------------------------------------------------------------------
@@ -1582,7 +1900,7 @@ function jsonTokens(content: readonly NodeJSON[]): NewToken[] {
 }
 
 /** Every Citation in an element, or in the new Answer's Block, by what it cites. */
-function citationsIn(node: Y.XmlElement | NodeJSON): string[] {
+export function citationsIn(node: Y.XmlElement | NodeJSON): string[] {
   if (node instanceof Y.XmlElement) {
     if (node.nodeName === CITATION_NODE) return [citedKey(node.getAttributes() as Attributes)];
     return node
@@ -1680,14 +1998,14 @@ export function proposeBlocks(
     for (const { element, ref } of gone) removeBlock(element, ref);
     for (const pair of [...pairs].reverse()) {
       if (pair.kind === "words") {
-        writeHunks(pair.segment, pair.tokens, next, newId, notes, true);
+        writeHunks(pair.segment, pair.tokens, next, newId, notes);
       } else {
         addAfter(pair.element, [addedBlock(pair.node, pair.ref)]);
         removeBlock(pair.element, pair.ref);
       }
     }
   }
-  return { proposals, droppedCitations: droppedOf(notes) };
+  return { proposals, droppedCitations: droppedOf(notes), notes: noNotes() };
 }
 
 // ---------------------------------------------------------------------------

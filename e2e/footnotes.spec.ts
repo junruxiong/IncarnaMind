@@ -22,6 +22,7 @@ import {
   removeDataFolder,
   setMotionSpeed,
   setWindowSize,
+  showCountWhileWriting,
   slideSelect,
   useLocalChatModel,
 } from "./app";
@@ -89,6 +90,7 @@ test("footnotes by keyboard, the / menu, the selection menu and ^[…], edited i
   await setWindowSize(app, window, 1280, 800);
   await dismissChatSetup(window);
   await newMind(window);
+  await showCountWhileWriting(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Neap tides are weaker");
@@ -279,6 +281,7 @@ test("in Chinese: footnotes typed with an input method number together with an A
   await bridge(window).language("zh-CN");
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
+  await showCountWhileWriting(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Spring tides 大潮");
@@ -322,12 +325,10 @@ test("in Chinese: footnotes typed with an input method number together with an A
   await expect(area.getByRole("heading")).toHaveText("脚注");
   await expect(areaTexts(window)).toHaveText(["每月两次。", "小潮在上下弦月"]);
 
-  // An Answer's Citation, added to the note after them, is 3, in the text, the margin and the area.
+  // An Answer's Citation, added to the note after them, is 3, in the text and the area.
   await addToNote(window, await askInAssistant(window, "When do spring tides happen?"));
   const answer = editor.locator(":scope > p").nth(1);
-  const marks = window.locator(".mind-editor-frame").getByTestId("margin-check");
   await expect(answer.getByTestId("citation-chip")).toHaveText("3");
-  await expect(marks).toHaveText(["3"]);
   const citationRow = area.getByTestId("footnote-row-citation");
   await expect(citationRow).toHaveAttribute("data-number", "3");
   await expect(citationRow).toHaveAttribute("data-check", "found");
@@ -368,7 +369,6 @@ test("in Chinese: footnotes typed with an input method number together with an A
   // It is footnote 3 now, before the Answer's Citation, which becomes 4; the one inside has no number.
   await expect(markers).toHaveText(["1", "2", "3"]);
   await expect(answer.getByTestId("citation-chip")).toHaveText("4");
-  await expect(marks).toHaveText(["4"]);
   await expect(areaTexts(window).nth(2)).toContainText("参见");
   await expect(areaTexts(window).nth(2).getByTestId("citation")).toHaveAttribute(
     "data-check",
