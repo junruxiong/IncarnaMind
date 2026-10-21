@@ -157,6 +157,13 @@ describe("⌘K's actions", () => {
     expect(actions("zzqx")).toEqual([]);
   });
 
+  // protects=typing a command's own keyword ("local") puts the command it names first, above one whose name only has a word that starts with it ("Change output location…"); fails_when=the entry whose name has "location" ranks first for "local"; no_claim=other queries.
+  test("a keyword a command names itself by ranks it above a name that only has a word starting with it", () => {
+    expect(actions("local")[0]?.[1][0]).toBe("Keep everything on this computer");
+    expect(actions("local")[0]?.[1]).toContain("Change output location…");
+    expect(actions("本地", "zh-CN")[0]?.[1][0]).toBe("所有内容都留在这台电脑上");
+  });
+
   test("act on the selection, saying how many, or on the one thing in front, naming it", () => {
     const [withTwo] = palette.actionGroup(
       ["new", "folder"],

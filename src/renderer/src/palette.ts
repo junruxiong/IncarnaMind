@@ -178,6 +178,8 @@ export function findings(t: Translate): Findings {
 }
 
 /** How many of each group show; the rest is a word or two more away. */
+/** What a keyword match scores less than the same match in a name (a name's kinds are a thousand apart, `./matcher`). */
+const KEYWORD_PENALTY = 500;
 const SHOWN = { names: 5, actions: 6, recent: 5, words: 5 } as const;
 
 /** What is typed: the words, and whether ">" asks for actions only, as in VS Code. */
@@ -279,16 +281,17 @@ export function actionGroup(
   const items = offered.flatMap((command) => {
     const name = labelOf(command, ctx, t);
     const byName = words.length > 0 ? matchName(words, name) : null;
-    const elsewhere =
+    const byKeyword =
       byName || words.length === 0
         ? null
-        : [
-            labelOf(command, ctx, other),
-            ...(command.keywords ?? []).flatMap((key) => [t(key), other(key)]),
-          ]
+        : (command.keywords ?? []).map((key) => matchName(words, t(key))).find(Boolean);
+    const elsewhere =
+      byName || byKeyword || words.length === 0
+        ? null
+        : [labelOf(command, ctx, other), ...(command.keywords ?? []).map((key) => other(key))]
             .map((each) => matchName(words, each))
             .find((match) => match !== null);
-    if (words.length > 0 && !byName && !elsewhere) return [];
+    if (words.length > 0 && !byName && !byKeyword && !elsewhere) return [];
     const item: PaletteItem = {
       kind: "command",
       key: `command:${command.id}`,
@@ -298,8 +301,12 @@ export function actionGroup(
       meta: command.appliesTo ? targetName : "",
       shortcut: menuKeysLabel(command),
     };
-    // A match by keyword or in the other language ranks below one by its name.
-    const score = byName?.score ?? (elsewhere ? elsewhere.score - 4000 : 0);
+    // A match by a keyword of the command's own, which names what it is for ("local" for Local
+    // mode), ranks below a name that starts with the words but above one that only has them at the
+    // start of a word ("location"); one in the other language ranks below all of those.
+    const score =
+      byName?.score ??
+      (byKeyword ? byKeyword.score - KEYWORD_PENALTY : elsewhere ? elsewhere.score - 4000 : 0);
     return [{ item, score, group: command.group }];
   });
   const topOf = (id: CommandId) => commands.get(id)?.top ?? Number.MAX_SAFE_INTEGER;
