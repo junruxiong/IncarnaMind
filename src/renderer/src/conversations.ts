@@ -290,6 +290,10 @@ const answerOnItsWay = (state: ConversationsState): boolean =>
 /** Whether an Answer is on its way (see `answerOnItsWay`), as it changes. */
 export const useAnswerOnItsWay = (): boolean => useConversations(answerOnItsWay);
 
+/** Whether the open conversation has a Question or an Answer, one still on its way included. */
+export const useHasMessage = (): boolean =>
+  useConversations((state) => state.messages.length > 0 || state.asking !== null);
+
 /**
  * What the composer waits on before it asks again: the open conversation's
  * Answer being written, by id, or "" while a Question is on its way and its
