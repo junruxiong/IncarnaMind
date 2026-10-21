@@ -1642,6 +1642,8 @@ export const zhCN = {
   "status.taggingPaused.full": "ChatGPT 订阅用量已达上限：打标签会等额度恢复后继续。",
   "status.taggingRateLimited": "已达到速率上限 · {time} 继续",
   "status.taggingRateLimited.full": "已达到速率上限：打标签将在 {time} 继续。",
+  "status.taggingKeyRefused": "密钥被拒绝了",
+  "status.taggingKeyRefused.full": "密钥被拒绝了：打标签和整理会等到你保存可用的密钥后继续。",
   "jev.form.sends": "会把文档内容发送给 Jev 用于打标签。",
 
   "settings.title": "设置",
