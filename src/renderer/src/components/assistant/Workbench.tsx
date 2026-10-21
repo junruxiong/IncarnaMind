@@ -17,6 +17,7 @@ import {
   GAP,
   isSide,
   questionHeight,
+  questionMax,
   RAIL,
   type Rect,
   restoredSize,
@@ -92,12 +93,12 @@ export function Workbench({
   const groups = useMemo(() => <TabGroups />, []);
 
   const width = sideWidth(shown.width, room.width);
+  const waits = useQuestionRoom((state) => state.fits !== null) && dock === "bottom" && !folded;
   const fits = useQuestionRoom((state) => (state.resized ? null : state.fits));
-  const ownHeight = bottomHeight(shown.height, room.height);
-  const height =
-    fits !== null && dock === "bottom" && !folded
-      ? questionHeight(ownHeight, fits, room.height)
-      : ownHeight;
+  // One largest height while a question waits, for its growth, the keys and a drag alike.
+  const tallest = waits ? questionMax(room.height) : bottomMax(room.height);
+  const ownHeight = bottomHeight(shown.height, room.height, tallest);
+  const height = waits && fits !== null ? questionHeight(ownHeight, fits, room.height) : ownHeight;
   const float = floatRect(shown.float, folded, viewport);
   const atWindowLeft = dock === "left" && sidebarHidden;
 
@@ -173,7 +174,7 @@ export function Workbench({
           gap
           width={side ? width : height}
           min={side ? SIDE_MIN : BOTTOM_MIN}
-          max={side ? sideMax(room.width) : bottomMax(room.height)}
+          max={side ? sideMax(room.width) : tallest}
           // The assistant is after the line, except on the left, where it is before it.
           direction={dock === "left" ? 1 : -1}
           onPreview={(px) => resize(side ? { width: px } : { height: px })}

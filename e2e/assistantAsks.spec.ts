@@ -315,8 +315,16 @@ for (const how of ["keys", "drag"] as const) {
     await expect.poll(() => heightOf(assistant)).toBeGreaterThan(own);
     const grown = await heightOf(assistant);
     const rod = window.getByTestId("assistant-resize");
+    // The line starts from the dock on screen: bigger never shrinks it, and a step is a step.
+    expect(Number(await rod.getAttribute("aria-valuemax"))).toBeGreaterThanOrEqual(grown);
     if (how === "keys") {
       await rod.focus();
+      await window.keyboard.press("ArrowUp");
+      await expect.poll(() => heightOf(assistant)).toBeGreaterThanOrEqual(grown);
+      const bigger = await heightOf(assistant);
+      await window.keyboard.press("ArrowDown");
+      await expect.poll(() => heightOf(assistant)).toBeLessThan(bigger);
+      expect(await heightOf(assistant)).toBeGreaterThanOrEqual(bigger - 10);
       await window.keyboard.press("ArrowDown");
     } else {
       const box = await rod.boundingBox();
@@ -332,7 +340,9 @@ for (const how of ["keys", "drag"] as const) {
 
     await pointAndClick(window, card.getByTestId("question-skip"));
     await expect(card).toHaveCount(0);
-    await expect.poll(() => heightOf(assistant)).toBe(chosen);
+    // The User's height holds, within what the dock may take when no question waits.
+    const usual = Number(await rod.getAttribute("aria-valuemax"));
+    await expect.poll(() => heightOf(assistant)).toBe(Math.min(chosen, usual));
     await app.close();
   });
 }

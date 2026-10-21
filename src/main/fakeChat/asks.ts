@@ -3,7 +3,6 @@
  * more than two Documents, asks which ones, the two newest ticked, then writes a summary of those
  * chosen into the Mind in focus. Skipped, it goes on with the two newest and says so.
  * "Summarise the main ones" asks as Claude Haiku 5.5 did: one choice, one ticked, Other… allowed.
- * Each option has a description, as the Tool asks for.
  */
 import { lastResult, type Prompt, type Reply, systemOf } from "./prompt";
 

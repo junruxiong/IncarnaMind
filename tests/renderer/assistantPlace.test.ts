@@ -3,6 +3,7 @@ import { type AssistantPlace, DEFAULT_ASSISTANT } from "../../src/core/api";
 import {
   BOTTOM_MIN,
   bottomHeight,
+  bottomMax,
   CARD_MIN_HEIGHT,
   CARD_MIN_WIDTH,
   FLOAT_MIN,
@@ -14,6 +15,7 @@ import {
   HEADER,
   QUESTION_LEAVES,
   questionHeight,
+  questionMax,
   restoredSize,
   SIDE_MIN,
   SNAP_DISTANCE,
@@ -73,6 +75,9 @@ describe("sizes", () => {
     expect(questionHeight(300, 420, room)).toBe(420);
     expect(questionHeight(300, 900, room)).toBe(room - QUESTION_LEAVES);
     expect(questionHeight(300, 200, room)).toBe(300);
+    // The same largest height for the User's own while the question waits.
+    expect(bottomHeight(440, room, questionMax(room))).toBe(440);
+    expect(bottomHeight(440, room)).toBe(bottomMax(room));
   });
 
   test("a double-click restores the default size of where it is", () => {
