@@ -17,6 +17,7 @@ import {
   editFolderInLibrary,
   expectReadyDocuments,
   launchApp,
+  leaveText,
   openFolderInLibrary,
   openSettings,
   placeAssistant,
@@ -281,6 +282,90 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
     );
   } finally {
     await reopened.app.close();
+  }
+});
+
+test("⌘Z takes Organize's suggestions back and ⇧⌘Z brings them all back in one step, leaving a Document the User moved in between where they put it (#1391)", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await dismissChatSetup(window);
+    await connectLocalChatModel(window, "main-chat");
+    await makeFolders(window, [{ name: "Research", description: "Research papers and reports" }]);
+    const settings = await taggingSettings(window);
+    const providerId = await window.evaluate(
+      async () =>
+        (
+          await (
+            globalThis as unknown as { incarnamind: CoreBridge }
+          ).incarnamind.listChatProviders()
+        )[0]?.id,
+    );
+    if (!providerId) throw new Error("No provider");
+    await chooseOtherModel(settings, async (form) => {
+      await form.getByLabel("Connection", { exact: true }).selectOption(providerId);
+      await form.getByLabel("Model name", { exact: true }).fill("small-classifier");
+    });
+    await settings
+      .getByRole("checkbox", { name: /^Move new Documents into Folders automatically/ })
+      .uncheck();
+    await closeSettings(window);
+    const names = ["Research notes A", "Research notes B", "Research notes C"];
+    const paths: string[] = [];
+    for (const name of names) {
+      const path = join(sources, `${name}.txt`);
+      await writeFile(path, `Research report about membrane separation, part ${name.slice(-1)}.`);
+      paths.push(path);
+    }
+    await addDocuments(window, paths);
+    await window.getByTestId("open-library").click();
+    const library = window.getByTestId("library");
+    await pointAndClick(window, organize(library));
+
+    const research = section(library, "Research");
+    const suggested = research.getByTestId("library-suggested");
+    await expect(suggested).toHaveCount(3);
+    await expect(window.getByTestId("undo-line")).toContainText(
+      "Organize suggested a Folder for 3 Documents",
+    );
+    const menu = (id: "edit.undo" | "edit.redo") =>
+      app.evaluate(({ Menu }, item) => {
+        const found = Menu.getApplicationMenu()?.getMenuItemById(item);
+        return { label: found?.label ?? "", enabled: found?.enabled ?? false };
+      }, id);
+    await expect.poll(() => menu("edit.undo")).toEqual({ label: "Undo Organize", enabled: true });
+
+    // ⌘Z takes all of it back.
+    await leaveText(window);
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(research.getByTestId("library-document")).toHaveCount(0);
+    await expect(section(library, "Not in a Folder").getByTestId("library-document")).toHaveCount(
+      3,
+    );
+    await expect.poll(() => menu("edit.redo")).toEqual({ label: "Redo Organize", enabled: true });
+
+    // One Document is put in the Folder by hand meanwhile: Redo leaves it as the User chose.
+    await moveRow(
+      window,
+      rowOf(section(library, "Not in a Folder"), "Research notes B"),
+      "Research",
+    );
+    await expect(research.getByTestId("library-document")).toHaveCount(1);
+    await expect(suggested).toHaveCount(0);
+
+    // ⇧⌘Z brings the other two back, in one step with its line, and a second does nothing.
+    await leaveText(window);
+    await window.keyboard.press("ControlOrMeta+Shift+z");
+    await expect(research.getByTestId("library-document")).toHaveCount(3);
+    await expect(suggested).toHaveCount(2);
+    await expect(window.getByTestId("undo-line")).toContainText(
+      "Organize suggested a Folder for 2 Documents",
+    );
+    await expect.poll(() => menu("edit.redo")).toMatchObject({ enabled: false });
+    await window.keyboard.press("ControlOrMeta+Shift+z");
+    await expect(research.getByTestId("library-document")).toHaveCount(3);
+    await expect(suggested).toHaveCount(2);
+  } finally {
+    await app.close();
   }
 });
 
