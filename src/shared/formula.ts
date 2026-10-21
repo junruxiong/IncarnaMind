@@ -1172,11 +1172,12 @@ const spelt = (word: string) =>
  * The scale an amount is shown in, from `scales`, the scales its inputs were written in. Inputs
  * written in the Answer's language keep their scale: the largest of them that shows the result
  * exactly in one decimal more than its inputs written in that scale have ("$2bn + $500m" is
- * $2.5bn, "$1.2bn + $350m" is $1.55bn), else the smallest, so no input's digits are lost
- * ("$1.2bn + $383m" is $1,583m, "2亿 + 5,120万" is 25,120万); one step smaller while the result is
- * under 1 in it ("0.3亿" is 3,000万). Inputs
- * written in the other language give the largest of the Answer's own scales the result fills
- * ("$1.2bn" is 12亿美元). With `decimals` given, those are the decimals the result is judged in.
+ * $2.5bn, "$1.2bn + $350m" is $1.55bn), with that decimal shown only when it isn't a zero
+ * ("$1.2bn + $300m" is $1.5bn), else the smallest, so no input's digits are lost ("$1.2bn + $383m"
+ * is $1,583m, "2亿 + 5,120万" is 25,120万); one step smaller while the result is under 1 in it
+ * ("0.3亿" is 3,000万). Inputs written in the other language give the largest of the Answer's own
+ * scales the result fills ("$1.2bn" is 12亿美元). With `decimals` given, those are the decimals
+ * the result is judged in.
  */
 function scaleFor(
   value: number,
@@ -1199,23 +1200,22 @@ function scaleFor(
     const same = byExponent.get(scale.exponent);
     byExponent.set(scale.exponent, {
       scale: same?.scale ?? scale,
-      decimals: Math.max(same?.decimals ?? 0, each.decimals + 1),
+      decimals: Math.max(same?.decimals ?? 0, each.decimals),
     });
   }
   if (start && start.exponent > 0) {
-    const exact = (at: { scale: Scale; decimals: number }) => {
-      const places = decimals ?? at.decimals;
-      return (
-        size >= 10 ** at.scale.exponent &&
-        excelDigits(roundedAt(value, at.scale.exponent, places)) === excelDigits(value)
-      );
-    };
+    const exactIn = (at: { scale: Scale }, places: number) =>
+      size >= 10 ** at.scale.exponent &&
+      excelDigits(roundedAt(value, at.scale.exponent, places)) === excelDigits(value);
     const first = start.exponent;
     const fits = [...byExponent.values()]
       .filter((at) => at.scale.exponent > first)
       .sort((a, b) => b.scale.exponent - a.scale.exponent)
-      .find(exact);
-    if (fits) return { ...fits.scale, decimals: decimals ?? fits.decimals };
+      .find((at) => exactIn(at, decimals ?? at.decimals + 1));
+    if (fits) {
+      const places = decimals ?? (exactIn(fits, fits.decimals) ? fits.decimals : fits.decimals + 1);
+      return { ...fits.scale, decimals: places };
+    }
   }
   if (start && (start.exponent === 0 || size >= 10 ** start.exponent)) return start;
   const step = steps.find(

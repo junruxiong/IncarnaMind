@@ -243,6 +243,10 @@ describe("worked examples in English", () => {
     expect(shown("a + b", [input("a", "£1.2bn"), input("b", "£350m")])).toBe("£1.55bn");
     expect(shown("a + b", [input("a", "£2bn"), input("b", "£512m")])).toBe("£2,512m");
     expect(shown("a + b", [input("a", "£1.2bn"), input("b", "£383m")])).toBe("£1,583m");
+    // The extra decimal isn't shown when it is a zero, and the input's own decimals stay.
+    expect(shown("a + b", [input("a", "£1.2bn"), input("b", "£300m")])).toBe("£1.5bn");
+    expect(shown("a + b", [input("a", "£1.2bn"), input("b", "£800m")])).toBe("£2.0bn");
+    expect(shown("a + b", [input("a", "£2bn"), input("b", "£1bn")])).toBe("£3bn");
     expect(shown("big - big * 60%", [big])).toBe("$480 million");
     expect(shown("big + small", [big, small], { scale: "billion", decimals: 2 })).toBe(
       "$1.55 billion",
@@ -301,6 +305,9 @@ describe("worked examples in Chinese", () => {
       "25,120万元",
     );
     expect(shown("yi + w", [yi, input("w", "3,830万元", ZH)], zh)).toBe("15,830万元");
+    expect(shown("yi + w", [yi, input("w", "3,000万元", ZH)], zh)).toBe("1.5亿元");
+    expect(shown("yi + w", [yi, input("w", "8,000万元", ZH)], zh)).toBe("2.0亿元");
+    expect(shown("a + b", [input("a", "2亿元", ZH), input("b", "1亿元", ZH)], zh)).toBe("3亿元");
     // Asked for decimals, the digits asked for are the ones judged: a whole number of 亿 loses 3,000万.
     expect(shown("yi + w", [yi, input("w", "3,000万元", ZH)], { ...zh, decimals: 0 })).toBe(
       "15,000万元",

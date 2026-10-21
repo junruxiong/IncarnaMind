@@ -1591,6 +1591,8 @@ describe("A Calculated figure keeps the scale its inputs are worked in (#1442)",
     { larger: 1.2, smaller: 350, shown: "£1.55bn", value: 1_550_000_000 },
     { larger: 2, smaller: 512, shown: "£2,512m", value: 2_512_000_000 },
     { larger: 1.2, smaller: 383, shown: "£1,583m", value: 1_583_000_000 },
+    { larger: 1.2, smaller: 300, shown: "£1.5bn", value: 1_500_000_000 },
+    { larger: 1.2, smaller: 800, shown: "£2.0bn", value: 2_000_000_000 },
   ])(
     "£$larger bn and £$smaller m together, from cells that store the numbers before 'bn' and 'm': the larger scale with one decimal more than its input has when that loses no digits, else the smaller (#1482)",
     async (case_) => {
@@ -1627,6 +1629,7 @@ describe("A Calculated figure keeps the scale its inputs are worked in (#1442)",
     { larger: 1.2, smaller: 3500, shown: "1.55亿元", value: 155_000_000 },
     { larger: 2, smaller: 5120, shown: "25,120万元", value: 251_200_000 },
     { larger: 1.2, smaller: 3830, shown: "15,830万元", value: 158_300_000 },
+    { larger: 1.2, smaller: 3000, shown: "1.5亿元", value: 150_000_000 },
   ])(
     "$larger亿元 and $smaller万元 together, in Chinese: 亿 with one decimal more than its input has when that loses no digits, else 万 (#1482)",
     async (case_) => {
