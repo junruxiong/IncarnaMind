@@ -53,6 +53,7 @@ import {
 } from "../lineIcons";
 import { ProblemLine } from "../ProblemLine";
 import { AnswerWait } from "./AnswerWait";
+import { askCallText } from "./AskCall";
 import { mindCallText, namedMind } from "./MindCall";
 
 /** Sources shown under a search before "+N more". */
@@ -262,6 +263,7 @@ function runningText(
   if (call.source === "sources") return t("sources.call.running", { query: field(call, "query") });
   if (call.source === "minds") return mindCallText(t, call, mindOf(call));
   if (call.source === "commands") return commandCallText(t, call);
+  if (call.source === "asks") return askCallText(t, call);
   if (call.source === "web") {
     return call.tool === "search_web"
       ? t("web.call.searching", { query: field(call, "query") })
