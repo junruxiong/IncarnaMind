@@ -8,6 +8,8 @@ import type {
 } from "../../../../core/api";
 import { organizeModelOf } from "../../../../shared/libraryModels";
 import { core } from "../../core";
+import { useDropTarget } from "../../dragDrop";
+import { folderTarget } from "../../folderDrag";
 import { useLanguage, useT } from "../../i18n";
 import { useLibraryFolds, useRevealed } from "../../libraryFolds";
 import {
@@ -21,6 +23,7 @@ import { useRequests } from "../../requests";
 import { useAppStore } from "../../store";
 import { TREE_ROW } from "../../treeKeys";
 import { useRename } from "../../useRename";
+import { DetailsLine } from "../DetailsLine";
 import { InlineName } from "../InlineName";
 import { FolderLineIcon } from "../lineIcons";
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
@@ -117,8 +120,9 @@ function foldKeys(key: string, open: boolean) {
 
 /**
  * A Folder's head: its name, which folds the section and renames in place
- * (double-click or F2), how many it holds, its description and, pointed at,
- * its ⋯. Edit description… opens the Folder's form under it.
+ * (double-click or F2), how many it holds and, pointed at, its ⋯, with its
+ * description as the head's tooltip and in Get info. Edit description… opens
+ * the Folder's form under it.
  */
 function FolderHead({
   folder,
@@ -143,6 +147,11 @@ function FolderHead({
     useRequests.getState().clear("editFolder");
   }, [editFolder, folder.id]);
   const arrows = foldKeys(folder.id, open);
+  const drop = useDropTarget(
+    `library-folder:${folder.id}`,
+    folderTarget(folder.id),
+    open ? undefined : () => useLibraryFolds.getState().setOpen(folder.id, true),
+  );
   let name: ReactNode;
   if (rename.renaming) {
     name = (
@@ -186,9 +195,10 @@ function FolderHead({
         icon={<FolderLineIcon className="size-4" />}
         name={name}
         count={count}
-        description={folder.description}
+        tip={folder.description}
         testId="library-section-head"
         rowProps={rename.renaming ? {} : objectMenu.rowProps}
+        drop={drop}
         end={
           !rename.renaming && (
             <ObjectMenu
@@ -215,6 +225,11 @@ function LooseHead({ documents, open }: { documents: readonly Document[]; open: 
   const t = useT();
   const label = t("library.unsorted");
   const toggle = () => useLibraryFolds.getState().toggle(NOT_IN_A_FOLDER);
+  const drop = useDropTarget(
+    "library-folder:none",
+    folderTarget(null),
+    open ? undefined : () => useLibraryFolds.getState().setOpen(NOT_IN_A_FOLDER, true),
+  );
   return (
     <SectionHead
       label={label}
@@ -237,6 +252,7 @@ function LooseHead({ documents, open }: { documents: readonly Document[]; open: 
       count={documents.length}
       testId="library-section-head"
       end={<Organize documents={documents} />}
+      drop={drop}
     />
   );
 }
@@ -320,23 +336,15 @@ function Organize({ documents }: { documents: readonly Document[] }) {
   }
   if (!hasFolders || documents.length === 0) return null;
   return (
-    <span className="flex min-w-0 items-baseline gap-2">
-      <span
-        data-testid="library-organize-explain"
-        className="min-w-0 truncate text-[13px] text-ink-meta @max-[704px]/page:hidden"
-      >
-        {t("library.organize.explain")}
-      </span>
-      <button
-        type="button"
-        data-testid="library-organize"
-        title={t("library.organize.explain")}
-        onClick={() => run(documents.map((doc) => doc.id))}
-        className={quietButtonClass}
-      >
-        {t("library.classify")}
-      </button>
-    </span>
+    <button
+      type="button"
+      data-testid="library-organize"
+      title={t("library.organize.explain")}
+      onClick={() => run(documents.map((doc) => doc.id))}
+      className={quietButtonClass}
+    >
+      {t("library.classify")}
+    </button>
   );
 }
 
@@ -401,7 +409,12 @@ function OrganizeNeedsModel({ documents }: { documents: readonly Document[] }) {
     >
       <p>{t("library.organize.needsModel")}</p>
       {automatic && automatic.group !== "local" && company && (
-        <p data-testid="library-organize-sends">{t("library.organize.sends", { company })}</p>
+        <DetailsLine
+          testId="library-organize-sends"
+          details={t("library.organize.sends.details", { company })}
+        >
+          {t("library.organize.sends", { company })}
+        </DetailsLine>
       )}
       <p className="flex flex-wrap gap-x-4">
         {company && (

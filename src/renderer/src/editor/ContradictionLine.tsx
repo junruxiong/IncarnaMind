@@ -9,84 +9,95 @@ import {
 } from "../contradictions";
 import { formatMoney } from "../cost";
 import { useLanguage, useT } from "../i18n";
-import { contradictionOutcomeText } from "./contradictionOutcome";
+import { saidInLine } from "../lineNames";
+import { contradictionOutcomeParts } from "./contradictionOutcome";
+import { AskBlock } from "./MindCheckLine";
 
 /**
- * Contradiction watch's line under the Mind's title (#112), beside its
- * health: the question before a run billed per token, with the estimate;
- * what a run on demand found; and what the last run a new version of a
- * Document started found and cost. Each closes; the last for good.
+ * Contradiction watch (#112) in the check badge's card: what a run on demand
+ * found, and what the last run a new version of a Document started found and
+ * cost. Each closes; the last for good.
  */
 export function ContradictionLine({ doc, mindId }: { doc: Y.Doc; mindId: string }) {
   const t = useT();
   const language = useLanguage();
   const shown = useContradictionLine(doc, mindId);
-  const format = (value: number) => new Intl.NumberFormat(language).format(value);
-  const outcome = (run: ContradictionCheckOutcome) => contradictionOutcomeText(run, t, language);
+  const outcome = (run: ContradictionCheckOutcome) => contradictionOutcomeParts(run, t, language);
 
-  if (shown?.kind === "asking") {
-    return (
-      <ProblemLine
-        role="status"
-        testId="contradictions-ask"
-        className="mind-health-line"
-        action={{
-          label: t("contradictions.check"),
-          testId: "contradictions-check",
-          onClick: () => void checkContradictions(mindId),
-        }}
-        also={{
-          label: t("contradictions.cancel"),
-          testId: "contradictions-cancel",
-          onClick: () => dismissContradictions(mindId),
-        }}
-      >
-        {t(shown.claims === 1 ? "contradictions.ask.one" : "contradictions.ask", {
-          count: format(shown.claims),
-          estimate: shown.estimate,
-        })}
-      </ProblemLine>
-    );
-  }
   if (shown?.kind === "found") {
+    const [first = "", ...rest] = outcome(shown.run);
     return (
-      <ProblemLine
-        role="status"
-        testId="contradictions-found"
-        className="mind-health-line"
-        action={{
-          label: t("checks.close"),
-          testId: "contradictions-close",
-          onClick: () => dismissContradictions(mindId),
-        }}
-      >
-        {outcome(shown.run)}
-      </ProblemLine>
+      <>
+        <div className="check-card-sep" />
+        <ProblemLine
+          role="status"
+          testId="contradictions-found"
+          className="mind-health-line"
+          details={rest}
+          action={{
+            label: t("checks.close"),
+            testId: "contradictions-close",
+            onClick: () => dismissContradictions(mindId),
+          }}
+        >
+          {first}
+        </ProblemLine>
+      </>
     );
   }
   if (shown?.kind === "watched") {
     const watched = shown.run;
-    const result = t("contradictions.after", {
-      document: watched.documentName,
-      result: outcome(watched),
-    });
+    const [first = "", ...rest] = outcome(watched);
+    const cost = watched.cost ? [formatMoney(watched.cost, language)] : [];
+    const after = saidInLine(t, (t) =>
+      t("contradictions.after", { document: watched.documentName, result: first }),
+    );
     return (
-      <ProblemLine
-        role="status"
-        testId="contradictions-watched"
-        className="mind-health-line"
-        action={{
-          label: t("checks.close"),
-          testId: "contradictions-watched-close",
-          // Closed for good: the record goes from the Mind, everywhere it is open.
-          onClick: () => clearContradictionWatch(doc.getMap(MIND_SETTINGS_FIELD)),
-        }}
-      >
-        {watched.cost
-          ? t("contradictions.cost", { result, cost: formatMoney(watched.cost, language) })
-          : result}
-      </ProblemLine>
+      <>
+        <div className="check-card-sep" />
+        <ProblemLine
+          role="status"
+          testId="contradictions-watched"
+          title={after.fullMessage}
+          className="mind-health-line"
+          details={[...rest, ...cost]}
+          action={{
+            label: t("checks.close"),
+            testId: "contradictions-watched-close",
+            // Closed for good: the record goes from the Mind, everywhere it is open.
+            onClick: () => clearContradictionWatch(doc.getMap(MIND_SETTINGS_FIELD)),
+          }}
+        >
+          {after.message}
+        </ProblemLine>
+      </>
     );
   }
   return null;
+}
+
+export function ContradictionAsk({ doc, mindId }: { doc: Y.Doc; mindId: string }) {
+  const t = useT();
+  const language = useLanguage();
+  const shown = useContradictionLine(doc, mindId);
+  if (shown?.kind !== "asking") return null;
+  return (
+    <AskBlock
+      testId="contradictions-ask"
+      question={t(shown.claims === 1 ? "contradictions.ask.one" : "contradictions.ask", {
+        count: new Intl.NumberFormat(language).format(shown.claims),
+      })}
+      estimate={shown.estimate}
+      check={{
+        label: t("contradictions.check"),
+        testId: "contradictions-check",
+        onClick: () => void checkContradictions(mindId),
+      }}
+      notNow={{
+        label: t("contradictions.cancel"),
+        testId: "contradictions-cancel",
+        onClick: () => dismissContradictions(mindId),
+      }}
+    />
+  );
 }

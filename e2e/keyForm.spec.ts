@@ -1,12 +1,15 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { CATALOG_PROVIDERS } from "../src/core/providers/catalog";
 import { createFakeOpenAI } from "../tests/helpers/fakeOpenAI";
 import {
   acceptPlainTextKeys,
+  addProviderForm,
   assistantAnswers,
   closeSettings,
+  continueSetup,
   createDataFolder,
   interceptOpenExternal,
   launchApp,
@@ -90,14 +93,14 @@ test("at 900px high the key form is in view, or scrolls inside its card, in Engl
   }
 });
 
-test("Where do I find it? opens with the keyboard, and holds the notes, the steps, the plan's credits and the key page, in English and Chinese", async () => {
+test("Where do I find it? opens with the keyboard, and holds the notes, the steps, the key line and the key page, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
     await acceptPlainTextKeys(window);
-    // The first provider is Anthropic in English, which has all four; DeepSeek in Chinese, with no plan's credits.
-    for (const [value, plan, keyPage] of [
-      ["en", 1, "Open Anthropic's key page ↗"],
+    // The first provider is Anthropic in English, which has all four; DeepSeek in Chinese, with no note and no key line.
+    for (const [value, count, keyPage] of [
+      ["en", 1, "Open Anthropic’s key page ↗"],
       ["zh-CN", 0, "打开 DeepSeek 的密钥页面 ↗"],
     ] as const) {
       await language(window, value);
@@ -111,31 +114,31 @@ test("Where do I find it? opens with the keyboard, and holds the notes, the step
       await expect(form.getByTestId("provider-key-help-toggle")).toBeFocused();
       await window.keyboard.press("Enter");
       await expect(help).toHaveAttribute("open", "");
-      await expect(help.getByTestId("provider-note")).toHaveCount(1);
+      await expect(help.getByTestId("provider-note")).toHaveCount(count);
       await expect(help.locator("ol > li")).toHaveCount(3);
-      await expect(help.getByTestId("provider-plan-credits")).toHaveCount(plan);
+      await expect(help.getByTestId("provider-key-line")).toHaveCount(count);
       await expect(help.getByTestId("provider-key-link")).toHaveText(keyPage);
       if (process.env.INCARNAMIND_SCREENSHOTS) {
         await window.screenshot({
           path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-help-open-${value}.png`,
         });
       }
-      // The notes come first, then the steps, then the credits, then the key page.
+      // The notes come first, then the steps, then the key line, then the key page.
       const order = await help.evaluate((element) =>
         [
           ...element.querySelectorAll(
-            "[data-testid=provider-note], ol, [data-testid=provider-plan-credits], [data-testid=provider-key-link]",
+            "[data-testid=provider-note], ol, [data-testid=provider-key-line], [data-testid=provider-key-link]",
           ),
         ].map((each) => each.getAttribute("data-testid") ?? each.tagName),
       );
       expect(order).toEqual(
-        plan
-          ? ["provider-note", "OL", "provider-plan-credits", "provider-key-link"]
-          : ["provider-note", "OL", "provider-key-link"],
+        count
+          ? ["provider-note", "OL", "provider-key-line", "provider-key-link"]
+          : ["OL", "provider-key-link"],
       );
-      // At first run the notes and the credits are in the disclosure only, and the model has no docs link.
-      await expect(form.getByTestId("provider-note")).toHaveCount(1);
-      await expect(form.getByTestId("provider-plan-credits")).toHaveCount(plan);
+      // At first run the notes and the key line are in the disclosure only, and the model has no docs link.
+      await expect(form.getByTestId("provider-note")).toHaveCount(count);
+      await expect(form.getByTestId("provider-key-line")).toHaveCount(count);
       await expect(form.getByTestId("provider-docs-link")).toHaveCount(0);
       await window.keyboard.press("Enter");
       await expect(help).not.toHaveAttribute("open", "");
@@ -146,15 +149,14 @@ test("Where do I find it? opens with the keyboard, and holds the notes, the step
   }
 });
 
-test("in Settings the notes and the plan's credits are under the key field, the steps and the key page behind Where do I find it?, and the model has a link to its models and prices; in English and Chinese", async () => {
+test("in Settings the notes and the key line are under the key field, the steps and the key page behind Where do I find it?, and the model has a link to its models and prices; in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
     await acceptPlainTextKeys(window);
     await language(window, "en");
     const settings = await openSettings(window, "models");
-    await settings.getByTestId("chat-choice-api-key").check();
-    const form = settings.getByTestId("provider-form");
+    const form = await addProviderForm(settings, "anthropic");
     const help = form.getByTestId("provider-key-help");
     // The form opens on Anthropic, which has all of it, whichever language is chosen after.
     for (const [value, link] of [
@@ -168,14 +170,14 @@ test("in Settings the notes and the plan's credits are under the key field, the 
         });
       }
       const note = form.getByTestId("provider-note");
-      const credits = form.getByTestId("provider-plan-credits");
+      const line = form.getByTestId("provider-key-line");
       await expect(note).toBeVisible();
-      await expect(credits).toBeVisible();
+      await expect(line).toBeVisible();
       // One column with the hint lines' own spacing, no more.
-      const [noteBox, creditsBox] = await Promise.all([note.boundingBox(), credits.boundingBox()]);
-      expect(
-        (creditsBox?.y ?? 0) - ((noteBox?.y ?? 0) + (noteBox?.height ?? 0)),
-      ).toBeLessThanOrEqual(4);
+      const [noteBox, lineBox] = await Promise.all([note.boundingBox(), line.boundingBox()]);
+      expect((lineBox?.y ?? 0) - ((noteBox?.y ?? 0) + (noteBox?.height ?? 0))).toBeLessThanOrEqual(
+        4,
+      );
       await expect(help.locator("ol")).toBeHidden();
       await expect(form.getByTestId("provider-docs-link")).toHaveText(link);
       await expect(form.getByTestId("provider-docs-link")).toHaveAttribute("href", /^https:\/\//);
@@ -191,40 +193,155 @@ test("in Settings the notes and the plan's credits are under the key field, the 
     await help.getByTestId("provider-key-help-toggle").click();
     await expect(help.locator("ol > li")).toHaveCount(3);
     await expect(help.getByTestId("provider-note")).toHaveCount(0);
-    await expect(help.getByTestId("provider-plan-credits")).toHaveCount(0);
+    await expect(help.getByTestId("provider-key-line")).toHaveCount(0);
     await expect(help.getByTestId("provider-key-link")).toHaveText("打开 Anthropic 的密钥页面 ↗");
   } finally {
     await app.close();
   }
 });
 
-test("the provider's own line on what it does with the data sits under the sentence of where it goes, with a link to its terms, in English and Chinese, at first run and in Settings", async () => {
+test("a key line says what to do in IncarnaMind and links to the company's own page for the rest, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 900);
     await acceptPlainTextKeys(window);
-    for (const [value, terms, lead] of [
-      ["en", "Terms ↗", ""],
-      ["zh-CN", "条款 ↗", "数据使用："],
+    const settings = await openSettings(window, "models");
+    for (const [name, en, zh] of [
+      [
+        "anthropic",
+        "Paste an API key from the Anthropic Console. · Details ↗",
+        "粘贴 Anthropic Console 中的 API 密钥。 · 详情 ↗",
+      ],
+      [
+        "openai",
+        "With a ChatGPT plan, you can use Continue with ChatGPT instead of a key. · Details ↗",
+        "有 ChatGPT 订阅时，可以改用“使用 ChatGPT 继续”，无需密钥。 · 详情 ↗",
+      ],
+      [
+        "google",
+        "Paste a Gemini API key from Google AI Studio · Pricing ↗",
+        "粘贴 Google AI Studio 的 Gemini API 密钥 · 价格 ↗",
+      ],
+      [
+        "openrouter",
+        "Pay per use with OpenRouter credits · Pricing ↗",
+        "用 OpenRouter 额度按用量付费 · 价格 ↗",
+      ],
+      [
+        "kimi",
+        "If Kimi refuses requests, check your Kimi account · Pricing ↗",
+        "如果 Kimi 拒绝请求，请检查你的 Kimi 账户 · 价格 ↗",
+      ],
+    ] as const) {
+      await language(window, "en");
+      const form = await addProviderForm(settings, name);
+      const line = form.getByTestId("provider-key-line");
+      await expect(line).toHaveText(en);
+      await expect(line.getByRole("link")).toHaveAttribute("href", /^https:\/\//);
+      if (process.env.INCARNAMIND_SCREENSHOTS) {
+        await settings.screenshot({
+          path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-line-${name}-en.png`,
+        });
+      }
+      await language(window, "zh-CN");
+      await expect(line).toHaveText(zh);
+      if (process.env.INCARNAMIND_SCREENSHOTS) {
+        await settings.screenshot({
+          path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-line-${name}-zh-CN.png`,
+        });
+      }
+      await settings.getByTestId("models-back").click();
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test("the provider's own line on what it does with the data sits under the sentence of where it goes, with a link to the page on it, in English and Chinese, at first run and in Settings", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    for (const [value, link, lead] of [
+      ["en", "Data use ↗", ""],
+      ["zh-CN", "数据使用 ↗", "数据使用："],
     ] as const) {
       await language(window, value);
       const card = await openKeyForm(window);
       await card.getByTestId("setup-key").click();
       const line = card.getByTestId("provider-form").getByTestId("provider-data-use");
       await expect(line).toContainText(lead);
-      await expect(line.getByRole("link")).toHaveText(terms);
+      await expect(line.getByRole("link")).toHaveText(link);
       await expect(line.getByRole("link")).toHaveAttribute("href", /^https:\/\//);
       await card.getByTestId("setup-back").click();
     }
 
     await language(window, "en");
     const settings = await openSettings(window, "models");
-    await settings.getByTestId("chat-choice-api-key").check();
-    const line = settings.getByTestId("provider-form").getByTestId("provider-data-use");
-    await expect(line.getByRole("link")).toHaveText("Terms ↗");
+    const line = (await addProviderForm(settings, "anthropic")).getByTestId("provider-data-use");
+    await expect(line.getByRole("link")).toHaveText("Data use ↗");
     await language(window, "zh-CN");
     await expect(line).toContainText("数据使用：");
-    await expect(line.getByRole("link")).toHaveText("条款 ↗");
+    await expect(line.getByRole("link")).toHaveText("数据使用 ↗");
+  } finally {
+    await app.close();
+  }
+});
+
+test("every provider's line on what it does with the data is one line beside its link at 900px wide, in English and Chinese, at first run and in Settings", async () => {
+  const { app, window } = await launchApp(dataDir);
+  const hosted = CATALOG_PROVIDERS.filter(
+    (each) => each.group !== "local" && each.id !== "openai-compatible",
+  );
+  const oneLine = (line: Locator) =>
+    line.evaluate((element) => {
+      const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+      return element.getBoundingClientRect().height < lineHeight * 1.5;
+    });
+  try {
+    await setWindowSize(app, window, 900, 900);
+    await acceptPlainTextKeys(window);
+    let checked = 0;
+    for (const [value, words] of [
+      ["en", "en"],
+      ["zh-CN", "zh"],
+    ] as const) {
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await card.getByTestId("setup-key").click();
+      const form = card.getByTestId("provider-form");
+      await form.getByTestId("provider-more-toggle").click();
+      for (const provider of hosted.filter((each) => each.support === "first-class")) {
+        await form
+          .locator("label", { has: window.locator(`input[value="${provider.id}"]`) })
+          .click();
+        const line = form.getByTestId("provider-data-use");
+        await expect(line).toContainText(provider.dataUse.summary[words]);
+        expect(await oneLine(line), `${provider.id} at first run, ${value}`).toBe(true);
+        checked += 1;
+      }
+      await card.getByTestId("setup-back").click();
+
+      await language(window, "en");
+      const settings = await openSettings(window, "models");
+      await language(window, value);
+      for (const provider of hosted) {
+        const line = (await addProviderForm(settings, provider.id)).getByTestId(
+          "provider-data-use",
+        );
+        await expect(line).toContainText(provider.dataUse.summary[words]);
+        expect(await oneLine(line), `${provider.id} in Settings, ${value}`).toBe(true);
+        await expect(line.getByRole("link")).toHaveAttribute(
+          "href",
+          (words === "zh" && provider.dataUse.zhUrl) || (provider.dataUse.url ?? ""),
+        );
+        checked += 1;
+        await settings.getByTestId("models-back").click();
+      }
+      await language(window, "en");
+      await closeSettings(window);
+    }
+    expect(checked).toBeGreaterThan(40);
   } finally {
     await app.close();
   }
@@ -239,16 +356,16 @@ test("a way that can't be used yet says why, with the next step: Ollama not runn
     const card = await openKeyForm(window);
     await card.getByTestId("setup-other").click();
     const local = card.getByTestId("way-local");
-    await expect(local).toContainText("Ollama isn't running on this computer. It's free to get.");
+    await expect(local).toContainText("Needs the free Ollama app");
     await expect(local.locator("xpath=..").getByRole("link", { name: /Get Ollama/ })).toBeVisible();
     await language(window, "zh-CN");
-    await expect(local).toContainText("这台电脑上没有运行 Ollama。可以免费获取。");
+    await expect(local).toContainText("需要免费的 Ollama 应用");
     await language(window, "en");
     await card.getByTestId("setup-key").click();
     const form = card.getByTestId("provider-form");
     await expect(form.getByTestId("provider-use-key")).toBeDisabled();
     await expect(form.getByTestId("provider-use-key-why")).toHaveText("Paste the key first.");
-    await form.getByLabel(/^API key/).fill("sk-something");
+    await form.getByLabel(/^API key/).fill("sk-ant-something");
     await expect(form.getByTestId("provider-use-key-why")).toHaveCount(0);
     await expect(form.getByTestId("provider-use-key")).toBeEnabled();
     await form.getByLabel(/^API key/).fill("");
@@ -265,11 +382,389 @@ test("a way that can't be used yet says why, with the next step: Ollama not runn
   }
 });
 
-/** An OpenAI-compatible server that refuses one key and answers with the other. */
+/** Made-up keys: the prefixes some services' keys all start with, and a bare sk- that names nobody. */
+const KEYS = {
+  anthropic: `sk-ant-api03-${"aZ3".repeat(14)}`,
+  openai: `sk-proj-${"aZ3".repeat(20)}`,
+  openrouter: `sk-or-v1-${"0f9a".repeat(16)}`,
+  xai: `xai-${"aZ3".repeat(26)}`,
+  bare: `sk-${"aZ3".repeat(16)}`,
+};
+
+const checked = (form: Locator) => form.getByRole("radio", { checked: true });
+
+for (const { value, first, other, anyway, notAnthropic, notGoogle } of [
+  {
+    value: "en",
+    first: "Anthropic",
+    other: "OpenAI",
+    anyway: "Use it for Anthropic anyway",
+    notGoogle:
+      "This isn’t Google’s key: its keys start with AQ. or AIza. Choose the service it belongs to.",
+    notAnthropic:
+      "This isn’t Anthropic’s key: its keys start with sk-ant-. Choose the service it belongs to.",
+  },
+  {
+    value: "zh-CN",
+    first: "DeepSeek",
+    other: "OpenAI",
+    anyway: "仍用于 DeepSeek",
+    notGoogle: "这不是 Google 的密钥：Google 的密钥以 AQ. 或 AIza 开头。请选择它所属的服务。",
+    notAnthropic: "这不是 Anthropic 的密钥：Anthropic 的密钥以 sk-ant- 开头。请选择它所属的服务。",
+  },
+] as const) {
+  test(`a key goes only to its own service: its prefix picks the service, a key the chosen one can't have is never sent, and nothing goes before the User agrees (${value})`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1100, 900);
+      await acceptPlainTextKeys(window);
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await card.getByTestId("setup-key").click();
+      const form = card.getByTestId("provider-form");
+      const key = form.locator('input[type="password"]');
+      const line = form.getByTestId("provider-key-wrong");
+      const useKey = form.getByTestId("provider-use-key");
+      await expect(checked(form)).toHaveAccessibleName(first);
+
+      await key.fill(KEYS.openai);
+      await expect(checked(form)).toHaveAccessibleName(other);
+      await expect(line).toContainText(
+        value === "en" ? "This is OpenAI’s key" : "这是 OpenAI 的密钥",
+      );
+      await expect(line.getByTestId("provider-key-anyway")).toHaveText(anyway);
+      await expect(key).toHaveValue(KEYS.openai);
+      await expect(useKey).toBeEnabled();
+      if (process.env.INCARNAMIND_SCREENSHOTS) {
+        await window.screenshot({
+          path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-wrong-service-${value}.png`,
+        });
+      }
+      await line.getByTestId("provider-key-anyway").click();
+      await expect(checked(form)).toHaveAccessibleName(first);
+      await expect(key).toHaveValue(KEYS.openai);
+      await expect(line).toHaveCount(0);
+      await expect(useKey).toBeEnabled();
+
+      await key.fill(` ${KEYS.openai} `);
+      await expect(checked(form)).toHaveAccessibleName(first);
+      await expect(line).toHaveCount(0);
+      await expect(useKey).toBeEnabled();
+
+      await key.fill(KEYS.openrouter);
+      await expect(checked(form)).toHaveAccessibleName("OpenRouter");
+
+      // xAI is a best-effort provider, so first run doesn't offer it (ADR-0019): the key waits for the User.
+      await key.fill(KEYS.xai);
+      await expect(line).toContainText(value === "en" ? "This is xAI’s key" : "这是 xAI 的密钥");
+      await expect(checked(form)).toHaveAccessibleName("OpenRouter");
+      await expect(useKey).toBeDisabled();
+      await key.press("Enter");
+      await expect(form.getByTestId("connection-test")).toHaveCount(0);
+      await expect(useKey).toBeDisabled();
+      await line.getByTestId("provider-key-anyway").click();
+      await expect(line).toHaveCount(0);
+      await expect(useKey).toBeEnabled();
+      await key.fill(`${KEYS.xai}x`);
+      await expect(line).toHaveCount(1);
+
+      await form.getByRole("radio", { name: "Anthropic" }).check({ force: true });
+      await key.fill(KEYS.bare);
+      await expect(line).toHaveText(notAnthropic);
+      await expect(line.getByTestId("provider-key-anyway")).toHaveCount(0);
+      await expect(useKey).toBeDisabled();
+      await key.press("Enter");
+      await expect(form.getByTestId("connection-test")).toHaveCount(0);
+      await expect(useKey).toHaveText(value === "en" ? "Use this key" : "使用这个密钥");
+
+      await form.getByRole("radio", { name: "Google" }).check({ force: true });
+      await expect(key).toHaveValue(KEYS.bare);
+      await expect(line).toHaveText(notGoogle);
+      await expect(useKey).toBeDisabled();
+
+      await form.getByRole("radio", { name: "DeepSeek" }).check({ force: true });
+      await expect(key).toHaveValue(KEYS.bare);
+      await expect(line).toHaveCount(0);
+      await expect(useKey).toBeEnabled();
+
+      await key.fill("not-a-key-at-all");
+      await expect(line).toHaveCount(0);
+      await expect(useKey).toBeEnabled();
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+test("Kimi's form opens on the region of the interface's language: International in English, China in Chinese", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const settings = await openSettings(window, "models");
+    for (const [value, region] of [
+      ["en", "intl"],
+      ["zh-CN", "cn"],
+    ] as const) {
+      await language(window, value);
+      const form = await addProviderForm(settings, "kimi");
+      await expect(form.getByRole("combobox", { name: /^(Region|地域)/ })).toHaveValue(region);
+      await settings.getByTestId("models-back").click();
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+for (const height of [560, 700]) {
+  test(`in a window ${height}px high, the line that explains the grey button is in view, not under the card's foot`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 900, height);
+      await acceptPlainTextKeys(window);
+      const card = await openKeyForm(window);
+      await card.getByTestId("setup-key").click();
+      const form = card.getByTestId("provider-form");
+      const key = form.locator('input[type="password"]');
+      // The card scrolled so the key field sits just above the foot: what comes under it is hidden by it.
+      await key.focus();
+      await card.evaluate(
+        (element, fieldBottom) => {
+          const foot = element.querySelector("[data-setup-foot]")?.getBoundingClientRect();
+          if (foot) element.scrollTop += fieldBottom - foot.top + 4;
+        },
+        await key.boundingBox().then((box) => (box ? box.y + box.height : 0)),
+      );
+      await window.keyboard.insertText(KEYS.bare);
+      const line = form.getByTestId("provider-key-wrong");
+      await expect(line).toBeVisible();
+      await expect(form.getByTestId("provider-use-key")).toBeDisabled();
+      await expect(line).toBeInViewport({ ratio: 1 });
+      await expect
+        .poll(async () => {
+          const lineBox = await line.boundingBox();
+          const foot = await form.locator("[data-setup-foot]").boundingBox();
+          if (!lineBox || !foot) return null;
+          return lineBox.y + lineBox.height <= foot.y + 1 || lineBox.y >= foot.y + foot.height - 1;
+        })
+        .toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+for (const { value, line, chips, titles } of [
+  {
+    value: "en",
+    line: "OpenAI, Anthropic, Google, DeepSeek, Kimi and more",
+    chips: ["Anthropic", "OpenAI", "Google", "DeepSeek", "Kimi", "Qwen"],
+    titles: ["Anthropic", "OpenAI", "Google", "DeepSeek", "Kimi"],
+  },
+  {
+    value: "zh-CN",
+    line: "DeepSeek、通义千问、Kimi、智谱 GLM 等",
+    chips: ["DeepSeek", "通义千问", "Kimi", "智谱 GLM", "Anthropic", "OpenAI", "Google"],
+    titles: ["DeepSeek", "通义千问", "Kimi", "智谱 GLM"],
+  },
+] as const) {
+  test(`the first-run key line names the services that work for the language, and each opens its key form in one step (${value})`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1100, 900);
+      await acceptPlainTextKeys(window);
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await expect(card.getByTestId("setup-key-for")).toHaveText(line);
+      await card.getByTestId("setup-key").click();
+      const form = card.getByTestId("provider-form");
+      const row = form.getByRole("radio");
+      await expect(row).toHaveCount(chips.length);
+      for (const [index, name] of chips.entries()) {
+        await expect(row.nth(index)).toHaveAccessibleName(name);
+      }
+      for (const name of titles) {
+        await form.getByRole("radio", { name, exact: true }).check({ force: true });
+        await expect(card.getByTestId("provider-form-title")).toContainText(name);
+        await expect(form.locator('input[type="password"]')).toBeVisible();
+        await expect(form.getByRole("radio", { checked: true })).toHaveAccessibleName(name);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+test("in Settings, a key that is not the page's service goes nowhere on Add a provider and on a provider's page, and the page stays the provider's", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const settings = await openSettings(window, "models");
+    const form = await addProviderForm(settings, "anthropic");
+    const key = form.locator('input[type="password"]');
+    const line = form.getByTestId("provider-key-wrong");
+    const useKey = form.getByTestId("provider-use-key");
+    const title = settings.getByTestId("provider-page-title");
+
+    await key.fill(KEYS.openai);
+    await expect(line).toContainText("This is OpenAI’s key");
+    await expect(title).toHaveText("Anthropic");
+    await expect(useKey).toBeDisabled();
+    await key.press("Enter");
+    await expect(form.getByTestId("connection-test")).toHaveCount(0);
+    await key.fill(KEYS.bare);
+    await expect(line).toHaveText("This isn’t Anthropic’s key: its keys start with sk-ant-.");
+    await expect(useKey).toBeDisabled();
+    await key.fill(KEYS.openai);
+    await line.getByTestId("provider-key-anyway").click();
+    await expect(line).toHaveCount(0);
+    await expect(useKey).toBeEnabled();
+    await expect(title).toHaveText("Anthropic");
+    await key.fill(KEYS.anthropic);
+    await expect(line).toHaveCount(0);
+    await expect(useKey).toBeEnabled();
+    await settings.getByTestId("models-back").click();
+
+    const saved = await window.evaluate(async (apiKey) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      return core.saveChatProvider({ kind: "anthropic", apiKey, modelId: "claude-haiku-5-5" });
+    }, KEYS.anthropic);
+    await settings.getByTestId("provider-row").first().click();
+    const page = settings.getByTestId("provider-page");
+    await expect(page).toHaveAttribute("data-provider-id", saved.id);
+    const pageKey = page.getByTestId("provider-page-key");
+    const save = page.getByTestId("provider-page-save-key");
+    await pageKey.fill(KEYS.bare);
+    await expect(page.getByTestId("provider-key-wrong")).toHaveText(
+      "This isn’t Anthropic’s key: its keys start with sk-ant-.",
+    );
+    await expect(save).toBeDisabled();
+    await pageKey.press("Enter");
+    await expect(page.getByTestId("provider-page-key-error")).toHaveCount(0);
+    await pageKey.fill(KEYS.openai);
+    await expect(page.getByTestId("provider-key-wrong")).toContainText("This is OpenAI’s key");
+    await expect(save).toBeDisabled();
+    await page.getByTestId("provider-key-anyway").click();
+    await expect(save).toBeEnabled();
+    await pageKey.fill(KEYS.anthropic);
+    await expect(page.getByTestId("provider-key-wrong")).toHaveCount(0);
+    await expect(save).toBeEnabled();
+  } finally {
+    await app.close();
+  }
+});
+
+test("Kimi is listed under International and under China, and each opens its form on that region (#1348)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    const settings = await openSettings(window, "models");
+    const region = (form: Locator) => form.getByRole("combobox", { name: /^(Region|地域)/ });
+    const open = async (group: string) => {
+      await settings.getByTestId("models-add-provider").click();
+      await settings.getByTestId("provider-directory-search").fill("kimi");
+      const tiles = settings.locator(
+        `[data-testid="provider-directory-group"][data-group="${group}"]`,
+      );
+      await tiles.locator('[data-catalog-id="kimi"]').click();
+      return region(settings.getByTestId("provider-add").getByTestId("provider-form"));
+    };
+
+    await settings.getByTestId("models-add-provider").click();
+    await settings.getByTestId("provider-directory-search").fill("kimi");
+    await expect(settings.getByTestId("provider-directory-group")).toHaveCount(2);
+    await expect(settings.getByTestId("provider-directory-group").first()).toHaveAttribute(
+      "data-group",
+      "international",
+    );
+    await settings.getByTestId("models-back").click();
+
+    await expect(await open("international")).toHaveValue("intl");
+    await settings.getByTestId("models-back").click();
+    await expect(await open("china")).toHaveValue("cn");
+    await settings.getByTestId("models-back").click();
+
+    await language(window, "zh-CN");
+    await settings.getByTestId("models-add-provider").click();
+    await settings.getByTestId("provider-directory-search").fill("kimi");
+    await expect(settings.getByTestId("provider-directory-group")).toHaveCount(2);
+    await settings.getByTestId("models-back").click();
+    await expect(await open("international")).toHaveValue("intl");
+    await settings.getByTestId("models-back").click();
+    // Popular, in Chinese, is Kimi's own region.
+    await expect(await open("popular")).toHaveValue("cn");
+  } finally {
+    await app.close();
+  }
+});
+
+test("with Kimi saved on China, only the China tile says Added and opens it, and International opens an empty form (#1348)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const saved = await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      return core.saveChatProvider({
+        kind: "kimi",
+        endpoint: "cn",
+        apiKey: "sk-not-real",
+        modelId: "kimi-k2.6",
+      });
+    });
+    const settings = await openSettings(window, "models");
+    const tile = (group: string) =>
+      settings.locator(
+        `[data-testid="provider-directory-group"][data-group="${group}"] [data-catalog-id="kimi"]`,
+      );
+    const directory = async () => {
+      await settings.getByTestId("models-add-provider").click();
+      await settings.getByTestId("provider-directory-search").fill("kimi");
+    };
+
+    await directory();
+    await expect(tile("china")).toContainText("Added");
+    await expect(tile("international")).not.toContainText("Added");
+    await tile("international").click();
+    const form = settings.getByTestId("provider-add").getByTestId("provider-form");
+    await expect(form.getByRole("combobox", { name: /^Region/ })).toHaveValue("intl");
+    await expect(form.getByLabel(/^API key/)).toHaveValue("");
+    await settings.getByTestId("models-back").click();
+
+    await directory();
+    await tile("china").click();
+    await expect(settings.getByTestId("provider-page")).toHaveAttribute(
+      "data-provider-id",
+      saved.id,
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * An OpenAI-compatible server that refuses one key and answers with the other, and answers a
+ * third with Anthropic's 400 for a model that needs 30-day data retention.
+ */
 async function server(): Promise<{ server: Server; url: string }> {
   const http = createServer((request, response) => {
     request.resume();
     request.on("end", () => {
+      if (request.headers.authorization === "Bearer locked-key") {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            type: "error",
+            error: {
+              type: "invalid_request_error",
+              message:
+                "In order to access this model, your organization or workspace must have data retention enabled.",
+            },
+          }),
+        );
+        return;
+      }
       const good = request.headers.authorization === "Bearer good-key";
       response.writeHead(good ? 200 : 401, { "content-type": "application/json" });
       response.end(
@@ -308,10 +803,7 @@ test("Use this key shows a refused key in place, and with a good one saves and t
     // A server the User gives is offered in Settings, not at first run (ADR-0019); saved there,
     // it answers the Question waiting in the setup card all the same.
     const settings = await openSettings(window, "models");
-    await settings.getByTestId("chat-choice-api-key").check();
-    const form = settings.getByTestId("provider-form");
-    await form.getByTestId("provider-more-toggle").click();
-    await form.locator("label").filter({ hasText: "OpenAI-compatible server" }).click();
+    const form = await addProviderForm(settings, "openai-compatible");
     // A compatible server keeps a free-text Model.
     await expect(form.getByTestId("provider-model-text")).toBeVisible();
     await form.getByLabel("Server URL").fill(fake.url);
@@ -327,10 +819,41 @@ test("Use this key shows a refused key in place, and with a good one saves and t
     await form.getByTestId("provider-use-key").click();
     await expect(form).toBeHidden();
     await closeSettings(window);
-    await expect(card).toBeHidden();
+    await continueSetup(window);
     // The waiting Question was asked: the conversation holds its Answer (the server only answers
     // the connection test, so how it ends is not the point).
     await expect(assistantAnswers(window).first()).toBeVisible({ timeout: 15_000 });
+  } finally {
+    await app.close();
+    fake.server.close();
+  }
+});
+
+test("a model that needs 30-day data retention says so with the model's name, and its action puts the cursor where the model is chosen; in English and Chinese", async () => {
+  const fake = await server();
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    await language(window, "en");
+    const settings = await openSettings(window, "models");
+    const form = await addProviderForm(settings, "openai-compatible");
+    await form.locator('input[type="url"]').fill(fake.url);
+    await form.getByTestId("provider-model-text").fill("claude-fable-5-1");
+    await form.locator('input[type="password"]').fill("locked-key");
+    await form.getByTestId("provider-use-key").click();
+    const result = form.getByTestId("connection-test");
+    await expect(result).toContainText(
+      "The key works, but your organization disallows 30-day retention for claude-fable-5-1. Choose another model. · Choose another model",
+      { timeout: 20_000 },
+    );
+    await expect(result).not.toContainText("Console");
+    await language(window, "zh-CN");
+    await expect(result).toContainText(
+      "密钥可用，但你的组织未开启 claude-fable-5-1 所需的 30 天数据保留。请换一个模型。· 换一个模型",
+    );
+    await result.getByTestId("connection-test-choose-model").click();
+    await expect(form.getByTestId("provider-model-text")).toBeFocused();
   } finally {
     await app.close();
     fake.server.close();
@@ -352,7 +875,7 @@ test("the ChatGPT wait offers the sign-in page again, and after five minutes say
     await card.getByTestId("setup-chatgpt").click();
     await expect.poll(() => urlsOpened(app)).toHaveLength(1);
     await expect(card).toContainText("Finish signing in in your browser");
-    await expect(card).toContainText("nothing extra to pay");
+    await expect(card).toContainText("OpenAI may ask you to allow IncarnaMind.");
     await card.getByTestId("chatgpt-reopen").click();
     await expect.poll(() => urlsOpened(app)).toHaveLength(2);
     await expect(card.getByTestId("chatgpt-late")).toHaveCount(0);

@@ -1,20 +1,23 @@
 import type { Editor } from "@tiptap/core";
+import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import type { Transaction } from "@tiptap/pm/state";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { MessageKey } from "../../../shared/i18n";
 import {
   countBasisOf,
+  countShownOf,
   observeWordCountSettings,
   setCountBasis,
+  setCountShown,
   setWordTarget,
   wordTargetOf,
 } from "../../../shared/mindWordCount";
 import {
   COUNT_BASES,
   type CountBasis,
+  countedUnit,
   countFor,
-  mostlyCjk,
   parseTarget,
 } from "../../../shared/wordCount";
 import { CheckLineIcon } from "../components/lineIcons";
@@ -37,6 +40,12 @@ export const COUNT_IDLE_MS = 300;
  */
 const COUNT_SLICE_MS = 8;
 
+/**
+ * What a count may take at once for a change the User didn't type, as an
+ * Accept or an Undo: they wait for their result, so it comes within 100 ms.
+ */
+const COUNT_AT_ONCE_MS = 50;
+
 const BASIS_NAMES: Record<CountBasis, MessageKey> = {
   words: "wordCount.basis.words",
   characters: "wordCount.basis.characters",
@@ -48,7 +57,7 @@ const BASIS_NAMES: Record<CountBasis, MessageKey> = {
  * changed; null until the Mind's first count is done, so a long Mind never
  * shows "0 words" while it is counted.
  */
-function useCounts(editor: Editor): MindCount | null {
+export function useCounts(editor: Editor): MindCount | null {
   const [counts, setCounts] = useState<MindCount | null>(null);
 
   useEffect(() => {
@@ -57,11 +66,11 @@ function useCounts(editor: Editor): MindCount | null {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;
     let showsSelection = false;
-    const count = () => {
+    const count = (slice = COUNT_SLICE_MS) => {
       timer = undefined;
       idle = undefined;
       if (editor.isDestroyed) return;
-      const until = performance.now() + COUNT_SLICE_MS;
+      const until = performance.now() + slice;
       const { from, to } = editor.state.selection;
       const counted = counter.count(
         editor.state.doc,
@@ -73,7 +82,7 @@ function useCounts(editor: Editor): MindCount | null {
         setCounts(counted);
       }
       // Not starved while the renderer is busy for long, as when an Answer streams.
-      else idle = requestIdleCallback(count, { timeout: 1000 });
+      else idle = requestIdleCallback(() => count(), { timeout: 1000 });
     };
     const stop = () => {
       clearTimeout(timer);
@@ -85,6 +94,12 @@ function useCounts(editor: Editor): MindCount | null {
       stop();
       timer = setTimeout(count, COUNT_IDLE_MS);
     };
+    // Typing waits for a pause; what comes through Yjs (an Accept, an Undo, the assistant's text) is waited on.
+    const updated = ({ transaction }: { transaction: Transaction }) => {
+      if (!isChangeOrigin(transaction)) return later();
+      stop();
+      count(COUNT_AT_ONCE_MS);
+    };
     // A selection closed over unchanged text counts at once: a check closes it as it starts, and a later count would move the check's line (#968).
     const selected = ({ transaction }: { transaction: Transaction }) => {
       if (!showsSelection || transaction.docChanged || !editor.state.selection.empty) {
@@ -95,11 +110,11 @@ function useCounts(editor: Editor): MindCount | null {
       count();
     };
     count();
-    editor.on("update", later);
+    editor.on("update", updated);
     editor.on("selectionUpdate", selected);
     return () => {
       stop();
-      editor.off("update", later);
+      editor.off("update", updated);
       editor.off("selectionUpdate", selected);
     };
   }, [editor]);
@@ -107,9 +122,13 @@ function useCounts(editor: Editor): MindCount | null {
   return counts;
 }
 
-/** The Mind's target and what its count shows, kept up to date as they change here or elsewhere. */
-function useCountSettings(doc: Y.Doc) {
-  const read = () => ({ target: wordTargetOf(doc), basis: countBasisOf(doc) });
+/** The Mind's target, what its count shows and whether it shows, kept up to date as they change here or elsewhere. */
+export function useCountSettings(doc: Y.Doc) {
+  const read = () => ({
+    target: wordTargetOf(doc),
+    basis: countBasisOf(doc),
+    shown: countShownOf(doc),
+  });
   const [settings, setSettings] = useState(read);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `read` only reads `doc`.
   useEffect(() => {
@@ -120,22 +139,14 @@ function useCountSettings(doc: Y.Doc) {
 }
 
 /**
- * The quiet count under the Mind's title: words for English and characters for
- * Chinese (what the hover says), the selection's count of the whole while text
- * is selected, and the progress to the Mind's target if it has one. Its menu
- * chooses what is counted (words, or characters with or without spaces) and
- * sets the target. Both are remembered for the Mind (`mindWordCount`).
+ * The count while writing, at the page's bottom left when the User turned it
+ * on: words for English and characters for Chinese (what the hover says), the
+ * selection's count of the whole while text is selected, and the progress to
+ * the Mind's target if it has one. Its menu chooses what is counted (words, or
+ * characters with or without spaces) and sets the target. All of it is
+ * remembered for the Mind (`mindWordCount`).
  */
-export function WordCount({
-  editor,
-  doc,
-  children,
-}: {
-  editor: Editor;
-  doc: Y.Doc;
-  /** What follows the count on its line: the Mind's health (#96). */
-  children?: ReactNode;
-}) {
+export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
   const t = useT();
   const language = useLanguage();
   const counts = useCounts(editor);
@@ -144,21 +155,12 @@ export function WordCount({
   const [draft, setDraft] = useState("");
   const [invalid, setInvalid] = useState(false);
 
-  if (!counts) {
-    return (
-      <div className="mind-count" data-testid="mind-count">
-        {children}
-      </div>
-    );
-  }
+  if (!counts) return null;
 
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
-  // Words, unless the writing is Chinese or Japanese (or the User asked for characters).
-  const counted = basis === "words" && !mostlyCjk(counts.total) ? "words" : "characters";
-  const unit = (value: number) => {
-    const name = counted;
-    return t(value === 1 ? `wordCount.unit.${name}.one` : `wordCount.unit.${name}`);
-  };
+  const counted = countedUnit(counts.total, basis, language === "zh-CN");
+  const unit = (value: number) =>
+    t(value === 1 ? `wordCount.unit.${counted}.one` : `wordCount.unit.${counted}`);
 
   const total = countFor(counts.total, basis);
   const selected = counts.selection ? countFor(counts.selection, basis) : null;
@@ -306,7 +308,63 @@ export function WordCount({
           </>
         )}
       </div>
-      {children}
+    </div>
+  );
+}
+
+/**
+ * The counts at the foot of a Mind's ⋯ menu: "812 words · 8,071 characters"
+ * (字数 812 · 字符数 8,071), of the whole while text is selected, and the
+ * switch that shows the count while writing.
+ */
+export function MindCounts({
+  editor,
+  doc,
+  switchable,
+}: {
+  editor: Editor;
+  doc: Y.Doc;
+  /** False for a read-only Mind, which can't remember the switch. */
+  switchable: boolean;
+}) {
+  const t = useT();
+  const language = useLanguage();
+  const counts = useCounts(editor);
+  const { shown } = useCountSettings(doc);
+  const format = (value: number) => new Intl.NumberFormat(language).format(value);
+  const part = (basis: "words" | "characters") => {
+    if (!counts) return "";
+    const count = countFor(counts.total, basis);
+    if (counts.selection) {
+      return t(`page.count.selected.${basis}`, {
+        selected: format(countFor(counts.selection, basis)),
+        count: format(count),
+      });
+    }
+    return t(count === 1 ? `page.count.${basis}.one` : `page.count.${basis}`, {
+      count: format(count),
+    });
+  };
+  return (
+    <div className="page-menu-foot">
+      {counts && (
+        <p className="page-menu-counts tabular-nums" data-testid="page-counts">
+          {`${part("words")} · ${part("characters")}`}
+        </p>
+      )}
+      {switchable && (
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          aria-checked={shown}
+          data-testid="page-count-shown"
+          className="page-menu-switch"
+          onClick={() => setCountShown(doc, !shown)}
+        >
+          <span className="flex-1">{t("page.countShown")}</span>
+          <span className="switch" data-on={shown || undefined} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }

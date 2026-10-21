@@ -6,9 +6,10 @@ import { rowInputClass } from "./sidebarRows";
 /**
  * A name typed where it is shown (docs/agents/interaction.md, rule 1), for
  * every object that has one. Everything is selected at the start. Enter or
- * leaving the field saves; Esc cancels and keeps the old name; a blank or
- * unchanged name changes nothing and counts as a cancel. Enter while an input
- * method is composing only confirms the composition.
+ * leaving the field saves; Esc cancels and keeps the old name; an unchanged
+ * name, or a blank one unless `clearable`, changes nothing and counts as a
+ * cancel. Enter while an input method is composing only confirms the
+ * composition.
  */
 export function InlineName({
   value,
@@ -17,6 +18,7 @@ export function InlineName({
   maxLength,
   testId,
   className = rowInputClass,
+  clearable = false,
   onCommit,
   onCancel,
 }: {
@@ -27,6 +29,8 @@ export function InlineName({
   maxLength?: number;
   testId?: string;
   className?: string;
+  /** A blank name is saved, as a Mind's: it is then named by its first line again (#908). */
+  clearable?: boolean;
   /** The new name, trimmed; its failure is reported as a problem. */
   onCommit(name: string): void | Promise<void>;
   onCancel(): void;
@@ -44,7 +48,7 @@ export function InlineName({
     if (finished.current) return;
     finished.current = true;
     const name = draft.trim();
-    if (!save || name === "" || name === value) {
+    if (!save || (name === "" && !clearable) || name === value) {
       onCancel();
       return;
     }

@@ -4,9 +4,11 @@ import {
   app,
   BrowserWindow,
   dialog,
+  globalShortcut,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   powerMonitor,
+  protocol,
 } from "electron";
 import {
   type ChatModelFactory,
@@ -22,18 +24,23 @@ import type { Language } from "../core/language";
 import { defaultOllamaUrl } from "../core/providers/kinds";
 import { installedOllamaModels } from "../core/providers/ollama";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
+import { ANALYSIS_SCHEME_PRIVILEGES } from "./analysis";
 import { showDevelopmentDockIcon, windowIcon } from "./appIcon";
-import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
+import { DOCUMENT_SCHEME_PRIVILEGES, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
+import { lockInstance } from "./instanceLock";
 import { handle } from "./ipc";
 import { startLogging } from "./logging";
 import { isCaptureWindow } from "./meetings/capture";
+import { isGuideWindow, servePermissionGuide } from "./meetings/guide";
+import { isPanelWindow, serveMeetingPanel } from "./meetings/panel";
 import { installAppMenu } from "./menu";
 import { createSystemNotifications } from "./notifications";
 import { chooseExecutor, createElectronAdapters, homeFolder, systemBrowser } from "./platform";
-import { DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
+import { busyDialog, DOWNLOAD_BUTTON, RELEASES_PAGE, startupDialog } from "./startupError";
 import { realHomeProblem } from "./testHome";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
+import { guardQuit } from "./unsavedChanges";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 import { keepWindowPlace, windowPlace } from "./windowState";
 
@@ -55,6 +62,28 @@ if (dataDirOverride) app.setPath("userData", resolve(dataDirOverride));
 // The log in the data folder's `logs/`, from the start, so it has what goes wrong at startup too.
 const logger = startLogging(app.getPath("userData"));
 
+// One copy to a data folder: a second would write the same database. Electron's lock is asked
+// first: a copy it refuses never reaches `ready`, so it quits at once, and the running copy's
+// window comes forward. Two copies asking in the same millisecond can both get it, so the data
+// folder's own lock decides which of them runs (#1352).
+const instanceLock = app.requestSingleInstanceLock()
+  ? lockInstance(app.getPath("userData"), (what, error) => logger.exception(what, error))
+  : null;
+const ownsDataFolder = instanceLock?.held ?? false;
+if (instanceLock?.timedOut) {
+  logger.error("app.dataFolderBusy", { folder: app.getPath("userData") });
+  const language = resolveLanguage("system", app.getPreferredSystemLanguages());
+  const { title, detail } = busyDialog(language);
+  dialog.showErrorBox(title, detail);
+}
+if (!ownsDataFolder) {
+  logger.info("app.anotherCopyRunning");
+  // Not `quit`: its `app.quit` line in the log would read as the running copy's.
+  app.exit(0);
+}
+const releaseDataFolder = () => instanceLock?.release();
+app.on("quit", releaseDataFolder);
+
 // Whether Skill scripts run in the OS sandbox, found out while Electron starts.
 const scriptExecutor = chooseExecutor(logger);
 
@@ -64,7 +93,17 @@ const rendererUrl = process.env.ELECTRON_RENDERER_URL;
 /** Test-only launch flag: lets the smoke tests drive UI directly, e.g. open the Document viewer at a page. */
 const testHooks = process.env.INCARNAMIND_TEST_HOOKS === "1";
 
-registerDocumentScheme();
+// The smoke tests sample painted frames to check that nothing moves. Chromium stops painting a
+// window it takes for hidden or covered, which a busy CI runner's windows often are, so a check saw
+// no frames at all while the page was right.
+if (testHooks) {
+  app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+  app.commandLine.appendSwitch("disable-renderer-backgrounding");
+  app.commandLine.appendSwitch("disable-background-timer-throttling");
+}
+
+// Electron takes every privileged scheme in one call: a second would replace the first.
+protocol.registerSchemesAsPrivileged([DOCUMENT_SCHEME_PRIVILEGES, ANALYSIS_SCHEME_PRIVILEGES]);
 
 /**
  * The scripted chat model the smoke tests answer Questions with. Only a test
@@ -94,8 +133,33 @@ async function testTaskKinds(): Promise<TaskKind[]> {
 
 let core: Core | undefined;
 
-/** The app's windows: not the hidden one that records a Meeting's audio. */
-const appWindows = () => BrowserWindow.getAllWindows().filter((window) => !isCaptureWindow(window));
+/** The app's windows: not the hidden one that records a Meeting's audio, nor the floating panel. */
+const appWindows = () =>
+  BrowserWindow.getAllWindows().filter(
+    (window) => !isCaptureWindow(window) && !isPanelWindow(window) && !isGuideWindow(window),
+  );
+
+/** The windows that hear the core's events: the app's, and the floating panel during a call. */
+const listeningWindows = () =>
+  BrowserWindow.getAllWindows().filter((window) => !isCaptureWindow(window));
+
+function showFront(): void {
+  const [front] = appWindows();
+  if (!front) {
+    // Before the core is there, the start in progress makes the first window itself.
+    if (core) createWindow();
+    return;
+  }
+  if (front.isMinimized()) front.restore();
+  front.show();
+  front.focus();
+  app.focus({ steal: true });
+}
+
+app.on("second-instance", () => {
+  logger.info("app.secondLaunch");
+  showFront();
+});
 
 function isFromOurRenderer(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   const url = event.senderFrame?.url ?? "";
@@ -123,16 +187,10 @@ function exposeCore(core: Core): void {
       );
       return;
     }
-    for (const window of appWindows()) {
+    for (const window of listeningWindows()) {
       if (!window.isDestroyed()) window.webContents.send(EVENT_CHANNEL, name, payload);
     }
-    if (name === "agents.citationShown") {
-      const [front] = appWindows();
-      if (front?.isMinimized()) front.restore();
-      front?.show();
-      front?.focus();
-      app.focus({ steal: true });
-    }
+    if (name === "agents.citationShown") showFront();
   });
 }
 
@@ -153,6 +211,9 @@ function createWindow(): BrowserWindow {
     // No title row of the system's: its window buttons sit in the app's top band.
     ...titleBarOptions(process.platform),
     ...windowIcon(),
+    // A test build's window takes the size a smoke test sets: macOS keeps a window no taller
+    // than the screen otherwise, and CI's Mac has a small one.
+    ...(import.meta.env.MODE === "test" && { enableLargerThanScreen: true }),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -232,6 +293,7 @@ async function showStartupError(error: unknown): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  if (!ownsDataFolder) return;
   showDevelopmentDockIcon();
   const createChatModel = await testChatModel();
   const taskKinds = await testTaskKinds();
@@ -259,6 +321,10 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
+  const settleQuit = guardQuit(
+    core,
+    () => BrowserWindow.getFocusedWindow() ?? appWindows()[0] ?? null,
+  );
   if (taskKinds.length > 0) {
     const started = core;
     (globalThis as { incarnamindScriptedTask?: unknown }).incarnamindScriptedTask = {
@@ -272,9 +338,23 @@ app.whenReady().then(async () => {
     logger,
   });
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
+  serveMeetingPanel(core, {
+    rendererUrl,
+    appWindows,
+    trusted: isFromOurRenderer,
+    log: logger,
+    testHooks,
+  });
+  servePermissionGuide({ rendererUrl, appWindows, trusted: isFromOurRenderer, testHooks });
   installMenuInLanguage(core);
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
-  if (!testHooks) startAutoUpdates(core);
+  if (!testHooks) {
+    startAutoUpdates(core, settleQuit, () => {
+      if (process.platform !== "linux") return;
+      releaseDataFolder();
+      app.releaseSingleInstanceLock();
+    });
+  }
 
   app.on("activate", () => {
     if (appWindows().length === 0) createWindow();
@@ -297,5 +377,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
   core?.close();
 });

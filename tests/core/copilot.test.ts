@@ -1,5 +1,5 @@
 import { generateText, streamText } from "ai";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { version } from "../../package.json";
 import { type CopilotProfileId, type Core, createAiSdkChatModel } from "../../src/core";
 import type { SignInRouteProblem } from "../../src/core/api";
@@ -12,7 +12,14 @@ import {
   wayBackLabel,
 } from "../../src/core/providers/signInRoutes";
 import { translate } from "../../src/shared/i18n";
-import { askAndFinish, citationsIn, shownPassages } from "../helpers/citations";
+import { askAssistant } from "../helpers/assistant";
+import {
+  answerEnded,
+  askAndFinish,
+  askNew,
+  citationsIn,
+  shownPassages,
+} from "../helpers/citations";
 import {
   createMemoryKeychain,
   createTempDataFolder,
@@ -24,17 +31,21 @@ import {
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
 import {
   ANSWER,
+  createFakeGitHub,
   createRecordingBrowser,
   EDITOR_HEADER,
   type FakeGitHub,
-  startFakeGitHub,
+  LISTED_MODELS,
+  LOGIN,
   USER_CODE,
 } from "../helpers/fakeGitHub";
 import { connectToMind } from "../helpers/mindClient";
+import { answerIn } from "../helpers/minds";
 
 const MODEL = "gpt-5.5";
 
 interface Setup {
+  dataDir: string;
   core: Core;
   fake: FakeGitHub;
   browser: ReturnType<typeof createRecordingBrowser>;
@@ -42,12 +53,19 @@ interface Setup {
   clock: ReturnType<typeof manualClock>;
 }
 
+async function startFakeGitHub(): Promise<FakeGitHub> {
+  const fake = await createFakeGitHub();
+  onTestFinished(() => fake.close());
+  return fake;
+}
+
 async function setUp(overrides: TestAdapters = {}): Promise<Setup> {
   const clock = manualClock();
   const fake = await startFakeGitHub();
   const browser = createRecordingBrowser();
   const keychain = createMemoryKeychain();
-  const core = startCore(await createTempDataFolder(), {
+  const dataDir = await createTempDataFolder();
+  const core = startCore(dataDir, {
     keychain,
     browser,
     now: clock.now,
@@ -55,7 +73,7 @@ async function setUp(overrides: TestAdapters = {}): Promise<Setup> {
     copilotProfiles: { own: fake.profile("own"), editor: fake.profile("editor") },
     ...overrides,
   });
-  return { core, fake, browser, keychain, clock };
+  return { dataDir, core, fake, browser, keychain, clock };
 }
 
 /**
@@ -211,7 +229,10 @@ describe("Sign in with GitHub for Copilot", () => {
     fake.approve();
     expect(await result).toMatchObject({
       ok: true,
-      status: { account: { state: "signed-in", profile: "own" }, deviceCode: null },
+      status: {
+        account: { state: "signed-in", profile: "own", login: LOGIN, plan: null },
+        deviceCode: null,
+      },
     });
     const poll = fake.requests.find((request) => request.body.grant_type !== undefined);
     expect(poll?.body).toEqual({
@@ -411,6 +432,7 @@ describe("Questions with IncarnaMind's own app", () => {
       if (tokens.refreshToken) expect(text).not.toContain(tokens.refreshToken);
     }
     expect(text).not.toContain("device-1");
+    expect(text).not.toContain(LOGIN);
   });
 });
 
@@ -476,7 +498,12 @@ describe("The editor profile, an experimental sign-in route", () => {
       authorization: `Bearer ${fake.exchanged[0]}`,
       "editor-version": EDITOR_HEADER,
     });
-    expect((await core.getCopilot()).account).toEqual({ state: "signed-in", profile: "editor" });
+    expect((await core.getCopilot()).account).toEqual({
+      state: "signed-in",
+      profile: "editor",
+      login: LOGIN,
+      plan: "pro-plus",
+    });
   });
 
   test("an expired Copilot token is traded for a new one with the kept GitHub token", async () => {
@@ -493,6 +520,7 @@ describe("The editor profile, an experimental sign-in route", () => {
     const cases = [
       { set: (fake: FakeGitHub) => (fake.exchangeStatus = 503), kind: "service-error" },
       { set: (fake: FakeGitHub) => (fake.exchangeStatus = 403), kind: "refused" },
+      { set: (fake: FakeGitHub) => (fake.exchangeStatus = 404), kind: "refused" },
       { set: (fake: FakeGitHub) => (fake.exchangeOffline = true), kind: "unreachable" },
     ];
     for (const { set, kind } of cases) {
@@ -506,9 +534,102 @@ describe("The editor profile, an experimental sign-in route", () => {
     }
   });
 
+  test("cancelling while GitHub's token is being traded keeps nothing", async () => {
+    const setup = await setUp();
+    let release = () => {};
+    setup.fake.holdExchange = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { result } = await codeShown(setup.core, "editor");
+    setup.fake.approve();
+    await vi.waitFor(() =>
+      expect(setup.fake.requests.some((r) => r.path === "/copilot_internal/v2/token")).toBe(true),
+    );
+
+    await setup.core.cancelCopilotSignIn();
+    release();
+
+    expect(await result).toMatchObject({ ok: false, error: { kind: "sign-in-cancelled" } });
+    expect(setup.keychain.secrets.size).toBe(0);
+  });
+
+  test("an organization's policy that blocks the app is told so at sign-in, and nothing is kept", async () => {
+    const setup = await setUp();
+    setup.fake.exchangePolicy = true;
+    const { result } = await codeShown(setup.core, "editor");
+    setup.fake.approve();
+
+    expect(await result).toMatchObject({ ok: false, error: { kind: "policy-blocked" } });
+    expect(setup.keychain.secrets.size).toBe(0);
+  });
+
+  test("names the plan GitHub gives, and none it doesn't recognise", async () => {
+    for (const [sku, plan] of [
+      ["free_limited_copilot", "free"],
+      ["monthly_subscriber_quota", "pro"],
+      ["plus_yearly_subscriber_quota", "pro-plus"],
+      ["copilot_for_business_seat_quota", "business"],
+      ["copilot_enterprise_seat_quota", "enterprise"],
+      ["something_new", null],
+    ] as const) {
+      const setup = await setUp();
+      setup.fake.sku = sku;
+      const { core } = await signedIn("editor", setup);
+
+      expect((await core.getCopilot()).account, sku).toMatchObject({ plan });
+    }
+  });
+
+  test("signs in when GitHub doesn't give the account's name, and names none", async () => {
+    const setup = await setUp();
+    setup.fake.userStatus = 500;
+    const { core, fake } = await signedIn(undefined, setup);
+
+    expect((await core.getCopilot()).account).toMatchObject({ state: "signed-in", login: null });
+    const user = fake.requests.find((request) => request.path === "/user");
+    expect(user?.headers["user-agent"]).toBe(`IncarnaMind/${version}`);
+  });
+
+  test("signing in again while signed in keeps the sign-in until the new one succeeds", async () => {
+    const { core, fake } = await signedIn("editor");
+    const { result } = await codeShown(core, "editor");
+
+    await core.cancelCopilotSignIn();
+
+    expect(await result).toMatchObject({ ok: false, error: { kind: "sign-in-cancelled" } });
+    expect((await core.getCopilot()).account).toMatchObject({ state: "signed-in", login: LOGIN });
+    expect((await ask(core)).text).toBe(ANSWER);
+    const again = await codeShown(core, "editor");
+    fake.approve();
+    expect(await again.result).toMatchObject({ ok: true });
+    await ask(core);
+    expect(chats(fake).at(-1)?.headers.authorization).toBe(`Bearer ${fake.exchanged.at(-1)}`);
+  });
+
+  test("a plan that lists no model is asked again, not kept as empty", async () => {
+    const setup = await setUp();
+    setup.fake.listedModels = [];
+    await signIn(setup);
+    expect((await setup.core.getCopilot()).models).toEqual([]);
+
+    setup.fake.listedModels = LISTED_MODELS;
+
+    expect((await setup.core.getCopilot()).models.map((model) => model.id)).toEqual([
+      "gpt-5.5",
+      "claude-sonnet-5",
+    ]);
+  });
+
+  test("signing out forgets the account's name and plan", async () => {
+    const { core } = await signedIn("editor");
+
+    expect((await core.signOutOfCopilot()).account).toEqual({ state: "signed-out" });
+    expect(JSON.stringify(await core.getCopilot())).not.toContain(LOGIN);
+  });
+
   test("a GitHub account without Copilot is told so at sign-in, and nothing is kept", async () => {
     const setup = await setUp();
-    setup.fake.exchangeStatus = 404;
+    setup.fake.exchangeNoCopilot = true;
     const { result } = await codeShown(setup.core, "editor");
     setup.fake.approve();
 
@@ -528,7 +649,7 @@ describe("Failures", () => {
     {
       name: "no Copilot plan",
       status: 403,
-      body: { error: { message: "You don't have access to GitHub Copilot." } },
+      body: { error: { message: "No access to GitHub Copilot found.", code: "no_copilot_access" } },
       kind: "blocked",
       problem: "no-plan",
     },
@@ -578,16 +699,32 @@ describe("Failures", () => {
 
       expect(await failure(core)).toMatchObject({ kind, signInRoute: problem });
     });
+
+    test(`${name} stops an Answer in the assistant, which keeps "${problem}" for its line`, async () => {
+      const { core, fake } = await signedIn();
+      const reply = { kind: "error" as const, status, body: JSON.stringify(body) };
+      // Every request fails alike, a search rewrite included.
+      fake.replies.push(reply, reply, reply, reply);
+
+      const answer = await askAssistant(core, { text: "What does my plan cover?" }, "failed");
+
+      expect(answer).toMatchObject({ errorKind: kind, errorSignInRoute: problem });
+    });
   }
 
-  test("a passing rate limit is a rate limit, with its own line", async () => {
+  test("a passing rate limit is asked again after the wait GitHub gives, then has its own line", async () => {
     const { core, fake } = await signedIn();
-    fake.replies.push({
-      kind: "error",
+    const slowDown = {
+      kind: "error" as const,
       status: 429,
+      headers: { "retry-after-ms": "1" },
       body: JSON.stringify({ error: { message: "Too many requests" } }),
-    });
+    };
+    fake.replies.push(slowDown);
+    const { model } = await core.prepareChatModel();
+    expect((await generateText({ model, prompt: "Hi", maxRetries: 2 })).text).toBe(ANSWER);
 
+    fake.replies.push(slowDown);
     expect(await failure(core)).toMatchObject({ kind: "rate-limit", signInRoute: "rate-limited" });
   });
 
@@ -633,5 +770,52 @@ describe("Failures", () => {
     for (const language of ["en", "zh-CN"] as const) {
       for (const { line } of signIn) expect(translate(language, line)).not.toBe(line);
     }
+  });
+});
+
+describe("A failed Answer in a Mind", () => {
+  test("keeps its route's problem with the Answer, for the route's own line", async () => {
+    const { core, fake } = await signedIn();
+    const refusal = {
+      kind: "error" as const,
+      status: 403,
+      body: JSON.stringify({
+        error: { message: "Copilot is disabled by your organization's policy." },
+      }),
+    };
+    fake.replies.push(refusal, refusal, refusal, refusal);
+    const mind = await core.createMind({ title: "Plan" });
+    const client = await connectToMind(core, mind.id);
+
+    const answerId = await askNew(core, client, mind.id, "What does my plan cover?");
+
+    expect((await answerEnded(core, answerId)).event).toBe("failed");
+    await client.settled();
+    expect(answerIn(client, answerId).attrs).toMatchObject({
+      errorKind: "blocked",
+      errorSignInRoute: "policy-blocked",
+    });
+  });
+});
+
+describe("A failed Answer in the assistant", () => {
+  test("keeps an expired sign-in as its route's problem, after a restart too", async () => {
+    const setup = await setUp();
+    const { core, fake, keychain, dataDir } = await signedIn(undefined, setup);
+    fake.revoke();
+    const answer = await askAssistant(core, { text: "What does my plan cover?" }, "failed");
+    expect(answer.errorSignInRoute).toBe("sign-in-expired");
+    core.close();
+
+    const again = startCore(dataDir, {
+      keychain,
+      copilotProfiles: { own: fake.profile("own"), editor: fake.profile("editor") },
+    });
+    const { messages } = await again.getConversation(answer.conversationId);
+
+    expect(messages.find((message) => message.id === answer.id)).toMatchObject({
+      errorKind: "not-signed-in",
+      errorSignInRoute: "sign-in-expired",
+    });
   });
 });

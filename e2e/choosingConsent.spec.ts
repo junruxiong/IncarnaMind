@@ -7,13 +7,15 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  addProviderForm,
   askInAssistant,
   closeSettings,
+  continueSetup,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -30,10 +32,43 @@ async function screenshot(window: Page, name: string): Promise<void> {
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-const SENDS_EN =
-  "Your Questions, the Mind you're in and Passages from your Documents go to OpenAI when you use it, and the first lines of each Document, to tag it. Tagging starts when you save the key.";
-const SENDS_ZH =
-  "你的问题、当前 Mind 和文档中的相关段落会在使用时发送给 OpenAI；每个文档的开头几行也会发送给它，用来打标签。保存密钥后就开始打标签。";
+const SENDS_EN = {
+  lead: "Sends your questions and document text to OpenAI. · Details",
+  after: "Tagging starts when you save the key.",
+  items: [
+    "your Questions, the Mind you’re in, matching passages with their Document names and pages, and the names of other Documents in scope",
+    "each sentence you check",
+    "the paragraph you pause on, for writing suggestions",
+    "the text you ask the assistant to change",
+    "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
+  ],
+};
+const SENDS_ZH = {
+  lead: "会把你的问题和文档内容发送给 OpenAI。 · 详情",
+  after: "保存密钥后就开始打标签。",
+  items: [
+    "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",
+    "你核对的每一句话",
+    "写作建议时你停下的那一段",
+    "你让助手修改的文字",
+    "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档（没有文字的扫描件会发送页面图片）",
+  ],
+};
+
+/** The one line, then Details opening and closing the full list by keyboard; and the tagging note under it. */
+async function expectSends(sends: Locator, words: typeof SENDS_EN): Promise<void> {
+  await expect(sends.locator("p")).toHaveText(words.lead);
+  await expect(sends.getByRole("listitem")).toHaveCount(0);
+  const details = sends.getByTestId("provider-sends-details");
+  await details.focus();
+  await details.press("Enter");
+  await expect(details).toHaveAttribute("aria-expanded", "true");
+  await expect(sends.getByRole("listitem")).toHaveText(words.items);
+  await details.press("Enter");
+  await expect(sends.getByRole("listitem")).toHaveCount(0);
+  await details.press("Enter");
+  await expect(sends.locator("xpath=..").getByText(words.after)).toBeVisible();
+}
 
 let dataDir: string;
 let sources: string;
@@ -84,13 +119,13 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
     .locator("label")
     .filter({ hasText: /^OpenAI$/ })
     .click();
-  await expect(form.getByTestId("provider-sends")).toHaveText(SENDS_EN);
+  await expectSends(form.getByTestId("provider-sends"), SENDS_EN);
   await acceptPlainTextKeys(window, form);
-  await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
+  await form.getByLabel(/^API key/).fill("sk-proj-not-a-real-key");
   await form.getByTestId("provider-sends").scrollIntoViewIfNeeded();
   await screenshot(window, "choosing-line-setup-en");
   await form.getByTestId("provider-use-key").click();
-  await expect(setup).toBeHidden();
+  await continueSetup(window);
 
   // A Document is tagged without asking.
   await addDocuments(window, [await invoice("Invoice 41")]);
@@ -103,23 +138,25 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
   await expect(window.getByTestId("consent-dialog")).toBeHidden();
   expect(await consentAsked()).toEqual([]);
 
-  // Settings › Privacy: each flow says it was allowed when OpenAI was chosen.
+  // Settings › Privacy: OpenAI says once that it was allowed when it was chosen, for every use.
   const settings = await openSettings(window, "privacy");
-  const decisionOf = (flow: string) =>
-    settings
-      .locator(`[data-testid="data-flow"][data-flow-id="${flow}"]`)
-      .getByTestId("data-flow-service");
+  const service = settings.getByTestId("data-service");
+  await expect(service).toHaveCount(1);
+  await expect(service).toHaveAttribute("data-consent", "accepted");
+  await expect(service.getByTestId("data-service-decision")).toContainText(
+    /^Allowed when you chose OpenAI, /,
+  );
+  await service.getByTestId("data-service-decision-details").click();
   for (const flow of ["chat", "edits", "checks", "suggestions", "tagging", "classification"]) {
-    await expect(decisionOf(flow).getByTestId("data-flow-decision")).toHaveText(
-      /^Allowed when you chose OpenAI, /,
+    await expect(service.locator(`[data-testid="data-flow"][data-flow-id="${flow}"]`)).toHaveCount(
+      1,
     );
   }
   await screenshot(window, "privacy-chosen-en");
 
-  // Revoking Tags stops tagging alone: the next Document waits, saying why, with Allow in place.
-  await decisionOf("tagging").getByTestId("data-flow-revoke").click();
-  await expect(decisionOf("tagging")).toHaveAttribute("data-consent", "not-asked");
-  await expect(decisionOf("chat")).toHaveAttribute("data-consent", "accepted");
+  // Stopping OpenAI stops tagging too: the next Document waits, saying why, with Allow in place.
+  await service.getByTestId("data-service-revoke").click();
+  await expect(service).toHaveAttribute("data-consent", "not-asked");
   await closeSettings(window);
   await window.getByTestId("add-documents-input").setInputFiles([await invoice("Invoice 42")]);
   const second = window.getByTestId("document-list-item").filter({ hasText: "Invoice 42" });
@@ -132,13 +169,20 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
     "Tags wait until you allow Document text to go to OpenAI.",
   );
   await screenshot(window, "tagging-permission-en");
-  await askInAssistant(window, "And now?");
-  expect(await consentAsked()).toEqual([]);
 
   await status.getByTestId("tagging-waiting-allow").click();
   await expect(second).toHaveAttribute("data-tagging", "tagged", { timeout: 15_000 });
   await expect(status).toHaveCount(0);
   expect(await consentAsked()).toEqual([]);
+
+  // Allowed for Tags alone, the service says some uses aren't allowed yet; Allow allows the rest.
+  const reopened = (await openSettings(window, "privacy")).getByTestId("data-service");
+  await expect(reopened).toHaveAttribute("data-consent", "partly");
+  await expect(reopened.getByTestId("data-service-decision")).toContainText(
+    "Some uses aren’t allowed yet",
+  );
+  await reopened.getByTestId("data-service-allow").click();
+  await expect(reopened).toHaveAttribute("data-consent", "accepted");
   await app.close();
 });
 
@@ -162,21 +206,34 @@ test("before a model is chosen, a new Document's tagging waits with its line, an
   await app.close();
 });
 
-test("in Chinese, Settings › Models says what goes to the provider above its button", async () => {
+test("Settings › Models says in one line what the ChatGPT plan sends, with the full list behind Details", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  const settings = await openSettings(window, "models");
+
+  const plan = settings.getByTestId("chatgpt-settings");
+  await expect(plan).toContainText("No key needed. Counts toward your plan’s limits.");
+  const sends = plan.getByTestId("provider-sends");
+  await expect(sends.locator("p")).toHaveText(
+    "Sends your questions and document text to OpenAI. · Details",
+  );
+  await sends.getByTestId("provider-sends-details").click();
+  await expect(sends.getByRole("listitem")).toHaveText(SENDS_EN.items);
+  await plan.scrollIntoViewIfNeeded();
+  await screenshot(window, "choosing-line-chatgpt-en");
+  await app.close();
+});
+
+test("in Chinese, adding a provider in Settings › Models says what goes to it above its button", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const settings = await openSettings(window, "models");
   await setLanguage(window, "zh-CN");
 
-  await settings.getByTestId("chat-choice-api-key").check();
-  const form = settings.getByTestId("provider-form");
-  await form
-    .locator("label")
-    .filter({ hasText: /^OpenAI$/ })
-    .click();
+  const form = await addProviderForm(settings, "openai");
 
   const line = form.getByTestId("provider-sends");
-  await expect(line).toHaveText(SENDS_ZH);
+  await expectSends(line, SENDS_ZH);
   await line.scrollIntoViewIfNeeded();
   // Right above the button it is said for.
   const lineBox = await line.boundingBox();

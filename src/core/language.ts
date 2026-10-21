@@ -1,8 +1,8 @@
 /** Interface languages. Pure module: the renderer and the main process import it too. */
 
-const languages = ["en", "zh-CN"] as const;
+export const LANGUAGES = ["en", "zh-CN"] as const;
 
-export type Language = (typeof languages)[number];
+export type Language = (typeof LANGUAGES)[number];
 
 /** An interface language as a model is told to write in it. */
 export const LANGUAGE_NAMES: Record<Language, string> = {
@@ -14,7 +14,7 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
 export type LanguagePreference = Language | "system";
 
 export function isLanguagePreference(value: unknown): value is LanguagePreference {
-  return value === "system" || languages.some((language) => language === value);
+  return value === "system" || LANGUAGES.some((language) => language === value);
 }
 
 /**

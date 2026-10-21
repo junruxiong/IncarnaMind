@@ -69,8 +69,20 @@ export function problemText(t: Translate, problem: MindProblem, mind: string): s
       return t("mindCall.failed.changed", { mind });
     case "content-not-own":
       return t("mindCall.failed.contentNotOwn", { mind });
+    case "copy":
+      return t("mindCall.failed.copy", { mind, text: problem.text });
+    case "new-version":
+      return t("mindCall.failed.newVersion", { mind, text: problem.text });
     case "stopped":
       return t("mindCall.failed.stopped", { mind });
+    case "no-table":
+      return t("mindCall.failed.noTable", { mind });
+    case "uncited":
+      return t("mindCall.failed.uncited", { mind });
+    case "no-chart":
+      return t(`mindCall.failed.noChart.${problem.problem}`, { mind });
+    case "new-mind":
+      return t("mindCall.failed.newMind", { mind });
     case "local-mode":
       return t("mindCall.failed.localMode", { mind });
     case "not-ready":

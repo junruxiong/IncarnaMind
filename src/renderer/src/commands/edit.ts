@@ -2,8 +2,9 @@ import { useEffect } from "react";
 import type { EditMenuState } from "../../../shared/bridge";
 import { files } from "../core";
 import { noteAround } from "../editor/noteKeymap";
+import { useT } from "../i18n";
 import type { Translate } from "../objects";
-import { typesText, type Undoable, useUndo } from "../undo";
+import { nextToRedo, nextToUndo, typesText, type Undoable, useUndo } from "../undo";
 import { type Command, type CommandContext, fromMenu } from "./registry";
 
 /**
@@ -21,11 +22,12 @@ function placeOf(ctx: CommandContext): EditMenuState["text"] {
   return typing ? "field" : null;
 }
 
-const nameOf = (change: Undoable | undefined) => (change ? (change.name ?? "") : null);
+const nameOf = (change: Undoable | undefined, t: Translate) =>
+  change ? (change.name?.(t) ?? "") : null;
 
 const labelFor = (step: "undo" | "redo", t: Translate) => {
-  const { done, undone } = useUndo.getState();
-  const name = nameOf((step === "undo" ? done : undone).at(-1));
+  const state = useUndo.getState();
+  const name = nameOf(step === "undo" ? nextToUndo(state) : nextToRedo(state), t);
   if (!name) return t(step === "undo" ? "menu.undo" : "menu.redo");
   return t(step === "undo" ? "menu.undo.named" : "menu.redo.named", { action: name });
 };
@@ -38,9 +40,7 @@ export const editCommands: readonly Command[] = [
     group: "edit",
     reversible: true,
     enabled: (ctx) =>
-      placeOf(ctx) !== null || useUndo.getState().done.length > 0
-        ? true
-        : { reason: "undo.nothing" },
+      placeOf(ctx) !== null || nextToUndo(useUndo.getState()) ? true : { reason: "undo.nothing" },
     run(ctx) {
       const place = placeOf(ctx);
       if (place === "note") noteAround(document.activeElement)?.commands.undo();
@@ -56,9 +56,7 @@ export const editCommands: readonly Command[] = [
     group: "edit",
     reversible: true,
     enabled: (ctx) =>
-      placeOf(ctx) !== null || useUndo.getState().undone.length > 0
-        ? true
-        : { reason: "redo.nothing" },
+      placeOf(ctx) !== null || nextToRedo(useUndo.getState()) ? true : { reason: "redo.nothing" },
     run(ctx) {
       const place = placeOf(ctx);
       if (place === "note") noteAround(document.activeElement)?.commands.redo();
@@ -69,12 +67,12 @@ export const editCommands: readonly Command[] = [
 ];
 
 /** The Edit menu's state here now: where its Undo and Redo go, and what they name. */
-function editMenuState(): EditMenuState {
-  const { done, undone } = useUndo.getState();
+function editMenuState(t: Translate): EditMenuState {
+  const state = useUndo.getState();
   return {
     text: placeOf({ selection: [], focus: null, surface: "mind" }),
-    undo: nameOf(done.at(-1)),
-    redo: nameOf(undone.at(-1)),
+    undo: nameOf(nextToUndo(state), t),
+    redo: nameOf(nextToRedo(state), t),
   };
 }
 
@@ -83,12 +81,13 @@ function editMenuState(): EditMenuState {
  * they would take back or do again, as the focus moves and changes are made.
  */
 export function useEditMenu(): void {
+  const t = useT();
   useEffect(() => {
     let sent = "";
     let pending = 0;
     const report = () => {
       pending = 0;
-      const state = editMenuState();
+      const state = editMenuState(t);
       const key = JSON.stringify(state);
       if (key === sent) return;
       sent = key;
@@ -115,5 +114,5 @@ export function useEditMenu(): void {
       window.removeEventListener("focus", again);
       stop();
     };
-  }, []);
+  }, [t]);
 }

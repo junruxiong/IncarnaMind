@@ -1,9 +1,11 @@
 /**
- * A Mind's health, under its title (#96): its Citations found and not
- * found, and its sentences without support: those checked as unsupported or
+ * A Mind's health (#96): its Citations found and not found, whatever their
+ * sentence's verdict, and its sentences without support: those checked as unsupported or
  * contradicted, and those that make a claim with no Citation; then those
  * whose check needs a re-check or couldn't be made. Each part keeps where
  * its sentences or Citations are, top to bottom, so it can move to the next.
+ * A sentence is in one part: a claim with no check counts as "not checked yet"
+ * when it has a Citation or an Answer wrote it, and as having no Citation otherwise.
  *
  * Its own sentences count: in paragraphs, lists, quotes and Answers added to
  * it, not in headings, Questions, code, formulas, tables or footnotes.
@@ -22,6 +24,7 @@ import { sentenceKey } from "../../../shared/mindCheck";
 import { readProposalAttribute } from "../../../shared/proposals";
 import { INLINE_NODE, isClaim, sentenceSpans } from "../../../shared/sentences";
 import type { ShownClaim } from "./claimChecks";
+import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 
 export const HEALTH_PARTS = [
   "found",
@@ -36,8 +39,9 @@ export type HealthPart = (typeof HEALTH_PARTS)[number];
 
 /**
  * Where each part's sentences or Citations are, top to bottom: its count is
- * how many. `unchecked`: the sentences that make a claim with no check, but
- * those the last whole-Mind check found make none (#737), for "Check all".
+ * how many. `unchecked`: the sentences that make a claim with no check, that
+ * have a Citation or that an Answer wrote, but those the last whole-Mind check
+ * found make none (#737).
  */
 export type NoteHealth = Record<HealthPart, number[]> & { unchecked: number[] };
 
@@ -68,6 +72,8 @@ export function noteHealth(
   claims: readonly ShownClaim[],
   citationCheck: (attributes: CitationAttributes) => CitationCheck,
   skipped: ReadonlySet<string> = new Set(),
+  /** Whether an Answer wrote the block with this id: its claims are to check, cited or not. */
+  writtenByAnswer: (blockId: unknown) => boolean = () => false,
 ): NoteHealth {
   const health: NoteHealth = {
     found: [],
@@ -83,6 +89,7 @@ export function noteHealth(
     if (UNCOUNTED.has(node.type.name) || proposed(node)) return false;
     if (!node.isTextblock) return true;
     if (node.type.name !== "paragraph") return false;
+    const answered = writtenByAnswer(doc.resolve(pos + 1).node(1).attrs[BLOCK_ID_ATTRIBUTE]);
     let text = "";
     /** Where each character of `text` is in the document. */
     const places: number[] = [];
@@ -111,19 +118,21 @@ export function noteHealth(
       const to = (places[span.to - 1] ?? from) + 1;
       const claim = claims.find((each) => each.from < to && each.to > from);
       const words = text.slice(span.from, span.to);
-      if (!claim && isClaim(words) && !skipped.has(sentenceKey(words))) health.unchecked.push(from);
       const problem = claim && PROBLEM[claim.shown.state];
-      if (problem) {
-        health[problem].push(from);
-        continue;
-      }
+      if (problem) health[problem].push(from);
       const cited = citations.filter((each) => each.at >= span.from && each.at < span.to);
       for (const citation of cited) {
         const check = citationCheck(citation.attributes);
         if (check === "found") health.found.push(citation.pos);
         else if (check === "not-found") health.notFound.push(citation.pos);
       }
-      if (cited.length === 0 && isClaim(words)) health.noCitation.push(from);
+      const toCheck =
+        !claim &&
+        isClaim(words) &&
+        !skipped.has(sentenceKey(words)) &&
+        (cited.length > 0 || answered);
+      if (toCheck) health.unchecked.push(from);
+      else if (!problem && cited.length === 0 && isClaim(words)) health.noCitation.push(from);
     }
     return false;
   });

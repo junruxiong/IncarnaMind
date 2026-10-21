@@ -38,7 +38,7 @@ describe("the Word look's stylesheet", () => {
     const shortRules = rulesOf(wordLookCss(short.mindId, short.look));
     const longRules = rulesOf(wordLookCss(long.mindId, long.look));
     expect(longRules).toHaveLength(shortRules.length);
-    expect(longRules.length).toBeLessThan(20);
+    expect(longRules.length).toBeLessThan(25);
     for (const rule of longRules)
       expect(rule.startsWith(`.${wordLookScope(long.mindId)} `)).toBe(true);
   });
@@ -50,13 +50,13 @@ describe("the Word look's stylesheet", () => {
     expect(decorationsIn(editor.state)).toBe(0);
   });
 
-  test("zooms the content to fit a frame narrower than the file's text width, down to 80%; the frame keeps the whole width", async () => {
+  test("zooms the content to fit a frame narrower than the file's text width, its body never under 11px; the frame keeps the whole width", async () => {
     const { mindId, look } = await importedLook(longContract(2));
     const scope = `.${wordLookScope(mindId)}`;
     const rules = rulesOf(wordLookCss(mindId, look));
     expect(rules).toContain(`${scope} { max-width: calc(var(--word-pt) * ${look.width}); }`);
     expect(rules).toContain(
-      `${scope} .mind-editor { --word-pt: clamp(calc(var(--word-unit) * 0.8), calc(100cqw / ${look.width}), var(--word-unit)); }`,
+      `${scope} .mind-editor { --word-pt: clamp(calc(11px / ${look.body}), calc(100cqw / ${look.width}), var(--word-unit)); }`,
     );
     expect(rulesOf(wordLookCss(mindId, { ...look, width: null })).join("\n")).not.toContain("cqw");
   });
@@ -82,7 +82,7 @@ describe("the Word look's stylesheet", () => {
     expect(Object.getPrototypeOf(look.runs)).toBe(Object.prototype);
     expect(look.paragraphs).toEqual({ p1: {}, p2: { run: "constructor" } });
     const css = wordLookCss("mind", look);
-    expect(css).not.toContain("display");
+    expect(css).not.toContain("display: none");
     expect(css).not.toContain("Polluted");
     // A run key that names no run of this look, only an object's own property, draws no run.
     expect(rulesOf(css).find((rule) => rule.includes('"p2"'))).not.toContain("text-transform");

@@ -196,6 +196,73 @@ function docxParts(exported: MindExport) {
 }
 
 describe("exporting a Mind", () => {
+  test("Markdown preserves checked, unchecked and empty checklist items, nested beside ordinary lists", async () => {
+    const { core, mind, client } = await setUp();
+    const task = (checked: boolean, ...content: JSONContent[]): JSONContent => ({
+      type: "taskItem",
+      attrs: { checked },
+      content,
+    });
+    const checklist = (checked: boolean): JSONContent => ({
+      type: "taskList",
+      content: [
+        task(
+          checked,
+          paragraph(text("核查清单项")),
+          {
+            type: "taskList",
+            content: [
+              task(false, paragraph(text("Check sources"))),
+              task(true, paragraph(text("已核对"))),
+            ],
+          },
+          {
+            type: "bulletList",
+            content: [item(paragraph(text("Supporting note")))],
+          },
+        ),
+        task(false, paragraph(text("交付报告"))),
+        task(true, paragraph()),
+        task(true, paragraph(), {
+          type: "taskList",
+          content: [task(false, paragraph(text("Empty parent")))],
+        }),
+        task(false, paragraph()),
+      ],
+    });
+    const ordinary: JSONContent = {
+      type: "orderedList",
+      attrs: { start: 3 },
+      content: [
+        item(paragraph(text("Ordinary item")), {
+          type: "bulletList",
+          content: [item(paragraph(text("A bullet")))],
+        }),
+      ],
+    };
+    for (const checked of [true, false]) {
+      writeMind(client, [checklist(checked), ordinary]);
+      await client.settled();
+      const exported = await core.exportMind(mind.id, { format: "markdown" });
+      expect(new TextDecoder().decode(exported.data).trim()).toBe(
+        [
+          `- [${checked ? "x" : " "}] 核查清单项`,
+          "  - [ ] Check sources",
+          "  - [x] 已核对",
+          "  - Supporting note",
+          "- [ ] 交付报告",
+          "- [x] ",
+          "- [x] ",
+          "  - [ ] Empty parent",
+          "- [ ] ",
+          "",
+          "3. Ordinary item",
+          "   - A bullet",
+        ].join("\n"),
+      );
+    }
+  });
+
   test("the bytes of an export don't change: a fingerprint of the sample's Markdown and .docx", async () => {
     const { core, mind, client, tides } = await setUp();
     writeSample(client, tides);
@@ -208,11 +275,11 @@ describe("exporting a Mind", () => {
       createHash("sha256")
         .update(await exported("markdown"))
         .digest("hex"),
-    ).toBe("a4c7d2f0c6856d0ed5a4df3984ab53e8b1bd89057a4cef980a14629bb86685fa");
+    ).toBe("6af5396e9bda856838e28958169641a1d21a98d04e5ec9d02a7e5375bb0c8f74");
     // The .docx's compressed bytes depend on zlib's build, so they are checked against this
     // Node's deflate, and the rest is pinned (see `zipFingerprint`).
     expect(zipFingerprint(await exported("docx"))).toBe(
-      "9d3657aa6be50fa1e81d4b805ffab8d6976bf6648899b05d0307c44a194745be",
+      "6a5db33f9993e45e655fb7aa840e136279ac02117a6e9cde73338b08466f80a5",
     );
   });
 
@@ -221,19 +288,19 @@ describe("exporting a Mind", () => {
       "the sample, with its Question",
       "sample",
       { includeQuestions: true },
-      "90dedfa1ef94e2f23d93b35494788229aa348426f03557101123d83ba4bd98f5",
+      "3753007f9f9eabf272117b41067bdd6708cfb17a2bae63e7d07b3ba17ba529b0",
     ],
     [
       "the sample, in Chinese, on A4",
       "sample",
       { language: "zh-CN" },
-      "7e0bbfccefa4e63d9be0ffb226798ad4cd766d60757725ff639d5d1b6fcbfc4f",
+      "d89a258688b8dbbb130669a52526768680538aa43c6b8e61390055f299a9bac2",
     ],
     [
       "quotes, rules, links, marks, breaks, tables, images and Locations",
       "rest",
       {},
-      "407655edf9fc643d253e7ec404d663cec5aaf0867e57b45195d0eaf51cc939cb",
+      "86a0b1422bc404bb4a8d796c8ba495d60aca2d3257be3ae11f070052360e3fa0",
     ],
   ] as const)(
     "the bytes of a .docx export don't change either: %s",
@@ -263,8 +330,6 @@ describe("exporting a Mind", () => {
 
     expect(decode(exported)).toBe(
       [
-        "# Tides",
-        "",
         "# Spring tides",
         "",
         "**Neap** tides are *weaker*, at \\$0.",
@@ -347,9 +412,10 @@ describe("exporting a Mind", () => {
       'PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"',
     );
 
+    // The name is the file's Title property, and the page starts with the text, with no title line (#908).
+    expect(part(files, "docProps/core.xml")).toContain("<dc:title>Tides</dc:title>");
     // Questions are left out by default; the Note switched out of Question context is in.
     expect(paragraphsOf(document)).toEqual([
-      { style: "Title", text: "Tides" },
       { style: "Heading1", text: "Spring tides" },
       { text: "Neap tides are weaker, at $0." },
       { text: "Kept out of Questions, still exported." },
@@ -413,6 +479,64 @@ describe("exporting a Mind", () => {
     );
   });
 
+  // protects=a list in a Word export is indented as the Mind draws it (DESIGN.md, #1341): each level's text half an inch further in, its bullet or number a quarter inch before it; fails_when=the export's indents drift from the screen's 48px a level and 24px hang; no_claim=how Word draws them.
+  test("to .docx: a list's levels are indented 720 twips each, with a 360 hang, as the Mind draws them", async () => {
+    const { core, mind, client } = await setUp();
+    writeMind(client, [
+      {
+        type: "bulletList",
+        content: [
+          item(paragraph(text("One")), {
+            type: "bulletList",
+            content: [
+              item(paragraph(text("Two")), {
+                type: "bulletList",
+                content: [item(paragraph(text("Three")))],
+              }),
+            ],
+          }),
+        ],
+      },
+    ]);
+    await client.settled();
+
+    const { document, numbering } = docxParts(await core.exportMind(mind.id, { format: "docx" }));
+
+    // A level's text is 48px per level in, in twips: 720 each; its bullet 24px (360) before it.
+    expect(
+      [...document.matchAll(/<w:ind w:left="(\d+)" w:hanging="(\d+)"\/>/g)].map((m) => m.slice(1)),
+    ).toEqual([
+      ["720", "360"],
+      ["1440", "360"],
+      ["2160", "360"],
+    ]);
+    // The list's own definition says the same for each of its levels.
+    const levels = [
+      ...numbering.matchAll(/<w:lvl w:ilvl="(\d)">.*?<w:ind w:left="(\d+)" w:hanging="(\d+)"\/>/g),
+    ];
+    expect(levels.slice(0, 3).map((m) => m.slice(1))).toEqual([
+      ["0", "720", "360"],
+      ["1", "1440", "360"],
+      ["2", "2160", "360"],
+    ]);
+  });
+
+  test("a new Mind's title line left empty isn't exported: no empty heading at the top of the file", async () => {
+    const { core, mind, client } = await setUp();
+    writeMind(client, [
+      { type: "heading", attrs: { level: 1 } },
+      note("Spring tides come at new moon."),
+    ]);
+    await client.settled();
+
+    const markdown = decode(await core.exportMind(mind.id, { format: "markdown" }));
+    expect(markdown).toBe("Spring tides come at new moon.\n");
+    const html = decode(await core.exportMind(mind.id, { format: "html" }));
+    expect(html).not.toMatch(/<h[1-6][^>]*>\s*<\/h[1-6]>/);
+    const { document } = docxParts(await core.exportMind(mind.id, { format: "docx" }));
+    expect(paragraphsOf(document)).toEqual([{ text: "Spring tides come at new moon." }]);
+  });
+
   test("highlighted text is ==marked== in Markdown and highlighted in Word", async () => {
     const { core, mind, client } = await setUp();
     writeMind(client, [
@@ -431,8 +555,6 @@ describe("exporting a Mind", () => {
     const markdown = decode(await core.exportMind(mind.id, { format: "markdown" }));
     expect(markdown).toBe(
       [
-        "# Tides",
-        "",
         "Spring tides are ==strongest== at **==new moon==**.",
         "",
         "In code, a \\== b; ==\\= b==",
@@ -442,7 +564,6 @@ describe("exporting a Mind", () => {
 
     const { document } = docxParts(await core.exportMind(mind.id, { format: "docx" }));
     expect(paragraphsOf(document)).toEqual([
-      { style: "Title", text: "Tides" },
       { text: "Spring tides are strongest at new moon." },
       { text: "In code, a == b; = b" },
     ]);
@@ -552,31 +673,23 @@ describe("exporting a Mind", () => {
       expect(name.length).toBeLessThanOrEqual(123);
     });
 
-    test("a Mind of Notes added from an Answer is named by the Question, not the Answer's first line (#769)", async () => {
+    test("a Mind of Notes added from an Answer is named by their first line, never by the instruction that gave them (#1174)", async () => {
       const { core, mind } = await setUp("");
       await core.addToNote({
         mindId: mind.id,
         blocks: [
-          {
-            type: "paragraph",
-            content: [
-              {
-                type: "text",
-                text: "The employee gets 27 days of paid holiday per year, plus bank holidays.",
-              },
-            ],
-          },
+          { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Summary" }] },
+          { type: "paragraph", content: [{ type: "text", text: "The parties agree to terms." }] },
         ],
         origin: {
           from: messageReference("conversation-1", "answer-1"),
-          question:
-            "How many days of holiday does the employee get, and how much notice after probation?",
+          question: "Make the summary longer.",
         },
         model: null,
       });
 
       expect((await core.previewMindExport(mind.id, { format: "docx" })).fileName).toBe(
-        "How many days of holiday does the employee get.docx",
+        "Summary.docx",
       );
     });
   });
@@ -718,8 +831,6 @@ describe("exporting a Mind", () => {
     const markdown = await core.exportMind(mind.id, { format: "markdown" });
     expect(decode(markdown)).toBe(
       [
-        "# Tides",
-        "",
         "| Tide | When | Range |",
         "| :--- | --- | ---: |",
         "| Spring | At new and full moon[^1] | **Largest** |",
@@ -772,7 +883,7 @@ describe("exporting a Mind", () => {
       "2": "Tides, p. 2 [unverified]",
     });
     expect(zipFingerprint(exported.data)).toBe(
-      "9f853f696b6ffc80860f8e88f99d34cb8f7ed63efef368c53f7ff5efcc39c2e6",
+      "088a3a76cc8283ce7a9a3c60e8d2bf313311821ec8cb460c9619fb922bf5cde4",
     );
   });
 
@@ -791,8 +902,6 @@ describe("exporting a Mind", () => {
 
     expect(decode(await core.exportMind(mind.id, { format: "markdown" }))).toBe(
       [
-        "# Tides",
-        "",
         "**问题：** 大潮什么时候出现？",
         "",
         "新月时[^1]。",
@@ -897,7 +1006,6 @@ describe("exporting a Mind", () => {
 
     const { document } = docxParts(await core.exportMind(mind.id, { format: "docx" }));
     expect(paragraphsOf(document)).toEqual([
-      { style: "Title", text: "Tides" },
       { style: "Math", text: "$$\\undefinedmacro{x}$$" },
       { text: "Linked $\\href{https://example.com}{x}$, and fine ." },
     ]);

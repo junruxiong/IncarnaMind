@@ -15,6 +15,8 @@ export interface Claim {
   kind: ClaimedChange;
   sentence: string;
   mind: string | null;
+  /** It names the User's own Mind without its name: "your notes", "这篇笔记". */
+  theirs: boolean;
 }
 
 const MADE = "made|created|started|set up";
@@ -58,6 +60,9 @@ const FIRST_PERSON = new RegExp(
   "gi",
 );
 const HEADING_LIKE = /^(?![-*•]\s)[^.!?。！？]*$/;
+// "Added it to your notes" is about the Mind the User is in (#1109), not any Mind.
+const THEIRS =
+  /\b(?:your|this|my)\s+(?:own\s+)?(?:notes?|page|mind|notebook)\b|你的笔记|您的笔记|这篇笔记|这个笔记|当前笔记|你的页面/i;
 const REPORT = new RegExp(`^(?:[-*•]\\s+)?(${REPORT_VERBS})\\b`, "i");
 const PASSIVE = new RegExp(`\\b(?:has|have) been (${VERBS})\\b`, "i");
 // "Summary page created in “X”", "The new page replaces the earlier version": a page or a Mind
@@ -72,9 +77,9 @@ const READY =
 
 const CHINESE_KINDS = [
   ["新建|创建|建立|生成", "made"],
-  ["添加|加入|写入|插入|补充|追加|写好|写了|新增", "added"],
+  ["添加|加入|写入|写进|插入|补充|追加|写好|写了|新增", "added"],
   [
-    "修改|改写|更新|扩写|扩展|扩充|缩短|精简|压缩|翻译|调整|重写|润色|修正|改正|改短|改长|改成|加长|完善",
+    "修改|改写|更新|扩写|扩展|扩充|缩短|精简|压缩|翻译|调整|重写|润色|修正|改正|改短|改长|改成|加长|写长|写短|完善",
     "changed",
   ],
   ["删除|删去|删掉|替换|去掉|移除", "removed"],
@@ -86,7 +91,7 @@ const CHINESE: [RegExp, ClaimedChange][] = CHINESE_KINDS.map(([verbs, kind]) => 
   kind,
 ]);
 // Only the User's notes: "我更新了我的理解" or "表 4 已经更新" are not.
-const CHINESE_MIND = /笔记|页面|Mind|总结|章节|段落/;
+const CHINESE_MIND = /笔记|页面|Mind|总结|摘要|章节|段落/;
 // "总结已扩写", "页面已创建": a Mind's text said to be done, not the authors'.
 const CHINESE_STATED: [RegExp, ClaimedChange][] = CHINESE_KINDS.map(([verbs, kind]) => [
   new RegExp(
@@ -146,7 +151,8 @@ function sentenceClaims(sentence: string, minds: ReadonlyMap<string, string>): C
     for (const [pattern, kind] of CHINESE_STATED) if (pattern.test(trimmed)) kinds.push(kind);
     if (CHINESE_LONGER.test(trimmed)) kinds.push("changed");
   }
-  return [...new Set(kinds)].map((kind) => ({ kind, sentence, mind: named }));
+  const theirs = named === null && THEIRS.test(sentence);
+  return [...new Set(kinds)].map((kind) => ({ kind, sentence, mind: named, theirs }));
 }
 
 const sentencesOf = (reply: string): string[] =>
@@ -249,20 +255,28 @@ function backs(log: ChangeLog, kind: ClaimedChange, mindIds: readonly string[] |
 
 /**
  * The kinds of change a reply claims that none of `calls` made, in the Mind
- * a claim names (by its name, among `minds`), else in any. Each kind once.
+ * a claim names (by its name, among `minds`, or as the User's own, `focused`),
+ * else in any. Each kind once.
  */
 export function unbackedClaims(
   reply: string,
   calls: readonly AnswerToolCall[],
   minds: readonly { id: string; name: string }[] = [],
+  focused: string | null = null,
 ): ClaimedChange[] {
   const log = changeLogOf(calls);
-  const idsOf = (name: string) =>
-    minds.filter((mind) => nameKey(mind.name) === nameKey(name)).map((mind) => mind.id);
+  const idsOf = (claim: Claim) =>
+    claim.mind !== null
+      ? minds
+          .filter((mind) => nameKey(mind.name) === nameKey(claim.mind ?? ""))
+          .map((mind) => mind.id)
+      : claim.theirs && focused !== null
+        ? [focused]
+        : null;
   const unbacked = claimsIn(
     reply,
     minds.map((mind) => mind.name),
-  ).filter((claim) => !backs(log, claim.kind, claim.mind === null ? null : idsOf(claim.mind)));
+  ).filter((claim) => !backs(log, claim.kind, idsOf(claim)));
   return [...new Set(unbacked.map((claim) => claim.kind))];
 }
 
@@ -273,19 +287,37 @@ const CLAIMED_WORDS: Record<ClaimedChange, string> = {
   removed: "removed or replaced text in a Mind",
 };
 
+const UNSEEN_REPLY =
+  "The User will not read your earlier reply and does not know you were asked again. Write your reply as if for the first time: don't mention, apologise for or correct an earlier reply.";
+
 /** The record of what the calls did, then to write the reply again from it. */
 export function askAgainNote(
   claims: readonly ClaimedChange[],
   calls: readonly AnswerToolCall[],
   names: MindNames,
 ): string {
-  const lines = toolRecordLines(calls, names);
   const said = claims.map((claim) => CLAIMED_WORDS[claim]).join(", and ");
+  return [
+    thisAnswersRecord(calls, names),
+    `Your reply says you ${said}, but no Tool did that. Write your reply again from its start, without saying what you changed: IncarnaMind lists each change under your reply. Say plainly what wasn't done and why. If the User's request still needs a change you can make now, make it with the Tools first.`,
+    UNSEEN_REPLY,
+  ].join("\n");
+}
+
+export function askToWriteNote(calls: readonly AnswerToolCall[], names: MindNames): string {
+  return [
+    thisAnswersRecord(calls, names),
+    "The User asked for this in a Mind, but no Tool changed one. Write it there now with the Minds' Tools, then reply in a sentence or two without repeating it. If you can't, say why in one sentence.",
+    UNSEEN_REPLY,
+  ].join("\n");
+}
+
+function thisAnswersRecord(calls: readonly AnswerToolCall[], names: MindNames): string {
+  const lines = toolRecordLines(calls, names);
   return [
     "<tool-record>",
     "What the Tools of this Answer really did, as IncarnaMind recorded it:",
     ...(lines.length > 0 ? lines : ["- No Tool was called."]),
     "</tool-record>",
-    `Your reply says you ${said}, but no Tool did that. Write your reply again from its start, without saying what you changed: IncarnaMind lists each change under your reply. Say plainly what wasn't done and why. If the User's request still needs a change you can make now, make it with the Tools first.`,
   ].join("\n");
 }

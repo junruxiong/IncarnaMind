@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type { DocumentGroupAssignment } from "../../core/api";
 import { core } from "./core";
-import { translateNow as t } from "./i18n";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
 
@@ -39,9 +38,10 @@ export function sayWhenOrganized(
       return core.restoreAssignment(item.documentId, rest);
     };
     useUndo.getState().push({
-      message: t(changed.length === 1 ? "library.organize.done.one" : "library.organize.done", {
-        count: changed.length,
-      }),
+      said: (t) =>
+        t(changed.length === 1 ? "library.organize.done.one" : "library.organize.done", {
+          count: changed.length,
+        }),
       undo: async () => {
         // A Document the User has moved since is theirs now: it stays where they put it.
         const now = new Map(

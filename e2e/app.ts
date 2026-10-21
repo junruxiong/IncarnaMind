@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -21,10 +22,12 @@ import {
   type SaveChatProviderInput,
 } from "../src/core/api";
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
+import { EVENT_CHANNEL } from "../src/shared/bridge";
 import type { DocumentLocation } from "../src/shared/documentViewer";
+import { translate } from "../src/shared/i18n";
 import type { TestHooks } from "../src/shared/testHooks";
 import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
-import { homeEnv } from "../tests/helpers/home";
+import { APP_ARGS, homeEnv, KEYCHAIN_ARGS } from "../tests/helpers/home";
 
 const appDir = resolve(__dirname, "..");
 
@@ -102,6 +105,15 @@ export interface LaunchOptions {
    * standing in for OpenAI (tests/helpers/fakeOpenAI.ts). A test build honours it.
    */
   chatGpt?: string;
+  /** A local stand-in for GitHub and Copilot at this origin, where the Copilot plan signs in and asks. */
+  copilot?: string;
+  /**
+   * Where the Claude account signs in and asks: the origin of a local server
+   * standing in for Anthropic (tests/helpers/fakeAnthropic.ts). A test build honours it.
+   */
+  claude?: string;
+  /** How long the Claude sign-in waits for its code, in milliseconds. A test build honours it. */
+  claudeSignInMs?: number;
   /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
@@ -113,6 +125,15 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /** Whether the Meeting's fake microphone is denied: no tone, and the line that says so. */
+  microphone?: "allowed" | "denied";
+  /**
+   * Where the guide for a permission added by hand opens, whatever the screen: in a window
+   * beside System Settings, or as text in the app's window. Without it, the system decides.
+   */
+  permissionGuide?: "beside" | "inline";
+  /** A copy with no way to record audio: Record says so. */
+  noAudioEngine?: boolean;
   /** What a Meeting's fake speech-to-text engine does: slow, failing to read stretches, failing over. */
   transcriber?: FakeTranscriberOptions;
   /**
@@ -138,6 +159,19 @@ export interface LaunchOptions {
    * Folder's Minds (#112), instead of 30 seconds. Needs a test build.
    */
   contradictionWatchDelayMs?: number;
+  /**
+   * Starts Electron with Chromium's sandbox on Linux too, as the User's app runs: Playwright
+   * starts it with --no-sandbox there otherwise, and Analyses don't run without the sandbox.
+   * CI's Linux runners give Electron's sandbox helper the rights it needs (ci.yml).
+   */
+  sandboxed?: boolean;
+  /**
+   * The window may say when the app runs without its sandbox (#1179), which a test build keeps
+   * quiet otherwise, as Playwright starts every test on Linux with --no-sandbox. "switch": the
+   * app is started with --no-sandbox; "environment": with ELECTRON_DISABLE_SANDBOX; "on": with
+   * its sandbox, where the line must not show. The sandbox is on in the last two on Linux too.
+   */
+  sandboxNotice?: "switch" | "environment" | "on";
 }
 
 /**
@@ -186,14 +220,22 @@ export async function launchApp(
     connectorDirectory,
     connectorRegistry,
     chatGpt,
+    claude,
+    claudeSignInMs,
+    copilot,
     keepWindow = false,
     computerSound = "allowed",
+    microphone = "allowed",
+    permissionGuide,
+    noAudioEngine = false,
     transcriber,
     scans,
     web,
     lookLimit,
     scriptedTasks = false,
     contradictionWatchDelayMs,
+    sandboxed = false,
+    sandboxNotice,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -218,16 +260,25 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_CONNECTOR_DIRECTORY;
   delete env.INCARNAMIND_TEST_CONNECTOR_REGISTRY;
   delete env.INCARNAMIND_TEST_CHATGPT;
+  delete env.INCARNAMIND_TEST_CLAUDE;
+  delete env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS;
+  delete env.INCARNAMIND_TEST_COPILOT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_WEB;
   delete env.INCARNAMIND_TEST_LOOK_LIMIT;
   delete env.INCARNAMIND_TEST_TASKS;
   delete env.INCARNAMIND_TEST_CONTRADICTION_DELAY_MS;
+  delete env.INCARNAMIND_TEST_SANDBOX_NOTICE;
+  if (sandboxNotice) env.INCARNAMIND_TEST_SANDBOX_NOTICE = "1";
+  if (sandboxNotice === "environment") env.ELECTRON_DISABLE_SANDBOX = "1";
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
-  env.INCARNAMIND_TEST_AUDIO = "fake";
+  env.INCARNAMIND_TEST_AUDIO = noAudioEngine ? "none" : "fake";
   env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
+  env.INCARNAMIND_TEST_AUDIO_MICROPHONE = microphone;
+  delete env.INCARNAMIND_TEST_GUIDE;
+  if (permissionGuide) env.INCARNAMIND_TEST_GUIDE = permissionGuide;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
   if (usageData) {
@@ -243,6 +294,9 @@ export async function launchApp(
   // Nowhere, unless a test serves one: a search in a test never reaches the real Registry.
   env.INCARNAMIND_TEST_CONNECTOR_REGISTRY = connectorRegistry ?? "http://127.0.0.1:9";
   if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
+  if (claude) env.INCARNAMIND_TEST_CLAUDE = claude;
+  if (claudeSignInMs) env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS = String(claudeSignInMs);
+  if (copilot) env.INCARNAMIND_TEST_COPILOT = copilot;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
@@ -257,7 +311,16 @@ export async function launchApp(
   env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
   if (transcriber) env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS = JSON.stringify(transcriber);
 
-  const app = await electron.launch({ args: [appDir], env });
+  const app = await electron.launch({
+    args: [
+      ...KEYCHAIN_ARGS,
+      ...(sandboxNotice === "switch" ? ["--no-sandbox"] : []),
+      appDir,
+      ...APP_ARGS,
+    ],
+    env,
+    chromiumSandbox: sandboxed || sandboxNotice === "environment" || sandboxNotice === "on",
+  });
   openApps.set(app, dataDir);
   app.on("close", () => {
     openApps.delete(app);
@@ -355,13 +418,38 @@ export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.
 
 /**
  * "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind
- * in no Folder. Returns once the menu has gone: keys a test presses a
- * millisecond apart can outrun the editor while frames are busy.
+ * in no Folder. Returns once its first line has the cursor: keys a test
+ * presses a millisecond apart can outrun the editor while frames are busy.
+ * That line starts as an empty title; unless `title`, Backspace makes
+ * it body text, as for someone who writes without one.
  */
-export async function newMind(window: Page): Promise<void> {
+export async function newMind(
+  window: Page,
+  { title = false }: { title?: boolean } = {},
+): Promise<void> {
+  const before = await (await coreOf(window)).evaluate(async (core) =>
+    (await core.listMinds()).map((mind) => mind.id),
+  );
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-new-mind").click();
   await motionSettled(window);
+  // Until the new Mind's text has the cursor, keys and names go to the Mind open before it.
+  await expect
+    .poll(async () => {
+      const id = await window.evaluate(
+        () =>
+          document.activeElement
+            ?.closest('[data-testid="mind-pane"]')
+            ?.getAttribute("data-mind-id") ?? null,
+      );
+      return id !== null && !before.includes(id);
+    })
+    .toBe(true);
+  if (title) return;
+  const first = frontMind(window).locator(".mind-editor > :first-child");
+  await expect(first).toHaveJSProperty("tagName", "H1");
+  await window.keyboard.press("Backspace");
+  await expect(first).toHaveJSProperty("tagName", "P");
 }
 
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
@@ -397,24 +485,52 @@ export async function editFolderInLibrary(window: Page, name: string): Promise<L
 }
 
 /**
- * Shows the sidebar's Folders on disk view: each Linked folder with its
- * folders as on disk, and "Other Documents".
+ * Waits for the sidebar's Linked folders section and each Linked folder's row. The rows don't
+ * unfold: their files sit in the Folders and Not in a Folder.
  */
 export async function showSourceLocations(window: Page): Promise<void> {
-  const button = window.getByTestId("browse-views").getByRole("button", {
-    name: "Folders on disk",
+  const section = window.getByTestId("linked-folders-section");
+  await expect(section).toBeVisible();
+  await expect(
+    section.locator('[data-testid="folder-item"][data-root="true"]').first(),
+  ).toBeVisible({
+    timeout: 15_000,
   });
-  await button.click();
-  await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
-/** Shows the sidebar's Folders view: the User's Folders with their Minds and Documents. */
-export async function showFolders(window: Page): Promise<void> {
-  const button = window
-    .getByTestId("browse-views")
-    .getByRole("button", { name: "Folders", exact: true });
-  await button.click();
-  await expect(button).toHaveAttribute("aria-pressed", "true");
+/**
+ * Puts a Tag on a Document through the core, each by its name (a Document's start will do): the
+ * sidebar's Tags section lists the Tags in use.
+ */
+export async function tagDocument(window: Page, documentName: string, tagName: string) {
+  await window.evaluate(
+    async (wanted) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const tag = (await core.listTags()).find((each) => each.name === wanted.tag);
+      const document = (await core.listDocuments()).find((each) =>
+        each.name.startsWith(wanted.document),
+      );
+      if (!tag || !document)
+        throw new Error(`No Tag ${wanted.tag} or Document ${wanted.document}.`);
+      await core.addTagToDocuments([document.id], tag.id);
+    },
+    { document: documentName, tag: tagName },
+  );
+  await expect(
+    window.getByTestId("sidebar-tag").filter({ hasText: tagName }).first(),
+  ).toBeAttached();
+}
+
+/** Manage Tags, from ⌘K, in the interface's language. */
+export async function openManageTags(window: Page, language: "en" | "zh-CN" = "en"): Promise<void> {
+  const label = translate(language, "tags.menu.manage");
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(label.replace(/…$/, ""));
+  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
+  await pointAt(window, item);
+  await item.click();
+  await expect(window.getByTestId("tags-dialog")).toBeVisible();
 }
 
 /**
@@ -445,6 +561,17 @@ export async function ollamaListing(models: string[], { delayMs = 0 }: { delayMs
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const { port } = server.address() as AddressInfo;
   return { server, url: `http://127.0.0.1:${port}` };
+}
+
+/**
+ * Continue on the setup card, once a key or sign-in works and the card says what each job uses:
+ * the Question that waited is asked then, and the composer takes the card's place.
+ */
+export async function continueSetup(window: Page): Promise<void> {
+  const next = window.getByTestId("setup-continue");
+  await expect(next).toBeVisible();
+  await pointAndClick(window, next);
+  await expect(window.getByTestId("model-setup")).toBeHidden();
 }
 
 /**
@@ -519,11 +646,68 @@ export async function showSettingsPage(window: Page, page: SettingsPage): Promis
   return settings;
 }
 
+/** In Settings › Models, opens Add a provider and the page that adds `catalogId` (#179). */
+export async function addProviderPage(settings: Locator, catalogId: string): Promise<Locator> {
+  await settings.getByTestId("models-add-provider").click();
+  await settings
+    .getByTestId("provider-directory")
+    .locator(`[data-catalog-id="${catalogId}"]`)
+    .first()
+    .click();
+  const page = settings.getByTestId("provider-add");
+  await expect(page).toHaveAttribute("data-catalog-id", catalogId);
+  return page;
+}
+
+/** As `addProviderPage`, returning that page's key form. */
+export const addProviderForm = async (settings: Locator, catalogId: string): Promise<Locator> =>
+  (await addProviderPage(settings, catalogId)).getByTestId("provider-form");
+
 /** Closes Settings with its close button. */
 export async function closeSettings(window: Page): Promise<void> {
   const settings = window.getByTestId("settings");
   await settings.getByRole("button", { name: "Close Settings" }).click();
   await expect(settings).toBeHidden();
+}
+
+/** The + menu's "Record a meeting": a new Mind with the start block. */
+export async function recordMeeting(window: Page): Promise<Locator> {
+  const plus = window.getByTestId("plus-menu");
+  await plus.hover();
+  await plus.click();
+  await window.getByTestId("plus-more").click();
+  await window.getByRole("menuitem", { name: "Record a meeting" }).click();
+  const start = window.getByTestId("meeting-start");
+  await expect(start).toBeVisible();
+  return start;
+}
+
+/** The + menu's "Record a meeting" once the recording notice is read: recording at once, in one action. */
+export async function recordMeetingNow(window: Page): Promise<Locator> {
+  const plus = window.getByTestId("plus-menu");
+  await plus.hover();
+  await plus.click();
+  await window.getByTestId("plus-more").click();
+  await window.getByRole("menuitem", { name: "Record a meeting" }).click();
+  const bar = window.getByTestId("meeting-bar");
+  await expect(bar).toHaveAttribute("data-status", "recording");
+  return bar;
+}
+
+/** Starts recording from the start block; the first time, through the one-time notice. */
+export async function startRecording(window: Page, start: Locator, { notice = false } = {}) {
+  const record = start.getByTestId("meeting-start-record");
+  await record.hover();
+  await record.click();
+  if (notice) {
+    const dialog = window.getByTestId("meeting-notice");
+    await expect(dialog).toBeVisible();
+    await dialog.getByTestId("meeting-notice-start").click();
+    await expect(dialog).toBeHidden();
+  }
+  const bar = window.getByTestId("meeting-bar");
+  await expect(bar).toHaveAttribute("data-status", "recording");
+  return bar;
 }
 
 /** Opens Settings from the sidebar, on its Privacy page. */
@@ -555,18 +739,6 @@ export async function openDocumentTags(item: Locator): Promise<Locator> {
 }
 
 /**
- * Adds a Tag to the sidebar's filter (Documents with any Tag chosen show), or,
- * choosing a Tag already chosen, takes it out.
- */
-export async function filterByTag(window: Page, name: string): Promise<void> {
-  await window.getByTestId("tag-filter-menu").click();
-  await window
-    .getByTestId("tag-filters")
-    .getByRole("menuitemcheckbox", { name, exact: true })
-    .click();
-}
-
-/**
  * Sets where new files go (the Output location) through the core's bridge, as
  * Settings › General would, so the next save goes there without asking.
  */
@@ -584,12 +756,67 @@ export function savedLine(name: string, folder: string, language: "en" | "zh-CN"
     : `Saved “${name}” in ${basename(folder)}`;
 }
 
+/** Opens the assistant's ⋯ and its Move assistant row, whose submenu has the places it docks. */
+export async function openMoveAssistant(window: Page): Promise<void> {
+  await window.getByTestId("assistant-more").click();
+  await window.getByTestId("assistant-menu-move").click();
+  await expect(window.getByTestId("assistant-menu-docks")).toBeVisible();
+}
+
+/** Docks or floats the assistant from its ⋯ › Move assistant. */
+export async function moveAssistant(
+  window: Page,
+  place: "right" | "left" | "bottom" | "float",
+): Promise<void> {
+  await openMoveAssistant(window);
+  await pointAndClick(window, window.getByTestId(`assistant-menu-${place}`));
+}
+
 /** The result line's saved file, once it says it saved one. */
 export async function savedPath(window: Page, name: string): Promise<string> {
   const done = window.getByTestId("export-result").getByTestId("export-done");
   await expect(done).toContainText(`Saved “${name}” in `, { timeout: 30_000 });
   return (await done.getAttribute("title")) ?? "";
 }
+
+/**
+ * Opens a saved page in a window of its own, in a session with the network off that records
+ * every request it is asked for (`requestsMade`), as a reader opening the file in a browser would.
+ */
+export async function openSavedPage(app: ElectronApplication, path: string): Promise<Page> {
+  const opened = app.waitForEvent("window");
+  await app.evaluate(async ({ BrowserWindow, session }, file) => {
+    const offline = session.fromPartition("saved-page", { cache: false });
+    offline.enableNetworkEmulation({ offline: true });
+    const requested: string[] = [];
+    (globalThis as { savedPageRequests?: string[] }).savedPageRequests = requested;
+    offline.webRequest.onBeforeRequest((details, callback) => {
+      requested.push(details.url);
+      callback({ cancel: !details.url.startsWith("file:") });
+    });
+    const window = new BrowserWindow({
+      width: 1100,
+      height: 760,
+      useContentSize: true,
+      // macOS keeps a window no taller than the screen otherwise, and CI's Mac has a small one.
+      enableLargerThanScreen: true,
+      webPreferences: {
+        session: offline,
+        sandbox: true,
+        contextIsolation: true,
+        backgroundThrottling: false,
+      },
+    });
+    await window.loadFile(file);
+  }, path);
+  const page = await opened;
+  await page.waitForLoadState("load");
+  return page;
+}
+
+/** Every address the page `openSavedPage` opened has asked for, the ones it was refused included. */
+export const requestsMade = (app: ElectronApplication) =>
+  app.evaluate(() => (globalThis as { savedPageRequests?: string[] }).savedPageRequests ?? []);
 
 /** The menu of the Mind's tab, opened by a right-click on the tab, as a person opens it. */
 export async function tabMenu(window: Page): Promise<Locator> {
@@ -600,18 +827,47 @@ export async function tabMenu(window: Page): Promise<Locator> {
   return menu;
 }
 
+/** Splits the shown tab to the right from its menu, as a person does: a copy of it in a new group. */
+export async function splitFromTabMenu(window: Page): Promise<void> {
+  const menu = await tabMenu(window);
+  await pointAndClick(window, menu.getByTestId("tab.split"));
+}
+
 /** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
 export async function importWordFromMenu(window: Page): Promise<Locator> {
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-import-word").click();
   const dialog = window.getByTestId("word-import-dialog");
   await expect(dialog).toBeVisible();
   return dialog;
 }
 
-/** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
+/** Writes a Word file named `name` into `folder` and imports it from the + menu, as the User picks one. */
+export async function importWordFile(
+  app: ElectronApplication,
+  window: Page,
+  folder: string,
+  name: string,
+  bytes: Buffer,
+): Promise<void> {
+  const path = join(folder, name);
+  await writeFile(path, bytes);
+  await interceptOpenDialog(app, path);
+  const dialog = await importWordFromMenu(window);
+  await dialog.getByTestId("word-import-confirm").click();
+  await expect(dialog).toBeHidden();
+}
+
+/** The Export button's menu, then Export options…, which opens the sheet. */
+export async function openExportOptions(window: Page): Promise<void> {
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await pointAndClick(window, window.getByTestId("export-options"));
+}
+
+/** Export options…, from the Export button's menu; resolves once the sheet shows `title`. */
 export async function openOptions(window: Page, title: string): Promise<void> {
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await openExportOptions(window);
   await expect(window.getByTestId("export-dialog").getByRole("heading")).toHaveText(title);
 }
 
@@ -732,6 +988,7 @@ export async function previewLink(
   if (button) await button.click();
   else {
     await window.getByTestId("plus-menu").click();
+    await window.getByTestId("plus-more").click();
     await window.getByTestId("plus-link-folder").click();
   }
   const dialog = window.getByTestId("link-folder-dialog");
@@ -965,6 +1222,17 @@ export async function catchCopies(window: Page): Promise<void> {
 export const copied = (window: Page) =>
   window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
 
+/** Pushes a core event to the window, as the core does when something happens. */
+export const emit = (app: ElectronApplication, name: string, payload: unknown) =>
+  app.evaluate(
+    ({ BrowserWindow }, sent) => {
+      for (const each of BrowserWindow.getAllWindows()) {
+        each.webContents.send(sent.channel, sent.name, sent.payload);
+      }
+    },
+    { channel: EVENT_CHANNEL, name, payload },
+  );
+
 /** Switches the interface's language, as Settings does. */
 export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
   return window.evaluate(
@@ -1034,6 +1302,26 @@ export async function motionSettled(window: Page): Promise<void> {
     .toBe(0);
 }
 
+/** A design token (`--color-warning-wash`) as the colour the browser draws it in. */
+export function tokenColor(window: Page, token: string): Promise<string> {
+  return window.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  }, token);
+}
+
+/** The colours an element is drawn in: its text and its background. */
+export function paintOf(target: Locator): Promise<{ color: string; background: string }> {
+  return target.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, background: style.backgroundColor };
+  });
+}
+
 /**
  * Clicks `target` where it is now, as a person does, without waiting for it to
  * stop moving (a menu still growing from its button): the app takes a click
@@ -1092,6 +1380,23 @@ export async function expectReadyDocuments(window: Page, count: number): Promise
     .toBe(count);
 }
 
+/** Ends the first open (hides its steps), so the shell shows everything, as it does for a returning User. */
+export async function leaveFirstOpen(window: Page): Promise<void> {
+  await markSteps(window, { hidden: true });
+  await expect(window.getByTestId("first-open-steps")).toHaveCount(0);
+}
+
+/** Marks steps of the first open done (or hides it), as the User doing them would. */
+export async function markSteps(window: Page, done: object): Promise<void> {
+  await window.evaluate(async (patch) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const { device } = await bridge.getSettings();
+    await bridge.updateSettings({
+      device: { gettingStarted: { ...device.gettingStarted, ...patch } },
+    });
+  }, done);
+}
+
 /** The id of the Document listed in the sidebar under `name`. */
 export async function documentIdOf(window: Page, name: string): Promise<string> {
   const id = await window
@@ -1121,11 +1426,123 @@ export function darkPixels(canvas: Locator): Promise<number> {
   });
 }
 
+/** The box of the words in an element, in CSS pixels: not of the element, which may be padded or overlap its neighbour. */
+export function textBoxOf(target: Locator) {
+  return target.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const { x, y, width, height } = range.getBoundingClientRect();
+    return { x, y, width, height };
+  });
+}
+
+/** ⌘K's rows for what it found, not its last row, which asks about the words typed. */
+export const paletteFound = (window: Page): Locator =>
+  window.locator('[data-testid="palette-item"]:not([data-kind="ask"])');
+
+export function lastLineBoxOf(target: Locator) {
+  return target.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const rect = [...range.getClientRects()].at(-1);
+    if (!rect) throw new Error("The element has no text.");
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
+}
+
 /** The rendered width of an element, in CSS pixels. */
 export async function widthOf(locator: Locator): Promise<number> {
   const box = await locator.boundingBox();
   if (!box) throw new Error("The element isn't visible.");
   return box.width;
+}
+
+/**
+ * By geometry, for each part after the first of a line of parts joined by
+ * dots (#684): its dot shows only where the part before it is on the same
+ * line, and then sits between the two. A part draws its dot as a `.meta-dot`
+ * or, as a flex item of the line, in a `::before` that is out in the gap
+ * before it; a `::before` in the part's own text counts as shown, and not
+ * between. `clips` is whether the row cuts off what sticks out of it: the dot
+ * of a part that starts a row is hidden by that, not by where it is.
+ */
+export async function dotsOf(line: Locator) {
+  return line.evaluate((element) => {
+    const row = element.getBoundingClientRect();
+    const clips = ["clip", "hidden"].includes(getComputedStyle(element).overflowX);
+    const parts: Element[] = [];
+    const collect = (parent: Element) => {
+      for (const child of parent.children) {
+        const { display, position } = getComputedStyle(child);
+        if (display === "contents") collect(child);
+        else if (display !== "none" && position !== "absolute" && child.tagName !== "UL")
+          parts.push(child);
+      }
+    };
+    collect(element);
+    return parts.slice(1).map((part, index) => {
+      const before = parts[index]?.getBoundingClientRect();
+      const here = part.getBoundingClientRect();
+      const dot = part.querySelector(":scope > .meta-dot")?.getBoundingClientRect();
+      const pseudo = getComputedStyle(part, "::before");
+      const inText = !dot && pseudo.content !== "none" && pseudo.position !== "absolute";
+      const glyphCentre = dot
+        ? dot.left + dot.width / 2
+        : inText
+          ? here.left + 1
+          : here.left - Number.parseFloat(pseudo.width) / 2;
+      return {
+        clips,
+        sameLine: before !== undefined && Math.abs(before.top - here.top) < 2,
+        shown: inText || glyphCentre > row.left + 4,
+        between:
+          !inText &&
+          before !== undefined &&
+          glyphCentre >= before.right - 1 &&
+          glyphCentre <= here.left + 1,
+      };
+    });
+  });
+}
+
+/**
+ * What copying the selected `within` (the whole row when left out) of a line
+ * of parts puts on the clipboard as plain text, read from a copy event of our
+ * own so the computer's clipboard is left alone; `taken` is whether the app
+ * answered it, as it does for a selection across parts.
+ */
+export async function copyFrom(line: Locator, within?: string) {
+  return line.evaluate((element, selector) => {
+    const range = document.createRange();
+    range.selectNodeContents((selector && element.querySelector(selector)) || element);
+    getSelection()?.removeAllRanges();
+    getSelection()?.addRange(range);
+    const data = new DataTransfer();
+    const event = new ClipboardEvent("copy", {
+      clipboardData: data,
+      bubbles: true,
+      cancelable: true,
+    });
+    element.dispatchEvent(event);
+    return { text: data.getData("text/plain"), taken: event.defaultPrevented };
+  }, within);
+}
+
+/**
+ * No line of parts joined by dots starts or ends with a dot: a part's dot is
+ * there only beside the part before it, and the row clips the rest. Returns
+ * whether some part started a row, so a test can say it wrapped.
+ */
+export async function expectDotsBetweenParts(line: Locator): Promise<boolean> {
+  let wrapped = false;
+  for (const dot of await dotsOf(line)) {
+    expect(dot.clips).toBe(true);
+    expect(dot.shown).toBe(dot.sameLine);
+    if (dot.shown) expect(dot.between).toBe(true);
+    if (!dot.sameLine) wrapped = true;
+  }
+  expect((await line.innerText()).trimEnd().endsWith("·")).toBe(false);
+  return wrapped;
 }
 
 /**
@@ -1161,13 +1578,22 @@ export async function pointAndClick(
   {
     button = "left",
     modifiers = [],
-  }: { button?: "left" | "right"; modifiers?: readonly ("ControlOrMeta" | "Shift")[] } = {},
+  }: {
+    button?: "left" | "right" | "middle";
+    modifiers?: readonly ("ControlOrMeta" | "Shift")[];
+  } = {},
 ): Promise<void> {
-  await target.scrollIntoViewIfNeeded();
-  const box = await target.boundingBox();
+  // A list that redraws as the click begins swaps the element for an equal one: look again.
+  let box: Awaited<ReturnType<Locator["boundingBox"]>> = null;
+  await expect(async () => {
+    await target.scrollIntoViewIfNeeded();
+    box = await target.boundingBox();
+    if (!box) throw new Error("The element isn't visible.");
+  }).toPass();
   if (!box) throw new Error("The element isn't visible.");
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
+  const { x: left, y: top, width, height } = box;
+  const x = left + width / 2;
+  const y = top + height / 2;
   await window.mouse.move(x, y, { steps: 8 });
   for (const key of modifiers) await window.keyboard.down(key);
   try {
@@ -1175,6 +1601,41 @@ export async function pointAndClick(
   } finally {
     for (const key of modifiers.toReversed()) await window.keyboard.up(key);
   }
+}
+
+/**
+ * A Mind's check badge card (#909): open already, as a question opens it,
+ * or opened as a person opens it: from the badge, or from ⌘K while no badge shows.
+ */
+export async function checkCard(window: Page, scope: Page | Locator = window): Promise<Locator> {
+  const card = window.getByTestId("check-card");
+  if (!(await card.isVisible())) {
+    const badge = scope.getByTestId("check-badge-open").first();
+    if (await badge.isVisible()) {
+      // "Checking 2 of 2 · Stop" shrinks to the counts as a check ends: aim once it has.
+      await expect(scope.getByTestId("badge-stop")).toHaveCount(0);
+      await motionSettled(window);
+      // The counts are worked out a moment after a change, and the badge can narrow under the pointer: aim again.
+      await expect(async () => {
+        if (!(await card.isVisible())) await pointAndClick(window, badge);
+        await expect(card).toBeVisible({ timeout: 1000 });
+      }).toPass();
+    } else {
+      const chinese = (await window.evaluate(() => document.documentElement.lang)) === "zh-CN";
+      const command = chinese ? "句子和引用" : "Sentences and Citations";
+      await window.keyboard.press("ControlOrMeta+k");
+      await expect(window.getByTestId("palette-search")).toBeFocused();
+      await window.keyboard.type(command);
+      await pointAndClick(
+        window,
+        window.getByTestId("palette-item").filter({ hasText: command }).first(),
+      );
+    }
+  }
+  await expect(card).toBeVisible();
+  // It grows from the badge: a click while it moves could land on the page behind.
+  await motionSettled(window);
+  return card;
 }
 
 /**
@@ -1317,27 +1778,114 @@ export async function slideSelect(
   words: string,
   to?: { line: Locator; words: string },
 ): Promise<void> {
-  const box = await wordsBox(line, words);
-  const end = to ? await wordsBox(to.line, to.words) : box;
-  await window.mouse.move(box.left - 6, box.y, { steps: 4 });
-  await window.mouse.move(box.left + 1, box.y, { steps: 2 });
-  await window.mouse.down();
-  await window.mouse.move(end.right - 1, end.y, { steps: 12 });
-  await window.mouse.up();
-  // After a drag, ProseMirror puts its selection back into the page in a task queued as the
-  // mouse comes up; a key pressed before that task runs is undone by it. This waits for it.
-  await window.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
+  // On a busy machine a drag can stop a letter short; a person sees it and drags again, after a
+  // click beside the words, as a press inside a selection would drag the text away.
+  let tries = 0;
+  await expect(async () => {
+    const box = await wordsBox(line, words);
+    const end = to ? await wordsBox(to.line, to.words) : box;
+    if (tries++ > 0) await window.mouse.click(box.left - 6, box.y);
+    await window.mouse.move(box.left - 6, box.y, { steps: 4 });
+    await window.mouse.move(box.left + 1, box.y, { steps: 2 });
+    await window.mouse.down();
+    await window.mouse.move(end.right - 1, end.y, { steps: 12 });
+    await window.mouse.up();
+    // After a drag, ProseMirror puts its selection back into the page in a task queued as the
+    // mouse comes up; a key pressed before that task runs is undone by it. This waits for it.
+    await window.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
+    if (!to) expect(await window.evaluate(() => getSelection()?.toString())).toBe(words);
+  }).toPass();
 }
 
 /**
- * Enter in a Mind's title, which takes the cursor into the Mind's text, and
- * waits until it is there: a new Mind's text comes a moment after its title,
- * and until then what is typed still goes into the title.
+ * Waits until the cursor is in the text of the Mind the User is in: a new
+ * Mind's text comes a moment after the Mind, and only then can it be typed in.
  */
 export async function enterContent(window: Page): Promise<void> {
-  await window.getByTestId("mind-title").press("Enter");
-  await expect(window.getByTestId("mind-editor")).toBeFocused();
+  await expect(frontMind(window).getByTestId("mind-editor")).toBeFocused();
 }
+
+/**
+ * Waits until a Mind's text has the focus and ProseMirror has finished taking
+ * it. 20 ms after the focus it puts its own selection back into the page if
+ * the page's differs, which undoes a key that moved the page's selection just
+ * before. A timer started now with the same delay runs after that check.
+ */
+export async function focusSettled(window: Page, editor: Locator): Promise<void> {
+  await expect(editor).toBeFocused();
+  await window.evaluate(() => new Promise((resolve) => setTimeout(resolve, 20)));
+}
+
+/** The page of the Mind the User is in, in the group they are in. */
+export const frontMind = (window: Page) =>
+  window.locator('[data-testid="tab-group"][data-focused] [data-testid="mind-pane"]:visible');
+
+/** The name of the Mind the User is in, as its tab shows it. */
+export const frontMindName = (window: Page) =>
+  window.locator(
+    '[data-testid="tab-group"][data-focused] [data-testid="mind-tab"][aria-selected="true"] [data-testid="tab-title"]',
+  );
+
+/** The ⋯ button at the top right of the Mind's page in view (#908); one Mind in view only. */
+export const pageMenuButton = (window: Page) => window.locator('[data-testid="page-menu"]:visible');
+
+/** Opens the page's ⋯ menu with the mouse, and returns it. */
+export async function openPageMenu(window: Page): Promise<Locator> {
+  await pointAndClick(window, pageMenuButton(window));
+  const menu = window.locator('[data-testid="page-actions"]:visible');
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** "Show word count while writing", in the page's ⋯ menu: the count is hidden until then. */
+export async function showCountWhileWriting(window: Page): Promise<void> {
+  const menu = await openPageMenu(window);
+  const shown = menu.getByTestId("page-count-shown");
+  await pointAndClick(window, shown);
+  await expect(shown).toHaveAttribute("aria-checked", "true");
+  await window.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+}
+
+/** Renames the Mind the User is in from its tab, as a person does: double-click, a name, Enter. */
+export async function renameInTab(window: Page, name: string): Promise<void> {
+  await frontMindName(window).dblclick();
+  const field = window.locator(
+    '[data-testid="tab-group"][data-focused] [data-testid="tab-rename"]',
+  );
+  await expect(field).toBeFocused();
+  await field.fill(name);
+  await field.press("Enter");
+  await expect(frontMindName(window)).toHaveText(name);
+}
+
+/**
+ * Names the Mind the User is in, as Rename does, leaving its text and the
+ * cursor as they are: a Mind's page has no title field (#908).
+ */
+export async function nameMind(window: Page, name: string): Promise<void> {
+  // The tab changes before its page does: a Mind just opened is the tab's.
+  const tab = window.locator(
+    '[data-testid="tab-group"][data-focused] [data-testid="mind-tab"][aria-selected="true"]',
+  );
+  const mindId =
+    (await tab.count()) > 0
+      ? await tab.getAttribute("data-mind-id")
+      : await frontMind(window).getAttribute("data-mind-id");
+  if (!mindId) throw new Error("No Mind is in front.");
+  await (await coreOf(window)).evaluate(
+    (core, named) => core.renameMind(named.mindId, named.name),
+    {
+      mindId,
+      name,
+    },
+  );
+  await expect(frontMindName(window)).toHaveText(name);
+}
+
+/** Moves the cursor to the start of the text as the system does: ⌘↑ on macOS, where ⌘Home doesn't. */
+export const pressTextStart = (window: Page) =>
+  window.keyboard.press(process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home");
 
 /**
  * Puts the cursor at the end of a line of text as a person does: slides to
@@ -1374,6 +1922,28 @@ export async function pointAt(window: Page, target: Locator): Promise<{ x: numbe
   const point = { x: box.x + Math.min(box.width / 2, 40), y: box.y + box.height / 2 };
   await window.mouse.move(point.x, point.y, { steps: 8 });
   return point;
+}
+
+/**
+ * Drags `from` onto `to` as a person does: slides onto it, presses, slides onto `to` and rests
+ * there while `whileOver` looks at what the drag shows, then lets go.
+ */
+export async function dragOnto(
+  window: Page,
+  from: Locator,
+  to: Locator,
+  whileOver?: () => Promise<void>,
+): Promise<void> {
+  await pointAt(window, from);
+  await window.mouse.down();
+  try {
+    const point = await pointAt(window, to);
+    // A hand never rests quite still: during a drag the page hears where it is at the next move.
+    await window.mouse.move(point.x + 2, point.y);
+    await whileOver?.();
+  } finally {
+    await window.mouse.up();
+  }
 }
 
 /** Presses Tab, or Shift+Tab if `target` comes before the focus, until `target` has the focus. */
@@ -1559,12 +2129,16 @@ export async function openSteps(window: Page, answer: Locator): Promise<Locator>
 
 /**
  * Adds an Answer in the assistant to the Mind in focus, at its cursor (or
- * end), with the mouse, as a person keeps one (#201), and waits until it is in.
+ * end), with the mouse, as a person keeps one (#201), and waits until it is in
+ * and its wash has ended: the redraw that ends it undoes a key or click that
+ * moved the selection a moment before, as ProseMirror rewrites the page's
+ * selection from its own.
  */
 export async function addToNote(window: Page, answer: Locator): Promise<void> {
   await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-add"));
   await expect(answer.getByTestId("answer-added")).toBeVisible();
+  await expect(window.locator(".block-just-added")).toHaveCount(0);
 }
 
 export type MindChild = Y.XmlElement | string;
@@ -1704,6 +2278,11 @@ export async function removeDataFolder(dataDir: string): Promise<void> {
     }
     await closeOrKill(app);
   }
+  // The app's log goes with a failed test's traces: what happened on CI's machine is gone after.
+  const log = join(dataDir, "logs", "incarnamind.log");
+  if (info.status !== info.expectedStatus && existsSync(log)) {
+    await info.attach("app-log", { path: log, contentType: "text/plain" });
+  }
   await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
 }
 
@@ -1787,4 +2366,25 @@ export async function exportFromMenu(window: Page, format?: ExportFormat): Promi
     await expect(window.getByTestId("export-more-menu")).toBeVisible();
   }
   await pointAndClick(window, item);
+}
+
+/** The fonts Chromium drew an element's text with, by name, and whether each is bundled with the app. */
+export async function fontsDrawing(window: Page, selector: string) {
+  const session = await window.context().newCDPSession(window);
+  try {
+    await session.send("DOM.enable");
+    await session.send("CSS.enable");
+    const { root } = await session.send("DOM.getDocument", { depth: -1 });
+    const { nodeId } = await session.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+    const { fonts } = await session.send("CSS.getPlatformFontsForNode", { nodeId });
+    return fonts
+      .map((font) => ({
+        family: font.familyName,
+        name: font.postScriptName,
+        bundled: font.isCustomFont,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } finally {
+    await session.detach();
+  }
 }

@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import { createDataFolder, launchApp, removeDataFolder } from "./app";
+import { createDataFolder, launchApp, leaveFirstOpen, removeDataFolder } from "./app";
 
 let dataDir: string;
 test.beforeEach(async () => {
@@ -52,7 +52,7 @@ async function pressTab(window: Page): Promise<Stop | null> {
         style.outlineColor === accent
       );
     };
-    const caret = element.isContentEditable || element.matches(".mind-title textarea");
+    const caret = element.isContentEditable;
     const field = element.matches("textarea, select, input:not([type=radio], [type=checkbox])");
     const shows =
       caret ||
@@ -118,6 +118,7 @@ async function pointAndClick(window: Page, target: Locator): Promise<void> {
 test("every Tab stop in a Mind, the sidebar and Settings shows the blue focus ring", async () => {
   // The example Mind is a working one: a Question with a scope, an Answer with checked Citations.
   const { app, window } = await launchApp(dataDir, { examples: true });
+  await leaveFirstOpen(window);
   // A chat model, so the composer shows its model chip: an Ollama on a closed port, never called.
   await window.evaluate(async () => {
     const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -128,7 +129,10 @@ test("every Tab stop in a Mind, the sidebar and Settings shows the blue focus ri
     });
   });
   await expect(window.getByTestId("composer-model")).toBeVisible();
-  const checks = window.getByTestId("mind-pane").getByTestId("margin-check");
+  const checks = window
+    .getByTestId("mind-pane")
+    .getByTestId("mind-editor")
+    .getByTestId("citation-chip");
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 30_000 });
 
   const stops = await tabRound(window, 120);

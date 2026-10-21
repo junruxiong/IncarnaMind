@@ -23,6 +23,7 @@ import {
   exportFromMenu,
   launchApp,
   linkFolderFromSidebar,
+  nameMind,
   newMind,
   openDocumentAt,
   removeDataFolder,
@@ -96,7 +97,7 @@ async function expectMarkBeside(mark: Locator, highlight: Locator) {
  */
 async function ask(window: Page, text: string) {
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Formats");
+  await nameMind(window, "Formats");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await addToNote(window, await askInAssistant(window, text));

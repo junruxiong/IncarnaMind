@@ -1,13 +1,16 @@
 import { useMemo } from "react";
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
+import { useAskedChanges } from "../../askedChanges";
 import { type ChangedMind, changedMinds } from "../../changedMinds";
+import { changeFact, keptText, leftText } from "../../changeFacts";
 import { askInAssistant } from "../../conversations";
 import { useT } from "../../i18n";
 import { resolveAllChanges, showChanges, useWaitingChanges, type Waiting } from "../../mindChanges";
 import type { Translate } from "../../objects";
 import { useAppStore } from "../../store";
 import { MindLineIcon, PencilLineIcon } from "../lineIcons";
+import { AskedChangesCard } from "./AskedChangesCard";
 
 /** The names of Minds seen in a card, for a row whose Mind has since been removed. */
 const seenNames = new Map<string, string>();
@@ -15,29 +18,7 @@ const seenNames = new Map<string, string>();
 /** What an Answer did in one Mind, from its calls: the same counts the Mind's own line shows. */
 function factText(t: Translate, row: ChangedMind, name: string, waiting: Waiting) {
   if (waiting === "gone") return t("mindChanges.one.removed", { mind: name });
-  const count = row.wrote + row.changed;
-  if (row.created) {
-    if (count === 0) return t("mindChanges.one.created.none", { mind: name });
-    return count === 1
-      ? t("mindChanges.created.one", { mind: name })
-      : t("mindChanges.created", { mind: name, count });
-  }
-  if (count === 0) return t("mindChanges.one.edited", { mind: name });
-  if (row.changed === 0) {
-    return count === 1
-      ? t("mindChanges.wrote.one", { mind: name })
-      : t("mindChanges.wrote", { mind: name, count });
-  }
-  return count === 1
-    ? t("mindChanges.changed.one", { mind: name })
-    : t("mindChanges.changed", { mind: name, count });
-}
-
-/** How many of what it did still wait, while that is known and there was something. */
-function leftText(t: Translate, row: ChangedMind, waiting: Waiting): string | null {
-  if (typeof waiting !== "number" || row.wrote + row.changed === 0) return null;
-  if (waiting === 0) return t("mindChanges.left.none");
-  return waiting === 1 ? t("mindChanges.left.one") : t("mindChanges.left", { count: waiting });
+  return changeFact(t, row, name);
 }
 
 /**
@@ -62,6 +43,7 @@ export function MindChangesCard({
   const rows = useMemo(() => changedMinds(answer), [answer]);
   const waiting = useWaitingChanges(rows);
   const minds = useAppStore((state) => state.minds);
+  const asked = useAskedChanges((state) => state.outcomes[answer.id]);
   if (rows.length === 0) return null;
 
   const nameOf = (row: ChangedMind) => {
@@ -70,6 +52,17 @@ export function MindChangesCard({
     if (mind) seenNames.set(row.mindId, name);
     return name;
   };
+  if (asked) {
+    return (
+      <AskedChangesCard
+        answerId={answer.id}
+        rows={rows}
+        outcomes={asked}
+        waiting={waiting}
+        nameOf={nameOf}
+      />
+    );
+  }
   const counted = (index: number) => {
     const count = waiting[index];
     return typeof count === "number" ? count : 0;
@@ -82,10 +75,11 @@ export function MindChangesCard({
       ? factText(t, only, nameOf(only), waiting[0] ?? null)
       : t("mindChanges.minds", { count: rows.length });
   const headLeft = rows.length === 1 && only ? leftText(t, only, waiting[0] ?? null) : null;
+  const headKept = rows.length === 1 && only ? keptText(t, only) : null;
 
   return (
     <section
-      aria-label={headLeft ? `${head} ${headLeft}` : head}
+      aria-label={[head, headLeft, headKept].filter(Boolean).join(" ")}
       data-testid="mind-changes"
       className="mind-changes"
     >
@@ -98,8 +92,19 @@ export function MindChangesCard({
           {headLeft && (
             <>
               {" "}
-              <span data-testid="mind-changes-left" className="mind-changes-count">
+              <span
+                data-testid="mind-changes-left"
+                className="mind-changes-count whitespace-nowrap"
+              >
                 {headLeft}
+              </span>
+            </>
+          )}
+          {headKept && (
+            <>
+              {" "}
+              <span data-testid="mind-changes-kept" className="mind-changes-count">
+                {headKept}
               </span>
             </>
           )}
@@ -131,7 +136,8 @@ export function MindChangesCard({
               : t(row.created ? "mindChanges.row.created" : "mindChanges.row.edited", {
                   mind: name,
                 });
-          const fact = factText(t, row, name, count);
+          const kept = keptText(t, row);
+          const fact = [factText(t, row, name, count), kept].filter(Boolean).join(" ");
           const left = leftText(t, row, count);
           return (
             <div
@@ -145,7 +151,10 @@ export function MindChangesCard({
                 {label}
               </span>
               {left && (
-                <span data-testid="mind-changes-left" className="mind-changes-count">
+                <span
+                  data-testid="mind-changes-left"
+                  className="mind-changes-count whitespace-nowrap"
+                >
                   {left}
                 </span>
               )}
@@ -215,7 +224,6 @@ export function NoMindLine({ question }: { question: ConversationQuestion }) {
   const askInNewMind = () =>
     void useAppStore.getState().createMind({
       folderId,
-      focusBody: true,
       made: (mindId) =>
         void askInAssistant({
           mindId,

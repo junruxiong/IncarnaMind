@@ -77,9 +77,14 @@ describe("Why a call changed nothing, on its row", () => {
     { kind: "changed", mindId: "a" },
     { kind: "content-not-own", mindId: "a" },
     { kind: "stopped", mindId: "a" },
+    { kind: "no-table", mindId: "a" },
+    { kind: "uncited", mindId: "a" },
+    { kind: "new-mind", mindId: "a" },
     { kind: "local-mode" },
     { kind: "not-ready" },
     { kind: "model", mindId: "a", message: "Overloaded" },
+    { kind: "copy", mindId: "a", text: "Risks" },
+    { kind: "new-version", mindId: "a", text: "Risks" },
   ];
 
   // protects=every reason a change failed reads in plain words, in English and Chinese; fails_when=one shows a bare "Couldn't change", or a key instead of words; no_claim=how the row is drawn.
@@ -100,26 +105,37 @@ describe("Why a call changed nothing, on its row", () => {
       adding: true,
     };
     expect(problemText(en, place, "Q3 review")).toBe(
-      "Couldn't add to “Q3 review”: more than one place is called “Summary”",
+      "Couldn’t add to “Q3 review”: more than one place is called “Summary”",
     );
     expect(problemText(zh, place, "Q3 review")).toBe(
       "无法添加到“Q3 review”：有多个位置叫“Summary”",
     );
     expect(problemText(en, { ...place, adding: false }, "Q3 review")).toBe(
-      "Couldn't change “Q3 review”: more than one place is called “Summary”",
+      "Couldn’t change “Q3 review”: more than one place is called “Summary”",
     );
   });
 
   // protects=the waiting reason names the count, and the Chinese reads as Chinese apps say it; fails_when=the count or the Mind is lost; no_claim=none beyond protects.
   test("the waiting reason names the Mind and how many wait", () => {
     expect(problemText(en, waiting, "Q3 review")).toBe(
-      "Couldn't change “Q3 review”: 12 changes are waiting there",
+      "Couldn’t change “Q3 review”: 12 changes are waiting there",
     );
     expect(problemText(zh, waiting, "Q3 review")).toBe(
       "无法修改“Q3 review”：其中有 12 处修订待确认",
     );
     expect(en("mindChanges.waiting", { mind: "Q3 review", count: 12 })).toBe(
       "12 changes are waiting in “Q3 review”. Accept or reject them first?",
+    );
+  });
+
+  // protects=a table that couldn't be made says so in plain words, and that nothing went in (#961); fails_when=the line blames the model vaguely or loses the Mind's name; no_claim=none beyond protects.
+  test("a table that couldn't be made says nothing was added", () => {
+    const problem: MindProblem = { kind: "no-table", mindId: "a" };
+    expect(problemText(en, problem, "Q3 review")).toBe(
+      "Couldn’t make the table, so nothing was added to “Q3 review”",
+    );
+    expect(problemText(zh, problem, "Q3 review")).toBe(
+      "未能生成表格，因此没有向“Q3 review”添加内容",
     );
   });
 });

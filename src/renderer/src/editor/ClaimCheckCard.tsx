@@ -4,21 +4,29 @@ import { createPortal } from "react-dom";
 import type * as Y from "yjs";
 import { CITATION_NODE, type CitationAttributes, type ClaimCalculation } from "../../../core/api";
 import { shownDocumentName } from "../../../shared/citations";
+import { SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { savedPageSource } from "../../../shared/webSource";
+import { useAddedDocuments } from "../addedDocuments";
 import { addAsCitation, checkAgain, removeClaimMark } from "../checks";
 import { CountItLine } from "../components/CountItLine";
+import { MetaLine } from "../components/MetaLine";
+import { LineAction } from "../components/ProblemLine";
 import { askInAssistant } from "../conversations";
 import { useFindSources } from "../findSources";
 import { translateNow, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
+import { firstOpenOf } from "../nudges";
 import { openCited } from "../openCited";
 import { useAppStore } from "../store";
+import { citedIn, cutUnsupported, keepAsView, offersFixes, uncoveredOf } from "../unsupportedFixes";
+import type { NumberedCitation } from "./citationNumbers";
 import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
 import { Popover } from "./Popover";
+import { UnsupportedCited } from "./UnsupportedCited";
 
 /** How long a pointer rests on a mark before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
@@ -100,6 +108,7 @@ export function ClaimMark({
   const open = pinned || peeking;
   // A figure worked out has inputs, not one Passage to cite.
   const plus = state === "supported" && !claim.check.calculation && !citesEvidence(editor, claim);
+  const added = useAddedDocuments((store) => store.byMind[mindId]?.[claim.check.id]?.length ?? 0);
 
   const hold = useCallback((source: string, on: boolean) => {
     if (on) askers.current.add(source);
@@ -116,6 +125,11 @@ export function ClaimMark({
   }, []);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
+  const guided = useAppStore((app) => {
+    const progress = app.settings?.device.gettingStarted;
+    return state === "contradicted" && !progress?.citationChecked && firstOpenOf(progress);
+  });
+
   /** After an action the card goes, and the focus stays in the Mind. */
   const done = () => {
     dismiss();
@@ -131,6 +145,7 @@ export function ClaimMark({
         data-check={state}
         data-claim={claim.check.id}
         data-open={open || undefined}
+        data-guided={guided || undefined}
         data-addable={plus || undefined}
         className={`margin-check claim-mark ${reveal ? "margin-check--reveal" : ""}`}
         style={style}
@@ -146,7 +161,7 @@ export function ClaimMark({
         onBlur={() => hold("focus", false)}
         onClick={() => {
           setPinned(true);
-          // "Open a check in the example", in Get started.
+          // Step 1 of the first open's steps, "See a mistake it caught".
           const { examples, updateGettingStarted } = useAppStore.getState();
           if (examples?.mindId === mindId) updateGettingStarted({ citationChecked: true });
         }}
@@ -174,7 +189,10 @@ export function ClaimMark({
           >
             <ClaimCard
               claim={claim}
+              cited={citedIn(editor, claim)}
+              fixes={offersFixes(editor, claim)}
               addable={plus}
+              added={added}
               onAdd={() => {
                 addAsCitation(editor, claim);
                 done();
@@ -206,6 +224,14 @@ export function ClaimMark({
               }}
               onRemove={() => {
                 removeClaimMark(editor, claim);
+                done();
+              }}
+              onCut={() => {
+                void cutUnsupported(editor, mindId, doc, claim);
+                done();
+              }}
+              onKeep={() => {
+                keepAsView(editor, claim);
                 done();
               }}
             />
@@ -265,7 +291,13 @@ function WorkingInput({
   const quote = useReadableQuote(input.citation);
   const location = citationLocation(input.citation);
   const where = location ? formatLocation(location, t) : null;
-  const source = [shownDocumentName(input.citation, documents), where].filter(Boolean).join(" · ");
+  const source = [
+    shownDocumentName(input.citation, documents),
+    where,
+    input.number.value < 0 ? t("claim.calculated.negative") : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <button
       type="button"
@@ -292,13 +324,18 @@ function WorkingInput({
  * when it isn't cited yet; for a contradiction, what the Document says; for a
  * figure worked out, its working and inputs; for nothing found, where it
  * looked, with Search all Documents, or, for a court decision no Document
- * holds, that it can't be checked here, with Remove the mark only; otherwise
- * why, with Check again. A Passage from a saved web page names the page.
- * Documents IncarnaMind wrote that matched are named, with Count it.
+ * holds, that it can't be checked here, with Remove the mark only; for a
+ * sentence with a Citation, the part the Citation doesn't cover, with its
+ * quote, and Cut the unsupported part, Search all Documents and Keep as my view
+ * (#1111); otherwise why, with Check again. A Passage from a saved web page
+ * names the page. Documents IncarnaMind wrote that matched are named, with Count it.
  */
 function ClaimCard({
   claim,
+  cited,
+  fixes,
   addable,
+  added,
   onAdd,
   onCheckAgain,
   onOpen,
@@ -307,9 +344,14 @@ function ClaimCard({
   onSearchWeb,
   onTurnOnWebSearch,
   onRemove,
+  onCut,
+  onKeep,
 }: {
   claim: ShownClaim;
+  cited: readonly NumberedCitation[];
+  fixes: boolean;
   addable: boolean;
+  added: number;
   onAdd(): void;
   onCheckAgain(allDocuments?: boolean): void;
   onOpen(): void;
@@ -318,6 +360,8 @@ function ClaimCard({
   onSearchWeb(): void;
   onTurnOnWebSearch(): void;
   onRemove(): void;
+  onCut(): void;
+  onKeep(): void;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -361,9 +405,14 @@ function ClaimCard({
   const searchedFolder = !check.scope.widened && folderName !== null;
   const ownWorkings =
     state === "unsupported" && check.excluded.some((left) => left.reason === "own-workings");
+  const cuttable = fixes && uncoveredOf(claim) !== null;
+  const pastCap = shown.state === "not-checked" && shown.reason === "too-many";
   const reason =
     shown.state === "not-checked"
-      ? t(`claim.reason.${shown.reason}`, { detail: check.detail ?? "" })
+      ? t(`claim.reason.${shown.reason}`, {
+          detail: check.detail ?? "",
+          cap: SENTENCES_CHECKED_AT_MOST,
+        })
       : shown.state === "needs-recheck"
         ? t(`claim.recheck.${shown.why}`)
         : null;
@@ -432,16 +481,28 @@ function ClaimCard({
         </p>
       )}
       {state === "unsupported" && !differs && !decisionMissing && (
-        <p
-          data-testid={ownWorkings ? "claim-own-workings" : "claim-nothing"}
-          className="citation-card-note"
-        >
-          {ownWorkings
-            ? t("claim.unsupported.ownWorkings")
-            : searchedFolder
-              ? t("claim.unsupported.inFolder", { folder: folderName })
-              : t("claim.unsupported.anywhere")}
-        </p>
+        <>
+          {fixes && (
+            <UnsupportedCited
+              cited={cited}
+              why={check.unsupported}
+              onCheckAgain={() => onCheckAgain()}
+              onOpen={onOpen}
+            />
+          )}
+          {!fixes && (
+            <p
+              data-testid={ownWorkings ? "claim-own-workings" : "claim-nothing"}
+              className="citation-card-note"
+            >
+              {ownWorkings
+                ? t("claim.unsupported.ownWorkings")
+                : searchedFolder
+                  ? t("claim.unsupported.inFolder", { folder: folderName })
+                  : t("claim.unsupported.anywhere")}
+            </p>
+          )}
+        </>
       )}
       {webOffShown && !webSearchOn && (
         <p data-testid="claim-web-off" className="citation-card-note">
@@ -456,10 +517,48 @@ function ClaimCard({
           </button>
         </p>
       )}
-      {reason && (
+      {reason && pastCap && (
+        <div className="citation-card-note">
+          <MetaLine
+            data-testid="claim-reason"
+            parts={[
+              reason,
+              <LineAction
+                key="now"
+                action={{
+                  label: t("claim.checkNow"),
+                  testId: "claim-check-now",
+                  onClick: () => onCheckAgain(),
+                }}
+              />,
+            ]}
+          />
+        </div>
+      )}
+      {reason && !pastCap && (
         <p data-testid="claim-reason" className="citation-card-note">
           {reason}
         </p>
+      )}
+      {added > 0 && (
+        <div className="citation-card-note">
+          <MetaLine
+            data-testid="claim-added"
+            parts={[
+              added === 1
+                ? t("claim.added.one")
+                : t("claim.added", { count: new Intl.NumberFormat(language).format(added) }),
+              <LineAction
+                key="check"
+                action={{
+                  label: t("claim.checkAgain"),
+                  testId: "claim-added-check",
+                  onClick: () => onCheckAgain(),
+                }}
+              />,
+            ]}
+          />
+        </div>
       )}
       {check.excluded.map((left) => {
         const document =
@@ -510,18 +609,38 @@ function ClaimCard({
             {t("claim.fixSentence")}
           </button>
         )}
+        {cuttable && (
+          <button
+            type="button"
+            data-testid="claim-cut"
+            className="citation-card-action citation-card-action--primary"
+            onClick={onCut}
+          >
+            {t("claim.cutUnsupported")}
+          </button>
+        )}
         {state === "unsupported" && searchedFolder && !decisionMissing && (
           <button
             type="button"
             data-testid="claim-search-all"
-            className="citation-card-action citation-card-action--primary"
+            className={`citation-card-action ${cuttable ? "" : "citation-card-action--primary"}`}
             onClick={() => onCheckAgain(true)}
           >
             {t("claim.searchAll")}
           </button>
         )}
+        {fixes && (
+          <button
+            type="button"
+            data-testid="claim-keep"
+            className="citation-card-action"
+            onClick={onKeep}
+          >
+            {t("claim.keepAsView")}
+          </button>
+        )}
         {/* Where the Documents say something different the card has Open the page and Fix the sentence already, so it offers no more ways to look. */}
-        {state === "unsupported" && !differs && !decisionMissing && (
+        {state === "unsupported" && !differs && !decisionMissing && !fixes && (
           <>
             <button
               type="button"
@@ -541,7 +660,7 @@ function ClaimCard({
             </button>
           </>
         )}
-        {state === "unsupported" && (
+        {state === "unsupported" && !fixes && (
           <button
             type="button"
             data-testid="claim-remove"
@@ -551,7 +670,7 @@ function ClaimCard({
             {t("claim.removeMark")}
           </button>
         )}
-        {(state === "not-checked" || state === "needs-recheck") && (
+        {(state === "needs-recheck" || (state === "not-checked" && added === 0 && !pastCap)) && (
           <button
             type="button"
             data-testid="claim-check-again"

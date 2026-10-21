@@ -3,12 +3,19 @@ import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
 import type { Core } from "../../src/core";
 import { pendingProposals } from "../../src/shared/proposals";
-import { askAssistant, changesIn, lastResult, mindCalls } from "../helpers/assistant";
+import {
+  answerRequests,
+  askAssistant,
+  changesIn,
+  lastResult,
+  mindCalls,
+} from "../helpers/assistant";
+import { checkReply, isCheckRun } from "../helpers/checks";
 import { answerEnded, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { createSourceFolder, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
-import { heading, note, shownWithChanges, writeMind } from "../helpers/minds";
+import { heading, note, readMind, shownWithChanges, writeMind } from "../helpers/minds";
 import {
   type ModelCall,
   type ScriptedReply,
@@ -82,7 +89,7 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
     const [checkpoint] = await checkpointsOf(core, mind.id);
     expect(checkpoint?.reason).toBe("accept");
     expect(changesIn(answer)).toEqual([
-      { mindId: mind.id, created: false, request: expect.any(String), proposals: 2 },
+      { mindId: mind.id, created: false, request: expect.any(String), proposals: 2, changed: 1 },
     ]);
     expect(mindCalls(answer)[0]?.status).toBe("done");
     expect(answer.text).toBe("Shortened the summary in “Q3 review”: dropped two fillers.");
@@ -205,6 +212,36 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
       "+ Tides",
       "+ Spring tides come at new and full moon ⟨found⟩.",
     ]);
+  });
+
+  // protects=a Mind the assistant makes starts with its title as a Heading 1, written with the Mind and not a change to accept, and a draft that begins with a heading of its own gets no second one (#908, the owner's résumé summary); fails_when=the title is missing, waits as a change, or shows twice; no_claim=how a real model titles a page.
+  test("a new note starts with its title as a heading, once, whatever the level of a heading the model began with", async () => {
+    const pages = [
+      { title: "Tide notes", content: "Spring tides come at new moon." },
+      { title: "张瑜简历总结", content: "# 张瑜简历总结\n\n教育背景。" },
+      { title: "工作经历", content: "## 工作经历\n\n2019 年至今。" },
+    ];
+    const model = scriptedModel(({ results }): ScriptedReply => {
+      const page = pages[results.filter((result) => result.tool === "create_mind").length];
+      return page ? { calls: [{ tool: "create_mind", input: page }] } : { text: "Made both." };
+    });
+    const { core, mind } = await setUp(model);
+    const answer = await ask(core, { text: "Make two notes", mindId: mind.id });
+
+    const [tides, resume, work] = changesIn(answer);
+    expect(tides).toMatchObject({ created: true, proposals: 1 });
+    const tidesPage = readMind(await connectToMind(core, tides?.mindId ?? ""));
+    expect(tidesPage.firstChild?.toJSON()).toEqual({
+      type: "heading",
+      attrs: expect.objectContaining({ level: 1 }),
+      content: [{ type: "text", text: "Tide notes" }],
+    });
+    const resumeClient = await connectToMind(core, resume?.mindId ?? "");
+    expect(shownWithChanges(resumeClient)).toEqual(["+ 张瑜简历总结", "+ 教育背景。"]);
+    expect(readMind(resumeClient).firstChild?.attrs.level).toBe(1);
+    // A heading of any level the model began with is its title: no second one above it.
+    const workClient = await connectToMind(core, work?.mindId ?? "");
+    expect(shownWithChanges(workClient)).toEqual(["+ 工作经历", "+ 2019 年至今。"]);
   });
 
   // protects=a Mind the User names that doesn't exist, or no Mind at all, changes nothing and the model is told why; fails_when=another Mind is changed, or the call says it worked; no_claim=how the model words it.
@@ -361,6 +398,154 @@ describe("The Minds' Tools find what the model names", { timeout: 30_000 }, () =
       "Next",
       "Really soon.",
     ]);
+  });
+
+  // protects=edit_mind with a paragraph's first words changes that paragraph only, even with the whole Mind selected; fails_when=the others are rewritten too; no_claim=that a model names it.
+  test("a paragraph named by its first words is all that changes, the whole Mind selected", async () => {
+    const model = toolModel(
+      {
+        tool: "edit_mind",
+        input: { part: "Margins were really thin", instruction: "Make it more formal" },
+      },
+      "Done.",
+    );
+    const { core, mind, client } = await setUp(model);
+    writeMind(client, [
+      note("Sales were really strong."),
+      note("Margins were really thin in the north."),
+      note("Hiring was very slow."),
+    ]);
+    await client.settled();
+    const all = [0, 1, 2].map((index) => blockIdAt(client, index));
+
+    await ask(core, {
+      text: "Make the second paragraph more formal",
+      mindId: mind.id,
+      focus: { selection: "everything", blockIds: all },
+    });
+
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual([
+      "Sales were really strong.",
+      "Margins were [-really -]thin in the north.",
+      "Hiring was very slow.",
+    ]);
+  });
+
+  // protects=asked about one paragraph by its place, edit_mind over the whole Mind changes that paragraph only and the others stay byte for byte, though the rewrite rewords whatever it is given; fails_when=a paragraph around it changes; no_claim=that a model picks the right Tool.
+  test.each([
+    ["Make the second paragraph more formal and leave the others as they are", 1],
+    ["把第二段改得更正式，其他段落保持不变", 1],
+    ["Tighten the last paragraph", 2],
+  ] as const)("“%s” changes only that paragraph, the whole Mind selected", async (text, at) => {
+    const model = toolModel({ tool: "edit_mind", input: { instruction: "Rewrite it" } }, "Done.");
+    const { core, mind, client } = await setUp(model);
+    const lines = [
+      "Sales were really strong.",
+      "Margins were really thin in the north.",
+      "Hiring was very slow.",
+    ];
+    writeMind(
+      client,
+      lines.map((line) => note(line)),
+    );
+    await client.settled();
+    const all = [0, 1, 2].map((index) => blockIdAt(client, index));
+    const before = [0, 1, 2].map((index) => client.blocks.get(index).toString());
+
+    await ask(core, { text, mindId: mind.id, focus: { selection: "everything", blockIds: all } });
+
+    await client.settled();
+    const shown = shownWithChanges(client);
+    expect(shown[at]).toContain("[-");
+    for (const index of [0, 1, 2].filter((each) => each !== at)) {
+      expect(client.blocks.get(index).toString()).toBe(before[index]);
+      expect(shown[index]).toBe(lines[index]);
+    }
+  });
+
+  // protects=a request that leaves the named paragraph alone, or reaches past it, isn't narrowed to it; fails_when=only that paragraph is rewritten, the opposite of what was asked; no_claim=what a real model then changes.
+  test.each([
+    "Shorten everything but the second paragraph",
+    "Don't change the second paragraph, shorten the rest",
+    "第二段不要改，其他的缩短",
+    "Make the whole thing more formal, especially the second paragraph",
+  ])("“%s” isn't narrowed to that paragraph", async (text) => {
+    const model = toolModel({ tool: "edit_mind", input: { instruction: "Shorten it" } }, "Done.");
+    const { core, mind, client } = await setUp(model);
+    writeMind(client, [note("Sales were really strong."), note("Margins were really thin.")]);
+    await client.settled();
+
+    await ask(core, { text, mindId: mind.id });
+
+    await client.settled();
+    expect(shownWithChanges(client)[0]).toBe("Sales were [-really -]strong.");
+  });
+
+  // protects=a section named as <mind> shows it, marks and all, is found; fails_when=the call is refused for no such heading; no_claim=none beyond protects.
+  test.each(["### [waiting change, adds: Risks]", "## **Risks**"])(
+    "a section named “%s” is what changes",
+    async (part) => {
+      const model = toolModel(
+        { tool: "edit_mind", input: { part, instruction: "Shorten it" } },
+        "Done.",
+      );
+      const { core, mind, client } = await setUp(model);
+      writeMind(client, [
+        heading(2, "Summary"),
+        note("Sales were really strong."),
+        heading(2, "Risks"),
+        note("The supplier is very late."),
+      ]);
+      await client.settled();
+
+      await ask(core, { text: "Shorten the risks", mindId: mind.id });
+
+      await client.settled();
+      expect(shownWithChanges(client)).toEqual([
+        "Summary",
+        "Sales were really strong.",
+        "Risks",
+        "The supplier is [-very -]late.",
+      ]);
+    },
+  );
+
+  // protects=a paragraph named by a few Chinese first words, or by a start the model got wrong while the User named its place, is all that changes; fails_when=the call is refused or the other paragraphs change; no_claim=none beyond protects.
+  test.each([
+    ["把第三段缩短", "团队里有两个人请假"],
+    ["Shorten the third paragraph", "Nothing starts like this"],
+  ])("“%s” with part “%s” changes the third paragraph only", async (text, part) => {
+    const model = toolModel(
+      { tool: "edit_mind", input: { part, instruction: "Shorten it" } },
+      "Done.",
+    );
+    const { core, mind, client } = await setUp(model);
+    writeMind(client, [
+      note("Sales were really strong."),
+      note("Margins were really thin."),
+      note("团队里有两个人请假，进度 really 很慢。"),
+    ]);
+    await client.settled();
+
+    await ask(core, { text, mindId: mind.id });
+
+    await client.settled();
+    const shown = shownWithChanges(client);
+    expect(shown.slice(0, 2)).toEqual(["Sales were really strong.", "Margins were really thin."]);
+    expect(shown[2]).toContain("[-really -]");
+  });
+
+  // protects=the User's own first-person words are written as given, whatever they say of finding or looking; fails_when=they are taken for the assistant's talk of searching and left out; no_claim=none beyond protects.
+  test("“Add to my notes: I found three issues…” writes that sentence", async () => {
+    const sentence = "I found three issues in the lease, and I looked at the break clause twice.";
+    const model = toolModel({ tool: "add_to_mind", input: { content: sentence } }, "Added.");
+    const { core, mind, client } = await setUp(model);
+
+    await ask(core, { text: `Add to my notes: ${sentence}`, mindId: mind.id });
+
+    await client.settled();
+    expect(shownWithChanges(client)).toContain(`+ ${sentence}`);
   });
 
   // protects=read_mind gives another Mind's text, as the Mind in focus is read; fails_when=the model gets nothing, or the wrong Mind; no_claim=none beyond protects.
@@ -976,7 +1161,9 @@ describe("Arguments a model gets slightly wrong cost no extra step", { timeout: 
     ["an array written in JSON", (record: object) => JSON.stringify([record])],
     ["an array encoded twice", (record: object) => JSON.stringify(JSON.stringify([record]))],
   ])("cite given %s", async (_how, wrap) => {
-    const model = scriptedModel(({ results }): ScriptedReply => {
+    const model = scriptedModel((call): ScriptedReply => {
+      if (isCheckRun(call)) return checkReply(call, {});
+      const { results } = call;
       const search = results.find((result) => result.tool === "search_documents");
       if (!search)
         return { calls: [{ tool: "search_documents", input: { query: "spring tides" } }] };
@@ -1005,7 +1192,7 @@ describe("Arguments a model gets slightly wrong cost no extra step", { timeout: 
       mindId: mind.id,
     });
 
-    expect(model.doStreamCalls).toHaveLength(4);
+    expect(answerRequests(model)).toHaveLength(4);
     const [change] = changesIn(answer);
     const madeClient = await connectToMind(core, change?.mindId ?? "");
     expect(shownWithChanges(madeClient)).toEqual([

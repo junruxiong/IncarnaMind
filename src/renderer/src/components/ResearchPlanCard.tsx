@@ -7,11 +7,12 @@ import { keysLabel } from "../commands/keys";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { formatMoney } from "../cost";
+import { AnswerError } from "../editor/AnswerView";
 import { RemoveIcon } from "../editor/icons";
 import { useMindModel } from "../editor/ModelChip";
 import { useLanguage, useT } from "../i18n";
+import { requestModelMenu } from "../modelMenu";
 import { useModelNames } from "../modelNames";
-import { answerProblem } from "../problems";
 import {
   addStep,
   type ResearchPlanCard as Card,
@@ -23,6 +24,8 @@ import {
   stepsOf,
   updatePlan,
   useResearch,
+  useResearchModel,
+  useWebMissing,
   useWebReach,
   type WebReach,
 } from "../research";
@@ -61,8 +64,7 @@ export function ResearchPlanCard({ mindId }: { mindId: string }) {
   const card = useResearch((state) => state.plans[mindId]);
   const seat = useComposer((state) => state.seat);
   const chosen = useMindModel(seat?.mindId === mindId ? seat.doc : null);
-  const fallback = useAppStore((state) => state.settings?.user.chatModel ?? null);
-  const model = chosen ?? fallback;
+  const model = useResearchModel(chosen);
   const web = useWebReach(model);
   const fields = useRef<(HTMLTextAreaElement | null)[]>([]);
   const focusStep = useRef<number | null>(null);
@@ -144,6 +146,7 @@ export function ResearchPlanCard({ mindId }: { mindId: string }) {
                   data-testid="research-plan-step"
                   aria-label={t("research.plan.step", { number: index + 1 })}
                   value={step}
+                  placeholder={card.steps.length === 1 ? t("research.plan.firstStep") : undefined}
                   disabled={card.planning}
                   onChange={(event) =>
                     setStep(mindId, index, event.target.value.replace(/\s*\n\s*/g, " "))
@@ -307,9 +310,9 @@ function SourceToggle({
 /** Why the web can't be searched with this model, with what fixes it. */
 function WebLine({ reach, model }: { reach: WebReach; model: ChatModelChoice | null }) {
   const t = useT();
-  const nameOf = useModelNames();
+  const missing = useWebMissing(reach, model);
   const updateSettings = useAppStore((state) => state.updateSettings);
-  if (reach === "ready") return null;
+  if (reach === "ready" || missing === null) return null;
   if (reach === "off") {
     return (
       <ProblemLine
@@ -327,13 +330,7 @@ function WebLine({ reach, model }: { reach: WebReach; model: ChatModelChoice | n
   }
   return (
     <p data-testid="research-plan-web-unavailable" className="research-plan-note">
-      {reach === "local-mode"
-        ? t("research.plan.localMode")
-        : t("research.plan.webUnavailable", {
-            model: model
-              ? nameOf(model.modelId, model.providerId).name
-              : t("answer.error.thisModel"),
-          })}
+      {t("research.plan.libraryOnly", { reason: missing })}
     </p>
   );
 }
@@ -422,7 +419,20 @@ function PlanProblem({
 }) {
   const t = useT();
   const openSettings = useAppStore((state) => state.openSettings);
+  const shown = useResearchModel(model);
   const problem = card.problem;
+  const thinking =
+    problem?.reason === "failed" &&
+    problem.error.wording?.key === "error.research.plan.thoughtOnly";
+  const failedWith = useRef(shown);
+  // Another model chosen is the way on from a model that only thinks: the plan is made again with it.
+  useEffect(() => {
+    const before = failedWith.current;
+    failedWith.current = shown;
+    if (!thinking || !shown) return;
+    if (before?.providerId === shown.providerId && before.modelId === shown.modelId) return;
+    void planAgain(mindId, model);
+  }, [thinking, shown, mindId, model]);
   if (!problem) return null;
   if (problem.reason === "not-ready") {
     return (
@@ -431,7 +441,6 @@ function PlanProblem({
         testId="research-plan-not-ready"
         className="research-plan-problem"
         setUpLabel={t("question.setUp")}
-        refused
       />
     );
   }
@@ -442,20 +451,41 @@ function PlanProblem({
       </ProblemLine>
     );
   }
-  const { fix } = answerProblem(problem.error.kind, undefined);
+  const { error } = problem;
+  const again = () => void planAgain(mindId, model);
+  if (error.wording) {
+    return (
+      <ProblemLine
+        testId="research-plan-failed"
+        className="research-plan-problem"
+        title={error.message}
+        action={
+          thinking
+            ? {
+                label: t("answer.error.chooseModel"),
+                // The chip's model is the plan's: Settings' default can't change it.
+                onClick: model ? requestModelMenu : () => openSettings("models"),
+              }
+            : { label: t("research.plan.tryAgain"), onClick: again }
+        }
+      >
+        {t("research.plan.failedBecause", { reason: t(error.wording.key, error.wording.values) })}
+      </ProblemLine>
+    );
+  }
   return (
-    <ProblemLine
-      testId="research-plan-failed"
-      className="research-plan-problem"
-      title={problem.error.message}
-      action={
-        fix.kind === "settings"
-          ? { label: t(fix.label), onClick: () => openSettings(fix.page) }
-          : { label: t("research.plan.tryAgain"), onClick: () => void planAgain(mindId, model) }
-      }
-    >
-      {t("research.plan.failed")}
-    </ProblemLine>
+    <div data-testid="research-plan-failed" className="research-plan-problem">
+      <AnswerError
+        kind={error.kind}
+        modelId={shown?.modelId ?? null}
+        providerId={shown?.providerId ?? null}
+        resetsAt={error.resetsAt ?? null}
+        signInRoute={error.signInRoute ?? null}
+        details={error.message}
+        onRetry={again}
+        onOpenSettings={openSettings}
+      />
+    </div>
   );
 }
 

@@ -6,9 +6,11 @@ import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  checkCard,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  motionSettled,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -29,7 +31,9 @@ import {
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 const screenshot = async (window: Page, name: string) => {
-  if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+  if (!SCREENSHOTS) return;
+  await motionSettled(window);
+  await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 };
 
 const TIDES = buildPdf([
@@ -127,21 +131,20 @@ test("Check for contradictions: the estimate first, then a cited claim another D
 
   await runFromPalette(window, "contradictions", "Check for contradictions");
 
-  // A model billed per token: the line asks first, with the estimate.
-  const ask = window.getByTestId("contradictions-ask");
+  // A model billed per token: the badge's card opens by itself and asks first, with the estimate.
+  const ask = window.getByTestId("check-card").getByTestId("contradictions-ask");
   await expect(ask).toContainText("Check 1 cited claim against this Folder’s other Documents?");
   await expect(ask).toContainText("About");
+  const checks = await checkCard(window);
   await screenshot(window, "contradictions-ask-en");
   await pointAndClick(window, ask.getByTestId("contradictions-check"));
 
-  const found = window.getByTestId("contradictions-found");
+  const found = checks.getByTestId("contradictions-found");
   await expect(found).toContainText("1 of 1 cited claims contradicted");
   const mark = window.getByTestId("claim-mark");
   await expect(mark).toHaveAttribute("data-check", "contradicted");
   await expect(line.locator(".claim-wash--contradicted").first()).toBeVisible();
-  await expect(window.getByTestId("mind-health").getByTestId("health-contradicted")).toHaveText(
-    "1 contradicted",
-  );
+  await expect(checks.getByTestId("health-contradicted")).toContainText("1 contradicted");
   await screenshot(window, "contradictions-found-en");
 
   await pointAndClick(window, mark);
@@ -171,8 +174,9 @@ test("In Chinese and a narrow window: a Mind in no Folder, and a Folder of only 
   await setWindowSize(app, window, 900, 720);
 
   await runFromPalette(window, "矛盾", "检查矛盾");
-  const problem = window.getByTestId("checks-problem");
-  await expect(problem).toContainText("这个 Mind 不在任何文件夹中");
+  // A check the User started that can't run opens the card to say why.
+  const problem = window.getByTestId("check-card").getByTestId("checks-problem");
+  await expect(problem).toContainText("这个 Mind 不在文件夹中");
 
   await bridge(window).folder("潮汐", ["Tides"]);
   await pointAndClick(window, problem.getByTestId("checks-problem-close"));
@@ -181,7 +185,7 @@ test("In Chinese and a narrow window: a Mind in no Folder, and a Folder of only 
   const item = window.getByRole("menuitem", { name: "检查矛盾" });
   await expect(item).toBeVisible();
   await pointAndClick(window, item);
-  await expect(window.getByTestId("checks-problem")).toContainText(
+  await expect(window.getByTestId("check-card").getByTestId("checks-problem")).toContainText(
     "“潮汐”中只有这些说法引用的文档。",
   );
   await screenshot(window, "contradictions-only-cited-zh-narrow");
@@ -203,15 +207,19 @@ test("A new version of a Document in the Folder has the Mind's cited claims chec
 
   await writeFile(join(sources, "Office.pdf"), OFFICE);
 
-  const watched = window.getByTestId("contradictions-watched");
-  await expect(watched).toContainText("After “Office” changed: 1 of 1 cited claims contradicted", {
+  // Work in the background never opens the card: the badge shows the mark, and the card what the run found.
+  await expect(window.getByTestId("claim-mark")).toHaveAttribute("data-check", "contradicted", {
     timeout: 30_000,
   });
-  await expect(window.getByTestId("claim-mark")).toHaveAttribute("data-check", "contradicted");
   await expect(line.locator(".claim-wash--contradicted").first()).toBeVisible();
-  await expect(window.getByTestId("mind-health").getByTestId("health-contradicted")).toHaveText(
-    "1 contradicted",
+  await expect(window.getByTestId("check-card")).toHaveCount(0);
+  await expect(window.getByTestId("check-badge").locator('[data-part="contradicted"]')).toHaveText(
+    "1",
   );
+  const checks = await checkCard(window);
+  const watched = checks.getByTestId("contradictions-watched");
+  await expect(watched).toContainText("After “Office” changed: 1 of 1 cited claims contradicted");
+  await expect(checks.getByTestId("health-contradicted")).toContainText("1 contradicted");
   await screenshot(window, "contradictions-watched-en");
 
   await pointAndClick(window, watched.getByTestId("contradictions-watched-close"));

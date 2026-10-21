@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import type { AudioSource, Meeting, Settings } from "../../core/api";
 import { meetingTimeAt } from "../../shared/blockTimes";
-import { core } from "./core";
+import { core, files } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
+import { currentMindIdOf } from "./layoutSlice";
 import { useAppStore } from "./store";
 
 interface MeetingsState {
@@ -13,14 +14,22 @@ interface MeetingsState {
   problems: Readonly<Record<string, string>>;
   /** The Meeting whose Start waits for the User to read the one-time recording notice. */
   noticeFor: { meetingId: string; systemAudio: boolean } | null;
+  starting: Readonly<Record<string, true>>;
+  /** Record was chosen where this copy can't record audio: the sidebar's footer says so until it is dismissed. */
+  cantRecord: boolean;
   /** The gaps the User has dismissed, by Meeting: how many of its gaps they have seen. */
   gapsSeen: Readonly<Record<string, number>>;
   /** The Meetings whose recording details are shown (#161). */
   detailsShown: Readonly<Record<string, boolean>>;
   /** Lists the Meetings, at startup; the core's events keep the list after that. */
   load(): Promise<void>;
-  /** "Record a meeting": a new Mind, in a tab of its own, with the start block. */
+  /**
+   * "Record a meeting": the Meeting recording now, opened, or else a new Mind in a tab of its
+   * own, in the Folder of the Mind in view; it starts recording at once once the User has read
+   * the one-time notice, and shows the start block before.
+   */
   record(): Promise<void>;
+  clearCantRecord(): void;
   /** Start recording, after the one-time notice if this device hasn't shown it. */
   start(meetingId: string, systemAudio: boolean): Promise<void>;
   /** The notice was read: recording starts, and the notice isn't shown again. */
@@ -57,6 +66,8 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     meetings: [],
     problems: {},
     noticeFor: null,
+    cantRecord: false,
+    starting: {},
     gapsSeen: {},
     detailsShown: {},
 
@@ -69,18 +80,44 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     },
 
     async record() {
+      const recording = get().meetings.find((each) => each.status === "recording");
+      if (recording) {
+        useAppStore.getState().openMind(recording.mindId);
+        return;
+      }
+      const { settings, layout, minds } = useAppStore.getState();
+      if (!settings) return;
+      if (settings.meetingAudio === "none") {
+        set({ cantRecord: true });
+        return;
+      }
+      let created: string | null = null;
       try {
-        const meeting = await core.createMeeting();
+        const inView = currentMindIdOf(layout);
+        const folderId = minds.find((each) => each.id === inView)?.folderId ?? null;
+        const meeting = await core.createMeeting(folderId ? { folderId } : undefined);
+        created = meeting.id;
+        const starts = settings.device.meetingNoticeAccepted;
+        if (starts) set((state) => ({ starting: { ...state.starting, [meeting.id]: true } }));
+        // The notes come first in a meeting: the text has the cursor, as in a Mind made with ⌘T.
+        useAppStore.setState({ bodyToFocus: meeting.mindId });
         // A tab of its own, as New Mind opens one: never in place of the Mind the User is in.
         await useAppStore.getState().changeLayout({
           type: "open",
           item: { kind: "mind", mindId: meeting.mindId },
           where: { in: "group" },
         });
+        if (starts) await get().start(meeting.id, meeting.systemAudio);
+        // The core's event can come after start() returns, and showing the start block between
+        // would flash it: the Meeting leaves "starting" with its status, or here if the start failed.
+        if (meeting.id in get().problems) set(stopStarting(meeting.id));
       } catch (error) {
         useAppStore.getState().reportError(error);
+        if (created) set(stopStarting(created));
       }
     },
+
+    clearCantRecord: () => set({ cantRecord: false }),
 
     async start(meetingId, systemAudio) {
       if (!useAppStore.getState().settings?.device.meetingNoticeAccepted) {
@@ -107,7 +144,11 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     discard: (meetingId) => attempt(meetingId, () => core.discardMeeting(meetingId)),
     deleteAudio: (meetingId) => attempt(meetingId, () => core.deleteMeetingAudio(meetingId)),
     retryTranscript: (meetingId) => attempt(meetingId, () => core.retryTranscript(meetingId)),
-    openSettings: (meetingId, source) => attempt(meetingId, () => core.openAudioSettings(source)),
+    openSettings: (meetingId, source) =>
+      attempt(meetingId, async () => {
+        await core.openAudioSettings(source);
+        await files.showPermissionGuide(source);
+      }),
     dismissGaps(meetingId) {
       const meeting = get().meetings.find((each) => each.id === meetingId);
       set((state) => ({
@@ -125,16 +166,30 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
   };
 });
 
+const stopStarting =
+  (meetingId: string) =>
+  (state: MeetingsState): Pick<MeetingsState, "starting"> => ({
+    starting: withoutKey(state.starting, meetingId),
+  });
+
 function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> {
   const { [key]: _, ...rest } = record;
   return rest;
 }
 
-core.on("meetings.changed", (meetings) => useMeetings.setState({ meetings }));
+core.on("meetings.changed", (meetings) => {
+  useMeetings.setState((state) => ({
+    meetings,
+    starting: Object.fromEntries(
+      Object.keys(state.starting)
+        .filter((id) => meetings.some((each) => each.id === id && each.status === "ready"))
+        .map((id) => [id, true as const]),
+    ),
+  }));
+});
 
-/** Meetings are turned on in Settings, and this copy can record. */
 export const canRecordMeetings = (settings: Settings | null): boolean =>
-  !!settings?.device.meetingsEnabled && settings.meetingAudio !== "none";
+  !!settings && settings.meetingAudio !== "none";
 
 /** The Mind's Meeting, if it has one. */
 export const useMeetingOf = (mindId: string): Meeting | undefined =>

@@ -10,6 +10,9 @@
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { INLINE_CODE_MARK } from "../../shared/aiText";
+import { askedFor } from "../../shared/askedChanges";
+import { originOf } from "../../shared/blockOrigins";
+import { readChart } from "../../shared/charts";
 import {
   keepRevised,
   pendingProposals,
@@ -18,16 +21,18 @@ import {
   readProposalRef,
   resolveProposals,
 } from "../../shared/proposals";
-import { topLevelBlocks } from "../answers/blocks";
+import { type NodeJSON, topLevelBlocks } from "../answers/blocks";
 import {
   BLOCK_ID_ATTRIBUTE,
+  CHART_NODE,
+  CITATION_NODE,
   GENERATED_MARK,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
   type TextPlace,
 } from "../api";
-import { setProposal, textBlocks } from "./write";
+import { citationsIn, setProposal, textBlocks } from "./write";
 
 /** The assistant's own waiting Blocks a stretch is in, from the first's top-level Block to the last's. */
 export interface OwnWaiting {
@@ -75,11 +80,25 @@ function holdsProposal(nodes: readonly (Y.XmlElement | Y.XmlText | Y.XmlHook)[])
   });
 }
 
-function allAiText(element: Y.XmlElement): boolean {
+const WRITTEN_ATOMS: ReadonlySet<string> = new Set([
+  CITATION_NODE,
+  "hardBreak",
+  "paragraph",
+  "heading",
+]);
+// A formula, picture, chart or code block carries no mark in the Mind, so one among the
+// assistant's text already there may be the User's: only Citations, line breaks and empty
+// paragraphs are its own.
+const writtenAtom = (atom: Y.XmlElement): boolean => WRITTEN_ATOMS.has(atom.nodeName);
+
+function allAiText(
+  element: Y.XmlElement,
+  ownAtom: (atom: Y.XmlElement) => boolean = () => true,
+): boolean {
   // A code block's text can't carry the mark.
-  if (element.nodeName === "codeBlock") return true;
+  if (element.nodeName === "codeBlock" || element.length === 0) return ownAtom(element);
   return element.toArray().every((node) => {
-    if (node instanceof Y.XmlElement) return allAiText(node);
+    if (node instanceof Y.XmlElement) return allAiText(node, ownAtom);
     if (!(node instanceof Y.XmlText)) return true;
     return (node.toDelta() as Run[]).every(
       (run) =>
@@ -101,6 +120,42 @@ function isOwn(element: Y.XmlElement): boolean {
     !holdsProposal(element.toArray()) &&
     allAiText(element)
   );
+}
+
+function elementText(element: Y.XmlElement): string {
+  return element
+    .toArray()
+    .map((node) =>
+      node instanceof Y.XmlText
+        ? (node.toDelta() as Run[])
+            .map((run) => (typeof run.insert === "string" ? run.insert : ""))
+            .join("")
+        : node instanceof Y.XmlElement
+          ? elementText(node)
+          : "",
+    )
+    .join(" ");
+}
+
+/**
+ * The text of each of the assistant's own waiting Blocks but its headings and
+ * those of request `except`, with the heading it sits under (null: none).
+ */
+export function ownWaitingTexts(
+  blocks: Y.XmlFragment,
+  except: string | null,
+): { heading: string | null; text: string }[] {
+  let heading: string | null = null;
+  return topLevelBlocks(blocks).flatMap((element) => {
+    if (element.nodeName === "heading") {
+      heading = elementText(element);
+      return [];
+    }
+    return isOwn(element) &&
+      readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE))?.request !== except
+      ? [{ heading, text: elementText(element) }]
+      : [];
+  });
 }
 
 function rangeOf(blocks: Y.XmlFragment, from: TextPlace, to: TextPlace): Y.XmlElement[] {
@@ -130,7 +185,10 @@ export function waitingIn(blocks: Y.XmlFragment, from: TextPlace, to: TextPlace)
 }
 
 /** The Blocks of `own` in the Mind now, in order; null once they have changed. */
-function blocksOf(blocks: Y.XmlFragment, own: OwnWaiting): Y.XmlElement[] | null {
+function blocksOf(
+  blocks: Y.XmlFragment,
+  own: Pick<OwnWaiting, "blockIds" | "fingerprint">,
+): Y.XmlElement[] | null {
   const top = topLevelBlocks(blocks);
   const start = top.findIndex((element) => idOf(element) === own.blockIds[0]);
   if (start < 0) return null;
@@ -169,6 +227,127 @@ export function boundsOf(
   const start = top.findIndex((element) => idOf(element) === own.blockIds[0]);
   const end = top.findIndex((element) => idOf(element) === own.blockIds.at(-1));
   return start < 0 || end < start ? null : { before: start, after: top.length - end - 1 };
+}
+
+/** The text of each of the assistant's own Blocks already in the Mind, accepted or added with Add to note, but its headings. */
+export function ownAppliedTexts(blocks: Y.XmlFragment): string[] {
+  return topLevelBlocks(blocks).flatMap((element) =>
+    element.nodeName !== "heading" &&
+    element.getAttribute(PROPOSAL_ATTRIBUTE) === undefined &&
+    !holdsProposal(element.toArray()) &&
+    allAiText(element)
+      ? [elementText(element)]
+      : [],
+  );
+}
+
+/**
+ * The assistant's own text already in the Mind, accepted or added with Add to note: whole
+ * top-level Blocks of AI text over a stretch, with nothing waiting in them (#1061).
+ */
+export interface OwnApplied {
+  kind: "applied";
+  blockIds: string[];
+  fingerprint: string;
+}
+
+export function ownAppliedIn(
+  blocks: Y.XmlFragment,
+  from: TextPlace,
+  to: TextPlace,
+): OwnApplied | null {
+  const range = rangeOf(blocks, from, to);
+  if (
+    range.length === 0 ||
+    holdsProposal(range) ||
+    !range.every((element) => allAiText(element, writtenAtom))
+  ) {
+    return null;
+  }
+  return { kind: "applied", blockIds: range.map(idOf), fingerprint: fingerprintOf(range) };
+}
+
+/**
+ * The top-level Blocks the Answer `answerId` wrote into a Mind, by their origin, to write again
+ * whole (#1149), and, `heading`, the untitled heading above them; null for none. `edited`: the
+ * User has typed in them since.
+ */
+export function writtenByAnswer(
+  blocks: Y.XmlFragment,
+  answerId: string,
+  { heading = false }: { heading?: boolean } = {},
+): { applied: OwnApplied; edited: boolean } | null {
+  const doc = blocks.doc;
+  if (!doc) return null;
+  const top = topLevelBlocks(blocks);
+  const fromAnswer = (element: Y.XmlElement) => {
+    const from = originOf(doc, idOf(element))?.from;
+    return from?.anchor.kind === "message" && from.anchor.messageId === answerId;
+  };
+  const range = top.filter(fromAnswer);
+  const [first] = top;
+  if (range.length === 0) return null;
+  if (heading && first && first.nodeName === "heading" && !fromAnswer(first)) range.unshift(first);
+  const ids = new Set(range.map(idOf));
+  // A chart carries no mark, but one drawn from the Answer's own table there is the Answer's:
+  // written again, it is drawn again from the new table (#1091).
+  const drawnHere = (element: Y.XmlElement) => {
+    if (element.nodeName !== CHART_NODE) return false;
+    const { source } = readChart(element.getAttributes());
+    return source.kind === "table" && source.blockId !== null && ids.has(source.blockId);
+  };
+  return {
+    applied: { kind: "applied", blockIds: [...ids], fingerprint: fingerprintOf(range) },
+    edited: !range.every(
+      (element) => !fromAnswer(element) || drawnHere(element) || allAiText(element, writtenAtom),
+    ),
+  };
+}
+
+/**
+ * Proposes `revised` in place of `applied`'s Blocks: each old one to remove and each new one to
+ * add after them, as Proposals of `request`, so rejecting them leaves the text as it was.
+ * Returns the new Blocks' ids; null, changing nothing, when the old ones changed since they
+ * were read. Call it in a Yjs transaction.
+ */
+export function replaceApplied(
+  blocks: Y.XmlFragment,
+  applied: OwnApplied,
+  revised: readonly Y.XmlElement[],
+  request: string,
+): string[] | null {
+  const old = blocksOf(blocks, applied);
+  const last = old?.at(-1);
+  if (!old || !last) return null;
+  for (const element of old) setProposal(element, { id: randomUUID(), request, kind: "delete" });
+  blocks.insert(blocks.toArray().indexOf(last) + 1, [...revised]);
+  for (const element of revised)
+    setProposal(element, { id: randomUUID(), request, kind: "insert" });
+  return revised.map(idOf);
+}
+
+/** How many of the Citations in `over`'s Blocks `revised` leaves out; 0 once they have changed. */
+export function citationsDropped(
+  blocks: Y.XmlFragment,
+  over: Pick<OwnWaiting, "blockIds" | "fingerprint">,
+  revised: readonly NodeJSON[],
+): number {
+  const kept = new Set(revised.flatMap(citationsIn));
+  return (blocksOf(blocks, over) ?? []).flatMap(citationsIn).filter((key) => !kept.has(key)).length;
+}
+
+/** Whether the User asked for all of the text `own` holds (#880): a revision of it is asked for too. */
+export function ownAsked(blocks: Y.XmlFragment, own: OwnWaiting): boolean {
+  const old = blocksOf(blocks, own);
+  const doc = blocks.doc;
+  return (
+    !!old &&
+    !!doc &&
+    old.every((element) => {
+      const attribute = readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE));
+      return !!attribute && askedFor(doc, attribute.request);
+    })
+  );
 }
 
 /**

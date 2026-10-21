@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ConsentRequest } from "../../../core/api";
 import { CHATGPT_SERVICE } from "../../../core/providers/chatgpt/service";
 import { core } from "../core";
-import { useT } from "../i18n";
+import { useGap, useT } from "../i18n";
 import { useAppStore } from "../store";
 import {
   buttonClass,
@@ -24,6 +24,7 @@ import { useModal } from "./useModal";
  */
 export function ConsentDialog() {
   const t = useT();
+  const gap = useGap();
   const [queue, setQueue] = useState<ConsentRequest[]>([]);
 
   useEffect(() => {
@@ -105,7 +106,11 @@ export function ConsentDialog() {
               {t("chatgpt.consent.note")}
             </p>
           )}
-          <p className={hintClass}>{t("consent.dialog.note")}</p>
+          <p className={hintClass}>
+            {t("consent.dialog.note")}
+            {gap(t("consent.dialog.note"), t("privacy.changeAnyTime"))}
+            {t("privacy.changeAnyTime")}
+          </p>
           <div className={dialogActionsClass}>
             <button
               type="button"
