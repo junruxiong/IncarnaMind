@@ -8,11 +8,11 @@
 import type * as Y from "yjs";
 import { create } from "zustand";
 import type { DocumentPlace, FindClaimsResult, VerifyClaimsResult } from "../../core/api";
-import { mindModelOf } from "../../shared/mindModel";
 import { core, files } from "./core";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { currentMindIdOf } from "./layoutSlice";
+import { modelInUseOf } from "./modelInUse";
 import { useAppStore } from "./store";
 
 /** How a Mind's last run ended, when it says something: why it gave nothing, or what it checked. */
@@ -79,13 +79,13 @@ async function runStep<R extends FindClaimsResult | VerifyClaimsResult>(
 /** Has the core find the Mind's claims, with its own model, if it has one. */
 export const findClaims = (mindId: string, doc: Y.Doc | null) =>
   runStep(mindId, "finding", (requestId) =>
-    core.findClaims({ requestId, mindId, model: doc && mindModelOf(doc) }),
+    core.findClaims({ requestId, mindId, model: modelInUseOf(doc) }),
   );
 
 /** Checks the Mind's claims against its Folder, or every Document. */
 export const checkClaims = (mindId: string, doc: Y.Doc, allDocuments = false) =>
   runStep(mindId, "checking", (requestId) =>
-    core.verifyClaims({ requestId, mindId, allDocuments, model: mindModelOf(doc) }),
+    core.verifyClaims({ requestId, mindId, allDocuments, model: modelInUseOf(doc) }),
   );
 
 /** Forgets how the Mind's last run ended, once its problem is dealt with. */

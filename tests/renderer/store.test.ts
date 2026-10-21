@@ -1,12 +1,14 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import type {
-  CoreEventName,
-  CoreEvents,
-  Document,
-  DocumentGroupAssignment,
-  Folder,
-  LibrarySnapshot,
-  Mind,
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  type CoreEventName,
+  type CoreEvents,
+  DEFAULT_ASSISTANT,
+  type Document,
+  type DocumentGroupAssignment,
+  type Folder,
+  type LibrarySnapshot,
+  type Mind,
+  type WindowLayout,
 } from "../../src/core/api";
 import type { Translate } from "../../src/renderer/src/objects";
 import { isFreed } from "../helpers/freed";
@@ -516,6 +518,73 @@ describe("making a Mind", () => {
     expect(method("deleteMind")).not.toHaveBeenCalled();
   });
 
+  describe("its Folder, when none is given (#1362)", () => {
+    const inFolder = { ...made, id: "m", folderId: "contracts" };
+    const alone = (folderId: string) => ({ folderIds: [folderId], tagIds: [], documentIds: [] });
+    const front = (mind: Mind | null) =>
+      useAppStore.setState({
+        minds: mind ? [mind] : [],
+        layout: {
+          groups: [
+            {
+              id: "group",
+              tabs: mind
+                ? [
+                    {
+                      id: "tab",
+                      item: { kind: "mind", mindId: mind.id },
+                      preview: false,
+                      pinned: false,
+                      place: null,
+                      opened: 0,
+                    },
+                  ]
+                : [],
+              activeTabId: mind ? "tab" : null,
+              width: 1,
+            },
+          ],
+          focusedGroupId: "group",
+          reopenable: 0,
+          assistant: DEFAULT_ASSISTANT,
+        } satisfies WindowLayout,
+      });
+    const madeIn = () => method("createMind").mock.lastCall?.[0];
+
+    afterEach(() => useAppStore.setState({ layout: null }));
+
+    test("it is the Folder of the Mind in front, and no Folder when none is", async () => {
+      front(inFolder);
+      await useAppStore.getState().createMind({ titled: true });
+      expect(madeIn()).toEqual({ headed: true, folderId: "contracts" });
+
+      front(null);
+      await useAppStore.getState().createMind({ titled: true });
+      expect(madeIn()).toEqual({ headed: true });
+    });
+
+    test("it is the one Folder a scope names, over the Folder of the Mind in front", async () => {
+      front(inFolder);
+      await useAppStore.getState().createMind({ startQuestion: true, scope: alone("board") });
+      expect(madeIn()).toEqual({ folderId: "board" });
+
+      front(inFolder);
+      await useAppStore
+        .getState()
+        .createMind({ startQuestion: true, scope: { ...alone("board"), tagIds: ["urgent"] } });
+      expect(madeIn()).toEqual({ folderId: "contracts" });
+    });
+
+    test("a Folder given, or none (null), is kept, whichever Mind is in front", async () => {
+      front(inFolder);
+      await useAppStore.getState().createMind({ titled: true, folderId: "board" });
+      expect(madeIn()).toEqual({ headed: true, folderId: "board" });
+
+      await useAppStore.getState().createMind({ titled: true, folderId: null });
+      expect(madeIn()).toEqual({ headed: true });
+    });
+  });
+
   test("a Mind made leaves the line of the change before it, and that change, as they were", async () => {
     const before = { said: () => "Moved “Quarterly” to Finance", undo: async () => undefined };
     useUndo.getState().push(before);
@@ -868,6 +937,7 @@ describe("making a Folder", () => {
 
 describe("loading keeps a list the core pushed after reading it", () => {
   beforeEach(() => {
+    method("listMinds").mockResolvedValue([]);
     method("getSettings").mockResolvedValue({ device: { gettingStarted: { askedOwn: false } } });
     method("getExamples").mockResolvedValue({
       group: "credit",

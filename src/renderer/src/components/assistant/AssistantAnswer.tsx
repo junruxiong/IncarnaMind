@@ -32,6 +32,7 @@ import { CommandsCard } from "./CommandsCard";
 import { CoverageLine, WrittenFromLine } from "./CoverageLines";
 import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
 import { SelfCheckLines } from "./SelfCheckLines";
+import { StillReadingLine } from "./StillReadingLine";
 
 /** What adding an Answer needs from the thread around it. */
 export interface AnswerKeeping {
@@ -166,6 +167,7 @@ export function AssistantAnswer({
         </ProblemLine>
       )}
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
+      {!streaming && status !== "failed" && <StillReadingLine answer={answer} />}
       {!streaming && status !== "failed" && <UnreadFilesLine files={unread} />}
       {!streaming && status === "failed" && !planModel && (
         <AnswerError
