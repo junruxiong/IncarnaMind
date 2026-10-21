@@ -1586,27 +1586,38 @@ describe("A Calculated figure keeps the scale its inputs are worked in (#1442)",
     expect(answer.figures[0]?.inputs[0]?.number.value).toBe(23_770_000_000);
   });
 
-  test("billions and millions together, from cells that store the numbers before 'bn' and 'm': the smaller scale, so no input's digits are lost", async () => {
-    const book = amountsBook({
-      heading: "Revenue",
-      format: '0.0"bn"',
-      rows: [
-        { label: "Product", stored: 1.2 },
-        { label: "Services", stored: 300, format: '0"m"' },
-      ],
-    });
-    const answer = await calculated(
-      book,
-      { formula: "product + services" },
-      [
-        { name: "product", row: 2, number: "1.2bn", line: "Product\t1.2bn" },
-        { name: "services", row: 3, number: "300m", line: "Services\t300m" },
-      ],
-      "Revenue came to [=1].",
-    );
-    expect(answer.figures[0]?.value).toBe(1_500_000_000);
-    expect(answer.figures[0]?.shown).toBe("1,500m");
-  });
+  test.each([
+    { services: 300, shown: "1.5bn", value: 1_500_000_000 },
+    { services: 383, shown: "1,583m", value: 1_583_000_000 },
+  ])(
+    "billions and millions together ($services m), from cells that store the numbers before 'bn' and 'm': the larger scale when it loses no digits, else the smaller (#1482)",
+    async (case_) => {
+      const book = amountsBook({
+        heading: "Revenue",
+        format: '0.0"bn"',
+        rows: [
+          { label: "Product", stored: 1.2 },
+          { label: "Services", stored: case_.services, format: '0"m"' },
+        ],
+      });
+      const answer = await calculated(
+        book,
+        { formula: "product + services" },
+        [
+          { name: "product", row: 2, number: "1.2bn", line: "Product\t1.2bn" },
+          {
+            name: "services",
+            row: 3,
+            number: `${case_.services}m`,
+            line: `Services\t${case_.services}m`,
+          },
+        ],
+        "Revenue came to [=1].",
+      );
+      expect(answer.figures[0]?.value).toBe(case_.value);
+      expect(answer.figures[0]?.shown).toBe(case_.shown);
+    },
+  );
 
   test("万元 written after a cell's number is worked in yuan and shown in 万元, in Chinese", async () => {
     const book = amountsBook({
