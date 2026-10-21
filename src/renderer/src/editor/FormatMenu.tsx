@@ -12,6 +12,7 @@ import { CheckLineIcon } from "../components/lineIcons";
 import { InstalledFontPicker } from "../components/MindStyle";
 import { buttonStyle, fieldClass } from "../components/ui";
 import { useT } from "../i18n";
+import { isComposing } from "./composing";
 import {
   ALIGNS,
   type Align,
@@ -93,9 +94,6 @@ function Glyph({ d, children }: { d?: string; children?: ReactNode }) {
     </svg>
   );
 }
-
-const isComposing = (event: KeyboardEvent) =>
-  event.nativeEvent.isComposing || event.key === "Process";
 
 const itemsOf = (menu: HTMLElement | null) =>
   Array.from(

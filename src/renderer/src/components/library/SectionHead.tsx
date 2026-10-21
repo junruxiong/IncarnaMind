@@ -6,9 +6,9 @@ import { dropIntoClass } from "../sidebarRows";
 
 /**
  * The head of a section of the Library page, as a toggle in a Notion page:
- * the chevron that folds it, its icon, its name, how many it holds, a line
- * about it and, at its end, what it offers. It rules the section off from
- * the next in the strong rule.
+ * the chevron that folds it, its icon, its name, how many it holds and, at its
+ * end, what it offers. What it is for is its tooltip. It rules the section off
+ * from the next in the strong rule.
  */
 export function SectionHead({
   label,
@@ -17,7 +17,7 @@ export function SectionHead({
   icon,
   name,
   count,
-  description,
+  tip,
   end,
   testId,
   rowProps,
@@ -31,7 +31,7 @@ export function SectionHead({
   /** The name as shown: a button that folds it too, or a field while it is renamed. */
   name: ReactNode;
   count: number;
-  description?: string | undefined;
+  tip?: string | undefined;
   end?: ReactNode;
   testId: string;
   rowProps?: HTMLAttributes<HTMLDivElement>;
@@ -45,6 +45,7 @@ export function SectionHead({
       role="row"
       data-testid={testId}
       data-open={open ? "true" : "false"}
+      title={tip || undefined}
       data-drop-target={drop?.over ? "true" : undefined}
       {...rowProps}
       {...drop?.props}
@@ -72,12 +73,7 @@ export function SectionHead({
       >
         {count}
       </span>
-      <span
-        title={description || undefined}
-        className="min-w-0 flex-1 truncate text-[12px] text-ink-meta"
-      >
-        {description}
-      </span>
+      <span className="min-w-0 flex-1" />
       {end}
     </div>
   );

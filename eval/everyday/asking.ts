@@ -21,12 +21,12 @@ import {
   type MindFocus,
   messageReference,
 } from "../../src/core";
+import { forPage } from "../../src/core/answers/pointersBack";
 import { toolRecordLines } from "../../src/core/answers/toolRecord";
 import { plainText } from "../../src/core/mindText";
 import type { createAiSdkChatModel } from "../../src/core/providers/models";
-import { answerBlocks } from "../../src/shared/answerBlocks";
+import { pageBlocks } from "../../src/shared/answerBlocks";
 import { namesOneOf, sourcesAsText } from "../../src/shared/namedSources";
-import { withoutFraming } from "../../src/shared/noteBlocks";
 import { resolveProposals } from "../../src/shared/proposals";
 import { connectToMind } from "../../tests/helpers/mindClient";
 import { heading, note, writeMind } from "../../tests/helpers/minds";
@@ -37,7 +37,15 @@ import type { EvalDocument } from "../lib/evaluationSet";
 import type { Library } from "../lib/library";
 import type { Log } from "../lib/log";
 import type { EverydayCase } from "./cases";
-import { type RequestFailure, requestFailures } from "./checks";
+import {
+  givenToMindsOf,
+  pointersIn,
+  type RequestFailure,
+  type RequestOutcome,
+  requestFailures,
+  rewrittenLater,
+  takenOut,
+} from "./checks";
 import { DATED_TEXTS } from "./dated";
 import { citedClaims } from "./dates";
 import { judgeClaims } from "./judge";
@@ -138,6 +146,14 @@ export interface CaseResult {
   model: string;
   failures: RequestFailure[];
   reply: string;
+  page: string;
+  /** What the guard took out: sentences of the reply, by Add to note, and Blocks of what the calls gave to write into Minds. */
+  removed: string[];
+  /** Sentences of what the calls gave that the model's edit_mind or the app's own check rewrote after the guard, and what the Mind holds now. */
+  rewritten: { given: string; now: string | null }[];
+  /** Calls that copied the last Answer into a Mind (`answer: true`). */
+  copies: number;
+  pointersLeft: number;
   calls: string[];
   /** The Mind's Blocks that changed, as they read before and once its changes are accepted. */
   changes: { block: number; before: string; after: string }[];
@@ -316,11 +332,12 @@ export async function runCase(
   const earlierCalls: ConversationAnswer["toolCalls"] = [];
   let last: ConversationAnswer | null = null;
   for (const earlier of each.before ?? []) {
+    const fromExample = each.beforeInExample === true;
     const answer = await ask(core, {
       text: earlier,
-      mindId: mind?.id ?? null,
+      mindId: (fromExample ? example?.mindId : mind?.id) ?? null,
       conversationId,
-      focus,
+      focus: fromExample ? null : focus,
     });
     conversationId = answer.conversationId;
     earlierCalls.push(...answer.toolCalls);
@@ -331,7 +348,7 @@ export async function runCase(
     const earlier = new Set(ids);
     await core.addToNote({
       mindId: mind.id,
-      blocks: withoutFraming(answerBlocks({ ...last, status: "done" })),
+      blocks: pageBlocks(last, each.before?.at(-1) ?? ""),
       origin: {
         from: messageReference(last.conversationId, last.id),
         question: each.before?.at(-1) ?? "",
@@ -371,15 +388,18 @@ export async function runCase(
   );
   const citedInMinds: string[] = [];
   const sourcesAsTextIn: string[] = [];
+  const writtenInMinds: string[] = [];
   const documentNames = scoped.map((document) => document.name);
   for (const mindId of changed) {
     const written = await connectToMind(core, mindId);
     await written.settled();
     citedInMinds.push(...citedDocuments(written.doc));
-    for (const text of acceptedTexts(written.doc, requests).values()) {
+    const was = mindId === mind?.id ? before : new Map<string, string>();
+    for (const [id, text] of acceptedTexts(written.doc, requests)) {
       sourcesAsTextIn.push(
         ...sourcesAsText(text, (source) => namesOneOf(source.name, documentNames)),
       );
+      if (was.get(id) !== text) writtenInMinds.push(text);
     }
   }
   let changes: CaseResult["changes"] = [];
@@ -393,7 +413,12 @@ export async function runCase(
     );
   }
   const changedBlocks = changes.map((change) => change.block);
-  const failures = requestFailures({
+  const page = forPage(answer.text, each.request);
+  const givenToMinds = givenToMindsOf(
+    answer.toolCalls,
+    last ? { text: last.text, question: each.before?.at(-1) ?? "" } : null,
+  );
+  const outcome: RequestOutcome = {
     expected: each.expected,
     answer,
     verdict,
@@ -401,10 +426,14 @@ export async function runCase(
     changedBlocks,
     addedBlocks,
     sourcesAsText: sourcesAsTextIn,
+    writtenInMinds,
+    addedToPage: page,
+    givenToMinds,
     askedAgain: asks.again > 0,
     scoped,
     texts: each.expected.textDates ? DATED_TEXTS : undefined,
-  });
+  };
+  const failures = requestFailures(outcome);
   return {
     id: each.id,
     language: each.language,
@@ -412,6 +441,11 @@ export async function runCase(
     model,
     failures,
     reply: answer.text,
+    page,
+    removed: takenOut(outcome).removed,
+    rewritten: rewrittenLater(outcome),
+    copies: givenToMinds.filter((given) => given.question !== undefined).length,
+    pointersLeft: pointersIn([page, ...writtenInMinds].join("\n\n")).length,
     calls: record,
     changes,
     seconds: (Date.now() - started) / 1000,

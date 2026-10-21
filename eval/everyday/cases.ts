@@ -27,6 +27,8 @@ export interface EverydayCase {
   afterExample?: true;
   /** With `afterExample`: asked from the example's own Mind, where the User stays, instead of from a Mind of its own. */
   inExample?: true;
+  /** With `afterExample`: `before` is asked from the example's own Mind, as a newcomer does before opening a page of their own. */
+  beforeInExample?: true;
   /** Asked first, in the same conversation, and not checked. */
   before?: readonly string[];
   /** The last of `before` is put into the Mind with Add to note, as a whole Answer, before the request. */
@@ -52,7 +54,14 @@ const WRITE = { write: true, cite: true, coverAll: false } as const;
 const WRITE_ALL = { write: true, cite: true, coverAll: true } as const;
 const EDIT = { write: true, cite: false, coverAll: false } as const;
 const NOTHING = { write: false, cite: false, coverAll: false } as const;
-const ABOUT_THE_QUESTION = { write: false, cite: false, coverAll: false, noEarlier: true } as const;
+const ABOUT_THE_QUESTION = {
+  write: false,
+  cite: false,
+  coverAll: false,
+  noEarlier: true,
+  standsAlone: true,
+  noExample: true,
+} as const;
 const TEXT_DATES = { write: false, cite: true, coverAll: false, textDates: true } as const;
 // The contracts and minutes have English and Chinese versions in the set: the reply follows the Question's language (#1273).
 const TEXT_DATES_EN = { ...TEXT_DATES, language: "en" } as const;
@@ -636,6 +645,62 @@ export const CASES: readonly EverydayCase[] = [
     inExample: true,
     request: "GraphST 这篇论文的主要主张是什么？",
     expected: ABOUT_THE_QUESTION,
+  },
+  // A short summary for a page of their own, after a Question about their file from the example's page
+  // (#1172). In the panel (to add with Add to note) or in the page, what it writes is held to both guards.
+  {
+    id: "page-summary",
+    language: "en",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    beforeInExample: true,
+    before: ["What data does the GraphST paper use, and what are its main results?"],
+    request: "Write a short summary of the GraphST paper.",
+    expected: { ...ANSWER, standsAlone: true, noExample: true },
+  },
+  {
+    id: "page-summary-panel",
+    language: "en",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    beforeInExample: true,
+    before: ["What data does the GraphST paper use, and what are its main results?"],
+    request: "Summarise the GraphST paper for my manager.",
+    expected: { ...ANSWER, standsAlone: true, noExample: true },
+  },
+  {
+    id: "page-summary-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    beforeInExample: true,
+    before: ["GraphST 这篇论文用了哪些数据，主要结果是什么？"],
+    request: "请为 GraphST 这篇论文写一个简短的摘要。",
+    expected: { ...ANSWER, standsAlone: true, noExample: true },
+  },
+  // The summary answered in the panel, then put into the page as it is: the copy of the last Answer the guard reads too.
+  {
+    id: "page-copy",
+    language: "en",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    before: ["Summarise the GraphST paper for my manager."],
+    request: "Put that summary into this page as it is.",
+    expected: { ...WRITE, standsAlone: true, noExample: true },
+  },
+  {
+    id: "page-copy-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    before: ["请为 GraphST 这篇论文写一份给经理看的摘要。"],
+    request: "把这份摘要原样放进这个页面。",
+    expected: { ...WRITE, standsAlone: true, noExample: true },
   },
   // Research questions where an inference is tempting: a cited sentence says only what its quote supports (#1073).
   {

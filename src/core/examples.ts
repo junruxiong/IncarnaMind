@@ -132,6 +132,14 @@ const hasText = (document: Document) =>
 export function createExamples(options: ExamplesOptions) {
   const stored = (group: ExampleGroup): StoredExamples | null => read(valueKey(group));
 
+  const everyExample = (): StoredExamples[] =>
+    [...GROUPS.map(stored), read(LEGACY_VALUE)].flatMap((each) => (each ? [each] : []));
+
+  const documentIdsOf = (example: StoredExamples): string[] =>
+    options.linkedFolderExists(example.linkedFolderId)
+      ? options.documentsIn(example.linkedFolderId).map((document) => document.id)
+      : [];
+
   /** The earlier version's tea example, while it is the one shown (no credit paper made yet). */
   const legacy = (): StoredExamples | null => (stored(DEFAULT_GROUP) ? null : read(LEGACY_VALUE));
 
@@ -569,17 +577,17 @@ export function createExamples(options: ExamplesOptions) {
      * asked from another Mind leaves out of "these documents".
      */
     made(): { mindIds: string[]; documentIds: string[] } {
-      const all = [...GROUPS.map(stored), read(LEGACY_VALUE)].flatMap((each) =>
-        each ? [each] : [],
-      );
+      const all = everyExample();
       return {
         mindIds: all.map((each) => each.mindId).filter((id) => options.mindExists(id)),
-        documentIds: all.flatMap((each) =>
-          options.linkedFolderExists(each.linkedFolderId)
-            ? options.documentsIn(each.linkedFolderId).map((document) => document.id)
-            : [],
-        ),
+        documentIds: all.flatMap(documentIdsOf),
       };
+    },
+
+    /** An example Mind's own Documents, by id; null for a Mind that isn't an example's. */
+    documentsOf(mindId: string): string[] | null {
+      const example = everyExample().find((each) => each.mindId === mindId);
+      return example ? documentIdsOf(example) : null;
     },
 
     create,

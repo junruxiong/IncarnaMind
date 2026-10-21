@@ -60,10 +60,10 @@ async function changeAndReview(window: Page, editor: Locator, line: Locator, ins
   // From its first words to its last, on whichever line they wrap to.
   await slideSelect(window, line, text.slice(0, 3), { line, words: text.slice(-3) });
   await window.keyboard.press("ControlOrMeta+j");
-  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await expect(window.getByTestId("selection-edit-field")).toBeFocused();
   await window.keyboard.type(instruction);
   await window.keyboard.press("Enter");
-  await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+  await expect(window.getByTestId("selection-edit-working")).toHaveCount(0);
   await pointAndClick(window, editor.getByTestId("applied-line").getByTestId("applied-review"));
 }
 
