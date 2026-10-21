@@ -1693,6 +1693,9 @@ export const en = {
     "ChatGPT plan limit reached: tagging waits for the reset, then resumes.",
   "status.taggingRateLimited": "Rate limit reached · resumes at {time}",
   "status.taggingRateLimited.full": "Rate limit reached: tagging resumes at {time}.",
+  "status.taggingKeyRefused": "The key was refused",
+  "status.taggingKeyRefused.full":
+    "The key was refused: Tagging and Organize wait until you save a key that works.",
   "jev.form.sends": "Sends Document text to Jev for tagging.",
 
   "settings.title": "Settings",
