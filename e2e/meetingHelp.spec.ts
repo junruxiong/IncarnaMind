@@ -612,14 +612,16 @@ test("help during the call with the live text behind and no line yet: the panel 
   const english = await pressIn(panel, "Answer their question");
   const line = english.getByTestId("help-option");
   await expect(line).toHaveCount(1);
-  await expect(line).toContainText("The live text is behind");
+  await expect(line).toContainText("The live text is behind, so none of the call is written yet");
   await expect(english.getByTestId("help-option-effect")).toHaveCount(0);
   await shot(panel, "help-panel-behind-en");
 
   await setLanguage(window, "zh-CN");
   const chinese = await pressIn(panel, "回答对方的问题");
   await expect(chinese.getByTestId("help-option")).toHaveCount(1);
-  await expect(chinese.getByTestId("help-option")).toContainText("实时转写跟不上");
+  await expect(chinese.getByTestId("help-option")).toContainText(
+    "实时转写跟不上，通话内容还没有转写出来",
+  );
   await shot(panel, "help-panel-behind-zh");
   await app.close();
 });

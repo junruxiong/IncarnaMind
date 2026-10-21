@@ -154,35 +154,44 @@ describe("Help during the call", { timeout: 60_000 }, () => {
     ]);
   });
 
-  // protects=a button pressed while the live text is behind and has no line yet gets one plain line saying so, not the button's form, and the Answer records it; fails_when=the model is told to base it on a transcript that isn't there, or is promised the text will catch up while it records; no_claim=what a real model writes (#1366).
-  test("with the live text behind and no line yet, a button's reply is one plain line saying so, not the button's form", async () => {
+  // protects=a button pressed while the live text is behind and has no line yet is answered with one plain line saying so, in the User's language, without asking the model; fails_when=the model is asked and may tell the User to retype what was said; no_claim=the panel's drawing of it (the smoke test) (#1366).
+  test("with the live text behind and no line yet, a button's reply says so in the User's language, and the model isn't asked", async () => {
     const { core, meeting, calls, lines } = await behindSetUp();
     expect(lines).toBe(0);
 
-    const { answer } = await press(core, meeting, "answer");
+    const english = await press(core, meeting, "answer");
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    const chinese = await press(core, meeting, "answer");
 
-    const [first] = calls;
-    expect(first?.prompt).not.toContain("<live-transcript>");
-    expect(first?.system).toContain("the live text fell behind");
-    expect(first?.system).toContain("never ask the User to type out what was said");
-    expect(first?.system).not.toContain("Reply in exactly this form");
-    expect(answer.steps?.textBehind).toBe(true);
+    expect(calls).toEqual([]);
+    expect(english.answer.text).toBe(
+      "The live text is behind, so none of the call is written yet. It is transcribed after the meeting stops.",
+    );
+    expect(chinese.answer.text).toBe(
+      "实时转写跟不上，通话内容还没有转写出来，会议结束后才会转写。",
+    );
+    expect(english.answer.steps?.textBehind).toBe(true);
+    expect(english.answer.citations).toEqual([]);
   });
 
-  // protects=a button pressed while the live text is behind but has lines gets those lines, the button's form, and the one line allowed before it; fails_when=the lines are left out, or the form is replaced; no_claim=what a real model writes (#1366).
-  test("with the live text behind but some lines, a button's reply rests on them and says so in one line before its form", async () => {
+  // protects=a button pressed while the live text is behind but has lines starts its reply with one line saying so, in the User's language, then the button's form from those lines; fails_when=the lines are left out, the form is replaced, or the line is left to the model; no_claim=what a real model writes after it (#1366).
+  test("with the live text behind but some lines, a button's reply starts with a line saying so, then rests on them in its form", async () => {
     const { core, meeting, calls, lines } = await behindSetUp(9);
     expect(lines).toBeGreaterThanOrEqual(4);
 
-    const { answer } = await press(core, meeting, "answer");
+    const english = await press(core, meeting, "answer");
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    const chinese = await press(core, meeting, "answer");
 
     const [first] = calls;
     expect(first?.prompt).toContain("<live-transcript>");
     expect(first?.system).toContain("Reply in exactly this form");
-    expect(first?.system).toContain(
-      "The live text fell behind: <live-transcript> holds the lines written so far",
+    expect(first?.system).toContain("A line saying so already starts the reply");
+    expect(english.answer.text).toMatch(
+      /^The live text is behind, so this rests on the lines so far\.\n\n★ /,
     );
-    expect(answer.steps?.textBehind).toBe(true);
+    expect(chinese.answer.text).toMatch(/^实时转写跟不上，以下只依据已转写的内容。\n\n★ /);
+    expect(english.answer.steps?.textBehind).toBe(true);
   });
 
   test("a second press goes on in the same conversation, the assistant's when it says so, and a deleted one starts anew", async () => {

@@ -1431,6 +1431,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
+    liveTextBehind: (lines) =>
+      translate(
+        settings.get().language,
+        lines ? "meetings.help.textBehind.some" : "meetings.help.textBehind",
+      ),
     onWritingChange: (writing) => {
       background.setAnswering(writing);
       tasks.setAnswering(writing);

@@ -219,8 +219,8 @@ import { markdownToBlocks } from "./markdown";
 import {
   FOUND_TOKEN_LIMIT,
   foundWithin,
+  LIVE_TEXT_BEHIND_NOTE,
   languageSaid,
-  liveTextBehindNote,
   meetingHelpInstructions,
   newestSaid,
   withFound,
@@ -493,6 +493,13 @@ export interface AnswersOptions {
   exampleDocuments?(mindId: string): string[] | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
   emptyScopeAnswer(): string;
+  /**
+   * The line a help button's Answer starts with while its Meeting's live text is behind (#1366),
+   * in the User's language: that none of the call is written yet, or, with `lines`, that it rests
+   * on the lines so far. With no line there is nothing to answer from, so it is the whole Answer
+   * and the model isn't asked.
+   */
+  liveTextBehind(lines: boolean): string;
   /** The User's Skills. */
   skills: AnswerSkills;
   /** The assistant's conversations, which Answers are written into too. */
@@ -1640,8 +1647,19 @@ export function createAnswers(options: AnswersOptions) {
           options.reportError(error);
         }
         if (finished) return;
-        if (help && heard?.behind) textBehind = true;
         const kept = newestWithin(heard?.passages ?? [], listenedTokens(prepared.window));
+        if (help && heard?.behind) {
+          textBehind = true;
+          const text = options.liveTextBehind(kept.length > 0);
+          if (kept.length === 0) {
+            markdown = text;
+            announce("answer.delta", { ...place, answerId, text });
+            finish({ status: "done" });
+            return;
+          }
+          markdown = `${text}\n\n`;
+          announce("answer.delta", { ...place, answerId, text: markdown });
+        }
         if (kept.length > 0) {
           messages = withTranscript(messages, session.show(kept));
           listening = true;
@@ -2032,18 +2050,12 @@ export function createAnswers(options: AnswersOptions) {
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
             ...(help
               ? [
-                  ...(textBehind && !listening
-                    ? []
-                    : [
-                        meetingHelpInstructions(help, {
-                          found: foundAhead,
-                          language: options.interfaceLanguage(),
-                          callLanguage,
-                        }),
-                      ]),
-                  ...(textBehind
-                    ? [liveTextBehindNote(listening, options.interfaceLanguage())]
-                    : []),
+                  meetingHelpInstructions(help, {
+                    found: foundAhead,
+                    language: options.interfaceLanguage(),
+                    callLanguage,
+                  }),
+                  ...(textBehind ? [LIVE_TEXT_BEHIND_NOTE] : []),
                 ]
               : [language]),
           ]

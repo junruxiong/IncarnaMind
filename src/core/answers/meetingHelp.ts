@@ -131,23 +131,11 @@ export const languageSaid = (heard: readonly WindowedPassage[]): string | null =
   );
 
 /**
- * A button's Question while the live text is behind (#1366): the rest of the call is written after
- * the Meeting stops. With some lines (`heard`), one plain line says so before the reply's form;
- * with none, that line is the whole reply, as there is nothing to fill the form from.
+ * A button's Question while the live text is behind but has lines (#1366). The reply starts with a
+ * line saying so, written for it: the model neither repeats it nor adds another before its form.
  */
-export function liveTextBehindNote(heard: boolean, language: Language): string {
-  const behind = "one plain sentence saying that the live text is behind";
-  if (heard) {
-    return [
-      "- The live text fell behind: <live-transcript> holds the lines written so far, and what was said since isn't in it.",
-      `- Start with ${behind}, so what follows is read as resting on the lines so far. It is the one line allowed before the form, with no "★ ", no "→ " and no Citation marker, in the language of the rest of the reply.`,
-    ].join("\n");
-  }
-  return [
-    "The User is in a call and pressed a button for help, but nothing of the call is written yet: the live text fell behind, and the rest is written after the meeting stops. There is no <live-transcript>.",
-    `Reply with ${behind}, in ${LANGUAGE_NAMES[language]}, and nothing else: no "★ ", no "→ ", no options, no Citation marker. Never say you can't see a transcript, and never ask the User to type out what was said.`,
-  ].join("\n");
-}
+export const LIVE_TEXT_BEHIND_NOTE =
+  "- The live text fell behind: <live-transcript> holds the lines written so far, and what was said since isn't in it. A line saying so already starts the reply: don't repeat it, and answer from these lines.";
 
 /**
  * What the model is told for a button's Question during a call. `found`: Passages of the User's
