@@ -1289,6 +1289,8 @@ export function createCore(adapters: CoreAdapters): Core {
       passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
+      reading: (documentIds) =>
+        documents.reading(documentIds ?? undefined).map((each) => ({ name: each.name })),
       search: searchDocuments,
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
