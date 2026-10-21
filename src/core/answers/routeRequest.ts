@@ -30,6 +30,8 @@ export interface RequestRoute {
   newMind: boolean;
   /** The last Answer goes into a new Mind as it is: its text, Citations and scope. */
   fromAnswer?: true;
+  /** "This" or "it" is the last Answer, added to a Mind ("add it to my notes", "把这个加到我的笔记里"). */
+  addsAnswer?: true;
   /** A piece, or the last Answer, fills the empty Mind the User is in rather than making another. */
   fillsEmpty?: true;
   /**
@@ -286,7 +288,7 @@ export interface RequestContext {
   lastAnswerHasText?: boolean;
 }
 
-type PlainKind = "edit" | "write" | "piece" | "as-a-mind" | "chart";
+type PlainKind = "edit" | "write" | "piece" | "as-a-mind" | "add-it" | "chart";
 
 function plainKind(
   question: string,
@@ -307,7 +309,7 @@ function plainKind(
     if (lastAnswerHasText && ZH_AS_A_MIND.test(chinese)) return "as-a-mind";
     if (matches(ZH_EDITS, chinese)) return "edit";
     if (matches(ZH_CHARTS, chinese)) return "chart";
-    if (ZH_ADD_IT.test(chinese)) return followsAnAnswer ? "write" : null;
+    if (ZH_ADD_IT.test(chinese)) return followsAnAnswer ? "add-it" : null;
     if (matches(ZH_PIECES, chinese)) return "piece";
     if (matches(ZH_WRITES, chinese)) return "write";
     if (!followsAChange) return null;
@@ -333,7 +335,7 @@ function plainKind(
   if (lastAnswerHasText && AS_A_MIND.test(english)) return "as-a-mind";
   if (matches(EDITS, english)) return WHOLE_MIND.test(english) ? null : "edit";
   if (matches(CHARTS, english)) return "chart";
-  if (ADD_IT.test(english)) return followsAnAnswer ? "write" : null;
+  if (ADD_IT.test(english)) return followsAnAnswer ? "add-it" : null;
   if (matches(PIECES, english)) return "piece";
   if (matches(WRITES, english)) return "write";
   if (!followsAChange) return null;
@@ -356,7 +358,7 @@ export function routeRequest(question: string, context: RequestContext): Request
       },
     };
   }
-  const kind = plain === "piece" ? "write" : (plain ?? "unclear");
+  const kind = plain === "piece" || plain === "add-it" ? "write" : (plain ?? "unclear");
   const lower = question.toLocaleLowerCase();
   const intoTheirs =
     !SAYS_NEW.test(lower) &&
@@ -366,5 +368,6 @@ export function routeRequest(question: string, context: RequestContext): Request
     !NAMES_A_MIND.test(question) &&
     !intoTheirs &&
     (plain === "piece" || NEW_MIND.test(lower));
+  if (plain === "add-it") return { kind, newMind, addsAnswer: true };
   return newMind && plain === "piece" ? { kind, newMind, fillsEmpty: true } : { kind, newMind };
 }

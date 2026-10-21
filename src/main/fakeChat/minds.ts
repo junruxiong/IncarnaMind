@@ -27,7 +27,7 @@
  * chart (#1091); "Make a bar chart of rent by lease" does the same with each unit's
  * monthly rent, so Use all can draw it again from every lease.
  * "Write a short summary of this agreement" (为这份协议写一份简短摘要, 为这份劳动合同写一个简短的摘要)
- * writes it where the route says, from the Documents it is asked over.
+ * writes it where the route says, from the Document "this" means, else those it is asked over.
  * "Write a brief summary" (写一份简要总结) adds one to the Mind in <mind>, but
  * answers that no Mind is open when that Mind has no name, as models did (#1212).
  */
@@ -129,7 +129,6 @@ const ADD_AND_NEW =
 
 const RISKS_AND_MORE = /^add a section on the risks[.。]?$/i;
 
-/** The Documents the instructions list, by name, in order. */
 function namesListed(prompt: Prompt): string[] {
   const system = systemOf(prompt);
   const listed =
@@ -137,7 +136,7 @@ function namesListed(prompt: Prompt): string[] {
   return [...listed.matchAll(/^- (.+)$/gm)].map((line) => line[1] ?? "").sort();
 }
 
-/** A piece where the route says: an empty Mind is filled; any other gets a new one beside it. */
+// An empty Mind is filled; any other gets a new one beside it.
 const writePiece = (prompt: Prompt, content: string): Reply =>
   systemOf(prompt).includes("write it there with add_to_mind")
     ? { tool: "add_to_mind", input: { content } }
@@ -207,7 +206,8 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
   if (SUMMARY_HERE.test(question)) {
     const made = lastResult(prompt, "add_to_mind") ?? lastResult(prompt, "create_mind");
     if (made !== undefined) return { text: firstSentence(made) };
-    const names = namesListed(prompt);
+    const meant = /By "this", the User means the Document "([^"]+)"/.exec(systemOf(prompt))?.[1];
+    const names = meant ? [meant] : namesListed(prompt);
     return writePiece(
       prompt,
       names.length > 0 ? `## Summary\n\nWritten from ${names.join(", ")}.` : SUMMARY,

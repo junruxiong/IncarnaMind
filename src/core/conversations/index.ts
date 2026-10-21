@@ -67,6 +67,8 @@ export interface QuestionInput {
   mind: { id: string; folderId: string | null } | null;
   /** Where the User was in that Mind; null with none. */
   focus: MindFocus | null;
+  /** The Document open in the focused group; null with none. Not kept with the Question. */
+  viewing: string | null;
   scope: SearchScope | null;
   model: ChatModelChoice | null;
   forcedSkill: string | null;
@@ -694,7 +696,7 @@ export function createConversations(db: Database, now: () => string) {
      */
     parseQuestion(input: unknown): QuestionInput {
       if (!isRecord(input)) throw new InvalidInputError("askInConversation expects an object.");
-      const { text, conversationId, mindId, model, forcedSkill, focus } = input;
+      const { text, conversationId, mindId, model, forcedSkill, focus, viewing } = input;
       if (typeof text !== "string" || text.trim() === "") {
         throw new InvalidInputError({ key: "error.question.empty" });
       }
@@ -732,6 +734,7 @@ export function createConversations(db: Database, now: () => string) {
         text: text.trim(),
         mind,
         focus: mind ? where : null,
+        viewing: typeof viewing === "string" && viewing !== "" ? viewing : null,
         scope: parseSearchScope(input.scope),
         model: model ?? null,
         forcedSkill: typeof forcedSkill === "string" ? forcedSkill : null,

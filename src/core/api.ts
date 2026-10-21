@@ -5485,6 +5485,8 @@ export interface AskInConversationInput {
   mindId?: string | null;
   /** Where the User is in that Mind; ignored with no Mind. */
   focus?: MindFocus | null;
+  /** The Document open in the focused group, if one is: what "this document" means first (#1334). */
+  viewing?: string | null;
   /** Its Search scope; none or null: every Document. */
   scope?: SearchScope | null;
   /** The model to answer with; none or null: the default. */

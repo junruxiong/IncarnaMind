@@ -43,6 +43,7 @@ import { type Dragged, type Dropped, useDropTarget } from "../dragDrop";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import { currentTabOf } from "../layoutSlice";
 import { newNoteTitle } from "../newNoteRequest";
 import {
   cancelResearch,
@@ -506,10 +507,12 @@ export function Composer({
     setViewing(null);
     setPicking(null);
     // In the assistant's conversation: the Mind is read, what is selected in it first, never written to.
+    const shown = currentTabOf(useAppStore.getState().layout)?.item;
     const asked = await askInAssistant({
       mindId,
       text,
       focus: selection.focus(),
+      viewing: shown?.kind === "document" ? shown.documentId : null,
       scope: composerScope(current, folderId),
       model: mind ? mindModelOf(mind.doc) : useComposer.getState().modelWithoutMind,
       forcedSkill: draft.skill,

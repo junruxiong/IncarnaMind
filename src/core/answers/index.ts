@@ -190,7 +190,7 @@ import {
   readMind,
 } from "./context";
 import { coverageInstructions, coverageOf, documentsAsked, type SizedDocument } from "./coverage";
-import { documentMeant, documentMeantInstructions } from "./documentMeant";
+import { citedIn, documentMeant, documentMeantInstructions, type InView } from "./documentMeant";
 import {
   documentTextBlock,
   givenUpFront,
@@ -418,7 +418,7 @@ function lastAnswerOf(
   };
 }
 
-const citedIn = (answer: ConversationMessage | undefined): string[] =>
+const answerCited = (answer: ConversationMessage | undefined): string[] =>
   answer?.kind === "answer"
     ? [...new Set(answer.citations.map((citation) => citation.documentId))]
     : [];
@@ -871,8 +871,8 @@ export function createAnswers(options: AnswersOptions) {
       RequestContext & {
         /** What the commands of the Conversation's earlier Answers renamed, oldest first. */
         renames: readonly CommandRename[];
-        /** The Documents the conversation's last Answer cited, by id: what "this one" may mean. */
-        cited: readonly string[];
+        /** What the User has in view, but the working copy's own Document: what "this" may mean. */
+        inView: Omit<InView, "original">;
       };
   }): void {
     const { home, answerId, model, context, forcedSkill } = input;
@@ -899,22 +899,21 @@ export function createAnswers(options: AnswersOptions) {
       originalId !== null && (input.documentIds === null || input.documentIds.includes(originalId))
         ? options.documents.searchableBySize([originalId])
         : [];
-    // With text selected, "this one" is what the User selected.
-    const selected = (input.assistant?.focused?.blockIds.length ?? 0) > 0;
     const meant =
-      inAssistant && input.assistant && !coverage && !selected && worded?.kind !== "edit"
+      inAssistant &&
+      input.assistant &&
+      !coverage &&
+      worded?.kind !== "edit" &&
+      !worded?.fromAnswer &&
+      !worded?.addsAnswer
         ? documentMeant(context.question, {
             documents: () => options.documents.searchableBySize(input.documentIds),
-            original: workingOriginal,
-            cited: input.assistant.cited,
+            inView: { ...input.assistant.inView, original: workingOriginal?.id ?? null },
+            folder: input.assistant.folderId !== null,
           })
         : null;
-    const documentIds = coverage
-      ? coverage.used.map((each) => each.id)
-      : meant?.kind === "one"
-        ? [meant.document.id]
-        : input.documentIds;
-    const scoped = (input.scoped ?? input.documentIds !== null) || meant?.kind === "one";
+    const documentIds = coverage ? coverage.used.map((each) => each.id) : input.documentIds;
+    const scoped = input.scoped ?? input.documentIds !== null;
     const routed: RequestRoute | null =
       meant?.kind === "which" ? { kind: "unclear", newMind: false } : worded;
     const writtenFrom =
@@ -1688,8 +1687,11 @@ export function createAnswers(options: AnswersOptions) {
           options.documents.searchableCount(documentIds) <= SMALL_SCOPE_DOCUMENTS
             ? options.documents.searchableBySize(documentIds)
             : [];
+        // The Document "this" means comes whole when it's short, and before the rest of the scope.
+        const meantUpFront =
+          meant?.kind === "one" ? options.documents.searchableBySize([meant.document.id]) : [];
         const given = givenUpFront(
-          [original ? [original] : [], scope],
+          [original ? [original] : [], meantUpFront, scope],
           upFrontTokens(prepared.window),
           passagesOf,
           (passages) => blockOf(passages, session.measure),
@@ -2392,6 +2394,18 @@ export function createAnswers(options: AnswersOptions) {
     }));
   };
 
+  /** What a Mind cites, and what the selected text in it cites (null with none selected). */
+  const mindCites = (mindId: string, focus: MindFocus | null) =>
+    options.content.read(mindId, (blocks) => {
+      const top = blocks.toArray().filter((each) => each instanceof Y.XmlElement);
+      const selected = focus?.selection
+        ? top.filter((each) =>
+            focus.blockIds.includes(String(each.getAttribute(BLOCK_ID_ATTRIBUTE))),
+          )
+        : null;
+      return { mind: citedIn(top), selected: selected && citedIn(selected) };
+    });
+
   /**
    * Writes the Answer of a Question in a conversation, added or emptied in `turn`, from
    * the messages before it, the Mind it reads and its Search scope as it is now.
@@ -2403,6 +2417,7 @@ export function createAnswers(options: AnswersOptions) {
     emptyScope: boolean,
     mind: MindToRead | null,
     remake: string | null = null,
+    viewing: string | null = null,
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
     const help = mind ? (options.meetingHelp?.(mind.mindId, question.text) ?? null) : null;
@@ -2484,7 +2499,11 @@ export function createAnswers(options: AnswersOptions) {
         lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier) !== null,
         remake,
         renames: renamesIn(turn.earlier),
-        cited: citedIn(turn.earlier.findLast((message) => message.kind === "answer")),
+        inView: {
+          open: viewing,
+          ...(mind ? mindCites(mind.mindId, question.focus) : { selected: null, mind: [] }),
+          lastAnswer: answerCited(turn.earlier.findLast((message) => message.kind === "answer")),
+        },
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
@@ -2660,7 +2679,15 @@ export function createAnswers(options: AnswersOptions) {
       const { documentIds, emptyScope } = scopeNow(question.scope, question.mind?.id ?? null);
       const mind = mindToRead(question.mind?.id ?? null, question.focus, question.text);
       const turn = options.conversations.add(question, ready.model, readOf(mind));
-      return startInConversation(turn, ready, documentIds, emptyScope, mind);
+      return startInConversation(
+        turn,
+        ready,
+        documentIds,
+        emptyScope,
+        mind,
+        null,
+        question.viewing,
+      );
     },
 
     /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */

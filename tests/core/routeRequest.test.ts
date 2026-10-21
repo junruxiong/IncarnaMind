@@ -919,7 +919,11 @@ describe("Routing everyday requests", () => {
   test.each(["add it to my notes", "把这个加到我的笔记里"])(
     "%s writes into the Mind in focus",
     (request) => {
-      expect(routeRequest(request, NO_CHANGE)).toEqual({ kind: "write", newMind: false });
+      expect(routeRequest(request, NO_CHANGE)).toEqual({
+        kind: "write",
+        newMind: false,
+        addsAnswer: true,
+      });
     },
   );
 });
