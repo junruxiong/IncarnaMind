@@ -196,6 +196,73 @@ function docxParts(exported: MindExport) {
 }
 
 describe("exporting a Mind", () => {
+  test("Markdown preserves checked, unchecked and empty checklist items, nested beside ordinary lists", async () => {
+    const { core, mind, client } = await setUp();
+    const task = (checked: boolean, ...content: JSONContent[]): JSONContent => ({
+      type: "taskItem",
+      attrs: { checked },
+      content,
+    });
+    const checklist = (checked: boolean): JSONContent => ({
+      type: "taskList",
+      content: [
+        task(
+          checked,
+          paragraph(text("核查清单项")),
+          {
+            type: "taskList",
+            content: [
+              task(false, paragraph(text("Check sources"))),
+              task(true, paragraph(text("已核对"))),
+            ],
+          },
+          {
+            type: "bulletList",
+            content: [item(paragraph(text("Supporting note")))],
+          },
+        ),
+        task(false, paragraph(text("交付报告"))),
+        task(true, paragraph()),
+        task(true, paragraph(), {
+          type: "taskList",
+          content: [task(false, paragraph(text("Empty parent")))],
+        }),
+        task(false, paragraph()),
+      ],
+    });
+    const ordinary: JSONContent = {
+      type: "orderedList",
+      attrs: { start: 3 },
+      content: [
+        item(paragraph(text("Ordinary item")), {
+          type: "bulletList",
+          content: [item(paragraph(text("A bullet")))],
+        }),
+      ],
+    };
+    for (const checked of [true, false]) {
+      writeMind(client, [checklist(checked), ordinary]);
+      await client.settled();
+      const exported = await core.exportMind(mind.id, { format: "markdown" });
+      expect(new TextDecoder().decode(exported.data).trim()).toBe(
+        [
+          `- [${checked ? "x" : " "}] 核查清单项`,
+          "  - [ ] Check sources",
+          "  - [x] 已核对",
+          "  - Supporting note",
+          "- [ ] 交付报告",
+          "- [x] ",
+          "- [x] ",
+          "  - [ ] Empty parent",
+          "- [ ] ",
+          "",
+          "3. Ordinary item",
+          "   - A bullet",
+        ].join("\n"),
+      );
+    }
+  });
+
   test("the bytes of an export don't change: a fingerprint of the sample's Markdown and .docx", async () => {
     const { core, mind, client, tides } = await setUp();
     writeSample(client, tides);

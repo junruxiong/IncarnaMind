@@ -36,6 +36,7 @@ import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { ComparisonTableView } from "../editor/ComparisonTableView";
+import { checklistLabel } from "../editor/checklistLabel";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
@@ -117,6 +118,7 @@ import { holdShownPage } from "../shownPages";
 import { skillDescription, skillTitle } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
+import { resumeTabCloseFocus } from "../tabFocus";
 import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useIsExample } from "./GettingStarted";
 import { CheckLineIcon, MineLineIcon, SearchLineIcon } from "./lineIcons";
@@ -323,6 +325,7 @@ function MindEditorView({
       shouldRerenderOnTransaction: false,
       extensions: [
         ...noteExtensions({
+          checklistLabel,
           onEditMath: setEditingMath,
           codeBlockView: ReactNodeViewRenderer(CodeBlockView),
           questionView: ReactNodeViewRenderer(QuestionView),
@@ -458,6 +461,9 @@ function MindEditorView({
     () => (readOnly ? undefined : registerMindEditor(mindId, editor)),
     [editor, mindId, readOnly],
   );
+  useEffect(() => {
+    if (!editor.isDestroyed) resumeTabCloseFocus();
+  }, [editor]);
 
   // The commands on the Mind's text (⌘K, ⌘↵ and ⌘⌫ on its changes) act on the Mind last written in.
   useEffect(() => {
@@ -579,7 +585,7 @@ function MindEditorView({
   );
 
   // When the language changes: relabel. Setting the props also redraws the placeholder,
-  // and the footnotes' markers are named anew.
+  // and the footnotes' markers and checklist boxes are named anew.
   useEffect(() => {
     editor.setOptions({ editorProps: editorPropsFor(label, emptyFormula) });
     if (!editor.isDestroyed) redrawFootnotes(editor.view);

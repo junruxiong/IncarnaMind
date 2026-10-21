@@ -11,6 +11,7 @@ import { AnswerError } from "../editor/AnswerView";
 import { RemoveIcon } from "../editor/icons";
 import { useMindModel } from "../editor/ModelChip";
 import { useLanguage, useT } from "../i18n";
+import { requestModelMenu } from "../modelMenu";
 import { useModelNames } from "../modelNames";
 import {
   addStep,
@@ -23,6 +24,7 @@ import {
   stepsOf,
   updatePlan,
   useResearch,
+  useResearchModel,
   useWebMissing,
   useWebReach,
   type WebReach,
@@ -62,8 +64,7 @@ export function ResearchPlanCard({ mindId }: { mindId: string }) {
   const card = useResearch((state) => state.plans[mindId]);
   const seat = useComposer((state) => state.seat);
   const chosen = useMindModel(seat?.mindId === mindId ? seat.doc : null);
-  const fallback = useAppStore((state) => state.settings?.user.chatModel ?? null);
-  const model = chosen ?? fallback;
+  const model = useResearchModel(chosen);
   const web = useWebReach(model);
   const fields = useRef<(HTMLTextAreaElement | null)[]>([]);
   const focusStep = useRef<number | null>(null);
@@ -418,8 +419,20 @@ function PlanProblem({
 }) {
   const t = useT();
   const openSettings = useAppStore((state) => state.openSettings);
-  const fallback = useAppStore((state) => state.settings?.user.chatModel ?? null);
+  const shown = useResearchModel(model);
   const problem = card.problem;
+  const thinking =
+    problem?.reason === "failed" &&
+    problem.error.wording?.key === "error.research.plan.thoughtOnly";
+  const failedWith = useRef(shown);
+  // Another model chosen is the way on from a model that only thinks: the plan is made again with it.
+  useEffect(() => {
+    const before = failedWith.current;
+    failedWith.current = shown;
+    if (!thinking || !shown) return;
+    if (before?.providerId === shown.providerId && before.modelId === shown.modelId) return;
+    void planAgain(mindId, model);
+  }, [thinking, shown, mindId, model]);
   if (!problem) return null;
   if (problem.reason === "not-ready") {
     return (
@@ -446,13 +459,20 @@ function PlanProblem({
         testId="research-plan-failed"
         className="research-plan-problem"
         title={error.message}
-        action={{ label: t("research.plan.tryAgain"), onClick: again }}
+        action={
+          thinking
+            ? {
+                label: t("answer.error.chooseModel"),
+                // The chip's model is the plan's: Settings' default can't change it.
+                onClick: model ? requestModelMenu : () => openSettings("models"),
+              }
+            : { label: t("research.plan.tryAgain"), onClick: again }
+        }
       >
         {t("research.plan.failedBecause", { reason: t(error.wording.key, error.wording.values) })}
       </ProblemLine>
     );
   }
-  const shown = model ?? fallback;
   return (
     <div data-testid="research-plan-failed" className="research-plan-problem">
       <AnswerError
