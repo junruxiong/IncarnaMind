@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       heavy: ${{ steps.diff.outputs.heavy }}
+      packaged: ${{ steps.diff.outputs.packaged }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -42,6 +43,7 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           heavy=true
+          packaged=false
           if [ "$EVENT" = pull_request ]; then
             files="$(git diff --name-only "$BASE...$HEAD")" || files=""
             echo "$files"
@@ -50,8 +52,13 @@ jobs:
                && ! echo "$files" | grep -qx 'docs/privacy.md'; then
               heavy=false
             fi
+            # Only a change to what the packaged transcription check covers runs it.
+            if [ -z "$files" ] || echo "$files" | grep -qE '^(src/core/(transcription|meetings)/|src/core/embedding/download\.ts$|src/main/meetings/|src/main/transcriber(Process)?\.ts$|src/(preload|shared)/capture\.ts$|src/renderer/capture(/|\.html$)|build/entitlements\.mac\.plist$|electron-builder\.yml$|electron\.vite\.config\.ts$|package(-lock)?\.json$|e2e/app\.ts$|e2e/packaged/|tests/fixtures/speech/|\.github/(actions/packaged-transcription/|workflows/ci\.yml$))'; then
+              packaged=true
+            fi
           fi
           echo "heavy=$heavy" | tee -a "$GITHUB_OUTPUT"
+          echo "packaged=$packaged" | tee -a "$GITHUB_OUTPUT"
 
   check:
     name: Typecheck, lint and unit tests
@@ -76,6 +83,30 @@ jobs:
         run: npm run lint
       - if: needs.changes.outputs.heavy == 'true'
         run: npm test
+
+  # The packaged app, as the User installs it, transcribes a meeting with its real speech engine
+  # and model (#1239): #1233 broke transcription only there, while every test passed on the fake
+  # transcriber. macOS runners are few, so a pull request runs it only when it changes what the
+  # check covers; the nightly run and the release always do. Not a required check.
+  packaged-transcription:
+    name: Packaged app transcribes a meeting (macOS)
+    needs: changes
+    if: needs.changes.outputs.packaged == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Ad-hoc signed, as the release signs a build without its certificate.
+      - name: Package the app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist:dir -- -c.mac.identity=- -c.mac.notarize=false
+      - uses: ./.github/actions/packaged-transcription
 
   # The Word corpus (eval/word/README.md): every file, its export back into itself after an
   # edit, its export for review and its export with someone's changes resolved open in LibreOffice
