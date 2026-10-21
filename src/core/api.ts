@@ -966,6 +966,13 @@ export interface CommandItem {
   renamed?: string;
 }
 
+/** How a Word export settled whether to mark the text IncarnaMind wrote (#1535): `how` says where the choice came from. */
+export interface ExportMarking {
+  choice: MarkAiTextChoice;
+  /** Kept as the answer by this export (asked in the tray, or named in the request); for this file only; or saved before. */
+  how: "kept" | "this-file" | "earlier";
+}
+
 /** What a call of `run_command` did (#1110), from what its command returned. */
 export interface CommandDone {
   command: AssistantCommandId;
@@ -976,6 +983,10 @@ export interface CommandDone {
   into?: { kind: "folder" | "tag"; id: string; name: string; made: boolean };
   /** The file an export saved. */
   file?: Pick<SavedFile, "path" | "name" | "folder" | "inDefaultFolder">;
+  /** For a file saved: whether it is in the Output location itself, not a folder the request named. */
+  inOutputLocation?: boolean;
+  /** For a Word file: how its marking of the text IncarnaMind wrote was settled. */
+  marking?: ExportMarking;
 }
 
 /** Why a call of `run_command` changed nothing (#1110). */

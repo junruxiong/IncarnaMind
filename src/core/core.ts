@@ -145,6 +145,7 @@ import { createLocalExecutor } from "./execution";
 import { createExports, type ExportsDependencies } from "./exports";
 import { createComparisonExport } from "./exports/comparisonExport";
 import { exportLabels } from "./exports/labels";
+import { markAiTextQuestion } from "./exports/markAiTextQuestion";
 import { renderMarkdown } from "./exports/markdown";
 import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPictures";
 import { createFileLock } from "./fileLock";
@@ -243,7 +244,7 @@ import { chatClassifier } from "./tags/classify";
 import { createJevTagging, decisionModelTagger } from "./tags/jev";
 import { createRateLimitPause } from "./tags/rateLimit";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
-import type { CommandsHost } from "./tools/commands/run";
+import type { CommandsHost, MarkingSettled } from "./tools/commands/run";
 import { createCommandSteps } from "./tools/commands/steps";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
 import { createPublicFetch } from "./tools/web/fetcher";
@@ -1238,8 +1239,38 @@ export function createCore(adapters: CoreAdapters): Core {
       return api;
     },
     outputFolder: async () => outputs.settings().location,
-    exportMind: async (mindId, format, folder, approved) => {
-      const options = optionsFor(format, settings.get().user.exportOptions);
+    exportMind: async (mindId, format, folder, approved, marking) => {
+      let options = optionsFor(format, settings.get().user.exportOptions);
+      let settled: MarkingSettled | null = null;
+      if (format === "docx") {
+        const { docx } = settings.get().user.exportOptions;
+        if (docx.markAiText === null) {
+          const ask = markAiTextQuestion(settings.get().language);
+          const asked =
+            marking.named === null && marking.asking ? await marking.asking(ask.question) : null;
+          const choice = marking.named ?? ask.choiceOf(asked);
+          if (choice === null) {
+            throw new InvalidInputError({
+              key: marking.asking
+                ? "error.commands.markAiTextClosed"
+                : "error.commands.markAiTextAsk",
+            });
+          }
+          const preferences = settings.get().user.exportOptions;
+          await api?.updateSettings({
+            user: {
+              exportOptions: { ...preferences, docx: { ...preferences.docx, markAiText: choice } },
+            },
+          });
+          settled = { choice, how: "kept" };
+          options = optionsFor(format, settings.get().user.exportOptions);
+        } else if (marking.named !== null && marking.named !== docx.markAiText && options) {
+          options = { ...options, markAiText: marking.named === "mark" };
+          settled = { choice: marking.named, how: "this-file" };
+        } else {
+          settled = { choice: docx.markAiText, how: "earlier" };
+        }
+      }
       if (!options) throw new InvalidInputError({ key: "error.commands.markAiTextAsk" });
       const { fileName, data, word } = await mindExports.export(mindId, options);
       // The window shows first what a Word file can't keep (#105); the assistant can't.
@@ -1253,7 +1284,7 @@ export function createCore(adapters: CoreAdapters): Core {
         ...(folder !== null && { folder, approved }),
       });
       recordExport(options);
-      return file;
+      return { file, marking: settled };
     },
   };
 
