@@ -4,7 +4,13 @@ import {
   readinessAction,
   readinessAlso,
 } from "../components/providers/ChatReadinessNotice";
-import { dismissEditProblem, stopEdit, TRANSLATE_LANGUAGES, useEdits } from "../editWithAi";
+import {
+  dismissEditProblem,
+  type EditProblem,
+  stopEdit,
+  TRANSLATE_LANGUAGES,
+  useEdits,
+} from "../editWithAi";
 import { providerErrorText } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -18,8 +24,8 @@ export function EditStatus({ mindId }: { mindId: string }) {
   const t = useT();
   const pending = useEdits((state) => state.pending[mindId]);
   const problem = useEdits((state) => state.problems[mindId]);
-  const openSettings = useAppStore((state) => state.openSettings);
 
+  if (pending?.menu || problem?.menu) return null;
   if (pending) {
     const language =
       TRANSLATE_LANGUAGES.find((each) => each.prompt === pending.language)?.name ??
@@ -37,7 +43,26 @@ export function EditStatus({ mindId }: { mindId: string }) {
       </ProblemLine>
     );
   }
-  if (!problem) return null;
+  return problem ? <EditProblemLine mindId={mindId} problem={problem} /> : null;
+}
+
+/**
+ * The one line for why an Edit with AI gave no changes, with the one thing
+ * that helps. `onRetry` is told as Try again asks for the edit again.
+ */
+export function EditProblemLine({
+  mindId,
+  problem,
+  className = "composer-problem",
+  onRetry,
+}: {
+  mindId: string;
+  problem: EditProblem;
+  className?: string;
+  onRetry?(): void;
+}) {
+  const t = useT();
+  const openSettings = useAppStore((state) => state.openSettings);
   const close = {
     label: t("edit.close"),
     testId: "edit-problem-close",
@@ -48,7 +73,7 @@ export function EditStatus({ mindId }: { mindId: string }) {
       return (
         <ProblemLine
           testId="edit-problem"
-          className="composer-problem"
+          className={className}
           action={readinessAction(problem.readiness, t, openSettings, t("question.setUp"), () =>
             dismissEditProblem(mindId),
           )}
@@ -61,7 +86,7 @@ export function EditStatus({ mindId }: { mindId: string }) {
       return (
         <ProblemLine
           testId="edit-problem"
-          className="composer-problem"
+          className={className}
           action={{
             label: t("edit.problem.chooseModel"),
             onClick: () => {
@@ -77,11 +102,12 @@ export function EditStatus({ mindId }: { mindId: string }) {
       return (
         <ProblemLine
           testId="edit-problem"
-          className="composer-problem"
+          className={className}
           action={{
             label: t("edit.problem.retry"),
             onClick: () => {
               dismissEditProblem(mindId);
+              onRetry?.();
               problem.retry();
             },
           }}
@@ -91,7 +117,7 @@ export function EditStatus({ mindId }: { mindId: string }) {
       );
     case "consent-revoked":
       return (
-        <ProblemLine testId="edit-problem" className="composer-problem" action={close}>
+        <ProblemLine testId="edit-problem" className={className} action={close}>
           {providerErrorText(problem.error, t)}
         </ProblemLine>
       );
@@ -100,7 +126,7 @@ export function EditStatus({ mindId }: { mindId: string }) {
         <ProblemLine
           role={problem.kind === "unchanged" ? "status" : "alert"}
           testId="edit-problem"
-          className="composer-problem"
+          className={className}
           action={close}
         >
           {t(`edit.problem.${problem.kind}`)}

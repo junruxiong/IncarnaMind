@@ -94,6 +94,15 @@ export type AppliedLine = (
       /** Asked of the assistant: all of its requests in the Mind, held as they would rewrite most of the User's text. */
       asked?: { mindId: string; requests: readonly string[]; facts: ChangeCounts };
     }
+  // An edit asked in the selection menu, once the menu is closed: it holds the spot its Undo line lands in.
+  | { kind: "running"; blockId: string | null; stop(): void }
+  | {
+      kind: "failed";
+      blockId: string | null;
+      text: string;
+      action: { label: string; run(): void } | null;
+      close(): void;
+    }
 ) & {
   /** The language it was last drawn in, once that changed. */
   language?: Language;
@@ -103,6 +112,8 @@ const LINE_KINDS: ReadonlySet<unknown> = new Set<AppliedLine["kind"]>([
   "applied",
   "review",
   "held",
+  "running",
+  "failed",
 ]);
 
 const isAppliedLine = (value: unknown): value is AppliedLine =>
@@ -318,8 +329,46 @@ function reviewText(t: Translate, blocks: ChangedBlocks, byAssistant: boolean): 
   return count === 1 ? t("edit.review.one") : t("edit.review", { count });
 }
 
+function actionButton(label: string, testId: string, run: () => void): HTMLButtonElement {
+  const each = document.createElement("button");
+  each.type = "button";
+  each.className = "proposal-action";
+  each.dataset.testid = testId;
+  each.textContent = label;
+  // The cursor stays in the text.
+  each.addEventListener("mousedown", (event) => event.preventDefault());
+  each.addEventListener("click", run);
+  return each;
+}
+
 function mainLine(line: AppliedLine, options: Options, blocks: ChangedBlocks): HTMLElement {
   const t = options.translate;
+  if (line.kind === "running") {
+    const pulse = document.createElement("span");
+    pulse.className = "edit-pending-dot";
+    pulse.setAttribute("aria-hidden", "true");
+    const element = lineElement("menu-edit-line", "applied-line", [
+      pulse,
+      text("min-w-0", t("edit.pending.instruction")),
+      dot(),
+      actionButton(t("edit.stop"), "menu-edit-stop", line.stop),
+    ]);
+    element.setAttribute("role", "status");
+    return element;
+  }
+  if (line.kind === "failed") {
+    const mark = document.createElement("span");
+    mark.className = "applied-problem-dot";
+    mark.setAttribute("aria-hidden", "true");
+    const parts: (Node | string)[] = [mark, text("min-w-0", line.text)];
+    if (line.action) {
+      parts.push(dot(), actionButton(line.action.label, "menu-edit-action", line.action.run));
+    }
+    parts.push(dot(), actionButton(t("edit.close"), "menu-edit-close", line.close));
+    const element = lineElement("edit-problem", "applied-line applied-line--problem", parts);
+    element.setAttribute("role", "alert");
+    return element;
+  }
   if (line.kind === "applied") {
     const what = text(
       "min-w-0 font-semibold",
@@ -591,13 +640,14 @@ function decorations(state: EditorState, line: AppliedLine, options: Options): D
         : line.kind === "review"
           ? changedBlocksOf(state, line.changes)
           : { paragraphs: 0, tables: 0 };
+    const words = line.kind === "failed" ? line.text : "";
     const count = `${blocks.paragraphs}/${blocks.tables}`;
     const canUndo = line.kind !== "review" || !line.undo || line.undo.available();
     marks.push(
       Decoration.widget(at, () => mainLine(line, options, blocks), {
         ...shared,
         // Drawn again in the interface language once it changes.
-        key: `applied:${line.kind}:${count}:${line.blockId}:${canUndo}:${options.translate("edit.applied.undo")}`,
+        key: `applied:${line.kind}:${count}:${line.blockId}:${canUndo}:${words}:${options.translate("edit.applied.undo")}`,
       }),
     );
   }
@@ -632,7 +682,11 @@ export const AppliedEditLine = Extension.create<Options>({
           apply: (tr, value, _before, state) => {
             const meta: unknown = tr.getMeta(appliedLineKey);
             // Typing ends the line, but a held edit waits for its Apply or Discard.
-            const typedOver = tr.docChanged && !fromDocument(tr) && value.line?.kind !== "held";
+            const typedOver =
+              tr.docChanged &&
+              !fromDocument(tr) &&
+              value.line?.kind !== "held" &&
+              value.line?.kind !== "running";
             const shown =
               meta === null || isAppliedLine(meta) ? meta : typedOver ? null : value.line;
             // Applied or discarded one by one, a held edit's changes are all gone; restored, a reviewed one's.

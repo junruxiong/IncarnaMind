@@ -65,7 +65,7 @@ test("each preset is a tile in Add a provider; Groq's page has its key page and 
   }
 });
 
-test("the setup card offers only the first-class providers: no preset and no best-effort provider", async () => {
+test("the setup card offers the first-class providers and Kimi and GLM, which its key line names, but no preset", async () => {
   const { app, window } = await launchApp(dataDir, { ollama: "http://127.0.0.1:9" });
   try {
     await setWindowSize(app, window, 1100, 900);
@@ -82,7 +82,9 @@ test("the setup card offers only the first-class providers: no preset and no bes
     for (const name of ["Groq", "Mistral", "xAI", "OpenAI-compatible server"]) {
       await expect(form.getByRole("radio", { name, exact: true })).toHaveCount(0);
     }
-    await expect(form.getByRole("radio", { name: /^(Kimi|GLM)/ })).toHaveCount(0);
+    for (const name of [/^Kimi/, /^GLM/]) {
+      await expect(form.getByRole("radio", { name })).toHaveCount(1);
+    }
   } finally {
     await app.close();
   }

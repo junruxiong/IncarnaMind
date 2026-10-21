@@ -68,7 +68,8 @@ export interface Mind {
   /**
    * The Folder (an in-app one, a `LibraryGroup`) the Mind belongs to, or null:
    * Not in a Folder. A Mind in a Folder starts each Question with the Folder
-   * as its Search scope; one in none searches every Document.
+   * as its Search scope while the Folder holds a Document, and searches every
+   * Document while it holds none, as one in no Folder does (#1359).
    */
   folderId: string | null;
 }
@@ -831,9 +832,10 @@ export interface AnswerToolCall {
    * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128);
    * "minds", the Minds' Tools of an Answer in the assistant (#202:
    * `read_mind`, `edit_mind`, `add_to_mind`, `create_mind`, see `mindChange`); "commands",
-   * the commands it runs for the User (#1110: `list_commands`, `run_command`, see `command`).
+   * the commands it runs for the User (#1110: `list_commands`, `run_command`, see `command`);
+   * "asks", a question it asked the User (#1374: `ask_user`, see `asked`).
    */
-  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds" | "commands";
+  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds" | "commands" | "asks";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -898,6 +900,52 @@ export interface AnswerToolCall {
   command?: CommandDone;
   /** `run_command` that changed nothing: why (#1110). Absent otherwise. */
   commandProblem?: CommandProblem;
+  /** `ask_user`: the question, and the User's answer once they gave it (#1374). */
+  asked?: UserQuestion;
+}
+
+/** One of the choices in a question the assistant asks the User (#1374). */
+export interface UserQuestionOption {
+  label: string;
+  /** One line that says what choosing it means; empty: none. */
+  description: string;
+  /** The one the assistant would go with; at most one option is. */
+  recommended: boolean;
+  /** Ticked already when the question shows, for the User to change. */
+  preselected: boolean;
+}
+
+/**
+ * The User's answer to a question: the labels of the options chosen, in their
+ * order, and what they wrote under Other… (null: nothing); or that they
+ * skipped it.
+ */
+export type UserAnswer =
+  | { skipped: false; chosen: string[]; wrote: string | null }
+  | { skipped: true };
+
+/** A question the assistant asks the User with options (#1374), as its Answer keeps it. */
+export interface UserQuestion {
+  question: string;
+  /** One line under the question, such as what is ticked already and why; null: none. */
+  detail: string | null;
+  /** 2 to 4, the recommended one first. */
+  options: UserQuestionOption[];
+  /** More than one option may be chosen. */
+  multiple: boolean;
+  /** The User may write their own answer, under Other…. */
+  other: boolean;
+  /** Null while it waits for the User. */
+  answer: UserAnswer | null;
+}
+
+/** A question waiting in the tray for the User's answer (#1374). */
+export interface UserQuestionRequest extends AnswerPlace {
+  requestId: string;
+  answerId: string;
+  /** The call's id among the Answer's `toolCalls`. */
+  toolCallId: string;
+  question: UserQuestion;
 }
 
 /** What the assistant finds and runs commands on (#1110). */
@@ -3953,6 +4001,8 @@ export interface Money {
   amount: number;
 }
 
+export const MAX_MONTHLY_CAP = 1_000_000;
+
 /**
  * The most IncarnaMind may spend in a calendar month on models billed per
  * token. Before each such request its most (its prompt and its output limit)
@@ -4778,9 +4828,10 @@ export interface CheckClaimInput {
 
 /**
  * Where a sentence's check searched: the Mind's Folder (null for a Mind in
- * none, which searches every Document), or every Document because the User
- * asked ("Search all Documents"). A Mind moved to another Folder since needs
- * its sentences checked again; one the User widened doesn't.
+ * none, which searches every Document), or every Document (`widened`)
+ * because the User asked ("Search all Documents") or the Mind's Folder held
+ * no Document (#1359). A Mind moved to another Folder since needs its
+ * sentences checked again; one whose check was widened doesn't.
  */
 export interface ClaimCheckScope {
   folderId: string | null;
@@ -5200,6 +5251,12 @@ export interface AnswerSteps {
    * `total` Documents (#1149). Absent: from all of them, or not a request to write.
    */
   writtenFrom?: { documents: number; total: number };
+  /**
+   * What its request held besides the Mind it read (`ConversationAnswer.read`), by id: the
+   * Documents whose whole text went with the Question, and whether the live transcript of a
+   * meeting did. Absent: an Answer written before this was kept, or one that isn't in the assistant.
+   */
+  sent?: { documents: string[]; transcript?: true };
 }
 
 /**
@@ -6250,6 +6307,119 @@ export interface RegisteredDataFlow {
    * e.g. chat with a model on this computer.
    */
   services: DataFlowStatus[];
+}
+
+// ---------------------------------------------------------------------------
+// Page setup
+// ---------------------------------------------------------------------------
+
+/** How a page number is written: Word's `decimal`, `lowerRoman`, `upperRoman`, `lowerLetter` and `upperLetter`. */
+export type PageNumberFormat =
+  | "decimal"
+  | "lowerRoman"
+  | "upperRoman"
+  | "lowerLetter"
+  | "upperLetter";
+
+/** One run in a header or footer: text, a tab to a position the page sets, or a field that the page it is drawn on fills in. */
+export type PageFurnitureRun =
+  | { kind: "text"; text: string; bold?: true; italic?: true }
+  | {
+      kind: "field";
+      /** The page's number, the pages in the document, or the pages in the section. */
+      field: "PAGE" | "NUMPAGES" | "SECTIONPAGES";
+      /** The field's own `\* roman`-style switch; null: the section's number format. */
+      format: PageNumberFormat | null;
+      bold?: true;
+      italic?: true;
+    }
+  /** Word's absolute position tab (`w:ptab`): the text after it starts at the margin's left, centre or right. */
+  | {
+      kind: "alignedTab";
+      align: "left" | "center" | "right";
+      relativeTo: "margin" | "indent";
+    };
+
+/** A tab stop of a paragraph, from its style and itself as Word resolves them: `position` is from the text area's left edge, in twips. */
+export interface PageTabStop {
+  position: number;
+  align: "left" | "center" | "right" | "decimal" | "bar";
+  leader?: "dot" | "hyphen" | "underscore" | "heavy" | "middleDot";
+}
+
+export interface PageFurnitureParagraph {
+  /** From the paragraph or its style, as Word resolves it. */
+  align: "left" | "center" | "right" | "justify";
+  runs: PageFurnitureRun[];
+  /** Where the tabs ("\t") in the runs stop. Absent: none are set, so Word's default stops. */
+  tabStops?: PageTabStop[];
+  /** It is in a text box anchored in the paragraph before it, as a page number often is. */
+  inTextBox?: true;
+  /** It is a frame (`w:framePr`), which Word places beside the text, such as a page number at the margin: where is not read yet. */
+  framed?: true;
+}
+
+/** A header or a footer: its paragraphs, tables flattened to their paragraphs, a text box's after the one it is anchored in. */
+export interface PageFurniture {
+  paragraphs: PageFurnitureParagraph[];
+  /** How many pictures and shapes it holds that are not read yet (a logo): none is drawn. Absent: none. */
+  pictures?: number;
+}
+
+/** A header or footer for each kind of page: most pages, the first, and the even ones. */
+export interface PageFurnitureSet {
+  default: PageFurniture | null;
+  /** Used where the section has a different first page. */
+  first: PageFurniture | null;
+  /** Used where the document has different odd and even pages. */
+  even: PageFurniture | null;
+}
+
+/** One section of a document's pages. Lengths are in twips (twentieths of a point, 1,440 to the inch). */
+export interface PageSection {
+  /**
+   * The place ("w:sectPr#3") of the section break atom that ends it in the Mind,
+   * as `WordAtomAttributes.source` has it; null for the last section, which ends with the document.
+   */
+  breakPlace: string | null;
+  /** Where its first page starts: on a new page, on the same page, or on the next odd or even one. */
+  start: "nextPage" | "continuous" | "evenPage" | "oddPage";
+  width: number;
+  height: number;
+  /** From the box: landscape where it is wider than tall, as Word draws it, whatever `w:orient` says. */
+  orientation: "portrait" | "landscape";
+  margins: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+    gutter: number;
+    /** From the page's top edge to its header, and from its bottom edge to its footer. */
+    header: number;
+    footer: number;
+  };
+  /** The first page has its own header and footer. */
+  differentFirstPage: boolean;
+  pageNumbers: {
+    /** The number the section's first page takes; null: it carries on from the section before. */
+    start: number | null;
+    format: PageNumberFormat;
+  };
+  /** As this section has them: a header or footer the file doesn't give it is the section before's. */
+  headers: PageFurnitureSet;
+  footers: PageFurnitureSet;
+}
+
+/**
+ * How a Mind's pages are set up, for Page view: what the Word file it was imported
+ * from says, or, for a Mind that wasn't, the size and margins of the native export. Pages are
+ * layout only: none of this is in the Mind's content, its sync or its Questions.
+ */
+export interface PageSetup {
+  source: "word" | "native";
+  /** Odd and even pages have different headers and footers. */
+  oddAndEven: boolean;
+  sections: PageSection[];
 }
 
 // ---------------------------------------------------------------------------
@@ -8410,6 +8580,8 @@ export interface CoreApi {
    * linked again.
    */
   deleteDocument(id: string): Promise<void>;
+  /** Removes Documents from the index as `deleteDocument` does, all in one step: or none, when one isn't found. */
+  deleteDocuments(ids: string[]): Promise<void>;
   /**
    * Processes a Document that failed again, from its file as it is now, e.g.
    * once the User has fixed it. Returns it, queued; "document.status" events
@@ -8512,9 +8684,11 @@ export interface CoreApi {
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
    * Units the Citations in Minds point to are kept, so those Citations can
-   * still be checked: "keptCitationTexts.changed" reports them.
+   * still be checked: "keptCitationTexts.changed" reports them. Its Documents
+   * in `options.keep` stay, as files added on their own: Undo of a link keeps
+   * those that were there before it (#1361).
    */
-  removeLinkedFolder(linkedFolderId: string): Promise<void>;
+  removeLinkedFolder(linkedFolderId: string, options?: { keep?: string[] }): Promise<void>;
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
   /**
@@ -9328,6 +9502,15 @@ export interface CoreApi {
   revokeApprovalPolicy(policyId: string): Promise<void>;
   /** Tool calls still waiting for the User's approval, e.g. for a window that opened after they were raised. */
   listApprovalRequests(): Promise<ApprovalRequest[]>;
+  /** The assistant's questions still waiting for the User's answer, oldest first (#1374). */
+  listUserQuestions(): Promise<UserQuestionRequest[]>;
+  /**
+   * Answers one of the assistant's questions. Answering one no longer waiting (answered in
+   * another window, or its Answer stopped) does nothing. Throws InvalidInputError for a choice it
+   * didn't offer, more than one where one may be chosen, nothing chosen or written, or text where
+   * none may be written.
+   */
+  answerUserQuestion(requestId: string, answer: UserAnswer): Promise<void>;
   /**
    * Answers an approval request. Answering one that's no longer waiting (decided
    * in another window, or its Answer stopped) does nothing. "always-allow" of a
@@ -9491,6 +9674,12 @@ export interface CoreApi {
   getMindStyle(mindId: string): Promise<MindStyle>;
   /** Sets the Mind's font and text size together, so Undo can put both back. */
   setMindStyle(mindId: string, style: MindStyle): Promise<MindStyle>;
+  /**
+   * The pages of a Mind, for Page view (#803): each section's size, orientation and margins, and its
+   * headers and footers with their page fields, as the Word file it was imported from has them; for
+   * any other Mind, the native export's paper (A4 or Letter by region) and margins in one section.
+   */
+  getPageSetup(mindId: string): Promise<PageSetup>;
 
   /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
   getOutputSettings(): Promise<OutputSettings>;
@@ -9773,6 +9962,10 @@ export interface CoreEvents {
    * stopped ("deny"): every window takes its card away.
    */
   "approval.resolved": { requestId: string; decision: ApprovalDecision };
+  /** The assistant asks the User a question (#1374): it waits in the tray, in every window. */
+  "question.asked": UserQuestionRequest;
+  /** A question was answered, here or in another window, or withdrawn (null) as its Answer stopped. */
+  "question.answered": { requestId: string; answer: UserAnswer | null };
   /**
    * The Answer event stream. The core writes each Answer into its Mind's Yjs
    * document as it streams (its text, Citations and Tool calls), so every
@@ -9880,6 +10073,7 @@ const methods: Record<CoreApiMethod, true> = {
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
+  deleteDocuments: true,
   retryDocument: true,
   unlockDocument: true,
   forgetDocumentPassword: true,
@@ -10082,6 +10276,8 @@ const methods: Record<CoreApiMethod, true> = {
   revokeApprovalPolicy: true,
   listApprovalRequests: true,
   respondToApproval: true,
+  listUserQuestions: true,
+  answerUserQuestion: true,
   listSkills: true,
   previewSkillImport: true,
   importSkill: true,
@@ -10111,6 +10307,7 @@ const methods: Record<CoreApiMethod, true> = {
   openCitationStyleLicences: true,
   getMindStyle: true,
   setMindStyle: true,
+  getPageSetup: true,
   getOutputSettings: true,
   setOutputLocation: true,
   setLinkedFolderWriting: true,

@@ -309,14 +309,14 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(undoLine.getByTestId("undo-message")).toHaveText("Moved “Shortlist” to Research");
     await screenshot(window, "folder-tree-moved");
 
-    // Its composer now starts with Research; a Question asked keeps it.
+    // Research holds no Document yet, so the Mind's next Question searches every Document, and the
+    // chip's title says why (#1359).
     const editor = window.getByTestId("mind-editor");
     await editor.click();
     await window.keyboard.press("ControlOrMeta+j");
     const composer = window.getByTestId("composer");
-    // The Folder holds no Document yet: its chip says so (#764).
-    await expect(composer.getByTestId("scope-chip").locator(".truncate")).toHaveText("Research");
-    await expect(composer.getByTestId("scope-chip-empty")).toBeVisible();
+    const all = composer.getByTestId("composer-scope-all");
+    await expect(all).toHaveAttribute("title", /^“Research” has no Documents yet/);
     await window.keyboard.type("What do my notes say?");
     await window.keyboard.press("Enter");
     const answer = assistantAnswers(window).first();
@@ -336,9 +336,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     );
     // Open as before the double-click.
     await expect(renamed).toHaveAttribute("data-expanded", "true");
-    await expect(composer.getByTestId("scope-chip").locator(".truncate")).toHaveText(
-      "Research notes",
-    );
+    await expect(all).toHaveAttribute("title", /^“Research notes” has no Documents yet/);
     for (const key of ["F2"]) {
       await renamed.getByTestId("folder-row").focus();
       await window.keyboard.press(key);
@@ -362,6 +360,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Edit description…$/,
       /^Sort by…$/,
       /^RenameF2$/,
+      /^Get info(⌘I|Ctrl\+I)$/,
       /^Delete$/,
     ]);
     await folderActions.getByTestId("folder.delete").click();
