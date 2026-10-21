@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { draftsFrom } from "../../src/renderer/src/composer";
+import { draftsFrom, withReloaded } from "../../src/renderer/src/composer";
 
 /*
  * What a reload of the window's page puts back of the composer (#1500): the drafts it kept,
@@ -30,6 +30,16 @@ describe("The drafts a reload leaves", () => {
         notAnObject: "text",
       }),
     ).toEqual({ good: draft });
+  });
+
+  // protects=what the app put in a composer by itself at its start, a Question that waited for Continue, is not wiped by what a reload left, and stays over it in the same Mind; fails_when=the reload's drafts replace the app's (#1500).
+  test("what the app already put in a composer wins over what the reload left", () => {
+    const kept = { ...draft, text: "What is in my Documents?" };
+    const left = { mind: { ...draft, text: "An older draft" }, other: draft };
+
+    expect(withReloaded({ mind: kept }, left)).toEqual({ mind: kept, other: draft });
+    expect(withReloaded({ mind: kept }, null)).toEqual({ mind: kept });
+    expect(withReloaded({}, left)).toEqual(left);
   });
 
   test("nothing, or something that isn't a set of drafts, is no drafts", () => {

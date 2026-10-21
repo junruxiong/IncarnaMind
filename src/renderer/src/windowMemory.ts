@@ -1,4 +1,4 @@
-import { draftsFrom, useComposer } from "./composer";
+import { useComposer, withReloaded } from "./composer";
 import { useConversations } from "./conversations";
 import { core } from "./core";
 
@@ -41,7 +41,7 @@ async function showAgain(conversationId: string): Promise<void> {
 
 /** Puts back what a reload of the page left, and keeps it as it changes. */
 export function installWindowMemory(): void {
-  useComposer.setState({ drafts: draftsFrom(read(DRAFTS_KEY)) });
+  useComposer.setState((state) => ({ drafts: withReloaded(state.drafts, read(DRAFTS_KEY)) }));
   useComposer.subscribe((state, previous) => {
     if (state.drafts !== previous.drafts) write(DRAFTS_KEY, state.drafts);
   });

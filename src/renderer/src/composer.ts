@@ -100,6 +100,17 @@ export function draftsFrom(value: unknown): Record<string, Draft> {
   return drafts;
 }
 
+/**
+ * The drafts as they are after a reload put back what it left: what the app already put in a
+ * composer at its start (a Question that waited for Continue) wins over what the reload left.
+ */
+export function withReloaded(
+  now: Readonly<Record<string, Draft>>,
+  left: unknown,
+): Record<string, Draft> {
+  return { ...draftsFrom(left), ...now };
+}
+
 interface ComposerState {
   /** By Mind id: switching tabs keeps what was typed in each Mind's composer. */
   drafts: Readonly<Record<string, Draft>>;
