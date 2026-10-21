@@ -164,6 +164,20 @@ describe("⌘K's actions", () => {
     expect(actions("本地", "zh-CN")[0]?.[1]?.[0]).toBe("所有内容都留在这台电脑上");
   });
 
+  // protects=a keyword never puts a command above one whose name starts with what was typed: "settings" and its Chinese, pinyin and initials list Settings first, not Local mode; fails_when=a command that only lists "settings" among its keywords ranks above Settings…; no_claim=the rows after the first.
+  test.each([
+    ["settings", "en"],
+    ["设置", "zh-CN"],
+    ["shezhi", "zh-CN"],
+    ["sz", "zh-CN"],
+  ] as const)(
+    "typing %s finds Settings first, ahead of commands that only name it as a keyword",
+    (typed, language) => {
+      const first = actions(typed, language)[0]?.[1]?.[0] ?? "";
+      expect(first.startsWith(language === "en" ? "Settings" : "设置")).toBe(true);
+    },
+  );
+
   test("act on the selection, saying how many, or on the one thing in front, naming it", () => {
     const [withTwo] = palette.actionGroup(
       ["new", "folder"],

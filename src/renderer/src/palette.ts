@@ -177,9 +177,15 @@ export function findings(t: Translate): Findings {
   return { kinds, names };
 }
 
-/** How many of each group show; the rest is a word or two more away. */
-/** What a keyword match scores less than the same match in a name (a name's kinds are a thousand apart, `./matcher`). */
+/**
+ * What a keyword match scores less than the same match in a name, and the most it scores: a name's
+ * kinds are a thousand apart (`./matcher`), and a keyword never ranks above a name that starts
+ * with the words, however well it matches.
+ */
 const KEYWORD_PENALTY = 500;
+const KEYWORD_MOST = 2000;
+
+/** How many of each group show; the rest is a word or two more away. */
 const SHOWN = { names: 5, actions: 6, recent: 5, words: 5 } as const;
 
 /** What is typed: the words, and whether ">" asks for actions only, as in VS Code. */
@@ -301,12 +307,16 @@ export function actionGroup(
       meta: command.appliesTo ? targetName : "",
       shortcut: menuKeysLabel(command),
     };
-    // A match by a keyword of the command's own, which names what it is for ("local" for Local
-    // mode), ranks below a name that starts with the words but above one that only has them at the
-    // start of a word ("location"); one in the other language ranks below all of those.
+    // A keyword of the command's own, which names what it is for ("local" for Local mode), ranks
+    // below a name that starts with the words but above one that only has them at the start of a
+    // word ("location"); a match in the other language ranks below all of those.
     const score =
       byName?.score ??
-      (byKeyword ? byKeyword.score - KEYWORD_PENALTY : elsewhere ? elsewhere.score - 4000 : 0);
+      (byKeyword
+        ? Math.min(byKeyword.score - KEYWORD_PENALTY, KEYWORD_MOST)
+        : elsewhere
+          ? elsewhere.score - 4000
+          : 0);
     return [{ item, score, group: command.group }];
   });
   const topOf = (id: CommandId) => commands.get(id)?.top ?? Number.MAX_SAFE_INTEGER;
