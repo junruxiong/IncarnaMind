@@ -66,13 +66,16 @@ async function mindWith(window: Page, lines: readonly string[]) {
   return { editor, paragraphs };
 }
 
-/** ⌘J over what is selected, saying what to change. */
+/** ⌘J over what is selected, saying what to change: in the selection menu's field, or in the composer where the menu can't open (all of the Mind). */
 async function askToChange(window: Page, instruction: string) {
   await window.keyboard.press("ControlOrMeta+j");
-  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await expect
+    .poll(() => window.evaluate(() => document.activeElement?.getAttribute("data-testid")))
+    .toMatch(/^(selection-edit-field|composer-input)$/);
   await window.keyboard.type(instruction);
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("edit-pending")).toHaveCount(0);
+  await expect(window.getByTestId("selection-edit-working")).toHaveCount(0);
 }
 
 async function selectAll(window: Page, editor: Locator) {
@@ -371,12 +374,14 @@ test("text typed elsewhere while a slow edit streams in stays, and one ⌘Z take
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Shorten this slowly");
   await window.keyboard.press("Enter");
-  await expect(editor.getByTestId("mind-writing")).toBeVisible();
+  await expect(window.getByTestId("selection-edit-working")).toBeVisible();
   await pointAndClick(window, paragraphs.last());
   await window.keyboard.press("End");
   await window.keyboard.type(" typed meanwhile");
-  await expect(editor.getByTestId("mind-writing")).toHaveCount(0, { timeout: 30_000 });
-  await expect(line.getByTestId("applied-count")).toHaveText("Changed 3 paragraphs");
+  await expect(line.getByTestId("applied-count")).toHaveText("Changed 3 paragraphs", {
+    timeout: 30_000,
+  });
+  await expect(window.getByTestId("menu-edit-line")).toHaveCount(0);
   await expect(paragraphs.last()).toHaveText("Notes: typed meanwhile");
 
   await editor.focus();
@@ -458,7 +463,7 @@ test("an edit whose last update never reaches the window waits as changes to rev
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("replace coast with shore");
   await window.keyboard.press("Enter");
-  await expect(window.getByTestId("edit-pending")).toBeVisible();
+  await expect(window.getByTestId("selection-edit-working")).toBeVisible();
 });
 
 /** Runs a command from ⌘K by the keyboard: its words, then Enter. */

@@ -107,7 +107,10 @@ test("Shorten applies at once; Review changes shows its two changes over the app
   await selectWords(window, note, "The tides here are very strong and really regular", 3);
   const menu = window.getByTestId("selection-menu");
   await expect(menu.getByTestId("selection-action-shorten")).toBeVisible();
-  await expect(menu.getByTestId("selection-action-edit")).toContainText("Edit with AI…");
+  await expect(menu.getByTestId("selection-edit-field")).toHaveAttribute(
+    "placeholder",
+    "Edit with AI…",
+  );
   await screenshot(window, "edit-menu-en");
   await pointAndClick(window, menu.getByTestId("selection-action-shorten"));
   await expect(note).toContainText("The tides here are strong and regular");
@@ -260,7 +263,7 @@ test("a whole Mind restructured with ⌘A and ⌘J keeps its headings, lists and
   );
 });
 
-test("⌘J with text selected says what to change in the composer, in Chinese; the change applies at once, ⌘Z takes it back, and the line fits a narrow window", async () => {
+test("⌘J with text selected says what to change in the selection menu's field, in Chinese; the change applies at once, ⌘Z takes it back, and the line fits a narrow window", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -272,17 +275,16 @@ test("⌘J with text selected says what to change in the composer, in Chinese; t
   await window.keyboard.type("潮水每天非常规律地涨落两次。");
   const note = editor.locator(":scope > p").first();
 
-  // ⌘J with the line selected: the composer quotes it and asks what to change.
+  // ⌘J with the line selected: the menu's field takes the cursor, and the selection stays drawn.
   await selectWords(window, note, "潮水每天非常规律地涨落两次。");
   await window.keyboard.press("ControlOrMeta+j");
-  const composer = window.getByTestId("composer");
-  const input = composer.getByTestId("composer-input");
+  const input = window.getByTestId("selection-menu").getByTestId("selection-edit-field");
   await expect(input).toBeFocused();
-  await expect(composer.getByTestId("composer-edit-quote")).toContainText("正在编辑“潮水每天");
-  await expect(input).toHaveAttribute("placeholder", "说说要怎么改…");
-  await expect(note.locator(".proposal-target")).toHaveText("潮水每天非常规律地涨落两次。");
+  await expect(input).toHaveAttribute("placeholder", "用 AI 编辑…");
+  await expect(note.locator(".held-selection")).toHaveText("潮水每天非常规律地涨落两次。");
+  await expect(window.getByTestId("composer-edit-quote")).toHaveCount(0);
   await window.keyboard.type("把规律换成准时");
-  await screenshot(window, "edit-composer-zh");
+  await screenshot(window, "edit-field-zh");
   await window.keyboard.press("Enter");
 
   await expect(note).toHaveText("潮水每天非常准时地涨落两次。");

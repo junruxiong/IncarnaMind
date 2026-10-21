@@ -247,7 +247,9 @@ export interface GenerateCall {
 }
 
 /** What a scripted model replies to a request that isn't streamed: text, or an HTTP error. */
-export type GeneratedReply = { text: string } | { error: { status: number; message: string } };
+export type GeneratedReply =
+  /** `cutOff`: the reply ran out of output tokens, as a model's whose thinking took them all. */
+  { text: string; cutOff?: boolean } | { error: { status: number; message: string } };
 
 /** What a scripted model replies to one request. */
 export type ScriptedReply =
@@ -350,7 +352,7 @@ export function scriptedModel(
       if ("error" in reply) throw providerError(reply.error);
       return {
         content: [{ type: "text", text: reply.text }],
-        finishReason: { unified: "stop", raw: undefined },
+        finishReason: { unified: reply.cutOff ? "length" : "stop", raw: undefined },
         usage,
         warnings: [],
       };
