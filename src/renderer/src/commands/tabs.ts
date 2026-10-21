@@ -172,10 +172,12 @@ export const tabCommands: readonly Command[] = [
     shortcut: { keys: "F2", list: true },
     group: "edit",
     reversible: true,
-    // Not from another list's F2: only on a tab, or on the shown one from ⌘K.
+    // Not from another list's F2: only on a tab, or on the shown one from ⌘K, where its Mind's own Rename comes first.
     when: (ctx) =>
       targetOf(ctx)?.tab.item.kind === "mind" &&
-      (ctx.focus?.kind === "tab" || ctx.surface === "palette" || keyboardTab() !== undefined),
+      (ctx.focus?.kind === "tab" ||
+        (ctx.surface === "palette" && ctx.here?.["mind.rename"] === undefined) ||
+        keyboardTab() !== undefined),
     run: onTarget(({ tab }) => store().renameTab(tab.id)),
   },
   {

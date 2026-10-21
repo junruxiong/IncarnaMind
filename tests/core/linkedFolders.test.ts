@@ -318,6 +318,43 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
     expect(added.map((each) => each.linkedFolderId)).toEqual([linked?.id, null]);
   });
 
+  // protects=Undo of a link (#1361) unlinks it but keeps the Documents that were there before, as files added on their own with their ids; fails_when=a kept Document goes, or stays in the gone Linked folder; no_claim=the window's Undo step.
+  test("unlinking a folder keeps the Documents asked for, as files added on their own", async () => {
+    const library = await createSourceFolder();
+    const core = startCore(await createTempDataFolder());
+    const [single] = await addAndProcess(core, [await writeSourceFile(library, "notes.md", TIDES)]);
+    if (!single) throw new Error("Nothing was added.");
+    await writeSourceFile(library, "b.md", NEAP);
+    await linkAndProcess(core, library);
+    const linked = (await core.listLinkedFolders())[0];
+    if (!linked) throw new Error("Nothing was linked.");
+
+    await core.removeLinkedFolder(linked.id, { keep: [single.id] });
+
+    expect(await core.listLinkedFolders()).toEqual([]);
+    expect(await core.listDocuments()).toEqual([
+      expect.objectContaining({ id: single.id, linkedFolderId: null, folderId: null }),
+    ]);
+  });
+
+  // protects=a merge's Undo (#1361) links the inner folder again and its Undo at once unlinks it with its files; fails_when=a file added on its own inside a newly linked folder stays on its own until the first scan; no_claim=what the scan reads.
+  test("a folder linked takes the files added on their own inside it at once, keeping their ids", async () => {
+    const library = await createSourceFolder();
+    const core = startCore(await createTempDataFolder());
+    const [single] = await addAndProcess(core, [
+      await writeSourceFile(library, "A/notes.md", TIDES),
+    ]);
+    if (!single) throw new Error("Nothing was added.");
+
+    const linked = await core.addLinkedFolder(library);
+
+    expect(await core.listDocuments()).toEqual([
+      expect.objectContaining({ id: single.id, linkedFolderId: linked.id }),
+    ]);
+    await core.removeLinkedFolder(linked.id);
+    expect(await core.listDocuments()).toEqual([]);
+  });
+
   test("unlinking a folder removes its Documents and Folders from the index", async () => {
     const library = await createSourceFolder();
     await writeSourceFile(library, "A/a.md", TIDES);

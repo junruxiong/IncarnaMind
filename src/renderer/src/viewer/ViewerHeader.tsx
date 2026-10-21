@@ -1,8 +1,9 @@
-import { createContext, type ReactNode, useContext, useState } from "react";
+import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 import type { Document } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import { CountItLine } from "../components/CountItLine";
 import { InlineName } from "../components/InlineName";
+import { moveDocumentsBeside } from "../components/library/DocumentMoveTo";
 import { DocumentLineIcon, PinLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
@@ -66,6 +67,7 @@ export function ViewerHeader({
   const leftOut = useLeftOutOfEvidence(document);
   const objectMenu = useObjectMenu({ kind: "document", id: document?.id ?? "" });
   const rename = useRename<HTMLButtonElement>(`viewer:${document?.id}`);
+  const header = useRef<HTMLElement>(null);
   const renameDocument = useAppStore((state) => state.renameDocument);
 
   // A copy named after the Document opens, as from the sidebar's file menu.
@@ -86,6 +88,7 @@ export function ViewerHeader({
       <header
         data-testid="viewer-header"
         {...(document ? objectMenu.rowProps : {})}
+        ref={header}
         className="viewer-header"
       >
         {leading}
@@ -159,7 +162,10 @@ ${sourceOf(document)}`
           <ObjectMenu
             target={{ kind: "document", id: document.id }}
             label={t("documents.more", { name: displayName(document) })}
-            here={{ "document.rename": rename.start }}
+            here={{
+              "document.rename": rename.start,
+              "document.moveTo": () => moveDocumentsBeside(header.current, [document.id]),
+            }}
             className="viewer-icon-button"
           />
         )}

@@ -7,11 +7,11 @@ import { keysLabel } from "../commands/keys";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { formatMoney } from "../cost";
+import { AnswerError } from "../editor/AnswerView";
 import { RemoveIcon } from "../editor/icons";
 import { useMindModel } from "../editor/ModelChip";
 import { useLanguage, useT } from "../i18n";
 import { useModelNames } from "../modelNames";
-import { answerProblem } from "../problems";
 import {
   addStep,
   type ResearchPlanCard as Card,
@@ -23,6 +23,7 @@ import {
   stepsOf,
   updatePlan,
   useResearch,
+  useWebMissing,
   useWebReach,
   type WebReach,
 } from "../research";
@@ -144,6 +145,7 @@ export function ResearchPlanCard({ mindId }: { mindId: string }) {
                   data-testid="research-plan-step"
                   aria-label={t("research.plan.step", { number: index + 1 })}
                   value={step}
+                  placeholder={card.steps.length === 1 ? t("research.plan.firstStep") : undefined}
                   disabled={card.planning}
                   onChange={(event) =>
                     setStep(mindId, index, event.target.value.replace(/\s*\n\s*/g, " "))
@@ -307,9 +309,9 @@ function SourceToggle({
 /** Why the web can't be searched with this model, with what fixes it. */
 function WebLine({ reach, model }: { reach: WebReach; model: ChatModelChoice | null }) {
   const t = useT();
-  const nameOf = useModelNames();
+  const missing = useWebMissing(reach, model);
   const updateSettings = useAppStore((state) => state.updateSettings);
-  if (reach === "ready") return null;
+  if (reach === "ready" || missing === null) return null;
   if (reach === "off") {
     return (
       <ProblemLine
@@ -327,13 +329,7 @@ function WebLine({ reach, model }: { reach: WebReach; model: ChatModelChoice | n
   }
   return (
     <p data-testid="research-plan-web-unavailable" className="research-plan-note">
-      {reach === "local-mode"
-        ? t("research.plan.localMode")
-        : t("research.plan.webUnavailable", {
-            model: model
-              ? nameOf(model.modelId, model.providerId).name
-              : t("answer.error.thisModel"),
-          })}
+      {t("research.plan.libraryOnly", { reason: missing })}
     </p>
   );
 }
@@ -422,6 +418,7 @@ function PlanProblem({
 }) {
   const t = useT();
   const openSettings = useAppStore((state) => state.openSettings);
+  const fallback = useAppStore((state) => state.settings?.user.chatModel ?? null);
   const problem = card.problem;
   if (!problem) return null;
   if (problem.reason === "not-ready") {
@@ -441,20 +438,34 @@ function PlanProblem({
       </ProblemLine>
     );
   }
-  const { fix } = answerProblem(problem.error.kind, undefined);
+  const { error } = problem;
+  const again = () => void planAgain(mindId, model);
+  if (error.wording) {
+    return (
+      <ProblemLine
+        testId="research-plan-failed"
+        className="research-plan-problem"
+        title={error.message}
+        action={{ label: t("research.plan.tryAgain"), onClick: again }}
+      >
+        {t("research.plan.failedBecause", { reason: t(error.wording.key, error.wording.values) })}
+      </ProblemLine>
+    );
+  }
+  const shown = model ?? fallback;
   return (
-    <ProblemLine
-      testId="research-plan-failed"
-      className="research-plan-problem"
-      title={problem.error.message}
-      action={
-        fix.kind === "settings"
-          ? { label: t(fix.label), onClick: () => openSettings(fix.page) }
-          : { label: t("research.plan.tryAgain"), onClick: () => void planAgain(mindId, model) }
-      }
-    >
-      {t("research.plan.failed")}
-    </ProblemLine>
+    <div data-testid="research-plan-failed" className="research-plan-problem">
+      <AnswerError
+        kind={error.kind}
+        modelId={shown?.modelId ?? null}
+        providerId={shown?.providerId ?? null}
+        resetsAt={error.resetsAt ?? null}
+        signInRoute={error.signInRoute ?? null}
+        details={error.message}
+        onRetry={again}
+        onOpenSettings={openSettings}
+      />
+    </div>
   );
 }
 
