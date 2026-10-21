@@ -350,7 +350,7 @@ test("A figure worked out from an amount in brackets says the amount was counted
   await editor.click();
   await window.keyboard.type(sentence);
   const line = editor.locator(":scope > p").first();
-  await checkAll(window, line, "Net cash", "end of 2025.", "find-support");
+  await checkAll(window, line, "Net cash", "end of 2025.", "check-against-documents");
 
   const contradicted = marks(window).and(window.locator('[data-check="contradicted"]'));
   await expect(contradicted).toBeVisible({ timeout: 15_000 });

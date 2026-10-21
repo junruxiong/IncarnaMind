@@ -721,7 +721,7 @@ export const en = {
   "contradictions.command": "Check for contradictions",
   "contradictions.command.keywords":
     "contradictions conflict contradicted cited claims Folder watch",
-  "contradictions.command.purpose": "Where your Documents disagree with this Mind's Citations",
+  "contradictions.command.purpose": "Where your Documents disagree with this Mind’s Citations",
   "contradictions.ask.one": "Check 1 cited claim against this Folder’s other Documents?",
   "contradictions.ask": "Check {count} cited claims against this Folder’s other Documents?",
   "contradictions.check": "Check",

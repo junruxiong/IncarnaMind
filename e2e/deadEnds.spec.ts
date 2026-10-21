@@ -200,6 +200,7 @@ test("in Chinese, the card's button and the panel it opens have one name, 查找
   await pointAndClick(window, menu.getByTestId("selection-action-check-against-documents"));
   const marks = window.getByTestId("claim-mark");
   await expect(marks).toHaveCount(2);
+  await expect(window.locator('[data-check="unsupported"]')).toHaveCount(2);
 
   await pointAndClick(window, marks.first());
   const button = window.getByTestId("claim-card").getByTestId("claim-find-sources");

@@ -376,12 +376,22 @@ test("with a sentence selected, ⌘K finds the one check by check, find support,
     await expect(row("check.againstDocuments")).toHaveText("Check against Documents");
     await expect(palette(window).locator('[data-key^="command:check."]')).toHaveCount(1);
     if (query === "check") {
-      await expect(row("mind.checkAll").getByTestId("palette-purpose")).toHaveText(
+      await expect(row("mind.check").getByTestId("palette-purpose")).toHaveText(
         "Whether each claim has support in your Documents",
       );
       await expect(row("mind.checkContradictions").getByTestId("palette-purpose")).toHaveText(
-        "Where your Documents disagree with this Mind's Citations",
+        "Where your Documents disagree with this Mind’s Citations",
       );
+    }
+    await window.keyboard.press("Escape");
+    await expect(palette(window)).toBeHidden();
+  }
+
+  // Words that belong to other commands don't list it.
+  for (const query of ["verify", "cite", "find sources"]) {
+    await search(query);
+    await expect(row("check.againstDocuments")).toHaveCount(0);
+    if (query === "verify") {
       const verify = row("verify.document");
       await expect(verify.getByTestId("palette-purpose")).toHaveText(
         "Check the claims in a PDF someone else wrote",
@@ -399,30 +409,26 @@ test("with a sentence selected, ⌘K finds the one check by check, find support,
     await expect(palette(window)).toBeHidden();
   }
 
-  // Words that belong to other commands don't list it.
-  for (const query of ["verify", "cite", "find sources"]) {
-    await search(query);
-    await expect(row("check.againstDocuments")).toHaveCount(0);
-    await window.keyboard.press("Escape");
-    await expect(palette(window)).toBeHidden();
-  }
-
   await setLanguage(window, "zh-CN");
   for (const query of ["核对", "出处"]) {
     await search(query);
     await expect(row("check.againstDocuments")).toHaveText("对照文档核对");
     await expect(palette(window).locator('[data-key^="command:check."]')).toHaveCount(1);
     if (query === "核对") {
-      await expect(row("mind.checkAll").getByTestId("palette-purpose")).toHaveText(
-        "每个说法在你的文档里有没有依据",
-      );
-      await expect(row("verify.document").getByTestId("palette-purpose")).toHaveText(
-        "核对别人写的 PDF 里的说法",
+      await expect(row("mind.check").getByTestId("palette-purpose")).toHaveText(
+        "每条说法在你的文档里有没有依据",
       );
     }
     await window.keyboard.press("Escape");
     await expect(palette(window)).toBeHidden();
   }
+
+  await search("核对文档");
+  await expect(row("verify.document").getByTestId("palette-purpose")).toHaveText(
+    "核对别人写的 PDF 里的说法",
+  );
+  await window.keyboard.press("Escape");
+  await expect(palette(window)).toBeHidden();
 
   await search("矛盾");
   await expect(row("mind.checkContradictions").getByTestId("palette-purpose")).toHaveText(
