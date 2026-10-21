@@ -80,6 +80,7 @@ describe("Settings", () => {
         sidebarHidden: false,
         chatSetupDismissed: false,
         sandboxNoticeDismissed: false,
+        openedBefore: false,
         gettingStarted: {
           started: false,
           citationChecked: false,
@@ -98,6 +99,7 @@ describe("Settings", () => {
         meetingPanelHidden: true,
         meetingHelpKeys: {},
         motion: "system",
+        lastChatModel: null,
       },
       language: "en",
       scriptSandbox: "none",
@@ -184,6 +186,7 @@ describe("Settings", () => {
       sidebarHidden: false,
       chatSetupDismissed: false,
       sandboxNoticeDismissed: false,
+      openedBefore: false,
       gettingStarted: {
         started: false,
         citationChecked: false,
@@ -202,6 +205,7 @@ describe("Settings", () => {
       meetingPanelHidden: true,
       meetingHelpKeys: {},
       motion: "system",
+      lastChatModel: null,
     });
   });
 
@@ -257,6 +261,7 @@ describe("Settings", () => {
       sidebarHidden: true,
       chatSetupDismissed: true,
       sandboxNoticeDismissed: true,
+      openedBefore: true,
       gettingStarted: {
         started: true,
         citationChecked: true,
@@ -275,6 +280,7 @@ describe("Settings", () => {
       meetingPanelHidden: false,
       meetingHelpKeys: { say: "Ctrl+Alt+Q" },
       motion: "reduced" as const,
+      lastChatModel: null,
     };
     await before.updateSettings({
       user: {
@@ -386,6 +392,10 @@ describe("Settings", () => {
     {
       name: "a default model without a model",
       patch: { user: { chatModel: { providerId: "x" } } },
+    },
+    {
+      name: "a last chosen model without a model",
+      patch: { device: { lastChatModel: { providerId: "x" } } },
     },
     {
       name: "a default model on a provider that doesn't exist",
