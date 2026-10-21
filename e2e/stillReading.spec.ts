@@ -5,6 +5,7 @@ import { openDatabase } from "../src/core/storage";
 import {
   addDocuments,
   askInAssistant,
+  useLocalChatModel as connectLocalChatModel,
   coreOf,
   createDataFolder,
   dismissChatSetup,
@@ -12,7 +13,6 @@ import {
   removeDataFolder,
   setLanguage,
   setWindowSize,
-  useLocalChatModel,
 } from "./app";
 
 /*
@@ -59,7 +59,7 @@ for (const language of ["en", "zh-CN"] as const) {
       try {
         await setWindowSize(app, window, width, 760);
         await dismissChatSetup(window);
-        await useLocalChatModel(window);
+        await connectLocalChatModel(window);
         await setLanguage(window, language);
         const memo = join(sources, "Memo.txt");
         const handbook = join(sources, "Handbook.txt");
