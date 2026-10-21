@@ -1,14 +1,16 @@
 import { expect, type Page, test } from "@playwright/test";
-import type { CoreBridge } from "../src/core/api";
+import type { CoreBridge, MeetingTranscript } from "../src/core/api";
 import {
   closeSettings,
   createDataFolder,
   dismissChatSetup,
+  emit,
   frontMindName,
   launchApp,
   leaveText,
   newMind,
   openSettings,
+  paletteFound,
   pointAndClick,
   removeDataFolder,
   setLanguage,
@@ -60,9 +62,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await window.keyboard.press("ControlOrMeta+k");
     await expect(window.getByTestId("palette-search")).toBeFocused();
     await window.keyboard.type(RECORD[language]);
-    await expect(
-      window.getByTestId("palette-item").filter({ hasText: RECORD[language] }),
-    ).toHaveCount(1);
+    await expect(paletteFound(window).filter({ hasText: RECORD[language] })).toHaveCount(1);
     await window.keyboard.press("Escape");
 
     // Words people look for: "transcribe" and "call", 录音 and 转写.
@@ -70,9 +70,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await window.keyboard.press("ControlOrMeta+k");
       await expect(window.getByTestId("palette-search")).toBeFocused();
       await window.keyboard.type(word);
-      await expect(
-        window.getByTestId("palette-item").filter({ hasText: RECORD[language] }),
-      ).toHaveCount(1);
+      await expect(paletteFound(window).filter({ hasText: RECORD[language] })).toHaveCount(1);
       await window.keyboard.press("Escape");
     }
 
@@ -103,7 +101,7 @@ test("once the recording notice is read, Record records in one action, with the 
   await app.close();
 });
 
-test("the first time, ⌘Z right after Record takes the new Mind back", async () => {
+test("the first time, Record makes a Mind with no line, and ⌘Z right after it doesn't take it back: Delete does", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
 
@@ -113,11 +111,152 @@ test("the first time, ⌘Z right after Record takes the new Mind back", async ()
   await expect(window.getByTestId("meeting-start")).toBeVisible();
   expect(await mindsOf(window)).toHaveLength(1);
 
+  await expect(window.getByTestId("undo-message")).toHaveCount(0);
   await leaveText(window);
   await window.keyboard.press("ControlOrMeta+z");
-  await expect.poll(async () => (await mindsOf(window)).length).toBe(0);
+  expect(await mindsOf(window)).toHaveLength(1);
   await app.close();
 });
+
+test("a Record that has begun a recording says nothing, and ⌘Z right after it doesn't take the Mind back", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await readNotice(window);
+
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
+  await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
+  await expect(window.getByTestId("undo-message")).toHaveCount(0);
+
+  await leaveText(window);
+  await window.keyboard.press("ControlOrMeta+z");
+  expect(await mindsOf(window)).toHaveLength(1);
+  await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
+  await app.close();
+});
+
+for (const width of [900, 1100, 1440]) {
+  test(`Record moves nothing on the new Mind's page, from the click to a settled bar, at ${width}px`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    await setWindowSize(app, window, width, 900);
+    await dismissChatSetup(window);
+    await readNotice(window);
+    await window.evaluate(() => {
+      const frames: { top: number; stage: string }[] = [];
+      (globalThis as unknown as { frames: typeof frames }).frames = frames;
+      const tick = () => {
+        const editor = document.querySelector('[data-testid="mind-editor"]');
+        const stage = document.querySelector('[data-testid="meeting-bar"]')
+          ? "bar"
+          : document.querySelector('[data-testid="meeting-bar-room"]')
+            ? "room"
+            : document.querySelector('[data-testid="meeting-start"]')
+              ? "start"
+              : "";
+        if (editor && stage)
+          frames.push({ top: Math.round(editor.getBoundingClientRect().top), stage });
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+
+    await pointAndClick(window, window.getByTestId("plus-menu"));
+    await pointAndClick(window, window.getByTestId("plus-more"));
+    await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+    await expect(window.getByTestId("meeting-bar")).toHaveAttribute("data-status", "recording");
+    await expect(window.getByTestId("meeting-bar-room")).toHaveCount(0);
+    // The engine's "starting" line is done by now, or still hanging below the bar.
+    await expect(window.getByTestId("meeting-transcript-line")).toHaveCount(0);
+
+    const frames = await window.evaluate(
+      () => (globalThis as unknown as { frames: { top: number; stage: string }[] }).frames,
+    );
+    expect(frames.some((frame) => frame.stage === "room")).toBe(true);
+    expect(frames.filter((frame) => frame.stage === "start")).toEqual([]);
+    const tops = frames.map((frame) => frame.top);
+    expect(Math.max(...tops) - Math.min(...tops), JSON.stringify(frames)).toBeLessThanOrEqual(1);
+    await app.close();
+  });
+}
+
+const SPEECH_MODEL_FAILURE =
+  "Couldn’t reach huggingface.co: getaddrinfo ENOTFOUND huggingface.co, and the proxy at proxy.corp.example.invalid:8080 refused the connection.";
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`a status line hangs on the bar's own surface, and a speech-model problem keeps a row of the bar, whole and clear of the notes, at 1100px (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1100, 900);
+      await dismissChatSetup(window);
+      await setLanguage(window, language);
+      await readNotice(window);
+      await pointAndClick(window, window.getByTestId("plus-menu"));
+      await pointAndClick(window, window.getByTestId("plus-more"));
+      await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+      const bar = window.getByTestId("meeting-bar");
+      await expect(bar).toHaveAttribute("data-status", "recording");
+      // Paused, so no event of the engine's replaces what the test shows.
+      await pointAndClick(window, window.getByTestId("meeting-pause"));
+      await expect(bar).toHaveAttribute("data-status", "paused");
+
+      const [meeting] = await meetings(window);
+      const show = (transcript: Partial<MeetingTranscript>) =>
+        emit(app, "meetings.changed", [
+          {
+            ...meeting,
+            transcript: {
+              documentId: null,
+              state: "preparing",
+              lines: 0,
+              partial: null,
+              model: null,
+              cloud: null,
+              fellBack: null,
+              savedPath: null,
+              savedDefaulted: false,
+              problem: null,
+              ...transcript,
+            },
+          },
+        ]);
+      const line = window.getByTestId("meeting-transcript-line");
+
+      await show({});
+      await expect(line).toHaveClass(/meeting-line-over/);
+      const surfaces = await line.evaluate((element) => ({
+        line: getComputedStyle(element).backgroundColor,
+        bar: getComputedStyle(element.closest('[data-testid="meeting-bar"]') ?? element)
+          .backgroundColor,
+      }));
+      expect(surfaces.bar).not.toBe("rgba(0, 0, 0, 0)");
+      expect(surfaces.line).toBe(surfaces.bar);
+
+      await show({ problem: { kind: "download", message: SPEECH_MODEL_FAILURE } });
+      await expect(line).toContainText(SPEECH_MODEL_FAILURE);
+      await expect(line).not.toHaveClass(/meeting-line-over/);
+      const retry = line.getByTestId("meeting-transcript-retry");
+      await expect(retry).toBeVisible();
+      const place = await line.evaluate((element) => {
+        const rect = (target: Element | null) => target?.getBoundingClientRect();
+        return {
+          clipped:
+            element.scrollWidth > element.clientWidth ||
+            element.scrollHeight > element.clientHeight,
+          bar: rect(element.closest('[data-testid="meeting-bar"]')),
+          retry: rect(element.querySelector('[data-testid="meeting-transcript-retry"]')),
+          notes: rect(document.querySelector('[data-testid="mind-editor"]')),
+        };
+      });
+      expect(place.clipped).toBe(false);
+      expect(place.retry?.bottom).toBeLessThanOrEqual(place.bar?.bottom ?? 0);
+      expect(place.retry?.right).toBeLessThanOrEqual(place.bar?.right ?? 0);
+      expect(place.bar?.bottom).toBeLessThanOrEqual(place.notes?.top ?? 0);
+    } finally {
+      await app.close();
+    }
+  });
+}
 
 test("once a recording has run and stopped, ⌘Z never takes its Meeting or audio back", async () => {
   const { app, window } = await launchApp(dataDir);

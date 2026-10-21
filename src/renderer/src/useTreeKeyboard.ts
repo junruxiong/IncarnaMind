@@ -37,6 +37,12 @@ const modelOf = (row: HTMLElement): TreeRow => ({
   name: row.textContent ?? "",
 });
 
+/** What a row stands for, to find it again once the list has drawn it anew or moved it. */
+const thingOf = (row: HTMLElement): string | null => {
+  const object = objectAt(row);
+  return object ? `${object.kind}:${object.id}` : null;
+};
+
 /** A letter, digit or sign that adds to the name typed: not Space, which a row keeps for itself, nor a shortcut. */
 const isNameKey = (event: KeyboardEvent) =>
   !event.ctrlKey &&
@@ -63,8 +69,9 @@ function deleteFrom(row: HTMLElement): void {
 
 /**
  * Keeps exactly one row in the Tab order (the last to have the focus, else the
- * first) and puts the focus back where it was when its row goes (deleted,
- * moved to another Folder), on the row that took its place.
+ * first) and puts the focus back when its row goes: on what the row stood for,
+ * wherever the list has put it now (renamed, so sorted elsewhere; moved to
+ * another Folder), else on the row that took its place (deleted).
  */
 function useOneTabStop(tree: RefObject<HTMLElement | null>): void {
   useEffect(() => {
@@ -73,12 +80,22 @@ function useOneTabStop(tree: RefObject<HTMLElement | null>): void {
     let stop: HTMLElement | null = null;
     let last: HTMLElement | null = null;
     let lastAt = 0;
+    let lastThing: string | null = null;
     let holdsFocus = false;
+
+    const remembered = (rows: HTMLElement[]) =>
+      (lastThing && rows.find((row) => thingOf(row) === lastThing)) ||
+      rows[Math.min(lastAt, rows.length - 1)] ||
+      null;
+    const remember = (row: HTMLElement) => {
+      last = row;
+      lastAt = Math.max(rowsIn(root).indexOf(row), 0);
+      lastThing = thingOf(row);
+    };
 
     const sync = () => {
       const rows = rowsIn(root);
-      const keep =
-        last && rows.includes(last) ? last : (rows[Math.min(lastAt, rows.length - 1)] ?? null);
+      const keep = last && rows.includes(last) ? last : remembered(rows);
       for (const row of rows) {
         const tabindex = row === keep ? "0" : "-1";
         if (row.getAttribute("tabindex") !== tabindex) row.setAttribute("tabindex", tabindex);
@@ -93,8 +110,7 @@ function useOneTabStop(tree: RefObject<HTMLElement | null>): void {
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
           if (last !== lost || document.activeElement !== document.body) return;
-          const rows = rowsIn(root);
-          rows[Math.min(lastAt, rows.length - 1)]?.focus();
+          remembered(rowsIn(root))?.focus();
         }),
       );
     };
@@ -114,8 +130,7 @@ function useOneTabStop(tree: RefObject<HTMLElement | null>): void {
     const onFocusIn = (event: FocusEvent) => {
       const row = event.target;
       if (!(row instanceof HTMLElement) || !row.matches(ROW)) return;
-      last = row;
-      lastAt = Math.max(rowsIn(root).indexOf(row), 0);
+      remember(row);
       holdsFocus = true;
       if (stop === row) return;
       stop?.setAttribute("tabindex", "-1");
@@ -134,8 +149,7 @@ function useOneTabStop(tree: RefObject<HTMLElement | null>): void {
     const onShown = (event: Event) => {
       const row = event.target;
       if (!(row instanceof HTMLElement) || !row.matches(ROW)) return;
-      last = row;
-      lastAt = Math.max(rowsIn(root).indexOf(row), 0);
+      remember(row);
       sync();
     };
     root.addEventListener("focusin", onFocusIn);

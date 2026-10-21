@@ -34,6 +34,8 @@ import {
 } from "./proposalReview";
 import { redrawProposalRewrites, toggleProposalOriginal } from "./proposalRewrites";
 
+const GAP_PX = 6;
+
 /** How long the bar stays once the pointer leaves its change, so it can reach the bar. */
 const LEAVE_MS = 300;
 
@@ -300,6 +302,7 @@ interface Shown {
   count: number;
   from: number;
   to: number;
+  end: number;
   dropped: number;
   citations: PendingProposal["citations"];
   /** Who made someone's change, and when; null for the assistant's. */
@@ -310,11 +313,27 @@ interface Shown {
   focused: boolean;
 }
 
-/** A change's bar sits over the first line of its change, following it as the Mind scrolls. */
+function textUnder(editor: Editor, x: number, y: number, size: DOMRect): boolean {
+  return [8, size.width / 2, size.width - 8].some((across) =>
+    document
+      .elementsFromPoint(x + across, y + size.height / 2)
+      .some(
+        (found) =>
+          found !== editor.view.dom &&
+          editor.view.dom.contains(found) &&
+          (found.textContent ?? "").trim() !== "",
+      ),
+  );
+}
+
+/**
+ * A change's bar sits over the first line of its change, following it as the Mind scrolls; under
+ * its last line instead when it would cover text above and nothing below (#1358).
+ */
 function useBarOver(
   editor: Editor,
   bar: RefObject<HTMLDivElement | null>,
-  change: { from: number; to: number } | null,
+  change: { from: number; to: number; end: number } | null,
 ): void {
   useLayoutEffect(() => {
     const element = bar.current;
@@ -336,15 +355,25 @@ function useBarOver(
         .map((line) => line.getBoundingClientRect().bottom)
         .filter((bottom) => bottom <= changeTop + 1);
       const top = Math.max(8, covered ?? 0, ...lines);
-      void computePosition(reference, element, {
-        placement: "top-start",
-        strategy: "fixed",
-        middleware: [
-          offset(6),
-          flip({ padding: { top } }),
-          shift({ padding: 8, rootBoundary: barRoom(editor) }),
-        ],
-      }).then(({ x, y }) => {
+      const size = element.getBoundingClientRect();
+      const first = reference.getBoundingClientRect();
+      const whole = posToDOMRect(editor.view, change.from, change.end);
+      const below =
+        textUnder(editor, first.left, first.top - GAP_PX - size.height, size) &&
+        !textUnder(editor, first.left, whole.bottom + GAP_PX, size);
+      void computePosition(
+        below ? { ...reference, getBoundingClientRect: () => whole } : reference,
+        element,
+        {
+          placement: below ? "bottom-start" : "top-start",
+          strategy: "fixed",
+          middleware: [
+            offset(GAP_PX),
+            flip({ padding: { top } }),
+            shift({ padding: 8, rootBoundary: barRoom(editor) }),
+          ],
+        },
+      ).then(({ x, y }) => {
         Object.assign(element.style, { left: `${x}px`, top: `${y}px`, visibility: "visible" });
       });
     };
@@ -364,12 +393,14 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
       if (!proposal || proposal.outOfDate) return null;
       const all = pendingIn(current.state);
       const first = proposal.ranges[0] ?? proposal;
+      const last = proposal.ranges.at(-1) ?? proposal;
       return {
         id: proposal.id,
         index: all.findIndex((each) => each.id === proposal.id) + 1,
         count: all.length,
         from: first.from,
         to: first.to,
+        end: last.to,
         dropped: proposal.droppedCitations,
         citations: proposal.citations,
         made: proposal.theirs ? theirChange(current, proposal) : null,

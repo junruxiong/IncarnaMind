@@ -27,7 +27,7 @@ Usage data is a small set of anonymous product events, such as "a Question was a
 - **Only from a build made with an analytics project.** A build without one (from source, by default) sends nothing, asks nothing, and doesn't load the analytics code.
 - **A release asks once, after the first Answer to a Question of your own,** in a card at the bottom of the sidebar, not on the first run. Nothing is sent, or kept to send, unless you choose Send; the default is no.
 - **A test build, for invited testers,** sends usage data until you turn it off, as testers agree to when they join. Its first run says so, in a notice at the bottom of the sidebar with the switch to turn it off.
-- **Local mode** ("Keep everything on this computer", in Settings → Search) turns usage data off, and it stays off.
+- **Local mode** ("Keep everything on this computer", in Settings → Privacy) turns usage data off, and it stays off.
 - **You can change it any time** in Settings → Privacy, under "Usage data". Turning it off stops sending at once and drops anything still waiting to be sent.
 
 ### What's never sent

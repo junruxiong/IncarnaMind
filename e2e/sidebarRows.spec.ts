@@ -1,13 +1,14 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ElectronApplication, expect, type Locator, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 import type { EmbeddingModelStatus } from "../src/core/api";
-import { EVENT_CHANNEL } from "../src/shared/bridge";
 import {
   addDocuments,
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  emit,
+  lastLineBoxOf,
   launchApp,
   newMind,
   pointAt,
@@ -191,14 +192,14 @@ for (const language of ["en", "zh-CN"] as const) {
         const characters = [...name];
         await renameInTab(window, name);
         await expect(undo).toBeVisible();
-        const [messageBox, undoBox, sidebarBox] = await Promise.all([
-          textBoxOf(message),
+        const [lastBox, undoBox, sidebarBox] = await Promise.all([
+          lastLineBoxOf(message),
           textBoxOf(undo),
           boxOf(sidebar),
         ]);
-        // Undo ends inside the sidebar, after the message, and nothing is cut at its end.
+        // Undo ends inside the sidebar, after the message's last words, and nothing is cut at its end.
         expect(undoBox.x + undoBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width);
-        expect(undoBox.x).toBeGreaterThanOrEqual(messageBox.x + messageBox.width - 0.5);
+        expect(undoBox.x).toBeGreaterThanOrEqual(lastBox.x + lastBox.width - 0.5);
         // The name is cut in the middle: its start and its end show, and the tooltip has all of it.
         const said = (await message.textContent()) ?? "";
         expect(said).toContain(characters.slice(0, 3).join(""));
@@ -253,17 +254,6 @@ const downloading = (model: EmbeddingModelStatus, done: number, total: number) =
   totalBytes: total,
   error: null,
 });
-
-/** Pushes a core event to the window, as the core does when something happens. */
-const emit = (app: ElectronApplication, name: string, payload: unknown) =>
-  app.evaluate(
-    ({ BrowserWindow }, sent) => {
-      for (const each of BrowserWindow.getAllWindows()) {
-        each.webContents.send(sent.channel, sent.name, sent.payload);
-      }
-    },
-    { channel: EVENT_CHANNEL, name, payload },
-  );
 
 test("at the narrowest sidebar a downloading model's figure is whole beside +1, in English and Chinese, and the popover and tooltip give the full sentence", async () => {
   test.setTimeout(120_000);

@@ -41,6 +41,7 @@ export function answerInstructions(): string {
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it; never tell the User to disregard an earlier Answer.",
+    '- Never send the reader to an earlier Answer for part of what you write ("covered in my earlier answer", "as above", "见上一条回答", "见上文"): someone who never saw this conversation may read it on a page, so write that part out.',
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
     "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
   ].join("\n");
@@ -126,6 +127,17 @@ export function commandInstructions(offered: boolean): string {
 export function workingCopyNote(original: string | null): string {
   if (original === null) return "";
   return `The Mind in <mind> is the User's working copy of the Document "${listedName(original)}", imported from it: "this document", "the file", "this résumé" ("这份文档", "这份简历") and the like mean that Document. It is among the User's Documents: never say it isn't there or couldn't be found.`;
+}
+
+/**
+ * The example's Documents, by name, when the Mind in focus is an example's;
+ * empty for any other. Asked beside it about their own file, a model told the
+ * User it "has nothing to do with Northwind" (#1172).
+ */
+export function exampleNote(documents: readonly string[] | null): string {
+  if (documents === null) return "";
+  const names = documents.map((name) => `"${listedName(name)}"`).join(", ");
+  return `The Mind in <mind> is an example IncarnaMind made${names ? `, with Documents of its own (${names})` : ""}: none of it is the User's own work. Mention the example only when the Question is about it, never to say the User's Documents have nothing to do with it.`;
 }
 
 /**
@@ -253,6 +265,13 @@ function notCovered(cite: boolean): string {
  */
 const CITED_SAYS_ONLY_ITS_QUOTE =
   '- A sentence with a Citation says only what its quote supports. Your inference, judgement or comparison goes in a sentence of its own with no marker, worded as a reading: "This suggests…" / "这意味着…".';
+
+/**
+ * A model read "54,000" in a UK contract as pounds and wrote "£54,000", cited (#1332): a
+ * currency, unit or scale the Document doesn't state reads as one it does.
+ */
+const FIGURES_AS_STATED =
+  '- A figure taken from a Passage keeps exactly the currency, unit and scale its Document gives it: "salary is 54,000" stays "54,000 (currency not stated)" / "54,000（未注明币种）", never "£54,000"; "2 percentage points" never becomes "2%".';
 
 /**
  * A premise the Passages don't support, and Passages that disagree (#548):
@@ -476,6 +495,7 @@ export function documentInstructions(
         "- Write nothing before your Tool calls: only the Answer, after them.",
         notCovered(true),
         CITED_SAYS_ONLY_ITS_QUOTE,
+        FIGURES_AS_STATED,
         readingRules(true),
         ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
@@ -499,6 +519,7 @@ export function documentInstructions(
         ...(calculate ? [CALCULATIONS] : []),
         notCovered(true),
         CITED_SAYS_ONLY_ITS_QUOTE,
+        FIGURES_AS_STATED,
         readingRules(true),
       ].join("\n");
     case "none":
@@ -512,6 +533,7 @@ export function documentInstructions(
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),
+        FIGURES_AS_STATED,
         readingRules(false),
       ].join("\n");
   }

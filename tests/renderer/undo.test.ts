@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import type { Language } from "../../src/core/language";
 import { saidInLine } from "../../src/renderer/src/lineNames";
-import { type Undoable, UndoRefused, useUndo } from "../../src/renderer/src/undo";
+import {
+  nextToRedo,
+  nextToUndo,
+  type Undoable,
+  UndoRefused,
+  useUndo,
+} from "../../src/renderer/src/undo";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
 /*
@@ -33,7 +39,7 @@ const noWords = (key: MessageKey) => key;
 const names = (changes: readonly Undoable[]) => changes.map((each) => each.name?.(noWords));
 
 beforeEach(() => {
-  useUndo.setState({ done: [], undone: [], line: null });
+  useUndo.setState({ done: [], undone: [], line: null, running: null });
 });
 
 describe("the undo stack", () => {
@@ -88,6 +94,37 @@ describe("the undo stack", () => {
     finish();
     await Promise.all([first, second]);
     expect(log).toEqual(["undo Slow", "undo A"]);
+  });
+
+  // protects=⇧⌘Z pressed while an undo still runs is offered and waits its turn, and ⌘Z during a redo too, so a fast key is never dropped (#1361 review); fails_when=the menu offers nothing while a step runs, or the key is lost; no_claim=the menu's own timing.
+  test("a step asked while another runs is offered, and waits its turn", async () => {
+    const log: string[] = [];
+    let finish: () => void = () => undefined;
+    const slow: Undoable = {
+      said: () => "Slow",
+      name: () => "Slow",
+      undo: () =>
+        new Promise<void>((resolve) => {
+          finish = () => {
+            log.push("undo Slow");
+            resolve();
+          };
+        }),
+      redo: async () => {
+        log.push("redo Slow");
+      },
+    };
+    push(slow);
+    const back = undo();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(nextToRedo(useUndo.getState())).toBe(slow);
+    expect(nextToUndo(useUndo.getState())).toBeUndefined();
+    const again = redo();
+    finish();
+    await Promise.all([back, again]);
+    expect(log).toEqual(["undo Slow", "redo Slow"]);
+    expect(nextToUndo(useUndo.getState())).toBe(slow);
+    expect(useUndo.getState().running).toBeNull();
   });
 
   test("a new change ends what can be redone", async () => {
@@ -244,24 +281,24 @@ describe("the lines follow the interface language", () => {
   test("a line made in English reads in Chinese once the language switches, and Undo still works", async () => {
     const log: string[] = [];
     push({
-      said: (t) => t("undo.mindMade"),
+      said: (t) => t("undo.folderEdited", { name: "Tides" }),
       undo: async () => {
         log.push("undo");
       },
     });
-    expect(shown()).toBe("Made a new Mind");
+    expect(shown()).toBe("Changed the Folder “Tides”");
     language = "zh-CN";
-    expect(shown()).toBe("已新建 Mind");
+    expect(shown()).toBe("已修改文件夹“Tides”");
     await undo();
     expect(log).toEqual(["undo"]);
   });
 
   test("a name in a line is kept, and cut when it is long, in either language", () => {
     const long = "Quarterly review of harbour dues and the wider coastal levy schedule 2026";
-    push({ said: (t) => t("undo.mindStarted", { name: long }), undo: async () => undefined });
-    expect(shown()).toMatch(/^Started “Quarterly.*…/u);
+    push({ said: (t) => t("undo.folderEdited", { name: long }), undo: async () => undefined });
+    expect(shown()).toMatch(/^Changed the Folder “Quarterly.*…/u);
     language = "zh-CN";
-    expect(shown()).toMatch(/^已新建“Quarterly.*…/u);
+    expect(shown()).toMatch(/^已修改文件夹“Quarterly.*…/u);
     expect(shown()).not.toContain(long);
   });
 
