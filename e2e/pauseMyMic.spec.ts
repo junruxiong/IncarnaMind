@@ -42,9 +42,8 @@ const mac = process.platform === "darwin";
 const MIC_KEYS = "Ctrl+Alt+M";
 const PANEL_KEYS = "Ctrl+Alt+H";
 const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Alt+M";
-/** A key the User may set that is also the editor's checklist key. */
-const CLASHING_KEYS = mac ? "Cmd+Shift+9" : "Ctrl+Shift+9";
-const CLASHING_LABEL = mac ? "⇧⌘9" : "Ctrl+Shift+9";
+const CHECKLIST_KEYS = mac ? "Cmd+Shift+9" : "Ctrl+Shift+9";
+const CHECKLIST_LABEL = mac ? "⇧⌘9" : "Ctrl+Shift+9";
 
 /** Lines come every couple of seconds of sound, a few seconds behind it. */
 const LINES_WITHIN = { timeout: 30_000 };
@@ -507,14 +506,14 @@ test("a meeting key the User set to one of the editor's own is held only while a
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await setMeetingKeys(window, { mic: CLASHING_KEYS });
+  await setMeetingKeys(window, { mic: CHECKLIST_KEYS });
   const bar = await recordingMeeting(window);
   const panel = await panelOf(app);
   const mic = bar.getByTestId("meeting-mic");
   const notes = window.getByTestId("mind-editor");
 
   await focusMainWindow(app, true);
-  await expect.poll(() => heldGlobalKeys(app, CLASHING_KEYS)).toBe(false);
+  await expect.poll(() => heldGlobalKeys(app, CHECKLIST_KEYS)).toBe(false);
   await expect(mic).toHaveAttribute("title", "Pause my mic. The other side is still recorded");
   await notes.click();
   await window.keyboard.type("Agenda");
@@ -526,10 +525,10 @@ test("a meeting key the User set to one of the editor's own is held only while a
 
   // The panel pointed at, which is another app in front for the keys: the key pauses the microphone.
   await focusMainWindow(app, false);
-  await expect.poll(() => heldGlobalKeys(app, CLASHING_KEYS)).toBe(true);
+  await expect.poll(() => heldGlobalKeys(app, CHECKLIST_KEYS)).toBe(true);
   await expect(panel.getByTestId("panel-mic")).toHaveAttribute(
     "title",
-    `Pause my mic. The other side is still recorded (${CLASHING_LABEL})`,
+    `Pause my mic. The other side is still recorded (${CHECKLIST_LABEL})`,
   );
   await pointAndClick(panel, panel.getByTestId("panel-template"));
   await pointAndClick(panel, panel.getByTestId("panel-template"));
@@ -544,8 +543,8 @@ test("a meeting key the User set to one of the editor's own is held only while a
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
 
   await focusMainWindow(app, true);
-  await expect.poll(() => heldGlobalKeys(app, CLASHING_KEYS)).toBe(false);
+  await expect.poll(() => heldGlobalKeys(app, CHECKLIST_KEYS)).toBe(false);
   await focusMainWindow(app, false);
-  await expect.poll(() => heldGlobalKeys(app, CLASHING_KEYS)).toBe(true);
+  await expect.poll(() => heldGlobalKeys(app, CHECKLIST_KEYS)).toBe(true);
   await app.close();
 });

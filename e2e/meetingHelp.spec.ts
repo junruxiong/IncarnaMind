@@ -662,7 +662,6 @@ test("help during the call on Windows and Linux: no shortcut is held until the U
   await app.close();
 });
 
-/** Every shortcut row's controls sit inside the row and the row inside the page, at a narrow width. */
 async function expectRowsFit(settings: Locator, rows: Locator): Promise<void> {
   const page = await settings.getByTestId("help-settings").boundingBox();
   if (!page) throw new Error("Settings › Meetings isn't drawn.");

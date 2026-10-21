@@ -6,7 +6,6 @@ import { noteExtensions } from "./editor/noteSchema";
 import { SmartTypography } from "./editor/typography";
 import { TAGS_KEYS } from "./treeKeys";
 
-/** The keys the Mind editor's extensions bind, as Tiptap writes them ("Mod-Shift-9"). */
 function editorShortcuts(): string[] {
   const editor = new Editor({
     element: null,
@@ -33,7 +32,6 @@ function editorShortcuts(): string[] {
   }
 }
 
-/** The editor's letter and digit keys, in the form `keysForm` gives; its other keys can't be a global shortcut. */
 function editorKeyForms(mac: boolean): string[] {
   const forms: string[] = [];
   for (const shortcut of editorShortcuts()) {
@@ -44,6 +42,7 @@ function editorKeyForms(mac: boolean): string[] {
       : /^\d$/.test(key)
         ? `Digit${key}`
         : null;
+    // Only a letter or a digit can be a global shortcut here; the editor binds no F-key.
     if (!code) continue;
     const has = (...names: string[]) => parts.some((part) => names.includes(part));
     forms.push(
@@ -64,8 +63,8 @@ function editorKeyForms(mac: boolean): string[] {
 /**
  * The keys the window binds itself, in the form `keysForm` gives: the commands' (⌘K's and the
  * keymap's), the menu's, the note editor's, and the Library row's Tags…, which the tree binds
- * rather than a command. A meeting key that is one of these would take the
- * User's keystroke from the window, so it is held only while another app is in front.
+ * rather than a command. A meeting key the User set to one of these is dropped while a main
+ * window is in front.
  */
 export function windowKeyForms(mac: boolean): Set<string> {
   const forms = new Set<string>();
@@ -92,7 +91,6 @@ export function windowKeyForms(mac: boolean): Set<string> {
 
 const known = new Map<boolean, Set<string>>();
 
-/** `windowKeyForms`, worked out once per kind of computer. */
 export function windowKeysOf(mac: boolean): ReadonlySet<string> {
   let forms = known.get(mac);
   if (!forms) {

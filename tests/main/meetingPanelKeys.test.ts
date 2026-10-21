@@ -7,7 +7,6 @@ import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { recordingLog } from "../helpers/log";
 
 const electron = vi.hoisted(() => {
-  /** Keys another app holds: registering them fails. */
   const taken = new Set<string>();
   const registered = new Map<string, () => void>();
   const attempts: string[] = [];
@@ -55,13 +54,12 @@ beforeEach(() => {
 
 const held = () => [...electron.registered.keys()].sort();
 
-/** The test hook a test build has for whether one of the app's own windows is in front. */
+// The hook a test build adds to the main process (src/main/meetings/panel.ts).
 const mainInFront = (front: boolean) =>
   (
     globalThis as unknown as { incarnamindMainFocused(front: boolean): void }
   ).incarnamindMainFocused(front);
 
-/** The main process serving the panel for `mac` or not, over a real core with a fake capture. */
 async function serve(mac: boolean, meetingHelpKeys: HelpKeys = {}) {
   const core = startCore(await createTempDataFolder(), {
     audioCapture: createFakeCapture(),
@@ -87,7 +85,6 @@ async function serve(mac: boolean, meetingHelpKeys: HelpKeys = {}) {
   };
 }
 
-/** The window saying which keys it binds itself, as its page does on load. */
 const windowBinds = (mac: boolean, ...keys: string[]) =>
   electron.listeners.get(FILES_CHANNELS.windowKeys)?.(
     {},
