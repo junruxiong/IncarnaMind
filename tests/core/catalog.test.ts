@@ -31,6 +31,7 @@ import { PRESETS } from "../../src/core/providers/catalog/presets";
 import {
   catalogProvider,
   dataUseOf,
+  FIRST_RUN_BEST_EFFORT,
   fieldAccepts,
   fieldUrl,
   isPreset,
@@ -713,6 +714,14 @@ describe("Support tiers (ADR-0019)", () => {
     // Settings' "More providers" holds the rest, and nothing is lost between the two.
     expect([...main, ...more].sort()).toEqual([...KEY_PROVIDERS].sort());
     expect(more).toEqual(expect.arrayContaining([...BEST_EFFORT, "openai-compatible"]));
+  });
+
+  test("the first-run key form also offers Kimi and GLM, the best-effort providers the catalog marks for it", () => {
+    expect([...FIRST_RUN_BEST_EFFORT].sort()).toEqual(["glm", "kimi"]);
+    for (const id of FIRST_RUN_BEST_EFFORT) {
+      expect(catalogProvider(id)?.support).toBe("best-effort");
+      expect(keyProviderGroups().more).toContain(id);
+    }
   });
 
   test("a provider already set up stays among the User's, whatever its tier", () => {

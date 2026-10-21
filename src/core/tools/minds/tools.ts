@@ -49,6 +49,7 @@ import { looksLikeTable } from "../../../shared/markdownTables";
 import {
   changedParagraphs,
   pendingProposals,
+  proposalRequestOf,
   readProposalAttribute,
   recordProposalRequest,
   resolveProposals,
@@ -63,6 +64,7 @@ import {
 } from "../../answers/blocks";
 import type { CheckWrittenInput, WrittenCheck } from "../../answers/checks/written";
 import type { ParagraphAsked } from "../../answers/paragraphAsked";
+import { withoutPointersBack } from "../../answers/pointersBack";
 import {
   BLOCK_ID_ATTRIBUTE,
   type BlockOrigin,
@@ -766,6 +768,7 @@ interface Written {
   notFound: number;
   unrecorded: number;
   searchTalk: number;
+  pointersBack: number;
   /** `ids` in the order of `blocks`. */
   blocks: { mindId: string; ids: readonly string[]; blocks: readonly NodeJSON[] };
 }
@@ -810,7 +813,7 @@ function checkedNotes(checked: WrittenCheck | null): string[] {
   ];
 }
 
-function writtenNotes({ notFound, unrecorded, searchTalk }: Written) {
+function writtenNotes({ notFound, unrecorded, searchTalk, pointersBack }: Written) {
   return [
     ...(notFound > 0
       ? [
@@ -825,6 +828,11 @@ function writtenNotes({ notFound, unrecorded, searchTalk }: Written) {
     ...(searchTalk > 0
       ? [
           `${searchTalk === 1 ? "1 sentence" : `${searchTalk} sentences`} about your searching ${searchTalk === 1 ? "was" : "were"} left out of the Mind: say in your reply what isn't covered.`,
+        ]
+      : []),
+    ...(pointersBack > 0
+      ? [
+          `${pointersBack === 1 ? "1 sentence that only pointed" : `${pointersBack} sentences that only pointed`} to an earlier Answer ${pointersBack === 1 ? "was" : "were"} left out: the Mind is read without this conversation, so if it needs what was pointed to, write that into it.`,
         ]
       : []),
   ];
@@ -963,6 +971,14 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       return [{ action, scope: { kind: "mind", mindId: mind instanceof Refusal ? "" : mind.id } }];
     };
 
+  const logPointersLeft = (left: number, mindId: string, toolCallId: string) => {
+    if (left > 0) {
+      console.info(
+        `${left} Blocks pointing to an earlier Answer were written as they were into Mind ${mindId} (call ${toolCallId}): only a paragraph that is nothing but a pointer is left out.`,
+      );
+    }
+  };
+
   /** A Tool whose refusals say on its card why nothing changed. */
   const reporting = (tool: Tool): Tool => ({
     ...tool,
@@ -1049,6 +1065,23 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       }
     });
     writer.written = blocks.length;
+  };
+
+  /**
+   * A chart a call draws is a write the User asked for, whatever their words were: its change
+   * applies at once with Undo, as the text writes do (#1358). In one Mind only, and not in one
+   * the Answer made, as for any other.
+   */
+  const asksForChart = (writer: Pick<Writer, "mind" | "request" | "made">): void => {
+    if (writer.made) return;
+    askedMind ??= writer.mind.id;
+    if (askedMind !== writer.mind.id) return;
+    minds.edit(writer.mind.id, (note) => {
+      const doc = note.doc;
+      const made = doc ? proposalRequestOf(doc, writer.request) : null;
+      if (!doc || made?.source !== "answer-added" || made.requested) return;
+      recordProposalRequest(doc, writer.request, { ...made, requested: "write" });
+    });
   };
 
   /** What a request did in a Mind: how many of its changes wait there now. */
@@ -1288,15 +1321,25 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const stream = streams.get(toolCallId);
     streams.delete(toolCallId);
     ended.add(toolCallId);
-    const markdown = typeof given === "string" ? given : null;
+    const alone = withoutPointersBack(typeof given === "string" ? given : "");
+    const markdown = typeof given === "string" ? alone.markdown : null;
     const content =
-      typeof given === "string" ? options.blocksOf(given) : answerContent(given.blocks);
+      typeof given === "string" ? options.blocksOf(alone.markdown) : answerContent(given.blocks);
     const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
     let writer = stream?.writer ?? null;
     const unmade = blocks.some(unmadeTable);
     const again = made ? "call create_mind again" : "call add_to_mind again";
     const uncited = unmade ? null : uncitedIn(mind, content, again, { answer: true, retry, made });
-    if (writer && (unmade || uncited || writer.mind.id !== mind.id || writer.named !== after)) {
+    // What streamed in holds the pointers taken out of the whole text: it is written again.
+    const streamedPointers = alone.removed > 0;
+    if (
+      writer &&
+      (unmade ||
+        uncited ||
+        streamedPointers ||
+        writer.mind.id !== mind.id ||
+        writer.named !== after)
+    ) {
       withdraw(writer);
       minds.writing(writer.mind.id, null);
       writer = null;
@@ -1313,6 +1356,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     }
     writeMore(writer, blocks);
     minds.writing(writer.mind.id, null);
+    logPointersLeft(alone.left, writer.mind.id, toolCallId);
     // A chart drawn before `cite` records its table's markers would draw values with no Citation.
     const later = chart !== null && unrecorded > 0 && markdown !== null;
     const drawn = chart && !later ? drawChart(writer, blocks, chart, markdown) : null;
@@ -1342,13 +1386,14 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       notFound,
       unrecorded,
       searchTalk,
+      pointersBack: alone.removed,
       charted,
       blocks: { mindId: writer.mind.id, ids: writer.ids, blocks },
     };
   };
 
   const drawChart = (
-    writer: Pick<Writer, "mind" | "request" | "origin"> & { ids: readonly string[] },
+    writer: Pick<Writer, "mind" | "request" | "origin" | "made"> & { ids: readonly string[] },
     blocks: readonly NodeJSON[],
     asked: ChartAsked,
     markdown: string | null,
@@ -1374,6 +1419,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const doc = note.doc;
       if (doc) setOrigins(doc, ids, writer.origin);
     });
+    asksForChart(writer);
     return { said: "IncarnaMind drew the chart from the table, right after it." };
   };
 
@@ -1400,6 +1446,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const writer = writerFor(mind, null, false);
     writer.anchor = table.picked.id;
     writeMore(writer, [drawn.chart]);
+    asksForChart(writer);
     const change = changeOf(writer, false);
     options.changed(toolCallId, change);
     return `Proposed a chart of the table in “${mind.name}”, right after it. ${outcomeOf(mind, change.request)}`;
@@ -1613,9 +1660,11 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     retry: boolean,
     { again = "call edit_mind again", asWrite = false } = {},
   ): Written & { change: MindChange; dropped: number } => {
-    const content = options.blocksOf(markdown);
+    const alone = withoutPointersBack(markdown);
+    const content = options.blocksOf(alone.markdown);
     const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
     if (blocks.some(unmadeTable)) throw noTable(mind);
+    logPointersLeft(alone.left, mind.id, toolCallId);
     const uncited = uncitedIn(mind, content, again, { answer: false, retry });
     if (uncited) throw uncited;
     const dropped = minds.read(mind.id, (note) => citationsDropped(note, over, blocks));
@@ -1660,13 +1709,20 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     };
     options.changed(toolCallId, change);
     if (unrecorded > 0) {
-      unsettled.set(toolCallId, { mindId: mind.id, ids, markdown, change: revision, sent: change });
+      unsettled.set(toolCallId, {
+        mindId: mind.id,
+        ids,
+        markdown: alone.markdown,
+        change: revision,
+        sent: change,
+      });
     }
     return {
       change,
       notFound,
       unrecorded,
       searchTalk,
+      pointersBack: alone.removed,
       dropped,
       blocks: { mindId: mind.id, ids, blocks },
     };
@@ -1962,6 +2018,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       request: written.change.request,
       ids: written.blocks.ids,
       origin: options.origin,
+      // Over text the User typed in, the request keeps the rule `writeOver` gave it.
+      made: true,
     };
     const later = chart !== null && written.unrecorded > 0;
     const drawn =

@@ -45,9 +45,13 @@ export function registerUpdateCheck(core: Pick<Core, "networkTraffic" | "getPriv
  * Starts this run's update check in the background. Does nothing in an
  * unpackaged app, or when the User turned automatic update checks off.
  */
-export function startAutoUpdates(core: SettingsSource, settleQuit: () => Promise<boolean>): void {
+export function startAutoUpdates(
+  core: SettingsSource,
+  settleQuit: () => Promise<boolean>,
+  releaseDataFolder: () => void,
+): void {
   if (!app.isPackaged) return;
-  checkForUpdates(core, settleQuit).catch((error: unknown) => {
+  checkForUpdates(core, settleQuit, releaseDataFolder).catch((error: unknown) => {
     // Offline, rate-limited, or no release yet: the next start tries again.
     console.warn("The update check failed:", error);
   });
@@ -56,6 +60,7 @@ export function startAutoUpdates(core: SettingsSource, settleQuit: () => Promise
 async function checkForUpdates(
   core: SettingsSource,
   settleQuit: () => Promise<boolean>,
+  releaseDataFolder: () => void,
 ): Promise<void> {
   if (!(await core.getPrivacySettings()).automaticUpdateChecks) return;
   const { autoUpdater } = await import("./autoUpdater");
@@ -79,9 +84,7 @@ async function checkForUpdates(
   await result.downloadPromise;
   const { language } = await core.getSettings();
   if (await ask(language, "ready", version)) {
-    await restartToInstall(autoUpdater, settleQuit, () => {
-      if (process.platform === "linux") app.releaseSingleInstanceLock();
-    });
+    await restartToInstall(autoUpdater, settleQuit, releaseDataFolder);
   }
 }
 

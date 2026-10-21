@@ -22,6 +22,7 @@ import {
   type SaveChatProviderInput,
 } from "../src/core/api";
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
+import { EVENT_CHANNEL } from "../src/shared/bridge";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import { translate } from "../src/shared/i18n";
 import type { TestHooks } from "../src/shared/testHooks";
@@ -651,6 +652,7 @@ export async function addProviderPage(settings: Locator, catalogId: string): Pro
   await settings
     .getByTestId("provider-directory")
     .locator(`[data-catalog-id="${catalogId}"]`)
+    .first()
     .click();
   const page = settings.getByTestId("provider-add");
   await expect(page).toHaveAttribute("data-catalog-id", catalogId);
@@ -776,6 +778,45 @@ export async function savedPath(window: Page, name: string): Promise<string> {
   await expect(done).toContainText(`Saved “${name}” in `, { timeout: 30_000 });
   return (await done.getAttribute("title")) ?? "";
 }
+
+/**
+ * Opens a saved page in a window of its own, in a session with the network off that records
+ * every request it is asked for (`requestsMade`), as a reader opening the file in a browser would.
+ */
+export async function openSavedPage(app: ElectronApplication, path: string): Promise<Page> {
+  const opened = app.waitForEvent("window");
+  await app.evaluate(async ({ BrowserWindow, session }, file) => {
+    const offline = session.fromPartition("saved-page", { cache: false });
+    offline.enableNetworkEmulation({ offline: true });
+    const requested: string[] = [];
+    (globalThis as { savedPageRequests?: string[] }).savedPageRequests = requested;
+    offline.webRequest.onBeforeRequest((details, callback) => {
+      requested.push(details.url);
+      callback({ cancel: !details.url.startsWith("file:") });
+    });
+    const window = new BrowserWindow({
+      width: 1100,
+      height: 760,
+      useContentSize: true,
+      // macOS keeps a window no taller than the screen otherwise, and CI's Mac has a small one.
+      enableLargerThanScreen: true,
+      webPreferences: {
+        session: offline,
+        sandbox: true,
+        contextIsolation: true,
+        backgroundThrottling: false,
+      },
+    });
+    await window.loadFile(file);
+  }, path);
+  const page = await opened;
+  await page.waitForLoadState("load");
+  return page;
+}
+
+/** Every address the page `openSavedPage` opened has asked for, the ones it was refused included. */
+export const requestsMade = (app: ElectronApplication) =>
+  app.evaluate(() => (globalThis as { savedPageRequests?: string[] }).savedPageRequests ?? []);
 
 /** The menu of the Mind's tab, opened by a right-click on the tab, as a person opens it. */
 export async function tabMenu(window: Page): Promise<Locator> {
@@ -1181,6 +1222,17 @@ export async function catchCopies(window: Page): Promise<void> {
 export const copied = (window: Page) =>
   window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
 
+/** Pushes a core event to the window, as the core does when something happens. */
+export const emit = (app: ElectronApplication, name: string, payload: unknown) =>
+  app.evaluate(
+    ({ BrowserWindow }, sent) => {
+      for (const each of BrowserWindow.getAllWindows()) {
+        each.webContents.send(sent.channel, sent.name, sent.payload);
+      }
+    },
+    { channel: EVENT_CHANNEL, name, payload },
+  );
+
 /** Switches the interface's language, as Settings does. */
 export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
   return window.evaluate(
@@ -1330,14 +1382,19 @@ export async function expectReadyDocuments(window: Page, count: number): Promise
 
 /** Ends the first open (hides its steps), so the shell shows everything, as it does for a returning User. */
 export async function leaveFirstOpen(window: Page): Promise<void> {
-  await window.evaluate(async () => {
+  await markSteps(window, { hidden: true });
+  await expect(window.getByTestId("first-open-steps")).toHaveCount(0);
+}
+
+/** Marks steps of the first open done (or hides it), as the User doing them would. */
+export async function markSteps(window: Page, done: object): Promise<void> {
+  await window.evaluate(async (patch) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     const { device } = await bridge.getSettings();
     await bridge.updateSettings({
-      device: { gettingStarted: { ...device.gettingStarted, hidden: true } },
+      device: { gettingStarted: { ...device.gettingStarted, ...patch } },
     });
-  });
-  await expect(window.getByTestId("first-open-steps")).toHaveCount(0);
+  }, done);
 }
 
 /** The id of the Document listed in the sidebar under `name`. */
@@ -1378,6 +1435,10 @@ export function textBoxOf(target: Locator) {
     return { x, y, width, height };
   });
 }
+
+/** ⌘K's rows for what it found, not its last row, which asks about the words typed. */
+export const paletteFound = (window: Page): Locator =>
+  window.locator('[data-testid="palette-item"]:not([data-kind="ask"])');
 
 export function lastLineBoxOf(target: Locator) {
   return target.evaluate((element) => {
