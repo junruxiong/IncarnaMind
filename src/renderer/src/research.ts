@@ -20,6 +20,8 @@ import { MAX_RESEARCH_STEPS } from "../../shared/research";
 import { searchesTheWeb } from "../../shared/webSearch";
 import { composerScope, useComposer } from "./composer";
 import { core } from "./core";
+import { useT } from "./i18n";
+import { useModelNames } from "./modelNames";
 import { useAppStore } from "./store";
 import { useTasks } from "./tasks";
 
@@ -50,6 +52,20 @@ export function useWebReach(model: ChatModelChoice | null): WebReach {
   if (localOnly) return "local-mode";
   if (!kind || !searchesTheWeb(kind)) return "unsupported";
   return on ? "ready" : "off";
+}
+
+/** Why research with `model` reads the Library only, in the interface's words; null when it can search the web. */
+export function useWebMissing(reach: WebReach, model: ChatModelChoice | null): string | null {
+  const t = useT();
+  const nameOf = useModelNames();
+  const fallback = useAppStore((state) => state.settings?.user.chatModel ?? null);
+  const shown = model ?? fallback;
+  if (reach === "ready") return null;
+  if (reach === "off") return t("research.plan.webOff");
+  if (reach === "local-mode") return t("research.plan.localMode");
+  return t("research.plan.webUnavailable", {
+    model: shown ? nameOf(shown.modelId, shown.providerId).name : t("answer.error.thisModel"),
+  });
 }
 
 /** Why the plan has no steps from the model, or the Task didn't start. */

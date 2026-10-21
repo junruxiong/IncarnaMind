@@ -350,7 +350,7 @@ describe("Check this Mind", () => {
     expect(estimate.tokens / (run?.tokens ?? 0)).toBeLessThan(1.5);
   });
 
-  test("says why there is nothing to check: no sentences, or no Documents to check against, unless every Document is", async () => {
+  test("says why there is nothing to check: no sentences; a Mind in a Folder with no Documents checks every Document (#1359)", async () => {
     const { core } = await setUp();
     const empty = await core.createMind({ title: "Empty", folderId: null });
     expect(await core.planMindCheck(empty.id, "all")).toEqual({ kind: "nothing" });
@@ -359,12 +359,7 @@ describe("Check this Mind", () => {
     const client = await connectToMind(core, lonely.id);
     writeMind(client, [{ type: "paragraph", attrs: { id: "moon" }, content: [text(MOON)] }]);
     await client.settled();
-    expect(await core.planMindCheck(lonely.id, "all")).toEqual({
-      kind: "no-documents",
-      folderId: emptyFolder.id,
-    });
-    // Against every Document, the Folder's emptiness doesn't stop it.
-    expect(await core.planMindCheck(lonely.id, "all", true)).toMatchObject({
+    expect(await core.planMindCheck(lonely.id, "all")).toMatchObject({
       kind: "ready",
       sentences: 1,
     });

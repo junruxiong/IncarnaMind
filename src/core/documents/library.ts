@@ -1518,7 +1518,8 @@ export function createLibrary(options: LibraryOptions) {
     /**
      * Links a folder (see `CoreApi.addLinkedFolder`). Nested Linked folders
      * are merged into the outer one: a folder inside one adds nothing, and
-     * one around others takes their place, their Documents keeping their ids.
+     * one around others takes their place. The Documents already inside it,
+     * theirs and files added on their own, are its at once, keeping their ids.
      */
     async add(input: unknown): Promise<LinkedFolder> {
       const path = await resolveFolder(input);
@@ -1527,13 +1528,13 @@ export function createLibrary(options: LibraryOptions) {
       if (outer) return toLinkedFolder(outer);
       const at = now();
       const id = randomUUID();
+      const taken: string[] = [];
       db.transaction(() => {
         db.run(
           `INSERT INTO linked_folders (id, path, created_at, updated_at) VALUES (?, ?, ?, ?)`,
           [id, path, at, at],
         );
         for (const inner of linked.filter((row) => isInside(path, row.path))) {
-          // Its Documents become the new one's at its first scan: same paths.
           stopWatcher(inner.id);
           statuses.delete(inner.id);
           onlineOnly.delete(inner.id);
@@ -1545,7 +1546,21 @@ export function createLibrary(options: LibraryOptions) {
           ]);
           folders.removeAll(inner.id, at);
         }
+        const owner = folderRow(id);
+        if (!owner) return;
+        // Taken now rather than at its first scan, so unlinking it straight away takes them too.
+        for (const document of documentsUnder(path)) {
+          db.run(`UPDATE documents SET ${PLACE_COLUMNS}, updated_at = ? WHERE id = ?`, [
+            ...placeValues(placeOf(document.path, owner)),
+            at,
+            document.id,
+          ]);
+          taken.push(document.id);
+        }
       });
+      const foldersChanged = taken.length > 0 && syncFolders(id);
+      if (taken.length > 0) hooks.moved(taken);
+      if (foldersChanged) hooks.foldersChanged();
       statuses.set(id, "scanning");
       request({ folders: [id] });
       announceFolders();
@@ -1556,18 +1571,23 @@ export function createLibrary(options: LibraryOptions) {
 
     /**
      * Unlinks a folder: its Documents and Folders leave the index, but for
-     * the text their Citations quote. Nothing on disk changes.
+     * the text their Citations quote, and for the Documents in `keep`, which
+     * stay as files added on their own. Nothing on disk changes.
      */
-    remove(idInput: unknown): void {
+    remove(idInput: unknown, keepInput: unknown = []): void {
       const row = getRow(idInput);
+      if (!Array.isArray(keepInput) || !keepInput.every((id) => typeof id === "string")) {
+        throw new InvalidInputError({ key: "error.linkedFolder.keep" });
+      }
+      const keep = new Set<string>(keepInput);
       stopWatcher(row.id);
       const at = now();
-      const ids = db
-        .all<{ id: string }>(
-          "SELECT id FROM documents WHERE linked_folder_id = ? AND deleted_at IS NULL",
-          [row.id],
-        )
-        .map((each) => each.id);
+      const live = db.all<{ id: string; path: string }>(
+        "SELECT id, path FROM documents WHERE linked_folder_id = ? AND deleted_at IS NULL",
+        [row.id],
+      );
+      const ids = live.filter((each) => !keep.has(each.id)).map((each) => each.id);
+      const kept = live.filter((each) => keep.has(each.id));
       let foldersChanged = false;
       db.transaction(() => {
         hooks.remove(ids, at);
@@ -1576,8 +1596,16 @@ export function createLibrary(options: LibraryOptions) {
           at,
           row.id,
         ]);
+        for (const document of kept) {
+          db.run(`UPDATE documents SET ${PLACE_COLUMNS}, updated_at = ? WHERE id = ?`, [
+            ...placeValues(placeOf(document.path, null)),
+            at,
+            document.id,
+          ]);
+        }
         foldersChanged = folders.removeAll(row.id, at);
       });
+      if (kept.length > 0) hooks.moved(kept.map((each) => each.id));
       statuses.delete(row.id);
       onlineOnly.delete(row.id);
       unsupported.delete(row.id);
