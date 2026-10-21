@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import type { AudioCapture, AudioSink } from "../../src/core";
 import { readVtt } from "../../src/core/documents/formats/vtt";
 import { listParts, meetingFolder } from "../../src/core/meetings/audioFiles";
+import { createFakeCapture } from "../../src/core/meetings/fakeCapture";
 import { createFakeSpeechEngine } from "../../src/core/transcription/fake";
 import { createTempDataFolder, manualClock, nextTurn, startCore } from "../helpers/core";
 import { inProcessTranscriber, NO_TRANSCRIPTION_FILES, until } from "../helpers/transcription";
@@ -368,5 +369,70 @@ describe("Pausing the microphone, in the capture pipeline, with recorded voices"
       expect(line.startMs >= RESUMED_AT || line.endMs <= PAUSED_AT).toBe(true);
     }
     expect(said(lost, "Me").some((line) => line.endMs <= PAUSED_AT)).toBe(true);
+  });
+});
+
+describe("Pausing the microphone just after it was heard", () => {
+  test("the computer's sound stamped ahead of the microphone doesn't carry the microphone's stream past the press: no audio stamped after it reaches the transcriber, and no Me line runs into the stretch", async () => {
+    const dataDir = await createTempDataFolder();
+    const clock = manualClock();
+    const capture = createFakeCapture();
+    const engine = inProcessTranscriber();
+    const sent: Record<string, number> = {};
+    const finished: string[] = [];
+    const core = startCore(dataDir, {
+      audioCapture: capture,
+      transcriber: {
+        ...engine.transcriber,
+        push(stream, samples) {
+          sent[stream] = (sent[stream] ?? 0) + samples.length;
+          engine.transcriber.push(stream, samples);
+        },
+        finish(stream) {
+          finished.push(stream);
+          return engine.transcriber.finish(stream);
+        },
+      },
+      transcriptionModelSource: NO_TRANSCRIPTION_FILES,
+      now: clock.now,
+    });
+    await core.updateSettings({ device: { meetingNoticeAccepted: true } });
+    await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
+    const { id } = await core.createMeeting();
+    await core.startMeeting({ meetingId: id, systemAudio: true });
+    await until(core, id, (transcript) => transcript.state === "live");
+
+    // As a busy computer does: the core is slow with the microphone's first frame, so the
+    // computer's sound is heard 10 ms after it and stays stamped 10 ms ahead of the microphone.
+    clock.advance(30);
+    capture.push("microphone", 30);
+    clock.advance(10);
+    capture.push("system", 30);
+    await nextTurn();
+    for (let tick = 1; tick <= 30; tick++) {
+      clock.advance(tick === 1 ? 90 : 100);
+      capture.push("microphone", 100);
+      capture.push("system", 100);
+      await nextTurn();
+    }
+    // The microphone was last heard up to 3,030 ms, mid-way through one of the engine's 20 ms frames.
+    clock.advance(6);
+    const pressedAt = 3036;
+    await core.setMeetingMicrophone({ meetingId: id, paused: true });
+    clock.advance(1000);
+    capture.push("system", 1000);
+    await nextTurn();
+    await core.stopMeeting(id);
+    const saved = await until(core, id, (transcript) => transcript.state === "saved");
+    const { cues, gaps } = readVtt(readFileSync(saved.savedPath ?? "", "utf8"));
+
+    const microphone = Object.keys(sent).filter(isMicrophone);
+    expect(microphone).toHaveLength(1);
+    expect(finished).toEqual(expect.arrayContaining(microphone));
+    expect(sent[microphone[0] ?? ""]).toBeLessThanOrEqual((pressedAt * RATE) / 1000);
+    expect(gaps.map((gap) => [gap.fromMs, gap.reason])).toEqual([[pressedAt, "muted"]]);
+    const me = cues.filter((cue) => cue.speaker === "Me");
+    expect(me.length).toBeGreaterThan(0);
+    expect(me.filter((cue) => cue.endMs > pressedAt)).toEqual([]);
   });
 });

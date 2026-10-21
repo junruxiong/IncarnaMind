@@ -455,7 +455,7 @@ export function createMeetings(options: MeetingsOptions) {
     options.onCapturingChange(true);
     transcripts?.begin(row.id, period.offsetMs, () => current.systemSignal);
     const silenced = microphonePausedAt.has(row.id);
-    if (silenced) transcripts?.microphonePaused(row.id);
+    if (silenced) transcripts?.microphonePaused(row.id, period.offsetMs);
     current.session = capture.start(
       { systemAudio: systemAudio && capture.systemAudio },
       {
@@ -868,7 +868,7 @@ export function createMeetings(options: MeetingsOptions) {
         if (capturing) {
           endRun(capturing, "microphone");
           capturing.session?.setMicrophone(false);
-          transcripts?.microphonePaused(row.id);
+          transcripts?.microphonePaused(row.id, atMs);
         }
         log.info("meeting.microphonePaused", { meetingId: row.id });
       } else {

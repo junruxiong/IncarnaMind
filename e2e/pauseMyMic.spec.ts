@@ -59,6 +59,35 @@ const capture = (app: ElectronApplication) =>
     return { running: fake.running, microphoneOn: fake.microphoneOn };
   });
 
+const mainNow = (app: ElectronApplication) => app.evaluate(() => Date.now());
+
+const sentBetween = (app: ElectronApplication, from: number, to: number) =>
+  app.evaluate(
+    (_electron, [after, before]) => {
+      const sent = (globalThis as { incarnamindTranscribed?: { stream: string; at: number }[] })
+        .incarnamindTranscribed;
+      if (!sent) throw new Error("The app isn't transcribing with the fake transcriber.");
+      const within = sent.filter((each) => each.at > after && each.at < before);
+      return {
+        microphone: within.filter((each) => /:microphone(:\d+)?$/.test(each.stream)).length,
+        system: within.filter((each) => each.stream.endsWith(":system")).length,
+      };
+    },
+    [from, to] as const,
+  );
+
+// Waits until some of the computer's sound has gone too, so audio was flowing while it counted.
+async function sentSince(app: ElectronApplication, from: number) {
+  let sent = { microphone: 0, system: 0 };
+  await expect
+    .poll(async () => {
+      sent = await sentBetween(app, from, await mainNow(app));
+      return sent.system;
+    })
+    .toBeGreaterThan(0);
+  return sent;
+}
+
 async function recordingMeeting(window: Page): Promise<Locator> {
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   await expect(bar.getByTestId("meeting-transcript-toggle")).toBeEnabled({ timeout: 20_000 });
@@ -181,6 +210,8 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   await expect(mic).toHaveAccessibleName("Pause my mic");
   await expect(mic).toHaveAttribute("title", `Resume my mic (${MIC_LABEL})`);
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(false);
+  const whilePaused: { microphone: number; system: number }[] = [];
+  let pausedFrom = await mainNow(app);
   const line = bar.getByTestId("meeting-line-microphone-paused");
   await expect(line).toHaveText(/^My mic paused since \d+:\d\d · Resume$/);
   const open = transcript.getByTestId("transcript-mic-paused");
@@ -202,6 +233,7 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
     window.getByTestId("palette-item").filter({ hasText: "Resume my mic" }),
   ).toContainText(MIC_LABEL);
   await shot(window, "mic-palette-en");
+  whilePaused.push(await sentSince(app, pausedFrom));
   expect(
     await pressedAfter(window, "meeting-mic", false, () => window.keyboard.press("Enter")),
   ).toBeLessThan(100);
@@ -216,6 +248,7 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   await pressHeldKeys(app, "mic");
   await expect(mic).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(false);
+  whilePaused.push(await sentSince(app, await mainNow(app)));
   await pressHeldKeys(app, "mic");
   await expect(mic).toHaveAttribute("aria-pressed", "false");
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
@@ -225,6 +258,8 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
     await pressedAfter(window, "meeting-mic", true, () => window.keyboard.press("Enter")),
   ).toBeLessThan(100);
   await expect(mic).toBeFocused();
+  await expect.poll(async () => (await capture(app)).microphoneOn).toBe(false);
+  pausedFrom = await mainNow(app);
 
   await window.keyboard.press("ControlOrMeta+Shift+KeyP");
   await expect(bar).toHaveAttribute("data-status", "paused");
@@ -235,6 +270,7 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   await expect(bar).toHaveAttribute("data-status", "recording");
   await expect.poll(async () => capture(app)).toEqual({ running: true, microphoneOn: false });
   await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(true);
+  whilePaused.push(await sentSince(app, pausedFrom));
   await pointAndClick(window, mic);
   await expect(mic).toHaveAttribute("aria-pressed", "false");
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
@@ -247,6 +283,8 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
       return lines.filter((each) => each.speaker === "Me" && each.start >= last).length;
     }, LINES_WITHIN)
     .toBeGreaterThanOrEqual(1);
+
+  expect(whilePaused.map((each) => each.microphone)).toEqual([0, 0, 0]);
 
   await bar.getByTestId("meeting-stop").click();
   await expect(bar).toBeHidden();

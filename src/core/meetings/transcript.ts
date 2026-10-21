@@ -1348,14 +1348,15 @@ export function createTranscripts(options: TranscriptsOptions) {
     },
 
     /**
-     * The User paused their microphone: what it heard is let out and its stream finished, so its
-     * lines are final. Nothing is sent for it, not even silence, until `microphoneResumed`.
+     * The User paused their microphone at `atMs` in the Meeting's time: what it heard up to there
+     * is let out and its stream finished, so its lines are final. Nothing is sent for it, not even
+     * silence, until `microphoneResumed`.
      */
-    microphonePaused(meetingId: string): void {
+    microphonePaused(meetingId: string, atMs: number): void {
       const state = states.get(meetingId);
       const live = state?.live;
       if (!state || !live) return;
-      feed(state, live.tracks.pauseMicrophone());
+      feed(state, live.tracks.pauseMicrophone(atMs));
       feed(state, { atMs: live.tracks.atMs, lengthMs: 0, microphone: null, system: null });
     },
 
