@@ -98,14 +98,17 @@ What this leaves different, on purpose or for want of a rule: years said in two 
 
 ## Results
 
-**This computer, Qwen3-ASR 0.6B int8 with Silero VAD** (the app's first engine, #136), the first 4 minutes of one case in each cell. 2026-10-21, Apple M2 Max, while the machine ran other work (load average 20 to 30), `INCARNAMIND_EVAL_UNTIL_MINUTES=4`:
+**This computer, Qwen3-ASR 0.6B int8 with Silero VAD** (the app's first engine, #136) on the whole set. 2026-10-21, Apple M2 Max, `npm run eval:meetings`, while the machine ran other work (load average 21 to 23, so the real-time factors are on the slow side):
 
-| Cell | Case | Error rate | DER ("Me" and "Them" labels only, collar 0.25 s) |
-|---|---|---|---|
-| English, online | en-online-EN2002a | WER 26.3% (210 of 797 words) | 27.0% |
-| English, room | en-room-ES2004b | WER 36.4% (133 of 365 words) | not scored |
-| Chinese, online | zh-online-R8007_M8011 | CER 16.0% (212 of 1,327 characters) | 28.4% |
-| Chinese, room | zh-room-R8003_M8001 | CER 20.6% (216 of 1,048 characters) | not scored |
-| Mixed | mixed-conversation-test-1 | MER 31.4% (273 of 870 units) | not scored |
+| Language | Setting | Cases | Minutes | Error rate | DER ("Me" and "Them" labels only, collar 0.25 s) | Real-time factor |
+|---|---|---|---|---|---|---|
+| English | online | 2 | 69.5 | WER 27.4% (3,617 of 13,206 words) | 45.2% | 0.20× |
+| English | room | 2 | 75.9 | WER 23.8% (2,626 of 11,020 words) | not scored | 0.14× |
+| Chinese | online | 2 | 68.4 | CER 17.3% (3,403 of 19,681 characters) | 30.8% | 0.22× |
+| Chinese | room | 2 | 65.4 | CER 38.8% (9,303 of 23,961 characters) | not scored | 0.20× |
+| Mixed | conversation | 2 | 37.1 | MER 33.5% (2,513 of 7,507 units) | not scored | 0.16× |
 
-Four minutes of one meeting each is a check that the set works, not a ranking. The 15% and 20% gates are set for the whole of the set, on the machine the alpha names; #137's bake-off runs the whole set on three machines.
+- The DER here is the baseline before any speaker pass: every microphone line is "Me" and every system line "Them", so it is the confusion among the other participants. #138 is measured against this.
+- The worst case, `zh-room-R8007_M8010` (CER 49.4%), is four people talking over each other in a room: the reference has 1,181 turns, the engine returns 117 lines with 10,121 characters against the reference's 17,028, and the engine's log reports a line cut at its 128-token limit three times in the run.
+- Per-case scores are in the report that `npm run eval:meetings:score` writes (`score.md` and `score.json`).
+- Numbers from one run on one busy machine: a check that the set works and a baseline to beat, not a ranking. #137's bake-off runs the whole set on three machines.
