@@ -96,8 +96,10 @@ const tray = (window: Page): Locator =>
   window.getByTestId("task-tray").getByTestId("question-card");
 
 for (const [language, width] of [
+  ["en", 900],
   ["en", 1440],
   ["zh-CN", 900],
+  ["zh-CN", 1440],
 ] as const) {
   const words = WORDS[language];
   test(`with no answer yet, an export to Word asks in the tray, keeps the answer and saves; the next doesn't ask (${language}, ${width}px)`, async () => {
