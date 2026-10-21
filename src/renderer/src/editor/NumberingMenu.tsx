@@ -8,9 +8,9 @@ import {
   numberingMarker,
 } from "../../../shared/numbering";
 import { keysHere } from "../commands/keymap";
-import { files } from "../core";
 import { ChevronIcon } from "../components/icons";
 import { CheckLineIcon } from "../components/lineIcons";
+import { files } from "../core";
 import { useT } from "../i18n";
 import { caretAnchor } from "./LinkField";
 import { keepSelection, useMenuKeys } from "./menuKeys";
