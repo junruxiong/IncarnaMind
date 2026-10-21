@@ -14,6 +14,7 @@ const LOAD = `
     createAsync: typeof sherpa.OfflineRecognizer?.createAsync,
     vad: typeof sherpa.Vad,
     diarization: typeof sherpa.OfflineSpeakerDiarization?.prototype.process,
+    voiceprint: typeof sherpa.SpeakerEmbeddingExtractor?.prototype.compute,
     separator: typeof (await createSherpaSeparator()),
   }));
 `;
@@ -37,6 +38,7 @@ test("the engine modules find sherpa-onnx-node's recognizer, voice detector and 
     createAsync: "function",
     vad: "function",
     diarization: "function",
+    voiceprint: "function",
     separator: "function",
   });
 });

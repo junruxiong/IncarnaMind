@@ -82,6 +82,17 @@ declare module "sherpa-onnx-node" {
     speaker: number;
   }
 
+  export interface OnlineStream {
+    acceptWaveform(waveform: Waveform): void;
+    inputFinished(): void;
+  }
+
+  export class SpeakerEmbeddingExtractor {
+    constructor(config: { model: string; numThreads: number; debug: number });
+    createStream(): OnlineStream;
+    compute(stream: OnlineStream, enableExternalBuffer?: boolean): Float32Array;
+  }
+
   export class OfflineSpeakerDiarization {
     constructor(config: OfflineSpeakerDiarizationConfig);
     readonly sampleRate: number;

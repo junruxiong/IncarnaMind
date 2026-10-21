@@ -11,6 +11,7 @@
  * INCARNAMIND_EVAL_MEETING_CASES: the cases' folder (default: the evaluation cache's meetings/cases).
  * INCARNAMIND_EVAL_SPEAKER_CASES: case ids to run, comma-separated (default: all).
  * INCARNAMIND_EVAL_SPEAKER_THRESHOLDS: clustering thresholds to try (default: the app's).
+ * INCARNAMIND_EVAL_SPEAKER_SAME: how alike two voiceprints are to be one person, to try (default: the app's).
  * INCARNAMIND_EVAL_SPEAKER_MINUTES: only the first minutes of each case, for tuning.
  * INCARNAMIND_EVAL_SPEAKER_HOUR=1: also an hour of the room cases one after the other, for the real-time factor.
  */
@@ -25,7 +26,11 @@ import type { Cue } from "../../src/core/documents/formats/vtt";
 import { downloadModel } from "../../src/core/embedding/download";
 import { writePart } from "../../src/core/meetings/audioFiles";
 import { labelled } from "../../src/core/meetings/speakerPass";
-import { CLUSTER_THRESHOLD, createSherpaSeparator } from "../../src/core/transcription/diarization";
+import {
+  CLUSTER_THRESHOLD,
+  createSherpaSeparator,
+  SAME_PERSON,
+} from "../../src/core/transcription/diarization";
 import { SILERO_VAD } from "../../src/core/transcription/model";
 import { createSileroDetectors } from "../../src/core/transcription/sherpa";
 import { createSpeakerModel } from "../../src/core/transcription/speakerModel";
@@ -35,6 +40,9 @@ import { evalCache } from "../lib/cache";
 const CASES = process.env.INCARNAMIND_EVAL_MEETING_CASES ?? join(evalCache(), "meetings", "cases");
 const ONLY = process.env.INCARNAMIND_EVAL_SPEAKER_CASES?.split(",");
 const THRESHOLDS = (process.env.INCARNAMIND_EVAL_SPEAKER_THRESHOLDS ?? String(CLUSTER_THRESHOLD))
+  .split(",")
+  .map(Number);
+const SAME = (process.env.INCARNAMIND_EVAL_SPEAKER_SAME ?? String(SAME_PERSON))
   .split(",")
   .map(Number);
 const MINUTES = Number(process.env.INCARNAMIND_EVAL_SPEAKER_MINUTES ?? "0");
@@ -180,10 +188,12 @@ describe.runIf(existsSync(CASES))("The speaker pass on the meeting audio set", (
       `speakers-${new Date().toISOString().replace(/[:.]/g, "-")}`,
     );
     const rows: string[] = [];
-    for (const threshold of THRESHOLDS) {
-      const separate = await createSherpaSeparator({ threshold });
-      const lines = join(out, `lines-${threshold}`);
-      const raw = join(out, `turns-${threshold}`);
+    for (const [threshold, samePerson] of THRESHOLDS.flatMap((t) =>
+      SAME.map((same) => [t, same] as const),
+    )) {
+      const separate = await createSherpaSeparator({ threshold, samePerson });
+      const lines = join(out, `lines-${threshold}-${samePerson}`);
+      const raw = join(out, `turns-${threshold}-${samePerson}`);
       await mkdir(lines, { recursive: true });
       await mkdir(raw, { recursive: true });
       for (const each of cases) {
@@ -202,7 +212,7 @@ describe.runIf(existsSync(CASES))("The speaker pass on the meeting audio set", (
         const audio = each.separate.length / RATE;
         const hypothesis = {
           case: each.id,
-          transcriber: `speaker pass, threshold ${threshold}`,
+          transcriber: `speaker pass, threshold ${threshold}, same person ${samePerson}`,
           processingSeconds: seconds,
         };
         await writeFile(
@@ -215,7 +225,7 @@ describe.runIf(existsSync(CASES))("The speaker pass on the meeting audio set", (
         );
         const voices = new Set(turns.map((turn) => turn.voice)).size;
         const labels = new Set(final.map((cue) => cue.speaker)).size;
-        const row = `| ${threshold} | ${each.id} | ${(audio / 60).toFixed(1)} min | ${voices} | ${labels} | ${(seconds / audio).toFixed(3)}× | ${load.toFixed(1)} |`;
+        const row = `| ${threshold} / ${samePerson} | ${each.id} | ${(audio / 60).toFixed(1)} min | ${voices} | ${labels} | ${(seconds / audio).toFixed(3)}× | ${load.toFixed(1)} |`;
         console.log(row);
         rows.push(row);
       }
@@ -225,12 +235,12 @@ describe.runIf(existsSync(CASES))("The speaker pass on the meeting audio set", (
       [
         `${availableParallelism()} cores, ${speakers.threads} threads for the pass.`,
         "",
-        "| Threshold | Case | Audio | Voices found | Labels | Time / audio | Load |",
+        "| Threshold / same person | Case | Audio | Voices found | Labels | Time / audio | Load |",
         "|---|---|---|---|---|---|---|",
         ...rows,
       ].join("\n"),
     );
     console.log(`Hypotheses in ${out}: score each folder with eval/meetings' scorer.`);
-    expect(rows).toHaveLength(cases.length * THRESHOLDS.length);
+    expect(rows).toHaveLength(cases.length * THRESHOLDS.length * SAME.length);
   });
 });
