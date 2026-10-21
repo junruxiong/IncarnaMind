@@ -7322,11 +7322,19 @@ export interface SharePagePreferences {
  */
 export type TheirChangesShown = "shown" | "accepted";
 
-/** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
+/** What a Word file does with the text IncarnaMind wrote: marks it with a comment, or leaves it out. */
+export const MARK_AI_TEXT_CHOICES = ["mark", "leave"] as const;
+
+export type MarkAiTextChoice = (typeof MARK_AI_TEXT_CHOICES)[number];
+
+/**
+ * A Word export's own choices (#107). The switches are on until the User turns them off; marking
+ * AI text is the User's to answer, once: null until they have (see `ExportMindOptions`).
+ */
 export interface WordExportPreferences {
   includeQuestions: boolean;
   trackChanges: boolean;
-  markAiText: boolean;
+  markAiText: MarkAiTextChoice | null;
   commentFailedChecks: boolean;
 }
 

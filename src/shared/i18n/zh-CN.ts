@@ -3034,8 +3034,11 @@ export const zhCN = {
   "export.options.docx.pending": "尚未接受的修订会以 IncarnaMind 的修订写入。",
   "export.trackChanges": "将我的修改显示为修订",
   "export.trackChanges.hint": "导入后的修改，以“{name}”的修订显示。",
-  "export.markAiText": "为 AI 生成的文字添加批注",
-  "export.markAiText.hint": "每一段都会加上批注：“由 IncarnaMind 生成”。",
+  "export.markAiText": "标出 IncarnaMind 写的内容？",
+  "export.markAiText.mark": "标出",
+  "export.markAiText.leave": "不标",
+  "export.markAiText.hint": "标出后，每一段都会加上批注：“由 IncarnaMind 生成”。",
+  "export.markAiText.unasked": "尚未选择，首次导出 Word 时会询问。",
   "export.commentFailedChecks": "对未通过的核对添加批注",
   "export.commentFailedChecks.hint": "未找到引文、与文档矛盾、无依据或需重新核对",
   "aiStatement.command": "导出 AI 使用声明",
@@ -3423,6 +3426,8 @@ export const zhCN = {
   "error.commands.undoGone": "这些改动已无法撤销：IncarnaMind 之后重启过。",
   "error.commands.wordLoses":
     "Word 文件无法保留这个 Mind 的全部内容。请先从 Mind 的菜单导出，查看会丢失什么。",
+  "error.commands.markAiTextAsk":
+    "导出 Word 前，需要先选择是否标出 IncarnaMind 写的内容。请先用 Mind 的“导出”按钮导出一次 Word，再重试。",
   "commands.found.document": "找到 {count} 个文档",
   "commands.found.document.one": "找到 1 个文档",
   "commands.found.mind": "找到 {count} 个 Mind",

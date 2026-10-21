@@ -3137,8 +3137,11 @@ export const en = {
   "export.options.docx.pending": "Changes waiting for you go in as IncarnaMind’s tracked changes.",
   "export.trackChanges": "Show my edits as tracked changes",
   "export.trackChanges.hint": "Your edits since import, tracked as {name}.",
-  "export.markAiText": "Mark AI-written text with a comment",
-  "export.markAiText.hint": "Each passage gets a comment: “Written by IncarnaMind”.",
+  "export.markAiText": "Mark the text IncarnaMind wrote?",
+  "export.markAiText.mark": "Mark it",
+  "export.markAiText.leave": "Leave it out",
+  "export.markAiText.hint": "Marked, each passage gets a comment: “Written by IncarnaMind”.",
+  "export.markAiText.unasked": "Not chosen yet, so the first Word export asks.",
   "export.commentFailedChecks": "Comment on checks that failed",
   "export.commentFailedChecks.hint": "Quote not found, Contradicted, Unsupported or Needs re-check",
   "aiStatement.command": "Export AI use statement",
@@ -3541,6 +3544,8 @@ export const en = {
     "These changes can’t be undone any more: IncarnaMind has restarted since.",
   "error.commands.wordLoses":
     "A Word file can’t keep everything in this Mind. Export it from the Mind’s menu to see what first.",
+  "error.commands.markAiTextAsk":
+    "A Word file needs one choice first: whether to mark the text IncarnaMind wrote. Export to Word once with the Mind’s Export button, then ask again.",
   "commands.found.document": "Found {count} Documents",
   "commands.found.document.one": "Found 1 Document",
   "commands.found.mind": "Found {count} Minds",

@@ -337,7 +337,7 @@ describe("exporting a Mind to HTML", () => {
           docx: {
             includeQuestions: false,
             trackChanges: true,
-            markAiText: true,
+            markAiText: "mark",
             commentFailedChecks: true,
           },
           pdf: { includeQuestions: false },
