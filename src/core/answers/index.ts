@@ -196,11 +196,14 @@ import {
 } from "./context";
 import { coverageInstructions, coverageOf, documentsAsked, type SizedDocument } from "./coverage";
 import {
+  documentSkimBlock,
   documentTextBlock,
   givenUpFront,
   OPENING_TOKEN_LIMIT,
   openingWithin,
   SMALL_SCOPE_DOCUMENTS,
+  skimTokens,
+  skimWithin,
   upFrontTokens,
 } from "./documentText";
 import type {
@@ -1710,15 +1713,31 @@ export function createAnswers(options: AnswersOptions) {
           passagesOf,
           (passages) => blockOf(passages, session.measure),
         );
+        // A summary of each Document too long to give whole reads each one's skim (#894).
+        const share = Math.floor(skimTokens(prepared.window) / Math.max(1, scope.length));
+        const skims =
+          !given && asked.each
+            ? scope.flatMap((document) => skimWithin(passagesOf(document.id), share))
+            : [];
+        // Only Documents given whole count as sent: a skim is a part of each.
         sentDocuments = new Set(
           given?.passages.flatMap((passage) =>
             transcripts.has(passage.documentId) ? [] : [passage.documentId],
           ),
         );
-        if (given) {
-          messages = withBeforeQuestion(messages, blockOf(given.passages, session.show));
+        const shown = given?.passages ?? skims;
+        if (shown.length > 0) {
+          messages = withBeforeQuestion(
+            messages,
+            given
+              ? blockOf(given.passages, session.show)
+              : documentSkimBlock(
+                  [...new Set(skims.map((passage) => passage.documentName))],
+                  withPassageNotes(session.show(skims), unread),
+                ),
+          );
           // Someone else wrote a saved web page: given up front, it is read as a search reads it (#78).
-          if (given.passages.some((passage) => passage.documentKind === "web")) {
+          if (shown.some((passage) => passage.documentKind === "web")) {
             contextReasons.push({ via: "read", source: "web-page" });
             textOrigin ??= "web-page";
           }
