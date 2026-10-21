@@ -8,6 +8,7 @@ import type { MessageKey, MessageParams } from "../src/shared/i18n/types";
 import type { TestHooks } from "../src/shared/testHooks";
 import {
   createDataFolder,
+  focusSettled,
   launchApp,
   pointAt,
   removeDataFolder,
@@ -570,6 +571,7 @@ test("Home beside a Mind follows it as it is saved, and tabs opened behind Home 
     await title.click({
       position: { x: (titleBox?.width ?? 2) - 2, y: (titleBox?.height ?? 2) / 2 },
     });
+    await focusSettled(window, editor);
     await window.keyboard.press("Enter");
     await window.keyboard.type("Harbour dues are due on the first of June.");
     const shownTitle = await window

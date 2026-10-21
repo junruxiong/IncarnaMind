@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from "react";
-
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
 import { useFirstOpen } from "../../firstOpen";
