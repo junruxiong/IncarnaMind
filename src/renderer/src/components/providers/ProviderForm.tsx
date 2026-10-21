@@ -24,6 +24,7 @@ import {
 } from "../../../../core/providers/catalog/providers";
 import type { Role } from "../../../../core/providers/catalog/types";
 import { serviceForUrl } from "../../../../core/providers/service";
+import { checkApiKey } from "../../../../shared/apiKey";
 import type { MessageKey } from "../../../../shared/i18n";
 import { gap } from "../../../../shared/i18n/join";
 import { modelName } from "../../../../shared/modelName";
@@ -33,6 +34,7 @@ import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
 import { useAppStore } from "../../store";
+import { KeyCharacterLine } from "../KeyCharacterLine";
 import { MetaLine } from "../MetaLine";
 import { LineAction, type ProblemAction, ProblemMark } from "../ProblemLine";
 import {
@@ -233,8 +235,8 @@ export function ProviderForm({
     ? providers.find((each) => sameServer(each, kind, endpoint?.id ?? "", baseUrl, fieldAddress))
     : undefined;
   const keyRequired = catalog?.apiKey === "required";
-  const hasKey = apiKey.trim() !== "" || Boolean(saved?.hasApiKey);
-  const keyBlocked = apiKey.trim() !== "" && secretStorage !== null && !secretStorage.canSave;
+  const hasKey = key.text !== "" || Boolean(saved?.hasApiKey);
+  const keyBlocked = key.text !== "" && secretStorage !== null && !secretStorage.canSave;
   const missing: MessageKey | null =
     kind === null
       ? null
@@ -249,7 +251,11 @@ export function ProviderForm({
               : modelId.trim() === ""
                 ? "providers.form.needsModel"
                 : null;
-  const complete = kind !== null && missing === null && (!local || server.status?.running === true);
+  const complete =
+    kind !== null &&
+    missing === null &&
+    key.stray === null &&
+    (!local || server.status?.running === true);
   const keyCheck = useKeyCheck(
     kind !== null && kind !== "openai-compatible" && !local ? kind : null,
     apiKey,
@@ -307,11 +313,14 @@ export function ProviderForm({
 
   const typeKey = (value: string) => {
     key.type(value, baseUrl);
+    const { key: given, stray } = checkApiKey(value);
     // Spaces around the same key change nothing, and leave an agreement to use it where it was.
-    if (value.trim() === apiKey.trim()) return;
+    if (given === key.text) return;
     setSwitchedFrom(null);
     const named =
-      only || kind === null || kind === "openai-compatible" || local ? null : serviceOfKey(value);
+      only || kind === null || kind === "openai-compatible" || local || stray !== null
+        ? null
+        : serviceOfKey(given);
     if (named !== null && named !== kind && offered.includes(named)) {
       choose(named, { keepKey: true, from: kind });
     }
@@ -338,7 +347,7 @@ export function ProviderForm({
       ...(endpoint ? { endpoint: endpoint.id } : {}),
       ...(field ? { endpointValue: fieldUsed } : {}),
       ...(kind === "openai-compatible" ? { baseUrl: baseUrl.trim() } : {}),
-      ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+      ...(key.text ? { apiKey: key.text } : {}),
     };
   };
 
@@ -422,7 +431,7 @@ export function ProviderForm({
   // A key that fits no service's prefix may be one the services under More… issue.
   const showMore =
     moreOpen ||
-    (!keyCheck.check.ok && keyCheck.check.service === null && apiKey.trim().startsWith("sk-"));
+    (!keyCheck.check.ok && keyCheck.check.service === null && key.text.startsWith("sk-"));
   const underMore = offered.filter((each) => !rowKinds.includes(each));
 
   return (
@@ -558,13 +567,17 @@ export function ProviderForm({
               type="password"
               value={apiKey}
               onChange={(event) => typeKey(event.target.value)}
-              onBlur={() => local && apiKey.trim() !== "" && void server.detect(apiKey, fieldUsed)}
+              onBlur={() => local && key.text !== "" && void server.detect(apiKey, fieldUsed)}
               autoComplete="off"
               spellCheck={false}
               ref={keyField}
-              aria-describedby={refusedHere ? `${id}-refused` : undefined}
+              aria-invalid={key.stray ? true : undefined}
+              aria-describedby={
+                key.stray ? `${id}-stray` : refusedHere ? `${id}-refused` : undefined
+              }
               className={inputClass}
             />
+            {key.stray && <KeyCharacterLine id={`${id}-stray`} stray={key.stray} />}
             {refusedHere && <KeyRefusedLine id={`${id}-refused`} refused={refused} />}
             {saved?.hasApiKey && (
               <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
@@ -837,7 +850,11 @@ export function TestResult({
       </p>
     );
   }
-  const line = ownLine ?? t(testErrorKey(result.error.kind), { model: model ?? "" });
+  const { wording } = result.error;
+  const badKey = wording?.key === "error.provider.keyCharacter" ? wording : null;
+  const line = badKey
+    ? t(badKey.key, badKey.values)
+    : (ownLine ?? t(testErrorKey(result.error.kind), { model: model ?? "" }));
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
       <div className="flex items-baseline">
@@ -845,7 +862,7 @@ export function TestResult({
         <MetaLine parts={[line, action && <LineAction action={action} />]} />
       </div>
       {/* The provider's own words help with its errors. */}
-      {result.error.message && (
+      {!badKey && result.error.message && (
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">
           {readableMessage(result.error.message)}
         </p>

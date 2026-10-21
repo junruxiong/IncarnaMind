@@ -25,6 +25,7 @@ import { useLanguage, useT } from "../../i18n";
 import { type KeyRefusal, useKeyRefusals } from "../../keyRefusals";
 import { useModelNames } from "../../modelNames";
 import { useAppStore } from "../../store";
+import { KeyCharacterLine } from "../KeyCharacterLine";
 import { OnThisComputer } from "../OnThisComputer";
 import { ProblemMark } from "../ProblemLine";
 import { SettingsBackLink } from "../SettingsBackLink";
@@ -156,8 +157,8 @@ export function ProviderPage({
 
   const saveKey = async (event: FormEvent) => {
     event.preventDefault();
-    const apiKey = key.apiKey.trim();
-    if (apiKey === "" || !someModel || keyCheck.blocked) return;
+    const apiKey = key.text;
+    if (apiKey === "" || key.stray || !someModel || keyCheck.blocked) return;
     setSaving(true);
     setKeyError(null);
     try {
@@ -301,15 +302,18 @@ export function ProviderPage({
               onChange={(event) => key.type(event.target.value)}
               autoComplete="off"
               spellCheck={false}
-              aria-describedby={refusedHere ? `${id}-refused` : undefined}
+              aria-invalid={key.stray ? true : undefined}
+              aria-describedby={
+                key.stray ? `${id}-stray` : refusedHere ? `${id}-refused` : undefined
+              }
               className={`${fieldClass} min-w-0 flex-1 basis-56`}
             />
           )}
-          {key.apiKey.trim() !== "" ? (
+          {key.text !== "" ? (
             <button
               type="submit"
               data-testid="provider-page-save-key"
-              disabled={saving || !someModel || keyCheck.blocked}
+              disabled={saving || !someModel || key.stray !== null || keyCheck.blocked}
               className={buttonClass}
             >
               {t("models.provider.saveKey")}
@@ -337,6 +341,7 @@ export function ProviderPage({
             </a>
           )}
         </div>
+        {key.stray && <KeyCharacterLine id={`${id}-stray`} stray={key.stray} />}
         <KeyCheckLine
           check={keyCheck.check}
           provider={name}
