@@ -151,10 +151,17 @@ export function createElectronAudioCapture({
         stopped = resolve;
       });
 
-      const onAudio = (event: IpcMainEvent, source: unknown, value: unknown) => {
+      const onAudio = (
+        event: IpcMainEvent,
+        source: unknown,
+        value: unknown,
+        capturedAt: unknown,
+      ) => {
         if (!fromWindow(event) || (source !== "microphone" && source !== "system")) return;
         const samples = samplesOf(value);
-        if (samples) sink.audio(source, samples);
+        const at =
+          typeof capturedAt === "number" && Number.isFinite(capturedAt) ? capturedAt : undefined;
+        if (samples) sink.audio(source, samples, at);
       };
       const onState = (event: IpcMainEvent, source: unknown, state: unknown) => {
         if (!fromWindow(event) || (source !== "microphone" && source !== "system")) return;

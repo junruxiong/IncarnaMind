@@ -186,6 +186,7 @@ export function createMeetings(options: MeetingsOptions) {
   const help = new Map<string, MeetingHelp>();
   const templates = new Map<string, MeetingHelpTemplate>();
   const microphonePausedAt = new Map<string, number>();
+  const microphoneResumedAt = new Map<string, number>();
 
   const rowOf = (meetingId: unknown): MeetingRow => {
     if (typeof meetingId !== "string" || meetingId === "") {
@@ -280,9 +281,9 @@ export function createMeetings(options: MeetingsOptions) {
     );
   }
 
-  /** How far into the Meeting's time it is now, while audio is being captured. */
-  const meetingTime = (current: Live) =>
-    current.period.offsetMs + (clock() - Date.parse(current.period.start));
+  const timeOf = (current: Live, wallMs: number) =>
+    current.period.offsetMs + (wallMs - Date.parse(current.period.start));
+  const meetingTime = (current: Live) => timeOf(current, clock());
 
   // ---- Audio to disk ----
 
@@ -346,11 +347,28 @@ export function createMeetings(options: MeetingsOptions) {
     if (run.waitingSamples > 0) savePart(current, source, run, take(run, run.waitingSamples));
   }
 
-  function hear(current: Live, source: AudioSource, samples: Int16Array): void {
-    if (live !== current || samples.length === 0) return;
+  function hear(
+    current: Live,
+    source: AudioSource,
+    heard: Int16Array,
+    capturedAt: number | undefined,
+  ): void {
+    if (live !== current || heard.length === 0) return;
     // Frames already on their way when the microphone was paused are dropped here.
     if (source === "microphone" && microphonePausedAt.has(current.meetingId)) return;
     const at = meetingTime(current);
+    // What the capture held at a pause can arrive after the resume (it flushes as it closes the
+    // microphone): only what was captured since the last resume counts, whenever it arrives. A
+    // stamp later than the arrival is a clock that is off, so the arrival counts instead.
+    const samples =
+      source === "microphone"
+        ? capturedSinceResumed(
+            current,
+            heard,
+            capturedAt === undefined ? at : Math.min(at, timeOf(current, capturedAt)),
+          )
+        : heard;
+    if (samples.length === 0) return;
     let run = current.runs.get(source);
     let stalledFrom: number | null = null;
     // Samples that come much later than the run could have produced them (a device changed,
@@ -398,6 +416,13 @@ export function createMeetings(options: MeetingsOptions) {
       source,
       source === "system" && current.silent >= SILENT_SAMPLES ? "silent" : "recording",
     );
+  }
+
+  function capturedSinceResumed(current: Live, samples: Int16Array, endMs: number): Int16Array {
+    const from = microphoneResumedAt.get(current.meetingId);
+    if (from === undefined) return samples;
+    const before = Math.ceil(((from - endMs) * MEETING_SAMPLE_RATE) / 1000) + samples.length;
+    return before <= 0 ? samples : samples.subarray(Math.min(before, samples.length));
   }
 
   function tellLevel(current: Live, source: AudioSource, samples: Int16Array): void {
@@ -459,7 +484,7 @@ export function createMeetings(options: MeetingsOptions) {
     current.session = capture.start(
       { systemAudio: systemAudio && capture.systemAudio },
       {
-        audio: (source, samples) => hear(current, source, samples),
+        audio: (source, samples, capturedAt) => hear(current, source, samples, capturedAt),
         state: (source, state) => heardState(current, source, state),
       },
     );
@@ -811,6 +836,7 @@ export function createMeetings(options: MeetingsOptions) {
       for (const row of rows) {
         if (live?.meetingId === row.id) end(live);
         microphonePausedAt.delete(row.id);
+        microphoneResumedAt.delete(row.id);
         transcripts?.forget(row.id);
         health.forget(row.id);
         deleteAudio(row.id, "discarded");
@@ -872,6 +898,7 @@ export function createMeetings(options: MeetingsOptions) {
         }
         log.info("meeting.microphonePaused", { meetingId: row.id });
       } else {
+        microphoneResumedAt.set(row.id, atMs);
         endMicrophonePause(row.id, atMs);
         if (capturing) {
           transcripts?.microphoneResumed(row.id, atMs);

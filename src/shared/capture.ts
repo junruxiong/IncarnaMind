@@ -18,7 +18,7 @@ export const CAPTURE_CHANNELS = {
   stop: "capture:stop",
   /** Main → page: turn the microphone off or on (boolean) while capturing; the computer's sound goes on. */
   microphone: "capture:microphone",
-  /** Page → main: (source, Int16Array) of 16 kHz mono samples. */
+  /** Page → main: (source, Int16Array of 16 kHz mono samples, when the last was captured). */
   audio: "capture:audio",
   /** Page → main: (source, `CaptureState`). */
   state: "capture:state",
@@ -65,7 +65,8 @@ export interface CaptureBridge {
   onStart(listener: (request: CaptureStart) => void): void;
   onStop(listener: () => void): void;
   onMicrophone(listener: (on: boolean) => void): void;
-  audio(source: AudioSource, samples: Int16Array): void;
+  /** `capturedAt`: when the last sample was captured, `Date.now()` on this computer. */
+  audio(source: AudioSource, samples: Int16Array, capturedAt: number): void;
   state(source: AudioSource, state: CaptureWindowState): void;
   stopped(): void;
 }

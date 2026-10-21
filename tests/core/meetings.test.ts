@@ -22,7 +22,7 @@ async function meetingCore(
   clock = manualClock(),
   captureOptions: FakeCaptureOptions = {},
 ) {
-  const capture = createFakeCapture(captureOptions);
+  const capture = createFakeCapture({ now: () => clock.now().getTime(), ...captureOptions });
   const core = startCore(dataDir, { audioCapture: capture, now: clock.now });
   await core.updateSettings({ device: { meetingNoticeAccepted: true } });
   /** `ms` of audio from every source asked for, as captured, the clock moving with it. */

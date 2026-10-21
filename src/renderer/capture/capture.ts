@@ -33,6 +33,8 @@ interface Open {
   heard: boolean;
   /** Resolves once the worklet has sent what it held. */
   flushed: Promise<void>;
+  /** When its track was stopped: what the worklet sends after that was captured by then. */
+  stoppedAt: number | null;
 }
 
 let context: Promise<AudioContext> | null = null;
@@ -78,6 +80,7 @@ async function connect(source: AudioSource, stream: MediaStream): Promise<Open> 
     node,
     worklet,
     heard: false,
+    stoppedAt: null,
     flushed: new Promise((resolve) => {
       flushed = resolve;
     }),
@@ -88,7 +91,7 @@ async function connect(source: AudioSource, stream: MediaStream): Promise<Open> 
       return;
     }
     if (!entry.heard) entry.heard = event.data.some((sample) => sample !== 0);
-    bridge.audio(source, toPcm16(event.data));
+    bridge.audio(source, toPcm16(event.data), entry.stoppedAt ?? Date.now());
   };
   node.connect(worklet);
   if (sink) worklet.connect(sink);
@@ -101,6 +104,7 @@ async function close(source: AudioSource): Promise<void> {
   const entry = open.get(source);
   if (!entry) return;
   open.delete(source);
+  entry.stoppedAt = Date.now();
   for (const track of entry.stream.getTracks()) {
     track.onended = null;
     track.stop();
