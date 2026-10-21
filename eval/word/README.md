@@ -71,6 +71,8 @@ For each file it runs these steps, and prints one line per file:
 
 After the files, a fixture made for it (headings, paragraphs and a table) is exported for review and opened in LibreOffice, which accepts every change in it with a Basic macro (in its temporary profile) and saves its text: that text's words, paragraph by paragraph, must be the Mind's with every change accepted.
 
+Numbered lists' schemes (#1419, `numbering.word.ts`): a list in each scheme (Default, Outline, Clauses, Chinese report), three levels deep, and one that starts a level deeper, is exported as .docx and opened in LibreOffice, whose text must number each item as the scheme does ("(a)", "(i)", "1.1.", "（一）"). Its PDF is kept as `numbering-<scheme>.pdf` with `INCARNAMIND_WORD_PDFS`. `npm test` checks the same files' Word numbering, and their import back, in `tests/core/wordNumbering.test.ts`.
+
 LibreOffice is found as `INCARNAMIND_SOFFICE`, then `soffice`, then `libreoffice` on the PATH. When it isn't there the LibreOffice steps are skipped and say so, unless `INCARNAMIND_WORD_REQUIRE_LIBREOFFICE=1`, which CI sets: then a missing LibreOffice fails the run.
 
 A file that is known to fail a step is marked `known` with the reason in `sources.json` (or `extended.json`); it is reported and does not fail the run.

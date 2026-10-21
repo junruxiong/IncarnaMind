@@ -64,8 +64,8 @@ describe("pasting what Word copies", () => {
     });
   });
 
-  // The rule for Word's numbering: a run becomes a list only when the editor can draw every marker in it.
-  test.each(["1、", "（1）", "一、", "1.1.", "a)"])(
+  // The rule for Word's numbering: a list becomes the editor's when a scheme writes every marker in it.
+  test.each(["1、", "（1）", "1.1.", "a)", "§1"])(
     "a run numbered %s stays paragraphs, each with its number typed",
     (marker) => {
       const doc = pasted(
@@ -77,6 +77,35 @@ describe("pasting what Word copies", () => {
       ]);
     },
   );
+
+  // protects=a Word list written in one of the schemes ("(a) (i)", "一、 （一）", "1. 1.1.") pastes as a list in that scheme, nested by level, and one whose first item is deeper starts at that level; fails_when=it stays typed, or draws in another scheme or level; no_claim=a list of mixed schemes.
+  test.each([
+    ["clauses", ["(a)", "(i)", "(b)"]],
+    ["chinese", ["一、", "（一）", "二、"]],
+    ["outline", ["1.", "1.1.", "2."]],
+  ])("a run in %s is a list in that scheme", (scheme, [first, nested, second]) => {
+    const doc = pasted(
+      word(
+        listParagraph("l0", 1, first ?? "", "Rent") +
+          listParagraph("l0", 2, nested ?? "", "Monthly") +
+          listParagraph("l0", 1, second ?? "", "Deposit"),
+      ),
+    );
+    expect(blocks(doc).map((block) => block.type)).toEqual(["orderedList"]);
+    expect(doc.firstChild?.attrs.numbering).toBe(scheme);
+    expect(items(doc.firstChild)).toEqual(["Rent", "Deposit"]);
+    expect(items(doc.firstChild?.firstChild?.lastChild)).toEqual(["Monthly"]);
+
+    const deeper = pasted(
+      word(
+        listParagraph("l0", 2, nested ?? "", "Monthly") +
+          listParagraph("l0", 1, second ?? "", "Deposit"),
+      ),
+    );
+    expect(blocks(deeper).map((block) => block.type)).toEqual(["orderedList", "orderedList"]);
+    expect(deeper.firstChild?.attrs.startLevel).toBe(1);
+    expect(deeper.lastChild?.attrs.startLevel ?? 0).toBe(0);
+  });
 
   test("a run numbered from 3. is a list that starts at 3", () => {
     const doc = pasted(
@@ -99,14 +128,14 @@ describe("pasting what Word copies", () => {
     const doc = pasted(
       word(
         listParagraph("l0", 1, "1.", "Collect") +
-          listParagraph("l0", 2, "a.", "Label") +
+          listParagraph("l0", 2, "a)", "Label") +
           "<p class=MsoNormal>Then</p>" +
           listParagraph("l1", 1, "·", "Boats"),
       ),
     );
     expect(blocks(doc)).toEqual([
       { type: "paragraph", text: "1. Collect" },
-      { type: "paragraph", text: "a. Label" },
+      { type: "paragraph", text: "a) Label" },
       { type: "paragraph", text: "Then" },
       { type: "bulletList", text: "Boats" },
     ]);

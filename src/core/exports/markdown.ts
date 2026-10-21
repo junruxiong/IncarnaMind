@@ -21,6 +21,8 @@ interface Context {
   table: boolean;
   /** Inside the text of a footnote the User wrote. */
   note?: boolean;
+  /** Inside a list's item. */
+  inList?: boolean;
 }
 
 /**
@@ -143,7 +145,20 @@ class MarkdownWriter {
     }
   }
 
+  // Markdown has only "1." lists. A list that starts a level deeper ("(i)") is indented to that
+  // level, three spaces a level, which the Markdown reader takes back as its level (#1419).
   private list(block: Extract<Block, { kind: "list" }>, context: Context): string {
+    const level = context.inList ? 0 : (block.numbering?.level ?? 0);
+    const written = this.listItems(block, { ...context, inList: true });
+    if (level === 0) return written;
+    const indent = "   ".repeat(level);
+    return written
+      .split("\n")
+      .map((line) => (line ? indent + line : line))
+      .join("\n");
+  }
+
+  private listItems(block: Extract<Block, { kind: "list" }>, context: Context): string {
     let number = block.start;
     return block.items
       .map((item, at) => {

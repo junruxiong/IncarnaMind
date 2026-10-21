@@ -303,11 +303,14 @@ function chartMarkdown(block: Extract<Block, { kind: "chart" }>, documents: Docu
 /** Question context writes a Citation's source, never its work. */
 const blankWork = { documentId: null, documentName: null, location: null };
 
+// A numbered list's items keep the markers the User sees ("(b)", "1.2.", "（二）"), so the model
+// reads the clause the User names.
 function listMarkdown(list: Extract<Block, { kind: "list" }>, documents: Documents): string {
   let number = list.start;
   return list.items
-    .map((item) => {
-      const marker = list.ordered ? `${number++}.` : "-";
+    .map((item, at) => {
+      const marker = list.ordered ? (list.numbering?.markers[at] ?? `${number}.`) : "-";
+      number++;
       const indent = " ".repeat(marker.length + 1);
       return blocksMarkdown(item, documents)
         .split("\n")
