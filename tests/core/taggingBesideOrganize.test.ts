@@ -259,25 +259,25 @@ describe("turning on Organize filing new Documents by itself", () => {
 });
 
 describe("with Organize filing new Documents by itself, a Document the tagger holds", () => {
-  const wrongKey = () =>
+  const unknownModel = () =>
     new APICallError({
-      message: "Invalid API key",
+      message: "The model does not exist",
       url: "https://api.example.com/v1/messages",
       requestBodyValues: {},
-      statusCode: 401,
+      statusCode: 404,
       isRetryable: false,
     });
 
   test("shows its failure, and Retry tags it without filing it", async () => {
     const { core, chat, save } = await start(false);
-    chat.fail(wrongKey());
+    chat.fail(unknownModel());
     const [held] = await add(core, { "One.txt": "The first report, about revenue." });
     if (!held) throw new Error("Nothing was added.");
     await waitForTagging(core, [held.id], (each) => each.tagging === "failed");
 
     await save(true);
     const [failed] = await waitForTagging(core, [held.id], (each) => each.tagging === "failed");
-    expect(failed?.taggingError).toMatchObject({ kind: "auth" });
+    expect(failed?.taggingError).toMatchObject({ kind: "model" });
 
     chat.fail(null);
     await core.retagDocuments([held.id]);

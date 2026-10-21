@@ -226,6 +226,7 @@ function storedSteps(value: string | null): AnswerSteps | null {
     withoutMindTools,
     coverage,
     writtenFrom,
+    stillReading,
     sent,
     textBehind,
   } = parsed;
@@ -265,6 +266,14 @@ function storedSteps(value: string | null): AnswerSteps | null {
       isCount(writtenFrom.documents) &&
       isCount(writtenFrom.total) && {
         writtenFrom: { documents: writtenFrom.documents, total: writtenFrom.total },
+      }),
+    ...(isRecord(stillReading) &&
+      isCount(stillReading.count) && {
+        stillReading: {
+          count: stillReading.count,
+          ...(typeof stillReading.name === "string" &&
+            stillReading.name !== "" && { name: stillReading.name }),
+        },
       }),
     ...(isRecord(sent) &&
       Array.isArray(sent.documents) && {

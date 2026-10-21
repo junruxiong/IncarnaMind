@@ -12,7 +12,15 @@ import { useUndo } from "../undo";
 import { checkKeys } from "./keys";
 
 /** Where the User is acting, as `data-surface` marks it on the page. */
-export const SURFACES = ["sidebar", "library", "deleted", "mind", "viewer", "palette"] as const;
+export const SURFACES = [
+  "sidebar",
+  "library",
+  "deleted",
+  "home",
+  "mind",
+  "viewer",
+  "palette",
+] as const;
 export type Surface = (typeof SURFACES)[number];
 
 /** The menus' order of commands (docs/agents/interaction.md, rule 5). */

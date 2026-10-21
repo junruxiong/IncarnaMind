@@ -107,6 +107,9 @@ import {
   type ThirdPartySource,
   type ToolCallApproval,
   type UnreadFile,
+  type UserAnswer,
+  type UserQuestion,
+  type UserQuestionRequest,
   type WebPageCall,
 } from "../api";
 import type { CallToDecide, ToolCallToApprove } from "../approvals";
@@ -144,6 +147,7 @@ import {
   type ToolProvider,
   type ToolProviderKind,
 } from "../tools";
+import { askTool } from "../tools/asks";
 import type { Findable } from "../tools/commands/find";
 import { type CommandRename, renamesIn } from "../tools/commands/policy";
 import type { CommandsHost } from "../tools/commands/run";
@@ -192,11 +196,14 @@ import {
 } from "./context";
 import { coverageInstructions, coverageOf, documentsAsked, type SizedDocument } from "./coverage";
 import {
+  documentSkimBlock,
   documentTextBlock,
   givenUpFront,
   OPENING_TOKEN_LIMIT,
   openingWithin,
   SMALL_SCOPE_DOCUMENTS,
+  skimTokens,
+  skimWithin,
   upFrontTokens,
 } from "./documentText";
 import type {
@@ -244,6 +251,7 @@ import {
   skillLanguageNote,
   skillSetsLanguage,
   sourcesInstructions,
+  stillReadingNote,
   webInstructions,
   withPassageNotes,
   workingCopyNote,
@@ -532,6 +540,10 @@ export interface AnswersOptions {
   withdrawChanges?(changes: readonly MindChange[]): void;
   /** Asking the User before a Connector Tool or a Skill script runs. */
   approvals: AnswerApprovals;
+  /** The assistant's questions to the User, in the tray (#1374). Without it, an Answer never asks. */
+  questions?: {
+    ask(request: Omit<UserQuestionRequest, "requestId">, signal: AbortSignal): Promise<UserAnswer>;
+  };
   /** Running Skill scripts. */
   scripts: AnswerScripts;
   /**
@@ -631,6 +643,7 @@ const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
   web: "web",
   minds: "minds",
   commands: "commands",
+  asks: "asks",
 };
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -661,6 +674,8 @@ export interface DocumentsForAnswers
   searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
   /** The Documents among these (null: every Document) whose text couldn't be read, or some of it. */
   unread(documentIds: readonly string[] | null): UnreadFile[];
+  /** The Documents among these (null: every Document) whose text is still being read: nothing a search finds is from them yet. */
+  reading(documentIds: readonly string[] | null): { name: string }[];
   search(
     query: string,
     documentIds: readonly string[] | null,
@@ -978,8 +993,23 @@ export function createAnswers(options: AnswersOptions) {
     let firstMindWordAt: number | null = null;
     const careful = asksToCheckOrCalculate(context.question);
     const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
+    /** The Documents of the scope still being read, looked at once, when the Answer ends. */
+    let stillReadingAtEnd: AnswerSteps["stillReading"] | null | undefined;
+    const stillReading = () => {
+      if (finishedAt === null) return null;
+      if (stillReadingAtEnd === undefined) {
+        const reading = options.documents.reading(documentIds);
+        const [only] = reading;
+        stillReadingAtEnd =
+          reading.length === 0
+            ? null
+            : { count: reading.length, ...(reading.length === 1 && only && { name: only.name }) };
+      }
+      return stillReadingAtEnd;
+    };
     const steps = (): AnswerSteps => {
       const summary = reasoning.trim();
+      const reading = stillReading();
       const thoughtUntil =
         firstTextAt !== null && reasoningStartedAt !== null && firstTextAt > reasoningStartedAt
           ? firstTextAt
@@ -1014,6 +1044,7 @@ export function createAnswers(options: AnswersOptions) {
         ...(coverage && { coverage }),
         ...(writtenFrom && { writtenFrom }),
         ...(textBehind && { textBehind: true as const }),
+        ...(reading && { stillReading: reading }),
         ...(sentDocuments && {
           sent: {
             documents: [...sentDocuments],
@@ -1269,6 +1300,7 @@ export function createAnswers(options: AnswersOptions) {
         | "found"
         | "command"
         | "commandProblem"
+        | "asked"
       > = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1285,6 +1317,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.found) call.found = found.found;
       if (found.command) call.command = found.command;
       if (found.commandProblem) call.commandProblem = found.commandProblem;
+      if (found.asked) call.asked = found.asked;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       input.onCall?.({ ...call });
       writeSoon();
@@ -1303,6 +1336,8 @@ export function createAnswers(options: AnswersOptions) {
     const commandsFound = new Map<string, CommandsFound>();
     const commandsDone = new Map<string, CommandDone>();
     const commandProblems = new Map<string, CommandProblem>();
+    /** The questions `ask_user` asked, by call, as they stand: for its card while it waits, and once it ends. */
+    const userQuestions = new Map<string, UserQuestion>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1708,15 +1743,31 @@ export function createAnswers(options: AnswersOptions) {
           passagesOf,
           (passages) => blockOf(passages, session.measure),
         );
+        // A summary of each Document too long to give whole reads each one's skim (#894).
+        const share = Math.floor(skimTokens(prepared.window) / Math.max(1, scope.length));
+        const skims =
+          !given && asked.each
+            ? scope.flatMap((document) => skimWithin(passagesOf(document.id), share))
+            : [];
+        // Only Documents given whole count as sent: a skim is a part of each.
         sentDocuments = new Set(
           given?.passages.flatMap((passage) =>
             transcripts.has(passage.documentId) ? [] : [passage.documentId],
           ),
         );
-        if (given) {
-          messages = withBeforeQuestion(messages, blockOf(given.passages, session.show));
+        const shown = given?.passages ?? skims;
+        if (shown.length > 0) {
+          messages = withBeforeQuestion(
+            messages,
+            given
+              ? blockOf(given.passages, session.show)
+              : documentSkimBlock(
+                  [...new Set(skims.map((passage) => passage.documentName))],
+                  withPassageNotes(session.show(skims), unread),
+                ),
+          );
           // Someone else wrote a saved web page: given up front, it is read as a search reads it (#78).
-          if (given.passages.some((passage) => passage.documentKind === "web")) {
+          if (shown.some((passage) => passage.documentKind === "web")) {
             contextReasons.push({ via: "read", source: "web-page" });
             textOrigin ??= "web-page";
           }
@@ -1915,6 +1966,21 @@ export function createAnswers(options: AnswersOptions) {
               failed: (toolCallId, problem) => commandProblems.set(toolCallId, problem),
             })
           : null;
+      const questions = outside ? undefined : options.questions;
+      const asking =
+        questions && input.assistant
+          ? askTool({
+              ask: (toolCallId, question, signal) =>
+                questions.ask({ ...place, answerId, toolCallId, question }, signal),
+              recorded: (toolCallId, question) => {
+                userQuestions.set(toolCallId, question);
+                const call = toolCalls.find((each) => each.id === toolCallId);
+                if (finished || !call) return;
+                call.asked = question;
+                writeSoon();
+              },
+            })
+          : null;
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -1922,6 +1988,7 @@ export function createAnswers(options: AnswersOptions) {
         // So the model can search again in the Documents' language (see the search Tool).
         documentLanguages: options.documents.searchableLanguages(documentIds),
         unreadDocuments: () => options.documents.unread(documentIds),
+        readingDocuments: () => options.documents.reading(documentIds),
         searchDocuments: (query, signal, searchOptions) =>
           session.tools.searchDocuments(query, signal, searchOptions),
         cite: (records, citeOptions) => session.tools.cite(records, citeOptions),
@@ -2032,6 +2099,7 @@ export function createAnswers(options: AnswersOptions) {
                   scoped,
                   calculating,
                 ),
+            stillReadingNote(options.documents.reading(documentIds)),
             coverageInstructions(
               coverage,
               asked.each,
@@ -2073,6 +2141,7 @@ export function createAnswers(options: AnswersOptions) {
           ...fromWeb,
           ...(mindsTools?.tools ?? []),
           ...(commandsOffered?.tools ?? []),
+          ...(asking ? [asking] : []),
         ],
         gate,
         streamsInput,
@@ -2189,6 +2258,7 @@ export function createAnswers(options: AnswersOptions) {
             const found = commandsFound.get(event.id);
             const command = commandsDone.get(event.id);
             const commandProblem = commandProblems.get(event.id);
+            const question = userQuestions.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
@@ -2198,6 +2268,7 @@ export function createAnswers(options: AnswersOptions) {
               ...(found && { found }),
               ...(command && { command }),
               ...(commandProblem && { commandProblem }),
+              ...(question && { asked: question }),
             });
             break;
           }

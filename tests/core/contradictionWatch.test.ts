@@ -154,7 +154,7 @@ describe("Check for contradictions", () => {
     expect(await core.planContradictionCheck(mind.id)).toEqual({
       kind: "ready",
       claims: 2,
-      model: null,
+      model: (await core.getSettings()).user.chatModel,
     });
     const result = await core.checkContradictions({ requestId: "r1", mindId: mind.id });
     expect(result).toMatchObject({

@@ -7,9 +7,11 @@
  */
 import { describe, expect, test } from "vitest";
 import type { Core, Meeting, MeetingHelpKind } from "../../src/core";
+import { setMindModel } from "../../src/shared/mindModel";
 import { answerEnded, shownPassages } from "../helpers/citations";
 import { createTempDataFolder } from "../helpers/core";
 import { createSourceFolder, waitForProcessing, writeSourceFile } from "../helpers/documents";
+import { connectToMind } from "../helpers/mindClient";
 import { type ModelCall, scriptedModel, scriptedModels } from "../helpers/models";
 import { transcribingCore, until } from "../helpers/transcription";
 
@@ -264,6 +266,39 @@ describe("Help during the call", { timeout: 60_000 }, () => {
     await core.updateSettings({ user: { language: "zh-CN" } });
     const { messages } = await press(core, meeting, "ask");
     expect(messages.at(-2)).toMatchObject({ kind: "question", text: "接下来问什么" });
+  });
+
+  test("the help Question is asked with the model in use in the Meeting's Mind: its own pick, else the last pick, else the Answers default", async () => {
+    const { core, meeting } = await setUp();
+    const openai = await core.saveChatProvider({
+      kind: "openai",
+      apiKey: "sk-test",
+      modelId: "gpt-6-luna",
+      keepDefault: true,
+    });
+    const claude = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+      keepDefault: true,
+    });
+    for (const provider of [openai, claude]) {
+      if (provider.service) await core.allowDataFlow("chat", provider.service.id);
+    }
+    const answers = (await core.getSettings()).user.chatModel;
+    const last = { providerId: claude.id, modelId: "claude-haiku-5-5" };
+    const own = { providerId: openai.id, modelId: "gpt-6-luna" };
+    const writtenBy = async () => (await press(core, meeting, "no")).answer.model;
+
+    expect(await writtenBy()).toEqual(answers);
+
+    await core.updateSettings({ device: { lastChatModel: last } });
+    expect(await writtenBy()).toEqual(last);
+
+    const client = await connectToMind(core, meeting.mindId);
+    setMindModel(client.doc, own);
+    await client.settled();
+    expect(await writtenBy()).toEqual(own);
   });
 
   test("the buttons' and Call help's shortcuts are kept per device, and only keys with ⌘, ⌃ or ⌥ are taken", async () => {

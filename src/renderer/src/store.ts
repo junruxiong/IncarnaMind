@@ -35,6 +35,7 @@ import { displayName } from "../../shared/documentNames";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
+import { filingFolder } from "../../shared/searchScope";
 import { tagLinks } from "../../shared/tagLinks";
 import {
   deleted,
@@ -47,11 +48,12 @@ import {
 import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
-import { errorMessage } from "./errors";
+import { describeError, errorMessage } from "./errors";
 import { languageNow } from "./i18n";
 import {
   createLayoutSlice,
   currentMindIdOf,
+  focusedGroupOf,
   followLayout,
   groupsMerged,
   type LayoutSlice,
@@ -178,9 +180,16 @@ export interface AppState extends LayoutSlice {
   refreshLibrary(): Promise<void>;
   /**
    * Shows the Library (one tab per window), at a Folder's section if given:
-   * its tab where it is open, else a new tab in the focused group, or to the side.
+   * its tab where it is open, else a new tab in the focused group, to the side,
+   * or behind the one shown.
    */
-  openLibrary(filter?: string, options?: { side?: boolean }): void;
+  openLibrary(filter?: string, options?: { side?: boolean; behind?: boolean }): void;
+  /**
+   * Shows Home (one tab per window): its tab where it is open, else a new one
+   * in the focused group; with `first`, as at a launch, just before the tab
+   * that group shows.
+   */
+  openHome(options?: { side?: boolean; first?: boolean }): Promise<void>;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
   /** The first-run example Mind and its Documents (onboarding). Null until loaded. */
@@ -202,10 +211,10 @@ export interface AppState extends LayoutSlice {
 
   load(): Promise<void>;
   /**
-   * Creates a Mind, in a Folder if given, and opens it in a new tab after the
-   * shown one, in the focused group or `groupId`, with its title focused, or
-   * with a Question started in it (with a Search scope, if given). It says nothing
-   * and leaves nothing to undo: ⌘Z stays the editor's own, and Delete takes the Mind back.
+   * Creates a Mind, in `folderId` if given, else where `filingFolder` says (#1362), and opens it
+   * in a new tab after the shown one, in the focused group or `groupId`, with its title focused,
+   * or with a Question started in it (with a Search scope, if given). It says nothing and leaves
+   * nothing to undo: ⌘Z stays the editor's own, and Delete takes the Mind back.
    */
   createMind(options?: {
     startQuestion?: boolean;
@@ -214,6 +223,7 @@ export interface AppState extends LayoutSlice {
     /** A new Mind to write in: its first line is an empty Heading 1, its title to be typed. */
     titled?: boolean;
     scope?: SearchScope | null;
+    /** Null: in no Folder, whichever Mind is in front. */
     folderId?: string | null;
     groupId?: string;
     /** Runs once it is made and shown, with its id. */
@@ -279,9 +289,9 @@ export interface AppState extends LayoutSlice {
   /**
    * Shows a Mind: its tab where it is open, else a new tab in the focused
    * group after the shown one; with `newTab`, a new tab in the focused group
-   * even where it is open.
+   * even where it is open; with `behind`, a new tab that stays behind the one shown.
    */
-  openMind(id: string, options?: { newTab?: boolean }): void;
+  openMind(id: string, options?: { newTab?: boolean; behind?: boolean }): void;
   /** Closes a tab, offering to reopen it; if it was shown, the tab after it (or else before it) is. */
   closeTab(tabId: string): void;
   /** ⇧⌘T: reopens the tab closed last, where it was. */
@@ -422,7 +432,6 @@ const linkSteps = new Map<Undoable, LinkStep>();
 const inside = (folder: string, path: string) =>
   path !== folder && (path.startsWith(`${folder}/`) || path.startsWith(`${folder}\\`));
 
-/** Moves the link steps' folders, and the folders they merged, from where a folder was to where it is now. */
 function moveLinkSteps(from: string, to: string): void {
   const moved = (path: string) =>
     path === from || inside(from, path) ? to + path.slice(from.length) : path;
@@ -486,6 +495,20 @@ function readList<T>(list: PushedList, request: Promise<T>, readAt: Map<PushedLi
 const pushedSince = (list: PushedList, readAt: Map<PushedList, number>) =>
   (lastPushed.get(list) ?? 0) > (readAt.get(list) ?? 0);
 
+const LOADED_KEY = "incarnamind.window.loaded";
+
+// A reload of the window (View › Reload) keeps the tab it showed; only a new window opens on Home.
+function windowLoadedBefore(): boolean {
+  try {
+    const before = sessionStorage.getItem(LOADED_KEY) !== null;
+    sessionStorage.setItem(LOADED_KEY, "1");
+    return before;
+  } catch (error) {
+    console.warn("Couldn't tell whether this window loaded before; it opens on Home.", error);
+    return false;
+  }
+}
+
 export const useAppStore = create<AppState>()((set, get) => {
   let libraryRequest = 0;
   /** The interface's words, outside React: for the lines the store writes (Undo's). */
@@ -537,7 +560,21 @@ export const useAppStore = create<AppState>()((set, get) => {
     if (!now) throw new UndoRefused((t) => t("error.linkedFolder.notFound"), null);
     if (now.path !== link.path) moveLinkSteps(link.path, now.path);
     // A merged folder that can't be linked again refuses the Undo before anything changes.
-    for (const inner of link.before.linkedFolders) await core.previewLinkedFolder(inner.path);
+    for (const inner of link.before.linkedFolders) {
+      try {
+        await core.previewLinkedFolder(inner.path);
+      } catch (error) {
+        if (describeError(error).wording?.key !== "error.path.noFolder") throw error;
+        // Its own link's Undo could only be refused too.
+        for (const [step, other] of linkSteps) {
+          if (other.path !== inner.path) continue;
+          linkSteps.delete(step);
+          useUndo.getState().withdraw(step);
+        }
+        const name = linkedFolderName(inner.path);
+        throw new UndoRefused((t) => t("undo.linkedFolder.mergedGone", { name }), null);
+      }
+    }
     await core.removeLinkedFolder(now.id, { keep: link.before.documentIds });
     // The Linked folders it merged are linked again, their Documents keeping their ids.
     for (const inner of link.before.linkedFolders) {
@@ -822,12 +859,33 @@ export const useAppStore = create<AppState>()((set, get) => {
           : {}),
       });
     },
+    openHome: async (options) => {
+      const { layout } = get();
+      const group = layout ? focusedGroupOf(layout) : null;
+      const shown = group?.tabs.find((tab) => tab.id === group.activeTabId);
+      await get().changeLayout({
+        type: "open",
+        item: { kind: "home" },
+        where: options?.side
+          ? { in: "side" }
+          : options?.first && group
+            ? {
+                in: "group",
+                groupId: group.id,
+                // Just before the tab that was in front, so closing Home shows it again.
+                before:
+                  shown && !shown.pinned ? shown.id : group.tabs.find((tab) => !tab.pinned)?.id,
+              }
+            : { in: "place" },
+      });
+    },
     openLibrary: (filter = "all", options) => {
       set({ libraryFilter: filter });
       void get().changeLayout({
         type: "open",
         item: { kind: "library" },
         where: options?.side ? { in: "side" } : { in: "place" },
+        ...(options?.behind && { behind: true }),
       });
     },
     skills: [],
@@ -881,6 +939,13 @@ export const useAppStore = create<AppState>()((set, get) => {
           readList("rerank", core.getRerankSettings(), readAt),
           readList("privacy", core.getPrivacySettings(), readAt),
         ]);
+        const reloaded = windowLoadedBefore();
+        // Minds made before this setting existed count as an earlier launch.
+        const launchedBefore = settings.device.openedBefore || minds.length > 0;
+        // Before the tabs are drawn, so the Mind left in front isn't drawn only to be covered.
+        if (!offered?.mindId && launchedBefore && !reloaded) {
+          await get().openHome({ first: true });
+        }
         // What the core's events brought before this is in the lists just read.
         documentUpdates.flush();
         const read = {
@@ -908,6 +973,9 @@ export const useAppStore = create<AppState>()((set, get) => {
           askedOwnAtLaunch: settings.device.gettingStarted.askedOwn,
           status: { kind: "ready" },
         });
+        if (!settings.device.openedBefore) {
+          void get().updateSettings({ device: { openedBefore: true } });
+        }
         await get().refreshLibrary();
         tickIndexed(connectors.length);
       } catch (error) {
@@ -917,10 +985,16 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     createMind: async (options) => {
       await attempt(async () => {
+        const { layout, minds } = get();
+        const inFront = minds.find((each) => each.id === currentMindIdOf(layout));
+        const folderId =
+          options?.folderId === undefined
+            ? filingFolder(options?.scope ?? null, inFront?.folderId ?? null)
+            : options.folderId;
         const mind = await core.createMind({
           ...(options?.title && { title: options.title }),
           ...((options?.title || options?.titled) && { headed: true }),
-          ...(options?.folderId && { folderId: options.folderId }),
+          ...(folderId && { folderId }),
         });
         set(
           options?.startQuestion
@@ -1187,7 +1261,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       void get().changeLayout({
         type: "open",
         item: { kind: "mind", mindId: id },
-        where: options?.newTab ? { in: "group" } : { in: "place" },
+        where: options?.newTab || options?.behind ? { in: "group" } : { in: "place" },
+        ...(options?.behind && { behind: true }),
       });
     },
 
@@ -1678,7 +1753,7 @@ export const allExamples = (state: Pick<AppState, "examples" | "otherExamples">)
 const madeExamples = (state: Pick<AppState, "examples" | "otherExamples">): Examples[] =>
   allExamples(state).filter(isMade);
 
-const exampleMindIds = (state: Pick<AppState, "examples" | "otherExamples">): string[] =>
+export const exampleMindIds = (state: Pick<AppState, "examples" | "otherExamples">): string[] =>
   allExamples(state).flatMap((each) => (each.mindId ? [each.mindId] : []));
 
 /** Ticks "Add your Documents" once there are Documents of the User's own, or Connectors. */
