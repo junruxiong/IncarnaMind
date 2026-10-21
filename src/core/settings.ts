@@ -192,6 +192,7 @@ const deviceScope: Scope<DeviceSettings> = {
     sidebarHidden: false,
     chatSetupDismissed: false,
     sandboxNoticeDismissed: false,
+    openedBefore: false,
     gettingStarted: {
       started: false,
       citationChecked: false,
@@ -210,12 +211,14 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingPanelHidden: true,
     meetingHelpKeys: {},
     motion: "system",
+    lastChatModel: null,
   },
   validators: {
     sidebarWidth: isPaneWidth,
     sidebarHidden: isBoolean,
     chatSetupDismissed: isBoolean,
     sandboxNoticeDismissed: isBoolean,
+    openedBefore: isBoolean,
     gettingStarted: isGettingStarted,
     skillScriptsEnabled: isBoolean,
     skillScriptTimeoutSeconds: isScriptTimeout,
@@ -230,6 +233,7 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingHelpKeys: isHelpKeys,
     motion: (value): value is MotionPreference =>
       MOTION_PREFERENCES.some((preference) => preference === value),
+    lastChatModel: isModelSetting,
   },
 };
 

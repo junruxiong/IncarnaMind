@@ -10,6 +10,7 @@ import { updateCheck } from "../../src/core/answers/checks/sentences";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
 import { mindCheckOf } from "../../src/shared/mindCheck";
+import { setMindModel } from "../../src/shared/mindModel";
 import { checkGenerate, checkReply, isCheckRun, type Plan, sentenceOf } from "../helpers/checks";
 import { shownPassages } from "../helpers/citations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
@@ -128,6 +129,47 @@ async function shownChecks(core: Core, client: MindClient, folderId: string | nu
 }
 
 describe("Check this Mind", () => {
+  test("the model it names is the one in use: an older Mind follows a new last pick, its own pick wins, and a removed provider falls back", async () => {
+    const { core, client, mindId } = await setUp();
+    const named = async () => {
+      const plan = await core.planMindCheck(mindId, "all");
+      return plan.kind === "ready" ? plan.model : undefined;
+    };
+    const defaultModel = (await core.getSettings()).user.chatModel;
+    expect(await named()).toEqual(defaultModel);
+
+    const claude = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+      keepDefault: true,
+    });
+    const openai = await core.saveChatProvider({
+      kind: "openai",
+      apiKey: "sk-test",
+      modelId: "gpt-6-luna",
+      keepDefault: true,
+    });
+    const last = { providerId: claude.id, modelId: "claude-haiku-5-5" };
+    const own = { providerId: openai.id, modelId: "gpt-6-luna" };
+
+    await core.updateSettings({ device: { lastChatModel: last } });
+    expect(await named()).toEqual(last);
+
+    setMindModel(client.doc, own);
+    await client.settled();
+    expect(await named()).toEqual(own);
+    await core.updateSettings({
+      device: { lastChatModel: { providerId: claude.id, modelId: "claude-sonnet-5-5" } },
+    });
+    expect(await named()).toEqual(own);
+
+    await core.deleteChatProvider(openai.id);
+    expect(await named()).toEqual({ providerId: claude.id, modelId: "claude-sonnet-5-5" });
+    await core.deleteChatProvider(claude.id);
+    expect(await named()).toEqual(defaultModel);
+  });
+
   test("checks every claim, each marked; the heading, the question and the User's opinion aren't; the run is recorded", async () => {
     const { core, client, mindId, folderId, checks, finds } = await setUp();
     expect(await core.planMindCheck(mindId, "all")).toEqual({
@@ -135,7 +177,7 @@ describe("Check this Mind", () => {
       sentences: 5,
       findsClaims: true,
       inFolder: true,
-      model: null,
+      model: (await core.getSettings()).user.chatModel,
     });
 
     expect(await core.checkMind(request(mindId, "all"))).toEqual({
@@ -185,7 +227,7 @@ describe("Check this Mind", () => {
       sentences: 2,
       findsClaims: false,
       inFolder: true,
-      model: null,
+      model: (await core.getSettings()).user.chatModel,
     });
     expect(await core.checkMind(request(mindId, "changed"))).toMatchObject({
       kind: "checked",

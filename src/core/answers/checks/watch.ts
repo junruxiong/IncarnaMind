@@ -102,6 +102,7 @@ export interface WatchOptions {
   /** Every live Document's current version, for telling a new one when it arrives. */
   documentVersions(): ReadonlyMap<string, string>;
   defaultModel(): ChatModelChoice | null;
+  modelInUse(own: ChatModelChoice | null): ChatModelChoice | null;
   /** The model to check with, or why not; the consent dialog shows before anything is sent. */
   prepare(choice: ChatModelChoice | null): Promise<Prepared>;
   /** The model, when it can be used now without asking the User anything; null otherwise. */
@@ -300,9 +301,10 @@ export function createContradictionWatch(options: WatchOptions) {
     };
   }
 
-  /** The Mind's own model, or none. */
   const modelOf = (mindId: string): ChatModelChoice | null =>
-    content.readSettings(mindId, (settings) => (settings.doc ? mindModelOf(settings.doc) : null));
+    options.modelInUse(
+      content.readSettings(mindId, (settings) => (settings.doc ? mindModelOf(settings.doc) : null)),
+    );
 
   // In the background ---------------------------------------------------------------------------
 
@@ -317,7 +319,7 @@ export function createContradictionWatch(options: WatchOptions) {
     if (closed) return;
     const ready = plan(mindId);
     if (ready.kind !== "ready") return;
-    const prepared = await options.prepareQuietly(modelOf(mindId) ?? options.defaultModel());
+    const prepared = await options.prepareQuietly(modelOf(mindId));
     if (!prepared || closed) return;
     const runId = randomUUID();
     const request = randomUUID();
@@ -417,7 +419,7 @@ export function createContradictionWatch(options: WatchOptions) {
       const { requestId, mindId } = input;
       const ready = plan(mindId);
       if (ready.kind !== "ready") return ready;
-      const model = await options.prepare(input.model ?? modelOf(mindId) ?? options.defaultModel());
+      const model = await options.prepare(input.model ?? modelOf(mindId));
       if (!model.ok) return model.result;
       const tracked = options.track(requestId, mindId);
       try {

@@ -220,6 +220,8 @@ export interface AnswerTools {
   readonly documentLanguages?: readonly DocumentLanguage[];
   /** The Documents in the Search scope whose text couldn't be read: the search Tool says so. Absent: none are known. */
   unreadDocuments?(): readonly UnreadFile[];
+  /** The Documents in the Search scope still being read: the search Tool says so, so a Document isn't taken for missing (#1503). */
+  readingDocuments?(): readonly { name: string }[];
   /** The document-search Tool. */
   searchDocuments(
     query: string,
@@ -1359,7 +1361,11 @@ export function documentTools(
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount, found.passageIds);
         // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
-        const passages = withPassageNotes(result.text, documents.unreadDocuments?.() ?? []);
+        const passages = withPassageNotes(
+          result.text,
+          documents.unreadDocuments?.() ?? [],
+          documents.readingDocuments?.() ?? [],
+        );
         const note = hooks.languageNote?.();
         return note ? `${passages}\n\n${note}` : passages;
       },

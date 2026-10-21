@@ -54,7 +54,7 @@ import type { CheckScope, VerifyOptions } from "./verify";
 
 export interface MindCheckOptions extends RunChecksOptions {
   content: Pick<MindContent, "read" | "edit" | "readSettings" | "editSettings">;
-  defaultModel(): ChatModelChoice | null;
+  modelInUse(own: ChatModelChoice | null): ChatModelChoice | null;
   prepare: VerifyOptions["prepare"];
   unread: VerifyOptions["unread"];
   recordUnread: VerifyOptions["recordUnread"];
@@ -127,7 +127,9 @@ export function createMindCheck(options: MindCheckOptions) {
   const { content } = options;
 
   const modelOf = (mindId: string): ChatModelChoice | null =>
-    content.readSettings(mindId, (settings) => (settings.doc ? mindModelOf(settings.doc) : null));
+    options.modelInUse(
+      content.readSettings(mindId, (settings) => (settings.doc ? mindModelOf(settings.doc) : null)),
+    );
 
   /**
    * What the model named among each Mind's sentences, by key: the ask before
@@ -276,7 +278,7 @@ export function createMindCheck(options: MindCheckOptions) {
     if (fresh.length + again.length === 0) return { kind: "nothing" };
     const { searchable, folderId } = options.scopeOf(mindId, everywhere(input.allDocuments, sent));
     if (searchable === 0) return { kind: "no-documents", folderId };
-    const ready = await options.prepare(input.model ?? modelOf(mindId) ?? options.defaultModel());
+    const ready = await options.prepare(input.model ?? modelOf(mindId));
     if (!ready.ok) return ready.result;
     if (signal.aborted) return { kind: "cancelled" };
     const found = await sort(mindId, fresh, ready.prepared, signal);
@@ -301,7 +303,7 @@ export function createMindCheck(options: MindCheckOptions) {
     if (searchable === 0) return { kind: "no-documents", folderId };
     const wide = widened.size > 0 ? options.scopeOf(mindId, true).check : scope;
     const scopeFor = (claim: SelectedSentence) => (widened.has(claim) ? wide : scope);
-    const ready = await options.prepare(input.model ?? modelOf(mindId) ?? options.defaultModel());
+    const ready = await options.prepare(input.model ?? modelOf(mindId));
     if (!ready.ok) return ready.result;
     if (signal.aborted) return { kind: "cancelled" };
 
