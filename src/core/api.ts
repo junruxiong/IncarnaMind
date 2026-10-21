@@ -5247,6 +5247,12 @@ export interface AnswerSteps {
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
   /**
+   * Documents in its Search scope were still being read (Queued or Extracting) when it ended, so
+   * no search could find their text yet (#1503): how many, and the name when there is one.
+   * Absent: none.
+   */
+  stillReading?: { count: number; name?: string };
+  /**
    * A request to write, written from a Search scope that holds `documents` of the User's
    * `total` Documents (#1149). Absent: from all of them, or not a request to write.
    */

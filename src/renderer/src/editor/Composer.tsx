@@ -43,6 +43,7 @@ import {
   stopWriting,
   useAnswerBeingWritten,
   useConversations,
+  useHasMessage,
 } from "../conversations";
 import { core } from "../core";
 import { type Dragged, type Dropped, useDropTarget } from "../dragDrop";
@@ -537,6 +538,7 @@ export function Composer({
 
   const askWanted = useComposer((state) => state.askWanted);
   const writing = useAnswerBeingWritten();
+  const hasMessage = useHasMessage();
   const latestAsk = useRef(ask);
   latestAsk.current = ask;
   // Asked once the Answer being written is done, as Enter would be.
@@ -846,7 +848,9 @@ export function Composer({
                   ? t("research.placeholder.change")
                   : researching
                     ? t("research.placeholder")
-                    : t("composer.placeholder")
+                    : hasMessage
+                      ? t("composer.placeholder.followUp")
+                      : t("composer.placeholder")
           }
           aria-autocomplete="list"
           aria-controls={picking ? listId : undefined}
