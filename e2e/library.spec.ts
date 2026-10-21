@@ -17,6 +17,7 @@ import {
   editFolderInLibrary,
   expectReadyDocuments,
   launchApp,
+  leaveText,
   openFolderInLibrary,
   openSettings,
   placeAssistant,
@@ -279,6 +280,165 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
     await expect(settings.getByLabel("Model name", { exact: true })).toHaveValue(
       "small-classifier",
     );
+  } finally {
+    await reopened.app.close();
+  }
+});
+
+test("⌘Z takes Organize's suggestions back and ⇧⌘Z brings them back in one step, leaving a Document chosen in between as it was (#1391)", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await dismissChatSetup(window);
+    await connectLocalChatModel(window, "main-chat");
+    await makeFolders(window, [{ name: "Research", description: "Research papers and reports" }]);
+    const settings = await taggingSettings(window);
+    const providerId = await window.evaluate(
+      async () =>
+        (
+          await (
+            globalThis as unknown as { incarnamind: CoreBridge }
+          ).incarnamind.listChatProviders()
+        )[0]?.id,
+    );
+    if (!providerId) throw new Error("No provider");
+    await chooseOtherModel(settings, async (form) => {
+      await form.getByLabel("Connection", { exact: true }).selectOption(providerId);
+      await form.getByLabel("Model name", { exact: true }).fill("small-classifier");
+    });
+    await settings
+      .getByRole("checkbox", { name: /^Move new Documents into Folders automatically/ })
+      .uncheck();
+    await closeSettings(window);
+    const names = ["Research notes A", "Research notes B", "Research notes C"];
+    const paths: string[] = [];
+    for (const name of names) {
+      const path = join(sources, `${name}.txt`);
+      await writeFile(path, `Research report about membrane separation, part ${name.slice(-1)}.`);
+      paths.push(path);
+    }
+    await addDocuments(window, paths);
+    await window.getByTestId("open-library").click();
+    const library = window.getByTestId("library");
+    await pointAndClick(window, organize(library));
+
+    const research = section(library, "Research");
+    const suggested = research.getByTestId("library-suggested");
+    await expect(suggested).toHaveCount(3);
+    await expect(window.getByTestId("undo-line")).toContainText(
+      "Organize suggested a Folder for 3 Documents",
+    );
+    const menu = (id: "edit.undo" | "edit.redo") =>
+      app.evaluate(({ Menu }, item) => {
+        const found = Menu.getApplicationMenu()?.getMenuItemById(item);
+        return { label: found?.label ?? "", enabled: found?.enabled ?? false };
+      }, id);
+    await expect.poll(() => menu("edit.undo")).toEqual({ label: "Undo Organize", enabled: true });
+
+    // ⌘Z takes all of it back.
+    await leaveText(window);
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(research.getByTestId("library-document")).toHaveCount(0);
+    await expect(section(library, "Not in a Folder").getByTestId("library-document")).toHaveCount(
+      3,
+    );
+    await expect.poll(() => menu("edit.redo")).toEqual({ label: "Redo Organize", enabled: true });
+
+    // One Document is put in the Folder meanwhile, by a change that leaves no step: Redo leaves it as chosen.
+    await (await coreOf(window)).evaluate(async (core) => {
+      const documents = await core.listDocuments();
+      const folders = (await core.getLibrary()).groups;
+      const chosen = documents.find((each) => each.name === "Research notes B");
+      const research = folders.find((each) => each.name === "Research");
+      if (!chosen || !research) throw new Error("No Document or Folder to choose.");
+      await core.assignDocumentGroup(chosen.id, research.id);
+    });
+    await expect(research.getByTestId("library-document")).toHaveCount(1);
+    await expect(suggested).toHaveCount(0);
+
+    // ⇧⌘Z brings the other two back, in one step with its line, and a second does nothing.
+    await leaveText(window);
+    await window.keyboard.press("ControlOrMeta+Shift+z");
+    await expect(research.getByTestId("library-document")).toHaveCount(3);
+    await expect(suggested).toHaveCount(2);
+    await expect(window.getByTestId("undo-line")).toContainText(
+      "Organize suggested a Folder for 3 Documents",
+    );
+    await expect.poll(() => menu("edit.redo")).toMatchObject({ enabled: false });
+    await window.keyboard.press("ControlOrMeta+Shift+z");
+    await expect(research.getByTestId("library-document")).toHaveCount(3);
+    await expect(suggested).toHaveCount(2);
+  } finally {
+    await app.close();
+  }
+});
+
+test("Undo of an Organize that began with no model leaves the Documents unfiled with nothing waiting, ⇧⌘Z files them again, and the next start organizes nothing (#1391)", async () => {
+  const names = ["Research notes A", "Research notes B", "Research notes C"];
+  const paths: string[] = [];
+  for (const name of names) {
+    const path = join(sources, `${name}.txt`);
+    await writeFile(path, `Research report about membrane separation, part ${name.slice(-1)}.`);
+    paths.push(path);
+  }
+  const first = await launchApp(dataDir, { fakeChat: true });
+  try {
+    const { window } = first;
+    await dismissChatSetup(window);
+    await makeFolders(window, [{ name: "Research", description: "Research papers and reports" }]);
+    await addDocuments(window, paths);
+    await connectLocalChatModel(window, "main-chat");
+    await window.getByTestId("open-library").click();
+    const library = window.getByTestId("library");
+    await pointAndClick(window, organize(library));
+    await pointAndClick(window, library.getByTestId("library-organize-use"));
+
+    const research = section(library, "Research");
+    const suggested = research.getByTestId("library-suggested");
+    await expect(suggested).toHaveCount(3);
+    await expect(window.getByTestId("undo-line")).toContainText(
+      "Organize suggested a Folder for 3 Documents",
+    );
+    const assignments = async () =>
+      (await coreOf(window)).evaluate(async (core) => (await core.getLibrary()).assignments);
+
+    // ⌘Z puts the three back unfiled, with no assignment left to wait or to organize.
+    await leaveText(window);
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(research.getByTestId("library-document")).toHaveCount(0);
+    await expect(section(library, "Not in a Folder").getByTestId("library-document")).toHaveCount(
+      3,
+    );
+    expect(await assignments()).toEqual([]);
+    await expect(window.getByTestId("organization-attention")).toHaveCount(0);
+
+    // ⇧⌘Z gives the Folders back.
+    await leaveText(window);
+    await window.keyboard.press("ControlOrMeta+Shift+z");
+    await expect(research.getByTestId("library-document")).toHaveCount(3);
+    await expect(suggested).toHaveCount(3);
+
+    // Undone again, the next start finds nothing to organize.
+    await leaveText(window);
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(research.getByTestId("library-document")).toHaveCount(0);
+    expect(await assignments()).toEqual([]);
+  } finally {
+    await first.app.close();
+  }
+  const reopened = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await reopened.window.getByTestId("open-library").click();
+    await expect(
+      section(reopened.window.getByTestId("library"), "Not in a Folder").getByTestId(
+        "library-document",
+      ),
+    ).toHaveCount(3);
+    expect(
+      await (await coreOf(reopened.window)).evaluate(
+        async (core) => (await core.getLibrary()).assignments,
+      ),
+    ).toEqual([]);
+    await expect(reopened.window.getByTestId("organization-attention")).toHaveCount(0);
   } finally {
     await reopened.app.close();
   }
