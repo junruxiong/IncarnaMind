@@ -2028,9 +2028,9 @@ export interface DeviceSettings {
   /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
   motion: MotionPreference;
   /**
-   * The model the User last chose here, in a composer or as the Answers default: a new Mind and
-   * the assistant with no Mind in focus start on it. Null until they choose, and again once its
-   * provider is removed: they follow `UserSettings.chatModel` then.
+   * The model the User last chose here, in a composer or as the Answers default: a Mind with no
+   * pick of its own and the assistant with no Mind in focus use it (`modelInUse`). Null until
+   * they choose, and again once its provider is removed: they follow `UserSettings.chatModel` then.
    */
   lastChatModel: ChatModelChoice | null;
 }

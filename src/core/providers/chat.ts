@@ -5,6 +5,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { generateText } from "ai";
+import { modelInUse } from "../../shared/mindModel";
 import {
   CHOSEN_PROVIDER_FLOWS,
   type ChatModelChoice,
@@ -895,6 +896,15 @@ export function createChat(options: {
     },
 
     exists: (id: string) => rowById(id) !== undefined,
+
+    /** The model a request in a Mind whose own pick is `own` is asked with (see `modelInUse`). */
+    modelInUse(own: ChatModelChoice | null): ChatModelChoice | null {
+      const { device, user } = settings.get();
+      return modelInUse(
+        { own, last: device.lastChatModel, fallback: user.chatModel },
+        (id) => rowById(id) !== undefined,
+      );
+    },
 
     /** The key of the saved provider of a hosted catalog entry, for another service of its (#141). */
     async apiKeyOf(catalogId: string): Promise<{ providerId: string; apiKey: string } | null> {

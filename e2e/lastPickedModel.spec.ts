@@ -6,7 +6,9 @@ import {
   coreOf,
   createDataFolder,
   dismissChatSetup,
+  frontMindName,
   launchApp,
+  nameMind,
   newMind,
   ollamaListing,
   openSettings,
@@ -18,9 +20,10 @@ import {
 } from "./app";
 
 /**
- * The model the User last chose is what a new Mind and the assistant with no Mind in focus start
- * on (#1379); the Answers default applies until there is one, and changing it in Settings sets it
- * too. The scripted model answers, and an Answer's steps name the model that was asked.
+ * A Mind keeps a model only when the User picked one in it; every other Mind, older ones too, and
+ * the assistant with no Mind in focus use the model last chosen on this device (#1379). The
+ * Answers default applies until there is one, and changing it in Settings sets it too. The
+ * scripted model answers, and an Answer's steps name the model that was asked.
  */
 const SONNET = "claude-sonnet-5-5";
 const HAIKU = "claude-haiku-5-5";
@@ -94,6 +97,11 @@ async function connectAnthropic(
 
 const chipOf = (window: Page) => window.getByTestId("composer-model");
 
+async function openMindNamed(window: Page, name: string): Promise<void> {
+  await pointAndClick(window, window.getByTestId("mind-list-item").filter({ hasText: name }));
+  await expect(frontMindName(window)).toHaveText(name);
+}
+
 const settingsOf = async (window: Page) =>
   (await coreOf(window)).evaluate((core) => core.getSettings());
 
@@ -120,34 +128,53 @@ async function expectFoot(window: Page, text: string): Promise<void> {
   await expect(menu).toBeHidden();
 }
 
-test("a model picked in one Mind is what a new Mind starts on, its Answers are asked with it, and a restart keeps it", async () => {
+test("a model picked in one Mind is what a new Mind and an older one with no pick follow, its Answers are asked with it, and a Mind's own pick stays through a restart", async () => {
   let window = await start();
   const providerId = await connectAnthropic(window, SONNET);
 
   // A fresh install: nothing chosen yet, so the Answers default.
   await newMind(window);
+  await nameMind(window, "Older");
   await expect(chipOf(window)).toHaveText("Claude Sonnet 5.5");
   expect(await lastPick(window)).toBeNull();
 
+  await newMind(window);
+  await nameMind(window, "Picked");
   await chooseInChip(window, "Claude Haiku 5.5");
   await expect(chipOf(window)).toHaveText("Claude Haiku 5.5");
   await expect.poll(() => lastPick(window)).toEqual({ providerId, modelId: HAIKU });
   expect((await settingsOf(window)).user.chatModel).toEqual({ providerId, modelId: SONNET });
 
-  // A new Mind starts on it, and its Answer is asked with it.
+  // The Mind made before, which never had a pick of its own, follows it: chip and Answer.
+  await openMindNamed(window, "Older");
+  await expect(chipOf(window)).toHaveText("Claude Haiku 5.5");
+  const older = await askInAssistant(window, "Which model answers?");
+  await expect(await openSteps(window, older)).toContainText("Answered by Claude Haiku 5.5");
+
+  // So does a new Mind, and the menu's foot names it.
   await newMind(window);
   await expect(chipOf(window)).toHaveText("Claude Haiku 5.5");
-  const answer = await askInAssistant(window, "Which model answers?");
-  await expect(await openSteps(window, answer)).toContainText("Answered by Claude Haiku 5.5");
   await expectFoot(window, "Default for new Minds: Claude Haiku 5.5");
   await setLanguage(window, "zh-CN");
   await expectFoot(window, "新 Mind 的默认模型：Claude Haiku 5.5");
+
+  // A Mind's own pick wins when the last pick moves on: it is kept, the others follow.
+  await chooseInChip(window, "Claude Opus 5.5");
+  await expect.poll(() => lastPick(window)).toEqual({ providerId, modelId: OPUS });
+  await openMindNamed(window, "Picked");
+  await expect(chipOf(window)).toHaveText("Claude Haiku 5.5");
+  await openMindNamed(window, "Older");
+  await expect(chipOf(window)).toHaveText("Claude Opus 5.5");
   await quit();
 
   window = await start();
-  await expect.poll(() => lastPick(window)).toEqual({ providerId, modelId: HAIKU });
-  await newMind(window);
+  await expect.poll(() => lastPick(window)).toEqual({ providerId, modelId: OPUS });
+  await openMindNamed(window, "Picked");
   await expect(chipOf(window)).toHaveText("Claude Haiku 5.5");
+  await openMindNamed(window, "Older");
+  await expect(chipOf(window)).toHaveText("Claude Opus 5.5");
+  await newMind(window);
+  await expect(chipOf(window)).toHaveText("Claude Opus 5.5");
 });
 
 test("the Answers default applies on a fresh install, and changing it in Settings also sets what new Minds start on", async () => {
@@ -182,7 +209,7 @@ test("the Answers default applies on a fresh install, and changing it in Setting
   );
 });
 
-test("when the provider of the last pick is removed, a new Mind falls back to the default and its chip says what is used", async () => {
+test("when a provider is removed, the Minds on its models fall back, and each chip says what is used", async () => {
   const ollama = await ollamaListing(["fake-model"]);
   try {
     const window = await start();
@@ -193,19 +220,24 @@ test("when the provider of the last pick is removed, a new Mind falls back to th
     const anthropic = await connectAnthropic(window, HAIKU, true);
 
     await newMind(window);
+    await nameMind(window, "Own pick");
     await expect(chipOf(window)).toHaveText("fake-model");
     await chooseInChip(window, "Claude Haiku 5.5");
     await expect.poll(() => lastPick(window)).toEqual({ providerId: anthropic, modelId: HAIKU });
     await newMind(window);
+    await nameMind(window, "No pick");
     await expect(chipOf(window)).toHaveText("Claude Haiku 5.5");
 
     await (await coreOf(window)).evaluate((core, id) => core.deleteChatProvider(id), anthropic);
     expect(await lastPick(window)).toBeNull();
 
-    await newMind(window);
     await expect(chipOf(window)).toHaveText("fake-model");
     const answer = await askInAssistant(window, "Which model answers now?");
     await expect(await openSteps(window, answer)).toContainText("Answered by fake-model");
+    await openMindNamed(window, "Own pick");
+    await expect(chipOf(window)).toHaveText("fake-model");
+    await newMind(window);
+    await expect(chipOf(window)).toHaveText("fake-model");
   } finally {
     ollama.server.close();
   }

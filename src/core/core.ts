@@ -23,7 +23,7 @@ import {
   citationStyleIn,
   setCitationStyle,
 } from "../shared/mindCitationStyle";
-import { mindModelOf, sameModel, setMindModel } from "../shared/mindModel";
+import { mindModelOf } from "../shared/mindModel";
 import {
   DEFAULT_MIND_STYLE,
   exportedFamily,
@@ -1702,20 +1702,6 @@ export function createCore(adapters: CoreAdapters): Core {
     if (sameStyle(style, DEFAULT_MIND_STYLE)) return;
     content.editSettings(mindId, (mindSettings) => writeMindStyle(mindSettings, style));
   };
-  // The Answers default needs no copy: a Mind with no choice follows it.
-  const startOnLastModel = (mindId: string) => {
-    const { device, user } = settings.get();
-    const { lastChatModel } = device;
-    if (!lastChatModel || !chat.exists(lastChatModel.providerId)) return;
-    if (sameModel(lastChatModel, user.chatModel)) return;
-    content.editSettings(mindId, (mindSettings) => {
-      if (mindSettings.doc) setMindModel(mindSettings.doc, lastChatModel);
-    });
-  };
-  const startNewMind = (mindId: string) => {
-    startInWritingStyle(mindId);
-    startOnLastModel(mindId);
-  };
   /** A new Mind, in the citation style last chosen for a Mind in its Folder, as its own choice (#289). */
   /**
    * With `headed`, the Mind's text starts with its title as a Heading 1 and an
@@ -1746,7 +1732,7 @@ export function createCore(adapters: CoreAdapters): Core {
     if (style !== null) {
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
     }
-    startNewMind(mind.id);
+    startInWritingStyle(mind.id);
     mindsChanged();
     usageData.record({ event: "mind_created", fields: {} });
     return mind;
@@ -1796,6 +1782,7 @@ export function createCore(adapters: CoreAdapters): Core {
     searchedScope,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
+    modelInUse: (own) => chat.modelInUse(own),
     recordAiUse: (inputs) => void aiUse.record(inputs),
     chat,
     consent,
@@ -1951,8 +1938,9 @@ export function createCore(adapters: CoreAdapters): Core {
       return [mind, ...asked.flat()].join("\n\n");
     },
     modelFor: (mindId) =>
-      content.read(mindId, (blocks) => (blocks.doc ? mindModelOf(blocks.doc) : null)) ??
-      settings.get().user.chatModel,
+      chat.modelInUse(
+        content.read(mindId, (blocks) => (blocks.doc ? mindModelOf(blocks.doc) : null)),
+      ),
     chat,
   });
   // New files: in the Output location, or inside a Linked folder the User allowed.
@@ -2332,7 +2320,6 @@ export function createCore(adapters: CoreAdapters): Core {
     newVersion: (documentId, path) => documents.newVersionFrom(documentId, path),
     documentChanged: (documentId) => events.emit("document.status", documents.get(documentId)),
     mindsChanged,
-    startMind: startOnLastModel,
     now,
     log: adapters.log ?? silentLogger,
   });
@@ -2823,7 +2810,7 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     createMind: (title, folderId) => {
       const mind = minds.create(parseCreateMindInput({ title, folderId }));
-      startNewMind(mind.id);
+      startInWritingStyle(mind.id);
       mindsChanged();
       return mind;
     },

@@ -9,8 +9,8 @@ import { core } from "../core";
 import { formatMoney } from "../cost";
 import { AnswerError } from "../editor/AnswerView";
 import { RemoveIcon } from "../editor/icons";
-import { useMindModel } from "../editor/ModelChip";
 import { useLanguage, useT } from "../i18n";
+import { useModelInUse } from "../modelInUse";
 import { useModelNames } from "../modelNames";
 import {
   addStep,
@@ -61,9 +61,7 @@ export function ResearchPlanCard({ mindId }: { mindId: string }) {
   const t = useT();
   const card = useResearch((state) => state.plans[mindId]);
   const seat = useComposer((state) => state.seat);
-  const chosen = useMindModel(seat?.mindId === mindId ? seat.doc : null);
-  const fallback = useAppStore((state) => state.settings?.user.chatModel ?? null);
-  const model = chosen ?? fallback;
+  const model = useModelInUse(seat?.mindId === mindId ? seat.doc : null);
   const web = useWebReach(model);
   const fields = useRef<(HTMLTextAreaElement | null)[]>([]);
   const focusStep = useRef<number | null>(null);
@@ -83,7 +81,7 @@ export function ResearchPlanCard({ mindId }: { mindId: string }) {
     card.planning || card.starting || steps.length === 0 || (!searchesWeb && !card.sources.library);
 
   const start = () => {
-    if (!blocked) void startResearch(mindId, chosen);
+    if (!blocked) void startResearch(mindId, model);
   };
   const cancel = () => cancelResearch(mindId);
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -221,7 +219,7 @@ export function ResearchPlanCard({ mindId }: { mindId: string }) {
           </div>
         </div>
       </div>
-      <PlanProblem mindId={mindId} card={card} model={chosen} />
+      <PlanProblem mindId={mindId} card={card} model={model} />
       <div className="research-plan-foot">
         <Estimate
           steps={Math.max(1, steps.length)}
