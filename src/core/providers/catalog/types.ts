@@ -153,6 +153,8 @@ export interface CatalogProvider {
   id: string;
   name: Localized;
   support: Support;
+  /** A best-effort provider the first-run key form offers too, as its key line says (#1375). */
+  firstRun?: boolean;
   group: "international" | "china" | "local" | "other";
   adapter: Adapter;
   /**

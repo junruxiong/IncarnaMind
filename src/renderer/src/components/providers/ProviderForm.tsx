@@ -5,6 +5,7 @@ import type {
   SecretStorageStatus,
   TestChatConnectionInput,
 } from "../../../../core/api";
+import type { Language } from "../../../../core/language";
 import type { DataUse } from "../../../../core/providers/catalog";
 import { catalogMenu } from "../../../../core/providers/catalog";
 import { serviceOfKey } from "../../../../core/providers/catalog/keyForms";
@@ -12,6 +13,7 @@ import {
   catalogProvider,
   dataUseOf,
   endpointOf,
+  FIRST_RUN_BEST_EFFORT,
   fieldAccepts,
   fieldUrl,
   isPreset,
@@ -61,8 +63,11 @@ const suggestedModel = (kind: CatalogId): string => catalogProvider(kind)?.roles
 const isSuggestion = (model: string) =>
   KEY_PROVIDERS.some((kind) => suggestedModel(kind) === model);
 
-/** The providers shown as one row of choices; the rest are under "More…". */
-const ROW: readonly CatalogId[] = ["anthropic", "openai", "google", "deepseek", "qwen"];
+/** The providers shown as one row of choices, in the order the interface's language puts first; the rest are under "More…". */
+const ROW: Readonly<Record<Language, readonly CatalogId[]>> = {
+  en: ["anthropic", "openai", "google", "deepseek", "kimi", "qwen"],
+  "zh-CN": ["deepseek", "qwen", "kimi", "glm", "anthropic", "openai", "google"],
+};
 
 /** What a provider's address field holds when it is chosen. */
 const fieldDefault = (kind: CatalogId): string => {
@@ -129,7 +134,7 @@ export function ProviderForm({
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
   onSaved(provider: ChatProvider): void;
-  /** Settings lists the best-effort providers too, under "More providers"; first run only the first-class ones. */
+  /** Lists every provider, the best-effort ones under "More…", as Settings does; without it, as first run does: the first-class ones and those the catalog marks `firstRun`. */
   withMoreProviders?: boolean;
   /** The provider chosen when the form opens: the one the User came from. DeepSeek in Chinese, else Anthropic. */
   initialKind?: CatalogId;
@@ -290,7 +295,7 @@ export function ProviderForm({
     if (next !== kind && !keepKey) key.clear();
     setKind(next);
     setSwitchedFrom(from);
-    if (more.includes(next) || !ROW.includes(next)) setMoreOpen(true);
+    if (more.includes(next) || !ROW[language].includes(next)) setMoreOpen(true);
     setEndpointId(defaultRegion(next, language));
     setFieldValue(fieldDefault(next));
     setModelId((current) =>
@@ -410,9 +415,10 @@ export function ProviderForm({
       className={inputClass}
     />
   );
-  // First run offers only the first-class providers (ADR-0019); Settings offers them all.
-  const offered = withMoreProviders ? [...main, ...more] : main;
-  const rowKinds = ROW.filter((each) => offered.includes(each));
+  const offered = withMoreProviders
+    ? [...main, ...more]
+    : [...main, ...FIRST_RUN_BEST_EFFORT.filter((each) => !main.includes(each))];
+  const rowKinds = ROW[language].filter((each) => offered.includes(each));
   // A key that fits no service's prefix may be one the services under More… issue.
   const showMore =
     moreOpen ||

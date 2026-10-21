@@ -1694,7 +1694,7 @@ export const zhCN = {
   "setup.chatgpt.line": "Plus 或 Pro · 无需密钥",
   "setup.chatgpt.line.china": "Plus 或 Pro（中国大陆不可用）· 无需密钥",
   "setup.key.use": "粘贴 API 密钥",
-  "setup.key.for": "OpenAI、Anthropic、Google、DeepSeek 等",
+  "setup.key.for": "DeepSeek、通义千问、Kimi、智谱 GLM 等",
   "setup.back": "返回",
   "setup.ready": "“{name}”可以使用了",
   "setup.ready.generic": "你的 AI 模型可以使用了",
