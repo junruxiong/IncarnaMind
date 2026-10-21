@@ -86,10 +86,12 @@ const grouped = (value: number): string =>
   value >= 1000 ? String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",") : String(value);
 
 const DIGIT_WORD = "zero|one|two|three|four|five|six|seven|eight|nine";
-const NUMBER_WORD = `${[...UNITS.keys()].join("|")}|${[...TENS.keys()].join("|")}|hundred|${[...SCALES.keys()].join("|")}`;
-// "a hundred", "one hundred and twenty-eight thousand", "nine point three", "six percent".
+const START_WORD = `${[...UNITS.keys()].join("|")}|${[...TENS.keys()].join("|")}`;
+const NUMBER_WORD = `${START_WORD}|hundred|${[...SCALES.keys()].join("|")}`;
+// "one hundred and twenty-eight thousand", "nine point three", "six percent". A run starts at a
+// number, never at a scale word alone ("a few million", "several hundred", "a million reasons").
 const RUN = new RegExp(
-  `\\b(?:a )?(?:${NUMBER_WORD})(?:[ -](?:${NUMBER_WORD})|(?<=hundred|thousand|million|billion|trillion) and (?:${NUMBER_WORD}))*(?: point(?: (?:${DIGIT_WORD}))+(?: (?:${[...SCALES.keys()].join("|")}))?)?(?: (?:percent|percentage|per cent))?(?![A-Za-z-])`,
+  `\\b(?:${START_WORD})(?:[ -](?:${NUMBER_WORD})|(?<=hundred|thousand|million|billion|trillion) and (?:${NUMBER_WORD}))*(?: point(?: (?:${DIGIT_WORD}))+(?: (?:${[...SCALES.keys()].join("|")}))?)?(?: (?:percent|percentage|per cent))?(?![A-Za-z-])`,
   "gi",
 );
 
@@ -169,9 +171,9 @@ function figuresOf(words: readonly string[]): Figure[] {
   return out;
 }
 
-/** A year said as two numbers: "twenty twenty-five", "nineteen ninety-nine", "twenty oh five". */
+/** A year said as two numbers after a word that leads one in: "in twenty twenty-five", "since nineteen ninety-nine". */
 const YEAR = new RegExp(
-  `\\b(nineteen|twenty)[ -]((?:${[...TENS.keys()].join("|")})(?:[- ](?:${DIGIT_WORD}))?|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|oh[ -](?:${DIGIT_WORD}))(?![A-Za-z-])`,
+  `(?<=\\b(?:in|since|by|from|until|of|during|year|before|after|through|and) )\\b(nineteen|twenty)[ -]((?:${[...TENS.keys()].join("|")})(?:[- ](?:${DIGIT_WORD}))?|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|oh[ -](?:${DIGIT_WORD}))(?![A-Za-z-])`,
   "gi",
 );
 
@@ -210,8 +212,10 @@ function runToDigits(run: string, after: string): string {
     text = text.slice(0, percentAt.index);
   }
   const [integer = "", places] = text.split(/ point /i);
-  const all = integer.toLowerCase().replace(/^a /, "");
+  const all = integer.toLowerCase();
   const figures = figuresOf(all.split(/[ -]+/).filter((each) => each !== "and"));
+  // Words that make more than one number ("twenty twenty-five") are a year or a list: left as said.
+  if (figures.length !== 1) return run;
   const scaleWord = places?.split(" ").find((each) => SCALES.has(word(each)));
   const decimals =
     places === undefined
@@ -244,11 +248,16 @@ function runToDigits(run: string, after: string): string {
 /** English: number words as digits; see the module's note on which. */
 function englishNumbers(text: string): string {
   const dated = text
+    .replace(/\ba hundred percent\b/gi, "100%")
     .replace(YEAR, (_whole, century: string, rest: string) => yearOf(century, rest))
     .replace(DAY, dayOf);
-  return dated.replace(RUN, (run: string, offset: number) =>
-    runToDigits(run, dated.slice(offset + run.length, offset + run.length + 24)),
-  );
+  return dated.replace(RUN, (run: string, offset: number) => {
+    // Beside a digit it is part of a figure the engine already wrote.
+    const before = dated.slice(0, offset).trimEnd().at(-1) ?? "";
+    const after = dated.slice(offset + run.length).trimStart()[0] ?? "";
+    if (/\d/.test(before) || /\d/.test(after)) return run;
+    return runToDigits(run, dated.slice(offset + run.length, offset + run.length + 24));
+  });
 }
 
 const ZH_DIGITS: ReadonlyMap<string, number> = new Map([
@@ -265,16 +274,8 @@ const ZH_DIGITS: ReadonlyMap<string, number> = new Map([
   ["八", 8],
   ["九", 9],
 ]);
-const ZH_SMALL: ReadonlyMap<string, number> = new Map([
-  ["十", 10],
-  ["百", 100],
-  ["千", 1000],
-]);
-const ZH_BIG: ReadonlyMap<string, number> = new Map([
-  ["万", 1e4],
-  ["亿", 1e8],
-]);
-const ZH_CHAR = "零〇一二三四五六七八九两十百千万亿";
+const ZH_DIGIT_CHARS = "一二三四五六七八九";
+const ZH_NUMERAL = "零〇一二三四五六七八九两十百千万亿";
 
 /** A Chinese numeral's value: "一百二十八万四千" is 1,284,000. */
 function zhValue(text: string): number {
@@ -283,13 +284,18 @@ function zhValue(text: string): number {
   let digit = 0;
   for (const char of text) {
     const each = ZH_DIGITS.get(char);
-    if (each !== undefined) {
-      digit = each;
-    } else if (ZH_SMALL.has(char)) {
-      section += (digit || (char === "十" ? 1 : 0)) * (ZH_SMALL.get(char) ?? 1);
+    if (each !== undefined) digit = each;
+    else if (char === "十") {
+      section += (digit || 1) * 10;
       digit = 0;
-    } else if (ZH_BIG.has(char)) {
-      total += (section + digit) * (ZH_BIG.get(char) ?? 1);
+    } else if (char === "百") {
+      section += digit * 100;
+      digit = 0;
+    } else if (char === "千") {
+      section += digit * 1000;
+      digit = 0;
+    } else if (char === "万" || char === "亿") {
+      total = (total + section + digit) * (char === "万" ? 1e4 : 1e8);
       section = 0;
       digit = 0;
     }
@@ -297,51 +303,146 @@ function zhValue(text: string): number {
   return total + section + digit;
 }
 
-const ZH_MEASURES = "年月日号元块%";
+/** The standard way to say a whole number below a trillion, to tell a numeral from a lookalike. */
+function zhSaid(value: number): string {
+  const digit = (each: number) => ZH_DIGIT_CHARS[each - 1] ?? "";
+  const group = (n: number, leading: boolean): string => {
+    let out = "";
+    let zero = false;
+    for (const [at, unit] of [
+      [1000, "千"],
+      [100, "百"],
+      [10, "十"],
+      [1, ""],
+    ] as const) {
+      const each = Math.floor(n / at) % 10;
+      if (each === 0) {
+        if (out !== "") zero = true;
+        continue;
+      }
+      if (zero) out += "零";
+      zero = false;
+      out += (each === 1 && unit === "十" && leading && out === "" ? "" : digit(each)) + unit;
+    }
+    return out;
+  };
+  const yi = Math.floor(value / 1e8);
+  const wan = Math.floor((value % 1e8) / 1e4);
+  const rest = value % 1e4;
+  let out = yi > 0 ? `${group(yi, true)}亿` : "";
+  if (wan > 0) out += `${out !== "" && wan < 1000 ? "零" : ""}${group(wan, out === "")}万`;
+  if (rest > 0) out += `${out !== "" && rest < 1000 ? "零" : ""}${group(rest, out === "")}`;
+  return out;
+}
 
-/** Chinese: numerals as digits, where a unit, a date or a size says they are a figure. */
+/** What a numeral is made of, said the same way as the standard one: 两 and 〇 are 二 and 零. */
+const plainNumeral = (text: string) => text.replace(/两/g, "二").replace(/〇/g, "零");
+
+/** The value of a numeral written the standard way ("三千二百", not "二三十" or "万一"), else null. */
+function zhStandard(text: string): number | null {
+  if (text === "" || /^[零〇]+$/.test(text)) return null;
+  const value = zhValue(text);
+  return value > 0 && value < 1e12 && zhSaid(value) === plainNumeral(text) ? value : null;
+}
+
+/** A numeral as digits: "三百万" stays "300万", as written numbers do, and the rest is grouped. */
+function zhShown(whole: string, value: number): string {
+  const last = whole.at(-1);
+  if (last === "万" || last === "亿") {
+    const head = whole.slice(0, -1);
+    const headValue = zhStandard(head);
+    if (headValue !== null && headValue < 10000 && !/[万亿]/.test(head))
+      return `${headValue}${last}`;
+  }
+  return grouped0(value);
+}
+
+const grouped0 = (value: number): string => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+/** After which a numeral is money, or a count of something. */
+const ZH_MONEY = ["美元", "欧元", "英镑", "日元", "元", "块"];
+const ZH_COUNTED = [
+  "件",
+  "个",
+  "人",
+  "家",
+  "台",
+  "吨",
+  "份",
+  "次",
+  "条",
+  "天",
+  "倍",
+  "笔",
+  "套",
+  "名",
+  "岁",
+];
+
+function zhDigits(text: string): string {
+  return [...text].map((each) => ZH_DIGITS.get(each) ?? 0).join("");
+}
+
+/**
+ * Chinese: a percent ("百分之三十"), a year said digit by digit ("二零二五年"), a month or day
+ * ("十一月", "三十日") and an amount before money or a counted noun ("三千二百元", "一百二十八万四千件")
+ * are written as digits. Only a numeral written the standard way, with nothing digit beside it:
+ * words and idioms with 一, 万 or 千 in them ("万一", "千万不要", "万事如意", "二三十", "唯一") stay.
+ */
 function chineseNumbers(text: string): string {
-  const whole = `[${ZH_CHAR}]+(?:点[零〇一二三四五六七八九]+[万亿]?)?`;
-  const pattern = new RegExp(`(百分之)?(${whole})`, "gu");
+  const numeral = `[${ZH_NUMERAL}]+`;
+  const decimal = "(?:点[零〇一二三四五六七八九]+)?";
+  const pattern = new RegExp(
+    `(百分之)?(${numeral})(${decimal})((?:[万亿])?)(月|日|号|年|美元|欧元|英镑|日元|元|块|${ZH_COUNTED.join("|")})?`,
+    "gu",
+  );
   return text.replace(
     pattern,
-    (match: string, percent: string | undefined, number: string, offset: number) => {
-      const after = text.charAt(offset + match.length);
-      const [integer = "", fraction] = number.split("点");
-      const scale = fraction === undefined ? "" : (/[万亿]$/.exec(fraction)?.[0] ?? "");
-      const decimal = fraction?.slice(0, fraction.length - scale.length);
-      if (percent) {
-        const value = zhValue(integer);
-        return `${grouped(value)}${decimal === undefined ? "" : `.${[...decimal].map((each) => ZH_DIGITS.get(each) ?? 0).join("")}`}%`;
-      }
-      const hasUnit = [...integer].some((char) => ZH_SMALL.has(char) || ZH_BIG.has(char));
-      // A year said digit by digit: "二零二五年".
-      if (!hasUnit && integer.length >= 4 && after === "年") {
-        return `${[...integer].map((each) => ZH_DIGITS.get(each) ?? 0).join("")}${decimal ?? ""}`;
-      }
-      const value = zhValue(integer);
-      const figure =
-        (hasUnit && !(integer === "十" || integer === "百" || integer === "千")) ||
-        value > 10 ||
-        (value > 0 && ZH_MEASURES.includes(after));
-      if (
-        !figure ||
-        (integer.length === 1 && ZH_DIGITS.has(integer) && !ZH_MEASURES.includes(after))
-      ) {
+    (
+      match: string,
+      percent: string | undefined,
+      whole: string,
+      places: string,
+      big: string,
+      unit: string | undefined,
+      offset: number,
+    ) => {
+      const before = text.slice(0, offset).at(-1) ?? "";
+      const after = text.slice(offset + match.length)[0] ?? "";
+      // Beside a digit it is part of a figure already written; beside a numeral character it is a word.
+      if (/[\d.,]/.test(before) || /\d/.test(after) || [...ZH_NUMERAL].includes(before))
         return match;
+      const fraction = places === "" ? "" : `.${zhDigits(places.slice(1))}`;
+      if (percent) {
+        if (whole === "百" && places === "" && big === "") return `100%${unit ?? ""}`;
+        const value = zhStandard(whole);
+        return value === null || big !== "" ? match : `${grouped0(value)}${fraction}%${unit ?? ""}`;
       }
-      const places =
-        decimal === undefined
-          ? ""
-          : `.${[...decimal].map((each) => ZH_DIGITS.get(each) ?? 0).join("")}`;
-      if (scale !== "") return `${zhValue(integer)}${places}${scale}`;
-      // "三百万" keeps its 万 or 亿, as written numbers do.
-      const big = integer.at(-1);
-      if (big !== undefined && ZH_BIG.has(big)) {
-        const before = zhValue(integer.slice(0, -1));
-        if (!/[万亿]/.test(integer.slice(0, -1))) return `${before}${places}${big}`;
+      // A year, said digit by digit.
+      if (
+        unit === "年" &&
+        /^[零〇一二三四五六七八九]{4}$/.test(whole) &&
+        places === "" &&
+        big === ""
+      ) {
+        return `${zhDigits(whole)}年`;
       }
-      return `${grouped(value)}${places}`;
+      // "十八点四万元": the decimal and its 万 or 亿 stay as written, the whole part is digits.
+      if (places !== "" || big !== "") {
+        const value = zhStandard(whole);
+        if (value === null || value >= 10000 || unit === undefined || unit === "年") return match;
+        if (!ZH_MONEY.includes(unit) && !ZH_COUNTED.includes(unit)) return match;
+        return `${value}${fraction}${big}${unit}`;
+      }
+      const value = zhStandard(whole);
+      if (value === null || unit === undefined) return match;
+      if (unit === "月") return value >= 1 && value <= 12 ? `${value}月` : match;
+      if (unit === "日" || unit === "号")
+        return value >= 1 && value <= 31 ? `${value}${unit}` : match;
+      if (unit === "年") return value >= 100 && value <= 2999 ? `${value}年` : match;
+      const unitful = /[百千万亿]/.test(whole) || value > 10;
+      if (ZH_MONEY.includes(unit)) return `${zhShown(whole, value)}${unit}`;
+      return unitful ? `${zhShown(whole, value)}${unit}` : match;
     },
   );
 }

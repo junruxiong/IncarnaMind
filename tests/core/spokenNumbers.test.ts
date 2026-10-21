@@ -23,6 +23,20 @@ describe("English numbers in a transcript", () => {
     expect(writtenNumbers(said)).toBe(written);
   });
 
+  // protects=text the engine got right isn't rewritten: a scale word after digits, "a few million", "several hundred"; fails_when=$18.4 million becomes $18.4 1 million, or several hundred becomes several 100; no_claim=what else may be written as digits.
+  test.each([
+    "$18.4 million",
+    "revenue of 18.4 million",
+    "a few million",
+    "several hundred",
+    "3 hundred",
+    "hundreds of thousands",
+    "a million reasons",
+    "Twenty twenty-five was good",
+  ])("%s stays as it is", (said) => {
+    expect(writtenNumbers(said)).toBe(said);
+  });
+
   test("digits already there stay, and so does a small number in running speech", () => {
     expect(writtenNumbers("Sales were 128,400, up 9.3%.")).toBe("Sales were 128,400, up 9.3%.");
     expect(writtenNumbers("one of the two of us waited five minutes")).toBe(
@@ -49,10 +63,12 @@ describe("English numbers in a transcript", () => {
 describe("Chinese numbers in a transcript", () => {
   test.each([
     ["三千二百件", "3,200件"],
+    ["一百二十八万四千件货", "1,284,000件货"],
     ["百分之九点三", "9.3%"],
-    ["一百二十八万四千", "1,284,000"],
+    ["百分之三十", "30%"],
+    ["百分之百", "100%"],
     ["三百万元", "300万元"],
-    ["十八点四万", "18.4万"],
+    ["十八点四万元", "18.4万元"],
     ["二零二五年十一月三十日", "2025年11月30日"],
     ["三月", "3月"],
     ["五元", "5元"],
@@ -60,7 +76,28 @@ describe("Chinese numbers in a transcript", () => {
     expect(writtenNumbers(said)).toBe(written);
   });
 
-  test("a small number in running speech stays a character", () => {
-    expect(writtenNumbers("我们一起去，十分高兴，三个人")).toBe("我们一起去，十分高兴，三个人");
+  // protects=text the engine got right isn't rewritten: digits with 万 or 亿 after them, and the words and idioms with 一, 万 or 千 in them, even at the end of the text, stay as they are; fails_when=3万 grows to 30万, 之一 becomes 之1, or 千万不要 loses its characters; no_claim=what else may be written as digits.
+  test.each([
+    "3万",
+    "2亿",
+    "5000万",
+    "2.4万亿",
+    "营收3万元，增长2亿",
+    "万一",
+    "万一下雨",
+    "千万不要",
+    "万分感谢",
+    "万万",
+    "亿万",
+    "万事如意",
+    "二三十",
+    "二三十个人",
+    "之一",
+    "唯一",
+    "这是唯一",
+    "我们十分高兴，三个人一起去",
+    "一方面，另一方面",
+  ])("%s stays as it is", (said) => {
+    expect(writtenNumbers(said)).toBe(said);
   });
 });
