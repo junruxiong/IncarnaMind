@@ -75,13 +75,13 @@ describe("A model that writes its notes instead of an Answer (#1344)", { timeout
     expect(answer.text.length).toBeGreaterThan(3_000);
   });
 
-  // protects=when the model uses every step on searches, the last step is told it has no more calls and to say what wasn't checked, may not call a Tool, and is capped, so a model that wanted another call neither writes it out nor thinks for pages; fails_when=the last request has no such line, still allows a call, or has no cap; no_claim=what a real model writes after it (#1344).
-  test("the last step is told to write from what was read, may call nothing, and is capped", async () => {
+  // protects=when the model uses every step on searches, the last step is told it has no more calls and to say what wasn't checked, and is capped, with the Tools offered as in every step before it (Anthropic refuses a thinking block once the tool list changes); fails_when=the last request has no such line or no cap, or its Tools differ from the step before; no_claim=what a real model writes after it (#1344).
+  test("the last step is told to write from what was read and capped, with the Tools as before", async () => {
     const calls: ModelCall[] = [];
     const model = scriptedModel((call: ModelCall): ScriptedReply => {
       if (call.json) return { text: JSON.stringify({ citations: [] }) };
       calls.push(call);
-      if (call.options.toolChoice?.type === "none") {
+      if (call.prompt.includes("You can make no more calls")) {
         return { text: "I read some of the Documents, and didn't check the rest." };
       }
       return { calls: [{ tool: "search_documents", input: { query: `tea ${calls.length}` } }] };
@@ -92,7 +92,9 @@ describe("A model that writes its notes instead of an Answer (#1344)", { timeout
 
     const last = calls.at(-1);
     expect(answer.status).toBe("done");
-    expect(last?.options.toolChoice).toEqual({ type: "none" });
+    expect(last?.tools.length).toBeGreaterThan(0);
+    expect(last?.tools).toEqual(calls.at(-2)?.tools);
+    expect(last?.options.toolChoice?.type ?? "auto").toBe("auto");
     expect(last?.options.maxOutputTokens).toBe(8_000);
     expect(last?.prompt).toContain(
       "You can make no more calls, and none can record a Citation now",

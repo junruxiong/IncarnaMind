@@ -396,17 +396,27 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     expect(run.events.map((event) => event.type)).not.toContain("finished");
   });
 
-  test("the last step is offered no Tools: it must write", async () => {
+  test("the last step keeps the Tools as they were, and is told to write and capped (#1344)", async () => {
     const search = testTool("search_documents");
     const model = stepsModel([[SEARCH], [SEARCH]], "Written.");
 
     const run = await collect(create(), request(model, { tools: [search], maxSteps: 3 }));
 
-    expect(model.doStreamCalls.map((call) => call.toolChoice?.type)).toEqual([
+    const toolNames = model.doStreamCalls.map((call) => call.tools?.map((each) => each.name));
+    expect(toolNames).toEqual([["search_documents"], ["search_documents"], ["search_documents"]]);
+    expect(model.doStreamCalls.map((call) => call.toolChoice?.type ?? "auto")).toEqual([
       "auto",
       "auto",
-      "none",
+      "auto",
     ]);
+    expect(model.doStreamCalls.map((call) => call.maxOutputTokens)).toEqual([
+      undefined,
+      undefined,
+      8_000,
+    ]);
+    const lastText = JSON.stringify(model.doStreamCalls.at(-1)?.prompt);
+    expect(lastText).toContain("You can make no more calls");
+    expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).not.toContain("no more calls");
     expect(run.text).toBe("Written.");
   });
 

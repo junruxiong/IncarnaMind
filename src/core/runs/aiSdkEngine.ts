@@ -306,9 +306,11 @@ function fromModelMessages(messages: readonly ModelMessage[]): RunMessage[] {
 }
 
 /**
- * What the last step is told. A model that wanted another call writes it out as text (a tag, JSON,
- * "Let me search…", "I need to record the citations first") when it may make none, as Kimi K2.6
- * does, and may think for pages first (#1344).
+ * What the last step is told. A model forced to write with `tool_choice: none`, though it wanted
+ * another call, writes the call out as text (a tag, JSON, "Let me search…", "I need to record the
+ * citations first") and may think for pages first, as Kimi K2.6 does (#1344). The Tools stay in the
+ * request as they were: Anthropic refuses a thinking block once the tool list differs from the one
+ * it was made with, which is what `none` does there.
  */
 const LAST_STEP_NOTE =
   "You can make no more calls, and none can record a Citation now. Write the Answer now from what has been read, without Citation markers, and say plainly what you didn't check. Don't write a call, and don't say what you would do next.";
@@ -428,7 +430,8 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
         if (compact) messages = toModelMessages(compact(fromModelMessages(messages)));
       }
       // The last step must write; so must a step with no room left for a Tool's result.
-      const write = stepNumber >= maxSteps - 1 || (window !== undefined && !window.canCallTools());
+      const noRoom = window !== undefined && !window.canCallTools();
+      const write = stepNumber >= maxSteps - 1 || noRoom;
       canCallAgain = stepNumber + 1 < maxSteps - 1;
       if (!write) return { ...(messages && { messages }) };
       return {
@@ -436,7 +439,8 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
           ...(messages ?? [...initialMessages, ...splice(responseMessages, inserted)]),
           { role: "user" as const, content: LAST_STEP_NOTE },
         ],
-        toolChoice: "none" as const,
+        // With no room for a result the Tools go, as they did; on the last step they stay (see above).
+        ...(noRoom && { toolChoice: "none" as const }),
         maxOutputTokens: LAST_STEP_TOKENS,
       };
     },
