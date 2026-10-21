@@ -7,7 +7,9 @@
  */
 import type { LinkedFolderLayout, RestoreRef, TagLinkState } from "../../core/api";
 import { core } from "./core";
+import { languageNow } from "./i18n";
 import type { Words } from "./lineNames";
+import { formatCount } from "./linkedFolders";
 import type { Translate } from "./objects";
 import type { Undoable } from "./undo";
 
@@ -42,20 +44,50 @@ export function deleted(
   shown: Shown,
   refs: RestoreRef[],
   remove: () => Promise<unknown>,
+  here?: { putBack(): void; takeOut(): void },
 ): Undoable {
   const count = refs.length;
+  const counted = () => formatCount(count, languageNow());
   return {
     said: (t) =>
       count > 1
-        ? t("object.deleted.documents", { count })
+        ? t("object.deleted.documents", { count: counted() })
         : t("object.deleted", { name: shownIn(t, shown) }),
     name: (t) =>
       count > 1
-        ? t("undo.name.delete.documents", { count })
+        ? t("undo.name.delete.documents", { count: counted() })
         : t("undo.name.delete", { name: shownIn(t, shown) }),
-    undo: () => core.restore(refs),
+    undo: async () => {
+      if (!here) return core.restore(refs);
+      // Back on the page at once, as they went: the core follows, and a refusal takes them out again.
+      here.putBack();
+      try {
+        await core.restore(refs);
+      } catch (error) {
+        here.takeOut();
+        throw error;
+      }
+    },
     redo: async () => {
       await remove();
+    },
+  };
+}
+
+/** A folder linked: undone by unlinking it, which touches nothing on disk, done again by linking it again. */
+export function folderLinked(
+  shown: () => string,
+  unlink: () => Promise<unknown>,
+  link: () => Promise<unknown>,
+): Undoable {
+  return {
+    said: (t) => t("undo.folderLinked", { name: shown() }),
+    name: (t) => t("undo.name.linkFolder", { name: shown() }),
+    undo: async () => {
+      await unlink();
+    },
+    redo: async () => {
+      await link();
     },
   };
 }

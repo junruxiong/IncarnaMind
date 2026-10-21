@@ -14,6 +14,7 @@ interface MeetingsState {
   problems: Readonly<Record<string, string>>;
   /** The Meeting whose Start waits for the User to read the one-time recording notice. */
   noticeFor: { meetingId: string; systemAudio: boolean } | null;
+  starting: Readonly<Record<string, true>>;
   /** Record was chosen where this copy can't record audio: the sidebar's footer says so until it is dismissed. */
   cantRecord: boolean;
   /** The gaps the User has dismissed, by Meeting: how many of its gaps they have seen. */
@@ -67,6 +68,7 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     problems: {},
     noticeFor: null,
     cantRecord: false,
+    starting: {},
     gapsSeen: {},
     detailsShown: {},
 
@@ -90,11 +92,14 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
         set({ cantRecord: true });
         return;
       }
+      let created: string | null = null;
       try {
         const inView = currentMindIdOf(layout);
         const folderId = minds.find((each) => each.id === inView)?.folderId ?? null;
         const meeting = await core.createMeeting(folderId ? { folderId } : undefined);
+        created = meeting.id;
         const starts = settings.device.meetingNoticeAccepted;
+        if (starts) set((state) => ({ starting: { ...state.starting, [meeting.id]: true } }));
         // The notes come first in a meeting: the text has the cursor, as in a Mind made with ⌘T.
         useAppStore.setState({ bodyToFocus: meeting.mindId });
         // A tab of its own, as New Mind opens one: never in place of the Mind the User is in.
@@ -104,8 +109,12 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
           where: { in: "group" },
         });
         if (starts) await get().start(meeting.id, meeting.systemAudio);
+        // The core's event can come after start() returns, and showing the start block between
+        // would flash it: the Meeting leaves "starting" with its status, or here if the start failed.
+        if (meeting.id in get().problems) set(stopStarting(meeting.id));
       } catch (error) {
         useAppStore.getState().reportError(error);
+        if (created) set(stopStarting(created));
       }
     },
 
@@ -182,16 +191,28 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
   };
 });
 
+const stopStarting =
+  (meetingId: string) =>
+  (state: MeetingsState): Pick<MeetingsState, "starting"> => ({
+    starting: withoutKey(state.starting, meetingId),
+  });
+
 function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> {
   const { [key]: _, ...rest } = record;
   return rest;
 }
 
 core.on("meetings.changed", (meetings) => {
-  useMeetings.setState({ meetings });
+  useMeetings.setState((state) => ({
+    meetings,
+    starting: Object.fromEntries(
+      Object.keys(state.starting)
+        .filter((id) => meetings.some((each) => each.id === id && each.status === "ready"))
+        .map((id) => [id, true as const]),
+    ),
+  }));
 });
 
-/** This copy can record audio. */
 export const canRecordMeetings = (settings: Settings | null): boolean =>
   !!settings && settings.meetingAudio !== "none";
 

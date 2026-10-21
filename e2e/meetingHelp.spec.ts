@@ -10,6 +10,7 @@ import {
   heldGlobalKeys as held,
   launchApp,
   openSettings,
+  paletteFound,
   panelOf,
   panelOpen,
   pointAndClick,
@@ -360,9 +361,9 @@ test("help during the call: Call help in the meeting bar shows and hides the pan
   // ⌘K has the same words and keys.
   await window.keyboard.press("ControlOrMeta+k");
   await window.keyboard.type("Show the call help panel");
-  await expect(
-    window.getByTestId("palette-item").filter({ hasText: "Show the call help panel" }),
-  ).toContainText(PANEL_LABEL);
+  await expect(paletteFound(window).filter({ hasText: "Show the call help panel" })).toContainText(
+    PANEL_LABEL,
+  );
   if (SCREENSHOTS) {
     await window.evaluate(() =>
       Promise.all(document.getAnimations().map((animation) => animation.finished)),

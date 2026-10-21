@@ -2010,6 +2010,25 @@
     font-family: var(--font-sans);
     container: meeting-bar / inline-size;
   }
+  .meeting-bar-room {
+    visibility: hidden;
+    pointer-events: none;
+  }
+  /* Hangs in the 24px the bar keeps below it; notes scrolled under the bar pass behind it, not through it. */
+  .meeting-bar .meeting-line-over {
+    position: absolute;
+    top: 100%;
+    left: -1px;
+    right: -1px;
+    box-sizing: border-box;
+    height: 24px;
+    margin-top: 1px;
+    padding: 2px 16px 0;
+    background: var(--color-sheet);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   .meeting-line {
     padding: 0 4px 2px;
   }
@@ -3952,6 +3971,19 @@
       color: var(--color-ink);
     }
   }
+  .mind-editor .applied-line .edit-pending-dot {
+    margin-right: 0;
+  }
+  .mind-editor .applied-line--problem {
+    color: var(--color-ink-meta);
+  }
+  .applied-problem-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-attention);
+  }
   .mind-editor .applied-restore-holder {
     margin-inline-start: 6px;
     font-family: var(--font-sans);
@@ -5058,10 +5090,16 @@
   }
 
   /* The menu under selected text: Turn into, the format buttons, and the AI section. */
+  .selection-menu-frame {
+    /* Over the fade that ends the page above the check badge and the count. */
+    z-index: 1;
+  }
   .selection-menu {
     width: 280px;
+    max-height: max(var(--selection-menu-room, 100vh), 140px);
     padding: 4px;
     border-radius: 10px;
+    overflow-y: auto;
   }
   .selection-turn {
     font-weight: 500;
@@ -5120,6 +5158,64 @@
     font-size: var(--text-meta);
     line-height: 16px;
     color: var(--color-ink-meta);
+  }
+  .selection-edit-foot {
+    position: sticky;
+    bottom: 0;
+    margin: 0 -4px -4px;
+    padding: 4px;
+    border-radius: 0 0 10px 10px;
+    background: var(--color-sheet);
+  }
+  .selection-edit {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    padding: 0 3px 0 10px;
+    border-radius: 6px;
+    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+
+    &:focus-within {
+      box-shadow: inset 0 0 0 1px var(--color-accent);
+    }
+  }
+  .selection-edit-input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    background: transparent;
+    font: inherit;
+    color: var(--color-ink);
+    outline: none;
+
+    &::placeholder {
+      color: var(--color-ink-placeholder);
+    }
+  }
+  .selection-edit-handoff {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .selection-problem {
+    padding: 4px 4px 0;
+  }
+  .selection-working {
+    width: 280px;
+    padding: 8px 12px;
   }
   /* The selection menu's Aa: font and size, alignment, spacing and indents, colour, raise. */
   .format-menu {

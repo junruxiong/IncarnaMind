@@ -8,10 +8,12 @@
  */
 
 import { markdownToBlocks } from "../core/answers/markdown";
+import { forPage } from "../core/answers/pointersBack";
 import { CITATION_NODE, type ConversationAnswer, type MarkedCitation } from "../core/api";
 import { asGenerated } from "./aiText";
 import { citationNode, type NodeJSON, withCitations } from "./blockJson";
 import { withFigures } from "./figureMarkers";
+import { withoutFraming } from "./noteBlocks";
 
 /**
  * While it is written, what would still change how it looks is held back, and
@@ -40,6 +42,18 @@ export function answerBlocks(
     ),
   );
 }
+
+/**
+ * A whole Answer as Add to note puts it in a page, for someone who never saw
+ * the conversation: without the model's framing, nor what points to an
+ * earlier Answer unless `question` asked about one. The Answer in the panel
+ * keeps both.
+ */
+export const pageBlocks = (
+  answer: Pick<ConversationAnswer, "text" | "citations" | "figures">,
+  question: string,
+): NodeJSON[] =>
+  withoutFraming(answerBlocks({ ...answer, text: forPage(answer.text, question), status: "done" }));
 
 /** The Citation markers an Answer's text shows, in order, one for each place: a marker used twice is two. */
 export function markersIn(text: string): number[] {
