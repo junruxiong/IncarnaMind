@@ -384,6 +384,7 @@ export const en = {
   "undo.name.editTag": "Edit Tag",
   "undo.name.editFolder": "Edit Folder",
   "undo.name.newFolder": "New Folder",
+  "undo.name.organize": "Organize",
   "undo.name.removeExamples": "Remove the Examples",
   "undo.name.showExamples": "Show the Examples",
   "firstOpen.remove": "Remove the examples",

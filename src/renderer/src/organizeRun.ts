@@ -31,6 +31,15 @@ export function sayWhenOrganized(
       (item) => item.suggested && placeOf(item) !== placeOf(before.get(item.documentId)),
     );
     if (changed.length === 0) return;
+    const stays = (now: ReadonlyMap<string, DocumentGroupAssignment>, wanted: "undone" | "done") =>
+      changed.filter((item) => {
+        const then = wanted === "undone" ? before.get(item.documentId) : item;
+        return placeOf(now.get(item.documentId)) === placeOf(then);
+      });
+    const assignmentsNow = () =>
+      new Map(
+        (useAppStore.getState().library?.assignments ?? []).map((item) => [item.documentId, item]),
+      );
     const put = (item: DocumentGroupAssignment) => {
       const previous = before.get(item.documentId);
       if (!previous) return core.restoreAssignment(item.documentId, null);
@@ -42,16 +51,18 @@ export function sayWhenOrganized(
         t(changed.length === 1 ? "library.organize.done.one" : "library.organize.done", {
           count: changed.length,
         }),
+      name: (t) => t("undo.name.organize"),
       undo: async () => {
         // A Document the User has moved since is theirs now: it stays where they put it.
-        const now = new Map(
-          (useAppStore.getState().library?.assignments ?? []).map((item) => [
-            item.documentId,
-            item,
-          ]),
-        );
+        await Promise.all(stays(assignmentsNow(), "done").map(put));
+        await useAppStore.getState().refreshLibrary();
+      },
+      redo: async () => {
+        // The same again, in one step: the Documents still as Undo left them get their Suggested Folder back.
         await Promise.all(
-          changed.filter((item) => placeOf(now.get(item.documentId)) === placeOf(item)).map(put),
+          stays(assignmentsNow(), "undone").map(({ documentId, ...suggestion }) =>
+            core.restoreAssignment(documentId, suggestion),
+          ),
         );
         await useAppStore.getState().refreshLibrary();
       },
