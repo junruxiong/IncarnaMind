@@ -9,7 +9,6 @@ import { type GenerateOptions, SLOWLY, systemOf, userText } from "./prompt";
 /** Research's planner (#130, src/core/research/prompt.ts). */
 const PLANNER = /^You plan research for IncarnaMind/m;
 
-/** Whether the request asks for a Research plan. */
 export const asksForPlan = (options: GenerateOptions) => PLANNER.test(systemOf(options.prompt));
 
 /**

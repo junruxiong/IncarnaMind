@@ -406,6 +406,52 @@ for (const [language, said, choose] of [
   });
 }
 
+test("with the thinking model picked in the chip, Choose another model opens the chip's menu, and another model there makes the plan", async () => {
+  const ollama = await ollamaListing(["fake-model", "fake-model-always-thinks"]);
+  try {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1100, 760);
+    await window.evaluate(async (baseUrl) => {
+      await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.saveChatProvider({
+        kind: "ollama",
+        baseUrl,
+        modelId: "fake-model",
+      });
+    }, ollama.url);
+    await newMind(window);
+    await window.keyboard.type("Tide notes");
+    const pick = async (name: string) => {
+      const option = window
+        .getByTestId("composer-model-menu")
+        .getByTestId("composer-model-option")
+        .filter({ hasText: name });
+      await pointAndClick(window, option.first());
+    };
+    await pointAndClick(window, window.getByTestId("composer-model"));
+    await pick("fake-model-always-thinks");
+
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("/res");
+    await window.keyboard.press("Enter");
+    await window.keyboard.type("Spring tides");
+    await window.keyboard.press("Enter");
+    const card = window.getByTestId("research-plan");
+    const failed = card.getByTestId("research-plan-failed");
+    await expect(failed.getByRole("button")).toHaveText("Choose another model");
+
+    await pointAndClick(window, failed.getByRole("button"));
+    await expect(window.getByTestId("composer-model-menu")).toBeVisible();
+    await expect(window.getByTestId("settings")).toBeHidden();
+    await pick("fake-model");
+    await expect(card.getByTestId("research-plan-step")).toHaveCount(3);
+    await expect(failed).toHaveCount(0);
+    await app.close();
+  } finally {
+    ollama.server.close();
+  }
+});
+
 test("the plan card follows the composer's model chip, says when the web can't be searched, fits 900px in Chinese, and Esc puts the topic back; Tell it… sends a message the Task reads at its next step, taken back with ↑ or ✕; Stop ends it", async () => {
   test.setTimeout(120_000);
   const ollama = await ollamaListing(["fake-model", "other-model"]);
