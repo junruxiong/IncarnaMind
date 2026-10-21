@@ -784,14 +784,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       };
     });
     offerLinks(linkable);
-    const [first] = result.added;
-    if (first === undefined) return;
-    const shown = result.documents.find((each) => each.id === first);
-    push(
-      documentsAdded(shown ? displayName(shown) : "", result.added.length, () =>
-        removeOwn(result.added),
-      ),
-    );
+    if (result.added.length === 0) return;
+    push(documentsAdded(result.added.length, () => removeOwn(result.added)));
   };
 
   /** Dropped or picked files' paths, and the names of those that aren't on disk. */

@@ -323,7 +323,7 @@ export const en = {
   "object.deleted.items": "Moved {count} items to Recently deleted",
   "undo.name.delete.documents": "Delete {count} Documents",
   "undo.documentsAdded": "Added {count} Documents",
-  "undo.documentAdded": "Added “{name}”",
+  "undo.documentAdded.one": "Added 1 Document",
   "undo.name.addDocuments": "Add Documents",
   "object.restored": "Restored “{name}”",
   "object.restoredTo": "Restored “{name}” to {folder}",

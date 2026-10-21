@@ -123,7 +123,7 @@ test("a file that was in the Library before the add stays after Undo, and an add
     await dismissChatSetup(window);
     const [tides, moons] = await textFiles("Tides", "Moons");
     await pick(window, [tides as string]);
-    await expect(window.getByTestId("undo-line")).toContainText("Added “Tides”");
+    await expect(window.getByTestId("undo-line")).toContainText("Added 1 Document");
     await expect.poll(async () => (await library(window)).length).toBe(1);
     const [first] = await library(window);
     await makeFolder(window);
@@ -135,7 +135,7 @@ test("a file that was in the Library before the add stays after Undo, and an add
     await expect.poll(() => undoMenuItem(app)).toEqual({ label: "Undo New Folder", enabled: true });
 
     await pick(window, [tides as string, moons as string]);
-    await expect(window.getByTestId("undo-line")).toContainText("Added “Moons”");
+    await expect(window.getByTestId("undo-line")).toContainText("Added 1 Document");
     await expect.poll(async () => (await library(window)).length).toBe(2);
     await leaveText(window);
     await window.keyboard.press("ControlOrMeta+z");

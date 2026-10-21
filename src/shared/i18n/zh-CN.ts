@@ -316,7 +316,7 @@ export const zhCN = {
   "object.deleted.items": "已将 {count} 项移到回收站",
   "undo.name.delete.documents": "删除 {count} 个文档",
   "undo.documentsAdded": "已添加 {count} 个文档",
-  "undo.documentAdded": "已添加“{name}”",
+  "undo.documentAdded.one": "已添加 1 个文档",
   "undo.name.addDocuments": "添加文档",
   "object.restored": "已恢复“{name}”",
   "object.restoredTo": "已将“{name}”恢复到“{folder}”",

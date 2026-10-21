@@ -78,17 +78,10 @@ export function deleted(
  * Documents added: undone by moving to Recently deleted those of the ones this add brought in that
  * are still its own, done again by bringing back exactly those. `take` says which it took.
  */
-export function documentsAdded(
-  shown: Shown,
-  count: number,
-  take: () => Promise<RestoreRef[]>,
-): Undoable {
+export function documentsAdded(count: number, take: () => Promise<RestoreRef[]>): Undoable {
   let taken: RestoreRef[] = [];
   return {
-    said: (t) =>
-      count > 1
-        ? t("undo.documentsAdded", { count })
-        : t("undo.documentAdded", { name: shownIn(t, shown) }),
+    said: (t) => t(count === 1 ? "undo.documentAdded.one" : "undo.documentsAdded", { count }),
     name: (t) => t("undo.name.addDocuments"),
     undo: async () => {
       taken = await take();
