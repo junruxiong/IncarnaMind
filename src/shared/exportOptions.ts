@@ -31,3 +31,9 @@ export const optionsFor = (
     ? { format, includeQuestions: preferences[format].includeQuestions, theirChanges }
     : { format, theirChanges };
 };
+
+/** The Word copy offered when quitting: it marks the text IncarnaMind wrote only if the User chose to. */
+export const quitCopyOptions = (preferences: ExportPreferences): ExportMindOptions => ({
+  format: "docx",
+  markAiText: preferences.docx.markAiText === "mark",
+});
