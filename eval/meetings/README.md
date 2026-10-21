@@ -24,7 +24,7 @@ The issue asks for 30 minutes of each language in each setting and 20 of mixed; 
 
 **Licences, checked 2026-10-21.**
 
-- AMI says CC BY 4.0 on both Hugging Face cards. The AMI site itself was not reachable from the machine that made the set, so its licence page was not read. OpenSLR's older copy of AMI (SLR16) is labelled CC BY-NC-SA 2.0 (modified), so it is not used.
+- AMI: the AMI site states that all its signals and transcriptions, and some of its annotations, are under CC BY 4.0. The set uses only the signals and the transcriptions, and both Hugging Face cards say CC BY 4.0. OpenSLR's older copy of AMI (SLR16) is labelled CC BY-NC-SA 2.0 (modified), so it is not used.
 - AliMeeting says CC BY-SA 4.0 on OpenSLR; ASCEND says it on its Hugging Face card.
 - Attribution: cite the papers above in anything that publishes results. Share-alike: the cases are built on the machine that runs the evaluation and never published; a published copy would be CC BY-SA 4.0 and need the same attribution.
 - **Consent:** no recording of the project's own is in the set, so no one's consent is needed. If one is ever added, every participant's written consent goes in this README first.
@@ -94,7 +94,7 @@ Both sides go through the same rules (`eval/transcription/scoring.ts`, tested in
 6. Numbers are digits. English number words in a run become one number ("twenty five" is 25, "two thousand and ten" is 2010, "one hundred and five" is 105). Chinese numerals in a run become one number ("二十五" is 25, "二零二六" is 2026, "三万五千" is 35000). A numeral next to an ASCII digit ("2万"), and 百 千 万 亿 alone, are left. A number is one unit.
 7. English is compared word by word; Chinese character by character, with each run of Latin letters or digits as one unit; whitespace is dropped.
 
-What this leaves different, on purpose or for want of a rule: years said in two parts ("nineteen ninety" is 19 90, "1990" is one number), ordinals ("second"), decimals ("2.5" is 2 5, "two point five" is 2 point 5), "okay" and "ok", spelled-out letters ("e c e" and "ece"), and British and American spelling. They cost every transcriber alike.
+What this leaves different, on purpose or for want of a rule: a Chinese numeral inside an ordinary word is a number too ("一起" is 1起, "十分" is 10分, "万一" is 10001), the same on both sides; years said in two parts ("nineteen ninety" is 19 90, "1990" is one number), ordinals ("second"), decimals ("2.5" is 2 5, "two point five" is 2 point 5), "okay" and "ok", spelled-out letters ("e c e" and "ece"), and British and American spelling. They cost every transcriber alike.
 
 ## Results
 

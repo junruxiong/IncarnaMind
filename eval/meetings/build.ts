@@ -242,7 +242,7 @@ export async function buildCase(
       `${definition.id}: ${wrong.join(", ") || "the files"} differ from what cases.json pins, so the case was not kept.`,
     );
   }
-  await markVerified(partial, names);
+  await markVerified(partial, files);
   await rm(folder, { recursive: true, force: true });
   await rename(partial, folder);
   return { durationSeconds: built.durationSeconds, speakers: built.speakers, files };

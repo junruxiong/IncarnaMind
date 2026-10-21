@@ -4,12 +4,12 @@
  * a `<case id>.json` for each case it did (the `Hypothesis` in ./types); a case with none is
  * left out. Needs the cases fetched (`npm run eval:meetings:fetch`) and no network.
  */
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadCase, readCases } from "./cache";
 import { DEFAULT_COLLAR } from "./der";
+import { readHypothesis } from "./hypotheses";
 import { type CaseScore, formatReport, scoreCase } from "./report";
-import type { Hypothesis } from "./types";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => {
@@ -30,17 +30,10 @@ const until = untilMinutes ? Number(untilMinutes) * 60 : undefined;
 const scores: CaseScore[] = [];
 const missing: string[] = [];
 for (const definition of await readCases()) {
-  let hypothesis: Hypothesis;
-  try {
-    hypothesis = JSON.parse(
-      await readFile(join(folder, `${definition.id}.json`), "utf8"),
-    ) as Hypothesis;
-  } catch {
+  const hypothesis = await readHypothesis(folder, definition.id);
+  if (!hypothesis) {
     missing.push(definition.id);
     continue;
-  }
-  if (hypothesis.case !== definition.id) {
-    throw new Error(`${definition.id}.json says it is for ${hypothesis.case}.`);
   }
   const { reference } = await loadCase(definition);
   scores.push(scoreCase(definition, reference, hypothesis, { collar, until }));

@@ -41,20 +41,24 @@ export async function hashesOf(folder: string, names: readonly string[]) {
   return out;
 }
 
-export async function markVerified(folder: string, names: readonly string[]) {
+/** Records the hashes the case's files were checked against, with their sizes. */
+export async function markVerified(folder: string, hashes: Readonly<Record<string, string>>) {
   const sizes: Record<string, number> = {};
-  for (const name of [...names].sort()) sizes[name] = (await stat(join(folder, name))).size;
-  await writeAtomic(join(folder, VERIFIED), JSON.stringify({ sizes }));
+  for (const name of Object.keys(hashes).sort())
+    sizes[name] = (await stat(join(folder, name))).size;
+  await writeAtomic(join(folder, VERIFIED), JSON.stringify({ sizes, hashes }));
 }
 
 export async function isVerified(folder: string, definition: CaseDefinition): Promise<boolean> {
   try {
-    const { sizes } = JSON.parse(await readFile(join(folder, VERIFIED), "utf8")) as {
+    const { sizes, hashes } = JSON.parse(await readFile(join(folder, VERIFIED), "utf8")) as {
       sizes: Record<string, number>;
+      hashes: Record<string, string>;
     };
     const names = Object.keys(definition.files).sort();
-    if (JSON.stringify(Object.keys(sizes).sort()) !== JSON.stringify(names)) return false;
+    if (JSON.stringify(Object.keys(hashes).sort()) !== JSON.stringify(names)) return false;
     for (const name of names) {
+      if (hashes[name] !== definition.files[name]) return false;
       if ((await stat(join(folder, name))).size !== sizes[name]) return false;
     }
     return true;
@@ -67,7 +71,7 @@ export async function removeCase(folder: string): Promise<void> {
   await rm(folder, { recursive: true, force: true });
 }
 
-/** A case as fetch left it; fails if it isn't there, so that a run never scores a half-built one. */
+/** A case as fetch left it; fails if it isn't there or isn't the one cases.json pins, so that a run never scores a half-built or outdated one. */
 export async function loadCase(
   definition: CaseDefinition,
   cache = meetingsCache(),
@@ -75,7 +79,7 @@ export async function loadCase(
   const folder = caseFolderOf(definition.id, cache);
   if (!(await isVerified(folder, definition))) {
     throw new Error(
-      `${definition.id} isn't in ${folder}, or isn't whole. Run: npm run eval:meetings:fetch`,
+      `${definition.id} isn't in ${folder}, or isn't the case cases.json pins. Run: npm run eval:meetings:fetch`,
     );
   }
   const tracks: CaseFolder["tracks"] = {};

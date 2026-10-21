@@ -195,10 +195,21 @@ describe("Making the cases", () => {
     const folder = caseFolderOf(definition.id, cache);
     await mkdir(folder, { recursive: true });
     await writeFile(join(folder, "reference.json"), "{}");
-    await markVerified(folder, ["reference.json"]);
+    await markVerified(folder, { "reference.json": sha256(Buffer.from("{}")) });
     await expect(loadCase({ ...definition, files: { "mic.wav": "x" } }, cache)).rejects.toThrow(
-      /isn't whole/,
+      /isn't the case cases\.json pins/,
     );
+  });
+
+  test("a case built under a pin that has since moved is not taken as cached, nor scored", async () => {
+    const measured = await buildCase(context(serving), definition, false);
+    const pinned = { ...definition, ...measured };
+    const moved = { ...pinned, files: { ...pinned.files, "mic.wav": "0".repeat(64) } };
+    await expect(loadCase(moved, cache)).rejects.toThrow(/isn't the case cases\.json pins/);
+    await expect(ensureCases(context(throwing, [moved]), null, { pin: false })).rejects.toThrow(
+      /mic\.wav differ/,
+    );
+    await expect(loadCase(pinned, cache)).resolves.toMatchObject({ folder: expect.any(String) });
   });
 
   test("a name that isn't a case is an error", async () => {
