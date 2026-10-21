@@ -2267,6 +2267,7 @@ export const zhCN = {
   "question.context.include": "提问时包含此笔记",
 
   "composer.placeholder": "提问，或说明要修改的内容…",
+  "composer.placeholder.followUp": "追问…",
   "composer.label": "提问，或说明要修改的内容（{shortcut}）",
   "composer.ask": "提问（Enter）",
   "composer.scope.all": "全部文档",

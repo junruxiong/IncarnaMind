@@ -2351,6 +2351,7 @@ export const en = {
   "question.context.include": "Include in Question context",
 
   "composer.placeholder": "Ask, or say what to change…",
+  "composer.placeholder.followUp": "Ask a follow-up…",
   "composer.label": "Ask, or say what to change ({shortcut})",
   "composer.ask": "Ask (Enter)",
   "composer.scope.all": "All Documents",
