@@ -3419,6 +3419,7 @@ export const en = {
   "error.dismiss": "Dismiss",
   "error.details": "Details",
   "panel.failed": "This panel stopped working",
+  "panel.failed.window": "This window stopped working",
   "panel.reload": "Reload",
   "details.label": "Details",
   "error.system.notAllowed": "IncarnaMind isn’t allowed to change that file or folder.",

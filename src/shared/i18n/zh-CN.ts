@@ -3307,6 +3307,7 @@ export const zhCN = {
   "error.dismiss": "关闭",
   "error.details": "详情",
   "panel.failed": "此面板出错了",
+  "panel.failed.window": "此窗口出错了",
   "panel.reload": "重新加载",
   "details.label": "详情",
   "error.system.notAllowed": "IncarnaMind 没有权限修改这个文件或文件夹。",

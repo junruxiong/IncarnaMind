@@ -1,10 +1,15 @@
-import { Component, type CSSProperties, createElement, type ReactNode } from "react";
+import {
+  Component,
+  type CSSProperties,
+  createElement,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import { create } from "zustand";
-import { logCaught } from "../errorLog";
+import type { PanelName } from "../../../shared/panels";
+import { logPanelFailure } from "../errorLog";
 import { translateNow } from "../i18n";
 import { ProblemLine, ProblemMark } from "./ProblemLine";
-
-export type PanelName = "window" | "sidebar" | "card" | "assistant" | "overlays";
 
 /** What stands in for a panel that failed when the panel's own box is drawn by the panel. */
 export interface PanelFrame {
@@ -42,7 +47,7 @@ function PanelFailed({
         action={{ label: translateNow("panel.reload"), onClick: onReload, testId: "panel-reload" }}
       >
         <ProblemMark />
-        {translateNow("panel.failed")}
+        {translateNow(name === "window" ? "panel.failed.window" : "panel.failed")}
       </ProblemLine>
     </div>
   );
@@ -59,7 +64,7 @@ function PanelFailed({
   }
   if (name === "overlays") {
     return (
-      <div className="fixed bottom-4 left-4 z-20 max-w-sm rounded-lg bg-sheet px-4 py-2.5 shadow-popover">
+      <div className="fixed top-16 left-1/2 z-20 w-max max-w-[calc(100vw-32px)] -translate-x-1/2 rounded-lg bg-sheet px-4 py-2.5 shadow-popover">
         {line}
       </div>
     );
@@ -85,8 +90,8 @@ export class PanelBoundary extends Component<
     return { failed: true };
   }
 
-  override componentDidCatch(error: unknown): void {
-    logCaught(error);
+  override componentDidCatch(error: unknown, info: ErrorInfo): void {
+    logPanelFailure(this.props.name, error, info.componentStack ?? "");
   }
 
   private reload = (): void => {

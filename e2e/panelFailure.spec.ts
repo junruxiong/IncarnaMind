@@ -87,8 +87,10 @@ for (const [width, language, line, reload] of [
     await screenshot(window, `card-failed-${language}-${width}`);
     // The error is in the log with its stack, as one nothing caught is.
     const log = await readFile(join(dataDir, "logs", "incarnamind.log"), "utf8");
-    expect(log).toContain("window.uncaught");
-    expect(log).toContain("panel was made to fail");
+    expect(log).toMatch(
+      /ERROR window\.panel-failed panel=card caught=boundary error="Error: The card panel was made to fail\."/,
+    );
+    expect(log).toContain("component stack:");
 
     await card.getByTestId("panel-reload").click();
 
@@ -114,6 +116,18 @@ test("the sidebar, the overlays and the assistant fail alone; the assistant's co
   await expect(failed(window, "overlays")).toBeVisible();
   await expect(window.getByTestId("card")).toBeVisible();
   await expect(window.getByTestId("sidebar")).toBeVisible();
+  // Its line stands where ⌘K's palette would, below the tabs, and covers none of the sidebar, the
+  // composer or the tab strip.
+  const line = await failed(window, "overlays").boundingBox();
+  const tabs = await window.getByTestId("tab-strip").first().boundingBox();
+  const footer = await window.getByTestId("sidebar-footer").boundingBox();
+  const composer = await window.getByTestId("composer-input").boundingBox();
+  if (!line || !tabs || !footer || !composer) throw new Error("Something isn't visible.");
+  const apart = (a: typeof line, b: typeof line) =>
+    a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+  expect(apart(line, footer)).toBe(true);
+  expect(apart(line, composer)).toBe(true);
+  expect(apart(line, tabs)).toBe(true);
   await screenshot(window, "overlays-failed");
   await failed(window, "overlays").getByTestId("panel-reload").click();
   await expect(failed(window, "overlays")).toHaveCount(0);
@@ -155,7 +169,8 @@ test("a window that can't draw shows the line and Reload, and the page loads aga
 
   const notice = failed(window, "window");
   await expect(notice).toBeVisible();
-  await expect(notice).toContainText("This panel stopped working");
+  await expect(notice).toContainText("This window stopped working");
+  await expect(notice).not.toContainText("panel");
   await expect(window.getByTestId("sidebar")).toHaveCount(0);
   await screenshot(window, "window-failed");
   await notice.getByTestId("panel-reload").click();
