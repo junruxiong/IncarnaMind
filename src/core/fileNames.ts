@@ -67,9 +67,6 @@ export async function removeStalePartials(folder: string): Promise<void> {
   );
 }
 
-/** Errors for a file system with no hard links (a USB stick, some network drives). */
-const NO_LINKS = new Set(["EPERM", "ENOSYS", "ENOTSUP", "EOPNOTSUPP", "EXDEV", "EMLINK"]);
-
 /**
  * Writes a new file in `folder` under `name` ("Tides.docx"), or under the
  * next free name, as Finder does ("Tides 2.docx", "Tides 3.docx"), and
@@ -107,9 +104,12 @@ export async function writeNewFile(
           await link(temporary, path);
           return candidate;
         } catch (error) {
-          const code = (error as NodeJS.ErrnoException).code ?? "";
+          const code = (error as NodeJS.ErrnoException).code;
           if (code === "EEXIST") continue;
-          if (!NO_LINKS.has(code)) throw error;
+          // Node reports a FAT or exFAT drive on Windows as EISDIR or EINVAL, a network share by
+          // other codes: any refusal of the link falls back, and a real problem (EACCES, ENOSPC)
+          // is raised again by the file made below.
+          if (code === undefined) throw error;
           linking = false;
         }
       }

@@ -119,17 +119,20 @@ describe("Writing a new file (#1388)", () => {
     expect((await readdir(folder)).filter((each) => each.endsWith(".partial"))).toEqual([]);
   });
 
-  test("a file system with no hard links gets the name made first and the finished file renamed onto it", async () => {
-    links.refuse = "EPERM";
-    links.fail = false;
-    const folder = await createTempDataFolder();
-    await writeFile(join(folder, "Tides.docx"), "mine");
-    expect(await writeNewFile(folder, "Tides.docx", bytes("whole"))).toBe("Tides 2.docx");
-    expect(await readFile(join(folder, "Tides 2.docx"), "utf8")).toBe("whole");
-    expect(await readFile(join(folder, "Tides.docx"), "utf8")).toBe("mine");
-    expect((await readdir(folder)).sort()).toEqual(["Tides 2.docx", "Tides.docx"]);
-    links.refuse = null;
-  });
+  test.each(["EPERM", "ENOTSUP", "EISDIR", "EINVAL", "UNKNOWN"])(
+    "a file system with no hard links (%s) gets the name made first and the finished file renamed onto it",
+    async (code) => {
+      links.refuse = code;
+      links.fail = false;
+      const folder = await createTempDataFolder();
+      await writeFile(join(folder, "Tides.docx"), "mine");
+      expect(await writeNewFile(folder, "Tides.docx", bytes("whole"))).toBe("Tides 2.docx");
+      expect(await readFile(join(folder, "Tides 2.docx"), "utf8")).toBe("whole");
+      expect(await readFile(join(folder, "Tides.docx"), "utf8")).toBe("mine");
+      expect((await readdir(folder)).sort()).toEqual(["Tides 2.docx", "Tides.docx"]);
+      links.refuse = null;
+    },
+  );
 });
 
 describe("Temporary files an earlier run left (#1388)", () => {
