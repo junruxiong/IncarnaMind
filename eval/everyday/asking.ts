@@ -48,6 +48,7 @@ import {
 } from "./checks";
 import { DATED_TEXTS } from "./dated";
 import { citedClaims } from "./dates";
+import { type Decision, decisionInput, type Forcing, type Route } from "./decisions";
 import { judgeClaims } from "./judge";
 import type { Asks, ReaskWatch } from "./reasks";
 import { checkCitedSentences, type SentenceSupport } from "./support";
@@ -171,6 +172,8 @@ export interface CaseResult {
   support: SentenceSupport[] | null;
   /** A summary: its sentences outside headings that make a claim, and how many carry a Citation; null for the others. */
   claims: { claims: number; cited: number } | null;
+  /** Arm C (./decisions): what the decision model chose for the request, and how many of its model requests were forced; absent in arms A and B. */
+  decision?: { choice: Route; confidence: number; forced: number };
 }
 
 /** Asks in the assistant and resolves with the Answer as stored once it has ended. */
@@ -274,11 +277,14 @@ export async function runCase(
   {
     watch,
     checkModel = null,
+    deciding,
   }: {
     /** Watches the app's own asks inside the Answer; none watched without it. */
     watch?: ReaskWatch;
     /** The model the cited sentences are checked on; null: the default chat model. */
     checkModel?: ChatModelChoice | null;
+    /** Arm C: decides each request first, and forces the chat model's requests as the decision says. */
+    deciding?: { decide(text: string): Promise<Decision>; forcing: Forcing };
   } = {},
 ): Promise<CaseResult> {
   const { core } = library;
@@ -309,7 +315,11 @@ export async function runCase(
     writeMind(
       client,
       each.mind.blocks.map((line) =>
-        line.startsWith("## ") ? heading(2, line.slice(3)) : note(line),
+        line.startsWith("## ")
+          ? heading(2, line.slice(3))
+          : line.startsWith("# ")
+            ? heading(1, line.slice(2))
+            : note(line),
       ),
     );
     await client.settled();
@@ -331,8 +341,27 @@ export async function runCase(
   let conversationId: string | null = example?.conversationId ?? null;
   const earlierCalls: ConversationAnswer["toolCalls"] = [];
   let last: ConversationAnswer | null = null;
+  const pageOf = (): "empty" | "text" | "none" =>
+    client
+      ? idsNow().length === 0 ||
+        [...acceptedTexts(client.doc, new Set()).values()].every((text) => text.trim() === "")
+        ? "empty"
+        : "text"
+      : "none";
+  const asked: string[] = [];
+  const decided: { last: Decision | null } = { last: null };
+  const decideFirst = async (text: string) => {
+    if (!deciding) return;
+    decided.last = await deciding.decide(
+      decisionInput({ request: text, page: pageOf(), earlier: asked }),
+    );
+    deciding.forcing.begin(decided.last);
+  };
+
   for (const earlier of each.before ?? []) {
     const fromExample = each.beforeInExample === true;
+    await decideFirst(earlier);
+    asked.push(earlier);
     const answer = await ask(core, {
       text: earlier,
       mindId: (fromExample ? example?.mindId : mind?.id) ?? null,
@@ -361,6 +390,7 @@ export async function runCase(
     before = acceptedTexts(client.doc, new Set());
   }
   watch?.begin(each.firstReply ?? null);
+  await decideFirst(each.request);
   const answer = await ask(core, {
     text: each.request,
     mindId: mind?.id ?? null,
@@ -369,6 +399,8 @@ export async function runCase(
   });
   const answeredSeconds = (Date.now() - started) / 1000;
   const asks = watch ? { ...watch.end() } : { again: 0, citations: 0 };
+  const forced = deciding ? deciding.forcing.end() : 0;
+  const decision = decided.last;
   counting();
   const minds = await core.listMinds();
   const names = (id: string) => minds.find((each) => each.id === id)?.title ?? null;
@@ -457,6 +489,9 @@ export async function runCase(
     asks,
     support,
     claims: each.summary ? citedClaims(answer.text) : null,
+    ...(decision && {
+      decision: { choice: decision.choice, confidence: decision.confidence, forced },
+    }),
   };
 }
 

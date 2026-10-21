@@ -92,8 +92,8 @@ export interface RequestOutcome {
     figures?: readonly Pick<MarkedFigure, "shown">[];
   };
   verdict: ClaimVerdict;
-  /** The Mind it was asked from, by id; null: none was in focus. */
-  askedFrom: string | null;
+  /** The Mind it was asked from, by id; null or absent: none was in focus. */
+  askedFrom?: string | null;
   /** The Documents the Citations it wrote into Minds quote, by id. */
   citedInMinds: readonly string[];
   /** The top-level Blocks of the Mind it was asked from (from 0) that read otherwise once its changes are accepted. */
@@ -430,7 +430,7 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
     const landed =
       expected.into === "new"
         ? log.made.size > 0
-        : outcome.askedFrom !== null && log.changed.has(outcome.askedFrom) && log.made.size === 0;
+        : outcome.askedFrom != null && log.changed.has(outcome.askedFrom) && log.made.size === 0;
     if (!landed) failures.push({ kind: "wrong-place", wanted: expected.into });
   }
   if (outcome.verdict.unbacked.length > 0) {
