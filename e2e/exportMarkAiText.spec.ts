@@ -168,6 +168,15 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(result).toHaveCount(0);
     await expect(editor).toBeFocused();
     expect(await readdir(out)).toHaveLength(4);
+
+    // Twice: a held ⇧⌘E shows one question, and a double click on an answer makes one file.
+    await window.keyboard.press("ControlOrMeta+Shift+E");
+    await window.keyboard.press("ControlOrMeta+Shift+E");
+    await expect(result).toHaveAttribute("data-state", "ask-mark");
+    await expect(mark).toHaveCount(1);
+    await mark.dblclick();
+    await expect(done).toHaveText(savedLine("Tides 5.docx", out, language));
+    expect(await readdir(out)).toHaveLength(5);
     await app.close();
   });
 
