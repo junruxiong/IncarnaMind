@@ -571,9 +571,10 @@ test("an Answer whose Citations are all from a Document given with the Question 
 });
 
 test("Documents sent whole are read whether or not the Answer cites them: the line counts them beside the Mind", async () => {
-  const { app, window } = await start();
+  const { app, window } = await start({ documents: false });
   await writeFile(join(sources, "Lease 2026.pdf"), LEASE);
-  await addDocuments(window, [join(sources, "Lease 2026.pdf")]);
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  await addDocuments(window, [join(sources, "Lease 2026.pdf"), join(sources, "Tides.pdf")]);
   await core(window).mind("Credit report draft");
   const answer = await ask(
     window,
@@ -813,8 +814,8 @@ test("a Connector call waiting for approval: the line says so, its card waits ou
   await pointAndClick(window, card.getByTestId("approval-allow-once"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   const timeline = await openSteps(window, answer);
-  // No search: the folded line says the Mind and the Documents it was sent.
-  expect(await stepsOf(timeline)).toEqual(["answered", "read", "read-documents", "call"]);
+  // No search: the folded line says the Mind read, so the timeline doesn't.
+  expect(await stepsOf(timeline)).toEqual(["answered", "call"]);
   await expect(timeline.getByTestId("answer-connector-call")).toHaveAttribute(
     "data-approval",
     "allowed",

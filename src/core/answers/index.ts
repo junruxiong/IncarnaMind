@@ -919,6 +919,8 @@ export function createAnswers(options: AnswersOptions) {
     let listening = false;
     /** The Documents whose whole text went with the Question; null until the assistant's request is built. */
     let sentDocuments: Set<string> | null = null;
+    /** The Documents the live transcript came from: the "listened" step names them. */
+    const transcripts = new Set<string>();
     const { help } = input;
     let foundAhead = false;
     /** The language the call's newest lines are in, which a help Answer is written in. */
@@ -1629,6 +1631,7 @@ export function createAnswers(options: AnswersOptions) {
         if (kept.length > 0) {
           messages = withTranscript(messages, session.show(kept));
           listening = true;
+          for (const passage of kept) transcripts.add(passage.documentId);
           if (help) callLanguage = languageSaid(kept);
         }
         // Help gets what the User's Documents say about the newest lines at once, with no search
@@ -1673,7 +1676,11 @@ export function createAnswers(options: AnswersOptions) {
           passagesOf,
           (passages) => blockOf(passages, session.measure),
         );
-        sentDocuments = new Set(given?.passages.map((passage) => passage.documentId));
+        sentDocuments = new Set(
+          given?.passages.flatMap((passage) =>
+            transcripts.has(passage.documentId) ? [] : [passage.documentId],
+          ),
+        );
         if (given) {
           messages = withBeforeQuestion(messages, blockOf(given.passages, session.show));
           // Someone else wrote a saved web page: given up front, it is read as a search reads it (#78).
