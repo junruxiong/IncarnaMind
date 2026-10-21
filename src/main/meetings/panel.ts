@@ -54,13 +54,15 @@ export interface MeetingPanelOptions {
   appWindows(): BrowserWindow[];
   /** Whether a call comes from IncarnaMind's own page. */
   trusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean;
+  /** On macOS the shortcuts have ⌃⌥ defaults; elsewhere none is held until the User sets one. */
+  mac: boolean;
   log: Logger;
   /** A test build lets the smoke tests press a shortcut, which no test can send the system. */
   testHooks: boolean;
 }
 
 export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): void {
-  const mac = process.platform === "darwin";
+  const { mac } = options;
   let meetings: Meeting[] = [];
   let settings: Settings | null = null;
   let panel: BrowserWindow | null = null;
@@ -74,10 +76,10 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
   const held = new Map<HelpShortcut, string>();
   /**
    * Held while the call has the focus and dropped when a main window (a Mind, Library or Settings)
-   * does, since there they would take keys the User is typing (Ctrl+Shift+9 makes a checklist in
-   * the notes) and the bar's buttons and ⌘K reach the same actions. The panel is the meeting's own
-   * surface and never takes the focus from the call, so pointing at it keeps them held. A test
-   * build starts with another app in front, as a call is.
+   * does, since there they would take keys the User is typing (a key set to Ctrl+Shift+9 would
+   * stop the notes making a checklist) and the bar's buttons and ⌘K reach the same actions. The
+   * panel is the meeting's own surface and never takes the focus from the call, so pointing at it
+   * keeps them held. A test build starts with another app in front, as a call is.
    */
   let frontOverride: boolean | null = options.testHooks ? false : null;
   const mainFocused = () =>

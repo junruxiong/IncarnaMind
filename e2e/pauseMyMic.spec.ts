@@ -20,6 +20,7 @@ import {
   recordMeetingNow,
   removeDataFolder,
   setLanguage,
+  setMeetingKeys,
   setWindowSize,
   startRecording,
   tabTo,
@@ -38,8 +39,8 @@ async function shot(page: Page | Locator, name: string): Promise<void> {
 }
 
 const mac = process.platform === "darwin";
-const MIC_KEYS = mac ? "Ctrl+Alt+M" : "Ctrl+Shift+9";
-const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Shift+9";
+const MIC_KEYS = "Ctrl+Alt+M";
+const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Alt+M";
 
 /** Lines come every couple of seconds of sound, a few seconds behind it. */
 const LINES_WITHIN = { timeout: 30_000 };
@@ -145,6 +146,7 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
+  await setMeetingKeys(window);
   const bar = await recordingMeeting(window);
   const mic = bar.getByTestId("meeting-mic");
 
@@ -285,6 +287,7 @@ test("Pause my mic in Chinese: the tooltips, the line, ⌘K and the mark in Chin
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1100, 800);
   await dismissChatSetup(window);
+  await setMeetingKeys(window);
   const bar = await recordingMeeting(window);
   const mic = bar.getByTestId("meeting-mic");
   await window.mouse.move(1, 1);
@@ -347,6 +350,7 @@ test("Pause my mic in the floating panel: the header's button and the line under
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
+  await setMeetingKeys(window);
   const bar = await recordingMeeting(window);
   const panel = await panelOf(app);
   const mic = panel.getByTestId("panel-mic");
@@ -403,6 +407,7 @@ test("the recording bar never wraps: from 1,600 px down to 900 px, in English an
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1600, 900);
   await dismissChatSetup(window);
+  await setMeetingKeys(window);
   const bar = await recordingMeeting(window);
   const toggle = bar.getByTestId("meeting-transcript-toggle");
   const more = bar.getByTestId("meeting-more");
@@ -469,6 +474,7 @@ test("the meeting's keys are held only while no main window has the focus: with 
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
+  await setMeetingKeys(window);
   const bar = await recordingMeeting(window);
   const panel = await panelOf(app);
   const mic = bar.getByTestId("meeting-mic");

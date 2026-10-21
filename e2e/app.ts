@@ -25,6 +25,7 @@ import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import { EVENT_CHANNEL } from "../src/shared/bridge";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import { translate } from "../src/shared/i18n";
+import { defaultHelpKeys, HELP_SHORTCUTS, type HelpKeys } from "../src/shared/meetingHelp";
 import type { TestHooks } from "../src/shared/testHooks";
 import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
 import { APP_ARGS, homeEnv, KEYCHAIN_ARGS } from "../tests/helpers/home";
@@ -451,6 +452,21 @@ export const focusMainWindow = (app: ElectronApplication, focused: boolean) =>
 
 export const heldGlobalKeys = (app: ElectronApplication, keys: string) =>
   app.evaluate(({ globalShortcut }, asked) => globalShortcut.isRegistered(asked), keys);
+
+/**
+ * Gives Windows and Linux the keys macOS holds by default (⌃⌥1–7, H and M), which they ship
+ * without: a spec that presses the meeting's shortcuts sets them first, as Settings › Meetings
+ * does. macOS keeps its own.
+ */
+export async function setMeetingKeys(window: Page): Promise<void> {
+  if (process.platform === "darwin") return;
+  const keys: HelpKeys = {};
+  for (const shortcut of HELP_SHORTCUTS) keys[shortcut] = defaultHelpKeys(shortcut, true) ?? "";
+  await window.evaluate(async (chosen) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.updateSettings({ device: { meetingHelpKeys: chosen } });
+  }, keys);
+}
 
 export const pressHeldKeys = (app: ElectronApplication, kind: string) =>
   app.evaluate((_electron, pressed) => {

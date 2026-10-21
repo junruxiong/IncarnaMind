@@ -191,13 +191,15 @@ describe("Pause my mic", () => {
     expect(mic.reversible).toBe(true);
   });
 
-  test("shows the global shortcut the meeting holds for it, ⌃⌥M or Ctrl+Shift+9 by default", () => {
+  test("shows the global shortcut the meeting holds for it: ⌃⌥M by default on macOS, none elsewhere until one is set", () => {
     const settings = {
       device: { meetingHelpKeys: {} },
       meetingAudio: "both",
     } as unknown as Settings;
     stores.useAppStore.setState({ settings });
-    expect(command("meeting.microphone").globalKeys?.()).toMatch(/^(⌃⌥M|Ctrl\+Shift\+9)$/);
+    expect(command("meeting.microphone").globalKeys?.()).toBe(
+      process.platform === "darwin" ? "⌃⌥M" : null,
+    );
     stores.useAppStore.setState({
       settings: {
         ...settings,

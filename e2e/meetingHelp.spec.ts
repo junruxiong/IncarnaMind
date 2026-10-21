@@ -17,6 +17,8 @@ import {
   pressHeldKeys as pressKeys,
   recordMeeting,
   removeDataFolder,
+  setLanguage,
+  setMeetingKeys,
   setWindowSize,
   startRecording,
   useLocalChatModel,
@@ -43,11 +45,10 @@ const BUYER = [
   "How much is the Enterprise plan per seat, and does it include single sign-on?",
 ];
 const mac = process.platform === "darwin";
-/** The first button's shortcut by default: ⌃⌥1 on macOS, Ctrl+Shift+1 elsewhere. */
-const FIRST_KEYS = mac ? "Ctrl+Alt+1" : "Ctrl+Shift+1";
-/** Call help's: ⌃⌥H on macOS, Ctrl+Shift+8 elsewhere. */
-const PANEL_KEYS = mac ? "Ctrl+Alt+H" : "Ctrl+Shift+8";
-const PANEL_LABEL = mac ? "⌃⌥H" : "Ctrl+Shift+8";
+/** The first button's and Call help's shortcuts: macOS's defaults, which `setMeetingKeys` gives the other systems. */
+const FIRST_KEYS = "Ctrl+Alt+1";
+const PANEL_KEYS = "Ctrl+Alt+H";
+const PANEL_LABEL = mac ? "⌃⌥H" : "Ctrl+Alt+H";
 
 let dataDir: string;
 test.beforeEach(async () => {
@@ -116,6 +117,7 @@ test("help during the call: the floating panel above the meeting gives one or tw
   });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
+  await setMeetingKeys(window);
   await recordingMeeting(window);
 
   // With no AI model yet, the assistant and the panel each say so in one line, with Set up.
@@ -167,7 +169,7 @@ test("help during the call: the floating panel above the meeting gives one or tw
     /^Check what was said/,
   ]);
   await expect(buttons.first().getByTestId("help-button-keys")).toHaveText(
-    mac ? "⌃⌥1" : "Ctrl+Shift+1",
+    mac ? "⌃⌥1" : "Ctrl+Alt+1",
   );
 
   // A press shows the outline at once, then the options; the panel still isn't focused.
@@ -256,6 +258,7 @@ test("help during the call: the panel folds to level bars that become Stop, ⌘K
   });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
+  await setMeetingKeys(window);
   await useLocalChatModel(window);
   const bar = await recordingMeeting(window);
   const panel = await panelOf(app);
@@ -265,7 +268,7 @@ test("help during the call: the panel folds to level bars that become Stop, ⌘K
   await pointAndClick(panel, panel.getByTestId("panel-collapse"));
   const pill = panel.getByTestId("panel-pill");
   await expect(pill).toBeVisible();
-  await expect(pill.getByTestId("panel-keys")).toHaveText(mac ? "⌃⌥1–7" : "Ctrl+Shift+1–7");
+  await expect(pill.getByTestId("panel-keys")).toHaveText(mac ? "⌃⌥1–7" : "Ctrl+Alt+1–7");
   const stop = pill.getByTestId("level-stop");
   await expect(stop.getByTestId("level-bar")).toHaveCount(5);
   await shot(panel, "help-panel-pill-en");
@@ -331,6 +334,7 @@ test("help during the call: Call help in the meeting bar shows and hides the pan
   });
   await setWindowSize(app, window, 1600, 900);
   await dismissChatSetup(window);
+  await setMeetingKeys(window);
   const bar = await recordingMeeting(window);
   await panelOf(app);
 
@@ -430,6 +434,7 @@ test("help during the call: Answer their question cites the price sheet, checked
   });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
+  await setMeetingKeys(window);
   await useLocalChatModel(window);
   // Documents wait while a meeting records: the price sheet is added first.
   const sheet = join(sources, "Price sheet.txt");
@@ -557,3 +562,116 @@ test("help during the call follows the call's language: a Chinese call gets Chin
   await expect(objection.getByTestId("help-heading")).toHaveText(/^处理异议 · 对方说：“.+”$/);
   await app.close();
 });
+
+test("help during the call on Windows and Linux: no shortcut is held until the User sets one in Settings › Meetings, which says so at 900 px in English and Chinese, and a key another app holds is refused", async () => {
+  test.skip(mac, "macOS keeps its ⌃⌥ defaults, which the tests above cover.");
+  const { app, window } = await launchApp(dataDir);
+  await setWindowSize(app, window, 900, 800);
+  await dismissChatSetup(window);
+  const bar = await recordingMeeting(window);
+  const panel = await panelOf(app);
+
+  for (const keys of [
+    ...Array.from({ length: 9 }, (_, index) => `Ctrl+Shift+${index + 1}`),
+    ...["1", "7", "H", "M"].map((key) => `Ctrl+Alt+${key}`),
+  ]) {
+    expect(await held(app, keys), keys).toBe(false);
+  }
+  await expect(panel.getByTestId("help-button").first()).toBeVisible();
+  await expect(panel.getByTestId("help-button-keys")).toHaveCount(0);
+  const mic = panel.getByTestId("panel-mic");
+  await expect(mic).toHaveAttribute("title", "Pause my mic. The other side is still recorded");
+  await window.keyboard.press("ControlOrMeta+k");
+  await window.keyboard.type("Hide the call help panel");
+  const hide = paletteFound(window).filter({ hasText: "Hide the call help panel" });
+  await expect(hide).toHaveCount(1);
+  await expect(hide).not.toContainText("Ctrl");
+  await window.keyboard.press("Escape");
+
+  const settings = await openSettings(window, "meetings");
+  const rows = settings.getByTestId("help-keys-row");
+  await expect(rows).toHaveCount(9);
+  const field = (kind: string) =>
+    settings.locator(`[data-testid="help-keys"][data-kind="${kind}"]`);
+  const remove = settings.getByTestId("help-keys-remove");
+  const problem = settings.getByTestId("help-keys-problem");
+  const hint = settings
+    .getByTestId("help-settings")
+    .getByText(
+      "No keys are set to start with. A key you set works over the meeting app, only while recording.",
+    );
+  await expect(hint).toBeVisible();
+  for (const row of await rows.all()) {
+    await expect(row.getByTestId("help-keys")).toHaveText("No key set");
+  }
+  await expect(remove).toHaveCount(0);
+  await expectRowsFit(settings, rows);
+  await shot(settings.getByTestId("help-settings"), "meeting-keys-none-en-900");
+
+  await field("mic").click();
+  await expect(field("mic")).toHaveText("Press the new keys…");
+  await window.keyboard.press("Control+Alt+F8");
+  await expect(field("mic")).toHaveText("Ctrl+Alt+F8");
+  await expect.poll(() => held(app, "Ctrl+Alt+F8")).toBe(true);
+  await expect(remove).toHaveCount(1);
+  await expect(mic).toHaveAttribute(
+    "title",
+    "Pause my mic. The other side is still recorded (Ctrl+Alt+F8)",
+  );
+  await expectRowsFit(settings, rows);
+  await shot(settings.getByTestId("help-settings"), "meeting-keys-set-en-900");
+
+  await field("say").click();
+  await window.keyboard.press("Control+Alt+F8");
+  await expect(problem).toHaveText("Already the shortcut for “Pause my mic”");
+  await expect(field("say")).toHaveText("No key set");
+
+  await app.evaluate(({ globalShortcut }) =>
+    globalShortcut.register("Ctrl+Alt+F9", () => undefined),
+  );
+  await field("say").click();
+  await window.keyboard.press("Control+Alt+F9");
+  await expect(problem).toHaveText("In use by another app · Choose another");
+  await expect(field("say")).toHaveText("No key set");
+  await expect.poll(() => held(app, "Ctrl+Alt+F9")).toBe(true);
+
+  await setLanguage(window, "zh-CN");
+  await expect(hint).toBeHidden();
+  await expect(
+    settings.getByText("默认没有快捷键。设置后，可在会议应用中使用，仅在录制时有效。"),
+  ).toBeVisible();
+  await expect(field("say")).toHaveText("未设置快捷键");
+  await expect(field("panel")).toHaveText("未设置快捷键");
+  await expect(field("mic")).toHaveText("Ctrl+Alt+F8");
+  await expect(remove).toHaveText("移除");
+  await expectRowsFit(settings, rows);
+  await shot(settings.getByTestId("help-settings"), "meeting-keys-set-zh-900");
+
+  await remove.click();
+  await expect(field("mic")).toHaveText("未设置快捷键");
+  await expect(remove).toHaveCount(0);
+  await expect.poll(() => held(app, "Ctrl+Alt+F8")).toBe(false);
+  await setLanguage(window, "en");
+  await expect(field("mic")).toHaveText("No key set");
+  await expect(mic).toHaveAttribute("title", "Pause my mic. The other side is still recorded");
+  await closeSettings(window);
+  await bar.getByTestId("meeting-stop").click();
+  await app.close();
+});
+
+/** Every shortcut row's controls sit inside the row and the row inside the page, at a narrow width. */
+async function expectRowsFit(settings: Locator, rows: Locator): Promise<void> {
+  const page = await settings.getByTestId("help-settings").boundingBox();
+  if (!page) throw new Error("Settings › Meetings isn't drawn.");
+  for (const row of await rows.all()) {
+    const [box, controls] = await Promise.all([
+      row.boundingBox(),
+      row.getByTestId("help-keys").boundingBox(),
+    ]);
+    if (!box || !controls) throw new Error("A shortcut row isn't drawn.");
+    expect(box.x).toBeGreaterThanOrEqual(page.x - 1);
+    expect(box.x + box.width).toBeLessThanOrEqual(page.x + page.width + 1);
+    expect(controls.x).toBeGreaterThanOrEqual(box.x - 1);
+    expect(controls.x + controls.width).toBeLessThanOrEqual(box.x + box.width + 1);
+  }
+}

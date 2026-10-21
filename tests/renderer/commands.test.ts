@@ -206,20 +206,14 @@ describe("shortcuts", () => {
       }
       for (const shortcut of HELP_SHORTCUTS) {
         const keys = defaultHelpKeys(shortcut, mac);
+        if (keys === null) continue;
         expect(bound.has(keysForm(keys, mac)), `${shortcut}: ${keys}`).toBe(false);
       }
     },
   );
 
-  // Ctrl+Shift+7 to 9 are the editor's list keys: the meeting's keys are held only while another app is in front (src/main/meetings/panel.ts), so they never reach the editor. See #1446.
-  const EDITOR_KEYS_NOT_HELD_IN_THE_APP = new Set([
-    "ctrl+shift+Digit7",
-    "ctrl+shift+Digit8",
-    "ctrl+shift+Digit9",
-  ]);
-
   test.each(SYSTEMS)(
-    "no default meeting key is a key of the note editor, bar the list keys held only while another app is in front, on $name",
+    "no default meeting key is a key of the note editor, and Windows and Linux have none, on $name",
     ({ mac }) => {
       const editor = new Set<string>();
       for (const shortcut of editorShortcuts()) {
@@ -247,9 +241,11 @@ describe("shortcuts", () => {
       expect(editor.has("ctrl+shift+Digit9") || mac, "the editor's checklist key").toBe(true);
       for (const shortcut of HELP_SHORTCUTS) {
         const keys = defaultHelpKeys(shortcut, mac);
-        const form = keysForm(keys, mac);
-        if (EDITOR_KEYS_NOT_HELD_IN_THE_APP.has(form)) continue;
-        expect(editor.has(form), `${shortcut}: ${keys}`).toBe(false);
+        if (keys === null) {
+          expect(mac, `${shortcut} has no default on Windows and Linux only`).toBe(false);
+          continue;
+        }
+        expect(editor.has(keysForm(keys, mac)), `${shortcut}: ${keys}`).toBe(false);
       }
     },
   );

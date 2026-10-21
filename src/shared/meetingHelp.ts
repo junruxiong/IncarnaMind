@@ -103,17 +103,16 @@ export const helpShortcutLabel = (shortcut: HelpShortcut): MessageKey =>
       : helpLabel(shortcut);
 
 /**
- * A shortcut by default: ⌃⌥1–7, ⌃⌥H and ⌃⌥M on macOS, which Zoom and Teams
- * leave free; Ctrl+Shift+1–9 elsewhere, where Ctrl+Alt is AltGr on many
- * European layouts and types characters, and Teams leaves a call on
- * Ctrl+Shift+H. Pause my mic is not on M or U: Teams mutes on Ctrl+Shift+M, and
- * GTK and IBus start Unicode entry on Ctrl+Shift+U.
+ * A shortcut by default on macOS only: ⌃⌥1–7, ⌃⌥H and ⌃⌥M, which Zoom, Teams and Mac apps leave
+ * free. Elsewhere none: the apps a call runs beside use Ctrl+Shift+1–9 (Excel's number formats),
+ * Ctrl+Alt is AltGr on many European layouts, and no app's keys can all be known. The buttons and
+ * ⌘K do everything, and the User sets keys in Settings › Meetings.
  */
-export function defaultHelpKeys(shortcut: HelpShortcut, mac: boolean): string {
-  if (shortcut === "panel") return mac ? "Ctrl+Alt+H" : "Ctrl+Shift+8";
-  if (shortcut === "mic") return mac ? "Ctrl+Alt+M" : "Ctrl+Shift+9";
-  const digit = GENERAL_HELP.indexOf(shortcut) + 1;
-  return mac ? `Ctrl+Alt+${digit}` : `Ctrl+Shift+${digit}`;
+export function defaultHelpKeys(shortcut: HelpShortcut, mac: boolean): string | null {
+  if (!mac) return null;
+  if (shortcut === "panel") return "Ctrl+Alt+H";
+  if (shortcut === "mic") return "Ctrl+Alt+M";
+  return `Ctrl+Alt+${GENERAL_HELP.indexOf(shortcut) + 1}`;
 }
 
 /** The shortcuts the User set in Settings › Meetings; "" for one they left without keys. */
@@ -122,7 +121,7 @@ export type HelpKeys = Partial<Record<HelpShortcut, string>>;
 /** The keys a shortcut has on this device: the User's, or the default. Null: none. */
 export function helpKeysOf(shortcut: HelpShortcut, chosen: HelpKeys, mac: boolean): string | null {
   const keys = chosen[shortcut] ?? defaultHelpKeys(shortcut, mac);
-  return keys === "" ? null : keys;
+  return keys || null;
 }
 
 const MODIFIERS = new Set(["Cmd", "Ctrl", "Alt", "Shift"]);
