@@ -196,11 +196,14 @@ import {
 } from "./context";
 import { coverageInstructions, coverageOf, documentsAsked, type SizedDocument } from "./coverage";
 import {
+  documentSkimBlock,
   documentTextBlock,
   givenUpFront,
   OPENING_TOKEN_LIMIT,
   openingWithin,
   SMALL_SCOPE_DOCUMENTS,
+  skimTokens,
+  skimWithin,
   upFrontTokens,
 } from "./documentText";
 import type {
@@ -241,6 +244,7 @@ import {
   skillLanguageNote,
   skillSetsLanguage,
   sourcesInstructions,
+  stillReadingNote,
   webInstructions,
   withPassageNotes,
   workingCopyNote,
@@ -655,6 +659,8 @@ export interface DocumentsForAnswers
   searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
   /** The Documents among these (null: every Document) whose text couldn't be read, or some of it. */
   unread(documentIds: readonly string[] | null): UnreadFile[];
+  /** The Documents among these (null: every Document) whose text is still being read: nothing a search finds is from them yet. */
+  reading(documentIds: readonly string[] | null): { name: string }[];
   search(
     query: string,
     documentIds: readonly string[] | null,
@@ -853,6 +859,11 @@ export function createAnswers(options: AnswersOptions) {
      */
     listening?: () => Promise<WindowedPassage[] | null>;
     /**
+     * A Meeting's saved Transcript to fill its notes in from (#142): shown with the Question as
+     * `listening` is, as much of it as fits half the model's window.
+     */
+    transcript?: WindowedPassage[];
+    /**
      * One-click help during the call: the button pressed. Its Answer is laid out as
      * the panel reads it, and is offered the Documents' Tools only.
      */
@@ -970,8 +981,23 @@ export function createAnswers(options: AnswersOptions) {
     let firstMindWordAt: number | null = null;
     const careful = asksToCheckOrCalculate(context.question);
     const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
+    /** The Documents of the scope still being read, looked at once, when the Answer ends. */
+    let stillReadingAtEnd: AnswerSteps["stillReading"] | null | undefined;
+    const stillReading = () => {
+      if (finishedAt === null) return null;
+      if (stillReadingAtEnd === undefined) {
+        const reading = options.documents.reading(documentIds);
+        const [only] = reading;
+        stillReadingAtEnd =
+          reading.length === 0
+            ? null
+            : { count: reading.length, ...(reading.length === 1 && only && { name: only.name }) };
+      }
+      return stillReadingAtEnd;
+    };
     const steps = (): AnswerSteps => {
       const summary = reasoning.trim();
+      const reading = stillReading();
       const thoughtUntil =
         firstTextAt !== null && reasoningStartedAt !== null && firstTextAt > reasoningStartedAt
           ? firstTextAt
@@ -1005,6 +1031,7 @@ export function createAnswers(options: AnswersOptions) {
         ...(withoutMindTools && { withoutMindTools: true as const }),
         ...(coverage && { coverage }),
         ...(writtenFrom && { writtenFrom }),
+        ...(reading && { stillReading: reading }),
         ...(sentDocuments && {
           sent: {
             documents: [...sentDocuments],
@@ -1671,6 +1698,16 @@ export function createAnswers(options: AnswersOptions) {
           if (finished) return;
         }
       }
+      if (input.transcript) {
+        const kept = newestWithin(
+          input.transcript,
+          prepared.window ? Math.floor(prepared.window.tokens / 2) : Number.MAX_SAFE_INTEGER,
+        );
+        if (kept.length > 0) {
+          messages = withTranscript(messages, session.show(kept));
+          for (const passage of kept) transcripts.add(passage.documentId);
+        }
+      }
       if (inAssistant) {
         const unread = options.documents.unread(documentIds);
         const blockOf = (
@@ -1691,15 +1728,31 @@ export function createAnswers(options: AnswersOptions) {
           passagesOf,
           (passages) => blockOf(passages, session.measure),
         );
+        // A summary of each Document too long to give whole reads each one's skim (#894).
+        const share = Math.floor(skimTokens(prepared.window) / Math.max(1, scope.length));
+        const skims =
+          !given && asked.each
+            ? scope.flatMap((document) => skimWithin(passagesOf(document.id), share))
+            : [];
+        // Only Documents given whole count as sent: a skim is a part of each.
         sentDocuments = new Set(
           given?.passages.flatMap((passage) =>
             transcripts.has(passage.documentId) ? [] : [passage.documentId],
           ),
         );
-        if (given) {
-          messages = withBeforeQuestion(messages, blockOf(given.passages, session.show));
+        const shown = given?.passages ?? skims;
+        if (shown.length > 0) {
+          messages = withBeforeQuestion(
+            messages,
+            given
+              ? blockOf(given.passages, session.show)
+              : documentSkimBlock(
+                  [...new Set(skims.map((passage) => passage.documentName))],
+                  withPassageNotes(session.show(skims), unread),
+                ),
+          );
           // Someone else wrote a saved web page: given up front, it is read as a search reads it (#78).
-          if (given.passages.some((passage) => passage.documentKind === "web")) {
+          if (shown.some((passage) => passage.documentKind === "web")) {
             contextReasons.push({ via: "read", source: "web-page" });
             textOrigin ??= "web-page";
           }
@@ -1920,6 +1973,7 @@ export function createAnswers(options: AnswersOptions) {
         // So the model can search again in the Documents' language (see the search Tool).
         documentLanguages: options.documents.searchableLanguages(documentIds),
         unreadDocuments: () => options.documents.unread(documentIds),
+        readingDocuments: () => options.documents.reading(documentIds),
         searchDocuments: (query, signal, searchOptions) =>
           session.tools.searchDocuments(query, signal, searchOptions),
         cite: (records, citeOptions) => session.tools.cite(records, citeOptions),
@@ -2030,6 +2084,7 @@ export function createAnswers(options: AnswersOptions) {
                   scoped,
                   calculating,
                 ),
+            stillReadingNote(options.documents.reading(documentIds)),
             coverageInstructions(
               coverage,
               asked.each,
@@ -2081,6 +2136,10 @@ export function createAnswers(options: AnswersOptions) {
         structuredOutput: givesStructuredOutput(prepared.capabilities),
         takesTemperature: prepared.capabilities.facts.temperature,
         window: prepared.window,
+        ...(prepared.capabilities.facts.maxOutput !== undefined && {
+          maxOutput: prepared.capabilities.facts.maxOutput,
+        }),
+        ...(prepared.capabilities.facts.toolsEveryRequest && { toolsEveryRequest: true }),
         retryQuotes: prepared.retryQuotes,
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
         ...(input.assistant && {
@@ -2831,6 +2890,56 @@ export function createAnswers(options: AnswersOptions) {
           outside: true,
           toolSet: "check",
           task: true,
+        });
+        const stop = () => active.get(answerId)?.finish({ status: "stopped" });
+        if (input.signal.aborted) stop();
+        else input.signal.addEventListener("abort", stop, { once: true });
+      });
+    },
+
+    /**
+     * Fills a Meeting's notes in (#142) as a check Run kept nowhere, as a cell is: from the
+     * Transcript's `passages`, shown with the Question, its Search scope `documentIds`. Its
+     * Citations are checked as any Answer's. The model is ready and allowed already.
+     */
+    answerMeetingFill(input: {
+      context: QuestionContext;
+      passages: WindowedPassage[];
+      documentIds: string[];
+      model: ChatModelChoice;
+      signal: AbortSignal;
+    }): Promise<CellAnswer> {
+      const answerId = randomUUID();
+      return new Promise<CellAnswer>((resolve) => {
+        start({
+          home: {
+            place: { mindId: null },
+            write(answer, outcome) {
+              if (outcome) {
+                resolve({
+                  status: outcome.status,
+                  markdown: answer.markdown,
+                  blocks: answer.blocks(),
+                  citations: answer.citations(),
+                  error: outcome.status === "failed" ? outcome.error : null,
+                });
+              }
+              return true;
+            },
+          },
+          answerId,
+          questionId: answerId,
+          model: input.model,
+          context: input.context,
+          contextReasons: [],
+          documentIds: input.documentIds,
+          emptyScope: false,
+          forcedSkill: null,
+          consentNeeded: false,
+          outside: true,
+          toolSet: "check",
+          task: true,
+          transcript: input.passages,
         });
         const stop = () => active.get(answerId)?.finish({ status: "stopped" });
         if (input.signal.aborted) stop();

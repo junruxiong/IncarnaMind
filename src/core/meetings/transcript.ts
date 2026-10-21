@@ -236,6 +236,11 @@ export interface TranscriptsOptions {
   health: CaptureHealthRecords;
   /** Tells speakers apart after the call (#138). Absent: lines keep the labels of where they came from. */
   speakers?: SpeakerPass;
+  /**
+   * The Meeting's Transcript is finished (#142): saved, its Document in its place and its
+   * speakers told apart (#138), or with no lines.
+   */
+  saved?(meetingId: string): void;
   /** The cloud service the User chose for meeting audio (#141). Absent: always this computer. */
   cloud?: Pick<CloudTranscription, "start" | "sending" | "refuse">;
   changed(): void;
@@ -1049,7 +1054,6 @@ export function createTranscripts(options: TranscriptsOptions) {
         }
       }
       await save(state);
-      if (state.state === "saved" && options.speakers) state.speakers = "due";
     } catch (error) {
       state.state = "failed";
       state.problem = {
@@ -1073,6 +1077,7 @@ export function createTranscripts(options: TranscriptsOptions) {
   async function save(state: State): Promise<void> {
     if (state.cues.length === 0) {
       state.state = "empty";
+      options.saved?.(state.meetingId);
       return;
     }
     const document = state.documentId ? documents.find(state.documentId) : null;
@@ -1086,6 +1091,8 @@ export function createTranscripts(options: TranscriptsOptions) {
     state.state = "saved";
     state.problem = null;
     log.info("transcript.saved", { meetingId: state.meetingId, lines: state.cues.length });
+    if (options.speakers) state.speakers = "due";
+    else options.saved?.(state.meetingId);
   }
 
   // ---- Speakers ----
@@ -1107,6 +1114,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       state.speakers = "done";
       persist(state);
       options.changed();
+      options.saved?.(state.meetingId);
     };
     if (!state.savedPath || options.audioDeleted(state.meetingId) || toldApart(state)) {
       done();

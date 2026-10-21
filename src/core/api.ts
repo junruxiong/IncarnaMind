@@ -2033,6 +2033,8 @@ export interface DeviceSettings {
   chatSetupDismissed: boolean;
   /** The User dismissed the sidebar's line saying the app runs without its sandbox (#1179). */
   sandboxNoticeDismissed: boolean;
+  /** The app has opened on this device before: from its second launch it opens on Home. */
+  openedBefore: boolean;
   /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
   gettingStarted: GettingStarted;
   /**
@@ -2074,6 +2076,12 @@ export interface DeviceSettings {
   meetingHelpKeys: HelpKeys;
   /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
   motion: MotionPreference;
+  /**
+   * The model the User last chose here, in a composer or as the Answers default: a Mind with no
+   * pick of its own and the assistant with no Mind in focus use it (`modelInUse`). Null until
+   * they choose, and again once its provider is removed: they follow `UserSettings.chatModel` then.
+   */
+  lastChatModel: ChatModelChoice | null;
 }
 
 /**
@@ -2162,6 +2170,7 @@ export const MAX_TAB_GROUPS = 3;
 export type TabItem =
   | { kind: "mind"; mindId: string }
   | { kind: "library" }
+  | { kind: "home" }
   | { kind: "document"; documentId: string };
 
 /** What the viewer knows of the Citation a Document was opened from. */
@@ -2315,6 +2324,11 @@ export type LayoutChange =
       keep?: boolean;
       /** Its group becomes the focused one: true unless false. */
       focus?: boolean;
+      /**
+       * Opened behind the tab shown, which stays in front with the focus, as a middle click opens
+       * a browser's tab; several in a row keep the order they were opened in.
+       */
+      behind?: boolean;
       /** A Document: where in it, e.g. a Citation's quote. */
       place?: DocumentPlace;
     }
@@ -5247,6 +5261,12 @@ export interface AnswerSteps {
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
   /**
+   * Documents in its Search scope were still being read (Queued or Extracting) when it ended, so
+   * no search could find their text yet (#1503): how many, and the name when there is one.
+   * Absent: none.
+   */
+  stillReading?: { count: number; name?: string };
+  /**
    * A request to write, written from a Search scope that holds `documents` of the User's
    * `total` Documents (#1149). Absent: from all of them, or not a request to write.
    */
@@ -5626,6 +5646,12 @@ export interface ConversationMatch {
 
 // ---------------------------------------------------------------------------
 // The words inside Minds and Documents (⌘K, #116)
+
+/** A Mind's first line of text that isn't its name (`CoreApi.listMindSnippets`). */
+export interface MindSnippet {
+  mindId: string;
+  text: string;
+}
 
 /**
  * A Mind whose Blocks hold every word searched for (`CoreApi.searchMinds`): its best Block, one
@@ -7369,11 +7395,19 @@ export interface SharePagePreferences {
  */
 export type TheirChangesShown = "shown" | "accepted";
 
-/** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
+/** What a Word file does with the text IncarnaMind wrote: marks it with a comment, or leaves it out. */
+export const MARK_AI_TEXT_CHOICES = ["mark", "leave"] as const;
+
+export type MarkAiTextChoice = (typeof MARK_AI_TEXT_CHOICES)[number];
+
+/**
+ * A Word export's own choices (#107). The switches are on until the User turns them off; marking
+ * AI text is the User's to answer, once: null until they have (see `ExportMindOptions`).
+ */
 export interface WordExportPreferences {
   includeQuestions: boolean;
   trackChanges: boolean;
-  markAiText: boolean;
+  markAiText: MarkAiTextChoice | null;
   commentFailedChecks: boolean;
 }
 
@@ -7779,8 +7813,47 @@ export interface Meeting {
   help: MeetingHelp | null;
   /** The kind of meeting the help buttons are for, as the User chose it; null: the general buttons only. */
   helpTemplate: MeetingHelpTemplate | null;
+  /** Its notes filled in from the Transcript after Stop (#142); null before Stop. */
+  fill: MeetingFill | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * The Mind's notes filled in from the Transcript after Stop (#142), with no question first:
+ * under each of the User's lines, or, with none, in sections. Every addition is AI text citing
+ * the Transcript's times; the User's own text never changes.
+ * - "waiting": for the Transcript to be finished and saved;
+ * - "filling": the model is writing;
+ * - "filled": written, and one Undo takes it all back;
+ * - "undone": taken back;
+ * - "failed": nothing was written, and `problem` says why; Try again fills it in;
+ * - "off": not run, and `problem` says why: "Keep everything on this computer" is on and the
+ *   Mind's model isn't on this computer, or the model isn't ready or allowed yet.
+ */
+export interface MeetingFill {
+  state: "waiting" | "filling" | "filled" | "undone" | "failed" | "off";
+  /** Under the User's lines ("notes"), or in sections because they wrote none. Null before it knows. */
+  mode: "notes" | "sections" | null;
+  /** The model that wrote it runs on this computer. */
+  local: boolean;
+  problem: MeetingFillProblem | null;
+}
+
+/**
+ * Why the notes weren't filled in:
+ * - "model": the model failed (`message`: its words, or a provider error's);
+ * - "stopped": IncarnaMind closed while they were being filled in;
+ * - "local-mode": "Keep everything on this computer" is on and the Mind's model isn't local;
+ * - "not-allowed": the User hasn't allowed sending to the model's service yet (`service`);
+ * - "no-model": no model is set up, or it needs a key or a sign-in;
+ * - "no-transcript": the Transcript has no lines.
+ */
+export interface MeetingFillProblem {
+  kind: "model" | "stopped" | "local-mode" | "not-allowed" | "no-model" | "no-transcript";
+  message: string;
+  /** For "not-allowed": the service's name, as the User knows it. */
+  service?: string;
 }
 
 export type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate };
@@ -8467,6 +8540,11 @@ export interface CoreApi {
    * typed a moment ago are found.
    */
   searchMinds(query: string): Promise<MindTextMatch[]>;
+  /**
+   * Home's Recent: each Mind's first line of text under its name, as the words typed a moment
+   * ago are; Minds with none, or not read yet, are left out.
+   */
+  listMindSnippets(): Promise<MindSnippet[]>;
   /**
    * ⌘K's "In your Documents" and the Library's search: live Documents whose Passages hold every
    * word of `query`, as `searchMinds` reads it, best match first, one Passage each, at most
@@ -9742,6 +9820,13 @@ export interface CoreApi {
    * downloads or starts the speech-to-text model, or saves the WebVTT file again.
    */
   retryTranscript(meetingId: string): Promise<Meeting>;
+  /**
+   * Fills the Meeting's notes in from its Transcript again (#142), after a problem or an Undo:
+   * on Try again. The model is the Answers one the User chose; nothing asks first.
+   */
+  fillMeetingNotes(meetingId: string): Promise<Meeting>;
+  /** Takes back what filling in added, leaving the notes as the User left them (#142). */
+  undoMeetingFill(meetingId: string): Promise<Meeting>;
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
   /**
@@ -10000,6 +10085,8 @@ export interface CoreEvents {
   "meetings.changed": Meeting[];
   /** About ten times a second while a Meeting's audio is captured: how loud each source is. */
   "meetings.level": MeetingLevel;
+  /** A notification that a Meeting's notes were filled in was clicked: its Mind is shown (#142). */
+  "meetings.notesShown": { mindId: string };
   /**
    * Connecting agents was turned on or off, Local mode paused or resumed them, or a pairing
    * was made, changed, used or removed: as `getAgents` now returns it.
@@ -10057,6 +10144,7 @@ const methods: Record<CoreApiMethod, true> = {
   getConversation: true,
   searchConversations: true,
   searchMinds: true,
+  listMindSnippets: true,
   searchDocumentText: true,
   renameConversation: true,
   deleteConversation: true,
@@ -10328,6 +10416,8 @@ const methods: Record<CoreApiMethod, true> = {
   removeTranscriptionKey: true,
   getTranscriptionSpeed: true,
   retryTranscript: true,
+  fillMeetingNotes: true,
+  undoMeetingFill: true,
   openAudioSettings: true,
   askMeetingHelp: true,
   setMeetingTemplate: true,

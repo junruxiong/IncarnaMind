@@ -4,7 +4,7 @@ Read this before writing code or tests, whether you are a person or a coding age
 
 **The bar:** a change is done when its pull request's checks are green on GitHub, not when the tests pass on your computer. CI runs on clean machines that are slower than yours and have a different screen. A test that passes only on your computer is a broken test.
 
-CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_request`), and again on each group the merge queue tests on top of `main` (`merge_group`). A push to `main` runs the first only, since the queue already ran the smoke test on that exact code:
+CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_request`), and again on each group the merge queue tests on top of `main` (`merge_group`). A push to `main` doesn't run CI: `main` moves to exactly the group the queue tested. A run by hand (`workflow_dispatch`) is there when needed. A draft pull request runs only the light checks, which report as passed, until it is marked ready for review:
 
 | Check | Where | What it runs |
 |---|---|---|
@@ -44,7 +44,7 @@ Every night, and by hand from the Actions tab, the Electron smoke test (macOS) i
 - **Load each real engine at least once.** The fake engines (the fake embedding model, `--fake` transcription, the scripted chat model) keep tests fast and repeatable. But they never load the real module, so an import that only breaks in the built app goes unseen: meeting transcription failed in alphas 1 to 3 while every test passed (#1233).
   - A feature that runs a real engine (transcription, OCR, embeddings, the reranker, Python analysis) has at least one unit test that loads the installed module through the app's own loader, not a copy of its import.
   - That test checks the module has what the code calls. It needs no model download.
-  - The release build checks the same in the packaged app before it uploads (#1239).
+  - The packaged app transcribes a meeting with its real speech engine and model, through Chromium's fake microphone (`e2e/packaged/`, #1239). The release runs it on macOS before it uploads, the nightly run every night, and CI on a pull request that changes transcription, meetings or packaging. To run it yourself: `npm run dist:dir`, then `npm run test:packaged`. Set `INCARNAMIND_MODEL_CACHE` to a folder to keep the 1.1 GB of models between runs. The other engines aren't checked in the packaged app yet.
 - **Tests and the evaluation never touch the real home folder.** `tests/setup/home.ts` gives each test file a temporary HOME (and `USERPROFILE` and the XDG folders), and fails a test that writes under the real one outside the cache and report folders the run was given; the core takes its home and Documents folders from its host, so `startCore` and the evaluation pass temporary ones.
 - **Write paths and text that work on every platform.** Use `path.join`, never assume `/` or a case-insensitive file system, and give the Chinese strings the same tests as the English ones.
 - **Write each spec for Linux and macOS.** Pull requests run the smoke test on Linux; macOS runs it each night. Press shortcuts with `ControlOrMeta+…`, never `Meta+…`, and expect a shortcut's label in either form (`⌘J` or `Ctrl+J`). A spec for something only macOS has, such as the traffic lights or full screen, skips elsewhere with `test.skip(process.platform !== "darwin", "<why>")`, and the nightly run covers it.
