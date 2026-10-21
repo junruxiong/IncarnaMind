@@ -11,7 +11,11 @@ export function ModelHealthLine() {
   );
   const openSettings = useAppStore((state) => state.openSettings);
   // A model that failed as a model says nothing of another of the provider's models.
-  if (!choice || !failure || (failure.error.kind === "model" && failure.modelId !== choice.modelId)) {
+  if (
+    !choice ||
+    !failure ||
+    (failure.error.kind === "model" && failure.modelId !== choice.modelId)
+  ) {
     return null;
   }
   return (

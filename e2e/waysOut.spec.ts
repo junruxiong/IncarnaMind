@@ -235,7 +235,9 @@ test("a choice that can't be used right now says why, with its next step: Ollama
   await expect(hostedLine).toHaveText(unavailable);
   await screenshot(settings, "why-unavailable-provider-en");
   await setLanguage(window, "zh-CN");
-  await expect(hostedLine).toHaveText("不可用：已开启“所有内容都留在这台电脑上” · 允许使用云端模型");
+  await expect(hostedLine).toHaveText(
+    "不可用：已开启“所有内容都留在这台电脑上” · 允许使用云端模型",
+  );
   await screenshot(settings, "why-unavailable-provider-zh");
   await setLanguage(window, "en");
   await settings.getByTestId("models-back").click();
