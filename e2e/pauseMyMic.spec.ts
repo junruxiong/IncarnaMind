@@ -40,6 +40,8 @@ async function shot(page: Page | Locator, name: string): Promise<void> {
 
 const mac = process.platform === "darwin";
 const MIC_KEYS = "Ctrl+Alt+M";
+/** A key the User may set on Windows and Linux that is also the editor's checklist key. */
+const CLASHING_KEYS = "Ctrl+Shift+9";
 const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Alt+M";
 
 /** Lines come every couple of seconds of sound, a few seconds behind it. */
@@ -474,14 +476,15 @@ test("the meeting's keys are held only while no main window has the focus: with 
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await setMeetingKeys(window);
+  await setMeetingKeys(window, { mic: CLASHING_KEYS });
   const bar = await recordingMeeting(window);
   const panel = await panelOf(app);
   const mic = bar.getByTestId("meeting-mic");
   const notes = window.getByTestId("mind-editor");
+  const keys = mac ? MIC_KEYS : CLASHING_KEYS;
 
   await focusMainWindow(app, true);
-  await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(false);
+  await expect.poll(() => heldGlobalKeys(app, keys)).toBe(false);
   await notes.click();
   await window.keyboard.type("Agenda");
   await window.keyboard.press("ControlOrMeta+Shift+9");
@@ -492,7 +495,7 @@ test("the meeting's keys are held only while no main window has the focus: with 
 
   // The panel pointed at, which is another app in front for the keys: the key pauses the microphone.
   await focusMainWindow(app, false);
-  await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(true);
+  await expect.poll(() => heldGlobalKeys(app, keys)).toBe(true);
   await pointAndClick(panel, panel.getByTestId("panel-template"));
   await pointAndClick(panel, panel.getByTestId("panel-template"));
   await pressHeldKeys(app, "mic");
@@ -506,8 +509,8 @@ test("the meeting's keys are held only while no main window has the focus: with 
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
 
   await focusMainWindow(app, true);
-  await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(false);
+  await expect.poll(() => heldGlobalKeys(app, keys)).toBe(false);
   await focusMainWindow(app, false);
-  await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(true);
+  await expect.poll(() => heldGlobalKeys(app, keys)).toBe(true);
   await app.close();
 });

@@ -455,16 +455,17 @@ export const heldGlobalKeys = (app: ElectronApplication, keys: string) =>
 
 /**
  * Gives Windows and Linux the keys macOS holds by default (⌃⌥1–7, H and M), which they ship
- * without: a spec that presses the meeting's shortcuts sets them first, as Settings › Meetings
- * does. macOS keeps its own.
+ * without, and then `chosen` over them: a spec that presses the meeting's shortcuts sets them
+ * first, as Settings › Meetings does. macOS keeps its own, whatever `chosen` says.
  */
-export async function setMeetingKeys(window: Page): Promise<void> {
+export async function setMeetingKeys(window: Page, chosen: HelpKeys = {}): Promise<void> {
   if (process.platform === "darwin") return;
   const keys: HelpKeys = {};
   for (const shortcut of HELP_SHORTCUTS) keys[shortcut] = defaultHelpKeys(shortcut, true) ?? "";
-  await window.evaluate(async (chosen) => {
+  Object.assign(keys, chosen);
+  await window.evaluate(async (all) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    await bridge.updateSettings({ device: { meetingHelpKeys: chosen } });
+    await bridge.updateSettings({ device: { meetingHelpKeys: all } });
   }, keys);
 }
 
