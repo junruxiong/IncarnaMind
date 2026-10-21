@@ -18,7 +18,9 @@
  * "in millions" each figure as "$289.4 million"; one that asks for "four columns" gets a
  * table of four, wider than the assistant (#612); one that asks for "two tables" (两个表) gets
  * two small ones; one that asks for "nine rows" (九行) gets
- * three peers' figures in nine rows, with the first column's labels; one that asks for "forty
+ * three peers' figures in nine rows, with the first column's labels; one that asks to "compare the
+ * two contracts" (比较两份合同) gets a table of three columns, its cells short if the instructions
+ * ask for that and the quotes if not (#1382); one that asks for "forty
  * citations" (四十条引用) gets forty sentences, each with a marker, and one that asks for "twelve in a
  * row" (连续十二条) gets one sentence with twelve markers side by side; one with "cited below" (or 引用在下) gets a
  * table whose one Citation stands in a paragraph under it, and one with "framed" (or 带说明)
@@ -206,6 +208,77 @@ function nineRowsAnswer(question: string, marker: string): string {
     }),
     "",
     chinese ? "变化和余量为计算所得。" : "Change and headroom are calculated.",
+  ].join("\n");
+}
+
+const CONTRACT_COMPARISON = /\bcompare the two contracts\b|比较两份合同/i;
+
+const SHORT_CELLS = "about eight words";
+
+const CONTRACT_CELLS = {
+  en: {
+    head: ["Term", "Alder", "Birch"],
+    short: [
+      ["Notice", "30 days", "60 days"],
+      ["Law", "England", "New York"],
+      ["Cap", "12 months' fees", "None"],
+    ],
+    long: [
+      [
+        "Notice",
+        "Either party may end the agreement by giving thirty days' written notice to the other party",
+        "Either party may end the agreement by giving sixty days' written notice to the other party",
+      ],
+      [
+        "Law",
+        "This agreement is governed by the laws of England and Wales and the courts of England",
+        "This agreement is governed by the laws of the State of New York and the courts of that State",
+      ],
+      [
+        "Cap",
+        "Liability under this agreement is limited to the fees paid in the twelve months before the claim",
+        "Liability under this agreement is not limited to any amount, whatever the cause of the claim",
+      ],
+    ],
+  },
+  zh: {
+    head: ["条款", "阿尔德", "伯奇"],
+    short: [
+      ["通知期", "30 天", "60 天"],
+      ["法律", "英国法", "纽约州法"],
+      ["上限", "12 个月费用", "无上限"],
+    ],
+    long: [
+      [
+        "通知期",
+        "任何一方均可提前三十日书面通知对方终止本协议，无需说明任何理由",
+        "任何一方均可提前六十日书面通知对方终止本协议，无需说明任何理由",
+      ],
+      [
+        "法律",
+        "本协议受英格兰和威尔士法律管辖，并由英格兰的法院专属管辖",
+        "本协议受纽约州法律管辖，并由纽约州的法院专属管辖",
+      ],
+      [
+        "上限",
+        "本协议项下的责任以索赔前十二个月内已支付的费用为限",
+        "本协议项下的责任不设金额上限，无论索赔因何而起",
+      ],
+    ],
+  },
+} as const;
+
+function contractComparisonAnswer(prompt: Prompt, question: string, marker: string): string {
+  const { head, short, long } = CONTRACT_CELLS[/\p{Script=Han}/u.test(question) ? "zh" : "en"];
+  // Short only if the instructions ask for it, so a test that passes proves they reach the model.
+  const rows = systemOf(prompt).includes(SHORT_CELLS) ? short : long;
+  return [
+    `| ${head.join(" | ")} |`,
+    "|:--|:--|:--|",
+    ...rows.map(([term, alder, birch], index) => {
+      const cited = index === 0 ? `${alder} ${marker}` : alder;
+      return `| ${term} | ${cited} | ${birch} |`;
+    }),
   ].join("\n");
 }
 
@@ -427,9 +500,11 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
                   ? citedBelowAnswer(question, recorded[0] ?? "")
                   : AS_A_TABLE.test(question)
                     ? tableAnswer(recorded.join(" "))
-                    : recorded.length > 1
-                      ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
-                      : CITED_ANSWER;
+                    : CONTRACT_COMPARISON.test(question)
+                      ? contractComparisonAnswer(prompt, question, recorded[0] ?? "")
+                      : recorded.length > 1
+                        ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
+                        : CITED_ANSWER;
   const said = withAsides(prompt, question, answer);
   return { text: skill ? `Following the Skill ${skill}.\n\n${said}` : said };
 }
