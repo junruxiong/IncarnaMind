@@ -4129,7 +4129,12 @@ export const en = {
     "This service can’t register IncarnaMind itself. Enter the client ID of an OAuth app you registered.",
   "remoteConnectors.signIn.error.secret-storage":
     "IncarnaMind can’t store your sign-in securely on this system, because no keyring is available.",
+  "remoteConnectors.signIn.error.held-back":
+    "Its sign-in is with a server on another computer, so nothing was sent.",
   "remoteConnectors.signIn.error.failed": "The sign-in didn’t work.",
+  "remoteConnectors.signIn.heldBack": "Paused: its sign-in server is on another computer.",
+  "remoteConnectors.signIn.heldBack.details":
+    "“Keep everything on this computer” is on, and this sign-in is with a server on another computer, so it isn’t renewed or started and its Tools aren’t used. Turn that off and it goes on from where it was.",
   "remoteConnectors.error.unreachable":
     "Its server can’t be reached. Check the URL and your internet connection.",
   "remoteConnectors.consent.note": "The Tool’s arguments go to this server over the network.",
