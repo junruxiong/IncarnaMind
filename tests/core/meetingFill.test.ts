@@ -8,10 +8,11 @@ import { describe, expect, test, vi } from "vitest";
 import type { Core, Meeting, MeetingFill } from "../../src/core";
 import type { WindowedPassage } from "../../src/core/documents/search";
 import { FILL_PART_TOKENS, transcriptParts } from "../../src/core/meetings/fill";
+import { setMindModel } from "../../src/shared/mindModel";
 import { pendingProposals } from "../../src/shared/proposals";
 import { checkReply, isCheckRun, type Plan } from "../helpers/checks";
 import { shownPassages } from "../helpers/citations";
-import { createTempDataFolder } from "../helpers/core";
+import { createTempDataFolder, saveProviderUnasked } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { heading, note, readMind, shownWithAiText, writeMind } from "../helpers/minds";
@@ -64,6 +65,7 @@ async function recorded(
   model: ReturnType<typeof scriptedModel>,
   notes: Parameters<typeof writeMind>[1] | null,
   before?: (core: Core) => Promise<void>,
+  inMind?: (client: MindClient) => void,
 ) {
   const dataDir = await createTempDataFolder();
   const { core, record } = await transcribingCore(dataDir, {
@@ -74,10 +76,9 @@ async function recorded(
   await before?.(core);
   const meeting = await core.createMeeting();
   const client = await connectToMind(core, meeting.mindId);
-  if (notes) {
-    writeMind(client, notes);
-    await client.settled();
-  }
+  if (notes) writeMind(client, notes);
+  inMind?.(client);
+  await client.settled();
   await core.startMeeting({ meetingId: meeting.id, systemAudio: true });
   record(12 * SECOND);
   await vi.waitFor(async () => {
@@ -217,6 +218,24 @@ describe("After Stop, the notes are filled in from the Transcript (#142)", {
     core.close();
   });
 
+  // protects=an addition the model wrote without a Citation is dropped, never written uncited, while its cited ones go in; fails_when=an uncited sentence lands in the notes; no_claim=none beyond protects.
+  test("an addition without a Citation is dropped", async () => {
+    const model = fillingModel(
+      "### L1\nThe enterprise price is 45 dollars a seat [^1].\n\n### L2\nDana sends the contract by Friday.\n\n### L3\n- The rollout starts in the second quarter [^1].\n- Everyone agreed.",
+      { 1: MY_LINES[0] as string },
+    );
+    const { core, meeting, client } = await recorded(model, NOTES);
+    const before = shown(client);
+    expect(await settledFill(core, meeting)).toMatchObject({ state: "filled" });
+    await vi.waitFor(() => expect(shown(client).length).toBeGreaterThan(before.length));
+    const added = shown(client).filter((line) => line.includes("«"));
+    expect(added).toEqual([
+      "«The enterprise price is 45 dollars a seat »\uFFFC«.»",
+      "«The rollout starts in the second quarter »\uFFFC«.»",
+    ]);
+    core.close();
+  });
+
   // protects=a model that fails leaves the Mind as it was and says why, and Try again fills it in; fails_when=anything is written on a failure, or Try again does nothing; no_claim=which provider error it was.
   test("a failing model writes nothing and says why; Try again fills the notes in", async () => {
     let failing = true;
@@ -307,6 +326,35 @@ describe("After Stop, the notes are filled in from the Transcript (#142)", {
     });
     expect(shown(reopened)).toEqual(before);
     again.close();
+  });
+
+  // protects=the notes are filled in with the model the meeting's Mind uses (its own pick, #1379), not the Answers default; a service not allowed yet is said as that, with its name, not as no model; fails_when=the default model writes them, or the line says to choose a model; no_claim=the device's last pick, which #1379's tests cover.
+  test("the Mind's own model fills them in, and a service not allowed yet says so", async () => {
+    let cloudId = "";
+    const { core, meeting } = await recorded(
+      fillingModel("### L1\nThe enterprise price is 45 dollars a seat [^1].", {
+        1: MY_LINES[0] as string,
+      }),
+      NOTES,
+      async (core) => {
+        const answers = (await core.getSettings()).user.chatModel;
+        cloudId = (
+          await saveProviderUnasked(core, {
+            kind: "openai",
+            apiKey: "sk-test",
+            modelId: "gpt-test",
+          })
+        ).id;
+        await core.updateSettings({ user: { chatModel: answers } });
+      },
+      (client) => setMindModel(client.doc, { providerId: cloudId, modelId: "gpt-test" }),
+    );
+    expect(await settledFill(core, meeting)).toMatchObject({
+      state: "off",
+      problem: { kind: "not-allowed", service: "OpenAI" },
+    });
+    expect((await core.getSettings()).user.chatModel?.providerId).not.toBe(cloudId);
+    core.close();
   });
 
   // protects=with "Keep everything on this computer" on and a cloud Answers model, nothing is filled in or sent, and the Meeting says why; fails_when=it runs on the cloud model, or says nothing; no_claim=a model on this computer, which the other tests use.

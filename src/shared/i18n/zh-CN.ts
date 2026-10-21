@@ -4128,8 +4128,10 @@ export const zhCN = {
   "meetings.fill.problem.empty": "模型没有找到可补充的内容。",
   "meetings.fill.problem.stopped": "补全完成前 IncarnaMind 已关闭。",
   "meetings.fill.problem.localMode":
-    "已开启“所有内容都留在这台电脑上”，而回答用的模型不在这台电脑上。",
-  "meetings.fill.problem.noModel": "请先为回答选择一个 AI 模型。",
+    "已开启“所有内容都留在这台电脑上”，而这个 Mind 用的模型不在这台电脑上。",
+  "meetings.fill.problem.notAllowed":
+    "你还没有允许发送给 {service}。在助手里提一个问题即可允许，然后重试。",
+  "meetings.fill.problem.noModel": "请先选择一个 AI 模型。",
   "meetings.fill.undoName": "补全笔记",
   "meetings.fill.notify": "已补全笔记：{meeting}",
   "transcript.live": "实时",

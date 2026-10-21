@@ -1,18 +1,7 @@
 /**
  * After Stop, a Meeting's notes filled in from its Transcript (#142), with no question first.
- *
- * - Once the Transcript is saved, one check Run per part of it (../answers `answerMeetingFill`)
- *   writes what goes under each of the User's lines, or, when they wrote none, the meeting's
- *   notes in sections. The model is the Answers one the User chose; it never asks. With "Keep
- *   everything on this computer" on, only a model on this computer writes them.
- * - A long Transcript is read in parts that fit half the model's window, at most
- *   `FILL_PART_TOKENS` each, and what each part says is put together.
- * - "Said in the call, not in your Documents": each claim is checked against the Mind's Folder
- *   on the same route, a few at a time, and only those it doesn't support are kept.
- * - Nothing is written until all of it is ready: then a Checkpoint and one write. The User's
- *   own text never changes; an addition whose line was deleted or moved meanwhile goes at the
- *   end of its heading's part, or at the end. A failure or a quit leaves the Mind as it was.
- * - Undo takes out every Block it added that the User hasn't typed in.
+ * Nothing is written until all of it is ready, then in one write after a Checkpoint, so a
+ * failure or a quit leaves the Mind as it was.
  */
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
@@ -37,6 +26,7 @@ import type { Language } from "../language";
 import type { MindContent } from "../mindContent";
 import type { StoredFill } from ".";
 import {
+  citedOnly,
   claimsIn,
   FILL_SECTIONS,
   type FillLine,
@@ -62,7 +52,6 @@ const SECTION_TITLES = {
 /** Claims checked at once on a model off this computer; one at a time on one on it. */
 const CLAIMS_AT_ONCE = 4;
 
-/** The Answers route, ready to fill with, or why it can't. */
 export type FillRoute =
   | { model: ChatModelChoice; local: boolean; windowTokens: number | null }
   | { problem: MeetingFillProblem };
@@ -77,8 +66,8 @@ export interface MeetingFillOptions {
   };
   /** The Transcript's Passages, in reading order, once its newest version has them. */
   transcript(documentId: string): Promise<WindowedPassage[]>;
-  /** The model to fill with: the Answers one, as Local mode and the User's choices allow. */
-  route(): Promise<FillRoute>;
+  /** The model to fill with: the one the Mind uses (#1379), as Local mode and consent allow. */
+  route(mindId: string): Promise<FillRoute>;
   answers: {
     answerMeetingFill(input: {
       context: QuestionContext;
@@ -103,24 +92,20 @@ export interface MeetingFillOptions {
   log: Logger;
 }
 
-/** A failure to show in the bar, in the User's words. */
 class FillProblemError extends Error {
   constructor(readonly problem: MeetingFillProblem) {
     super(problem.message);
   }
 }
 
-/** A line the User wrote, where it is, and the heading it comes under. */
 interface UserLine extends FillLine {
   id: string;
   headingId: string | null;
 }
 
 const LINE_TYPES = new Set(["paragraph", "heading"]);
-/** What holds no line of the User's notes: a table's cells, a footnote's text. */
 const NOT_NOTES = new Set([COMPARISON_TABLE_NODE, FOOTNOTE_NODE]);
 
-/** An element's text, and whether all of it is AI text. */
 function readLine(element: Y.XmlElement): { text: string; generated: boolean } {
   let text = "";
   let generated = true;
@@ -141,7 +126,6 @@ function readLine(element: Y.XmlElement): { text: string; generated: boolean } {
   return { text: text.trim(), generated };
 }
 
-/** Every line and heading the User wrote, in order, in all of the Mind but tables and footnotes. */
 function linesIn(parent: Y.XmlFragment | Y.XmlElement, found: Y.XmlElement[] = []): Y.XmlElement[] {
   for (const child of parent.toArray()) {
     if (!(child instanceof Y.XmlElement) || NOT_NOTES.has(child.nodeName)) continue;
@@ -153,7 +137,7 @@ function linesIn(parent: Y.XmlFragment | Y.XmlElement, found: Y.XmlElement[] = [
   return found;
 }
 
-/** The User's lines, each given an id if it had none, so they can be found once filled in. */
+// Each line gets an id if it had none, so it can be found once filled in.
 function userLines(blocks: Y.XmlFragment): UserLine[] {
   const lines: UserLine[] = [];
   let headingId: string | null = null;
@@ -183,7 +167,6 @@ function findById(parent: Y.XmlFragment | Y.XmlElement, id: string): Y.XmlElemen
   return null;
 }
 
-/** Where a heading's part ends at the top level: before the next heading as high or higher. */
 function endOfHeadingPart(blocks: Y.XmlFragment, heading: Y.XmlElement): number {
   const top = blocks.toArray();
   const at = top.indexOf(heading);
@@ -204,7 +187,6 @@ const withIds = (nodes: readonly NodeJSON[]): NodeJSON[] =>
 
 const idOf = (node: NodeJSON) => String(node.attrs?.[BLOCK_ID_ATTRIBUTE]);
 
-/** Puts each line's additions right after it, or where its line went; returns the ids added. */
 function placeUnderLines(
   blocks: Y.XmlFragment,
   lines: readonly UserLine[],
@@ -221,7 +203,6 @@ function placeUnderLines(
       const at = parent.toArray().indexOf(element) + 1;
       parent.insert(at, placed.map(createElement));
     } else {
-      // Its line was deleted, or moved out of reach: at the end of its heading's part, or the end.
       const heading = line.headingId ? findById(blocks, line.headingId) : null;
       const at = heading?.parent === blocks ? endOfHeadingPart(blocks, heading) : blocks.length;
       blocks.insert(at, placed.map(createElement));
@@ -255,7 +236,6 @@ function placeSections(
   return withId.map(idOf);
 }
 
-/** Whether all of an element's words are still AI text: the User hasn't typed in it. */
 function untouched(element: Y.XmlElement): boolean {
   const lines: Y.XmlElement[] = LINE_TYPES.has(element.nodeName) ? [element] : [];
   const visit = (parent: Y.XmlElement) => {
@@ -340,7 +320,7 @@ export function createMeetingFill(options: MeetingFillOptions) {
     }
     let route: FillRoute;
     try {
-      route = await options.route();
+      route = await options.route(meeting.mindId);
     } catch (error) {
       log.warn("meeting.fillNoModel", {
         meetingId,
@@ -394,7 +374,8 @@ export function createMeetingFill(options: MeetingFillOptions) {
           });
         }
         for (const [marker, blocks] of partsOf(answer.blocks)) {
-          gathered.set(marker, [...(gathered.get(marker) ?? []), ...blocks]);
+          const cited = citedOnly(blocks);
+          if (cited.length > 0) gathered.set(marker, [...(gathered.get(marker) ?? []), ...cited]);
         }
       }
       if (gathered.size === 0) {
@@ -443,7 +424,6 @@ export function createMeetingFill(options: MeetingFillOptions) {
     }
   }
 
-  /** The claims among `blocks` the User's Documents don't support, as a bullet list. */
   async function notSupported(
     blocks: readonly NodeJSON[],
     mindId: string,

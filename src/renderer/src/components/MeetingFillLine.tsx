@@ -8,6 +8,7 @@ const REASONS = {
   model: "meetings.fill.problem.model",
   stopped: "meetings.fill.problem.stopped",
   "local-mode": "meetings.fill.problem.localMode",
+  "not-allowed": "meetings.fill.problem.notAllowed",
   "no-model": "meetings.fill.problem.noModel",
   "no-transcript": "meetings.fill.problem.noTranscript",
 } as const satisfies Record<MeetingFillProblem["kind"], MessageKey>;
@@ -27,7 +28,8 @@ export function MeetingFillLine({ meeting }: { meeting: Meeting }) {
     onClick: () => void useMeetings.getState().fillNotes(meeting.id),
   });
   // Said in the interface's words now; a model's own words show on hover.
-  const reasonOf = (problem: MeetingFillProblem | null) => t(REASONS[problem?.kind ?? "model"]);
+  const reasonOf = (problem: MeetingFillProblem | null) =>
+    t(REASONS[problem?.kind ?? "model"], { service: problem?.service ?? "" });
 
   if (fill.state === "waiting" || fill.state === "filling") {
     const text =

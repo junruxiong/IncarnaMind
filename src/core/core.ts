@@ -2938,9 +2938,9 @@ export function createCore(adapters: CoreAdapters): Core {
       await extracted(documentId, LIVE_TRANSCRIPT_WAIT_MS);
       return documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
     },
-    async route() {
+    async route(mindId) {
       const language = settings.get().language;
-      const choice = await chat.answeringModel();
+      const choice = await chat.answeringModel(modelInUseIn(mindId) ?? undefined);
       const readiness = await chat.readiness(choice);
       if (!readiness.ready) {
         return {
@@ -2955,10 +2955,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       // Filling in never asks: a service the User hasn't allowed yet waits for an Answer to ask.
       if (readiness.consent === "needed") {
+        const service = readiness.provider.service?.name ?? readiness.provider.kind;
         return {
           problem: {
-            kind: "no-model",
-            message: translate(language, "meetings.fill.problem.noModel"),
+            kind: "not-allowed",
+            message: translate(language, "meetings.fill.problem.notAllowed", { service }),
+            service,
           },
         };
       }

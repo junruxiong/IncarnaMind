@@ -6,6 +6,7 @@
  */
 import type { NodeJSON } from "../../shared/blockJson";
 import type { QuestionContext } from "../answers/context";
+import { CITATION_NODE } from "../api";
 
 /** A line the User wrote, as the model is shown it. */
 export interface FillLine {
@@ -114,6 +115,20 @@ export function partsOf(blocks: readonly NodeJSON[]): Map<string, NodeJSON[]> {
   }
   for (const [marker, part] of parts) if (part.length === 0) parts.delete(marker);
   return parts;
+}
+
+const hasCitation = (node: NodeJSON): boolean =>
+  node.type === CITATION_NODE || (node.content ?? []).some(hasCitation);
+
+/** What of a reply goes into the notes: only what cites the Transcript, never a line uncited. */
+export function citedOnly(blocks: readonly NodeJSON[]): NodeJSON[] {
+  return blocks.flatMap((block) => {
+    if (block.type === "bulletList" || block.type === "orderedList") {
+      const items = (block.content ?? []).filter(hasCitation);
+      return items.length > 0 ? [{ ...block, content: items }] : [];
+    }
+    return hasCitation(block) ? [block] : [];
+  });
 }
 
 /** The plain text of each bullet in `blocks`, or of each paragraph where there are no bullets. */

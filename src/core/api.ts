@@ -7801,7 +7801,7 @@ export interface Meeting {
  * - "undone": taken back;
  * - "failed": nothing was written, and `problem` says why; Try again fills it in;
  * - "off": not run, and `problem` says why: "Keep everything on this computer" is on and the
- *   Answers model isn't on this computer, or the model isn't ready.
+ *   Mind's model isn't on this computer, or the model isn't ready or allowed yet.
  */
 export interface MeetingFill {
   state: "waiting" | "filling" | "filled" | "undone" | "failed" | "off";
@@ -7816,13 +7816,16 @@ export interface MeetingFill {
  * Why the notes weren't filled in:
  * - "model": the model failed (`message`: its words, or a provider error's);
  * - "stopped": IncarnaMind closed while they were being filled in;
- * - "local-mode": "Keep everything on this computer" is on and the Answers model isn't local;
- * - "no-model": no Answers model is set up, or it needs a key, a sign-in or the User's OK;
+ * - "local-mode": "Keep everything on this computer" is on and the Mind's model isn't local;
+ * - "not-allowed": the User hasn't allowed sending to the model's service yet (`service`);
+ * - "no-model": no model is set up, or it needs a key or a sign-in;
  * - "no-transcript": the Transcript has no lines.
  */
 export interface MeetingFillProblem {
-  kind: "model" | "stopped" | "local-mode" | "no-model" | "no-transcript";
+  kind: "model" | "stopped" | "local-mode" | "not-allowed" | "no-model" | "no-transcript";
   message: string;
+  /** For "not-allowed": the service's name, as the User knows it. */
+  service?: string;
 }
 
 export type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate };

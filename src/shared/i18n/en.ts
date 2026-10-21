@@ -4307,8 +4307,10 @@ export const en = {
   "meetings.fill.problem.empty": "the model found nothing to add.",
   "meetings.fill.problem.stopped": "IncarnaMind closed before they were done.",
   "meetings.fill.problem.localMode":
-    "“Keep everything on this computer” is on, and the Answers model isn’t on this computer.",
-  "meetings.fill.problem.noModel": "choose an AI model for Answers first.",
+    "“Keep everything on this computer” is on, and this Mind’s model isn’t on this computer.",
+  "meetings.fill.problem.notAllowed":
+    "you haven’t allowed sending to {service} yet. Ask a Question in the assistant to allow it, then Try again.",
+  "meetings.fill.problem.noModel": "choose an AI model first.",
   "meetings.fill.undoName": "Fill in notes",
   "meetings.fill.notify": "Notes filled in: {meeting}",
   "transcript.live": "Live",
