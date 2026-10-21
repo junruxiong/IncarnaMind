@@ -811,7 +811,7 @@ export const zhCN = {
   "references.localMode.turnOff": "关闭",
   "references.problem": "无法核对参考文献：{message}",
   "consent.flow.checks": "核对",
-  "consent.flow.checks.purpose": "对照你的文档，核对你选中的句子、整个 Mind 和要核对的文档",
+  "consent.flow.checks.purpose": "对照你的文档核对句子、Mind 和文档",
   "aiText.markedAsMine": "已标为你写的",
   "edit.pending.improve": "正在润色…",
   "edit.pending.shorten": "正在精简…",

@@ -830,8 +830,7 @@ export const en = {
   "references.localMode.turnOff": "Turn it off",
   "references.problem": "The references couldn’t be checked: {message}",
   "consent.flow.checks": "Checks",
-  "consent.flow.checks.purpose":
-    "check the sentences you select, a whole Mind you check, and the documents you verify, against your Documents",
+  "consent.flow.checks.purpose": "check sentences, Minds and documents against your Documents",
   "aiText.markedAsMine": "Marked as yours",
   "edit.pending.improve": "Improving the writing…",
   "edit.pending.shorten": "Shortening…",
