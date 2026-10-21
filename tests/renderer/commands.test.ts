@@ -8,10 +8,10 @@ import {
   offered,
 } from "../../src/renderer/src/commands/registry";
 import type { ObjectRef } from "../../src/renderer/src/objects";
+import { windowKeyForms } from "../../src/renderer/src/windowKeys";
 import { MENU_COMMANDS, type MenuCommandId } from "../../src/shared/commands";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 import { defaultHelpKeys, HELP_SHORTCUTS } from "../../src/shared/meetingHelp";
-import { editorShortcuts } from "../helpers/editor";
 
 /*
  * Every command the app has: no key bound twice where both commands could act,
@@ -185,67 +185,20 @@ describe("shortcuts", () => {
   });
 
   test.each(SYSTEMS)(
-    "the keys held over the meeting app while recording are none the window or the menu binds, on $name",
+    "no default meeting key is one of the window's own (commands, menu and note editor), and Windows and Linux have none, on $name",
     ({ mac }) => {
-      const bound = new Set<string>();
-      for (const command of all) {
-        const shortcut = command.shortcut;
-        if (shortcut && !(shortcut.macOnly && !mac)) {
-          for (const keys of [
-            keysOn(shortcut.keys, mac),
-            ...(!mac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
-            ...(shortcut.also ? [shortcut.also] : []),
-          ]) {
-            bound.add(keysForm(keys, mac));
-          }
-        }
-        if (command.rowKeys) bound.add(keysForm(keysOn(command.rowKeys, mac), mac));
-      }
-      for (const { keys } of Object.values(MENU_COMMANDS)) {
-        if (keys) bound.add(keysForm(keys, mac));
-      }
-      for (const shortcut of HELP_SHORTCUTS) {
-        const keys = defaultHelpKeys(shortcut, mac);
-        if (keys === null) continue;
-        expect(bound.has(keysForm(keys, mac)), `${shortcut}: ${keys}`).toBe(false);
-      }
-    },
-  );
-
-  test.each(SYSTEMS)(
-    "no default meeting key is a key of the note editor, and Windows and Linux have none, on $name",
-    ({ mac }) => {
-      const editor = new Set<string>();
-      for (const shortcut of editorShortcuts()) {
-        const parts = shortcut.split("-");
-        const key = parts.pop() ?? "";
-        const code = /^[a-z]$/i.test(key)
-          ? `Key${key.toUpperCase()}`
-          : /^\d$/.test(key)
-            ? `Digit${key}`
-            : null;
-        if (!code) continue;
-        const has = (...names: string[]) => parts.some((part) => names.includes(part));
-        editor.add(
-          [
-            (has("Meta", "Cmd") || (mac && has("Mod"))) && "meta",
-            (has("Ctrl", "Control") || (!mac && has("Mod"))) && "ctrl",
-            has("Alt", "Option") && "alt",
-            has("Shift") && "shift",
-            code,
-          ]
-            .filter(Boolean)
-            .join("+"),
-        );
-      }
-      expect(editor.has("ctrl+shift+Digit9") || mac, "the editor's checklist key").toBe(true);
+      const own = windowKeyForms(mac);
+      expect(own.has(keysForm("CmdOrCtrl+Shift+P", mac)), "a command's keys").toBe(true);
+      expect(own.has(keysForm("CmdOrCtrl+Shift+E", mac)), "the menu's keys").toBe(true);
+      expect(own.has(keysForm("CmdOrCtrl+B", mac)), "the editor's keys").toBe(true);
+      expect(own.has("ctrl+shift+Digit9") || mac, "the editor's checklist key").toBe(true);
       for (const shortcut of HELP_SHORTCUTS) {
         const keys = defaultHelpKeys(shortcut, mac);
         if (keys === null) {
           expect(mac, `${shortcut} has no default on Windows and Linux only`).toBe(false);
           continue;
         }
-        expect(editor.has(keysForm(keys, mac)), `${shortcut}: ${keys}`).toBe(false);
+        expect(own.has(keysForm(keys, mac)), `${shortcut}: ${keys}`).toBe(false);
       }
     },
   );

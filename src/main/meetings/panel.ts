@@ -10,12 +10,13 @@
  * own screen share where the system honours content protection (macOS,
  * Windows 10 2004 and later).
  *
- * The shortcuts are held only while a Meeting records and no main window has
- * the focus: never while it is paused or after it stops, so other apps get
- * their keys back. A button's press
- * goes to the panel, or, with none shown, to the app's window, which asks
- * there; Call help's shows or hides the panel, and Pause my mic's pauses or
- * resumes the Meeting's microphone.
+ * The shortcuts are held only while a Meeting records: never while it is paused
+ * or after it stops, so other apps get their keys back. With a main window in
+ * front they are held too, bar those the User set to a key the window binds
+ * itself (`windowKeys`), which would take that keystroke from the window. A
+ * button's press goes to the panel, or, with none shown, to the app's window,
+ * which asks there; Call help's shows or hides the panel, and Pause my mic's
+ * pauses or resumes the Meeting's microphone.
  */
 import { join } from "node:path";
 import {
@@ -31,6 +32,7 @@ import type { Core, Logger } from "../../core";
 import type { Meeting, Settings } from "../../core/api";
 import { isRecord } from "../../core/errors";
 import { FILES_CHANNELS } from "../../shared/bridge";
+import { keysForm } from "../../shared/keyForms";
 import { HELP_SHORTCUTS, type HelpShortcut, helpKeysOf } from "../../shared/meetingHelp";
 import {
   type HeldKeys,
@@ -75,17 +77,20 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
   let corner: { right: number; top: number } | null = null;
   const held = new Map<HelpShortcut, string>();
   /**
-   * Held while the call has the focus and dropped when a main window (a Mind, Library or Settings)
-   * does, since there they would take keys the User is typing (a key set to Ctrl+Shift+9 would
-   * stop the notes making a checklist) and the bar's buttons and ⌘K reach the same actions. The
-   * panel is the meeting's own surface and never takes the focus from the call, so pointing at it
-   * keeps them held. A test build starts with another app in front, as a call is.
+   * Keys the window binds itself, as the window last said. Over a main window (a Mind, Library or
+   * Settings) a meeting key that is one of them is dropped, since the User is typing there (a key
+   * set to Ctrl+Shift+9 would stop the notes making a checklist). Every other key stays held:
+   * taking notes in the meeting's Mind is when Pause my mic is most wanted. The panel is the
+   * meeting's own surface and never takes the focus from the call, so pointing at it keeps them
+   * all held. A test build starts with another app in front, as a call is.
    */
+  let windowKeys: ReadonlySet<string> = new Set();
   let frontOverride: boolean | null = options.testHooks ? false : null;
   const mainFocused = () =>
     frontOverride ??
     options.appWindows().some((window) => !window.isDestroyed() && window.isFocused());
-  const keysWanted = () => liveMeeting()?.status === "recording" && !mainFocused();
+  const keysWanted = () => liveMeeting()?.status === "recording";
+  const takenByWindow = (keys: string) => mainFocused() && windowKeys.has(keysForm(keys, mac));
   /**
    * Keys the system refused while recording: not asked for again, nor logged, on every Meeting
    * update, until those keys or the recording change.
@@ -150,7 +155,7 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     if (active && settings) {
       for (const kind of HELP_SHORTCUTS) {
         const keys = helpKeysOf(kind, settings.device.meetingHelpKeys, mac);
-        if (keys) wanted.set(kind, keys);
+        if (keys && !takenByWindow(keys)) wanted.set(kind, keys);
       }
     }
     if (!active) refused.clear();
@@ -315,6 +320,11 @@ export function serveMeetingPanel(core: Core, options: MeetingPanelOptions): voi
     }
     globalShortcut.unregister(keys);
     return true;
+  });
+  ipcMain.on(FILES_CHANNELS.windowKeys, (event, forms: unknown) => {
+    if (!options.trusted(event) || !Array.isArray(forms)) return;
+    windowKeys = new Set(forms.filter((form): form is string => typeof form === "string"));
+    holdKeys(keysWanted());
   });
   ipcMain.on(FILES_CHANNELS.showMeetingPanel, (event, shown: unknown) => {
     if (options.trusted(event) && typeof shown === "boolean") choose(shown);

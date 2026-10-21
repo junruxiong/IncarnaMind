@@ -216,6 +216,18 @@ describe("Pause my mic", () => {
     expect(command("meeting.microphone").globalKeys?.()).toBeNull();
   });
 
+  test("shows no key the window binds itself, which works only over another app", () => {
+    const window = process.platform === "darwin" ? "Cmd+Alt+L" : "Ctrl+Alt+L";
+    stores.useAppStore.setState({
+      settings: {
+        device: { meetingHelpKeys: { mic: window, panel: "Ctrl+Alt+F8" } },
+        meetingAudio: "both",
+      } as unknown as Settings,
+    });
+    expect(command("meeting.microphone").globalKeys?.()).toBeNull();
+    expect(command("meeting.panel").globalKeys?.()).toMatch(/F8/);
+  });
+
   test("is offered where this copy can record, and works while a meeting records or is paused", () => {
     const mic = command("meeting.microphone");
     canRecord(false);

@@ -125,6 +125,11 @@ export interface FilesBridge {
   onMeetingHelp(listener: (kind: GeneralHelpKind) => void): () => void;
   /** Whether no other app holds these keys as its global shortcut, as far as the system says. */
   globalKeysFree(keys: string): Promise<boolean>;
+  /**
+   * Says which keys the window binds itself, in the form `keysForm` gives. A meeting shortcut the
+   * User set to one of them is held only while another app is in front.
+   */
+  windowKeys(forms: readonly string[]): void;
   /** Shows the floating panel during a call again after the User closed it, or hides it. */
   showMeetingPanel(shown: boolean): void;
   /** Calls `listener` with the floating panel's state, now and when it changes. Returns how to stop. */
@@ -202,6 +207,8 @@ export const FILES_CHANNELS = {
   /** From the main process: a help button's shortcut was pressed with no floating panel shown. */
   meetingHelp: "app:meetingHelp",
   globalKeysFree: "app:globalKeysFree",
+  /** From the page: the keys the window binds itself (`windowKeys`). */
+  windowKeys: "app:windowKeys",
   /** From the page: show (true) or hide (false) the floating panel. */
   showMeetingPanel: "app:showMeetingPanel",
   /** From the page: what the floating panel's state is now; the main process answers on `meetingPanel`. */

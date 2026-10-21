@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { createFakeCapture } from "../../src/core/meetings/fakeCapture";
 import { FILES_CHANNELS } from "../../src/shared/bridge";
+import { keysForm } from "../../src/shared/keyForms";
 import type { HelpKeys } from "../../src/shared/meetingHelp";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { recordingLog } from "../helpers/log";
@@ -11,17 +12,20 @@ const electron = vi.hoisted(() => {
   const registered = new Map<string, () => void>();
   const attempts: string[] = [];
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
+  const listeners = new Map<string, (event: unknown, ...args: unknown[]) => void>();
   return {
     taken,
     registered,
     attempts,
     handlers,
+    listeners,
     module: {
       app: { on: () => undefined },
       BrowserWindow: class {},
       screen: {},
       ipcMain: {
-        on: () => undefined,
+        on: (channel: string, listener: (event: unknown, ...args: unknown[]) => void) =>
+          listeners.set(channel, listener),
         handle: (channel: string, listener: (event: unknown, ...args: unknown[]) => unknown) =>
           handlers.set(channel, listener),
       },
@@ -46,6 +50,7 @@ beforeEach(() => {
   electron.registered.clear();
   electron.attempts.length = 0;
   electron.handlers.clear();
+  electron.listeners.clear();
 });
 
 const held = () => [...electron.registered.keys()].sort();
@@ -81,6 +86,13 @@ async function serve(mac: boolean, meetingHelpKeys: HelpKeys = {}) {
     setKeys: (keys: HelpKeys) => core.updateSettings({ device: { meetingHelpKeys: keys } }),
   };
 }
+
+/** The window saying which keys it binds itself, as its page does on load. */
+const windowBinds = (mac: boolean, ...keys: string[]) =>
+  electron.listeners.get(FILES_CHANNELS.windowKeys)?.(
+    {},
+    keys.map((each) => keysForm(each, mac)),
+  );
 
 const keysFree = async (keys: string) =>
   electron.handlers.get(FILES_CHANNELS.globalKeysFree)?.({}, keys);
@@ -130,19 +142,39 @@ describe("The shortcuts held over the meeting app while a meeting records", () =
     await vi.waitFor(() => expect(held()).toEqual([]));
   });
 
+  test("macOS keeps holding its defaults with a main window in front, as Pause my mic is wanted while taking notes", async () => {
+    const { record } = await serve(true);
+    windowBinds(true, "CmdOrCtrl+B", "Cmd+Shift+9");
+    await record();
+    await vi.waitFor(() => expect(held()).toHaveLength(9));
+    mainInFront(true);
+    expect(held()).toHaveLength(9);
+    expect(held()).toContain("Ctrl+Alt+M");
+    mainInFront(false);
+    expect(held()).toHaveLength(9);
+  });
+
   test.each([
     { name: "macOS", mac: true },
     { name: "Windows and Linux", mac: false },
   ])(
-    "a key the User sets is held only while another app is in front, so the editor keeps its own, on $name",
+    "a key the User sets that is one of the window's own is held only while another app is in front, and the rest stay held, on $name",
     async ({ mac }) => {
-      const { record } = await serve(mac, { panel: "Ctrl+Shift+8", say: "Ctrl+Shift+9" });
+      const { record } = await serve(mac, {
+        panel: "Ctrl+Alt+F8",
+        say: "Ctrl+Shift+9",
+        mic: "Ctrl+Alt+F9",
+      });
+      const set = ["Ctrl+Alt+F8", "Ctrl+Alt+F9", "Ctrl+Shift+9"];
+      const mine = () => held().filter((keys) => set.includes(keys));
       await record();
-      await vi.waitFor(() => expect(held()).toContain("Ctrl+Shift+9"));
+      await vi.waitFor(() => expect(mine()).toEqual(set));
+      windowBinds(mac, "Ctrl+Shift+9");
+      expect(mine()).toEqual(set);
       mainInFront(true);
-      expect(held()).toEqual([]);
+      expect(mine()).toEqual(["Ctrl+Alt+F8", "Ctrl+Alt+F9"]);
       mainInFront(false);
-      expect(held()).toEqual(expect.arrayContaining(["Ctrl+Shift+8", "Ctrl+Shift+9"]));
+      expect(mine()).toEqual(set);
     },
   );
 

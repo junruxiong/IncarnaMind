@@ -40,9 +40,11 @@ async function shot(page: Page | Locator, name: string): Promise<void> {
 
 const mac = process.platform === "darwin";
 const MIC_KEYS = "Ctrl+Alt+M";
-/** A key the User may set on Windows and Linux that is also the editor's checklist key. */
-const CLASHING_KEYS = "Ctrl+Shift+9";
+const PANEL_KEYS = "Ctrl+Alt+H";
 const MIC_LABEL = mac ? "⌃⌥M" : "Ctrl+Alt+M";
+/** A key the User may set that is also the editor's checklist key. */
+const CLASHING_KEYS = mac ? "Cmd+Shift+9" : "Ctrl+Shift+9";
+const CLASHING_LABEL = mac ? "⇧⌘9" : "Ctrl+Shift+9";
 
 /** Lines come every couple of seconds of sound, a few seconds behind it. */
 const LINES_WITHIN = { timeout: 30_000 };
@@ -471,7 +473,36 @@ test("the recording bar never wraps: from 1,600 px down to 900 px, in English an
   await app.close();
 });
 
-test("the meeting's keys are held only while no main window has the focus: with a Mind in front the key is the editor's and the microphone stays on, and with the panel or another app in front it pauses the microphone", async () => {
+test("the meeting's keys work with IncarnaMind in front: with the notes focused Pause my mic's key is held, shown where the User looks, and pauses and resumes the microphone", async () => {
+  test.setTimeout(120_000);
+  const { app, window } = await launchApp(dataDir);
+  await setWindowSize(app, window, 1440, 900);
+  await dismissChatSetup(window);
+  await setMeetingKeys(window);
+  const bar = await recordingMeeting(window);
+  const mic = bar.getByTestId("meeting-mic");
+  const notes = window.getByTestId("mind-editor");
+
+  await focusMainWindow(app, true);
+  await notes.click();
+  await window.keyboard.type("Agenda");
+  await expect(mic).toHaveAttribute(
+    "title",
+    `Pause my mic. The other side is still recorded (${MIC_LABEL})`,
+  );
+  await expect.poll(() => heldGlobalKeys(app, MIC_KEYS)).toBe(true);
+  await expect.poll(() => heldGlobalKeys(app, PANEL_KEYS)).toBe(true);
+  await pressHeldKeys(app, "mic");
+  await expect(mic).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await capture(app)).microphoneOn).toBe(false);
+  await pressHeldKeys(app, "mic");
+  await expect(mic).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
+  await expect(notes).toContainText("Agenda");
+  await app.close();
+});
+
+test("a meeting key the User set to one of the editor's own is held only while another app is in front: with a Mind in front the key is the editor's and the microphone stays on, and with the panel or another app in front it pauses the microphone", async () => {
   test.setTimeout(120_000);
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1440, 900);
@@ -481,10 +512,10 @@ test("the meeting's keys are held only while no main window has the focus: with 
   const panel = await panelOf(app);
   const mic = bar.getByTestId("meeting-mic");
   const notes = window.getByTestId("mind-editor");
-  const keys = mac ? MIC_KEYS : CLASHING_KEYS;
 
   await focusMainWindow(app, true);
-  await expect.poll(() => heldGlobalKeys(app, keys)).toBe(false);
+  await expect.poll(() => heldGlobalKeys(app, CLASHING_KEYS)).toBe(false);
+  await expect(mic).toHaveAttribute("title", "Pause my mic. The other side is still recorded");
   await notes.click();
   await window.keyboard.type("Agenda");
   await window.keyboard.press("ControlOrMeta+Shift+9");
@@ -495,7 +526,11 @@ test("the meeting's keys are held only while no main window has the focus: with 
 
   // The panel pointed at, which is another app in front for the keys: the key pauses the microphone.
   await focusMainWindow(app, false);
-  await expect.poll(() => heldGlobalKeys(app, keys)).toBe(true);
+  await expect.poll(() => heldGlobalKeys(app, CLASHING_KEYS)).toBe(true);
+  await expect(panel.getByTestId("panel-mic")).toHaveAttribute(
+    "title",
+    `Pause my mic. The other side is still recorded (${CLASHING_LABEL})`,
+  );
   await pointAndClick(panel, panel.getByTestId("panel-template"));
   await pointAndClick(panel, panel.getByTestId("panel-template"));
   await pressHeldKeys(app, "mic");
@@ -509,8 +544,8 @@ test("the meeting's keys are held only while no main window has the focus: with 
   await expect.poll(async () => (await capture(app)).microphoneOn).toBe(true);
 
   await focusMainWindow(app, true);
-  await expect.poll(() => heldGlobalKeys(app, keys)).toBe(false);
+  await expect.poll(() => heldGlobalKeys(app, CLASHING_KEYS)).toBe(false);
   await focusMainWindow(app, false);
-  await expect.poll(() => heldGlobalKeys(app, keys)).toBe(true);
+  await expect.poll(() => heldGlobalKeys(app, CLASHING_KEYS)).toBe(true);
   await app.close();
 });
