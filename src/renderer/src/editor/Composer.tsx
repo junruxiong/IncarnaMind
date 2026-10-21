@@ -39,7 +39,7 @@ import {
   useConversations,
 } from "../conversations";
 import { core } from "../core";
-import { carriesDocuments, droppedDocumentIds } from "../documentDrag";
+import { type Dragged, type Dropped, useDropTarget } from "../dragDrop";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
@@ -50,6 +50,7 @@ import {
   openResearch,
   startResearch,
   useResearch,
+  useWebMissing,
   useWebReach,
 } from "../research";
 import type { ScopeChoice } from "../scope";
@@ -165,6 +166,7 @@ export function Composer({
   const root = useRef<HTMLDivElement>(null);
   const list = useRef<ChoiceListHandle>(null);
   const listId = useId();
+  const dropKey = useId();
   const row = useRef<HTMLDivElement>(null);
   const controls = useRef<HTMLDivElement>(null);
   /** The text runs past one line: it takes the full width and the controls go under it. */
@@ -196,6 +198,10 @@ export function Composer({
   const [tellProblem, setTellProblem] = useState<string | null>(null);
   const chosenModel = useMindModel(mind?.doc ?? null);
   const webReach = useWebReach(chosenModel);
+  const webMissing = useWebMissing(webReach, chosenModel);
+  const researchHint = webMissing
+    ? t("research.command.hint.libraryOnly", { reason: webMissing })
+    : t("research.command.hint");
   const selection = useMindSelection(mind, editing !== undefined);
   const mindTitle = useAppStore((state) => {
     const own = state.minds.find((each) => each.id === mindId);
@@ -204,7 +210,6 @@ export function Composer({
 
   const update = (change: Partial<Draft>) => useComposer.getState().update(key, change);
   /** Keeps the scope the User chose; the Mind's own follows it to another Folder. */
-  const [dropping, setDropping] = useState(false);
   const updateScope = (next: SearchScope) => update({ scope: chosenScope(next, folderId) });
 
   // Single-line text sits beside the controls; once it would run past one line, it takes the
@@ -335,13 +340,25 @@ export function Composer({
   };
 
   /** Documents dragged from the sidebar join the Search scope, as "@" would add them. */
-  const addDocuments = (ids: readonly string[]) => {
-    const have = scopeIds(scope, "document");
-    const fresh = ids.filter((id) => !have.includes(id));
+  const addDocuments = (fresh: readonly string[]) => {
     if (fresh.length === 0) return;
-    updateScope({ ...scope, documentIds: [...have, ...fresh] });
+    updateScope({ ...scope, documentIds: [...scopeIds(scope, "document"), ...fresh] });
     field.current?.focus();
   };
+  // Only those not in the scope yet: the composer never lights for a drop that would add nothing.
+  const freshIn = (dragged: Dragged | Dropped) => {
+    if (dragged.kind !== "objects") return [];
+    const have = scopeIds(scope, "document");
+    return dragged.refs.flatMap((ref) =>
+      ref.kind === "document" && !have.includes(ref.id) ? [ref.id] : [],
+    );
+  };
+  const drop = useDropTarget(`composer:${dropKey}`, {
+    accepts: (dragged) => (freshIn(dragged).length > 0 ? { kind: "attach" } : null),
+    drop(dropped) {
+      addDocuments(freshIn(dropped));
+    },
+  });
 
   /** Research…: what is typed next is a topic (#130). */
   const chooseResearch = () => {
@@ -631,28 +648,13 @@ export function Composer({
       : t("composer.ask");
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target; "@" adds a Document without dragging.
     <div
       ref={root}
       data-testid="composer"
       data-expanded={expanded || undefined}
-      data-dropping={dropping || undefined}
+      data-dropping={drop.over ? true : undefined}
       className={expanded ? "composer composer--expanded" : "composer"}
-      onDragOver={(event) => {
-        if (!carriesDocuments(event)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "link";
-        setDropping(true);
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
-      }}
-      onDrop={(event) => {
-        if (!carriesDocuments(event)) return;
-        event.preventDefault();
-        setDropping(false);
-        addDocuments(droppedDocumentIds(event));
-      }}
+      {...drop.props}
     >
       {mind && (
         <>
@@ -788,11 +790,7 @@ export function Composer({
           />
         )}
         {researching && !target && (
-          <span
-            data-testid="composer-research"
-            title={t("research.command.hint")}
-            className="question-skill"
-          >
+          <span data-testid="composer-research" title={researchHint} className="question-skill">
             <SearchLineIcon className="question-skill-icon" />
             <span className="truncate">{t("research.chip")}</span>
             <button
@@ -949,6 +947,7 @@ export function Composer({
               ref={list}
               id={listId}
               onResearch={mind ? chooseResearch : undefined}
+              researchHint={researchHint}
               skills={enabledSkills}
               describe={(each) => skillDescription(each, t)}
               query={picking.query}

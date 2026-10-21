@@ -19,6 +19,7 @@ export type SettingsPage = (typeof settingsPages)[number];
 export type SettingsTarget =
   | "output-location"
   | "author-name"
+  | "local-mode"
   | "chat-model"
   | "add-provider"
   | SignInRoute;

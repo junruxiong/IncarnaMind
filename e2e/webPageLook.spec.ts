@@ -156,7 +156,7 @@ test("off by default: the box is unticked, a page saved is never loaded for its 
   await expect(fetched).toContainText("Nothing else on the page is loaded.");
   await dialog.getByTestId("add-web-page-keep-look").check();
   await expect(fetched).not.toContainText("Nothing else on the page is loaded.");
-  await expect(dialog).toContainText("loads the page again");
+  await expect(dialog).toContainText("the site sees a second visit");
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
   await add(window, "/report", "Harbour trade in 2026", false);
@@ -273,7 +273,7 @@ test("a page that never finishes loading is given up at the time limit, its hidd
   await expect.poll(() => windowCounts(app)).toEqual({ app: windows.app, all: windows.all + 1 });
   const viewer = window.getByTestId("viewer");
   const failed = viewer.getByTestId("viewer-web-look-failed");
-  await expect(failed).toContainText("didn't finish loading", { timeout: 30_000 });
+  await expect(failed).toContainText("didn’t finish loading", { timeout: 30_000 });
   await expect(failed.getByTestId("viewer-web-look-try-again")).toBeVisible();
   await expect.poll(() => windowCounts(app)).toEqual(windows);
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "look-failed-en.png") });

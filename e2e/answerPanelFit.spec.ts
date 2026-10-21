@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Locator, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -15,6 +15,7 @@ import {
   removeDataFolder,
   setLanguage,
   setWindowSize,
+  tabMenu,
   tabTo,
 } from "./app";
 
@@ -82,7 +83,6 @@ const WORDS = {
     open: "Open as a table",
     nth: (n: number) => `Open table ${n} as a table`,
     find: "table",
-    made: "from this table",
     header: ["Figure", "Harrow Foods", "Brightmart", "Calder Grocers"],
     second: ["Region", "Share"],
   },
@@ -90,11 +90,16 @@ const WORDS = {
     open: "以表格打开",
     nth: (n: number) => `以表格打开第 ${n} 个表格`,
     find: "表格",
-    made: "已用这个表格新建 Mind",
     header: ["指标", "哈罗食品", "明智超市", "考尔德杂货"],
     second: ["地区", "占比"],
   },
 } as const;
+
+/** A Mind made from an Answer says nothing: Delete from its tab takes it back. */
+async function deleteShownMind(window: Page, tabs: Locator): Promise<void> {
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.delete"));
+  await expect(tabs).toHaveCount(1);
+}
 
 function reachesPast(answer: Locator) {
   return answer.getByTestId("assistant-answer-text").evaluate((text) => {
@@ -255,9 +260,8 @@ for (const { width, height } of SIZES) {
         expect(cells[0]).toEqual(words.header);
         expect(cells[9]?.slice(1)).toEqual(["1.1×", "0.1×", "0.65×"]);
 
-        await expect(answer.getByTestId("answer-added")).toContainText(words.made);
-        await pointAndClick(window, answer.getByTestId("answer-added-undo"));
-        await expect(tabs).toHaveCount(1);
+        await expect(answer.getByTestId("answer-added")).toHaveCount(0);
+        await deleteShownMind(window, tabs);
       });
 
       await test.step("twelve Citations in a row wrap and stay in the Answer", async () => {
@@ -343,8 +347,7 @@ for (const language of ["en", "zh-CN"] as const) {
       const table = window.getByTestId("mind-editor").locator("table");
       await expect(table.locator("tr")).toHaveCount(3);
       await expect(table.locator("th")).toHaveText(words.second);
-      await pointAndClick(window, answer.getByTestId("answer-added-undo"));
-      await expect(tabs).toHaveCount(1);
+      await deleteShownMind(window, tabs);
     };
 
     await test.step("with the cursor in no table, both are listed, and the second is chosen", async () => {
@@ -396,9 +399,8 @@ for (const language of ["en", "zh-CN"] as const) {
       await expect(tabs).toHaveCount(2);
       await expect(table.locator("tr")).toHaveCount(10);
       expect(await tableWhenTabShown.jsonValue()).toEqual([0]);
-      await expect(answer.getByTestId("answer-added")).toContainText(words.made);
-      await pointAndClick(window, answer.getByTestId("answer-added-undo"));
-      await expect(tabs).toHaveCount(1);
+      await expect(answer.getByTestId("answer-added")).toHaveCount(0);
+      await deleteShownMind(window, tabs);
     });
 
     await test.step("from the keyboard: Tab to the button, Enter, then ⌘Z", async () => {
@@ -409,11 +411,12 @@ for (const language of ["en", "zh-CN"] as const) {
 
       await expect(tabs).toHaveCount(2);
       await expect(table.locator("tr")).toHaveCount(10);
-      await expect(answer.getByTestId("answer-added")).toContainText(words.made);
-
-      await window.keyboard.press("ControlOrMeta+z");
-      await expect(tabs).toHaveCount(1);
       await expect(answer.getByTestId("answer-added")).toHaveCount(0);
+
+      // ⌘Z never closes a Mind that was made: Delete does.
+      await window.keyboard.press("ControlOrMeta+z");
+      await expect(tabs).toHaveCount(2);
+      await deleteShownMind(window, tabs);
       await expect(open).toBeVisible();
     });
   });

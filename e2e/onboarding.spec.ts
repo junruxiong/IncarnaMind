@@ -16,7 +16,9 @@ import {
   leaveFirstOpen,
   leaveText,
   linkedFolderRow,
+  markSteps,
   newMind,
+  paletteFound,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -71,16 +73,6 @@ const gettingStarted = (window: Page) =>
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     return (await bridge.getSettings()).device.gettingStarted;
   });
-
-async function markSteps(window: Page, done: object): Promise<void> {
-  await window.evaluate(async (patch) => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const { device } = await bridge.getSettings();
-    await bridge.updateSettings({
-      device: { gettingStarted: { ...device.gettingStarted, ...patch } },
-    });
-  }, done);
-}
 
 /** Words a newcomer shouldn't meet on the first screens: the left column of #763's glossary. */
 const JARGON = [
@@ -351,7 +343,7 @@ test("an empty Mind of one's own shows the three steps, the example's steps tick
   await expect(step(window, "files")).toHaveAttribute("data-state", "done");
   await pointAndClick(window, checks.nth(0));
   const steps = window.getByTestId("first-open-steps");
-  await expect(steps).toContainText("You're set up.");
+  await expect(steps).toContainText("You’re set up.");
   await expect(steps.locator('[data-testid="first-open-step"][data-state="done"]')).toHaveText([
     /Saw a mistake it caught/,
     /Asked a question/,
@@ -593,7 +585,7 @@ test("the steps can be hidden once all are done, and stay hidden", async () => {
   await useLocalChatModel(first.window);
   await markSteps(first.window, { citationChecked: true, askedOwn: true, indexed: true });
   const steps = first.window.getByTestId("first-open-steps");
-  await expect(steps).toContainText("You're set up.");
+  await expect(steps).toContainText("You’re set up.");
   await pointAndClick(first.window, steps.getByTestId("first-open-hide"));
   await expect(steps).toHaveCount(0);
   await first.app.close();
@@ -619,7 +611,7 @@ test("finishing the steps with no model asks for one in the card, never says You
   const steps = pane.getByTestId("first-open-steps");
   await expect(step(window, "files")).toHaveAttribute("data-state", "done");
   await expect(steps).toContainText("Choose an AI model to ask about your own files.");
-  await expect(steps).not.toContainText("You're set up.");
+  await expect(steps).not.toContainText("You’re set up.");
   await expect(steps.getByTestId("first-open-next")).toHaveCount(0);
   // Each part of the shell still waits for its own moment. The card asks for the model, and the
   // footer's one line says the files wait for it (#1128).
@@ -635,7 +627,7 @@ test("finishing the steps with no model asks for one in the card, never says You
   await expect(window.getByTestId("assistant")).toBeVisible();
   await expect(setup.getByRole("heading", { level: 2 })).toHaveText("Choose your AI");
   await useLocalChatModel(window);
-  await expect(steps).toContainText("You're set up.");
+  await expect(steps).toContainText("You’re set up.");
   await expect(steps.getByTestId("first-open-next").first()).toBeVisible();
   await continueSetup(window);
   await expect(sidebar.getByTestId("tagging-waiting")).toHaveCount(0);
@@ -670,7 +662,7 @@ test("by keyboard alone: Choose a model takes the focus into the setup, and a sa
   await expect(setup.getByTestId("setup-continue")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(setup).toHaveCount(0);
-  await expect(window.getByTestId("first-open-steps")).toContainText("You're set up.");
+  await expect(window.getByTestId("first-open-steps")).toContainText("You’re set up.");
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await app.close();
 });
@@ -866,7 +858,7 @@ test("Remove the examples removes every example Mind made, and Undo brings them 
   await app.close();
 });
 
-const paletteItems = (window: Page) => window.getByTestId("palette").getByTestId("palette-item");
+const paletteItems = paletteFound;
 
 async function askPalette(window: Page, text: string): Promise<void> {
   await window.keyboard.press("ControlOrMeta+k");

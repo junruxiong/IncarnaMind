@@ -47,6 +47,7 @@ export const exportCommands: readonly Command[] = [
     label: "export.menu",
     keywords: ["export.keywords"],
     group: "main",
+    top: 14,
     // Only opens a menu; nothing is saved until a format is chosen.
     reversible: true,
     when: (ctx) => onlyOne(ctx) && mindOf(ctx) !== null,

@@ -336,6 +336,8 @@ describe("Excel", () => {
     expect(formatNumber(1234.5, "General")).toBe("1234.5");
     expect(formatNumber(46114, "yyyy-mm-dd")).toBe("2026-04-02");
     expect(formatNumber(12345, "0.00E+00")).toBe("12345");
+    expect(formatNumber(1_200_000, '"$"#,##0.0,,"m"')).toBe("$1.2m");
+    expect(formatNumber(4_500, "#,##0,")).toBe("5");
   });
 });
 

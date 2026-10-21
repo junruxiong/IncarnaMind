@@ -17,6 +17,7 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
 3. **Keep the User's place.** Nothing replaces the Mind the User is in. The Library, a Folder or a Tag opens as a tab; a Document opens beside the Mind; Settings opens over it and closes with Esc.
    - Check: no label starts with "Back to". One that does means this rule is broken.
 4. **Undo instead of asking.** Anything the User can take back happens at once and offers Undo: ⌘Z / Ctrl+Z, and one short line such as "Moved 3 Documents to Finance · Undo". Deleting a Mind, Conversation, Document, Folder or Tag moves it to Recently deleted, where it waits 30 days, with no question asked. Ask first only before something that can't be taken back, and say what will be lost.
+   - Making a Mind is the one exception, by any way of making one: from ⌘N, a template, a Folder, a Document, an Answer, a table, Record or the AI use statement. It says nothing and leaves no step for ⌘Z, so a habitual ⌘Z never closes the tab; Delete takes it back, with Undo. What a step puts into a Mind (an Answer added as changes) is the Mind's own to accept or reject.
    - Check: each action in the change is marked reversible (with its undo) or irreversible (with its confirmation text).
    - In a multi-line field a run of typing is one step to undo, as on the computer: use `TypingTextarea`, never a plain `<textarea>` (the linter fails one).
 5. **Every object has one right-click menu, in one order.** Open (and Open in new tab), the object's own actions, Move to…, Tags…, Rename, the file's actions (Show in Finder, Copy path), then Delete last, after a separator. The ⋯ button opens the same menu, and each item shows its shortcut.
@@ -83,3 +84,4 @@ Add the interaction checklist from the pull request template to the acceptance c
 - Add before and after screenshots, at a narrow and a wide window, in English and Chinese where text changed.
 - Record the flow in the built app beside the same flow in the prototype (a short GIF of each), with the mouse and the keyboard, and list every difference in behaviour or looks with its reason.
 - Test it like a person: with the mouse and the keyboard, in the built app, not only in unit tests.
+- If it changes a flow the feel check covers (`e2e/feel*.spec.ts`), run that spec (testing.md, The feel check).

@@ -167,7 +167,7 @@ test("Continue with ChatGPT opens OpenAI's sign-in for IncarnaMind's own registr
   // Settings → Models has it too. Nothing is signed in here: the browser is stood in for.
   await openSettings(window, "models");
   const section = window.getByTestId("chatgpt-settings");
-  await expect(section.getByTestId("chatgpt-account")).toHaveText("Not signed in.");
+  await expect(section.getByTestId("chatgpt-continue")).toBeVisible();
   // Where the sign-in couldn't be kept safely (Linux without a keyring), that's said up front and
   // Continue waits, so OpenAI's page never opens for a sign-in that would have nowhere to go.
   const storage = await window.evaluate(() =>
