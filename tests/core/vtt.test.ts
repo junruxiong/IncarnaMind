@@ -95,7 +95,7 @@ describe("Transcripts as WebVTT", () => {
   });
 
   // protects=a Transcript lists a gap of a second or more, and a point in time, but not a stretch under a second, and a gap with no audio captured reads back as such; fails_when=a 0 s or 400 ms gap is listed, or the reason is lost on the way through the file; no_claim=how the gap is worded, which the views carry.
-  test("a stretch under a second isn't listed, and the reason no audio was captured is kept", () => {
+  test("a stretch under a second isn't listed, and the reason no audio was recorded is kept", () => {
     const gaps = [
       { fromMs: 0, toMs: 300_000, reason: "uncaptured" as const },
       { fromMs: 312_000, toMs: 312_400, reason: "lost" as const },

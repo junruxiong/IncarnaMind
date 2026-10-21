@@ -26,7 +26,7 @@ export interface Cue {
 /**
  * Why a stretch of a Meeting has no text: transcription restarted after a
  * crash, the computer slept, IncarnaMind wasn't running, the audio was
- * deleted before it could catch up, no audio was captured for it (the system's
+ * deleted before it could catch up, no audio was recorded for it (the system's
  * permission prompt unanswered, a capture that stalled), or the cloud
  * service's connection dropped (#141).
  */
