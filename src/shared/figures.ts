@@ -554,8 +554,11 @@ const EN_SCALES: Readonly<Record<string, number>> = {
 const EN_SCALE_AFTER =
   /(?:[ \n]?(?:[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|[Ll]akh|[Cc]rore)s?|[ \u00a0]?(?:Mio|Mrd|Tsd)(?:\.|(?![A-Za-z]))|(?: ?(?:tn|trn|bn|Bn|BN|mn|Mn|MN|MM)|[kKmMbB])(?![A-Za-z0-9])|mm(?![A-Za-z0-9]))/y;
 
-const CURRENCY_TOKEN =
-  /(?:(?<![A-Za-z])(?:US|HK|AU|CA|NZ|SG|NT|MX|A|C|S|R)?\$|CN¥|JP¥|[¥€£₹₩₽₺฿₫₱]|(?<![A-Za-z])(?:USD|CNY|RMB|Rmb|HKD|EUR|GBP|JPY|AUD|CAD|SGD|TWD|CHF|INR|KRW|NZD|MOP|BRL|RUB|SEK|NOK|DKK|ZAR|MXN|THB|MYR|IDR|PHP|VND|TRY|SAR|AED|Rs\.?)|人民币|美元|港币|港元|欧元|日元|英镑)/;
+const CURRENCY_ISO_CODES =
+  "USD|CNY|RMB|Rmb|HKD|EUR|GBP|JPY|AUD|CAD|SGD|TWD|CHF|INR|KRW|NZD|MOP|BRL|RUB|SEK|NOK|DKK|ZAR|MXN|THB|MYR|IDR|PHP|VND|TRY|SAR|AED";
+const CURRENCY_TOKEN = new RegExp(
+  `(?:(?<![A-Za-z])(?:US|HK|AU|CA|NZ|SG|NT|MX|A|C|S|R)?\\$|CN¥|JP¥|[¥€£₹₩₽₺฿₫₱]|(?<![A-Za-z])(?:${CURRENCY_ISO_CODES}|Rs\\.?)|人民币|美元|港币|港元|欧元|日元|英镑)`,
+);
 /** Currency signs before a number, and codes and names before it, with a space allowed. */
 const CURRENCY_BEFORE = new RegExp(`${CURRENCY_TOKEN.source}[ \\u00a0]?$`);
 
@@ -622,7 +625,17 @@ const CURRENCY_CODES: Readonly<Record<string, string>> = {
   pounds: "GBP",
   "pounds sterling": "GBP",
   rupees: "INR",
+  "Indian rupees": "INR",
+  "United States dollars": "USD",
+  "Swiss francs": "CHF",
 };
+
+// Contracts write "in Pounds Sterling" and "ALL AMOUNTS ARE IN US DOLLARS".
+const NAMED_CODES = new Map(
+  Object.entries(CURRENCY_CODES)
+    .filter(([word]) => /^[a-z]/.test(word) || /^[A-Za-z.]+(?: [A-Za-z]+)+$/.test(word))
+    .map(([word, code]) => [word.toLowerCase(), code]),
+);
 
 const CN_CURRENCY_AFTER =
   /(?:新加坡元|瑞士法郎|新台币|澳门元|澳门币|人民币|美元|港元|港币|欧元|日元|英镑|澳元|加元|韩元|卢布|元|圆|円)(?:人民币)?/y;
@@ -841,10 +854,10 @@ export function scaleExponent(word: string): number {
 /** The unit a currency or unit word names, with the context's "$", "元" and "¥". */
 function currencyCodes(word: string, settled: Settled): string[] {
   const trimmed = word.trim();
-  if (trimmed === "$" || trimmed === "dollars") return [settled.dollar];
+  if (trimmed === "$" || trimmed.toLowerCase() === "dollars") return [settled.dollar];
   if (trimmed === "元" || trimmed === "圆") return [settled.yuan];
   if (trimmed === "¥") return settled.yen;
-  const code = CURRENCY_CODES[trimmed];
+  const code = CURRENCY_CODES[trimmed] ?? NAMED_CODES.get(trimmed.toLowerCase());
   if (code) return [code];
   return /^[A-Z]{3}$/.test(trimmed) ? [trimmed] : [];
 }
@@ -1954,22 +1967,50 @@ export function readFigures(text: string, context: FigureContext = {}): Figure[]
   return drafts.map((draft) => finish(draft, prepared, text, [...statements, ...header]));
 }
 
+/** Each way a figure can be read: as written, and each reading of what isn't settled. */
+export const readingsOf = (figure: Figure): Reading[] => [
+  figure,
+  ...figure.ambiguous.flatMap((each) => each.readings),
+];
+
 /** The currencies a figure may be in: its own, or each that its "¥" may be. */
 export function currenciesOf(figure: Figure): string[] {
-  const readings = [figure, ...figure.ambiguous.flatMap((each) => each.readings)];
   return [
-    ...new Set(readings.flatMap(({ unit }) => (unit.kind === "currency" ? [unit.code] : []))),
+    ...new Set(
+      readingsOf(figure).flatMap(({ unit }) => (unit.kind === "currency" ? [unit.code] : [])),
+    ),
   ];
 }
 
-/** A currency named in words or by its code, which, apart from any number, says what amounts are in. */
-const CURRENCY_WORDS =
-  /(?<![A-Za-z])(?:U\.S\. dollars|US dollars?|Hong Kong dollars|HK dollars|Australian dollars|Canadian dollars|Singapore dollars|dollars|euros?|yuan|[Rr]enminbi|yen|pounds sterling|sterling|pounds|rupees|RMB|Rmb|USD|CNY|HKD|EUR|GBP|JPY|AUD|CAD|SGD|TWD|CHF|INR|KRW|NZD|MOP|BRL|RUB|SEK|NOK|DKK|ZAR|MXN|THB|MYR|IDR|PHP|VND|TRY|SAR|AED)(?![A-Za-z])|新加坡元|瑞士法郎|新台币|澳门元|澳门币|人民币|美元|港元|港币|欧元|日元|英镑|澳元|加元|韩元|卢布/g;
-/** A column's currency in its heading: "Salary (£)", "金额（US$）". */
+// A Document that says its amounts are in Canadian dollars writes them "$54,000".
+const SIGN_CURRENCIES: Readonly<Record<string, readonly string[]>> = {
+  $: ["USD", ...new Set(Object.values(DOLLARS))],
+  元: ["CNY", ...Object.values(YUAN)],
+  圆: ["CNY", ...Object.values(YUAN)],
+  "¥": ["CNY", "JPY"],
+};
+
+/** Every currency a figure's own sign stands for in some Document: "$" for any dollar, "元" for yuan, or Hong Kong, Taiwan or Macau dollars. */
+export const currenciesOfSign = (figure: Figure): readonly string[] =>
+  (figure.currency !== null && SIGN_CURRENCIES[figure.currency]) || [];
+
+const longestFirst = (words: readonly string[]) => [...words].sort((a, b) => b.length - a.length);
+const CURRENCY_NAMES = new RegExp(
+  `(?<![A-Za-z])(?:${longestFirst([...NAMED_CODES.keys(), "dollars"])
+    .map((word) => word.replaceAll(".", "\\."))
+    .join("|")})(?![A-Za-z])`,
+  "gi",
+);
+const CURRENCY_WORDS = new RegExp(
+  `(?<![A-Za-z])(?:${CURRENCY_ISO_CODES})(?![A-Za-z])|${longestFirst(
+    Object.keys(CURRENCY_CODES).filter((word) => /^\p{Script=Han}{2,}$/u.test(word)),
+  ).join("|")}`,
+  "gu",
+);
 const CURRENCY_HEADING = new RegExp(`[(（](${CURRENCY_TOKEN.source})[)）]`, "g");
+const CURRENCY_IN = new RegExp(`(?<![A-Za-z])in (${CURRENCY_TOKEN.source})(?! ?\\d)`, "g");
 const NUMBER_CHAR = new RegExp(`[\\d\uff10-\uff19${CN_NUMERAL_CHARS}百千万亿]`);
 
-/** Whether a number stands right before or after `from`–`to`: "54,000 US dollars", "人民币54,000元". */
 function besideNumber(text: string, from: number, to: number): boolean {
   const before = text
     .slice(Math.max(0, from - 2), from)
@@ -1980,31 +2021,46 @@ function besideNumber(text: string, from: number, to: number): boolean {
 }
 
 /**
- * The currencies `text` names, by ISO 4217 code: on its figures ("£54,000"), in a unit it states
- * ("单位：人民币元", "Salary (£)") and in its words ("paid in pounds sterling", "币种：人民币").
- * `wordsOnly`: in its words alone, what a Document says of all its amounts; a sign, or a code on
- * one figure, says nothing of another figure elsewhere.
+ * The currencies `text` names, by ISO 4217 code: in words ("paid in Pounds Sterling", "币种：人民币"),
+ * in a unit it states ("单位：元", "Salary (£)", "in £'000", "All figures are in £") and on
+ * `figures`, its figures as read. With no figures given (null), the currency on its figures counts
+ * only when they all carry the same one: a Document that mixes "HK$" and "$" says nothing of a
+ * plain "54,000".
  */
 export function namedCurrencies(
   text: string,
-  context: FigureContext = {},
-  { wordsOnly = false }: { wordsOnly?: boolean } = {},
+  context: FigureContext,
+  figures: readonly Figure[] | null,
 ): Set<string> {
   const settled = settle(context);
   const named = new Set<string>();
   const add = (codes: readonly string[]) => {
     for (const code of codes) named.add(code);
   };
-  for (const match of text.matchAll(CURRENCY_WORDS)) {
-    if (!besideNumber(text, match.index, match.index + match[0].length))
-      add(currencyCodes(match[0], settled));
+  for (const pattern of [CURRENCY_NAMES, CURRENCY_WORDS]) {
+    for (const match of text.matchAll(pattern)) {
+      if (!besideNumber(text, match.index, match.index + match[0].length))
+        add(currencyCodes(match[0], settled));
+    }
   }
-  if (wordsOnly) return named;
-  for (const match of text.matchAll(CURRENCY_HEADING)) add(currencyCodes(match[1] ?? "", settled));
-  for (const figure of readFigures(text, context)) add(currenciesOf(figure));
+  for (const pattern of [CURRENCY_HEADING, CURRENCY_IN]) {
+    for (const match of text.matchAll(pattern)) add(currencyCodes(match[1] ?? "", settled));
+  }
   for (const stated of readStatedUnits(text, context)) {
     if (stated.unit.kind === "currency") add([stated.unit.code]);
   }
+  if (figures) {
+    for (const figure of figures) add(currenciesOf(figure));
+    return named;
+  }
+  const onFigures = new Map<string, string[]>();
+  for (const match of text.matchAll(CURRENCY_ANYWHERE)) {
+    if (!besideNumber(text, match.index, match.index + match[0].length)) continue;
+    const codes = currencyCodes(match[0], settled);
+    if (codes.length > 0) onFigures.set(codes.join(), codes);
+  }
+  const [only] = onFigures.values();
+  if (onFigures.size === 1 && only) add(only);
   return named;
 }
 

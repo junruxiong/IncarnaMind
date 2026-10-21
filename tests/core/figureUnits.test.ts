@@ -11,7 +11,13 @@ import { type CheckedText, unitNotStated } from "../../src/core/answers/checks/u
 import { documentInstructions } from "../../src/core/answers/prompt";
 import { INLINE_NODE } from "../../src/shared/sentences";
 import { askAssistant, changesIn } from "../helpers/assistant";
-import { checkingModel, checkReply, isCheckRun } from "../helpers/checks";
+import {
+  checkGenerate,
+  checkingModel,
+  checkReply,
+  isCheckRun,
+  sentenceOf,
+} from "../helpers/checks";
 import { setUpWithDocuments, shownPassages } from "../helpers/citations";
 import { connectToMind } from "../helpers/mindClient";
 import { shownWithChanges } from "../helpers/minds";
@@ -24,11 +30,9 @@ const CONTRACT = {
 };
 const STATED = "The annual salary is 54,000, paid monthly in arrears";
 
-/** The cited text and the Document's, the same unless told. */
-const read = (cited: string, document = cited): CheckedText => ({
-  cited: () => cited,
-  document: () => document,
-});
+const read = (cited: string, document = cited): CheckedText[] => [
+  { cited: () => cited, document: () => document },
+];
 
 describe("A currency the Document doesn't state", () => {
   // protects=a currency added to a figure the cited text states as a plain number, which the Document never names, is found, as the sentence writes it apart from the number, in English and Chinese, "¥" and Chinese numerals included; fails_when="£54,000" against "54,000" passes, "¥" passes, or "五万四千英镑" is named as the currency; no_claim=other units, which the model judges.
@@ -48,12 +52,17 @@ describe("A currency the Document doesn't state", () => {
     });
   });
 
-  // protects=only a currency the Document names counts: "元" inside 单元, a "$" on another figure elsewhere, "HK$" in the same Passage and a lowercase "php" don't name the one the sentence adds, and a scale its table states ("in thousands") doesn't hide it; fails_when=any of these hides the added currency; no_claim=none beyond protects.
+  // protects=only a currency the Document names counts: "元" inside 单元, figures elsewhere in more than one currency ("$" and "HK$"), a lowercase "php" and a stated sign of another currency don't name the one the sentence adds, and a scale its table states ("in thousands") doesn't hide it; fails_when=any of these hides the added currency; no_claim=none beyond protects.
   test.each([
     ["第三单元 薪酬\n年薪为 54,000，按月支付。", "年薪为 54,000元。", "元"],
-    [`${STATED}. The relocation allowance is HK$8,000.`, "The annual salary is $54,000.", "$"],
-    [STATED, "The annual salary is $54,000.", "$", `The signing bonus is $5,000.\n${STATED}.`],
+    [
+      STATED,
+      "The annual salary is $54,000.",
+      "$",
+      `The signing bonus is $5,000 and the relocation allowance HK$8,000.\n${STATED}.`,
+    ],
     [STATED, "The annual salary is PHP 54,000.", "PHP", `The portal runs on php.\n${STATED}.`],
+    [`All figures are in €.\n${STATED}`, "The annual salary is £54,000.", "£"],
     ["Revenue by region (in thousands)\nNorth\t54,000", "North's revenue was $54m.", "$"],
   ])("%j doesn't name it", (cited, claim, currency, document = cited) => {
     expect(unitNotStated(claim, read(cited, document))).toMatchObject({
@@ -62,13 +71,27 @@ describe("A currency the Document doesn't state", () => {
     });
   });
 
-  // protects=no false alarm when the Document names the currency in words, in the cited Passage or anywhere in the Document, or in a column heading, in English and Chinese; fails_when=a right "£" is flagged; no_claim=none beyond protects.
+  // protects=no false alarm when the Document names the currency, in the cited Passage or anywhere in the Document: in words in any case, by a dollar or 元 of its own that "$" or "元" stands for, by its sign or code stated as the unit, or as the one currency of its other figures, in English and Chinese; fails_when=a right "£", "$" or "元" is flagged; no_claim=none beyond protects.
   const named: [string, string][] = [
     ["All payments under this agreement are made in pounds sterling.", "£"],
+    ["All payments under this agreement shall be made in Pounds Sterling.", "£"],
+    ["ALL AMOUNTS ARE IN POUNDS STERLING.", "£"],
     ["All amounts in this agreement are in US dollars.", "$"],
+    ["All amounts are in U.S. Dollars.", "$"],
+    ["All amounts are in United States Dollars.", "$"],
+    ["All amounts in this agreement are in Canadian dollars.", "$"],
+    ["Amounts are in Australian dollars.", "$"],
+    ["Amounts are in Hong Kong dollars.", "$"],
     ["Payments are made in euro.", "€"],
+    ["Payments are made in Euros.", "€"],
     ["The Employer pays in dollars.", "$"],
     ["Paid in rupees.", "₹"],
+    ["Paid in Indian Rupees.", "₹"],
+    ["Fees are paid in Swiss francs.", "CHF "],
+    ["All figures are in £.", "£"],
+    ["Amounts in £'000", "£"],
+    ["Name\tSalary (£)", "£"],
+    ["The signing bonus is £5,000.", "£"],
   ];
   test.each(
     named.flatMap(([words, sign]) =>
@@ -77,6 +100,17 @@ describe("A currency the Document doesn't state", () => {
   )("named %s: %s", (where, words, claim) => {
     const cited = where === "cited" ? `${words}\n${STATED}.` : STATED;
     expect(unitNotStated(claim, read(cited, `${words}\n${STATED}.`))).toBeNull();
+  });
+
+  test.each([
+    ["本合同所有款项以港币支付。", "年薪为 54,000元。"],
+    ["本合同以新台币计价。", "年薪为 54,000元。"],
+    ["本合同以日元支付。", "年薪为¥54,000。"],
+    ["单位：元", "年薪为 54,000元。"],
+    ["合同总价为人民币120,000元。", "年薪为 54,000元。"],
+  ])("named elsewhere in %j", (words, claim) => {
+    const cited = "年薪为 54,000，按月支付。";
+    expect(unitNotStated(claim, read(cited, `${words}\n${cited}`))).toBeNull();
   });
 
   test.each([
@@ -89,13 +123,27 @@ describe("A currency the Document doesn't state", () => {
     expect(unitNotStated(claim, read(cited))).toBeNull();
   });
 
-  // protects=no false alarm: a figure written as the Document writes it, a currency on the cited figure, or a number the cited text doesn't state is left to the model; fails_when=any of these is flagged; no_claim=none beyond protects.
+  // protects=no false alarm: a figure written as the Document writes it, a currency on the cited figure, a Hong Kong dollar beside it that "$" may stand for, or a number the cited text doesn't state is left to the model; fails_when=any of these is flagged; no_claim=none beyond protects.
   test.each([
     ["the figure as written", "The annual salary is 54,000.", STATED],
     ["a currency on the cited figure", "The annual salary is £54,000.", "The salary is £54,000"],
+    [
+      "a Hong Kong dollar beside it",
+      "The annual salary is $54,000.",
+      `${STATED}. The relocation allowance is HK$8,000.`,
+    ],
     ["a number the cited text doesn't state", "The bonus is £5,000.", STATED],
   ])("%s isn't flagged", (_, claim, cited) => {
     expect(unitNotStated(claim, read(cited))).toBeNull();
+  });
+
+  // protects=every Citation counts, each with its own Document: the currency named by the second Citation's Document backs the first's figure; fails_when=only the first Citation is read; no_claim=none beyond protects.
+  test("a currency another Citation's Document names counts", () => {
+    const salary = "Grade 4 annual salary: 54,000";
+    const pay = "Every salary at the company is paid in pounds sterling";
+    const claim = "The Grade 4 annual salary is £54,000.";
+    expect(unitNotStated(claim, read(salary))).not.toBeNull();
+    expect(unitNotStated(claim, [...read(salary), ...read(pay)])).toBeNull();
   });
 });
 
@@ -118,22 +166,33 @@ describe("A percent where the Document gives percentage points", () => {
   ])("%s against %s", (claim, cited) => {
     expect(unitNotStated(claim, read(cited))).toBeNull();
   });
+
+  // protects=a percent another Citation gives backs it, so the sentence isn't told the Document gives points; fails_when="The Document gives 2 percentage points, not 2%" shows though [2] gives 2%; no_claim=none beyond protects.
+  test("a percent another Citation gives counts", () => {
+    const claim = "In 2025 inflation was 2% and Meridian's gross margin rose 2 percentage points.";
+    const margin = "Meridian's gross margin rose 2 percentage points in 2025";
+    const inflation = "Inflation in the euro area was 2% in 2025";
+    expect(unitNotStated(claim, read(margin))).toMatchObject({ kind: "unit" });
+    expect(unitNotStated(claim, [...read(margin), ...read(inflation)])).toBeNull();
+  });
 });
 
 describe("How much a check reads", () => {
   // protects=a sentence without a currency, a percent or points reads nothing more; the cited Units are read only for one that has, and the Document's whole text only for a currency they don't name (#1332's review: a 2 MB Document took 2 s a sentence); fails_when=the Document is read for every sentence; no_claim=how long a read takes.
   test("reads the cited Units only for a figure with a unit, and the Document only for a currency they don't name", () => {
     const reads = { cited: 0, document: 0 };
-    const counted = (cited: string): CheckedText => ({
-      cited: () => {
-        reads.cited += 1;
-        return cited;
+    const counted = (cited: string): CheckedText[] => [
+      {
+        cited: () => {
+          reads.cited += 1;
+          return cited;
+        },
+        document: () => {
+          reads.document += 1;
+          return `${"Clause text with 1,234 and $5 or HK$5 in it. ".repeat(1000)}${cited}`;
+        },
       },
-      document: () => {
-        reads.document += 1;
-        return `${"Clause text with 1,234 and $5 in it. ".repeat(1000)}${cited}`;
-      },
-    });
+    ];
 
     expect(unitNotStated("The notice period is three months.", counted(STATED))).toBeNull();
     expect(reads).toEqual({ cited: 0, document: 0 });
@@ -225,6 +284,95 @@ describe("Checking a sentence that adds a unit", { timeout: 30_000 }, () => {
     expect(await check("Meridian's gross margin rose 2%.")).toMatchObject({
       unsupported: { reason: "文档写的是 2 percentage points，不是 2%。" },
     });
+  });
+
+  // protects=through the core, a correct currency stays supported when its Document names it in capitals, by a dollar or 元 of its own that the sign stands for, or by its sign stated as the unit (#1332's review); fails_when=any of these checks Unsupported, which would cut a right currency; no_claim=a real model's verdict.
+  test("stays supported for a currency its Document names in any of its ways", async () => {
+    const named = [
+      [
+        "Fenwick agreement.txt",
+        "All payments under this agreement shall be made in Pounds Sterling.\nFenwick Ltd pays the Employee an annual salary of 54,000.\n",
+        "Fenwick Ltd pays an annual salary of £54,000.",
+        "Fenwick Ltd pays the Employee an annual salary of 54,000",
+      ],
+      [
+        "Maple agreement.txt",
+        "All amounts in this agreement are in Canadian dollars.\nMaple Freight pays the Employee an annual salary of 54,000.\n",
+        "Maple Freight pays an annual salary of $54,000.",
+        "Maple Freight pays the Employee an annual salary of 54,000",
+      ],
+      [
+        "港湾合同.txt",
+        "本合同所有款项以港币支付。\n港湾贸易公司向员工支付年薪 54,000。\n",
+        "港湾贸易公司支付的年薪为 54,000元。",
+        "港湾贸易公司向员工支付年薪 54,000",
+      ],
+      [
+        "Harrow agreement.txt",
+        "All figures are in £.\nHarrow Ltd pays the Employee an annual salary of 54,000.\n",
+        "Harrow Ltd pays an annual salary of £54,000.",
+        "Harrow Ltd pays the Employee an annual salary of 54,000",
+      ],
+    ] as const;
+    const plans = Object.fromEntries(named.map(([, , claim, quote]) => [claim, supported(quote)]));
+    const files = named.map(([name, contents]) => ({ name, contents }));
+    const { core } = await setUpWithDocuments(checkingModel(plans), files);
+
+    for (const [, , claim] of named) {
+      expect(await core.checkClaim({ claim }), claim).toMatchObject({ verdict: "supported" });
+    }
+  });
+
+  // protects=through the core, every Citation the check found counts, each with its own Document: a currency or a percent the second Citation backs leaves the sentence supported, and no false "The Document gives 2 percentage points, not 2%" (#1332's review); fails_when=only the first Citation is read; no_claim=a real model's verdict.
+  test("reads every Citation the check found", async () => {
+    const both: Record<string, [string, string]> = {
+      "The Grade 4 annual salary is £54,000.": [
+        "Grade 4 annual salary: 54,000",
+        "Every salary at the company is paid in pounds sterling",
+      ],
+      "In 2025 inflation was 2% and Meridian's gross margin rose 2 percentage points.": [
+        "Meridian's gross margin rose 2 percentage points in 2025",
+        "Inflation in the euro area was 2% in 2025",
+      ],
+    };
+    const model = scriptedModel(
+      (call) => {
+        if (!isCheckRun(call)) return checkReply(call, {});
+        const quotes = both[sentenceOf(call)] ?? [];
+        const searches = call.results.filter((result) => result.tool === "search_documents");
+        const shown = searches.flatMap((result) => shownPassages(result.text));
+        const missing = quotes.find((quote) => !shown.some((each) => each.text.includes(quote)));
+        if (missing && searches.length < 3) {
+          return { calls: [{ tool: "search_documents", input: { query: missing } }] };
+        }
+        if (!call.results.some((result) => result.tool === "cite")) {
+          const citations = quotes.map((quote, index) => ({
+            marker: index + 1,
+            passage: shown.find((each) => each.text.includes(quote))?.id,
+            quote,
+          }));
+          return { calls: [{ tool: "cite", input: { citations } }] };
+        }
+        return { text: "Verdict: supported\nBoth Passages say so. [^1] [^2]" };
+      },
+      { generate: checkGenerate({}) },
+    );
+    const { core } = await setUpWithDocuments(model, [
+      { name: "Pay grades.txt", contents: "Pay grades\nGrade 4 annual salary: 54,000\n" },
+      {
+        name: "Pay policy.txt",
+        contents: "Pay policy\nEvery salary at the company is paid in pounds sterling.\n",
+      },
+      {
+        name: "Meridian results 2025.txt",
+        contents: "Meridian's gross margin rose 2 percentage points in 2025.\n",
+      },
+      { name: "Euro area prices.txt", contents: "Inflation in the euro area was 2% in 2025.\n" },
+    ]);
+
+    for (const claim of Object.keys(both)) {
+      expect(await core.checkClaim({ claim }), claim).toMatchObject({ verdict: "supported" });
+    }
   });
 
   // protects=the same sentence written as the Document writes it stays supported; fails_when=the rule flags a figure that adds nothing; no_claim=none beyond protects.

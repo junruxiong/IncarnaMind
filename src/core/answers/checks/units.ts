@@ -1,12 +1,13 @@
 /** A model reads "54,000" in a UK contract as pounds and calls "£54,000" supported (#1332), so a program decides. */
 import {
   currenciesOf,
+  currenciesOfSign,
   type Figure,
   type FigureContext,
   type FigureUnit,
   namedCurrencies,
-  type Reading,
   readFigures,
+  readingsOf,
 } from "../../../shared/figures";
 import { documentFigureContext } from "../calculations";
 
@@ -16,9 +17,9 @@ export type UnitNotStated =
   /** A percent where the Document gives percentage points, or points where it gives a percent. */
   | { kind: "unit"; figure: string; amount: string };
 
-/** The text a sentence is checked against, read only when it is needed. */
+/** A Citation's text, read only when it is needed. */
 export interface CheckedText {
-  /** The Units its Citation points to, or its quote. */
+  /** The Units it points to, or its quote. */
   cited(): string;
   /** Its Document's whole text. */
   document(): string;
@@ -28,17 +29,9 @@ const sameValue = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(1
 
 const isShare = (unit: FigureUnit) => unit.kind === "percent" || unit.kind === "points";
 
-const readingsOf = (figure: Figure): Reading[] => [
-  figure,
-  ...figure.ambiguous.flatMap((each) => each.readings),
-];
-
 const hasUnit = (figure: Figure) => currenciesOf(figure).length > 0 || isShare(figure.unit);
 
-/**
- * The sentence's figures that carry a currency, a percent or points, and nothing else unsettled
- * but their separators: read with the cited text's context, the same digits read the same.
- */
+// Separators may stay unsettled: read with the cited text's context, the same digits read the same.
 function figuresToCheck(claim: string, context: FigureContext): Figure[] {
   return readFigures(claim, context).filter(
     (figure) =>
@@ -47,25 +40,48 @@ function figuresToCheck(claim: string, context: FigureContext): Figure[] {
   );
 }
 
+interface Read {
+  text: CheckedText;
+  cited: string;
+  context: FigureContext;
+  figures: Figure[];
+  named: Set<string> | null;
+  inDocument: Set<string> | null;
+}
+
 /**
- * What `claim` gives a figure that its cited text states without it: a currency on a plain
- * number, which neither the cited Units nor the Document's words name; a percent where the text
- * gives percentage points; or points where it gives a percent. Null when it gives none. A figure
- * the cited text doesn't state, or states with another currency or unit, is the model's to judge.
+ * What `claim` gives a figure that its Citations (`citations`, each with its own Document) state
+ * without it: a currency on a plain number, which no cited Unit nor any of their Documents names;
+ * a percent where they give only percentage points; or points where they give only a percent.
+ * Null when it gives none. A figure they don't state, or state with another currency or unit, is
+ * the model's to judge.
  */
-export function unitNotStated(claim: string, text: CheckedText): UnitNotStated | null {
+export function unitNotStated(
+  claim: string,
+  citations: readonly CheckedText[],
+): UnitNotStated | null {
   const own = documentFigureContext([{ text: claim }]);
-  if (!readFigures(claim, own).some(hasUnit)) return null;
-  const cited = text.cited();
-  const context = documentFigureContext([{ text: cited }]);
-  const there = readFigures(cited, context);
-  let named: Set<string> | null = null;
-  let inWords: Set<string> | null = null;
-  for (const figure of figuresToCheck(claim, own.language ? own : context)) {
-    const same = there.flatMap((each) =>
-      readingsOf(each)
-        .filter((reading) => sameValue(reading.value, figure.value))
-        .map((reading) => ({ chars: each.chars, unit: reading.unit })),
+  if (citations.length === 0 || !readFigures(claim, own).some(hasUnit)) return null;
+  const read: Read[] = citations.map((text) => {
+    const cited = text.cited();
+    const context = documentFigureContext([{ text: cited }]);
+    return {
+      text,
+      cited,
+      context,
+      figures: readFigures(cited, context),
+      named: null,
+      inDocument: null,
+    };
+  });
+  const [first] = read;
+  for (const figure of figuresToCheck(claim, own.language || !first ? own : first.context)) {
+    const same = read.flatMap(({ figures }) =>
+      figures.flatMap((each) =>
+        readingsOf(each)
+          .filter((reading) => sameValue(reading.value, figure.value))
+          .map((reading) => ({ chars: each.chars, unit: reading.unit })),
+      ),
     );
     if (same.length === 0) continue;
     if (isShare(figure.unit)) {
@@ -75,14 +91,21 @@ export function unitNotStated(claim: string, text: CheckedText): UnitNotStated |
       continue;
     }
     if (same.some(({ unit }) => unit.kind !== "plain")) continue;
-    const codes = currenciesOf(figure);
-    named ??= namedCurrencies(cited, context);
-    if (codes.some((code) => named?.has(code))) continue;
-    inWords ??= namedCurrencies(text.document(), context, { wordsOnly: true });
-    if (codes.some((code) => inWords?.has(code))) continue;
+    const codes = new Set([...currenciesOf(figure), ...currenciesOfSign(figure)]);
+    const names = (each: Set<string>) => [...codes].some((code) => each.has(code));
+    const inCited = read.some((each) => {
+      each.named ??= namedCurrencies(each.cited, each.context, each.figures);
+      return names(each.named);
+    });
+    if (inCited) continue;
+    const inDocument = read.some((each) => {
+      each.inDocument ??= namedCurrencies(each.text.document(), each.context, null);
+      return names(each.inDocument);
+    });
+    if (inDocument) continue;
     return {
       kind: "currency",
-      currency: figure.currency ?? codes[0] ?? "",
+      currency: figure.currency ?? [...codes][0] ?? "",
       amount: same[0]?.chars ?? figure.chars,
     };
   }

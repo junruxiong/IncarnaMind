@@ -224,17 +224,20 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       }),
     };
 
-    const unstatedUnit = (evidence: Citation): UnsupportedReason | null => {
-      const text = (from: number | null, to: number | null) =>
-        scoped
-          .pageTexts(evidence.documentId, evidence.contentHash, from, to)
-          .map((unit) => unit.text)
-          .join("\n");
-      const found = unitNotStated(request.claim, {
-        cited: () =>
-          evidence.pageFrom === null ? evidence.quote : text(evidence.pageFrom, evidence.pageTo),
-        document: () => text(null, null),
+    const unstatedUnit = (citations: readonly Citation[]): UnsupportedReason | null => {
+      const checked = citations.map((citation) => {
+        const text = (from: number | null, to: number | null) =>
+          scoped
+            .pageTexts(citation.documentId, citation.contentHash, from, to)
+            .map((unit) => unit.text)
+            .join("\n");
+        return {
+          cited: () =>
+            citation.pageFrom === null ? citation.quote : text(citation.pageFrom, citation.pageTo),
+          document: () => text(null, null),
+        };
       });
+      const found = unitNotStated(request.claim, checked);
       if (!found) return null;
       const t = (key: MessageKey, params?: MessageParams) =>
         translate(deps.language(), key, params);
@@ -385,7 +388,9 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       (await askForEvidence(request, verdict, session, signal));
     if (signal.aborted) return notChecked("stopped");
     if (!evidence) return byCalculation ?? notChecked("no-evidence");
-    const unit = byCalculation ? null : unstatedUnit(evidence);
+    const unit = byCalculation
+      ? null
+      : unstatedUnit([evidence, ...foundCitations(session.finalCitation, evidence)]);
     if (unit && verdict.verdict !== "contradicted") return unsupported(unit);
     if (verdict.verdict === "contradicted") {
       const judged = await confirmContradiction(request, evidence, session, signal);
@@ -601,6 +606,20 @@ const NEAREST_MARKER = 98;
 
 /** The marker the record asked for once more is given: apart from any the model gave. */
 const EVIDENCE_MARKER = 99;
+
+function foundCitations(
+  finalCitation: (marker: number) => Citation | null,
+  deciding: Citation,
+): Citation[] {
+  const found: Citation[] = [];
+  for (let marker = 1; marker <= 4; marker++) {
+    const citation = finalCitation(marker);
+    if (citation?.check !== "found") continue;
+    if (citation.documentId === deciding.documentId && citation.quote === deciding.quote) continue;
+    found.push(citation);
+  }
+  return found;
+}
 
 /** The Citation that decides a claim: marker 1's, or the first other marker's, whose quote the check found. */
 function decidingCitation(finalCitation: (marker: number) => Citation | null): Citation | null {
