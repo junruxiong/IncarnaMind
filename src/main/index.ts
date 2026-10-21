@@ -93,6 +93,15 @@ const rendererUrl = process.env.ELECTRON_RENDERER_URL;
 /** Test-only launch flag: lets the smoke tests drive UI directly, e.g. open the Document viewer at a page. */
 const testHooks = process.env.INCARNAMIND_TEST_HOOKS === "1";
 
+// The smoke tests sample painted frames to check that nothing moves. Chromium stops painting a
+// window it takes for hidden or covered, which a busy CI runner's windows often are, so a check saw
+// no frames at all while the page was right.
+if (testHooks) {
+  app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+  app.commandLine.appendSwitch("disable-renderer-backgrounding");
+  app.commandLine.appendSwitch("disable-background-timer-throttling");
+}
+
 // Electron takes every privileged scheme in one call: a second would replace the first.
 protocol.registerSchemesAsPrivileged([DOCUMENT_SCHEME_PRIVILEGES, ANALYSIS_SCHEME_PRIVILEGES]);
 

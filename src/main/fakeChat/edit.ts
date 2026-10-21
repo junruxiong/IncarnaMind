@@ -15,12 +15,15 @@
  * with the passage's markers, and takes the part named out of any other
  * (#1111). The
  * new text streams in word by word, slowly when the instruction says
- * "slowly", then a line saying why (#202).
+ * "slowly", or not at all until it is stopped when it says "forever", then
+ * a line saying why (#202).
  */
 
 import { appliedEditReply } from "./appliedEdits";
 import { PARTLY } from "./checks";
 import { type Prompt, SHORTEN, SLOWLY, type StreamPart, USAGE } from "./prompt";
+
+const HOLDING = /\bforever\b/i;
 
 const FILLER = /(?:\b(?:very|really|truly|quite|actually|basically)\s+|非常|真的|其实|十分)/giu;
 
@@ -78,7 +81,7 @@ const EDIT_REASONS: Readonly<Record<string, readonly [string, string]>> = {
  * The scripted Edit with AI (see the top of this file): the passage's new
  * text and why, or an explanation; `slow` when the instruction says "slowly".
  */
-export function fakeEdit(prompt: Prompt): { text: string; slow: boolean } | null {
+export function fakeEdit(prompt: Prompt): { text: string; slow: boolean; holds: boolean } | null {
   const request = prompt
     .filter((message) => message.role === "user")
     .map((message) =>
@@ -97,7 +100,8 @@ export function fakeEdit(prompt: Prompt): { text: string; slow: boolean } | null
   const why = EDIT_REASONS[action]?.[/\p{Script=Han}/u.test(passage) ? 1 : 0];
   // A cut's task quotes the sentence's sources, which may say "slowly" themselves.
   const slow = action !== "cut-unsupported" && SLOWLY.test(asked);
-  return { text: why ? `${text}\n\n<why>${why}</why>` : text, slow };
+  const holds = action !== "cut-unsupported" && HOLDING.test(asked);
+  return { text: why ? `${text}\n\n<why>${why}</why>` : text, slow, holds };
 }
 
 /** The scripted Edit with AI's new text for `passage`, or its explanation. */
