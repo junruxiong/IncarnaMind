@@ -2789,6 +2789,8 @@ export function createCore(adapters: CoreAdapters): Core {
         return meeting ? minds.get(meeting.mindId).folderId : null;
       },
       partsOf: (meetingId) => listParts(meetingFolder(dataDir, meetingId)),
+      audioDeleted: (meetingId) =>
+        listMeetings?.().find((each) => each.id === meetingId)?.audio.deletedAt != null,
       recordSpeed: (modelId, ratio) => {
         const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
         settings.writeDeviceValue(TRANSCRIPTION_SPEED, {
