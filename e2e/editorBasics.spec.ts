@@ -1,6 +1,7 @@
 import { realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import type { CoreBridge } from "../src/core/api";
 import {
   addDocuments,
@@ -80,7 +81,11 @@ test("checklist boxes keep their text, state and localized empty name when the l
     await window.keyboard.press("ArrowUp");
     await expect
       .poll(() =>
-        secondText.evaluate((element) => element.contains(getSelection()?.anchorNode ?? null)),
+        secondText.evaluate((element) => {
+          const root = element.closest(".ProseMirror") as (Element & { editor?: Editor }) | null;
+          const view = root?.editor?.view;
+          return !!view && element.contains(view.domAtPos(view.state.selection.from).node);
+        }),
       )
       .toBe(true);
     await window.keyboard.press("Tab");
