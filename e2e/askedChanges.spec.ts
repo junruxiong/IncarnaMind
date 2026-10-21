@@ -266,7 +266,6 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
     "Boats rest on the mud at low water.",
   ]);
   await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ paragraphs?$/);
-  // Applied, nothing waits: a screen reader isn't left with the suggestion (#893).
   await expect(spoken).not.toContainText("Suggested change");
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+z");
