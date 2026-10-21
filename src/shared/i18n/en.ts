@@ -4801,6 +4801,8 @@ export const en = {
   "answer.copy.label": "Copy the Answer ({shortcut})",
   "answer.copied": "Copied",
   "answer.add": "Add to note",
+  "answer.newMind": "New Mind",
+  "answer.newMind.label": "Put this Answer in a new Mind, or in the empty Mind in front",
   "answer.add.to": "Add to “{mind}” ({shortcut})",
   "answer.add.choose": "Choose a Mind to add it to",
   "mindChanges.minds": "{count} Minds changed",

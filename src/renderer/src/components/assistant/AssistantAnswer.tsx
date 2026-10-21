@@ -40,6 +40,7 @@ export interface AnswerKeeping {
   focusedMindName: string | null;
   add(answer: ConversationAnswer): void;
   pick(answer: ConversationAnswer, anchor: HTMLElement): void;
+  newMind(answer: ConversationAnswer): void;
   openTable(answer: ConversationAnswer, table: NodeJSON): void;
 }
 
@@ -207,6 +208,7 @@ export function AssistantAnswer({
         focusedMindName={keeping.focusedMindName}
         onAdd={() => keeping.add(answer)}
         onPick={(anchor) => keeping.pick(answer, anchor)}
+        onNewMind={() => keeping.newMind(answer)}
       />
     </article>
   );

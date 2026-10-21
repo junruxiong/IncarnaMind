@@ -4611,6 +4611,8 @@ export const zhCN = {
   "answer.copy.label": "复制回答（{shortcut}）",
   "answer.copied": "已复制",
   "answer.add": "添加到笔记",
+  "answer.newMind": "新建 Mind",
+  "answer.newMind.label": "把这条回答放进新的 Mind，或放进前面空着的 Mind",
   "answer.add.to": "添加到“{mind}”（{shortcut}）",
   "answer.add.choose": "选择要添加到的 Mind",
   "mindChanges.minds": "修改过的 Mind（{count}）",
