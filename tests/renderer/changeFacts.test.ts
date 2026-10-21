@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { type ChangeCounts, changeFact, keptText } from "../../src/renderer/src/changeFacts";
+import {
+  type ChangeCounts,
+  changeFact,
+  keptText,
+  leftText,
+} from "../../src/renderer/src/changeFacts";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
 const t =
@@ -53,6 +58,25 @@ describe("What an Answer did in a Mind, in words (#880), counted by paragraph (#
       expect(changeFact(t("zh-CN"), counts, null)).toBe(zhLine);
     },
   );
+});
+
+describe("What still waits is said in changes, the number the Mind's bar shows (#1358)", () => {
+  test.each([
+    [row({ wrote: 3 }), 2, "· 2 changes waiting", "· 2 处修订待确认"],
+    [row({ wrote: 3 }), 1, "· 1 change waiting", "· 1 处修订待确认"],
+    [row({ changed: 12 }), 0, "· none waiting", "· 没有待确认的修订"],
+    [row({ charts: 1 }), 1, "· 1 change waiting", "· 1 处修订待确认"],
+    [row({ tables: 1, charts: 1 }), 2, "· 2 changes waiting", "· 2 处修订待确认"],
+  ] as const)("after %o, with %i waiting", (counts, waiting, line, zhLine) => {
+    expect(leftText(t("en"), counts, waiting)).toBe(line);
+    expect(leftText(t("zh-CN"), counts, waiting)).toBe(zhLine);
+  });
+
+  test("nothing is said before the count is known, for a Mind that is gone, or when nothing was done", () => {
+    expect(leftText(t("en"), row({ wrote: 3 }), null)).toBeNull();
+    expect(leftText(t("en"), row({ wrote: 3 }), "gone")).toBeNull();
+    expect(leftText(t("en"), row({}), 2)).toBeNull();
+  });
 });
 
 describe("Why a chart asked for wasn't drawn (#1091)", () => {
