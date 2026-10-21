@@ -126,6 +126,40 @@ test('"/" finds the new items by their Chinese names', async () => {
   await expect(editor.locator("ul:has(> li[data-checked])")).toHaveCount(1);
 });
 
+// ⌘K while the selection menu isn't shown (dismissed with Esc, or not yet open after a double-click)
+// opened the field inside the hidden menu, off the page, and the whole window went white (#1461).
+for (const [how, language] of [
+  ["Esc", "en"],
+  ["Esc", "zh-CN"],
+  ["double-click", "en"],
+] as const) {
+  test(`⌘K on a selection whose menu isn't shown (${how}) opens the link field, and the page stays (${language})`, async () => {
+    const { window, editor } = await startMind(language);
+    const errors: string[] = [];
+    window.on("pageerror", (error) => errors.push(error.message));
+    await window.keyboard.type("Read the Tides paper today and the Moon one tomorrow");
+    const line = editor.locator("p").first();
+    const menu = window.getByTestId("selection-menu");
+    if (how === "Esc") {
+      await slideSelect(window, line, "Tides paper");
+      await expect(menu).toBeVisible();
+      await window.keyboard.press("Escape");
+      await expect(menu).toBeHidden();
+    } else {
+      await line.getByText("Read the Tides paper").dblclick({ position: { x: 4, y: 4 } });
+    }
+    await window.keyboard.press("ControlOrMeta+K");
+
+    const field = window.getByTestId("link-field");
+    await expect(field).toBeFocused();
+    await window.keyboard.type("example.com/tides");
+    await window.keyboard.press("Enter");
+    await expect(line.locator("a")).toHaveAttribute("href", "https://example.com/tides");
+    await expect(editor).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+}
+
 test("a link: added with the button or ⌘K on a selection, edited, opened and removed in place, each undone", async () => {
   const { app, window, editor } = await startMind();
   await interceptOpenExternal(app);
