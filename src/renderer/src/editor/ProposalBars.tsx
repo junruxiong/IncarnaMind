@@ -34,7 +34,6 @@ import {
 } from "./proposalReview";
 import { redrawProposalRewrites, toggleProposalOriginal } from "./proposalRewrites";
 
-/** The space between a change and its bar. */
 const GAP_PX = 6;
 
 /** How long the bar stays once the pointer leaves its change, so it can reach the bar. */
@@ -303,7 +302,6 @@ interface Shown {
   count: number;
   from: number;
   to: number;
-  /** Where its last range ends. */
   end: number;
   dropped: number;
   citations: PendingProposal["citations"];
@@ -315,7 +313,6 @@ interface Shown {
   focused: boolean;
 }
 
-/** Whether text of the Mind is where a bar of this size would go, its top-left corner at `x`, `y`. */
 function textUnder(editor: Editor, x: number, y: number, size: DOMRect): boolean {
   return [8, size.width / 2, size.width - 8].some((across) =>
     document

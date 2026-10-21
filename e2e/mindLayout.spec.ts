@@ -176,13 +176,12 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
     "So spring tides follow the Moon. Check whether the tables put numbers on how much higher they are.",
   );
 
-  // One text edge: the title, a Note, a heading, a list item, and a Note added from an Answer.
+  // One text edge: the title, a Note, a heading, and a Note added from an Answer.
   const edge = (await textColumn(editor)).x;
   const texts = {
     title: title,
     note: editor.locator(":scope > p").first(),
     heading: editor.locator(":scope > h2"),
-    "list item": editor.locator(":scope > ul > li").first(),
     added: editor
       .locator(":scope > p")
       .filter({ has: window.getByTestId("citation") })
@@ -191,6 +190,13 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   for (const [name, locator] of Object.entries(texts)) {
     expectNear((await box(locator)).x, edge, 1, `the ${name} starts at the text edge`);
   }
+  // A list is indented as Word indents it: its text starts 48px in (DESIGN.md, #1341).
+  expectNear(
+    (await box(editor.locator(":scope > ul > li").first())).x,
+    edge + 48,
+    1,
+    "the list item starts one indent in",
+  );
   // The measure is 680px, with its margins inside the pane.
   expectNear((await textColumn(editor)).width, MEASURE, 1, "the measure");
 
