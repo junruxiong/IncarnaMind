@@ -45,9 +45,18 @@ export function MeetingBar({ meeting, children }: { meeting: Meeting; children?:
     >
       <MeetingControls meeting={meeting} />
       <MeetingLines meeting={meeting} />
-      <TranscriptLines meeting={meeting} />
+      <TranscriptLines meeting={meeting} over />
       {children}
     </section>
+  );
+}
+
+/** The bar's own controls, unseen, where the bar will be: the page keeps its place when it comes, at any width. */
+export function MeetingBarRoom({ meeting }: { meeting: Meeting }) {
+  return (
+    <div aria-hidden="true" data-testid="meeting-bar-room" className="meeting-bar meeting-bar-room">
+      <MeetingControls meeting={{ ...meeting, status: "recording" }} />
+    </div>
   );
 }
 
@@ -156,14 +165,14 @@ function CallHelpToggle() {
 /**
  * Show transcript (显示转写稿): opens the Meeting's Transcript as a tab in
  * the group beside its Mind; then Hide transcript closes it (#136). Before
- * the first line there is no Transcript to show yet.
+ * the first line there is no Transcript to show yet, and the button waits
+ * greyed, so the bar has the same width from its first paint.
  */
 function TranscriptToggle({ meeting }: { meeting: Meeting }) {
   const t = useT();
   const place = useTabPlace();
   const documentId = meeting.transcript?.documentId ?? null;
   const tab = useDocumentTab(documentId);
-  if (!meeting.transcript) return null;
   const label = t(tab ? "meetings.bar.hideTranscript" : "meetings.bar.showTranscript");
   return (
     <button

@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import {
@@ -164,7 +164,7 @@ test("dropped files behave the same", async () => {
   }
 });
 
-test("Undo leaves a Document the User deleted or added another way since: each step finds its Documents by id", async () => {
+test("Undo leaves a Document the User deleted or added another way since, and Redo brings back only what Undo took: each step finds its Documents by id", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 1100, 700);
@@ -190,7 +190,46 @@ test("Undo leaves a Document the User deleted or added another way since: each s
     await leaveText(window);
     await window.keyboard.press("ControlOrMeta+z");
     await expect.poll(() => library(window)).toEqual([moonsAgain]);
-    expect(tidesFirst?.name).toBe("Tides");
+
+    // Redo brings Tides back with its own id, and never the Moons the User had deleted.
+    await window.keyboard.press("ControlOrMeta+Shift+z");
+    await expect.poll(() => library(window)).toEqual([moonsAgain, tidesFirst]);
+    await expect(window.getByTestId("undo-line")).not.toContainText("Couldn’t do it again");
+  } finally {
+    await app.close();
+  }
+});
+
+test("Undo leaves a Document a Linked folder has taken over since: it is no longer only this add's", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 700);
+    await dismissChatSetup(window);
+    const folder = join(await realpath(sources), "Notes");
+    await mkdir(folder, { recursive: true });
+    const inside = join(folder, "Inside.txt");
+    await writeFile(inside, "Inside notes.\n");
+    const [outside] = await textFiles("Outside");
+    await pick(window, [inside, outside as string]);
+    await expect.poll(async () => (await library(window)).length).toBe(2);
+    const before = await library(window);
+
+    await (await coreOf(window)).evaluate(async (core, path) => core.addLinkedFolder(path), folder);
+    await expect
+      .poll(
+        async () =>
+          (await (await coreOf(window)).evaluate((core) => core.listDocuments())).filter(
+            (each) => each.linkedFolderId !== null,
+          ).length,
+      )
+      .toBe(1);
+
+    await leaveText(window);
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect
+      .poll(async () => (await library(window)).map((each) => each.name))
+      .toEqual(["Inside"]);
+    expect((await library(window))[0]?.id).toBe(before.find((each) => each.name === "Inside")?.id);
   } finally {
     await app.close();
   }

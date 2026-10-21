@@ -15,6 +15,7 @@ import { selectionForEdit } from "../editor/editSelection";
 import { noteHolding } from "../editor/noteKeymap";
 import { pendingAtSelection, pendingIn } from "../editor/proposalReview";
 import { proposalOriginalAt, toggleProposalOriginal } from "../editor/proposalRewrites";
+import { requestEditField } from "../editor/selectionCommands";
 import {
   regenerateChange,
   requestEdit,
@@ -251,7 +252,8 @@ export const proposalCommands: readonly Command[] = [
     when: () => withSelection() !== null,
     run() {
       const note = withSelection();
-      if (note && startEditing(note.editor, note.mindId)) useComposer.getState().requestFocus();
+      if (!note || requestEditField(note.editor, true)) return;
+      if (startEditing(note.editor, note.mindId)) useComposer.getState().requestFocus();
     },
   },
   editAction("improve", "editor.ai.improve"),

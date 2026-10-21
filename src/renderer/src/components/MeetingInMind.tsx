@@ -11,7 +11,7 @@ import { useAppStore } from "../store";
 import { useAudioKeptKey } from "../transcriptionServices";
 import { CaptureDetails, CaptureDetailsLine, CaptureProblem } from "./CaptureDetails";
 import { CloseLineIcon, RecordingLineIcon } from "./lineIcons";
-import { MeetingBar } from "./MeetingBar";
+import { MeetingBar, MeetingBarRoom } from "./MeetingBar";
 import { ProblemLine } from "./ProblemLine";
 import { TranscriptLines } from "./TranscriptLines";
 import { buttonStyle, fieldLabelClass, inputClass } from "./ui";
@@ -24,7 +24,11 @@ import { buttonStyle, fieldLabelClass, inputClass } from "./ui";
  */
 export function MeetingInMind({ mindId }: { mindId: string }) {
   const meeting = useMeetingOf(mindId);
+  const starting = useMeetings((state) => !!meeting && state.starting[meeting.id] === true);
   if (!meeting) return null;
+  if (meeting.status === "ready" && starting) {
+    return <MeetingBarRoom meeting={meeting} />;
+  }
   if (meeting.status === "ready") return <MeetingStart meeting={meeting} />;
   if (isLive(meeting)) {
     return (

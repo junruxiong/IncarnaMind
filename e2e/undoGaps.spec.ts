@@ -95,7 +95,10 @@ async function startWithADocument(language: "en" | "zh-CN" = "en") {
   const { window } = running;
   await dismissChatSetup(window);
   await writeFile(join(sources, "Tides.txt"), "Neap tides are the smallest of the month.\n");
-  await addDocuments(window, [join(sources, "Tides.txt")]);
+  // Added by the core, not through the sidebar's picker, which leaves a step of its own for ⌘Z.
+  const path = join(sources, "Tides.txt");
+  await read(window, (core) => core.addDocuments([path]));
+  await expect(window.getByTestId("document-list-item")).toHaveAttribute("data-status", "ready");
   await read(window, (core) => core.createLibraryGroup({ name: "Finance", description: "" }));
   if (language !== "en") await setLanguage(window, language);
   return running;
