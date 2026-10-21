@@ -367,6 +367,12 @@ describe("Commands that reach outside IncarnaMind wait for the User (#1110)", {
       `${kept === "mark" ? "marks the text IncarnaMind wrote with comments" : "leaves the text IncarnaMind wrote unmarked"}, following the answer the User saved for Word exports`,
     );
     expect(commandCalls(answer).map((call) => call.status)).not.toContain("failed");
+    // What the record keeps of the first export, for the next Question's reading of it.
+    expect(commandCalls(answer).find((call) => call.asked)?.command).toMatchObject({
+      command: "mind.export",
+      inOutputLocation: true,
+      marking: { choice: kept, how: "kept" },
+    });
     expect(commandCalls(answer).find((call) => call.asked)?.asked?.answer).toMatchObject({
       chosen: [chose],
     });

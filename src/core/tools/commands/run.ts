@@ -18,6 +18,7 @@ import type {
   CoreApi,
   Document,
   Effect,
+  ExportMarking,
   FolderMove,
   MarkAiTextChoice,
   Mind,
@@ -63,16 +64,7 @@ export type CommandExportFormat = (typeof COMMAND_EXPORT_FORMATS)[number];
 export type CommandAsking = ((question: UserQuestion) => Promise<UserAnswer>) | null;
 
 /** How a Word file's choice about marking the text IncarnaMind wrote was settled for an export. */
-export interface MarkingSettled {
-  /** The choice the file followed. */
-  choice: MarkAiTextChoice;
-  /**
-   * Where it came from: the User gave it in the tray, or their request named it, and it is kept
-   * (`kept`); their request named it for this file only (`this-file`); or they chose it before
-   * (`earlier`). A Word export always says which, so the model never has to guess.
-   */
-  how: "kept" | "this-file" | "earlier";
-}
+export type MarkingSettled = ExportMarking;
 
 export interface CommandsHost {
   core: CommandsCore;
@@ -574,6 +566,8 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
             folder: file.folder,
             inDefaultFolder: file.inDefaultFolder,
           },
+          inOutputLocation: !elsewhere,
+          ...(marking && { marking }),
         },
         step: null,
         said: `Saved “${mindName(mind)}” as “${file.name}” in ${elsewhere ? file.folder : `the Output location, ${file.folder}`}. A file can't be taken back with Undo.${markingSaid(marking)}`,
