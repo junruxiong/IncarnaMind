@@ -78,6 +78,7 @@ import { useNotices } from "./notices";
 import type { ObjectRef } from "./objects";
 import { useRequests } from "./requests";
 import { resolveSettingsPage, type SettingsPage, type SettingsTarget } from "./settingsPages";
+import { returnFocusAfterTabClose } from "./tabFocus";
 import { asOneStep, makeInTurn, sayWhileSlow, type Undoable, UndoRefused, useUndo } from "./undo";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
@@ -684,7 +685,10 @@ export const useAppStore = create<AppState>()((set, get) => {
 
   /** Closes a tab, then says so with Reopen. */
   const closeTabWith = async (tab: LayoutTab) => {
-    if (await get().changeLayout({ type: "close", tabId: tab.id })) {
+    const returnFocus = returnFocusAfterTabClose(tab.id, get().layout);
+    const next = await get().changeLayout({ type: "close", tabId: tab.id });
+    if (next) {
+      returnFocus(next);
       get().showTabNotice({ kind: "closed", item: tab.item, count: 1 });
     }
   };
