@@ -17,6 +17,7 @@ import {
   motionSettled,
   openDocumentAt,
   openSettings,
+  paletteFound,
   pointAndClick,
   recordMeeting,
   recordMeetingNow,
@@ -244,7 +245,7 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   // ⌘K's "Delete audio" is the same command: the same question, in the same place, and Esc
   // or "Keep it" keeps the audio.
   const palette = window.getByTestId("palette");
-  const deleteAudio = palette.getByTestId("palette-item").filter({ hasText: "Delete audio" });
+  const deleteAudio = paletteFound(window).filter({ hasText: "Delete audio" });
   await searchPalette(window, "delete audio");
   await expect(deleteAudio).toHaveCount(1);
   await shot(window, "meeting-delete-audio-palette-en");

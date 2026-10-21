@@ -135,9 +135,7 @@ test("first run: the row is first under Other ways, says the usage limits first 
     await row.getByTestId("claude-plan-sign-in").click();
     const code = await codeAfterApproving(app, 1);
     const waiting = row.getByTestId("claude-plan-waiting");
-    await expect(waiting).toContainText(
-      "Sign in to Claude in your browser, then paste the code it shows.",
-    );
+    await expect(waiting).toContainText("Sign in to Claude, then paste the code it shows.");
     await expect(waiting.getByTestId("claude-plan-usage")).toHaveText(USAGE);
     // The code is the way on, so its field is open, focused and named for what goes in it.
     const field = waiting.getByLabel("Code from Claude’s page");

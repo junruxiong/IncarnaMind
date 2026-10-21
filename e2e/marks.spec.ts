@@ -57,7 +57,7 @@ async function expectOnThisComputer(marks: Locator): Promise<void> {
   expect(await mark.evaluate((element) => element.firstElementChild?.tagName)).toBe("svg");
 }
 
-test("“Stays on this computer” is ink-secondary with a computer icon in Settings and Privacy, and no text in Settings is the check green, in English and Chinese", async () => {
+test("“Stays on this computer” is ink-secondary with a computer icon in Settings, and no text in Settings is the check green, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   // A server on this computer, which nothing answers: its page says where its data stays.
@@ -82,11 +82,9 @@ test("“Stays on this computer” is ink-secondary with a computer icon in Sett
       settings.getByTestId("provider-page").getByTestId("on-this-computer"),
     );
 
-    // Privacy: a data flow that goes nowhere.
+    // Privacy: no data flow goes anywhere, so the page says so once.
     await showSettingsPage(window, "privacy");
-    await expectOnThisComputer(
-      window.getByTestId("data-flow-not-in-use").getByTestId("on-this-computer"),
-    );
+    await expect(window.getByTestId("data-flows-none")).toBeVisible();
 
     // Nothing on any page of Settings is green: it has no Citation checks.
     for (const page of PAGES) {

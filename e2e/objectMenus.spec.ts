@@ -244,6 +244,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "folder.rename",
     "—",
+    "file.info",
+    "—",
     "folder.delete",
   ]);
 

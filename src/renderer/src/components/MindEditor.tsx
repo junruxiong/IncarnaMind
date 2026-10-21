@@ -61,6 +61,7 @@ import { FindInMind } from "../editor/findInMind";
 import { FootnoteKeys } from "../editor/footnoteSchema";
 import { HeldSelection } from "../editor/heldSelection";
 import { LinkBubble } from "../editor/LinkBubble";
+import { ListKeys } from "../editor/listKeys";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { MindOutline } from "../editor/MindOutline";
@@ -91,14 +92,17 @@ import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { TitleLine } from "../editor/titleLine";
 import { SmartTypography } from "../editor/typography";
+import type { EditWithAiField } from "../editor/useEditField";
+import { useMenuEditLine } from "../editor/useMenuEditLine";
 import { useVerification } from "../editor/VerifyLine";
 import { wordAtomView, wordBlockView } from "../editor/WordAtomView";
 import { useCountSettings, WordCount } from "../editor/WordCount";
 import { OriginalNotAdded, useWordFile, WordImportProgress } from "../editor/WordOrigin";
 import { WordTableFades } from "../editor/WordTableFades";
 import { useWordLookStyle } from "../editor/wordLookStyle";
+import { WordPaste } from "../editor/wordPaste";
 import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
-import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
+import { requestEdit, startEditing, TRANSLATE_LANGUAGES, useEdits } from "../editWithAi";
 import { useFirstOpen } from "../firstOpen";
 import { translateNow, useT } from "../i18n";
 import { markSelectionAsMine } from "../markAsMine";
@@ -115,7 +119,7 @@ import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useIsExample } from "./GettingStarted";
-import { CheckLineIcon, MineLineIcon, SearchLineIcon, SparkLineIcon } from "./lineIcons";
+import { CheckLineIcon, MineLineIcon, SearchLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
@@ -338,6 +342,7 @@ function MindEditorView({
         CopyCitations,
         FootnoteKeys,
         DocumentChipKeys,
+        ListKeys,
         MeetingNotes.configure({
           mindId,
           doc,
@@ -361,6 +366,7 @@ function MindEditorView({
         }),
         Focus.configure({ className: "has-focus", mode: "shallowest" }),
         TitleLine,
+        WordPaste,
         SmartTypography,
         SlashMenu.configure({
           items: (place) => {
@@ -546,18 +552,31 @@ function MindEditorView({
         available: (current) => holdsAiText(current.state),
         run: (current) => void markSelectionAsMine(current),
       },
-      {
-        id: "edit",
-        label: "editor.ai.edit",
-        icon: <SparkLineIcon className="size-3.5" />,
-        keys: shortcutLabel("composer.focus"),
-        available,
-        run: (current) => {
-          if (startEditing(current, mindId)) useComposer.getState().requestFocus();
-        },
-      },
     ];
   }, [mindId, doc, hasDocuments]);
+
+  useMenuEditLine(editor, mindId, readOnly);
+  const editField = useMemo(
+    (): EditWithAiField => ({
+      mindId,
+      send: (current, instruction) =>
+        void requestEdit(current, mindId, doc, "instruction", instruction, undefined, "menu"),
+      ...(reads && {
+        handOff(current: typeof editor, typed: string) {
+          if (!startEditing(current, mindId)) return;
+          const composer = useComposer.getState();
+          const draft = composer.draft(mindId).text;
+          if (typed.trim() !== "") {
+            composer.update(mindId, {
+              text: draft === "" ? typed.trim() : `${draft} ${typed.trim()}`,
+            });
+          }
+          composer.requestFocus();
+        },
+      }),
+    }),
+    [mindId, doc, reads],
+  );
 
   // When the language changes: relabel. Setting the props also redraws the placeholder,
   // and the footnotes' markers are named anew.
@@ -598,10 +617,13 @@ function MindEditorView({
   }, [asksHere, editor, doc, mindId]);
 
   // The assistant writing changes into this Mind as they come (#202): "Writing…" where the next goes.
+  // An edit asked in the selection menu changes the text in place, with no line that moves it.
   useEffect(() => {
-    setWritingPlace(editor, writingPlaceOf(mindId));
+    const placeNow = (place: ReturnType<typeof writingPlaceOf>) =>
+      useEdits.getState().pending[mindId]?.menu ? null : place;
+    setWritingPlace(editor, placeNow(writingPlaceOf(mindId)));
     return onMindWriting(({ mindId: changed, place }) => {
-      if (changed === mindId) setWritingPlace(editor, place);
+      if (changed === mindId) setWritingPlace(editor, placeNow(place));
     });
   }, [editor, mindId]);
 
@@ -737,7 +759,7 @@ function MindEditorView({
         createPortal(<CompareSheet mindId={mindId} doc={doc} editor={editor} />, sheetSlot)}
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
-      {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}
+      {!readOnly && <SelectionMenu editor={editor} ai={aiActions} edit={editField} />}
       {!readOnly && <LinkBubble editor={editor} />}
       {findShown && <FindBar editor={editor} onClose={() => useMindTools.getState().hideFind()} />}
       {outlineShown && (
