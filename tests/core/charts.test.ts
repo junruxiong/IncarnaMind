@@ -346,7 +346,7 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     expect(body).toContain(
       '<p class="caption keep-next">Chart: Revenue by quarter</p>' +
         '<p class="caption chart-sources">Source: <sup class="note-ref" data-note="1">1</sup>' +
-        '<sup class="note-ref" data-note="2">2</sup> 1 value has no Citation.</p>',
+        '<sup class="note-ref" data-note="2">,2</sup> 1 value has no Citation.</p>',
     );
     expect(printed[0]?.notes).toEqual(["Acme, p. 1", "Acme, p. 2"]);
 

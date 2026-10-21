@@ -107,6 +107,9 @@ import {
   type ThirdPartySource,
   type ToolCallApproval,
   type UnreadFile,
+  type UserAnswer,
+  type UserQuestion,
+  type UserQuestionRequest,
   type WebPageCall,
 } from "../api";
 import type { CallToDecide, ToolCallToApprove } from "../approvals";
@@ -144,6 +147,7 @@ import {
   type ToolProvider,
   type ToolProviderKind,
 } from "../tools";
+import { askTool } from "../tools/asks";
 import type { Findable } from "../tools/commands/find";
 import { type CommandRename, renamesIn } from "../tools/commands/policy";
 import type { CommandsHost } from "../tools/commands/run";
@@ -517,6 +521,10 @@ export interface AnswersOptions {
   withdrawChanges?(changes: readonly MindChange[]): void;
   /** Asking the User before a Connector Tool or a Skill script runs. */
   approvals: AnswerApprovals;
+  /** The assistant's questions to the User, in the tray (#1374). Without it, an Answer never asks. */
+  questions?: {
+    ask(request: Omit<UserQuestionRequest, "requestId">, signal: AbortSignal): Promise<UserAnswer>;
+  };
   /** Running Skill scripts. */
   scripts: AnswerScripts;
   /**
@@ -616,6 +624,7 @@ const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
   web: "web",
   minds: "minds",
   commands: "commands",
+  asks: "asks",
 };
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -1251,6 +1260,7 @@ export function createAnswers(options: AnswersOptions) {
         | "found"
         | "command"
         | "commandProblem"
+        | "asked"
       > = {},
     ) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1267,6 +1277,7 @@ export function createAnswers(options: AnswersOptions) {
       if (found.found) call.found = found.found;
       if (found.command) call.command = found.command;
       if (found.commandProblem) call.commandProblem = found.commandProblem;
+      if (found.asked) call.asked = found.asked;
       announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       input.onCall?.({ ...call });
       writeSoon();
@@ -1285,6 +1296,8 @@ export function createAnswers(options: AnswersOptions) {
     const commandsFound = new Map<string, CommandsFound>();
     const commandsDone = new Map<string, CommandDone>();
     const commandProblems = new Map<string, CommandProblem>();
+    /** The questions `ask_user` asked, by call, as they stand: for its card while it waits, and once it ends. */
+    const userQuestions = new Map<string, UserQuestion>();
     /** Keeps how a script's run went on its card. */
     const setScriptRun = (id: string, run: SkillScriptRun) => {
       const call = toolCalls.find((each) => each.id === id);
@@ -1885,6 +1898,21 @@ export function createAnswers(options: AnswersOptions) {
               failed: (toolCallId, problem) => commandProblems.set(toolCallId, problem),
             })
           : null;
+      const questions = outside ? undefined : options.questions;
+      const asking =
+        questions && input.assistant
+          ? askTool({
+              ask: (toolCallId, question, signal) =>
+                questions.ask({ ...place, answerId, toolCallId, question }, signal),
+              recorded: (toolCallId, question) => {
+                userQuestions.set(toolCallId, question);
+                const call = toolCalls.find((each) => each.id === toolCallId);
+                if (finished || !call) return;
+                call.asked = question;
+                writeSoon();
+              },
+            })
+          : null;
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -2040,6 +2068,7 @@ export function createAnswers(options: AnswersOptions) {
           ...fromWeb,
           ...(mindsTools?.tools ?? []),
           ...(commandsOffered?.tools ?? []),
+          ...(asking ? [asking] : []),
         ],
         gate,
         streamsInput,
@@ -2156,6 +2185,7 @@ export function createAnswers(options: AnswersOptions) {
             const found = commandsFound.get(event.id);
             const command = commandsDone.get(event.id);
             const commandProblem = commandProblems.get(event.id);
+            const question = userQuestions.get(event.id);
             callFinished(event.id, event.ok, event.resultCount, {
               ...(event.passages && { passages: [...event.passages] }),
               ...(event.error && { error: event.error }),
@@ -2165,6 +2195,7 @@ export function createAnswers(options: AnswersOptions) {
               ...(found && { found }),
               ...(command && { command }),
               ...(commandProblem && { commandProblem }),
+              ...(question && { asked: question }),
             });
             break;
           }
