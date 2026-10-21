@@ -7,14 +7,21 @@ How well, and how fast, the speaker pass (#138) tells a Meeting's voices apart o
 ```sh
 npm run eval:meetings:fetch            # the meeting audio set (eval/meetings, #85)
 npm run eval:speakers
-npm run eval:meetings:score -- eval/results/speakers-<time>/lines-<threshold>
+npm run eval:meetings:score -- eval/results/speakers-<time>/lines-<threshold>-<same person>
 ```
 
 - **The set:** eval/meetings' cases, online and in a room, in English, Chinese and both. Online, the pass separates the computer's sound and the microphone's lines are "Me"; in a room it separates the room's track.
-- **The lines:** cut with Silero VAD as the transcription process cuts them, then labelled by the pass's rule. That is what DER is scored on: the final labels, a line at a time. `turns-<threshold>` holds the engine's own turns, for comparison.
+- **The lines:** cut with Silero VAD as the transcription process cuts them, then labelled by the pass's rule. That is what DER is scored on: the final labels, a line at a time. `turns-…` holds the engine's own turns, for comparison.
 - **The models:** downloaded the first time into `~/.cache/incarnamind-eval/models/` (about 30 MB) and checked against the SHA-256 hashes in `src/core/transcription/speakerModel.ts`, as the app downloads them.
-- **Options:** `INCARNAMIND_EVAL_SPEAKER_CASES` picks cases by id, `INCARNAMIND_EVAL_SPEAKER_THRESHOLDS` tries clustering thresholds (`CLUSTER_THRESHOLD` is the app's), `INCARNAMIND_EVAL_SPEAKER_MINUTES` keeps only the start of each case, and `INCARNAMIND_EVAL_SPEAKER_HOUR=1` adds an hour of the room cases for the real-time factor.
+- **Options:** `INCARNAMIND_EVAL_SPEAKER_CASES` picks cases by id, `INCARNAMIND_EVAL_SPEAKER_THRESHOLDS` tries clustering thresholds (`CLUSTER_THRESHOLD` is the app's), `INCARNAMIND_EVAL_SPEAKER_SAME` how alike two voiceprints are to be one person (`SAME_PERSON`), `INCARNAMIND_EVAL_SPEAKER_MINUTES` keeps only the start of each case, and `INCARNAMIND_EVAL_SPEAKER_HOUR=1` adds an hour of the room cases for the real-time factor.
 - **Reported:** each case's voices found, labels given and time over audio, with the machine's load average, in `speakers.md`. The scorer gives DER with a 0.25 s collar, overlap scored. The hypotheses carry no text, so its word error rate means nothing here.
+
+## How the settings were chosen
+
+`CLUSTER_THRESHOLD` (1.05) and `SAME_PERSON` (0.6) in `src/core/transcription/diarization.ts` were set on the first 15 minutes of the four English cases alone (`INCARNAMIND_EVAL_SPEAKER_MINUTES=15`), on 2026-10-21. Held-out numbers are scored on the rest: the English cases from minute 15 to the end, and the Chinese and mixed cases in full.
+
+- Thresholds from 0.5 to 1.4 were tried. Below 1.0 the engine finds 7 to 15 voices in a quarter of an hour of four people; above 1.15 it merges the room's speakers.
+- Over a whole meeting the engine still splits people (9 to 16 voices for four). Joining voices whose voiceprints are at least 0.6 alike, and each voice with under 2% of the speech into the voice most like it, leaves 2 to 4. DER on the lines barely moves (14.5% to 14.3% online), but nobody reads "Speaker 9".
 
 ## The models' licences
 
