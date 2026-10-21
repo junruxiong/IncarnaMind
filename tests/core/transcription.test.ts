@@ -230,7 +230,7 @@ describe("The microphone and the computer's sound as two tracks", () => {
       tracks.add("system", tone(3000, 16_000), 0),
       tracks.add("microphone", tone(5000, 16_000), 0),
       // What the microphone heard goes out at once, its last: nothing more is waited for.
-      tracks.pauseMicrophone(),
+      tracks.pauseMicrophone(1000),
     ].filter((each) => each !== null);
     expect(before.reduce((sum, each) => sum + (each.microphone?.length ?? 0), 0)).toBe(16_000);
     expect(before.reduce((sum, each) => sum + (each.system?.length ?? 0), 0)).toBe(16_000);
@@ -249,7 +249,7 @@ describe("The microphone and the computer's sound as two tracks", () => {
   test("a microphone resumed after a long pause with nothing else playing carries on from there", () => {
     const tracks = createTracks(0);
     tracks.add("microphone", tone(5000, 16_000), 0);
-    tracks.pauseMicrophone();
+    tracks.pauseMicrophone(1000);
     expect(tracks.atMs).toBe(1000);
 
     // Ten minutes on: no block holds the pause, and the first one starts where the microphone does.
@@ -267,7 +267,7 @@ describe("The microphone and the computer's sound as two tracks", () => {
     const tracks = createTracks(0);
     tracks.add("microphone", tone(5000, 8000), 0);
     tracks.add("system", tone(3000, 8000), 0);
-    tracks.pauseMicrophone();
+    tracks.pauseMicrophone(500);
     tracks.add("system", tone(3000, 16_000), 500);
     const waiting = tracks.resumeMicrophone(1500);
     expect(waiting?.microphone).toBeNull();

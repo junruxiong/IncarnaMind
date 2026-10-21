@@ -133,9 +133,14 @@ export function createTracks(startMs: number) {
       return take(newest);
     },
 
-    /** The microphone is paused: what it heard is let out now, its last, and no block has its track until `resumeMicrophone`. */
-    pauseMicrophone(): TrackedAudio | null {
-      const audio = take(newest);
+    /**
+     * The microphone is paused at `atMs` in the Meeting's time: what it heard up to there is let
+     * out now, its last, and no block has its track until `resumeMicrophone`.
+     */
+    pauseMicrophone(atMs: number): TrackedAudio | null {
+      // Either source can be stamped a little past the press (the computer's sound runs ahead
+      // when its first frame was heard late): that goes out later, without the microphone's track.
+      const audio = take(Math.max(out, Math.min(newest, sampleAt(atMs))));
       microphonePaused = true;
       return audio;
     },

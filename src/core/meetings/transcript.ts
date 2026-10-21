@@ -66,6 +66,7 @@ import { hashBytes } from "../documents/files";
 import {
   type Cue,
   type GapReason,
+  MIN_GAP_MS,
   readVtt,
   type TranscriptGap,
   writeVtt,
@@ -234,6 +235,8 @@ export interface TranscriptsOptions {
   folderOf(meetingId: string): string | null;
   /** The Meeting's audio parts on disk. */
   partsOf(meetingId: string): AudioPart[];
+  /** Whether the Meeting's audio was deleted, by the User or after its day. */
+  audioDeleted(meetingId: string): boolean;
   /** Keeps how long decoding took for the audio it decoded, by model. */
   recordSpeed(modelId: string, ratio: number): void;
   /** Each Meeting's capture health (#161): how fast live text came, restarts, falling behind, switches. */
@@ -1008,10 +1011,11 @@ export function createTranscripts(options: TranscriptsOptions) {
     }
     const pauses = state.gaps.filter((gap) => gap.reason === "muted");
     for (const pause of pauses) covered = addRange(covered, pause);
+    const reason = options.audioDeleted(state.meetingId) ? "lost" : "uncaptured";
     let at = range.fromMs;
     for (const each of [...covered, { fromMs: range.toMs, toMs: range.toMs }]) {
-      if (each.fromMs > at)
-        state.gaps.push({ fromMs: at, toMs: Math.min(each.fromMs, range.toMs), reason: "lost" });
+      const toMs = Math.min(each.fromMs, range.toMs);
+      if (toMs - at >= MIN_GAP_MS) state.gaps.push({ fromMs: at, toMs, reason });
       at = Math.max(at, each.toMs);
     }
     if (parts.length === 0) return;
@@ -1348,14 +1352,15 @@ export function createTranscripts(options: TranscriptsOptions) {
     },
 
     /**
-     * The User paused their microphone: what it heard is let out and its stream finished, so its
-     * lines are final. Nothing is sent for it, not even silence, until `microphoneResumed`.
+     * The User paused their microphone at `atMs` in the Meeting's time: what it heard up to there
+     * is let out and its stream finished, so its lines are final. Nothing is sent for it, not even
+     * silence, until `microphoneResumed`.
      */
-    microphonePaused(meetingId: string): void {
+    microphonePaused(meetingId: string, atMs: number): void {
       const state = states.get(meetingId);
       const live = state?.live;
       if (!state || !live) return;
-      feed(state, live.tracks.pauseMicrophone());
+      feed(state, live.tracks.pauseMicrophone(atMs));
       feed(state, { atMs: live.tracks.atMs, lengthMs: 0, microphone: null, system: null });
     },
 
