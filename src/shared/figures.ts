@@ -2011,6 +2011,15 @@ const CURRENCY_HEADING = new RegExp(`[(（](${CURRENCY_TOKEN.source})[)）]`, "g
 const CURRENCY_IN = new RegExp(`(?<![A-Za-z])in (${CURRENCY_TOKEN.source})(?! ?\\d)`, "g");
 const NUMBER_CHAR = new RegExp(`[\\d\uff10-\uff19${CN_NUMERAL_CHARS}百千万亿]`);
 
+// Reading a 2 MB Document's stated units takes over a second; only these lines can state a currency.
+const UNIT_LINE =
+  /单位|币种|[(（][^)）\n]{0,12}[元币镑][)）]|[亿万千百]元|\bin (?:thousands|millions|billions)\b|'000|\b000s\b|(?:[$€£¥]|\b[A-Z]{3}) ?(?:in )?(?:m|bn|mn|k|thousands?|millions?|billions?)\b/i;
+const unitLinesOf = (text: string) =>
+  text
+    .split("\n")
+    .filter((line) => UNIT_LINE.test(line))
+    .join("\n");
+
 function besideNumber(text: string, from: number, to: number): boolean {
   const before = text
     .slice(Math.max(0, from - 2), from)
@@ -2046,7 +2055,7 @@ export function namedCurrencies(
   for (const pattern of [CURRENCY_HEADING, CURRENCY_IN]) {
     for (const match of text.matchAll(pattern)) add(currencyCodes(match[1] ?? "", settled));
   }
-  for (const stated of readStatedUnits(text, context)) {
+  for (const stated of readStatedUnits(figures ? text : unitLinesOf(text), context)) {
     if (stated.unit.kind === "currency") add([stated.unit.code]);
   }
   if (figures) {
