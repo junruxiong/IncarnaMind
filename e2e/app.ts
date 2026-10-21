@@ -798,6 +798,45 @@ export async function savedPath(window: Page, name: string): Promise<string> {
   return (await done.getAttribute("title")) ?? "";
 }
 
+/**
+ * Opens a saved page in a window of its own, in a session with the network off that records
+ * every request it is asked for (`requestsMade`), as a reader opening the file in a browser would.
+ */
+export async function openSavedPage(app: ElectronApplication, path: string): Promise<Page> {
+  const opened = app.waitForEvent("window");
+  await app.evaluate(async ({ BrowserWindow, session }, file) => {
+    const offline = session.fromPartition("saved-page", { cache: false });
+    offline.enableNetworkEmulation({ offline: true });
+    const requested: string[] = [];
+    (globalThis as { savedPageRequests?: string[] }).savedPageRequests = requested;
+    offline.webRequest.onBeforeRequest((details, callback) => {
+      requested.push(details.url);
+      callback({ cancel: !details.url.startsWith("file:") });
+    });
+    const window = new BrowserWindow({
+      width: 1100,
+      height: 760,
+      useContentSize: true,
+      // macOS keeps a window no taller than the screen otherwise, and CI's Mac has a small one.
+      enableLargerThanScreen: true,
+      webPreferences: {
+        session: offline,
+        sandbox: true,
+        contextIsolation: true,
+        backgroundThrottling: false,
+      },
+    });
+    await window.loadFile(file);
+  }, path);
+  const page = await opened;
+  await page.waitForLoadState("load");
+  return page;
+}
+
+/** Every address the page `openSavedPage` opened has asked for, the ones it was refused included. */
+export const requestsMade = (app: ElectronApplication) =>
+  app.evaluate(() => (globalThis as { savedPageRequests?: string[] }).savedPageRequests ?? []);
+
 /** The menu of the Mind's tab, opened by a right-click on the tab, as a person opens it. */
 export async function tabMenu(window: Page): Promise<Locator> {
   const tab = window.getByRole("tab", { selected: true }).first();

@@ -36,6 +36,7 @@ import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { ComparisonTableView } from "../editor/ComparisonTableView";
+import { checklistLabel } from "../editor/checklistLabel";
 import { CitationClusters } from "../editor/citationClusters";
 import { CitationNumbers, redrawFootnotes, setCitationForm } from "../editor/citationNumbers";
 import { ClaimChecks, setClaimContext } from "../editor/claimChecks";
@@ -324,6 +325,7 @@ function MindEditorView({
       shouldRerenderOnTransaction: false,
       extensions: [
         ...noteExtensions({
+          checklistLabel,
           onEditMath: setEditingMath,
           codeBlockView: ReactNodeViewRenderer(CodeBlockView),
           questionView: ReactNodeViewRenderer(QuestionView),
@@ -583,7 +585,7 @@ function MindEditorView({
   );
 
   // When the language changes: relabel. Setting the props also redraws the placeholder,
-  // and the footnotes' markers are named anew.
+  // and the footnotes' markers and checklist boxes are named anew.
   useEffect(() => {
     editor.setOptions({ editorProps: editorPropsFor(label, emptyFormula) });
     if (!editor.isDestroyed) redrawFootnotes(editor.view);
