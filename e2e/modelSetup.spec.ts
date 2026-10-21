@@ -792,7 +792,7 @@ test("with a Soniox key, the card's Meetings row says a cloud service gets the a
   expect(await transcriptionConsent(window)).toBe("not-asked");
   await route.selectOption("soniox");
   await expect(meetings.getByTestId("setup-job-meetings-value")).toHaveText("Soniox");
-  await expect(line).toHaveText("Audio goes to Soniox while you record");
+  await expect(line).toContainText("Audio goes to Soniox while you record.");
   expect(await transcriptionConsent(window)).toBe("accepted");
   await continueSetup(window);
   await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
@@ -802,7 +802,7 @@ test("with a Soniox key, the card's Meetings row says a cloud service gets the a
   const sheet = await firstRecordingSheet(window);
   const chosen = sheet.getByTestId("meeting-route");
   await expect(chosen).toContainText("Transcribe with Soniox");
-  await expect(chosen).toContainText("Audio goes to Soniox while you record");
+  await expect(chosen).toContainText("Audio goes to Soniox while you record.");
   await expect(sheet.getByTestId("meeting-route-ways")).toHaveCount(0);
   await app.close();
 });
@@ -821,7 +821,7 @@ test("with a Soniox key, Settings › Models says a cloud service gets the audio
   await expect(route).toHaveValue("");
   expect(await transcriptionConsent(window)).toBe("not-asked");
   await route.selectOption("soniox");
-  await expect(line).toHaveText("Audio goes to Soniox while you record");
+  await expect(line).toContainText("Audio goes to Soniox while you record.");
   expect(await transcriptionConsent(window)).toBe("accepted");
   await route.selectOption("local");
   await expect(line).toHaveText(CLOUD_CONSENT);

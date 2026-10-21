@@ -25,6 +25,7 @@ import type {
   TranscriptionModelFiles,
 } from "../adapters";
 import { createOpenAiStream } from "./cloud/openai";
+import { createQwenStream } from "./cloud/qwen";
 import type { CloudConnect } from "./cloud/socket";
 import { createSonioxStream } from "./cloud/soniox";
 import type { CloudStreamHandle } from "./cloud/stream";
@@ -253,6 +254,7 @@ export function serveTranscriber(
       report: streamReport,
     };
     if (config.service === "soniox") return createSonioxStream(options);
+    if (config.service === "qwen") return createQwenStream({ ...options, url: config.url });
     try {
       let made = detectors.get(config.vad);
       if (!made) {

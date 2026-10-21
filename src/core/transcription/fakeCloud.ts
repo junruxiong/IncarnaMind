@@ -1,13 +1,14 @@
 /**
  * A pretend cloud transcription service, for the tests and the smoke tests (#141): it speaks
- * enough of OpenAI's and Soniox's protocols for their adapters (./cloud) and never touches the
- * network. Soniox's side gives a line, with a speaker, for every two seconds of sound it is
- * sent; OpenAI's gives one for each turn committed. It can refuse the key, or drop the
- * connection after so much audio, as a lost network does.
+ * enough of OpenAI's, Soniox's and Qwen's protocols for their adapters (./cloud) and never
+ * touches the network. Soniox's side gives a line, with a speaker, for every two seconds of
+ * sound it is sent, and Qwen's a sentence; OpenAI's gives one for each turn committed. It can
+ * refuse the key, or drop the connection after so much audio, as a lost network does.
  */
 import { MEETING_SAMPLE_RATE } from "../adapters";
 import { OPENAI_TRANSCRIPTION_URL } from "./cloud/openai";
-import type { CloudConnect, CloudSocket } from "./cloud/socket";
+import { QWEN_REALTIME_PATH } from "./cloud/qwen";
+import { type CloudConnect, type CloudSocket, HANDSHAKE_REFUSED } from "./cloud/socket";
 
 export const FAKE_CLOUD_LINES: readonly string[] = [
   "The budget holds at one point two million.",
@@ -36,7 +37,9 @@ export function createFakeCloud(options: FakeCloudOptions = {}): CloudConnect {
 
   return (url, _apiKey, events) => {
     const openai = url === OPENAI_TRANSCRIPTION_URL;
+    const qwen = new URL(url).pathname === QWEN_REALTIME_PATH;
     let closed = false;
+    let sentences = 0;
     let sentMs = 0;
     let loudMs = 0;
     let lineStartMs: number | null = null;
@@ -92,6 +95,15 @@ export function createFakeCloud(options: FakeCloudOptions = {}): CloudConnect {
           }
           return;
         }
+        if (qwen && typeof data === "string") {
+          const { action } = (JSON.parse(data) as { header: { action: string } }).header;
+          if (action === "run-task") reply({ header: { event: "task-started" }, payload: {} });
+          if (action === "finish-task") {
+            reply({ header: { event: "task-finished" }, payload: { output: {}, usage: null } });
+            close(1000);
+          }
+          return;
+        }
         if (typeof data === "string") {
           if (data === "") {
             reply({
@@ -121,21 +133,41 @@ export function createFakeCloud(options: FakeCloudOptions = {}): CloudConnect {
           loudMs += 20;
           if (loudMs >= LINE_MS) {
             const start = lineStartMs;
-            const speaker = String((said % 2) + 1);
-            reply({
-              tokens: [
-                {
-                  text: nextLine(),
-                  start_ms: start,
-                  end_ms: frameMs + 20,
-                  is_final: true,
-                  speaker,
-                },
-                { text: "<end>", is_final: true },
-              ],
-              final_audio_proc_ms: frameMs + 20,
-              total_audio_proc_ms: frameMs + 20,
-            });
+            const end = frameMs + 20;
+            reply(
+              qwen
+                ? {
+                    header: { event: "result-generated" },
+                    payload: {
+                      output: {
+                        sentence: {
+                          begin_time: start,
+                          end_time: end,
+                          text: nextLine(),
+                          heartbeat: false,
+                          sentence_end: true,
+                          sentence_id: ++sentences,
+                          words: [],
+                        },
+                      },
+                      usage: { duration: Math.ceil(end / 1000) },
+                    },
+                  }
+                : {
+                    tokens: [
+                      {
+                        text: nextLine(),
+                        start_ms: start,
+                        end_ms: end,
+                        is_final: true,
+                        speaker: String((said % 2) + 1),
+                      },
+                      { text: "<end>", is_final: true },
+                    ],
+                    final_audio_proc_ms: end,
+                    total_audio_proc_ms: end,
+                  },
+            );
             loudMs = 0;
             lineStartMs = null;
           }
@@ -145,6 +177,11 @@ export function createFakeCloud(options: FakeCloudOptions = {}): CloudConnect {
     };
     later(() => {
       if (closed) return;
+      if (qwen && options.refuse) {
+        closed = true;
+        events.closed(HANDSHAKE_REFUSED);
+        return;
+      }
       events.open();
       if (openai && options.refuse) {
         reply({ type: "error", error: { type: "invalid_request_error", code: "invalid_api_key" } });

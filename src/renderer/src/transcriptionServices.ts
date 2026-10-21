@@ -1,6 +1,10 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import type { CloudTranscriptionRoute, TranscriptionServiceStatus } from "../../core/api";
+import type {
+  CloudTranscriptionRoute,
+  TranscriptionRoute,
+  TranscriptionServiceStatus,
+} from "../../core/api";
 import type { Language } from "../../core/language";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 import { core } from "./core";
@@ -48,6 +52,13 @@ export function useTranscriptionServicesList(): TranscriptionServiceStatus[] {
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
+export const ROUTE_LABELS: Record<TranscriptionRoute, MessageKey> = {
+  local: "meetings.route.local",
+  openai: "meetings.route.openai",
+  soniox: "meetings.route.soniox",
+  qwen: "meetings.route.qwen",
+};
+
 /** Where a Meeting's recording stays, said so it holds with a cloud route chosen too. */
 export function useAudioKeptKey(): MessageKey {
   const route = useAppStore((state) => state.settings?.device.transcriptionRoute);
@@ -61,9 +72,10 @@ export function serviceMeta(service: TranscriptionServiceStatus, t: Translate, l
   return joinMeta([
     named ? service.model : "",
     t(named ? "meetings.route.perHour" : "meetings.route.perHourFirst", { price }),
-    t(service.key === "provider" ? "meetings.route.providerKey" : "meetings.route.ownKey", {
-      service: service.name,
+    t(named ? "meetings.route.providerKey" : "meetings.route.ownKey", {
+      provider: t(ROUTE_LABELS[service.route]),
     }),
+    service.region?.[language === "zh-CN" ? "zh" : "en"] ?? "",
     service.liveSpeakers ? t("meetings.route.speakers") : "",
   ]);
 }
