@@ -7,6 +7,7 @@ import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import { currentMindIdOf } from "./layoutSlice";
 import { useAppStore } from "./store";
+import { useUndo } from "./undo";
 
 interface MeetingsState {
   meetings: Meeting[];
@@ -42,6 +43,10 @@ interface MeetingsState {
   deleteAudio(meetingId: string): Promise<void>;
   /** Tries the Meeting's Transcript again after a problem: the model's download, its engine, or saving it. */
   retryTranscript(meetingId: string): Promise<void>;
+  /** Fills the notes in from the Transcript again (#142): Try again, or after an Undo. */
+  fillNotes(meetingId: string): Promise<void>;
+  /** Takes back what filling the notes in added (#142). */
+  undoFill(meetingId: string): Promise<void>;
   openSettings(meetingId: string, source: AudioSource): Promise<void>;
   dismissGaps(meetingId: string): void;
   /** Shows or hides a Meeting's recording details; with no `shown`, the other way from now. */
@@ -144,6 +149,8 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     discard: (meetingId) => attempt(meetingId, () => core.discardMeeting(meetingId)),
     deleteAudio: (meetingId) => attempt(meetingId, () => core.deleteMeetingAudio(meetingId)),
     retryTranscript: (meetingId) => attempt(meetingId, () => core.retryTranscript(meetingId)),
+    fillNotes: (meetingId) => attempt(meetingId, () => core.fillMeetingNotes(meetingId)),
+    undoFill: (meetingId) => attempt(meetingId, () => core.undoMeetingFill(meetingId)),
     openSettings: (meetingId, source) =>
       attempt(meetingId, async () => {
         await core.openAudioSettings(source);
@@ -177,7 +184,29 @@ function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record
   return rest;
 }
 
+/** Notes just filled in go on the undo stack, as a change made for the User: ⌘Z takes them back. */
+function offerUndoOfFill(before: readonly Meeting[], after: readonly Meeting[]): void {
+  for (const meeting of after) {
+    if (meeting.fill?.state !== "filled") continue;
+    const was = before.find((each) => each.id === meeting.id)?.fill?.state;
+    if (was === undefined || was === "filled") continue;
+    useUndo.getState().push({
+      said: (t) => t("meetings.fill.filled"),
+      name: (t) => t("meetings.fill.undoName"),
+      undo: () => core.undoMeetingFill(meeting.id).then(() => undefined),
+      also: {
+        label: (t) => t("meetings.fill.show"),
+        testId: "meeting-fill-show",
+        run: () => useAppStore.getState().openMind(meeting.mindId),
+      },
+    });
+  }
+}
+
+core.on("meetings.notesShown", ({ mindId }) => useAppStore.getState().openMind(mindId));
+
 core.on("meetings.changed", (meetings) => {
+  offerUndoOfFill(useMeetings.getState().meetings, meetings);
   useMeetings.setState((state) => ({
     meetings,
     starting: Object.fromEntries(
