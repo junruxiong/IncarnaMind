@@ -655,6 +655,94 @@ test("in Settings, a key that is not the page's service goes nowhere on Add a pr
   }
 });
 
+test("Kimi is listed under International and under China, and each opens its form on that region (#1348)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    const settings = await openSettings(window, "models");
+    const region = (form: Locator) => form.getByRole("combobox", { name: /^(Region|地域)/ });
+    const open = async (group: string) => {
+      await settings.getByTestId("models-add-provider").click();
+      await settings.getByTestId("provider-directory-search").fill("kimi");
+      const tiles = settings.locator(
+        `[data-testid="provider-directory-group"][data-group="${group}"]`,
+      );
+      await tiles.locator('[data-catalog-id="kimi"]').click();
+      return region(settings.getByTestId("provider-add").getByTestId("provider-form"));
+    };
+
+    await settings.getByTestId("models-add-provider").click();
+    await settings.getByTestId("provider-directory-search").fill("kimi");
+    await expect(settings.getByTestId("provider-directory-group")).toHaveCount(2);
+    await expect(settings.getByTestId("provider-directory-group").first()).toHaveAttribute(
+      "data-group",
+      "international",
+    );
+    await settings.getByTestId("models-back").click();
+
+    await expect(await open("international")).toHaveValue("intl");
+    await settings.getByTestId("models-back").click();
+    await expect(await open("china")).toHaveValue("cn");
+    await settings.getByTestId("models-back").click();
+
+    await language(window, "zh-CN");
+    await settings.getByTestId("models-add-provider").click();
+    await settings.getByTestId("provider-directory-search").fill("kimi");
+    await expect(settings.getByTestId("provider-directory-group")).toHaveCount(2);
+    await settings.getByTestId("models-back").click();
+    await expect(await open("international")).toHaveValue("intl");
+    await settings.getByTestId("models-back").click();
+    // Popular, in Chinese, is Kimi's own region.
+    await expect(await open("popular")).toHaveValue("cn");
+  } finally {
+    await app.close();
+  }
+});
+
+test("with Kimi saved on China, only the China tile says Added and opens it, and International opens an empty form (#1348)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const saved = await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      return core.saveChatProvider({
+        kind: "kimi",
+        endpoint: "cn",
+        apiKey: "sk-not-real",
+        modelId: "kimi-k2.6",
+      });
+    });
+    const settings = await openSettings(window, "models");
+    const tile = (group: string) =>
+      settings.locator(
+        `[data-testid="provider-directory-group"][data-group="${group}"] [data-catalog-id="kimi"]`,
+      );
+    const directory = async () => {
+      await settings.getByTestId("models-add-provider").click();
+      await settings.getByTestId("provider-directory-search").fill("kimi");
+    };
+
+    await directory();
+    await expect(tile("china")).toContainText("Added");
+    await expect(tile("international")).not.toContainText("Added");
+    await tile("international").click();
+    const form = settings.getByTestId("provider-add").getByTestId("provider-form");
+    await expect(form.getByRole("combobox", { name: /^Region/ })).toHaveValue("intl");
+    await expect(form.getByLabel(/^API key/)).toHaveValue("");
+    await settings.getByTestId("models-back").click();
+
+    await directory();
+    await tile("china").click();
+    await expect(settings.getByTestId("provider-page")).toHaveAttribute(
+      "data-provider-id",
+      saved.id,
+    );
+  } finally {
+    await app.close();
+  }
+});
+
 /**
  * An OpenAI-compatible server that refuses one key and answers with the other, and answers a
  * third with Anthropic's 400 for a model that needs 30-day data retention.
