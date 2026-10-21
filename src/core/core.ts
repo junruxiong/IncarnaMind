@@ -110,7 +110,7 @@ import {
   parseListOptions,
 } from "./documents";
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
-import { pdfIsLocked, pdfOpensWith } from "./documents/extract";
+import { pdfIsLocked, pdfOpensWith, pdfTablePages } from "./documents/extract";
 import { statIdentity } from "./documents/files";
 import { openWordPackage } from "./documents/formats/docxPackage";
 import { readPageSetup } from "./documents/formats/docxPages";
@@ -1767,6 +1767,21 @@ export function createCore(adapters: CoreAdapters): Core {
     document: (documentId) => documents.get(documentId),
     onStatus: (listener) => events.on("document.status", listener),
     readText: (documentId) => documents.readText(documentId),
+    readScanned: (documentId) => documents.readScannedText(documentId),
+    async readTables(documentId) {
+      if (documents.get(documentId).kind !== "pdf") return new Map();
+      try {
+        const bytes = await readFile(await documents.filePath(documentId));
+        return await pdfTablePages(bytes, await pdfPasswords.of(documentId));
+      } catch (error) {
+        // Its text, as read for the Library, still makes the Mind: only the tables' layout is lost.
+        (adapters.log ?? silentLogger).warn("verify.tables_unread", {
+          documentId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return new Map();
+      }
+    },
     // Named so it doesn't share its Document's name in ⌘K and the sidebar.
     createMind: (title, folderId) =>
       makeMind({
