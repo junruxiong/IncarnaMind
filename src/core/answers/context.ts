@@ -63,6 +63,10 @@ const RECORDS_SHARE = 0.5;
 
 /** A Document's whole text given with the Question (./documentText): it says it is whole, so it is never cut. */
 const DOCUMENT_TEXT_BLOCK = /<document-text>[\s\S]*?<\/document-text>/g;
+export const holdsDocumentText = (messages: readonly AnswerMessage[]): boolean =>
+  messages.some(
+    (message) => message.role === "user" && message.content.includes("<document-text>"),
+  );
 const WHOLE_OR_RECORD = new RegExp(`${RECORD_BLOCK.source}|${DOCUMENT_TEXT_BLOCK.source}`, "g");
 
 interface Piece {

@@ -8,7 +8,7 @@ import type {
   Tag,
 } from "../../core/api";
 import type { MessageKey } from "../../shared/i18n";
-import { SCOPE_KINDS, type ScopeKind, scopeIds } from "../../shared/searchScope";
+import { holdsText, SCOPE_KINDS, type ScopeKind, scopeIds } from "../../shared/searchScope";
 import { buildFolderTree, flattenFolderTree } from "./folders";
 
 /** What a scope item gone without its name is called: "Deleted Folder". */
@@ -66,12 +66,6 @@ export interface ScopeChip {
 /** The most choices of one kind the picker lists at once; typing narrows them. */
 const MAX_CHOICES_PER_KIND = 50;
 
-/** Whether a search can use the Document now. */
-const searchable = (document: Document) =>
-  document.fileStatus !== "missing" &&
-  document.status !== "failed" &&
-  document.status !== "no-text";
-
 /**
  * How many Documents each Folder and Tag holds that can be searched (#764): an in-app
  * Folder's filed Documents (suggested ones too, as a search counts them), a
@@ -79,7 +73,7 @@ const searchable = (document: Document) =>
  */
 export function scopeCounts(library: ScopeLibrary): Map<string, number> {
   const counts = new Map<string, number>();
-  const live = library.documents.filter(searchable);
+  const live = library.documents.filter(holdsText);
   const liveIds = new Set(live.map((document) => document.id));
   for (const group of library.groups ?? []) {
     const filed = (library.assignments ?? []).filter(

@@ -445,6 +445,8 @@ export type AnswerEngineEvent =
   | { type: "cited-after-checking"; count: number; asked: boolean }
   /** The model's window holds only part of the Mind read with the Question: this share of it (0: none). */
   | { type: "mind-cut"; share: number }
+  /** The model's window left out the whole text of the Documents that went with the Question. */
+  | { type: "documents-dropped" }
   /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
   | { type: "quotes-retried"; retry: QuoteRetry }
   /** The model was asked once more for the figures it gave that couldn't be worked out (see ./figureRetry). */
@@ -1084,6 +1086,7 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
             return;
           }
           if (fit.mindCut !== undefined) yield { type: "mind-cut", share: fit.mindCut };
+          if (fit.documentsDropped) yield { type: "documents-dropped" };
           const sized = { ...request, messages: fit.messages };
           const window: Sized = {
             estimated: fit.estimated,
@@ -1568,6 +1571,7 @@ async function* toolLoop(
       return;
     }
     if (fit.mindCut !== undefined) yield { type: "mind-cut", share: fit.mindCut };
+    if (fit.documentsDropped) yield { type: "documents-dropped" };
     ({ messages, estimated } = fit);
     const account = budget.loop(fit.estimated);
     loop = account;

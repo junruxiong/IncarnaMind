@@ -10,6 +10,7 @@ import {
 } from "../../../../core/providers/catalog/providers";
 import { OLLAMA_CLOUD } from "../../../../core/providers/ollamaCloud";
 import { isSignInRoute, SIGN_IN_ROUTES } from "../../../../core/providers/signInRoutes";
+import { checkApiKey } from "../../../../shared/apiKey";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -87,14 +88,18 @@ function hostOf(baseUrl: string): string | null {
 /**
  * An API key field that keeps a key only for the provider and server it was
  * typed for, so it is never sent to another: choosing another provider clears
- * it, and so does leaving the address field pointing at another host.
+ * it, and so does leaving the address field pointing at another host. `text`
+ * is the key as it is sent, and `stray` the character in it that keys don't use.
  */
 export function useProviderKey() {
   const [apiKey, setApiKey] = useState("");
   /** The host the address field held when the key was typed, if it held one. */
   const typedFor = useRef<string | null>(null);
+  const { key: text, stray } = checkApiKey(apiKey);
   return {
     apiKey,
+    text,
+    stray,
     /** The key as typed, with the server address the form holds now. */
     type(value: string, baseUrl = "") {
       setApiKey(value);
