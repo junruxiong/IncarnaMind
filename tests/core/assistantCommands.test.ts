@@ -364,7 +364,7 @@ describe("Commands that reach outside IncarnaMind wait for the User (#1110)", {
     expect((await readdir(output)).sort()).toEqual(["Tides 2.docx", "Tides.docx"]);
     // The second export, with the answer already kept, still says how the text was marked.
     expect(lastResult(model)).toContain(
-      `${kept === "mark" ? "is marked with comments" : "is left unmarked"} in this file, as the User chose before for every Word export`,
+      `${kept === "mark" ? "marks the text IncarnaMind wrote with comments" : "leaves the text IncarnaMind wrote unmarked"}, following the answer the User saved for Word exports`,
     );
     expect(commandCalls(answer).map((call) => call.status)).not.toContain("failed");
     expect(commandCalls(answer).find((call) => call.asked)?.asked?.answer).toMatchObject({
@@ -407,7 +407,7 @@ describe("Commands that reach outside IncarnaMind wait for the User (#1110)", {
     expect(asked).toEqual([]);
     // The second request names the other choice: followed for that file, the kept answer unchanged.
     expect(lastResult(model)).toContain(
-      "is marked with comments in this file, as the User asked for this file",
+      "marks the text IncarnaMind wrote with comments, as the User asked for it; their saved answer for Word exports is unchanged",
     );
     expect((await core.getSettings()).user.exportOptions.docx.markAiText).toBe("leave");
     expect((await readdir(output)).sort()).toEqual(["Tides 2.docx", "Tides.docx"]);

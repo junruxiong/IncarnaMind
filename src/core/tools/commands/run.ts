@@ -183,16 +183,21 @@ export function commandEffects(input: Record<string, unknown>): Effect[] {
 const plural = (count: number, one: string, many = `${one}s`) =>
   `${count} ${count === 1 ? one : many}`;
 
-const markingSaid = (marking: MarkingSettled | null): string =>
-  marking === null
-    ? ""
-    : ` The text IncarnaMind wrote ${marking.choice === "mark" ? "is marked with comments" : "is left unmarked"} in this file, as the User ${
-        marking.how === "kept"
-          ? "chose just now, and that choice is kept for every Word export"
-          : marking.how === "this-file"
-            ? "asked for this file"
-            : "chose before for every Word export"
-      }.`;
+const markingSaid = (marking: MarkingSettled | null): string => {
+  if (marking === null) return "";
+  const leaves =
+    marking.choice === "mark"
+      ? "marks the text IncarnaMind wrote with comments"
+      : "leaves the text IncarnaMind wrote unmarked";
+  switch (marking.how) {
+    case "kept":
+      return ` This file ${leaves}, as the User answered when asked; that answer is saved for every Word export.`;
+    case "this-file":
+      return ` This file ${leaves}, as the User asked for it; their saved answer for Word exports is unchanged.`;
+    case "earlier":
+      return ` This file ${leaves}, following the answer the User saved for Word exports.`;
+  }
+};
 
 const same = (a: string, b: string) =>
   a.normalize("NFKC").trim().toLowerCase() === b.normalize("NFKC").trim().toLowerCase();
