@@ -121,7 +121,6 @@ export function createMindIndex(options: {
 }) {
   const { db, now, content } = options;
   const dirty = new Set<string>();
-  // Null until Home first asks for the lines.
   let leading: Map<string, LeadingLine[]> | null = null;
   /** The Minds the walk has still to read; null until they are looked up. */
   let unread: string[] | null = null;

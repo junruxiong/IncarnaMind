@@ -60,7 +60,6 @@ registerMenu("document", [
 
 registerMenu("folder", [
   "folder.open",
-  "folder.openTab",
   "folder.newMind",
   "folder.new",
   "folder.ask",

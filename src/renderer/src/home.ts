@@ -97,16 +97,3 @@ export function homeClick(select: { onClick(event: MouseEvent): void }, open: ()
     open();
   };
 }
-
-/** A middle click opens it in a new tab behind Home, which stays in front. */
-export function homeMiddleClick(open: () => void) {
-  return {
-    onMouseDown(event: MouseEvent) {
-      // No autoscroll.
-      if (event.button === 1) event.preventDefault();
-    },
-    onAuxClick(event: MouseEvent) {
-      if (event.button === 1) open();
-    },
-  };
-}

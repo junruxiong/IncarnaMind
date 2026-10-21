@@ -179,7 +179,8 @@ export interface AppState extends LayoutSlice {
   refreshLibrary(): Promise<void>;
   /**
    * Shows the Library (one tab per window), at a Folder's section if given:
-   * its tab where it is open, else a new tab in the focused group, or to the side.
+   * its tab where it is open, else a new tab in the focused group, to the side,
+   * or behind the one shown.
    */
   openLibrary(filter?: string, options?: { side?: boolean; behind?: boolean }): void;
   /**
@@ -286,9 +287,8 @@ export interface AppState extends LayoutSlice {
   /**
    * Shows a Mind: its tab where it is open, else a new tab in the focused
    * group after the shown one; with `newTab`, a new tab in the focused group
-   * even where it is open.
+   * even where it is open; with `behind`, a new tab that stays behind the one shown.
    */
-  /** `behind`: in a new tab behind the one shown, as a middle-click opens it. */
   openMind(id: string, options?: { newTab?: boolean; behind?: boolean }): void;
   /** Closes a tab, offering to reopen it; if it was shown, the tab after it (or else before it) is. */
   closeTab(tabId: string): void;

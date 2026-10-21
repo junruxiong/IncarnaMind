@@ -332,16 +332,6 @@ export const folderCommands: readonly Command[] = [
     run: (ctx) => store().openLibrary(idsOf(ctx, "folder")[0]),
   },
   {
-    id: "folder.openTab",
-    label: "mind.openTab",
-    group: "open",
-    appliesTo: ["folder"],
-    when: onlyOne,
-    reversible: true,
-    // The Library has one tab per window: a new one where it isn't open yet, else that tab.
-    run: (ctx) => store().openLibrary(idsOf(ctx, "folder")[0]),
-  },
-  {
     id: "folder.newMind",
     label: "folder.newMindHere",
     group: "main",

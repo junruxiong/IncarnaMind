@@ -623,7 +623,9 @@ class WindowState {
     this.openedBehind = null;
     switch (change.type) {
       case "open":
-        this.openedBehind = open(layout, change, newId, openedBehind);
+        // One already open, opened behind again, leaves the run of tabs opened behind as it was.
+        this.openedBehind =
+          open(layout, change, newId, openedBehind) ?? (change.behind ? openedBehind : null);
         break;
       case "show": {
         const { group, tab } = requireTab(layout, change.tabId);

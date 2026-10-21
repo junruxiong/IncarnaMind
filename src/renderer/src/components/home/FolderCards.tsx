@@ -7,9 +7,10 @@ import { timeAgo } from "../../dates";
 import { useDropTarget } from "../../dragDrop";
 import { useFolderContents } from "../../folderContents";
 import { folderTarget } from "../../folderDrag";
-import { homeClick, homeMiddleClick } from "../../home";
+import { homeClick } from "../../home";
 import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
+import { onMiddleClick } from "../../middleClick";
 import { useSelectable } from "../../selection";
 import { useAppStore } from "../../store";
 import { useRename } from "../../useRename";
@@ -147,7 +148,7 @@ function FolderCard({
             data-row-main
             data-testid="home-folder-open"
             onClick={homeClick(select, open)}
-            {...homeMiddleClick(() => openLibrary(folder.id, { behind: true }))}
+            {...onMiddleClick(() => openLibrary(folder.id, { behind: true }))}
             onKeyDown={rename.nameProps.onKeyDown}
             // The whole card is what a click on it opens.
             className="min-w-0 flex-1 truncate rounded-sm text-left after:absolute after:inset-0 after:rounded-[10px]"

@@ -2353,7 +2353,7 @@ export function createCore(adapters: CoreAdapters): Core {
     library,
     mindsChanged,
     mindsRestored: (mindIds) => {
-      // Its lines left the index's memory with it, and nothing stores to it on the way back.
+      // A Mind deleted before a restart has no lines in the index's memory, and a restore stores nothing.
       for (const mindId of mindIds) mindIndex.contentStored(mindId);
       wordImports.resume(mindIds);
     },

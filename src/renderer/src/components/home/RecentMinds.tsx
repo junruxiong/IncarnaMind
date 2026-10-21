@@ -2,8 +2,9 @@ import { useRef } from "react";
 import type { Mind } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
 import { timeAgo } from "../../dates";
-import { homeClick, homeMiddleClick, useHomeView, useMindSnippets, useOwnMinds } from "../../home";
+import { homeClick, useHomeView, useMindSnippets, useOwnMinds } from "../../home";
 import { useLanguage, useT } from "../../i18n";
+import { onMiddleClick } from "../../middleClick";
 import { useSelectable } from "../../selection";
 import { moveFromMenu } from "../../sidebarMoves";
 import { useAppStore } from "../../store";
@@ -97,7 +98,7 @@ function RecentRow({ mind, snippet, now }: { mind: Mind; snippet?: string; now: 
           data-testid="home-recent-open"
           title={title}
           onClick={homeClick(select, () => openMind(mind.id))}
-          {...homeMiddleClick(() => openMind(mind.id, { behind: true }))}
+          {...onMiddleClick(() => openMind(mind.id, { behind: true }))}
           onKeyDown={rename.nameProps.onKeyDown}
           className="flex min-h-[52px] min-w-0 flex-1 items-center gap-3 rounded-sm py-1.5 pr-1 pl-2 text-left -outline-offset-2"
         >

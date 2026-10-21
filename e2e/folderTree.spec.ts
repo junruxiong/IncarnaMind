@@ -354,7 +354,6 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     const folderActions = renamed.getByTestId("folder-actions");
     await expect(folderActions.getByRole("menuitem")).toHaveText([
       /^Open in the Library$/,
-      /^Open in new tab$/,
       /^New Mind here$/,
       /^New Folder(⇧⌘N|Ctrl\+Shift\+N)$/,
       /^Organize this Folder$/,

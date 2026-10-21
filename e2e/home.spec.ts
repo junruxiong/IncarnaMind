@@ -524,7 +524,7 @@ for (const [language, width] of [
       await card("Finance").click({ button: "right", position: { x: 40, y: 90 } });
       expect((await menuIds(card("Finance").getByTestId("folder-actions"))).slice(0, 2)).toEqual([
         "folder.open",
-        "folder.openTab",
+        "folder.newMind",
       ]);
       await window.keyboard.press("Escape");
 
@@ -540,3 +540,45 @@ for (const [language, width] of [
     }
   });
 }
+
+test("Home beside a Mind follows it as it is saved, and tabs opened behind Home keep the order they were clicked in", async () => {
+  let { app, window } = await launchApp(dataDir);
+  await makeMinds(window, ["Ideas", "Tides", "Moorings"]);
+  await app.close();
+  ({ app, window } = await launchApp(dataDir));
+  try {
+    await setWindowSize(app, window, 1440, 900);
+    await expectHomeInFront(window);
+    for (const title of ["Moorings", "Tides", "Ideas"]) {
+      await recentRow(window, title).getByTestId("home-recent-open").click({ button: "middle" });
+    }
+    await expect(window.getByRole("tab").getByTestId("tab-title")).toHaveText([
+      "Home",
+      "Moorings",
+      "Tides",
+      "Ideas",
+    ]);
+    await expectHomeInFront(window);
+
+    await window.getByTestId("split-group").click();
+    await expect(window.getByTestId("tab-group")).toHaveCount(2);
+    await expect(window.getByTestId("home")).toBeVisible();
+    const editor = window.locator('[data-testid="mind-pane"]:visible .mind-editor');
+    await expect(editor).toHaveCount(1);
+    const title = editor.locator("h1");
+    const titleBox = await title.boundingBox();
+    await title.click({
+      position: { x: (titleBox?.width ?? 2) - 2, y: (titleBox?.height ?? 2) / 2 },
+    });
+    await window.keyboard.press("Enter");
+    await window.keyboard.type("Harbour dues are due on the first of June.");
+    const shownTitle = await window
+      .locator('[data-testid="mind-tab"][aria-selected="true"] [data-testid="tab-title"]')
+      .textContent();
+    await expect(recentRow(window, shownTitle ?? "").getByTestId("home-recent-snippet")).toHaveText(
+      "Harbour dues are due on the first of June.",
+    );
+  } finally {
+    await app.close();
+  }
+});
