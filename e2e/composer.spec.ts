@@ -634,10 +634,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
 
     // In Chinese.
     await bridge(window).language("zh-CN");
-    await expect(window.getByTestId("composer-input")).toHaveAttribute(
-      "placeholder",
-      "提问，或说明要修改的内容…",
-    );
+    await expect(window.getByTestId("composer-input")).toHaveAttribute("placeholder", "追问…");
     await pointAndClick(window, window.getByTestId("composer-model"));
     const menuZh = window.getByTestId("composer-model-menu");
     await expect(menuZh.getByRole("group", { name: "在本机运行" })).toBeVisible();
