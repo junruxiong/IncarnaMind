@@ -32,7 +32,6 @@ const MIN_THREAD_ASKING = 40;
 
 const ALLOW_KEYS = "CmdOrCtrl+Enter";
 
-/** How much taller the question's card is than it is drawn: its head and its rows, up to their cap. */
 function hiddenIn(card: HTMLElement): number {
   const head = card.querySelector<HTMLElement>(".approval-head");
   const options = card.querySelector<HTMLElement>(".choice-options");
@@ -177,8 +176,9 @@ function TaskAskView({ task }: { task: Task }) {
  * waiting ask (a Task's, else the assistant's question in the open
  * conversation, #1374), then queued messages, which wrap. Progress is in the thread
  * (`TaskProgress`). The plan card is Research's (#130). It takes at most 40%
- * of the column, and at least room for the ask's buttons; the ask scrolls
- * inside with its buttons pinned. Nothing in it goes into the Mind.
+ * of the column, a question all the column's room (#1400), and at least room
+ * for the ask's buttons; the ask scrolls inside with its buttons pinned.
+ * Nothing in it goes into the Mind.
  */
 export function TaskTray({ mindId }: { mindId: string | null }) {
   const t = useT();
@@ -244,7 +244,7 @@ export function TaskTray({ mindId }: { mindId: string | null }) {
     }
     return () => {
       observer.disconnect();
-      if (choosing) useQuestionRoom.setState({ fits: null });
+      if (choosing) useQuestionRoom.setState({ fits: null, resized: false });
     };
   }, [present, choosing]);
 

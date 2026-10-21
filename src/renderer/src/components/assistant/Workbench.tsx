@@ -92,7 +92,7 @@ export function Workbench({
   const groups = useMemo(() => <TabGroups />, []);
 
   const width = sideWidth(shown.width, room.width);
-  const fits = useQuestionRoom((state) => state.fits);
+  const fits = useQuestionRoom((state) => (state.resized ? null : state.fits));
   const ownHeight = bottomHeight(shown.height, room.height);
   const height =
     fits !== null && dock === "bottom" && !folded
@@ -123,8 +123,15 @@ export function Workbench({
   /** Room the assistant takes from the card on its side, for what the window draws there. */
   const beside = quiet ? 0 : side ? (folded ? RAIL : width) + GAP : 0;
 
-  const resize = (next: Partial<AssistantPlace>) => setPreview(next);
+  const resizedNow = () => {
+    if (useQuestionRoom.getState().fits !== null) useQuestionRoom.setState({ resized: true });
+  };
+  const resize = (next: Partial<AssistantPlace>) => {
+    resizedNow();
+    setPreview(next);
+  };
   const keep = (next: Partial<AssistantPlace>) => {
+    resizedNow();
     setPreview(null);
     void placeAssistant(next);
   };

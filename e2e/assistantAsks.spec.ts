@@ -302,6 +302,41 @@ for (const [language, asked, more, less] of [
   }
 }
 
+for (const how of ["keys", "drag"] as const) {
+  test(`resizing the grown dock while a question waits sets the User's own height, which it keeps after Skip (${how})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setUpFour(app, window, "en", 700);
+    const assistant = window.getByTestId("assistant");
+    const own = await heightOf(assistant);
+
+    const card = await ask(window, "Summarise the main documents for the board");
+    await expect.poll(() => heightOf(assistant)).toBeGreaterThan(own);
+    const grown = await heightOf(assistant);
+    const rod = window.getByTestId("assistant-resize");
+    if (how === "keys") {
+      await rod.focus();
+      await window.keyboard.press("ArrowDown");
+    } else {
+      const box = await rod.boundingBox();
+      if (!box) throw new Error("No resize line.");
+      await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await window.mouse.down();
+      await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 60, { steps: 6 });
+      await window.mouse.up();
+    }
+    await expect.poll(() => heightOf(assistant)).toBeLessThan(grown);
+    const chosen = await heightOf(assistant);
+    expect(chosen).toBeGreaterThan(own);
+
+    await pointAndClick(window, card.getByTestId("question-skip"));
+    await expect(card).toHaveCount(0);
+    await expect.poll(() => heightOf(assistant)).toBe(chosen);
+    await app.close();
+  });
+}
+
 test("with the assistant at the side, a long question shows every described row and Other, as the prototype does", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
