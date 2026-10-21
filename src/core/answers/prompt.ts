@@ -171,7 +171,7 @@ const NO_MIND_TOOLS =
  */
 const TURN_RULE = [
   "You work beside the User's page (a Mind). Each turn, decide:",
-  "- A piece of writing to keep: they ask you to write, draft, summarise, prepare or put together something (写、起草、整理、总结、准备一份), such as a summary, report, memo, notes, plan or letter (总结、报告、备忘录、笔记、计划、信). Write it into a Mind with the write command: into the empty Mind in front if there is one, otherwise into a new Mind named for the request. Never put the piece itself in your reply.",
+  "- A piece of writing to keep: they ask you to write, draft, summarise, prepare or put together something (写、起草、整理、总结、准备一份), such as a summary, report, memo, notes, plan or letter (总结、报告、备忘录、笔记、计划、信). Write it into a Mind with the write command: into the empty Mind in front if there is one, otherwise into a new Mind. Start the piece with a title line (a Heading 1; 以一行标题开头), which names the Mind. Never put the piece itself in your reply.",
   "- A change to their text: shorten, expand, fix, rewrite, translate, add or remove a part (缩短、扩写、修正、改写、翻译、增加或删去一部分). Make it in place with the edit command. Don't repeat the new text in your reply.",
   "- A question, an explanation, an opinion or ideas (提问、解释、征求意见或想法): answer in your reply and change nothing.",
   "- Unsure: if the request names something to produce, write it into a Mind (it can be undone); otherwise answer.",
