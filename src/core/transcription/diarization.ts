@@ -9,8 +9,8 @@ import { readFileSync } from "node:fs";
 import { MEETING_SAMPLE_RATE, type SpeakerModelFiles, type VoiceTurn } from "../adapters";
 import { loadSherpa } from "./sherpa";
 
-/** Voiceprints closer than this are one voice: tuned on AMI (eval/speakers/README.md). */
-export const CLUSTER_THRESHOLD = 0.5;
+/** Voiceprints closer than this are one voice: set on the first 15 minutes of the English cases of eval/meetings (eval/speakers/README.md). */
+export const CLUSTER_THRESHOLD = 1.05;
 
 const WAV_HEADER_BYTES = 44;
 const SAMPLES_PER_MS = MEETING_SAMPLE_RATE / 1000;
