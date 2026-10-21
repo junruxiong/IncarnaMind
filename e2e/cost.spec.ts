@@ -96,7 +96,7 @@ for (const language of ["en", "zh-CN"] as const) {
       const message =
         language === "en"
           ? "Enter an amount from 0 to 1,000,000. The active cap is still $20.00."
-          : "请输入 0 到 1,000,000 之间的金额。当前上限仍为 ¥150.00。";
+          : "输入 0 到 1,000,000 之间的金额。当前上限仍为 ¥150.00。";
       await expect(amount).toHaveValue(String(initial.amount));
 
       await amount.fill("-1");

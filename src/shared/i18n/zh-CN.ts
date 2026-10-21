@@ -2718,7 +2718,7 @@ export const zhCN = {
   "cost.cap.interrupted.one": "有 1 次请求被中断，费用未知。",
   "cost.cap.interrupted": "有 {count} 次请求被中断，费用未知。",
   "cost.cap.amount": "每月上限",
-  "cost.cap.problem": "请输入 0 到 {max} 之间的金额。当前上限仍为 {cap}。",
+  "cost.cap.problem": "输入 0 到 {max} 之间的金额。当前上限仍为 {cap}。",
   "cost.cap.currency": "币种",
   "cost.provider.thisMonth": "本月已花 {spent}",
   "cost.setAside": "进行中的任务预留 {amount}",
