@@ -522,8 +522,8 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
   const push = (change: Undoable) => useUndo.getState().push(change);
-  /** Moves to Recently deleted those of `ids` still there on their own: one deleted since, or taken by a Linked folder, is left. */
   const removeOwn = async (ids: readonly string[]): Promise<RestoreRef[]> => {
+    // One deleted since, or taken over by a Linked folder, is no longer this add's.
     const own = new Set(
       (await core.listDocuments({ linkedFolderId: null })).map((each) => each.id),
     );
