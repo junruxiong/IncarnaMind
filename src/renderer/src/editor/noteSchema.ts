@@ -31,6 +31,7 @@ import {
   TextFont,
   TextSize,
 } from "./formatSchema";
+import { Numbering } from "./numbering";
 import { ProposalAttributes, ProposalDelete, ProposalInsert } from "./proposalSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
 import {
@@ -146,6 +147,7 @@ export function noteExtensions({
       dropcursor: { color: "rgb(14 165 233)", width: 2 },
     }),
     MindDocument,
+    Numbering,
     // One colour: a `highlight` mark with no attributes. Mod-Shift-H, or `==text==` typed or pasted.
     Highlight,
     CodeBlock.configure({ lowlight }),
