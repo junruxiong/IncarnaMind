@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -521,5 +522,129 @@ describe("Scanned pages are read on this computer (#397)", { timeout: 60_000 }, 
     // The pages read before the pause weren't read again; only the one under way could be.
     expect(new Set(read)).toEqual(new Set([1, 2, 3, 4]));
     expect(read.filter((page) => page <= 2)).toEqual([1, 2]);
+  });
+});
+
+describe("Pages read before a quit or a crash are kept (#1504)", { timeout: 60_000 }, () => {
+  const PAGES = [1, 2, 3, 4];
+  const script: FakeScanScript = {
+    pages: Object.fromEntries(
+      PAGES.map((page) => [page, { lines: [`Page ${page} of the lease.`] }]),
+    ),
+  };
+
+  /** A recognizer that reads up to `stopAfter` pages, then holds the next until the test ends. */
+  function recognizerHolding(stopAfter: number) {
+    const fake = createFakeTextRecognizer({ script });
+    const read: number[] = [];
+    const recognizer: TextRecognizer = {
+      load: (files) => fake.load(files),
+      read: async (picture, page): Promise<RecognizedLine[]> => {
+        read.push(page);
+        if (read.length > stopAfter) await new Promise(() => {});
+        return fake.read(picture, page);
+      },
+      readFile: (file, page) => fake.readFile(file, page),
+      close: () => fake.close(),
+    };
+    return { recognizer, read };
+  }
+
+  /** Adds a four-page scan and quits, in good order, once `pages` of it are read. */
+  async function quitMidway(dataDir: string, pages: number) {
+    const first = recognizerHolding(pages);
+    const core = startCore(dataDir, scanning(first.recognizer));
+    const sources = await createSourceFolder();
+    const file = await writeSourceFile(
+      sources,
+      "Lease scan.pdf",
+      buildPdf(PAGES.map(() => ({ scan: picture("en-clean") }))),
+    );
+    const {
+      documents: [document],
+    } = await core.addDocuments([file]);
+    if (!document) throw new Error("The scan wasn't added.");
+    await waitForDocuments(core, (documents) => {
+      const scan = documents.find((each) => each.id === document.id)?.scan;
+      expect(scan?.read).toBe(pages);
+    });
+    core.close();
+    return { document, file, firstRead: first.read };
+  }
+
+  const liveUnits = (dataDir: string, id: string) =>
+    queryDatabase<{ page: number; text: string }>(
+      dataDir,
+      `SELECT page, text FROM document_pages WHERE document_id = ? AND deleted_at IS NULL ORDER BY page`,
+      [id],
+    );
+
+  // protects=after a quit mid-scan, the next start goes on from the first unread page, and no page is read twice or stored twice; fails_when=it starts again from page 1, or a page is doubled; no_claim=the page under way at the quit, which is read again.
+  test("after a quit, the scan goes on from the first unread page", async () => {
+    const dataDir = await createTempDataFolder();
+    const { document } = await quitMidway(dataDir, 2);
+
+    const second = countingRecognizer(script);
+    const core = startCore(dataDir, scanning(second.recognizer));
+    try {
+      const [ready] = await waitForProcessing(core, [document.id]);
+      expect(ready?.status).toBe("ready");
+      expect(second.read).toEqual([3, 4]);
+      expect(liveUnits(dataDir, document.id).map((unit) => unit.page)).toEqual(PAGES);
+      expect(liveUnits(dataDir, document.id).map((unit) => unit.text)).toEqual(
+        PAGES.map((page) => `Page ${page} of the lease.`),
+      );
+      expect(
+        await core.searchPassages("Page 1 of the lease", { mode: "keyword" }),
+      ).not.toHaveLength(0);
+    } finally {
+      core.close();
+    }
+  });
+
+  // protects=after a crash mid-scan, the Document says the app stopped while it was read, and Retry reads only the pages not yet read; fails_when=Retry starts from page 1; no_claim=why the app stopped.
+  test("after a crash, the Document says why, and Retry reads only what wasn't read", async () => {
+    const dataDir = await createTempDataFolder();
+    const { document } = await quitMidway(dataDir, 3);
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run("UPDATE documents SET status = 'extracting' WHERE id = ?", [document.id]);
+    } finally {
+      db.close();
+    }
+
+    const second = countingRecognizer(script);
+    const core = startCore(dataDir, scanning(second.recognizer));
+    try {
+      const stopped = (await core.listDocuments()).find((each) => each.id === document.id);
+      expect(stopped).toMatchObject({ status: "failed", failure: { reason: "app-stopped" } });
+      await core.retryDocument(document.id);
+      const [ready] = await waitForProcessing(core, [document.id]);
+      expect(ready?.status).toBe("ready");
+      expect(second.read).toEqual([4]);
+      expect(liveUnits(dataDir, document.id).map((unit) => unit.page)).toEqual(PAGES);
+    } finally {
+      core.close();
+    }
+  });
+
+  // protects=pages read of a version the file no longer is are never used for the new one; fails_when=the new version keeps the old version's pages; no_claim=none beyond protects.
+  test("a file changed after the quit is read from its first page", async () => {
+    const dataDir = await createTempDataFolder();
+    const { document, file } = await quitMidway(dataDir, 2);
+    await writeFile(file, buildPdf(PAGES.map(() => ({ scan: picture("zh-clean") }))));
+
+    const second = countingRecognizer(script);
+    const core = startCore(dataDir, scanning(second.recognizer));
+    try {
+      const [ready] = await waitForProcessing(core, [document.id]);
+      expect(ready?.status).toBe("ready");
+      // Each page of the new version is read: none is kept from the old one. The start reads
+      // the file as found, and its check for changed files may read the first page again.
+      expect(new Set(second.read)).toEqual(new Set(PAGES));
+      expect(unitsOf(dataDir, ready as Document).map((unit) => unit.page)).toEqual(PAGES);
+    } finally {
+      core.close();
+    }
   });
 });

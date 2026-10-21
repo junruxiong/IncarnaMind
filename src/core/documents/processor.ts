@@ -22,7 +22,11 @@ import startDocumentWorker from "./worker?nodeWorker";
 
 export interface ProcessorHandlers {
   /** A processing job is about to go to the worker. */
-  onStart(job: ProcessingJob): void;
+  /**
+   * A processing job is about to go to the worker: returns it as it starts, if that has
+   * changed since it was queued (the scanned pages it keeps).
+   */
+  onStart(job: ProcessingJob): ProcessingJob | undefined;
   onResult(job: ProcessingJob, result: ProcessingResult): void;
   onMetadata(job: MetadataJob, result: MetadataResult): void;
   /**
@@ -176,12 +180,18 @@ export function createProcessor(
   function pump(): void {
     pumpScheduled = false;
     if (closed || current) return;
-    const job = take();
+    let job = take();
     if (!job) return;
+    if (job.task === "process") {
+      try {
+        job = handlers.onStart(job) ?? job;
+      } catch (error) {
+        reportError(error);
+      }
+    }
     const id = nextId++;
     const started = { id, job, posted: false, stopped: false };
     current = started;
-    if (job.task === "process") call(() => handlers.onStart(job));
     worker ??= startWorker();
     const running = worker;
     const send = (password: string | undefined) => {
