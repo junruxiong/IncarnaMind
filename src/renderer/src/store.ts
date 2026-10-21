@@ -37,14 +37,7 @@ import { type MessageKey, type MessageParams, translate } from "../../shared/i18
 import { mindName } from "../../shared/naming";
 import { filingFolder } from "../../shared/searchScope";
 import { tagLinks } from "../../shared/tagLinks";
-import {
-  deleted,
-  folderLinked,
-  linkedFolderPaused,
-  linkedFolderShown,
-  renamed,
-  retagged,
-} from "./changes";
+import { deleted, folderLinked, linkedFolderPaused, renamed, retagged } from "./changes";
 import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
@@ -368,11 +361,6 @@ export interface AppState extends LayoutSlice {
   cancelLinkedFolder(): void;
   /** Pauses or resumes a Linked folder's indexing, with Undo. Resolves to that change, if it changed anything. */
   setLinkedFolderPaused(linkedFolderId: string, paused: boolean): Promise<Undoable | undefined>;
-  /** Shows a Linked folder as Folders or as a flat list, with Undo. Resolves to that change, if it changed anything. */
-  setLinkedFolderLayout(
-    linkedFolderId: string,
-    layout: LinkedFolderLayout,
-  ): Promise<Undoable | undefined>;
   /** Downloads a Linked folder's online-only files and indexes them. */
   downloadOnlineOnlyFiles(linkedFolderId: string): Promise<void>;
   /** Shows a Linked folder in the system's file manager. */
@@ -1573,23 +1561,6 @@ export const useAppStore = create<AppState>()((set, get) => {
         await setPaused(paused);
         if (before && (before.status === "paused") !== paused) {
           change = linkedFolderPaused(linkedFolderName(before.path), paused, setPaused);
-          push(change);
-        }
-      });
-      return change;
-    },
-
-    setLinkedFolderLayout: async (linkedFolderId, layout) => {
-      let change: Undoable | undefined;
-      await attempt(async () => {
-        const before = get().linkedFolders.find((each) => each.id === linkedFolderId);
-        const setLayout = async (to: LinkedFolderLayout) => {
-          showLinked(await core.setLinkedFolderLayout(linkedFolderId, to));
-        };
-        await setLayout(layout);
-        if (before && before.layout !== layout) {
-          const layouts = { before: before.layout, after: layout };
-          change = linkedFolderShown(linkedFolderName(before.path), layouts, setLayout);
           push(change);
         }
       });
