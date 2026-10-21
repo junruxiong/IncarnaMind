@@ -1,0 +1,66 @@
+import { describe, expect, test } from "vitest";
+import { writtenNumbers } from "../../src/core/transcription/spokenNumbers";
+
+/*
+ * A transcript writes numbers one way (#1508): digits for figures, percentages, money and dates,
+ * so a check of "6.8%" finds the line that says "six point eight percent".
+ */
+
+describe("English numbers in a transcript", () => {
+  test.each([
+    ["one hundred and twenty eight thousand four hundred shipments", "128,400 shipments"],
+    ["nine point three percent", "9.3%"],
+    ["six point eight percent to eighteen point four million", "6.8% to 18.4 million"],
+    ["four hundred and twelve to three hundred and thirty-seven", "412 to 337"],
+    ["the thirtieth of November", "the 30th of November"],
+    ["on November twenty-first", "on November 21st"],
+    ["a hundred percent sure", "100% sure"],
+    ["it cost twelve million dollars", "it cost 12 million dollars"],
+    ["five dollars and fifty cents", "5 dollars and 50 cents"],
+    ["in twenty twenty-five and nineteen ninety-nine", "in 2025 and 1999"],
+    ["two million", "2 million"],
+  ])("%s is %s", (said, written) => {
+    expect(writtenNumbers(said)).toBe(written);
+  });
+
+  test("digits already there stay, and so does a small number in running speech", () => {
+    expect(writtenNumbers("Sales were 128,400, up 9.3%.")).toBe("Sales were 128,400, up 9.3%.");
+    expect(writtenNumbers("one of the two of us waited five minutes")).toBe(
+      "one of the two of us waited five minutes",
+    );
+    expect(writtenNumbers("on the first day of the year, none came")).toBe(
+      "on the first day of the year, none came",
+    );
+  });
+
+  test("the whole clip of the issue is written one way, and 6.8% is in it", () => {
+    const said =
+      "one hundred and twenty eight thousand four hundred shipments, nine point three percent, " +
+      "six point eight percent to eighteen point four million, four hundred and twelve to " +
+      "three hundred and thirty seven, the thirtieth of November, 96.2% and 41%";
+    const written = writtenNumbers(said);
+    expect(written).toBe(
+      "128,400 shipments, 9.3%, 6.8% to 18.4 million, 412 to 337, the 30th of November, 96.2% and 41%",
+    );
+    expect(written).toContain("6.8%");
+  });
+});
+
+describe("Chinese numbers in a transcript", () => {
+  test.each([
+    ["三千二百件", "3,200件"],
+    ["百分之九点三", "9.3%"],
+    ["一百二十八万四千", "1,284,000"],
+    ["三百万元", "300万元"],
+    ["十八点四万", "18.4万"],
+    ["二零二五年十一月三十日", "2025年11月30日"],
+    ["三月", "3月"],
+    ["五元", "5元"],
+  ])("%s is %s", (said, written) => {
+    expect(writtenNumbers(said)).toBe(written);
+  });
+
+  test("a small number in running speech stays a character", () => {
+    expect(writtenNumbers("我们一起去，十分高兴，三个人")).toBe("我们一起去，十分高兴，三个人");
+  });
+});
