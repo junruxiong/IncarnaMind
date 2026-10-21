@@ -376,7 +376,7 @@ describe("Pausing the microphone just after it was heard", () => {
   test("the computer's sound stamped ahead of the microphone doesn't carry the microphone's stream past the press: no audio stamped after it reaches the transcriber, and no Me line runs into the stretch", async () => {
     const dataDir = await createTempDataFolder();
     const clock = manualClock();
-    const capture = createFakeCapture();
+    const capture = createFakeCapture({ now: () => clock.now().getTime() });
     const engine = inProcessTranscriber();
     const sent: Record<string, number> = {};
     const finished: string[] = [];
@@ -434,5 +434,201 @@ describe("Pausing the microphone just after it was heard", () => {
     const me = cues.filter((cue) => cue.speaker === "Me");
     expect(me.length).toBeGreaterThan(0);
     expect(me.filter((cue) => cue.endMs > pressedAt)).toEqual([]);
+  });
+});
+
+const SPEECH_LEVEL = 4000;
+// Whatever is captured while the microphone is paused is louder than anything else, so any of it
+// that gets through shows.
+const PAUSED_LEVEL = 12_000;
+
+interface StampedCall {
+  /** Moves the clock to `ms` into the call. */
+  to(ms: number): void;
+  /** The microphone's next frame: `ms` of sound captured up to `capturedTo` ms into the call, now by default. */
+  hear(ms: number, frame?: { capturedTo?: number; level?: number }): Promise<void>;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  stop(): Promise<void>;
+}
+
+// A Meeting in a room whose capture stamps each frame with when it was captured, so a frame can
+// arrive after the moment it was captured in, as what a capture flushes when it closes does.
+async function stampedCall(script: (call: StampedCall) => Promise<void>) {
+  const dataDir = await createTempDataFolder();
+  const clock = manualClock();
+  const startedAt = clock.now().getTime();
+  const elapsed = () => clock.now().getTime() - startedAt;
+  let sink: AudioSink | null = null;
+  const capture: AudioCapture = {
+    systemAudio: false,
+    start(_request, given) {
+      sink = given;
+      given.state("microphone", "recording");
+      return {
+        setMicrophone(on) {
+          if (on) given.state("microphone", "recording");
+        },
+        stop: async () => {},
+      };
+    },
+    openSettings: async () => {},
+  };
+  const engine = inProcessTranscriber();
+  const sent: Int16Array[] = [];
+  const finished: string[] = [];
+  const core = startCore(dataDir, {
+    audioCapture: capture,
+    transcriber: {
+      ...engine.transcriber,
+      push(stream, samples) {
+        if (isMicrophone(stream)) sent.push(samples.slice());
+        engine.transcriber.push(stream, samples);
+      },
+      finish(stream) {
+        finished.push(stream);
+        return engine.transcriber.finish(stream);
+      },
+    },
+    transcriptionModelSource: NO_TRANSCRIPTION_FILES,
+    now: clock.now,
+  });
+  await core.updateSettings({ device: { meetingNoticeAccepted: true } });
+  await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
+  const { id } = await core.createMeeting();
+  await core.startMeeting({ meetingId: id, systemAudio: false });
+  await until(core, id, (transcript) => transcript.state === "live");
+
+  let made = 0;
+  let stopped = false;
+  await script({
+    to(ms) {
+      clock.advance(ms - elapsed());
+    },
+    async hear(ms, { capturedTo = elapsed(), level = SPEECH_LEVEL } = {}) {
+      const samples = new Int16Array((ms * RATE) / 1000);
+      for (let i = 0; i < samples.length; i++) {
+        samples[i] =
+          level === SPEECH_LEVEL
+            ? Math.round(level * Math.sin((2 * Math.PI * 440 * (made + i)) / RATE))
+            : level;
+      }
+      made += samples.length;
+      sink?.audio("microphone", samples, startedAt + capturedTo);
+      await nextTurn();
+    },
+    pause: async () => {
+      await core.setMeetingMicrophone({ meetingId: id, paused: true });
+    },
+    resume: async () => {
+      await core.setMeetingMicrophone({ meetingId: id, paused: false });
+    },
+    async stop() {
+      stopped = true;
+      await core.stopMeeting(id);
+    },
+  });
+  if (!stopped) await core.stopMeeting(id);
+  const saved = await until(core, id, (transcript) => transcript.state === "saved");
+  const parts = listParts(meetingFolder(dataDir, id))
+    .filter((part) => part.source === "microphone")
+    .map((part) => {
+      const bytes = readFileSync(part.path);
+      return {
+        ...part,
+        samples: new Int16Array(
+          bytes.buffer.slice(bytes.byteOffset + 44, bytes.byteOffset + bytes.byteLength),
+        ),
+      };
+    });
+  const { gaps } = readVtt(readFileSync(saved.savedPath ?? "", "utf8"));
+  return { sent, finished, parts, gaps };
+}
+
+const loudest = (frames: readonly Int16Array[]) =>
+  frames.reduce((most, frame) => frame.reduce((max, v) => Math.max(max, Math.abs(v)), most), 0);
+
+const msIn = (frames: readonly Int16Array[]) => (samplesIn(frames) * 1000) / RATE;
+
+async function speak(call: StampedCall, fromMs: number, toMs: number) {
+  for (let at = fromMs + 100; at <= toMs; at += 100) {
+    call.to(at);
+    await call.hear(100);
+  }
+}
+
+describe("Microphone frames are kept by when they were captured, not when they arrive", () => {
+  test("a frame captured while the microphone was paused but heard after the resume reaches neither the transcriber nor the disk", async () => {
+    const call = await stampedCall(async (call) => {
+      await speak(call, 0, 1000);
+      await call.pause();
+      call.to(2000);
+      await call.resume();
+      await speak(call, 2000, 2300);
+      await call.hear(100, { capturedTo: 1500, level: PAUSED_LEVEL });
+      await speak(call, 2300, 3000);
+    });
+
+    expect(call.gaps).toEqual([{ fromMs: 1000, toMs: 2000, reason: "muted" }]);
+    expect(loudest(call.sent)).toBeLessThanOrEqual(SPEECH_LEVEL);
+    expect(msIn(call.sent)).toBe(2000);
+    expect(call.finished.filter(isMicrophone).length).toBeGreaterThanOrEqual(2);
+    expect(loudest(call.parts.map((part) => part.samples))).toBeLessThanOrEqual(SPEECH_LEVEL);
+    expect(call.parts.reduce((sum, part) => sum + part.durationMs, 0)).toBe(2000);
+  });
+
+  test("a pause and a resume quicker than the capture's round trip: what it flushes as it closes the microphone arrives after the resume and is dropped", async () => {
+    const call = await stampedCall(async (call) => {
+      await speak(call, 0, 1000);
+      await call.pause();
+      call.to(1030);
+      await call.resume();
+      call.to(1060);
+      await call.hear(20, { capturedTo: 1020, level: PAUSED_LEVEL });
+      call.to(1100);
+      await call.hear(70);
+      await speak(call, 1100, 2000);
+    });
+
+    expect(call.gaps).toEqual([{ fromMs: 1000, toMs: 1030, reason: "muted" }]);
+    expect(loudest(call.sent)).toBeLessThanOrEqual(SPEECH_LEVEL);
+    expect(msIn(call.sent)).toBe(1970);
+    expect(loudest(call.parts.map((part) => part.samples))).toBeLessThanOrEqual(SPEECH_LEVEL);
+  });
+
+  test("what is flushed late at Stop, captured while the microphone was paused, doesn't go out with the rest, nor after", async () => {
+    const call = await stampedCall(async (call) => {
+      await speak(call, 0, 1000);
+      await call.pause();
+      call.to(2000);
+      await call.resume();
+      await speak(call, 2000, 2200);
+      call.to(2210);
+      await call.hear(100, { capturedTo: 1900, level: PAUSED_LEVEL });
+      await call.stop();
+      await call.hear(100, { capturedTo: 1950, level: PAUSED_LEVEL });
+    });
+
+    expect(loudest(call.sent)).toBeLessThanOrEqual(SPEECH_LEVEL);
+    expect(msIn(call.sent)).toBe(1200);
+    expect(loudest(call.parts.map((part) => part.samples))).toBeLessThanOrEqual(SPEECH_LEVEL);
+  });
+
+  test("no more is dropped than was captured while paused: speech just before the press and just after the resume reaches the transcriber and the disk", async () => {
+    const call = await stampedCall(async (call) => {
+      await speak(call, 0, 1000);
+      await call.pause();
+      call.to(1950);
+      await call.resume();
+      // Captured from 1,900 ms: its last 50 ms count.
+      await speak(call, 1900, 3000);
+    });
+
+    expect(msIn(call.sent)).toBe(2050);
+    expect(call.parts.reduce((sum, part) => sum + part.durationMs, 0)).toBe(2050);
+    for (const part of call.parts) {
+      expect(part.offsetMs + part.durationMs <= 1000 || part.offsetMs >= 1950).toBe(true);
+    }
+    expect(call.parts.some((part) => part.offsetMs === 1950)).toBe(true);
   });
 });

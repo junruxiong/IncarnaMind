@@ -24,6 +24,8 @@ export interface FakeCaptureOptions {
   realTime?: number;
   /** The computer's sound plays these samples once, then silence; the microphone is quiet meanwhile. */
   recording?: Int16Array;
+  /** The clock its frames are stamped with, the one the core's `now` reads: `Date.now` by default. */
+  now?: () => number;
 }
 
 /** A WAV file's samples: 16-bit PCM, mono, at `MEETING_SAMPLE_RATE`, as a recording to play. */
@@ -91,10 +93,11 @@ export function createFakeCapture(options: FakeCaptureOptions = {}): FakeCapture
     return samples;
   };
 
+  const now = options.now ?? Date.now;
   const push = (source: AudioSource, ms: number) => {
     if (!sink || !wanted[source]) return;
     if (source === "microphone" && Date.now() < micQuietUntil) return;
-    sink.audio(source, samplesOf(source, ms));
+    sink.audio(source, samplesOf(source, ms), now());
   };
 
   return {

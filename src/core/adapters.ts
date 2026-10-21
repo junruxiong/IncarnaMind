@@ -575,8 +575,13 @@ export type CaptureState = "recording" | "denied" | "unavailable" | "ended";
 
 /** Where a capture delivers what it hears. */
 export interface AudioSink {
-  /** Samples from one source, in the order captured: `MEETING_SAMPLE_RATE` mono, signed 16-bit. */
-  audio(source: AudioSource, samples: Int16Array): void;
+  /**
+   * Samples from one source, in the order captured: `MEETING_SAMPLE_RATE` mono, signed 16-bit.
+   * `capturedAt` is when the last of them was captured, in ms since the epoch on the clock `now`
+   * reads; without it they count as captured as they arrive. Microphone samples captured while
+   * the User had it paused are dropped, however late they arrive.
+   */
+  audio(source: AudioSource, samples: Int16Array, capturedAt?: number): void;
   /** A source started, couldn't start, or stopped. */
   state(source: AudioSource, state: CaptureState): void;
 }
