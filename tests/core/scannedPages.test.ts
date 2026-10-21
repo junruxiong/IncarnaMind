@@ -533,15 +533,18 @@ describe("Pages read before a quit or a crash are kept (#1504)", { timeout: 60_0
     ),
   };
 
-  /** A recognizer that reads up to `stopAfter` pages, then holds the next until the test ends. */
-  function recognizerHolding(stopAfter: number) {
+  /**
+   * A recognizer that reads up to `stopAfter` pages, then holds the next until the test ends;
+   * with `fromPage`, it holds every scan's pages from that one on instead.
+   */
+  function recognizerHolding(stopAfter: number, fromPage = Number.POSITIVE_INFINITY) {
     const fake = createFakeTextRecognizer({ script });
     const read: number[] = [];
     const recognizer: TextRecognizer = {
       load: (files) => fake.load(files),
       read: async (picture, page): Promise<RecognizedLine[]> => {
         read.push(page);
-        if (read.length > stopAfter) await new Promise(() => {});
+        if (read.length > stopAfter || page >= fromPage) await new Promise(() => {});
         return fake.read(picture, page);
       },
       readFile: (file, page) => fake.readFile(file, page),
@@ -653,7 +656,8 @@ describe("Pages read before a quit or a crash are kept (#1504)", { timeout: 60_0
     "two scans read at once each keep their own pages after a %s",
     async (how) => {
       const dataDir = await createTempDataFolder();
-      const first = recognizerHolding(4);
+      // Each scan reads its first two pages, then waits at its third.
+      const first = recognizerHolding(Number.POSITIVE_INFINITY, 3);
       const core = startCore(dataDir, { ...scanning(first.recognizer), scansAtOnce: 2 });
       const sources = await createSourceFolder();
       const files = [];
