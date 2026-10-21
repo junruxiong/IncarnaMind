@@ -886,10 +886,10 @@ function statementsIn(prepared: Prepared, text: string, settled: Settled): State
   return kept;
 }
 
-/**
- * A power of ten and a scale word in a line given as a header: "100million USD", as a workbook
- * states 亿美元 in English. Anywhere else it is a figure, so only a header is read so.
- */
+const BEFORE_COUNTED_SCALE = /^\s*[(（]?\s*(?:(?:units?|单位)\s*[:：]\s*)?$/i;
+const AFTER_COUNTED_SCALE = /^\s*[)）]?\s*$/;
+
+// "100million USD" states a scale only as the whole header; in a sentence it is a figure.
 function countedScales(text: string, prepared: Prepared, context: FigureContext): Statement[] {
   return readFigures(text, { ...context, header: null }).flatMap((figure) => {
     const count = figure.scale === 1 ? 0 : figure.value / figure.scale;
@@ -898,6 +898,8 @@ function countedScales(text: string, prepared: Prepared, context: FigureContext)
     const from = prepared.from.indexOf(figure.start);
     const to = prepared.to.lastIndexOf(figure.end) + 1;
     if (from < 0 || to <= 0) return [];
+    if (!BEFORE_COUNTED_SCALE.test(prepared.s.slice(0, from))) return [];
+    if (!AFTER_COUNTED_SCALE.test(prepared.s.slice(to))) return [];
     return [
       {
         from,
@@ -910,7 +912,6 @@ function countedScales(text: string, prepared: Prepared, context: FigureContext)
   });
 }
 
-/** What a header states: a unit line's scale and unit, and a power of ten and a scale word. */
 function headerStatements(text: string, context: FigureContext, settled: Settled): Statement[] {
   const prepared = prepare(text);
   return [...statementsIn(prepared, text, settled), ...countedScales(text, prepared, context)];

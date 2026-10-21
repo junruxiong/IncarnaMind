@@ -930,6 +930,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
     expect(results[1]).toMatch(
       /^Recorded \[=1\] = -17\.0% \(\$1,231\.0 million ÷ \$1,482\.6 million − 1\)\. It replaces the earlier \[=1\] = 20\.4%: give each figure a marker of its own\./,
     );
+    expect(results[4]).toMatch(/^Recorded \[=1\]/);
     expect(results[5]).toBe(
       "You have called calculate enough for this Question: write the Answer now with the figures recorded, and say which numbers couldn't be calculated rather than working them out.",
     );

@@ -968,6 +968,9 @@ describe("what an ambiguous figure could be", () => {
     expect(
       readings("34,002.51", { ...EN, header: "raised 3 million dollars" }, "scale"),
     ).toBeUndefined();
+    expect(
+      readings("34,002.51", { ...EN, header: "Revenue was 10 million" }, "scale"),
+    ).toBeUndefined();
   });
 
   test("△ and a whole number in brackets may be negative or not", () => {
@@ -1035,6 +1038,11 @@ describe("stated units", () => {
     ]);
     expect(asHeader("官方储备资产 Official reserve assets")).toEqual([]);
     expect(asHeader("3 million dollars")).toEqual([]);
+    expect(asHeader("Unit: 10 thousand yuan")).toHaveLength(1);
+    // A sentence that happens to hold a power of ten states no unit, however it is asked.
+    expect(asHeader("The company raised 100 million dollars in 2025")).toEqual([]);
+    expect(asHeader("Revenue was 10 million")).toEqual([]);
+    expect(asHeader("a total of 100 million shares")).toEqual([]);
     expect(stated("100million USD", EN)).toEqual([]);
   });
 

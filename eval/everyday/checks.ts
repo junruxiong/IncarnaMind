@@ -301,7 +301,6 @@ export function aboutAnUnseenAttempt(reply: string): string | null {
 const COULDNT_CALCULATE =
   /\b(?:couldn't|could not|can't|cannot|unable to|wasn't able to) (?:calculate|compute|work out)\b|没能算出|没有算出|无法计算|未能计算|不能计算|没法计算/i;
 
-/** The first sentence that says a number couldn't be calculated. */
 export function givesUpOnCalculating(reply: string): string | null {
   return (
     reply
