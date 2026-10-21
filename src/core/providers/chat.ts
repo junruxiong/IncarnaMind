@@ -32,6 +32,7 @@ import type { Secrets } from "../secrets";
 import { createSendGate, gateStop } from "../sendGate";
 import type { SettingsStore } from "../settings";
 import type { Database } from "../storage";
+import { parseApiKey as parseKey, storedApiKey } from "./apiKey";
 import {
   cloudWindow,
   type ModelCapabilities,
@@ -288,9 +289,8 @@ function parseApiKey(
   { kind, catalogId }: { kind: ChatProviderKind; catalogId: string | null },
 ): string | null | undefined {
   if (value === undefined || value === null) return value;
-  if (typeof value !== "string") throw new InvalidInputError("The API key must be text.");
-  const key = value.trim();
-  if (key === "") return undefined;
+  const key = parseKey(value);
+  if (key === undefined) return undefined;
   if (!acceptsApiKey(kind, catalogId)) {
     throw new InvalidInputError("This provider doesn't take an API key.");
   }
@@ -577,11 +577,12 @@ export function createChat(options: {
       };
     }
     const baseUrl = endpointUrl(kind, server.endpoint, server.catalogId) ?? server.baseUrl;
+    const checkedKey = storedApiKey(apiKey);
     if (kind === "ollama") {
       return {
         kind,
         baseUrl,
-        apiKey,
+        apiKey: checkedKey,
         modelId,
         ollama: profile?.settings ?? DEFAULT_OLLAMA_SETTINGS,
       };
@@ -589,7 +590,7 @@ export function createChat(options: {
     return {
       kind,
       baseUrl,
-      apiKey,
+      apiKey: checkedKey,
       modelId,
       // Only a provider's other regions say which they are; its first is the default.
       ...(server.endpoint &&

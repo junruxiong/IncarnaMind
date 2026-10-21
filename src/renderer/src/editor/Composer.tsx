@@ -13,7 +13,13 @@ import type * as Y from "yjs";
 import type { AnswerPlace, SearchScope } from "../../../core/api";
 import { mindModelOf } from "../../../shared/mindModel";
 import { mindName } from "../../../shared/naming";
-import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/searchScope";
+import {
+  filingFolder,
+  hasSearchScope,
+  mindSearchScope,
+  type ScopeKind,
+  scopeIds,
+} from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
 import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon, StopIcon } from "../components/icons";
@@ -54,6 +60,7 @@ import {
   useWebReach,
 } from "../research";
 import type { ScopeChoice } from "../scope";
+import { useFolderHoldsDocuments } from "../scopeDocuments";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { tellTask, useTasks } from "../tasks";
@@ -120,8 +127,8 @@ const isCommand = (event: { metaKey: boolean; ctrlKey: boolean }) =>
  * "@" adds more), and the Ask button (an up arrow; Stop while an Answer is
  * written, which Enter waits for). Sending empties the text at once, and puts
  * it back if the Question couldn't be asked. A Mind in a Folder starts
- * with the Folder's chip; taking it out searches everything (see
- * `composerScope`). Why a Question couldn't be asked shows on one line above
+ * with the Folder's chip while the Folder holds a Document, and with All
+ * Documents while it holds none (`mindSearchScope`). Why a Question couldn't be asked shows on one line above
  * them, with the one thing that fixes it; so does the offer to suggest as the
  * User writes (`SuggestionOffer`).
  */
@@ -135,11 +142,16 @@ export function Composer({
   const mindId = mind?.mindId ?? null;
   const key = mindId ?? NO_MIND;
   const draft = useComposer((state) => state.drafts[key]) ?? EMPTY;
-  // The Mind's Folder, whose chip its Questions start with.
+  // The Mind's Folder: its own Search scope while it holds a Document, and where its new notes go.
   const folderId = useAppStore(
     (state) => state.minds.find((each) => each.id === mindId)?.folderId ?? null,
   );
-  const scope = composerScope(draft, folderId);
+  const folderHolds = useFolderHoldsDocuments(folderId);
+  const folderName = useAppStore(
+    (state) => state.library?.groups.find((each) => each.id === folderId)?.name ?? null,
+  );
+  // What the chips show: what the core will search (#1359). Asking sends `composerScope`.
+  const scope = mindSearchScope(draft.scope, folderId, folderHolds);
   // The Mind in focus changes under the one composer: what was typed with no Mind goes with the
   // User into the Mind that opens, whose draft is empty; the rest of its state starts over.
   const was = useRef(key);
@@ -426,7 +438,7 @@ export function Composer({
         text: paste.text,
       });
       const now = useComposer.getState().draft(key);
-      const nowScope = composerScope(now, folderId);
+      const nowScope = mindSearchScope(now.scope, folderId, folderHolds);
       const ids = scopeIds(nowScope, "document");
       update({
         pastes: now.pastes.filter((each) => each.id !== paste.id),
@@ -492,12 +504,10 @@ export function Composer({
     const title = current.pastes.length === 0 && !current.skill ? newNoteTitle(typed) : null;
     if (title) {
       update({ text: "" });
-      const scope = composerScope(current, folderId);
-      const scopeFolder =
-        scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
-          ? (scope.folderIds[0] ?? null)
-          : null;
-      void useAppStore.getState().createMind({ title, folderId: scopeFolder });
+      void useAppStore.getState().createMind({
+        title,
+        folderId: filingFolder(composerScope(current, folderId), folderId),
+      });
       return;
     }
     useAnswers.getState().dismiss(composerKey(mindId));
@@ -873,8 +883,16 @@ export function Composer({
             <button
               type="button"
               data-testid="composer-scope-all"
-              aria-label={t("composer.scope.allLabel")}
-              title={t("composer.scope.allTitle")}
+              aria-label={
+                folderName !== null && !folderHolds
+                  ? t("composer.scope.allEmptyFolder", { folder: folderName })
+                  : t("composer.scope.allLabel")
+              }
+              title={
+                folderName !== null && !folderHolds
+                  ? t("composer.scope.allEmptyFolder", { folder: folderName })
+                  : t("composer.scope.allTitle")
+              }
               onClick={openScopePicker}
               className="composer-chip composer-scope-all"
             >

@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import type {
   ChatModelFactory,
   Core,
+  CoreAdapters,
   Logger,
   Meeting,
   MeetingTranscript,
@@ -109,6 +110,7 @@ export async function transcribingCore(
     loads,
     log,
     capture: captureOptions,
+    keychain,
   }: {
     engine?: FakeTranscriberOptions;
     /** What the fake capture does, e.g. the computer's sound denied. */
@@ -119,6 +121,7 @@ export async function transcribingCore(
     /** The engine starts once this resolves, as a model loading slowly does. */
     loads?: Promise<void>;
     log?: Logger;
+    keychain?: CoreAdapters["keychain"];
   } = {},
 ) {
   const clock = manualClock();
@@ -137,6 +140,7 @@ export async function transcribingCore(
     ...(models && { createChatModel: models.createChatModel }),
     ...(createChatModel && { createChatModel }),
     ...(log && { log }),
+    ...(keychain && { keychain }),
   });
   await core.updateSettings({ device: { meetingNoticeAccepted: true } });
   await core.setOutputLocation(join(dataDir, "Documents", "IncarnaMind"));
