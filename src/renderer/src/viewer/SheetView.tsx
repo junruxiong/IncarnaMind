@@ -684,6 +684,9 @@ function Grid({
       const wraps = style?.wrap || horizontal === "justify" || horizontal === "distributed";
       const numeric = cell?.numeric ?? false;
       let display = text;
+      // A formula the file saved no result for says so; it is never shown as 0 (#1514).
+      const unsaved = !csv && !cell && (model.look?.noValue.has(at) ?? false);
+      if (unsaved) display = t("sheet.noSavedValue");
       if (!csv && cell && !merge && text) {
         let measured = model.widths.get(at);
         if (measured === undefined) {
@@ -802,7 +805,7 @@ function Grid({
           rowSpan={spanRows > 1 ? spanRows : undefined}
           colSpan={spanColumns > 1 ? spanColumns : undefined}
           title={note}
-          className={`${csv && numeric ? "viewer-cell--number" : ""} ${isHighlighted ? "viewer-cell--quote" : ""} ${note ? "viewer-cell--note" : ""}`}
+          className={`${csv && numeric ? "viewer-cell--number" : ""} ${isHighlighted ? "viewer-cell--quote" : ""} ${note ? "viewer-cell--note" : ""} ${unsaved ? "viewer-cell--unsaved" : ""}`}
           style={css}
         >
           {csv ? (

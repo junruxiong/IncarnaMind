@@ -3352,6 +3352,7 @@ export const zhCN = {
 
   "error.connector.notInDirectory": "目录里没有这个连接器。",
   "error.examples.reading": "示例文档还在读取中，稍后再试一次。",
+  "sheet.noSavedValue": "无保存的值",
   "error.document.notFound": "找不到这个文档。",
   "error.checkRecord.format": "核对记录可以保存为 PDF 或 CSV。",
   "error.checkRecord.noPdf": "这个版本的 IncarnaMind 无法生成 PDF，可以把核对记录改存为 CSV。",
