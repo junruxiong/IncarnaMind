@@ -102,8 +102,11 @@ export interface ResearchOptions extends FinishOptions {
   chat: {
     providerExists(providerId: string): boolean;
     readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
-    /** The model, once the User has allowed its data flow (asking them if needed). */
-    prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
+    /**
+     * The model, once the User has allowed its data flow (asking them if needed). "off" skips
+     * its thinking where it can, for a short request.
+     */
+    prepareModel(choice: ChatModelChoice, thinking?: "off"): Promise<PreparedChatModel>;
     /** Whether the model runs on this computer, which serves one request at a time. */
     runsLocally(choice: ChatModelChoice): boolean;
   };
@@ -293,13 +296,13 @@ export function createResearch(options: ResearchOptions) {
     | Exclude<ResearchStartResult, { started: true }>;
 
   /** The model, ready and allowed; or why it can't be. */
-  async function readyModel(picked: ChatModelChoice | null): Promise<Readied> {
+  async function readyModel(picked: ChatModelChoice | null, thinking?: "off"): Promise<Readied> {
     const choice = picked && options.chat.providerExists(picked.providerId) ? picked : undefined;
     const readiness = await options.chat.readiness(choice);
     if (!readiness.ready) return { started: false, reason: "not-ready", readiness };
     const model = { providerId: readiness.provider.id, modelId: readiness.modelId };
     try {
-      return { model, prepared: await options.chat.prepareModel(model) };
+      return { model, prepared: await options.chat.prepareModel(model, thinking) };
     } catch (error) {
       if (error instanceof ChatNotReadyError) {
         return { started: false, reason: "not-ready", readiness: error.readiness };
@@ -622,23 +625,27 @@ export function createResearch(options: ResearchOptions) {
             text: text(given.change.text, "error.research.change", MAX_RESEARCH_TOPIC),
           }
         : null;
-      const ready = await readyModel(model);
+      // Kimi K2.6 thinks by default, and its thinking took the whole reply: none was left for the plan (#1369).
+      const ready = await readyModel(model, "off");
       if (!("model" in ready)) {
         return ready.reason === "not-ready"
           ? { planned: false, reason: "not-ready", readiness: ready.readiness }
           : { planned: false, reason: "consent-declined" };
       }
       let reply: string;
+      let thoughtOnly = false;
       try {
         const result = await generateText({
           model: ready.prepared.model,
           instructions: PLAN_INSTRUCTIONS,
           prompt: planPrompt(topic, sources, change),
-          maxOutputTokens: 1_024,
+          // Room for a model that thinks whatever it is asked, before its plan.
+          maxOutputTokens: 4_096,
           maxRetries: 1,
           abortSignal: AbortSignal.timeout(PLAN_TIMEOUT_MS),
         });
         reply = result.text;
+        thoughtOnly = result.finishReason === "length" && reply.trim() === "";
       } catch (error) {
         return { planned: false, reason: "failed", error: classifyProviderError(error) };
       }
@@ -647,7 +654,15 @@ export function createResearch(options: ResearchOptions) {
         return {
           planned: false,
           reason: "failed",
-          error: { kind: "provider", message: "The model gave no steps." },
+          error: {
+            kind: "no-answer",
+            message: thoughtOnly
+              ? "The model spent its whole reply thinking."
+              : "The model's reply had no steps.",
+            wording: {
+              key: thoughtOnly ? "error.research.plan.thoughtOnly" : "error.research.plan.noSteps",
+            },
+          },
         };
       }
       return { planned: true, plan };

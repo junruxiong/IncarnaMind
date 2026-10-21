@@ -68,7 +68,7 @@ export interface UndoProblem {
 export type UndoLineState =
   | { id: number; change: Undoable; problem?: undefined; note?: undefined }
   | { id: number; problem: UndoProblem; change?: undefined; note?: undefined }
-  | { id: number; note: Words; change?: undefined; problem?: undefined };
+  | { id: number; note: Words; busy?: boolean; change?: undefined; problem?: undefined };
 
 interface UndoState {
   /** The changes ⌘Z takes back, the last one last. */
@@ -95,16 +95,28 @@ interface UndoState {
 /** How long the line shows before it goes by itself. */
 export const UNDO_SHOWN_MS = 10_000;
 
+/** Past this, a change still being made says so (docs/agents/interaction.md, rule 8). */
+export const SLOW_CHANGE_MS = 1_000;
+
 let lines = 0;
 const lineOf = (change: Undoable): UndoLineState => ({ id: ++lines, change });
 
 /** Undo and redo run one at a time, in the order asked, so a held ⌘Z steps back change by change. */
 let queue: Promise<void> = Promise.resolve();
-const inTurn = (step: () => Promise<void>): Promise<void> => {
+const inTurn = <T>(step: () => Promise<T>): Promise<T> => {
   const turn = queue.then(step);
-  queue = turn.catch(() => undefined);
+  queue = turn.then(
+    () => undefined,
+    () => undefined,
+  );
   return turn;
 };
+
+/**
+ * Makes a change that goes on the stack once it is done, in turn with Undo and Redo: a ⌘Z
+ * pressed while it runs waits for it, then takes it back, never an earlier change.
+ */
+export const makeInTurn = <T>(make: () => Promise<T>): Promise<T> => inTurn(make);
 
 export const useUndo = create<UndoState>()((set, get) => {
   /**
@@ -252,3 +264,21 @@ const NOT_TEXT = new Set([
   "reset",
   "submit",
 ]);
+
+/**
+ * Makes a change; one that takes longer than a second says what it is doing on the undo line,
+ * where what it did shows next, until it is done.
+ */
+export async function sayWhileSlow<T>(said: Words, work: () => Promise<T>): Promise<T> {
+  let shown: number | null = null;
+  const timer = setTimeout(() => {
+    shown = ++lines;
+    useUndo.setState({ line: { id: shown, note: said, busy: true } });
+  }, SLOW_CHANGE_MS);
+  try {
+    return await work();
+  } finally {
+    clearTimeout(timer);
+    if (shown !== null && useUndo.getState().line?.id === shown) useUndo.setState({ line: null });
+  }
+}

@@ -16,7 +16,9 @@ import {
   leaveFirstOpen,
   leaveText,
   linkedFolderRow,
+  markSteps,
   newMind,
+  paletteFound,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -71,16 +73,6 @@ const gettingStarted = (window: Page) =>
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     return (await bridge.getSettings()).device.gettingStarted;
   });
-
-async function markSteps(window: Page, done: object): Promise<void> {
-  await window.evaluate(async (patch) => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const { device } = await bridge.getSettings();
-    await bridge.updateSettings({
-      device: { gettingStarted: { ...device.gettingStarted, ...patch } },
-    });
-  }, done);
-}
 
 /** Words a newcomer shouldn't meet on the first screens: the left column of #763's glossary. */
 const JARGON = [
@@ -918,7 +910,7 @@ test("Remove the examples removes every example Mind made, and Undo brings them 
   await app.close();
 });
 
-const paletteItems = (window: Page) => window.getByTestId("palette").getByTestId("palette-item");
+const paletteItems = paletteFound;
 
 async function askPalette(window: Page, text: string): Promise<void> {
   await window.keyboard.press("ControlOrMeta+k");

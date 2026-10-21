@@ -14,9 +14,6 @@ import {
   sectionTitleClass,
 } from "./ui";
 
-/**
- * Settings → Meetings → Recording: what is recorded; then help during the call.
- */
 export function MeetingsSettings() {
   const t = useT();
   const device = useAppStore((state) => state.settings?.device);

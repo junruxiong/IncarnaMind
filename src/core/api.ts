@@ -8539,6 +8539,8 @@ export interface CoreApi {
    * linked again.
    */
   deleteDocument(id: string): Promise<void>;
+  /** Removes Documents from the index as `deleteDocument` does, all in one step: or none, when one isn't found. */
+  deleteDocuments(ids: string[]): Promise<void>;
   /**
    * Processes a Document that failed again, from its file as it is now, e.g.
    * once the User has fixed it. Returns it, queued; "document.status" events
@@ -8641,9 +8643,11 @@ export interface CoreApi {
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
    * Units the Citations in Minds point to are kept, so those Citations can
-   * still be checked: "keptCitationTexts.changed" reports them.
+   * still be checked: "keptCitationTexts.changed" reports them. Its Documents
+   * in `options.keep` stay, as files added on their own: Undo of a link keeps
+   * those that were there before it (#1361).
    */
-  removeLinkedFolder(linkedFolderId: string): Promise<void>;
+  removeLinkedFolder(linkedFolderId: string, options?: { keep?: string[] }): Promise<void>;
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
   /**
@@ -10016,6 +10020,7 @@ const methods: Record<CoreApiMethod, true> = {
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
+  deleteDocuments: true,
   retryDocument: true,
   unlockDocument: true,
   forgetDocumentPassword: true,

@@ -69,6 +69,7 @@ registerMenu("folder", [
   "folder.editDescription",
   "folder.sort",
   "folder.rename",
+  "file.info",
   "folder.delete",
 ]);
 
