@@ -4895,6 +4895,9 @@ export const en = {
   "mindCall.failed.noChart.uncited":
     "No chart: some figures in the table in “{mind}” have no Citation",
   "mindCall.failed.newMind": "Didn’t add to “{mind}”: a new Mind was asked for",
+  "answer.stillReading.one": "1 Document is still being read: {name}",
+  "answer.stillReading": "{count} Documents are still being read",
+  "answer.stillReading.again": "Ask again when it’s ready",
   "answer.writtenFrom": "From {count} of your {total} Documents (this Mind’s scope)",
   "answer.writtenFrom.useAll": "Use all",
   "command.answer.useAll": "Write the Answer again from all Documents",
