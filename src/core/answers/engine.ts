@@ -582,10 +582,11 @@ export function searchToolDescription(languages: readonly DocumentLanguage[]): s
 const MARKER = /\[[\^=]\d{1,4}\]/;
 
 /**
- * A step that has read the Documents and has written this much with no Citation marker in it is
- * the model thinking aloud, not an Answer: every sentence about Documents carries one (#1344).
+ * A backstop: a step that has read the Documents and has written this much with no Citation
+ * marker in it is a model running on, not an Answer (#1344). The last step is told to write and
+ * capped (src/core/runs/aiSdkEngine.ts), so this should never cut.
  */
-const NOTES_CHARS = 1_500;
+const RUNAWAY_CHARS = 12_000;
 
 /**
  * What a one-pass attempt yields when its provider refused the request before
@@ -1605,9 +1606,7 @@ async function* toolLoop(
   const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
   let searching = 0;
-  /** A search has been called: what the model writes now should carry Citations. */
   let searched = false;
-  /** The model wrote notes instead of an Answer: its run is stopped and the Answer fails. */
   const rambling = new AbortController();
   /** The reply that stands if the model, asked once more, fails: as it was before the last ask. */
   let standing: string | null = null;
@@ -1700,7 +1699,7 @@ async function* toolLoop(
         // A new step's text goes on from the last kept text in a new paragraph.
         if (stepText === "" && keptText !== "" && !/\s$/.test(keptText)) text = `\n\n${text}`;
         stepText += text;
-        if (searched && stepText.length > NOTES_CHARS && !MARKER.test(stepText)) {
+        if (searched && stepText.length > RUNAWAY_CHARS && !MARKER.test(stepText)) {
           rambling.abort();
           break;
         }
@@ -1861,7 +1860,7 @@ async function* toolLoop(
     if (released > 0) yield { type: "text-retracted", length: released };
     yield {
       type: "failed",
-      error: { kind: "no-answer", message: "The model wrote its notes instead of an Answer." },
+      error: { kind: "no-answer", message: "The model ran on without an Answer." },
     };
   }
 }

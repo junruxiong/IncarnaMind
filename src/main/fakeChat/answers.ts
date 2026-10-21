@@ -80,13 +80,13 @@ const FOUND_PAGES = [
 export const CITED_ANSWER = "Your Documents answer this [^1].\n\nThat is all.";
 
 /**
- * A Question whose model, after its search, writes pages of working notes instead of an Answer
- * (#1344). The notes are Chinese, which has no spaces to stream a word at a time at: they arrive
- * in one piece.
+ * A Question whose model, after its search, runs on for pages of working notes instead of an
+ * Answer (#1344): more than the backstop lets stand. The notes are Chinese, which has no spaces to
+ * stream a word at a time at: they arrive in one piece.
  */
 const THINKING_ALOUD = /边想边写/;
 
-const WORKING_NOTES = "等一下，可能还有一份相同的文件。再搜一次确认一下。".repeat(120);
+const WORKING_NOTES = "等一下，可能还有一份相同的文件。再搜一次确认一下。".repeat(600);
 
 /** A Question the model answers with a marker and no `cite` call. */
 const WITHOUT_CITING = /\bwithout citing\b|不引用/i;

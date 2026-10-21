@@ -305,6 +305,17 @@ function fromModelMessages(messages: readonly ModelMessage[]): RunMessage[] {
   return out;
 }
 
+/**
+ * What the last step is told. A model that wanted another call writes it out as text (a tag, JSON,
+ * "Let me search…", "I need to record the citations first") when it may make none, as Kimi K2.6
+ * does, and may think for pages first (#1344).
+ */
+const LAST_STEP_NOTE =
+  "You can make no more calls, and none can record a Citation now. Write the Answer now from what has been read, without Citation markers, and say plainly what you didn't check. Don't write a call, and don't say what you would do next.";
+
+/** The most the last step may write, its thinking included. */
+const LAST_STEP_TOKENS = 8_000;
+
 /** Messages with others put in where they were taken: `at` counts the messages before, without them. */
 function splice(
   messages: readonly ModelMessage[],
@@ -419,7 +430,15 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
       // The last step must write; so must a step with no room left for a Tool's result.
       const write = stepNumber >= maxSteps - 1 || (window !== undefined && !window.canCallTools());
       canCallAgain = stepNumber + 1 < maxSteps - 1;
-      return { ...(messages && { messages }), ...(write && { toolChoice: "none" as const }) };
+      if (!write) return { ...(messages && { messages }) };
+      return {
+        messages: [
+          ...(messages ?? [...initialMessages, ...splice(responseMessages, inserted)]),
+          { role: "user" as const, content: LAST_STEP_NOTE },
+        ],
+        toolChoice: "none" as const,
+        maxOutputTokens: LAST_STEP_TOKENS,
+      };
     },
     abortSignal: signal,
     // Errors arrive as stream parts; don't also log them.
