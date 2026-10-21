@@ -13,7 +13,6 @@
  * there. Each running job has a worker of its own, so a job that crashes its
  * worker fails alone.
  */
-import { availableParallelism, totalmem } from "node:os";
 import type { Worker } from "node:worker_threads";
 import type { TextUnit } from "../../shared/units";
 import type { LogFields, PagePicture, PictureRead, RecognizedLine } from "../adapters";
@@ -30,7 +29,7 @@ import type {
 import startDocumentWorker from "./worker?nodeWorker";
 
 export interface ProcessorHandlers {
-  /** How many scans are read at once. Defaults to what the computer can bear (`scansAtOnce`). */
+  /** How many scans are read at once (the host works it out with `scansAtOnce`). Default: one. */
   scansAtOnce?: number | undefined;
   /** A processing job is about to go to a worker: from the queue, or its turn in the scan lane. */
   onStart(job: ProcessingJob): void;
@@ -87,7 +86,7 @@ const GIB = 2 ** 30;
  * scan's next page is drawn while another's is read, and one elsewhere. The model reads one
  * page at a time either way.
  */
-export function scansAtOnce(cores = availableParallelism(), memoryBytes = totalmem()): number {
+export function scansAtOnce(cores: number, memoryBytes: number): number {
   return cores >= 8 && memoryBytes >= 16 * GIB ? 2 : 1;
 }
 
@@ -95,7 +94,7 @@ export function createProcessor(
   handlers: ProcessorHandlers,
   reportError: (error: unknown) => void = (error) => console.error(error),
 ): Processor {
-  const scanSlots = Math.max(1, handlers.scansAtOnce ?? scansAtOnce());
+  const scanSlots = Math.max(1, handlers.scansAtOnce ?? 1);
   const queue: WorkerJob[] = [];
   /**
    * Jobs that read scanned pages, in the order they were found to, waiting for the scan

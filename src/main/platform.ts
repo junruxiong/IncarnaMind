@@ -4,7 +4,7 @@
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
-import { homedir, tmpdir } from "node:os";
+import { availableParallelism, homedir, tmpdir, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import { Agent, fetch as undiciFetch } from "undici";
@@ -25,6 +25,7 @@ import {
   type UsageDataSender,
 } from "../core";
 import { runAnalysis } from "../core/analysis";
+import { scansAtOnce } from "../core/documents/processor";
 import type { PageFetch } from "../core/documents/web/fetch";
 import { createFakeCapture, type FakeCapture, wavSamples } from "../core/meetings/fakeCapture";
 import { type LocalServers, scriptedLocalServers } from "../core/providers/localServers";
@@ -744,7 +745,8 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     textRecognizer: createUtilityProcessTextRecognizer(
       fakeEmbedder ? { fake: { script: fakeScans } } : {},
     ),
-    ...(testScansAtOnce > 0 && { scansAtOnce: testScansAtOnce }),
+    scansAtOnce:
+      testScansAtOnce > 0 ? testScansAtOnce : scansAtOnce(availableParallelism(), totalmem()),
     // The fake models have no files to download.
     ...(fakeEmbedder && {
       embeddingModelSource: { baseUrl: "http://localhost/", files: [] },
