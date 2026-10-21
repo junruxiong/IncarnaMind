@@ -241,10 +241,10 @@ describe("A Connector on this computer with its sign-in on another, in Local mod
 describe("Why a sign-in is held back, in words", () => {
   // protects=the Connector's page says why in English and Chinese; fails_when=either wording goes; no_claim=none beyond protects.
   test("the notice names the setting and what happens when it is off", () => {
-    expect(translate("en", "remoteConnectors.signIn.heldBack")).toContain(
+    expect(translate("en", "remoteConnectors.signIn.heldBack.details")).toContain(
       "“Keep everything on this computer” is on",
     );
-    expect(translate("zh-CN", "remoteConnectors.signIn.heldBack")).toContain(
+    expect(translate("zh-CN", "remoteConnectors.signIn.heldBack.details")).toContain(
       "已开启“所有内容都留在这台电脑上”",
     );
   });

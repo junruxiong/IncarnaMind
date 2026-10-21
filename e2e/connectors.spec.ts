@@ -198,9 +198,16 @@ test("in Local mode a Connector on this computer whose sign-in is on another wai
       "Not used while everything stays on this computer",
     );
     const why = connector.getByTestId("connector-sign-in-held-back");
-    await expect(why).toContainText("“Keep everything on this computer” is on");
+    await expect(why).toContainText("Paused: its sign-in server is on another computer.");
+    await why.getByTestId("connector-sign-in-held-back-details").click();
+    await expect(why.getByTestId("connector-sign-in-held-back-list")).toContainText(
+      "“Keep everything on this computer” is on",
+    );
     await setLanguage(window, "zh-CN");
-    await expect(why).toContainText("已开启“所有内容都留在这台电脑上”");
+    await expect(why).toContainText("已暂停：它的登录服务在另一台电脑上。");
+    await expect(why.getByTestId("connector-sign-in-held-back-list")).toContainText(
+      "已开启“所有内容都留在这台电脑上”",
+    );
     await expect(connector.getByTestId("connector-sign-in")).toHaveCount(0);
 
     // Nothing reached the sign-in server, or its address.

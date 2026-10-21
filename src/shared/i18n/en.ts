@@ -4070,7 +4070,8 @@ export const en = {
   "remoteConnectors.signIn.error.held-back":
     "Its sign-in is with a server on another computer, so nothing was sent.",
   "remoteConnectors.signIn.error.failed": "The sign-in didn’t work.",
-  "remoteConnectors.signIn.heldBack":
+  "remoteConnectors.signIn.heldBack": "Paused: its sign-in server is on another computer.",
+  "remoteConnectors.signIn.heldBack.details":
     "“Keep everything on this computer” is on, and this sign-in is with a server on another computer, so it isn’t renewed or started and its Tools aren’t used. Turn that off and it goes on from where it was.",
   "remoteConnectors.error.unreachable":
     "Its server can’t be reached. Check the URL and your internet connection.",
