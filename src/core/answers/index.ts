@@ -853,6 +853,11 @@ export function createAnswers(options: AnswersOptions) {
      */
     listening?: () => Promise<WindowedPassage[] | null>;
     /**
+     * A Meeting's saved Transcript to fill its notes in from (#142): shown with the Question as
+     * `listening` is, as much of it as fits half the model's window.
+     */
+    transcript?: WindowedPassage[];
+    /**
      * One-click help during the call: the button pressed. Its Answer is laid out as
      * the panel reads it, and is offered the Documents' Tools only.
      */
@@ -1669,6 +1674,16 @@ export function createAnswers(options: AnswersOptions) {
             if (!controller.signal.aborted) options.reportError(error);
           }
           if (finished) return;
+        }
+      }
+      if (input.transcript) {
+        const kept = newestWithin(
+          input.transcript,
+          prepared.window ? Math.floor(prepared.window.tokens / 2) : Number.MAX_SAFE_INTEGER,
+        );
+        if (kept.length > 0) {
+          messages = withTranscript(messages, session.show(kept));
+          for (const passage of kept) transcripts.add(passage.documentId);
         }
       }
       if (inAssistant) {
@@ -2831,6 +2846,56 @@ export function createAnswers(options: AnswersOptions) {
           outside: true,
           toolSet: "check",
           task: true,
+        });
+        const stop = () => active.get(answerId)?.finish({ status: "stopped" });
+        if (input.signal.aborted) stop();
+        else input.signal.addEventListener("abort", stop, { once: true });
+      });
+    },
+
+    /**
+     * Fills a Meeting's notes in (#142) as a check Run kept nowhere, as a cell is: from the
+     * Transcript's `passages`, shown with the Question, its Search scope `documentIds`. Its
+     * Citations are checked as any Answer's. The model is ready and allowed already.
+     */
+    answerMeetingFill(input: {
+      context: QuestionContext;
+      passages: WindowedPassage[];
+      documentIds: string[];
+      model: ChatModelChoice;
+      signal: AbortSignal;
+    }): Promise<CellAnswer> {
+      const answerId = randomUUID();
+      return new Promise<CellAnswer>((resolve) => {
+        start({
+          home: {
+            place: { mindId: null },
+            write(answer, outcome) {
+              if (outcome) {
+                resolve({
+                  status: outcome.status,
+                  markdown: answer.markdown,
+                  blocks: answer.blocks(),
+                  citations: answer.citations(),
+                  error: outcome.status === "failed" ? outcome.error : null,
+                });
+              }
+              return true;
+            },
+          },
+          answerId,
+          questionId: answerId,
+          model: input.model,
+          context: input.context,
+          contextReasons: [],
+          documentIds: input.documentIds,
+          emptyScope: false,
+          forcedSkill: null,
+          consentNeeded: false,
+          outside: true,
+          toolSet: "check",
+          task: true,
+          transcript: input.passages,
         });
         const stop = () => active.get(answerId)?.finish({ status: "stopped" });
         if (input.signal.aborted) stop();
