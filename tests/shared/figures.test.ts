@@ -134,6 +134,15 @@ const GOLDEN: { name: string; context: FigureContext; cases: Case[] }[] = [
     ],
   },
   {
+    name: "German scale words",
+    context: { language: "de" },
+    cases: [
+      ["1,2 Mio. €", [f("1,2 Mio. €", 1200000, { unit: "EUR", scale: "Mio." })]],
+      ["3,4 Mrd. €", [f("3,4 Mrd. €", 3400000000, { unit: "EUR", scale: "Mrd." })]],
+      ["250 Tsd. EUR", [f("250 Tsd. EUR", 250000, { unit: "EUR", scale: "Tsd." })]],
+    ],
+  },
+  {
     name: "Indian grouping and scales",
     context: { language: "en-IN" },
     cases: [
@@ -310,6 +319,13 @@ const GOLDEN: { name: string; context: FigureContext; cases: Case[] }[] = [
       ["(1)", []],
       ["(2025)", []],
       ["(US$170 million)", [f("US$170 million", 170000000, { unit: "USD", scale: "million" })]],
+      [
+        "revenue of RMB 1.2 billion (US$170 million)",
+        [
+          f("RMB 1.2 billion", 1200000000, { unit: "CNY", scale: "billion" }),
+          f("US$170 million", 170000000, { unit: "USD", scale: "million" }),
+        ],
+      ],
       ["1,234 -1,100", [f("1,234", 1234), f("-1,100", -1100)]],
       ["+5%", [f("+5%", 0.05, { unit: "%" })]],
       ["-$1.2bn", [f("-$1.2bn", -1200000000, { unit: "USD", scale: "bn" })]],

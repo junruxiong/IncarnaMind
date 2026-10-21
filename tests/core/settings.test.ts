@@ -1,5 +1,13 @@
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { type Executor, type ExportPreferences, InvalidInputError } from "../../src/core";
+import {
+  DATABASE_FILE,
+  type Executor,
+  type ExportPreferences,
+  type GettingStarted,
+  InvalidInputError,
+} from "../../src/core";
+import { openDatabase } from "../../src/core/storage";
 import { createTempDataFolder, startCore } from "../helpers/core";
 
 /**
@@ -31,6 +39,23 @@ const PDF_EXPORT = {
 } as const;
 
 describe("Settings", () => {
+  test("the old switch for recording meetings, on or off, is ignored", async () => {
+    for (const old of [true, false]) {
+      const dataDir = await createTempDataFolder();
+      startCore(dataDir).close();
+      const db = openDatabase(join(dataDir, DATABASE_FILE));
+      const at = new Date().toISOString();
+      db.run(
+        "INSERT INTO device_settings (id, key, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        [crypto.randomUUID(), "meetingsEnabled", JSON.stringify(old), at, at],
+      );
+      db.close();
+      const core = startCore(dataDir);
+      expect(Object.keys((await core.getSettings()).device)).not.toContain("meetingsEnabled");
+      core.close();
+    }
+  });
+
   test("a new data folder starts with the defaults", async () => {
     const core = startCore(await createTempDataFolder());
 
@@ -47,24 +72,31 @@ describe("Settings", () => {
         monthlyCap: null,
         webSearch: false,
         keepWebPageLook: false,
+        recentCitationStyles: [],
+        newMindStyle: { font: "default", size: "default" },
       },
       device: {
         sidebarWidth: 248,
         sidebarHidden: false,
         chatSetupDismissed: false,
+        sandboxNoticeDismissed: false,
         gettingStarted: {
           started: false,
           citationChecked: false,
           indexed: false,
           askedOwn: false,
+          askedReady: false,
           hidden: false,
         },
         skillScriptsEnabled: true,
         skillScriptTimeoutSeconds: 60,
         suggestionOffers: 0,
-        meetingsEnabled: false,
         meetingSystemAudio: true,
+        transcriptionRoute: null,
         meetingNoticeAccepted: false,
+        meetingPanel: true,
+        meetingPanelHidden: true,
+        meetingHelpKeys: {},
         motion: "system",
       },
       language: "en",
@@ -144,24 +176,31 @@ describe("Settings", () => {
       monthlyCap: null,
       webSearch: false,
       keepWebPageLook: false,
+      recentCitationStyles: [],
+      newMindStyle: { font: "default", size: "default" },
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
       sidebarHidden: false,
       chatSetupDismissed: false,
+      sandboxNoticeDismissed: false,
       gettingStarted: {
         started: false,
         citationChecked: false,
         indexed: false,
         askedOwn: false,
+        askedReady: false,
         hidden: false,
       },
       skillScriptsEnabled: true,
       skillScriptTimeoutSeconds: 60,
       suggestionOffers: 0,
-      meetingsEnabled: false,
       meetingSystemAudio: true,
+      transcriptionRoute: null,
       meetingNoticeAccepted: false,
+      meetingPanel: true,
+      meetingPanelHidden: true,
+      meetingHelpKeys: {},
       motion: "system",
     });
   });
@@ -180,6 +219,28 @@ describe("Settings", () => {
     });
   });
 
+  test("Get started's progress kept before the ready Question reads it as not asked (#123)", async () => {
+    const dataDir = await createTempDataFolder();
+    const before = startCore(dataDir);
+    const kept = {
+      started: true,
+      citationChecked: true,
+      indexed: false,
+      askedOwn: true,
+      hidden: false,
+    };
+    await before.updateSettings({
+      device: { gettingStarted: kept as unknown as GettingStarted },
+    });
+    before.close();
+
+    const after = startCore(dataDir);
+    expect((await after.getSettings()).device.gettingStarted).toEqual({
+      ...kept,
+      askedReady: false,
+    });
+  });
+
   test("a width must be a number", async () => {
     const core = startCore(await createTempDataFolder());
 
@@ -195,19 +256,24 @@ describe("Settings", () => {
       sidebarWidth: 300,
       sidebarHidden: true,
       chatSetupDismissed: true,
+      sandboxNoticeDismissed: true,
       gettingStarted: {
         started: true,
         citationChecked: true,
         indexed: false,
         askedOwn: false,
+        askedReady: true,
         hidden: true,
       },
       skillScriptsEnabled: false,
       skillScriptTimeoutSeconds: 15,
       suggestionOffers: 1,
-      meetingsEnabled: true,
       meetingSystemAudio: false,
+      transcriptionRoute: "local" as const,
       meetingNoticeAccepted: true,
+      meetingPanel: false,
+      meetingPanelHidden: false,
+      meetingHelpKeys: { say: "Ctrl+Alt+Q" },
       motion: "reduced" as const,
     };
     await before.updateSettings({
@@ -220,6 +286,7 @@ describe("Settings", () => {
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
         keepWebPageLook: true,
+        newMindStyle: { font: { family: "Georgia" }, size: "large" },
       },
       device,
     });
@@ -240,6 +307,8 @@ describe("Settings", () => {
         monthlyCap: { amount: 20, currency: "USD" },
         webSearch: true,
         keepWebPageLook: true,
+        recentCitationStyles: [],
+        newMindStyle: { font: { family: "Georgia" }, size: "large" },
       },
       device,
       language: "zh-CN",
@@ -256,6 +325,14 @@ describe("Settings", () => {
     { name: "an unknown group", patch: { secrets: { apiKey: "sk-…" } } },
     { name: "a negative width", patch: { device: { sidebarWidth: -1 } } },
     { name: "a width that isn't a number", patch: { device: { sidebarWidth: "wide" } } },
+    {
+      name: "a new Mind style with a font that isn't a preset or a family",
+      patch: { user: { newMindStyle: { font: "comic", size: "default" } } },
+    },
+    {
+      name: "a new Mind style with a size it hasn't got",
+      patch: { user: { newMindStyle: { font: "serif", size: "huge" } } },
+    },
     { name: "the tabs the app kept before groups", patch: { device: { openMinds: ["mind-a"] } } },
     {
       name: "a checklist with a step missing",
@@ -301,6 +378,10 @@ describe("Settings", () => {
     {
       name: "a way to show someone's changes that isn't one",
       patch: { user: { exportOptions: { ...DEFAULT_EXPORT, theirChanges: "hidden" } } },
+    },
+    {
+      name: "a place to transcribe meetings that isn't one",
+      patch: { device: { transcriptionRoute: "carrier-pigeon" } },
     },
     {
       name: "a default model without a model",

@@ -24,10 +24,18 @@ import {
 import type { Core } from "../core";
 import { FILES_CHANNELS } from "../shared/bridge";
 import { type MessageKey, translate } from "../shared/i18n";
+import { sandboxOff } from "./analysisPaths";
 import { handle } from "./ipc";
 import { type FileLogger, logsFolder, logWindowError } from "./log";
-import { isEditMenuState, setEditMenu, setMenuSidebarHidden } from "./menu";
+import {
+  isEditMenuState,
+  setEditMenu,
+  setExamplesRemoved,
+  setExportMenu,
+  setMenuSidebarHidden,
+} from "./menu";
 import { rememberPick, startFolder, startNear } from "./pickerFolders";
+import { saveMindCopy } from "./unsavedChanges";
 
 /** What "Add Documents" offers; the core decides what it takes (and says what it skipped). */
 const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "csv", "txt", "md", "markdown"];
@@ -86,6 +94,12 @@ export function serveFileActions(
       ? await dialog.showOpenDialog(window, openOptions)
       : await dialog.showOpenDialog(openOptions);
     return canceled ? null : (filePaths[0] ?? null);
+  });
+
+  handle(FILES_CHANNELS.saveMindCopy, async (event, mindId: unknown): Promise<boolean> => {
+    refuseUnknown(event);
+    if (typeof mindId !== "string") throw new Error("A Mind id must be a string.");
+    return saveMindCopy(core, BrowserWindow.fromWebContents(event.sender), mindId);
   });
 
   handle(FILES_CHANNELS.openDataFolder, async (event) => {
@@ -258,12 +272,31 @@ export function serveFileActions(
     shell.showItemInFolder(linked.path);
   });
 
+  handle(FILES_CHANNELS.runsWithoutSandbox, (event) => {
+    refuseUnknown(event);
+    // Playwright starts a test build on Linux with --no-sandbox: only a test that is about the line asks for it.
+    if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_SANDBOX_NOTICE !== "1") {
+      return false;
+    }
+    return sandboxOff((name) => app.commandLine.hasSwitch(name), process.env);
+  });
+
   ipcMain.on(FILES_CHANNELS.sidebarHidden, (event, hidden: unknown) => {
     if (trusted(event) && typeof hidden === "boolean") setMenuSidebarHidden(hidden);
   });
 
   ipcMain.on(FILES_CHANNELS.editMenu, (event, state: unknown) => {
     if (trusted(event) && isEditMenuState(state)) setEditMenu(state);
+  });
+
+  ipcMain.on(FILES_CHANNELS.examplesRemoved, (event, removed: unknown) => {
+    if (trusted(event) && typeof removed === "boolean") setExamplesRemoved(removed);
+  });
+
+  ipcMain.on(FILES_CHANNELS.exportMenu, (event, mindName: unknown) => {
+    if (trusted(event) && (typeof mindName === "string" || mindName === null)) {
+      setExportMenu(mindName);
+    }
   });
 
   ipcMain.on(FILES_CHANNELS.logError, (event, report: unknown) => {

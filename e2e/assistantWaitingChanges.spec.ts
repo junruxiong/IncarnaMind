@@ -5,6 +5,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  nameMind,
   newMind,
   openSteps,
   pointAndClick,
@@ -33,9 +34,8 @@ test.afterEach(async () => {
 
 async function writeMind(window: Page, title: string, note: string): Promise<void> {
   await newMind(window);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
-  await window.keyboard.type(title);
   await enterContent(window);
+  await nameMind(window, title);
   await window.keyboard.type(note);
   await expect(window.getByTestId("mind-editor").locator("p")).toHaveText([note]);
 }
@@ -47,11 +47,11 @@ test("over changes it can't revise, the assistant changes nothing, says why, and
   await setLanguage(window, "en");
   await setWindowSize(app, window, 1100, 800);
   await writeMind(window, "Q3 review", "The quarter was very good, and sales were really strong.");
-  await askInAssistant(window, "Shorten the summary");
+  await askInAssistant(window, "Could you shorten the summary?");
   const bar = window.getByTestId("proposals-bar");
   await expect(bar.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
 
-  const refused = await askInAssistant(window, "Shorten the summary");
+  const refused = await askInAssistant(window, "Could you shorten the summary?");
 
   const line = refused.getByTestId("answer-waiting-changes");
   await expect(line).toHaveText(
@@ -60,12 +60,16 @@ test("over changes it can't revise, the assistant changes nothing, says why, and
   await expect(bar.getByTestId("proposals-count")).toHaveText("2 changes from the assistant");
   const timeline = await openSteps(window, refused);
   await expect(timeline.getByTestId("answer-mind-call")).toHaveText(
-    /Couldn't change “Q3 review”: 2 changes are waiting there/,
+    /Couldn’t change “Q3 review”: 2 changes are waiting there/,
   );
-  // The line sits under the Answer's text, inside the assistant.
-  const text = await refused.getByTestId("assistant-answer-text").boundingBox();
-  const shown = await line.boundingBox();
-  expect(shown && text && shown.y >= text.y + text.height).toBe(true);
+  // The line sits under the Answer's text, inside the assistant, once the steps have opened.
+  await expect
+    .poll(async () => {
+      const text = await refused.getByTestId("assistant-answer-text").boundingBox();
+      const shown = await line.boundingBox();
+      return shown !== null && text !== null && shown.y >= text.y + text.height;
+    })
+    .toBe(true);
 
   await pointAndClick(window, line.getByTestId("answer-waiting-review"));
   await expect(window.getByTestId("mind-editor")).toBeFocused();

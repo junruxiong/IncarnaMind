@@ -11,6 +11,7 @@ import {
   dismissChatSetup,
   launchApp,
   motionSettled,
+  nameMind,
   newMind,
   pointAndClick,
   pointAt,
@@ -18,6 +19,7 @@ import {
   setLanguage,
   setWindowSize,
   slideSelect,
+  tabMenu,
   useLocalChatModel,
 } from "./app";
 
@@ -47,7 +49,6 @@ const TEXTS = {
     command: "Export AI use statement",
     title: "AI use statement: Thesis",
     sections: ["AI models and what they were used for", "AI text, by section", "Checks"],
-    made: "Made “AI use statement: Thesis”",
     undo: "Undo",
     added: "Answers added to the document",
     found: "Quote found",
@@ -70,7 +71,6 @@ const TEXTS = {
       "二、AI 生成文字的保留与改写（按章节）",
       "三、引用与说法的核对",
     ],
-    made: "已新建“AI 使用声明：Thesis”",
     undo: "撤销",
     added: "将助手的回答加入文档",
     found: "找到引文",
@@ -104,7 +104,7 @@ async function writeThesis(window: Page, heading: string): Promise<Locator> {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Thesis");
+  await nameMind(window, "Thesis");
   const editor = editorOf(window);
   await editor.click();
   await window.keyboard.type(`# ${heading}`);
@@ -139,11 +139,11 @@ async function runCommand(
     await pointAt(window, row);
     await pointAndClick(window, row.getByTestId("mind-menu"));
     const menu = row.getByTestId("mind-actions");
-    // In the menu's order: right after the export items.
+    // In the menu's order: right after Export….
     const ids = await menu
       .getByRole("menuitem")
       .evaluateAll((items) => items.map((item) => item.getAttribute("data-testid")));
-    expect(ids.indexOf("mind.aiUseStatement")).toBe(ids.indexOf("mind.exportOptions") + 1);
+    expect(ids.indexOf("mind.aiUseStatement")).toBe(ids.indexOf("mind.exportMenu") + 1);
     await expect(menu.getByTestId("mind.aiUseStatement")).toHaveText(text.command);
     await screenshot(window, `${shot}-menu`);
     await pointAndClick(window, menu.getByTestId("mind.aiUseStatement"));
@@ -188,7 +188,7 @@ for (const { language, width, via } of CASES) {
     await expect(tabs(window).nth(1)).toHaveAttribute("aria-selected", "true");
     const statement = editorOf(window);
     await expect(statement.getByRole("heading")).toHaveText(text.sections);
-    await expect(window.getByTestId("undo-message")).toHaveText(text.made);
+    await expect(window.getByTestId("undo-message")).toHaveCount(0);
     await screenshot(window, shot);
 
     // The counts are the Mind's: its Answer added once, its one Citation found, its heading's section.
@@ -213,13 +213,19 @@ for (const { language, width, via } of CASES) {
       await window.evaluate(() => document.documentElement.scrollWidth <= globalThis.innerWidth),
     ).toBe(true);
 
-    // Undo takes the new Mind to Recently deleted, leaving the Mind it is of in front; ⇧⌘Z brings it back.
-    await expect(window.getByTestId("undo-action")).toHaveText(text.undo);
-    await pointAndClick(window, window.getByTestId("undo-action"));
+    // ⌘Z never takes it back: Delete sends it to Recently deleted, and Undo brings it back.
+    await window.getByTestId("plus-menu").focus();
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(tabs(window)).toHaveCount(2);
+    await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.delete"));
     await expect(tabs(window)).toHaveCount(1);
     await expect(tabs(window).nth(0)).toContainText("Thesis");
-    await window.getByTestId("plus-menu").focus();
-    await window.keyboard.press("ControlOrMeta+Shift+z");
+    await expect(window.getByTestId("undo-action")).toHaveText(text.undo);
+    await pointAndClick(window, window.getByTestId("undo-action"));
+    await pointAndClick(
+      window,
+      window.getByTestId("mind-list-item").filter({ hasText: text.title }),
+    );
     await expect(tabs(window)).toHaveCount(2);
     await expect(tabs(window).nth(1)).toContainText(text.title);
     await expect(statement.getByRole("heading")).toHaveText(text.sections);
@@ -246,7 +252,7 @@ test("an empty Mind says there is nothing to report, not a table of zeros, in bo
     await setLanguage(window, language);
     const text = TEXTS[language];
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Thesis");
+    await nameMind(window, "Thesis");
     const before = await tabs(window).count();
 
     await runCommand(window, "palette", text, `ai-statement-empty-${language}`);
@@ -276,7 +282,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await setWindowSize(app, window, 1440, 900);
     await addDocuments(window, [join(sources, "Tides.pdf")]);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Thesis");
+    await nameMind(window, "Thesis");
     const editor = editorOf(window);
     await editor.click();
     await window.keyboard.type(sentences.join(" "));

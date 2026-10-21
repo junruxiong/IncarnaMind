@@ -15,6 +15,8 @@
  * - a figure with no scale of its own under a header that states one
  *   ("单位：万元", "in millions");
  * - "△1,250", which some reports use for a decrease and others for a change;
+ * - "(250)" or "(12.5%)", a minus in accounts and an aside in prose, and "12,500.00 DR",
+ *   a debit that may or may not be a minus (#978);
  * - "2–3%", a range, which can't be one input without choosing an end;
  * - "3 points", which may be percentage points or an index's points.
  *
@@ -72,7 +74,7 @@ export interface Reading {
  *   a figure whose decimal mark isn't the one the Document uses;
  * - "currency": "¥", yuan or yen;
  * - "scale": no scale of its own, under a header that states one;
- * - "sign": "△1,250", or a whole number in brackets, "(250)";
+ * - "sign": "△1,250", a whole number or a percent in brackets, "(250)", or "12,500.00 DR";
  * - "range": "2–3%", two values;
  * - "points": "3 points", percentage points or an index's.
  */
@@ -95,6 +97,8 @@ export interface Figure extends Reading {
    * a Citation shows, and what the check finds again.
    */
   chars: string;
+  /** Its own currency as written, apart from the number: "£", "US$", "英镑", "GBP". */
+  currency: string | null;
   /** Written as approximate or as a bound: "约", "c.", "about", "~", "近", "逾", "超过", "左右". */
   approximate: boolean;
   /** The other end of a range ("2–3%": 0.03); `value` is the first. */
@@ -126,6 +130,12 @@ export interface FigureContext {
   header?: string | null;
   /** Read years, dates, quarters and periods as plain figures too. */
   dates?: boolean;
+  /**
+   * The Document is accounts (see `figureContextOf`), so a whole number in
+   * brackets in one of its table rows or statement lines is negative. Left
+   * out, it is worked out from the text read.
+   */
+  accounts?: boolean;
 }
 
 /** A scale or unit stated apart from the figures it applies to: "单位：万元", "(in millions)". */
@@ -166,6 +176,8 @@ interface Prepared {
    */
   lineStarts: ReadonlySet<number>;
   spaced: ReadonlySet<number>;
+  /** Characters of `s` that follow a tab in the original text, which the normaliser removes beside a Chinese character. */
+  tabbed: ReadonlySet<number>;
 }
 
 /**
@@ -184,12 +196,14 @@ function prepare(text: string): Prepared {
   const to: number[] = [];
   const lineStarts = new Set<number>([0]);
   const spaced = new Set<number>();
+  const tabbed = new Set<number>();
   let previousEnd = 0;
   for (const unit of units) {
     if (unit.removed) continue;
     const gap = text.slice(previousEnd, unit.start);
     if (LINE_BREAK.test(gap)) lineStarts.add(s.length);
     if (/\s/.test(gap)) spaced.add(s.length);
+    if (gap.includes("\t")) tabbed.add(s.length);
     previousEnd = unit.end;
     const original = text.slice(unit.start, unit.end);
     let char = unit.char;
@@ -219,7 +233,7 @@ function prepare(text: string): Prepared {
     from.push(unit.start);
     to.push(unit.end);
   }
-  return { s, from, to, lineStarts, spaced };
+  return { s, from, to, lineStarts, spaced, tabbed };
 }
 
 const isDigit = (char: string | undefined): boolean =>
@@ -409,15 +423,24 @@ const JPY_WORDS = /日元|円|JPY|\byen\b/;
  * a Passage alone may hold no number that tells.
  */
 export function figureContextOf(text: string, language?: string | null): FigureContext {
-  const { s } = prepare(text);
+  const prepared = prepare(text);
+  const { s } = prepared;
   const cny = CNY_WORDS.test(s);
   const jpy = JPY_WORDS.test(s);
   return {
     language: language ?? null,
     separators: separatorsIn(s),
     yen: cny && !jpy ? "CNY" : jpy && !cny ? "JPY" : null,
+    accounts: writesAccounts(s, statementsIn(prepared, text, settle({ language }))),
   };
 }
+
+const BRACKETED_AMOUNT =
+  /\(\s*(?:\p{Sc}|[A-Z]{3} ?)?\s*(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d{2})\s*\)/u;
+
+const writesAccounts = (s: string, statements: readonly Statement[]): boolean =>
+  BRACKETED_AMOUNT.test(s) ||
+  statements.some((each) => each.exponent > 0 || each.unit.kind === "currency");
 
 /** The language, script and region of a BCP 47 tag. */
 function tagOf(language: string): {
@@ -458,6 +481,7 @@ interface Settled {
   yen: string[];
   dates: boolean;
   chinese: boolean;
+  accounts: boolean;
 }
 
 function settle(context: FigureContext): Settled {
@@ -481,6 +505,7 @@ function settle(context: FigureContext): Settled {
     yen,
     dates: context.dates === true,
     chinese: tag?.language === "zh",
+    accounts: context.accounts === true,
   };
 }
 
@@ -517,14 +542,25 @@ const EN_SCALES: Readonly<Record<string, number>> = {
   k: 3,
   lakh: 5,
   crore: 7,
+  // German reports: "1,2 Mio. €", "3,4 Mrd. €", "250 Tsd. €".
+  "mio.": 6,
+  mio: 6,
+  "mrd.": 9,
+  mrd: 9,
+  "tsd.": 3,
+  tsd: 3,
 };
 /** Scale words, with a space before the longer ones. Single letters only attached: "5 m" is often metres. */
 const EN_SCALE_AFTER =
-  /(?:[ \n]?(?:[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|[Ll]akh|[Cc]rore)s?|(?: ?(?:tn|trn|bn|Bn|BN|mn|Mn|MN|MM)|[kKmMbB])(?![A-Za-z0-9])|mm(?![A-Za-z0-9]))/y;
+  /(?:[ \n]?(?:[Tt]rillion|[Bb]illion|[Mm]illion|[Tt]housand|[Ll]akh|[Cc]rore)s?|[ \u00a0]?(?:Mio|Mrd|Tsd)(?:\.|(?![A-Za-z]))|(?: ?(?:tn|trn|bn|Bn|BN|mn|Mn|MN|MM)|[kKmMbB])(?![A-Za-z0-9])|mm(?![A-Za-z0-9]))/y;
 
+const CURRENCY_ISO_CODES =
+  "USD|CNY|RMB|Rmb|HKD|EUR|GBP|JPY|AUD|CAD|SGD|TWD|CHF|INR|KRW|NZD|MOP|BRL|RUB|SEK|NOK|DKK|ZAR|MXN|THB|MYR|IDR|PHP|VND|TRY|SAR|AED";
+const CURRENCY_TOKEN = new RegExp(
+  `(?:(?<![A-Za-z])(?:US|HK|AU|CA|NZ|SG|NT|MX|A|C|S|R)?\\$|CN¥|JP¥|[¥€£₹₩₽₺฿₫₱]|(?<![A-Za-z])(?:${CURRENCY_ISO_CODES}|Rs\\.?)|人民币|美元|港币|港元|欧元|日元|英镑)`,
+);
 /** Currency signs before a number, and codes and names before it, with a space allowed. */
-const CURRENCY_BEFORE =
-  /(?:(?<![A-Za-z])(?:US|HK|AU|CA|NZ|SG|NT|MX|A|C|S|R)?\$|CN¥|JP¥|[¥€£₹₩₽₺฿₫₱]|(?<![A-Za-z])(?:USD|CNY|RMB|Rmb|HKD|EUR|GBP|JPY|AUD|CAD|SGD|TWD|CHF|INR|KRW|NZD|MOP|BRL|RUB|SEK|NOK|DKK|ZAR|MXN|THB|MYR|IDR|PHP|VND|TRY|SAR|AED|Rs\.?)|人民币|美元|港币|港元|欧元|日元|英镑)[ \u00a0]?$/;
+const CURRENCY_BEFORE = new RegExp(`${CURRENCY_TOKEN.source}[ \\u00a0]?$`);
 
 const CURRENCY_CODES: Readonly<Record<string, string>> = {
   US$: "USD",
@@ -589,7 +625,17 @@ const CURRENCY_CODES: Readonly<Record<string, string>> = {
   pounds: "GBP",
   "pounds sterling": "GBP",
   rupees: "INR",
+  "Indian rupees": "INR",
+  "United States dollars": "USD",
+  "Swiss francs": "CHF",
 };
+
+// Contracts write "in Pounds Sterling" and "ALL AMOUNTS ARE IN US DOLLARS".
+const NAMED_CODES = new Map(
+  Object.entries(CURRENCY_CODES)
+    .filter(([word]) => /^[a-z]/.test(word) || /^[A-Za-z.]+(?: [A-Za-z]+)+$/.test(word))
+    .map(([word, code]) => [word.toLowerCase(), code]),
+);
 
 const CN_CURRENCY_AFTER =
   /(?:新加坡元|瑞士法郎|新台币|澳门元|澳门币|人民币|美元|港元|港币|欧元|日元|英镑|澳元|加元|韩元|卢布|元|圆|円)(?:人民币)?/y;
@@ -598,6 +644,72 @@ const EN_CURRENCY_AFTER =
 
 /** A currency sign after the number, as many European Documents write it ("1.234 €"), unless it starts the next one. */
 const SIGN_AFTER = / ?[€£¥$](?![A-Za-z0-9])(?! ?\d)/y;
+
+const LEDGER_AFTER = / ?(?:CR|DR|Cr|Dr)(?![A-Za-z0-9])(?!\.? \p{Lu}\p{Ll})/uy;
+
+const CURRENCY_ANYWHERE = new RegExp(
+  [CURRENCY_TOKEN, CN_CURRENCY_AFTER, EN_CURRENCY_AFTER].map((each) => each.source).join("|"),
+  "g",
+);
+const AMOUNT_ENDS = /[\d%亿万千]$|(?:\d|\b)(?:million|billion|trillion|thousand|bn|mn|[mkb])$/i;
+
+function amountBefore(s: string, at: number, settled: Settled): string[] | null {
+  const line = s.slice(s.lastIndexOf("\n", at - 1) + 1, at).trimEnd();
+  const last = [...line.matchAll(CURRENCY_ANYWHERE)].at(-1);
+  if (!last || !(AMOUNT_ENDS.test(line) || last.index + last[0].length === line.length))
+    return null;
+  return currencyCodes(last[0], settled);
+}
+
+const AMOUNTS_ONLY =
+  /^(?:[\s|.,;()（）%‰+\-–—−\d万亿千元圆\ue000]|\p{Sc}|(?:CR|DR|Cr|Dr)(?![A-Za-z])|(?:thousand|million|billion|trillion|tn|bn|mn|[kKmMbB])(?![A-Za-z]))*$/u;
+const LABEL_START = /^(?:\p{Lu}|\p{Script=Han})/u;
+const PROSE_START =
+  /^(?:The|A|An|This|That|These|Those|Our|Its|Their|It|We|They|In|On|At|For|Of|To|By|With|As|If|When|While) /;
+const LABEL_REFERENCE =
+  /(?:(?<![A-Za-z])(?:[Pp]aragraphs?|[Pp]ara|[Ss]ections?|[Nn]otes?|[Pp]ages?|[Pp]art|[Cc]lause|[Aa]rticle)|第|[条款项章节页])$/;
+
+const COUNT_LABEL =
+  /(?:(?<![A-Za-z])(?:head ?count|employees?|staff|FTEs?|people)|人数|员工|人员|职工)$/i;
+
+/** "Payments to employees", "Revenue per employee": the people are who the money is for, not what is counted. */
+const MONEY_FOR_PEOPLE =
+  /\b(?:of|to|for|from|per|by|with|among|between|towards?|against|owed|paid)\b|[给向每付欠借对为]/i;
+
+function namesCount(prepared: Prepared, at: number): boolean {
+  const { s } = prepared;
+  const lead = s.slice(s.lastIndexOf("\n", at - 1) + 1, at);
+  const label = /^[^\d(\p{Sc}]*/u.exec(lead)?.[0] ?? "";
+  return [label, lead].some((words) => {
+    const end = words.slice(-100).replace(/[\s|]+$/, "");
+    return COUNT_LABEL.test(end) && !MONEY_FOR_PEOPLE.test(end.replace(/\bnumbers? of\b/gi, ""));
+  });
+}
+
+function rowOf(prepared: Prepared, from: number, to: number): "table" | "statement" | null {
+  const { s, tabbed } = prepared;
+  const start = s.lastIndexOf("\n", from - 1) + 1;
+  const stop = s.indexOf("\n", to);
+  const end = stop < 0 ? s.length : stop;
+  if (!AMOUNTS_ONLY.test(s.slice(to, end))) return null;
+  let cell = from;
+  while (s[cell - 1] === " " && cell - 1 >= start) cell--;
+  const startsCell =
+    cell === start || s[cell - 1] === "\t" || s[cell - 1] === "|" || tabbed.has(cell);
+  let delimited = /[\t|]/.test(s.slice(start, end));
+  for (let at = start + 1; !delimited && at <= end; at++) delimited = tabbed.has(at);
+  if (startsCell && delimited) return "table";
+  const lead = s.slice(start, from);
+  const label = (/^[^\d(（\p{Sc}]*/u.exec(lead)?.[0] ?? "").replace(/^[\s|]+|[\s|]+$/g, "");
+  const prose =
+    label === "" ||
+    label.length > 60 ||
+    !LABEL_START.test(label) ||
+    PROSE_START.test(label) ||
+    /[,，;；。]|\. /.test(label) ||
+    LABEL_REFERENCE.test(label);
+  return prose ? null : "statement";
+}
 
 /** Percentage points and basis points, checked before percent: "% points" isn't a percent. */
 const POINTS_AFTER =
@@ -742,10 +854,10 @@ export function scaleExponent(word: string): number {
 /** The unit a currency or unit word names, with the context's "$", "元" and "¥". */
 function currencyCodes(word: string, settled: Settled): string[] {
   const trimmed = word.trim();
-  if (trimmed === "$" || trimmed === "dollars") return [settled.dollar];
+  if (trimmed === "$" || trimmed.toLowerCase() === "dollars") return [settled.dollar];
   if (trimmed === "元" || trimmed === "圆") return [settled.yuan];
   if (trimmed === "¥") return settled.yen;
-  const code = CURRENCY_CODES[trimmed];
+  const code = CURRENCY_CODES[trimmed] ?? NAMED_CODES.get(trimmed.toLowerCase());
   if (code) return [code];
   return /^[A-Z]{3}$/.test(trimmed) ? [trimmed] : [];
 }
@@ -1163,6 +1275,8 @@ interface Draft extends Span {
   negative: boolean;
   /** "△1,250", or a whole number in brackets: the sign is a question. */
   signUnsure: boolean;
+  /** A count of people in brackets: no sign, and no unit a header states, applies to it. */
+  count: boolean;
   exponent: number;
   scaleWord: string | null;
   /** Where the scale word is, to give it as written. */
@@ -1174,6 +1288,7 @@ interface Draft extends Span {
   unitAt: Span | null;
   /** Codes the currency may be, when more than one ("¥"). */
   currencies: string[];
+  currencyAt: Span | null;
   loosePoints: string | null;
   /** "pct" in a Chinese Document: a percent, or percentage points. */
   percentOrPoints: boolean;
@@ -1261,6 +1376,7 @@ function readAround(
     core: found,
     negative: false,
     signUnsure: false,
+    count: false,
     exponent: found.exponent,
     scaleWord: found.scaleWord,
     scaleAt: found.scaleAt,
@@ -1268,6 +1384,7 @@ function readAround(
     unit: found.percent !== null ? { kind: "percent" } : { kind: "plain" },
     unitAt: null,
     currencies: [],
+    currencyAt: null,
     loosePoints: null,
     percentOrPoints: false,
     approximate: false,
@@ -1287,12 +1404,15 @@ function readAround(
   };
   const currencyBefore = (at: number) => {
     const match = CURRENCY_BEFORE.exec(s.slice(floor, at));
-    return match ? { from: floor + match.index, codes: currencyCodes(match[0], settled) } : null;
+    if (!match) return null;
+    const from = floor + match.index;
+    return { from, to: from + match[0].trimEnd().length, codes: currencyCodes(match[0], settled) };
   };
   takeSign();
   const currency = currencyBefore(left);
   if (currency) {
     draft.currencies = currency.codes;
+    draft.currencyAt = currency;
     left = currency.from;
   }
   takeSign();
@@ -1328,12 +1448,20 @@ function readAround(
           " \t\n".includes(afterMark) ||
           prepared.spaced.has(found.to + 1));
   if (lineStart && listMark && !found.formatted && found.to - found.from <= 2) return null;
-  const bracket = s[left - 1] === "(" && left - 1 >= floor ? left - 1 : null;
+  let open = left;
+  while (s[open - 1] === " " && open - 1 >= floor) open--;
+  const bracket = s[open - 1] === "(" && open - 1 >= floor ? open - 1 : null;
 
   // A route's or a line's name, not a figure: "1路", "2号线".
   if (/^(?:路|号线)/.test(s.slice(found.to, found.to + 2)) && !found.formatted) return null;
 
   let right = found.to;
+  const takeLedger = (): boolean => {
+    const word = matchAt(LEDGER_AFTER, s, right);
+    if (!word || (!word[0].startsWith(" ") && !found.formatted)) return false;
+    right += word[0].length;
+    return true;
+  };
   /** Takes what `pattern` matches at the right, and where it is, without the space before it. */
   const take = (pattern: RegExp) => {
     const match = matchAt(pattern, s, right);
@@ -1366,6 +1494,7 @@ function readAround(
     if (draft.currencies.length === 0 || codes.every((code) => draft.currencies.includes(code)))
       draft.currencies = codes;
     else draft.currencies = [...new Set([...draft.currencies, ...codes])];
+    draft.currencyAt ??= currencyAfter.at;
     if (found.capitals) {
       const jiao = take(/([壹贰叁肆伍陆柒捌玖])角/y);
       const fen = take(/([壹贰叁肆伍陆柒捌玖])分/y);
@@ -1414,6 +1543,7 @@ function readAround(
   if (draft.currencies.length > 0)
     draft.unit = { kind: "currency", code: draft.currencies[0] as string };
   if (take(APPROXIMATE_AFTER)) draft.approximate = true;
+  let ledger = takeLedger();
 
   // A name, not a figure: "5G", "3D", "2025E", "1st", "600519.SH".
   if (isLatin(s[right]) && (right === found.to || isAlnum(s[right - 1]))) return null;
@@ -1457,18 +1587,32 @@ function readAround(
     return null;
 
   draft.from = left;
+  let close = right;
+  while (s[close] === " ") close++;
   // "（+2.1pct）": a sign written inside brackets makes them an aside, not an accounting negative.
-  if (bracket !== null && s[right] === ")" && !signed) {
+  if (bracket !== null && s[close] === ")" && !signed) {
     const outer = draft.currencies.length === 0 ? currencyBefore(bracket) : null;
-    // "(1,250)" and "($1,250)" are accounting negatives; "(US$170 million)" is an aside.
-    if (bare && found.formatted) {
+    const count = draft.unit.kind === "plain" && outer === null && namesCount(prepared, bracket);
+    const reference =
+      !count &&
+      (REFERENCE_BEFORE.test(s.slice(Math.max(floor, bracket - 24), bracket)) ||
+        LABEL_REFERENCE.test(s.slice(floor, bracket).trimEnd()));
+    // "section 1159(10)", "s.12(3)": a sub-reference, never an amount.
+    const glued =
+      !outer &&
+      !prepared.spaced.has(bracket) &&
+      (isAlnum(s[bracket - 1]) || s[bracket - 1] === ")");
+    // In running text brackets are an aside; only a table's cell or a statement line makes one a minus.
+    const row = glued || reference ? null : rowOf(prepared, outer?.from ?? bracket, close + 1);
+    const negate = () => {
       draft.negative = true;
       if (outer) {
         draft.currencies = outer.codes;
+        draft.currencyAt = outer;
         draft.unit = { kind: "currency", code: outer.codes[0] as string };
       }
       draft.from = outer?.from ?? bracket;
-      right++;
+      right = close + 1;
       // "£(12.3)m": the scale may follow the brackets.
       const scale = draft.scaleWord === null ? take(EN_SCALE_AFTER) : null;
       if (scale && scale.word !== "mm") {
@@ -1476,14 +1620,47 @@ function readAround(
         draft.scaleAt = scale.at;
         draft.exponent = scaleExponent(scale.word);
       }
-    } else if ((bare && whole) || (draft.unit.kind === "percent" && draft.scaleWord === null)) {
-      // "(2)" is a list's or a note's; "(250)" and "(12.5%)" may be negative or an aside.
-      if (bare && found.number.digits.length <= 2) return null;
-      draft.signUnsure = true;
+      ledger = ledger || takeLedger();
+    };
+    const enclose = () => {
       draft.from = bracket;
-      right++;
+      right = close + 1;
+    };
+    const question = () => {
+      draft.signUnsure = true;
+      enclose();
+    };
+    draft.count = count;
+    const currencySigned = outer !== null || currency !== null;
+    if (bare && found.formatted) {
+      // "(1,250)" and "($1,250)" are accounting negatives, unless they count people.
+      if (count) enclose();
+      else negate();
+    } else if (bare && whole) {
+      // "(2)" is a list's or a note's; "(250)" may be negative or an aside, and is a minus in a row of accounts.
+      if (reference) return null;
+      const marked = draft.currencies.length > 0 || outer !== null;
+      const small = found.number.digits.length <= 2;
+      if (small && !(marked && row)) return null;
+      if (count) enclose();
+      else if (row && (marked || settled.accounts)) negate();
+      else question();
+    } else if (draft.unit.kind === "percent" && draft.scaleWord === null) {
+      question();
+    } else if (count) {
+      enclose();
+    } else if (
+      row === "table"
+        ? draft.unit.kind === "plain" || draft.unit.kind === "currency"
+        : row === "statement" && currencySigned && settled.accounts
+    ) {
+      // "(US$170 million)" after an amount in another currency restates it; in a cell of its own, or in accounts beside a statement's label ("Impairment (£1.2m)"), it is a minus.
+      const codes = outer?.codes ?? draft.currencies;
+      const before = codes.length > 0 ? amountBefore(s, outer?.from ?? bracket, settled) : null;
+      if (!before?.length || before.some((code) => codes.includes(code))) negate();
     }
   }
+  if (ledger && !draft.negative) draft.signUnsure = true;
   const footnote = matchAt(FOOTNOTE_AFTER, s, right);
   if (footnote) {
     draft.footnote = { from: right, to: right + footnote[0].length };
@@ -1549,6 +1726,7 @@ function rangeAfter(
       to.unitAt = from.unitAt;
       to.unitExponent = from.unitExponent;
       to.currencies = from.currencies;
+      to.currencyAt = from.currencyAt;
       to.loosePoints = from.loosePoints;
     }
     if (to.scaleWord === null && from.scaleWord !== null && to.core.percent === null) {
@@ -1594,7 +1772,12 @@ function readingOf(draft: Draft, written?: Written, number: Digits = draft.core.
 
 /** The readings a header's stated unit gives a figure that has no scale or unit of its own. */
 function statedReadings(draft: Draft, statements: readonly Statement[]): Reading[] {
-  if (draft.scaleWord !== null || draft.core.percent !== null || draft.core.fraction !== null)
+  if (
+    draft.count ||
+    draft.scaleWord !== null ||
+    draft.core.percent !== null ||
+    draft.core.fraction !== null
+  )
     return [];
   if (draft.unit.kind !== "plain" && draft.unit.kind !== "currency") return [];
   const readings: Reading[] = [];
@@ -1671,6 +1854,7 @@ function finish(
     start,
     end,
     chars: text.slice(start, end),
+    currency: draft.currencyAt ? written(draft.currencyAt) : null,
     approximate: draft.approximate,
     rangeTo,
     footnote: draft.footnote ? written(draft.footnote) : null,
@@ -1701,6 +1885,7 @@ function dateFigures(s: string, span: Span): Draft[] {
       core: core({ from, to }, number),
       negative: false,
       signUnsure: false,
+      count: false,
       exponent: 0,
       scaleWord: null,
       scaleAt: null,
@@ -1708,6 +1893,7 @@ function dateFigures(s: string, span: Span): Draft[] {
       unit: { kind: "plain" },
       unitAt: null,
       currencies: [],
+      currencyAt: null,
       loosePoints: null,
       percentOrPoints: false,
       approximate: false,
@@ -1726,11 +1912,13 @@ function dateFigures(s: string, span: Span): Draft[] {
 export function readFigures(text: string, context: FigureContext = {}): Figure[] {
   const prepared = prepare(text);
   const { s } = prepared;
-  const settled = settle(context);
-  const statements = statementsIn(prepared, text, settled);
-  const header = context.header
-    ? statementsIn(prepare(context.header), context.header, settled)
-    : [];
+  const plain = settle(context);
+  const statements = statementsIn(prepared, text, plain);
+  const header = context.header ? statementsIn(prepare(context.header), context.header, plain) : [];
+  const settled = {
+    ...plain,
+    accounts: context.accounts ?? writesAccounts(s, [...statements, ...header]),
+  };
   const dateSpans = datesIn(s);
   const blocked = [...statements, ...dateSpans].sort((a, b) => a.from - b.from);
   const dates = new Set(dateSpans);
@@ -1777,6 +1965,117 @@ export function readFigures(text: string, context: FigureContext = {}): Figure[]
     at = next;
   }
   return drafts.map((draft) => finish(draft, prepared, text, [...statements, ...header]));
+}
+
+/** Each way a figure can be read: as written, and each reading of what isn't settled. */
+export const readingsOf = (figure: Figure): Reading[] => [
+  figure,
+  ...figure.ambiguous.flatMap((each) => each.readings),
+];
+
+/** The currencies a figure may be in: its own, or each that its "¥" may be. */
+export function currenciesOf(figure: Figure): string[] {
+  return [
+    ...new Set(
+      readingsOf(figure).flatMap(({ unit }) => (unit.kind === "currency" ? [unit.code] : [])),
+    ),
+  ];
+}
+
+// A Document that says its amounts are in Canadian dollars writes them "$54,000".
+const ANY_DOLLAR = ["USD", ...new Set(Object.values(DOLLARS))];
+const SIGN_CURRENCIES: Readonly<Record<string, readonly string[]>> = {
+  $: ANY_DOLLAR,
+  dollar: ANY_DOLLAR,
+  dollars: ANY_DOLLAR,
+  元: ["CNY", ...Object.values(YUAN)],
+  圆: ["CNY", ...Object.values(YUAN)],
+  "¥": ["CNY", "JPY"],
+};
+
+/** Every currency a figure's own sign stands for in some Document: "$" or "dollars" for any dollar, "元" for yuan, or Hong Kong, Taiwan or Macau dollars. */
+export const currenciesOfSign = (figure: Figure): readonly string[] =>
+  (figure.currency !== null &&
+    (SIGN_CURRENCIES[figure.currency] ?? SIGN_CURRENCIES[figure.currency.toLowerCase()])) ||
+  [];
+
+const longestFirst = (words: readonly string[]) => [...words].sort((a, b) => b.length - a.length);
+const CURRENCY_NAMES = new RegExp(
+  `(?<![A-Za-z])(?:${longestFirst([...NAMED_CODES.keys(), "dollars"])
+    .map((word) => word.replaceAll(".", "\\."))
+    .join("|")})(?![A-Za-z])`,
+  "gi",
+);
+const CURRENCY_WORDS = new RegExp(
+  `(?<![A-Za-z])(?:${CURRENCY_ISO_CODES})(?![A-Za-z])|${longestFirst(
+    Object.keys(CURRENCY_CODES).filter((word) => /^\p{Script=Han}{2,}$/u.test(word)),
+  ).join("|")}`,
+  "gu",
+);
+const CURRENCY_HEADING = new RegExp(`[(（](${CURRENCY_TOKEN.source})[)）]`, "g");
+const CURRENCY_IN = new RegExp(`(?<![A-Za-z])in (${CURRENCY_TOKEN.source})(?! ?\\d)`, "g");
+const NUMBER_CHAR = new RegExp(`[\\d\uff10-\uff19${CN_NUMERAL_CHARS}百千万亿]`);
+
+// Reading a 2 MB Document's stated units takes over a second; only these lines can state a currency.
+const UNIT_LINE =
+  /单位|币种|[(（][^)）\n]{0,12}[元币镑][)）]|[亿万千百]元|\bin (?:thousands|millions|billions)\b|'000|\b000s\b|(?:[$€£¥]|\b[A-Z]{3}) ?(?:in )?(?:m|bn|mn|k|thousands?|millions?|billions?)\b/i;
+const unitLinesOf = (text: string) =>
+  text
+    .split("\n")
+    .filter((line) => UNIT_LINE.test(line))
+    .join("\n");
+
+function besideNumber(text: string, from: number, to: number): boolean {
+  const before = text
+    .slice(Math.max(0, from - 2), from)
+    .replace(/[ \u00a0]$/, "")
+    .at(-1);
+  const after = text.slice(to, to + 2).replace(/^[ \u00a0]/, "")[0];
+  return [before, after].some((char) => char !== undefined && NUMBER_CHAR.test(char));
+}
+
+/**
+ * The currencies `text` names, by ISO 4217 code: in words ("paid in Pounds Sterling", "币种：人民币"),
+ * in a unit it states ("单位：元", "Salary (£)", "in £'000", "All figures are in £") and on
+ * `figures`, its figures as read. With no figures given (null), the currency on its figures counts
+ * only when they all carry the same one: a Document that mixes "HK$" and "$" says nothing of a
+ * plain "54,000".
+ */
+export function namedCurrencies(
+  text: string,
+  context: FigureContext,
+  figures: readonly Figure[] | null,
+): Set<string> {
+  const settled = settle(context);
+  const named = new Set<string>();
+  const add = (codes: readonly string[]) => {
+    for (const code of codes) named.add(code);
+  };
+  for (const pattern of [CURRENCY_NAMES, CURRENCY_WORDS]) {
+    for (const match of text.matchAll(pattern)) {
+      if (!besideNumber(text, match.index, match.index + match[0].length))
+        add(currencyCodes(match[0], settled));
+    }
+  }
+  for (const pattern of [CURRENCY_HEADING, CURRENCY_IN]) {
+    for (const match of text.matchAll(pattern)) add(currencyCodes(match[1] ?? "", settled));
+  }
+  for (const stated of readStatedUnits(figures ? text : unitLinesOf(text), context)) {
+    if (stated.unit.kind === "currency") add([stated.unit.code]);
+  }
+  if (figures) {
+    for (const figure of figures) add(currenciesOf(figure));
+    return named;
+  }
+  const onFigures = new Map<string, string[]>();
+  for (const match of text.matchAll(CURRENCY_ANYWHERE)) {
+    if (!besideNumber(text, match.index, match.index + match[0].length)) continue;
+    const codes = currencyCodes(match[0], settled);
+    if (codes.length > 0) onFigures.set(codes.join(), codes);
+  }
+  const [only] = onFigures.values();
+  if (onFigures.size === 1 && only) add(only);
+  return named;
 }
 
 /** The end of a run of digits and separators that isn't a number, so none of it is read. */

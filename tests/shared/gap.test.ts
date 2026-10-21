@@ -23,11 +23,11 @@ describe("The gap between two pieces of text on a screen", () => {
   test("joins the recording notice as the interface language says", () => {
     const join = (language: "en" | "zh-CN") => {
       const before = translate(language, "meetings.notice.both");
-      const after = translate(language, "meetings.notice.kept.mac");
+      const after = translate(language, "meetings.audio.kept");
       return `${before}${gap(language, before, after)}${after}`;
     };
-    expect(join("zh-CN")).toContain("声音。音频");
-    expect(join("en")).toContain("meeting. The audio");
+    expect(join("zh-CN")).toContain("所有人。音频");
+    expect(join("en")).toContain("call. Audio stays");
   });
 
   test("is none beside a space already there, so a name in a spaced template keeps one space", () => {

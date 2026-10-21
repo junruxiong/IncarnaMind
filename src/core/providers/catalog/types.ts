@@ -58,6 +58,8 @@ export interface Endpoint {
   field?: EndpointField;
   /** Where the User gets a key for this region, when it isn't the provider's `keyUrl` (keys are per region). */
   keyUrl?: string;
+  /** This region's prices, when they aren't on the provider's `pricingUrl`. */
+  pricingUrl?: string;
 }
 
 /**
@@ -75,14 +77,19 @@ export type Role = "answers" | "strongest" | "quickTasks" | "images" | "tagging"
 export interface DataUse {
   /**
    * Whether it may train its models on API data: "no"; "opt-out" (it may,
-   * unless the User turns it off); "free-tier" (on a free plan only);
-   * "unknown" (it depends on the server, or its terms don't say).
+   * unless the User turns it off or agrees otherwise in writing); "free-tier"
+   * (on a free plan only); "unknown" (it depends on the server, or its terms
+   * don't say).
    */
   training: "no" | "opt-out" | "free-tier" | "unknown";
   /** One plain line, shown where the User picks the provider. */
   summary: Localized;
-  /** The provider's own terms, when there is one place for them. */
+  /** The provider's own page on it (terms, privacy policy or data-retention page), when there is one place for it; shown as "Data use". */
   url?: string;
+  /** The page to open from the Chinese interface, when `url` is English only and the provider has one in Chinese. */
+  zhUrl?: string;
+  /** Other pages of the provider that a claim in `summary` rests on, for the next re-read; the app doesn't show them. */
+  sources?: readonly string[];
 }
 
 export type ProviderOptions = Record<string, Record<string, unknown>>;
@@ -146,7 +153,11 @@ export interface CatalogProvider {
   id: string;
   name: Localized;
   support: Support;
+  /** A best-effort provider the first-run key form offers too, as its key line says (#1375). */
+  firstRun?: boolean;
   group: "international" | "china" | "local" | "other";
+  /** A provider with a region in each (Kimi) is listed under the other heading too. */
+  alsoListedIn?: "international" | "china";
   adapter: Adapter;
   /**
    * Its API, one per region, the first the default. Empty for a server the
@@ -164,6 +175,8 @@ export interface CatalogProvider {
    */
   keyGuide?: readonly Localized[];
   docsUrl?: string;
+  /** Its own page of prices ("Pricing ↗" beside a model's estimate), when `docsUrl` isn't it. */
+  pricingUrl?: string;
   request?: RequestQuirks;
   /** Model ids for the roles it offers. A provider whose models the User names has none. */
   roles: Partial<Record<Role, string>>;
@@ -171,11 +184,11 @@ export interface CatalogProvider {
   /** Short notes shown under the key field. */
   notes?: readonly Localized[];
   /**
-   * Which of the provider's subscription plans include credits a key can
-   * spend, in the provider's own words, and the page that says so: shown
-   * under the key field. Left out where no plan does.
+   * One line under the key field: what to do in IncarnaMind, and the provider's own page
+   * for the rest. It never states the provider's prices, fees, credits or what its plans
+   * include, which change without notice.
    */
-  planCredits?: Localized & { url: string };
+  keyLine?: Localized & { url: string; link: "details" | "pricing" };
   /**
    * A preset only: the run of the citing evaluation (#185) its Answers model
    * passed. Until then it is labelled not yet tested and never recommended

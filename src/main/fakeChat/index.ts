@@ -5,11 +5,13 @@
  *
  * A Question with "blank reply" in it gets a reply with no text at all. A model whose id ends
  * "-not-found" fails as one its provider doesn't know when it answers; one ending "-claims-not-found"
- * does when it finds or checks claims. A key with "refused" in it is refused,
+ * does when it finds or checks claims; one ending "-claims-offline" can't reach its provider the
+ * first time it finds claims. A key with "refused" in it is refused,
  * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
  * Tools and structured output, as a small server model does, so its Answers have no Citations.
  * A Document whose text says "slowly" takes a moment to tag or organize; one whose text says "unreachable"
- * can't reach the model the first time it is tagged.
+ * can't reach the model the first time it is tagged (nor on the retry that follows), and one that says
+ * "rate-limited" meets its rate limit.
  */
 
 import { APICallError } from "ai";
@@ -17,10 +19,10 @@ import { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelFactory } from "../../core";
 import { searchParts } from "./answers";
 import { isCell } from "./cells";
-import { fakeClaims } from "./claims";
+import { fakeClaims, findsClaims } from "./claims";
 import { fakeConfirm } from "./confirm";
 import { editParts, fakeEdit } from "./edit";
-import { fakePlan } from "./plan";
+import { asksForPlan, fakePlan } from "./plan";
 import {
   type GenerateOptions,
   lastQuestion,
@@ -32,18 +34,27 @@ import {
 import { fakeResearchTags } from "./researchTags";
 import { fakeSkillDraft } from "./skillDraft";
 import { refusal, replyParts } from "./stream";
-import { fakeStructuredOutput, SLOW_TAGGING_MS, tagsSlowly, tagsUnreachable } from "./structured";
+import {
+  fakeStructuredOutput,
+  SLOW_TAGGING_MS,
+  tagsRateLimited,
+  tagsSlowly,
+  tagsUnreachable,
+} from "./structured";
 
 /** Time between two streamed words: slow enough for a test to watch the Answer grow. */
 const WORD_DELAY_MS = 60;
 /** For a Question asked "slowly": the wait before each step, and between two words of the Answer. */
 const SLOW_STEP_MS = 1200;
 const SLOW_WORD_MS = 250;
+/** An Edit with AI asked "forever" writes nothing until it is stopped, or this long. */
+const HOLD_MS = 120_000;
 /** Between two words of Edit with AI's new text: a passage takes a moment, not seconds. */
 const EDIT_WORD_MS = 10;
 
 /** The cells whose provider has refused them once already ("busy" in the Question). */
 const refusedOnce = new Set<string>();
+const offline = new Set<string>();
 
 /**
  * The scripted replies to a request that doesn't ask for JSON, in order: the first that
@@ -84,6 +95,20 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           statusCode: 404,
         });
       }
+      // A model id ending "-claims-offline" can't reach its provider the first time it finds claims (#973).
+      if (
+        spec.modelId.endsWith("-claims-offline") &&
+        findsClaims(options) &&
+        !offline.has(spec.modelId)
+      ) {
+        offline.add(spec.modelId);
+        throw new APICallError({
+          message: "Cannot connect to API: fetch failed",
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          isRetryable: false,
+        });
+      }
       if (tagsSlowly(options)) await new Promise((resolve) => setTimeout(resolve, SLOW_TAGGING_MS));
       if (tagsUnreachable(options)) {
         throw new APICallError({
@@ -92,6 +117,25 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           requestBodyValues: {},
           isRetryable: false,
         });
+      }
+      if (tagsRateLimited(options)) {
+        throw new APICallError({
+          message: "Rate limit reached for requests",
+          url: "https://fake.invalid/chat",
+          requestBodyValues: {},
+          statusCode: 429,
+          responseHeaders: { "retry-after": "600" },
+          isRetryable: true,
+        });
+      }
+      // A model id ending "-always-thinks" thinks through its whole reply to a plan, as one with no off switch may (#1369).
+      if (spec.modelId.endsWith("-always-thinks") && asksForPlan(options)) {
+        return {
+          content: [{ type: "text", text: "" }],
+          finishReason: { unified: "length", raw: undefined },
+          usage: USAGE,
+          warnings: [],
+        };
       }
       return {
         content: [
@@ -151,6 +195,15 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           if (!part) {
             controller.close();
             return;
+          }
+          if (edit?.holds && part.type === "stream-start") {
+            await new Promise<void>((resolve) => {
+              const timer = setTimeout(resolve, HOLD_MS);
+              abortSignal?.addEventListener("abort", () => {
+                clearTimeout(timer);
+                resolve();
+              });
+            });
           }
           if (slow && part.type === "stream-start") await wait(SLOW_STEP_MS);
           if (part.type === "text-delta" || part.type === "tool-input-delta") {

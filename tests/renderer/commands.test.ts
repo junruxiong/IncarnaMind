@@ -163,6 +163,7 @@ describe("shortcuts", () => {
       const keys = [
         keysOn(shortcut.keys, mac),
         ...(!mac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
+        ...(shortcut.also ? [shortcut.also] : []),
       ];
       return keys.map((each) => keysForm(each, mac));
     };
@@ -219,6 +220,13 @@ describe("shortcuts", () => {
     expect(newFolder?.macOnly).toBeUndefined();
     expect(newWith && keysLabel(keysOn(newWith.keys, true), true)).toBe("⌃⌘N");
     expect(newWith?.macOnly).toBe(true);
+  });
+
+  test("Add Documents is ⌘O and waits for the focus to leave text; Link a folder has no keys", () => {
+    const add = commands.get("documents.add")?.shortcut;
+    expect(add && keysLabel(keysOn(add.keys, true), true)).toBe("⌘O");
+    expect(add && keysLabel(keysOn(add.keys, false), false)).toBe("Ctrl+O");
+    expect(commands.get("linkedFolder.add")?.shortcut).toBeUndefined();
   });
 
   test("the application menu's items are commands, with the menu's label and keys", () => {
@@ -386,7 +394,7 @@ describe("the registry", () => {
   });
 
   test("doesn't run a command that isn't enabled, and returns what can undo one that ran", async () => {
-    const undo = { message: "Did it", undo: async () => undefined };
+    const undo = { said: () => "Did it", undo: async () => undefined };
     const stops = [
       commands.register({
         ...base,

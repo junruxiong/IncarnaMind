@@ -6,17 +6,19 @@
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import type { CheckMindInput, Core } from "../../src/core";
+import { updateCheck } from "../../src/core/answers/checks/sentences";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
 import { mindCheckOf } from "../../src/shared/mindCheck";
 import { checkGenerate, checkReply, isCheckRun, type Plan } from "../helpers/checks";
-import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
+import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
 import { editMind, readMind, writeMind } from "../helpers/minds";
 import {
   type GenerateCall,
   type ModelCall,
+  type ReportedUsage,
   scriptedModel,
   scriptedModels,
 } from "../helpers/models";
@@ -53,8 +55,12 @@ const text = (value: string): JSONContent => ({ type: "text", text: value });
 const runsIn = (calls: readonly ModelCall[]) =>
   calls.filter((call) => isCheckRun(call) && call.results.length === 0);
 
-/** A core with the two Documents in a Folder, a model on this computer, and every call to it kept. */
-async function setUp() {
+/**
+ * A core with the two Documents in a Folder, a model on this computer (or,
+ * `billed`, one billed per token, each request reporting its tokens), and
+ * every call to it kept.
+ */
+async function setUp(billed?: { usage: ReportedUsage }) {
   const checks: ModelCall[] = [];
   const finds: GenerateCall[] = [];
   const model = scriptedModel(
@@ -67,13 +73,23 @@ async function setUp() {
         if (call.system.startsWith("You sort the sentences")) finds.push(call);
         return checkGenerate(PLANS)(call);
       },
+      ...(billed && { usage: billed.usage }),
     },
   );
-  const core = startCore(await createTempDataFolder(), {
+  const dataDir = await createTempDataFolder();
+  const core = startCore(dataDir, {
     createChatModel: scriptedModels(model).createChatModel,
     now: manualClock("2026-10-02T14:20:00.000Z").now,
   });
-  await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+  if (billed) {
+    core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
+    const provider = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+    });
+    if (provider.service) await core.allowDataFlow("checks", provider.service.id);
+  } else await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
   const sources = await createTempDataFolder();
   const documents = await addAndProcess(core, [
     await writeSourceFile(sources, TIDES.name, TIDES.contents),
@@ -89,7 +105,7 @@ async function setUp() {
     { type: "paragraph", attrs: { id: "two" }, content: [text(`${OPINION} ${PENGUINS}`)] },
   ]);
   await client.settled();
-  return { core, client, mindId: mind.id, folderId: folder.id, checks, finds };
+  return { core, client, dataDir, mindId: mind.id, folderId: folder.id, checks, finds };
 }
 
 const request = (mindId: string, mode: CheckMindInput["mode"], id = "run"): CheckMindInput => ({
@@ -115,6 +131,7 @@ describe("Check this Mind", () => {
       kind: "ready",
       sentences: 5,
       findsClaims: true,
+      inFolder: true,
       model: null,
     });
 
@@ -164,6 +181,7 @@ describe("Check this Mind", () => {
       kind: "ready",
       sentences: 2,
       findsClaims: false,
+      inFolder: true,
       model: null,
     });
     expect(await core.checkMind(request(mindId, "changed"))).toMatchObject({
@@ -178,6 +196,30 @@ describe("Check this Mind", () => {
       "contradicted",
       "unsupported",
     ]);
+  });
+
+  // protects=a sentence the User keeps as their own view (#1111) isn't checked again, in any mode, until its words change; fails_when=a run sends it, or an edit of it doesn't bring it back; no_claim=how the card sets it.
+  test("a sentence kept as the User's own view isn't checked again until its words change", async () => {
+    const { core, client, mindId, folderId } = await setUp();
+    await core.checkMind(request(mindId, "all"));
+    const penguins = claimSpans(readMind(client)).find((span) =>
+      span.sentence.text.startsWith(PENGUINS),
+    );
+    client.doc.transact(() => {
+      updateCheck(client.blocks, penguins?.check.id ?? "", (check) => ({ ...check, kept: true }));
+    }, "editor");
+    await client.settled();
+    expect((await shownChecks(core, client, folderId)).map(({ shown }) => shown.state)).toEqual([
+      "supported",
+      "contradicted",
+      "kept",
+    ]);
+
+    expect(await core.planMindCheck(mindId, "all")).toMatchObject({ kind: "ready", sentences: 4 });
+    expect(await core.planMindCheck(mindId, "changed")).toEqual({ kind: "nothing" });
+
+    typeInto(client, 2, OPINION.length + 1, "Some ");
+    expect(await core.planMindCheck(mindId, "changed")).toMatchObject({ sentences: 1 });
   });
 
   test("a sentence written since is found among the new ones only, and the opinion isn't sent again", async () => {
@@ -247,7 +289,68 @@ describe("Check this Mind", () => {
     expect(mindCheckOf(client.doc)?.stop).toEqual({ reason: "cost-cap" });
   });
 
-  test("says why there is nothing to check: no sentences, or no Documents to check against, unless every Document is", async () => {
+  // protects=the ask counts exactly the claims a run checks, and the model sorts each sentence once (#973); fails_when=the ask counts sentences the model leaves out, Check sorts again, or declining spends more; no_claim=what a real model names.
+  test("the claims named before the ask are exactly those checked, and neither Check nor a second run sorts them again; declining spends nothing more", async () => {
+    const { core, client, mindId, checks, finds } = await setUp();
+    const memo = "This memo sums up what the harbour office told us.";
+    editMind(client, (blocks) => [
+      ...blocks,
+      { type: "paragraph", attrs: { id: "three" }, content: [text(memo)] },
+    ]);
+    await client.settled();
+    expect(await core.planMindCheck(mindId, "changed")).toMatchObject({
+      sentences: 6,
+      findsClaims: true,
+    });
+
+    expect(await core.findMindClaims(request(mindId, "changed", "sort"))).toEqual({
+      kind: "found",
+      claims: 3,
+    });
+    expect(finds).toHaveLength(1);
+    expect(checks).toHaveLength(0);
+    // Declined: asked again, nothing is sent again.
+    expect(await core.findMindClaims(request(mindId, "changed", "again"))).toEqual({
+      kind: "found",
+      claims: 3,
+    });
+    expect(finds).toHaveLength(1);
+    expect(checks).toHaveLength(0);
+
+    expect(await core.checkMind(request(mindId, "changed"))).toMatchObject({
+      kind: "checked",
+      sentences: 3,
+    });
+    expect(finds).toHaveLength(1);
+    expect(mindCheckOf(client.doc)?.skipped).toHaveLength(3);
+    expect(await core.planMindCheck(mindId, "changed")).toEqual({ kind: "nothing" });
+  });
+
+  // protects=on a model billed per token, the estimate for the claims named comes within 1.5 times the run's tokens; fails_when=it prices a check as an Answer, or counts sentences the model leaves out; no_claim=a real model's tokens (tests/core/cost.test.ts has those).
+  test("on a model billed per token, the estimate for the claims named comes within 1.5 times the tokens the run then reports", async () => {
+    // Each request as an average check of Claude Haiku 5.5 reported it (tests/fixtures/cost/recorded-checks.json).
+    const usage: ReportedUsage = {
+      inputTokens: { total: 8_260, noCache: 995, cacheRead: 2_903, cacheWrite: 4_362 },
+      outputTokens: { total: 129, text: 129, reasoning: undefined },
+    };
+    const { core, mindId, dataDir } = await setUp({ usage });
+    const found = await core.findMindClaims(request(mindId, "changed", "sort"));
+    if (found.kind !== "found") throw new Error(`No claims: ${found.kind}.`);
+
+    const estimate = await core.estimateRun({ items: found.claims, each: "check" });
+    await core.checkMind(request(mindId, "changed"));
+
+    if (estimate.billing !== "per-token") throw new Error("Not billed per token.");
+    const [run] = queryDatabase<{ tokens: number }>(
+      dataDir,
+      `SELECT sum(input_tokens + output_tokens) AS tokens FROM model_requests
+       WHERE deleted_at IS NULL AND status = 'settled' AND flow = 'checks'`,
+    );
+    expect(estimate.tokens / (run?.tokens ?? 0)).toBeGreaterThan(1 / 1.5);
+    expect(estimate.tokens / (run?.tokens ?? 0)).toBeLessThan(1.5);
+  });
+
+  test("says why there is nothing to check: no sentences; a Mind in a Folder with no Documents checks every Document (#1359)", async () => {
     const { core } = await setUp();
     const empty = await core.createMind({ title: "Empty", folderId: null });
     expect(await core.planMindCheck(empty.id, "all")).toEqual({ kind: "nothing" });
@@ -256,12 +359,7 @@ describe("Check this Mind", () => {
     const client = await connectToMind(core, lonely.id);
     writeMind(client, [{ type: "paragraph", attrs: { id: "moon" }, content: [text(MOON)] }]);
     await client.settled();
-    expect(await core.planMindCheck(lonely.id, "all")).toEqual({
-      kind: "no-documents",
-      folderId: emptyFolder.id,
-    });
-    // Against every Document, the Folder's emptiness doesn't stop it.
-    expect(await core.planMindCheck(lonely.id, "all", true)).toMatchObject({
+    expect(await core.planMindCheck(lonely.id, "all")).toMatchObject({
       kind: "ready",
       sentences: 1,
     });

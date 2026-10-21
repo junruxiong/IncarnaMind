@@ -91,6 +91,20 @@ export function sectionsOf(
   );
 }
 
+/** How many Documents each Folder holds, counted as the Library page lists them. */
+export function folderCounts(
+  folders: readonly LibraryGroup[],
+  documents: readonly Document[],
+  assignments: readonly Pick<DocumentGroupAssignment, "documentId" | "groupId">[],
+): Map<string, number> {
+  const folderOf = new Map(assignments.map((each) => [each.documentId, each.groupId]));
+  return new Map(
+    sectionsOf(folders, documents, (id) => folderOf.get(id) ?? null, false).flatMap((section) =>
+      section.folder ? [[section.folder.id, section.documents.length] as const] : [],
+    ),
+  );
+}
+
 /** How a Document matches the Library's search. */
 export interface SearchMatch {
   /** Where the words typed are in its shown name. */

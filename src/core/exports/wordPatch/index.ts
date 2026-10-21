@@ -16,10 +16,11 @@ import { deflateRawSync } from "node:zlib";
 import { DOMParser } from "@xmldom/xmldom";
 import * as Y from "yjs";
 import type { NodeJSON } from "../../../shared/blockJson";
-import type { CitationStyle } from "../../../shared/citationStyles";
+import type { ResolvedCitationStyle } from "../../../shared/citationStyles";
 import { proposalRequestOf } from "../../../shared/proposals";
 import type { SourceContext } from "../../../shared/sources";
 import { wordFileOf, wordFingerprint, wordSourceOf } from "../../../shared/wordFiles";
+import { wordLookOf } from "../../../shared/wordLook";
 import {
   CITATION_NODE,
   type CitationFormatRequest,
@@ -30,6 +31,7 @@ import {
   type WordExportReport,
 } from "../../api";
 import { nodesByPlace, readWordDocument } from "../../documents/formats/docxImport";
+import { WORD_LOOK_VERSION } from "../../documents/formats/docxLook";
 import { openWordPackage, relationshipsOf, reviewOf } from "../../documents/formats/docxPackage";
 import { child, elements, type XmlElement } from "../../documents/formats/xml";
 import {
@@ -73,7 +75,7 @@ export interface WordPatchInput {
   /** How the Mind's Blocks are read, as the native export reads them. */
   readOptions: ReadOptions;
   labels: ExportLabels;
-  style: CitationStyle;
+  style: ResolvedCitationStyle;
   /** Whether a Numbered Mind shows its Bibliography. */
   bibliography: boolean;
   bibliographyHeading: string;
@@ -289,6 +291,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     reading,
     review,
     ids: target.ids,
+    lookCurrent: (wordLookOf(doc)?.version ?? 0) >= WORD_LOOK_VERSION,
   });
   let text: string;
   try {

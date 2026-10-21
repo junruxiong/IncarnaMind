@@ -70,6 +70,8 @@ export interface WebPagesOptions {
   look?: PageLook;
   /** A save that doesn't say keeps the page as it looks: `UserSettings.keepWebPageLook`. */
   keepLookByDefault: () => boolean;
+  /** Aborted when the core closes: no look is started, and none that finishes late is kept. */
+  signal: AbortSignal;
   reportError?: (error: unknown) => void;
 }
 
@@ -133,7 +135,7 @@ function parseSaveInput(input: unknown): SaveWebPageInput {
 }
 
 export function createWebPages(options: WebPagesOptions) {
-  const { db, now, documents } = options;
+  const { db, now, documents, signal } = options;
   const folder = join(options.dataDir, "Web pages");
   const pictureFolder = join(folder, "pictures");
   const lookFolder = join(folder, "looks");
@@ -263,21 +265,25 @@ export function createWebPages(options: WebPagesOptions) {
 
   let looks: Promise<void> = Promise.resolve();
 
+  // A look still waiting at close stays "saving": the next start makes it.
   const queueLook = (documentId: string, contentHash: string, address: string) => {
     const look = options.look;
     if (!look) return;
     looks = looks
       .then(async () => {
+        if (signal.aborted) return;
         const made = await look.render(address).catch((error: unknown) => ({
           failure: "failed" as const,
           message: error instanceof Error ? error.message : String(error),
         }));
+        if (signal.aborted) return;
         if ("pdf" in made) {
           const lookHash = hashBytes(made.pdf);
           const file = join(lookFolder, lookName(lookHash));
           hold([lookHash], 1);
           try {
             await writeOnce(file, made.pdf);
+            if (signal.aborted) return;
             const at = now();
             const recorded = recordLook(
               db,
@@ -369,6 +375,7 @@ export function createWebPages(options: WebPagesOptions) {
       // picture, or has recorded it, meanwhile keeps it; one that holds it after finds it gone
       // and writes it again.
       const lookFiles = await readdir(lookFolder).catch(() => [] as string[]);
+      if (signal.aborted) return;
       const removeUnkept = (from: string, names: readonly string[], kept: Set<string>) => {
         for (const name of names) {
           const hash = name.split(".")[0] ?? "";

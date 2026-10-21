@@ -7,6 +7,7 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  checkCard,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -30,8 +31,8 @@ const TIDES = buildPdf([
 const SENTENCE = "Spring tides happen at new and full moon.";
 
 const NOTICE = {
-  en: "This model is small, so its verdicts may be wrong. A larger model checks more reliably.",
-  "zh-CN": "这个模型较小，核对结论可能不准。换更大的模型会更可靠。",
+  en: "Small model: its verdicts may be wrong. A larger one is more reliable.",
+  "zh-CN": "模型较小，结论可能不准，换更大的模型更可靠。",
 } as const;
 
 let dataDir: string;
@@ -104,7 +105,7 @@ async function checkSelection(window: Page, modelId: string) {
   const menu = window.getByTestId("selection-menu");
   await pointAndClick(window, menu.getByTestId("selection-action-check-against-documents"));
   await expect(window.getByTestId("claim-mark")).toHaveCount(1);
-  await expect(window.getByTestId("mind-health")).toBeVisible();
+  await expect((await checkCard(window)).getByTestId("mind-health")).toBeVisible();
 }
 
 for (const language of ["en", "zh-CN"] as const) {
@@ -118,21 +119,10 @@ for (const language of ["en", "zh-CN"] as const) {
     await checkSelection(window, "scripted-4b");
     const notice = window.getByTestId("checks-small-model");
     await expect(notice).toHaveText(NOTICE[language]);
-    // Quiet: beside the health line without covering it, and not a problem.
-    // The health line's parts sit directly in the count's row, so its extent is theirs.
-    const parts = await window
-      .getByTestId("mind-health")
-      .locator(".mind-health-part")
-      .evaluateAll((elements) =>
-        elements.map((element) => {
-          const { x, y, width, height } = element.getBoundingClientRect();
-          return { x, y, width, height };
-        }),
-      );
-    const last = parts.at(-1);
+    // Quiet: in the badge's card under its rows, without covering them, and not a problem.
+    const health = await window.getByTestId("mind-health").boundingBox();
     const line = await notice.boundingBox();
-    if (!last || !line) throw new Error("The lines aren't drawn.");
-    const health = { x: last.x, y: last.y, width: last.width, height: last.height };
+    if (!health || !line) throw new Error("The lines aren't drawn.");
     const apart = line.x >= health.x + health.width - 1 || line.y >= health.y + health.height - 1;
     expect(apart).toBe(true);
     await expect(window.getByTestId("checks-problem")).toHaveCount(0);

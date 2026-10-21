@@ -21,7 +21,7 @@ import { files } from "../../core";
 import { Composer } from "../../editor/Composer";
 import { useT } from "../../i18n";
 import { useAssistantWaiting } from "../../mindStatus";
-import { useModelSetup } from "../../modelSetup";
+import { useSettingUp } from "../../modelSetup";
 import { useAppStore } from "../../store";
 import { GripIcon } from "../icons";
 import {
@@ -33,6 +33,7 @@ import {
   HistoryLineIcon,
   PlusLineIcon,
 } from "../lineIcons";
+import { HelpStrip } from "../meetings/HelpStrip";
 import { ModelSetupCard } from "../providers/ModelSetupCard";
 import { TaskTray } from "../TaskTray";
 import { AssistantMenu } from "./AssistantMenu";
@@ -43,10 +44,11 @@ import { useKeepInView } from "./useKeepInView";
 
 /**
  * The window's one assistant (#253), outside the tab groups, as in Cursor:
- * its header (the conversation's title with ▾ and the clock for History,
+ * its header (the conversation's title with ▾, which opens History, then
  * + New chat, ⋯ and fold), with no line under it (#391), the conversation
  * (#201), and the composer at its foot. Folded on a side, it is a 44px rail
- * (show, New chat, History); at the bottom or floating, only its header.
+ * (show, New chat, History, which has no title to open it from); at the bottom
+ * or floating, only its header.
  *
  * Where it sits and how big is the `Workbench`'s; this is what it shows.
  * Nothing in it is remounted when it moves, resizes or folds: the composer
@@ -82,8 +84,8 @@ export function Assistant({
 }) {
   const t = useT();
   const [history, setHistory] = useState<Element | null>(null);
-  const historyButton = useRef<HTMLButtonElement>(null);
   const titleButton = useRef<HTMLButtonElement>(null);
+  const historyButton = useRef<HTMLButtonElement>(null);
   const aside = useRef<HTMLElement>(null);
   const rail = folded && isSide(dock);
   const foldInMenu = foldsInMenu(files.titleBar, dock);
@@ -93,7 +95,7 @@ export function Assistant({
   const handle = useMemo(
     () => ({
       openHistory() {
-        setHistory(historyButton.current ?? titleButton.current);
+        setHistory(titleButton.current ?? historyButton.current);
       },
     }),
     [],
@@ -157,20 +159,6 @@ export function Assistant({
       <PlusLineIcon className="size-4" />
     </IconButton>
   );
-  const clock = (
-    <IconButton
-      ref={historyButton}
-      testId="assistant-history"
-      label={t("assistant.history")}
-      expanded={history !== null}
-      open={history !== null}
-      popup="dialog"
-      onClick={(event) => openHistory(event.currentTarget)}
-    >
-      <HistoryLineIcon className="size-4" />
-    </IconButton>
-  );
-
   return (
     <aside
       ref={aside}
@@ -201,7 +189,17 @@ export function Assistant({
           </IconButton>
           <WaitingDot />
           {newChatButton}
-          {clock}
+          <IconButton
+            ref={historyButton}
+            testId="assistant-history"
+            label={t("assistant.history")}
+            expanded={history !== null}
+            open={history !== null}
+            popup="dialog"
+            onClick={(event) => openHistory(event.currentTarget)}
+          >
+            <HistoryLineIcon className="size-4" />
+          </IconButton>
         </div>
       ) : (
         <header
@@ -230,7 +228,6 @@ export function Assistant({
           </button>
           <WaitingDot />
           <span className="flex-1" />
-          {clock}
           {newChatButton}
           <AssistantMenu withFold={foldInMenu} />
           {!foldInMenu && (
@@ -276,7 +273,7 @@ function AssistantMain({
   // in the Mind in focus once that Mind's editor is open, and of every Document until then.
   const seat = useComposer((state) => state.seat);
   const mind = seat !== null && seat.mindId === readMindId ? seat : null;
-  const waiting = useModelSetup((state) => state.waiting !== null);
+  const settingUp = useSettingUp();
   const thread = useRef<HTMLDivElement>(null);
   useKeepInView(thread);
   /** Where the conversation was scrolled to, put back when it shows again. */
@@ -286,6 +283,7 @@ function AssistantMain({
   }, [folded]);
   return (
     <div className="assistant-main" hidden={folded}>
+      <HelpStrip mindId={mind?.mindId ?? null} />
       <div
         ref={thread}
         data-testid="assistant-thread"
@@ -296,9 +294,14 @@ function AssistantMain({
       >
         <ConversationThread focusedMindId={mind?.mindId ?? null} />
       </div>
-      <div ref={onComposerSlot} data-testid="assistant-composer" className="assistant-composer">
-        {mind && <TaskTray mindId={mind.mindId} />}
-        {waiting ? <ModelSetupCard /> : <Composer mind={mind} />}
+      <div
+        ref={onComposerSlot}
+        data-testid="assistant-composer"
+        data-setup={settingUp || undefined}
+        className="assistant-composer"
+      >
+        <TaskTray mindId={mind?.mindId ?? null} />
+        {settingUp ? <ModelSetupCard /> : <Composer mind={mind} />}
       </div>
     </div>
   );

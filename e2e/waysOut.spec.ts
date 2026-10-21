@@ -92,20 +92,20 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   // Anthropic's key field, open, focused, with the refusal said beside it.
   const settings = window.getByTestId("settings");
   await expect(settings).toHaveAttribute("data-page", "models");
-  const form = settings.getByTestId("provider-form");
-  await expect(form.getByRole("radio", { name: "Anthropic" })).toBeChecked();
-  const key = form.locator('input[type="password"]');
+  const page = settings.getByTestId("provider-page");
+  await expect(page.getByTestId("provider-page-title")).toHaveText("Anthropic");
+  const key = page.getByTestId("provider-page-key");
   await expect(key).toBeFocused();
   await expect(key).toBeInViewport();
-  await expect(form.getByTestId("provider-key-refused")).toHaveText(
-    /^Anthropic refused this key \(Today, .+\)\.$/,
-  );
+  const refusal = page.getByTestId("provider-key-refused");
+  await expect(refusal).toHaveText(/^Anthropic refused this key \(Today, .+\)\.$/);
   await motionSettled(window);
   await screenshot(window, "key-refused-settings");
 
   await window.keyboard.type("sk-ant-new-key");
-  await form.getByTestId("provider-use-key").click();
-  await expect(form).toBeHidden();
+  await window.keyboard.press("Enter");
+  await expect(refusal).toHaveCount(0);
+  await expect(key).toHaveValue("");
   await window.keyboard.press("Escape");
   await expect(settings).toBeHidden();
 
@@ -136,7 +136,7 @@ test("a model that can't add Citations says so under its Answer, and Choose anot
   await expect(answer).toHaveAttribute("data-status", "done");
   const line = answer.getByTestId("answer-no-citations");
   await expect(line).toHaveText(
-    "tiny-no-tools can’t add Citations, so nothing in this Answer is checked · Choose another model",
+    "tiny-no-tools can’t add Citations: nothing here is checked · Choose another model",
   );
   await screenshot(answer, "no-citations-line");
   await pointAndClick(window, line.getByTestId("answer-choose-model"));
@@ -144,9 +144,7 @@ test("a model that can't add Citations says so under its Answer, and Choose anot
   await window.keyboard.press("Escape");
 
   await setLanguage(window, "zh-CN");
-  await expect(line).toHaveText(
-    "tiny-no-tools 无法添加引用，这个回答里的内容都没有核对 · 换一个模型",
-  );
+  await expect(line).toHaveText("tiny-no-tools 无法添加引用：这里的内容均未核对 · 换一个模型");
   await screenshot(answer, "no-citations-line-zh");
   await app.close();
 });
@@ -164,10 +162,10 @@ test("with no Ollama on this computer, the setup card's local way says so, and o
   await expect(setup).toBeVisible();
   await setup.getByTestId("setup-other").click();
   const local = setup.getByTestId("way-local");
-  await expect(local).toContainText("Ollama isn't running on this computer. It's free to get.");
+  await expect(local).toContainText("Needs the free Ollama app");
   await local.click();
   await expect(setup.getByTestId("ollama-status")).toHaveText(
-    "To run models on this computer, install Ollama from ollama.com and start it.",
+    "Install and start Ollama from ollama.com to run models here.",
   );
   const get = setup.getByTestId("ollama-get");
   const again = setup.getByTestId("ollama-check-again");

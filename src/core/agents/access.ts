@@ -16,8 +16,10 @@
  * IncarnaMind's own Answer on the User's chat model and returns it with its
  * Citations as tokens. Every call is recorded for the pairing's activity list.
  */
+
 import { citedLocation, type LiveDocument, withShownName } from "../../shared/citations";
 import type { MessageKey, MessageParams } from "../../shared/i18n/types";
+import { mindName } from "../../shared/naming";
 import type { OutsideAnswer } from "../answers";
 import type { Citing } from "../answers/citing";
 import { matchingTerms } from "../answers/citing";
@@ -782,8 +784,8 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
     readMind(input) {
       const mindId = typeof input?.mindId === "string" ? input.mindId : "";
       const effects: Effect[] = [{ action: "read", scope: { kind: "mind", mindId } }];
-      const mindTitle = deps.minds().find((mind) => mind.id === mindId);
-      return call("read_mind", mindTitle?.title ?? "", effects, (pairing) => {
+      const named = deps.minds().find((mind) => mind.id === mindId);
+      return call("read_mind", named ? mindName(named) : "", effects, (pairing) => {
         const id = text(input?.mindId, "mindId", 200);
         const offset = whole(input?.offset, "offset", 0, Number.MAX_SAFE_INTEGER, 0);
         const mind = deps.minds().find((each) => each.id === id);

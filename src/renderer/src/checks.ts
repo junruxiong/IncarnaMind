@@ -24,7 +24,7 @@ import { selectionForEdit } from "./editor/editSelection";
 import { type BlockPlace, pendingIn, placeOnAccept, positionOf } from "./editor/proposalReview";
 import { resolveProposalsIn } from "./editWithAi";
 
-/** Why a check gave no marks, or what it left out, for the line under the Mind's title. */
+/** Why a check gave no marks, or what it left out, for the check badge's card. */
 export type CheckProblem =
   | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" } | { kind: "waiting" }>
   | LeftOut
@@ -62,12 +62,15 @@ interface ChecksState {
   problems: Readonly<Record<string, CheckProblem>>;
   /** By Mind: its last verdicts came from a model too small to judge reliably (#680). */
   smallModel: Readonly<Record<string, true>>;
+  /** By tab, else by Mind: its check badge's card is open (#909). A Mind beside itself has a card in each. */
+  cardOpen: Readonly<Record<string, true>>;
 }
 
 export const useChecks = create<ChecksState>()(() => ({
   running: {},
   problems: {},
   smallModel: {},
+  cardOpen: {},
 }));
 
 function setFor<K extends keyof ChecksState>(
@@ -93,14 +96,18 @@ export const setCheckRunning = (mindId: string, running: CheckRunning | null) =>
 export const setCheckSmallModel = (mindId: string, small: boolean) =>
   setFor("smallModel", mindId, small ? true : null);
 
-/** Says why a check of a Mind gave no marks, under its title. */
+/** `place`: the tab the card is in, else its Mind. */
+export const setCheckCardOpen = (place: string, open: boolean) =>
+  setFor("cardOpen", place, open ? true : null);
+
+/** Says why a check of a Mind gave no marks, in its check badge's card. */
 export const setCheckProblem = (mindId: string, problem: CheckProblem) =>
   setFor("problems", mindId, problem);
 
 /**
  * Checks the sentences the selection (or `ranges`) touches, each whole and
  * once, as `action` says. Their marks come with the core's updates; anything
- * that stops it is one line under the Mind's title. One request runs per
+ * that stops it is a line in the check badge's card. One request runs per
  * Mind: asking again while it runs does nothing.
  */
 export async function checkSentences(

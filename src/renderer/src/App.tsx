@@ -9,13 +9,16 @@ import { Workbench } from "./components/assistant/Workbench";
 import { CitationStylePickerHost } from "./components/CitationStylePicker";
 import { CommandPalette } from "./components/CommandPalette";
 import { ConsentDialog } from "./components/ConsentDialog";
+import { DropLabel } from "./components/DropLabel";
 import { ErrorNotices } from "./components/ErrorNotices";
 import { FeedbackDialog } from "./components/FeedbackDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
 import { HistoryView } from "./components/history/HistoryView";
 import { InfoPanel } from "./components/InfoPanel";
+import { DocumentMoveTo } from "./components/library/DocumentMoveTo";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
+import { MindStyleHost } from "./components/MindStyle";
 import { Peek } from "./components/Peek";
 import { ProblemMark } from "./components/ProblemLine";
 import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
@@ -29,8 +32,11 @@ import { TagsDialog } from "./components/TagsDialog";
 import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
 import { WordImportDialog } from "./components/WordImportDialog";
 import { files } from "./core";
+import { useDragState } from "./dragDrop";
 import { useEscapeToDismiss } from "./escapeDismiss";
+import { useExamplesMenu, useExportMenu } from "./exportMenu";
 import { useLanguage, useT } from "./i18n";
+import { useMeetingHelpInWindow } from "./meetingHelp";
 import { useMeetings } from "./meetings";
 import { setMotionPreference } from "./motion";
 import { importReferenceFile, isReferenceFile } from "./referenceImport";
@@ -187,6 +193,8 @@ function Workspace() {
     },
     (addresses) => void useWebPages.getState().add(addresses),
   );
+  // A target inside that takes the files (a Word file on a Mind) says what its drop does instead.
+  const takenInside = useDragState((state) => state.over !== null);
   const windowWidth = useWindowWidth();
   const assistantBeside = useAppStore((state) => {
     const place = state.layout?.assistant;
@@ -195,12 +203,15 @@ function Workspace() {
   });
   const openSettings = useAppStore((state) => state.openSettings);
   useKeymap();
+  useMeetingHelpInWindow();
   useEditMenu();
   useEscapeToDismiss();
   useRememberSidebarWidth(device?.sidebarWidth);
   const workbench = useRef<HTMLDivElement>(null);
   const beforeSlide = useSidebarSlide(workbench);
   const sidebar = useSidebarControl(device?.sidebarHidden ?? false, beforeSlide);
+  useExportMenu();
+  useExamplesMenu();
   const peek = useSidebarPeek(sidebar.hidden, beforeSlide);
   const [announcement, setAnnouncement] = useState("");
   const announced = useRef(sidebar.hidden);
@@ -274,12 +285,20 @@ function Workspace() {
           cardOverlay={fileDrop.active && fileDrop.links ? <DropOverlay links /> : null}
         />
         <TabNoticeLine />
+        <DropLabel />
         <CommandPalette />
+        {/* Where Move to… from ⌘K opens when nothing it moves is in sight: where the palette was. */}
+        <span
+          data-move-to-fallback
+          aria-hidden="true"
+          className="pointer-events-none fixed top-16 left-[calc(50%-8rem)] size-px"
+        />
         <SettingsDialog />
         <HistoryView />
         <TagsDialog />
         <RequestedDialogs />
         <SortMenu />
+        <DocumentMoveTo />
         <InfoPanel />
         <Peek />
         <AddWebPageDialog />
@@ -287,12 +306,13 @@ function Workspace() {
         <WordImportDialog />
         <ChatGptWelcomeDialog />
         <CitationStylePickerHost />
+        <MindStyleHost />
         {/* Open after the dialog that triggered the request, so they show on top of it. */}
         <ConsentDialog />
         <MeetingNoticeDialog />
         <FileWriteDialog />
         <ErrorNotices />
-        {fileDrop.active && !fileDrop.links && <DropOverlay />}
+        {fileDrop.active && !fileDrop.links && !takenInside && <DropOverlay />}
         <p role="status" data-testid="sidebar-announcement" className="sr-only">
           {announcement}
         </p>

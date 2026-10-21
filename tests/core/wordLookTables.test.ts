@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import {
   BLOCK_ID_ATTRIBUTE,
   MIND_WORD_LOOK_FIELD,
+  PARAGRAPH_FORMAT_ATTRIBUTE,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
   type WordCellLook,
@@ -215,6 +216,41 @@ describe("a Word table's own lines and widths", () => {
   });
 });
 
+describe("Word's hang of a table into the margin (#1035)", () => {
+  const settings = (mode: number | null) =>
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${
+      mode === null
+        ? ""
+        : `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="${mode}"/></w:compat>`
+    }</w:settings>`;
+  const lookFor = async (mode: number | null) => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    try {
+      const { client } = await importWordBytes(
+        core,
+        dataDir,
+        wordFile({
+          body: `<w:tbl><w:tr>${cell("Dates")}</w:tr></w:tbl>${paragraph("After")}`,
+          rels: '<Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>',
+          parts: [{ name: "word/settings.xml", data: settings(mode) }],
+        }),
+        { name: "CV.docx", origin: "own" },
+      );
+      return wordLookOf(client.doc);
+    } finally {
+      await core.close();
+    }
+  };
+
+  test("in compatibility mode 14 and lower, and with no mode named, tables hang; from mode 15 they don't", async () => {
+    expect((await lookFor(14))?.tablesHang).toBe(true);
+    expect((await lookFor(12))?.tablesHang).toBe(true);
+    expect((await lookFor(null))?.tablesHang).toBe(true);
+    expect((await lookFor(15))?.tablesHang).toBeUndefined();
+  });
+});
+
 describe("indents in characters", () => {
   test("are in the paragraph's size and win over lengths; 0 characters leaves the length", async () => {
     const { client, look } = await imported(
@@ -232,17 +268,20 @@ describe("indents in characters", () => {
       ].join(""),
     );
     const looks = new Map<string, WordParagraphLook>();
+    const formats = new Map<string, unknown>();
     readMind(client).descendants((node) => {
       const key = node.attrs[WORD_LOOK_ATTRIBUTE];
-      if (node.type.name === "paragraph" && typeof key === "string") {
-        looks.set(node.textContent, look.paragraphs[key] ?? {});
-      }
+      if (node.type.name !== "paragraph") return true;
+      looks.set(node.textContent, typeof key === "string" ? (look.paragraphs[key] ?? {}) : {});
+      formats.set(node.textContent, node.attrs[PARAGRAPH_FORMAT_ATTRIBUTE]);
       return true;
     });
-    expect(looks.get("首行缩进两个字")).toMatchObject({ firstLine: 24 });
+    // A paragraph's own indent in characters stays in characters, measured in its style's size.
+    expect(formats.get("首行缩进两个字")).toEqual({ firstLineChars: 2 });
+    expect(looks.get("首行缩进两个字")).toMatchObject({ characterSize: 12 });
     expect(looks.get("Indented by its style")).toMatchObject({ left: 24 });
-    expect(looks.get("Indented by a length")).toMatchObject({ left: 36 });
-    expect(looks.get("Hanging one character")).toMatchObject({ firstLine: -12 });
+    expect(formats.get("Indented by a length")).toEqual({ left: 36 });
+    expect(formats.get("Hanging one character")).toEqual({ firstLineChars: -1 });
   });
 });
 

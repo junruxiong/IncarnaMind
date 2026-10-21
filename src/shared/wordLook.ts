@@ -31,6 +31,9 @@ export function setWordLook(doc: Y.Doc, look: WordLook): void {
   map.set("cells", look.cells);
   map.set("body", look.body);
   map.set("width", look.width);
+  map.set("defaultTab", look.defaultTab);
+  if (look.tablesHang) map.set("tablesHang", true);
+  else map.delete("tablesHang");
   map.set("version", look.version);
 }
 
@@ -48,11 +51,13 @@ const FONT = /^[^"\\{};<>\p{Cc}]{1,64}$/u;
 
 const num = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
-// Word's own range of font sizes, in points.
-const size = (value: unknown) => {
+const within = (low: number, high: number) => (value: unknown) => {
   const points = num(value);
-  return points === undefined || points <= 0 ? undefined : Math.min(1638, Math.max(1, points));
+  return points === undefined || points <= 0 ? undefined : Math.min(high, Math.max(low, points));
 };
+// Word's own ranges, in points: font sizes, and the spacing of default tab stops (up to 22 in).
+const size = within(1, 1638);
+const tabSpacing = within(1, 1584);
 const hex = (value: unknown) =>
   typeof value === "string" && HEX.test(value) ? value.toUpperCase() : undefined;
 const font = (value: unknown) =>
@@ -151,6 +156,7 @@ function paragraphLook(value: Record<string, unknown>): WordParagraphLook {
   return defined({
     run: key(value.run),
     next: key(value.next),
+    characterSize: size(value.characterSize),
     align: oneOf(value.align, ["left", "center", "right", "justify", "distribute"] as const),
     left: num(value.left),
     right: num(value.right),
@@ -212,6 +218,8 @@ export function wordLookOf(doc: Y.Doc): WordLook | null {
     version,
     body: size(map.get("body")) ?? null,
     width: num(map.get("width")) ?? null,
+    defaultTab: tabSpacing(map.get("defaultTab")) ?? null,
+    ...(map.get("tablesHang") === true && { tablesHang: true as const }),
     paragraphs: styles(map.get("paragraphs"), paragraphLook),
     runs: styles(map.get("runs"), runLook),
     tables: styles(map.get("tables"), tableLook),

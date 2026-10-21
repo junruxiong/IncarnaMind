@@ -161,6 +161,7 @@ Keys are read from these variables only, never from `OPENAI_API_KEY` and the lik
 | `INCARNAMIND_EVAL_CHAT_MODEL` | none | The model id. |
 | `INCARNAMIND_EVAL_CHAT_KEY` | none | Required for `anthropic`, `openai` and `google`. |
 | `INCARNAMIND_EVAL_CHAT_BASE_URL` | none | Required for `openai-compatible`; Ollama's address for `ollama`. |
+| `INCARNAMIND_EVAL_CHAT_ENDPOINT` | its first | A hosted provider's endpoint, by its id in the app's catalog: `intl` for Kimi International (`api.moonshot.ai`), for example. The run uses the app's own provider for the kind, as Settings does, so it sends what the app sends. The judge's `INCARNAMIND_EVAL_JUDGE_ENDPOINT` works the same way. |
 | `INCARNAMIND_EVAL_CHAT_NUM_CTX` | the app's choice | `ollama` only: the context window (`num_ctx`) every request carries, instead of the one the app chooses from this computer's memory, so local runs are comparable. The output cap follows it, as in the app. |
 | `INCARNAMIND_EVAL_CHAT_CITING` | the app's rule | `ollama` only: `tools`, `structured-output` or `none`, how the model cites instead of the app's rule (`citingMode`), to compare the citing modes. |
 | `INCARNAMIND_EVAL_EMBED_KIND` | none | `openai` or `google`. Turns on the cloud embedding run. |
@@ -489,3 +490,7 @@ The check before building the Library's grouping (#51) found that clustering Doc
 ## The Organize benchmark
 
 `npm run eval:organize` measures how well Organize puts Documents in the right Folder with the right Tags (ADR-0012), per classifier route, on 80 labelled English and Chinese Documents split into a tuning half and a held-out half. It reads the chat route's model from the same `INCARNAMIND_EVAL_CHAT_*` variables. `npm run eval` doesn't run it. See `organize/README.md` and `organize/RESULTS.md`.
+
+## The harness bake-off
+
+`npm run eval:harness` asks 30 requests, in English and Chinese, of IncarnaMind's Run engine, Claude Code and Codex on the same model, the outside two reaching the Documents only through IncarnaMind's MCP server, and reports one results table per model (#1208). `npm run eval` doesn't run it. See `harness/README.md`; `tests/eval/harnessScoring.test.ts` checks its scoring and its adapter to Anthropic's API.

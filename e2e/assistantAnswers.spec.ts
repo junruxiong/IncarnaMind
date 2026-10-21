@@ -13,6 +13,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  nameMind,
   openSteps,
   pointAndClick,
   pointAt,
@@ -20,6 +21,7 @@ import {
   setWindowSize,
   slideToHandle,
   stubClipboard,
+  tabMenu,
 } from "./app";
 
 /**
@@ -75,16 +77,18 @@ async function addTides(window: Page) {
   await addDocuments(window, [join(sources, "Tides.pdf")]);
 }
 
-/** A new Mind, from the sidebar's +, with the mouse. */
+/** A new Mind, from the sidebar's +, with the mouse; its first line body text, not a title. */
 async function newMindByMouse(window: Page) {
   await pointAndClick(window, window.getByTestId("plus-menu"));
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
+  await enterContent(window);
+  await window.keyboard.press("Backspace");
 }
 
 /** A Mind with a title and two Notes, the cursor on the empty line between them. */
 async function mindWithNotes(window: Page, title: string) {
   await newMindByMouse(window);
-  await window.getByTestId("mind-title").fill(title);
+  await nameMind(window, title);
   await enterContent(window);
   const editor = window.getByTestId("mind-editor");
   await window.keyboard.type("Spring tides come twice a month.");
@@ -123,7 +127,7 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   );
   const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "streaming");
-  await expect(answer.getByTestId("answer-stop")).toBeVisible();
+  await expect(window.getByTestId("composer-stop")).toBeVisible();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
   await expect(answer.getByTestId("answer-steps")).toHaveText("Searched All Documents · 1 source");
@@ -205,7 +209,7 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
 test("an Answer goes to another Mind through the ▾, and to a new Mind as changes to accept; the link back opens the conversation at that Answer, and says so once it is deleted", async () => {
   const { app, window } = await start();
   await newMindByMouse(window);
-  await window.getByTestId("mind-title").fill("Chapter 2 outline");
+  await nameMind(window, "Chapter 2 outline");
   await enterContent(window);
   await window.keyboard.type("Outline.");
   const editor = await mindWithNotes(window, "Reading notes: tides");
@@ -223,6 +227,12 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   await expect(options.filter({ hasText: "Chapter 2 outline" })).toHaveCount(1);
   await expect(options.last()).toContainText("New Mind");
   await screenshot(window, "assistant-add-to-picker");
+  // Esc closes it and the focus goes back to the control that opened it.
+  await window.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+  await expect(answer.getByTestId("answer-add-to")).toBeFocused();
+  await pointAndClick(window, answer.getByTestId("answer-add-to"));
+  await expect(picker).toBeVisible();
   await window.keyboard.type("chapter");
   await expect(options).toHaveCount(2);
   await window.keyboard.press("Enter");
@@ -274,17 +284,16 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   await expect(shown.getByTestId("answer-add-to")).toBeVisible({ timeout: 15_000 });
   await pointAndClick(window, shown.getByTestId("answer-add-to"));
   await pointAndClick(window, window.getByTestId("add-to-option").last());
-  await expect(shown.getByTestId("answer-added")).toContainText(
-    "Made the Mind “When do spring tides happen” from this Answer",
-  );
-  const tab = window.getByTestId("mind-tab").filter({ hasText: "When do spring tides happen" });
+  // Making a Mind says nothing under the Answer either.
+  await expect(shown.getByTestId("answer-added")).toHaveCount(0);
+  const tab = window.getByTestId("mind-tab").filter({ hasText: "Your Documents answer this" });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   const made = window.getByTestId("mind-editor");
   await expect(made.locator('[data-proposal="insert"]')).toHaveCount(2);
   await expect(window.getByTestId("proposals-bar")).toBeVisible();
   await screenshot(window, "assistant-new-mind");
-  // Undo removes it, and its tab.
-  await pointAndClick(window, shown.getByTestId("answer-added-undo"));
+  // Delete removes it, and its tab.
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.delete"));
   await expect(tab).toHaveCount(0);
 
   // Deleted, the conversation's link says so.
@@ -482,7 +491,7 @@ test("the ⋯ menu adds the last Answer to a new Mind and clears the conversatio
   await askInAssistant(window, "When do spring tides happen?");
   await pointAndClick(window, more);
   await pointAndClick(window, window.getByTestId("assistant-menu-last-to-new-mind"));
-  const tab = window.getByTestId("mind-tab").filter({ hasText: "When do spring tides happen" });
+  const tab = window.getByTestId("mind-tab").filter({ hasText: "Your Documents answer this" });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   await expect(window.getByTestId("mind-editor").locator('[data-proposal="insert"]')).toHaveCount(
     2,

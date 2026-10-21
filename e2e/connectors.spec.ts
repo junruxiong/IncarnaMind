@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import { startFakeRegistry } from "../tests/helpers/fakeRegistry";
 import { type FakeRemote, startFakeRemote } from "../tests/helpers/remoteMcp";
 import {
@@ -80,9 +81,7 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   // Privacy page lists, and revoking it there goes back to the default.
   const approvals = window.getByTestId("approvals-settings");
   await showSettingsPage(window, "privacy");
-  await expect(approvals).toContainText(
-    "No Tool is set to always allow, to ask every time or to stay off.",
-  );
+  await expect(approvals).toContainText("Nothing changed from the default.");
   await showSettingsPage(window, "connectors");
   await lookup.getByText("Ask every time").click();
   await expect(lookup).toHaveAttribute("data-asks", "true");
@@ -127,6 +126,43 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await expect(connector).toHaveAttribute("data-state", "off");
   await expect(connector.getByTestId("connector-state")).toHaveText("Off");
   await app.close();
+});
+
+test("in Local mode a Connector on another computer is paused and says why, in English and Chinese; its page offers no sign-in", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await dismissChatSetup(window);
+    // Added in Local mode, it is never connected to: the address need not exist.
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.setLocalOnly(true);
+      await bridge.addConnector({ name: "Wiki", url: "https://wiki.example.test/mcp" });
+    });
+
+    await openSettings(window, "connectors");
+    const page = window.getByTestId("settings-page-connectors");
+    const row = page.getByTestId("connected-connector");
+    await expect(row).toHaveAttribute("data-state", "paused");
+    await expect(row.getByTestId("connected-connector-state")).toHaveText(
+      "Not used while everything stays on this computer",
+    );
+    await setLanguage(window, "zh-CN");
+    await expect(row.getByTestId("connected-connector-state")).toHaveText(
+      "所有内容都留在这台电脑上时不会使用",
+    );
+    await setLanguage(window, "en");
+
+    // Its page says the same, and offers no sign-in to a server that would hear of it.
+    await row.getByTestId("connector-manage").click();
+    const connector = page.getByTestId("connector");
+    await expect(connector).toHaveAttribute("data-state", "paused");
+    await expect(connector.getByTestId("connector-state")).toHaveText(
+      "Not used while everything stays on this computer",
+    );
+    await expect(connector.getByTestId("connector-sign-in")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
 });
 
 test("a remote Connector added by URL needs a sign-in, which goes through the browser", async () => {
@@ -235,9 +271,7 @@ test("a reviewed Connector in the directory connects in one click, signing in in
     await expect(detail).toContainText(
       "By Wiki Inc. · Reviewed by IncarnaMind · Needs your Wiki Pro subscription",
     );
-    await expect(detail).toContainText(
-      "Sign in with Wiki in your browser; you need a Wiki Pro subscription.",
-    );
+    await expect(detail).toContainText("Browser sign-in. Needs a Wiki Pro subscription.");
     await expect(page.getByTestId("connectors-back")).toBeFocused();
     // Its Tools as reviewed, before connecting: what each does, with no choice yet.
     const reviewed = page.getByTestId("connector-reviewed-tool");
@@ -303,7 +337,7 @@ test("the search asks the MCP Registry only once the User types and agrees, and 
     await expect(found.getByTestId("connectors-registry-badge")).toHaveText(
       "Community · not reviewed",
     );
-    await expect(found).toContainText("Searched only because you typed.");
+    await expect(found).toContainText("Community connectors aren’t reviewed.");
     await expect(found.getByTestId("registry-server")).toHaveCount(3);
     expect(registry.requests).toEqual(["/v0.1/servers?search=zotero&version=latest&limit=20"]);
 
@@ -347,7 +381,7 @@ test("a whole command line pasted as the command is split into its arguments, an
   await form.getByLabel(/^Arguments, one per line/).focus();
   await expect(command).toHaveValue(process.execPath);
   await expect(form.getByLabel(/^Arguments, one per line/)).toHaveValue(TIDE_SERVER);
-  await expect(form).toContainText("The rest of what you pasted went into Arguments");
+  await expect(form).toContainText("The rest went into Arguments");
   await form.getByRole("button", { name: "Cancel" }).click();
 
   // A Connector added with a command that isn't there fails; changing its command fixes it.

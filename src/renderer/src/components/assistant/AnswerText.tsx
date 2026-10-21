@@ -5,14 +5,15 @@ import type { NodeJSON } from "../../../../shared/blockJson";
 import { lendAnswerEditor } from "../../answerEditors";
 import { AnswerTableSlots } from "../../editor/answerTables";
 import { CitationView } from "../../editor/CitationView";
+import { checklistLabel } from "../../editor/checklistLabel";
 import { CitationGlue, withCitationGlue } from "../../editor/citationGlue";
 import { CitationNumbers } from "../../editor/citationNumbers";
 import { CopyCitations } from "../../editor/copyCitations";
 import { RegenerateAnswerContext } from "../../editor/mindContext";
 import { noteExtensions } from "../../editor/noteSchema";
 import { useT } from "../../i18n";
+import { useTableFades } from "../useTableFades";
 import { OpenAsTable } from "./OpenAsTable";
-import { useTableFades } from "./useTableFades";
 
 /** A Citation redraws when it changes, and when its number does (as in a Mind). */
 const citationView = ReactNodeViewRenderer(CitationView, {
@@ -70,7 +71,7 @@ export function AnswerText({
       content: docOf(blocks),
       editorProps: editorPropsFor(label),
       extensions: [
-        ...noteExtensions({ citationView }),
+        ...noteExtensions({ citationView, checklistLabel }),
         CitationGlue,
         CitationNumbers,
         CopyCitations,

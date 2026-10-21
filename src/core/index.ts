@@ -4,6 +4,16 @@
  */
 
 export type {
+  AnalysisCell,
+  AnalysisEnd,
+  AnalysisInput,
+  AnalysisJob,
+  AnalysisLanguage,
+  AnalysisOutput,
+  AnalysisResult,
+  AnalysisVersions,
+} from "../shared/analysis";
+export type {
   DrawnPage,
   PageArea,
   PageBox,
@@ -11,12 +21,15 @@ export type {
   PageText,
 } from "../shared/citedPage";
 export type {
+  AnalysisRuntime,
   AudioCapture,
   AudioSink,
   Browser,
   CapturePage,
   CaptureSession,
   CaptureState,
+  CloudLoss,
+  CloudStream,
   CoreAdapters,
   CpuFallbackReason,
   CrashReporter,

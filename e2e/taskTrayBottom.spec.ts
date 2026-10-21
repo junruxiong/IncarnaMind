@@ -7,6 +7,8 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  moveAssistant,
+  nameMind,
   newMind,
   removeDataFolder,
   setLanguage,
@@ -47,7 +49,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await connectLocalChatModel(window);
     await setLanguage(window, language);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Credit memo");
+    await nameMind(window, "Credit memo");
     await askInAssistant(window, "First");
     const mind = await window.evaluate(
       async () =>
@@ -58,8 +60,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await startScriptedTask(app, mind, { folder, files: ["a.txt"] });
     const tray = window.getByTestId("task-tray");
     await expect(tray).toBeVisible();
-    await window.getByTestId("assistant-more").click();
-    await window.getByTestId("assistant-menu-bottom").click();
+    await moveAssistant(window, "bottom");
     await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", "bottom");
 
     const thread = window.getByTestId("assistant-thread");

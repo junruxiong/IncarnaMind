@@ -33,7 +33,6 @@
  * Word export reads them too, for review (`ReadOptions.review`, #107).
  */
 import * as Y from "yjs";
-import { originOf } from "../shared/blockOrigins";
 import { type ChartAttributes, chartSources, chosenSeries, readChart } from "../shared/charts";
 import { type RecheckReason, readClaimCheck } from "../shared/claimChecks";
 import { cellProblemMessage, comparisonCellOf, comparisonQuestionsOf } from "../shared/comparisons";
@@ -41,6 +40,12 @@ import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 import { citationLocation } from "../shared/locations";
 import type { TableAlign } from "../shared/markdownTables";
 import { cutTitle } from "../shared/naming";
+import {
+  readParagraphFormat,
+  readTextColor,
+  readTextFont,
+  readTextSize,
+} from "../shared/paragraphFormat";
 import {
   outOfDateProposals,
   proposalRequestOf,
@@ -50,26 +55,34 @@ import {
 import { readWordAtom, wordAtomText } from "../shared/wordFiles";
 import {
   ANSWER_BLOCK,
-  BLOCK_ID_ATTRIBUTE,
   CHART_NODE,
   CITATION_NODE,
   type CitedWork,
   CLAIM_CHECK_MARK,
   COMPARISON_ROW_NODE,
   COMPARISON_TABLE_NODE,
+  type ComparisonQuestion,
   DOCUMENT_CHIP_NODE,
   FOOTNOTE_NODE,
   GENERATED_MARK,
+  PARAGRAPH_FORMAT_ATTRIBUTE,
+  type ParagraphFormat,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
   type ProposalRequest,
   QUESTION_BLOCK,
   type StyledRun,
+  SUBSCRIPT_MARK,
+  SUPERSCRIPT_MARK,
+  TEXT_COLOR_MARK,
+  TEXT_FONT_MARK,
+  TEXT_SIZE_MARK,
   WORD_ATOM_NODE,
   WORD_BLOCK_NODE,
   WORD_CHANGE_ID,
 } from "./api";
+import { isRecord } from "./errors";
 
 export interface Marks {
   bold: boolean;
@@ -80,6 +93,12 @@ export interface Marks {
   code: boolean;
   /** The link's target, or null. */
   link: string | null;
+  /** Hex "RRGGBB". */
+  color?: string;
+  font?: string;
+  /** In points. */
+  size?: number;
+  vertical?: "superscript" | "subscript";
 }
 
 /** A Citation's footnote: one per Citation, in the order they appear. */
@@ -202,11 +221,18 @@ export interface TableSlot {
 }
 
 export type Block = (
-  | { kind: "paragraph"; content: Inline[] }
-  | { kind: "heading"; level: number; content: Inline[] }
+  | { kind: "paragraph"; content: Inline[]; format?: ParagraphFormat }
+  | { kind: "heading"; level: number; content: Inline[]; format?: ParagraphFormat }
   | { kind: "code"; language: string; code: string }
   | { kind: "math"; latex: string }
-  | { kind: "list"; ordered: boolean; start: number; items: Block[][] }
+  | {
+      kind: "list";
+      ordered: boolean;
+      start: number;
+      items: Block[][];
+      /** A checklist's state, in the same order as its items; absent on ordinary lists. */
+      checked?: boolean[];
+    }
   | { kind: "quote"; content: Block[] }
   | { kind: "rule" }
   | { kind: "table"; rows: TableCell[][] }
@@ -378,10 +404,10 @@ function firstText(element: Y.XmlElement): string {
 }
 
 /**
- * What a Mind without a title is called: its first line of text, cut as a title.
+ * What a Mind without a title is called: its first line of text, cut as a title, whether
+ * the User wrote it or the assistant did. Never an instruction typed to the assistant,
+ * which the Blocks it wrote remember as their origin (#1174).
  * An Answer's text, or a comparison table's, is not the User's, so it isn't read.
- * A Note added from an Answer is named by the Question it answered (#769): the
- * Answer's first line isn't a name.
  */
 export function firstLineOf(blocks: Y.XmlFragment): string {
   for (const block of blocks.toArray()) {
@@ -393,9 +419,7 @@ export function firstLineOf(blocks: Y.XmlFragment): string {
       continue;
     }
     const written = cutTitle(firstText(block));
-    if (written === "") continue;
-    const origin = blocks.doc && originOf(blocks.doc, stringAttribute(block, BLOCK_ID_ATTRIBUTE));
-    return (origin && cutTitle(origin.question)) || written;
+    if (written !== "") return written;
   }
   return "";
 }
@@ -487,10 +511,23 @@ const hasBlockChildren = (element: Y.XmlElement) =>
 function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] {
   switch (element.nodeName) {
     case "paragraph":
-      return [{ kind: "paragraph", content: readInline(element.toArray(), options) }];
+      return [
+        {
+          kind: "paragraph",
+          content: readInline(element.toArray(), options),
+          ...formatOf(element),
+        },
+      ];
     case "heading": {
       const level = Math.min(Math.max(Number(element.getAttribute("level")) || 1, 1), 6);
-      return [{ kind: "heading", level, content: readInline(element.toArray(), options) }];
+      return [
+        {
+          kind: "heading",
+          level,
+          content: readInline(element.toArray(), options),
+          ...formatOf(element),
+        },
+      ];
     }
     case "codeBlock":
       return [
@@ -498,7 +535,6 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
       ];
     case "blockMath":
       return [{ kind: "math", latex: stringAttribute(element, "latex") }];
-    // A checklist reads as a bulleted list: its ticks are for the User, not for what reads the text.
     case "bulletList":
     case "taskList":
     case "orderedList": {
@@ -510,11 +546,22 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
         .toArray()
         .filter((item): item is Y.XmlElement => item instanceof Y.XmlElement)
         .flatMap((item) => {
-          if (!options.review) return [readChildren(item.toArray(), options)];
-          const change = changeOf(item, options);
-          return change ? [withChange(readChildren(item.toArray(), options), change)] : [];
+          const change = options.review ? changeOf(item, options) : undefined;
+          if (options.review && !change) return [];
+          const attributes: Record<string, unknown> = item.getAttributes();
+          const checked = attributes.checked === true;
+          const content = readChildren(item.toArray(), options);
+          return [{ content: change ? withChange(content, change) : content, checked }];
         });
-      return [{ kind: "list", ordered, start, items }];
+      return [
+        {
+          kind: "list",
+          ordered,
+          start,
+          items: items.map((item) => item.content),
+          ...(element.nodeName === "taskList" && { checked: items.map((item) => item.checked) }),
+        },
+      ];
     }
     case "blockquote":
       return [{ kind: "quote", content: readChildren(element.toArray(), options) }];
@@ -581,6 +628,55 @@ function readTable(table: Y.XmlElement, options: ReadOptions): TableCell[][] {
   return rows;
 }
 
+/** A comparison table's cell as read: its Answer, or what it says in the Answer's place. */
+export type ComparisonCellReading =
+  | { kind: "answer"; content: Block[] }
+  | { kind: "words"; text: string }
+  | { kind: "empty" };
+
+/** A comparison table as read (#98): its Questions, then a row per Document, a cell per Question. */
+export interface ComparisonReading {
+  questions: ComparisonQuestion[];
+  rows: {
+    documentId: string;
+    /** The Document's name, or that its source was removed. */
+    name: string;
+    cells: ComparisonCellReading[];
+  }[];
+}
+
+export function readComparisonTable(table: Y.XmlElement, options: ReadOptions): ComparisonReading {
+  const say = options.comparisonText ?? ((key, params) => translate("en", key, params));
+  const questions = comparisonQuestionsOf(table.getAttributes());
+  const rows: ComparisonReading["rows"] = [];
+  for (const row of table.toArray()) {
+    if (!(row instanceof Y.XmlElement) || row.nodeName !== COMPARISON_ROW_NODE) continue;
+    const name = stringAttribute(row, "documentName");
+    const documentId = stringAttribute(row, "documentId");
+    const removed = options.documentRemoved?.(documentId) ?? false;
+    const cells = new Map<string, Y.XmlElement>();
+    for (const each of row.toArray()) {
+      if (each instanceof Y.XmlElement) cells.set(stringAttribute(each, "questionId"), each);
+    }
+    rows.push({
+      documentId,
+      name: removed ? say("comparison.row.removed", { name }) : name,
+      cells: questions.map((question): ComparisonCellReading => {
+        const element = cells.get(question.id);
+        if (!element) return { kind: "empty" };
+        const state = comparisonCellOf(element.getAttributes());
+        if (state.status === "done") {
+          return { kind: "answer", content: readChildren(element.toArray(), options) };
+        }
+        if (!state.problem) return { kind: "words", text: "…" };
+        const { key, params } = cellProblemMessage(state.problem);
+        return { kind: "words", text: say(key, params) };
+      }),
+    });
+  }
+  return { questions, rows };
+}
+
 /**
  * A comparison table as a table: a heading row ("Document", then its
  * Questions), then a row per Document, its name first, each cell its Answer,
@@ -598,35 +694,19 @@ function readComparison(table: Y.XmlElement, options: ReadOptions): TableCell[][
   const words = (text: string): Block[] => [
     { kind: "paragraph", content: [{ kind: "text", text, marks: NO_MARKS }] },
   ];
-  const questions = comparisonQuestionsOf(table.getAttributes());
-  const rows: TableCell[][] = [
+  const { questions, rows } = readComparisonTable(table, options);
+  return [
     [
       cell(words(say("comparison.document")), true),
       ...questions.map((question) => cell(words(question.text), true)),
     ],
+    ...rows.map((row) => [
+      cell(words(row.name)),
+      ...row.cells.map((each) =>
+        cell(each.kind === "answer" ? each.content : each.kind === "words" ? words(each.text) : []),
+      ),
+    ]),
   ];
-  for (const row of table.toArray()) {
-    if (!(row instanceof Y.XmlElement) || row.nodeName !== COMPARISON_ROW_NODE) continue;
-    const name = stringAttribute(row, "documentName");
-    const removed = options.documentRemoved?.(stringAttribute(row, "documentId")) ?? false;
-    const cells = new Map<string, Y.XmlElement>();
-    for (const each of row.toArray()) {
-      if (each instanceof Y.XmlElement) cells.set(stringAttribute(each, "questionId"), each);
-    }
-    rows.push([
-      cell(words(removed ? say("comparison.row.removed", { name }) : name)),
-      ...questions.map((question) => {
-        const element = cells.get(question.id);
-        if (!element) return cell([]);
-        const state = comparisonCellOf(element.getAttributes());
-        if (state.status === "done") return cell(readChildren(element.toArray(), options));
-        if (!state.problem) return cell(words("…"));
-        const { key, params } = cellProblemMessage(state.problem);
-        return cell(words(say(key, params)));
-      }),
-    ]);
-  }
-  return rows;
 }
 
 /**
@@ -716,7 +796,7 @@ function readImage(element: Y.XmlElement): Image {
   return { src: stringAttribute(element, "src"), alt: stringAttribute(element, "alt") };
 }
 
-const NO_MARKS: Marks = {
+export const NO_MARKS: Marks = {
   bold: false,
   italic: false,
   strike: false,
@@ -726,8 +806,24 @@ const NO_MARKS: Marks = {
   link: null,
 };
 
+function formatOf(element: Y.XmlElement): { format?: ParagraphFormat } {
+  const format = readParagraphFormat(element.getAttribute(PARAGRAPH_FORMAT_ATTRIBUTE));
+  return Object.keys(format).length > 0 ? { format } : {};
+}
+
+const attributeOf = (mark: unknown, name: string): unknown =>
+  isRecord(mark) ? mark[name] : undefined;
+
 function marksOf(attributes: Record<string, unknown> = {}): Marks {
   const link = attributes.link as { href?: unknown } | undefined;
+  const color = readTextColor(attributeOf(attributes[TEXT_COLOR_MARK], "color"));
+  const font = readTextFont(attributeOf(attributes[TEXT_FONT_MARK], "family"));
+  const size = readTextSize(attributeOf(attributes[TEXT_SIZE_MARK], "size"));
+  const vertical = Object.hasOwn(attributes, SUPERSCRIPT_MARK)
+    ? "superscript"
+    : Object.hasOwn(attributes, SUBSCRIPT_MARK)
+      ? "subscript"
+      : null;
   return {
     bold: Object.hasOwn(attributes, "bold"),
     italic: Object.hasOwn(attributes, "italic"),
@@ -736,6 +832,10 @@ function marksOf(attributes: Record<string, unknown> = {}): Marks {
     highlight: Object.hasOwn(attributes, "highlight"),
     code: Object.hasOwn(attributes, "code"),
     link: link && typeof link.href === "string" && link.href !== "" ? link.href : null,
+    ...(color && { color }),
+    ...(font && { font }),
+    ...(size && { size }),
+    ...(vertical && { vertical }),
   };
 }
 

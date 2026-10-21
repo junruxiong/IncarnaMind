@@ -8,14 +8,33 @@ import type { ChatProviderKind, CopilotSignInErrorKind, SignInRouteProblem } fro
 
 export type SignInRoute = Extract<ChatProviderKind, "claude-account" | "copilot">;
 
+export const isSignInRoute = (kind: ChatProviderKind | null | undefined): kind is SignInRoute =>
+  kind === "claude-account" || kind === "copilot";
+
+const PROBLEMS: Record<SignInRouteProblem, true> = {
+  "sign-in-cancelled": true,
+  "signed-out": true,
+  "sign-in-expired": true,
+  refused: true,
+  "plan-limit": true,
+  "unexpected-response": true,
+  "no-plan": true,
+  "policy-blocked": true,
+  "model-unavailable": true,
+  "rate-limited": true,
+};
+
+/** For a problem read back from storage, which may predate one. */
+export const isSignInRouteProblem = (value: unknown): value is SignInRouteProblem =>
+  typeof value === "string" && Object.hasOwn(PROBLEMS, value);
+
 /** A way back; "sign-in" signs in with the route's provider, which its label names. */
 export type RouteWayBack =
   | "sign-in"
   | "try-again"
   | "sign-in-again"
   | "use-another-model"
-  | "paste-api-key"
-  | "use-claude-code";
+  | "paste-api-key";
 
 export interface RouteProblemWords {
   line: MessageKey;
@@ -26,7 +45,8 @@ export interface RouteProblemWords {
 
 export interface SignInRouteWords {
   signIn: MessageKey;
-  problems: Partial<Record<SignInRouteProblem, RouteProblemWords>>;
+  problems: Partial<Record<SignInRouteProblem, RouteProblemWords>> &
+    Record<"signed-out", RouteProblemWords>;
 }
 
 const WAYS_BACK: Record<Exclude<RouteWayBack, "sign-in">, MessageKey> = {
@@ -34,7 +54,6 @@ const WAYS_BACK: Record<Exclude<RouteWayBack, "sign-in">, MessageKey> = {
   "sign-in-again": "signInRoute.wayBack.signInAgain",
   "use-another-model": "signInRoute.wayBack.useAnotherModel",
   "paste-api-key": "signInRoute.wayBack.pasteApiKey",
-  "use-claude-code": "signInRoute.wayBack.useClaudeCode",
 };
 
 export const SIGN_IN_ROUTES: Record<SignInRoute, SignInRouteWords> = {
@@ -47,10 +66,7 @@ export const SIGN_IN_ROUTES: Record<SignInRoute, SignInRouteWords> = {
         line: "claudeAccount.problem.signInExpired",
         waysBack: ["sign-in-again"],
       },
-      refused: {
-        line: "claudeAccount.problem.refused",
-        waysBack: ["paste-api-key", "use-claude-code"],
-      },
+      refused: { line: "claudeAccount.problem.refused", waysBack: ["paste-api-key"] },
       "plan-limit": {
         line: "claudeAccount.problem.planLimit",
         lineUntil: "claudeAccount.problem.planLimitUntil",
@@ -58,7 +74,7 @@ export const SIGN_IN_ROUTES: Record<SignInRoute, SignInRouteWords> = {
       },
       "unexpected-response": {
         line: "claudeAccount.problem.unexpectedResponse",
-        waysBack: ["paste-api-key", "use-claude-code"],
+        waysBack: ["paste-api-key"],
       },
     },
   },
@@ -121,6 +137,10 @@ export const COPILOT_SIGN_IN_PROBLEMS: Record<CopilotSignInErrorKind, RouteProbl
   },
   refused: { line: "copilot.problem.refused", waysBack: ["try-again", "paste-api-key"] },
   "no-plan": { line: "copilot.problem.noPlan", waysBack: ["paste-api-key", "use-another-model"] },
+  "policy-blocked": {
+    line: "copilot.problem.policyBlocked",
+    waysBack: ["paste-api-key", "use-another-model"],
+  },
   "unexpected-response": {
     line: "copilot.problem.unexpectedResponse",
     waysBack: ["try-again", "paste-api-key"],

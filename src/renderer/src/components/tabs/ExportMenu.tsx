@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { type DocumentKind, EXPORT_FORMATS, type ExportFormat } from "../../../../core/api";
 import type { CommandId } from "../../../../shared/commands";
 import { useMindFormatting } from "../../citationFormatting";
-import { styleLabel, useCitationStylePicker } from "../../citationStylePicker";
+import { useCitationStylePicker, useStyleLabel } from "../../citationStylePicker";
 import { shortcutLabel } from "../../commands/keymap";
 import { commands } from "../../commands/registry";
+import { takeExportMenuRequest, useExportMenuRequests } from "../../exportMenuRequest";
 import { FORMAT_LABELS, useExports } from "../../exports";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
@@ -80,8 +81,16 @@ export function ExportMenu({ mindId }: { mindId: string }) {
     (state) => state.result?.mindId === mindId && state.result.state === "saving",
   );
   // The style the export is written in, as the Mind's editor last formatted it.
-  const style = useMindFormatting(mindId)?.style;
+  const formatting = useMindFormatting(mindId);
+  const styleName = useStyleLabel(formatting?.style, formatting?.formatted?.unavailable === true);
   const { shown, more } = exportChoices(last);
+
+  // "Export…" in a Mind's menus: this Mind's button opens its menu, as if it had been clicked.
+  const asked = useExportMenuRequests((state) => state.request);
+  const button = menu.buttonProps.ref;
+  useEffect(() => {
+    if (asked?.mindId === mindId && takeExportMenuRequest(mindId)) button.current?.click();
+  }, [asked, mindId, button]);
 
   const run = (id: CommandId) => {
     menu.close();
@@ -143,7 +152,7 @@ export function ExportMenu({ mindId }: { mindId: string }) {
               testId="export-citation-style-menu"
               icon={<span aria-hidden="true" className="size-4 shrink-0" />}
               label={t("export.citationStyle")}
-              {...(style && { hint: styleLabel(style, t) })}
+              {...(styleName && { hint: styleName })}
               onClick={() => {
                 const button = menu.buttonProps.ref.current;
                 menu.close();
