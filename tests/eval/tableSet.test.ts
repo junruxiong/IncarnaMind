@@ -18,6 +18,11 @@ interface Labels {
 
 const labels = JSON.parse(await readFile(join(ROOT, "eval/tables/labels.json"), "utf8")) as Labels;
 
+// Some PDFs print CJK characters with Kangxi radicals' code points ("⽬" for "目"), and pdf.js reads
+// them so: the set compares what a person reads.
+const asRead = (text: string) =>
+  text.replace(/[\u2f00-\u2fdf]/gu, (radical) => radical.normalize("NFKC"));
+
 const read = new Map<string, Promise<Map<number, PagePart[]>>>();
 const tablesOn = async (file: string, page: number) => {
   if (!read.has(file)) {
@@ -29,7 +34,12 @@ const tablesOn = async (file: string, page: number) => {
   const parts = (await read.get(file))?.get(page) ?? [];
   return parts.flatMap((part) =>
     part.kind === "table"
-      ? [{ headings: part.grid.headings, rows: part.grid.rows.map((row) => row.cells) }]
+      ? [
+          {
+            headings: part.grid.headings.map(asRead),
+            rows: part.grid.rows.map((row) => row.cells.map(asRead)),
+          },
+        ]
       : [],
   );
 };
@@ -41,7 +51,10 @@ describe("the table set", { timeout: 60_000 }, () => {
       const [file = "", page = "0"] = key.split("#");
       const expected = labels.tables
         .filter((table) => table.file === file && table.page === Number(page))
-        .map(({ headings, rows }) => ({ headings, rows }));
+        .map(({ headings, rows }) => ({
+          headings: headings.map(asRead),
+          rows: rows.map((cells) => cells.map(asRead)),
+        }));
       expect(await tablesOn(file, Number(page)), key).toEqual(expected);
     }
   });

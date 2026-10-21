@@ -262,7 +262,8 @@ function gridOf(
   // Over the row of headings next to the body, a row heads the columns only if it fills them, or
   // groups the ones right of the labels (2025 over Q1 and Q2): a form's fields above aren't headings.
   // The labels' own heading may sit level with the groups, or centred in its merged cell between
-  // rows: it is theirs when a row above it heads the columns. A bullet's line starts left of them.
+  // rows: it is theirs when a row above it heads the columns. A bullet's line starts left of them,
+  // and a caption, a title or a page header centred above the table is one line, not groups.
   const overLabels = (fragment: Fragment) =>
     fragment.right <= (spans[1]?.left ?? Number.POSITIVE_INFINITY);
   const groups = (fragment: Fragment) => fragment.left > (spans[0]?.right ?? 0);
@@ -275,8 +276,10 @@ function gridOf(
     const heads =
       dropped === headingCount ||
       row.length >= spans.length ||
-      row.every(groups) ||
-      (row.some(groups) && row.every((fragment) => overLabels(fragment) || overFigures(fragment)));
+      (row.length >= 2 && row.every(groups)) ||
+      (row.length >= 2 &&
+        row.some(groups) &&
+        row.every((fragment) => overLabels(fragment) || overFigures(fragment)));
     if (heads) top = dropped - 1;
     else if (!row.every(overLabels)) break;
     dropped--;
@@ -319,10 +322,12 @@ function gridOf(
   headingRows.forEach((row, index) => {
     const adjacent = index === headingRows.length - 1;
     if (adjacent || row.length >= spans.length) {
-      for (const fragment of row) {
-        const column = headedColumn(fragment, spans);
+      // A heading a column each, though one is centred off its cells ("项目" in a wide label column).
+      const each = row.length === spans.length;
+      row.forEach((fragment, at) => {
+        const column = each ? at : headedColumn(fragment, spans);
         headings[column] = join(headings[column] ?? "", fragment.text);
-      }
+      });
       return;
     }
     // An upper heading names the columns from the one it starts over to the next one's.

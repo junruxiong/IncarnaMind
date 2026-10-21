@@ -1,5 +1,5 @@
 {
-  "about": "Tables Verify reads from the text layer of PDF fixtures (#1368), and of two printed from HTML in files/: a two-level heading centred over its columns, as Word, Excel and HTML set merged cells, and headings set left: each table's column headings and its rows' cells, as a person reads them off the page, and pages that hold no table though their text sits in columns. tests/eval/tableSet.test.ts scores the reader against them.",
+  "about": "Tables Verify reads from the text layer of PDF fixtures (#1368), and of tables printed from HTML in files/: a two-level heading centred over its columns, as Word, Excel and HTML set merged cells, with the labels' heading in the middle or at the top of its merged cell; headings set left; a centred caption, title or page header just above one row of headings; and a Chinese statement whose title is centred above it: each table's column headings and its rows' cells, as a person reads them off the page, and pages that hold no table though their text sits in columns. tests/eval/tableSet.test.ts scores the reader against them.",
   "tables": [
     {
       "file": "tests/fixtures/organize/files/2025年度财务报表.pdf",
@@ -620,6 +620,161 @@
           "Net cash",
           "4,850",
           "4,235"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/Sales by channel, captioned.pdf",
+      "page": 1,
+      "headings": [
+        "Channel",
+        "Q1",
+        "Q2",
+        "Q3"
+      ],
+      "rows": [
+        [
+          "Retail",
+          "1,200",
+          "1,340",
+          "1,280"
+        ],
+        [
+          "Online",
+          "860",
+          "910",
+          "990"
+        ],
+        [
+          "Wholesale",
+          "430",
+          "455",
+          "470"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/Sales by channel, titled.pdf",
+      "page": 1,
+      "headings": [
+        "Channel",
+        "Q1",
+        "Q2",
+        "Q3"
+      ],
+      "rows": [
+        [
+          "Retail",
+          "1,200",
+          "1,340",
+          "1,280"
+        ],
+        [
+          "Online",
+          "860",
+          "910",
+          "990"
+        ],
+        [
+          "Wholesale",
+          "430",
+          "455",
+          "470"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/Sales by channel, page header.pdf",
+      "page": 1,
+      "headings": [
+        "Channel",
+        "Q1",
+        "Q2",
+        "Q3"
+      ],
+      "rows": [
+        [
+          "Retail",
+          "1,200",
+          "1,340",
+          "1,280"
+        ],
+        [
+          "Online",
+          "860",
+          "910",
+          "990"
+        ],
+        [
+          "Wholesale",
+          "430",
+          "455",
+          "470"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/Quarterly sales, channel at the top.pdf",
+      "page": 1,
+      "headings": [
+        "Channel",
+        "2025 Q1",
+        "2025 Q2",
+        "2024 Q1",
+        "2024 Q2"
+      ],
+      "rows": [
+        [
+          "Retail",
+          "1,200",
+          "1,340",
+          "1,100",
+          "1,150"
+        ],
+        [
+          "Online",
+          "860",
+          "910",
+          "700",
+          "760"
+        ],
+        [
+          "Wholesale",
+          "430",
+          "455",
+          "480",
+          "470"
+        ]
+      ]
+    },
+    {
+      "file": "eval/tables/files/利润表.pdf",
+      "page": 1,
+      "headings": [
+        "项目",
+        "本年金额",
+        "上年金额"
+      ],
+      "rows": [
+        [
+          "营业收入",
+          "25,600",
+          "22,140"
+        ],
+        [
+          "营业成本",
+          "（16,320）",
+          "（14,050）"
+        ],
+        [
+          "销售费用",
+          "（2,410）",
+          "（2,180）"
+        ],
+        [
+          "净利润",
+          "4,180",
+          "3,560"
         ]
       ]
     }
