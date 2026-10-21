@@ -370,17 +370,13 @@ describe("Check this Mind", () => {
 });
 
 describe("A sentence gets the same verdict in Check this Mind as checked alone", () => {
-  /** The model calls a check's Run may make (the engine's `MAX_STEPS`). */
+  // The engine's MAX_STEPS: the model calls one check's Run may make.
   const STEPS = 10;
   const LOAN = "The Northgate Bank term loan stood at £214,480.00 at 31 March 2026.";
   const BANK = "Balance outstanding at 31 March 2026: GBP 212,480.00.";
   const MEMO = `Revenue for the year was £1,284,300. ${LOAN}`;
 
-  /**
-   * A model that trusts what it reads: the sentence itself supports it, the
-   * bank's figure contradicts it. The first `unread` of its check Runs answer
-   * before searching, as a model sometimes does.
-   */
+  // The draft's own sentence would support it; the bank's figure contradicts it.
   function readingModel(runs: ModelCall[], unread = 0) {
     const plans: Record<string, Plan> = { [LOAN]: { judgement: "conflict" } };
     let skipped = 0;
@@ -418,7 +414,6 @@ describe("A sentence gets the same verdict in Check this Mind as checked alone",
     );
   }
 
-  /** A bank confirmation, and a memo imported from Word with its original added, in one Folder. */
   async function yearEnd(
     unread = 0,
     model: (runs: ModelCall[]) => ReturnType<typeof scriptedModel> = (runs) =>
@@ -478,7 +473,6 @@ describe("A sentence gets the same verdict in Check this Mind as checked alone",
     await client.settled();
     expect(loanCheck()).toMatchObject({ state: "contradicted", evidence: { quote: BANK } });
 
-    // No check, whole or alone, was shown a Passage of the draft itself.
     const shownToChecks = runs.flatMap((call) =>
       call.results
         .filter((result) => result.tool === "search_documents")
@@ -510,8 +504,8 @@ describe("A sentence gets the same verdict in Check this Mind as checked alone",
               : { text: "Verdict: unsupported" };
           }
           runs.push(call);
-          // Busy with everything but a search until its last step, which gives a verdict.
-          return call.results.length < STEPS - 1
+          // Busy with everything but a search until two steps are left, then a verdict each time.
+          return call.results.length < STEPS - 2
             ? { calls: [{ tool: "cite", input: { citations: [] } }] }
             : { text: "Verdict: unsupported" };
         },
@@ -520,6 +514,6 @@ describe("A sentence gets the same verdict in Check this Mind as checked alone",
     );
     await core.checkMind(request(mindId, "all"));
     expect(loanCheck()).toMatchObject({ state: "not-checked", reason: "unread" });
-    expect(runs).toHaveLength(STEPS + 1);
+    expect(runs).toHaveLength(STEPS);
   });
 });
