@@ -41,6 +41,7 @@ export function answerInstructions(): string {
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it; never tell the User to disregard an earlier Answer.",
+    '- Never send the reader to an earlier Answer for part of what you write ("covered in my earlier answer", "as above", "见上一条回答", "见上文"): someone who never saw this conversation may read it on a page, so write that part out.',
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
     "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
   ].join("\n");
@@ -129,6 +130,17 @@ export function workingCopyNote(original: string | null): string {
 }
 
 /**
+ * The example's Documents, by name, when the Mind in focus is an example's;
+ * empty for any other. Asked beside it about their own file, a model told the
+ * User it "has nothing to do with Northwind" (#1172).
+ */
+export function exampleNote(documents: readonly string[] | null): string {
+  if (documents === null) return "";
+  const names = documents.map((name) => `"${listedName(name)}"`).join(", ");
+  return `The Mind in <mind> is an example IncarnaMind made${names ? `, with Documents of its own (${names})` : ""}: none of it is the User's own work. Mention the example only when the Question is about it, never to say the User's Documents have nothing to do with it.`;
+}
+
+/**
  * Passages as the model reads them, from a search or given whole, with the
  * notes their text calls for: dates, the User's own workings, amounts in
  * brackets, and Documents that couldn't be read.
@@ -214,14 +226,7 @@ export function emptyMindNote(offered: boolean, empty: boolean): string {
  * A Question asked while the meeting the User is in records (#144): the live transcript goes
  * with it (see ./liveTranscript), and is what Questions about the call are answered from.
  */
-export function meetingInstructions(listening: boolean, nothingHeard = false): string {
-  if (nothingHeard) {
-    return [
-      "The User is in a meeting that is being recorded, and asks this during the call. Nothing of the call has been transcribed yet: the live text is behind, and catches up once the meeting stops.",
-      "- Say so in one plain sentence in the User's language: the live text hasn't caught up, so you can't hear the call yet. Never say you can't see a transcript, and never ask the User to type out what was said.",
-      "- Then answer what you can without the call, from the Mind and the User's Documents, if the Question allows it.",
-    ].join("\n");
-  }
+export function meetingInstructions(listening: boolean): string {
   if (!listening) return "";
   return [
     "The User is in a meeting that is being recorded, and asks this during the call.",

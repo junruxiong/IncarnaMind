@@ -16,9 +16,15 @@ import {
 } from "./prompt";
 
 const HELP = /pressed a button for help/;
+const BEHIND = /the live text fell behind/;
 
 const block = (text: string, tag: string) =>
   new RegExp(`<${tag}>\\n([\\s\\S]*?)\\n</${tag}>`).exec(text)?.[1] ?? "";
+
+const BEHIND_LINE = {
+  en: "The live text is behind: nothing of the call is written yet, so there is nothing to answer from.",
+  zh: "实时转写跟不上：通话还没有转写出文字，暂时没有内容可以回答。",
+};
 
 const OPTIONS = {
   en: {
@@ -65,6 +71,7 @@ export function helpReply(prompt: Prompt, tools: readonly string[]): Reply | nul
   const heard = passagesIn(block(asked, "live-transcript"));
   const newest = heard.at(-1)?.text ?? question;
   const language = /\p{Script=Han}/u.test(newest) ? "zh" : "en";
+  if (BEHIND.test(system) && heard.length === 0) return { text: BEHIND_LINE[language] };
   const shape = /One or two readings/.test(system)
     ? "readings"
     : /At most three short lines/.test(system)

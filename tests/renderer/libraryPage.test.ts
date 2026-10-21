@@ -7,6 +7,7 @@ import type {
 } from "../../src/core/api";
 import {
   addedLabel,
+  folderCounts,
   folderFacet,
   foundLine,
   NOT_IN_A_FOLDER,
@@ -70,6 +71,20 @@ describe("sections", () => {
     expect(sections[1]?.documents).toEqual([a]);
     // A Document in a Folder that isn't there any more is in none.
     expect(sections[2]?.documents).toEqual([b, c]);
+  });
+
+  test("a Folder's count is the Documents the page lists in it, not those filed there and since deleted", () => {
+    const assignments = [
+      { documentId: a.id, groupId: "finance" },
+      { documentId: b.id, groupId: "finance" },
+      { documentId: "deleted", groupId: "finance" },
+    ];
+    expect(folderCounts([board, finance], [a, b, c], assignments)).toEqual(
+      new Map([
+        ["board", 0],
+        ["finance", 2],
+      ]),
+    );
   });
 
   test("an empty Folder still shows; Not in a Folder only while it holds something", () => {

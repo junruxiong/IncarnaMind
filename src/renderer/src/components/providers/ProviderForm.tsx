@@ -5,12 +5,15 @@ import type {
   SecretStorageStatus,
   TestChatConnectionInput,
 } from "../../../../core/api";
+import type { Language } from "../../../../core/language";
 import type { DataUse } from "../../../../core/providers/catalog";
 import { catalogMenu } from "../../../../core/providers/catalog";
+import { serviceOfKey } from "../../../../core/providers/catalog/keyForms";
 import {
   catalogProvider,
   dataUseOf,
   endpointOf,
+  FIRST_RUN_BEST_EFFORT,
   fieldAccepts,
   fieldUrl,
   isPreset,
@@ -21,6 +24,7 @@ import {
 } from "../../../../core/providers/catalog/providers";
 import type { Role } from "../../../../core/providers/catalog/types";
 import { serviceForUrl } from "../../../../core/providers/service";
+import { checkApiKey } from "../../../../shared/apiKey";
 import type { MessageKey } from "../../../../shared/i18n";
 import { gap } from "../../../../shared/i18n/join";
 import { modelName } from "../../../../shared/modelName";
@@ -30,6 +34,7 @@ import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import type { KeyRefusal } from "../../keyRefusals";
 import { useAppStore } from "../../store";
+import { KeyCharacterLine } from "../KeyCharacterLine";
 import { MetaLine } from "../MetaLine";
 import { LineAction, type ProblemAction, ProblemMark } from "../ProblemLine";
 import {
@@ -43,9 +48,10 @@ import {
   successTextClass,
 } from "../ui";
 import { KeyHelp } from "./KeyHelp";
+import { KeyCheckLine, useKeyCheck } from "./keyCheck";
 import { LocalServerLine, useLocalServer } from "./LocalServerLine";
 import { SendsLine } from "./SendsLine";
-import { keyProviderName, testErrorKey, useProviderKey } from "./shared";
+import { defaultRegion, keyProviderName, testErrorKey, useProviderKey } from "./shared";
 import { useJevSettings } from "./useJevSettings";
 
 type CatalogId = string;
@@ -59,8 +65,11 @@ const suggestedModel = (kind: CatalogId): string => catalogProvider(kind)?.roles
 const isSuggestion = (model: string) =>
   KEY_PROVIDERS.some((kind) => suggestedModel(kind) === model);
 
-/** The providers shown as one row of choices; the rest are under "More…". */
-const ROW: readonly CatalogId[] = ["anthropic", "openai", "google", "deepseek", "qwen"];
+/** The providers shown as one row of choices, in the order the interface's language puts first; the rest are under "More…". */
+const ROW: Readonly<Record<Language, readonly CatalogId[]>> = {
+  en: ["anthropic", "openai", "google", "deepseek", "kimi", "qwen"],
+  "zh-CN": ["deepseek", "qwen", "kimi", "glm", "anthropic", "openai", "google"],
+};
 
 /** What a provider's address field holds when it is chosen. */
 const fieldDefault = (kind: CatalogId): string => {
@@ -127,7 +136,7 @@ export function ProviderForm({
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
   onSaved(provider: ChatProvider): void;
-  /** Settings lists the best-effort providers too, under "More providers"; first run only the first-class ones. */
+  /** Lists every provider, the best-effort ones under "More…", as Settings does; without it, as first run does: the first-class ones and those the catalog marks `firstRun`. */
   withMoreProviders?: boolean;
   /** The provider chosen when the form opens: the one the User came from. DeepSeek in Chinese, else Anthropic. */
   initialKind?: CatalogId;
@@ -152,7 +161,9 @@ export function ProviderForm({
   );
   const [moreOpen, setMoreOpen] = useState(false);
   /** The region of a provider that has several; its first otherwise. */
-  const [endpointId, setEndpointId] = useState(refused?.endpoint ?? initialEndpoint ?? "");
+  const [endpointId, setEndpointId] = useState(
+    refused?.endpoint ?? initialEndpoint ?? defaultRegion(first, language),
+  );
   const key = useProviderKey();
   const { apiKey } = key;
   const [fieldValue, setFieldValue] = useState(() => fieldDefault(first));
@@ -171,6 +182,7 @@ export function ProviderForm({
     ) && !jev?.enabled;
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
+  const [switchedFrom, setSwitchedFrom] = useState<CatalogId | null>(null);
 
   useEffect(() => {
     core.getSecretStorage().then(setSecretStorage, () => undefined);
@@ -203,6 +215,7 @@ export function ProviderForm({
     keyField.current?.focus({ preventScroll: true });
   }, []);
   const outcome = useRef<HTMLDivElement>(null);
+  const keyLine = useRef<HTMLDivElement>(null);
   // The setup card keeps the action row at its foot, which would leave a failure under it out of sight.
   useEffect(() => {
     if (test?.ok === false || error) outcome.current?.scrollIntoView({ block: "nearest" });
@@ -222,8 +235,8 @@ export function ProviderForm({
     ? providers.find((each) => sameServer(each, kind, endpoint?.id ?? "", baseUrl, fieldAddress))
     : undefined;
   const keyRequired = catalog?.apiKey === "required";
-  const hasKey = apiKey.trim() !== "" || Boolean(saved?.hasApiKey);
-  const keyBlocked = apiKey.trim() !== "" && secretStorage !== null && !secretStorage.canSave;
+  const hasKey = key.text !== "" || Boolean(saved?.hasApiKey);
+  const keyBlocked = key.text !== "" && secretStorage !== null && !secretStorage.canSave;
   const missing: MessageKey | null =
     kind === null
       ? null
@@ -238,14 +251,28 @@ export function ProviderForm({
               : modelId.trim() === ""
                 ? "providers.form.needsModel"
                 : null;
-  const complete = kind !== null && missing === null && (!local || server.status?.running === true);
-
+  const complete =
+    kind !== null &&
+    missing === null &&
+    key.stray === null &&
+    (!local || server.status?.running === true);
+  const keyCheck = useKeyCheck(
+    kind !== null && kind !== "openai-compatible" && !local ? kind : null,
+    apiKey,
+  );
+  const keyLineShown = keyCheck.blocked || switchedFrom !== null;
+  // The card's foot would cover the line under it, and the button it explains is grey.
+  useEffect(() => {
+    if (keyLineShown) keyLine.current?.scrollIntoView({ block: "nearest" });
+  }, [keyLineShown]);
   const shortName = (option: CatalogId) =>
     option === "qwen"
       ? t("providers.kind.short.qwen")
       : option === "deepseek"
         ? t("providers.kind.short.deepseek")
-        : keyProviderName(option, t, language);
+        : option === "kimi"
+          ? t("providers.kind.short.kimi")
+          : keyProviderName(option, t, language);
 
   const chip = (option: CatalogId) => (
     <label
@@ -259,25 +286,44 @@ export function ProviderForm({
         name={`${id}-kind`}
         value={option}
         checked={kind === option}
-        onChange={() => choose(option)}
+        onChange={() => choose(option, { keepKey: keyCheck.blocked })}
         className="sr-only"
       />
       {shortName(option)}
     </label>
   );
 
-  const choose = (next: CatalogId) => {
-    // A key typed for one provider is never sent to another.
-    if (next !== kind) key.clear();
+  const choose = (
+    next: CatalogId,
+    { keepKey = false, from = null }: { keepKey?: boolean; from?: CatalogId | null } = {},
+  ) => {
+    // A key typed for one provider is never sent to another, unless it was pasted for this one.
+    if (next !== kind && !keepKey) key.clear();
     setKind(next);
-    if (more.includes(next)) setMoreOpen(true);
-    setEndpointId("");
+    setSwitchedFrom(from);
+    if (more.includes(next) || !ROW[language].includes(next)) setMoreOpen(true);
+    setEndpointId(defaultRegion(next, language));
     setFieldValue(fieldDefault(next));
     setModelId((current) =>
       current === "" || isSuggestion(current) ? suggestedModel(next) : current,
     );
     setTest(null);
     setError(null);
+  };
+
+  const typeKey = (value: string) => {
+    key.type(value, baseUrl);
+    const { key: given, stray } = checkApiKey(value);
+    // Spaces around the same key change nothing, and leave an agreement to use it where it was.
+    if (given === key.text) return;
+    setSwitchedFrom(null);
+    const named =
+      only || kind === null || kind === "openai-compatible" || local || stray !== null
+        ? null
+        : serviceOfKey(given);
+    if (named !== null && named !== kind && offered.includes(named)) {
+      choose(named, { keepKey: true, from: kind });
+    }
   };
 
   useEffect(() => {
@@ -301,7 +347,7 @@ export function ProviderForm({
       ...(endpoint ? { endpoint: endpoint.id } : {}),
       ...(field ? { endpointValue: fieldUsed } : {}),
       ...(kind === "openai-compatible" ? { baseUrl: baseUrl.trim() } : {}),
-      ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+      ...(key.text ? { apiKey: key.text } : {}),
     };
   };
 
@@ -332,7 +378,7 @@ export function ProviderForm({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    void run();
+    if (!keyCheck.blocked) void run();
   };
 
   const acceptPlainText = async () => {
@@ -378,9 +424,14 @@ export function ProviderForm({
       className={inputClass}
     />
   );
-  // First run offers only the first-class providers (ADR-0019); Settings offers them all.
-  const offered = withMoreProviders ? [...main, ...more] : main;
-  const rowKinds = ROW.filter((each) => offered.includes(each));
+  const offered = withMoreProviders
+    ? [...main, ...more]
+    : [...main, ...FIRST_RUN_BEST_EFFORT.filter((each) => !main.includes(each))];
+  const rowKinds = ROW[language].filter((each) => offered.includes(each));
+  // A key that fits no service's prefix may be one the services under More… issue.
+  const showMore =
+    moreOpen ||
+    (!keyCheck.check.ok && keyCheck.check.service === null && key.text.startsWith("sk-"));
   const underMore = offered.filter((each) => !rowKinds.includes(each));
 
   return (
@@ -399,8 +450,8 @@ export function ProviderForm({
         <fieldset>
           <legend className="sr-only">{t("providers.form.label")}</legend>
           <div className="flex flex-wrap gap-1">
-            {[...rowKinds, ...(moreOpen ? underMore : [])].map(chip)}
-            {underMore.length > 0 && !moreOpen && (
+            {[...rowKinds, ...(showMore ? underMore : [])].map(chip)}
+            {underMore.length > 0 && !showMore && (
               <button
                 type="button"
                 data-testid="provider-more-toggle"
@@ -515,19 +566,43 @@ export function ProviderForm({
             <input
               type="password"
               value={apiKey}
-              onChange={(event) => key.type(event.target.value, baseUrl)}
-              onBlur={() => local && apiKey.trim() !== "" && void server.detect(apiKey, fieldUsed)}
+              onChange={(event) => typeKey(event.target.value)}
+              onBlur={() => local && key.text !== "" && void server.detect(apiKey, fieldUsed)}
               autoComplete="off"
               spellCheck={false}
               ref={keyField}
-              aria-describedby={refusedHere ? `${id}-refused` : undefined}
+              aria-invalid={key.stray ? true : undefined}
+              aria-describedby={
+                key.stray ? `${id}-stray` : refusedHere ? `${id}-refused` : undefined
+              }
               className={inputClass}
             />
+            {key.stray && <KeyCharacterLine id={`${id}-stray`} stray={key.stray} />}
             {refusedHere && <KeyRefusedLine id={`${id}-refused`} refused={refused} />}
             {saved?.hasApiKey && (
               <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
             )}
           </label>
+          <div ref={keyLine}>
+            {kind && (
+              <KeyCheckLine
+                check={keyCheck.check}
+                provider={shortName(kind)}
+                nameOf={shortName}
+                pickAbove={!only}
+                onAnyway={() => keyCheck.agree()}
+                {...(switchedFrom !== null && {
+                  from: {
+                    name: shortName(switchedFrom),
+                    back: () => {
+                      choose(switchedFrom, { keepKey: true });
+                      keyCheck.agree(switchedFrom);
+                    },
+                  },
+                })}
+              />
+            )}
+          </div>
           {catalog && (
             <KeyHelp
               key={`${kind}:${endpoint?.id}`}
@@ -622,7 +697,7 @@ export function ProviderForm({
             <button
               type="submit"
               data-testid="provider-use-key"
-              disabled={!complete || keyBlocked || busy !== null}
+              disabled={!complete || keyBlocked || keyCheck.blocked || busy !== null}
               className={primaryButtonClass}
             >
               {busy
@@ -775,7 +850,11 @@ export function TestResult({
       </p>
     );
   }
-  const line = ownLine ?? t(testErrorKey(result.error.kind), { model: model ?? "" });
+  const { wording } = result.error;
+  const badKey = wording?.key === "error.provider.keyCharacter" ? wording : null;
+  const line = badKey
+    ? t(badKey.key, badKey.values)
+    : (ownLine ?? t(testErrorKey(result.error.kind), { model: model ?? "" }));
   return (
     <div data-testid="connection-test" role="alert" className={errorTextClass}>
       <div className="flex items-baseline">
@@ -783,7 +862,7 @@ export function TestResult({
         <MetaLine parts={[line, action && <LineAction action={action} />]} />
       </div>
       {/* The provider's own words help with its errors. */}
-      {result.error.message && (
+      {!badKey && result.error.message && (
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">
           {readableMessage(result.error.message)}
         </p>

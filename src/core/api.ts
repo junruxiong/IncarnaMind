@@ -68,7 +68,8 @@ export interface Mind {
   /**
    * The Folder (an in-app one, a `LibraryGroup`) the Mind belongs to, or null:
    * Not in a Folder. A Mind in a Folder starts each Question with the Folder
-   * as its Search scope; one in none searches every Document.
+   * as its Search scope while the Folder holds a Document, and searches every
+   * Document while it holds none, as one in no Folder does (#1359).
    */
   folderId: string | null;
 }
@@ -3953,6 +3954,8 @@ export interface Money {
   amount: number;
 }
 
+export const MAX_MONTHLY_CAP = 1_000_000;
+
 /**
  * The most IncarnaMind may spend in a calendar month on models billed per
  * token. Before each such request its most (its prompt and its output limit)
@@ -4778,9 +4781,10 @@ export interface CheckClaimInput {
 
 /**
  * Where a sentence's check searched: the Mind's Folder (null for a Mind in
- * none, which searches every Document), or every Document because the User
- * asked ("Search all Documents"). A Mind moved to another Folder since needs
- * its sentences checked again; one the User widened doesn't.
+ * none, which searches every Document), or every Document (`widened`)
+ * because the User asked ("Search all Documents") or the Mind's Folder held
+ * no Document (#1359). A Mind moved to another Folder since needs its
+ * sentences checked again; one whose check was widened doesn't.
  */
 export interface ClaimCheckScope {
   folderId: string | null;
@@ -5201,10 +5205,17 @@ export interface AnswerSteps {
    */
   writtenFrom?: { documents: number; total: number };
   /**
-   * Asked while its Mind's Meeting records, with no line of the live Transcript to give the model
-   * yet: the live text is behind (#1366). Absent: it listened, or there was no Meeting recording.
+   * What its request held besides the Mind it read (`ConversationAnswer.read`), by id: the
+   * Documents whose whole text went with the Question, and whether the live transcript of a
+   * meeting did. Absent: an Answer written before this was kept, or one that isn't in the assistant.
    */
-  nothingHeard?: true;
+  sent?: { documents: string[]; transcript?: true };
+  /**
+   * A help button was pressed while its Meeting's live text was behind (#1366): the lines it had,
+   * if any, went with the Question, and the reply says so first. Absent: it wasn't behind, or this
+   * isn't a help Answer.
+   */
+  textBehind?: true;
 }
 
 /**
@@ -8528,6 +8539,8 @@ export interface CoreApi {
    * linked again.
    */
   deleteDocument(id: string): Promise<void>;
+  /** Removes Documents from the index as `deleteDocument` does, all in one step: or none, when one isn't found. */
+  deleteDocuments(ids: string[]): Promise<void>;
   /**
    * Processes a Document that failed again, from its file as it is now, e.g.
    * once the User has fixed it. Returns it, queued; "document.status" events
@@ -8630,9 +8643,11 @@ export interface CoreApi {
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
    * Units the Citations in Minds point to are kept, so those Citations can
-   * still be checked: "keptCitationTexts.changed" reports them.
+   * still be checked: "keptCitationTexts.changed" reports them. Its Documents
+   * in `options.keep` stay, as files added on their own: Undo of a link keeps
+   * those that were there before it (#1361).
    */
-  removeLinkedFolder(linkedFolderId: string): Promise<void>;
+  removeLinkedFolder(linkedFolderId: string, options?: { keep?: string[] }): Promise<void>;
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
   /**
@@ -10004,6 +10019,7 @@ const methods: Record<CoreApiMethod, true> = {
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
+  deleteDocuments: true,
   retryDocument: true,
   unlockDocument: true,
   forgetDocumentPassword: true,

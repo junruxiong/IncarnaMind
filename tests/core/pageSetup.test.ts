@@ -296,6 +296,33 @@ describe("What a Word file's section breaks, headers and footers hold", () => {
     expect(section?.footers.default?.pictures).toBeUndefined();
   });
 
+  // protects=a value that is also a property every object has ("constructor", "toString", "__proto__) where a keyword is expected reads as unknown, so the page setup still crosses the bridge; fails_when=the reader looks a keyword up in a plain object, finds a function, and the result can't be structured-cloned; no_claim=none beyond protects.
+  test.each(["constructor", "toString", "__proto__"])(
+    "%s where a keyword is expected falls back to the default, and the result is structured-clone-safe",
+    async (value) => {
+      const setup = await setupOf(
+        wordFile({
+          body: [
+            `<w:p><w:pPr><w:jc w:val="${value}"/><w:tabs><w:tab w:val="${value}" w:pos="720" w:leader="${value}"/></w:tabs><w:sectPr><w:type w:val="${value}"/><w:pgNumType w:fmt="${value}"/></w:sectPr></w:pPr>${run("Body")}</w:p>`,
+          ].join(""),
+          sectPr: '<w:footerReference w:type="default" r:id="rIdF1"/>',
+          footers: {
+            rIdF1: `<w:p><w:pPr><w:jc w:val="${value}"/><w:tabs><w:tab w:val="${value}" w:pos="720" w:leader="${value}"/></w:tabs></w:pPr>${field(`PAGE \\* ${value}`, "1")}</w:p>`,
+          },
+        }),
+      );
+
+      expect(() => structuredClone(setup)).not.toThrow();
+      const [first, last] = setup.sections;
+      expect(first).toMatchObject({ start: "nextPage", pageNumbers: { format: "decimal" } });
+      expect(last?.footers.default?.paragraphs[0]).toEqual({
+        align: "left",
+        tabStops: [{ position: 720, align: "left" }],
+        runs: [{ kind: "field", field: "PAGE", format: null }],
+      });
+    },
+  );
+
   // protects=a section's orientation is the one its box has, whatever w:orient says; fails_when=a portrait box is called landscape; no_claim=none beyond protects.
   test("orientation follows the page box", async () => {
     const setup = await setupOf(

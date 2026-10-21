@@ -63,6 +63,31 @@ async function setUp(
   return { core, meeting, calls, specs: models.specs };
 }
 
+/**
+ * A meeting whose live text fell behind (#1366): `before` seconds were transcribed first, then
+ * forty arrived at once, more than the engine decodes in time, so it stopped keeping up.
+ */
+async function behindSetUp(before = 0) {
+  const calls: ModelCall[] = [];
+  const dataDir = await createTempDataFolder();
+  const models = scriptedModels(helpingModel(calls));
+  const { core, record } = await transcribingCore(dataDir, {
+    createChatModel: models.createChatModel,
+    engine: { decodeMs: 30 },
+  });
+  await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+  const meeting = await core.createMeeting();
+  await core.startMeeting({ meetingId: meeting.id, systemAudio: true });
+  await until(core, meeting.id, (transcript) => transcript.state === "live");
+  if (before > 0) {
+    record(before * SECOND);
+    await until(core, meeting.id, (transcript) => transcript.lines >= 4);
+  }
+  record(40 * SECOND);
+  const behind = await until(core, meeting.id, (transcript) => transcript.state === "behind");
+  return { core, meeting, calls, lines: behind.lines };
+}
+
 async function press(core: Core, meeting: Meeting, kind: MeetingHelpKind, conversationId?: string) {
   const result = await core.askMeetingHelp({
     meetingId: meeting.id,
@@ -88,6 +113,8 @@ describe("Help during the call", { timeout: 60_000 }, () => {
     expect(first?.system).toContain("pressed a button for help");
     expect(first?.system).toContain('starting with "★ "');
     expect(first?.prompt).toContain("<live-transcript>");
+    expect(first?.system).not.toContain("live text fell behind");
+    expect(answer.steps?.textBehind).toBeUndefined();
     expect(first?.tools).toEqual(expect.arrayContaining(["search_documents", "cite"]));
     expect(first?.tools).not.toContain("add_to_mind");
     expect(messages[0]).toMatchObject({ kind: "question", text: "Say no politely" });
@@ -127,24 +154,35 @@ describe("Help during the call", { timeout: 60_000 }, () => {
     ]);
   });
 
-  // protects=with the live text behind, no line yet, a button's Answer is told so and isn't given the button's exact form, and the Answer records that nothing was heard; fails_when=the model is told to base it on a transcript that isn't there, or the Answer reads as having listened; no_claim=what a real model writes (#1366).
-  test("with no line of the live text yet, the model is told it is behind, not to answer from a transcript", async () => {
-    const calls: ModelCall[] = [];
-    const dataDir = await createTempDataFolder();
-    const models = scriptedModels(helpingModel(calls));
-    const { core } = await transcribingCore(dataDir, { createChatModel: models.createChatModel });
-    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
-    const meeting = await core.createMeeting();
-    await core.startMeeting({ meetingId: meeting.id, systemAudio: true });
+  // protects=a button pressed while the live text is behind and has no line yet gets one plain line saying so, not the button's form, and the Answer records it; fails_when=the model is told to base it on a transcript that isn't there, or is promised the text will catch up while it records; no_claim=what a real model writes (#1366).
+  test("with the live text behind and no line yet, a button's reply is one plain line saying so, not the button's form", async () => {
+    const { core, meeting, calls, lines } = await behindSetUp();
+    expect(lines).toBe(0);
 
     const { answer } = await press(core, meeting, "answer");
 
     const [first] = calls;
     expect(first?.prompt).not.toContain("<live-transcript>");
-    expect(first?.system).toContain("the live text is behind");
+    expect(first?.system).toContain("the live text fell behind");
     expect(first?.system).toContain("never ask the User to type out what was said");
     expect(first?.system).not.toContain("Reply in exactly this form");
-    expect(answer.steps?.nothingHeard).toBe(true);
+    expect(answer.steps?.textBehind).toBe(true);
+  });
+
+  // protects=a button pressed while the live text is behind but has lines gets those lines, the button's form, and the one line allowed before it; fails_when=the lines are left out, or the form is replaced; no_claim=what a real model writes (#1366).
+  test("with the live text behind but some lines, a button's reply rests on them and says so in one line before its form", async () => {
+    const { core, meeting, calls, lines } = await behindSetUp(9);
+    expect(lines).toBeGreaterThanOrEqual(4);
+
+    const { answer } = await press(core, meeting, "answer");
+
+    const [first] = calls;
+    expect(first?.prompt).toContain("<live-transcript>");
+    expect(first?.system).toContain("Reply in exactly this form");
+    expect(first?.system).toContain(
+      "The live text fell behind: <live-transcript> holds the lines written so far",
+    );
+    expect(answer.steps?.textBehind).toBe(true);
   });
 
   test("a second press goes on in the same conversation, the assistant's when it says so, and a deleted one starts anew", async () => {

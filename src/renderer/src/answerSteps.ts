@@ -39,6 +39,19 @@ export interface StepsInput {
 /** A source a search led to: the first of its Citations at one place in one Document. */
 export type StepSource = MarkedCitation;
 
+/** A Document the request held whole, by id, with the name a Citation of it carries when one does. */
+export interface ReadDocument {
+  documentId: string;
+  name: string | null;
+}
+
+export interface MindReadLine {
+  kind: "read";
+  mind: MindRead;
+  share: number | null;
+  selection?: true;
+}
+
 export type StepRow =
   /** The model's reasoning summary, and how long it thought. */
   | { kind: "reasoning"; model: string; summary: string; seconds: number }
@@ -56,6 +69,8 @@ export type StepRow =
       used: number;
       sources: StepSource[];
     }
+  /** The Documents whose whole text went with the Question, and where its Citations point into them. */
+  | { kind: "read-documents"; documents: ReadDocument[]; sources: StepSource[] }
   /** A search that failed, where it happened. */
   | { kind: "failed-search"; call: AnswerToolCall }
   /** A Connector's Tool, Find sources or a Skill script. */
@@ -76,10 +91,10 @@ export type FoldedLine =
    */
   | { kind: "read-passages"; passages: number; citedAfterChecking: number }
   | { kind: "searched-web"; sources: number }
+  /** The Documents whose whole text went with the Question, and the Mind it read beside them. */
+  | { kind: "read-documents"; documents: ReadDocument[]; read: MindReadLine | null }
   | { kind: "listened"; sources: number }
-  /** Asked during a meeting, but the live text had no line yet (#1366): nothing was heard. */
-  | { kind: "not-heard" }
-  | { kind: "read"; mind: MindRead; share: number | null; selection?: true }
+  | MindReadLine
   | { kind: "asked"; mind: AskedFrom }
   | { kind: "answered"; model: string };
 
@@ -132,6 +147,69 @@ function modelRow(answer: StepsInput["answer"]): StepRow | null {
 const placeOf = (citation: MarkedCitation) =>
   `${citation.documentId}\n${citation.pageFrom}-${citation.pageTo}\n${JSON.stringify(citation.location)}`;
 
+// An Answer written before searches kept their Passages can't tell its searches' Citations apart.
+const forgetful = (call: AnswerToolCall) =>
+  call.status === "done" && (call.resultCount ?? 0) > 0 && !call.passages;
+
+function searchBehind(
+  calls: readonly AnswerToolCall[],
+  citation: MarkedCitation,
+): AnswerToolCall | undefined {
+  const searches = calls.filter((call) => isSearch(call) && call.status !== "failed");
+  return searches.some(forgetful)
+    ? searches.at(-1)
+    : searches.find((call) => call.passages?.includes(citation.passageId));
+}
+
+// A web page the Answer read is named by its own call.
+function citedWithoutSearch({
+  toolCalls,
+  citations,
+}: Pick<StepsInput["answer"], "toolCalls" | "citations">): MarkedCitation[] {
+  const pages = new Set(
+    toolCalls.flatMap((call) =>
+      call.webPage && "documentId" in call.webPage ? [call.webPage.documentId] : [],
+    ),
+  );
+  return citations.filter(
+    (citation) => !pages.has(citation.documentId) && !searchBehind(toolCalls, citation),
+  );
+}
+
+// An Answer written before its request was recorded can only say what its Citations prove: the
+// Documents it cites that no search found.
+function readDocuments(answer: StepsInput["answer"]): ReadDocument[] {
+  const sent = answer.steps?.sent;
+  const named = (documentId: string) =>
+    answer.citations.find((citation) => citation.documentId === documentId)?.documentName ?? null;
+  return sent
+    ? sent.documents.map((documentId) => ({ documentId, name: named(documentId) }))
+    : documentsOf(citedWithoutSearch(answer)).map((citation) => ({
+        documentId: citation.documentId,
+        name: citation.documentName,
+      }));
+}
+
+/** The Citations into the Documents read with the Question that no search found. */
+function citedFromRead(answer: StepsInput["answer"]): MarkedCitation[] {
+  const sent = answer.steps?.sent;
+  if (!sent) return citedWithoutSearch(answer);
+  const read = new Set(sent.documents);
+  return answer.citations.filter(
+    (citation) => read.has(citation.documentId) && !searchBehind(answer.toolCalls, citation),
+  );
+}
+
+const documentsOf = (citations: readonly MarkedCitation[]) =>
+  citations.filter(
+    (citation, at) => citations.findIndex((each) => each.documentId === citation.documentId) === at,
+  );
+
+const placesOf = (citations: readonly MarkedCitation[]) =>
+  citations.filter(
+    (citation, at) => citations.findIndex((each) => placeOf(each) === placeOf(citation)) === at,
+  );
+
 /** The Mind the Answer read, or the one it was asked from and didn't read. */
 const mindRow = ({ answer, askedFrom, selection }: StepsInput) =>
   answer.read
@@ -148,7 +226,8 @@ const mindRow = ({ answer, askedFrom, selection }: StepsInput) =>
 /**
  * The rows of the unfolded timeline, in order: the model's reasoning (or
  * who answered), the Mind read, unless the folded line already says so and
- * there is no share of it to say (#564), the
+ * there is no share of it to say (#564), the Documents whose whole text went
+ * with the Question, the
  * searches and other calls in the order they started (searches in a row as
  * one, a failed one where it happened), the figures calculated, and the check
  * of the Citations last. A call still waiting for the User has no row: its
@@ -162,6 +241,14 @@ export function stepRows(input: StepsInput): StepRow[] {
   const mind = mindRow(input);
   const shared = mind?.kind === "read" && mind.share !== null;
   if (mind && (shared || foldedLine(input)?.kind !== mind.kind)) rows.push(mind);
+  const read = input.meeting && !answer.steps?.sent ? [] : readDocuments(answer);
+  if (read.length > 0) {
+    rows.push({
+      kind: "read-documents",
+      documents: read,
+      sources: placesOf(citedFromRead(answer)),
+    });
+  }
 
   const searches: Extract<StepRow, { kind: "search" }>[] = [];
   const skills = new Map<string, Extract<StepRow, { kind: "skill" }>>();
@@ -204,16 +291,11 @@ export function stepRows(input: StepsInput): StepRow[] {
     rows.push({ kind: "call", call });
   }
 
-  // Each Citation goes under the first search that found its Passage. Searches made before
-  // they kept what they found give theirs to the last search.
-  const kept = searches.some((search) => search.calls.some((call) => call.passages));
+  // Each Citation goes under the first search that found its Passage.
   const used = new Map<Extract<StepRow, { kind: "search" }>, Set<string>>();
   for (const citation of answer.citations) {
-    const search = kept
-      ? searches.find((each) =>
-          each.calls.some((call) => call.passages?.includes(citation.passageId)),
-        )
-      : searches.at(-1);
+    const call = searchBehind(answer.toolCalls, citation);
+    const search = call && searches.find((each) => each.calls.includes(call));
     if (!search) continue;
     const passages = used.get(search) ?? new Set<string>();
     passages.add(citation.passageId);
@@ -267,16 +349,15 @@ function extraScopes(calls: readonly AnswerToolCall[]): number {
 
 /**
  * The folded line: what was searched (the Documents, or else the web) and
- * how many Documents the Answer cites; with no search, the Mind it read (or
- * was asked from), or the model that answered. Null for an Answer no model
- * wrote, asked from no Mind.
+ * how many Documents the Answer cites; with no search, the Documents whose
+ * whole text went with the Question, with the Mind it read beside them; else
+ * the Mind it read (or was asked from), or the model that answered. Null for
+ * an Answer no model wrote, asked from no Mind.
  */
 export function foldedLine(input: StepsInput): FoldedLine | null {
   const { answer, meeting } = input;
   const sources = sourceCount(answer.citations);
-  if (meeting) {
-    return answer.steps?.nothingHeard ? { kind: "not-heard" } : { kind: "listened", sources };
-  }
+  if (meeting) return { kind: "listened", sources };
   if (answer.toolCalls.some((call) => isSearch(call) && call.status === "done")) {
     // Never "no sources" once Passages were read: when the model cited nothing itself, what
     // was read, and what came of checking the Answer against it.
@@ -289,6 +370,11 @@ export function foldedLine(input: StepsInput): FoldedLine | null {
   }
   if (answer.toolCalls.some((call) => call.source === "web" && call.status === "done")) {
     return { kind: "searched-web", sources };
+  }
+  const read = readDocuments(answer);
+  if (read.length > 0) {
+    const mind = mindRow(input);
+    return { kind: "read-documents", documents: read, read: mind?.kind === "read" ? mind : null };
   }
   return (
     mindRow(input) ?? (answer.model ? { kind: "answered", model: answer.model.modelId } : null)

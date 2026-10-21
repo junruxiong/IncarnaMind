@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
+import { cleanApiKey } from "../shared/apiKey";
 import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
 import { optionsFor } from "../shared/exportOptions";
@@ -37,6 +38,7 @@ import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
+import { hasSearchScope, holdsText, mindSearchScope } from "../shared/searchScope";
 import { SPEAKER_ME, SPEAKER_THEM } from "../shared/speakers";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -60,6 +62,7 @@ import {
 import { createCiting } from "./answers/citing";
 import { readMind } from "./answers/context";
 import type { AnswerSearchOptions } from "./answers/engine";
+import type { LiveTranscript } from "./answers/liveTranscript";
 import {
   type AddDocumentsResult,
   type ChatModelChoice,
@@ -116,7 +119,6 @@ import { createOwnFiles } from "./documents/ownFiles";
 import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
-import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
 import { LANGUAGE_SAMPLE, writtenInChinese } from "./documents/textLanguage";
 import { findUnreadDocuments } from "./documents/unread";
@@ -184,6 +186,7 @@ import { createOutputFiles } from "./outputFiles";
 import { PAPER as PAGE_PAPER } from "./pageDefaults";
 import { nativePageSetup } from "./pageSetup";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
+import { KeyCharacterError, storedApiKey } from "./providers/apiKey";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
@@ -227,7 +230,7 @@ import { createSkills } from "./skills";
 import { createSkillDrafts } from "./skills/draft";
 import { createScriptRunner } from "./skills/scripts";
 import { createSources, FIND_SOURCES_SENDS } from "./sources";
-import { createSourceHttp } from "./sources/http";
+import { createSourceHttp, SourceError } from "./sources/http";
 import { createPace, realTimers } from "./sources/pace";
 import { createSourceProviders, sourceKeySecret } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
@@ -359,6 +362,8 @@ export interface Core extends CoreApi, CoreEventSource {
 
 /** How long a Question asked during a call waits for the live transcript's newest lines to be indexed (#144). */
 const LIVE_TRANSCRIPT_WAIT_MS = 3_000;
+
+const isBehind = (meeting: Meeting) => meeting.transcript?.state === "behind";
 
 /**
  * Opens (or creates) the data folder and its database, brings the schema up to
@@ -1049,9 +1054,15 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     secrets,
-    providers: createSourceProviders(adapters.sourceProviders, (id) =>
-      secrets.tryGet(sourceKeySecret(id)),
-    ),
+    providers: createSourceProviders(adapters.sourceProviders, async (id) => {
+      try {
+        return storedApiKey(await secrets.tryGet(sourceKeySecret(id)));
+      } catch (error) {
+        if (error instanceof KeyCharacterError)
+          throw new SourceError("key-rejected", error.message);
+        throw error;
+      }
+    }),
     http: createSourceHttp(pace, paceTimers),
     folder: join(dataDir, "Sources"),
     checkFolder: (folderId) => {
@@ -1113,6 +1124,20 @@ export function createCore(adapters: CoreAdapters): Core {
       organizedFolderDocuments: (folderId) => library.documentIds(folderId),
       documentIds: (filter) => documents.ids(filter),
     });
+  const searchedScope = (scope: SearchScope | null, mindId: string | null) => {
+    const folderId = mindId !== null && mindExists(mindId) ? minds.get(mindId).folderId : null;
+    const holds =
+      folderId !== null &&
+      documents
+        .getMany(resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] }) ?? [])
+        .some(holdsText);
+    const searched = mindSearchScope(
+      scope ?? { folderIds: [], tagIds: [], documentIds: [] },
+      folderId,
+      holds,
+    );
+    return hasSearchScope(searched) ? searched : null;
+  };
   // A Folder of the Library holds no file that isn't a Document, so it names the folders on disk
   // its Documents are in: a Linked folder filed into it whole names the Linked folder.
   const foldersOnDisk = (folderIds: readonly string[]) => {
@@ -1395,6 +1420,9 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     resolveScope,
     workingCopyOf: (mindId) => wordImports.originalOf(mindId)?.documentIds?.[0] ?? null,
+    searchedScope,
+    mindFolder: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
+    exampleDocuments: (mindId) => examples.documentsOf(mindId),
     unscopedDocuments: (mindId) => {
       const made = examples.made();
       if (made.documentIds.length === 0 || (mindId && made.mindIds.includes(mindId))) return null;
@@ -1494,6 +1522,7 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   const research = createResearch({
     requireMind: (mindId) => writableMind(mindId).id,
+    searchedScope,
     mindExists,
     mindName: (mindId) => (mindExists(mindId) ? mindName(minds.get(mindId)) || null : null),
     folderOfMind: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
@@ -1543,7 +1572,7 @@ export function createCore(adapters: CoreAdapters): Core {
     chat: {
       providerExists: (providerId) => chat.exists(providerId),
       readiness: (choice) => chat.readiness(choice),
-      prepareModel: (choice) => chat.prepareModel(choice),
+      prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
       runsLocally: (choice) => chat.metered(choice)?.billing === "free",
     },
     answers,
@@ -1594,6 +1623,7 @@ export function createCore(adapters: CoreAdapters): Core {
       writableMind(mindId);
     },
     resolveScope,
+    searchedScope,
     searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
     localOnly: () => embedding.localOnly(),
     events,
@@ -1751,6 +1781,7 @@ export function createCore(adapters: CoreAdapters): Core {
       log: adapters.log ?? silentLogger,
     },
     mindFolder: (mindId) => minds.get(mindId).folderId,
+    searchedScope,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
     recordAiUse: (inputs) => void aiUse.record(inputs),
@@ -1945,8 +1976,8 @@ export function createCore(adapters: CoreAdapters): Core {
       throw error;
     }
   };
-  const unlinkFolder = (linkedFolderId: string) => {
-    documents.linkedFolders.remove(linkedFolderId);
+  const unlinkFolder = (linkedFolderId: string, keep: readonly string[] = []) => {
+    documents.linkedFolders.remove(linkedFolderId, keep);
     outputs.forgetLinkedFolder(linkedFolderId);
   };
 
@@ -2513,7 +2544,6 @@ export function createCore(adapters: CoreAdapters): Core {
       id: transcriptionHost.origin,
       name: transcriptionHost.host === "huggingface.co" ? "Hugging Face" : transcriptionHost.host,
     },
-    // Where this copy transcribes.
     listed: () => transcriber !== undefined && transcriptionSource.files.length > 0,
   });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
@@ -2683,7 +2713,7 @@ export function createCore(adapters: CoreAdapters): Core {
   /** See `AnswersOptions.meetingHelp`; set once Meetings are. */
   let meetingHelpOf = (_mindId: string, _question: string): MeetingHelpKind | null => null;
   /** See `AnswersOptions.liveTranscript`; set once Meetings are. */
-  let liveTranscriptOf = async (_mindId: string): Promise<WindowedPassage[] | null> => null;
+  let liveTranscriptOf = async (_mindId: string): Promise<LiveTranscript | null> => null;
   const meetingsChanged = () => {
     if (listMeetings) events.emit("meetings.changed", listMeetings());
   };
@@ -2898,10 +2928,14 @@ export function createCore(adapters: CoreAdapters): Core {
       );
     if (!meeting) return null;
     const documentId = meeting.transcript?.documentId;
-    if (!documentId || !transcripts) return [];
+    if (!documentId || !transcripts) return { passages: [], behind: isBehind(meeting) };
     await transcripts.refresh(meeting.id);
     await extracted(documentId, LIVE_TRANSCRIPT_WAIT_MS);
-    return documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
+    const now = meetings.list().find((each) => each.id === meeting.id) ?? meeting;
+    return {
+      passages: await documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER),
+      behind: isBehind(now),
+    };
   };
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
@@ -3240,8 +3274,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return renamed;
     },
     deleteDocument: async (id) => {
-      await documents.delete(id);
-      activity.documentDeleted(id as string);
+      for (const deleted of await documents.delete(id)) activity.documentDeleted(deleted);
+    },
+    deleteDocuments: async (ids) => {
+      for (const deleted of await documents.delete(ids)) activity.documentDeleted(deleted);
     },
     retryDocument: async (id) => documents.retry(id),
     unlockDocument: async (input) => {
@@ -3290,7 +3326,8 @@ export function createCore(adapters: CoreAdapters): Core {
     listUnreadFiles: async (scope) => unreadIn(parseSearchScope(scope)),
     locateLinkedFolder: (linkedFolderId, path) =>
       documents.linkedFolders.locate(linkedFolderId, path),
-    removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
+    removeLinkedFolder: async (linkedFolderId, options) =>
+      unlinkFolder(linkedFolderId, options?.keep),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
     updateReference: async (documentId, patch) => references.update(documentId, patch),
     restoreReference: async (documentId, before, fields) =>
@@ -3483,7 +3520,7 @@ export function createCore(adapters: CoreAdapters): Core {
           values: { provider: String(isRecord(input) ? input.catalogId : input) },
         });
       }
-      const apiKey = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey : null;
+      const apiKey = (typeof input.apiKey === "string" && cleanApiKey(input.apiKey)) || null;
       return localServers.detect(
         input.catalogId,
         apiKey,
