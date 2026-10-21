@@ -3434,6 +3434,7 @@ export const zhCN = {
     "Word 文件无法保留这个 Mind 的全部内容。请先从 Mind 的菜单导出，查看会丢失什么。",
   "error.commands.markAiTextAsk":
     "导出 Word 前，需要先选择是否标出 IncarnaMind 写的内容。请先用 Mind 的“导出”按钮导出一次 Word，再重试。",
+  "error.commands.markAiTextClosed": "未导出：关闭了“是否标出 IncarnaMind 写的内容”的提问。",
   "commands.found.document": "找到 {count} 个文档",
   "commands.found.document.one": "找到 1 个文档",
   "commands.found.mind": "找到 {count} 个 Mind",

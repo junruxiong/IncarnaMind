@@ -3553,6 +3553,8 @@ export const en = {
     "A Word file can’t keep everything in this Mind. Export it from the Mind’s menu to see what first.",
   "error.commands.markAiTextAsk":
     "A Word file needs one choice first: whether to mark the text IncarnaMind wrote. Export to Word once with the Mind’s Export button, then ask again.",
+  "error.commands.markAiTextClosed":
+    "Nothing was exported: the question about marking the text IncarnaMind wrote was closed.",
   "commands.found.document": "Found {count} Documents",
   "commands.found.document.one": "Found 1 Document",
   "commands.found.mind": "Found {count} Minds",

@@ -1881,6 +1881,21 @@ export function createAnswers(options: AnswersOptions) {
             })
           : null;
       if (mindsTools) settleMinds = () => mindsTools.settle();
+      const questions = outside ? undefined : options.questions;
+      const asksUser =
+        questions && input.assistant
+          ? {
+              ask: (toolCallId: string, question: UserQuestion, signal: AbortSignal) =>
+                questions.ask({ ...place, answerId, toolCallId, question }, signal),
+              recorded: (toolCallId: string, question: UserQuestion) => {
+                userQuestions.set(toolCallId, question);
+                const call = toolCalls.find((each) => each.id === toolCallId);
+                if (finished || !call) return;
+                call.asked = question;
+                writeSoon();
+              },
+            }
+          : null;
       const commands = outside ? undefined : options.commands;
       commandsOffered =
         commands && input.assistant
@@ -1893,26 +1908,21 @@ export function createAnswers(options: AnswersOptions) {
               renames: input.assistant.renames,
               runId: randomUUID(),
               steps: commands.steps,
+              ...(asksUser && {
+                // The question and the User's answer stay in the thread on the call that asked.
+                ask: async (toolCallId, question, signal) => {
+                  asksUser.recorded(toolCallId, question);
+                  const answer = await asksUser.ask(toolCallId, question, signal);
+                  asksUser.recorded(toolCallId, { ...question, answer });
+                  return answer;
+                },
+              }),
               found: (toolCallId, found) => commandsFound.set(toolCallId, found),
               ran: (toolCallId, done) => commandsDone.set(toolCallId, done),
               failed: (toolCallId, problem) => commandProblems.set(toolCallId, problem),
             })
           : null;
-      const questions = outside ? undefined : options.questions;
-      const asking =
-        questions && input.assistant
-          ? askTool({
-              ask: (toolCallId, question, signal) =>
-                questions.ask({ ...place, answerId, toolCallId, question }, signal),
-              recorded: (toolCallId, question) => {
-                userQuestions.set(toolCallId, question);
-                const call = toolCalls.find((each) => each.id === toolCallId);
-                if (finished || !call) return;
-                call.asked = question;
-                writeSoon();
-              },
-            })
-          : null;
+      const asking = asksUser ? askTool(asksUser) : null;
       const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
