@@ -64,23 +64,26 @@ export function OpenAsTable({
     if (!wide) return null;
     const index = Number(slot.getAttribute(TABLE_SLOT_INDEX));
     return createPortal(
-      <button
-        type="button"
-        data-testid="answer-open-table"
-        className="answer-table-open"
-        aria-label={t("answer.table.open")}
-        title={t("answer.table.open")}
-        aria-disabled={streaming}
-        // Keeps a selection in the Answer as it is.
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          if (streaming) return;
-          const table = tablesOf(editor.state.doc)[index];
-          if (table) onOpen(table);
-        }}
-      >
-        <ExpandIcon className="size-3.5" />
-      </button>,
+      <>
+        <span aria-hidden className="answer-table-fade" />
+        <button
+          type="button"
+          data-testid="answer-open-table"
+          className="answer-table-open"
+          aria-label={t("answer.table.open")}
+          title={t("answer.table.open")}
+          aria-disabled={streaming}
+          // Keeps a selection in the Answer as it is.
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            if (streaming) return;
+            const table = tablesOf(editor.state.doc)[index];
+            if (table) onOpen(table);
+          }}
+        >
+          <ExpandIcon className="size-3.5" />
+        </button>
+      </>,
       slot,
       `table-${index}`,
     );

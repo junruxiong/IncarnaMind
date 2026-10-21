@@ -474,6 +474,47 @@ const overlayOf = (open: Locator) =>
     };
   });
 
+const fadeOf = (open: Locator) =>
+  open.evaluate((button) => {
+    const slot = button.parentElement;
+    const fade = slot?.querySelector(".answer-table-fade");
+    const frame = slot?.nextElementSibling;
+    if (!(fade instanceof HTMLElement) || !(frame instanceof HTMLElement)) {
+      throw new Error("The Expand has no fade, or no table follows it.");
+    }
+    const icon = button.getBoundingClientRect();
+    const box = fade.getBoundingClientRect();
+    const heading = frame.querySelector("tr");
+    const meets = (rect: DOMRect, other: DOMRect) =>
+      rect.width > 0 &&
+      rect.left < other.right &&
+      rect.right > other.left &&
+      rect.top < other.bottom &&
+      rect.bottom > other.top;
+    let underIcon = false;
+    let inFade = false;
+    const walker = document.createTreeWalker(heading ?? frame, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) {
+        underIcon ||= meets(rect, icon);
+        inFade ||= meets(rect, box);
+      }
+    }
+    const row = heading?.getBoundingClientRect();
+    return {
+      reachesPastIcon:
+        box.left <= icon.left - 28 + 0.5 &&
+        box.right >= icon.right &&
+        box.top <= icon.top + 0.5 &&
+        row !== undefined &&
+        box.bottom >= row.bottom - 0.5,
+      underIcon,
+      inFade,
+    };
+  });
+
 const scrollToEnd = (frame: Locator) =>
   frame.evaluate((each) => {
     each.scrollLeft = each.scrollWidth;
@@ -640,6 +681,43 @@ for (const language of ["en", "zh-CN"] as const) {
       await expect(window.getByTestId("mind-editor").locator("table tr")).toHaveCount(10);
       await deleteShownMind(window, tabs);
     });
+  });
+
+  test(`a table that scrolls far fades its heading text out before the Expand at every scroll position, so the bare icon never cuts a heading, in ${language}`, async () => {
+    test.setTimeout(240_000);
+    const window = await start(language, 1600, 900);
+    const answer = await askInAssistant(
+      window,
+      language === "en" ? "Tides long headings" : "长标题 tides",
+    );
+    const frame = answer.getByTestId("assistant-answer-text").locator(".tableWrapper");
+    const open = answer.getByTestId("answer-open-table");
+    await expect(open).toBeVisible();
+    const reachOf = () => frame.evaluate((each) => each.scrollWidth - each.clientWidth);
+
+    for (const width of [320, 280]) {
+      await test.step(`with the panel at ${width} px`, async () => {
+        await sizeAssistant(window, width);
+        const reach = await reachOf();
+        expect(reach).toBeGreaterThan(300);
+        let slidUnder = 0;
+        for (let left = 0; left < reach + 24; left += 24) {
+          await frame.evaluate(
+            (each, to) => each.scrollTo({ left: to, behavior: "instant" }),
+            left,
+          );
+          const seen = await fadeOf(open);
+          expect(seen.reachesPastIcon).toBe(true);
+          if (seen.inFade) slidUnder++;
+        }
+        // The same table scrolled to its middle and to its end: heading text did slide under it.
+        expect(slidUnder).toBeGreaterThan(0);
+        await frame.evaluate((each) =>
+          each.scrollTo({ left: each.scrollWidth, behavior: "instant" }),
+        );
+        expect(await overlayOf(open)).toMatchObject({ inCorner: true, covered: [] });
+      });
+    }
   });
 
   test(`a table that starts narrow and widens while rows arrive gains the Expand without moving, with a line tight above it, in ${language}`, async () => {

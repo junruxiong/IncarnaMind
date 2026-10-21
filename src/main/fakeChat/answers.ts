@@ -21,7 +21,9 @@
  * three peers' figures in nine rows, with the first column's labels; one that asks to "compare the
  * two contracts" (比较两份合同) gets a table of three columns, its cells short if the instructions
  * ask for that and the quotes if not (#1382); one that asks for "narrow then wide" (先窄后宽) gets a
- * line, then a table whose first rows fit the assistant and whose last is wider than it; one that asks for "forty
+ * line, then a table whose first rows fit the assistant and whose last is wider than it; one that asks for
+ * "long headings" (长标题) gets a table of four long headings and long rows, as a real model writes one;
+ * one that asks for "forty
  * citations" (四十条引用) gets forty sentences, each with a marker, and one that asks for "twelve in a
  * row" (连续十二条) gets one sentence with twelve markers side by side; one with "cited below" (or 引用在下) gets a
  * table whose one Citation stands in a paragraph under it, and one with "framed" (or 带说明)
@@ -316,6 +318,27 @@ function narrowThenWideAnswer(question: string, marker: string): string {
   ].join("\n");
 }
 
+const LONG_HEADINGS = /\blong headings\b|长标题/i;
+
+function longHeadingsAnswer(question: string, marker: string): string {
+  if (/\p{Script=Han}/u.test(question)) {
+    return [
+      "| 条款 | 阿尔德供货协议 | 伯奇供货协议 | 港湾包装补充说明 |",
+      "|:--|:--|:--|:--|",
+      `| 期限 | 自 2026 年 3 月 1 日起三年，之后每年续期 ${marker} | 自 2026 年 6 月 1 日起两年，期满终止，除非书面延长 | 两份协议均在港湾框架内履行 |`,
+      "| 通知 | 任何一方须提前 30 天书面通知对方 | 任何一方须提前 60 天书面通知对方 | 通知送交港湾包装的联系人 |",
+      "| 付款 | 收到发票后 30 天内付款，逾期按基准利率加 4% 计息 | 收到发票后 45 天内付款，逾期按每月 1.5% 计息 | 逾期费用按各自协议执行 |",
+    ].join("\n");
+  }
+  return [
+    "| Term | Alder Supply Agreement | Birch Supply Agreement | Harbour Packaging notes |",
+    "|:--|:--|:--|:--|",
+    `| Duration | Three years from 1 March 2026, then renews yearly ${marker} | Two years from 1 June 2026, then ends unless extended in writing | Both run beside the Harbour framework |`,
+    "| Notice | Either party gives 30 days' written notice to the other | Either party gives 60 days' written notice to the other | Notice goes to the Harbour Packaging contact |",
+    "| Payment | Invoices paid within 30 days, late payments at 4% above base rate | Invoices paid within 45 days, late payments at 1.5% a month | Late fees follow each agreement |",
+  ].join("\n");
+}
+
 function fortyCitationsAnswer(question: string): string {
   const chinese = /\p{Script=Han}/u.test(question);
   const sentences = Array.from({ length: 40 }, (_, index) =>
@@ -538,9 +561,11 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
                       ? contractComparisonAnswer(prompt, question, recorded[0] ?? "")
                       : NARROW_THEN_WIDE.test(question)
                         ? narrowThenWideAnswer(question, recorded[0] ?? "")
-                        : recorded.length > 1
-                          ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
-                          : CITED_ANSWER;
+                        : LONG_HEADINGS.test(question)
+                          ? longHeadingsAnswer(question, recorded[0] ?? "")
+                          : recorded.length > 1
+                            ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
+                            : CITED_ANSWER;
   const said = withAsides(prompt, question, answer);
   return { text: skill ? `Following the Skill ${skill}.\n\n${said}` : said };
 }
