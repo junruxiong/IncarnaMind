@@ -145,7 +145,11 @@ export function exampleNote(documents: readonly string[] | null): string {
  * notes their text calls for: dates, the User's own workings, amounts in
  * brackets, and Documents that couldn't be read.
  */
-export function withPassageNotes(passages: string, unread: readonly UnreadFile[]): string {
+export function withPassageNotes(
+  passages: string,
+  unread: readonly UnreadFile[],
+  reading: readonly { name: string }[] = [],
+): string {
   return [
     passages,
     datedDocumentsNote(passages),
@@ -153,6 +157,7 @@ export function withPassageNotes(passages: string, unread: readonly UnreadFile[]
     notCitedNote(passages),
     bracketedAmountsNote(passages),
     unreadDocumentsNote(unread),
+    stillReadingNote(reading),
   ]
     .filter((part) => part !== "")
     .join("\n\n");
@@ -368,6 +373,7 @@ const CALCULATE = [
   'Never work out a number yourself, not even a simple one: for any number the Answer gives that isn\'t written in a Passage (a difference, sum, average, ratio, share, growth rate, CAGR, change in percentage points, conversion between 万 and 亿 or millions and billions, or which of two is larger), call calculate and write its marker in the number\'s place, with no number or unit beside it: "grew [=1] in 2025", not "grew 20.4% [=1]".',
   '- Name each input\'s number as it is written in its quote, labelled with what it is and its period; give a table heading\'s unit line ("单位：万元", "in millions") as unitQuote. Inputs come in base units with that scale applied: give scale ("亿", "billion") to show another, never convert in the formula.',
   "- A number copied as it is from a Passage is cited with [^n]; calculate is only for numbers you work out.",
+  "- If calculate refuses a figure, fix what its reply says and call it again; never write that you couldn't calculate a number whose inputs you cited.",
 ].join("\n");
 
 /** Structured output's `calculations`, for a model offered them: what `CALCULATE` is to the Tool loop. */
@@ -435,6 +441,18 @@ export function unreadDocumentsNote(unread: readonly UnreadFile[]): string {
     .map((file) => `"${listedName(file.name)}" (${UNREAD_WORDS[file.reason](file.pages)})`);
   const more = unread.length - named.length;
   return `IncarnaMind couldn't read the text of some Documents in the search, so no Passage comes from that text: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. If the Passages don't clearly answer the Question and it may be about one of them, say in one sentence that it couldn't be read, so the answer may be there, rather than taking another Document's figure for it.`;
+}
+
+/**
+ * A reminder after a search's Passages when Documents in the Search scope are still being read
+ * (#1503): no search finds anything in them yet, so a model that finds nothing says they are
+ * being read, never that a Document isn't there.
+ */
+export function stillReadingNote(reading: readonly { name: string }[]): string {
+  if (reading.length === 0) return "";
+  const named = reading.slice(0, NAMED_UNREAD).map((file) => `"${listedName(file.name)}"`);
+  const more = reading.length - named.length;
+  return `IncarnaMind is still reading ${reading.length === 1 ? "a Document" : `${reading.length} Documents`} in the search: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. No Passage comes from ${reading.length === 1 ? "it" : "them"} yet. If the Passages don't clearly answer the Question and it may be about ${reading.length === 1 ? "it" : "one of them"}, say that ${reading.length === 1 ? "it is" : "they are"} still being read and to ask again when ${reading.length === 1 ? "it's" : "they're"} ready. Never say ${reading.length === 1 ? "it doesn't exist or wasn't added" : "they don't exist or weren't added"}, and never take another Document's figure for what ${reading.length === 1 ? "it" : "they"} would say.`;
 }
 
 /**
