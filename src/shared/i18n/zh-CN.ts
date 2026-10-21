@@ -3094,8 +3094,7 @@ export const zhCN = {
   "aiStatement.citations.unsupported": "无依据",
   "aiStatement.citations.contradicted": "与文档矛盾",
   "aiStatement.citations.checking": "正在核对",
-  "aiStatement.sentences.intro":
-    "作者还对自己写的一些说法做过“查找出处”或“对照文档核对”，结果如下：",
+  "aiStatement.sentences.intro": "以下是“查找出处”或“对照文档核对”的结果：",
   "aiStatement.sentences.column.count": "说法（条）",
   "aiStatement.sentences.supported": "有依据",
   "aiStatement.sentences.unsupported": "无依据",
