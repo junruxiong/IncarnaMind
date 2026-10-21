@@ -212,7 +212,22 @@ function lineOf(call: AnswerToolCall, names: MindNames, states?: ChangeStates): 
       }`;
     case "commands":
       return commandLine(call);
+    case "asks":
+      return askLine(call);
   }
+}
+
+function askLine(call: AnswerToolCall): string {
+  const asked = call.asked;
+  const question = quoted(asked?.question ?? field(call, "question"));
+  const answer = asked?.answer;
+  if (!answer) return `ask_user ${question}: not answered`;
+  if (answer.skipped) return `ask_user ${question}: the User skipped it`;
+  const chose = [
+    ...answer.chosen.map(quoted),
+    ...(answer.wrote === null ? [] : [`in their own words ${quoted(answer.wrote)}`]),
+  ];
+  return `ask_user ${question}: the User answered ${chose.join(" and ")}`;
 }
 
 function commandLine(call: AnswerToolCall): string {
