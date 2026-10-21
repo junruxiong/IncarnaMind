@@ -1,12 +1,13 @@
 name: CI
 
 on:
-  # Pull requests run once, through pull_request; a push runs CI only on main. The merge queue
-  # runs it again on each queued group, through merge_group, before anything reaches main.
-  push:
-    branches: [main]
+  # Pull requests run through pull_request, and the merge queue runs each queued group through
+  # merge_group before anything reaches main. Main then moves to exactly the tested group, so a
+  # push to main isn't run again: on a busy day those runs took the runners the queue waits for.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,11 +22,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Whether the change needs the heavy jobs. A pull request that changes only the repository's
-  # own documents (the root's *.md files and docs/, except docs/privacy.md, which a unit test
-  # reads) skips them; the required checks still report, as passed. Any other file, a merge
-  # group and a push to main run everything. Not every *.md is a document: the built-in Skills
-  # and the example Documents are Markdown files the tests read.
+  # Whether the change needs the heavy jobs. A draft pull request, and one that changes only the
+  # repository's own documents (the root's *.md files and docs/, except docs/privacy.md, which a
+  # unit test reads), skips them; the required checks still report, as passed. Marking a draft
+  # ready runs them. Any other file and every merge group run everything. Not every *.md is a
+  # document: the built-in Skills and the example Documents are Markdown files the tests read.
   changes:
     name: Which checks to run
     runs-on: ubuntu-latest
@@ -38,11 +39,14 @@ jobs:
       - id: diff
         env:
           EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           heavy=true
-          if [ "$EVENT" = pull_request ]; then
+          if [ "$EVENT" = pull_request ] && [ "$DRAFT" = true ]; then
+            heavy=false
+          elif [ "$EVENT" = pull_request ]; then
             files="$(git diff --name-only "$BASE...$HEAD")" || files=""
             echo "$files"
             # Nothing listed (the diff failed, or is empty) runs everything.
