@@ -6,6 +6,7 @@
  */
 import type * as Y from "yjs";
 import {
+  MIND_SETTINGS_FIELD,
   MIND_WORD_LOOK_FIELD,
   WORD_RUN_MARK,
   type WordBorder,
@@ -30,6 +31,9 @@ export function setWordLook(doc: Y.Doc, look: WordLook): void {
   map.set("cells", look.cells);
   map.set("body", look.body);
   map.set("width", look.width);
+  map.set("defaultTab", look.defaultTab);
+  if (look.tablesHang) map.set("tablesHang", true);
+  else map.delete("tablesHang");
   map.set("version", look.version);
 }
 
@@ -47,6 +51,13 @@ const FONT = /^[^"\\{};<>\p{Cc}]{1,64}$/u;
 
 const num = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
+const within = (low: number, high: number) => (value: unknown) => {
+  const points = num(value);
+  return points === undefined || points <= 0 ? undefined : Math.min(high, Math.max(low, points));
+};
+// Word's own ranges, in points: font sizes, and the spacing of default tab stops (up to 22 in).
+const size = within(1, 1638);
+const tabSpacing = within(1, 1584);
 const hex = (value: unknown) =>
   typeof value === "string" && HEX.test(value) ? value.toUpperCase() : undefined;
 const font = (value: unknown) =>
@@ -104,7 +115,7 @@ function runLook(value: Record<string, unknown>): WordRunLook {
   return defined({
     font: font(value.font),
     eastAsia: font(value.eastAsia),
-    size: num(value.size),
+    size: size(value.size),
     color: hex(value.color),
     highlight: wordName(value.highlight),
     shade: hex(value.shade),
@@ -145,6 +156,7 @@ function paragraphLook(value: Record<string, unknown>): WordParagraphLook {
   return defined({
     run: key(value.run),
     next: key(value.next),
+    characterSize: size(value.characterSize),
     align: oneOf(value.align, ["left", "center", "right", "justify", "distribute"] as const),
     left: num(value.left),
     right: num(value.right),
@@ -204,11 +216,38 @@ export function wordLookOf(doc: Y.Doc): WordLook | null {
   if (version === undefined) return null;
   return {
     version,
-    body: num(map.get("body")) ?? null,
+    body: size(map.get("body")) ?? null,
     width: num(map.get("width")) ?? null,
+    defaultTab: tabSpacing(map.get("defaultTab")) ?? null,
+    ...(map.get("tablesHang") === true && { tablesHang: true as const }),
     paragraphs: styles(map.get("paragraphs"), paragraphLook),
     runs: styles(map.get("runs"), runLook),
     tables: styles(map.get("tables"), tableLook),
     cells: styles(map.get("cells"), cellLook),
+  };
+}
+
+export type MindLook = "word" | "plain";
+
+const MIND_LOOK_KEY = "look";
+
+export const mindLookOf = (doc: Y.Doc): MindLook =>
+  doc.getMap<unknown>(MIND_SETTINGS_FIELD).get(MIND_LOOK_KEY) === "plain" ? "plain" : "word";
+
+export function setMindLook(doc: Y.Doc, look: MindLook): void {
+  doc.getMap<unknown>(MIND_SETTINGS_FIELD).set(MIND_LOOK_KEY, look);
+}
+
+export function observeWordLook(doc: Y.Doc, listener: () => void): () => void {
+  const looks = lookMap(doc);
+  const settings = doc.getMap<unknown>(MIND_SETTINGS_FIELD);
+  const onSettings = (event: Y.YMapEvent<unknown>) => {
+    if (event.keysChanged.has(MIND_LOOK_KEY)) listener();
+  };
+  looks.observe(listener);
+  settings.observe(onSettings);
+  return () => {
+    looks.unobserve(listener);
+    settings.unobserve(onSettings);
   };
 }

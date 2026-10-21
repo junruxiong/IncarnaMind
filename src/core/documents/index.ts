@@ -23,16 +23,21 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import type { LiveDocument } from "../../shared/citations";
-import { quoteInUnits } from "../../shared/locations";
+import { joinUnits, quoteInUnits } from "../../shared/locations";
+import { readableQuote } from "../../shared/readableQuote";
 import {
   type Anchor,
+  anchorsOf,
   cellNumber,
   type TextUnit,
   type UnitKind,
   type UnitLabel,
+  type UnitText,
 } from "../../shared/units";
+import { silentLogger } from "../activityLog";
+import type { Logger } from "../adapters";
 import { cleanQuote } from "../answers/citations";
 import type { CitedUnits } from "../answers/citedVersions";
 import type {
@@ -83,6 +88,7 @@ import {
   CURRENT_SINCE,
   HAN_CURRENT_SINCE,
   METADATA_VERSION,
+  PICTURES_CURRENT_SINCE,
   PROCESSING_VERSION,
   type ProcessedPassage,
   type ProcessingJob,
@@ -119,7 +125,7 @@ import { detectLanguage, languageList, type TextLanguage } from "./textLanguage"
 import { createVectorIndex } from "./vectors";
 import type { WatchFolder } from "./watcher";
 import type { SnapshotFile } from "./web";
-import { webPageInfo } from "./web/store";
+import { currentLookHash, lookName, showsPicture, webPageInfo } from "./web/store";
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 200;
@@ -151,6 +157,7 @@ interface DocumentRow {
   tagging_status: string;
   tagging_error_kind: string | null;
   tagging_error_message: string | null;
+  tagging_error_resets_at: string | null;
   embedding_model: string | null;
   path: string;
   linked_folder_id: string | null;
@@ -159,6 +166,7 @@ interface DocumentRow {
   title: string | null;
   own_file: string | null;
   counted_as_evidence: number;
+  not_cited: number;
   processing_version: number;
   file_mtime_ms: number | null;
   created_at: string;
@@ -194,8 +202,9 @@ const toUnitText = (row: UnitRow): PageText => ({
 
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
-  tagging_error_message, embedding_model, path, linked_folder_id, file_status,
-  creation_date, title, own_file, counted_as_evidence, processing_version, file_mtime_ms, created_at, updated_at`;
+  tagging_error_message, tagging_error_resets_at, embedding_model, path, linked_folder_id, file_status,
+  creation_date, title, own_file, counted_as_evidence, not_cited, processing_version, file_mtime_ms,
+  created_at, updated_at`;
 
 /** What IncarnaMind wrote the file as (#80), from its stored kind; a kind a newer version wrote counts as an export. */
 const ownFileOf = (row: Pick<DocumentRow, "own_file" | "counted_as_evidence">): OwnFile | null =>
@@ -348,6 +357,19 @@ export interface CitationSource {
   contentHash: string;
   /** The Document has been deleted since. */
   documentDeleted: boolean;
+  /** The User keeps the Document as their own workings: its Passages are read, never cited. */
+  notCited: boolean;
+}
+
+/**
+ * A Document's date as Answers see it beside its Passages, and where it comes from:
+ * the Document ("document"), or its file's information ("file-created", "file-modified"),
+ * which says when the file was made or changed, never what the Document is dated (#1173).
+ */
+export interface DocumentDate {
+  /** ISO 8601 at the precision known: "2025-05-14", "2024-03" or "2019". */
+  date: string;
+  of: "document" | "file-created" | "file-modified";
 }
 
 /** A live Document's file, opened for reading. */
@@ -417,6 +439,7 @@ export interface DocumentsOptions {
     detectDataless: boolean;
   };
   reportError?: (error: unknown) => void;
+  log?: Logger;
 }
 
 /** Which Documents `list` returns. Every condition given must match. */
@@ -433,9 +456,19 @@ export interface DocumentFilter {
   searchable?: boolean;
 }
 
+// A file named "2306.10683v1" says nothing of what is in it: the model gets its title too. A
+// title taken from a first line that is a sentence, as a text file's is, says no more than a search.
+const withTitle = (name: string, title: string | null) => {
+  const shown = title?.replace(/\s+/g, " ").trim() ?? "";
+  const same = (a: string) => a.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const heading = shown.length <= 160 && !/[.!?。！？]$/.test(shown);
+  return heading && shown && !same(name).includes(same(shown)) ? `${name} (“${shown}”)` : name;
+};
+
 export function createDocuments(options: DocumentsOptions) {
   const { db, dataDir, now, model, emitStatus } = options;
   const reportError = options.reportError ?? ((error: unknown) => console.error(error));
+  const log = options.log ?? silentLogger;
   const vectors = createVectorIndex(db, model);
   const legacyFolder = join(dataDir, "documents");
   const { textRecognition } = options;
@@ -521,11 +554,15 @@ export function createDocuments(options: DocumentsOptions) {
       folderId: row.folder_id,
       tags: tagsOfDocument(db, row.id),
       tagging,
+      // Why it failed, or why it waits when that is worth saying (a plan's or a rate limit).
       taggingError:
-        tagging === "failed"
+        tagging === "failed" || (tagging === "waiting-for-provider" && row.tagging_error_kind)
           ? {
               kind: (row.tagging_error_kind ?? "unknown") as ProviderErrorKind,
               message: row.tagging_error_message ?? "",
+              ...(row.tagging_error_resets_at !== null && {
+                resetsAt: row.tagging_error_resets_at,
+              }),
             }
           : null,
       creationDate:
@@ -535,6 +572,7 @@ export function createDocuments(options: DocumentsOptions) {
       web: row.kind === "web" ? webPageInfo(db, row.id) : null,
       reference: referenceOf(db, row.id),
       ownFile: ownFileOf(row),
+      notCited: row.not_cited === 1,
       found: foundSourceOf(db, row.id),
       importedAs: importedMindOf(row.id),
       createdAt: row.created_at,
@@ -624,7 +662,9 @@ export function createDocuments(options: DocumentsOptions) {
     scan:
       textRecognition && row.kind === "pdf"
         ? { reader: textRecognition.reader, keep: keptScans(row) }
-        : null,
+        : textRecognition && row.kind === "web"
+          ? { reader: textRecognition.reader, keep: null }
+          : null,
   });
 
   const setStatus = (id: string, status: DocumentStatus) =>
@@ -919,7 +959,11 @@ export function createDocuments(options: DocumentsOptions) {
       announce(job.documentId);
     },
     onProgress(job, { contentHash, read, of, unit }) {
-      scanProgress.set(job.documentId, { pages: of, read });
+      scanProgress.set(job.documentId, {
+        pages: of,
+        read,
+        of: job.kind === "web" ? "pictures" : "scanned-pages",
+      });
       if (unit) {
         let partial = partialScans.get(job.documentId);
         if (partial?.contentHash !== contentHash) {
@@ -936,6 +980,15 @@ export function createDocuments(options: DocumentsOptions) {
         return Promise.reject(new TextRecognitionUnavailableError("Scanned pages can't be read."));
       }
       return textRecognition.read(picture, page);
+    },
+    onLog(job, { event, fields }) {
+      log.warn(event, { documentId: job.documentId, ...fields });
+    },
+    readFile(_job, page, file) {
+      if (!textRecognition) {
+        return Promise.reject(new TextRecognitionUnavailableError("Pictures can't be read."));
+      }
+      return textRecognition.readFile(file, page);
     },
     isUnavailable: (error) => error instanceof TextRecognitionUnavailableError,
     password: async (job) => options.pdfPassword?.(job.documentId),
@@ -1199,6 +1252,11 @@ export function createDocuments(options: DocumentsOptions) {
         [at, at, list],
       );
       db.run(
+        `UPDATE web_page_pictures SET deleted_at = ?, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
+        [at, at, list],
+      );
+      db.run(
         `UPDATE document_pages SET deleted_at = ?, updated_at = ?
          WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL
            AND id NOT IN (SELECT value FROM json_each(?))`,
@@ -1333,6 +1391,16 @@ export function createDocuments(options: DocumentsOptions) {
                AND (length(trim(dp.text)) < ? OR json_extract(dp.label, '$.scan') IS NOT NULL)))`,
         [now(), BigInt(SCAN_CURRENT_SINCE), BigInt(MIN_PAGE_TEXT * 2)],
       );
+      db.run(
+        `UPDATE documents SET status = 'queued', updated_at = ?
+         WHERE deleted_at IS NULL AND kind = 'web' AND processing_version < ?
+           AND status IN ('ready', 'embedding', 'waiting-for-model')
+           AND EXISTS (
+             SELECT 1 FROM web_page_pictures wp
+             WHERE wp.document_id = documents.id AND wp.content_hash = documents.content_hash
+               AND wp.deleted_at IS NULL)`,
+        [now(), BigInt(PICTURES_CURRENT_SINCE)],
+      );
     }
     db.run(
       `UPDATE documents SET processing_version = ?
@@ -1347,8 +1415,12 @@ export function createDocuments(options: DocumentsOptions) {
     if (closed) return;
     for (const { id } of db.all<{ id: string }>(
       `SELECT id FROM documents
-       WHERE deleted_at IS NULL AND failure_reason = 'pages-unread' AND file_status = 'available'
+       WHERE deleted_at IS NULL AND file_status = 'available'
          AND status NOT IN ('queued', 'extracting')
+         AND (failure_reason = 'pages-unread' OR (kind = 'web' AND EXISTS (
+           SELECT 1 FROM document_pages dp, json_each(dp.label, '$.figures') figure
+           WHERE dp.document_id = documents.id AND dp.content_hash = documents.content_hash
+             AND dp.deleted_at IS NULL AND json_extract(figure.value, '$.unread') = 1)))
        ORDER BY created_at DESC, rowid DESC`,
     )) {
       process(id);
@@ -1377,8 +1449,32 @@ export function createDocuments(options: DocumentsOptions) {
     for (const units of options.citedUnits(upgraded)) byDocument.get(units.documentId)?.push(units);
     citedAtStart = byDocument;
   }
+  // A Document read well before, being read again for a newer pipeline, isn't what stopped the app.
+  const rereadForNewerPipeline = (row: DocumentRow) =>
+    row.processing_version <
+      (Object.entries(CURRENT_SINCE).find(([kind]) => kind === row.kind)?.[1] ??
+        PROCESSING_VERSION) && indexedStatus(row) !== null;
   for (const row of unfinished) {
-    if (row.status === "extracting") setStatus(row.id, "queued");
+    if (row.status === "extracting") {
+      if (!rereadForNewerPipeline(row)) {
+        // Read again by itself, what stopped the app could stop it again, at every start.
+        db.run(
+          `UPDATE documents SET status = ?, failure_reason = 'app-stopped',
+             failure_message = ?, updated_at = ? WHERE id = ?`,
+          [
+            indexedStatus(row) ?? "failed",
+            "The app stopped while it was being read.",
+            now(),
+            row.id,
+          ],
+        );
+        continue;
+      }
+      db.run("UPDATE documents SET status = 'queued', updated_at = ? WHERE id = ?", [
+        now(),
+        row.id,
+      ]);
+    }
     if (!isPaused(row.id)) processor.enqueue(jobFor(row));
   }
   citedAtStart = null;
@@ -1763,22 +1859,68 @@ export function createDocuments(options: DocumentsOptions) {
     searchableCount,
 
     /**
+     * The live Documents with Passages to search (of all of them, or only of these) that
+     * joined after `since` (ISO 8601, UTC): added then, or, with `folderId`, filed into that
+     * Folder then. `joinedAt` says when.
+     */
+    searchableJoinedAfter(
+      documentIds: readonly string[] | undefined,
+      since: string,
+      folderId: string | null,
+    ): { id: string; joinedAt: string }[] {
+      const { where, params } = searchable(documentIds);
+      return db
+        .all<{ id: string; joined_at: string }>(
+          `SELECT id, joined_at FROM (
+             SELECT d.id, MAX(d.created_at, COALESCE((
+               SELECT COALESCE(a.filed_at, a.created_at) FROM document_groups a
+               WHERE a.document_id = d.id AND a.group_id = ? AND a.deleted_at IS NULL
+             ), d.created_at)) AS joined_at
+             FROM documents d WHERE ${where}
+           ) WHERE joined_at > ?`,
+          [folderId, ...params, since],
+        )
+        .map((row) => ({ id: row.id, joinedAt: row.joined_at }));
+    },
+
+    /**
      * How many live Documents have Passages to search (of all of them, or only
-     * of these), and the names of the `limit` most recently added, newest first.
+     * of these), and the names of the `limit` most recently added, newest
+     * first, each with its title when its name doesn't hold it; `webPage`: one
+     * of them is a saved web page, named by its own title.
      */
     searchableNames(
       documentIds: readonly string[] | undefined,
       limit: number,
-    ): { total: number; names: string[] } {
+    ): { total: number; names: string[]; webPage: boolean } {
       const { where, params } = searchable(documentIds);
-      const names = db
-        .all<{ name: string }>(
-          `SELECT d.name FROM documents d WHERE ${where}
-           ORDER BY d.created_at DESC, d.rowid DESC LIMIT ?`,
-          [...params, BigInt(limit)],
+      const rows = db.all<{ name: string; title: string | null; kind: string }>(
+        `SELECT d.name, d.title, d.kind FROM documents d WHERE ${where}
+         ORDER BY d.created_at DESC, d.rowid DESC LIMIT ?`,
+        [...params, BigInt(limit)],
+      );
+      return {
+        total: searchableCount(documentIds),
+        names: rows.map((row) => withTitle(row.name, row.title)),
+        webPage: rows.some((row) => row.kind === "web"),
+      };
+    },
+
+    /** The live Documents with Passages to search (of all of them, or only of these), the most text first: `size` characters. */
+    searchableBySize(
+      documentIds: readonly string[] | undefined,
+    ): { id: string; name: string; size: number }[] {
+      const { where, params } = searchable(documentIds);
+      return db
+        .all<{ id: string; name: string; size: bigint | number }>(
+          `SELECT d.id, d.name,
+             (SELECT coalesce(sum(length(p.text)), 0) FROM passages p
+               WHERE p.document_id = d.id AND p.deleted_at IS NULL) AS size
+           FROM documents d WHERE ${where}
+           ORDER BY size DESC, d.created_at DESC, d.rowid DESC`,
+          params,
         )
-        .map((row) => row.name);
-      return { total: searchableCount(documentIds), names };
+        .map((row) => ({ id: row.id, name: row.name, size: Number(row.size) }));
     },
 
     /**
@@ -1819,9 +1961,10 @@ export function createDocuments(options: DocumentsOptions) {
         kind: string;
         content_hash: string;
         deleted_at: string | null;
+        not_cited: number;
       }>(
         `SELECT p.id, p.text, p.page_from, p.page_to, p.document_id, d.name, d.kind,
-           coalesce(p.content_hash, d.content_hash) AS content_hash, d.deleted_at
+           coalesce(p.content_hash, d.content_hash) AS content_hash, d.deleted_at, d.not_cited
          FROM passages p JOIN documents d ON d.id = p.document_id
          WHERE p.id = ?`,
         [passageId],
@@ -1837,6 +1980,7 @@ export function createDocuments(options: DocumentsOptions) {
         documentKind: row.kind as DocumentKind,
         contentHash: row.content_hash,
         documentDeleted: row.deleted_at !== null,
+        notCited: row.not_cited === 1,
       };
     },
 
@@ -1852,22 +1996,27 @@ export function createDocuments(options: DocumentsOptions) {
     /**
      * A live Document's date, as Answers see it beside its Passages (#548):
      * the date it states (its reference record's, else its creation date),
-     * else the day its file was last modified, in UTC. ISO 8601 at the
-     * precision known: "2025-05-14", "2024-03" or "2019". Null when nothing
+     * else the day its file was last modified, in UTC. Null when nothing
      * gives one, or the Document was deleted.
      */
-    documentDate(documentId: string): string | null {
+    documentDate(documentId: string): DocumentDate | null {
       const row = find(documentId);
       if (!row) return null;
       const issued = referenceOf(db, documentId)?.fields.issued;
-      if (issued) return issued;
+      if (issued) return { date: issued, of: "document" };
       // A date stored before it was known to be a placeholder (2000-01-01) isn't shown either.
       if (row.creation_date && !isPlaceholderDate(row.creation_date)) {
-        return row.creation_date.slice(0, 10);
+        // A year alone is the one written in the first Unit (see ./creationDate): file metadata
+        // gives a day. A web page's date is the one it says it was published on.
+        const stated = row.creation_date.length === 4 || row.kind === "web";
+        return {
+          date: row.creation_date.slice(0, 10),
+          of: stated ? "document" : "file-created",
+        };
       }
       if (row.file_mtime_ms === null) return null;
       const modified = new Date(row.file_mtime_ms).toISOString().slice(0, 10);
-      return isPlaceholderDate(modified) ? null : modified;
+      return isPlaceholderDate(modified) ? null : { date: modified, of: "file-modified" };
     },
 
     /**
@@ -1961,6 +2110,20 @@ export function createDocuments(options: DocumentsOptions) {
       };
     },
 
+    /** A Citation's quote as the Document's text reads it (see `CoreApi.readableQuote`). */
+    readableQuote(input: ScannedQuoteInput): string | null {
+      const row = find(parseId(input.documentId));
+      if (!row) return null;
+      const units = pageTexts(
+        row.id,
+        input.contentHash ?? row.content_hash,
+        input.pageFrom,
+        input.pageTo ?? input.pageFrom,
+      );
+      const ranges = quoteInUnits(units, cleanQuote(input.quote));
+      return ranges && ranges.length > 0 ? readableQuote(joinUnits(units).text, ranges) : null;
+    },
+
     /** A Citation's quote read from a scan (see `CoreApi.readScannedQuote`). */
     readScannedQuote(input: ScannedQuoteInput): ScannedQuote | null {
       const row = find(parseId(input.documentId));
@@ -1971,31 +2134,39 @@ export function createDocuments(options: DocumentsOptions) {
         input.pageFrom,
         input.pageTo ?? input.pageFrom,
       );
-      if (!units.some((unit) => unit.label?.scan && !unit.label.scan.unread)) return null;
+      const read = (unit: UnitText) =>
+        (unit.label?.scan && !unit.label.scan.unread) ||
+        unit.label?.figures?.some((figure) => !figure.unread);
+      if (!units.some(read)) return null;
       const ranges = quoteInUnits(units, cleanQuote(input.quote));
       if (!ranges || ranges.length === 0) return null;
       const unsure: string[] = [];
+      const covers = (from: number, to: number) =>
+        ranges.some((range) => range.start < to && range.end > from);
       // A quote of a page of text beside a scanned one wasn't read from a scan.
       let scanned = false;
+      let pictured = false;
       let start = 0;
       for (const unit of units) {
         const end = start + unit.text.length;
-        if (
-          unit.label?.scan &&
-          !unit.label.scan.unread &&
-          ranges.some((range) => range.start < end && range.end > start)
-        ) {
-          scanned = true;
-        }
+        if (unit.label?.scan && !unit.label.scan.unread && covers(start, end)) scanned = true;
         for (const [from, to] of unit.label?.scan?.unsure ?? []) {
-          if (ranges.some((range) => range.start < start + to && range.end > start + from)) {
-            unsure.push(unit.text.slice(from, to));
+          if (covers(start + from, start + to)) unsure.push(unit.text.slice(from, to));
+        }
+        for (const figure of unit.label?.figures ?? []) {
+          const anchor = anchorsOf(unit).find((each) => each.target === `figure${figure.number}`);
+          if (figure.unread || !anchor || !covers(start + anchor.start, start + anchor.end)) {
+            continue;
+          }
+          pictured = true;
+          for (const [from, to] of figure.unsure ?? []) {
+            if (covers(start + from, start + to)) unsure.push(unit.text.slice(from, to));
           }
         }
         // `joinUnits` puts one line break between Units.
         start = end + 1;
       }
-      return scanned ? { unsure } : null;
+      return scanned ? { unsure, from: "scan" } : pictured ? { unsure, from: "picture" } : null;
     },
 
     /** `added` hears of each new Document as it is stored, before it is processed. */
@@ -2067,6 +2238,9 @@ export function createDocuments(options: DocumentsOptions) {
 
     /** Looks at a file again now, as when it is opened: a new version is processed. */
     check: (path: string) => library.check([path]),
+
+    /** Tells the windows a Document changed besides its processing, such as a web page's look. */
+    announce,
 
     /**
      * Points a Document added on its own at a copy IncarnaMind just saved of
@@ -2167,18 +2341,52 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
-     * Removes a Document from the index. The User's file isn't touched; only a
-     * copy the old layout made in the data folder is removed with it.
+     * Keeps a Document as the User's own workings, or cites it as any again
+     * (see `Document.notCited`), and says so.
      */
-    async delete(idInput: unknown): Promise<void> {
+    setNotCited(idInput: unknown, notCitedInput: unknown): Document {
       const id = parseId(idInput);
+      if (typeof notCitedInput !== "boolean") {
+        throw new InvalidInputError({ key: "error.document.notCitedChoice" });
+      }
       const row = find(id);
       if (!row) throw new NotFoundError({ key: "error.document.notFound" });
-      removeFromIndex([id], now());
-      if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
-        await rm(row.path, { force: true }).catch(reportError);
+      if ((row.not_cited === 1) !== notCitedInput) {
+        db.run("UPDATE documents SET not_cited = ?, updated_at = ? WHERE id = ?", [
+          notCitedInput ? 1 : 0,
+          now(),
+          id,
+        ]);
+        announce(id);
       }
-      library.documentsChanged(row.linked_folder_id);
+      const updated = find(id);
+      if (!updated) throw new NotFoundError({ key: "error.document.notFound" });
+      return toDocument(updated);
+    },
+
+    /**
+     * Removes Documents from the index, all in one step, or none when one isn't found. The
+     * User's files aren't touched; only copies the old layout made in the data folder go with
+     * them.
+     */
+    async delete(idsInput: unknown): Promise<string[]> {
+      const ids = [...new Set((Array.isArray(idsInput) ? idsInput : [idsInput]).map(parseId))];
+      const rows = ids.map((id) => {
+        const row = find(id);
+        if (!row) throw new NotFoundError({ key: "error.document.notFound" });
+        return row;
+      });
+      removeFromIndex(ids, now());
+      for (const row of rows) {
+        if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
+          await rm(row.path, { force: true }).catch(reportError);
+        }
+      }
+      // Once a Linked folder, not once a Document: 1,700 Documents took 90 s one by one (#1349).
+      for (const linkedFolderId of new Set(rows.map((row) => row.linked_folder_id))) {
+        library.documentsChanged(linkedFolderId);
+      }
+      return ids;
     },
 
     /**
@@ -2188,40 +2396,51 @@ export function createDocuments(options: DocumentsOptions) {
      */
     restore(ids: readonly string[]): void {
       const at = now();
-      for (const id of ids) {
-        const row = db.get<DocumentRow & { deleted_at: string }>(
-          `SELECT ${COLUMNS}, deleted_at FROM documents WHERE id = ? AND deleted_at IS NOT NULL`,
-          [id],
-        );
-        if (!row) continue;
-        const deleted = [at, id, row.deleted_at] as const;
-        db.run("UPDATE documents SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, id]);
+      const rows = db.all<DocumentRow & { deleted_at: string }>(
+        `SELECT ${COLUMNS}, deleted_at FROM documents
+         WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NOT NULL`,
+        [JSON.stringify(ids)],
+      );
+      if (rows.length === 0) return;
+      const list = JSON.stringify(rows.map((row) => row.id));
+      // What went with each Document, by its own delete time: read from its row, so its parts go
+      // back before it does. One statement a table, however many there are (#1349).
+      const deletedWith = (table: string) =>
+        `(SELECT d.deleted_at FROM documents d WHERE d.id = ${table}.document_id)`;
+      db.run(
+        `UPDATE passages SET deleted_at = NULL, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?))
+           AND deleted_at = ${deletedWith("passages")}
+           AND content_hash IS (SELECT d.content_hash FROM documents d WHERE d.id = passages.document_id)`,
+        [at, list],
+      );
+      for (const table of ["document_pages", "web_pages", "web_page_pictures"]) {
         db.run(
-          `UPDATE passages SET deleted_at = NULL, updated_at = ?
-           WHERE document_id = ? AND deleted_at = ? AND content_hash IS ?`,
-          [...deleted, row.content_hash],
+          `UPDATE ${table} SET deleted_at = NULL, updated_at = ?
+           WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at = ${deletedWith(table)}`,
+          [at, list],
         );
-        db.run(
-          "UPDATE document_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          "UPDATE web_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
-           WHERE document_id = ? AND deleted_at = ?
-             AND NOT EXISTS (SELECT 1 FROM document_tags live
-                             WHERE live.document_id = document_tags.document_id
-                               AND live.tag_id = document_tags.tag_id AND live.deleted_at IS NULL)`,
-          deleted,
-        );
-        reindexName(id, row.name);
-        if (row.status === "extracting") setStatus(id, "queued");
+      }
+      db.run(
+        `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?))
+           AND deleted_at = ${deletedWith("document_tags")}
+           AND NOT EXISTS (SELECT 1 FROM document_tags live
+                           WHERE live.document_id = document_tags.document_id
+                             AND live.tag_id = document_tags.tag_id AND live.deleted_at IS NULL)`,
+        [at, list],
+      );
+      db.run(
+        `UPDATE documents SET deleted_at = NULL, updated_at = ?
+         WHERE id IN (SELECT value FROM json_each(?))`,
+        [at, list],
+      );
+      for (const row of rows) {
+        reindexName(row.id, row.name);
+        if (row.status === "extracting") setStatus(row.id, "queued");
         else if (["ready", "embedding", "waiting-for-model"].includes(row.status)) {
           const status = indexedStatus(row);
-          if (status !== null && status !== row.status) setStatus(id, status);
+          if (status !== null && status !== row.status) setStatus(row.id, status);
         }
       }
     },
@@ -2300,15 +2519,31 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * Opens a picture a live Markdown Document shows from beside it, by the
-     * path written in the file (see `openImageBeside`). Anything else is
-     * refused (NotFoundError).
+     * path written in the file (see `openImageBeside`), or one a saved web
+     * page's versions show, by its path in the snapshot, or the PDF of how
+     * its last version looked (`WebPageLook.path`). Anything else is refused
+     * (NotFoundError).
      */
     async openImage(idInput: unknown, path: unknown): Promise<DocumentImage> {
       if (typeof path !== "string" || path.length > 2048) {
         throw new InvalidInputError("An image's path must be text.");
       }
       const row = await openablePath(idInput);
-      if (row.kind !== "markdown") {
+      const look = row.kind === "web" ? currentLookHash(db, row.id) : null;
+      if (look && path === `looks/${lookName(look)}`) {
+        try {
+          return { ...(await openFile(join(dirname(row.path), path))), type: "application/pdf" };
+        } catch (error) {
+          throw new NotFoundError({ key: "error.webPage.lookGone" }, { cause: error });
+        }
+      }
+      if (row.kind === "web") {
+        // A saved web page's picture: one of the files its versions show, and nothing else (#756).
+        const hash = /^pictures\/([0-9a-f]{64})\.(?:png|jpg|gif|webp|avif)$/.exec(path)?.[1];
+        if (!hash || !showsPicture(db, row.id, hash)) {
+          throw new NotFoundError({ key: "error.document.noSuchPicture" });
+        }
+      } else if (row.kind !== "markdown") {
         throw new NotFoundError("Only a Markdown Document shows pictures from beside it.");
       }
       try {
@@ -2476,6 +2711,13 @@ export function createDocuments(options: DocumentsOptions) {
       library.close();
       embedding.close();
       processor.close();
+      // Closed in good order, a Document being read is read again at the next start; one
+      // still "extracting" then is one whose reading stopped the app (see `unfinished`).
+      db.run(
+        `UPDATE documents SET status = 'queued', updated_at = ?
+         WHERE deleted_at IS NULL AND status = 'extracting'`,
+        [now()],
+      );
     },
   };
 }

@@ -18,6 +18,7 @@ function accessAnswering(outcome: OutsideAnswer) {
     passage: () => null,
     passagesBetween: () => [],
     citing: { citeQuote: () => null, locate: () => null },
+    notCited: () => false,
     recheck: () => {
       throw new Error("Not called.");
     },
@@ -44,7 +45,7 @@ describe("ask, when IncarnaMind's Answer isn't written", () => {
   it("is paused in Local mode, as every Tool is", async () => {
     await expect(
       accessAnswering({ asked: false, reason: "local-mode" }).ask({ question: "When?" }),
-    ).rejects.toMatchObject({ problem: "local-mode", message: /Connected agents are paused/ });
+    ).rejects.toMatchObject({ problem: "local-mode", message: /Agents are paused/ });
   });
 
   it("says when no chat model is ready, or it isn't allowed yet", async () => {

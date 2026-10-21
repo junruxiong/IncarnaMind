@@ -6,11 +6,16 @@ import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  addProviderForm,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
+  frontMindName,
   interceptOpenExternal,
   launchApp,
+  linkedFolderRow,
   linkFolderFromSidebar,
+  nameMind,
   newMind,
   openDocumentMenu,
   openSettings,
@@ -39,7 +44,7 @@ test("a Mind created before quitting is still there after reopening the app", as
   const mindId = await created.getAttribute("data-mind-id");
   expect(mindId).toBeTruthy();
   await expect(first.window.getByTestId("mind-pane")).toHaveAttribute("data-mind-id", `${mindId}`);
-  await expect(first.window.getByTestId("mind-title")).toBeVisible();
+  await expect(first.window.getByTestId("mind-editor")).toBeVisible();
   await first.app.close();
 
   // Second run on the same data folder: the Mind is listed and opens.
@@ -49,7 +54,7 @@ test("a Mind created before quitting is still there after reopening the app", as
   await expect(restored).toHaveAttribute("data-mind-id", `${mindId}`);
   await restored.click();
   await expect(second.window.getByTestId("mind-pane")).toHaveAttribute("data-mind-id", `${mindId}`);
-  await expect(second.window.getByTestId("mind-title")).toBeVisible();
+  await expect(second.window.getByTestId("mind-editor")).toBeVisible();
   await second.app.close();
 });
 
@@ -59,7 +64,7 @@ test("what was typed in a Mind, and its title, are still there after reopening t
   const first = await launchApp(dataDir);
   await dismissChatSetup(first.window);
   await newMind(first.window);
-  await first.window.getByTestId("mind-title").fill("Field notes");
+  await nameMind(first.window, "Field notes");
   const editor = first.window.getByTestId("mind-editor");
   await editor.click();
   await first.window.keyboard.type(paragraphs[0] ?? "");
@@ -73,7 +78,7 @@ test("what was typed in a Mind, and its title, are still there after reopening t
   const item = second.window.getByTestId("mind-list-item");
   await expect(item).toHaveText("Field notes");
   await item.click();
-  await expect(second.window.getByTestId("mind-title")).toHaveValue("Field notes");
+  await expect(frontMindName(second.window)).toHaveText("Field notes");
   await expect(second.window.getByTestId("mind-editor").locator("p")).toHaveText(paragraphs);
   await second.app.close();
 });
@@ -85,7 +90,7 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
   const items = window.getByTestId("mind-list-item");
   for (const title of ["Older", "Newer"]) {
     await newMind(window);
-    await window.getByTestId("mind-title").fill(title);
+    await nameMind(window, title);
     await expect(items.first()).toHaveText(title);
   }
   await expect(items).toHaveText(["Newer", "Older"]);
@@ -162,7 +167,7 @@ test("Continue with ChatGPT opens OpenAI's sign-in for IncarnaMind's own registr
   // Settings → Models has it too. Nothing is signed in here: the browser is stood in for.
   await openSettings(window, "models");
   const section = window.getByTestId("chatgpt-settings");
-  await expect(section.getByTestId("chatgpt-account")).toHaveText("Not signed in.");
+  await expect(section.getByTestId("chatgpt-continue")).toBeVisible();
   // Where the sign-in couldn't be kept safely (Linux without a keyring), that's said up front and
   // Continue waits, so OpenAI's page never opens for a sign-in that would have nowhere to go.
   const storage = await window.evaluate(() =>
@@ -195,7 +200,7 @@ test("Continue with ChatGPT opens OpenAI's sign-in for IncarnaMind's own registr
   await app.close();
 });
 
-test("first run asks for no model; the first own Question waits while the setup leads with one recommended way, and Set up later gives the words back", async () => {
+test("first run asks for no model; the first own Question waits while the setup leads with the ChatGPT plan and a key, and Set up later gives the words back", async () => {
   const first = await launchApp(dataDir);
   const { window } = first;
   await expect(window.getByTestId("chat-setup")).toHaveCount(0);
@@ -213,30 +218,33 @@ test("first run asks for no model; the first own Question waits while the setup 
   await expect(window.getByTestId("assistant-waiting-model")).toHaveText(
     "Waiting for you to choose a model",
   );
-  await expect(card).toContainText("Choose where Answers come from");
-  await expect(card.getByTestId("setup-primary")).toHaveText("Use my ChatGPT plan");
-  // Choosing it is the consent (ADR-0022), so its line names everything that goes.
-  await expect(card.getByTestId("setup-chatgpt-sends")).toHaveText(
-    "Plus or Pro · No key needed · Your Questions, the Mind you're in, Passages from your Documents, and Document text for Tags go to OpenAI under your ChatGPT account.",
+  await expect(card).toContainText("Choose your AI");
+  await expect(card.getByTestId("setup-chatgpt")).toHaveText("Use my ChatGPT plan");
+  await expect(card.getByTestId("setup-key")).toHaveText("Paste an API key");
+  // Choosing it is the consent (ADR-0022): one line says what goes, and Details names it all.
+  await expect(card.getByTestId("setup-chatgpt-line")).toHaveText("Plus or Pro · no key needed");
+  await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(
+    "Sends your questions and document text to OpenAI. · Details",
   );
-  // The card says what the Mind's "needs a chat model" line would, so that line steps aside.
+  // The card says what the Mind's "needs an AI model" line would, so that line steps aside.
   await expect(window.getByTestId("chat-readiness")).toHaveCount(0);
-  // The other ways are folded under the one recommended button.
-  await expect(card.getByTestId("way-key")).toBeHidden();
+  // The other ways are folded under the two that lead.
+  await expect(card.getByTestId("way-local")).toBeHidden();
   await card.getByTestId("setup-other").click();
-  await expect(card.getByTestId("way-key")).toBeVisible();
   await expect(card.getByTestId("way-local")).toBeVisible();
-  await expect(card.getByTestId("setup-claude")).toContainText("Already pay for Claude?");
 
-  // In Chinese the recommended button is a DeepSeek key.
+  // In Chinese the key leads.
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
       user: { language: "zh-CN" },
     }),
   );
-  await expect(card.getByTestId("setup-primary")).toHaveText("粘贴 DeepSeek 密钥");
-  await expect(card.getByTestId("setup-deepseek-sends")).toHaveText(
-    "你的问题、当前 Mind、文档中的相关段落，以及用于打标签的文档文字，会通过你自己的密钥发送给 DeepSeek。",
+  await expect(card.getByTestId("setup-key")).toHaveText("粘贴 API 密钥");
+  await expect(card.getByTestId("setup-chatgpt-line")).toHaveText(
+    "Plus 或 Pro（中国大陆不可用）· 无需密钥",
+  );
+  await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(
+    "会把你的问题和文档内容发送给 OpenAI。 · 详情",
   );
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
@@ -252,20 +260,13 @@ test("first run asks for no model; the first own Question waits while the setup 
   await first.app.close();
 });
 
-test("Settings → Models lists the key providers, and “Already pay for a plan?” with its routes", async () => {
+test("Settings → Models offers Add a provider, and “Already pay for a plan?” with the ChatGPT plan", async () => {
   const { app, window } = await launchApp(dataDir);
   const settings = await openSettings(window, "models");
-  await expect(settings.getByTestId("chat-choice-api-key")).toBeVisible();
-  await expect(
-    settings.locator("label").filter({ has: window.getByTestId("chat-choice-api-key") }),
-  ).toContainText(
-    "Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server",
-  );
+  await expect(settings.getByTestId("models-add-provider")).toHaveText("Add a provider…");
   const plans = settings.getByTestId("plans-settings");
   await expect(plans).toContainText("Already pay for a plan?");
   await expect(plans).toContainText("ChatGPT Plus or Pro");
-  await expect(plans).toContainText("Claude Pro, Max or Team");
-  await expect(plans).toContainText("Google AI Pro or Ultra");
   await window.evaluate(async () =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
       user: { language: "zh-CN" },
@@ -275,26 +276,27 @@ test("Settings → Models lists the key providers, and “Already pay for a plan
   await app.close();
 });
 
-test("first run fits a small window; the not-ready notice and a long title keep the Mind's text edge", async () => {
+test("first run fits a small window; the not-ready notice and a long first line keep the Mind's text edge", async () => {
   const { app, window } = await launchApp(dataDir);
   await setWindowSize(app, window, 1000, 600);
 
   await newMind(window);
-  const title = window.getByTestId("mind-title");
-  await expect(title).toBeFocused();
-  const long = "Reading notes on spring and neap tides, harbour tables and the Moon's pull";
+  await enterContent(window);
+  const long = "Reading notes on spring and neap tides, harbour tables and the pull of the Moon";
   await window.keyboard.type(long);
-  // Long, the title wraps instead of being cut off.
-  await expect(title).toHaveValue(long);
-  const titleBox = await title.boundingBox();
-  if (!titleBox) throw new Error("The title isn't visible.");
-  expect(titleBox.height).toBeGreaterThan(70);
+  // Long, the first line wraps instead of being cut off.
+  const line = window.getByTestId("mind-editor").locator("p").first();
+  await expect(line).toHaveText(long);
+  const lineBox = await line.boundingBox();
+  if (!lineBox) throw new Error("The line isn't visible.");
+  const lineHeight = await line.evaluate((p) => Number.parseFloat(getComputedStyle(p).lineHeight));
+  expect(lineBox.height).toBeGreaterThan(lineHeight * 1.5);
 
-  // The notice's box reaches into the margin; its text starts where the title's does.
+  // The notice's box reaches into the margin; its text starts where the Mind's does.
   const notice = window.getByTestId("chat-readiness").locator("span").first();
   const noticeBox = await notice.boundingBox();
   if (!noticeBox) throw new Error("The notice isn't visible.");
-  expect(Math.abs(noticeBox.x - titleBox.x)).toBeLessThan(1);
+  expect(Math.abs(noticeBox.x - lineBox.x)).toBeLessThan(1);
   await app.close();
 });
 
@@ -325,42 +327,33 @@ test("the window opens at the size and place it was left at", async () => {
 test("an API key typed for one chat provider is cleared when another is chosen, or when the server changes", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  // A server the User gives is among the "More providers" in Settings.
   const settings = await openSettings(window, "models");
-  const form = settings.getByTestId("provider-form");
-  await settings.getByTestId("chat-choice-api-key").check();
-  const key = form.getByLabel(/^API key/);
-  const useKey = form.getByTestId("provider-use-key");
 
   // Typed for OpenAI, the key isn't kept for Anthropic: there is nothing to test or use with it.
-  await form
-    .locator("label")
-    .filter({ hasText: /^OpenAI$/ })
-    .click();
-  await key.fill("sk-typed-for-openai");
-  await form
-    .locator("label")
-    .filter({ hasText: /^Anthropic$/ })
-    .click();
-  await expect(key).toHaveValue("");
-  await expect(useKey).toBeDisabled();
+  let form = await addProviderForm(settings, "openai");
+  await form.getByLabel(/^API key/).fill("sk-typed-for-openai");
+  await settings.getByTestId("models-back").click();
+  form = await addProviderForm(settings, "anthropic");
+  const key = () => form.getByLabel(/^API key/);
+  await expect(key()).toHaveValue("");
+  await expect(form.getByTestId("provider-use-key")).toBeDisabled();
+  await settings.getByTestId("models-back").click();
 
   // For a server, the key stays while the address is fixed, and goes once it names another host.
-  await form.getByTestId("provider-more-toggle").click();
-  await form.locator("label").filter({ hasText: "OpenAI-compatible server" }).click();
+  form = await addProviderForm(settings, "openai-compatible");
   const server = form.getByLabel("Server URL");
   await server.fill("https://api.example.com/v1");
-  await key.fill("sk-typed-for-example");
+  await key().fill("sk-typed-for-example");
   await server.fill("https://api.example.com/v2");
   await server.blur();
-  await expect(key).toHaveValue("sk-typed-for-example");
+  await expect(key()).toHaveValue("sk-typed-for-example");
   await server.fill("https://other.example.net/v1");
   await server.blur();
-  await expect(key).toHaveValue("");
+  await expect(key()).toHaveValue("");
   await app.close();
 });
 
-test("a Linked folder shows its Folders as on disk, and files added on their own are Other Documents", async () => {
+test("a Linked folder is one row in its section, which doesn't unfold: its files sit in Not in a Folder with those added on their own, and the row opens the Library", async () => {
   const sources = await createDataFolder();
   try {
     const library = join(await realpath(sources), "Library");
@@ -372,60 +365,34 @@ test("a Linked folder shows its Folders as on disk, and files added on their own
 
     const { app, window } = await launchApp(dataDir);
     await dismissChatSetup(window);
-    const documents = window.getByTestId("document-list-item");
-    const folders = window.getByTestId("folder-item");
-    const others = window.getByTestId("other-documents");
+    const section = window.getByTestId("linked-folders-section");
+    const notInAFolder = window.getByTestId("not-in-a-folder").getByTestId("document-list-item");
 
-    // A file added on its own, with no Linked folder yet: just its row, at the top level.
+    // A file added on its own, with no Linked folder yet: its row in Not in a Folder, and no
+    // Linked folders section.
     await addDocuments(window, [loose]);
-    const looseItem = documents.filter({ hasText: "Loose notes" });
+    const looseItem = notInAFolder.filter({ hasText: "Loose notes" });
     await expect(looseItem).toHaveAttribute("data-depth", "0");
-    // As they are on disk: Folders on disk.
-    await showSourceLocations(window);
-    await expect(looseItem).toHaveAttribute("data-depth", "0");
-    await expect(others).toHaveCount(0);
+    await expect(section).toHaveCount(0);
 
-    // "Add folder…" links a folder, picked with the system's picker (answered by the test),
-    // once the User confirms in the link dialog.
+    // "Link a folder…" links a folder once the User confirms in the link dialog. Its one row comes,
+    // with nothing to unfold and none of its files under it.
     await linkFolderFromSidebar(app, window, library);
-    const root = folders.filter({ hasText: "Library" });
-    await expect(root).toHaveAttribute("data-depth", "0");
-    await expect(root.getByTestId("folder-toggle")).toHaveAttribute("aria-expanded", "true");
-    const paperItem = documents.filter({ hasText: "Paper" });
-    await expect(paperItem).toHaveAttribute("data-depth", "1");
-    // Its folders, nested as on disk, each level one step deeper.
-    const projects = folders.filter({ hasText: "Projects" });
-    await expect(projects).toHaveAttribute("data-depth", "1");
-    const year = folders.filter({ hasText: "2026" });
-    await expect(year).toHaveAttribute("data-depth", "2");
-    const planItem = documents.filter({ hasText: "Plan" });
-    await expect(planItem).toHaveAttribute("data-depth", "3");
-    await expect(planItem).toHaveAttribute(
-      "data-folder-id",
-      `${await year.getAttribute("data-folder-id")}`,
-    );
-    // Folding a folder hides what's inside it, its sub-Folder's too; unfolding shows it again.
-    const toggle = projects.getByTestId("folder-toggle");
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await expect(year).toHaveCount(0);
-    await expect(planItem).toHaveCount(0);
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(planItem).toBeVisible();
-
-    // The file added on its own is now in "Other Documents", below the Linked folder.
-    await expect(others).toHaveAttribute("data-depth", "0");
-    await expect(looseItem).toHaveAttribute("data-depth", "1");
-    const planBox = await planItem.boundingBox();
-    const othersBox = await others.boundingBox();
-    expect(othersBox?.y).toBeGreaterThan(planBox?.y ?? Number.POSITIVE_INFINITY);
-
-    // Folding the Linked folder hides everything in it; the Other Documents stay.
-    await root.getByTestId("folder-toggle").click();
-    await expect(documents).toHaveCount(1);
-    await expect(folders).toHaveCount(1);
+    await showSourceLocations(window);
+    const root = linkedFolderRow(window, "Library");
+    await expect(section.getByTestId("folder-item")).toHaveCount(1);
+    await expect(root.getByTestId("linked-folder-open")).not.toHaveAttribute("aria-expanded");
+    await expect(section.getByTestId("document-list-item")).toHaveCount(0);
+    // Its files, from its top and from its folders, sit in Not in a Folder beside the loose one.
+    await expect(notInAFolder.filter({ hasText: "Paper" })).toHaveAttribute("data-depth", "0");
+    await expect(notInAFolder.filter({ hasText: "Plan" })).toHaveAttribute("data-depth", "0");
     await expect(looseItem).toBeVisible();
+
+    // The row opens the Library, and stays as it was.
+    await root.getByTestId("linked-folder-open").click();
+    await expect(window.getByTestId("library")).toBeVisible();
+    await expect(section.getByTestId("folder-item")).toHaveCount(1);
+    await expect(section.getByTestId("document-list-item")).toHaveCount(0);
     await app.close();
   } finally {
     await removeDataFolder(sources);

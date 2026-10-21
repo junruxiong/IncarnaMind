@@ -5,6 +5,8 @@
  * styles or fonts) and pictures are data URIs; the page's policy refuses everything else.
  */
 
+import { cssString } from "../../shared/mindStyle";
+import { lineHeightCss } from "../../shared/paragraphFormat";
 import type { Language } from "../language";
 import type { Block } from "../mindText";
 import type { ExportLabels } from "./labels";
@@ -13,7 +15,7 @@ import { renderPrintHtml } from "./printHtml";
 const escapeText = (text: string) =>
   text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const STYLES = `
+export const HTML_STYLES = `
 :root{--ink:#17191c;--ink-answer:#3b4048;--ink-meta:#656b74;--rule:#e3e5e9;--rule-strong:#d5d8dd;--frame:#f4f5f7;--warning:#9a4a06;--serif:Charter,"Iowan Old Style","Source Serif 4","Songti SC","Noto Serif CJK SC","Source Han Serif SC",SimSun,ui-serif,Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;--mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
 body{margin:0;background:#fff;color:var(--ink);font-family:var(--serif);font-size:1.0625rem;line-height:1.6;overflow-wrap:break-word}
 main,.notes{max-width:42rem;margin:0 auto;padding:0 1.25rem}
@@ -27,7 +29,6 @@ p{margin:0 0 .9rem}
 .question-label{font-weight:600}
 sup.note-ref{margin-left:.05rem;font-family:var(--sans);font-size:.7em;line-height:0}
 sup.note-ref a{text-decoration:none;color:#2457a7}
-sup.note-ref + sup.note-ref::before{content:","}
 .unverified{color:var(--warning)}
 ins.change{text-decoration:underline;text-underline-offset:.15em}
 del.change{color:var(--ink-meta);text-decoration:line-through}
@@ -63,44 +64,81 @@ img{max-width:100%;height:auto}
 @media print{main{padding-top:0}sup.note-ref a,.backref{color:inherit}}
 `.replace(/\n/g, "");
 
-/** A Mind's HTML file: its text in `<main>`, its notes as a numbered list after it. */
-export function renderHtml(
-  title: string,
-  blocks: readonly Block[],
-  labels: ExportLabels,
-  { language, name }: { language: Language; name: string },
-): string {
-  const printed = renderPrintHtml(title, blocks, labels, { linkNotes: true });
-  const { notes } = printed;
-  // The print page lays tables out itself; a browser's tables, and the validator, want a body.
-  const body = printed.body
-    .replaceAll("<table>", "<table><tbody>")
-    .replaceAll("</table>", "</tbody></table>");
+/** The Mind's own font ahead of the export's, which the reader's computer falls back to. */
+export const bodyFamily = (family: string) => `${cssString(family)},var(--serif)`;
+
+export const bodyFontStyle = (family: string | null) =>
+  family === null ? "" : `body{font-family:${bodyFamily(family)}}`;
+
+/** The Mind's line spacing, a multiple of a single line, over the export's. */
+export const bodyLineStyle = (multiple: number | null) =>
+  multiple === null
+    ? ""
+    : `body{line-height:${lineHeightCss({ rule: "auto", value: multiple }, String)}}`;
+
+/** The print page lays tables out itself; a browser's tables, and the validator, want a body. */
+export const withTableBodies = (body: string) =>
+  body.replaceAll("<table>", "<table><tbody>").replaceAll("</table>", "</tbody></table>");
+
+export function notesSection(notes: readonly string[], labels: ExportLabels): string {
+  if (notes.length === 0) return "";
   const list = notes
     .map(
       (note, index) =>
         `<li id="note-${index + 1}">${note}<a class="backref" href="#ref-${index + 1}" aria-label="${escapeText(labels.backToText)}" title="${escapeText(labels.backToText)}">↩\ufe0e</a></li>`,
     )
     .join("");
-  const section =
-    notes.length > 0
-      ? `<section class="notes" aria-labelledby="notes-title"><h2 id="notes-title">${escapeText(labels.notes)}</h2><ol>${list}</ol></section>`
-      : "";
+  return `<section class="notes" aria-labelledby="notes-title"><h2 id="notes-title">${escapeText(labels.notes)}</h2><ol>${list}</ol></section>`;
+}
+
+export function htmlFile({
+  language,
+  name,
+  policy,
+  styles,
+  body,
+}: {
+  language: Language;
+  name: string;
+  policy: string;
+  styles: string;
+  body: string;
+}): string {
   return [
     "<!DOCTYPE html>",
     `<html lang="${language === "zh-CN" ? "zh-CN" : "en"}">`,
     "<head>",
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`,
+    `<meta http-equiv="Content-Security-Policy" content="${policy}">`,
     `<title>${escapeText(name)}</title>`,
-    `<style>${STYLES}</style>`,
+    `<style>${styles}</style>`,
     "</head>",
     "<body>",
-    `<main>${body}</main>`,
-    section,
+    body,
     "</body>",
     "</html>",
     "",
   ].join("\n");
+}
+
+/** A Mind's HTML file: its text in `<main>`, its notes as a numbered list after it. */
+export function renderHtml(
+  blocks: readonly Block[],
+  labels: ExportLabels,
+  {
+    language,
+    name,
+    font,
+    lineSpacing,
+  }: { language: Language; name: string; font: string | null; lineSpacing: number | null },
+): string {
+  const printed = renderPrintHtml(blocks, labels, { linkNotes: true });
+  return htmlFile({
+    language,
+    name,
+    policy: "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+    styles: HTML_STYLES + bodyFontStyle(font) + bodyLineStyle(lineSpacing),
+    body: `<main>${withTableBodies(printed.body)}</main>\n${notesSection(printed.notes, labels)}`,
+  });
 }

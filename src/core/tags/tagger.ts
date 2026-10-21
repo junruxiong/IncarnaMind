@@ -1,8 +1,11 @@
 /**
- * Automatic tagging (spec #20, "Tagging"): once a Document is ready (embedded,
- * so already searchable), its Tags are decided: by Jev when a Jev key is set
- * up on this device, otherwise by the default chat model. One Document at a
- * time, in the order they became ready.
+ * Automatic tagging (spec #20, "Tagging"), unless Organize tags and files new
+ * Documents by itself: once a Document is ready (embedded, so already
+ * searchable), its Tags are decided by the model the Tagging setting picks
+ * (Automatic, or one chosen by hand, see ../library/tagging), the one Organize
+ * uses once there are Folders. With Organize not moving new Documents by
+ * itself, this still tags them, and Organize only moves them when asked. One
+ * Document at a time, in the order they became ready.
  *
  * - Each Document takes one turn in the background model queue (see
  *   ../backgroundQueue), which other background model work shares and which
@@ -17,6 +20,13 @@
  *   picked up again whenever that may have changed.
  * - Only automatic links change: Tags the User added or removed on a
  *   Document stay as they are (see `TagsStore.applyAutomatic`).
+ * - Where the User stopped Tagging with AI, Documents are "stopped"
+ *   and nothing is sent, unless the User asks to re-tag one.
+ * - While Organize files new Documents by itself, the Documents it holds are
+ *   its own. One it doesn't hold, such as one this tagger had when Organize
+ *   began filing new Documents, is still tagged here.
+ * - With no Tags defined the model is skipped and a Document is "no-tags", not
+ *   "tagged", so it is checked once a Tag exists (see `tagsDefined`).
  */
 import type { DocumentKind, ProviderError } from "../api";
 import type { BackgroundCall, BackgroundJob, BackgroundQueue } from "../backgroundQueue";
@@ -25,10 +35,14 @@ import {
   ConsentDeclinedError,
   ConsentNeededError,
   InvalidInputError,
+  LocalModeError,
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
+import { isPlanLimit } from "../providers/chatgpt/errors";
 import { classifyProviderError } from "../providers/providerErrors";
+import { gateStop } from "../sendGate";
+import type { PaceTimers } from "../sources/pace";
 import type { Database } from "../storage";
 import {
   type DocumentExcerpt,
@@ -37,6 +51,8 @@ import {
   type TagDecision,
 } from "./classify";
 import type { TagsStore } from "./index";
+import { type RateLimitPause, rateLimitError } from "./rateLimit";
+import { isTransient, RETRY_WAIT_MS } from "./transient";
 
 /** What the "tagging" flow sends to the tagger's service: the chat model's or Jev's. */
 export const TAGGING_FLOW_SENDS = ["tags", "document-excerpts"] as const;
@@ -47,15 +63,19 @@ export type StoredTaggingState =
   | "waiting-for-provider"
   | "tagging"
   | "tagged"
-  | "failed";
+  | "no-tags"
+  | "failed"
+  | "stopped";
 
 /** How many Passages, from the start, are read to build an excerpt. */
 const EXCERPT_ROWS = 6;
 
 export interface TaggerOptions {
   db: Database;
-  /** The folder organizer owns tagging while it is configured. */
+  /** Organize tags new Documents itself while it files them by itself; those it has no hold of yet stay with this tagger. */
   enabled?(): boolean;
+  organizing?(id: string): boolean;
+  stopped(id: string): boolean;
   now: () => string;
   tags: TagsStore;
   /** Whether the tagger in use can take a request now. Asks the User nothing. */
@@ -77,6 +97,10 @@ export interface TaggerOptions {
   reportError(error: unknown): void;
   /** The background model queue, in which tagging each Document takes one turn. */
   background: BackgroundQueue;
+  /** The pause a rate limit puts on all Tagging (see ./rateLimit). */
+  rateLimit: Pick<RateLimitPause, "pausedUntil" | "pause" | "succeeded">;
+  /** Waits before the one retry after a passing error. */
+  timers: PaceTimers;
 }
 
 interface DocumentRow {
@@ -87,6 +111,7 @@ interface DocumentRow {
   tagging_status: string;
   tagging_error_kind: string | null;
   tagging_error_message: string | null;
+  tagging_error_resets_at: string | null;
 }
 
 export function createTagger(options: TaggerOptions) {
@@ -102,10 +127,13 @@ export function createTagger(options: TaggerOptions) {
    * latest request is dropped: the run that request queued decides.
    */
   const requests = new Map<string, number>();
+  const asked = new Set<string>();
+  const organized = (id: string) => options.organizing?.(id) === true;
 
   const rowOf = (id: string) =>
     db.get<DocumentRow>(
-      `SELECT name, kind, page_count, status, tagging_status, tagging_error_kind, tagging_error_message
+      `SELECT name, kind, page_count, status, tagging_status, tagging_error_kind, tagging_error_message,
+         tagging_error_resets_at
        FROM documents WHERE id = ? AND deleted_at IS NULL`,
       [id],
     );
@@ -121,15 +149,16 @@ export function createTagger(options: TaggerOptions) {
       !row ||
       (row.tagging_status === state &&
         row.tagging_error_kind === (error?.kind ?? null) &&
-        row.tagging_error_message === (error?.message ?? null))
+        row.tagging_error_message === (error?.message ?? null) &&
+        row.tagging_error_resets_at === (error?.resetsAt ?? null))
     ) {
       return false;
     }
     db.run(
       `UPDATE documents SET tagging_status = ?, tagging_error_kind = ?, tagging_error_message = ?,
-         updated_at = ?
+         tagging_error_resets_at = ?, updated_at = ?
        WHERE id = ?`,
-      [state, error?.kind ?? null, error?.message ?? null, now(), id],
+      [state, error?.kind ?? null, error?.message ?? null, error?.resetsAt ?? null, now(), id],
     );
     return true;
   };
@@ -139,9 +168,10 @@ export function createTagger(options: TaggerOptions) {
     if (changed.length > 0) announce(changed);
   };
 
-  /** No tagger can be used: every queued Document waits for one. */
-  function park(): void {
-    setStates(queue.splice(0), "waiting-for-provider");
+  /** No tagger can be used: every queued Document waits for one, with why when known. */
+  function park(error: ProviderError | null = null): void {
+    const changed = queue.splice(0).filter((id) => setState(id, "waiting-for-provider", error));
+    if (changed.length > 0) announce(changed);
   }
 
   function excerptOf(id: string, row: DocumentRow): DocumentExcerpt {
@@ -173,12 +203,13 @@ export function createTagger(options: TaggerOptions) {
      * meanwhile: the run that comes next decides instead.
      */
     const stale = () =>
-      options.enabled?.() === false ||
+      organized(id) ||
       lifetime.signal.aborted ||
       call.signal.aborted ||
       (requests.get(id) ?? 0) !== request;
     const row = rowOf(id);
-    if (row?.status !== "ready") return;
+    // Tagged meanwhile: Organize did it, in its own turn.
+    if (row?.status !== "ready" || row.tagging_status === "tagged") return;
     const definitions = tags.list();
     if (setState(id, "tagging")) announce([id]);
 
@@ -193,6 +224,7 @@ export function createTagger(options: TaggerOptions) {
           error instanceof ChatNotReadyError ||
           error instanceof ConsentDeclinedError ||
           error instanceof ConsentNeededError ||
+          error instanceof LocalModeError ||
           error instanceof TaggingNotReadyError
         ) {
           // Not allowed, or the tagger went away while this waited: this and the rest wait.
@@ -206,23 +238,50 @@ export function createTagger(options: TaggerOptions) {
       // A model on this computer serves one request at a time: an Answer goes first.
       if (tagger.local) call.runsLocally();
       if (stale()) return;
+      const signal = AbortSignal.any([lifetime.signal, call.signal]);
+      const decide = () =>
+        tagger.decide({ tags: definitions, excerpt: excerptOf(id, row), signal });
       try {
-        decisions = await tagger.decide({
-          tags: definitions,
-          excerpt: excerptOf(id, row),
-          signal: AbortSignal.any([lifetime.signal, call.signal]),
-        });
+        try {
+          decisions = await decide();
+        } catch (error) {
+          if (!isTransient(error)) throw error;
+          await options.timers.sleep(
+            RETRY_WAIT_MS.least + Math.random() * RETRY_WAIT_MS.jitter,
+            signal,
+          );
+          decisions = await decide();
+        }
       } catch (error) {
-        if (!stale()) fail(id, error);
+        if (stale()) return;
+        const stopped = gateStop(error);
+        const limitedUntil = stopped ? null : options.rateLimit.pause(error);
+        if (stopped instanceof ConsentNeededError || stopped instanceof LocalModeError) {
+          // Turned off, or Local mode on, as it was sent (../sendGate): this and the rest wait.
+          if (setState(id, "waiting-for-provider")) announce([id]);
+          park();
+        } else if (limitedUntil !== null) {
+          const why = rateLimitError(limitedUntil, error);
+          if (setState(id, "waiting-for-provider", why)) announce([id]);
+          park(why);
+        } else if (isPlanLimit(error)) {
+          // The ChatGPT plan's limit: this and the rest wait for it to reset (see ../library/planPace).
+          const why = classifyProviderError(error);
+          if (setState(id, "waiting-for-provider", why)) announce([id]);
+          park(why);
+        } else {
+          fail(id, error);
+        }
         return;
       }
+      options.rateLimit.succeeded();
     }
     if (stale()) return;
 
     const changed = db.transaction(() => {
       if (rowOf(id)?.status !== "ready") return false; // deleted, or processed again, meanwhile
       const tagsChanged = tags.applyAutomatic(id, decisions);
-      return setState(id, "tagged") || tagsChanged;
+      return setState(id, definitions.length === 0 ? "no-tags" : "tagged") || tagsChanged;
     });
     if (changed) announce([id]);
   }
@@ -231,8 +290,9 @@ export function createTagger(options: TaggerOptions) {
   async function tagNext(call: BackgroundCall): Promise<void> {
     try {
       if (queue.length === 0 || lifetime.signal.aborted) return;
-      if (options.enabled?.() === false) {
-        queue.length = 0;
+      const limitedUntil = options.rateLimit.pausedUntil();
+      if (limitedUntil !== null) {
+        park(rateLimitError(limitedUntil));
         return;
       }
       const ready = await options.canRun();
@@ -242,7 +302,11 @@ export function createTagger(options: TaggerOptions) {
         return;
       }
       const id = queue.shift();
-      if (id === undefined) return;
+      if (id === undefined || organized(id)) return;
+      if (options.stopped(id) && !asked.has(id)) {
+        if (setState(id, "stopped")) announce([id]);
+        return;
+      }
       current = id;
       try {
         await tagDocument(id, call);
@@ -253,6 +317,8 @@ export function createTagger(options: TaggerOptions) {
         // Interrupted by an Answer: it waits, first in line, until no Answer is being written.
         if (!queue.includes(id)) queue.unshift(id);
         if (setState(id, "pending")) announce([id]);
+      } else {
+        asked.delete(id);
       }
     } catch (error) {
       if (lifetime.signal.aborted) return;
@@ -296,22 +362,58 @@ export function createTagger(options: TaggerOptions) {
     schedule();
   }
 
-  /** Queues every ready Document that still needs tagging, or marks them waiting if no tagger can be used. */
-  function resume(): void {
-    if (lifetime.signal.aborted || options.enabled?.() === false) return;
-    const ids = db
-      .all<{ id: string }>(
-        `SELECT id FROM documents
+  /**
+   * Queues every ready Document that still needs tagging, or marks them
+   * waiting if no tagger can be used. Those where Tagging is stopped are
+   * "stopped", and those where it was turned back on are queued again.
+   */
+  function resume(only?: "no-tags"): void {
+    if (lifetime.signal.aborted) return;
+    const checkable = tags.list().length > 0;
+    if (only && !checkable) return;
+    const statuses = only
+      ? [only]
+      : ["pending", "waiting-for-provider", "failed", "stopped", ...(checkable ? ["no-tags"] : [])];
+    const rows = db
+      .all<{ id: string; tagging_status: string; tagging_error_kind: string | null }>(
+        `SELECT id, tagging_status, tagging_error_kind FROM documents
          WHERE deleted_at IS NULL AND status = 'ready'
-           AND tagging_status IN ('pending', 'waiting-for-provider', 'failed')
+           AND tagging_status IN (${statuses.map(() => "?").join(", ")})
          ORDER BY created_at, rowid`,
+        statuses,
       )
-      .map((row) => row.id);
+      .filter((row) => !organized(row.id));
+    const stopped = rows.filter((row) => options.stopped(row.id) && !asked.has(row.id));
+    setStates(
+      stopped.map((row) => row.id),
+      "stopped",
+    );
+    const rest = rows.filter((row) => !stopped.includes(row));
     if (!options.mightBeReady()) {
-      setStates(ids, "waiting-for-provider");
+      setStates(
+        rest.map((row) => row.id),
+        "waiting-for-provider",
+      );
       return;
     }
-    for (const id of ids) enqueue(id);
+    // Queued, they are about to be tagged, not waiting for a model; a plan's pause keeps saying
+    // why, and a rate limit's does until it ends.
+    const limited = options.rateLimit.pausedUntil() !== null;
+    setStates(
+      rest
+        .filter(
+          (row) =>
+            row.tagging_status === "stopped" ||
+            row.tagging_status === "no-tags" ||
+            (row.tagging_status === "waiting-for-provider" &&
+              (row.tagging_error_kind === null ||
+                (row.tagging_error_kind === "rate-limit" && !limited))),
+        )
+        .map((row) => row.id),
+      "pending",
+    );
+    // Fresh for "no-tags": the run that marked it may not have let go of it yet.
+    for (const row of rest) enqueue(row.id, row.tagging_status === "no-tags");
   }
 
   return {
@@ -330,10 +432,14 @@ export function createTagger(options: TaggerOptions) {
      * so that event already says whether it waits for a tagger.
      */
     documentReady(id: string): void {
-      if (options.enabled?.() === false) return;
+      if (options.enabled?.() === false || organized(id)) return;
       const row = rowOf(id);
       // Processed again (e.g. by a newer pipeline): the same file keeps its Tags.
       if (!row || row.tagging_status === "tagged") return;
+      if (options.stopped(id)) {
+        setState(id, "stopped");
+        return;
+      }
       if (!options.mightBeReady()) {
         setState(id, "waiting-for-provider");
         return;
@@ -342,8 +448,11 @@ export function createTagger(options: TaggerOptions) {
       enqueue(id);
     },
 
+    /** A Tag may exist now: the Documents checked while there were none are tagged. */
+    tagsDefined: () => resume("no-tags"),
+
     /** The tagger, or whether it can run, may have changed: Documents waiting, or failed, are tried again. */
-    resume,
+    resume: () => resume(),
 
     /**
      * Re-tags Documents (all of them without ids): their automatic Tags are
@@ -369,6 +478,7 @@ export function createTagger(options: TaggerOptions) {
         if (!row) throw new NotFoundError({ key: "error.document.notFound" });
         return { id, row };
       });
+      if (input !== undefined) for (const { id } of rows) asked.add(id);
       const changed: string[] = [];
       const ready = options.mightBeReady();
       for (const { id, row } of rows) {

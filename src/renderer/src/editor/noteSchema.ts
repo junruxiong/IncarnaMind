@@ -1,7 +1,7 @@
 import type { Extensions, NodeViewRenderer } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Highlight from "@tiptap/extension-highlight";
-import { TaskItem, TaskList } from "@tiptap/extension-list";
+import { TaskList } from "@tiptap/extension-list";
 import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import UniqueID from "@tiptap/extension-unique-id";
@@ -15,17 +15,35 @@ import {
   NOTE_BLOCK_TYPES,
   QUESTION_BLOCK,
 } from "../../../core/api";
+import { translate } from "../../../shared/i18n";
 import { Generated } from "./aiText";
 import { Chart } from "./chartSchema";
+import { checklistItem } from "./checklistItem";
 import { Citation } from "./citationSchema";
 import { ClaimCheck } from "./claimChecks";
 import { lowlight } from "./codeLanguages";
 import { ComparisonCell, ComparisonRow, ComparisonTable } from "./comparisonSchema";
 import { DocumentChip } from "./documentChipSchema";
 import { Footnote } from "./footnoteSchema";
+import {
+  ParagraphFormatAttribute,
+  Subscript,
+  Superscript,
+  TextColor,
+  TextFont,
+  TextSize,
+} from "./formatSchema";
 import { ProposalAttributes, ProposalDelete, ProposalInsert } from "./proposalSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
-import { InlineImage, WordAtom, WordBlock, WordLookAttribute, WordRun } from "./wordSchema";
+import {
+  InlineImage,
+  WordAtom,
+  WordBlock,
+  WordLookAttribute,
+  WordLookTableView,
+  WordRun,
+} from "./wordSchema";
+import { WordTab } from "./wordTabs";
 
 /** The attribute each Block keeps its UUID in. It is stored in the Mind's Yjs document. */
 export { BLOCK_ID_ATTRIBUTE };
@@ -49,6 +67,7 @@ const BLOCK_TYPES: readonly string[] = [
 export const MATH_TYPES: readonly string[] = ["blockMath", "inlineMath"];
 
 export interface NoteSchemaOptions {
+  checklistLabel?: (text: string) => string;
   /** Called with a formula's position when it is clicked, to edit it. */
   onEditMath?: (pos: number) => void;
   /** Draws code blocks, e.g. with a language picker. */
@@ -86,7 +105,8 @@ export interface NoteSchemaOptions {
  * text. Charts, drawn from a table or from cited figures, each value with its
  * Citation (#436). Comparison tables, top-level only (#98). What a Word
  * import kept as it is, and its inline pictures (#104), and the file's look
- * (see `wordSchema`).
+ * (see `wordSchema`). Paragraph formatting, and text colour, font, size and raise (see
+ * `formatSchema`).
  * Proposals the AI made, waiting for the User (see `proposalSchema`).
  * AI text, the words the AI wrote that the User hasn't made their own (see `aiText`).
  * The checks of the User's own sentences, on their text (see `claimChecks`).
@@ -95,6 +115,7 @@ export interface NoteSchemaOptions {
  * this alone.
  */
 export function noteExtensions({
+  checklistLabel = (text) => text.trim() || translate("en", "editor.checklist.empty"),
   onEditMath,
   codeBlockView,
   questionView,
@@ -138,8 +159,8 @@ export function noteExtensions({
     // Tab and Shift-Tab move between cells; Tab in the last cell adds a row.
     // A checklist: its items hold a box and Blocks, as list items do.
     TaskList,
-    TaskItem.configure({ nested: true }),
-    Table.configure({ resizable: false }),
+    checklistItem(checklistLabel),
+    Table.configure({ resizable: false, View: WordLookTableView }),
     TableRow,
     TableHeader,
     TableCell,
@@ -157,6 +178,13 @@ export function noteExtensions({
     InlineImage,
     WordLookAttribute,
     WordRun,
+    WordTab,
+    ParagraphFormatAttribute,
+    TextColor,
+    TextFont,
+    TextSize,
+    Superscript,
+    Subscript,
     QuestionContextFlag,
     // Proposals waiting for the User: words struck and added, and whole Blocks (#93).
     ProposalInsert,

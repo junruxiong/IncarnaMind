@@ -14,18 +14,24 @@ import {
   DEFAULT_FOLDER_ZH,
   dismissChatSetup,
   editFolderInLibrary,
+  exportFromMenu,
+  frontMindName,
   interceptOpenDialog,
   interceptOpenPath,
   interceptShowItemInFolder,
   launchApp,
+  motionSettled,
+  nameMind,
   newMind,
   openDocumentMenu,
   openSettings,
   pathsOpened,
   pathsShown,
+  pointAndClick,
+  pointAt,
   removeDataFolder,
+  savedLine,
   setWindowSize,
-  showFolders,
   showSourceLocations,
   useLocalChatModel,
   useOutputLocation,
@@ -73,7 +79,116 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-test("Export saves a .docx in one click: the first goes to Documents › IncarnaMind without asking and says so, with Open and Change folder…; the Mind says a quote wasn't found, and the next goes there under a free name", async () => {
+test("Export opens a short menu: Word and PDF, the last one used first with ⇧⌘E, the rest under More formats, which moving to another item closes, by mouse and keyboard, in Chinese too", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
+  await newMind(window);
+  await nameMind(window, "Tides");
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.type("Spring tides come twice a month.");
+  await useOutputLocation(window, sources);
+  const done = window.getByTestId("export-result").getByTestId("export-done");
+  const menu = window.getByTestId("export-menu");
+  const items = menu.getByRole("menuitem");
+  const shortcut = /(⇧⌘E|Ctrl\+Shift\+E)$/;
+
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await expect(items).toHaveText([
+    /^Word \(\.docx\)/,
+    "PDF",
+    "More formats",
+    "Citation styleNumbered (Document and Location)",
+    "Export options…",
+  ]);
+  await expect(items.first()).toHaveText(shortcut);
+  await motionSettled(window);
+  // Under the button, its right edge by the button's, so it stays over the Mind.
+  const button = await window.getByTestId("export-mind").boundingBox();
+  const opened = await menu.boundingBox();
+  expect(
+    Math.abs((opened?.x ?? 0) + (opened?.width ?? 0) - (button?.x ?? 0) - (button?.width ?? 0)),
+  ).toBeLessThan(2);
+  expect(opened?.y ?? 0).toBeGreaterThan(button?.y ?? 0);
+  await screenshot(window, "export-menu-en");
+  await pointAndClick(window, menu.getByTestId("export-as-docx"));
+  await expect(done).toHaveText(savedLine("Tides.docx", sources));
+
+  await exportFromMenu(window, "pdf");
+  await expect(done).toHaveText(savedLine("Tides.pdf", sources));
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await expect(items).toHaveText([
+    new RegExp(`^PDF${shortcut.source}`),
+    "Word (.docx)",
+    "More formats",
+    /^Citation style/,
+    "Export options…",
+  ]);
+
+  const moreItem = menu.getByTestId("export-more");
+  await window.keyboard.press("ArrowDown");
+  await window.keyboard.press("ArrowDown");
+  await expect(moreItem).toBeFocused();
+  await window.keyboard.press("ArrowRight");
+  const more = window.getByTestId("export-more-menu");
+  await expect(more.getByRole("menuitem")).toHaveText([
+    "Source pack (PDF)",
+    "HTML",
+    "Web page to share (.html)",
+    "Markdown (.md)",
+  ]);
+  await expect(more.getByTestId("export-as-source-pack")).toBeFocused();
+  await motionSettled(window);
+  await screenshot(window, "export-more-en");
+  await window.keyboard.press("End");
+  await expect(more.getByTestId("export-as-markdown")).toBeFocused();
+  await window.keyboard.press("Home");
+  await expect(more.getByTestId("export-as-source-pack")).toBeFocused();
+  await window.keyboard.press("ArrowLeft");
+  await expect(more).toBeHidden();
+  await expect(moreItem).toBeFocused();
+
+  await pointAt(window, moreItem);
+  await expect(more).toBeVisible();
+  await pointAt(window, menu.getByTestId("export-as-pdf"));
+  await expect(more).toBeHidden();
+  await pointAt(window, moreItem);
+  await expect(more).toBeVisible();
+  await window.keyboard.press("ArrowUp");
+  await expect(more).toBeHidden();
+  await expect(menu.getByTestId("export-as-docx")).toBeFocused();
+  await expect(menu).toBeVisible();
+
+  await window.keyboard.press("ArrowDown");
+  await window.keyboard.press("ArrowRight");
+  await window.keyboard.press("End");
+  await window.keyboard.press("Enter");
+  await expect(done).toHaveText(savedLine("Tides.md", sources));
+
+  await bridge(window).language("zh-CN");
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await expect(items).toHaveText([
+    /^Markdown（\.md）/,
+    "Word（.docx）",
+    "PDF",
+    "更多格式",
+    /^引用格式/,
+    "导出选项…",
+  ]);
+  await motionSettled(window);
+  await screenshot(window, "export-menu-zh");
+  // The pointer opens More formats as it comes onto it; the click that follows keeps it open.
+  await pointAndClick(window, menu.getByTestId("export-more"));
+  await motionSettled(window);
+  await expect(more).toBeVisible();
+  await expect(menu.getByTestId("export-more")).toHaveAttribute("aria-expanded", "true");
+  await window.keyboard.press("Escape");
+  await expect(more).toBeHidden();
+  await window.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+});
+
+test("Export saves a .docx from its menu: the first goes to Documents › IncarnaMind without asking and says so, with Open and Change folder…; the Mind says a quote wasn't found, and the next goes there under a free name", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
@@ -82,7 +197,7 @@ test("Export saves a .docx in one click: the first goes to Documents › Incarna
 
   // A Note, then an Answer that misquotes its Document, added from the assistant.
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Notes on tides.");
@@ -92,13 +207,13 @@ test("Export saves a .docx in one click: the first goes to Documents › Incarna
   await addToNote(window, answer);
   await expect(editor.getByTestId("citation")).toHaveAttribute("data-check", "not-found");
 
-  // One click exports in the last format, Word to begin with. The first save goes to IncarnaMind
+  // Export's first item is the last format, Word to begin with. The first save goes to IncarnaMind
   // in Documents (the test build's own Documents folder) without asking, and the line says so.
   await interceptShowItemInFolder(app);
   await interceptOpenPath(app);
   const exportButton = window.getByTestId("export-mind");
   await expect(exportButton).toHaveAttribute("data-format", "docx");
-  await exportButton.click();
+  await exportFromMenu(window);
   const result = window.getByTestId("export-result");
   const ask = window.getByTestId("file-write-dialog");
   const done = result.getByTestId("export-done");
@@ -108,7 +223,7 @@ test("Export saves a .docx in one click: the first goes to Documents › Incarna
   await expect(result.getByTestId("export-unverified")).toHaveText(
     "1 quote not found, marked unverified · Show",
   );
-  await expect(result.getByTestId("export-show")).toHaveCount(0);
+  await expect(result.getByTestId("export-show")).toHaveText(/^Show in (Finder|folder)$/);
   await screenshot(result, "export-first-save-en");
   await screenshot(window, "export-first-save-window-en");
   const target = join(await realpath(join(dataDir, "Documents", "IncarnaMind")), "Tides.docx");
@@ -136,10 +251,10 @@ test("Export saves a .docx in one click: the first goes to Documents › Incarna
   await screenshot(window, "settings-output-location-from-export-en");
   await closeSettings(window);
 
-  // The next export doesn't ask either, says only its name, and leaves the first file as it was.
+  // The next export doesn't ask either, names the same folder, and leaves the first file as it was.
   const first = await readFile(target);
-  await exportButton.click();
-  await expect(done).toHaveText("Saved Tides 2.docx");
+  await exportFromMenu(window);
+  await expect(done).toHaveText("Saved “Tides 2.docx” in Documents › IncarnaMind");
   await expect(ask).toBeHidden();
   await expect(result.getByTestId("export-change-folder")).toHaveCount(0);
   await result.getByTestId("export-show").click();
@@ -148,7 +263,46 @@ test("Export saves a .docx in one click: the first goes to Documents › Incarna
   await app.close();
 });
 
-test("in Chinese, at the narrowest window, the first export says it went to 文稿 (文档 off macOS) › IncarnaMind, its long name wrapped whole; if that folder can't be made, the save asks where instead, in plain words, and Esc saves nothing", async () => {
+test("the Saved line names the folder, goes by itself after ten seconds unless the pointer is on it, and doesn't come back when the Mind is opened again", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1100, 760);
+  await newMind(window);
+  await nameMind(window, "Tides");
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.type("Spring tides come twice a month.");
+  await useOutputLocation(window, sources);
+  await window.clock.install();
+  const result = window.getByTestId("export-result");
+  const done = result.getByTestId("export-done");
+
+  await exportFromMenu(window);
+  await expect(done).toHaveText(savedLine("Tides.docx", sources));
+  await expect(result.getByTestId("export-open")).toBeVisible();
+  await expect(result.getByTestId("export-show")).toBeVisible();
+
+  // The pointer on the line keeps it; ten seconds after it leaves, the line goes.
+  await pointAt(window, result);
+  await window.clock.fastForward("00:30");
+  await expect(result).toBeVisible();
+  await window.mouse.move(2, 2);
+  await window.clock.fastForward("00:09");
+  await expect(result).toBeVisible();
+  await window.clock.fastForward("00:02");
+  await expect(result).toHaveCount(0);
+
+  // Another export, then another Mind for a minute: the line is not there when this one is opened again.
+  await exportFromMenu(window);
+  await expect(done).toHaveText(savedLine("Tides 2.docx", sources));
+  await newMind(window);
+  await window.clock.fastForward("01:00");
+  await window.getByRole("tab", { name: "Tides" }).click();
+  await expect(frontMindName(window)).toHaveText("Tides");
+  await expect(result).toHaveCount(0);
+  await app.close();
+});
+
+test("in Chinese, at the narrowest window, the first export says it went to 文稿 (文档 off macOS) › IncarnaMind, its long name cut in the middle; if that folder can't be made, the save asks where instead, in plain words, and Esc saves nothing", async () => {
   // A file where the folder would be made.
   await mkdir(join(dataDir, "Documents"), { recursive: true });
   const blocked = join(dataDir, "Documents", "IncarnaMind");
@@ -158,18 +312,17 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
   await newMind(window);
   const title =
     "Contract review notes for the fourth-quarter credit committee 信贷委员会合同审阅笔记";
-  await window.getByTestId("mind-title").fill(title);
+  await nameMind(window, title);
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
 
-  const exportButton = window.getByTestId("export-mind");
   const result = window.getByTestId("export-result");
   const ask = window.getByTestId("file-write-dialog");
-  await exportButton.click();
+  await exportFromMenu(window);
   await expect(ask).toHaveAttribute("data-kind", "output-location");
   await expect(ask.getByRole("heading")).toHaveText("Where should new files go?");
   await expect(ask.getByTestId("file-write-unusable")).toHaveText(
-    `Couldn't save “${title}.docx” in Documents › IncarnaMind: IncarnaMind couldn't make that folder.`,
+    `Couldn’t save “${title}.docx” in Documents › IncarnaMind: IncarnaMind couldn’t make that folder.`,
   );
   await expect(ask.getByRole("button")).toHaveText(["Cancel", "Choose another folder…"]);
   await screenshot(ask, "file-write-output-location-en");
@@ -179,7 +332,7 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
 
   await bridge(window).language("zh-CN");
   await setWindowSize(app, window, 900, WINDOW_SIZE.height);
-  await exportButton.click();
+  await exportFromMenu(window);
   await expect(ask.getByRole("heading")).toHaveText("新文件保存到哪里？");
   await expect(ask.getByTestId("file-write-unusable")).toHaveText(
     `无法把“${title}.docx”保存到“${DEFAULT_FOLDER_ZH}”：IncarnaMind 无法创建这个文件夹。`,
@@ -189,12 +342,13 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
   await expect(ask).toBeHidden();
   await expect(result).toHaveCount(0);
 
-  // With the file out of the way, the save goes there and says so, the whole name wrapped
-  // inside the line rather than cut short.
+  // With the file out of the way, the save goes there and says so, the name cut in the middle
+  // to fit the line, and whole in the line's accessible name.
   await rm(blocked);
-  await exportButton.click();
+  await exportFromMenu(window);
   const done = result.getByTestId("export-done");
-  await expect(done).toHaveText(`已保存“${title}.docx”到“${DEFAULT_FOLDER_ZH}”`);
+  await expect(done).toHaveText(/^已保存“Contract review[^…]*…[^…]*笔记\.docx”到“/);
+  await expect(done).toHaveAccessibleName(`已保存“${title}.docx”到“${DEFAULT_FOLDER_ZH}”`);
   await expect(result.getByTestId("export-open")).toHaveText("打开");
   await expect(result.getByTestId("export-change-folder")).toHaveText("更改文件夹…");
   await expect(ask).toBeHidden();
@@ -204,7 +358,6 @@ test("in Chinese, at the narrowest window, the first export says it went to 文�
     window.evaluate(() => globalThis.innerWidth),
   ]);
   if (!line || !saved) throw new Error("The line isn't laid out.");
-  expect(saved.height).toBeGreaterThan(30);
   expect(saved.x + saved.width).toBeLessThanOrEqual(line.x + line.width);
   expect(line.x + line.width).toBeLessThanOrEqual(windowWidth);
   expect(await done.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -219,7 +372,7 @@ test("maths exports to .docx as Word equations, which a Word viewer shows as equ
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Gravity");
+  await nameMind(window, "Gravity");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
@@ -244,8 +397,8 @@ test("maths exports to .docx as Word equations, which a Word viewer shows as equ
 
   const target = join(sources, "Gravity.docx");
   await useOutputLocation(window, sources);
-  await window.getByTestId("export-mind").click();
-  await expect(window.getByTestId("export-done")).toHaveText("Saved Gravity.docx");
+  await exportFromMenu(window);
+  await expect(window.getByTestId("export-done")).toHaveText(savedLine("Gravity.docx", sources));
 
   // Word equations, not "$…$" text: one on its own line, one in the sentence.
   const document = part(unzip(await readFile(target)), "word/document.xml");
@@ -283,7 +436,7 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
   await dismissChatSetup(window);
   await bridge(window).link(papers);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
 
@@ -295,7 +448,7 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
     join(dataDir, "Documents", "IncarnaMind"),
   );
   await expect(output.getByTestId("output-location-default")).toHaveText(
-    "The default: new files go here until you choose another folder.",
+    "Default: new files go here.",
   );
   await interceptOpenDialog(app, join(papers, "Exports"));
   await output.getByTestId("output-location-change").click();
@@ -309,15 +462,19 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
   // The first save there asks about the Linked folder; the next doesn't.
   const result = window.getByTestId("export-result");
   const ask = window.getByTestId("file-write-dialog");
-  const exportOnce = () => window.getByTestId("export-mind").click();
+  const exportOnce = () => exportFromMenu(window);
   await exportOnce();
   await expect(ask).toHaveAttribute("data-kind", "linked-folder");
   await expect(ask.getByRole("heading")).toHaveText("Add files to “Papers”?");
   await screenshot(ask, "file-write-linked-folder-en");
   await ask.getByTestId("file-write-allow").click();
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Tides.docx");
+  await expect(result.getByTestId("export-done")).toHaveText(
+    savedLine("Tides.docx", join(papers, "Exports")),
+  );
   await exportOnce();
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Tides 2.docx");
+  await expect(result.getByTestId("export-done")).toHaveText(
+    savedLine("Tides 2.docx", join(papers, "Exports")),
+  );
   await expect(ask).toBeHidden();
 
   // Settings shows the answer, and turns it off.
@@ -335,12 +492,14 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
   await exportOnce();
   const problem = result.getByTestId("export-problem");
   await expect(problem).toHaveText(
-    "Couldn't save: you haven't allowed new files in “Papers”, a Linked folder · Allow",
+    "Couldn’t save: you haven’t allowed new files in “Papers”, a Linked folder · Allow",
   );
   await expect(ask).toBeHidden();
   await screenshot(result, "export-not-allowed-en");
   await problem.getByTestId("export-allow").click();
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Tides 3.docx");
+  await expect(result.getByTestId("export-done")).toHaveText(
+    savedLine("Tides 3.docx", join(papers, "Exports")),
+  );
   expect((await readFile(join(papers, "Lease.txt"))).equals(original)).toBe(true);
 
   // In Chinese, for another Linked folder: asked, and Don't allow is said where it happened.
@@ -375,15 +534,15 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   );
   await useOutputLocation(window, papers);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
-  await window.getByTestId("export-mind").click();
-  await expect(window.getByTestId("export-done")).toHaveText("Saved Tides.docx");
+  await exportFromMenu(window);
+  await expect(window.getByTestId("export-done")).toHaveText(savedLine("Tides.docx", papers));
 
-  // The Linked folder picks the export up, beside the User's own file.
+  // The Linked folder picks the export up, beside the User's own file, both in Not in a Folder.
   await showSourceLocations(window);
-  const items = window.getByTestId("document-list-item");
+  const items = window.getByTestId("not-in-a-folder").getByTestId("document-list-item");
   const exported = items.filter({ hasText: "Tides" });
   const moon = items.filter({ hasText: "Moon" });
   await expect(exported).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
@@ -398,7 +557,7 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await exported.getByTestId("open-document").click();
   await expect(viewer.getByTestId("viewer-title")).toHaveText("Tides");
   await expect(line).toHaveText(
-    "IncarnaMind wrote this file, so checks don't count it as evidence · Count it",
+    "IncarnaMind wrote this file, so checks don’t count it as evidence · Count it",
   );
   await screenshot(viewer, "own-file-viewer-en");
 
@@ -418,7 +577,7 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await countItem.click();
   await expect(line).toHaveCount(0);
   await openDocumentMenu(exported);
-  await expect(leaveOutItem).toHaveText("Don't count as evidence");
+  await expect(leaveOutItem).toHaveText("Don’t count as evidence");
   await leaveOutItem.click();
   await expect(line).toBeVisible();
   await expect(undo.getByTestId("undo-message")).toHaveText("“Tides” no longer counts as evidence");
@@ -458,13 +617,12 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await (await coreOf(window)).evaluate((core) =>
     core.createLibraryGroup({ name: "Reports", description: "" }),
   );
-  await showFolders(window);
   await editFolderInLibrary(window, "Reports");
   const library = window.getByTestId("library");
   const counts = library.getByTestId("folder-counts-own-files");
   await expect(counts).toBeChecked();
   await expect(counts).toBeDisabled();
-  await expect(library).toContainText("Counted in every folder");
+  await expect(library).toContainText("Counted in every Folder");
 
   // On again: a new folder leaves them out unless it says otherwise; in Chinese too.
   await window.evaluate(() =>
@@ -493,3 +651,112 @@ test("Settings opens the data folder in the file manager", async () => {
   expect(await realpath(opened ?? "")).toBe(await realpath(dataDir));
   await app.close();
 });
+
+const NEWCOMER = {
+  en: {
+    first: "Write a short summary of this agreement.",
+    second: "Make the summary longer.",
+  },
+  "zh-CN": {
+    first: "为这份协议写一份简短摘要。",
+    second: "把摘要写长一点。",
+  },
+} as const;
+
+for (const language of ["en", "zh-CN"] as const) {
+  const words = NEWCOMER[language];
+
+  test(`a Mind the User never named is named by its first line, not by the last instruction, and Export saves it so (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await bridge(window).language(language);
+    await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
+    await useOutputLocation(window, sources);
+    await newMind(window);
+
+    await askInAssistant(window, words.first);
+    await expect(window.getByTestId("mind-editor").locator("h2")).toHaveText("Summary");
+    await expect(frontMindName(window)).toHaveText("Summary");
+
+    const second = await askInAssistant(window, words.second);
+    await expect(second.getByTestId("mind-changes-title")).toContainText("“Summary”");
+    await expect(frontMindName(window)).toHaveText("Summary");
+    await screenshot(window, `mind-named-by-first-line-${language}`);
+
+    await exportFromMenu(window);
+    await expect(window.getByTestId("export-result").getByTestId("export-done")).toContainText(
+      savedLine("Summary.docx", sources, language),
+    );
+    await app.close();
+  });
+
+  test(`a Mind the User renamed keeps its name through both requests and Export (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await bridge(window).language(language);
+    await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
+    await useOutputLocation(window, sources);
+    await newMind(window);
+    await nameMind(window, "Agreement notes");
+
+    await askInAssistant(window, words.first);
+    const second = await askInAssistant(window, words.second);
+    await expect(second.getByTestId("mind-changes-title")).toContainText("“Agreement notes”");
+    await expect(frontMindName(window)).toHaveText("Agreement notes");
+
+    await exportFromMenu(window);
+    await expect(window.getByTestId("export-result").getByTestId("export-done")).toContainText(
+      savedLine("Agreement notes.docx", sources, language),
+    );
+    await app.close();
+  });
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  const instruction =
+    language === "en" ? "Summarise this agreement for me." : "为这份协议写一份摘要。";
+
+  test(`a new Mind made from an Answer is named by its first line, not by the conversation's name from the first instruction; a name the User gave the conversation is kept (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await bridge(window).language(language);
+    await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
+    const core = await coreOf(window);
+    const minds = () => core.evaluate((each) => each.listMinds());
+
+    const answer = await askInAssistant(window, instruction);
+    const addToNew = async () => {
+      await pointAt(window, answer.getByTestId("assistant-answer-text"));
+      await pointAndClick(window, answer.getByTestId("answer-add-to"));
+      await pointAndClick(
+        window,
+        window.getByTestId("add-to-picker").getByTestId("add-to-option").last(),
+      );
+    };
+
+    await addToNew();
+    await expect.poll(async () => (await minds()).length).toBe(1);
+    const [first] = await minds();
+    expect(first?.title).toBe("");
+    expect(first?.autoTitle).toMatch(/^This is a scripted Answer to/);
+    const preview = await core.evaluate(
+      (each, mindId) => each.previewMindExport(mindId, { format: "docx" }),
+      first?.id ?? "",
+    );
+    expect(preview.fileName).toMatch(/^This is a scripted Answer to/);
+    expect(preview.fileName).not.toMatch(/^Summarise this agreement|^为这份协议/);
+
+    const conversationId = (await core.evaluate((each) => each.listConversations()))[0]?.id ?? "";
+    await core.evaluate(
+      (each, id) => each.renameConversation(id, "Agreement review"),
+      conversationId,
+    );
+    await addToNew();
+    await expect.poll(async () => (await minds()).length).toBe(2);
+    expect((await minds()).map((each) => each.title)).toContain("Agreement review");
+    await app.close();
+  });
+}

@@ -7,6 +7,7 @@
 import {
   type CalculatedFigure,
   type CheckedVersion,
+  type Citation,
   type CitationAttributes,
   type ClaimCalculation,
   type ClaimCheckAction,
@@ -17,8 +18,12 @@ import {
   claimCheckActions,
   type EvidenceExclusion,
   type LeftOutDocument,
+  type UnsupportedReason,
 } from "../core/api";
 import { comparableSentence } from "./sentences";
+
+/** The most sentences with Citations one write of the assistant's has checked as it lands (#1111): past it, a long draft would wait minutes and cost dozens of requests. */
+export const SENTENCES_CHECKED_AT_MOST = 12;
 
 const STATES: readonly ClaimCheckAttributes["state"][] = [
   "checking",
@@ -38,9 +43,12 @@ const FAILURES: readonly ClaimCheckFailure[] = [
   "plan-limit",
   "failed",
   "stopped",
+  "too-many",
+  "consent-revoked",
+  "local-mode",
 ];
 
-const EXCLUSIONS: readonly EvidenceExclusion[] = ["own-file", "checked-document"];
+const EXCLUSIONS: readonly EvidenceExclusion[] = ["own-file", "own-workings", "checked-document"];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -83,6 +91,15 @@ function calculationOf(value: unknown): ClaimCalculation | null {
   };
 }
 
+function unsupportedOf(value: unknown): UnsupportedReason | null {
+  if (!isRecord(value)) return null;
+  return {
+    reason: text(value.reason),
+    covered: text(value.covered),
+    uncovered: text(value.uncovered),
+  };
+}
+
 function scopeOf(value: unknown): ClaimCheckScope {
   if (!isRecord(value)) return { folderId: null, widened: false };
   return { folderId: text(value.folderId), widened: value.widened === true };
@@ -103,30 +120,38 @@ export function readClaimCheck(value: unknown): ClaimCheckAttributes | null {
     state,
     reason: FAILURES.find((each) => each === value.reason) ?? null,
     detail: text(value.detail),
+    providerId: text(value.providerId),
+    modelId: text(value.modelId),
     text: text(value.text) ?? "",
     evidence: isRecord(value.evidence) ? (value.evidence as unknown as CitationAttributes) : null,
     says: text(value.says),
+    unsupported: unsupportedOf(value.unsupported),
     calculation: calculationOf(value.calculation),
+    citedCaseUnchecked: value.citedCaseUnchecked === true,
+    citedCaseFound: value.citedCaseFound === true,
     scope: scopeOf(value.scope),
     versions: versionsOf(value.versions),
     excluded: excludedOf(value.excluded),
     checkedAt: text(value.checkedAt) ?? "",
+    ...(value.kept === true && { kept: true }),
   };
 }
 
 /**
  * Why a check no longer holds: its sentence was edited (an accepted change
  * or a restored Checkpoint edits it too), a Document it read has a new
- * version or was deleted, or the Mind moved to another Folder.
+ * version, one its result rests on was deleted, or the Mind moved to another
+ * Folder.
  */
 export type RecheckReason = "edited" | "new-version" | "document-removed" | "scope";
 
-/** A check as it shows now. */
+/** A check as it shows now; "kept": the User keeps the sentence as their own view, and it shows nothing. */
 export type ClaimCheckShown =
   | { state: "checking" }
   | { state: ClaimVerdict }
   | { state: "not-checked"; reason: ClaimCheckFailure }
-  | { state: "needs-recheck"; why: RecheckReason };
+  | { state: "needs-recheck"; why: RecheckReason }
+  | { state: "kept" };
 
 /** What a check is compared with. */
 export interface ClaimCheckNow {
@@ -138,17 +163,33 @@ export interface ClaimCheckNow {
   folderId: string | null;
 }
 
+/** What a check's result rests on: its evidence, and the quotes a worked-out figure read its numbers from. */
+export function restsOn(check: ClaimCheckAttributes): (CitationAttributes | Citation)[] {
+  const inputs = check.calculation?.figure.inputs ?? [];
+  return [
+    check.evidence,
+    ...inputs.flatMap((input) => [input.citation, input.unitStatement?.citation ?? null]),
+  ].filter((each): each is CitationAttributes | Citation => each !== null);
+}
+
 /** How a check shows, given the sentence, the Documents and the Mind's Folder as they are now. */
 export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow): ClaimCheckShown {
   if (check.state === "checking") return { state: "checking" };
   if (comparableSentence(now.text) !== comparableSentence(check.text)) {
     return { state: "needs-recheck", why: "edited" };
   }
+  if (check.kept) return { state: "kept" };
   if (now.versions) {
+    const relied = new Set(restsOn(check).map((each) => each.documentId));
     for (const version of check.versions) {
       const current = now.versions.get(version.documentId);
-      if (current === undefined) return { state: "needs-recheck", why: "document-removed" };
-      if (current !== version.contentHash) return { state: "needs-recheck", why: "new-version" };
+      // A Document only read, gone, takes nothing from the result: an example's, swapped for the interface language, among them (#962).
+      if (current === undefined && relied.has(version.documentId)) {
+        return { state: "needs-recheck", why: "document-removed" };
+      }
+      if (current !== undefined && current !== version.contentHash) {
+        return { state: "needs-recheck", why: "new-version" };
+      }
     }
   }
   if (!check.scope.widened && check.scope.folderId !== now.folderId) {
@@ -157,4 +198,41 @@ export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow)
   if (check.state === "not-checked")
     return { state: "not-checked", reason: check.reason ?? "failed" };
   return { state: check.state };
+}
+
+/**
+ * Whether Documents added to its scope since could change a check (#993): one
+ * found unsupported or not checked. A supported or contradicted one already
+ * has its evidence, and contradiction watch makes its own checks again.
+ */
+export const addedCouldChange = (check: ClaimCheckAttributes, shown: ClaimCheckShown): boolean =>
+  check.action !== "contradiction-watch" &&
+  check.checkedAt !== "" &&
+  (shown.state === "unsupported" || shown.state === "not-checked");
+
+/**
+ * A sentence's check as a record lists it: the counts' keys (`needsRecheck` is a Document or the
+ * scope that changed), and "changed" once its words were edited. Null while it is still checking,
+ * and for a sentence the User keeps as their own view.
+ */
+export type SentenceResult =
+  | "supported"
+  | "unsupported"
+  | "contradicted"
+  | "needsRecheck"
+  | "notChecked"
+  | "changed";
+
+export function sentenceResultOf(shown: ClaimCheckShown): SentenceResult | null {
+  switch (shown.state) {
+    case "checking":
+    case "kept":
+      return null;
+    case "needs-recheck":
+      return shown.why === "edited" ? "changed" : "needsRecheck";
+    case "not-checked":
+      return "notChecked";
+    default:
+      return shown.state;
+  }
 }

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import * as Y from "yjs";
+import type * as Y from "yjs";
 import {
   CHART_NODE,
   type CitationAttributes,
@@ -13,22 +13,28 @@ import {
 import type { ChartAttributes, ChartValue } from "../src/shared/charts";
 import {
   addDocuments,
+  blocksUpdate,
   createDataFolder,
   dismissChatSetup,
+  exportFromMenu,
   interceptOpenDialog,
   interceptOpenPath,
   interceptShowItemInFolder,
   launchApp,
+  type MindChild,
+  mindNode,
   motionSettled,
+  nameMind,
   newMind,
   openOptions,
+  openSavedPage,
   pathsOpened,
   pathsShown,
   pointAndClick,
   removeDataFolder,
+  savedLine,
   savedPath,
   setWindowSize,
-  tabMenu,
   useOutputLocation,
   WINDOW_SIZE,
 } from "./app";
@@ -74,22 +80,8 @@ const bridge = (window: Page) => ({
     ),
 });
 
-type Child = Y.XmlElement | string;
-
-/** A node as the editor stores it in the Mind's Yjs document; strings are its text. */
-function node(name: string, attributes: Record<string, unknown>, children: Child[] = []) {
-  const element = new Y.XmlElement(name);
-  for (const [key, value] of Object.entries(attributes)) {
-    element.setAttribute(key, value as string);
-  }
-  element.insert(
-    0,
-    children.map((child) => (typeof child === "string" ? new Y.XmlText(child) : child)),
-  );
-  return element;
-}
-
-const paragraph = (...children: Child[]) => node("paragraph", { id: randomUUID() }, children);
+const paragraph = (...children: MindChild[]) =>
+  mindNode("paragraph", { id: randomUUID() }, children);
 
 type Cited = Pick<Document, "id" | "name" | "contentHash">;
 
@@ -114,17 +106,10 @@ function citationAttributes(
 }
 
 const citation = (...given: Parameters<typeof citationAttributes>) =>
-  node("citation", { ...citationAttributes(...given) });
+  mindNode("citation", { ...citationAttributes(...given) });
 
-const cell = (kind: "tableHeader" | "tableCell", ...children: Child[]) =>
-  node(kind, { colspan: 1, rowspan: 1 }, [paragraph(...children)]);
-
-/** The Blocks as one Yjs update, to apply to a Mind. */
-function updateOf(blocks: Y.XmlElement[]): Uint8Array {
-  const doc = new Y.Doc();
-  doc.getXmlFragment("blocks").insert(0, blocks);
-  return Y.encodeStateAsUpdate(doc);
-}
+const cell = (kind: "tableHeader" | "tableCell", ...children: MindChild[]) =>
+  mindNode(kind, { colspan: 1, rowspan: 1 }, [paragraph(...children)]);
 
 const ARTICLE = readFile(join(__dirname, "../tests/fixtures/web/article.html"), "utf8");
 const ADDRESS = "https://reader.example/tea";
@@ -135,7 +120,7 @@ const unspaced = (text: string) => text.replace(/\s+/g, "");
 /** Opens a new Mind titled `title`, and adds the two Documents it cites. Returns its id. */
 async function setUpMind(window: Page, folder: string, title: string) {
   await newMind(window);
-  await window.getByTestId("mind-title").fill(title);
+  await nameMind(window, title);
   const mindId = await window.getByTestId("mind-pane").getAttribute("data-mind-id");
   if (!mindId) throw new Error("No Mind is open.");
   await writeFile(join(folder, "Tides.txt"), "Spring tides happen at new moon.");
@@ -150,9 +135,9 @@ async function documentNamed(window: Page, name: string): Promise<Document> {
   return found;
 }
 
-/** Export as PDF, from the tab's menu, while Word is still the last format. */
+/** Export as PDF, from the Export button's menu, while Word is still the last format. */
 async function exportAsPdf(window: Page): Promise<void> {
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportAs.pdf"));
+  await exportFromMenu(window, "pdf");
 }
 
 let dataDir: string;
@@ -183,8 +168,8 @@ test("a Mind with English and Chinese Citations, a table and maths prints as a P
   const web = await documentNamed(window, "Tea - The Open Encyclopedia");
   await bridge(window).write(
     mindId,
-    updateOf([
-      node("heading", { id: randomUUID(), level: 1 }, ["Spring tides"]),
+    blocksUpdate([
+      mindNode("heading", { id: randomUUID(), level: 1 }, ["Spring tides"]),
       paragraph(
         "Spring tides happen at new moon and at full moon",
         citation(tides, 1, "found"),
@@ -193,17 +178,20 @@ test("a Mind with English and Chinese Citations, a table and maths prints as a P
       paragraph("大潮出现在新月和满月前后", citation(chinese, 1, "found"), "。"),
       paragraph(
         "The pull that raises them falls off as ",
-        node("inlineMath", { latex: "1/r^3" }),
+        mindNode("inlineMath", { latex: "1/r^3" }),
         ", faster than gravity:",
       ),
-      node("blockMath", { id: randomUUID(), latex: "F = G\\frac{m_1 m_2}{r^2}" }),
-      node("table", { id: randomUUID() }, [
-        node("tableRow", {}, [cell("tableHeader", "Tide 潮"), cell("tableHeader", "Range 潮差")]),
-        node("tableRow", {}, [
+      mindNode("blockMath", { id: randomUUID(), latex: "F = G\\frac{m_1 m_2}{r^2}" }),
+      mindNode("table", { id: randomUUID() }, [
+        mindNode("tableRow", {}, [
+          cell("tableHeader", "Tide 潮"),
+          cell("tableHeader", "Range 潮差"),
+        ]),
+        mindNode("tableRow", {}, [
           cell("tableCell", "Spring 大潮"),
           cell("tableCell", "4 m", citation(tides, 1, "found")),
         ]),
-        node("tableRow", {}, [
+        mindNode("tableRow", {}, [
           cell("tableCell", "Neap 小潮"),
           cell("tableCell", "2 m", citation(chinese, 1, "not-found")),
         ]),
@@ -241,7 +229,6 @@ test("a Mind with English and Chinese Citations, a table and maths prints as a P
     year: "numeric",
   }).format(new Date(fetched));
   const golden = [
-    "Tides 潮汐",
     "Spring tides",
     "Spring tides happen at new moon and at full moon1.",
     "大潮出现在新月和满月前后2。",
@@ -317,7 +304,10 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
       ],
     },
   };
-  await bridge(window).write(mindId, updateOf([node(CHART_NODE, { id: randomUUID(), ...chart })]));
+  await bridge(window).write(
+    mindId,
+    blocksUpdate([mindNode(CHART_NODE, { id: randomUUID(), ...chart })]),
+  );
   await expect(window.getByTestId("mind-editor").getByTestId("chart-point")).toHaveCount(3);
 
   const out = await createDataFolder();
@@ -333,7 +323,6 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
   // Under it, its caption, then its sources: each a footnote naming its Document and
   // Location, numbered with the rest, and the value with no Citation said in words.
   const golden = [
-    "Tides 潮汐",
     "Chart: Tidal range 潮差",
     "Source: 1,2 1 value has no Citation.",
     "1 Tides, p. 1",
@@ -344,15 +333,17 @@ test("a Mind with one chart prints its picture, drawn at twice its size, its cap
 
   // In Chinese, the words are Chinese.
   await bridge(window).language("zh-CN");
-  await pointAndClick(window, window.getByTestId("export-mind"));
-  await expect(window.getByTestId("export-done")).toHaveText("已保存“Tides 潮汐 2.pdf”", {
-    timeout: 30_000,
-  });
+  await exportFromMenu(window);
+  await expect(window.getByTestId("export-done")).toHaveText(
+    savedLine("Tides 潮汐 2.pdf", out, "zh-CN"),
+    {
+      timeout: 30_000,
+    },
+  );
   const chineseText = await pdfText(await readFile(join(out, "Tides 潮汐 2.pdf")));
   expect(chineseText.map(unspaced)).toEqual([
     unspaced(
       [
-        "Tides 潮汐",
         "图表：Tidal range 潮差",
         "数据来源：1,2 1 个数值没有引用。",
         "1 Tides，第 1 页",
@@ -388,18 +379,18 @@ test("a long Mind breaks into pages: each footnote is on the page of its marker,
     );
   }
   const rows = Array.from({ length: 45 }, (_, index) =>
-    node("tableRow", {}, [
+    mindNode("tableRow", {}, [
       cell("tableCell", `Row ${index + 1} cell`, citation(chinese, index + 1, "found")),
       cell("tableCell", "大潮出现在新月和满月前后"),
     ]),
   );
   blocks.push(
-    node("table", { id: randomUUID() }, [
-      node("tableRow", {}, [cell("tableHeader", "Tide 潮"), cell("tableHeader", "Note 注")]),
+    mindNode("table", { id: randomUUID() }, [
+      mindNode("tableRow", {}, [cell("tableHeader", "Tide 潮"), cell("tableHeader", "Note 注")]),
       ...rows,
     ]),
   );
-  await bridge(window).write(mindId, updateOf(blocks));
+  await bridge(window).write(mindId, blocksUpdate(blocks));
   await expect(window.getByTestId("mind-editor").getByTestId("citation")).toHaveCount(85);
 
   const out = await createDataFolder();
@@ -437,19 +428,24 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Tides");
+  await nameMind(window, "Tides");
   await pointAndClick(window, window.getByTestId("mind-editor"));
   await window.keyboard.type("Spring tides come twice a month.");
   const out = await createDataFolder();
   await useOutputLocation(window, out);
 
-  // Export says what one click does: the last format, Word to begin with.
   const exportButton = window.getByTestId("export-mind");
   await expect(exportButton).toHaveAttribute("data-format", "docx");
-  await expect(exportButton).toHaveAttribute(
-    "aria-label",
-    /^Export as Word \(\.docx\) \((⇧⌘E|Ctrl\+Shift\+E)\)$/,
-  );
+  const exportMenu = window.getByTestId("export-menu");
+  await pointAndClick(window, exportButton);
+  await expect(exportMenu.getByRole("menuitem")).toHaveText([
+    /^Word \(\.docx\)(⇧⌘E|Ctrl\+Shift\+E)$/,
+    "PDF",
+    "More formats",
+    /^Citation style/,
+    "Export options…",
+  ]);
+  await window.keyboard.press("Escape");
 
   // The sheet opens with the options last saved; Cancel leaves them so.
   const sheet = window.getByTestId("export-dialog");
@@ -461,7 +457,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   );
   // Word's review choices (#107), on to begin with; a Mind made here has no import to track edits since.
   await expect(sheet.getByTestId("export-pending-note")).toHaveText(
-    "Changes waiting for you go in as tracked changes by IncarnaMind.",
+    "Changes waiting for you go in as IncarnaMind’s tracked changes.",
   );
   await expect(sheet.getByTestId("export-mark-ai-text")).toBeChecked();
   await expect(sheet.getByTestId("export-comment-failed-checks")).toBeChecked();
@@ -498,7 +494,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   const result = window.getByTestId("export-result");
   const first = await savedPath(window, "Tides.pdf");
   await screenshot(window, "export-result-en-wide");
-  await pointAndClick(window, exportButton);
+  await exportFromMenu(window);
   await savedPath(window, "Tides 2.pdf");
   expect((await readFile(first)).subarray(0, 5).toString("latin1")).toBe("%PDF-");
   expect((await readdir(out)).sort()).toEqual(["Tides 2.pdf", "Tides.pdf"]);
@@ -511,10 +507,10 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   await mkdir(gone, { recursive: true });
   await useOutputLocation(window, gone);
   await rm(join(sources, "Exports"), { recursive: true });
-  await pointAndClick(window, exportButton);
+  await exportFromMenu(window);
   const problem = result.getByTestId("export-problem");
   await expect(problem).toHaveText(
-    "Couldn't save: the folder isn't there any more · Change output location…",
+    "Couldn’t save: the folder isn’t there any more · Change output location…",
   );
   await interceptOpenDialog(app, out);
   await pointAndClick(window, problem.getByTestId("export-change-location"));
@@ -523,7 +519,15 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   // In Chinese, at the narrowest window, the sheet and the line fit, in Chinese.
   await bridge(window).language("zh-CN");
   await setWindowSize(app, window, 900, WINDOW_SIZE.height);
-  await expect(exportButton).toHaveAttribute("aria-label", /^导出为 PDF（(⇧⌘E|Ctrl\+Shift\+E)）$/);
+  await pointAndClick(window, exportButton);
+  await expect(exportMenu.getByRole("menuitem")).toHaveText([
+    /^PDF(⇧⌘E|Ctrl\+Shift\+E)$/,
+    "Word（.docx）",
+    "更多格式",
+    /^引用格式/,
+    "导出选项…",
+  ]);
+  await window.keyboard.press("Escape");
   await openOptions(window, "导出选项");
   await expect(sheet.getByTestId("export-format-note")).toHaveText(
     "引用会成为脚注，写明文档和位置。",
@@ -545,10 +549,13 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
   await motionSettled(window);
   await screenshot(window, "export-options-zh-narrow");
   await window.keyboard.press("Escape");
-  await pointAndClick(window, exportButton);
-  await expect(result.getByTestId("export-done")).toHaveText("已保存“Tides 4.pdf”", {
-    timeout: 30_000,
-  });
+  await exportFromMenu(window);
+  await expect(result.getByTestId("export-done")).toHaveText(
+    savedLine("Tides 4.pdf", out, "zh-CN"),
+    {
+      timeout: 30_000,
+    },
+  );
   await screenshot(window, "export-result-zh-narrow");
   await app.close();
   await removeDataFolder(out);
@@ -556,6 +563,7 @@ test("Export options remembers the format and its options; Export and ⇧⌘E us
 
 test("Export as HTML saves one .html file whose footnotes link both ways, and the sheet offers the format", async () => {
   const { app, window } = await launchApp(dataDir, { home });
+  await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
   await dismissChatSetup(window);
   const mindId = await setUpMind(window, sources, "Tides 潮汐");
   await expect
@@ -565,16 +573,23 @@ test("Export as HTML saves one .html file whose footnotes link both ways, and th
   const chinese = await documentNamed(window, "潮汐");
   await bridge(window).write(
     mindId,
-    updateOf([
-      paragraph("Spring tides happen at new moon", citation(tides, 1, "found"), "."),
+    blocksUpdate([
+      paragraph(
+        "Spring tides happen at new moon",
+        citation(tides, 1, "found"),
+        ". 大潮出现在新月前后",
+        citation(chinese, 1, "found"),
+        citation(tides, 1, "found"),
+        "。",
+      ),
       paragraph("大潮出现在新月和满月前后", citation(chinese, 1, "not-found"), "。"),
     ]),
   );
-  await expect(window.getByTestId("mind-editor").getByTestId("citation")).toHaveCount(2);
+  await expect(window.getByTestId("mind-editor").getByTestId("citation")).toHaveCount(4);
   const out = await createDataFolder();
   await useOutputLocation(window, out);
 
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportAs.html"));
+  await exportFromMenu(window, "html");
   const path = await savedPath(window, "Tides 潮汐.html");
   const html = await readFile(path, "utf8");
   expect(html.startsWith("<!DOCTYPE html>")).toBe(true);
@@ -583,13 +598,37 @@ test("Export as HTML saves one .html file whose footnotes link both ways, and th
   expect(html).toContain('<a class="backref" href="#ref-2"');
   expect(html).not.toMatch(/<script|<link|src="http/);
 
+  const reader = await openSavedPage(app, path);
+  try {
+    for (const width of [1280, 390]) {
+      await setWindowSize(app, reader, width, 844);
+      await expect(reader.locator("main > p").filter({ has: reader.locator("#ref-1") })).toHaveText(
+        "Spring tides happen at new moon1. 大潮出现在新月前后2,3。",
+      );
+      expect(
+        await reader
+          .locator("sup.note-ref")
+          .evaluateAll((markers) =>
+            markers.map((marker) => getComputedStyle(marker, "::before").content),
+          ),
+      ).not.toContain('","');
+      await screenshot(reader, `html-citation-separators-${width}`);
+    }
+    await reader.locator("#ref-2 a").click();
+    await expect(reader).toHaveURL(/#note-2$/);
+    await reader.locator("#note-2 .backref").click();
+    await expect(reader).toHaveURL(/#ref-2$/);
+  } finally {
+    await reader.close();
+  }
+
   // Export now makes HTML, and the sheet offers the format with its note.
   await expect(window.getByTestId("export-mind")).toHaveAttribute("data-format", "html");
   await openOptions(window, "Export options");
   const sheet = window.getByTestId("export-dialog");
   await expect(sheet.getByTestId("export-format")).toHaveValue("html");
   await expect(sheet.getByTestId("export-format-note")).toHaveText(
-    "One file that opens in any browser. Citations become footnotes linked both ways.",
+    "Opens in any browser; Citations become linked footnotes.",
   );
   await app.close();
   await removeDataFolder(out);

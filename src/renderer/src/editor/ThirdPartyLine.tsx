@@ -10,6 +10,13 @@ const READ: Record<ReadThirdPartySource, MessageKey> = {
   "checked-document": "approvals.thirdParty.read.checkedDocument",
 };
 
+/** The line for text a Task read itself, such as Research's web pages (#130). */
+const TASK_READ: Record<ReadThirdPartySource, MessageKey> = {
+  imported: "approvals.thirdParty.task.imported",
+  "web-page": "approvals.thirdParty.task.webPage",
+  "checked-document": "approvals.thirdParty.task.checkedDocument",
+};
+
 /** The line for text in its Question context: in a Mind, or the Mind a Question in a conversation read. */
 const IN_MIND: Record<ThirdPartySource, MessageKey> = {
   imported: "approvals.thirdParty.mind.imported",
@@ -27,7 +34,7 @@ const IN_CONVERSATION: Record<ThirdPartySource, MessageKey> = {
 /**
  * Why an approval card asks whatever the User's policy: its Answer had read
  * third-party text, and the call writes or sends data (#78). One line, for the
- * first reason: "This Answer read a web page, so it asks you first." Nothing
+ * first reason: "Asks first: this Answer read a web page." Nothing
  * for a call that asks for another reason.
  */
 export function ThirdPartyLine({ request }: { request: ApprovalRequest }) {
@@ -36,7 +43,7 @@ export function ThirdPartyLine({ request }: { request: ApprovalRequest }) {
   if (!reason || !asksAfterThirdParty(request)) return null;
   const key =
     reason.via === "read"
-      ? READ[reason.source]
+      ? (request.taskId ? TASK_READ : READ)[reason.source]
       : (reason.via === "context" && request.mindId === null ? IN_CONVERSATION : IN_MIND)[
           reason.source
         ];

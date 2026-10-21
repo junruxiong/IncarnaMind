@@ -5,6 +5,7 @@
  */
 import { Fragment, type ReactNode, useEffect, useState } from "react";
 import type { CitationAttributes, ScannedQuote } from "../../../core/api";
+import { readableQuoteText } from "../../../shared/readableQuote";
 import { normaliseText } from "../../../shared/text";
 import { core } from "../core";
 import { useT } from "../i18n";
@@ -38,15 +39,60 @@ export function useScannedQuote(attributes: CitationAttributes): ScannedQuote | 
   return scanned;
 }
 
+/**
+ * A Citation's quote as a person reads it (#905): the words a PDF split at a line end whole again,
+ * and a quote that stops at one run to its end. At first as the quote alone allows; once the core
+ * has read the Document's own text, as that does.
+ */
+export function useReadableQuote(
+  attributes: Pick<
+    CitationAttributes,
+    "documentId" | "contentHash" | "pageFrom" | "pageTo" | "quote"
+  > | null,
+): string {
+  const { documentId, contentHash, pageFrom, pageTo, quote } = attributes ?? {};
+  const alone = readableQuoteText(quote ?? "");
+  const [read, setRead] = useState<{ quote: string; text: string } | null>(null);
+  useEffect(() => {
+    if (!documentId || !quote) return;
+    let current = true;
+    core
+      .readableQuote({
+        documentId,
+        contentHash: contentHash ?? null,
+        pageFrom: pageFrom ?? null,
+        pageTo: pageTo ?? null,
+        quote,
+      })
+      .then(
+        (text) => {
+          if (current && text) setRead({ quote, text });
+        },
+        // A card that can't read the Document's text shows the quote as it can read it alone.
+        (error: unknown) => console.error(error),
+      );
+    return () => {
+      current = false;
+    };
+  }, [documentId, contentHash, pageFrom, pageTo, quote]);
+  return read !== null && read.quote === quote ? read.text : alone;
+}
+
 /** "Text read from a scan", with how many of the quote's words may be misread. */
 export function ScanLine({ scanned }: { scanned: ScannedQuote }) {
   const t = useT();
   const count = scanned.unsure.length;
+  const words =
+    scanned.from === "picture"
+      ? ([
+          "citation.picture",
+          "citation.picture.unsure.one",
+          "citation.picture.unsure.other",
+        ] as const)
+      : (["citation.scan", "citation.scan.unsure.one", "citation.scan.unsure.other"] as const);
   return (
-    <p data-testid="citation-scan" className="citation-card-source">
-      {count === 0
-        ? t("citation.scan")
-        : t(count === 1 ? "citation.scan.unsure.one" : "citation.scan.unsure.other", { count })}
+    <p data-testid="citation-scan" data-from={scanned.from} className="citation-card-source">
+      {count === 0 ? t(words[0]) : t(count === 1 ? words[1] : words[2], { count })}
     </p>
   );
 }

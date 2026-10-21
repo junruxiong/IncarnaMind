@@ -6,25 +6,32 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { AnalysisJob, AnalysisResult, AnalysisVersions } from "../shared/analysis";
 import type { DrawnPage, PageCaptureRequest } from "../shared/citedPage";
 import type { PrintDocument } from "../shared/printDocument";
 import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type {
   AudioSource,
+  CopilotProfileId,
   EngineSwitchReason,
   ExternalService,
   SandboxLevel,
   SecretProtection,
   TranscriptionEngine,
+  WebPageLookFailure,
 } from "./api";
 import type { StatIdentity } from "./documents/files";
 import type { Reranker } from "./documents/searchTool";
 import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
 import type { FetchLimits, PageFetch } from "./documents/web/fetch";
+import type { PictureLimits } from "./documents/web/pictures";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
+import type { AnthropicOAuthConfig } from "./providers/claudeAccount/config";
+import type { CopilotProfile } from "./providers/copilot/config";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
+import type { LocalServers } from "./providers/localServers";
 import type { ChatModelFactory } from "./providers/models";
 import type { OllamaModels } from "./providers/ollamaModels";
 import type { RerankingModelFactory } from "./providers/rerank";
@@ -174,6 +181,17 @@ export interface OllamaApp {
  */
 export interface Printer {
   print(document: PrintDocument): Promise<Uint8Array>;
+}
+
+/**
+ * Makes a PDF of a web page as a browser shows it, for "Keep the page as it
+ * looks". The desktop app loads it once in a hidden page that reaches only
+ * the public internet (src/main/pageLook.ts).
+ */
+export interface PageLook {
+  render(
+    address: string,
+  ): Promise<{ pdf: Uint8Array } | { failure: WebPageLookFailure; message: string }>;
 }
 
 /** How Linked folders are watched and checked (see ./documents/library). The defaults suit the app. */
@@ -466,8 +484,20 @@ export interface TextRecognizer {
    * loaded or fails on it.
    */
   read(picture: PagePicture, page: number): Promise<RecognizedLine[]>;
+  /**
+   * The lines of text on a picture file (PNG, JPEG, GIF, WebP or AVIF), and
+   * the size it was read at. It is decoded where the model runs, so a file
+   * that breaks the decoder takes only that down.
+   */
+  readFile(file: Uint8Array, page: number): Promise<PictureRead>;
   /** Stops the model and frees its memory. Loading again starts it afresh. */
   close(): void;
+}
+
+export interface PictureRead {
+  lines: RecognizedLine[];
+  width: number;
+  height: number;
 }
 
 /** One file of a built-in model, as recorded when the app was built. */
@@ -617,7 +647,23 @@ export interface SpeechSegment {
   decodeMs: number;
   /** The engine couldn't decode it: a final with no text. */
   failed?: true;
+  /** Who said it, as the engine tells speakers apart within the stream ("1", "2"): Soniox does. */
+  speaker?: string;
 }
+
+/**
+ * A stream's audio sent to a cloud transcription service instead (#141), with the User's key.
+ * OpenAI's live model needs our own voice activity detection: `vad` is Silero's file.
+ */
+export type CloudStream =
+  | { service: "openai"; model: string; apiKey: string; vad: string }
+  | { service: "soniox"; model: string; apiKey: string };
+
+/**
+ * Why a cloud stream ended before it was finished: the connection was lost ("dropped"), or the
+ * service refused the key or the account has no credit left ("refused").
+ */
+export type CloudLoss = "dropped" | "refused";
 
 /**
  * Turns speech into text off the core's thread (#136): the desktop app runs
@@ -639,6 +685,11 @@ export interface Transcriber {
   finish(stream: string): Promise<void>;
   /** Forgets a stream, and its audio not yet decoded. */
   drop(stream: string): void;
+  /**
+   * The stream's audio goes to a cloud service from now on, before any is pushed. If it can't,
+   * or the connection is lost, the listeners hear `lost` and the stream is gone.
+   */
+  open(stream: string, cloud: CloudStream): void;
   /** Hears every segment, and how far each stream is done: all its audio up to `doneMs` has given its final text. */
   listen(listener: TranscriberListener): void;
   /** Stops the engine and frees its memory. Loading again starts it afresh. */
@@ -654,6 +705,13 @@ export interface TranscriberListener {
   stopped(reason: string): void;
   /** The transcriber moved a stream to another engine, for the stream's audio from now on. */
   switched(change: EngineSwitch): void;
+  /** A cloud stream ended before it was finished (see `CloudLoss`): its audio not yet transcribed is lost. */
+  lost(stream: string, loss: CloudLoss): void;
+  /**
+   * A cloud stream's connection is ready for audio. The core holds the stream's audio until
+   * then, so what the User stops before it opens never leaves the core.
+   */
+  opened(stream: string): void;
 }
 
 export interface EngineSwitch {
@@ -671,6 +729,27 @@ export interface EngineSwitch {
 export interface Pictures {
   /** The SVG drawn at its own size in pixels (its `width` and `height`), as PNG bytes. */
   png(svg: string): Promise<Uint8Array>;
+}
+
+/**
+ * Runs Analyses (ADR-0023): code a model wrote, over inputs cited from the
+ * User's Documents, in a sandbox with no files and no network. The desktop
+ * app runs Python in a hidden, sandboxed window (src/main/analysis.ts); tests
+ * pass a fake (./analysis/fake). Each job names its language, so a second
+ * one can run behind the same port.
+ */
+export interface AnalysisRuntime {
+  /** The languages it runs, each with what it runs them with; none when it can't run on this computer. */
+  readonly languages: readonly AnalysisVersions[];
+  /**
+   * Runs a job in a namespace of its own, with the same seeds and no clock,
+   * to its end, its time limit or `signal`, one job at a time. Never rejects:
+   * a failure is how the result ends (an error in the code, timed out,
+   * stopped, out of memory, or unavailable).
+   */
+  run(job: AnalysisJob, signal: AbortSignal): Promise<AnalysisResult>;
+  /** Stops what is running and frees the interpreter's memory; the next run starts another. */
+  close(): void;
 }
 
 export interface CoreAdapters {
@@ -702,6 +781,8 @@ export interface CoreAdapters {
   ollamaStartTimeoutMs?: number;
   /** Prints PDF exports. Absent (tests that don't export PDFs): a PDF export is refused. */
   printer?: Printer;
+  /** Keeps web pages as they look. Absent (tests that aren't about it): none is kept. */
+  pageLook?: PageLook;
   /**
    * Draws a chart's picture for a Word export. Absent (tests that don't need
    * it): a chart goes into Word as the table of its values instead.
@@ -713,7 +794,7 @@ export interface CoreAdapters {
    * How web pages are fetched (#261). Defaults to Node's fetch, within 20
    * seconds and 10 MB; tests shorten the limits.
    */
-  webPages?: { fetch?: PageFetch; limits?: FetchLimits };
+  webPages?: { fetch?: PageFetch; limits?: FetchLimits; pictureLimits?: PictureLimits };
   /**
    * How web search's fetcher resolves host names and makes its connections
    * (#128): the system's resolver and undici's by default. Tests stand a
@@ -737,6 +818,12 @@ export interface CoreAdapters {
    * src/core/agents/socket.ts), and the version the server names itself with.
    */
   agents?: {
+    /**
+     * Whether connecting agents is offered at all (the desktop app's
+     * `SHOW_AGENT_CONNECTION`). Not offered, the socket never listens and
+     * Privacy lists no agents, whatever an earlier build saved. Defaults to offered.
+     */
+    offered?: boolean;
     launcher?: AgentLauncher;
     socketPath?: string;
     version?: string;
@@ -789,11 +876,32 @@ export interface CoreAdapters {
    * this computer's memory; tests pass a stub.
    */
   ollamaModels?: OllamaModels;
+  /** Looks for the servers of the presets on this computer. Tests pass a stand-in, so none is asked. */
+  localServers?: LocalServers;
+  /**
+   * Where Ollama is for the Tagging setting's Automatic when no Ollama
+   * provider is saved. Defaults to OLLAMA_HOST, else 127.0.0.1:11434.
+   */
+  ollamaUrl?: string;
+  /**
+   * Which models Ollama has installed at an address, for Automatic tagging's
+   * local decision models. Defaults to asking Ollama (`/api/tags`);
+   * tests, and the smoke tests' scripted model, give their own, so nothing
+   * reaches an Ollama that happens to run on the computer.
+   */
+  localModels?(baseUrl: string): Promise<readonly string[]>;
   /**
    * Where the ChatGPT plan provider signs in and sends Questions. Defaults to
    * OpenAI's servers; tests point it at a local fake authorization server and API.
    */
   chatGptPlan?: Partial<ChatGptPlanEndpoints>;
+  /** In place of this build's Claude account profile: tests point it at a local fake. */
+  claudeAccount?: AnthropicOAuthConfig;
+  /**
+   * The Copilot route's ways to sign in, in place of the ones this build has
+   * (./providers/copilot/config); tests point them at a local fake of GitHub.
+   */
+  copilotProfiles?: Partial<Record<CopilotProfileId, CopilotProfile>>;
   /**
    * Where the ChatGPT sign-in is kept instead of `keychain`: a store that
    * several data folders on this computer share, and a lock file that keeps
@@ -806,6 +914,12 @@ export interface CoreAdapters {
    * Defaults to five minutes; tests shorten it.
    */
   connectorSignInTimeoutMs?: number;
+  /**
+   * Contradiction watch's timings (#112), which tests shorten: how long after
+   * a new version of a Document its Folder's Minds are checked (30 seconds),
+   * and how long a background check of one claim may take (3 minutes).
+   */
+  contradictionWatch?: { delayMs?: number; claimTimeLimitMs?: number };
   /**
    * The Connectors directory's entries, in its JSON form, in place of the
    * list that ships with the app; tests point an entry at a local stand-in.
@@ -823,11 +937,11 @@ export interface CoreAdapters {
    */
   jevHostedUrl?: string;
   /**
-   * Where Look up (#286) asks Crossref's and arXiv's APIs. Defaults to
-   * theirs; tests point them at a local fake server. Consent still treats
-   * the requests as going to Crossref and arXiv.
+   * Where Look up (#286) and checking references ask Crossref's,
+   * arXiv's and OpenAlex's APIs. Defaults to theirs; tests point them at a
+   * local fake server. Consent still treats the requests as going to each.
    */
-  referenceLookup?: { crossref?: string; arxiv?: string };
+  referenceLookup?: { crossref?: string; arxiv?: string; openalex?: string };
   /**
    * Where Find sources (#296) asks each Source provider, by its id
    * ("openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed", "clinicaltrials", "ecfr", "govinfo"). Defaults to the real
@@ -899,6 +1013,11 @@ export interface CoreAdapters {
    */
   audioCapture?: AudioCapture;
   /**
+   * Runs Analyses (see `AnalysisRuntime`). Absent (tests that aren't about
+   * them, a host with no sandbox): Analyses can't run.
+   */
+  analysisRuntime?: AnalysisRuntime;
+  /**
    * Draws cited pages other than PDFs' (see `CapturePage`). The desktop app
    * draws them in a hidden window (src/main/citedPageCapture.ts). Absent
    * (tests that aren't about them): only PDFs' cited pages are saved.
@@ -915,6 +1034,11 @@ export interface CoreAdapters {
    * fake that needs none.
    */
   transcriptionModelSource?: { model: EmbeddingModelSource; vad: EmbeddingModelSource };
+  /**
+   * Asks a cloud transcription service whether it takes a key of its own (#141), before it is
+   * kept. The global `fetch` by default; tests answer without the network.
+   */
+  transcriptionKeyFetch?: typeof fetch;
   /** Where the core logs what happens (see `Logger`). None by default. */
   log?: Logger;
 }

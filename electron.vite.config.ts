@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
 import type { Plugin } from "vite";
+import { preparePythonRuntime } from "./scripts/pythonRuntime";
 
 /** Where the renderer finds pdf.js's data files, relative to its page (see src/renderer/src/viewer/pdfjs.ts). */
 const PDFJS_DATA_PATH = "pdfjs";
@@ -87,13 +88,33 @@ function fontLicences(): Plugin {
   };
 }
 
+/**
+ * Fills resources/python with what Analyses run with (ADR-0023), before the
+ * renderer is built or served: the app ships those files and never fetches one.
+ */
+function pythonRuntime(): Plugin {
+  return {
+    name: "incarnamind:python-runtime",
+    async buildStart() {
+      const { fetched } = await preparePythonRuntime(resolve(__dirname, "resources/python"));
+      if (fetched.length > 0) this.info(`Fetched ${fetched.join(", ")} for Analyses`);
+    },
+  };
+}
+
 // Entry points follow electron-vite's defaults (src/main, src/preload and src/renderer), plus the
 // hidden window that records a Meeting's audio: its preload and its page (ADR-0015), the hidden
 // window that prints PDF exports (#100), the page of the hidden window that draws a cited page
-// (#133), and the shim an outside agent starts to reach the app (#351), run by the app's binary as
-// plain Node.
+// (#133), the floating panel during a call (#839), the hidden window that runs Analyses and its
+// preload (ADR-0023), and the shim an outside agent starts to reach the app (#351), run by the
+// app's binary as plain Node.
+// false leaves the experimental sign-in routes out of the bundle, and their entries out of the window
+// (src/core/buildFlags.ts).
+const SIGN_IN_ROUTES = { __EXPERIMENTAL_SIGN_IN_ROUTES__: "true" };
+
 export default defineConfig({
   main: {
+    define: SIGN_IN_ROUTES,
     build: {
       rollupOptions: {
         input: {
@@ -109,12 +130,14 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, "src/preload/index.ts"),
           capture: resolve(__dirname, "src/preload/capture.ts"),
+          analysis: resolve(__dirname, "src/preload/analysis.ts"),
         },
       },
     },
   },
   renderer: {
     define: {
+      ...SIGN_IN_ROUTES,
       __APP_VERSION__: JSON.stringify(
         (
           JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf8")) as {
@@ -123,7 +146,7 @@ export default defineConfig({
         ).version,
       ),
     },
-    plugins: [react(), tailwindcss(), pdfjsData(), fontLicences()],
+    plugins: [react(), tailwindcss(), pdfjsData(), fontLicences(), pythonRuntime()],
     // electron-vite leaves the renderer unminified; minified, its JavaScript is half the size
     // to load and parse at every launch.
     build: {
@@ -134,6 +157,9 @@ export default defineConfig({
           capture: resolve(__dirname, "src/renderer/capture.html"),
           print: resolve(__dirname, "src/renderer/print.html"),
           citedPage: resolve(__dirname, "src/renderer/citedPage.html"),
+          meetingPanel: resolve(__dirname, "src/renderer/meetingPanel.html"),
+          permissionGuide: resolve(__dirname, "src/renderer/permissionGuide.html"),
+          analysis: resolve(__dirname, "src/renderer/analysis.html"),
         },
       },
     },

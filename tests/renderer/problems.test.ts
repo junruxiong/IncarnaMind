@@ -1,6 +1,13 @@
 import { describe, expect, test } from "vitest";
-import type { ProviderErrorKind } from "../../src/core/api";
-import { ANSWER_PROBLEMS, answerProblem, saveFailureReason } from "../../src/renderer/src/problems";
+import type { ChatProviderKind, ProviderErrorKind } from "../../src/core/api";
+import { SIGN_IN_ROUTES } from "../../src/core/providers/signInRoutes";
+import { readinessKey } from "../../src/renderer/src/components/providers/shared";
+import {
+  ANSWER_PROBLEMS,
+  answerProblem,
+  failedAnswerLine,
+  saveFailureReason,
+} from "../../src/renderer/src/problems";
 import { settingsPages } from "../../src/renderer/src/settingsPages";
 import { type MessageKey, translate } from "../../src/shared/i18n";
 
@@ -11,8 +18,10 @@ const KINDS: ProviderErrorKind[] = [
   "network",
   "provider",
   "consent-declined",
+  "consent-revoked",
   "local-mode",
   "ollama-not-running",
+  "data-retention",
   "not-signed-in",
   "plan-limit",
   "blocked",
@@ -45,13 +54,30 @@ describe("a failed Answer's problem line", () => {
     });
   });
 
+  test("local mode stopping an Answer says everything stays on this computer, in both languages", () => {
+    const { line } = ANSWER_PROBLEMS["local-mode"];
+    expect(translate("en", line)).toBe("Stopped: everything stays on this computer");
+    expect(translate("zh-CN", line)).toBe("已停止：所有内容都留在这台电脑上");
+  });
+
+  test("turning off sending while an Answer is written says so, naming the service, in both languages, with nothing to press", () => {
+    const { line, fix } = ANSWER_PROBLEMS["consent-revoked"];
+    expect(fix).toEqual({ kind: "none" });
+    expect(translate("en", line, { service: "OpenAI" })).toBe(
+      "Stopped: you turned off sending to OpenAI",
+    );
+    expect(translate("zh-CN", line, { service: "OpenAI" })).toBe(
+      "已停止：你关闭了向 OpenAI 发送内容",
+    );
+  });
+
   test("Ollama not running says so in both languages, and its fix is Ollama's own (open it or get it)", () => {
     expect(ANSWER_PROBLEMS["ollama-not-running"]).toEqual({
       line: "answer.error.ollama-not-running",
       fix: { kind: "ollama", label: "localModel.open" },
     });
     expect(translate("en", "answer.error.ollama-not-running")).toBe(
-      "Ollama isn't running on this computer",
+      "Ollama isn’t running on this computer",
     );
     expect(translate("zh-CN", "answer.error.ollama-not-running")).toBe(
       "Ollama 没有在这台电脑上运行",
@@ -95,6 +121,41 @@ describe("a failed Answer's problem line", () => {
     expect(translate("zh-CN", "answer.error.no-answer")).toBe("模型没有给出回答");
   });
 
+  test("a sign-in route's plain line never names ChatGPT, nor offers its sign-in or usage page", () => {
+    for (const route of ["claude-account", "copilot"] as const) {
+      for (const kind of KINDS) {
+        const { line, fix } = answerProblem(kind, route);
+        expect(["sign-in", "link"]).not.toContain(fix.kind);
+        for (const language of ["en", "zh-CN"] as const) {
+          expect(translate(language, line)).not.toMatch(/ChatGPT|OpenAI/);
+        }
+      }
+    }
+  });
+
+  test("a sign-in route's Answer gets the route's own line only where this build signs in with it", () => {
+    expect(failedAnswerLine("blocked", "copilot", "policy-blocked", true)).toEqual({
+      kind: "route",
+      route: "copilot",
+      words: SIGN_IN_ROUTES.copilot.problems["policy-blocked"],
+    });
+    const notOffered = failedAnswerLine("blocked", "copilot", "policy-blocked", false);
+    expect(notOffered.kind).toBe("plain");
+  });
+
+  test("a route's Answer whose provider is gone or not loaded yet never gets ChatGPT's line or sign-in", () => {
+    for (const kind of ["not-signed-in", "plan-limit", "blocked"] as const) {
+      const shown = failedAnswerLine(kind, undefined, "signed-out", true);
+      if (shown.kind !== "plain") throw new Error("A route's line with no route known.");
+      expect(translate("en", shown.problem.line)).not.toMatch(/ChatGPT|OpenAI/);
+      expect(["sign-in", "link"]).not.toContain(shown.problem.fix.kind);
+    }
+    expect(failedAnswerLine("not-signed-in", "chatgpt", null, false)).toEqual({
+      kind: "plain",
+      problem: ANSWER_PROBLEMS["not-signed-in"],
+    });
+  });
+
   test("an Ollama Cloud allowance used up is managed on Ollama's own page", () => {
     expect(answerProblem("plan-limit", "ollama")).toEqual({
       line: "answer.error.plan-limit.ollama",
@@ -125,21 +186,29 @@ describe("a failed Answer's problem line", () => {
     const labels = (language: "en" | "zh-CN") =>
       KINDS.map((kind) => {
         const { line, fix } = ANSWER_PROBLEMS[kind];
-        const words = translate(language, line, { model: "claude-sonnet-5.5" });
+        const words = translate(language, line, { model: "claude-sonnet-5.5", service: "OpenAI" });
         const label = fix.kind === "none" ? "" : translate(language, fix.label);
         return { kind, words, label };
       });
     for (const language of ["en", "zh-CN"] as const) {
       for (const { kind, words, label } of labels(language)) {
         expect(words, `${language} ${kind}`).not.toMatch(/\{/);
-        // No full stop: the action follows on the same line.
-        expect(words, `${language} ${kind}`).not.toMatch(/[.。]$/);
+        // No full stop, so the action follows on the same line; but data retention and too long are two sentences, the second what to do.
+        if (kind !== "data-retention" && kind !== "too-long") {
+          expect(words, `${language} ${kind}`).not.toMatch(/[.。]$/);
+        }
         if (ANSWER_PROBLEMS[kind].fix.kind !== "none") expect(label).not.toBe("");
       }
     }
     expect(translate("en", ANSWER_PROBLEMS.auth.line, { model: "claude-sonnet-5.5" })).toBe(
       "The key for claude-sonnet-5.5 was refused",
     );
+    expect(translate("en", ANSWER_PROBLEMS.network.line, { model: "m", service: "OpenAI" })).toBe(
+      "Couldn’t reach OpenAI. Check your internet connection",
+    );
+    expect(
+      translate("zh-CN", ANSWER_PROBLEMS.network.line, { model: "m", service: "OpenAI" }),
+    ).toBe("无法连接 OpenAI，请检查网络连接");
     expect(translate("zh-CN", ANSWER_PROBLEMS.auth.line, { model: "claude-sonnet-5.5" })).toContain(
       "claude-sonnet-5.5",
     );
@@ -171,11 +240,43 @@ describe("why a file couldn't be saved", () => {
   test('the reasons read after "Couldn\'t save:" in both languages', () => {
     expect(
       translate("en", "export.failed.save", { reason: translate("en", "export.failed.readOnly") }),
-    ).toBe("Couldn't save: the folder is read-only");
+    ).toBe("Couldn’t save: the folder is read-only");
     expect(
       translate("zh-CN", "export.failed.save", {
         reason: translate("zh-CN", "export.failed.readOnly"),
       }),
     ).toBe("无法保存：这个文件夹是只读的");
+  });
+});
+
+describe("Questions waiting for a sign-in", () => {
+  const signedOut = (kind: ChatProviderKind) =>
+    readinessKey({
+      ready: false,
+      reason: "sign-in-required",
+      provider: {
+        id: "provider-1",
+        kind,
+        catalogId: null,
+        endpoint: null,
+        baseUrl: null,
+        hasApiKey: false,
+        service: null,
+      },
+      modelId: "model-1",
+    });
+
+  test("name the route's own provider, never ChatGPT, in both languages", () => {
+    expect(translate("en", signedOut("chatgpt"))).toMatch(/ChatGPT/);
+    for (const [kind, name] of [
+      ["claude-account", /Claude/],
+      ["copilot", /GitHub Copilot/],
+    ] as const) {
+      for (const language of ["en", "zh-CN"] as const) {
+        const line = translate(language, signedOut(kind));
+        expect(line).toMatch(name);
+        expect(line).not.toMatch(/ChatGPT/);
+      }
+    }
   });
 });

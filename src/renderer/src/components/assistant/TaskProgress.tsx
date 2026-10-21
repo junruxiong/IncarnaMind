@@ -2,15 +2,17 @@ import { Fragment, type ReactNode, useEffect, useId, useState } from "react";
 import type { Task, TaskStep } from "../../../../core/api";
 import type { Language } from "../../../../core/language";
 import { formatDateTime } from "../../../../shared/dates";
+import { RESEARCH_TASK } from "../../../../shared/research";
 import { core } from "../../core";
 import { formatMoney } from "../../cost";
 import { useLanguage, useT } from "../../i18n";
 import type { Translate } from "../../objects";
 import { useAppStore } from "../../store";
 import { needsYou } from "../../taskGroups";
-import { pauseTask, resumeTask, showTask, stopTask, useTasks } from "../../tasks";
+import { pauseTask, resumeTask, reviewTask, stopTask, useTasks } from "../../tasks";
 import { stepLine, taskName } from "../../taskText";
 import { CheckLineIcon } from "../lineIcons";
+import { MetaLine } from "../MetaLine";
 
 /**
  * What a Task's progress offers that its kind brings (#130's plan card, and
@@ -35,18 +37,22 @@ function useMinutes(since: string, until: string | null): number {
 }
 
 /** Its head's right side: how far it is and for how long, or how it ended. */
-function headLine(task: Task, minutes: number, t: Translate): string {
+function headLine(task: Task, minutes: number, t: Translate): string[] {
   const time = t("task.minutes", { count: minutes });
-  if (task.status === "done") return t("task.progress.doneIn", { time });
-  if (task.status === "failed") return t("task.status.failed");
-  if (task.status === "stopped") return t("task.status.stopped");
+  if (task.status === "done") return [t("task.progress.doneIn", { time })];
+  if (task.status === "failed") return [t("task.status.failed")];
+  if (task.status === "stopped") return [t("task.status.stopped")];
   const progress = task.progress;
-  if (!progress || progress.total === 0) return time;
-  const counted = t(task.kind === "comparison" ? "task.progress.cells" : "task.progress.items", {
-    done: progress.done,
-    total: progress.total,
-  });
-  return `${counted} · ${time}`;
+  if (!progress || progress.total === 0) return [time];
+  const counted = t(
+    task.kind === "comparison"
+      ? "task.progress.cells"
+      : task.kind === RESEARCH_TASK
+        ? "task.progress.steps"
+        : "task.progress.items",
+    { done: progress.done, total: progress.total },
+  );
+  return [counted, time];
 }
 
 /** What it waits for, where the step it is on would be: the User below, or a limit. */
@@ -61,14 +67,14 @@ function waitingLine(task: Task, t: Translate, language: Language): string | nul
   return task.status === "paused" ? stepLine(task, t, language) : null;
 }
 
-function details(task: Task, t: Translate, language: Language): string {
+function details(task: Task, t: Translate, language: Language): string[] {
   const parts: string[] = [];
   if (task.kind === "comparison" && task.progress) {
     parts.push(t("task.details.cells", { done: task.progress.done, total: task.progress.total }));
   }
   parts.push(t("task.details.started", { time: formatDateTime(task.startedAt, language) }));
   if (task.cost) parts.push(t("task.details.cost", { cost: formatMoney(task.cost, language) }));
-  return parts.join(" · ");
+  return parts;
 }
 
 function StepMark({ step, live }: { step: TaskStep; live: boolean }) {
@@ -173,7 +179,7 @@ export function TaskProgress({
         key: "review",
         testId: "review",
         label: t("task.action.review"),
-        onClick: () => showTask(task),
+        onClick: () => reviewTask(task),
         strong: true,
       });
     }
@@ -219,9 +225,12 @@ export function TaskProgress({
           </span>
         )}
         <span className="task-progress-name">{name}</span>
-        <span data-testid="task-progress-meta" className="task-progress-meta">
-          {headLine(task, minutes, t)}
-        </span>
+        <MetaLine
+          as="div"
+          data-testid="task-progress-meta"
+          className="task-progress-meta"
+          parts={headLine(task, minutes, t)}
+        />
       </div>
       {!finished && (
         <div
@@ -268,15 +277,39 @@ export function TaskProgress({
           </li>
         )}
       </ol>
+      {task.remaining.length > 0 && (
+        <div data-testid="task-progress-remaining" className="task-progress-remaining">
+          <p className="task-progress-remaining-label">{t("task.progress.remaining")}</p>
+          <ul className="task-progress-steps">
+            {task.remaining.map((step, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: what is left, in its order.
+              <li key={index} className="task-progress-step">
+                <span aria-hidden="true" className="task-progress-mark">
+                  –
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {detailsOpen && (
-        <p id={detailsId} data-testid="task-progress-record" className="task-progress-details">
-          {details(task, t, language)}
-        </p>
+        <MetaLine
+          id={detailsId}
+          data-testid="task-progress-record"
+          className="task-progress-details"
+          parts={details(task, t, language)}
+        />
       )}
       <div data-testid="task-progress-actions" className="task-progress-actions">
+        {task.summary && (
+          <span data-testid="task-progress-summary" className="task-progress-summary">
+            {task.summary}
+          </span>
+        )}
         {offered.map((action, index) => (
           <Fragment key={action.key}>
-            {index > 0 && <Dot />}
+            {(index > 0 || task.summary) && <Dot />}
             <button
               type="button"
               data-testid={`task-progress-${action.testId}`}

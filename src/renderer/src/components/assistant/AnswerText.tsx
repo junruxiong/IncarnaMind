@@ -3,14 +3,17 @@ import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
 import { useEffect, useRef } from "react";
 import type { NodeJSON } from "../../../../shared/blockJson";
 import { lendAnswerEditor } from "../../answerEditors";
+import { AnswerTableSlots } from "../../editor/answerTables";
 import { CitationView } from "../../editor/CitationView";
+import { checklistLabel } from "../../editor/checklistLabel";
 import { CitationGlue, withCitationGlue } from "../../editor/citationGlue";
 import { CitationNumbers } from "../../editor/citationNumbers";
 import { CopyCitations } from "../../editor/copyCitations";
-import { MarginChecks } from "../../editor/MarginChecks";
 import { RegenerateAnswerContext } from "../../editor/mindContext";
 import { noteExtensions } from "../../editor/noteSchema";
-import { useTableFades } from "./useTableFades";
+import { useT } from "../../i18n";
+import { useTableFades } from "../useTableFades";
+import { OpenAsTable } from "./OpenAsTable";
 
 /** A Citation redraws when it changes, and when its number does (as in a Mind). */
 const citationView = ReactNodeViewRenderer(CitationView, {
@@ -37,23 +40,29 @@ const editorPropsFor = (label: string) => ({
 
 /**
  * An Answer's text in the assistant (#201): its Blocks drawn by the note's own
- * schema and node views, read only, with its Citations numbered from 1 and
- * their checks in the margin beside it, as in a Mind. Text can be selected in
- * it, to copy or add just that part (`selectedNotes`). While the Answer is
- * written its Blocks are drawn again as they change, and only then.
+ * schema and node views, read only, with its Citations numbered from 1, each
+ * badge holding its check in the line. Text can be selected in it, to copy or
+ * add just that part (`selectedNotes`). While the Answer is written its Blocks
+ * are drawn again as they change, and only then; once it is written, each
+ * table has "Open as a table" under it.
  */
 export function AnswerText({
   answerId,
   blocks,
   label,
+  streaming,
   regenerate,
+  onOpenTable,
 }: {
   answerId: string;
   blocks: readonly NodeJSON[];
   label: string;
+  streaming: boolean;
   /** Writes the Answer again. */
   regenerate(): void;
+  onOpenTable(table: NodeJSON): void;
 }) {
+  const t = useT();
   const shown = useRef(JSON.stringify(blocks));
   const editor = useEditor(
     {
@@ -62,17 +71,18 @@ export function AnswerText({
       content: docOf(blocks),
       editorProps: editorPropsFor(label),
       extensions: [
-        ...noteExtensions({ citationView }),
+        ...noteExtensions({ citationView, checklistLabel }),
         CitationGlue,
         CitationNumbers,
         CopyCitations,
+        AnswerTableSlots,
       ],
     },
     [],
   );
 
   const frame = useRef<HTMLDivElement>(null);
-  useTableFades(frame);
+  useTableFades(frame, t("answer.table.label"));
 
   useEffect(() => lendAnswerEditor(answerId, editor), [answerId, editor]);
 
@@ -93,7 +103,7 @@ export function AnswerText({
     <RegenerateAnswerContext.Provider value={regenerate}>
       <div ref={frame} className="assistant-answer-frame">
         <EditorContent editor={editor} />
-        <MarginChecks editor={editor} />
+        {!streaming && <OpenAsTable frame={frame} editor={editor} onOpen={onOpenTable} />}
       </div>
     </RegenerateAnswerContext.Provider>
   );

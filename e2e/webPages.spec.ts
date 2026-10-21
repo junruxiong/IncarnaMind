@@ -33,6 +33,8 @@ let dataDir: string;
 let home: string;
 let server: Server;
 let site: string;
+/** The server's port: it stands in for the web too, so a page's pictures are asked of it (#756). */
+let port: number;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();
   home = await createDataFolder();
@@ -46,7 +48,8 @@ test.beforeEach(async () => {
     }
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  site = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  port = (server.address() as AddressInfo).port;
+  site = `http://127.0.0.1:${port}`;
 });
 test.afterEach(async () => {
   server.closeAllConnections();
@@ -63,6 +66,7 @@ async function screenshot(target: Page | Locator, name: string): Promise<void> {
 /** "Add a web page…" from the sidebar's "+", with these addresses, one per line. Returns the dialog. */
 async function addWebPages(window: Page, addresses: string[]): Promise<Locator> {
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-add-web-page").click();
   const dialog = window.getByTestId("add-web-page-dialog");
   await dialog.getByTestId("add-web-page-addresses").fill(addresses.join("\n"));
@@ -101,7 +105,7 @@ const dragLink = (target: Locator, address: string, drop = true) =>
   );
 
 test("a web page added from the + menu is a Document named by its title, opened as its snapshot; one that can't be fetched says why", async () => {
-  const { app, window } = await launchApp(dataDir, { home });
+  const { app, window } = await launchApp(dataDir, { home, web: port });
   await dismissChatSetup(window);
   await interceptOpenExternal(app);
 
@@ -111,7 +115,7 @@ test("a web page added from the + menu is a Document named by its title, opened 
   const results = dialog.getByTestId("add-web-page-result");
   await expect(results.filter({ hasText: `${site}/tea` })).toContainText("Added");
   await expect(dialog.getByTestId("add-web-page-problem")).toHaveText(
-    "Couldn't fetch: the page doesn't exist · Try again",
+    "Couldn’t fetch: the page doesn’t exist · Try again",
   );
   await screenshot(window, "add-web-page-results");
   await dialog.getByTestId("add-web-page-done").click();
@@ -149,7 +153,7 @@ test("a web page added from the + menu is a Document named by its title, opened 
 });
 
 test("a link pasted or dropped on a Folder in the sidebar is saved there; one that can't be fetched says why below", async () => {
-  const { app, window } = await launchApp(dataDir, { home });
+  const { app, window } = await launchApp(dataDir, { home, web: port });
   await dismissChatSetup(window);
   await window.evaluate(() =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.createLibraryGroup({
@@ -168,24 +172,24 @@ test("a link pasted or dropped on a Folder in the sidebar is saved there; one th
   await expect(folder.getByTestId("document-list-item")).toContainText(TITLE);
 
   // Dragged over the window, the Folders stay in sight; dropped on one, it is saved there.
-  await dragLink(folder, `${site}/tea-dropped`, false);
+  await dragLink(row, `${site}/tea-dropped`, false);
   await expect(window.getByTestId("drop-overlay")).toContainText("drop it on a Folder");
   await expect(folder).toHaveAttribute("data-drop-target", "true");
   await screenshot(window, "web-page-drag");
-  await dragLink(folder, `${site}/tea-dropped`);
+  await dragLink(row, `${site}/tea-dropped`);
   await expect(window.getByTestId("drop-overlay")).toBeHidden();
   await expect(folder).toHaveAttribute("data-count", "2");
 
   await paste(window, `${site}/gone`);
   const problem = window.locator('[data-testid^="web-page-problem"]');
-  await expect(problem).toContainText("Couldn't fetch: the page doesn't exist");
+  await expect(problem).toContainText("Couldn’t fetch: the page doesn’t exist");
   await expect(problem.getByTestId("web-page-try-again")).toBeVisible();
   await screenshot(window, "web-page-pasted");
   await app.close();
 });
 
 test("an Answer cites a web page by section and paragraph; its card says the site and when it was fetched, and opens the snapshot at the quote", async () => {
-  const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, home, web: port });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await interceptOpenExternal(app);

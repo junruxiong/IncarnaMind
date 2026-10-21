@@ -1,4 +1,5 @@
 import { Extension, Mark, mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
+import { TableView } from "@tiptap/extension-table";
 import { Fragment, type Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 import type * as Y from "yjs";
@@ -189,6 +190,16 @@ export const InlineImage = Node.create({
 
 export const WORD_LOOK_TYPES = ["paragraph", "heading", "table", "tableCell", "tableHeader"];
 
+/** Tiptap's table view keeps the attributes it was made with, so a look given while the Mind is open (the start-up backfill, a sync) makes a new one. */
+export class WordLookTableView extends TableView {
+  override update(node: ProseMirrorNode): boolean {
+    if (node.attrs[WORD_LOOK_ATTRIBUTE] !== this.node.attrs[WORD_LOOK_ATTRIBUTE]) return false;
+    return super.update(node);
+  }
+}
+export const WORD_LOOK_DOM_ATTRIBUTE = "data-word-look";
+export const WORD_RUN_DOM_ATTRIBUTE = "data-word-run";
+
 function lookKeysOf(doc: Y.Doc | null): ReadonlySet<string> {
   const look = doc ? wordLookOf(doc) : null;
   if (!look) return new Set();
@@ -249,10 +260,10 @@ export const WordLookAttribute = Extension.create({
           [WORD_LOOK_ATTRIBUTE]: {
             default: null,
             keepOnSplit: true,
-            parseHTML: (element: HTMLElement) => element.getAttribute("data-word-look"),
+            parseHTML: (element: HTMLElement) => element.getAttribute(WORD_LOOK_DOM_ATTRIBUTE),
             renderHTML: (attributes: Record<string, unknown>) => {
               const key = attributes[WORD_LOOK_ATTRIBUTE];
-              return typeof key === "string" ? { "data-word-look": key } : {};
+              return typeof key === "string" ? { [WORD_LOOK_DOM_ATTRIBUTE]: key } : {};
             },
           },
         },
@@ -270,13 +281,13 @@ export const WordRun = Mark.create({
     return {
       k: {
         default: null,
-        parseHTML: (element: HTMLElement) => element.getAttribute("data-word-run"),
+        parseHTML: (element: HTMLElement) => element.getAttribute(WORD_RUN_DOM_ATTRIBUTE),
         renderHTML: (attributes: Record<string, unknown>) =>
-          typeof attributes.k === "string" ? { "data-word-run": attributes.k } : {},
+          typeof attributes.k === "string" ? { [WORD_RUN_DOM_ATTRIBUTE]: attributes.k } : {},
       },
     };
   },
 
-  parseHTML: () => [{ tag: "span[data-word-run]" }],
+  parseHTML: () => [{ tag: `span[${WORD_RUN_DOM_ATTRIBUTE}]` }],
   renderHTML: ({ HTMLAttributes }) => ["span", HTMLAttributes, 0],
 });

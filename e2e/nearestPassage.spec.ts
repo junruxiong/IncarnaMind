@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  motionSettled,
   newMind,
   pointAndClick,
   removeDataFolder,
@@ -79,6 +80,9 @@ for (const language of ["en", "zh-CN"] as const) {
     );
     const marks = window.getByTestId("claim-mark");
     await expect(marks).toHaveCount(2);
+    await expect(marks.first()).toHaveAttribute("data-check", "unsupported");
+    await expect(marks.nth(1)).toHaveAttribute("data-check", "unsupported");
+    await motionSettled(window);
     const card = window.getByTestId("claim-card");
 
     await pointAndClick(window, marks.first());

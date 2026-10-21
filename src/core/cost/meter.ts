@@ -24,6 +24,9 @@
  *   plan's own limit is its cap. An Ollama Cloud model's used-up allowance
  *   (HTTP 402) becomes a plan limit, the same stop as the ChatGPT plan's.
  * - A model on this computer is free and isn't recorded.
+ * - Audio sent to a cloud transcription service (#141) is billed by the hour:
+ *   it is counted before it is sent, and audio that would pass the cap isn't
+ *   counted or sent (`audio`).
  *
  * Records stay in this computer's database; nothing here is sent anywhere.
  */
@@ -39,6 +42,7 @@ import type {
   MonthlyCap,
   ProviderCost,
   RunEstimate,
+  RunEstimateInput,
 } from "../api";
 import type { Price } from "../providers/catalog/types";
 import { ChatGptPlanError } from "../providers/chatgpt/errors";
@@ -46,11 +50,11 @@ import type { ChatLanguageModel } from "../providers/models";
 import { tokenUsageOf } from "../providers/promptCache";
 import { CostCapError, PlanLimitError } from "../providers/providerErrors";
 import { retryAfterMs } from "../providers/retryAfter";
-import { searchFee } from "../providers/webSearch";
+import { searchFee, searchFeeOf } from "../providers/webSearch";
 import { currentTask } from "../runs/current";
 import type { TokenUsage } from "../runs/engine";
 import type { Database } from "../storage";
-import { costOf, inCurrency, promptTokensOf, reservationOf } from "./price";
+import { costOf, inCurrency, promptTokensOf, reservationOf, TYPICAL_ANSWER } from "./price";
 
 type Wrapped = Parameters<NonNullable<LanguageModelMiddleware["wrapStream"]>>[0];
 type CallOptions = Wrapped["params"];
@@ -79,23 +83,53 @@ export interface MeteredModel {
 /** The output reserved for a request that sets no limit, on a model whose limit isn't known. */
 const DEFAULT_OUTPUT_TOKENS = 16_384;
 
-/**
- * An Answer searches, then writes: about three model calls. Before this
- * computer has recorded two Answers' worth on a model, a call is a third of
- * an average Answer's 12,000 input and 750 output tokens, none cached.
- */
-const CALLS_PER_ITEM = 3;
-const DEFAULT_CALL = { inputTokens: 4_000, cachedInputTokens: 0, outputTokens: 250 };
-/** The recorded requests an estimate averages, once there are at least `MIN_RECORDED`. */
+interface ItemCost {
+  calls: number;
+  /** A call before this computer has recorded two items' worth on the model. */
+  call: Required<TokenUsage>;
+  flow: DataFlowId;
+}
+
+const ITEM_COSTS: Record<NonNullable<RunEstimateInput["each"]>, ItemCost> = {
+  /** An Answer searches, then writes: a third of a typical Answer's tokens each, none cached. */
+  answer: {
+    calls: 3,
+    call: {
+      inputTokens: TYPICAL_ANSWER.inputTokens / 3,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: TYPICAL_ANSWER.outputTokens / 3,
+    },
+    flow: "chat",
+  },
+  /**
+   * A sentence checked: it searches, cites and gives its verdict, with its
+   * run's one call naming the claims shared out. Measured on a memo checked
+   * with Claude Haiku 5.5 (tests/fixtures/cost/recorded-checks.json). Its own
+   * recorded calls, not Answers', which carry more of the Documents: those made
+   * one estimate seven times its run's cost (#973).
+   */
+  check: {
+    calls: 2.35,
+    call: {
+      inputTokens: 8_260,
+      cachedInputTokens: 2_903,
+      cacheWriteTokens: 4_362,
+      outputTokens: 129,
+    },
+    flow: "checks",
+  },
+};
+/** The recorded requests an estimate averages, once there are two items' worth. */
 const RECORDED_CALLS = 100;
-const MIN_RECORDED = 2 * CALLS_PER_ITEM;
 
 interface RequestRow {
   provider_id: string;
   billing: Billing;
   currency: Currency | null;
   requests: number;
-  amount: number | null;
+  settled: number;
+  set_aside: number;
   tokens: number | null;
   interrupted: number;
 }
@@ -173,11 +207,12 @@ export function createMeter(options: {
   /** The start of this calendar month, in the computer's time zone. */
   const monthStart = (at: Date) => new Date(at.getFullYear(), at.getMonth(), 1).toISOString();
 
-  /** Per provider, billing and currency: requests, what they cost (open reservations at their amount), and tokens. */
+  /** Per provider, billing and currency: requests, what the settled ones cost, what the open ones reserved, and tokens. */
   const monthRows = (since: string) =>
     db.all<RequestRow>(
       `SELECT provider_id, billing, currency, count(*) AS requests,
-         sum(CASE status WHEN 'reserved' THEN reserved ELSE cost END) AS amount,
+         coalesce(sum(CASE WHEN status <> 'reserved' THEN cost END), 0) AS settled,
+         coalesce(sum(CASE WHEN status = 'reserved' THEN reserved END), 0) AS set_aside,
          sum(coalesce(input_tokens, 0) + coalesce(output_tokens, 0)) AS tokens,
          sum(status = 'interrupted') AS interrupted
        FROM model_requests
@@ -187,14 +222,30 @@ export function createMeter(options: {
       [since],
     );
 
-  const spentIn = (currency: Currency, since: string) =>
-    monthRows(since).reduce(
-      (sum, row) =>
-        row.billing === "per-token" && row.currency && row.amount !== null
-          ? sum + inCurrency(row.amount, row.currency, currency)
-          : sum,
-      0,
-    );
+  const monthIn = (currency: Currency, since: string) => {
+    let settled = 0;
+    let setAside = 0;
+    for (const row of monthRows(since)) {
+      if (row.billing !== "per-token" || !row.currency) continue;
+      settled += inCurrency(row.settled, row.currency, currency);
+      setAside += inCurrency(row.set_aside, row.currency, currency);
+    }
+    return { settled, setAside };
+  };
+
+  const againstCap = (currency: Currency, since: string) => {
+    const { settled, setAside } = monthIn(currency, since);
+    return settled + setAside;
+  };
+
+  const towardCap = (cap: MonthlyCap | null, since: string) => {
+    if (!cap) return { spentTowardCap: null, setAsideTowardCap: null };
+    const { settled, setAside } = monthIn(cap.currency, since);
+    return {
+      spentTowardCap: { currency: cap.currency, amount: settled },
+      setAsideTowardCap: { currency: cap.currency, amount: setAside },
+    };
+  };
 
   /** Opens a request's record; throws `CostCapError`, recording nothing, when its reservation would pass the cap. */
   function begin(model: MeteredModel, params: CallOptions) {
@@ -231,7 +282,7 @@ export function createMeter(options: {
       const cap = options.cap();
       if (cap && price && reserved !== null) {
         const after =
-          spentIn(cap.currency, monthStart(at)) +
+          againstCap(cap.currency, monthStart(at)) +
           inCurrency(reserved, price.currency, cap.currency);
         if (after > cap.amount) throw new CostCapError();
       }
@@ -422,6 +473,49 @@ export function createMeter(options: {
     },
 
     /**
+     * Audio sent to a cloud transcription service on one stretch of recording, one record a
+     * month, its cost growing as audio is counted. `add` counts audio about to be sent, and
+     * says false, counting nothing, when it would take the month past the cap.
+     */
+    audio(use: { providerId: string; modelId: string; perHour: Money }) {
+      let row: { id: string; month: string } | null = null;
+      return {
+        add(ms: number): boolean {
+          const at = now();
+          const month = monthStart(at);
+          const amount = (use.perHour.amount * Math.max(0, ms)) / 3_600_000;
+          const { currency } = use.perHour;
+          return db.transaction(() => {
+            const cap = options.cap();
+            if (cap) {
+              const spent = againstCap(cap.currency, month);
+              // A month already at the cap sends nothing more, however little.
+              if (spent >= cap.amount) return false;
+              if (spent + inCurrency(amount, currency, cap.currency) > cap.amount) return false;
+            }
+            const stamp = at.toISOString();
+            if (row?.month === month) {
+              db.run("UPDATE model_requests SET cost = cost + ?, updated_at = ? WHERE id = ?", [
+                amount,
+                stamp,
+                row.id,
+              ]);
+            } else {
+              row = { id: randomUUID(), month };
+              db.run(
+                `INSERT INTO model_requests (id, provider_id, model_id, flow, billing, status, currency,
+                   cost, created_at, updated_at)
+                 VALUES (?, ?, ?, 'transcription', 'per-token', 'settled', ?, ?, ?, ?)`,
+                [row.id, use.providerId, use.modelId, currency, amount, stamp, stamp],
+              );
+            }
+            return true;
+          });
+        },
+      };
+    },
+
+    /**
      * Settles the reservations a crash left open: at the usage heard before it, else at
      * nothing, marked interrupted (what the provider billed isn't known, and no lookup is
      * made). Never at the reservation. Returns how many.
@@ -443,18 +537,20 @@ export function createMeter(options: {
       return open.count;
     },
 
-    /** This month so far: what per-token requests cost, and each provider's use. */
+    /** This month so far: what was spent, what is set aside, and each provider's use. */
     summary(): CostSummary {
       const since = monthStart(now());
       const rows = monthRows(since);
       const byProvider = new Map<string, ProviderCost>();
       const totals = new Map<Currency, number>();
+      const asides = new Map<Currency, number>();
       for (const row of rows) {
         const provider = byProvider.get(row.provider_id) ?? {
           providerId: row.provider_id,
           billing: row.billing,
           requests: 0,
           spent: [],
+          setAside: [],
           unpricedTokens: 0,
           interrupted: 0,
         };
@@ -462,36 +558,39 @@ export function createMeter(options: {
         provider.interrupted += row.interrupted;
         if (row.billing === "per-token" && row.currency === null) {
           provider.unpricedTokens += row.tokens ?? 0;
-        } else if (row.billing === "per-token" && row.currency && row.amount !== null) {
-          provider.spent.push({ currency: row.currency, amount: row.amount });
-          totals.set(row.currency, (totals.get(row.currency) ?? 0) + row.amount);
+        } else if (row.billing === "per-token" && row.currency) {
+          provider.spent.push({ currency: row.currency, amount: row.settled });
+          totals.set(row.currency, (totals.get(row.currency) ?? 0) + row.settled);
+          if (row.set_aside > 0) {
+            provider.setAside.push({ currency: row.currency, amount: row.set_aside });
+            asides.set(row.currency, (asides.get(row.currency) ?? 0) + row.set_aside);
+          }
         }
         byProvider.set(row.provider_id, provider);
       }
       const cap = options.cap();
-      const spent: Money[] = [...totals].map(([currency, amount]) => ({ currency, amount }));
+      const moneys = (byCurrency: Map<Currency, number>): Money[] =>
+        [...byCurrency].map(([currency, amount]) => ({ currency, amount }));
       return {
         monthStart: since,
-        spent,
+        spent: moneys(totals),
+        setAside: moneys(asides),
         cap,
-        spentTowardCap: cap
-          ? { currency: cap.currency, amount: spentIn(cap.currency, since) }
-          : null,
+        ...towardCap(cap, since),
         providers: [...byProvider.values()],
       };
     },
 
     /**
-     * What a Task's model requests billed per token have cost, settled and
-     * still reserved, in the currency of most of it (the other at the fixed
-     * rate); null when none was priced.
+     * What a Task's settled model requests billed per token have cost, in the
+     * currency of most of it (the other at the fixed rate); null when none was priced.
      */
     taskCost(taskId: string): Money | null {
       const rows = db.all<{ currency: Currency; amount: number }>(
-        `SELECT currency, sum(CASE status WHEN 'reserved' THEN reserved ELSE cost END) AS amount
+        `SELECT currency, sum(cost) AS amount
          FROM model_requests
          WHERE run_id = ? AND deleted_at IS NULL AND billing = 'per-token'
-           AND currency IS NOT NULL
+           AND currency IS NOT NULL AND status <> 'reserved'
          GROUP BY currency ORDER BY amount DESC`,
         [taskId],
       );
@@ -505,51 +604,68 @@ export function createMeter(options: {
     },
 
     /**
-     * The estimate before a large run of `items` on `model`: three calls an
-     * item, each the average of this computer's recent requests to the model
-     * once it has made enough, else a third of an average Answer. On recorded
-     * Answers its tokens come within 15% of the run's, and its price from 10%
-     * below to 2.5 times above: higher when recent requests found the prompt
-     * cache cold, as the first of a session does, and a run's later ones don't.
+     * The estimate before a large run of `items` on `model`: each item's calls
+     * (`ITEM_COSTS`), each the average of this computer's recent requests to
+     * the model for the same kind of item once it has made enough, else that
+     * kind's measured call. On recorded Answers its tokens come within 15% of
+     * the run's, and its price from 10% below to 2.5 times above: higher when
+     * recent requests found the prompt cache cold, as the first of a session
+     * does, and a run's later ones don't.
      */
-    estimate(model: MeteredModel, items: number): RunEstimate {
+    estimate(
+      model: MeteredModel,
+      items: number,
+      searches = 0,
+      kind: NonNullable<RunEstimateInput["each"]> = "answer",
+    ): RunEstimate {
       if (model.billing !== "per-token") return { billing: model.billing };
+      const item = ITEM_COSTS[kind];
       const recent = db.all<Required<TokenUsage>>(
         `SELECT input_tokens AS inputTokens, coalesce(cached_input_tokens, 0) AS cachedInputTokens,
            coalesce(cache_write_tokens, 0) AS cacheWriteTokens, output_tokens AS outputTokens
          FROM model_requests
          WHERE deleted_at IS NULL AND status = 'settled' AND provider_id = ? AND model_id = ?
-           AND flow = 'chat' AND input_tokens IS NOT NULL AND output_tokens IS NOT NULL
+           AND flow = ? AND input_tokens IS NOT NULL AND output_tokens IS NOT NULL
          ORDER BY created_at DESC LIMIT ?`,
-        [model.providerId, model.modelId, RECORDED_CALLS],
+        [model.providerId, model.modelId, item.flow, RECORDED_CALLS],
       );
       const mean = (pick: (each: Required<TokenUsage>) => number) =>
         recent.reduce((sum, each) => sum + pick(each), 0) / recent.length;
       const call: Required<TokenUsage> =
-        recent.length >= MIN_RECORDED
+        recent.length >= 2 * item.calls
           ? {
               inputTokens: mean((each) => each.inputTokens),
               cachedInputTokens: mean((each) => each.cachedInputTokens),
               cacheWriteTokens: mean((each) => each.cacheWriteTokens),
               outputTokens: mean((each) => each.outputTokens),
             }
-          : { ...DEFAULT_CALL, cacheWriteTokens: 0 };
-      const calls = Math.max(0, Math.round(items)) * CALLS_PER_ITEM;
+          : item.call;
+      const calls = Math.round(Math.max(0, Math.round(items)) * item.calls);
       const at = now();
       const cap = options.cap();
+      const fee = searchFeeOf(model.kind);
+      const searchCost = (price: Price) =>
+        fee
+          ? searches *
+            (inCurrency(fee.amount, fee.currency, price.currency) +
+              costOf({ inputTokens: SEARCH_INPUT_TOKENS }, price, at))
+          : 0;
       return {
         billing: "per-token",
         calls,
-        tokens: Math.round(calls * (call.inputTokens + call.outputTokens)),
+        tokens: Math.round(
+          calls * (call.inputTokens + call.outputTokens) +
+            (fee ? searches * SEARCH_INPUT_TOKENS : 0),
+        ),
         cost: model.price
           ? {
               currency: model.price.currency,
-              amount: calls * costOf(call, model.price, at, { cacheWrites: writesCache(model) }),
+              amount:
+                calls * costOf(call, model.price, at, { cacheWrites: writesCache(model) }) +
+                searchCost(model.price),
             }
           : null,
-        spentTowardCap: cap
-          ? { currency: cap.currency, amount: spentIn(cap.currency, monthStart(at)) }
-          : null,
+        ...towardCap(cap, monthStart(at)),
         cap,
       };
     },

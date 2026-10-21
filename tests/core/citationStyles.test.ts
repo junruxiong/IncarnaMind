@@ -4,7 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { cp, writeFile } from "node:fs/promises";
+import { cp } from "node:fs/promises";
 import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, onTestFinished, test } from "vitest";
@@ -18,7 +18,8 @@ import type {
 } from "../../src/core";
 import { FOOTNOTE_NODE } from "../../src/core/api";
 import { locatorOf } from "../../src/core/citationStyles/csl";
-import { CITATION_STYLE_IDS } from "../../src/shared/citationStyles";
+import { COMMON_CITATION_STYLE_IDS } from "../../src/shared/citationStyles";
+import { shippedLocale, shippedStyle, writePack } from "../helpers/citationStyles";
 import { CITATION_STYLES, createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { footnotesOf, paragraphsOf, part, textOf, unzip } from "../helpers/docx";
@@ -175,11 +176,14 @@ describe("a Mind's citation style", () => {
     expect(client.doc.getMap("settings").get("citationStyle")).toBe("ieee");
   });
 
-  test("refuses what isn't a style", async () => {
+  test("refuses what can't be a style's name, but keeps one this version doesn't have", async () => {
     const { core, mind } = await setUp();
-    await expect(
-      core.setMindCitationStyle(mind.id, "harvard-2" as unknown as "harvard"),
-    ).rejects.toThrow("isn't a citation style");
+    for (const name of ["Harvard 2", "../apa", ""]) {
+      await expect(core.setMindCitationStyle(mind.id, name)).rejects.toThrow(
+        "isn't a citation style",
+      );
+    }
+    expect((await core.setMindCitationStyle(mind.id, "harvard-2")).style).toBe("harvard-2");
   });
 });
 
@@ -215,6 +219,54 @@ describe("formatting a Mind's Citations", () => {
       label: "line",
     });
     expect(locatorOf(null, "en")).toEqual({});
+    // A Meeting's Citation says who spoke in the app, but a style's locator is the time alone.
+    const said: CitationLocation = { kind: "time", from: 723_000, to: 725_000, speaker: "Me" };
+    expect(locatorOf(said, "en")).toEqual({ locator: "12:03", label: "custom" });
+    expect(locatorOf(said, "zh-CN")).toEqual({ locator: "12:03", label: "custom" });
+  });
+
+  test("a PDF page is cited by the page it prints, not by its number in the PDF", async () => {
+    const { core, prospect } = await setUp();
+    const printed = (from: string, to = from): CitationLocation => ({
+      kind: "page",
+      from: 14,
+      to: 14 + (to === from ? 0 : 1),
+      printed: { from, to },
+    });
+    const formatted = await format(
+      core,
+      "apa",
+      [work(prospect, printed("265"))],
+      [work(prospect, printed("68", "69"))],
+      [work(prospect, printed("xii"))],
+      [work(prospect, printed("1-3"))],
+      [work(prospect, printed("A-3"))],
+      [work(prospect, printed("iii", "iv"))],
+      [work(prospect, printed("5-12", "5-13"))],
+    );
+    expect(formatted.clusters.map((cluster) => plain(cluster.runs))).toEqual([
+      "(Kahneman & Tversky, 1979, p. 265)",
+      "(Kahneman & Tversky, 1979, pp. 68–69)",
+      "(Kahneman & Tversky, 1979, p. xii)",
+      "(Kahneman & Tversky, 1979, p. 1-3)",
+      "(Kahneman & Tversky, 1979, p. A-3)",
+      "(Kahneman & Tversky, 1979, pp. iii–iv)",
+      "(Kahneman & Tversky, 1979, pp. 5-12–5-13)",
+    ]);
+    expect(locatorOf(printed("1-3"), "en")).toEqual({ locator: "p. 1-3", label: "custom" });
+    expect(locatorOf(printed("iii", "iv"), "en")).toEqual({
+      locator: "pp. iii–iv",
+      label: "custom",
+    });
+    expect(locatorOf(printed("iii", "iv"), "zh-CN")).toEqual({
+      locator: "第 iii–iv 页",
+      label: "custom",
+    });
+    expect(locatorOf(printed("5-12", "5-13"), "en")).toEqual({
+      locator: "pp. 5-12–5-13",
+      label: "custom",
+    });
+    expect(locatorOf(printed("68", "69"), "en")).toEqual({ locator: "68-69", label: "page" });
   });
 
   test("Citations side by side are one cluster, its runs marked with the Citation each belongs to", async () => {
@@ -256,22 +308,14 @@ describe("formatting a Mind's Citations", () => {
     ).toBe(false);
   });
 
-  test("a Document with no details gets an entry from its name, kind and the day it was added, in every style", async () => {
+  test("a Document with no details gets an entry from its name alone, never its format or the day it was added, in every style", async () => {
     const { core, prospect, lease } = await setUp();
     const style = (id: FormattedCitations["style"]) => format(core, id, [work(lease)]);
-    const added = (locale: string) =>
-      new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" }).format(
-        new Date(lease.createdAt),
-      );
-    for (const id of CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
+    for (const id of COMMON_CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
       const { bibliography } = await style(id);
       const entry = bibliography.find((each) => each.documentId === lease.id);
       expect(entry?.needsDetails, id).toBe(true);
-      expect(plain(entry?.runs), id).toBe(
-        id.startsWith("gb-t")
-          ? `Lease agreement。纯文本，添加于 ${added("zh-CN")}。`
-          : `Lease agreement. Plain text, added ${added("en-GB")}.`,
-      );
+      expect(plain(entry?.runs), id).toBe("Lease agreement.");
     }
     // The style's own number stays.
     expect(plain((await style("ieee")).bibliography[0]?.label)).toBe("[1]");
@@ -411,8 +455,12 @@ describe("the style thread", () => {
   });
 
   test("a style that can't be read fails its request, and other styles still format", async () => {
-    const core = await withStyles((folder) =>
-      writeFile(join(folder, "styles", "apa.csl"), "<style>not a whole style"),
+    const core = await withStyles(async (folder) =>
+      writePack(
+        join(folder, "styles.pack"),
+        { apa: "<style>not a whole style", ieee: shippedStyle("ieee") },
+        Object.fromEntries(["en-US", "en-GB", "zh-CN"].map((code) => [code, shippedLocale(code)])),
+      ),
     );
     const request = (style: FormattedCitations["style"]) =>
       core.formatCitations({ style, clusters: [{ works: [named("A book")] }] });
@@ -449,7 +497,6 @@ describe("exporting a Mind in its citation style", () => {
     const files = unzip(exported.data);
     const paragraphs = paragraphsOf(part(files, "word/document.xml"));
     expect(paragraphs.map((each) => each.text)).toEqual([
-      "Thesis",
       "Losses loom larger than gains (Kahneman & Tversky, 1979, p. 265; 钱学森 et al., 1990, p. 5) [unverified]. Systems are open (钱学森 et al., 1990).",
       "References",
       expect.stringMatching(/^Kahneman, D., & Tversky, A\. \(1979\)\. Prospect theory/),
@@ -469,20 +516,21 @@ describe("exporting a Mind in its citation style", () => {
     const exported = await core.exportMind(mind.id, { format: "docx" });
     const document = part(unzip(exported.data), "word/document.xml");
     const paragraphs = paragraphsOf(document);
-    expect(paragraphs[1]?.text).toBe(
-      "Losses loom larger than gains[1,2] [unverified]. Systems are open[2].",
+    // Each work with a page is cited on its own, its page raised after its number.
+    expect(paragraphs[0]?.text).toBe(
+      "Losses loom larger than gains[1]265[2]5 [unverified]. Systems are open[2].",
     );
     expect(document).toContain('<w:vertAlign w:val="superscript"/>');
-    expect(paragraphs[2]?.text).toBe("参考文献");
-    expect(paragraphs[3]?.text).toMatch(/^\[1\]\tKAHNEMAN D, TVERSKY A\. Prospect theory/);
-    expect(paragraphs[4]?.text).toMatch(/^\[2\]\t钱学森, 于景元, 戴汝为\. 一个科学新领域/);
+    expect(paragraphs[1]?.text).toBe("参考文献");
+    expect(paragraphs[2]?.text).toMatch(/^\[1\]\tKAHNEMAN D, TVERSKY A\. Prospect theory/);
+    expect(paragraphs[3]?.text).toMatch(/^\[2\]\t钱学森, 于景元, 戴汝为\. 一个科学新领域/);
   });
 
   test("Chicago notes to Word: each cluster a footnote in the style, and the Bibliography", async () => {
     const { core, mind } = await written("chicago-notes");
     const exported = await core.exportMind(mind.id, { format: "docx" });
     const files = unzip(exported.data);
-    expect(paragraphsOf(part(files, "word/document.xml"))[1]?.text).toBe(
+    expect(paragraphsOf(part(files, "word/document.xml"))[0]?.text).toBe(
       "Losses loom larger than gains[1]. Systems are open[2].",
     );
     const notes = Object.values(footnotesOf(part(files, "word/footnotes.xml")));
@@ -498,7 +546,7 @@ describe("exporting a Mind in its citation style", () => {
     const { core, mind, client, lease } = await setUp();
     writeMind(client, [paragraph(text("Rent is monthly "), citation(lease, page(2)), text("."))]);
     await client.settled();
-    for (const id of CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
+    for (const id of COMMON_CITATION_STYLE_IDS.filter((each) => each !== "numbered")) {
       await core.setMindCitationStyle(mind.id, id);
       const markdown = new TextDecoder().decode(
         (await core.exportMind(mind.id, { format: "markdown" })).data,
@@ -525,7 +573,9 @@ describe("exporting a Mind in its citation style", () => {
     const gbt = new TextDecoder().decode(
       (await core.exportMind(mind.id, { format: "markdown" })).data,
     );
-    expect(gbt).toContain("Losses loom larger than gains<sup>\\[1,2\\]</sup> \\[unverified\\].");
+    expect(gbt).toContain(
+      "Losses loom larger than gains<sup>\\[1\\]265\\[2\\]5</sup> \\[unverified\\].",
+    );
     expect(gbt).toContain("## 参考文献");
 
     await core.setMindCitationStyle(mind.id, "chicago-notes");
@@ -543,7 +593,6 @@ describe("exporting a Mind in its citation style", () => {
     await core.setMindCitationStyle(mind.id, "numbered");
     const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
     expect(paragraphsOf(part(files, "word/document.xml")).map((each) => each.text)).toEqual([
-      "Thesis",
       "Losses loom larger than gains[1][2]. Systems are open[3].",
     ]);
     expect(Object.values(footnotesOf(part(files, "word/footnotes.xml")))).toEqual([
@@ -559,7 +608,6 @@ describe("exporting a Mind in its citation style", () => {
     await client.settled();
     const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
     expect(paragraphsOf(part(files, "word/document.xml")).map((each) => each.text)).toEqual([
-      "Thesis",
       "Nothing cited here.",
     ]);
   });
@@ -596,7 +644,7 @@ describe("the User's footnotes beside a citation style", () => {
   test("in a style that cites in the text, only the User's footnotes are footnotes, right after the word", async () => {
     const { core, mind } = await written("apa");
     const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
-    expect(paragraphsOf(part(files, "word/document.xml"))[1]?.text).toBe(
+    expect(paragraphsOf(part(files, "word/document.xml"))[0]?.text).toBe(
       "Losses loom larger (Kahneman & Tversky, 1979, p. 265) than gains[1]. Systems are open (钱学森 et al., 1990)[2].",
     );
     // A Citation inside a footnote is written into its text as its source, as in Numbered.
@@ -609,7 +657,7 @@ describe("the User's footnotes beside a citation style", () => {
   test("in a note style, the style's notes and the User's are numbered together, in order", async () => {
     const { core, mind } = await written("chicago-notes");
     const files = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
-    expect(paragraphsOf(part(files, "word/document.xml"))[1]?.text).toBe(
+    expect(paragraphsOf(part(files, "word/document.xml"))[0]?.text).toBe(
       "Losses loom larger[1] than gains[2]. Systems are open[3][4].",
     );
     const notes = Object.values(footnotesOf(part(files, "word/footnotes.xml")));

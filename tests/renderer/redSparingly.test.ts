@@ -18,13 +18,17 @@ const RED =
 /** A rule that sets red: its file, then its selectors from the outside in. */
 const RED_RULES = [
   "src/styles.css @theme",
-  'src/styles.css .margin-check[data-check="contradicted"], .citation-card--contradicted',
+  'src/styles.css .margin-check[data-check="contradicted"], .citation-marker[data-check="contradicted"], .citation-card--contradicted',
+  // A contradicted Citation's badge in an Answer, which has no margin for its mark.
+  'src/styles.css .mind-editor.assistant-answer-text .citation-marker &[data-check="contradicted"]',
   'src/styles.css .margin-check &[data-check="contradicted"]',
   'src/styles.css .citation-marker &[data-check="contradicted"]',
   'src/styles.css .citation-run &[data-check="contradicted"]',
   "src/styles.css .chart-check--contradicted",
-  'src/styles.css .mind-health-part[data-part="contradicted"] .mind-health-icon',
+  'src/styles.css :is(.check-row, .check-badge-mark)[data-part="contradicted"] .mind-health-icon',
   "src/styles.css .claim-wash--contradicted",
+  // The outline of a picture a contradicted quote was read from.
+  'src/viewer/viewer.css [data-quote-tone="contradicted"]',
   'src/viewer/viewer.css [data-quote-tone="contradicted"] .quote-highlight, .highlight',
   'src/viewer/viewer.css [data-quote-tone="contradicted"] td.viewer-cell--quote',
   "src/viewer/viewer.css .quote-mark--contradicted",

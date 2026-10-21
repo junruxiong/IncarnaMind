@@ -5,6 +5,7 @@ import type { CoreBridge, SaveChatProviderInput } from "../src/core/api";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  addProviderPage,
   assistantAnswers,
   closeSettings,
   createDataFolder,
@@ -112,20 +113,20 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   // Anthropic's key field, open, focused, with the refusal said beside it.
   const settings = window.getByTestId("settings");
   await expect(settings).toHaveAttribute("data-page", "models");
-  const form = settings.getByTestId("provider-form");
-  await expect(form.getByRole("radio", { name: "Anthropic" })).toBeChecked();
-  const key = form.locator('input[type="password"]');
+  const page = settings.getByTestId("provider-page");
+  await expect(page.getByTestId("provider-page-title")).toHaveText("Anthropic");
+  const key = page.getByTestId("provider-page-key");
   await expect(key).toBeFocused();
   await expect(key).toBeInViewport();
-  await expect(form.getByTestId("provider-key-refused")).toHaveText(
-    /^Anthropic refused this key \(Today, .+\)\.$/,
-  );
+  const refusal = page.getByTestId("provider-key-refused");
+  await expect(refusal).toHaveText(/^Anthropic refused this key \(Today, .+\)\.$/);
   await motionSettled(window);
   await screenshot(window, "key-refused-settings");
 
   await window.keyboard.type("sk-ant-new-key");
-  await form.getByTestId("provider-use-key").click();
-  await expect(form).toBeHidden();
+  await window.keyboard.press("Enter");
+  await expect(refusal).toHaveCount(0);
+  await expect(key).toHaveValue("");
   await window.keyboard.press("Escape");
   await expect(settings).toBeHidden();
 
@@ -158,7 +159,7 @@ test("a model that can't add Citations says so under its Answer, and Choose anot
   await expect(answer).toHaveAttribute("data-status", "done");
   const line = answer.getByTestId("answer-no-citations");
   await expect(line).toHaveText(
-    "tiny-no-tools can’t add Citations, so nothing in this Answer is checked · Choose another model",
+    "tiny-no-tools can’t add Citations: nothing here is checked · Choose another model",
   );
   await screenshot(answer, "no-citations-line");
   await pointAndClick(window, line.getByTestId("answer-choose-model"));
@@ -166,9 +167,7 @@ test("a model that can't add Citations says so under its Answer, and Choose anot
   await window.keyboard.press("Escape");
 
   await setLanguage(window, "zh-CN");
-  await expect(line).toHaveText(
-    "tiny-no-tools 无法添加引用，这个回答里的内容都没有核对 · 换一个模型",
-  );
+  await expect(line).toHaveText("tiny-no-tools 无法添加引用：这里的内容均未核对 · 换一个模型");
   await screenshot(answer, "no-citations-line-zh");
   await app.close();
 });
@@ -186,10 +185,10 @@ test("with no Ollama on this computer, the setup card's local way says so, and o
   await expect(setup).toBeVisible();
   await setup.getByTestId("setup-other").click();
   const local = setup.getByTestId("way-local");
-  await expect(local).toContainText("Ollama isn't running on this computer. It's free to get.");
+  await expect(local).toContainText("Needs the free Ollama app");
   await local.click();
   await expect(setup.getByTestId("ollama-status")).toHaveText(
-    "To run models on this computer, install Ollama from ollama.com and start it.",
+    "Install and start Ollama from ollama.com to run models here.",
   );
   const get = setup.getByTestId("ollama-get");
   const again = setup.getByTestId("ollama-check-again");
@@ -205,7 +204,7 @@ test("with no Ollama on this computer, the setup card's local way says so, and o
   await app.close();
 });
 
-test("a choice that can't be used right now says why, with its next step: Ollama not running, and in local mode the key, the plans and the model menu; English and Chinese", async () => {
+test("a choice that can't be used right now says why, with its next step: Ollama not running, and in local mode a hosted provider, the plans and the model menu; English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true, ollama: NO_OLLAMA });
   await dismissChatSetup(window);
   await setWindowSize(app, window, 1440, 900);
@@ -213,35 +212,47 @@ test("a choice that can't be used right now says why, with its next step: Ollama
   await setLocalMode(window, true);
 
   const settings = await openSettings(window, "models");
-  const choices = settings.getByTestId("chat-provider-choices");
-  await expect(choices.getByTestId("ollama-status")).toHaveText(
-    "To run models on this computer, install Ollama from ollama.com and start it.",
+  const ollama = await addProviderPage(settings, "ollama");
+  await expect(ollama.getByTestId("ollama-status")).toHaveText(
+    "Install and start Ollama from ollama.com to run models here.",
   );
-  await expect(choices.getByTestId("chat-choice-ollama")).not.toBeChecked();
-  await expect(choices.getByTestId("ollama-get")).toBeVisible();
-  await expect(choices.getByTestId("ollama-check-again")).toBeVisible();
-  const keyLine = choices.getByTestId("local-mode-unavailable");
-  const plansLine = settings.getByTestId("plans-settings").getByTestId("local-mode-unavailable");
-  const unavailable = "Unavailable: “Keep everything on this computer” is on · Turn off local mode";
-  await expect(keyLine).toHaveText(unavailable);
-  await expect(plansLine).toHaveText(unavailable);
-  await screenshot(settings, "why-unavailable-settings-en");
-
+  await expect(ollama.getByTestId("ollama-get")).toHaveText("Get Ollama ↗");
+  await expect(ollama.getByTestId("ollama-check-again")).toHaveText("Check again");
+  await expect(ollama.getByTestId("local-mode-unavailable")).toHaveCount(0);
   await setLanguage(window, "zh-CN");
-  await expect(keyLine).toHaveText("不可用：已开启“所有内容都留在这台电脑上” · 关闭本地模式");
-  await expect(choices.getByTestId("ollama-status")).toHaveText(
-    "如需在本机运行模型，请从 ollama.com 安装并启动 Ollama。",
+  await expect(ollama.getByTestId("ollama-status")).toHaveText(
+    "要在本机运行模型，请从 ollama.com 安装并启动 Ollama。",
   );
-  await screenshot(settings, "why-unavailable-settings-zh");
+  await expect(ollama.getByTestId("ollama-get")).toHaveText("下载 Ollama ↗");
+  await expect(ollama.getByTestId("ollama-check-again")).toHaveText("重新检查");
   await setLanguage(window, "en");
+  await settings.getByTestId("models-back").click();
 
-  await keyLine.getByTestId("local-mode-turn-off").click();
-  await expect(keyLine).toHaveCount(0);
+  const hosted = await addProviderPage(settings, "anthropic");
+  const hostedLine = hosted.getByTestId("local-mode-unavailable");
+  const plansLine = settings.getByTestId("plans-settings").getByTestId("local-mode-unavailable");
+  const unavailable = "Unavailable: “Keep everything on this computer” is on · Allow cloud models";
+  await expect(hostedLine).toHaveText(unavailable);
+  await screenshot(settings, "why-unavailable-provider-en");
+  await setLanguage(window, "zh-CN");
+  await expect(hostedLine).toHaveText("不可用：已开启“所有内容都留在这台电脑上” · 允许使用云端模型");
+  await screenshot(settings, "why-unavailable-provider-zh");
+  await setLanguage(window, "en");
+  await settings.getByTestId("models-back").click();
+
+  await expect(plansLine).toHaveText(unavailable);
+  await screenshot(settings, "why-unavailable-plans-en");
+  await plansLine.getByTestId("local-mode-turn-off").click();
   await expect(plansLine).toHaveCount(0);
+  const undo = settings.getByTestId("undo-line-here");
+  await expect(undo.getByTestId("undo-message")).toHaveText(
+    "Turned off “Keep everything on this computer”",
+  );
+  await undo.getByTestId("undo-action").click();
+  await expect(plansLine).toHaveText(unavailable);
   await closeSettings(window);
 
   // A cloud model in the menu while local mode is on: why on the model, and the way out below.
-  await setLocalMode(window, true);
   await saveProvider(window, {
     kind: "anthropic",
     apiKey: "sk-ant-test-0000",

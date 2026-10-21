@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { gunzipSync } from "node:zlib";
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   createDataFolder,
@@ -35,37 +35,61 @@ test("the Privacy page lists the data flows and the update check, and offers no 
 
   const privacy = await openPrivacySettings(window);
   await expect(privacy).toContainText("collects no usage data");
+  const statement = privacy.getByTestId("privacy-flows-intro");
+  await expect(statement).toContainText("Only these services receive anything");
+  await privacy.getByTestId("privacy-flows-intro-details").click();
   await expect(privacy).toContainText("asks it not to store your requests");
 
-  // Every registered flow, with what it sends and where.
-  const chat = privacy.locator('[data-testid="data-flow"][data-flow-id="chat"]');
+  // The statement, then the services, then the switch, then the other traffic.
+  const service = privacy.getByTestId("data-service");
+  await expect(service).toHaveCount(1);
+  await expect(service).toContainText("llm.example.com");
+  await expect(service).toHaveAttribute("data-consent", "accepted");
+  const top = async (locator: Locator) => (await locator.boundingBox())?.y ?? Number.NaN;
+  const order = [
+    await top(statement),
+    await top(service),
+    await top(privacy.getByTestId("local-only-setting")),
+    await top(privacy.getByTestId("network-traffic")),
+  ];
+  expect(order).toEqual(order.toSorted((a, b) => a - b));
+
+  // The decision is said once for the service, with what each use sends behind Details.
+  const decision = service.getByTestId("data-service-decision");
+  await expect(decision).toContainText("Allowed when you chose llm.example.com, ");
+  await decision.getByTestId("data-service-decision-details").click();
+  await expect(privacy.getByText(/Allowed when you chose/)).toHaveCount(1);
+  const chat = service.locator('[data-testid="data-flow"][data-flow-id="chat"]');
   await expect(chat).toContainText("Chat");
   await expect(chat).toContainText(
-    "The Mind you're in: its text, your Notes and earlier Answers, except Notes you've excluded",
+    "This Mind’s text, Notes and earlier Answers, minus excluded Notes",
   );
-  await expect(chat).toContainText("Passages from your Documents");
-  await expect(privacy.locator('[data-flow-id="tagging"]')).toContainText("Automatic Tags");
-  const service = chat.getByTestId("data-flow-service");
-  await expect(service).toContainText("to llm.example.com");
-  await expect(service).toHaveAttribute("data-consent", "accepted");
-  await expect(service.getByTestId("data-flow-decision")).toContainText(
-    "Allowed when you chose llm.example.com, ",
-  );
+  await expect(chat).toContainText("passages from your Documents");
+  await expect(service.locator('[data-flow-id="tagging"]')).toContainText("Automatic Tags");
 
-  // Stop allowing it, and it asks again next time; allowed from here, with the date.
+  // Stop allowing it, and it asks again next time; the line to take it back is under the list.
   // Not "Revoke", which is 撤销 in Chinese, the same word as Undo (#763).
-  const revoke = service.getByTestId("data-flow-revoke");
+  const revoke = service.getByTestId("data-service-revoke");
   await expect(revoke).toHaveText("Stop allowing");
   await setLanguage(window, "zh-CN");
   await expect(revoke).toHaveText("停止允许");
   await setLanguage(window, "en");
   await revoke.click();
   await expect(service).toHaveAttribute("data-consent", "not-asked");
-  await service.getByTestId("data-flow-allow").click();
+  const allow = service.getByTestId("data-service-allow");
+  await expect(allow).toBeFocused();
+  const undoLine = privacy.getByTestId("consent-settings").getByTestId("undo-line-here");
+  await expect(undoLine).toContainText("Stopped allowing llm.example.com");
+  await undoLine.getByTestId("undo-action").click();
   await expect(service).toHaveAttribute("data-consent", "accepted");
-  await expect(service.getByTestId("data-flow-decision")).toContainText(
-    /Allowed on \d{1,2} [A-Z][a-z]+ \d{4}/,
-  );
+  await expect(decision).toContainText(/Allowed on \d{1,2} [A-Z][a-z]+ \d{4}/);
+
+  // Allowed again from here, with the date.
+  await revoke.click();
+  await expect(service).toHaveAttribute("data-consent", "not-asked");
+  await allow.click();
+  await expect(service).toHaveAttribute("data-consent", "accepted");
+  await expect(decision).toContainText(/Allowed on \d{1,2} [A-Z][a-z]+ \d{4}/);
 
   // Traffic without the User's content: the update check, on by default, can be turned off.
   const updates = privacy.locator(
@@ -80,9 +104,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(privacy.locator('[data-traffic-id="ollama-pull"]')).toContainText("Ollama");
 
   // Skill scripts are their own matter.
-  await expect(privacy.getByTestId("skill-scripts-note")).toContainText(
-    "approval you give before each run",
-  );
+  await expect(privacy.getByTestId("skill-scripts-note")).toContainText("Each run asks first");
 
   // A copy built without a crash-report address doesn't offer crash reports.
   await expect(privacy.getByTestId("crash-reports")).toHaveCount(0);
@@ -116,7 +138,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
       value,
     );
   await language("zh-CN");
-  await expect(chat).toContainText("你所在的 Mind：正文、笔记和之前的回答，不含你排除的笔记");
+  await expect(chat).toContainText("当前 Mind 的正文、笔记和之前的回答，不含已排除的笔记");
   await language("en");
   await app.close();
 
@@ -167,6 +189,7 @@ test("with a crash-report address, crash reports are off until opted in, scrubbe
     const privacy = await openPrivacySettings(window);
     const crashReports = privacy.getByTestId("crash-reports-switch");
     await expect(crashReports).not.toBeChecked();
+    await privacy.getByTestId("crash-reports-description-details").click();
     await expect(privacy.getByTestId("crash-reports")).toContainText("removed first");
 
     // Off by default: nothing is sent. The first report that arrives, once opted in, is the

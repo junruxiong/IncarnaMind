@@ -8,13 +8,19 @@
  */
 import * as Y from "yjs";
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
-import { readProposalAttribute } from "../../../shared/proposals";
+import { readTextColor, readTextFont, readTextSize } from "../../../shared/paragraphFormat";
+import { readProposalAttribute, readProposalRef } from "../../../shared/proposals";
 import { readWordAtom } from "../../../shared/wordFiles";
 import {
   ANSWER_BLOCK,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
+  SUBSCRIPT_MARK,
+  SUPERSCRIPT_MARK,
+  TEXT_COLOR_MARK,
+  TEXT_FONT_MARK,
+  TEXT_SIZE_MARK,
   WORD_BLOCK_NODE,
 } from "../../api";
 import { type Pendings, pendingOf, type ReviewReading } from "../../mindText";
@@ -28,6 +34,10 @@ export interface TextMarks {
   highlight: boolean;
   code: boolean;
   link: string | null;
+  color: string | null;
+  font: string | null;
+  size: number | null;
+  vertical: "superscript" | "subscript" | null;
 }
 
 export const NO_MARKS: TextMarks = {
@@ -38,11 +48,17 @@ export const NO_MARKS: TextMarks = {
   highlight: false,
   code: false,
   link: null,
+  color: null,
+  font: null,
+  size: null,
+  vertical: null,
 };
 
 export function marksOf(marks: readonly MarkJSON[] | undefined): TextMarks {
   const has = (type: string) => marks?.some((mark) => mark.type === type) ?? false;
-  const link = marks?.find((mark) => mark.type === "link")?.attrs?.href;
+  const attribute = (type: string, name: string) =>
+    marks?.find((mark) => mark.type === type)?.attrs?.[name];
+  const link = attribute("link", "href");
   return {
     bold: has("bold"),
     italic: has("italic"),
@@ -51,6 +67,10 @@ export function marksOf(marks: readonly MarkJSON[] | undefined): TextMarks {
     highlight: has("highlight"),
     code: has("code"),
     link: typeof link === "string" && link !== "" ? link : null,
+    color: readTextColor(attribute(TEXT_COLOR_MARK, "color")),
+    font: readTextFont(attribute(TEXT_FONT_MARK, "family")),
+    size: readTextSize(attribute(TEXT_SIZE_MARK, "size")),
+    vertical: has(SUPERSCRIPT_MARK) ? "superscript" : has(SUBSCRIPT_MARK) ? "subscript" : null,
   };
 }
 
@@ -61,7 +81,20 @@ export const sameMarks = (a: TextMarks, b: TextMarks): boolean =>
   a.strike === b.strike &&
   a.highlight === b.highlight &&
   a.code === b.code &&
-  a.link === b.link;
+  a.link === b.link &&
+  a.color === b.color &&
+  a.font === b.font &&
+  a.size === b.size &&
+  a.vertical === b.vertical;
+
+/** Text's marks with the file's colour, font, size and raise where they have none. */
+export const withFileFormat = (marks: TextMarks, file: TextMarks): TextMarks => ({
+  ...marks,
+  color: marks.color ?? file.color,
+  font: marks.font ?? file.font,
+  size: marks.size ?? file.size,
+  vertical: marks.vertical ?? file.vertical,
+});
 
 /** What changes still waiting do to a node as a whole: its `proposal` attribute. */
 export function nodePendings(node: NodeJSON, review: ReviewReading | undefined): Pendings {
@@ -77,6 +110,56 @@ export function textPendings(node: NodeJSON, review: ReviewReading | undefined):
   const inserted = pendingOf(attrsOf(PROPOSAL_INSERT_MARK), review);
   const deleted = pendingOf(attrsOf(PROPOSAL_DELETE_MARK), review);
   return { ...(inserted && { inserted }), ...(deleted && { deleted }) };
+}
+
+const MARK_KINDS: ReadonlyMap<string, "insert" | "delete"> = new Map([
+  [PROPOSAL_INSERT_MARK, "insert"],
+  [PROPOSAL_DELETE_MARK, "delete"],
+]);
+
+/**
+ * The changes on what a Mind's node holds, its text and the nodes within it, not on the node
+ * itself (that is its counterpart's `pending`): each by its id and kind, with its request.
+ */
+export function changesWithin(element: Y.XmlElement): Map<string, string> {
+  const found = new Map<string, string>();
+  const visit = (parent: Y.XmlElement) => {
+    for (const child of parent.toArray()) {
+      if (child instanceof Y.XmlText) {
+        for (const run of child.toDelta() as { attributes?: Record<string, unknown> }[]) {
+          for (const [mark, kind] of MARK_KINDS) {
+            const ref = readProposalRef(run.attributes?.[mark]);
+            if (ref) found.set(`${ref.id} ${kind}`, ref.request);
+          }
+        }
+      } else if (child instanceof Y.XmlElement) {
+        const own = readProposalAttribute(child.getAttribute(PROPOSAL_ATTRIBUTE));
+        if (own) found.set(`${own.id} ${own.kind}`, own.request);
+        visit(child);
+      }
+    }
+  };
+  visit(element);
+  return found;
+}
+
+/** As `changesWithin`, for a node as the import reads it. */
+export function importedChangesWithin(node: NodeJSON): Map<string, string> {
+  const found = new Map<string, string>();
+  const visit = (parent: NodeJSON) => {
+    for (const child of parent.content ?? []) {
+      for (const mark of child.marks ?? []) {
+        const kind = MARK_KINDS.get(mark.type);
+        const ref = kind ? readProposalRef(mark.attrs) : null;
+        if (kind && ref) found.set(`${ref.id} ${kind}`, ref.request);
+      }
+      const own = readProposalAttribute(child.attrs?.[PROPOSAL_ATTRIBUTE]);
+      if (own) found.set(`${own.id} ${own.kind}`, own.request);
+      visit(child);
+    }
+  };
+  visit(node);
+  return found;
 }
 
 /**

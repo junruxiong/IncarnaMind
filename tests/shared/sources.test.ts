@@ -3,6 +3,7 @@ import { sourceEntry, sourcesOf, sourceText } from "../../src/shared/sources";
 
 const WEB = {
   address: "https://encyclopedia.example/tea",
+  origin: "user" as const,
   siteName: "The Open Encyclopedia",
   author: null,
   published: null,
@@ -11,6 +12,8 @@ const WEB = {
     { contentHash: "old", fetchedAt: "2026-10-06T09:00:00.000Z" },
     { contentHash: "new", fetchedAt: "2026-10-08T09:00:00.000Z" },
   ],
+  picturesLeftOut: 0,
+  look: null,
 };
 
 const documents = [

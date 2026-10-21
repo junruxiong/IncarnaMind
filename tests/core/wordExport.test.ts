@@ -11,6 +11,7 @@ import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import { type Core, type Document, MIND_WORD_FIELD, WORD_ATOM_NODE } from "../../src/core";
+import { elements, parseXml, type XmlElement } from "../../src/core/documents/formats/xml";
 import { recordProposalRequest } from "../../src/shared/proposals";
 import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
 import { createTempDataFolder, startCore } from "../helpers/core";
@@ -521,6 +522,100 @@ describe("IncarnaMind's comments in an imported file (#107)", () => {
   });
 });
 
+describe("sentences whose check isn't good, in an imported file (#900)", () => {
+  const checked = (value: string, state: "contradicted" | "unsupported", says: string | null) => ({
+    ...text(value),
+    marks: [
+      {
+        type: "claimCheck",
+        attrs: {
+          id: `check-${state}`,
+          request: "r1",
+          action: "check-against-documents",
+          state,
+          reason: null,
+          detail: null,
+          text: value,
+          evidence: null,
+          says,
+          calculation: null,
+          scope: { folderId: null, widened: false },
+          versions: [],
+          excluded: [],
+          checkedAt: "2026-10-12T14:30:00.000Z",
+        },
+      },
+    ],
+  });
+
+  test("each gets a comment on its own words, written into its paragraph; the others stay as they were", async () => {
+    const { core, bytes, mindId, client } = await setUp({
+      body:
+        paragraph("Halden held cash of £192.9m.") +
+        paragraph("Nothing to check here.") +
+        paragraph("Margins widened in 2026."),
+    });
+    editMind(client, ([first, second, third]) => [
+      {
+        ...(first as JSONContent),
+        content: [
+          checked("Halden held cash of £192.9m.", "contradicted", "The report says £182.9m."),
+        ],
+      },
+      second as JSONContent,
+      {
+        ...(third as JSONContent),
+        content: [checked("Margins widened in 2026.", "unsupported", null)],
+      },
+    ]);
+    await client.settled();
+
+    const result = await core.exportMind(mindId, { format: "docx", commentFailedChecks: true });
+    const files = unzip(result.data);
+    const comments = files.get("word/comments.xml")?.toString("utf8") ?? "";
+    const document = files.get("word/document.xml")?.toString("utf8") ?? "";
+
+    expect(result.sentenceChecks).toEqual({
+      contradicted: 1,
+      unsupported: 1,
+      needsRecheck: 0,
+      commented: true,
+    });
+    expect([...comments.matchAll(/<w:comment /g)]).toHaveLength(2);
+    expect(textOf(comments)).toContain("Contradicted: The report says £182.9m.");
+    expect(textOf(comments)).toContain("Unsupported: nothing in your Documents says this.");
+    const [first, second, third] = paragraphsIn(document);
+    expect(first).toMatch(
+      /<w:commentRangeStart w:id="(\d+)"\/>[\s\S]*Halden held cash of £192\.9m\.[\s\S]*<w:commentRangeEnd w:id="\1"\/>/,
+    );
+    expect(third).toMatch(
+      /<w:commentRangeStart w:id="(\d+)"\/>[\s\S]*Margins widened in 2026\.[\s\S]*<w:commentRangeEnd w:id="\1"\/>/,
+    );
+    const before = paragraphsIn(unzip(bytes).get("word/document.xml")?.toString("utf8") ?? "");
+    expect(second).toBe(before[1]);
+  });
+
+  test("with the option off the file is the one it was", async () => {
+    const { core, bytes, mindId, client } = await setUp({
+      body: paragraph("Halden held cash of £192.9m."),
+    });
+    editMind(client, ([first]) => [
+      {
+        ...(first as JSONContent),
+        content: [
+          checked("Halden held cash of £192.9m.", "contradicted", "The report says £182.9m."),
+        ],
+      },
+    ]);
+    await client.settled();
+
+    const result = await core.exportMind(mindId, { format: "docx", commentFailedChecks: false });
+
+    expect(changed(unzip(bytes), unzip(result.data))).toEqual([]);
+    expect(result.sentenceChecks.commented).toBe(false);
+  });
+});
+
 describe("Blocks added, deleted and moved", () => {
   test("a new paragraph with a Citation goes after the one before it, in its look; the Citation is a footnote", async () => {
     const { core, mindId, client } = await setUp({
@@ -823,4 +918,67 @@ describe("Word's rules", () => {
     const head = (xml: string) => xml.slice(0, xml.indexOf("<w:body>"));
     expect(head(document)).toBe(head(original));
   });
+
+  test("a table nested 2,000 deep keeps its depth, and every cell still ends with a paragraph when the one after the nested table goes", async () => {
+    const { core, mindId, client } = await setUp({
+      body: nestedTable(0, NESTED, (level) => paragraph(`After level ${level}`)),
+    });
+    const withoutAfter = (node: JSONContent): JSONContent => ({
+      ...node,
+      ...(node.content && {
+        content: node.content
+          .filter((each) => each.content?.[0]?.text !== "After level 0")
+          .map(withoutAfter),
+      }),
+    });
+    editMind(client, (blocks) => blocks.map(withoutAfter));
+    editText(client, (value) => (value === "Level 0" ? "Level 0, edited" : value));
+    await client.settled();
+    const { document } = await exported(core, mindId);
+    expect(document).toContain("Level 0, edited");
+    expect(document).not.toContain("After level 0");
+    expect(document).toContain("After level 1");
+    const { lastInCell, depth } = cellEndsAndDepth(document);
+    expect(depth).toBe(NESTED);
+    expect(lastInCell).toHaveLength(NESTED);
+    expect(new Set(lastInCell)).toEqual(new Set(["w:p"]));
+  });
+
+  test("a cell that ended with its nested table in the file still does, the table byte for byte and as deep", async () => {
+    const { core, mindId, client } = await setUp({ body: nestedTable(0, NESTED, () => "") });
+    editText(client, (value) => (value === "Level 0" ? "Level 0, edited" : value));
+    await client.settled();
+    const { document } = await exported(core, mindId);
+    expect(document).toContain("Level 0, edited");
+    expect(document).toContain(`${nestedTable(1, NESTED, () => "")}</w:tc>`);
+    expect(cellEndsAndDepth(document).depth).toBe(NESTED);
+  });
 });
+
+const NESTED = 2_000;
+
+function nestedTable(
+  fromLevel: number,
+  untilLevel: number,
+  afterNested: (level: number) => string,
+): string {
+  let inner = "";
+  for (let level = untilLevel - 1; level >= fromLevel; level--) {
+    inner = table([[`${paragraph(`Level ${level}`)}${inner && inner + afterNested(level)}`]]);
+  }
+  return inner;
+}
+
+function cellEndsAndDepth(xml: string): { lastInCell: string[]; depth: number } {
+  const lastInCell: string[] = [];
+  let depth = 0;
+  const stack: [XmlElement, number][] = [[parseXml(xml), 0]];
+  for (let at = stack.pop(); at; at = stack.pop()) {
+    const [element, outside] = at;
+    const tables = element.name === "w:tbl" ? outside + 1 : outside;
+    depth = Math.max(depth, tables);
+    if (element.name === "w:tc") lastInCell.push(elements(element).at(-1)?.name ?? "");
+    for (const each of elements(element)) stack.push([each, tables]);
+  }
+  return { lastInCell, depth };
+}

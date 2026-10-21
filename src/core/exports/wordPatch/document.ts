@@ -16,8 +16,14 @@
  * (#108); one the User accepted or rejected leaves no trace.
  */
 import type { NodeJSON } from "../../../shared/blockJson";
+import { readParagraphFormat } from "../../../shared/paragraphFormat";
 import { readWordAtom, wordAtomText } from "../../../shared/wordFiles";
-import type { WordAtomKind, WordExportLoss } from "../../api";
+import {
+  PARAGRAPH_FORMAT_ATTRIBUTE,
+  type ParagraphFormat,
+  type WordAtomKind,
+  type WordExportLoss,
+} from "../../api";
 import type { WordDocument } from "../../documents/formats/docxImport";
 import type { Relationship } from "../../documents/formats/docxPackage";
 import { child, elements, walk, type XmlElement } from "../../documents/formats/xml";
@@ -26,16 +32,18 @@ import {
   isWordChange,
   madeBy,
   type Pendings,
+  NO_MARKS as PLAIN,
   type ReviewReading,
   samePendings,
   type TableCell,
   tableLayout,
 } from "../../mindText";
 import { type DocxWriter, piecesOf, WRITER_NAMESPACES } from "../docx";
+import { changedElement, formatChanges } from "../paragraphFormat";
 import { dateAttribute, escapeXml, type WordIds } from "../wordml";
 import {
   type Authorship,
-  passagesOf,
+  type Piece,
   type Review,
   type Tracking,
   trackBlocks,
@@ -94,6 +102,11 @@ export interface DocumentPatchInput {
   /** IncarnaMind's tracked changes and comments, and the User's tracked edits. */
   review: Review;
   ids: WordIds;
+  /**
+   * Whether this version read the Mind's Word look. Until it reads it again, the Mind lacks
+   * the file's direct formatting, which is then kept as the file has it rather than removed.
+   */
+  lookCurrent: boolean;
 }
 
 /** A counterpart as imported, and the element its XML is. */
@@ -106,6 +119,25 @@ interface Based {
 interface Reference {
   pPr: string;
   rPr: string;
+  format: ParagraphFormat;
+}
+
+const formatOf = (node: NodeJSON): ParagraphFormat =>
+  readParagraphFormat(node.attrs?.[PARAGRAPH_FORMAT_ATTRIBUTE]);
+
+function writeFormat(properties: Properties, now: ParagraphFormat, before: ParagraphFormat): void {
+  const changes = formatChanges(now, before);
+  for (const [name, attributes] of [
+    ["w:spacing", changes.spacing],
+    ["w:ind", changes.ind],
+  ] as const) {
+    if (Object.keys(attributes).length === 0) continue;
+    const element = changedElement(name, properties.get(name), attributes);
+    if (element) properties.set(name, element);
+    else properties.remove(name);
+  }
+  if (changes.jc === null) properties.remove("w:jc");
+  else if (changes.jc) properties.set("w:jc", `<w:jc w:val="${changes.jc}"/>`);
 }
 
 /** CT_TcPr's children, in order. */
@@ -175,6 +207,7 @@ export class DocumentPatch {
       counterpartsOf(input.current, input.currentKey, input.reading),
       input.currentKey,
       (counterpart) => {
+        this.forceForComments(counterpart);
         if (!counterpart.list) return;
         this.listItems.set(counterpart.list.list, [
           ...(this.listItems.get(counterpart.list.list) ?? []),
@@ -215,7 +248,23 @@ export class DocumentPatch {
       ids: input.ids,
       review: input.review,
       removedHere: (source) => !input.plan.writtenElsewhere(source),
+      lookCurrent: input.lookCurrent,
     };
+  }
+
+  /** Copied as it was, a paragraph has no runs a comment's range could start and end in. */
+  private forceForComments(counterpart: Counterpart): void {
+    const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
+    if (
+      !based ||
+      counterpart.kind !== "paragraph" ||
+      !this.input.review.choices.commentFailedChecks ||
+      !this.input.tokensOf(counterpart.node).some((token) => token.sentence)
+    ) {
+      return;
+    }
+    for (let at: XmlElement | undefined = based.element; at; at = this.parents.get(at))
+      this.forced.add(at);
   }
 
   /** The Mind's counterparts in some of its Blocks, read for review. */
@@ -305,13 +354,12 @@ export class DocumentPatch {
   }
 
   /**
-   * The pieces of text written, in document order, for finding AI text's
-   * passages: a paragraph written as it was is the User's; one written again,
-   * its new words by who wrote them; new Blocks as the native writer writes them.
+   * The pieces of text written, in document order, for finding where comments
+   * go: a paragraph written as it was is the User's; one written again, its
+   * new words by who wrote them, and its sentences with a check that isn't
+   * good; new Blocks as the native writer writes them.
    */
-  private *pieces(
-    counterparts: readonly Counterpart[],
-  ): Generator<{ key: object; authorship: Authorship }> {
+  private *pieces(counterparts: readonly Counterpart[]): Generator<Piece> {
     for (const counterpart of counterparts) {
       if (counterpart.pending.inserted) continue;
       const based = counterpart.key ? this.based.get(counterpart.key) : undefined;
@@ -336,7 +384,7 @@ export class DocumentPatch {
                   : /^\s$/u.test(token.char)
                     ? "neither"
                     : "own";
-          yield { key: token, authorship };
+          yield { key: token, authorship, sentence: token.sentence };
         }
       } else if (counterpart.kind === "table" && based) {
         if (!this.input.edited(counterpart.node) && !this.forced.has(based.element)) {
@@ -384,7 +432,7 @@ export class DocumentPatch {
     const body = child(this.input.base.root, "w:body");
     if (!body) return this.text;
     const current = this.currentOf(this.input.current);
-    this.input.review.mark(passagesOf(this.pieces(current)));
+    this.input.review.mark(this.pieces(current));
     const splices = this.container({
       element: body,
       contentStart: body.openEnd ?? startOf(body),
@@ -510,7 +558,9 @@ export class DocumentPatch {
       previous = { table, index: keptHere ? (matched[index] as number) : null };
     });
 
-    // A cell ends with a paragraph, and so does the body before its last section's properties.
+    // A cell ends with a paragraph, and so does the body before its last section's properties,
+    // unless it still ends with the table it ended with in the file: LibreOffice takes minutes
+    // to lay out a paragraph after a table nested thousands deep.
     if (splices.length > 0) {
       const last = spec.current.at(-1);
       const lastBased = last?.key ? this.based.get(last.key) : undefined;
@@ -520,7 +570,7 @@ export class DocumentPatch {
         lastBased !== undefined &&
         last?.key === baseKeys.at(-1) &&
         keptKeys.has(lastBased.counterpart.key ?? "");
-      if (endsInTable && !(stillLast && element.name === "w:body")) {
+      if (endsInTable && !stillLast) {
         splices.push({ from: anchor, to: anchor, text: "<w:p/>" });
       }
     }
@@ -784,8 +834,10 @@ export class DocumentPatch {
         : null;
     let properties: Properties;
     let rPr = "";
+    let formatBefore: ParagraphFormat = {};
     if (based) {
       properties = Properties.paragraph(basePPr);
+      formatBefore = formatOf(based.counterpart.node);
       rPr = runOfMark(properties.get("w:rPr"));
       const baseLevel =
         based.counterpart.node.type === "heading"
@@ -817,6 +869,7 @@ export class DocumentPatch {
     } else if (counterpart.list) {
       const sibling = this.siblingOf(counterpart);
       properties = Properties.paragraph(sibling ? cleaned(this.pPrOf(sibling.element)) : "");
+      if (sibling) formatBefore = formatOf(sibling.counterpart.node);
       rPr = sibling ? this.lastRunOf(sibling) : "";
       if (!sibling) {
         properties.set("w:pStyle", `<w:pStyle w:val="${escapeXml(styles.id("listParagraph"))}"/>`);
@@ -825,8 +878,15 @@ export class DocumentPatch {
     } else {
       const reference = references()[0];
       properties = Properties.paragraph(reference ? reference.pPr : "");
+      formatBefore = reference?.format ?? {};
       rPr = reference?.rPr ?? "";
     }
+    const format = formatOf(counterpart.node);
+    writeFormat(
+      properties,
+      this.input.lookCurrent ? format : { ...formatBefore, ...format },
+      formatBefore,
+    );
 
     // A section break goes with the paragraph that holds it now.
     const sections = this.sectionSources(counterpart);
@@ -932,7 +992,15 @@ export class DocumentPatch {
     for (const order of [counterparts.slice(0, index).reverse(), counterparts.slice(index + 1)]) {
       for (const counterpart of order) {
         const based = plain(counterpart);
-        if (based) return [{ pPr: cleaned(this.pPrOf(based.element)), rPr: this.lastRunOf(based) }];
+        if (based) {
+          return [
+            {
+              pPr: cleaned(this.pPrOf(based.element)),
+              rPr: this.lastRunOf(based),
+              format: formatOf(based.counterpart.node),
+            },
+          ];
+        }
       }
     }
     return [];
@@ -1409,7 +1477,7 @@ function textBlocks(node: NodeJSON): Block[] {
     .filter((line) => line.trim() !== "")
     .map((line) => ({
       kind: "paragraph",
-      content: [{ kind: "text", text: line, marks: { ...NO_MARKS } }],
+      content: [{ kind: "text", text: line, marks: { ...PLAIN } }],
     }));
 }
 

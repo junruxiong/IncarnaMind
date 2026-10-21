@@ -38,18 +38,21 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-async function organizationSettings(window: Page) {
+/** The Tagging section in Settings → Models. */
+async function taggingSettings(window: Page) {
   const settings = await openSettings(window, "models");
-  await expect(settings.getByTestId("organization-settings")).toBeVisible();
-  return settings;
+  const section = settings.getByTestId("tagging-settings");
+  await section.scrollIntoViewIfNeeded();
+  return section;
 }
-async function saveOrganization(window: Page) {
-  await window
-    .getByTestId("settings")
-    .getByRole("button", { name: "Save settings", exact: true })
-    .click();
-  await expect(window.getByTestId("settings").getByRole("status")).toHaveText("Settings saved.");
-  await closeSettings(window);
+
+/** "Other model…": fills in a model the list doesn't have, and uses it. */
+async function chooseOtherModel(section: Locator, fill: (form: Locator) => Promise<void>) {
+  await section.getByTestId("tagging-other").click();
+  const form = section.getByTestId("tagging-other-form");
+  await fill(form);
+  await form.getByRole("button", { name: "Use this model", exact: true }).click();
+  await expect(section.getByTestId("tagging-other").getByRole("radio")).toBeChecked();
 }
 
 const makeFolders = async (
@@ -143,7 +146,7 @@ test("folders, tags, search, edits and removal update the index while originals 
     // The Folder's name and description edit under its section, from its menu.
     const form = await editFolderInLibrary(window, "Client work");
     await form.getByLabel("Folder name", { exact: true }).fill("Client reports");
-    await form.getByRole("button", { name: "Save folder" }).click();
+    await form.getByRole("button", { name: "Save Folder" }).click();
     await expect(section(library, "Client reports")).toHaveCount(1);
     await expect(form).toHaveCount(0);
 
@@ -191,7 +194,7 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
     await dismissChatSetup(window);
     await connectLocalChatModel(window, "main-chat");
     await makeFolders(window, [{ name: "Research", description: "Research papers and reports" }]);
-    const settings = await organizationSettings(window);
+    const settings = await taggingSettings(window);
     const providerId = await window.evaluate(
       async () =>
         (
@@ -201,15 +204,17 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
         )[0]?.id,
     );
     if (!providerId) throw new Error("No provider");
-    await settings.getByLabel("Connection", { exact: true }).selectOption(providerId);
-    await settings.getByLabel("Model name", { exact: true }).fill("small-classifier");
+    await chooseOtherModel(settings, async (form) => {
+      await form.getByLabel("Connection", { exact: true }).selectOption(providerId);
+      await form.getByLabel("Model name", { exact: true }).fill("small-classifier");
+    });
     // On by default; turned off here, so the Document waits for Organize.
     const automatic = settings.getByRole("checkbox", {
-      name: /^Organize new and changed Documents automatically/,
+      name: /^Move new Documents into Folders automatically/,
     });
     await expect(automatic).toBeChecked();
     await automatic.uncheck();
-    await saveOrganization(window);
+    await closeSettings(window);
     const path = join(sources, "Research notes.txt");
     await writeFile(path, "Research report about membrane separation and water filtration.");
     await addDocuments(window, [path]);
@@ -269,7 +274,8 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
     const library = reopened.window.getByTestId("library");
     const row = rowOf(section(library, "Not in a Folder"), "Research notes");
     await expect(row.getByTestId("document-tags")).toContainText("Membrane");
-    const settings = await organizationSettings(reopened.window);
+    const settings = await taggingSettings(reopened.window);
+    await expect(settings.getByTestId("tagging-other")).toContainText("small-classifier");
     await expect(settings.getByLabel("Model name", { exact: true })).toHaveValue(
       "small-classifier",
     );
@@ -281,7 +287,9 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
 test("onboarding offers starter folders, and Organize with no model chosen opens its settings, in Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true });
   try {
-    await window.getByTestId("onboarding-groups").click();
+    await window.keyboard.press("ControlOrMeta+k");
+    await window.keyboard.type("Starter Folders");
+    await window.keyboard.press("Enter");
     await expect(window.getByTestId("library")).toBeVisible();
     await window.evaluate(async () =>
       (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
@@ -296,11 +304,22 @@ test("onboarding offers starter folders, and Organize with no model chosen opens
     );
     await pointAndClick(window, window.getByTestId("library-organize-set-up"));
     await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
-    await expect(window.getByTestId("organization-settings")).toContainText("文档整理");
+    await expect(window.getByTestId("tagging-settings")).toContainText("自动打标签");
     await window.getByTestId("settings-close").click();
   } finally {
     await app.close();
   }
+});
+
+test("the + menu's More offers From starter folders…, which opens the starter folders (#123)", async () => {
+  const { window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
+  await expect(window.getByTestId("plus-starter-folders")).toHaveText("From starter Folders…");
+  await window.getByTestId("plus-starter-folders").click();
+  await expect(window.getByTestId("library")).toBeVisible();
+  await expect(window.getByRole("region", { name: "Starter Folders" })).toBeVisible();
 });
 
 test("a Document waiting for Ollama says why in the interface language, in its info", async () => {
@@ -335,7 +354,11 @@ test("a Document waiting for Ollama says why in the interface language, in its i
 
 /** Real HTTP protocol and PDF rendering; only inference is deterministic here. */
 test("Auto routes text and scans with tags, reports failures, retries and preserves overrides", async () => {
-  const requests: { model: string; images?: string[] }[] = [];
+  const requests: {
+    model: string;
+    images?: string[];
+    questions: Record<string, { type: string }>;
+  }[] = [];
   let models = ["tev1:0.8b", "clef-flash:latest"];
   let fail = false;
   const loaded = new Set<string>();
@@ -403,13 +426,15 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     });
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
-    let settings = await organizationSettings(window);
-    await settings.getByLabel("Connection", { exact: true }).selectOption("auto");
-    await expect(settings.getByLabel("Model name", { exact: true })).toHaveCount(0);
-    await settings
-      .getByLabel("Local Ollama address", { exact: true })
-      .fill(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
-    await saveOrganization(window);
+    let settings = await taggingSettings(window);
+    await chooseOtherModel(settings, async (form) => {
+      await form.getByLabel("Connection", { exact: true }).selectOption("auto");
+      await expect(form.getByLabel("Model name", { exact: true })).toHaveCount(0);
+      await form
+        .getByLabel("Local Ollama address", { exact: true })
+        .fill(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+    });
+    await closeSettings(window);
     await pointAndClick(window, organize(library));
     const notes = rowOf(library, "Research notes");
     const scan = rowOf(library, "Scanned diagram");
@@ -422,16 +447,20 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     await expect(library.getByTestId("library-organizing")).toHaveCount(0);
     await organized(notes, "tev1:0.8b · Text");
     await organized(scan, "clef-flash · Text + PDF pages");
-    expect(requests.map((item) => item.model)).toEqual(["tev1:0.8b", "clef-flash"]);
-    expect(requests[0]?.images).toBeUndefined();
-    expect(requests[1]?.images).toHaveLength(1);
+    // Organize's requests ask for a Folder; the Document that waited for a model was tagged before it ran.
+    const sorting = requests.filter((item) =>
+      Object.values(item.questions).some((question) => question.type === "choice"),
+    );
+    expect(sorting.map((item) => item.model)).toEqual(["tev1:0.8b", "clef-flash"]);
+    expect(sorting[0]?.images).toBeUndefined();
+    expect(sorting[1]?.images).toHaveLength(1);
 
     // A failure says so where it happened, with one way to try again.
     models = [...models, "tev1:4b"];
     fail = true;
     await pointAndClick(window, organize(library));
     await expect(library.getByTestId("library-organize-failed")).toHaveText(
-      /^Organize couldn't sort (1 Document|2 Documents) · Try again$/,
+      /^Organize couldn’t sort (1 Document|2 Documents) · Try again$/,
     );
     await expect(notes.getByTestId("library-not-sorted")).toHaveAttribute(
       "title",
@@ -457,18 +486,21 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     );
     await organized(scan, /clef-flash/);
     // Explicit Clef override can include or omit PDF images; the choice persists.
-    settings = await organizationSettings(window);
-    await expect(settings.getByLabel("Connection", { exact: true })).toHaveValue("auto");
-    await settings.getByLabel("Connection", { exact: true }).selectOption("ollama");
-    await settings.getByLabel("Model name", { exact: true }).fill("clef-flash");
-    const images = settings.getByRole("checkbox", { name: /Include up to 3 PDF page images/ });
-    await images.check();
-    await saveOrganization(window);
-    settings = await organizationSettings(window);
+    settings = await taggingSettings(window);
+    const form = settings.getByTestId("tagging-other-form");
+    await expect(form.getByLabel("Connection", { exact: true })).toHaveValue("auto");
+    const images = form.getByRole("checkbox", { name: /Up to 3 PDF page images/ });
+    await chooseOtherModel(settings, async () => {
+      await form.getByLabel("Connection", { exact: true }).selectOption("ollama");
+      await form.getByLabel("Model name", { exact: true }).fill("clef-flash");
+      await images.check();
+    });
+    await closeSettings(window);
+    settings = await taggingSettings(window);
     await expect(images).toBeChecked();
-    await images.uncheck();
-    await saveOrganization(window);
-    settings = await organizationSettings(window);
+    await chooseOtherModel(settings, () => images.uncheck());
+    await closeSettings(window);
+    settings = await taggingSettings(window);
     await expect(images).not.toBeChecked();
     await closeSettings(window);
   } finally {
@@ -536,9 +568,9 @@ test("organized folders remain separate from source locations and follow changes
     const row = rowOf(library, "Membrane separation");
     await moveRow(window, row, "Finance");
     await expect(rowOf(section(library, "Finance"), "Membrane separation")).toHaveCount(1);
-    await window.getByRole("button", { name: "Folders on disk", exact: true }).click();
-    await expect(window.getByTestId("folder-item")).toHaveCount(1);
-    await window.getByRole("button", { name: "Folders", exact: true }).click();
+    await expect(
+      window.getByTestId("linked-folders-section").getByTestId("folder-item"),
+    ).toHaveCount(1);
     await expect(window.getByTestId("library-folders")).toBeVisible();
     const path = join(sources, "Membrane separation.txt");
     const revised = "Research report: membrane invoice for laboratory services. Total GBP 250.";
@@ -732,9 +764,7 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
     const remove = library.getByTestId("library-filter-remove");
     while ((await remove.count()) > 0) await pointAndClick(window, remove.first());
 
-    // The sidebar's Tags: the same counts, and a Tag shows its Documents across Folders.
-    const browse = window.getByTestId("browse-views");
-    await browse.getByRole("button", { name: "Tags", exact: true }).click();
+    // The sidebar's Tags in use: the same counts, and a Tag shows its Documents across Folders.
     const tagRow = (name: string) =>
       window
         .getByTestId("sidebar-tags")
@@ -742,8 +772,9 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
         .filter({
           has: window.locator(':scope > div [data-testid="row-text"]', { hasText: name }),
         });
-    for (const name of ["Paper", "Report", "Invoice", "Notes", "Book"])
+    for (const name of ["Paper", "Report", "Invoice", "Notes"])
       await expect(tagRow(name).getByTestId("browse-count")).toHaveText(String(saved.byTag[name]));
+    await expect(tagRow("Book")).toHaveCount(0);
     await tagRow("Invoice")
       .locator(":scope > div")
       .getByRole("treeitem", { name: /^Invoice/ })
@@ -764,12 +795,6 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
       .getByRole("treeitem", { name: /^Invoice/ })
       .click({ position: { x: 120, y: 12 } });
     await expect(library.getByTestId("library-filter")).toHaveCount(0);
-
-    // Folders on disk: every Document's row, each done.
-    await browse.getByRole("button", { name: "Folders on disk", exact: true }).click();
-    const rows = window.getByTestId("sidebar").getByTestId("document-list-item");
-    await expect(rows).toHaveCount(count);
-    await expect(rows.and(window.locator('[data-tagging="tagged"]'))).toHaveCount(count);
   } finally {
     await app.close();
   }

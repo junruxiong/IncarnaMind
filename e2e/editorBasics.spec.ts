@@ -1,6 +1,7 @@
 import { realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { Editor } from "@tiptap/core";
 import type { CoreBridge } from "../src/core/api";
 import {
   addDocuments,
@@ -12,6 +13,7 @@ import {
   launchApp,
   newMind,
   pointAndClick,
+  pressTextStart,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -53,6 +55,80 @@ const BLOCKS = [
   { id: "checklist", selector: "ul:has(> li[data-checked]) > li > div > p", typed: "check" },
   { id: "quote", selector: "blockquote > p", typed: "quote" },
 ] as const;
+
+test("checklist boxes keep their text, state and localized empty name when the language changes", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 900, 560);
+    await newMind(window);
+    const editor = window.getByTestId("mind-editor");
+    await pointAndClick(window, editor);
+    await window.keyboard.type("[ ] ");
+    await expect(
+      editor.getByRole("checkbox", { name: "Empty checklist item", exact: true }),
+    ).toBeVisible();
+    await window.keyboard.insertText("核查清单项");
+    await expect(editor.getByRole("checkbox", { name: "核查清单项", exact: true })).toBeVisible();
+    await window.keyboard.press("Enter");
+    await window.keyboard.type("Submit report");
+    await window.keyboard.press("Enter");
+    const boxes = editor.getByRole("checkbox");
+    await expect(boxes).toHaveCount(3);
+    await expect(boxes.nth(2)).toHaveAccessibleName("Empty checklist item");
+
+    const secondText = editor.locator("li[data-checked] > div > p").nth(1);
+    await window.keyboard.press("ArrowUp");
+    await expect
+      .poll(() =>
+        secondText.evaluate((element) => {
+          const root = element.closest(".ProseMirror") as (Element & { editor?: Editor }) | null;
+          const view = root?.editor?.view;
+          return !!view && element.contains(view.domAtPos(view.state.selection.from).node);
+        }),
+      )
+      .toBe(true);
+    await window.keyboard.press("Tab");
+    await expect(editor.locator("ul ul li[data-checked]")).toHaveCount(1);
+    await expect(editor.locator("ul ul li[data-checked] > div > p")).toHaveText("Submit report");
+    await expect(boxes.first()).toHaveAccessibleName("核查清单项Submit report");
+    await expect(boxes.nth(1)).toHaveAccessibleName("Submit report");
+
+    await setLanguage(window, "zh-CN");
+    await expect(boxes.nth(2)).toHaveAccessibleName("空白待办项");
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(editor.locator("ul ul")).toHaveCount(0);
+    await expect(boxes.first()).toHaveAccessibleName("核查清单项");
+    await expect(boxes.nth(1)).toHaveAccessibleName("Submit report");
+    await boxes.first().press("Space");
+    await expect(boxes.first()).toBeChecked();
+    await expect(boxes.nth(1)).not.toBeChecked();
+    await test.info().attach("checklist-zh-CN", {
+      body: await editor.ariaSnapshot(),
+      contentType: "text/plain",
+    });
+
+    const firstText = editor.locator("li[data-checked] > div > p").first();
+    await pointAndClick(window, firstText);
+    await firstText.press("End");
+    await window.keyboard.insertText("已完成");
+    await expect(boxes.first()).toHaveAccessibleName("核查清单项已完成");
+    await expect(boxes.first()).toBeChecked();
+
+    await setLanguage(window, "en");
+    await expect(boxes.nth(2)).toHaveAccessibleName("Empty checklist item");
+    await expect(boxes.first()).toHaveAccessibleName("核查清单项已完成");
+    await boxes.first().press("Space");
+    await expect(boxes.first()).not.toBeChecked();
+    await expect(boxes.nth(1)).not.toBeChecked();
+    await test.info().attach("checklist-en", {
+      body: await editor.ariaSnapshot(),
+      contentType: "text/plain",
+    });
+  } finally {
+    await app.close();
+  }
+});
 
 test('"/" offers lists, a checklist, a quote and a divider, chosen by keyboard or mouse and undone', async () => {
   const { window, editor } = await startMind();
@@ -226,7 +302,7 @@ async function writeSections(window: Page, titles: readonly string[]) {
       await window.keyboard.press("Enter");
     }
   }
-  await window.keyboard.press("ControlOrMeta+Home");
+  await pressTextStart(window);
 }
 
 /** Whether the heading shows in the window. */
@@ -504,7 +580,7 @@ test("a Document dragged from the sidebar onto the composer joins the Question's
     const chips = composer.getByTestId("scope-chip");
     const before = await chips.count();
     const row = window.getByTestId("open-document").filter({ hasText: "Tides" });
-    const drag = async () => {
+    const drag = async (lights: boolean) => {
       const from = await row.boundingBox();
       const to = await composer.boundingBox();
       if (!from || !to) throw new Error("Not laid out.");
@@ -514,16 +590,17 @@ test("a Document dragged from the sidebar onto the composer joins the Question's
       await window.mouse.move(from.x + 30, from.y + from.height / 2 + 6, { steps: 3 });
       await window.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 });
       await window.mouse.move(to.x + to.width / 2 + 4, to.y + to.height / 2 + 2, { steps: 3 });
-      // The composer shows it takes it while the Document is over it.
-      await expect(composer).toHaveAttribute("data-dropping", "true");
+      // The composer shows it takes it while the Document is over it, and never when it would add nothing.
+      if (lights) await expect(composer).toHaveAttribute("data-dropping", "true");
+      else await expect(composer).not.toHaveAttribute("data-dropping", "true");
       await window.mouse.up();
       await expect(composer).not.toHaveAttribute("data-dropping", "true");
     };
-    await drag();
+    await drag(true);
     await expect(chips).toHaveCount(before + 1);
     await expect(chips.filter({ hasText: "Tides" })).toHaveCount(1);
-    // The same Document again adds nothing.
-    await drag();
+    // The same Document again: already in the scope, so the composer doesn't light, and nothing is added.
+    await drag(false);
     await expect(chips).toHaveCount(before + 1);
   } finally {
     await removeDataFolder(sources);

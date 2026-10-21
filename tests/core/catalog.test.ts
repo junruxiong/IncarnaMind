@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { RECOMMENDED_OLLAMA_MODEL } from "../../src/core";
 import { type ChatProviderKind, chatProviderKinds } from "../../src/core/api";
+import { automaticTagging } from "../../src/core/library/tagging";
 import {
   calculates,
   cloudWindow,
@@ -16,6 +17,8 @@ import {
   catalogFacts,
   catalogModel,
   catalogModels,
+  catalogRoleModel,
+  type EndpointField,
   isNonChatModel,
   LOCAL_MODEL_TIERS,
   LOCAL_MODELS,
@@ -24,22 +27,38 @@ import {
   recommendedLocalModels,
 } from "../../src/core/providers/catalog";
 import { OVERRIDES } from "../../src/core/providers/catalog/overrides";
+import { PRESETS } from "../../src/core/providers/catalog/presets";
 import {
   catalogProvider,
-  KEY_PROVIDER_KINDS,
+  dataUseOf,
+  FIRST_RUN_BEST_EFFORT,
+  fieldAccepts,
+  fieldUrl,
+  isPreset,
+  KEY_PROVIDERS,
   keyProviderGroups,
+  kindOfCatalogId,
+  LOCAL_PRESETS,
+  untestedForCitations,
 } from "../../src/core/providers/catalog/providers";
 import { KNOWN_PLAN_MODELS } from "../../src/core/providers/chatgpt/planEndpoint";
 import {
   baseUrlFor,
   endpointUrl,
+  isLoopbackHost,
   requiresApiKey,
   serviceFor,
 } from "../../src/core/providers/kinds";
+import { OLLAMA_CLOUD } from "../../src/core/providers/ollamaCloud";
 import { en } from "../../src/shared/i18n/en";
 import { zhCN } from "../../src/shared/i18n/zh-CN";
 
 const GIB = 1024 ** 3;
+
+const sampleFieldValue = (field: EndpointField): string =>
+  field.choices?.[0]?.value ??
+  field.default ??
+  (field.name === "account" ? "0123456789abcdef0123456789abcdef" : "");
 const REPO_ROOT = resolve(__dirname, "../..");
 
 /** What the catalog alone says of a model on a provider kind. */
@@ -61,6 +80,16 @@ describe("The provider catalog", () => {
       "glm",
       "siliconflow",
       "ollama",
+      "groq",
+      "together",
+      "fireworks",
+      "cerebras",
+      "cohere",
+      "venice",
+      "bedrock",
+      "cloudflare",
+      "lmstudio",
+      "unsloth",
       "openai-compatible",
     ]);
     for (const provider of CATALOG_PROVIDERS) {
@@ -77,8 +106,16 @@ describe("The provider catalog", () => {
       // A hosted provider has its API; a server the User gives has a URL rule instead.
       if (provider.endpoints.length > 0) {
         for (const endpoint of provider.endpoints) {
-          expect(new URL(endpoint.baseUrl).protocol, where).toBe("https:");
+          const value = endpoint.field ? sampleFieldValue(endpoint.field) : "";
+          expect(new URL(fieldUrl(endpoint, value)).protocol, where).toBe(
+            provider.group === "local" ? "http:" : "https:",
+          );
           expect(endpoint.label.en && endpoint.label.zh, where).toBeTruthy();
+          if (endpoint.field) {
+            expect(endpoint.baseUrl, where).toContain(`{${endpoint.field.name}}`);
+            expect(fieldAccepts(endpoint.field, value), where).toBe(true);
+            expect(fieldAccepts(endpoint.field, "elsewhere.example.com/x"), where).toBe(false);
+          }
         }
       } else {
         expect(provider.serverUrl, where).toBeDefined();
@@ -95,7 +132,9 @@ describe("The provider catalog", () => {
   });
 
   test("a hosted provider offers every role: a capable, cheaper Answers model, its strongest one click away, a cheap quick-tasks model and one that reads images", () => {
-    for (const provider of CATALOG_PROVIDERS.filter((each) => each.endpoints.length > 0)) {
+    for (const provider of CATALOG_PROVIDERS.filter(
+      (each) => each.endpoints.length > 0 && !isPreset(each),
+    )) {
       const { answers, strongest, quickTasks, images } = provider.roles;
       const model = (id: string | undefined) => {
         const found = id ? catalogModel(provider.id, id) : undefined;
@@ -135,10 +174,16 @@ describe("The provider catalog", () => {
   test("the generated facts cover the hosted providers, with unique ids, and their sources' licences ship with the app", async () => {
     expect(providersWithModels().sort()).toEqual([
       "anthropic",
+      "bedrock",
+      "cerebras",
+      "cloudflare",
+      "cohere",
       "deepseek",
+      "fireworks",
       "glm",
       "glm/intl",
       "google",
+      "groq",
       "kimi",
       "kimi/intl",
       "mistral",
@@ -148,6 +193,8 @@ describe("The provider catalog", () => {
       "qwen/intl",
       "siliconflow",
       "siliconflow/intl",
+      "together",
+      "venice",
       "xai",
     ]);
     for (const providerId of providersWithModels()) {
@@ -208,7 +255,7 @@ describe("The provider catalog", () => {
     ["openrouter", "openai/gpt-6-luna", false],
     ["google", "gemini-3.8-flash", false],
     ["deepseek", "deepseek-flash", false],
-    ["qwen", "qwen3.7-flash", false],
+    ["qwen", "qwen3.8-flash", false],
     ["siliconflow", "deepseek-ai/DeepSeek-V4", false],
     ["ollama", "gpt-oss:20b-cloud", false],
     ["ollama", "qwen3.5:4b", false],
@@ -348,7 +395,7 @@ describe("The providers of #178", () => {
     }
   });
 
-  test("each says whether it may train on API data; DeepSeek may (with an opt-out) and Kimi's pages disagree", () => {
+  test("each says whether it may train on API data: Mistral and Kimi may, with an opt-out; DeepSeek's, Z.ai's and SiliconFlow's terms don't say", () => {
     const training = Object.fromEntries(
       added.map((id) => [id, catalogProvider(id)?.dataUse.training]),
     );
@@ -356,13 +403,96 @@ describe("The providers of #178", () => {
       openrouter: "no",
       mistral: "opt-out",
       xai: "no",
-      deepseek: "opt-out",
+      deepseek: "unknown",
       qwen: "no",
-      kimi: "unknown",
+      kimi: "opt-out",
       glm: "unknown",
-      siliconflow: "no",
+      siliconflow: "unknown",
     });
-    expect(catalogProvider("kimi")?.dataUse.summary.en).toContain("disagree");
+    expect(catalogProvider("kimi")?.dataUse.url).toBe(
+      "https://platform.kimi.ai/docs/agreement/modeluse",
+    );
+  });
+
+  test("Anthropic's data line says content is kept up to 30 days and longer if flagged, and no link uses an address that has moved", () => {
+    const { summary, sources } = catalogProvider("anthropic")?.dataUse ?? {};
+    expect(summary?.en).toMatch(/30 days.*longer if flagged/);
+    expect(summary?.zh).toMatch(/30 天.*更久/);
+    expect(summary?.en).not.toMatch(/\bonly\b/);
+    expect(sources).toContain(
+      "https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data",
+    );
+    const links = CATALOG_PROVIDERS.flatMap((each) => [each.docsUrl, each.dataUse.url]);
+    expect(
+      links.filter((url) => /docs\.anthropic\.com|platform\.openai\.com\/docs/.test(url ?? "")),
+    ).toEqual([]);
+  });
+
+  test("Kimi's data line says it may train on what you send unless agreed otherwise in writing", () => {
+    const { summary, sources } = catalogProvider("kimi")?.dataUse ?? {};
+    expect(summary?.en).toMatch(/train.*unless agreed otherwise in writing/);
+    expect(summary?.zh).toMatch(/训练.*除非另有书面约定/);
+    expect(sources).toEqual(["https://platform.kimi.com/docs/agreement/modeluse"]);
+  });
+
+  test("a claim that rests on another page keeps its address in the catalog", () => {
+    const second = Object.fromEntries(
+      CATALOG_PROVIDERS.filter((each) => each.dataUse.sources || each.dataUse.zhUrl).map((each) => [
+        each.id,
+        [...(each.dataUse.sources ?? []), each.dataUse.zhUrl ?? ""].filter(Boolean),
+      ]),
+    );
+    expect(Object.keys(second).sort()).toEqual([
+      "anthropic",
+      "bedrock",
+      "deepseek",
+      "glm",
+      "kimi",
+      "siliconflow",
+      "together",
+    ]);
+    for (const url of Object.values(second).flat()) expect(url).toMatch(/^https:\/\//);
+    expect(catalogProvider("siliconflow")?.dataUse.url).toContain("docs.siliconflow.com/en/");
+  });
+
+  test("a local app's data line gives way to a server's when its server is on another computer, Ollama's included", () => {
+    const server = catalogProvider("openai-compatible")?.dataUse;
+    expect(server?.summary.en).toMatch(/^Depends on the server/);
+    for (const id of ["lmstudio", "unsloth", "ollama"]) {
+      const provider = catalogProvider(id);
+      expect(provider && dataUseOf(provider, false), id).toBe(provider?.dataUse);
+      expect(provider && dataUseOf(provider, true), id).toBe(server);
+    }
+    for (const id of ["anthropic", "openai-compatible"]) {
+      const provider = catalogProvider(id);
+      expect(provider && dataUseOf(provider, true), id).toBe(provider?.dataUse);
+    }
+  });
+
+  test("every provider's data-use line fits one line at 900px beside its link, states no price or plan, and a hosted provider links its own page", () => {
+    // The narrowest 900px screen is first run's key form, 524px wide, in 12px type: the line,
+    // "Data use ↗" and in Chinese "数据使用：" before it must fit in one line of it.
+    const MOST_ENGLISH_CHARACTERS = 90;
+    const MOST_CHINESE_UNITS = 30;
+    const wide = /[\u2e80-\u9fff\uff00-\uffef]/u;
+    const units = (text: string) =>
+      [...text].reduce((sum, each) => sum + (wide.test(each) ? 1 : each === " " ? 0.25 : 0.5), 0);
+    for (const provider of CATALOG_PROVIDERS) {
+      const { summary, url } = provider.dataUse;
+      expect(summary.en.length, provider.id).toBeLessThanOrEqual(MOST_ENGLISH_CHARACTERS);
+      expect(units(summary.zh), provider.id).toBeLessThanOrEqual(MOST_CHINESE_UNITS);
+      expect(summary.en, provider.id).not.toMatch(
+        /\bplans?\b|\bfees?\b|\bcredits?\b|\bprices?\b|[$¥]\s?\d|\d\s?%/i,
+      );
+      expect(summary.zh, provider.id).not.toMatch(
+        /订阅|套餐|方案|费用|收费|价格|额度|[$¥]\s?\d|\d\s?%/,
+      );
+      if (provider.id === "openai-compatible") {
+        expect(url, provider.id).toBeUndefined();
+      } else {
+        expect(url, provider.id).toMatch(/^https:\/\//);
+      }
+    }
   });
 
   test("a provider with regions has an endpoint for each, the first the default, and a set of model facts for each", () => {
@@ -437,6 +567,11 @@ describe("The providers of #178", () => {
       expect(catalogProvider(id)?.request?.thinkingOff, id).toBeDefined();
     }
     expect(catalogProvider("glm")?.request?.thinkingOff?.unless).toEqual(["glm-5.3"]);
+    // OpenAI's small calls run with reasoning off, except on the models that refuse "none".
+    expect(catalogProvider("openai")?.request?.thinkingOff?.except).toEqual(
+      expect.arrayContaining(["gpt-6.1-sol", "gpt-6-astra", "gpt-5", "gpt-5-mini", "gpt-5-nano"]),
+    );
+    expect(catalogProvider("openai")?.request?.thinkingOff?.except).not.toContain("gpt-6-luna");
   });
 
   test("a provider needs a key and takes no server URL; a region comes with the endpoint", () => {
@@ -447,6 +582,62 @@ describe("The providers of #178", () => {
       );
       expect(baseUrlFor(id as ChatProviderKind, undefined), id).toBeNull();
     }
+  });
+});
+
+describe("Tagging models", () => {
+  test("a provider tags with its quick-tasks model, except Mistral, whose tagging model is Mistral Small 4", () => {
+    const tagging = CATALOG_PROVIDERS.filter((each) => each.roles.tagging !== undefined);
+    expect(tagging.map((each) => [each.id, each.roles.tagging])).toEqual([
+      ["mistral", "mistral-small-2603"],
+    ]);
+    // Same input price as Ministral 8B, which is nearly all of what tagging costs.
+    expect(catalogModel("mistral", "mistral-small-2603")?.price?.input).toBe(
+      catalogModel("mistral", "ministral-8b-2512")?.price?.input,
+    );
+    expect(
+      catalogRoleModel({ kind: "anthropic", catalogId: "anthropic" }, "tagging"),
+    ).toBeUndefined();
+    expect(catalogRoleModel({ kind: "anthropic", catalogId: "anthropic" }, "quickTasks")).toBe(
+      "claude-haiku-5-5",
+    );
+  });
+
+  test("a preset tags with its own quick-tasks model", () => {
+    expect(catalogRoleModel({ kind: "openai-compatible", catalogId: "groq" }, "quickTasks")).toBe(
+      "openai/gpt-oss-20b",
+    );
+    expect(
+      catalogRoleModel({ kind: "openai-compatible", catalogId: "openai-compatible" }, "quickTasks"),
+    ).toBeUndefined();
+  });
+
+  test("the ChatGPT plan tags with GPT-6 Luna", () => {
+    expect(catalogRoleModel({ kind: "chatgpt", catalogId: null }, "tagging")).toBe("gpt-6-luna");
+    expect(catalogRoleModel({ kind: "chatgpt", catalogId: null }, "quickTasks")).toBe("gpt-6-luna");
+    expect(catalogRoleModel({ kind: "chatgpt", catalogId: null }, "images")).toBeUndefined();
+  });
+
+  test("Ollama's cloud models get no tagging default: Automatic passes them by", () => {
+    expect(catalogRoleModel({ kind: "ollama", catalogId: "ollama" }, "tagging")).toBeUndefined();
+    const cloud = {
+      choice: { providerId: "ollama", modelId: "gpt-oss:20b-cloud" },
+      kind: "ollama" as const,
+      catalogId: "ollama",
+      service: OLLAMA_CLOUD,
+      ollamaCloud: true,
+      readsImages: false,
+      name: "gpt-oss:20b-cloud",
+      price: undefined,
+    };
+    const picked = automaticTagging({
+      localOnly: false,
+      jev: { enabled: false, local: false },
+      chat: { model: cloud, tagging: cloud, reason: "answers-model" },
+      decision: null,
+      localChat: null,
+    });
+    expect(picked).toBeNull();
   });
 });
 
@@ -470,7 +661,48 @@ describe("Support tiers (ADR-0019)", () => {
     const supportOf = (tier: string) =>
       CATALOG_PROVIDERS.filter((each) => each.support === tier).map((each) => each.id);
     expect(supportOf("first-class").sort()).toEqual([...FIRST_CLASS].sort());
-    expect(supportOf("best-effort").sort()).toEqual([...BEST_EFFORT, "openai-compatible"].sort());
+    expect(supportOf("best-effort").sort()).toEqual(
+      [...BEST_EFFORT, "openai-compatible", ...PRESETS.map((each) => each.id)].sort(),
+    );
+  });
+
+  test("a hosted preset is an OpenAI-compatible row with a key page and an Answers model, a local one a server on this computer; each is saved as that kind, and not yet tested is never first-class", () => {
+    expect(PRESETS.length).toBeGreaterThan(0);
+    for (const preset of PRESETS) {
+      const where = preset.id;
+      expect(isPreset(preset), where).toBe(true);
+      expect(chatProviderKinds as readonly string[], where).not.toContain(preset.id);
+      expect(preset.adapter, where).toBe("openai-compatible");
+      expect(kindOfCatalogId(preset.id), where).toBe("openai-compatible");
+      expect(preset.endpoints.length, where).toBeGreaterThan(0);
+      expect(untestedForCitations(preset), where).toBe(preset.citingTested === undefined);
+      if (untestedForCitations(preset)) expect(preset.support, where).toBe("best-effort");
+      if (preset.group === "local") {
+        // The models are whatever the User has loaded: none is named here.
+        expect(preset.roles, where).toEqual({});
+        // Set up at its default address, it is on this computer; and it is in no list of keys.
+        for (const endpoint of preset.endpoints) {
+          const address = endpoint.field?.default ?? "";
+          expect(isLoopbackHost(new URL(fieldUrl(endpoint, address)).hostname), where).toBe(true);
+        }
+        expect(KEY_PROVIDERS, where).not.toContain(preset.id);
+        expect(LOCAL_PRESETS, where).toContain(preset.id);
+        continue;
+      }
+      expect(preset.keyUrl ?? preset.endpoints[0]?.keyUrl, where).toMatch(/^https:\/\//);
+      expect(preset.roles.answers, where).toBeDefined();
+      // An Answers model that calls Tools, and quick tasks that cost no more.
+      const output = (id: string | undefined) =>
+        id ? catalogModel(preset.id, id)?.price?.output : undefined;
+      expect(catalogModel(preset.id, preset.roles.answers ?? "")?.tools, where).toBe(true);
+      expect(output(preset.roles.quickTasks) ?? Number.NaN, where).toBeLessThanOrEqual(
+        output(preset.roles.answers) ?? Number.NaN,
+      );
+    }
+    // Rows that aren't presets are never marked untested.
+    expect(
+      CATALOG_PROVIDERS.filter((each) => untestedForCitations(each) && !isPreset(each)),
+    ).toEqual([]);
   });
 
   test("the first-run list holds exactly the first-class providers that take a key", () => {
@@ -480,8 +712,16 @@ describe("Support tiers (ADR-0019)", () => {
     ).map((each) => each.id);
     expect(main).toEqual(expected);
     // Settings' "More providers" holds the rest, and nothing is lost between the two.
-    expect([...main, ...more].sort()).toEqual([...KEY_PROVIDER_KINDS].sort());
+    expect([...main, ...more].sort()).toEqual([...KEY_PROVIDERS].sort());
     expect(more).toEqual(expect.arrayContaining([...BEST_EFFORT, "openai-compatible"]));
+  });
+
+  test("the first-run key form also offers Kimi and GLM, the best-effort providers the catalog marks for it", () => {
+    expect([...FIRST_RUN_BEST_EFFORT].sort()).toEqual(["glm", "kimi"]);
+    for (const id of FIRST_RUN_BEST_EFFORT) {
+      expect(catalogProvider(id)?.support).toBe("best-effort");
+      expect(keyProviderGroups().more).toContain(id);
+    }
   });
 
   test("a provider already set up stays among the User's, whatever its tier", () => {
@@ -507,21 +747,29 @@ describe("Support tiers (ADR-0019)", () => {
     }
   });
 
-  test("a key guide's steps say what to do; what a plan includes is said once, in the note under them, in both languages", () => {
-    const withNote = CATALOG_PROVIDERS.filter((each) => each.planCredits && each.keyGuide);
-    expect(withNote.map((each) => each.id)).toEqual(
-      expect.arrayContaining(["anthropic", "openai"]),
+  test("a key guide's steps and notes say what to do, and no line states another company's price, fee, credit or plan contents, in both languages", () => {
+    const withLine = CATALOG_PROVIDERS.filter((each) => each.keyLine);
+    expect(withLine.map((each) => each.id)).toEqual(
+      expect.arrayContaining(["anthropic", "openai", "google", "openrouter", "kimi"]),
     );
-    for (const each of withNote) {
-      for (const step of each.keyGuide ?? []) {
-        expect(step.en, each.id).not.toMatch(/include|doesn't/i);
-        expect(step.zh, each.id).not.toMatch(/不含|不包含|附带/);
+    for (const each of CATALOG_PROVIDERS) {
+      const lines = [
+        ...(each.keyGuide ?? []),
+        ...(each.notes ?? []),
+        ...(each.keyLine ? [each.keyLine] : []),
+      ];
+      for (const line of lines) {
+        expect(line.en, each.id).not.toMatch(
+          /include|doesn't|\bfree\b|\bfees?\b|\bdouble\b|[$¥]\s?\d|\d\s?%/i,
+        );
+        expect(line.zh, each.id).not.toMatch(/不含|不包含|附带|免费|手续费|翻倍|[$¥]\s?\d|\d\s?%/);
       }
     }
-    // The Anthropic note says where the plan is linked, which its step no longer does.
-    const note = catalogProvider("anthropic")?.planCredits;
-    expect(note?.en).toContain("claude.ai's Billing");
-    expect(note?.zh).toContain("claude.ai");
+    for (const each of withLine) {
+      expect(each.keyLine?.url, each.id).toMatch(/^https:\/\//);
+    }
+    expect(catalogProvider("google")?.keyLine?.link).toBe("pricing");
+    expect(catalogProvider("openrouter")?.keyLine?.link).toBe("pricing");
   });
 
   test("a best-effort provider keeps its link to the provider's key page", () => {

@@ -17,7 +17,9 @@ export type TextLanguage = string;
 /** Common words that tell Latin-script languages apart: few appear in more than one list. */
 const LATIN_WORDS: Readonly<Record<TextLanguage, ReadonlySet<string>>> = {
   English: new Set(
-    "the and of to is that with for this are was from which have has not be by it as".split(" "),
+    "the and of to is that with for this are was from which have has not be by it as what how why who where when does did can about my your you there any all please".split(
+      " ",
+    ),
   ),
   French: new Set("les des est une dans pour qui sur avec pas sont du ce cette aux".split(" ")),
   German: new Set("der die und das ist nicht mit sich auf für eine dem werden auch".split(" ")),
@@ -33,7 +35,7 @@ const MIN_COMMON_WORDS = 3;
 const count = (text: string, pattern: RegExp) => text.match(pattern)?.length ?? 0;
 
 /** The language `text` is mostly written in, or null when it can't tell. */
-export function detectLanguage(text: string): TextLanguage | null {
+export function detectLanguage(text: string, minimumWords = MIN_COMMON_WORDS): TextLanguage | null {
   const han = count(text, /\p{Script=Han}/gu);
   const kana = count(text, /[\p{Script=Hiragana}\p{Script=Katakana}]/gu);
   const hangul = count(text, /\p{Script=Hangul}/gu);
@@ -54,8 +56,18 @@ export function detectLanguage(text: string): TextLanguage | null {
       bestCount = found;
     }
   }
-  return bestCount >= MIN_COMMON_WORDS ? best : null;
+  return bestCount >= minimumWords ? best : null;
 }
+
+/** How much of a text its language is told from: the start of a long Mind says it as well as all of it. */
+export const LANGUAGE_SAMPLE = 4000;
+
+export const writtenInChinese = (text: string): boolean =>
+  detectLanguage(text.slice(0, LANGUAGE_SAMPLE)) === "Chinese";
+
+const CJK_LANGUAGES: ReadonlySet<TextLanguage | null> = new Set(["Chinese", "Japanese", "Korean"]);
+
+export const writtenInCjk = (text: string): boolean => CJK_LANGUAGES.has(detectLanguage(text));
 
 /** How many Documents are in each language: the most common first, then by name. */
 export function languageList(

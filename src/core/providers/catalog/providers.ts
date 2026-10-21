@@ -12,9 +12,26 @@
  * and defaults without the generated data (see ./index).
  */
 import type { ChatProviderKind } from "../../api";
-import type { CatalogProvider, Endpoint } from "./types";
+import { PRESETS } from "./presets";
+import type {
+  CatalogProvider,
+  DataUse,
+  Endpoint,
+  EndpointField,
+  ProviderOptions,
+  Role,
+} from "./types";
 
 const GLOBAL = { en: "Global", zh: "全球" };
+
+export const CLAUDE_BETWEEN_TOOLS: ProviderOptions = {
+  anthropic: { thinking: { type: "between_tools" } },
+};
+
+// A model that always thinks adaptively can only be asked for less (#907).
+export const CLAUDE_LOW_EFFORT: ProviderOptions = {
+  anthropic: { thinking: { type: "adaptive" }, effort: "low" },
+};
 
 const PROVIDERS = [
   {
@@ -28,26 +45,42 @@ const PROVIDERS = [
     keyUrl: "https://platform.claude.com/settings/keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign in to the Anthropic Console.",
-        zh: "点“获取密钥”，登录 Anthropic Console。",
+        en: "Open Anthropic's key page and sign in to the Anthropic Console.",
+        zh: "打开 Anthropic 的密钥页面，登录 Anthropic Console。",
       },
       {
-        en: "Add credit under Billing, or link your Claude Max or Team plan there (see below).",
-        zh: "在 Billing 中充值，或在那里关联你的 Claude Max 或 Team 订阅（见下方说明）。",
+        en: "Add credit under Billing.",
+        zh: "在 Billing 中充值。",
       },
       {
         en: "Create a key, copy it (it's shown once) and paste it here.",
         zh: "新建一个密钥，复制（只显示一次），粘贴到这里。",
       },
     ],
-    docsUrl: "https://docs.anthropic.com/en/docs/about-claude/models",
+    docsUrl: "https://platform.claude.com/docs/en/about-claude/models/overview",
+    pricingUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
     request: {
       // Claude 5.5 thinks by default (adaptively): a small call with a short reply runs out of room
-      // before it writes anything (#282).
-      thinkingOff: { options: { anthropic: { thinking: { type: "disabled" } } } },
+      // before it writes anything (#282). The newest refuse `disabled`, and their refusal names
+      // the setting they take instead (#907).
+      thinkingOff: {
+        options: { anthropic: { thinking: { type: "disabled" } } },
+        refused: [
+          { names: "between_tools", options: CLAUDE_BETWEEN_TOOLS },
+          { names: "output_config.effort", options: CLAUDE_LOW_EFFORT },
+        ],
+      },
       // Claude 5 models think by default, and return only an empty block unless asked for the summary.
+      // At the default effort, a summary of three Documents took 30 to 85 seconds to start (#899).
       reasoningSummary: {
         options: { anthropic: { thinking: { type: "adaptive", display: "summarized" } } },
+        answer: {
+          anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+        },
+        careful: {
+          anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+        },
+        refused: [{ names: "effort", options: { anthropic: { effort: undefined } } }],
         only: [
           "claude-fable-5",
           "claude-mythos-5",
@@ -66,10 +99,13 @@ const PROVIDERS = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Doesn't train on API data by default, and keeps it for up to 30 days.",
-        zh: "默认不用 API 数据训练模型，数据最多保留 30 天。",
+        en: "No training without your permission; kept up to 30 days, longer if flagged.",
+        zh: "未经你许可不用于训练；最多保留 30 天，被标记的内容可能更久。",
       },
-      url: "https://www.anthropic.com/legal/commercial-terms",
+      url: "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention",
+      sources: [
+        "https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data",
+      ],
     },
     notes: [
       {
@@ -77,12 +113,13 @@ const PROVIDERS = [
         zh: "中国大陆和香港无法使用。",
       },
     ],
-    planCredits: {
-      en: "Claude Max and Team plans include monthly API credits, for keys in the Console organization you link to the plan in claude.ai's Billing. Free, Pro and Enterprise plans don't.",
-      zh: "Claude Max 和 Team 订阅每月附带 API 额度，可用于你在 claude.ai 账单设置中关联到订阅的 Console 组织里的密钥。Free、Pro 和 Enterprise 订阅不含。",
+    keyLine: {
+      en: "Paste an API key from the Anthropic Console.",
+      zh: "粘贴 Anthropic Console 中的 API 密钥。",
       url: "https://support.claude.com/en/articles/17154008",
+      link: "details",
     },
-    checked: "2026-10-11",
+    checked: "2026-10-19",
   },
   {
     id: "openai",
@@ -95,8 +132,8 @@ const PROVIDERS = [
     keyUrl: "https://platform.openai.com/api-keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign in to the OpenAI platform.",
-        zh: "点“获取密钥”，登录 OpenAI 平台。",
+        en: "Open OpenAI's key page and sign in to the OpenAI platform.",
+        zh: "打开 OpenAI 的密钥页面，登录 OpenAI 平台。",
       },
       {
         en: "Add credit under Billing.",
@@ -107,10 +144,37 @@ const PROVIDERS = [
         zh: "新建一个密钥，复制（只显示一次），粘贴到这里。",
       },
     ],
-    docsUrl: "https://platform.openai.com/docs/models",
+    docsUrl: "https://developers.openai.com/api/docs/models",
+    pricingUrl: "https://developers.openai.com/api/docs/pricing",
+    // The Responses API keeps each request on OpenAI's servers unless it says not to. Small
+    // calls run with reasoning off: on the Organize evaluation GPT-6 Luna tagged as well with it
+    // off, writing a quarter of the output tokens. These models refuse "none" (GPT-6.1 Sol and
+    // GPT-6 Astra start at "low", the 2025 GPT-5 models at "minimal"; o-series, Pro and Codex
+    // models aren't checked), so they keep their own.
     request: {
-      // The Responses API keeps each request on OpenAI's servers unless it says not to.
       store: false,
+      thinkingOff: {
+        options: { openai: { reasoningEffort: "none" } },
+        except: [
+          "gpt-6.1-sol",
+          "gpt-6-astra",
+          "gpt-5",
+          "gpt-5-mini",
+          "gpt-5-nano",
+          "gpt-5-pro",
+          "gpt-5.2-pro",
+          "gpt-5.3-codex",
+          "gpt-5.3-codex-spark",
+          "gpt-5.4-pro",
+          "gpt-5.5-pro",
+          "o1",
+          "o1-pro",
+          "o3",
+          "o3-mini",
+          "o3-pro",
+          "o4-mini",
+        ],
+      },
       reasoningSummary: { options: { openai: { reasoningSummary: "auto" } } },
     },
     roles: {
@@ -122,10 +186,10 @@ const PROVIDERS = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Doesn't train on API data unless you opt in. IncarnaMind asks it not to store requests; it may keep logs for abuse monitoring for up to 30 days.",
-        zh: "除非你选择加入，否则不用 API 数据训练模型。IncarnaMind 会要求它不保存请求；它可能为防滥用保留日志，最多 30 天。",
+        en: "Not trained on unless you opt in; abuse-monitoring logs are kept up to 30 days.",
+        zh: "除非你选择加入，否则不用于训练；防滥用日志最多保留 30 天。",
       },
-      url: "https://platform.openai.com/docs/guides/your-data",
+      url: "https://developers.openai.com/api/docs/guides/your-data",
     },
     notes: [
       {
@@ -133,12 +197,13 @@ const PROVIDERS = [
         zh: "中国大陆和香港无法使用。",
       },
     ],
-    planCredits: {
-      en: "ChatGPT plans don't include API usage. With ChatGPT Plus or Pro, you can use Continue with ChatGPT instead of a key.",
-      zh: "ChatGPT 订阅不包含 API 用量。如果你有 ChatGPT Plus 或 Pro，可以改用“使用 ChatGPT 继续”，无需密钥。",
+    keyLine: {
+      en: "With a ChatGPT plan, you can use Continue with ChatGPT instead of a key.",
+      zh: "有 ChatGPT 订阅时，可以改用“使用 ChatGPT 继续”，无需密钥。",
       url: "https://learn.chatgpt.com/docs/sign-in-with-chatgpt",
+      link: "details",
     },
-    checked: "2026-10-11",
+    checked: "2026-10-18",
   },
   {
     id: "google",
@@ -157,8 +222,8 @@ const PROVIDERS = [
     keyUrl: "https://aistudio.google.com/apikey",
     keyGuide: [
       {
-        en: "Open Get a key and sign in with your Google account.",
-        zh: "点“获取密钥”，用 Google 账号登录。",
+        en: "Open Google's key page and sign in with your Google account.",
+        zh: "打开 Google 的密钥页面，用 Google 账号登录。",
       },
       {
         en: "Choose Create API key, and a project if it asks.",
@@ -170,32 +235,34 @@ const PROVIDERS = [
       },
     ],
     docsUrl: "https://ai.google.dev/gemini-api/docs/models",
+    pricingUrl: "https://ai.google.dev/gemini-api/docs/pricing",
     roles: {
       answers: "gemini-3.8-flash",
       strongest: "gemini-3.1-pro-preview",
-      quickTasks: "gemini-3.1-flash-lite",
+      quickTasks: "gemini-3.5-flash-lite",
       images: "gemini-3.8-flash",
     },
     dataUse: {
       training: "free-tier",
       summary: {
-        en: "On the free tier, Google uses API data to improve its products, with human review, except in the EEA, Switzerland and the UK; on a paid plan it doesn't.",
-        zh: "免费层级下，Google 会用 API 数据改进其产品，并可能经人工审阅（欧洲经济区、瑞士和英国除外）；付费方案则不会。",
+        en: "Unpaid use may improve Google's products, with human review; paid use doesn't.",
+        zh: "未付费时可能用于改进 Google 产品并经人工审阅；付费则不会。",
       },
       url: "https://ai.google.dev/gemini-api/terms",
     },
     notes: [
       {
-        en: "Not available in mainland China or Hong Kong. In the EEA, the UK and Switzerland, only paid plans.",
-        zh: "中国大陆和香港无法使用。欧洲经济区、英国和瑞士仅限付费方案。",
+        en: "Not available in mainland China or Hong Kong.",
+        zh: "中国大陆和香港无法使用。",
       },
     ],
-    planCredits: {
-      en: "Google AI Pro and Ultra include monthly Google Cloud credits that can pay for the Gemini API, once you activate them in the Google Developer Program.",
-      zh: "Google AI Pro 和 Ultra 订阅每月附带 Google Cloud 额度，在 Google 开发者计划中激活后可用于 Gemini API。",
-      url: "https://blog.google/innovation-and-ai/technology/developers-tools/gdp-premium-ai-pro-ultra/",
+    keyLine: {
+      en: "Paste a Gemini API key from Google AI Studio",
+      zh: "粘贴 Google AI Studio 的 Gemini API 密钥",
+      url: "https://ai.google.dev/gemini-api/docs/pricing",
+      link: "pricing",
     },
-    checked: "2026-10-11",
+    checked: "2026-10-18",
   },
   {
     id: "openrouter",
@@ -208,12 +275,12 @@ const PROVIDERS = [
     keyUrl: "https://openrouter.ai/settings/keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign in to OpenRouter.",
-        zh: "点“获取密钥”，登录 OpenRouter。",
+        en: "Open OpenRouter's key page and sign in.",
+        zh: "打开 OpenRouter 的密钥页面并登录。",
       },
       {
-        en: "Add credit under Credits. One balance pays for every model.",
-        zh: "在 Credits 中充值。一份余额可用于所有模型。",
+        en: "Add credit under Credits.",
+        zh: "在 Credits 中充值。",
       },
       {
         en: "Create a key, copy it (it's shown once) and paste it here.",
@@ -236,18 +303,18 @@ const PROVIDERS = [
     dataUse: {
       training: "no",
       summary: {
-        en: "One key for many models. IncarnaMind asks OpenRouter to use only providers that don't keep or train on your prompts; that leaves out some models.",
-        zh: "一个密钥可用多种模型。IncarnaMind 会要求 OpenRouter 只使用不保存、不用于训练的提供商，因此部分模型无法使用。",
+        en: "OpenRouter uses only providers it lists as not collecting data, leaving out some models.",
+        zh: "OpenRouter 只用其标明不收集数据的服务，部分模型无法使用。",
       },
-      url: "https://openrouter.ai/docs/guides/privacy/logging",
+      url: "https://openrouter.ai/docs/guides/routing/provider-selection",
     },
-    notes: [
-      {
-        en: "OpenRouter adds a fee of 5.5% to credits bought by card.",
-        zh: "OpenRouter 对刷卡充值的额度收取 5.5% 的手续费。",
-      },
-    ],
-    checked: "2026-10-10",
+    keyLine: {
+      en: "Pay per use with OpenRouter credits",
+      zh: "用 OpenRouter 额度按用量付费",
+      url: "https://openrouter.ai/pricing",
+      link: "pricing",
+    },
+    checked: "2026-10-18",
   },
   {
     id: "mistral",
@@ -259,27 +326,26 @@ const PROVIDERS = [
     apiKey: "required",
     keyUrl: "https://console.mistral.ai/api-keys",
     docsUrl: "https://docs.mistral.ai/getting-started/models/models_overview/",
+    pricingUrl: "https://mistral.ai/pricing",
+    request: { thinkingOff: { options: { mistral: { reasoningEffort: "none" } } } },
     roles: {
       answers: "mistral-small-2603",
       strongest: "mistral-medium-2604",
       quickTasks: "ministral-8b-2512",
       images: "mistral-small-2603",
+      // Tagging's cost is nearly all input, which Mistral Small 4 prices as Ministral 8B does,
+      // and it is a much larger model.
+      tagging: "mistral-small-2603",
     },
     dataUse: {
       training: "opt-out",
       summary: {
-        en: "In free mode Mistral may train on API data unless you turn that off in its privacy settings; on pay-as-you-go you can opt out too. Preview models may be trained on regardless.",
-        zh: "免费模式下，Mistral 可能用 API 数据训练模型，除非你在其隐私设置中关闭；按量付费同样可以选择退出。预览版模型的数据无论如何都可能用于训练。",
+        en: "May train on your input and output; you can opt out at any time.",
+        zh: "可能用你的输入和输出训练模型，你可随时选择退出。",
       },
       url: "https://help.mistral.ai/en/articles/347617-do-you-use-my-user-data-to-train-your-artificial-intelligence-models",
     },
-    notes: [
-      {
-        en: "Mistral Large 4 is a preview: pick it only if its terms suit you.",
-        zh: "Mistral Large 4 为预览版：请确认其条款适合你再选用。",
-      },
-    ],
-    checked: "2026-10-10",
+    checked: "2026-10-18",
   },
   {
     id: "xai",
@@ -305,12 +371,12 @@ const PROVIDERS = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Doesn't train on API data without your permission, and keeps it for up to 30 days. IncarnaMind asks it not to store requests.",
-        zh: "未经你许可不用 API 数据训练模型，数据最多保留 30 天。IncarnaMind 会要求它不保存请求。",
+        en: "No training without your permission; kept 30 days, then deleted.",
+        zh: "未经你许可不用于训练；保留 30 天后删除。",
       },
-      url: "https://x.ai/legal/faq-enterprise",
+      url: "https://docs.x.ai/developers/faq/security",
     },
-    checked: "2026-10-10",
+    checked: "2026-10-18",
   },
   {
     id: "deepseek",
@@ -323,12 +389,12 @@ const PROVIDERS = [
     keyUrl: "https://platform.deepseek.com/api_keys",
     keyGuide: [
       {
-        en: "Open Get a key and sign up or sign in to the DeepSeek platform.",
-        zh: "点“获取密钥”，注册或登录 DeepSeek 开放平台。",
+        en: "Open DeepSeek's key page and sign up or sign in to the DeepSeek platform.",
+        zh: "打开 DeepSeek 的密钥页面，注册或登录 DeepSeek 开放平台。",
       },
       {
-        en: "Top up your balance. API use is paid by what you use.",
-        zh: "充值账户余额。API 按用量计费。",
+        en: "Top up your balance.",
+        zh: "充值账户余额。",
       },
       {
         en: "Create a key, copy it (it's shown once) and paste it here.",
@@ -344,20 +410,17 @@ const PROVIDERS = [
       images: "deepseek-flash",
     },
     dataUse: {
-      training: "opt-out",
+      training: "unknown",
       summary: {
-        en: "DeepSeek's privacy policy lets it use personal data to train and improve its technology, with a right to opt out. Data is stored in China.",
-        zh: "DeepSeek 的隐私政策允许其使用个人数据训练和改进技术，用户有权选择退出。数据存储在中国。",
+        en: "Privacy policy allows training and stores data in China; API terms are silent on both.",
+        zh: "隐私政策允许用于训练，数据存储在中国；API 条款对此未作说明。",
       },
       url: "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+      sources: [
+        "https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html",
+      ],
     },
-    notes: [
-      {
-        en: "Weekdays 09:00–12:00 and 14:00–18:00 Beijing time cost double.",
-        zh: "北京时间工作日 9:00–12:00 和 14:00–18:00 为高峰时段，价格翻倍。",
-      },
-    ],
-    checked: "2026-10-10",
+    checked: "2026-10-18",
   },
   {
     id: "qwen",
@@ -372,24 +435,26 @@ const PROVIDERS = [
         label: { en: "China (Beijing)", zh: "中国内地（北京）" },
         baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         keyUrl: "https://bailian.console.aliyun.com/?tab=model#/api-key",
+        pricingUrl: "https://help.aliyun.com/zh/model-studio/model-pricing",
       },
       {
         id: "intl",
         label: { en: "International (Singapore)", zh: "国际（新加坡）" },
         baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
         keyUrl: "https://modelstudio.console.alibabacloud.com/?tab=playground#/api-key",
+        pricingUrl: "https://www.alibabacloud.com/help/en/model-studio/model-pricing",
       },
     ],
     apiKey: "required",
     keyUrl: "https://bailian.console.aliyun.com/?tab=model#/api-key",
     keyGuide: [
       {
-        en: "Pick the region of your account above, then open Get a key. A key works only in its own region.",
-        zh: "先在上方选择账号所在的地域，再点“获取密钥”。密钥只在创建它的地域有效。",
+        en: "Pick the region of your account above, then open Qwen's key page. A key works only in its own region.",
+        zh: "先在上方选择账号所在的地域，再打开通义千问的密钥页面。密钥只在创建它的地域有效。",
       },
       {
-        en: "Sign in to Model Studio and turn it on if it asks. New accounts may get free use for a while.",
-        zh: "登录百炼并按提示开通。新账号可能有一段时间的免费额度。",
+        en: "Sign in to Model Studio and turn it on if it asks.",
+        zh: "登录百炼并按提示开通。",
       },
       {
         en: "Create a key, copy it and paste it here.",
@@ -401,16 +466,16 @@ const PROVIDERS = [
     roles: {
       answers: "qwen3.7-plus",
       strongest: "qwen3.8-max",
-      quickTasks: "qwen3.7-flash",
+      quickTasks: "qwen3.8-flash",
       images: "qwen3.7-plus",
     },
     dataUse: {
       training: "no",
       summary: {
-        en: "Alibaba Cloud says it will never use your data for model training. Data is stored in the region you choose.",
-        zh: "阿里云承诺绝不会将你的数据用于模型训练。数据存储在你所选的地域。",
+        en: "Alibaba Cloud says it never trains on your data; it stores what your calls generate.",
+        zh: "阿里云称绝不用你的数据训练模型，但会存储调用产生的数据。",
       },
-      url: "https://www.alibabacloud.com/help/en/model-studio/",
+      url: "https://www.alibabacloud.com/help/en/model-studio/privacy-notice",
     },
     notes: [
       {
@@ -418,13 +483,15 @@ const PROVIDERS = [
         zh: "密钥只能用于创建它的地域。请先选择地域。",
       },
     ],
-    checked: "2026-10-10",
+    checked: "2026-10-18",
   },
   {
     id: "kimi",
     name: { en: "Kimi (Moonshot AI)", zh: "Kimi（月之暗面）" },
     support: "best-effort",
+    firstRun: true,
     group: "china",
+    alsoListedIn: "international",
     adapter: "moonshotai",
     endpoints: [
       {
@@ -432,6 +499,7 @@ const PROVIDERS = [
         label: { en: "China", zh: "中国" },
         baseUrl: "https://api.moonshot.cn/v1",
         keyUrl: "https://platform.kimi.com/console/api-keys",
+        pricingUrl: "https://platform.moonshot.cn/docs/pricing/chat",
       },
       {
         id: "intl",
@@ -451,25 +519,27 @@ const PROVIDERS = [
       images: "kimi-k2.6",
     },
     dataUse: {
-      training: "unknown",
+      training: "opt-out",
       summary: {
-        en: "Moonshot's pages disagree: its help page says API data isn't used to train Kimi, but its international terms let it use content to improve the service unless agreed otherwise.",
-        zh: "月之暗面的说明并不一致：帮助页面称不会用 API 数据训练 Kimi，但其国际版条款允许在未另行约定时使用内容改进服务。",
+        en: "May use what you send to train and improve its models unless agreed otherwise in writing.",
+        zh: "可能用你发送的内容训练和改进模型，除非另有书面约定。",
       },
-      url: "https://platform.kimi.ai/docs/terms",
+      url: "https://platform.kimi.ai/docs/agreement/modeluse",
+      sources: ["https://platform.kimi.com/docs/agreement/modeluse"],
     },
-    notes: [
-      {
-        en: "Until you top up, Kimi allows 3 requests a minute; a top-up of ¥50 lifts that to 100.",
-        zh: "充值前每分钟只允许 3 次请求；充值 ¥50 后提高到 100 次。",
-      },
-    ],
-    checked: "2026-10-10",
+    keyLine: {
+      en: "If Kimi refuses requests, check your Kimi account",
+      zh: "如果 Kimi 拒绝请求，请检查你的 Kimi 账户",
+      url: "https://platform.kimi.ai/docs/pricing/chat",
+      link: "pricing",
+    },
+    checked: "2026-10-19",
   },
   {
     id: "glm",
     name: { en: "GLM (Zhipu / Z.ai)", zh: "智谱 GLM" },
     support: "best-effort",
+    firstRun: true,
     group: "china",
     adapter: "zai",
     // BigModel (mainland China) and Z.ai (international) are separate platforms with separate keys.
@@ -486,6 +556,7 @@ const PROVIDERS = [
         label: { en: "International (Z.ai)", zh: "国际（Z.ai）" },
         baseUrl: "https://api.z.ai/api/paas/v4",
         keyUrl: "https://z.ai/manage-apikey/apikey-list",
+        pricingUrl: "https://docs.z.ai/guides/overview/pricing",
       },
     ],
     apiKey: "required",
@@ -507,10 +578,11 @@ const PROVIDERS = [
     dataUse: {
       training: "unknown",
       summary: {
-        en: "Z.ai says it won't use your content unless you agree. BigModel (China) may train on anonymised data. Which applies depends on the region you choose.",
-        zh: "Z.ai 表示未经你同意不会使用你的内容；智谱开放平台（中国）可能使用匿名化数据训练。具体取决于你选择的地域。",
+        en: "Z.ai says it doesn't store your content; BigModel (China) may train on anonymised data.",
+        zh: "Z.ai 称不存储你的内容；智谱开放平台可能用匿名化数据训练。",
       },
       url: "https://docs.z.ai/legal-agreement/privacy-policy",
+      sources: ["https://docs.bigmodel.cn/cn/terms/privacy-policy"],
     },
     notes: [
       {
@@ -518,7 +590,7 @@ const PROVIDERS = [
         zh: "智谱开放平台在发放密钥前需要实名认证。",
       },
     ],
-    checked: "2026-10-10",
+    checked: "2026-10-18",
   },
   {
     id: "siliconflow",
@@ -532,20 +604,22 @@ const PROVIDERS = [
         label: { en: "China", zh: "中国" },
         baseUrl: "https://api.siliconflow.cn/v1",
         keyUrl: "https://cloud.siliconflow.cn/account/ak",
+        pricingUrl: "https://siliconflow.cn/pricing",
       },
       {
         id: "intl",
         label: { en: "International", zh: "国际" },
         baseUrl: "https://api.siliconflow.com/v1",
         keyUrl: "https://cloud.siliconflow.com/account/ak",
+        pricingUrl: "https://www.siliconflow.com/pricing",
       },
     ],
     apiKey: "required",
     keyUrl: "https://cloud.siliconflow.cn/account/ak",
     keyGuide: [
       {
-        en: "Pick the region of your account above, then open Get a key.",
-        zh: "先在上方选择账号所在的地域，再点“获取密钥”。",
+        en: "Pick the region of your account above, then open SiliconFlow's key page.",
+        zh: "先在上方选择账号所在的地域，再打开硅基流动的密钥页面。",
       },
       {
         en: "Sign in to SiliconFlow. In mainland China it asks you to verify your identity first.",
@@ -568,12 +642,13 @@ const PROVIDERS = [
       images: "Qwen/Qwen3-VL-32B-Instruct",
     },
     dataUse: {
-      training: "no",
+      training: "unknown",
       summary: {
-        en: "SiliconFlow says it won't use your business data for pre-training or fine-tuning any model.",
-        zh: "硅基流动表示不会将你的业务数据用于任何大模型的预训练或微调。",
+        en: "China policy: no training, no stored inputs or outputs. International policy: doesn't say.",
+        zh: "中国站政策称不训练、不保留输入和输出；国际站政策未说明。",
       },
-      url: "https://docs.siliconflow.cn/cn/legals/privacy-policy",
+      url: "https://docs.siliconflow.com/en/legals/privacy-policy",
+      zhUrl: "https://docs.siliconflow.cn/docs/legals/privacy-policy",
     },
     notes: [
       {
@@ -581,7 +656,7 @@ const PROVIDERS = [
         zh: "一个密钥可用多种模型。中国大陆账号需要身份证和人脸验证。",
       },
     ],
-    checked: "2026-10-10",
+    checked: "2026-10-18",
   },
   {
     id: "ollama",
@@ -593,6 +668,7 @@ const PROVIDERS = [
     serverUrl: "optional",
     apiKey: "none",
     docsUrl: "https://ollama.com/library",
+    pricingUrl: "https://ollama.com/pricing",
     // The model measured with IncarnaMind (#67); the loaded model also does the small jobs,
     // as a second local model would push it out of memory. Others by this computer's
     // memory are in ./local.
@@ -600,11 +676,12 @@ const PROVIDERS = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Downloaded models run on this computer: what you ask stays on it. Ollama cloud models (their names end in cloud, or Ollama marks them as remote) run on ollama.com instead, so your Questions and Passages are sent there.",
-        zh: "下载的模型在本机运行，你的问题不会离开本机。名称以 cloud 结尾或被 Ollama 标为远程的云端模型则在 ollama.com 运行，你的问题和相关段落会发送到那里。",
+        en: "Local models stay local; cloud-model questions go to ollama.com, which says no training.",
+        zh: "本地模型不外传；云端模型的提问发往 ollama.com，称不训练。",
       },
+      url: "https://ollama.com/privacy",
     },
-    checked: "2026-10-10",
+    checked: "2026-10-18",
   },
   {
     id: "openai-compatible",
@@ -620,7 +697,7 @@ const PROVIDERS = [
       training: "unknown",
       summary: {
         en: "Depends on the server: check its terms. A server on this computer sends nothing out.",
-        zh: "取决于服务器，请查看其条款。在本机运行的服务器不会向外发送任何内容。",
+        zh: "取决于服务器，请查看其条款；本机的服务器不会向外发送内容。",
       },
     },
     checked: "2026-10-10",
@@ -629,50 +706,140 @@ const PROVIDERS = [
 
 export type CatalogProviderId = (typeof PROVIDERS)[number]["id"];
 
-/** The providers, in the order the catalog lists them. */
-export const CATALOG_PROVIDERS: readonly CatalogProvider[] = PROVIDERS;
+/**
+ * The ChatGPT plan's models for the jobs that aren't Answers: it has no entry
+ * of its own (it serves OpenAI's models, see ../chatgpt), and the User picks
+ * its Answers model from the plan's list.
+ */
+export const CHATGPT_PLAN_ROLES: Readonly<
+  Pick<Partial<Record<Role, string>>, "quickTasks" | "tagging">
+> = {
+  quickTasks: "gpt-6-luna",
+  tagging: "gpt-6-luna",
+};
+
+/** The providers, in the order the catalog lists them: the presets before a server the User gives. */
+export const CATALOG_PROVIDERS: readonly CatalogProvider[] = PROVIDERS.flatMap(
+  (each): readonly CatalogProvider[] =>
+    each.id === "openai-compatible" ? [...PRESETS, each] : [each],
+);
 
 const byId = new Map<string, CatalogProvider>(CATALOG_PROVIDERS.map((each) => [each.id, each]));
+const presetIds = new Set(PRESETS.map((each) => each.id));
+const kinds = new Map<string, ChatProviderKind>(PROVIDERS.map((each) => [each.id, each.id]));
 
 /** The provider with this catalog id, if the catalog has it. */
 export const catalogProvider = (id: string | null | undefined): CatalogProvider | undefined =>
   id ? byId.get(id) : undefined;
 
 /**
- * The catalog provider a provider kind stands for: each kind is one today,
- * except the ChatGPT plan, which signs in instead (see ../chatgpt).
+ * What a provider does with what it is sent. A local app's own line holds only
+ * while its server runs on this computer: at an address `elsewhere` it is any
+ * server's, so it says that.
+ */
+export function dataUseOf(provider: CatalogProvider, elsewhere: boolean): DataUse {
+  return (
+    (elsewhere && provider.group === "local" && catalogProvider("openai-compatible")?.dataUse) ||
+    provider.dataUse
+  );
+}
+
+/**
+ * The catalog provider a provider kind stands for: each kind is one, except
+ * the ChatGPT plan, which signs in instead (see ../chatgpt).
  */
 export const catalogProviderOfKind = (kind: ChatProviderKind): CatalogProvider | undefined =>
   catalogProvider(kind);
 
+export type Preset = CatalogProvider & { adapter: "openai-compatible" };
+
+export const isPreset = (provider: CatalogProvider | undefined): provider is Preset =>
+  provider !== undefined && presetIds.has(provider.id);
+
+export const catalogProviderOf = (
+  kind: ChatProviderKind,
+  catalogId: string | null | undefined,
+): CatalogProvider | undefined =>
+  (catalogId && presetIds.has(catalogId) ? catalogProvider(catalogId) : undefined) ??
+  catalogProviderOfKind(kind);
+
+/** Throws for an id the catalog doesn't have. */
+export function kindOfCatalogId(id: string): ChatProviderKind {
+  if (presetIds.has(id)) return "openai-compatible";
+  const kind = kinds.get(id);
+  if (!kind) throw new Error(`The catalog has no provider kind "${id}".`);
+  return kind;
+}
+
 /**
- * The providers set up with a key or a server address, in catalog order: every
- * hosted provider, then a server the User gives. Ollama has its own card.
+ * A preset whose Answers model hasn't passed the citing evaluation (#185): its
+ * models are labelled "Not yet tested for checked Citations" and it is never
+ * recommended, whatever else its row says.
  */
-export const KEY_PROVIDER_KINDS: readonly ChatProviderKind[] = CATALOG_PROVIDERS.filter(
-  (each) => each.endpoints.length > 0 || each.id === "openai-compatible",
-).map((each) => each.id as ChatProviderKind);
+export const untestedForCitations = (provider: CatalogProvider | undefined): boolean =>
+  isPreset(provider) && provider.citingTested === undefined;
+
+/** The presets that run on this computer (LM Studio, Unsloth Studio), by catalog id: set up beside Ollama, not by a key. */
+export const LOCAL_PRESETS: readonly string[] = CATALOG_PROVIDERS.filter(
+  (each) => isPreset(each) && each.group === "local",
+).map((each) => each.id);
+
+/**
+ * The providers set up with a key or a server address, by catalog id, in
+ * catalog order: every hosted provider and preset, then a server the User
+ * gives. Ollama and the presets on this computer have their own place.
+ */
+export const KEY_PROVIDERS: readonly string[] = CATALOG_PROVIDERS.filter(
+  (each) =>
+    (each.endpoints.length > 0 || each.id === "openai-compatible") &&
+    !LOCAL_PRESETS.includes(each.id),
+).map((each) => each.id);
+
+/** The best-effort providers the first-run key form offers beside the first-class ones, by catalog id. */
+export const FIRST_RUN_BEST_EFFORT: readonly string[] = KEY_PROVIDERS.filter(
+  (id) => catalogProvider(id)?.firstRun === true,
+);
 
 /**
  * The providers to offer for a key, in the two groups the screens show: `main`,
  * the first-class ones and any best-effort one the User already set up (it
  * stays among their providers whatever its tier), and `more`, under "More
- * providers". The first-run setup shows `main` for a User with none set up.
+ * providers".
  */
-export function keyProviderGroups(setUp: readonly ChatProviderKind[] = []): {
-  main: ChatProviderKind[];
-  more: ChatProviderKind[];
+export function keyProviderGroups(setUp: readonly string[] = []): {
+  main: string[];
+  more: string[];
 } {
-  const firstClass = KEY_PROVIDER_KINDS.filter(
-    (kind) => catalogProviderOfKind(kind)?.support === "first-class",
-  );
+  const firstClass = KEY_PROVIDERS.filter((id) => catalogProvider(id)?.support === "first-class");
   // Set up, then listed after the first-class ones rather than among them.
-  const keptSetUp = KEY_PROVIDER_KINDS.filter(
-    (kind) => !firstClass.includes(kind) && setUp.includes(kind),
-  );
+  const keptSetUp = KEY_PROVIDERS.filter((id) => !firstClass.includes(id) && setUp.includes(id));
   const main = [...firstClass, ...keptSetUp];
-  return { main, more: KEY_PROVIDER_KINDS.filter((kind) => !main.includes(kind)) };
+  return { main, more: KEY_PROVIDERS.filter((id) => !main.includes(id)) };
 }
+
+export const fieldAccepts = (field: EndpointField, value: string): boolean =>
+  field.choices
+    ? field.choices.some((each) => each.value === value)
+    : new RegExp(`^(?:${field.pattern ?? ".+"})$`).test(value);
+
+/** An endpoint's address with its field's value in it. */
+export const fieldUrl = (endpoint: Endpoint, value: string): string =>
+  endpoint.field ? endpoint.baseUrl.replace(`{${endpoint.field.name}}`, value) : endpoint.baseUrl;
+
+/** The field's value a saved address was built with; null when it wasn't built from this endpoint. */
+export function fieldValueOf(endpoint: Endpoint, baseUrl: string | null): string | null {
+  if (!endpoint.field || !baseUrl) return null;
+  const [before = "", after = ""] = endpoint.baseUrl.split(`{${endpoint.field.name}}`);
+  if (!baseUrl.startsWith(before) || !baseUrl.endsWith(after)) return null;
+  const value = baseUrl.slice(before.length, baseUrl.length - after.length);
+  return fieldAccepts(endpoint.field, value) ? value : null;
+}
+
+export const pricingUrlOf = (
+  provider: CatalogProvider,
+  endpointId: string | null | undefined,
+): string | undefined =>
+  endpointOf(provider, endpointId)?.pricingUrl ?? provider.pricingUrl ?? provider.docsUrl;
 
 /** The provider's endpoint with this id, else its first (the default); none for a server the User gives. */
 export const endpointOf = (
@@ -680,3 +847,17 @@ export const endpointOf = (
   id: string | null | undefined,
 ): Endpoint | undefined =>
   provider.endpoints.find((each) => each.id === id) ?? provider.endpoints[0];
+
+/**
+ * A provider's model for a job that isn't Answers, from the catalog: the
+ * ChatGPT plan's from its own roles. Undefined when it names none.
+ */
+export const catalogRoleModel = (
+  { kind, catalogId }: { kind: ChatProviderKind; catalogId: string | null },
+  role: "quickTasks" | "images" | "tagging",
+): string | undefined =>
+  kind === "chatgpt"
+    ? role === "images"
+      ? undefined
+      : CHATGPT_PLAN_ROLES[role]
+    : catalogProviderOf(kind, catalogId)?.roles[role];

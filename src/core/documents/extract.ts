@@ -8,13 +8,16 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { CJK } from "../../shared/text";
 import type { TextUnit } from "../../shared/units";
-import type { PagePicture, RecognizedLine } from "../adapters";
+import type { LogFields, PagePicture, PictureRead, RecognizedLine } from "../adapters";
 import type { DocumentKind } from "../api";
 import { isRecord } from "../errors";
 import { ExtractionError, extractUnits } from "./formats";
+import { type FigureReading, readWebPage, webUnits } from "./formats/web";
 import { passwordProblem } from "./pdfPasswords";
+import { printedPageNames } from "./printedPages";
 import { scannedUnit } from "./scan/layout";
 import { type CanvasFactory, isScanned, pagePicture } from "./scan/pages";
+import { PICTURE_LIMITS, pictureSize, pictureType } from "./web/pictures";
 
 export { ExtractionError };
 
@@ -26,6 +29,10 @@ export interface PageReading {
   keep: ReadonlyMap<number, TextUnit>;
   /** The lines on a page's picture. Rejects with `ReadingUnavailable` when no page can be read now. */
   read(page: number, picture: PagePicture): Promise<RecognizedLine[]>;
+  /** As `read`, for a picture file, decoded where the model runs. */
+  readFile(page: number, file: Uint8Array): Promise<PictureRead>;
+  /** Logs in the core, with the Document's id: the worker's own console reaches no log. */
+  log(event: string, fields: LogFields): void;
   /** `read` of `of` scanned pages are read; `unit` is the one just read. */
   progress(read: number, of: number, unit: TextUnit | null): void;
   /** Aborted when the job is stopped: no further page is read. */
@@ -45,15 +52,97 @@ export interface ExtractedText {
   unread: { pages: number[]; message: string } | null;
 }
 
-/** `password`: what opens a locked PDF, from ./pdfPasswords (#763). */
+/**
+ * `password`: what opens a locked PDF, from ./pdfPasswords (#763).
+ * `readPicture`: a saved web page's picture, by its path in the snapshot,
+ * whose text is read when `reading` is given.
+ */
 export async function extractText(
   kind: DocumentKind,
   bytes: Uint8Array,
   reading: PageReading | null = null,
   password?: string,
+  readPicture: ((src: string) => Promise<Uint8Array>) | null = null,
 ): Promise<ExtractedText> {
   if (kind === "pdf") return extractPdf(bytes, reading, password);
+  if (kind === "web" && reading && readPicture) {
+    return { pageCount: null, units: await extractWeb(bytes, reading, readPicture), unread: null };
+  }
   return { pageCount: null, units: await extractUnits(kind, bytes), unread: null };
+}
+
+/**
+ * A web page's Units with its saved pictures' text read. A picture that
+ * isn't one to read, or that fails to decode or read, keeps its description
+ * alone; once the model can't be had, the pictures left are marked unread.
+ */
+async function extractWeb(
+  bytes: Uint8Array,
+  reading: PageReading,
+  readPicture: (src: string) => Promise<Uint8Array>,
+): Promise<TextUnit[]> {
+  const source = new TextDecoder().decode(bytes);
+  const readings = new Map<number, FigureReading>();
+  const figures = readWebPage(source).blocks.flatMap((block) =>
+    block.figure === undefined
+      ? []
+      : [{ number: block.figure, src: block.element.attrs.src ?? "" }],
+  );
+  const unread: FigureReading = { reader: reading.reader, text: "", lines: [], unread: true };
+  let unavailable = false;
+  if (figures.length > 0) reading.progress(0, figures.length, null);
+  for (const [index, figure] of figures.entries()) {
+    reading.signal.throwIfAborted();
+    if (unavailable) {
+      readings.set(figure.number, unread);
+      continue;
+    }
+    try {
+      const read = await readFigure(figure.number, figure.src, reading, readPicture);
+      if (read) readings.set(figure.number, read);
+    } catch (error) {
+      reading.signal.throwIfAborted();
+      if (error instanceof ReadingUnavailable) {
+        unavailable = true;
+        readings.set(figure.number, unread);
+      } else {
+        // Marked unread, it would be read again at every start, and fail again.
+        reading.log("documents.pictureNotRead", {
+          picture: figure.src,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    reading.progress(index + 1, figures.length, null);
+  }
+  return webUnits(source, readings);
+}
+
+async function readFigure(
+  number: number,
+  src: string,
+  reading: PageReading,
+  readPicture: (src: string) => Promise<Uint8Array>,
+): Promise<FigureReading | null> {
+  const file = await readPicture(src);
+  const type = pictureType(file);
+  const size = type && pictureSize(file, type);
+  if (!size || size.width * size.height > PICTURE_LIMITS.maxPixels) {
+    reading.log("documents.pictureNotRead", {
+      picture: src,
+      message: size ? `${size.width} × ${size.height} pixels` : "not a picture",
+    });
+    return null;
+  }
+  const picture = await reading.readFile(number, file);
+  const read = scannedUnit(number, picture.lines, picture, reading.reader);
+  const unsure = read.label?.scan?.unsure;
+  return {
+    reader: reading.reader,
+    text: read.text,
+    lines: (read.anchors ?? []).map(({ start, end, quad }) => ({ start, end, quad: quad ?? [] })),
+    ...(unsure && { unsure }),
+  };
 }
 
 type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -96,6 +185,51 @@ function pageText(items: readonly object[]): string {
   return text.replaceAll("\u0000", "").replace(/\r\n?/g, "\n").replace(CJK_LINE_WRAP, "$1").trim();
 }
 
+/** A line of a page as printed, with its largest font size in points. */
+export interface PageLine {
+  text: string;
+  size: number;
+  /** How far down the page its baseline is, from 0 at the top to 1 at the foot. */
+  top: number;
+}
+
+/**
+ * A page's lines across it, in the order pdf.js reads them. Text set at an angle (arXiv's stamp
+ * up the margin) is left out: it is no line of the page's own.
+ */
+function pageLines(items: readonly object[], height: number): PageLine[] {
+  const lines: PageLine[] = [];
+  let text = "";
+  let size = 0;
+  let baseline: number | null = null;
+  const end = () => {
+    const tidy = text.replaceAll("\u0000", "").replace(/\s+/g, " ").trim();
+    if (tidy !== "" && size > 0 && baseline !== null) {
+      const top = height > 0 ? Math.min(1, Math.max(0, 1 - baseline / height)) : 0;
+      lines.push({ text: tidy, size, top });
+    }
+    text = "";
+    size = 0;
+    baseline = null;
+  };
+  for (const item of items) {
+    if (!("str" in item) || typeof item.str !== "string") continue;
+    const transform: number[] =
+      "transform" in item && Array.isArray(item.transform) ? item.transform : [];
+    const [a = 0, b = 0, c = 0, d = 0, , f = 0] = transform;
+    if (Math.abs(b) < 0.01 && Math.abs(c) < 0.01 && a > 0) {
+      text += item.str;
+      if (item.str.trim() !== "") {
+        size = Math.max(size, Math.round(Math.abs(d) * 10) / 10);
+        baseline ??= f;
+      }
+    }
+    if ("hasEOL" in item && item.hasEOL === true) end();
+  }
+  end();
+  return lines;
+}
+
 /** XMP's creation date, written as an element or as an attribute of its description. */
 const XMP_CREATE_DATE = /xmp:CreateDate\s*(?:=\s*(["'])([^"'<>]*)\1|>([^<]*)<)/i;
 
@@ -113,14 +247,16 @@ export interface PdfMetadata {
   xmpPacket: string | null;
   /** The text of its first `pages` pages, as extracted, running headers and all (#286). */
   firstPages: string[];
+  /** Its first page's lines, where a title, its authors and a date are printed. */
+  firstPageLines: PageLine[];
 }
 
 /**
  * A PDF's metadata as written: its document information dictionary's
  * CreationDate (#53), Title (#213) and Author, and its XMP metadata, whose
- * xmp:CreateDate is read here; never its ModDate. With `pages`, the text of
- * its first pages too (#286: a DOI or an arXiv id is printed there).
- * Throws if the PDF can't be opened.
+ * xmp:CreateDate is read here; never its ModDate. Its first page's lines, and
+ * with `pages`, the text of its first pages too (#286: a DOI or an arXiv id is
+ * printed there). Throws if the PDF can't be opened.
  */
 export async function pdfMetadata(
   bytes: Uint8Array,
@@ -132,7 +268,8 @@ export async function pdfMetadata(
   const task = getDocument({
     data: new Uint8Array(bytes),
     ...(password !== undefined && { password }),
-    ...(pages > 0 && { ...pdfjsDataUrls(), cMapPacked: true }),
+    ...pdfjsDataUrls(),
+    cMapPacked: true,
     verbosity: 0,
   });
   try {
@@ -145,9 +282,12 @@ export async function pdfMetadata(
       return typeof value === "string" ? value : null;
     };
     const firstPages: string[] = [];
-    for (let number = 1; number <= Math.min(pages, document.numPages); number++) {
+    let firstPageLines: PageLine[] = [];
+    for (let number = 1; number <= Math.min(Math.max(pages, 1), document.numPages); number++) {
       const page = await document.getPage(number);
-      firstPages.push(pageText((await page.getTextContent()).items));
+      const { items } = await page.getTextContent();
+      if (number <= pages) firstPages.push(pageText(items));
+      if (number === 1) firstPageLines = pageLines(items, page.getViewport({ scale: 1 }).height);
       page.cleanup();
     }
     return {
@@ -157,6 +297,7 @@ export async function pdfMetadata(
       author: entry("Author"),
       xmpPacket: raw,
       firstPages,
+      firstPageLines,
     };
   } finally {
     await task.destroy();
@@ -223,7 +364,12 @@ async function extractPdf(
       reading && scanned.length > 0
         ? await readScannedPages(document, pages, scanned, reading)
         : null;
-    return { pageCount: pages.length, units: pages, unread };
+    const names = printedPageNames(
+      await document.getPageLabels(),
+      pages.map((unit) => unit.text),
+    );
+    const units = pages.map((unit, index) => withPrintedName(unit, names[index] ?? null));
+    return { pageCount: pages.length, units, unread };
   } catch (error) {
     if (reading?.signal.aborted) throw reading.signal.reason;
     const name = error instanceof Error ? error.name : "";
@@ -235,6 +381,13 @@ async function extractPdf(
   } finally {
     await task.destroy();
   }
+}
+
+function withPrintedName(unit: TextUnit, name: string | null): TextUnit {
+  // A scanned page kept from an earlier read has the name that read gave it.
+  const { printed: _earlier, ...label } = unit.label ?? {};
+  const named = name === null ? label : { ...label, printed: name };
+  return { ...unit, label: Object.keys(named).length > 0 ? named : null };
 }
 
 /**

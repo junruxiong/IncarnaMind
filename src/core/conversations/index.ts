@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { withFigureText } from "../../shared/figureMarkers";
 import { conversationName, cutTitle } from "../../shared/naming";
 import { parseThirdPartySource } from "../../shared/textOrigins";
+import { asksToCheckOrCalculate } from "../answers/carefulIntent";
 import {
   addCitedUnit,
   addCitedVersion,
@@ -21,7 +22,9 @@ import {
   type CitedUnits,
   type CitedVersions,
 } from "../answers/citedVersions";
+import { usualWait } from "../answers/usualWait";
 import type {
+  AnswerCoverage,
   AnswerPhase,
   AnswerStatus,
   AnswerSteps,
@@ -29,6 +32,7 @@ import type {
   AskedFrom,
   ChatModelChoice,
   CitationSupport,
+  ClaimedChange,
   Conversation,
   ConversationAnswer,
   ConversationContent,
@@ -45,7 +49,9 @@ import type {
   SearchScope,
   ThirdPartySource,
 } from "../api";
+import { CLAIMED_CHANGES } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
+import { isSignInRouteProblem } from "../providers/signInRoutes";
 import { parseSearchScope } from "../scope";
 import { isChatModelChoice } from "../settings";
 import type { Database, SqlValue } from "../storage";
@@ -117,6 +123,7 @@ interface MessageRow {
   status: string | null;
   error_kind: string | null;
   error_message: string | null;
+  error_sign_in_route: string | null;
   citation_support: string | null;
   citations: string;
   figures: string;
@@ -167,8 +174,10 @@ const ERROR_KINDS: Record<ProviderErrorKind, true> = {
   network: true,
   provider: true,
   "consent-declined": true,
+  "consent-revoked": true,
   "local-mode": true,
   "ollama-not-running": true,
+  "data-retention": true,
   "not-signed-in": true,
   "plan-limit": true,
   blocked: true,
@@ -206,7 +215,24 @@ function storedSteps(value: string | null): AnswerSteps | null {
   }
   if (!isRecord(parsed)) return null;
   const phases = Array.isArray(parsed.phases) ? parsed.phases.filter(isRecord) : [];
-  const { reasoning, readShare, citedAfterChecking } = parsed;
+  const {
+    reasoning,
+    readShare,
+    citedAfterChecking,
+    firstWordMs,
+    careful,
+    unbackedClaims,
+    example,
+    withoutMindTools,
+    coverage,
+    writtenFrom,
+    sent,
+  } = parsed;
+  const claimed = Array.isArray(unbackedClaims)
+    ? unbackedClaims.filter((each): each is ClaimedChange =>
+        CLAIMED_CHANGES.some((claim) => claim === each),
+      )
+    : [];
   return {
     sentAt: timeOrNull(parsed.sentAt),
     finishedAt: timeOrNull(parsed.finishedAt),
@@ -227,7 +253,43 @@ function storedSteps(value: string | null): AnswerSteps | null {
     ...(typeof citedAfterChecking === "number" &&
       Number.isInteger(citedAfterChecking) &&
       citedAfterChecking > 0 && { citedAfterChecking }),
+    ...(typeof firstWordMs === "number" && firstWordMs >= 0 && { firstWordMs }),
+    ...(careful === true && { careful }),
+    ...(claimed.length > 0 && { unbackedClaims: claimed }),
+    ...(example === true && { example }),
+    ...(withoutMindTools === true && { withoutMindTools }),
+    ...(storedCoverage(coverage) ?? {}),
+    ...(isRecord(writtenFrom) &&
+      isCount(writtenFrom.documents) &&
+      isCount(writtenFrom.total) && {
+        writtenFrom: { documents: writtenFrom.documents, total: writtenFrom.total },
+      }),
+    ...(isRecord(sent) &&
+      Array.isArray(sent.documents) && {
+        sent: {
+          documents: sent.documents.filter((each): each is string => typeof each === "string"),
+          ...(sent.transcript === true && { transcript: true as const }),
+        },
+      }),
   };
+}
+
+const isCount = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value > 0;
+
+function storedCoverage(value: unknown): { coverage: AnswerCoverage } | null {
+  if (!isRecord(value) || (value.kind !== "main" && value.kind !== "largest")) return null;
+  const used = Array.isArray(value.used)
+    ? value.used.flatMap((each) =>
+        isRecord(each) && typeof each.id === "string" && typeof each.name === "string"
+          ? [{ id: each.id, name: each.name }]
+          : [],
+      )
+    : [];
+  const rest = Array.isArray(value.rest)
+    ? value.rest.filter((each): each is string => typeof each === "string")
+    : [];
+  return used.length > 0 ? { coverage: { kind: value.kind, used, rest } } : null;
 }
 
 /** A conversation's name: the title the User typed, else its own. */
@@ -327,6 +389,10 @@ function toAnswer(row: MessageRow): ConversationAnswer {
     errorKind:
       status !== "failed" ? null : isErrorKind(row.error_kind) ? row.error_kind : "unknown",
     errorMessage: status === "failed" ? row.error_message : null,
+    errorSignInRoute:
+      status === "failed" && isSignInRouteProblem(row.error_sign_in_route)
+        ? row.error_sign_in_route
+        : null,
     citationSupport: SUPPORTS.find((each) => each === row.citation_support) ?? null,
     toolCalls: storedList<AnswerToolCall>(row.tool_calls),
     textOrigin: parseThirdPartySource(row.text_origin),
@@ -343,6 +409,25 @@ const toMessage = (row: MessageRow): ConversationMessage | null =>
 
 const messagesOf = (rows: readonly MessageRow[]) =>
   rows.map(toMessage).filter((message): message is ConversationMessage => message !== null);
+
+/**
+ * No model wrote the example's Answer, so it isn't the model's own earlier turn
+ * for a Question asked from another Mind than the one the example was asked in.
+ */
+function withoutExample(
+  messages: readonly ConversationMessage[],
+  mindId: string | null,
+): ConversationMessage[] {
+  const left = new Set<string>();
+  for (const answer of messages) {
+    if (answer.kind !== "answer" || !answer.steps?.example) continue;
+    const question = messages.find((each) => each.id === answer.questionId);
+    if (question?.kind === "question" && question.askedFrom?.mindId !== mindId) {
+      left.add(question.id).add(answer.id);
+    }
+  }
+  return messages.filter((each) => !left.has(each.id));
+}
 
 /** An Answer's `read_mind_id`, `read_mind_version` and `read_partial`. */
 const readColumns = (read: AnswerRead | null): [string | null, string | null, number] => [
@@ -503,8 +588,11 @@ export function createConversations(db: Database, now: () => string) {
     conversation: get(question.conversation_id),
     question: toQuestion(question),
     answer: toAnswer(storedMessage(answerId)),
-    earlier: messagesOf(
-      messageRows(question.conversation_id, "AND msg.position < ?", [BigInt(question.position)]),
+    earlier: withoutExample(
+      messagesOf(
+        messageRows(question.conversation_id, "AND msg.position < ?", [BigInt(question.position)]),
+      ),
+      question.asked_from_mind_id,
     ),
   });
 
@@ -577,6 +665,34 @@ export function createConversations(db: Database, now: () => string) {
     content(conversationId: unknown): ConversationContent {
       const conversation = get(conversationId);
       return { conversation, messages: messagesOf(messageRows(conversation.id)) };
+    },
+
+    usualWait(answerId: unknown): number | null {
+      if (typeof answerId !== "string") return null;
+      const asked = db.get<{ provider_id: string | null; model_id: string | null; text: string }>(
+        `SELECT answer.provider_id, answer.model_id, question.text
+         FROM conversation_messages answer
+         JOIN conversation_messages question ON question.id = answer.question_id
+         WHERE answer.id = ? AND answer.kind = 'answer' AND answer.deleted_at IS NULL`,
+        [answerId],
+      );
+      if (!asked?.provider_id || !asked.model_id) return null;
+      const careful = asksToCheckOrCalculate(asked.text);
+      const rows = db.all<{ steps: string }>(
+        `SELECT steps FROM conversation_messages
+         WHERE kind = 'answer' AND status = 'done' AND provider_id = ? AND model_id = ?
+           AND steps IS NOT NULL AND id != ? AND deleted_at IS NULL
+         ORDER BY created_at DESC LIMIT ?`,
+        [asked.provider_id, asked.model_id, answerId, 50],
+      );
+      return usualWait(
+        rows.flatMap((row) => {
+          const steps = storedSteps(row.steps);
+          return steps?.firstWordMs !== undefined && (steps.careful === true) === careful
+            ? [steps.firstWordMs]
+            : [];
+        }),
+      );
     },
 
     /**
@@ -755,7 +871,7 @@ export function createConversations(db: Database, now: () => string) {
         db.run(
           `UPDATE conversation_messages SET text = '', citations = '[]', figures = '[]', tool_calls = '[]',
              status = 'streaming', error_kind = NULL, error_message = NULL,
-             citation_support = NULL, text_origin = NULL, steps = NULL, provider_id = ?,
+             error_sign_in_route = NULL, citation_support = NULL, text_origin = NULL, steps = NULL, provider_id = ?,
              model_id = ?, read_mind_id = ?, read_mind_version = ?, read_partial = ?,
              updated_at = ?
            WHERE id = ?`,
@@ -785,7 +901,7 @@ export function createConversations(db: Database, now: () => string) {
           `UPDATE conversation_messages SET text = ?, citations = ?, figures = ?, tool_calls = ?,
              citation_support = ?, text_origin = ?, read_mind_id = ?, read_mind_version = ?,
              read_partial = ?, steps = ?, status = ?, error_kind = ?, error_message = ?,
-             updated_at = ?
+             error_sign_in_route = ?, updated_at = ?
            WHERE id = ?`,
           [
             write.text,
@@ -799,6 +915,7 @@ export function createConversations(db: Database, now: () => string) {
             outcome?.status ?? "streaming",
             outcome?.error?.kind ?? null,
             outcome?.error?.message ?? null,
+            outcome?.error?.signInRoute ?? null,
             now(),
             answerId,
           ],

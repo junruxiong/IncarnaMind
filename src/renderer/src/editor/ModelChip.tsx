@@ -21,7 +21,9 @@ import { useT } from "../i18n";
 import { turnOffLocalMode } from "../localMode";
 import { useModelMenuRequests } from "../modelMenu";
 import { useModelNames } from "../modelNames";
+import { usePlanStandIn } from "../planLimits";
 import { useAppStore } from "../store";
+import { untestedHintKey } from "../untestedModels";
 import { ChevronDownSmallIcon } from "./icons";
 
 /** Where a model runs, as the menu groups them (DESIGN.md, Composer › Model). */
@@ -50,14 +52,6 @@ const GROUP_NAMES: Record<ModelGroup, MessageKey> = {
   cloud: "composer.model.group.cloud",
 };
 
-/** What each group's models are like, on their second line. */
-const HINTS: Record<ModelGroup, MessageKey> = {
-  keys: "composer.model.hint.keys",
-  plan: "composer.model.hint.plan",
-  local: isMacOS() ? "composer.model.hint.localMac" : "composer.model.hint.local",
-  cloud: "composer.model.hint.cloud",
-};
-
 /** How a model is reached, after its name in the chip's tooltip. */
 const VIA: Record<ModelGroup, MessageKey> = {
   keys: "composer.model.via.keys",
@@ -84,6 +78,21 @@ export function useMindModel(doc: Y.Doc | null): ChatModelChoice | null {
   return doc ? choice : withoutMind;
 }
 
+/** The model a run in the Mind uses: the Mind's own, else the default the composer shows. */
+export function useRunModel(doc: Y.Doc | null): {
+  providerId: string | null;
+  modelId: string | null;
+} {
+  const own = useMindModel(doc);
+  const providerId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.provider.id : null,
+  );
+  const modelId = useAppStore((state) =>
+    state.chatReadiness?.ready ? state.chatReadiness.modelId : null,
+  );
+  return own ?? { providerId, modelId };
+}
+
 function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
   if (doc) setMindModel(doc, choice);
   else useComposer.setState({ modelWithoutMind: choice });
@@ -92,8 +101,8 @@ function chooseModel(doc: Y.Doc | null, choice: ChatModelChoice): void {
 /**
  * The composer's quiet model chip, before the Search scope: the model the
  * Mind's next Questions are asked with, and a menu to choose another, grouped
- * by where it runs (your keys, the ChatGPT plan, this computer), each with a
- * one-line hint. A choice is remembered for the Mind (`setMindModel`); a Mind
+ * by where it runs (your keys, the ChatGPT plan, this computer), with a hint
+ * only on a model that needs one. A choice is remembered for the Mind (`setMindModel`); a Mind
  * with none uses the default for new Minds, which the menu names at its foot.
  * Until the User is signed in with ChatGPT, the plan's group offers "Continue
  * with ChatGPT"; while its model is chosen, it says the plan is in use, with
@@ -118,6 +127,7 @@ export function ModelChip({
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
   const nameOf = useModelNames();
+  const standIn = usePlanStandIn();
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
   // Over the composer, not on it.
@@ -170,13 +180,34 @@ export function ModelChip({
   };
   const via = provider ? t(VIA[groupOf(provider, isCloud(provider.id, current.modelId))]) : null;
   const shown = nameOf(current.modelId, current.providerId);
+  const answering =
+    standIn && provider?.kind === "chatgpt" && standIn.insteadOf === current.modelId
+      ? { name: nameOf(standIn.modelId, current.providerId).name, until: standIn.untilTime }
+      : null;
+  const chipText = answering?.until
+    ? t("composer.model.standIn", { model: answering.name, time: answering.until })
+    : (answering?.name ?? shown.name);
   const named = shown.id ? `${shown.name} · ${shown.id}` : shown.name;
-  const title = via ? `${named} · ${via}` : named;
+  const title = answering
+    ? answering.until
+      ? t("composer.model.standIn.title", {
+          chosen: shown.name,
+          model: answering.name,
+          time: answering.until,
+        })
+      : t("composer.model.standIn.titleForNow", { chosen: shown.name, model: answering.name })
+    : via
+      ? `${named} · ${via}`
+      : named;
   const label = via
-    ? t("composer.model.label", { model: shown.name, via })
-    : t("composer.model.labelPlain", { model: shown.name });
+    ? t("composer.model.label", { model: chipText, via })
+    : t("composer.model.labelPlain", { model: chipText });
 
   const choose = (choice: ChatModelChoice) => {
+    // The User's own pick wins over a stand-in, for the model it stood in for too.
+    if (answering || (standIn && choice.modelId === standIn.insteadOf)) {
+      core.endPlanStandIn().catch(useAppStore.getState().reportError);
+    }
     chooseModel(doc, choice);
     menu.close();
     onChosen();
@@ -209,13 +240,14 @@ export function ModelChip({
         type="button"
         {...menu.buttonProps}
         data-testid="composer-model"
+        data-stand-in={answering ? "" : undefined}
         aria-label={label}
         title={title}
         onPointerEnter={loadModels}
         onFocus={loadModels}
         className="composer-chip composer-model"
       >
-        <span className="truncate">{shown.name}</span>
+        <span className="truncate">{chipText}</span>
         <ChevronDownSmallIcon className="composer-model-chevron" />
       </button>
       <div
@@ -242,7 +274,6 @@ export function ModelChip({
                 }
               }}
             >
-              <p className="model-menu-intro">{t("composer.model.intro")}</p>
               <input
                 ref={search}
                 type="search"
@@ -281,7 +312,6 @@ export function ModelChip({
                             key={`${each.id}\n${modelId}`}
                             provider={each}
                             modelId={modelId}
-                            hint={t(HINTS[group])}
                             checked={same({ providerId: each.id, modelId }, current)}
                             unavailable={localMode}
                             onChoose={choose}
@@ -296,16 +326,24 @@ export function ModelChip({
                   // biome-ignore lint/a11y/useSemanticElements: a group of a menu's items, which a fieldset can't hold.
                   <div key={group} role="group" aria-label={t(GROUP_NAMES[group])}>
                     <p aria-hidden="true" className="model-menu-heading">
-                      {t(GROUP_NAMES[group])}
+                      {group === "local" ? (
+                        <OnThisComputer>{t(GROUP_NAMES[group])}</OnThisComputer>
+                      ) : (
+                        t(GROUP_NAMES[group])
+                      )}
                     </p>
+                    {group === "cloud" && (
+                      <p className="model-menu-hint model-menu-group-hint">
+                        {t("composer.model.hint.cloud")}
+                      </p>
+                    )}
                     {inGroup.flatMap(({ provider: each, models }) =>
                       models.map((modelId) => (
                         <ModelItem
                           key={`${each.id}\n${modelId}`}
                           provider={each}
                           modelId={modelId}
-                          hint={t(HINTS[group])}
-                          onThisComputer={group === "local"}
+                          hint={untestedHintKey(each) ? t("providers.untested") : null}
                           checked={same({ providerId: each.id, modelId }, current)}
                           // Local mode: only a model on this computer can be asked.
                           unavailable={localMode && group !== "local"}
@@ -379,23 +417,21 @@ export function ModelChip({
 }
 
 /**
- * One model in the menu: its name (its id on hover), a hint, and who runs it. `unavailable`: listed
- * but not chosen, with the reason as its hint (a cloud model in local mode).
+ * One model in the menu: its name (its id on hover), who runs it, and, only when it needs one, a
+ * hint (not yet tested for Citations). Where models run is said once, by their group's heading.
+ * `unavailable`: listed but not chosen, with the reason as its hint (a cloud model in local mode).
  */
 function ModelItem({
   provider,
   modelId,
-  hint,
-  onThisComputer = false,
+  hint = null,
   checked,
   unavailable,
   onChoose,
 }: {
   provider: ChatProvider;
   modelId: string;
-  hint: string;
-  /** The hint says it stays on this computer: it takes that mark. */
-  onThisComputer?: boolean;
+  hint?: string | null;
   checked: boolean;
   unavailable: boolean;
   onChoose(choice: ChatModelChoice): void;
@@ -424,15 +460,11 @@ function ModelItem({
       />
       <span className="model-menu-name">
         <span className="truncate">{shown.name}</span>
-        <span className="model-menu-hint">
-          {unavailable ? (
-            t("composer.model.localModeOff")
-          ) : onThisComputer ? (
-            <OnThisComputer>{hint}</OnThisComputer>
-          ) : (
-            hint
-          )}
-        </span>
+        {(unavailable || hint) && (
+          <span className="model-menu-hint">
+            {unavailable ? t("composer.model.localModeOff") : hint}
+          </span>
+        )}
       </span>
       <span className="model-menu-provider">{providerName(provider, t)}</span>
     </button>

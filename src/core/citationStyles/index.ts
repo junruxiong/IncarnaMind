@@ -3,9 +3,9 @@
  * cited Documents' reference records (#286). The editor asks for them through
  * `CoreApi.formatCitations`, and the exports format with the same function, so the two agree.
  */
-import { type CitationStyle, citationStyle } from "../../shared/citationStyles";
+import { join } from "node:path";
+import type { ResolvedCitationStyle } from "../../shared/citationStyles";
 import { displayName, titleWithoutSite } from "../../shared/documentNames";
-import { translate } from "../../shared/i18n";
 import { missingDetails } from "../../shared/references";
 import type {
   BibliographyEntry,
@@ -15,16 +15,17 @@ import type {
   FormattedCitations,
   StyledRun,
 } from "../api";
-import type { Language } from "../language";
-import { type CslItem, cslItemOf, locatorOf, nameOnlyItem } from "./csl";
+import { createCatalogue } from "./catalogue";
+import { type CslItem, cslItemOf, locatorOf, nameOnlyItem, restoreHyphens } from "./csl";
 import { CitationFormatError, type CitationStyleEngine, createWorkerEngine } from "./engine";
 import type { FormatJob } from "./format";
+import type { EngineStyle } from "./protocol";
 import { parseRequest } from "./request";
 
 export { CitationFormatError } from "./engine";
 
 export interface CitationStylesOptions {
-  /** resources/citation-styles: the engine, the styles and the locales; none: Numbered only. */
+  /** resources/citation-styles: the engine and the style pack; none: Numbered only. */
   folder: string | undefined;
   /** The live Document, or undefined for one deleted since it was cited. */
   document(id: string): Document | undefined;
@@ -40,8 +41,8 @@ interface Reference {
   /** The Document's name, as the app shows it, or as it was when cited. */
   name: string;
   needsDetails: boolean;
-  /** What the app knows of it, for an entry when its record has no details; null if it has some. */
-  bare: { kind: Document["kind"]; addedAt: string } | "removed" | null;
+  /** Its record gives nothing to cite it by, or its Document is gone: its entry is its name. */
+  bare: boolean;
 }
 
 /** Whether a record gives nothing to cite by, so the style has only the name to print. */
@@ -78,7 +79,7 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
       documentId: null,
       name,
       needsDetails: true,
-      bare: "removed",
+      bare: true,
     };
   }
   const fields = document.reference?.fields;
@@ -97,28 +98,20 @@ function referenceOf(work: CitedWork, document: Document | undefined): Reference
     documentId: document.id,
     name,
     needsDetails: thin(document),
-    bare: hasNoDetails(document) ? { kind: document.kind, addedAt: document.createdAt } : null,
+    bare: hasNoDetails(document),
   };
 }
 
 /**
  * The entry for a work with no details, which some styles leave blank (Chicago notes) and the
- * rest print as little more than a title: its name, its kind and the day it was added, in the
- * style's language. The style's own number, if it has one, stays.
+ * rest print as little more than a title: its name, ended as every shipped style ends an entry,
+ * GB/T 7714's included. Nothing the app knows of the file (its format, the day it was added) is
+ * a fact to cite it by, so the entry is flagged as needing details instead. The style's own
+ * number, if it has one, stays.
  */
-function fallbackRuns(reference: Reference, language: Language): StyledRun[] {
-  const { bare } = reference;
-  if (bare === null) return [];
-  const name = reference.name.replace(/[.。]+$/, "");
-  if (bare === "removed") {
-    return [{ text: translate(language, "references.fallback.removed", { name }) }];
-  }
-  const date = new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-GB", {
-    dateStyle: "long",
-    timeZone: "UTC",
-  }).format(new Date(bare.addedAt));
-  const kind = translate(language, `library.format.${bare.kind}`);
-  return [{ text: translate(language, "references.fallback", { name, kind, date }) }];
+function fallbackRuns(reference: Reference): StyledRun[] {
+  if (!reference.bare) return [];
+  return [{ text: `${reference.name.replace(/[.。]+$/, "")}.` }];
 }
 
 /** The version of a web page a Citation quotes, as the page's fetches recorded it. */
@@ -162,6 +155,9 @@ function numbered(request: CitationFormatRequest, references: Map<string, Refere
 }
 
 export function createCitationStyles(options: CitationStylesOptions) {
+  const catalogue = createCatalogue(
+    options.folder === undefined ? undefined : join(options.folder, "styles.pack"),
+  );
   let engine: CitationStyleEngine | undefined;
   const cache = new Map<string, FormattedCitations>();
 
@@ -175,30 +171,30 @@ export function createCitationStyles(options: CitationStylesOptions) {
   };
 
   async function formatWith(
-    style: CitationStyle & { file: string },
+    style: ResolvedCitationStyle & { engine: EngineStyle },
     request: CitationFormatRequest,
     references: Map<string, Reference>,
     keyOf: (work: CitedWork) => string,
   ): Promise<FormattedCitations> {
+    const raisedLocators = style.locators === "raised-after";
     const job: FormatJob = {
       items: [...references.values()].map((reference) => reference.item),
       citations: request.clusters.map((cluster, index) => ({
         items: cluster.works.map((work) => ({
           id: (references.get(keyOf(work)) as Reference).item.id,
-          ...locatorOf(work.location, style.language),
+          ...locatorOf(work.location, style.language, raisedLocators),
         })),
         // Each cluster is one note, numbered through the Mind.
         noteIndex: index + 1,
       })),
       englishTermsForOthers: style.language === "zh-CN",
+      raisedLocators,
     };
+    if (style.engine.locale) job.locale = style.engine.locale;
     const fallbacks = new Map(
-      [...references.values()].map((reference) => [
-        reference.item.id,
-        fallbackRuns(reference, style.language),
-      ]),
+      [...references.values()].map((reference) => [reference.item.id, fallbackRuns(reference)]),
     );
-    const key = JSON.stringify([style.id, job, [...fallbacks.values()]]);
+    const key = JSON.stringify([style.engine, job, [...fallbacks.values()]]);
     const known = cache.get(key);
     if (known) {
       remember(key, known);
@@ -208,15 +204,23 @@ export function createCitationStyles(options: CitationStylesOptions) {
       throw new CitationFormatError("The citation styles aren't installed.", true);
     }
     engine ??= createWorkerEngine(options.folder);
-    const { description, output } = await engine.format(style.file, job);
+    const { description, output } = await engine.format(style.engine, job);
     const byId = new Map(
       [...references.values()].map((reference) => [reference.item.id, reference]),
     );
     const formatted: FormattedCitations = {
       style: style.id,
       form: description.class === "note" ? "note" : "in-text",
-      clusters: output.citations.map((runs) => ({
-        runs: runs.map(({ item, ...run }) => (item === undefined ? run : { ...run, work: item })),
+      clusters: output.citations.map((runs, cluster) => ({
+        runs: runs.map(({ item, ...run }) => {
+          if (item === undefined) return run;
+          const cite = job.citations[cluster]?.items[item];
+          const text =
+            cite?.label === "custom" && cite.locator
+              ? restoreHyphens(run.text, cite.locator)
+              : run.text;
+          return { ...run, text, work: item };
+        }),
       })),
       bibliography: output.bibliography.map((entry): BibliographyEntry => {
         const reference = byId.get(entry.id);
@@ -238,12 +242,12 @@ export function createCitationStyles(options: CitationStylesOptions) {
     /** Formats a request (see `CoreApi.formatCitations`); `input` is checked first. */
     async format(input: unknown): Promise<FormattedCitations> {
       const request = parseRequest(input);
-      const style = citationStyle(request.style);
+      const style = catalogue.resolve(request.style, request.language ?? "en");
       const keyOf = (work: CitedWork) => {
         const document = work.documentId !== null ? options.document(work.documentId) : undefined;
         if (!document) return `name:${work.documentName ?? ""}`;
         // Numbered lists each Document once, by name; a style cites each version of a web page.
-        return style.file !== null && webVersionOf(work, document)
+        return style.engine !== null && webVersionOf(work, document)
           ? versionKey(document.id, work)
           : document.id;
       };
@@ -256,7 +260,10 @@ export function createCitationStyles(options: CitationStylesOptions) {
           references.set(key, referenceOf(work, document));
         }
       }
-      if (style.file === null) return numbered(request, references);
+      if (style.engine === null) {
+        const formatted = numbered(request, references);
+        return style.unavailable ? { ...formatted, unavailable: true } : formatted;
+      }
       if (references.size === 0) {
         return {
           style: style.id,
@@ -266,8 +273,15 @@ export function createCitationStyles(options: CitationStylesOptions) {
           hangingIndent: false,
         };
       }
-      return formatWith({ ...style, file: style.file }, request, references, keyOf);
+      return formatWith({ ...style, engine: style.engine }, request, references, keyOf);
     },
+
+    /** Every style the pack has (see `CoreApi.listCitationStyles`). */
+    list: () => catalogue.catalogue(),
+    /** How a Mind in a style is formatted, `language` being its text's. */
+    resolve: catalogue.resolve,
+    /** The licence notice of the pack's styles and locales. */
+    notice: () => catalogue.notice(),
 
     close(): void {
       engine?.close();

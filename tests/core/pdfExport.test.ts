@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import type { JSONContent } from "@tiptap/core";
+import { parseHTML } from "linkedom";
 import { describe, expect, test } from "vitest";
 import type {
   CitationCheck,
@@ -121,6 +122,27 @@ function writeBilingual(client: MindClient, tides: Document, chinese: Document):
 const marker = (number: number) => `<sup class="note-ref" data-note="${number}">${number}</sup>`;
 
 describe("exporting a Mind to PDF", () => {
+  test("the print page separates adjacent notes without adding commas across prose", async () => {
+    const { printed, printer } = fakePrinter();
+    const { core, mind, client, tides, chinese } = await setUp({ printer });
+    writeMind(client, [
+      paragraph(
+        text("Spring tides"),
+        citation(tides, 1, "found"),
+        text(". 大潮"),
+        citation(chinese, 1, "found"),
+        citation(tides, 1, "found"),
+      ),
+    ]);
+    await client.settled();
+    await core.exportMind(mind.id, { format: "pdf" });
+    const { document } = parseHTML(`<html><body>${printed[0]?.body ?? ""}</body></html>`);
+    expect(document.body.textContent).toBe("Spring tides1. 大潮2,3");
+    expect(
+      [...document.querySelectorAll("sup.note-ref")].map((node) => node.getAttribute("data-note")),
+    ).toEqual(["1", "2", "3"]);
+  });
+
   test("Word and Markdown are as they were: a fingerprint of the bilingual fixture's", async () => {
     const { core, mind, client, tides, chinese } = await setUp();
     writeBilingual(client, tides, chinese);
@@ -128,11 +150,11 @@ describe("exporting a Mind to PDF", () => {
 
     const markdown = (await core.exportMind(mind.id, { format: "markdown" })).data;
     expect(createHash("sha256").update(markdown).digest("hex")).toBe(
-      "463b4c7cb3eab17fb1f48476e6408782ed272142538324cbf3305afd75057fcc",
+      "742f3922386f489bb3bf316db04081492724af4a4755ece4b4b40a7740189cf5",
     );
     const docx = (await core.exportMind(mind.id, { format: "docx" })).data;
     expect(zipFingerprint(docx)).toBe(
-      "126e3d5b6cfd2188fe17c57936ec429cc8465ceb2dc43d3e97390df1cd2aeda9",
+      "a2d8108fece220b9636e48e474e197047990eea40c802de251834bf88a301501",
     );
   });
 
@@ -166,7 +188,7 @@ describe("exporting a Mind to PDF", () => {
     expect(body).toMatch(
       new RegExp(
         `^${escapeRegExp(
-          '<h1 class="mind-title">Tides 潮汐</h1><h2>Spring tides</h2>' +
+          "<h2>Spring tides</h2>" +
             `<p>Spring tides happen at new moon and at <em>full moon</em>${marker(1)}.</p>` +
             `<p>大潮出现在新月和满月前后${marker(2)}。</p>` +
             "<p>The pull that raises them falls off as ",
@@ -219,7 +241,7 @@ describe("exporting a Mind to PDF", () => {
     expect(american.printed[0]).toMatchObject({ language: "zh-CN", paper: "letter" });
   });
 
-  test("an empty Mind prints its title alone; a Mind with no title takes its first line", async () => {
+  test("an empty Mind prints nothing, its name only the PDF's title (#908); a Mind with no title takes its first line", async () => {
     const { printed, printer } = fakePrinter();
     const { core, mind } = await setUp({ printer });
     const untitled = await core.createMind({ title: "" });
@@ -227,7 +249,7 @@ describe("exporting a Mind to PDF", () => {
     await core.exportMind(mind.id, { format: "pdf" });
     const exported = await core.exportMind(untitled.id, { format: "pdf" });
 
-    expect(printed[0]).toMatchObject({ body: '<h1 class="mind-title">Tides 潮汐</h1>', notes: [] });
+    expect(printed[0]).toMatchObject({ body: "", notes: [], title: "Tides 潮汐" });
     expect(exported.fileName).toBe("Untitled.pdf");
     expect(printed[1]).toMatchObject({ body: "", notes: [], title: "Untitled" });
   });
@@ -412,7 +434,7 @@ describe("a web page Citation's footnote", () => {
     expect(document?.body).toContain("Accessed October 6, 2026");
   });
 
-  test("a Document with no reference details is in the Bibliography by its name, kind and the day it was added, in each style", async () => {
+  test("a Document with no reference details is in the Bibliography by its name, marked as needing details, in each style", async () => {
     const { printed, printer } = fakePrinter();
     const { core, mind, client, tides } = await setUp({ printer });
     writeMind(client, [paragraph(text("Spring tides"), citation(tides, 1, "found"))]);
@@ -421,7 +443,8 @@ describe("a web page Citation's footnote", () => {
       await core.setMindCitationStyle(mind.id, style);
       await core.exportMind(mind.id, { format: "pdf" });
       const body = printed.at(-1)?.body ?? "";
-      expect(body, style).toMatch(/Tides\. Plain text, added \d+ \w+ \d{4}\./);
+      expect(body, style).toContain("Tides. [needs details]");
+      expect(body, style).not.toMatch(/added \d/);
     }
   });
 });

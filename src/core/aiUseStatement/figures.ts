@@ -3,15 +3,18 @@
  * already records and nothing else: the AI use record (`ai_use`, #292) for the
  * models and what became of each insertion, the AI text marks in the Mind's
  * text (#95), its Answers' models and Tool calls, and the results of its
- * Citation checks and sentence checks (#96). A figure none of these holds is
+ * Citation checks and sentence checks (#96), with the files those checks
+ * couldn't read when they started. A figure none of these holds is
  * not here, and nothing is estimated.
  */
 import * as Y from "yjs";
 import { citationState, type LiveDocument } from "../../shared/citations";
-import { claimCheckShown } from "../../shared/claimChecks";
+import { claimCheckShown, type SentenceResult, sentenceResultOf } from "../../shared/claimChecks";
 import { readProposalAttribute } from "../../shared/proposals";
+import { comparableSentence } from "../../shared/sentences";
 import { toolCallsOf } from "../../shared/toolCalls";
-import { countFor, countText } from "../../shared/wordCount";
+import { checkUnreadOf } from "../../shared/unreadFiles";
+import { countFor, countText, firstWords } from "../../shared/wordCount";
 import { isEdited, textAttribute } from "../answers/blocks";
 import { checkedSentences } from "../answers/checks/sentences";
 import {
@@ -23,6 +26,7 @@ import {
   type KeptCitationText,
   PROPOSAL_ATTRIBUTE,
   QUESTION_BLOCK,
+  type UnreadFile,
 } from "../api";
 import {
   type Block,
@@ -53,6 +57,7 @@ export const USES: readonly Use[] = [
   "search-documents",
   "search-sources",
   "search-web",
+  "sentence-checked",
 ];
 
 /** How often one model was used for one thing. `model` is null when the record doesn't say. */
@@ -94,6 +99,19 @@ export interface SentenceCounts {
   notChecked: number;
 }
 
+export const SENTENCE_WORDS = 12;
+
+/** One sentence checked against the Documents, with the latest result of its check. */
+export interface CheckedSentence {
+  /** Its first words, with "…" when it goes on, as it reads in the Mind now. */
+  sentence: string;
+  result: SentenceResult;
+  /** The model that checked it; null when the mark doesn't say, or when no check ran. */
+  model: string | null;
+  /** When it was checked, ISO 8601 UTC; null when no check ran. */
+  checkedAt: string | null;
+}
+
 export interface AiUseFigures {
   uses: UseCount[];
   /** Whether the Mind has headings, which its sections follow. */
@@ -104,6 +122,8 @@ export interface AiUseFigures {
   removed: number;
   citations: CitationCounts;
   sentences: SentenceCounts;
+  checked: CheckedSentence[];
+  unread: UnreadFile[];
 }
 
 export interface FigureSources {
@@ -127,7 +147,7 @@ export const totalCitations = (counts: CitationCounts) => sum({ ...counts });
 export const totalSentences = (counts: SentenceCounts) => sum({ ...counts });
 
 /** Every inline run of text in some Blocks, a run being what a paragraph, a heading or a cell holds. */
-function groupsOf(blocks: readonly Block[]): Inline[][] {
+export function groupsOf(blocks: readonly Block[]): Inline[][] {
   return blocks.flatMap((block): Inline[][] => {
     if (block.inserted) return [];
     switch (block.kind) {
@@ -150,7 +170,7 @@ function groupsOf(blocks: readonly Block[]): Inline[][] {
 }
 
 /** A Block a change still waiting would add, which isn't the Mind's until it is accepted. */
-const isProposed = (element: Y.XmlElement) =>
+export const isProposed = (element: Y.XmlElement) =>
   readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE))?.kind === "insert";
 
 function placeIds(
@@ -296,13 +316,28 @@ export function readFigures(sources: FigureSources): AiUseFigures {
     notChecked: 0,
   };
   const versions = new Map(documents.map((document) => [document.id, document.contentHash]));
+  const checked: CheckedSentence[] = [];
+  const requests: string[] = [];
   for (const { check, sentence } of checkedSentences(fragment)) {
+    requests.push(check.request);
     const shown = claimCheckShown(check, { text: sentence, versions, folderId: sources.folderId });
-    if (shown.state === "supported") sentences.supported++;
-    else if (shown.state === "unsupported") sentences.unsupported++;
-    else if (shown.state === "contradicted") sentences.contradicted++;
-    else if (shown.state === "needs-recheck") sentences.needsRecheck++;
-    else if (shown.state === "not-checked") sentences.notChecked++;
+    const result = sentenceResultOf(shown);
+    if (!result) continue;
+    sentences[result === "changed" ? "needsRecheck" : result]++;
+    const quoted = firstWords(comparableSentence(sentence), SENTENCE_WORDS);
+    const ran = result !== "notChecked";
+    checked.push({
+      sentence: quoted.cut ? `${quoted.text}…` : quoted.text,
+      result,
+      model: ran ? sources.modelName(check.providerId, check.modelId) : null,
+      checkedAt: ran ? check.checkedAt : null,
+    });
+  }
+  // A Mind whose record holds no check (made before checks were recorded, or cleared) still used the model.
+  if (!uses.some((each) => each.use === "sentence-checked")) {
+    for (const { result, model } of checked) {
+      if (result !== "notChecked") use("sentence-checked", model);
+    }
   }
 
   const order = (use: Use) => USES.indexOf(use);
@@ -318,5 +353,7 @@ export function readFigures(sources: FigureSources): AiUseFigures {
     removed,
     citations,
     sentences,
+    checked,
+    unread: fragment.doc ? checkUnreadOf(fragment.doc, requests) : [],
   };
 }

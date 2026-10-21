@@ -22,12 +22,20 @@ import type {
   ReferenceRecord,
 } from "../api";
 import type { Consent } from "../consent";
-import { ConsentDeclinedError, InvalidInputError, isRecord } from "../errors";
+import {
+  ConsentDeclinedError,
+  ConsentRevokedError,
+  InvalidInputError,
+  isRecord,
+  LocalModeError,
+} from "../errors";
+import { createSendGate } from "../sendGate";
 import type { Pace } from "../sources/pace";
 import { ARXIV_INTERVAL_MS, ARXIV_LANE } from "../sources/providers/arxiv";
 import type { Database } from "../storage";
 import { ARXIV, CROSSREF, LookupError, lookUpArxiv, lookUpDoi } from "./lookup";
 import {
+  confirmReference,
   editReference,
   fillReference,
   isFieldValue,
@@ -149,6 +157,7 @@ function parseRecord(before: unknown, fields: readonly ReferenceField[]): Refere
 
 export function createReferences(options: ReferencesOptions) {
   const { db, now, consent, urls, signal, pace } = options;
+  const gate = createSendGate(consent, options.localOnly);
 
   /** The Document as it is now, and pushed as changed if `changed` says so. */
   const settle = (documentId: string, changed: boolean) => {
@@ -170,6 +179,12 @@ export function createReferences(options: ReferencesOptions) {
       return settle(id, changed.length > 0);
     },
 
+    confirm(documentId: unknown): Document {
+      const id = options.document(documentId).id;
+      const changed = db.transaction(() => confirmReference(db, id, now()));
+      return settle(id, changed.length > 0);
+    },
+
     restore(documentId: unknown, before: unknown, fields: unknown): Document {
       const list = parseFields(fields);
       const record = parseRecord(before, list);
@@ -182,32 +197,38 @@ export function createReferences(options: ReferencesOptions) {
       const document = options.document(documentId);
       const identifier = lookupIdentifier(document.reference?.fields ?? emptyReferenceFields());
       if (!identifier) return failed("no-identifier", "The record has no DOI or arXiv id.");
-      const local = () => failed("local-mode", "Look up is off in local mode.");
+      const local = () =>
+        failed("local-mode", "Look up is off while “Keep everything on this computer” is on.");
       if (options.localOnly()) return local();
       const service = identifier.kind === "doi" ? CROSSREF : ARXIV;
       try {
         await consent.ensure("reference-lookup", service);
       } catch (error) {
         if (error instanceof ConsentDeclinedError) return failed("declined", error.message);
+        if (error instanceof LocalModeError) return local();
         throw error;
       }
-      // Local mode may have come on while the User was being asked.
-      if (options.localOnly()) return local();
       let found: Partial<ReferenceFields>;
       try {
         if (identifier.kind === "doi") {
+          gate.check("reference-lookup", service);
           found = await lookUpDoi(urls.crossref, identifier.id, signal);
         } else {
           // arXiv asks for "no more than one request every three seconds", from all of one's machines.
           found = await pace.run(
             ARXIV_LANE,
             ARXIV_INTERVAL_MS,
-            () => lookUpArxiv(urls.arxiv, identifier.id, signal),
+            () => {
+              gate.check("reference-lookup", service);
+              return lookUpArxiv(urls.arxiv, identifier.id, signal);
+            },
             signal,
           );
         }
       } catch (error) {
         if (error instanceof LookupError) return failed(error.reason, error.message);
+        if (error instanceof LocalModeError) return local();
+        if (error instanceof ConsentRevokedError) return failed("declined", error.message);
         throw error;
       }
       const id = options.document(document.id).id;

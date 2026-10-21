@@ -10,13 +10,18 @@ export interface PrintDocument {
   paper: PrintPaper;
   /** The PDF's title. */
   title: string;
+  /** The CSS `font-family` of the text, the Mind's font; absent, the print page's own serif. */
+  fontFamily?: string;
   /**
    * The body, as HTML the core escaped. Each footnote's marker is
-   * `<sup class="note-ref" data-note="N">N</sup>`, N counting from 1 in reading order.
+   * `<sup class="note-ref" data-note="N">N</sup>`, N counting from 1 in reading order; a marker
+   * right after another is `<sup class="note-ref" data-note="N">,N</sup>`.
    */
   body: string;
   /** Each footnote's text, as HTML: footnote N is `notes[N - 1]`. */
   notes: string[];
+  /** Plain text for the foot of every page, above its number. */
+  footer?: string;
 }
 
 export type PrintPaper = "a4" | "letter";

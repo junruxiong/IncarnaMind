@@ -16,6 +16,7 @@ import {
   openSettings,
   removeDataFolder,
   setWindowSize,
+  showSettingsPage,
   urlsOpened,
 } from "./app";
 
@@ -50,11 +51,12 @@ const bridge = (window: Page) => ({
   keyProvider: () =>
     window.evaluate(async () => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      await core.saveChatProvider({
+      const provider = await core.saveChatProvider({
         kind: "anthropic",
         apiKey: "sk-ant-test",
         modelId: "claude-haiku-5-5",
       });
+      return provider.id;
     }),
   cap: () =>
     window.evaluate(
@@ -71,6 +73,121 @@ test.beforeEach(async () => {
 test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`an invalid monthly cap keeps its draft, explains the active cap, and can be corrected or cancelled (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await dismissChatSetup(window);
+      await setWindowSize(app, window, 1440, 660);
+      const settings = await openSettings(window, "general");
+      await bridge(window).language(language);
+      const cap = settings.getByTestId("spending-cap-settings");
+      const toggle = cap.getByTestId("spending-cap-switch");
+      await toggle.hover();
+      await toggle.click();
+      const amount = cap.getByTestId("spending-cap-amount");
+      const currency = cap.getByTestId("spending-cap-currency");
+      const problem = cap.getByTestId("spending-cap-problem");
+      const initial = {
+        amount: language === "en" ? 20 : 150,
+        currency: language === "en" ? "USD" : "CNY",
+      };
+      const message =
+        language === "en"
+          ? "Enter an amount from 0 to 1,000,000. The active cap is still $20.00."
+          : "输入 0 到 1,000,000 之间的金额。当前上限仍为 ¥150.00。";
+      await expect(amount).toHaveValue(String(initial.amount));
+
+      await amount.fill("-1");
+      await amount.press("Enter");
+      await expect(problem).toHaveText(message);
+      await expect(amount).toHaveValue("-1");
+      await expect(amount).toHaveAttribute("aria-invalid", "true");
+      await expect(amount).toHaveAttribute(
+        "aria-describedby",
+        (await problem.getAttribute("id")) ?? "",
+      );
+      expect(await bridge(window).cap()).toEqual(initial);
+      await shot(window, `cap-invalid-wide-${language}`);
+      await setWindowSize(app, window, 900, 560);
+      await expect(problem).toBeInViewport();
+      const within = await problem.evaluate((element) => {
+        const row = element.parentElement?.getBoundingClientRect();
+        const bounds = element.getBoundingClientRect();
+        return row && bounds.left >= row.left && bounds.right <= row.right;
+      });
+      expect(within).toBe(true);
+      await shot(window, `cap-invalid-narrow-${language}`);
+      await amount.press("Escape");
+      await expect(amount).toHaveValue(String(initial.amount));
+      await expect(problem).toHaveCount(0);
+      await expect(settings).toBeVisible();
+
+      await amount.fill("-2");
+      await amount.press("Tab");
+      await expect(toggle).toBeFocused();
+      await expect(amount).toHaveValue("-2");
+      await expect(problem).toHaveText(message);
+      expect(await bridge(window).cap()).toEqual(initial);
+      await currency.selectOption(initial.currency === "USD" ? "CNY" : "USD");
+      await expect(currency).toHaveValue(initial.currency);
+      await expect(amount).toHaveValue("-2");
+      await expect(problem).toHaveText(message);
+      expect(await bridge(window).cap()).toEqual(initial);
+
+      await amount.fill("1000001");
+      await amount.press("Enter");
+      await expect(amount).toHaveValue("1000001");
+      await expect(problem).toHaveText(message);
+      expect(await bridge(window).cap()).toEqual(initial);
+      await amount.fill("");
+      await amount.press("Tab");
+      await expect(amount).toHaveValue(String(initial.amount));
+      await expect(problem).toHaveCount(0);
+      expect(await bridge(window).cap()).toEqual(initial);
+
+      for (const value of [0, 12.5, 1000000]) {
+        await amount.fill(String(value));
+        await amount.press(value === 12.5 ? "Tab" : "Enter");
+        await expect
+          .poll(() => bridge(window).cap())
+          .toEqual({ amount: value, currency: initial.currency });
+        await expect(amount).not.toHaveAttribute("aria-invalid", "true");
+        await expect(problem).toHaveCount(0);
+      }
+      await amount.fill("-3");
+      await amount.press("Enter");
+      await expect(problem).toBeVisible();
+      await amount.fill("25");
+      await amount.press("Enter");
+      await amount.press("Enter");
+      await expect
+        .poll(() => bridge(window).cap())
+        .toEqual({ amount: 25, currency: initial.currency });
+      await expect(problem).toHaveCount(0);
+      await amount.press("Escape");
+      await expect(settings).toBeHidden();
+      await window
+        .getByRole("button", { name: language === "en" ? "Settings" : "设置", exact: true })
+        .click();
+      await expect(settings).toBeVisible();
+      await expect(amount).toHaveValue("25");
+
+      await amount.fill("-4");
+      await amount.press("Tab");
+      await expect(problem).toBeVisible();
+      await toggle.press("Space");
+      await expect.poll(() => bridge(window).cap()).toBeNull();
+      await expect(problem).toHaveCount(0);
+      await toggle.press("Space");
+      await expect.poll(() => bridge(window).cap()).toEqual(initial);
+      await expect(amount).toHaveValue(String(initial.amount));
+    } finally {
+      await app.close();
+    }
+  });
+}
 
 test("an Answer stopped by the monthly cap says so in place, and Change cap opens the cap; set by mouse and keyboard, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
@@ -145,7 +262,7 @@ test("an Answer stopped by the monthly cap says so in place, and Change cap open
     await shot(window, "cap-problem-wide-zh");
     await error.getByTestId("answer-error-action").click();
     await expect(cap.getByTestId("spending-cap-spent")).toHaveText(
-      "本月 API 密钥已花费：US$0，上限 US$0。",
+      "本月 API 密钥已花费：$0，上限 $0。",
     );
     await shot(window, "cap-control-wide-zh");
     await setWindowSize(app, window, NARROW.width, NARROW.height);
@@ -175,15 +292,17 @@ test("Settings → Models shows what a key spent this month, and the ChatGPT pla
     await window.keyboard.press("Enter");
     await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done");
     const settings = await openSettings(window, "models");
+    await settings.getByTestId("provider-row").first().click();
     const cost = settings.getByTestId("chat-provider-cost");
-    await expect(cost).toHaveText("This month: $0");
+    await expect(cost).toHaveText("This month: $0 spent");
     await shot(window, "models-key-wide-en");
     await setWindowSize(app, window, NARROW.width, NARROW.height);
     await shot(window, "models-key-narrow-en");
     await bridge(window).language("zh-CN");
-    await expect(cost).toHaveText("本月：US$0");
+    await expect(cost).toHaveText("本月已花 $0");
     await shot(window, "models-key-narrow-zh");
     await bridge(window).language("en");
+    await settings.getByTestId("models-back").click();
 
     // Signed in with ChatGPT and using the plan: its line names the plan, never a price.
     await interceptOpenExternal(app);
@@ -197,8 +316,10 @@ test("Settings → Models shows what a key spent this month, and the ChatGPT pla
     await expect(plan.getByTestId("chatgpt-in-use")).toHaveText(
       "Using ChatGPT plan · Manage usage ↗",
     );
-    await expect(settings.getByTestId("chat-provider-current")).toHaveText("ChatGPT plan");
+    await settings.getByTestId("provider-row").filter({ hasText: "ChatGPT plan" }).click();
+    await expect(settings.getByTestId("provider-page-title")).toHaveText("ChatGPT plan");
     await expect(settings.getByTestId("chat-provider-cost")).toHaveCount(0);
+    await settings.getByTestId("models-back").click();
     await plan.scrollIntoViewIfNeeded();
     await shot(window, "models-plan-narrow-en");
     await setWindowSize(app, window, WIDE.width, WIDE.height);
@@ -254,6 +375,74 @@ test("a request a force-quit cut short counts for nothing, and the cost line say
       "有 1 次请求被中断，费用未知。",
     );
     await shot(window, "cost-interrupted-wide-zh");
+  } finally {
+    await app.close();
+  }
+});
+
+test("work still running is set aside apart from what was spent, and the set-aside part goes when the work ends, in English and Chinese (#891)", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, WIDE.width, WIDE.height);
+    await acceptPlainTextKeys(window);
+    const providerId = await bridge(window).keyProvider();
+
+    // One request settled at a cent, and one still open with $1.28 reserved for it.
+    const db = openDatabase(join(dataDir, "incarnamind.db"));
+    const at = new Date().toISOString();
+    const insert = `INSERT INTO model_requests (id, provider_id, model_id, flow, billing, status,
+        currency, reserved, cost, created_at, updated_at)
+      VALUES (?, ?, 'claude-haiku-5-5', 'chat', 'per-token', ?, 'USD', ?, ?, ?, ?)`;
+    db.run(insert, ["settled-1", providerId, "settled", 0.3, 0.01, at, at]);
+    db.run(insert, ["open-1", providerId, "reserved", 1.28, null, at, at]);
+
+    const settings = await openSettings(window, "models");
+    await settings.getByTestId("provider-row").first().click();
+    const cost = settings.getByTestId("chat-provider-cost");
+    await expect(cost).toHaveText("This month: $0.01 spent · $1.28 set aside for work in progress");
+    await expect(settings.getByTestId("chat-provider-set-aside")).toHaveAttribute(
+      "title",
+      "Kept aside so running work can’t go over your monthly limit",
+    );
+    await shot(window, "set-aside-models-wide-en");
+    await showSettingsPage(window, "general");
+    const cap = settings.getByTestId("spending-cap-settings");
+    await expect(cap.getByTestId("spending-cap-spent")).toHaveText(
+      "Spent this month: $0.01 on your keys.",
+    );
+    await expect(cap.getByTestId("spending-cap-set-aside")).toHaveText(
+      "$1.28 set aside for work in progress",
+    );
+    await shot(window, "set-aside-cap-wide-en");
+
+    await bridge(window).language("zh-CN");
+    await expect(cap.getByTestId("spending-cap-spent")).toHaveText("本月 API 密钥已花费：$0.01。");
+    await expect(cap.getByTestId("spending-cap-set-aside")).toHaveText("进行中的任务预留 $1.28");
+    await expect(cap.getByTestId("spending-cap-set-aside")).toHaveAttribute(
+      "title",
+      "预留出来，避免进行中的任务超出你的月度上限",
+    );
+    await shot(window, "set-aside-cap-wide-zh");
+    await showSettingsPage(window, "models");
+    await expect(cost).toHaveText("本月已花 $0.01 · 进行中的任务预留 $1.28");
+    await setWindowSize(app, window, NARROW.width, NARROW.height);
+    await shot(window, "set-aside-models-narrow-zh");
+    await bridge(window).language("en");
+    await shot(window, "set-aside-models-narrow-en");
+    await closeSettings(window);
+
+    db.run("UPDATE model_requests SET status = 'settled', cost = 0.01 WHERE id = 'open-1'");
+    db.close();
+    await openSettings(window, "models");
+    await settings.getByTestId("provider-row").first().click();
+    await expect(cost).toHaveText("This month: $0.02 spent");
+    await expect(settings.getByTestId("chat-provider-set-aside")).toHaveCount(0);
+    await showSettingsPage(window, "general");
+    await expect(cap.getByTestId("spending-cap-spent")).toHaveText(
+      "Spent this month: $0.02 on your keys.",
+    );
+    await expect(cap.getByTestId("spending-cap-set-aside")).toHaveCount(0);
   } finally {
     await app.close();
   }

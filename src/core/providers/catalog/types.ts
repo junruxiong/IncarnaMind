@@ -28,15 +28,38 @@ export type Adapter =
   | "openai-compatible"
   | "ollama";
 
+/**
+ * A value the User gives that an endpoint's address is built from, written in
+ * its `baseUrl` as `{name}`: an AWS region, a Cloudflare account.
+ */
+export interface EndpointField {
+  name: string;
+  label: Localized;
+  /** The values to pick from; left out, a typed value that matches `pattern` (a regular expression). */
+  choices?: readonly { value: string; label: Localized }[];
+  pattern?: string;
+  /** Filled in when the provider is chosen, and used when none is given. */
+  default?: string;
+  /** One plain line under the field, for what the User must know to fill it in. */
+  hint?: Localized;
+}
+
 /** Where a provider's API is, for one region. */
 export interface Endpoint {
   /** Stable, stored on the provider row: "global", "cn", "intl". */
   id: string;
   label: Localized;
-  /** The API's base URL, as the AI SDK provider takes it (e.g. "https://api.openai.com/v1"). */
+  /**
+   * The API's base URL, as the AI SDK provider takes it (e.g. "https://api.openai.com/v1"),
+   * with `{name}` for its `field`'s value when it has one.
+   */
   baseUrl: string;
+  /** The value its address needs; each value is a provider of its own, with its own origin. */
+  field?: EndpointField;
   /** Where the User gets a key for this region, when it isn't the provider's `keyUrl` (keys are per region). */
   keyUrl?: string;
+  /** This region's prices, when they aren't on the provider's `pricingUrl`. */
+  pricingUrl?: string;
 }
 
 /**
@@ -44,23 +67,32 @@ export interface Endpoint {
  * - "answers": the default for Answers, the provider's cheaper capable model;
  * - "strongest": its strongest model for Answers, one click away from the default;
  * - "quickTasks": a small, cheap model for the calls that don't write the Answer;
- * - "images": the model that reads images and scanned pages.
+ * - "images": the model that reads images and scanned pages;
+ * - "tagging": the model that tags and organizes Documents, only where it isn't
+ *   the quick-tasks model, which tags otherwise.
  */
-export type Role = "answers" | "strongest" | "quickTasks" | "images";
+export type Role = "answers" | "strongest" | "quickTasks" | "images" | "tagging";
 
 /** What a provider does with the data it is sent through its API. */
 export interface DataUse {
   /**
    * Whether it may train its models on API data: "no"; "opt-out" (it may,
-   * unless the User turns it off); "free-tier" (on a free plan only);
-   * "unknown" (it depends on the server, or its terms don't say).
+   * unless the User turns it off or agrees otherwise in writing); "free-tier"
+   * (on a free plan only); "unknown" (it depends on the server, or its terms
+   * don't say).
    */
   training: "no" | "opt-out" | "free-tier" | "unknown";
   /** One plain line, shown where the User picks the provider. */
   summary: Localized;
-  /** The provider's own terms, when there is one place for them. */
+  /** The provider's own page on it (terms, privacy policy or data-retention page), when there is one place for it; shown as "Data use". */
   url?: string;
+  /** The page to open from the Chinese interface, when `url` is English only and the provider has one in Chinese. */
+  zhUrl?: string;
+  /** Other pages of the provider that a claim in `summary` rests on, for the next re-read; the app doesn't show them. */
+  sources?: readonly string[];
 }
+
+export type ProviderOptions = Record<string, Record<string, unknown>>;
 
 /** What every request to a provider carries, whatever the model. */
 export interface RequestQuirks {
@@ -77,9 +109,16 @@ export interface RequestQuirks {
   /**
    * Provider options (by the AI SDK provider's key) that turn thinking off, for
    * the small calls that don't write the Answer. A model whose id starts with
-   * one of `unless` can't turn it off.
+   * one of `unless`, or is one of `except` (with or without a date suffix),
+   * can't turn it off.
    */
-  thinkingOff?: { options: Record<string, Record<string, unknown>>; unless?: readonly string[] };
+  thinkingOff?: {
+    options: ProviderOptions;
+    unless?: readonly string[];
+    except?: readonly string[];
+    /** The form to retry with when a refusal of `options` names it, for a model the catalog has none for. */
+    refused?: readonly { names: string; options: ProviderOptions }[];
+  };
   /**
    * Provider options that ask for the provider's summary of a model's
    * reasoning, for the calls that write the Answer (#391). Only providers
@@ -88,7 +127,16 @@ export interface RequestQuirks {
    * `only`, they go to the models whose id starts with one of its prefixes,
    * the ones that think by default.
    */
-  reasoningSummary?: { options: Record<string, Record<string, unknown>>; only?: readonly string[] };
+  reasoningSummary?: {
+    options: ProviderOptions;
+    /** The same with a modest thinking budget, for an Answer. */
+    answer?: ProviderOptions;
+    /** The same with a larger thinking budget, for an Answer to a Question that asks to check or calculate. */
+    careful?: ProviderOptions;
+    /** What to leave out when a refusal names `names`, for a model that takes no budget: an option set to undefined. */
+    refused?: readonly { names: string; options: ProviderOptions }[];
+    only?: readonly string[];
+  };
 }
 
 /**
@@ -105,7 +153,11 @@ export interface CatalogProvider {
   id: string;
   name: Localized;
   support: Support;
+  /** A best-effort provider the first-run key form offers too, as its key line says (#1375). */
+  firstRun?: boolean;
   group: "international" | "china" | "local" | "other";
+  /** A provider with a region in each (Kimi) is listed under the other heading too. */
+  alsoListedIn?: "international" | "china";
   adapter: Adapter;
   /**
    * Its API, one per region, the first the default. Empty for a server the
@@ -123,6 +175,8 @@ export interface CatalogProvider {
    */
   keyGuide?: readonly Localized[];
   docsUrl?: string;
+  /** Its own page of prices ("Pricing ↗" beside a model's estimate), when `docsUrl` isn't it. */
+  pricingUrl?: string;
   request?: RequestQuirks;
   /** Model ids for the roles it offers. A provider whose models the User names has none. */
   roles: Partial<Record<Role, string>>;
@@ -130,11 +184,17 @@ export interface CatalogProvider {
   /** Short notes shown under the key field. */
   notes?: readonly Localized[];
   /**
-   * Which of the provider's subscription plans include credits a key can
-   * spend, in the provider's own words, and the page that says so: shown
-   * under the key field. Left out where no plan does.
+   * One line under the key field: what to do in IncarnaMind, and the provider's own page
+   * for the rest. It never states the provider's prices, fees, credits or what its plans
+   * include, which change without notice.
    */
-  planCredits?: Localized & { url: string };
+  keyLine?: Localized & { url: string; link: "details" | "pricing" };
+  /**
+   * A preset only: the run of the citing evaluation (#185) its Answers model
+   * passed. Until then it is labelled not yet tested and never recommended
+   * (see `untestedForCitations`).
+   */
+  citingTested?: string;
   /** When a person last checked this entry against the provider's own pages (YYYY-MM-DD). */
   checked: string;
 }
@@ -187,6 +247,8 @@ export interface ModelFacts {
   temperature: boolean;
   /** It accepts a forced Tool choice ("required" or a named Tool). */
   forcedToolChoice: boolean;
+  /** How a small call asks it not to think, where its provider's way (`RequestQuirks.thinkingOff`) is refused. */
+  thinkingOff: ProviderOptions;
   /** Its context window, in tokens, input and output together. */
   context: number;
   /** The most a request may send, when the provider limits input below the window. */

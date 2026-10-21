@@ -64,6 +64,19 @@ export function countText(text: string): TextCount {
   };
 }
 
+/** The text up to its `limit`th word, counted as the Mind's count counts; `cut` when more words follow. */
+export function firstWords(text: string, limit: number): { text: string; cut: boolean } {
+  let used = 0;
+  let end = 0;
+  for (const { segment, index, isWordLike } of segmenter.segment(text)) {
+    if (!isWordLike) continue;
+    if (used >= limit) return { text: text.slice(0, end), cut: true };
+    used += countFor(countText(segment), "words");
+    end = index + segment.length;
+  }
+  return { text, cut: false };
+}
+
 /** The number a basis shows. */
 export function countFor(count: TextCount, basis: CountBasis): number {
   return basis === "words"
@@ -75,6 +88,22 @@ export function countFor(count: TextCount, basis: CountBasis): number {
 
 /** Whether the words basis should be called characters: the writing is mostly Chinese or Japanese. */
 export const mostlyCjk = (count: TextCount): boolean => count.cjk > count.words;
+
+/**
+ * What the count is called: words, unless the writing is mostly Chinese or
+ * Japanese, the User asked for characters, or a Chinese interface has nothing
+ * written yet to tell by, where an empty Mind counts 字 too.
+ */
+export function countedUnit(
+  count: TextCount,
+  basis: CountBasis,
+  chineseInterface: boolean,
+): "words" | "characters" {
+  const empty = count.words + count.cjk === 0;
+  return basis === "words" && !mostlyCjk(count) && !(empty && chineseInterface)
+    ? "words"
+    : "characters";
+}
 
 /**
  * A target the User typed: "8000", "8,000 words", "3万字", "1.5万", "5k". A

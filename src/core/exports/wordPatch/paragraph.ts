@@ -19,11 +19,13 @@
  * waiting stays as it was there; one accepted or rejected leaves no trace.
  */
 import type { NodeJSON } from "../../../shared/blockJson";
+import { readClaimCheck } from "../../../shared/claimChecks";
 import { readWordAtom } from "../../../shared/wordFiles";
-import { GENERATED_MARK, IMAGE_NODE, WORD_ATOM_NODE } from "../../api";
+import { CLAIM_CHECK_MARK, GENERATED_MARK, IMAGE_NODE, WORD_ATOM_NODE } from "../../api";
 import type { Places } from "../../documents/formats/docxImport";
 import { elements, type XmlElement } from "../../documents/formats/xml";
 import {
+  type FailedSentence,
   type Inline,
   isWordChange,
   type Pending,
@@ -34,8 +36,16 @@ import {
 import { diffSteps, splitWords } from "../../proposals/diff";
 import { dateAttribute, escapeXml, type WordIds } from "../wordml";
 import { changeClose, changeTag, type Review, type Tracking, trackInline } from "../wordReview";
-import { marksOf, NO_MARKS, nodePendings, sameMarks, type TextMarks, textPendings } from "./mind";
-import { Properties, runPropertiesFor, withoutFormatChange } from "./properties";
+import {
+  marksOf,
+  NO_MARKS,
+  nodePendings,
+  sameMarks,
+  type TextMarks,
+  textPendings,
+  withFileFormat,
+} from "./mind";
+import { marksOfRun, Properties, runPropertiesFor, withoutFormatChange } from "./properties";
 import {
   closeTag,
   endOf,
@@ -64,6 +74,7 @@ export interface Token {
   pending: Pendings;
   /** It is AI text. */
   ai: boolean;
+  sentence?: FailedSentence;
 }
 
 const BREAK = "\u0001break";
@@ -162,7 +173,7 @@ export function sourceOf(node: NodeJSON): string | null {
  * writes (Citations, footnotes, maths, a new picture); other inline nodes
  * read as their text. Read for review (`reading`), what changes still waiting
  * do to each is marked, and AI text (all of it, `wholeAi`, in an Answer from
- * before AI text was marked).
+ * before AI text was marked), and the sentences in `checks` whose check isn't good.
  */
 export function currentTokens(
   content: readonly NodeJSON[],
@@ -170,6 +181,7 @@ export function currentTokens(
   textOf: (node: NodeJSON) => string,
   reading?: ReviewReading,
   wholeAi = false,
+  checks?: ReadonlyMap<string, FailedSentence>,
 ): Token[] {
   const tokens: Token[] = [];
   const marked = (made: Token[], node: NodeJSON, pending: Pendings): Token[] => {
@@ -186,13 +198,17 @@ export function currentTokens(
   };
   for (const node of content) {
     if (node.type === "text") {
-      tokens.push(
-        ...marked(
-          textTokens(node.text ?? "", marksOf(node.marks), null),
-          node,
-          textPendings(node, reading),
-        ),
+      const made = marked(
+        textTokens(node.text ?? "", marksOf(node.marks), null),
+        node,
+        textPendings(node, reading),
       );
+      const checkId = readClaimCheck(
+        node.marks?.find((mark) => mark.type === CLAIM_CHECK_MARK)?.attrs,
+      )?.id;
+      const sentence = checkId === undefined ? undefined : checks?.get(checkId);
+      if (sentence) for (const token of made) token.sentence = sentence;
+      tokens.push(...made);
     } else if (node.type === "hardBreak") {
       tokens.push(
         ...marked(
@@ -439,6 +455,8 @@ export interface ParagraphContext {
   review: Review;
   /** Whether an atom the User removed from its paragraph is written there, as removed: it isn't written elsewhere. */
   removedHere(source: string): boolean;
+  /** As `DocumentPatchInput.lookCurrent`: if not, text keeps the file's colour, font, size and raise where the Mind has none. */
+  lookCurrent: boolean;
 }
 
 export interface ParagraphInput {
@@ -479,6 +497,8 @@ export function writeParagraph(
 ): { xml: string; lost: number } {
   const { base, current } = input;
   const { text, parents, places, review } = context;
+  const sameAsFile = (was: TextMarks, now: TextMarks) =>
+    sameMarks(was, context.lookCurrent ? now : withFileFormat(now, was));
   const element = base?.element ?? null;
   const children = element ? elements(element).filter((each) => each.name !== "w:pPr") : [];
   const childIndex = new Map(children.map((each, index) => [each, index]));
@@ -577,7 +597,8 @@ export function writeParagraph(
       if (
         piece &&
         (!samePendings(was.pending, now.pending) ||
-          (isText(was) && !sameMarks(was.marks, now.marks)))
+          (isText(was) && !sameAsFile(was.marks, now.marks)) ||
+          (now.sentence !== undefined && review.choices.commentFailedChecks))
       )
         piece.dirty = true;
       if (isText(was)) {
@@ -689,14 +710,14 @@ export function writeParagraph(
         passiveBefore(piece.from);
         verbatim(piece);
       }
-      if (from < 0 || !sameMarks((baseList[from] as Token).marks, token.marks)) lost++;
+      if (from < 0 || !sameAsFile((baseList[from] as Token).marks, token.marks)) lost++;
       continue;
     }
     if (piece) passiveBefore(piece.from);
     lastVerbatim = -1;
     if (each.step === "equal") {
       const was = baseList[from] as Token;
-      const reformatted = isText(was) && !sameMarks(was.marks, token.marks);
+      const reformatted = isText(was) && !sameAsFile(was.marks, token.marks);
       const kept = wordChangesOf(was.pending) === wordChangesOf(token.pending);
       writer.add(
         token,
@@ -817,12 +838,20 @@ class RunWriter {
     deleted: boolean;
   } | null = null;
 
+  private readonly importedMarks = new Map<XmlElement, TextMarks>();
+
   constructor(
     private readonly input: ParagraphInput,
     private readonly context: ParagraphContext,
     private readonly scope: Namespaces,
     private readonly paragraph: XmlElement | null,
-  ) {}
+  ) {
+    for (const token of input.base?.tokens ?? []) {
+      if (token.kind === "char" && token.run && !this.importedMarks.has(token.run)) {
+        this.importedMarks.set(token.run, token.marks);
+      }
+    }
+  }
 
   /** The wrappers around an element, outermost first, up to the paragraph. */
   private wrappersOf(element: XmlElement | null): XmlElement[] {
@@ -974,7 +1003,9 @@ class RunWriter {
     const baseRPr = use === "borrowed" ? withoutFormatChange(ownRPr) : ownRPr;
     const linkChanged = token.marks.link !== inheritedLink;
     const style = !linkChanged ? null : token.marks.link ? addLinkStyle() : linkStyle;
-    const rPr = runPropertiesFor(baseRPr, token.marks, style);
+    const from = (formatRun ? this.importedMarks.get(formatRun) : undefined) ?? marksOfRun(baseRPr);
+    const marks = this.context.lookCurrent ? token.marks : withFileFormat(token.marks, from);
+    const rPr = runPropertiesFor(baseRPr, marks, style, from);
     const startTag = formatRun ? openTag(text, formatRun) : "<w:r>";
     const deleted =
       changes.some((each) => each.kind === "delete") ||

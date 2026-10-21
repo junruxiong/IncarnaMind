@@ -62,6 +62,9 @@ const SEARCH_TOOLS: Partial<
   chatgpt: { id: "openai.web_search", args: {}, fee: { currency: "USD", amount: 0.01 } },
 };
 
+/** What one search costs with a provider of this kind; undefined for one with no web search. */
+export const searchFeeOf = (kind: ChatProviderKind): Money | undefined => SEARCH_TOOLS[kind]?.fee;
+
 /** What one search with a provider's tool costs, by the tool's id; undefined for any other tool. */
 export const searchFee = (toolId: string): Money | undefined =>
   Object.values(SEARCH_TOOLS).find((each) => each.id === toolId)?.fee;

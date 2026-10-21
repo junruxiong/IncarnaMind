@@ -16,9 +16,11 @@ import { deflateRawSync } from "node:zlib";
 import { DOMParser } from "@xmldom/xmldom";
 import * as Y from "yjs";
 import type { NodeJSON } from "../../../shared/blockJson";
-import type { CitationStyle } from "../../../shared/citationStyles";
+import type { ResolvedCitationStyle } from "../../../shared/citationStyles";
+import { proposalRequestOf } from "../../../shared/proposals";
 import type { SourceContext } from "../../../shared/sources";
 import { wordFileOf, wordFingerprint, wordSourceOf } from "../../../shared/wordFiles";
+import { wordLookOf } from "../../../shared/wordLook";
 import {
   CITATION_NODE,
   type CitationFormatRequest,
@@ -28,11 +30,13 @@ import {
   type WordExportLoss,
   type WordExportReport,
 } from "../../api";
-import { readWordDocument } from "../../documents/formats/docxImport";
+import { nodesByPlace, readWordDocument } from "../../documents/formats/docxImport";
+import { WORD_LOOK_VERSION } from "../../documents/formats/docxLook";
 import { openWordPackage, relationshipsOf, reviewOf } from "../../documents/formats/docxPackage";
 import { child, elements, type XmlElement } from "../../documents/formats/xml";
 import {
   type Block,
+  type FailedSentence,
   plainText,
   type ReadOptions,
   readBlock,
@@ -44,7 +48,14 @@ import { Review, type ReviewChoices } from "../wordReview";
 import { AtomPlan } from "./atoms";
 import { styleWritten, type Written } from "./citations";
 import { DocumentPatch } from "./document";
-import { type Counterpart, counterpartsOf, isFurniture, mindJson } from "./mind";
+import {
+  type Counterpart,
+  changesWithin,
+  counterpartsOf,
+  importedChangesWithin,
+  isFurniture,
+  mindJson,
+} from "./mind";
 import { WordPackageWriter, WordPartError } from "./package";
 import { currentTokens, type Token } from "./paragraph";
 import {
@@ -64,7 +75,7 @@ export interface WordPatchInput {
   /** How the Mind's Blocks are read, as the native export reads them. */
   readOptions: ReadOptions;
   labels: ExportLabels;
-  style: CitationStyle;
+  style: ResolvedCitationStyle;
   /** Whether a Numbered Mind shows its Bibliography. */
   bibliography: boolean;
   bibliographyHeading: string;
@@ -79,6 +90,7 @@ export interface WordPatchInput {
 export interface WordPatchResult {
   data: Uint8Array;
   report: WordExportReport;
+  commented: FailedSentence[];
 }
 
 /** The text width a section leaves, in twips, for new tables and pictures: US Letter's with 1 inch margins if it doesn't say. */
@@ -122,13 +134,32 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
       ((node.type === "paragraph" || node.type === "heading") && element.name === "w:p");
     return fits ? source.n : null;
   };
+  const importedByPlace = nodesByPlace(base.structure);
+  /**
+   * Resolving a change on a node within a Block, such as a line break someone removed, leaves
+   * the Block's fingerprint as it was (#858). An import from before changes were read made
+   * none of the file's, so only those it recorded count.
+   */
+  const changesResolvedOrMade = (element: Y.XmlElement, place: string): boolean => {
+    const imported = importedByPlace.get(place);
+    if (!imported) return false;
+    const now = changesWithin(element);
+    const before = [...importedChangesWithin(imported)].filter(
+      ([, request]) => proposalRequestOf(doc, request) !== null,
+    );
+    return before.length !== now.size || before.some(([key]) => !now.has(key));
+  };
   const editedNodes = new Map<NodeJSON, boolean>();
   const edited = (node: NodeJSON) => {
     const known = editedNodes.get(node);
     if (known !== undefined) return known;
     const source = sourceOf(node);
     const element = yOf.get(node);
-    const result = !source || !element || wordFingerprint(element) !== source.f;
+    const result =
+      !source ||
+      !element ||
+      wordFingerprint(element) !== source.f ||
+      changesResolvedOrMade(element, source.n);
     editedNodes.set(node, result);
     return result;
   };
@@ -195,6 +226,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
             textOf,
             reading,
             counterpart.wholeAi,
+            options.sentenceChecks,
           ),
         };
         tokens.set(counterpart.node, each.tokens ?? []);
@@ -221,6 +253,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     heading: input.bibliographyHeading,
     sources: input.sources,
     format: input.formatCitations,
+    needsDetails: input.labels.needsDetails,
   });
   for (const each of order) if (each.blocks) each.blocks = await input.withPictures(each.blocks);
 
@@ -232,7 +265,14 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     tokensOf: (node): Token[] => {
       const known = written.get(node)?.tokens ?? tokens.get(node);
       if (known) return known;
-      const read = currentTokens(node.content ?? [], specialOf, textOf, reading);
+      const read = currentTokens(
+        node.content ?? [],
+        specialOf,
+        textOf,
+        reading,
+        false,
+        options.sentenceChecks,
+      );
       tokens.set(node, read);
       return read;
     },
@@ -251,6 +291,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
     reading,
     review,
     ids: target.ids,
+    lookCurrent: (wordLookOf(doc)?.version ?? 0) >= WORD_LOOK_VERSION,
   });
   let text: string;
   try {
@@ -279,7 +320,7 @@ export async function exportWordPatch(input: WordPatchInput): Promise<WordPatchR
   ) {
     report.notKept.push(signatureLoss);
   }
-  return { data, report };
+  return { data, report, commented: review.commentedSentences() };
 }
 
 const signatureLoss: WordExportLoss = {

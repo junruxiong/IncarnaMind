@@ -2,6 +2,13 @@
 
 <p align="center"><a href="README.md">English</a> · <b>简体中文</b></p>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="build/icon/svg/mac-dark.svg">
+    <img src="build/icon/svg/mac-light.svg" width="96" height="96" alt="">
+  </picture>
+</p>
+
 <h1 align="center">IncarnaMind</h1>
 
 <p align="center">
@@ -22,11 +29,11 @@
   <!-- 第一个版本发布后，加上：<a href="https://github.com/IncarnaMind/IncarnaMind/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/IncarnaMind/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示六个界面：选中草稿里的两句话，菜单里有“对照文档核对”；同一篇草稿核对后，每句话都标出有依据、无依据或与文档矛盾，标题下显示统计；在笔记旁打开一条引用，PDF 页面上高亮着引文；打开一份别人写的贷款人季度报告来核对，显示“核对 8 条说法”；核对结果中有一条与贷款协议第 3 页矛盾；以及中文界面下核对过的草稿。"></p>
+<p align="center"><img src="docs/images/demo-tour-2026-10.gif" width="880" alt="依次展示十个场景，除最后一个外均为英文界面，模型为 Claude Sonnet 5.5：一个有六个文件夹、一个同步文件夹和标签的工作区，一个文件夹的新文档先读取，再由“整理”给每份文档建议文件夹和标签；在 Mind 旁的助手里就杠杆率条款提问，回答带编号引用；在 Mind 旁打开一条引用，PDF 页面上高亮着引文；让助手把各季度毛利率画成图，Mind 里添加了带引用的表格和柱状图；让助手写一份摘要，它以灰色 AI 文字和引用写进一个新 Mind，并显示“写入了 1 个段落”和“撤销”；核对此 Mind，页边每句话一个标记，一张“与文档矛盾”的卡片写明文档里的原话；“对比文档”填好三份条款清单的对比表，每个单元格都有引用；录制会议，先有“告诉所有人你在录制”的提示，实时转写里分出“我”和“对方”，通话中的帮助回答对方的问题；把草稿导出为 Word，并显示“已保存……”的一行；最后是中文界面下的同一篇草稿。"></p>
 
 <p align="center"><sub>图中展示的功能现在都能用。</sub></p>
 
-**IncarnaMind** 是一款免费开源的桌面应用，支持 macOS、Windows 和 Linux：你可以借助 AI 写作，并就自己的文档（PDF、Word、PowerPoint、Excel 等）提问。它能把草稿里的每一句话、每一个数字都对照这些文档核对，不管草稿是谁写的；每个回答都标明出处的确切页码。它用你已经在用的 AI：你自己的 API 密钥（比如 DeepSeek），或你的 ChatGPT 订阅。
+**IncarnaMind** 是一款免费开源的桌面应用，支持 macOS、Windows 和 Linux：你可以借助 AI 写作，并就自己的文档（PDF、Word、PowerPoint、Excel 等）提问。它能把草稿里的每一句话、每一个数字都对照这些文档核对，不管草稿是谁写的；每个回答都标明出处的确切页码。它用你已经在用的 AI：你自己的 API 密钥（比如 DeepSeek），或你的 ChatGPT、Claude、Copilot 订阅。
 
 ## 下载
 
@@ -44,29 +51,29 @@ Windows 版将通过 SignPath Foundation 为开源项目提供的免费签名服
 
 - **Windows** 提示“Windows 已保护你的电脑”：安装程序暂时还没有代码签名。点**更多信息**，再点**仍要运行**。
 - **macOS** 提示无法验证 IncarnaMind：在完成公证之前，先打开一次，在警告里点**完成**，再到**系统设置 → 隐私与安全性**里点**仍要打开**。也可以运行 `xattr -dr com.apple.quarantine /Applications/IncarnaMind.app`。未签名的 Mac 版不能自动更新：有新版本时，IncarnaMind 会通知你，并打开下载页面。
-- **Linux**：先运行 `chmod +x IncarnaMind-*.AppImage`。Ubuntu 22.04 及以后的版本还要运行 `sudo apt install libfuse2`（24.04 及以后是 `libfuse2t64`）。
+- **Linux**：Ubuntu 和 Debian 请用 .deb（推荐），其他发行版可用 AppImage。在 Ubuntu 24.04 及更新版本上，AppImage 会在没有应用沙盒的情况下运行。使用 AppImage 时，先运行 `chmod +x IncarnaMind-*.AppImage`。Ubuntu 22.04 及以后的版本还要运行 `sudo apt install libfuse2`（24.04 及以后是 `libfuse2t64`）。
 
 </details>
 
 ## 你能用它做什么
 
-**交稿前先核对一遍。** 在 Mind 里选中几句话，选择 **对照文档核对**：每句话都会标出在你的文档里有依据、无依据还是与文档矛盾，原文一键打开，标题下还会统计还有几处需要留意。别人写的 PDF 也能这样逐条核对说法：**+ → 核对文档…**。
+**交稿前先核对一遍。** 在 Mind 里选中几句话，选择 **对照文档核对**：每句话都会标出在你的文档里有依据、无依据还是与文档矛盾，原文一键打开，页面角落的核对标记会统计还有几处需要留意。别人写的 PDF 也能这样逐条核对说法：**+ → 核对文档…**。
 
 **边写边问。** 一个 Mind 就是为一个主题准备的笔记本，旁边就是助手：就当前的 Mind 或你的文件向它提问，回答以对话的形式留在助手里，每个引用都已核对。你的草稿保持原样，直到你点 **添加到笔记**：回答连同引用放到光标处，可以像普通文字一样修改。
 
 **每个回答都能核对。** 回答会标出每个说法的出处，并附上原文引文，再逐条到那个位置核对：找到了打绿勾，没找到就标成橙色；点一下，原文就打开到那一页，引文高亮显示。展开回答的过程，可以看到它搜了什么、用了哪些来源。
 
-**会议中记笔记。** 开始录音后，实时转写显示在 Mind 旁边，转写在你的电脑上完成。会议结束后，可以把转写稿保存为文档，笔记就能引用会上说过的话。
+**会议中记笔记。** 开始录音后，实时转写显示在 Mind 旁边，转写在你的电脑上完成。会议结束后，可以把转写稿保存为文档，笔记就能引用会上说过的话。通话中，一个小面板可以建议你接下来怎么说，并根据你的文档回答对方的问题。
 
 **直接用你手上的文件。** 把你平时用的文件夹添加为同步文件夹，连 Zotero 的存储文件夹也可以：IncarnaMind 就地读取里面的 PDF、Word（连批注一起）、PowerPoint、Excel、CSV、Markdown 和纯文本文件，从不移动或修改它们，文件有变化也会跟着更新。
 
 **查找和添加资料。** 在 OpenAlex、arXiv 和 PubMed 里搜索论文，开放获取的直接添加为文档；输入网址保存网页，像文件一样引用和核对；还能从 Zotero 或任何 CSL JSON、BibTeX、RIS 文件导入引用信息。
 
-**AI 帮你写，改不改由你定。** 告诉助手要改什么（“把摘要缩短”“把今天的决定加到项目计划里”“把这些论文整理成一篇新笔记”），它就直接修改 Mind，或新建一个 Mind，边写边一段段出现，每处改动都以修订的形式等你接受或拒绝；提问仍然得到回答。也可以选中文字，选“用 AI 编辑…”，每处修订都会说明为什么这样改。开启写作建议后，你停下来时会出现灰色的续写，只在你的文档支持时出现，并且总带着引用；按 Tab 采纳。
+**AI 帮你写，改不改由你定。** 告诉助手要改什么（“把摘要缩短”“把今天的决定加到项目计划里”“把这些论文整理成一篇新笔记”），它就直接修改 Mind，或新建一个 Mind，边写边一段段出现，改动直接生效：在你修改之前以灰色显示，一键撤销，也可以点“查看改动”看改了什么；提问仍然得到回答。也可以选中文字，选“用 AI 编辑…”，每处修订都会说明为什么这样改。开启写作建议后，你停下来时会出现灰色的续写，只在你的文档支持时出现，并且总带着引用；按 Tab 采纳。
 
 **文档再多也不乱。** 标签会自动添加，IncarnaMind 还会给每个文档推荐文件夹，由你确认；你自己做的选择都会保留。
 
-**模型由你来选。** 可以用你自己的 OpenAI、Anthropic、Google、DeepSeek、通义千问、硅基流动、OpenRouter 密钥，还有更多可选，例如 Kimi、智谱 GLM、Mistral、xAI，或任何兼容 OpenAI 接口的服务。已经订阅了 ChatGPT Plus 或 Pro，也可以使用 ChatGPT 登录，直接用订阅提问。
+**模型由你来选。** 可以用你自己的 OpenAI、Anthropic、Google、DeepSeek、通义千问、硅基流动、OpenRouter 密钥，还有更多可选，例如 Kimi、智谱 GLM、Mistral、xAI，或任何兼容 OpenAI 接口的服务。已经订阅了 ChatGPT Plus 或 Pro、Claude 或 GitHub Copilot，也可以直接登录，用订阅提问，无需密钥（Copilot 登录目前是实验性的）。
 
 **写完就能交。** 把 Mind 导出为 Word 或 Markdown，引用和参考文献按你选的引用格式排好：APA、MLA、Chicago、Harvard、IEEE、Vancouver、GB/T 7714，或 IncarnaMind 自己的编号格式。没通过核对的引用会标上“[未核实]”。也可以把 Word 文件打开成 Mind，再导出回同一个文件：没改动的部分原样保留，你的修改可以作为修订写回去。
 
@@ -87,10 +94,11 @@ Windows 版将通过 SignPath Foundation 为开源项目提供的免费签名服
 <details>
 <summary><b>常见问题</b></summary>
 
-- **要花钱吗？** 不用。IncarnaMind 开源免费（Apache 2.0 许可证）。AI 模型由它的提供商收费：用你自己的 API 密钥按用量付费，或用你已有的 ChatGPT 订阅。
+- **要花钱吗？** 不用。IncarnaMind 开源免费（Apache 2.0 许可证）。AI 模型由它的提供商收费：用你自己的 API 密钥按用量付费，或用你已有的 ChatGPT、Claude、Copilot 订阅。
 - **一定要有 API 密钥吗？** 需要一个 AI 模型，最省事的是填一个 DeepSeek 密钥（设置里有“如何获取？”）。也可以填通义千问、硅基流动、OpenAI、Anthropic、Google、OpenRouter 的密钥；“设置”中还有更多提供商，例如 Kimi、智谱 GLM、Mistral、xAI，或任何兼容 OpenAI 接口的服务。订阅了 ChatGPT Plus 或 Pro，可以使用 ChatGPT 登录。
-- **是 NotebookLM（现名 Gemini Notebook）的替代品吗？** 是。IncarnaMind 在你的电脑上运行，文件在原处读取，不需要账号；模型由你来选（你自己的密钥或 ChatGPT 订阅）；每条引用都和原文所在页逐一核对，你自己写的句子也能核对；Mind 还能导出为带引用的 Word。
+- **是 NotebookLM（现名 Gemini Notebook）的替代品吗？** 是。IncarnaMind 在你的电脑上运行，文件在原处读取，不需要账号；模型由你来选（你自己的密钥，或 ChatGPT、Claude、Copilot 订阅）；每条引用都和原文所在页逐一核对，你自己写的句子也能核对；Mind 还能导出为带引用的 Word。
 - **能用我的 ChatGPT 订阅吗？** 能，需要 ChatGPT Plus 或 Pro。在**设置 → 模型**里选**使用 ChatGPT 继续**，在浏览器里完成登录即可：之后的提问会以你的账号发给 OpenAI，计入订阅的用量上限，不需要密钥。
+- **能用我的 Claude 或 GitHub Copilot 订阅吗？** 能。在**其他方式**或**设置 → 模型**里，用你的 Claude 或 GitHub 账号登录；登录之前不会启用。回答会计入你订阅的用量限额。Copilot 登录目前是实验性的。
 - **能离线用吗？** 读取文件和搜索可以离线。回答和核对需要 AI 模型，大多数人要联网。通过 [Ollama](https://ollama.com) 运行的本地模型可以离线回答，但比云端模型慢，也没那么可靠。按含义搜索（嵌入）是可选功能，默认关闭。
 - **会改动我的文件吗？** 不会。它只在原处读取文件，只往自己的数据文件夹和你导出的文件里写内容。
 - **“找到引文”是什么意思？** 意思是这段文字确实在引用所指的位置，但不代表它能证明你写的那句话，所以原文永远只差一次点击。“无法核对”表示那里没有可以比对的文字，比如扫描页。

@@ -26,11 +26,14 @@
  */
 import type { MarkJSON, NodeJSON } from "../../../shared/blockJson";
 import { NODE_CHARACTER, targetHash } from "../../../shared/proposals";
+import { groupWordLists } from "../../../shared/wordLists";
 import { runLookOf } from "../../../shared/wordLook";
+import { mindHeadingLevel } from "../../../shared/wordStyles";
 import {
   BLOCK_ID_ATTRIBUTE,
   IMAGE_NODE,
   type KeptChangeKind,
+  PARAGRAPH_FORMAT_ATTRIBUTE,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
@@ -40,12 +43,13 @@ import {
   WORD_CHANGE_ID,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
+  WORD_TAB_MARK,
   type WordAtomInfo,
   type WordAtomKind,
   type WordChangeRequest,
   type WordImportReport,
-  type WordLayout,
   type WordLook,
+  type WordRunLook,
   type WordSource,
 } from "../../api";
 import { headingLevelOf, textIn } from "./docx";
@@ -61,7 +65,16 @@ import {
   type WordReview,
 } from "./docxPackage";
 import { dataUrlOf, imageTypeOf } from "./images";
-import { child, descendants, elements, onOff, parseXml, walk, type XmlElement } from "./xml";
+import {
+  child,
+  descendants,
+  elements,
+  onOff,
+  ordinalsOf,
+  parseXml,
+  walk,
+  type XmlElement,
+} from "./xml";
 
 /** The largest picture made editable; a larger one is kept as is. */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -91,6 +104,19 @@ export async function readWordStructure(
   review: WordReview,
 ): Promise<WordStructure> {
   return (await readWordDocument(pkg, review)).structure;
+}
+
+/** Each node mapped from the document, by its place ("w:p#12"). */
+export function nodesByPlace(structure: WordStructure): Map<string, NodeJSON> {
+  const byPlace = new Map<string, NodeJSON>();
+  const visit = (node: NodeJSON) => {
+    const id = node.attrs?.[BLOCK_ID_ATTRIBUTE];
+    const source = typeof id === "string" ? structure.sources.get(id) : undefined;
+    if (source) byPlace.set(source.n, node);
+    for (const each of node.content ?? []) visit(each);
+  };
+  for (const block of structure.blocks) visit(block);
+  return byPlace;
 }
 
 /**
@@ -369,6 +395,19 @@ function fieldType(instruction: string): string {
 
 const isOn = (element: XmlElement | undefined) => onOff(element) === true;
 
+const RESOLVED_MARKS: ReadonlySet<string> = new Set(["bold", "italic", "underline", "strike"]);
+
+function formattingMarks(look: WordRunLook): MarkJSON[] {
+  return [
+    look.bold && { type: "bold" },
+    look.italic && { type: "italic" },
+    look.underline && { type: "underline" },
+    (look.strike || look.doubleStrike) && { type: "strike" },
+  ].filter((mark): mark is MarkJSON => Boolean(mark));
+}
+
+const TAB: MarkJSON = { type: WORD_TAB_MARK };
+
 /** The editor's marks for a run's own formatting. */
 export function runMarks(rPr: XmlElement | undefined): MarkJSON[] {
   if (!rPr) return [];
@@ -492,76 +531,6 @@ const paragraphNode = (
 });
 
 // ---------------------------------------------------------------------------
-// The look the Mind doesn't draw (#735)
-
-/** Shading that paints nothing: no fill, or white. */
-const NO_FILL = new Set(["auto", "FFFFFF"]);
-const NO_COLOUR = new Set(["auto", "000000"]);
-
-/** A border side, or any side of a border, that draws a line. */
-const drawsLine = (borders: XmlElement | undefined): boolean =>
-  borders !== undefined &&
-  elements(borders).some((side) => !["nil", "none"].includes(side.attrs["w:val"] ?? "none"));
-
-/** A table with no lines of its own or from a style: its cells only place text. */
-function placesText(tbl: XmlElement): boolean {
-  const tblPr = child(tbl, "w:tblPr");
-  if (tblPr && child(tblPr, "w:tblStyle")) return false;
-  if (drawsLine(tblPr && child(tblPr, "w:tblBorders"))) return false;
-  return !descendants(tbl, "w:tcBorders").some((borders) => drawsLine(borders));
-}
-
-/** Counts what the Mind doesn't draw of a document's look (`WordLayout`), from its own formatting. */
-export function layoutOf(document: XmlElement): WordLayout {
-  const layout: WordLayout = {
-    shading: 0,
-    borders: 0,
-    tabStops: 0,
-    layoutTables: 0,
-    colours: 0,
-    fonts: 0,
-    sizes: 0,
-  };
-  const colours = new Set<string>();
-  const fonts = new Set<string>();
-  const sizes = new Set<string>();
-  for (const element of walk(document)) {
-    const value = element.attrs["w:val"];
-    switch (element.name) {
-      case "w:shd": {
-        const fill = (element.attrs["w:fill"] ?? "auto").toUpperCase();
-        const solid =
-          value === "solid" && !NO_FILL.has((element.attrs["w:color"] ?? "auto").toUpperCase());
-        if (!NO_FILL.has(fill) || solid) layout.shading++;
-        break;
-      }
-      case "w:pBdr":
-        if (drawsLine(element)) layout.borders++;
-        break;
-      case "w:tabs":
-        layout.tabStops += elements(element).filter((tab) => tab.attrs["w:val"] !== "clear").length;
-        break;
-      case "w:tbl":
-        if (placesText(element)) layout.layoutTables++;
-        break;
-      case "w:color":
-        if (value && !NO_COLOUR.has(value.toUpperCase())) colours.add(value.toUpperCase());
-        break;
-      case "w:rFonts":
-        for (const key of ["w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"]) {
-          const font = element.attrs[key];
-          if (font) fonts.add(font);
-        }
-        break;
-      case "w:sz":
-        if (value) sizes.add(value);
-        break;
-    }
-  }
-  return { ...layout, colours: colours.size, fonts: fonts.size, sizes: sizes.size };
-}
-
-// ---------------------------------------------------------------------------
 // The reader
 
 class Reader {
@@ -598,7 +567,7 @@ class Reader {
   private readonly absorbed = new Set<XmlElement>();
   /** Someone's changes kept as is, by kind. */
   private readonly kept: Partial<Record<KeptChangeKind, number>> = {};
-  private paragraphLook: ParagraphLookContext = { look: {}, runs: [] };
+  private paragraphLook: ParagraphLookContext = { look: {}, format: {}, runs: [] };
   private tableLook: TableLookContext | null = null;
 
   private constructor(
@@ -716,12 +685,9 @@ class Reader {
 
   /** Gives every element its place among the elements of its name, in document order. */
   private numberElements(root: XmlElement): void {
-    const counts = new Map<string, number>();
+    for (const [element, ordinal] of ordinalsOf(root)) this.ordinals.set(element, ordinal);
     const paraIds = new Set<string>();
     for (const element of walk(root)) {
-      const count = counts.get(element.name) ?? 0;
-      counts.set(element.name, count + 1);
-      this.ordinals.set(element, count);
       const named = this.byName.get(element.name);
       if (named) named.push(element);
       else this.byName.set(element.name, [element]);
@@ -813,7 +779,6 @@ class Reader {
     this.wholeChanges(blocks);
     this.countKeptChanges();
     const { header, footer } = this.pageFurniture(body);
-    this.report.layout = layoutOf(this.document);
     return {
       blocks: [...header, ...blocks, ...footer],
       sources: this.sources,
@@ -861,7 +826,7 @@ class Reader {
             break;
           case "w:tab":
           case "w:ptab":
-            this.text("\t", own, out);
+            this.text("\t", [...own, TAB], out);
             break;
           case "w:noBreakHyphen":
             this.text("‑", own, out);
@@ -1132,7 +1097,7 @@ class Reader {
     const node =
       level === null
         ? paragraphNode("paragraph", {})
-        : paragraphNode("heading", { level: Math.min(6, Math.max(1, level)) });
+        : paragraphNode("heading", { level: mindHeadingLevel(level) });
     node.content.push(...this.pending);
     this.pending = [];
     this.fieldDepth = 0;
@@ -1151,6 +1116,9 @@ class Reader {
     if (main !== null) this.markOnlyOtherRuns(node.content, main);
     const look = this.look.paragraphKey(this.paragraphLook, main);
     if (look) node.attrs[WORD_LOOK_ATTRIBUTE] = look;
+    if (Object.keys(this.paragraphLook.format).length > 0) {
+      node.attrs[PARAGRAPH_FORMAT_ATTRIBUTE] = this.paragraphLook.format;
+    }
     this.noteWhole(node, pPr, inCell);
     const sectPr = pPr && child(pPr, "w:sectPr");
     if (sectPr) {
@@ -1226,10 +1194,22 @@ class Reader {
     const content = new Map<Placed, NodeJSON[]>();
     const outer = this.tableLook;
     const tableLook = this.look.table(tbl);
-    this.tableLook = tableLook;
-    placed.forEach((row) => {
+    const cellLooks = new Map<Placed, TableLookContext>();
+    const rowSpanOf = (at: Placed, r: number) =>
+      Math.max(1, Math.min(rowspans.get(at) ?? 1, placed.length - r));
+    const spanOf = (at: Placed) => Math.min(at.span, width - at.column);
+    placed.forEach((row, r) => {
       for (const at of row) {
         if (at.merge === "continue" && mergedInto.has(at)) continue;
+        this.tableLook = this.look.cellAt(tableLook, {
+          row: r,
+          rows: placed.length,
+          rowSpan: rowSpanOf(at, r),
+          column: at.column,
+          span: spanOf(at),
+          columns: width,
+        });
+        cellLooks.set(at, this.tableLook);
         const blocks: NodeJSON[] = [];
         this.blocks(at.cell, blocks, true);
         content.set(at, blocks);
@@ -1242,6 +1222,7 @@ class Reader {
         !["w:drawing", "w:pict", "w:object", "w:bookmarkStart"].some(
           (name) => descendants(cell.cell, name).length > 0,
         );
+      this.tableLook = cellLooks.get(into) ?? tableLook;
       if (!empty) this.blocks(cell.cell, content.get(into) ?? [], true);
     }
     this.tableLook = outer;
@@ -1258,8 +1239,8 @@ class Reader {
       for (let column = 0; column < width; ) {
         const at = starts.get(column);
         if (at) {
-          const rowspan = Math.max(1, Math.min(rowspans.get(at) ?? 1, placed.length - r));
-          const colspan = Math.min(at.span, width - column);
+          const rowspan = rowSpanOf(at, r);
+          const colspan = spanOf(at);
           for (let down = r; down < r + rowspan; down++) {
             for (let across = column; across < column + colspan; across++) {
               const line = occupied[down];
@@ -1267,7 +1248,7 @@ class Reader {
             }
           }
           const blocks = content.get(at) ?? [];
-          const cellLook = this.look.cell(at.cell, tableLook);
+          const cellLook = this.look.cell(at.cell, cellLooks.get(at) ?? tableLook);
           const cellNode: NodeJSON = {
             type: cellType,
             attrs: { colspan, rowspan, ...(cellLook && { [WORD_LOOK_ATTRIBUTE]: cellLook }) },
@@ -1311,7 +1292,7 @@ class Reader {
       type: "table",
       attrs: {
         [BLOCK_ID_ATTRIBUTE]: id,
-        ...(tableLook.key && { [WORD_LOOK_ATTRIBUTE]: tableLook.key }),
+        [WORD_LOOK_ATTRIBUTE]: tableLook.key,
       },
       content: tableRows,
     };
@@ -1450,7 +1431,7 @@ class Reader {
       characters.set(key, (characters.get(key) ?? 0) + node.text.length);
     }
     if (characters.size === 0) {
-      const run = this.look.run(pPr && child(pPr, "w:rPr"), this.paragraphLook, 0);
+      const run = this.look.run(pPr && child(pPr, "w:rPr"), this.paragraphLook, 0).key;
       return run !== null && this.look.canBeParagraphRun(run) ? run : null;
     }
     let main: string | null = null;
@@ -1482,10 +1463,16 @@ class Reader {
     }
   }
 
+  /** Bold, italic, underline and strike as Word resolves them, styles included, so the editor's toggles act on them; then the run's own colour and raise. */
   private marksOfRun(run: XmlElement): MarkJSON[] {
     const rPr = child(run, "w:rPr");
-    const key = this.look.run(rPr, this.paragraphLook, textIn(run).length);
-    return [...runMarks(rPr), ...(key ? [{ type: WORD_RUN_MARK, attrs: { k: key } }] : [])];
+    const { key, look, marks } = this.look.run(rPr, this.paragraphLook, textIn(run).length);
+    return [
+      ...formattingMarks(look),
+      ...runMarks(rPr).filter((mark) => !RESOLVED_MARKS.has(mark.type)),
+      ...marks,
+      ...(key ? [{ type: WORD_RUN_MARK, attrs: { k: key } }] : []),
+    ];
   }
 
   private run(run: XmlElement, marks: MarkJSON[], out: NodeJSON[]): void {
@@ -1523,7 +1510,7 @@ class Reader {
         break;
       case "w:tab":
       case "w:ptab":
-        this.text("\t", marks, out);
+        this.text("\t", [...marks, TAB], out);
         break;
       case "w:noBreakHyphen":
         this.text("‑", marks, out);
@@ -1883,40 +1870,31 @@ function rowsOf(
   return rows;
 }
 
-/**
- * Groups list items into the editor's lists: consecutive items of one
- * numbering, nested by level (a level deeper than the one before goes one
- * deeper only), numbered from where Word's numbering has got to.
- */
-function groupLists(items: readonly Item[]): NodeJSON[] {
-  const out: NodeJSON[] = [];
-  const open: { list: NodeJSON; ordered: boolean; numId: string }[] = [];
-  for (const { node, list } of items) {
-    if (!list) {
-      open.length = 0;
-      out.push(node);
-      continue;
-    }
-    const depth = Math.min(list.level, open.length);
-    open.length = Math.min(open.length, depth + 1);
-    const top = open[depth];
-    if (top && (top.ordered !== list.ordered || (depth === 0 && top.numId !== list.numId))) {
-      open.length = depth;
-    }
-    if (open.length === depth) {
-      const created: NodeJSON = list.ordered
-        ? {
-            type: "orderedList",
-            attrs: { [BLOCK_ID_ATTRIBUTE]: newId(), start: list.number },
-            content: [],
-          }
-        : { type: "bulletList", attrs: { [BLOCK_ID_ATTRIBUTE]: newId() }, content: [] };
-      const parent = open[depth - 1];
-      if (parent) parent.list.content?.at(-1)?.content?.push(created);
-      else out.push(created);
-      open.push({ list: created, ordered: list.ordered, numId: list.numId });
-    }
-    open[depth]?.list.content?.push({ type: "listItem", content: [node] });
-  }
-  return out;
-}
+const groupLists = (items: readonly Item[]): NodeJSON[] =>
+  groupWordLists(
+    items.map(({ node, list }) => ({
+      node,
+      list: list && {
+        listId: list.numId,
+        level: list.level,
+        ordered: list.ordered,
+        number: list.number,
+      },
+    })),
+    {
+      list: (place) =>
+        place.ordered
+          ? {
+              type: "orderedList",
+              attrs: { [BLOCK_ID_ATTRIBUTE]: newId(), start: place.number },
+              content: [],
+            }
+          : { type: "bulletList", attrs: { [BLOCK_ID_ATTRIBUTE]: newId() }, content: [] },
+      item: (list, block) => {
+        list.content?.push({ type: "listItem", content: [block] });
+      },
+      nest: (parent, list) => {
+        parent.content?.at(-1)?.content?.push(list);
+      },
+    },
+  );

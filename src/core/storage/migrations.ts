@@ -1658,12 +1658,134 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    version: 89,
+    description: "Web pages keep their pictures: each version's, and how many were left out (#756)",
+    // A saved page's pictures are files named by their content (src/core/documents/web),
+    // shared by its versions; a row per picture per version, numbered as the page shows
+    // them, says which files a version shows, so a picture an older version still has stays.
+    sql: `
+      CREATE TABLE web_page_pictures (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL REFERENCES documents (id),
+        content_hash TEXT NOT NULL,
+        number INTEGER NOT NULL,
+        picture_hash TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        bytes INTEGER NOT NULL,
+        address TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX web_page_pictures_by_number
+        ON web_page_pictures (document_id, content_hash, number) WHERE deleted_at IS NULL;
+      CREATE INDEX web_page_pictures_by_picture
+        ON web_page_pictures (picture_hash) WHERE deleted_at IS NULL;
+      -- Pictures over the caps (too many, too large, past the page's total), per version.
+      ALTER TABLE web_pages ADD COLUMN pictures_left_out INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
     version: 90,
     description: "A Mind imported from Word keeps the file's look (#746)",
     sql: `
       -- WORD_LOOK_VERSION the look was read with; NULL for imports from before it was kept.
       -- Lets start-up find Minds needing it without loading each one.
       ALTER TABLE word_packages ADD COLUMN look_version INTEGER;
+    `,
+  },
+  {
+    version: 91,
+    description: "Web pages kept as they look: a PDF of each version, when the User asks (#756)",
+    // The PDF is a file named by its content, beside the snapshots (src/core/documents/web).
+    // A version asked for it is 'saving' until it is made, and made again at the next start
+    // if the app quit meanwhile; 'failed' says why in look_failure.
+    sql: `
+      ALTER TABLE web_pages ADD COLUMN look_status TEXT
+        CHECK (look_status IS NULL OR look_status IN ('saving', 'saved', 'failed'));
+      ALTER TABLE web_pages ADD COLUMN look_hash TEXT;
+      ALTER TABLE web_pages ADD COLUMN look_saved_at TEXT;
+      ALTER TABLE web_pages ADD COLUMN look_failure TEXT;
+    `,
+  },
+  {
+    version: 94,
+    description: "A Document the User keeps as their own workings: read, never cited (#897)",
+    sql: `
+      -- 1: Answers search and read the Document but never cite it, and checks never use it as
+      -- evidence; the User's choice, kept until they take it back. 0: cited as any Document.
+      ALTER TABLE documents ADD COLUMN not_cited INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    version: 95,
+    description: "A web page keeps who saved it: the User, or a web search (#896)",
+    // A page only the User saved can stand for a court decision's opinion in a check. Pages saved
+    // before this was kept can't be told apart, so they read as a search's until the User saves
+    // the address again.
+    sql: `
+      ALTER TABLE web_pages ADD COLUMN origin TEXT NOT NULL DEFAULT 'search'
+        CHECK (origin IN ('user', 'search'));
+    `,
+  },
+  {
+    version: 96,
+    description: "Reference lookups kept, so checking a list again asks only about misses (#711)",
+    // OpenAlex's free allowance is per network and per day; a student re-checks the same list often.
+    // `service` is where the answer came from, which the check still names.
+    sql: `
+      CREATE TABLE reference_lookups (
+        id TEXT PRIMARY KEY NOT NULL,
+        service TEXT NOT NULL CHECK (service IN ('crossref', 'openalex', 'arxiv')),
+        kind TEXT NOT NULL,
+        lookup_key TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        -- 1: an answer that found the work cited, kept for good; 0: a miss, asked again after a while.
+        kept INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX reference_lookups_by_key
+        ON reference_lookups (service, kind, lookup_key) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 97,
+    description: "A failed Answer keeps which of its sign-in route's problems stopped it",
+    // A Claude account's or a Copilot plan's own problem (SignInRouteProblem, checked in code), so
+    // its line and ways back are the route's after a restart; NULL for any other failure.
+    sql: `
+      ALTER TABLE conversation_messages ADD COLUMN error_sign_in_route TEXT;
+    `,
+  },
+  {
+    version: 98,
+    description: "A Document's Folder keeps when it was filed there",
+    // When the Document joined the Folder's scope, for checks of a Mind there it could change
+    // (#993). NULL on a row filed before: its created_at stands for it.
+    sql: `
+      ALTER TABLE document_groups ADD COLUMN filed_at TEXT;
+    `,
+  },
+  {
+    version: 99,
+    description: "A Document waiting out a rate limit keeps when it resumes (#1127)",
+    // ISO 8601 UTC, beside the error kind and message the tagging state already keeps; NULL when
+    // the error carries no time.
+    sql: `
+      ALTER TABLE documents ADD COLUMN tagging_error_resets_at TEXT;
+    `,
+  },
+  {
+    version: 101,
+    description: "A provider's own model can be taken out of the model menu (#179)",
+    // 1: the User put the id in the menu (as before); 0: the User took one the provider offers
+    // in the menu by default out of it, with Settings › Models' "In the menu".
+    sql: `
+      ALTER TABLE chat_menu_models ADD COLUMN in_menu INTEGER NOT NULL DEFAULT 1;
     `,
   },
 ];

@@ -1,8 +1,16 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { Document, LibraryGroup } from "../../../../core/api";
+import type {
+  Document,
+  LibraryGroup,
+  LibrarySettings,
+  TaggingModelOption,
+} from "../../../../core/api";
+import { organizeModelOf } from "../../../../shared/libraryModels";
 import { core } from "../../core";
-import { useT } from "../../i18n";
+import { useDropTarget } from "../../dragDrop";
+import { folderTarget } from "../../folderDrag";
+import { useLanguage, useT } from "../../i18n";
 import { useLibraryFolds, useRevealed } from "../../libraryFolds";
 import {
   FIRST_ROWS,
@@ -15,10 +23,12 @@ import { useRequests } from "../../requests";
 import { useAppStore } from "../../store";
 import { TREE_ROW } from "../../treeKeys";
 import { useRename } from "../../useRename";
+import { DetailsLine } from "../DetailsLine";
 import { InlineName } from "../InlineName";
 import { FolderLineIcon } from "../lineIcons";
 import { ObjectMenu, useObjectMenu } from "../ObjectMenu";
 import { rowActionButtonClass } from "../sidebarRows";
+import { providerOf } from "../TaggingSettings";
 import { FolderForm } from "./FolderForm";
 import { LibraryRow } from "./LibraryRow";
 import { SectionHead, sectionNameClass } from "./SectionHead";
@@ -110,8 +120,9 @@ function foldKeys(key: string, open: boolean) {
 
 /**
  * A Folder's head: its name, which folds the section and renames in place
- * (double-click or F2), how many it holds, its description and, pointed at,
- * its ⋯. Edit description… opens the Folder's form under it.
+ * (double-click or F2), how many it holds and, pointed at, its ⋯, with its
+ * description as the head's tooltip and in Get info. Edit description… opens
+ * the Folder's form under it.
  */
 function FolderHead({
   folder,
@@ -136,6 +147,11 @@ function FolderHead({
     useRequests.getState().clear("editFolder");
   }, [editFolder, folder.id]);
   const arrows = foldKeys(folder.id, open);
+  const drop = useDropTarget(
+    `library-folder:${folder.id}`,
+    folderTarget(folder.id),
+    open ? undefined : () => useLibraryFolds.getState().setOpen(folder.id, true),
+  );
   let name: ReactNode;
   if (rename.renaming) {
     name = (
@@ -179,9 +195,10 @@ function FolderHead({
         icon={<FolderLineIcon className="size-4" />}
         name={name}
         count={count}
-        description={folder.description}
+        tip={folder.description}
         testId="library-section-head"
         rowProps={rename.renaming ? {} : objectMenu.rowProps}
+        drop={drop}
         end={
           !rename.renaming && (
             <ObjectMenu
@@ -208,6 +225,11 @@ function LooseHead({ documents, open }: { documents: readonly Document[]; open: 
   const t = useT();
   const label = t("library.unsorted");
   const toggle = () => useLibraryFolds.getState().toggle(NOT_IN_A_FOLDER);
+  const drop = useDropTarget(
+    "library-folder:none",
+    folderTarget(null),
+    open ? undefined : () => useLibraryFolds.getState().setOpen(NOT_IN_A_FOLDER, true),
+  );
   return (
     <SectionHead
       label={label}
@@ -230,9 +252,13 @@ function LooseHead({ documents, open }: { documents: readonly Document[]; open: 
       count={documents.length}
       testId="library-section-head"
       end={<Organize documents={documents} />}
+      drop={drop}
     />
   );
 }
+
+const organizeHasModel = (settings: LibrarySettings | undefined) =>
+  !!settings && organizeModelOf(settings) !== null;
 
 /**
  * Organize, for the Documents in no Folder (its model is chosen in Settings ›
@@ -251,7 +277,7 @@ function Organize({ documents }: { documents: readonly Document[] }) {
       }
       return {
         hasFolders: (state.library?.groups.length ?? 0) > 0,
-        hasModel: Boolean(state.library?.settings.classifier),
+        hasModel: organizeHasModel(state.library?.settings),
         pending,
         failed,
       };
@@ -310,66 +336,56 @@ function Organize({ documents }: { documents: readonly Document[] }) {
   }
   if (!hasFolders || documents.length === 0) return null;
   return (
-    <span className="flex min-w-0 items-baseline gap-2">
-      <span
-        data-testid="library-organize-explain"
-        className="min-w-0 truncate text-[13px] text-ink-meta @max-[704px]/page:hidden"
-      >
-        {t("library.organize.explain")}
-      </span>
-      <button
-        type="button"
-        data-testid="library-organize"
-        title={t("library.organize.explain")}
-        onClick={() => run(documents.map((doc) => doc.id))}
-        className={quietButtonClass}
-      >
-        {t("library.classify")}
-      </button>
-    </span>
+    <button
+      type="button"
+      data-testid="library-organize"
+      title={t("library.organize.explain")}
+      onClick={() => run(documents.map((doc) => doc.id))}
+      className={quietButtonClass}
+    >
+      {t("library.classify")}
+    </button>
   );
 }
 
 /**
  * Organize with no model chosen (#763): a row under Not in a Folder's head
- * says so where it was asked, with the way on: the AI model already
- * connected, saying what would be sent to it, or one on this computer.
+ * says so where it was asked, with the way on: the model Automatic tags with,
+ * saying what would be sent to its company, or one on this computer. The
+ * answer is kept, so Organize asks once.
  */
 function OrganizeNeedsModel({ documents }: { documents: readonly Document[] }) {
   const t = useT();
+  const language = useLanguage();
   const ids = useOrganizeAsk((state) => state.ids);
-  const hasModel = useAppStore((state) => Boolean(state.library?.settings.classifier));
-  const chosen = useAppStore((state) => state.settings?.user.chatModel ?? null);
-  const [company, setCompany] = useState<{ name: string; cloud: boolean } | null>(null);
+  const hasModel = useAppStore((state) => organizeHasModel(state.library?.settings));
+  const [automatic, setAutomatic] = useState<TaggingModelOption | null>(null);
   const asked = ids !== null && !hasModel;
   useEffect(() => {
-    if (!asked || !chosen) return;
+    if (!asked) return;
     let current = true;
-    core.listChatProviders().then(
-      (providers) => {
-        const provider = providers.find((each) => each.id === chosen.providerId);
-        if (current && provider) {
-          setCompany({
-            name: provider.service?.name ?? t(`providers.kind.${provider.kind}`),
-            cloud: provider.service !== null,
-          });
-        }
-      },
-      (error: unknown) => console.error("Organize couldn't list the AI model's services.", error),
-    );
+    const load = () =>
+      core.getTaggingModels().then(
+        (models) => {
+          if (current) setAutomatic(models.automatic);
+        },
+        (error: unknown) => console.error("Organize couldn't work out the model to offer.", error),
+      );
+    load();
+    const stop = core.on("chatReadiness.changed", () => void load());
     return () => {
       current = false;
+      stop();
     };
-  }, [asked, chosen, t]);
+  }, [asked]);
   if (!asked) return null;
+  const company = automatic && (providerOf(automatic, language) ?? t("providers.kind.ollama"));
   const close = () => useOrganizeAsk.getState().close();
   const use = () => {
-    if (!chosen) return;
+    const settings = useAppStore.getState().library?.settings;
+    if (!automatic || !settings) return;
     core
-      .saveLibrarySettings({
-        classifier: { kind: "chat", choice: chosen },
-        automatic: useAppStore.getState().library?.settings.automatic ?? false,
-      })
+      .saveLibrarySettings({ ...settings, organizeWith: automatic.classifier })
       .then(() => useAppStore.getState().refreshLibrary())
       .then(() => {
         close();
@@ -392,10 +408,13 @@ function OrganizeNeedsModel({ documents }: { documents: readonly Document[] }) {
       className="flex flex-col gap-0.5 border-b border-rule py-2 pl-14 text-[13px] leading-5 text-ink-meta"
     >
       <p>{t("library.organize.needsModel")}</p>
-      {company?.cloud && (
-        <p data-testid="library-organize-sends">
-          {t("library.organize.sends", { company: company.name })}
-        </p>
+      {automatic && automatic.group !== "local" && company && (
+        <DetailsLine
+          testId="library-organize-sends"
+          details={t("library.organize.sends.details", { company })}
+        >
+          {t("library.organize.sends", { company })}
+        </DetailsLine>
       )}
       <p className="flex flex-wrap gap-x-4">
         {company && (
@@ -405,7 +424,7 @@ function OrganizeNeedsModel({ documents }: { documents: readonly Document[] }) {
             onClick={use}
             className={quietButtonClass}
           >
-            {t("library.organize.use", { company: company.name })}
+            {t("library.organize.use", { company })}
           </button>
         )}
         <button

@@ -23,7 +23,9 @@
  *   亿): inputs are in base units with their page's scale applied, so the
  *   figure would be 10,000 times too small (#577); `scale` shows it in 亿.
  * In a workbook, the formula uses the number a cell stores (#435), not the one
- * it shows rounded.
+ * it shows rounded. A deduction a statement writes in brackets is negative, so
+ * a sum that subtracts it is recorded all the same, with a line telling the
+ * model it adds (#978).
  */
 import {
   type Figure,
@@ -46,6 +48,7 @@ import {
   scaleWordOf,
   scaleWords,
   showResult,
+  sumOf,
 } from "../../shared/formula";
 import {
   anchorsCovered,
@@ -157,7 +160,7 @@ const fields = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
-/** A list given as an array, or as an array written in JSON, as some models send it. */
+/** A list given as an array, as an array written in JSON, or as its one item alone, as some models send it. */
 export function givenList(value: unknown): unknown[] {
   if (typeof value === "string") {
     try {
@@ -166,7 +169,8 @@ export function givenList(value: unknown): unknown[] {
       return [];
     }
   }
-  return Array.isArray(value) ? value : [];
+  if (Array.isArray(value)) return value;
+  return Object.keys(fields(value)).length > 0 ? [value] : [];
 }
 
 function givenInput(value: unknown): GivenInput {
@@ -237,6 +241,17 @@ const either = (items: readonly (string | number)[]) =>
 /** A number as a message to the model writes it: no float noise. */
 const plainNumber = (value: number) => String(Number(value.toPrecision(12)));
 
+const DEDUCTION_LINE =
+  /(?:^|[\s|:：(（])(?:less|deduct(?:ion|ions|ed)?|minus|减|扣除|减去)(?![A-Za-z])/i;
+
+function signNote(negatives: readonly { name: string; chars: string; value: number }[]): string {
+  const them = negatives.length > 1 ? "them" : "it";
+  const read = negatives
+    .map((each) => `${each.name} is ${each.chars}, read as ${plainNumber(each.value)}`)
+    .join("; ");
+  return ` Check the sign: ${read}, so subtracting ${them} adds ${them}. To take a deduction off, add it (price + fee); if adding ${them} is what you meant, the figure stands.`;
+}
+
 /** One of the reader's readings, as the model is offered it. */
 function readingText(reading: Reading): string {
   const { unit, value } = reading;
@@ -302,6 +317,8 @@ interface Recorded {
   figure: CalculatedFigure;
   /** What the model is told beside its result, if anything: how it is shown when not as asked. */
   note: string;
+  /** The model was told to check a sign (#978): its next figure for the marker is the fix, not a marker given twice. */
+  signAsked: boolean;
   /** Each input's quote, and its unit statement's, in order. */
   quotes: { input: Quoted; unit: Quoted | null }[];
 }
@@ -436,6 +453,15 @@ export function createCalculationSession(options: CalculationSessionOptions) {
     const own = scaleReadings({ ...context, header: null });
     const all = scaleReadings({ ...context, header });
     return all.slice(Math.max(1, own.length));
+  }
+
+  function lineBefore(quoted: Quoted, figure: Figure): string {
+    const { quote } = quoted.citation;
+    const page = quoted.units.map((unit) => unit.text).join("\n");
+    const at = page.indexOf(quote);
+    const text = at < 0 ? quote : page;
+    const figureAt = (at < 0 ? 0 : at) + figure.start;
+    return text.slice(text.lastIndexOf("\n", figureAt - 1) + 1, figureAt);
   }
 
   /** Reads one input; or says why it can't be read. */
@@ -664,6 +690,17 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       return {
         problems: changes.map((change) => `${lead}: ${scaleChangeProblem(change, language)}`),
       };
+    const sum = sumOf(given.formula);
+    const nameIs = (name: string, other?: string) => name.toLowerCase() === other?.toLowerCase();
+    const totalValue = inputs.find((input) => nameIs(input.name, sum?.total))?.value ?? -1;
+    const negatives = reads.flatMap((read, index) => {
+      const number = inputs[index];
+      const deducted = sum?.taken.some((name) => nameIs(name, read.given.name));
+      const line = lineBefore(read.quoted, read.figure);
+      return totalValue >= 0 && deducted && number && number.value < 0 && DEDUCTION_LINE.test(line)
+        ? [{ name: number.name, chars: read.figure.chars, value: number.value }]
+        : [];
+    });
     let show: FigureShowOptions = {
       language,
       as: SHOW_AS.find((each) => each === given.as) ?? null,
@@ -671,13 +708,13 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       scale: given.scale,
     };
     let shown = showResult(result, show);
-    let note = "";
+    let note = negatives.length > 0 ? signNote(negatives) : "";
     // A result that can't be shown as asked (a difference of percents "as a percent") is shown in
     // its own unit, which is the right one, rather than refused.
     if (!shown.ok && show.as !== null) {
       const own = showResult(result, { ...show, as: null });
       if (own.ok) {
-        note = ` It is shown in its own unit: ${shown.message}`;
+        note += ` It is shown in its own unit: ${shown.message}`;
         show = { ...show, as: null };
         shown = own;
       }
@@ -729,6 +766,7 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       recorded: {
         figure,
         note,
+        signAsked: negatives.length > 0,
         quotes: reads.map((read) => ({ input: read.quoted, unit: read.unit?.quoted ?? null })),
       },
     };
@@ -784,15 +822,17 @@ export function createCalculationSession(options: CalculationSessionOptions) {
           });
         continue;
       }
-      const earlier = recorded.get(marker)?.figure;
+      const earlier = recorded.get(marker);
       recorded.set(marker, outcome.recorded);
       failed.delete(marker);
       options.onRecord?.(marker, outcome.recorded.figure);
       lines.push(
         told(marker, outcome.recorded.figure) +
           outcome.recorded.note +
-          (earlier && earlier.formula !== outcome.recorded.figure.formula
-            ? ` It replaces the earlier [=${marker}] = ${earlier.shown}: give each figure a marker of its own.`
+          (earlier &&
+          !earlier.signAsked &&
+          earlier.figure.formula !== outcome.recorded.figure.formula
+            ? ` It replaces the earlier [=${marker}] = ${earlier.figure.shown}: give each figure a marker of its own.`
             : ""),
       );
     }

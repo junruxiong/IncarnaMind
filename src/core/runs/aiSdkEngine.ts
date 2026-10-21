@@ -75,29 +75,53 @@ function validatorFor(schema: Record<string, unknown>): ValidateFunction | null 
   return validate;
 }
 
+function readJsonText(value: unknown): unknown {
+  let meant = value;
+  for (let encodings = 0; typeof meant === "string" && encodings < 2; encodings++) {
+    try {
+      meant = JSON.parse(meant);
+    } catch {
+      break;
+    }
+  }
+  return meant;
+}
+
+const typeWanted = (schema: Record<string, unknown>, name: string): unknown => {
+  const properties = isPlainObject(schema.properties) ? schema.properties : {};
+  return (properties[name] as { type?: unknown } | undefined)?.type;
+};
+
 /**
  * A copy of the arguments to check, as a small model meant them: an optional
- * one sent as null is left out, and one sent as JSON text where the schema
- * wants an array or an object is parsed.
+ * one sent as null is left out, one sent as JSON text where the schema wants
+ * an array or an object is parsed, and one object where it wants an array is
+ * that array's only item.
  */
 function asMeant(input: Record<string, unknown>, schema: Record<string, unknown>) {
   const copy = structuredClone(input);
-  const properties = isPlainObject(schema.properties) ? schema.properties : {};
   const required = Array.isArray(schema.required) ? schema.required : [];
   for (const [name, value] of Object.entries(copy)) {
-    const wanted = (properties[name] as { type?: unknown } | undefined)?.type;
+    const wanted = typeWanted(schema, name);
     if (value === null && !required.includes(name)) {
       delete copy[name];
-    } else if (typeof value === "string" && (wanted === "array" || wanted === "object")) {
-      try {
-        const parsed: unknown = JSON.parse(value);
-        if (wanted === "array" ? Array.isArray(parsed) : isPlainObject(parsed)) copy[name] = parsed;
-      } catch {
-        // Not JSON: the check says what's wrong.
-      }
+    } else if (wanted === "array" || wanted === "object") {
+      const meant = readJsonText(value);
+      if (wanted === "array" ? Array.isArray(meant) : isPlainObject(meant)) copy[name] = meant;
+      else if (wanted === "array" && isPlainObject(meant)) copy[name] = [meant];
     }
   }
   return copy;
+}
+
+/** The arguments a Tool gets: as sent, but an object sent where an array is wanted is that array's only item. */
+function forTool(input: Record<string, unknown>, schema: Record<string, unknown>) {
+  const out: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(input)) {
+    const meant = typeWanted(schema, name) === "array" ? readJsonText(value) : null;
+    out[name] = isPlainObject(meant) ? [meant] : value;
+  }
+  return out;
 }
 
 /**
@@ -126,16 +150,21 @@ function checkedSchema(schema: Record<string, unknown>) {
  * JSON Schema and call. Arguments a model sends that aren't an object are
  * taken as none. (The one place Tools meet the loop's library.)
  */
-export function toToolSet(tools: readonly RunTool[], signal: AbortSignal): ToolSet {
+export function toToolSet(
+  tools: readonly RunTool[],
+  signal: AbortSignal,
+  canCallAgain: () => boolean = () => true,
+): ToolSet {
   const set: ToolSet = {};
   for (const each of tools) {
     set[each.name] = tool({
       description: each.description,
       inputSchema: checkedSchema(each.inputSchema),
       execute: async (input, { abortSignal, toolCallId }) =>
-        each.call(isPlainObject(input) ? input : {}, {
+        each.call(isPlainObject(input) ? forTool(input, each.inputSchema) : {}, {
           toolCallId,
           signal: abortSignal ?? signal,
+          canCallAgain,
         }),
     });
   }
@@ -342,9 +371,11 @@ function failure(
 
 async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
   const { signal, window, maxSteps } = request;
+  let canCallAgain = maxSteps > 2;
   const tools = toToolSet(
     request.tools.map((each) => gated(each, request)),
     signal,
+    () => canCallAgain && (window === undefined || window.canCallTools()),
   );
   const initial = toModelMessages(request.messages);
   /** Steering messages, where each was taken among the responses. */
@@ -387,6 +418,7 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
       }
       // The last step must write; so must a step with no room left for a Tool's result.
       const write = stepNumber >= maxSteps - 1 || (window !== undefined && !window.canCallTools());
+      canCallAgain = stepNumber + 1 < maxSteps - 1;
       return { ...(messages && { messages }), ...(write && { toolChoice: "none" as const }) };
     },
     abortSignal: signal,

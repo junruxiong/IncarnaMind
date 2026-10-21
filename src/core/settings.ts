@@ -1,16 +1,23 @@
 import { randomUUID } from "node:crypto";
+import { isRecentStyles } from "../shared/citationStyles";
+import { isHelpKeys } from "../shared/meetingHelp";
+import { DEFAULT_MIND_STYLE, isMindStyle } from "../shared/mindStyle";
 import {
   type ChatModelChoice,
   type DeviceSettings,
   EXPORT_FORMATS,
   type ExportPreferences,
   type GettingStarted,
+  MAX_MONTHLY_CAP,
   MOTION_PREFERENCES,
   type MonthlyCap,
   type MotionPreference,
   type SandboxLevel,
   type Settings,
+  type SharePagePreferences,
   SKILL_SCRIPT_LIMITS,
+  TRANSCRIPTION_ROUTES,
+  type TranscriptionRoute,
   type UserSettings,
   type WordExportPreferences,
 } from "./api";
@@ -44,6 +51,9 @@ export const isChatModelChoice = (value: unknown): value is ChatModelChoice =>
   isNonBlankText(value.providerId) &&
   isNonBlankText(value.modelId);
 
+const isModelSetting = (value: unknown): value is ChatModelChoice | null =>
+  value === null || isChatModelChoice(value);
+
 const hasOnly = (value: unknown, keys: readonly string[]): value is Record<string, unknown> =>
   isRecord(value) &&
   Object.keys(value).length === keys.length &&
@@ -61,19 +71,31 @@ const isWordOption = (value: unknown) =>
     isBoolean(value.includeQuestions) &&
     WORD_CHOICES.every((choice) => isBoolean(value[choice])));
 
+const SHARE_PAGE_CHOICES = ["includeQuestions", "citationCards", "checkedLine"] as const;
+
+const isSharePageOption = (value: unknown) =>
+  hasOnly(value, SHARE_PAGE_CHOICES) && SHARE_PAGE_CHOICES.every((key) => isBoolean(value[key]));
+
+const SHARE_PAGE_DEFAULTS: SharePagePreferences = {
+  includeQuestions: false,
+  citationCards: true,
+  checkedLine: false,
+};
+
 /**
- * HTML came after the others, and how someone's changes are shown (#734) after HTML: choices
- * saved before them have neither, and read as the defaults.
+ * HTML came after the others, how someone's changes are shown (#734) after HTML, and the web
+ * page to share after that: choices saved before them have none, and read as the defaults.
  */
 const isExportPreferences = (value: unknown): value is ExportPreferences => {
   if (!isRecord(value)) return false;
-  const later = ["html", "theirChanges"].filter((key) => Object.hasOwn(value, key));
+  const later = ["html", "share-page", "theirChanges"].filter((key) => Object.hasOwn(value, key));
   return (
     hasOnly(value, ["format", "docx", "pdf", ...later]) &&
     EXPORT_FORMATS.some((format) => format === value.format) &&
     isWordOption(value.docx) &&
     isQuestionsOption(value.pdf) &&
     (!Object.hasOwn(value, "html") || isQuestionsOption(value.html)) &&
+    (!Object.hasOwn(value, "share-page") || isSharePageOption(value["share-page"])) &&
     (!Object.hasOwn(value, "theirChanges") ||
       value.theirChanges === "shown" ||
       value.theirChanges === "accepted")
@@ -93,7 +115,7 @@ const isMonthlyCap = (value: unknown): value is MonthlyCap =>
   typeof value.amount === "number" &&
   Number.isFinite(value.amount) &&
   value.amount >= 0 &&
-  value.amount <= 1_000_000 &&
+  value.amount <= MAX_MONTHLY_CAP &&
   (value.currency === "USD" || value.currency === "CNY");
 
 const userScope: Scope<UserSettings> = {
@@ -102,6 +124,8 @@ const userScope: Scope<UserSettings> = {
   defaults: {
     language: "system",
     chatModel: null,
+    quickTasksModel: null,
+    imageModel: null,
     suggestWhileWriting: false,
     leaveOutOwnFiles: true,
     // Word is the deliverable most asked for; the deliverables leave the Questions out.
@@ -110,30 +134,48 @@ const userScope: Scope<UserSettings> = {
       docx: { includeQuestions: false, ...WORD_DEFAULTS },
       pdf: { includeQuestions: false },
       html: { includeQuestions: false },
+      "share-page": SHARE_PAGE_DEFAULTS,
     },
     authorName: null,
     monthlyCap: null,
     webSearch: false,
+    keepWebPageLook: false,
+    recentCitationStyles: [],
+    newMindStyle: DEFAULT_MIND_STYLE,
   },
   validators: {
     language: isLanguagePreference,
-    chatModel: (value): value is ChatModelChoice | null =>
-      value === null || isChatModelChoice(value),
+    chatModel: isModelSetting,
+    quickTasksModel: isModelSetting,
+    imageModel: isModelSetting,
     suggestWhileWriting: isBoolean,
     leaveOutOwnFiles: isBoolean,
     exportOptions: isExportPreferences,
     authorName: (value): value is string | null => value === null || isNonBlankText(value),
     monthlyCap: (value): value is MonthlyCap | null => value === null || isMonthlyCap(value),
     webSearch: isBoolean,
+    keepWebPageLook: isBoolean,
+    recentCitationStyles: isRecentStyles,
+    newMindStyle: isMindStyle,
   },
 };
 
-const GETTING_STARTED_STEPS = ["started", "citationChecked", "indexed", "askedOwn", "hidden"];
+const GETTING_STARTED_STEPS = [
+  "started",
+  "citationChecked",
+  "indexed",
+  "askedOwn",
+  "askedReady",
+  "hidden",
+];
 
+// Progress kept before the ready Question (#123) has no `askedReady`; `get` reads it as not asked.
 const isGettingStarted = (value: unknown): value is GettingStarted =>
   isRecord(value) &&
-  Object.keys(value).length === GETTING_STARTED_STEPS.length &&
-  GETTING_STARTED_STEPS.every((key) => isBoolean(value[key]));
+  Object.keys(value).every((key) => GETTING_STARTED_STEPS.includes(key)) &&
+  GETTING_STARTED_STEPS.every(
+    (key) => isBoolean(value[key]) || (key === "askedReady" && value[key] === undefined),
+  );
 
 const isScriptTimeout = (value: unknown): value is number =>
   typeof value === "number" &&
@@ -149,33 +191,43 @@ const deviceScope: Scope<DeviceSettings> = {
     sidebarWidth: 248,
     sidebarHidden: false,
     chatSetupDismissed: false,
+    sandboxNoticeDismissed: false,
     gettingStarted: {
       started: false,
       citationChecked: false,
       indexed: false,
       askedOwn: false,
+      askedReady: false,
       hidden: false,
     },
     skillScriptsEnabled: true,
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
     suggestionOffers: 0,
-    meetingsEnabled: false,
     meetingSystemAudio: true,
+    transcriptionRoute: null,
     meetingNoticeAccepted: false,
+    meetingPanel: true,
+    meetingPanelHidden: true,
+    meetingHelpKeys: {},
     motion: "system",
   },
   validators: {
     sidebarWidth: isPaneWidth,
     sidebarHidden: isBoolean,
     chatSetupDismissed: isBoolean,
+    sandboxNoticeDismissed: isBoolean,
     gettingStarted: isGettingStarted,
     skillScriptsEnabled: isBoolean,
     skillScriptTimeoutSeconds: isScriptTimeout,
     suggestionOffers: (value): value is number =>
       typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100,
-    meetingsEnabled: isBoolean,
     meetingSystemAudio: isBoolean,
+    transcriptionRoute: (value): value is TranscriptionRoute | null =>
+      value === null || TRANSCRIPTION_ROUTES.some((route) => route === value),
     meetingNoticeAccepted: isBoolean,
+    meetingPanel: isBoolean,
+    meetingPanelHidden: isBoolean,
+    meetingHelpKeys: isHelpKeys,
     motion: (value): value is MotionPreference =>
       MOTION_PREFERENCES.some((preference) => preference === value),
   },
@@ -264,8 +316,10 @@ export function createSettings(
       ...user.exportOptions,
       docx: { ...WORD_DEFAULTS, ...user.exportOptions.docx },
       html: stored.html ?? { includeQuestions: false },
+      "share-page": stored["share-page"] ?? SHARE_PAGE_DEFAULTS,
     };
     const device = read(db, deviceScope);
+    device.gettingStarted = { ...deviceScope.defaults.gettingStarted, ...device.gettingStarted };
     const language = resolveLanguage(user.language, systemLanguages());
     const author = user.authorName ?? systemUserName().trim();
     return { user, device, language, scriptSandbox, meetingAudio, author };

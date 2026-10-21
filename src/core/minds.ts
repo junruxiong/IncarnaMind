@@ -47,7 +47,10 @@ export function parseFolderChoice(folderId: unknown): string | null {
   return folderId;
 }
 
-export function parseCreateMindInput(input: unknown): Required<CreateMindInput> {
+/** What the store needs to make a Mind; making it `headed` is the core's (`makeMind`). */
+export type NewMind = Required<Omit<CreateMindInput, "headed">>;
+
+export function parseCreateMindInput(input: unknown): NewMind {
   if (input === undefined) return { title: "", kind: DEFAULT_MIND_KIND, folderId: null };
   if (!isRecord(input)) throw new InvalidInputError("createMind expects an object.");
   const { title = "", kind, folderId } = input;
@@ -105,7 +108,7 @@ export function createMinds(db: Database, now: () => string) {
     },
 
     /** Makes a Mind; its Folder, if any, is the caller's to have checked. */
-    create(input: Required<CreateMindInput>): Mind {
+    create(input: NewMind): Mind {
       const { title, kind, folderId } = input;
       const id = randomUUID();
       const at = now();

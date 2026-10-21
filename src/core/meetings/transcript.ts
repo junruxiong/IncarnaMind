@@ -1,8 +1,10 @@
 /**
  * A Meeting's Transcript (#136), made on this computer from its audio as it
- * is captured: the microphone and the computer's sound mixed into one track
- * (./mixer) and streamed to the `Transcriber`, whose lines arrive a few
- * seconds behind. The Transcript is a Document from its first line, in the
+ * is captured: the microphone, with the computer's echo taken out, and the
+ * computer's sound, as two streams (./tracks) to the `Transcriber`, whose
+ * lines arrive a few seconds behind. A line from the microphone is "Me" and
+ * one from the computer's sound "Them" (#941); in a room with no computer
+ * sound, "Speaker ?". The Transcript is a Document from its first line, in the
  * data folder's "Transcripts" while the Meeting records, indexed again as
  * lines come; at Stop it is finished and saved as a WebVTT file in the Output
  * location, and the Document follows it there.
@@ -16,6 +18,16 @@
  *   it lost is marked as a gap, which is filled in after the Meeting stops
  *   if its audio is still there.
  *
+ * Where the User chose a cloud service (#141), the live audio goes to it
+ * instead, each chunk through the cloud's send gate and counted against the
+ * monthly cap first. A lost connection, or the service refusing its key,
+ * hands the live audio to this computer: what the cloud hadn't given text for
+ * is a gap, filled in after Stop. At the cap, the cloud's streams finish what
+ * they were sent. When the gate closes (Local mode, consent revoked, another
+ * route chosen, the key removed), its streams are dropped with nothing more
+ * sent, and this computer transcribes that stretch after Stop. Recording never
+ * stops, and the bar says why, except where the User chose.
+ *
  * What is needed to pick up after a crash is in files beside the Transcript,
  * as the audio's parts are (ADR-0015): its lines and gaps in the WebVTT file,
  * and in "<meeting>.json" its Document, how far live text got and what is
@@ -25,9 +37,25 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { EngineSwitch, Logger, SpeechSegment, Transcriber } from "../adapters";
+import {
+  isTheirs,
+  roomVoice,
+  SPEAKER_ME,
+  SPEAKER_THEM,
+  SPEAKER_UNKNOWN,
+  theirVoice,
+} from "../../shared/speakers";
+import type {
+  CloudLoss,
+  CloudStream,
+  EngineSwitch,
+  Logger,
+  SpeechSegment,
+  Transcriber,
+} from "../adapters";
 import type {
   AudioSource,
+  CloudTranscriptionRoute,
   Document,
   MeetingTranscript,
   SavedFile,
@@ -38,6 +66,7 @@ import { hashBytes } from "../documents/files";
 import {
   type Cue,
   type GapReason,
+  MIN_GAP_MS,
   readVtt,
   type TranscriptGap,
   writeVtt,
@@ -45,10 +74,12 @@ import {
 import type { SnapshotFile } from "../documents/web";
 import { FileWriteCancelledError } from "../errors";
 import type { NewFile } from "../outputFiles";
+import type { CloudAudioMeter, CloudTranscription } from "../transcription/cloud/routes";
 import type { TranscriptionModel } from "../transcription/model";
 import type { AudioPart } from "./audioFiles";
+import { echoedBy, isEcho, repeats } from "./echoLines";
 import type { CaptureHealthRecords } from "./health";
-import { createMixer, type MixedAudio, type Mixer } from "./mixer";
+import { createTracks, type TrackedAudio, type Tracks } from "./tracks";
 
 /** Live text this far behind the audio has fallen behind. */
 export const BEHIND_MS = 30_000;
@@ -63,12 +94,16 @@ const indexEvery = (lines: number) => Math.min(120_000, Math.max(20_000, lines *
 /** The engine started again this many times within `RESTARTS_WITHIN_MS` isn't started again until Stop. */
 const MAX_RESTARTS = 3;
 const RESTARTS_WITHIN_MS = 5 * 60_000;
+/** Both streams move to another engine together: switches this close are one switch of the Meeting. */
+const SWITCH_TOGETHER_MS = 10_000;
 /** Audio read back from disk goes to the engine this much at a time. */
 const CATCH_UP_CHUNK_MS = 20_000;
 /** The speed probe counts once this much audio has been decoded live. */
 const PROBE_MS = 30_000;
 /** Partial text reaches the window at most this often. */
 const PARTIAL_EVERY_MS = 500;
+/** Cloud audio is counted against the cap this much ahead of what is sent, so the cap is never passed. */
+const COUNTED_AHEAD_MS = 10_000;
 
 const SAMPLE_RATE_MS = 16;
 const WAV_HEADER_BYTES = 44;
@@ -90,18 +125,31 @@ interface Saved {
   savedDefaulted?: boolean;
   /** Stopped with nothing transcribed. */
   empty?: boolean;
+  /** The number each speaker a cloud service told apart has, by stream and its own label. */
+  voices?: Record<string, number>;
+}
+
+interface LiveStream {
+  baseMs: number;
+  doneMs: number;
+  /** A cloud stream's audio held in the core until its connection opens; absent once it has. */
+  waiting?: Int16Array[];
 }
 
 interface Live {
   stream: string;
-  /** The Meeting's time at the stream's first sample. */
-  baseMs: number;
-  mixer: Mixer;
-  /** The engine takes this stream's audio. */
+  engine: "local" | CloudTranscriptionRoute;
+  /** `aheadMs`: audio counted against the cap and not sent yet. */
+  cloud: { stream: CloudStream; meter: CloudAudioMeter; aheadMs: number } | null;
+  /** Where to transcribe is being worked out: the audio waits meanwhile. */
+  choosing: boolean;
+  tracks: Tracks;
+  /** The streams opened, each with its source's first audio: the computer's sound may come later, or never. */
+  streams: Partial<Record<AudioSource, LiveStream>>;
   started: boolean;
   /** Audio waiting for the engine to start. */
-  held: MixedAudio[];
-  /** How far audio has gone to the engine, and how far its text is final, in the Meeting's time. */
+  held: TrackedAudio[];
+  /** How far audio has gone to the engine, and how far its text is final on every stream, in the Meeting's time. */
   pushedMs: number;
   doneMs: number;
   /** Audio from here on isn't transcribed live: it is transcribed after Stop. Null while it is. */
@@ -111,6 +159,22 @@ interface Live {
    * is done with it, only audio after it counts towards falling behind.
    */
   backlogEnd: number;
+  callSound(): boolean;
+}
+
+interface Reading {
+  baseMs: number;
+  source: AudioSource;
+  speaker(): string;
+  /** A cloud stream lost before its last lines came. */
+  lost?: boolean;
+}
+
+interface Heard {
+  startMs: number;
+  text: string;
+  id: number;
+  speaker: string;
 }
 
 interface State extends Saved {
@@ -119,13 +183,15 @@ interface State extends Saved {
   gaps: TranscriptGap[];
   state: TranscriptState;
   problem: TranscriptProblem | null;
-  partial: { startMs: number; text: string; id: number } | null;
+  partials: Map<string, Heard>;
   live: Live | null;
-  /** The live stream last ended, until its last lines are in. */
+  /** The live streams last ended, until their last lines are in. */
   ending: Promise<void> | null;
-  /** Streams reading audio back from disk, and live streams ending: their start in the Meeting's time. */
-  catchUps: Map<string, number>;
+  /** Streams reading audio back from disk, and live streams ending. */
+  catchUps: Map<string, Reading>;
   restarts: number[];
+  lastSwitch: (Pick<EngineSwitch, "from" | "to" | "reason"> & { atMs: number }) | null;
+  fellBack: MeetingTranscript["fellBack"];
   probe: { audioMs: number; decodeMs: number; recorded: boolean };
   written: boolean;
   lastIndexed: number;
@@ -156,15 +222,33 @@ export interface TranscriptsOptions {
   folderOf(meetingId: string): string | null;
   /** The Meeting's audio parts on disk. */
   partsOf(meetingId: string): AudioPart[];
+  /** Whether the Meeting's audio was deleted, by the User or after its day. */
+  audioDeleted(meetingId: string): boolean;
   /** Keeps how long decoding took for the audio it decoded, by model. */
   recordSpeed(modelId: string, ratio: number): void;
   /** Each Meeting's capture health (#161): how fast live text came, restarts, falling behind, switches. */
   health: CaptureHealthRecords;
+  /** The cloud service the User chose for meeting audio (#141). Absent: always this computer. */
+  cloud?: Pick<CloudTranscription, "start" | "sending" | "refuse">;
   changed(): void;
   log: Logger;
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+const SOURCES: readonly AudioSource[] = ["microphone", "system"];
+
+const streamName = (prefix: string, source: AudioSource) => `${prefix}:${source}`;
+
+const speakerOf = (source: AudioSource, callSound: boolean) =>
+  source === "system" ? SPEAKER_THEM : callSound ? SPEAKER_ME : SPEAKER_UNKNOWN;
+
+const lengthOf = (audio: TrackedAudio) => audio.microphone.length / SAMPLE_RATE_MS;
+
+const msOf = (chunks: readonly Int16Array[]) =>
+  chunks.reduce((sum, samples) => sum + samples.length / SAMPLE_RATE_MS, 0);
+
+type Leaving = "dropped" | "refused" | "cap" | "user" | "local-mode";
 
 /** The engine couldn't start, or stopped, while what was left was being transcribed. */
 class EngineError extends Error {}
@@ -232,11 +316,13 @@ export function createTranscripts(options: TranscriptsOptions) {
             ? "behind"
             : "waiting",
       problem: null,
-      partial: null,
+      partials: new Map(),
       live: null,
       ending: null,
       catchUps: new Map(),
       restarts: [],
+      lastSwitch: null,
+      fellBack: null,
       probe: { audioMs: 0, decodeMs: 0, recorded: false },
       written: cues.length > 0,
       lastIndexed: 0,
@@ -266,6 +352,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       savedPath: state.savedPath,
       ...(state.savedDefaulted && { savedDefaulted: true }),
       ...(state.state === "empty" && { empty: true }),
+      ...(state.voices && { voices: state.voices }),
     };
     try {
       writeWhole(jsonPath(state.meetingId), JSON.stringify(saved));
@@ -335,21 +422,100 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   // ---- What the engine says ----
 
-  /** The stream's Meeting, and where the stream starts in the Meeting's time. */
-  function owner(stream: string): { state: State; baseMs: number; live: boolean } | null {
+  function owner(stream: string): {
+    state: State;
+    baseMs: number;
+    live: boolean;
+    source: AudioSource;
+    speaker: string;
+    callSound: boolean;
+    reading?: Reading;
+  } | null {
     for (const state of states.values()) {
-      if (state.live?.stream === stream) return { state, baseMs: state.live.baseMs, live: true };
-      const baseMs = state.catchUps.get(stream);
-      if (baseMs !== undefined) return { state, baseMs, live: false };
+      const live = state.live;
+      for (const source of SOURCES) {
+        const own = live?.streams[source];
+        if (live && own && stream === streamName(live.stream, source)) {
+          return {
+            state,
+            baseMs: own.baseMs,
+            live: true,
+            source,
+            speaker: speakerOf(source, live.callSound()),
+            callSound: live.callSound(),
+          };
+        }
+      }
+      const reading = state.catchUps.get(stream);
+      if (reading) {
+        return {
+          state,
+          live: false,
+          baseMs: reading.baseMs,
+          source: reading.source,
+          speaker: reading.speaker(),
+          // Its microphone is "Me" exactly when the computer's sound was recorded with it.
+          callSound: reading.source === "system" || reading.speaker() === SPEAKER_ME,
+          reading,
+        };
+      }
     }
     return null;
   }
 
+  // In a call the microphone is the User's: its lines stay "Me", so echo removal still applies.
+  // The other side's voices are "Them 1", "Them 2"; a room's are "Speaker 1", "Speaker 2", never
+  // taken for the other side. Labels are per stream: a new session's "1" is a new person.
+  function voiceOf(
+    state: State,
+    stream: string,
+    source: AudioSource,
+    callSound: boolean,
+    label: string,
+  ): string {
+    if (source === "microphone" && callSound) return SPEAKER_ME;
+    const voices = state.voices ?? {};
+    state.voices = voices;
+    const key = `${stream}:${label}`;
+    const side = `:${source}:`;
+    const number =
+      voices[key] ?? Object.keys(voices).filter((each) => each.includes(side)).length + 1;
+    voices[key] = number;
+    return source === "system" ? theirVoice(number) : roomVoice(number);
+  }
+
   function addCue(state: State, cue: Cue): void {
+    if (isEcho(cue, state.cues)) return;
     // Lines caught up from disk fill in before later ones: keep them in time order.
     let at = state.cues.length;
     while (at > 0 && (state.cues[at - 1] as Cue).startMs > cue.startMs) at--;
     state.cues.splice(at, 0, cue);
+    // Theirs may come after the echo of it.
+    for (const echo of echoedBy(cue, state.cues)) state.cues.splice(state.cues.indexOf(echo), 1);
+  }
+
+  // A stretch caught up after Stop can overlap what a cloud service or an engine before a restart
+  // already gave text for, up to where it stopped: the same side's same words at the same time
+  // are kept once. The other side's are left to echo removal.
+  function alreadySaid(state: State, cue: Cue): boolean {
+    const length = Math.max(1, cue.endMs - cue.startMs);
+    return state.cues.some((each) => {
+      const shared = Math.min(each.endMs, cue.endMs) - Math.max(each.startMs, cue.startMs);
+      return (
+        isTheirs(each.speaker) === isTheirs(cue.speaker) &&
+        shared > length / 2 &&
+        repeats(cue.text, [each.text])
+      );
+    });
+  }
+
+  function shownPartial(state: State): MeetingTranscript["partial"] {
+    const all = [...state.partials.values()];
+    const theirs = all.filter((each) => isTheirs(each.speaker)).map((each) => each.text);
+    const newest = all
+      .filter((each) => each.speaker !== SPEAKER_ME || !repeats(each.text, theirs))
+      .sort((a, b) => b.startMs - a.startMs)[0];
+    return newest ? { startMs: newest.startMs, text: newest.text, speaker: newest.speaker } : null;
   }
 
   function heardSegment(segment: SpeechSegment): void {
@@ -357,26 +523,31 @@ export function createTranscripts(options: TranscriptsOptions) {
     const found = owner(segment.stream);
     if (!found) return;
     const { state, baseMs, live } = found;
+    const speaker = segment.speaker
+      ? voiceOf(state, segment.stream, found.source, found.callSound, segment.speaker)
+      : found.speaker;
     const startMs = baseMs + segment.startMs;
     if (!segment.final) {
       if (!live || state.state !== "live") return;
-      state.partial = { startMs, text: segment.text, id: segment.id };
+      state.partials.set(segment.stream, { startMs, text: segment.text, id: segment.id, speaker });
       state.partialTimer ??= setTimeout(() => {
         state.partialTimer = null;
         options.changed();
       }, PARTIAL_EVERY_MS);
       return;
     }
-    if (live && state.partial?.id === segment.id) state.partial = null;
-    if (segment.text)
-      addCue(state, { startMs, endMs: baseMs + segment.endMs, text: segment.text, speaker: null });
+    if (live && state.partials.get(segment.stream)?.id === segment.id) {
+      state.partials.delete(segment.stream);
+    }
+    const cue = { startMs, endMs: baseMs + segment.endMs, text: segment.text, speaker };
+    if (segment.text && (live || !alreadySaid(state, cue))) addCue(state, cue);
     if (segment.failed) {
       health.add(state.meetingId, {
         kind: "notTranscribed",
         atMs: startMs,
         durationMs: segment.endMs - segment.startMs,
       });
-    } else if (live) {
+    } else if (live && state.live?.engine === "local") {
       probe(state, segment);
     }
     writeLines(state);
@@ -404,7 +575,13 @@ export function createTranscripts(options: TranscriptsOptions) {
     if (!found?.live || !found.state.live) return;
     const { state } = found;
     const live = found.state.live;
-    live.doneMs = Math.max(live.doneMs, found.baseMs + doneMs);
+    const own = live.streams[found.source];
+    if (!own) return;
+    own.doneMs = Math.max(own.doneMs, found.baseMs + doneMs);
+    live.doneMs = Math.max(
+      live.doneMs,
+      Math.min(...Object.values(live.streams).map((each) => each.doneMs)),
+    );
     if (live.pendingFrom === null) state.doneMs = live.doneMs;
   }
 
@@ -420,12 +597,12 @@ export function createTranscripts(options: TranscriptsOptions) {
         state.gaps.push({ ...lost, reason: "restarted" });
         state.pending = addRange(state.pending, lost);
       }
-      state.partial = null;
+      state.partials.clear();
       const now = Date.now();
       state.restarts = [...state.restarts.filter((at) => now - at < RESTARTS_WITHIN_MS), now];
       live.started = false;
       live.stream = `${state.meetingId}:${++streams}`;
-      live.baseMs = live.pushedMs;
+      live.streams = {};
       live.doneMs = live.pushedMs;
       if (state.restarts.length > MAX_RESTARTS) {
         live.pendingFrom ??= live.pushedMs;
@@ -451,13 +628,101 @@ export function createTranscripts(options: TranscriptsOptions) {
     const found = owner(change.stream);
     if (!found) return;
     const { state } = found;
+    const atMs = found.live && state.live ? state.live.pushedMs : found.baseMs;
+    const { from, to, reason } = change;
+    const last = state.lastSwitch;
+    if (
+      last?.from === from &&
+      last.to === to &&
+      last.reason === reason &&
+      Math.abs(atMs - last.atMs) < SWITCH_TOGETHER_MS
+    ) {
+      return;
+    }
+    state.lastSwitch = { from, to, reason, atMs };
+    health.add(state.meetingId, { kind: "switched", atMs, from, to, reason });
+  }
+
+  function heardLost(stream: string, loss: CloudLoss): void {
+    if (closed) return;
+    const found = owner(stream);
+    if (!found) return;
+    log.warn("transcript.cloudLost", { meetingId: found.state.meetingId, loss });
+    if (found.reading) {
+      found.reading.lost = true;
+      return;
+    }
+    const live = found.state.live;
+    if (live) leaveCloud(found.state, live, loss);
+  }
+
+  // Dropped, refused or the gate closed: the cloud's streams are dropped, nothing they queued is
+  // sent, and the stretch this computer didn't hear is transcribed after Stop. At the cap, the
+  // streams finish with what they were already sent.
+  function leaveCloud(state: State, live: Live, reason: Leaving): void {
+    if (live.engine === "local") return;
+    const route = live.engine;
+    const atMs = live.pushedMs;
+    if (reason === "cap") {
+      if (live.started) finishStreams(state, live, atMs);
+    } else {
+      dropStreams(live);
+      const lost = { fromMs: live.doneMs, toMs: Math.max(live.doneMs, live.pushedMs) };
+      if (live.started && live.pendingFrom === null && lost.toMs > lost.fromMs) {
+        if (reason === "dropped" || reason === "refused") {
+          state.gaps.push({ ...lost, reason: "cloud" });
+        }
+        state.pending = addRange(state.pending, lost);
+      }
+    }
+    if (reason === "refused") options.cloud?.refuse(route);
+    live.engine = "local";
+    live.cloud = null;
+    live.started = false;
+    live.stream = `${state.meetingId}:${++streams}`;
+    live.streams = {};
+    live.doneMs = live.pushedMs;
+    live.backlogEnd = live.pushedMs;
+    state.partials.clear();
+    if (reason !== "user") state.fellBack = { route, atMs, reason };
     health.add(state.meetingId, {
       kind: "switched",
-      atMs: state.live?.stream === change.stream ? state.live.pushedMs : found.baseMs,
-      from: change.from,
-      to: change.to,
-      reason: change.reason,
+      atMs,
+      from: "cloud",
+      to: "local",
+      reason:
+        reason === "dropped" || reason === "refused" ? "failed" : reason === "cap" ? "cap" : "user",
     });
+    startEngine(state);
+    writeLines(state, { now: true });
+    persist(state);
+    options.changed();
+  }
+
+  function gateClosed(live: Live): Leaving | null {
+    if (live.engine === "local") return null;
+    const now = options.cloud?.sending(live.engine) ?? "stopped";
+    return now === "ok" ? null : now === "local-mode" ? "local-mode" : "user";
+  }
+
+  function heardOpened(stream: string): void {
+    if (closed) return;
+    const found = owner(stream);
+    const live = found?.state.live;
+    const own = found?.live && live ? live.streams[found.source] : undefined;
+    if (!found || !live || !own?.waiting) return;
+    const leaving = gateClosed(live);
+    if (leaving) {
+      leaveCloud(found.state, live, leaving);
+      return;
+    }
+    if (!counted(live, msOf(own.waiting))) {
+      leaveCloud(found.state, live, "cap");
+      return;
+    }
+    const waiting = own.waiting;
+    delete own.waiting;
+    for (const samples of waiting) transcriber.push(stream, samples);
   }
 
   transcriber.listen({
@@ -467,6 +732,8 @@ export function createTranscripts(options: TranscriptsOptions) {
     failed: (stream) => log.warn("transcript.decodeFailed", { stream }),
     stopped: engineStopped,
     switched: heardSwitch,
+    lost: heardLost,
+    opened: heardOpened,
   });
 
   // ---- Live ----
@@ -474,7 +741,11 @@ export function createTranscripts(options: TranscriptsOptions) {
   /** Starts the engine for the live stream, once the model is downloaded; the audio waits meanwhile. */
   function startEngine(state: State): void {
     const live = state.live;
-    if (!live || live.started || live.pendingFrom !== null) return;
+    if (!live || live.started || live.choosing || live.pendingFrom !== null) return;
+    if (live.engine !== "local") {
+      startCloud(state, live);
+      return;
+    }
     if (model.status().state !== "ready") {
       state.state = "preparing";
       model.ensure();
@@ -487,7 +758,9 @@ export function createTranscripts(options: TranscriptsOptions) {
         live.pendingFrom ??= live.held[0]?.atMs ?? live.pushedMs;
         live.held = [];
         state.state = "behind";
-        state.problem = { kind: "engine", message: model.status().error?.message ?? "" };
+        const message = model.status().error?.message ?? "";
+        log.warn("transcript.engineFailed", { meetingId: state.meetingId, message });
+        state.problem = { kind: "engine", message };
         options.changed();
         return;
       }
@@ -496,36 +769,135 @@ export function createTranscripts(options: TranscriptsOptions) {
       state.problem = null;
       const held = live.held;
       live.held = [];
-      for (const audio of held) {
-        transcriber.push(live.stream, audio.samples);
-        live.pushedMs = audio.atMs + audio.samples.length / SAMPLE_RATE_MS;
-      }
+      for (const audio of held) pushTracks(state, live, audio);
       live.backlogEnd = live.pushedMs;
       options.changed();
     });
   }
 
-  function send(state: State, live: Live, audio: MixedAudio): void {
+  function startCloud(state: State, live: Live): void {
+    live.started = true;
+    state.state = "live";
+    state.problem = null;
+    const held = live.held;
+    live.held = [];
+    for (const audio of held) {
+      if (!live.started) {
+        live.held.push(audio);
+        continue;
+      }
+      pushTracks(state, live, audio);
+    }
+    live.backlogEnd = live.pushedMs;
+    options.changed();
+  }
+
+  // Counted as it is sent, not while held for a connection that may never open.
+  function counted(live: Live, ms: number): boolean {
+    const cloud = live.cloud;
+    if (!cloud) return true;
+    while (cloud.aheadMs < ms) {
+      if (!cloud.meter.add(COUNTED_AHEAD_MS)) return false;
+      cloud.aheadMs += COUNTED_AHEAD_MS;
+    }
+    cloud.aheadMs -= ms;
+    return true;
+  }
+
+  function pushTracks(state: State, live: Live, audio: TrackedAudio): void {
+    if (live.engine !== "local") {
+      const sent = SOURCES.flatMap((source) => {
+        const samples = audio[source];
+        return samples && live.streams[source] && !live.streams[source].waiting ? [samples] : [];
+      });
+      const leaving = gateClosed(live) ?? (counted(live, msOf(sent)) ? null : "cap");
+      if (leaving) {
+        leaveCloud(state, live, leaving);
+        if (live.started) pushTracks(state, live, audio);
+        else live.held.push(audio);
+        return;
+      }
+    }
+    for (const source of SOURCES) {
+      const samples = audio[source];
+      if (!samples) continue;
+      const name = streamName(live.stream, source);
+      let own = live.streams[source];
+      if (!own) {
+        own = { baseMs: audio.atMs, doneMs: audio.atMs, ...(live.cloud && { waiting: [] }) };
+        live.streams[source] = own;
+        if (live.cloud) transcriber.open(name, live.cloud.stream);
+      }
+      if (own.waiting) own.waiting.push(samples);
+      else transcriber.push(name, samples);
+    }
+    live.pushedMs = audio.atMs + lengthOf(audio);
+  }
+
+  function dropStreams(live: Live): void {
+    for (const source of SOURCES) {
+      if (live.streams[source]) transcriber.drop(streamName(live.stream, source));
+    }
+  }
+
+  function send(state: State, live: Live, audio: TrackedAudio): void {
     if (!live.started || live.pendingFrom !== null) return;
-    transcriber.push(live.stream, audio.samples);
-    live.pushedMs = audio.atMs + audio.samples.length / SAMPLE_RATE_MS;
+    pushTracks(state, live, audio);
+    if (!live.started) return;
     if (live.pushedMs - Math.max(live.doneMs, live.backlogEnd) > BEHIND_MS) fallBehind(state, live);
   }
 
   /** Live text stops; the rest is transcribed after Stop. */
   function fallBehind(state: State, live: Live): void {
-    transcriber.drop(live.stream);
+    dropStreams(live);
     live.stream = `${state.meetingId}:${++streams}`;
+    live.streams = {};
     live.started = false;
     live.pendingFrom = live.doneMs;
     state.state = "behind";
-    state.partial = null;
+    state.partials.clear();
     health.add(state.meetingId, { kind: "behind", atMs: live.doneMs });
     persist(state);
     options.changed();
   }
 
-  function feed(state: State, audio: MixedAudio | null): void {
+  function choose(state: State, live: Live, cloud: NonNullable<TranscriptsOptions["cloud"]>): void {
+    cloud.start().then(
+      (start) => {
+        if (closed || state.live !== live) return;
+        live.choosing = false;
+        if (start && "refused" in start) {
+          const reason = start.refused === "key" ? "refused" : start.refused;
+          state.fellBack = { route: start.route, atMs: live.pushedMs, reason };
+          health.add(state.meetingId, {
+            kind: "switched",
+            atMs: live.pushedMs,
+            from: "cloud",
+            to: "local",
+            reason: reason === "refused" ? "failed" : reason === "cap" ? "cap" : "user",
+          });
+        } else if (start) {
+          live.engine = start.route;
+          live.cloud = { stream: start.stream, meter: start.meter, aheadMs: 0 };
+          log.info("transcript.cloud", { meetingId: state.meetingId, route: start.route });
+        }
+        startEngine(state);
+        options.changed();
+      },
+      (error: unknown) => {
+        if (closed || state.live !== live) return;
+        live.choosing = false;
+        log.warn("transcript.cloudUnavailable", {
+          meetingId: state.meetingId,
+          message: messageOf(error),
+        });
+        startEngine(state);
+        options.changed();
+      },
+    );
+  }
+
+  function feed(state: State, audio: TrackedAudio | null): void {
     const live = state.live;
     if (!audio || !live || live.pendingFrom !== null) return;
     if (live.started) {
@@ -534,14 +906,13 @@ export function createTranscripts(options: TranscriptsOptions) {
     }
     live.held.push(audio);
     // Audio that waited too long is transcribed after Stop: live text starts from what is left.
-    const newest = audio.atMs + audio.samples.length / SAMPLE_RATE_MS;
+    const newest = audio.atMs + audio.microphone.length / SAMPLE_RATE_MS;
     while ((live.held[0]?.atMs ?? newest) < newest - HELD_MS) {
-      const old = live.held.shift() as MixedAudio;
-      const end = old.atMs + old.samples.length / SAMPLE_RATE_MS;
+      const old = live.held.shift() as TrackedAudio;
+      const end = old.atMs + old.microphone.length / SAMPLE_RATE_MS;
       state.pending = addRange(state.pending, { fromMs: old.atMs, toMs: end });
       live.doneMs = end;
       live.pushedMs = end;
-      live.baseMs = end;
     }
   }
 
@@ -555,7 +926,7 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   // ---- Finishing ----
 
-  /** Transcribes a stretch from the audio on disk, both sources mixed; the part with no audio left is a gap. */
+  /** Transcribes a stretch from the audio on disk, each source on its own; the part with no audio left is a gap. */
   async function catchUp(state: State, range: Range): Promise<void> {
     const parts = options
       .partsOf(state.meetingId)
@@ -566,17 +937,19 @@ export function createTranscripts(options: TranscriptsOptions) {
     for (const part of parts) {
       covered = addRange(covered, { fromMs: part.offsetMs, toMs: part.offsetMs + part.durationMs });
     }
+    const reason = options.audioDeleted(state.meetingId) ? "lost" : "uncaptured";
     let at = range.fromMs;
     for (const each of [...covered, { fromMs: range.toMs, toMs: range.toMs }]) {
-      if (each.fromMs > at)
-        state.gaps.push({ fromMs: at, toMs: Math.min(each.fromMs, range.toMs), reason: "lost" });
+      const toMs = Math.min(each.fromMs, range.toMs);
+      if (toMs - at >= MIN_GAP_MS) state.gaps.push({ fromMs: at, toMs, reason });
       at = Math.max(at, each.toMs);
     }
     if (parts.length === 0) return;
-    const stream = `${state.meetingId}:catch-up:${++streams}`;
-    state.catchUps.set(stream, range.fromMs);
+    const prefix = `${state.meetingId}:catch-up:${++streams}`;
+    let callSound = false;
+    const opened: string[] = [];
     try {
-      const mixer = createMixer(range.fromMs);
+      const tracks = createTracks(range.fromMs);
       const end = Math.min(
         range.toMs,
         Math.max(...parts.map((part) => part.offsetMs + part.durationMs)),
@@ -590,27 +963,43 @@ export function createTranscripts(options: TranscriptsOptions) {
           const first = Math.max(0, Math.round((from - part.offsetMs) * SAMPLE_RATE_MS));
           const last = Math.min(samples.length, Math.round((to - part.offsetMs) * SAMPLE_RATE_MS));
           if (last > first) {
-            mixer.put(
+            tracks.put(
               part.source,
               samples.subarray(first, last),
               part.offsetMs + first / SAMPLE_RATE_MS,
             );
           }
         }
-        const audio = mixer.flush();
-        if (audio) transcriber.push(stream, audio.samples);
+        const audio = tracks.flush();
+        callSound ||= audio?.system?.some((sample) => sample !== 0) ?? false;
+        for (const source of SOURCES) {
+          const track = audio?.[source];
+          if (!audio || !track) continue;
+          const stream = streamName(prefix, source);
+          if (!state.catchUps.has(stream)) {
+            state.catchUps.set(stream, {
+              baseMs: audio.atMs,
+              source,
+              speaker: () => speakerOf(source, callSound),
+            });
+            opened.push(stream);
+          }
+          transcriber.push(stream, track);
+        }
       }
-      await transcriber.finish(stream).catch((error: unknown) => {
-        throw new EngineError(messageOf(error));
-      });
+      await Promise.all(opened.map((stream) => transcriber.finish(stream))).catch(
+        (error: unknown) => {
+          throw new EngineError(messageOf(error));
+        },
+      );
     } finally {
-      state.catchUps.delete(stream);
+      for (const stream of opened) state.catchUps.delete(stream);
     }
   }
 
   /** Whether a gap's stretch has been transcribed since: its lines fill it. */
   const filled = (gap: TranscriptGap, done: readonly Range[]) =>
-    gap.reason === "restarted" &&
+    (gap.reason === "restarted" || gap.reason === "cloud") &&
     done.some((range) => range.fromMs <= gap.fromMs && range.toMs >= gap.toMs);
 
   /**
@@ -677,39 +1066,76 @@ export function createTranscripts(options: TranscriptsOptions) {
     log.info("transcript.saved", { meetingId: state.meetingId, lines: state.cues.length });
   }
 
+  function finishStreams(state: State, live: Live, endMs: number): void {
+    const callSound = live.callSound();
+    const fromMs = live.doneMs;
+    // A cloud stream that never opened has sent nothing: this computer transcribes its stretch.
+    let unopened = false;
+    for (const source of SOURCES) {
+      if (!live.streams[source]?.waiting) continue;
+      transcriber.drop(streamName(live.stream, source));
+      delete live.streams[source];
+      unopened = true;
+    }
+    if (unopened) state.pending = addRange(state.pending, { fromMs, toMs: endMs });
+    const ending = SOURCES.flatMap((source) => {
+      const own = live.streams[source];
+      return own
+        ? [
+            {
+              stream: streamName(live.stream, source),
+              reading: {
+                baseMs: own.baseMs,
+                source,
+                speaker: () => speakerOf(source, callSound),
+              } as Reading,
+            },
+          ]
+        : [];
+    });
+    for (const { stream, reading } of ending) state.catchUps.set(stream, reading);
+    const before = state.ending;
+    const done: Promise<void> = Promise.all([
+      before,
+      ...ending.map(({ stream }) => transcriber.finish(stream)),
+    ])
+      .then(
+        () => {
+          if (ending.some(({ reading }) => reading.lost)) {
+            state.pending = addRange(state.pending, { fromMs, toMs: endMs });
+          } else state.doneMs = Math.max(state.doneMs, endMs);
+        },
+        (error: unknown) => {
+          log.warn("transcript.endFailed", {
+            meetingId: state.meetingId,
+            message: messageOf(error),
+          });
+          state.pending = addRange(state.pending, { fromMs, toMs: endMs });
+        },
+      )
+      .finally(() => {
+        for (const { stream } of ending) state.catchUps.delete(stream);
+        if (state.ending === done) state.ending = null;
+        if (closed) return;
+        writeLines(state, { now: true });
+        persist(state);
+      });
+    state.ending = done;
+  }
+
   function endLive(state: State, endMs: number): void {
     const live = state.live;
     if (!live) return;
-    feed(state, live.mixer.flush());
+    feed(state, live.tracks.flush());
+    const leaving = gateClosed(live);
+    if (leaving) leaveCloud(state, live, leaving);
     state.live = null;
-    state.partial = null;
+    state.partials.clear();
     if (live.started && live.pendingFrom === null) {
-      // The stream is the Meeting's until its last lines are in.
-      state.catchUps.set(live.stream, live.baseMs);
-      state.ending = transcriber
-        .finish(live.stream)
-        .then(
-          () => {
-            state.doneMs = Math.max(state.doneMs, endMs);
-          },
-          (error: unknown) => {
-            log.warn("transcript.endFailed", {
-              meetingId: state.meetingId,
-              message: messageOf(error),
-            });
-            state.pending = addRange(state.pending, { fromMs: live.doneMs, toMs: endMs });
-          },
-        )
-        .finally(() => {
-          state.catchUps.delete(live.stream);
-          state.ending = null;
-          if (closed) return;
-          writeLines(state, { now: true });
-          persist(state);
-        });
+      finishStreams(state, live, endMs);
     } else {
       state.pending = addRange(state.pending, {
-        fromMs: live.pendingFrom ?? live.baseMs,
+        fromMs: live.pendingFrom ?? live.doneMs,
         toMs: endMs,
       });
     }
@@ -732,6 +1158,23 @@ export function createTranscripts(options: TranscriptsOptions) {
       await documents.check(vttPath(meetingId));
     },
 
+    /**
+     * The newest line said, by `speaker` when given (a live line's "Me" or "Them", which is
+     * anyone told apart too), for the heading over help during the call; null before there is one.
+     */
+    newestLine(
+      meetingId: string,
+      speaker?: string,
+    ): { text: string; speaker: string | null } | null {
+      const cues = states.get(meetingId)?.cues ?? [];
+      const said = (each: Cue) =>
+        speaker === undefined ||
+        each.speaker === speaker ||
+        (speaker === SPEAKER_THEM && isTheirs(each.speaker));
+      const cue = cues.findLast(said);
+      return cue ? { text: cue.text, speaker: cue.speaker } : null;
+    },
+
     /** The Meeting's Transcript, as the window shows it. */
     of(meetingId: string): MeetingTranscript {
       const state = load(meetingId);
@@ -740,9 +1183,7 @@ export function createTranscripts(options: TranscriptsOptions) {
         documentId: state.documentId,
         state: state.state,
         lines: state.cues.length,
-        partial: state.partial
-          ? { startMs: state.partial.startMs, text: state.partial.text }
-          : null,
+        partial: shownPartial(state),
         model:
           (state.state === "preparing" ||
             state.state === "finishing" ||
@@ -750,6 +1191,11 @@ export function createTranscripts(options: TranscriptsOptions) {
           status.state !== "ready"
             ? status
             : null,
+        cloud:
+          state.live && state.live.engine !== "local" && state.live.started
+            ? state.live.engine
+            : null,
+        fellBack: state.fellBack,
         savedPath: state.savedPath,
         savedDefaulted: state.savedDefaulted === true,
         problem:
@@ -763,31 +1209,53 @@ export function createTranscripts(options: TranscriptsOptions) {
       };
     },
 
-    /** Audio starts being captured, at `offsetMs` in the Meeting's time. */
-    begin(meetingId: string, offsetMs: number): void {
+    /**
+     * Where meeting audio may go changed (Local mode, consent, the chosen route, a key): every
+     * live cloud stream whose gate is now closed is dropped at once, not at its next chunk.
+     */
+    recheckCloud(): void {
+      for (const state of states.values()) {
+        const live = state.live;
+        const leaving = live && gateClosed(live);
+        if (live && leaving) leaveCloud(state, live, leaving);
+      }
+    },
+
+    /**
+     * Audio starts being captured, at `offsetMs` in the Meeting's time. `callSound` says,
+     * whenever asked, whether the computer's sound is being recorded.
+     */
+    begin(meetingId: string, offsetMs: number, callSound: () => boolean): void {
       const state = load(meetingId);
       if (state.savedPath) return;
-      state.live = {
+      const live: Live = {
         stream: `${meetingId}:${++streams}`,
-        baseMs: offsetMs,
-        mixer: createMixer(offsetMs),
+        engine: "local",
+        cloud: null,
+        choosing: options.cloud !== undefined,
+        tracks: createTracks(offsetMs),
+        streams: {},
         started: false,
         held: [],
         pushedMs: offsetMs,
         doneMs: offsetMs,
         pendingFrom: null,
         backlogEnd: offsetMs,
+        callSound,
       };
+      state.live = live;
+      state.fellBack = null;
       state.problem = state.problem?.kind === "engine" ? state.problem : null;
       state.state = "preparing";
-      startEngine(state);
+      if (options.cloud) choose(state, live, options.cloud);
+      else startEngine(state);
       options.changed();
     },
 
     /** Samples from a source, starting at `atMs` in the Meeting's time. */
     hear(meetingId: string, source: AudioSource, samples: Int16Array, atMs: number): void {
       const state = states.get(meetingId);
-      if (state?.live) feed(state, state.live.mixer.add(source, samples, atMs));
+      if (state?.live) feed(state, state.live.tracks.add(source, samples, atMs));
     },
 
     /** Audio stopped being captured, at `endMs` in the Meeting's time: paused, asleep or stopped. */
@@ -844,12 +1312,12 @@ export function createTranscripts(options: TranscriptsOptions) {
         if (live.pendingFrom !== null) {
           state.pending = addRange(state.pending, {
             fromMs: live.pendingFrom,
-            toMs: live.mixer.atMs,
+            toMs: live.tracks.atMs,
           });
           live.stream = `${meetingId}:${++streams}`;
-          live.baseMs = live.mixer.atMs;
-          live.pushedMs = live.mixer.atMs;
-          live.doneMs = live.mixer.atMs;
+          live.streams = {};
+          live.pushedMs = live.tracks.atMs;
+          live.doneMs = live.tracks.atMs;
           live.pendingFrom = null;
         }
         startEngine(state);
@@ -864,7 +1332,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     forget(meetingId: string): void {
       const state = states.get(meetingId);
       if (state?.live) {
-        transcriber.drop(state.live.stream);
+        dropStreams(state.live);
         state.live = null;
       }
       if (state?.indexTimer) clearTimeout(state.indexTimer);

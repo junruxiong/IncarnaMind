@@ -23,7 +23,7 @@ const cell = (paragraphs: string, tcPr = "") =>
 /** A4 with 2 cm margins: 11906 − 2 × 1134 twips. */
 export const RESUME_TEXT_WIDTH_TWIPS = 9638;
 
-const RESUME_STYLES = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="华文中宋"/><w:sz w:val="21"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="SectionTitle"><w:name w:val="Section title"/><w:basedOn w:val="Normal"/><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="D9E2F3"/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:color w:val="1F3864"/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>`;
+const RESUME_STYLES = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="华文中宋"/><w:sz w:val="21"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="SectionTitle"><w:name w:val="Section title"/><w:basedOn w:val="Normal"/><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="D9E2F3"/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:color w:val="1F3864"/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="120"/><w:contextualSpacing/></w:pPr></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>`;
 
 const RESUME_NUMBERING = `<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:pPr><w:ind w:left="420" w:hanging="210"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>`;
 
@@ -34,7 +34,10 @@ const entry = (parts: readonly string[], dates: string) =>
   );
 
 const bullet = (text: string) =>
-  p(run(text), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>');
+  p(
+    run(text),
+    '<w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>',
+  );
 
 const layoutTable = (cells: readonly string[], widths: readonly number[]) =>
   `<w:tbl><w:tblPr><w:tblW w:w="${RESUME_TEXT_WIDTH_TWIPS}" w:type="dxa"/><w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join("")}</w:tblGrid><w:tr>${cells.map((text, index) => cell(p(run(text, '<w:sz w:val="21"/>'), index === cells.length - 1 ? '<w:jc w:val="right"/>' : ""), `<w:tcW w:w="${widths[index]}" w:type="dxa"/>`)).join("")}</w:tr></w:tbl>`;
@@ -156,5 +159,119 @@ export function contractFile({
     ].join(""),
     sectPr:
       '<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>',
+  });
+}
+
+/** A4 with 0.5 in margins: 11906 − 2 × 720 twips. */
+export const CV_TEXT_WIDTH_TWIPS = 10466;
+/** Each table is the text's width and Word's 108-twip cell margin on each side, as Word 2010 lays them out. */
+export const CV_TABLE_TWIPS = 10682;
+
+const CV_STYLES = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="微软雅黑"/><w:sz w:val="18"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>`;
+
+const CV_SETTINGS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:defaultTabStop w:val="420"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="14"/></w:compat></w:settings>`;
+
+/** Two columns, dates or a label at the left: how the résumé lays out every section. */
+const cvTable = (
+  rows: readonly (readonly [string, string])[],
+  width = CV_TABLE_TWIPS,
+  grid = [Math.round(width * 0.206), width - Math.round(width * 0.206)],
+) =>
+  `<w:tbl><w:tblPr><w:tblW w:w="${width}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="BFBFBF"/><w:bottom w:val="single" w:sz="4" w:color="BFBFBF"/><w:insideH w:val="single" w:sz="4" w:color="BFBFBF"/></w:tblBorders></w:tblPr><w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join("")}</w:tblGrid>${rows
+    .map(
+      ([left, right]) =>
+        `<w:tr>${cell(p(run(left, "<w:b/>")), `<w:tcW w:w="${grid[0]}" w:type="dxa"/>`)}${cell(p(run(right)), `<w:tcW w:w="${grid[1]}" w:type="dxa"/>`)}</w:tr>`,
+    )
+    .join("")}</w:tbl>`;
+
+/** Twelve figures a row: columns of numbers that can't wrap, too many for the column. */
+const figuresTable = () => {
+  const grid = Array.from({ length: 12 }, () => 890);
+  const row = (values: readonly string[]) =>
+    `<w:tr>${values.map((value) => cell(p(run(value)), '<w:tcW w:w="890" w:type="dxa"/>')).join("")}</w:tr>`;
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  return `<w:tbl><w:tblPr><w:tblW w:w="${CV_TABLE_TWIPS}" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="BFBFBF"/><w:bottom w:val="single" w:sz="4" w:color="BFBFBF"/><w:insideV w:val="single" w:sz="4" w:color="BFBFBF"/></w:tblBorders></w:tblPr><w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join("")}</w:tblGrid>${row(months)}${row(months.map((_, index) => `1,${String(100 + index * 37).padStart(3, "0")},${String(400 + index * 53).padStart(3, "0")}.75`))}</w:tbl>`;
+};
+
+const CV_ENTRIES: readonly (readonly [string, string])[] = [
+  [
+    "2021.04-至今",
+    "Northwind Studio · 高级视觉设计师：负责品牌系统、包装与线下物料的整体设计，带领 3 人小组完成 40 余个项目",
+  ],
+  [
+    "2018.07-2021.03",
+    "Corran Design Lab · 视觉设计师：参与电商活动页面与海报设计，季度转化率提升 18%",
+  ],
+  ["2016.09-2018.06", "Harbour Media · 设计助理：整理素材库，协助完成杂志排版与插画"],
+];
+
+/**
+ * A two-page résumé laid out as such files are: a 9 pt body, every section in a
+ * two-column table 534 pt wide on A4 with 0.5 in margins, Word 2010's
+ * compatibility mode (#1035). Synthetic text. `figures` adds a table of twelve
+ * figures a row that can't fit; `size` (half-points) and `tableTwips` make
+ * other résumés.
+ */
+export function cvFile({
+  figures = false,
+  size = 18,
+  tableTwips = CV_TABLE_TWIPS,
+}: {
+  figures?: boolean;
+  size?: number;
+  tableTwips?: number;
+} = {}): Buffer {
+  const heading = (text: string) =>
+    p(
+      run(text, '<w:b/><w:color w:val="1F3864"/><w:sz w:val="24"/>'),
+      '<w:spacing w:before="200" w:after="80"/>',
+    );
+  const sections: string[] = [
+    p(run("陈　岚", '<w:b/><w:sz w:val="40"/>'), '<w:jc w:val="center"/>'),
+    p(run("视觉设计 · 7 年经验 · 上海 · chenlan@example.com"), '<w:jc w:val="center"/>'),
+  ];
+  const titles = [
+    "个人信息",
+    "求职意向",
+    "工作经历",
+    "项目经历",
+    "项目经历（续）",
+    "教育背景",
+    "专业技能",
+    "语言能力",
+    "获奖情况",
+    "自我评价",
+    "作品集",
+  ];
+  for (const [index, title] of titles.entries()) {
+    sections.push(
+      heading(title),
+      cvTable(
+        CV_ENTRIES.map(([date, text]) => [date, `${text}（${index + 1}）`] as const),
+        tableTwips,
+      ),
+    );
+  }
+  if (figures) sections.push(heading("Monthly billings"), figuresTable());
+  return wordFile({
+    styles: CV_STYLES.replace('<w:sz w:val="18"/>', `<w:sz w:val="${size}"/>`),
+    rels: `<Relationship Id="rIdSettings" Type="${REL}/settings" Target="settings.xml"/>`,
+    parts: [{ name: "word/settings.xml", data: CV_SETTINGS }],
+    body: sections.join(""),
+    sectPr:
+      '<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="567" w:footer="567" w:gutter="0"/>',
   });
 }

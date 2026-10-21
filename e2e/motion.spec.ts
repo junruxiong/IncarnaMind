@@ -136,7 +136,7 @@ test("Reduced, chosen in Settings, fades a menu without moving it; Off shows and
   await expect(motion.getByRole("heading")).toHaveText("Motion");
   await expect(motion.getByRole("radio")).toHaveCount(3);
   await expect(motion.getByRole("radio", { name: "On" })).toBeChecked();
-  await expect(motion).toContainText("Until you choose, this follows your system's setting.");
+  await expect(motion).toContainText("Until you choose, this follows your system’s setting.");
 
   await motion.getByRole("radio", { name: "Reduced" }).check();
   await expect(window.locator("html")).toHaveAttribute("data-motion", "reduced");
@@ -216,6 +216,9 @@ test("the Citation card grows from its Citation and goes back toward it", async 
   await expect(pane.getByTestId("citation").first()).toHaveAttribute("data-check", "found", {
     timeout: 20_000,
   });
+  // Below the example's draft at this height: in view before it is pointed at, so the Mind
+  // isn't still scrolling under the pointer when the card would open.
+  await citation.scrollIntoViewIfNeeded();
   await motionSettled(window);
   await setMotionSpeed(window, 0.2);
 

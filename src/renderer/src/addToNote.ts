@@ -10,8 +10,8 @@
  * - Into another Mind: at its end, through the core. With no Mind in focus
  *   (`openIt`), it is shown too, in a new tab beside the focused one if it isn't open,
  *   never replacing it.
- * - Into a new Mind: made from the Answer, named as the conversation, in its
- *   Folder, opened in a new tab beside the focused one, the Answer waiting
+ * - Into a new Mind: made from the Answer, in its conversation's Folder, named by
+ *   its first line, opened in a new tab beside the focused one, the Answer waiting
  *   there as changes to accept or reject.
  *
  * Each says what it did under the Answer, with Undo (and ⌘Z), and what went
@@ -31,14 +31,19 @@ import { asGenerated } from "../../shared/aiText";
 import type { NodeJSON } from "../../shared/blockJson";
 import { setOrigins } from "../../shared/blockOrigins";
 import { cutTitle, mindName } from "../../shared/naming";
-import { citedTables, recheckCitations, textLength, withoutIds } from "../../shared/noteBlocks";
+import {
+  citedTables,
+  firstLineOfBlocks,
+  recheckCitations,
+  textLength,
+  withoutIds,
+} from "../../shared/noteBlocks";
 import { readMindHandle } from "./commands/handles";
-import { conversationLabel, questionOf } from "./conversations";
+import { questionOf } from "./conversations";
 import { core } from "./core";
 import { flashBlocks } from "./editor/blockOrigins";
 import { asOneStep, offerEditorUndo } from "./editor/editorUndo";
 import { notePlace } from "./editor/notePlace";
-import { translateNow as t } from "./i18n";
 import { useAppStore } from "./store";
 import { answerUndoPlace, useUndo } from "./undo";
 
@@ -53,10 +58,10 @@ export interface AddedAnswer {
   blocks: NodeJSON[];
 }
 
-/** The Mind's name, which an unnamed Mind is about to take from the Question (the core names it a moment after the Note is in). */
-const nameOfMind = (mindId: string, question: string) => {
+/** The Mind's name, which an unnamed Mind is about to take from the first line of what goes in (the core names it a moment after the Note is in). */
+const nameOfMind = (mindId: string, blocks: readonly NodeJSON[]) => {
   const mind = useAppStore.getState().minds.find((each) => each.id === mindId);
-  return (mind && mindName(mind)) || cutTitle(question) || t("mind.untitled");
+  return (mind && mindName(mind)) || cutTitle(firstLineOfBlocks(blocks));
 };
 
 const originOf = ({ answer }: AddedAnswer): BlockOrigin => ({
@@ -130,9 +135,10 @@ async function addToReadMind(added: AddedAnswer, mindId: string): Promise<boolea
       },
     ])
     .catch(useAppStore.getState().reportError);
+  const mind = nameOfMind(mindId, added.blocks);
   offerEditorUndo(
     editor,
-    t("answer.added", { mind: nameOfMind(mindId, originOf(added).question) }),
+    (t) => t("answer.added", { mind: mind || t("mind.untitled") }),
     answerUndoPlace(added.answer.id),
   );
   return true;
@@ -146,8 +152,9 @@ async function addToOtherMind(added: AddedAnswer, mindId: string, openIt: boolea
     origin: originOf(added),
     model: added.answer.model,
   });
+  const mind = nameOfMind(mindId, added.blocks);
   useUndo.getState().push({
-    message: t("answer.added", { mind: nameOfMind(mindId, originOf(added).question) }),
+    said: (t) => t("answer.added", { mind: mind || t("mind.untitled") }),
     undo: () => core.undoAddToNote({ mindId, blockIds }),
     shownAt: answerUndoPlace(added.answer.id),
   });
@@ -163,29 +170,62 @@ const openBeside = (mindId: string) =>
   });
 
 /**
- * Into a new Mind: named as the conversation, in its Folder, the Answer in it
- * as changes to accept or reject, in a new tab beside the focused one. Undo
- * deletes it.
+ * A new Mind for an Answer, in the conversation's Folder. It is named by its first line, like
+ * any Mind; the conversation's name goes on it only when the User gave the conversation one,
+ * never the name it takes from the first Question, which is an instruction (#1174).
  */
-async function addToNewMind(added: AddedAnswer): Promise<void> {
-  const title = conversationLabel(added.conversation);
-  const mind = await core.createMind({
-    title,
-    folderId: added.conversation?.folderId ?? null,
-  });
-  await core.addToNote({
-    mindId: mind.id,
+async function newMindFor(added: AddedAnswer) {
+  const title = added.conversation?.title ?? "";
+  return core.createMind({ title, folderId: added.conversation?.folderId ?? null });
+}
+
+const putIn = (mindId: string, added: AddedAnswer, proposed: boolean) =>
+  core.addToNote({
+    mindId,
     blocks: added.blocks,
     origin: originOf(added),
     model: added.answer.model,
-    proposed: true,
+    proposed,
   });
+
+/**
+ * Into a new Mind: in its conversation's Folder, the Answer in it as changes to
+ * accept or reject, in a new tab beside the focused one. Like any Mind made, it says
+ * nothing, and Delete takes it back.
+ */
+async function addToNewMind(added: AddedAnswer): Promise<void> {
+  const mind = await newMindFor(added);
+  await putIn(mind.id, added, true);
   await openBeside(mind.id);
-  useUndo.getState().push({
-    message: t("answer.addedToNew", { mind: mindName(mind) || title }),
-    undo: () => core.deleteMind(mind.id),
-    shownAt: answerUndoPlace(added.answer.id),
-  });
+}
+
+let openingTable = false;
+
+/**
+ * "Open as a table": the one table in `added.blocks` in a Mind of its own, as it is (to copy or
+ * export from its tab). Its tab opens beside the focused one first and the table is put in after,
+ * so a big table never keeps the tab from showing. Like any Mind made, it says nothing, and
+ * Delete takes it back. A table that can't go in
+ * is shown as a problem and its Mind deleted. A second call while one is under way does nothing.
+ */
+export async function openTable(added: AddedAnswer): Promise<void> {
+  if (openingTable) return;
+  openingTable = true;
+  try {
+    const mind = await newMindFor(added);
+    await openBeside(mind.id);
+    try {
+      await putIn(mind.id, added, false);
+    } catch (error) {
+      useAppStore.getState().reportError(error);
+      await core.deleteMind(mind.id);
+      return;
+    }
+  } catch (error) {
+    useAppStore.getState().reportError(error);
+  } finally {
+    openingTable = false;
+  }
 }
 
 /**

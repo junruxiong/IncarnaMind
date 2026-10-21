@@ -16,7 +16,8 @@ const dictionaries: { readonly [L in Language]: Dictionary } = {
   "zh-CN": zhCN,
 };
 
-const AGENT_PLACEHOLDER = "{agent}";
+/** Names that can be Chinese or Latin, so a space beside one depends on the name (docs/agents/zh-CN.md). */
+const NAMES = ["agent", "provider", "format"] as const;
 
 export function translate(language: Language, key: MessageKey, params?: MessageParams): string {
   const template = dictionaries[language][key];
@@ -25,19 +26,16 @@ export function translate(language: Language, key: MessageKey, params?: MessageP
     text.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
       Object.hasOwn(params, name) ? String(params[name]) : placeholder,
     );
-  // Chinese templates put no space around an agent's name: it depends on the name (docs/agents/zh-CN.md).
-  if (
-    language !== "zh-CN" ||
-    !Object.hasOwn(params, "agent") ||
-    !template.includes(AGENT_PLACEHOLDER)
-  ) {
-    return fill(template);
-  }
-  const agent = String(params.agent);
+  const name =
+    language === "zh-CN"
+      ? NAMES.find((each) => Object.hasOwn(params, each) && template.includes(`{${each}}`))
+      : undefined;
+  if (!name) return fill(template);
+  const value = String(params[name]);
   return template
-    .split(AGENT_PLACEHOLDER)
+    .split(`{${name}}`)
     .map(fill)
     .reduce(
-      (text, part) => text + gap(language, text, agent) + agent + gap(language, agent, part) + part,
+      (text, part) => text + gap(language, text, value) + value + gap(language, value, part) + part,
     );
 }

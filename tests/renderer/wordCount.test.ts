@@ -10,7 +10,14 @@ import {
   setWordTarget,
   wordTargetOf,
 } from "../../src/shared/mindWordCount";
-import { countFor, countText, mostlyCjk, parseTarget } from "../../src/shared/wordCount";
+import {
+  countedUnit,
+  countFor,
+  countText,
+  firstWords,
+  mostlyCjk,
+  parseTarget,
+} from "../../src/shared/wordCount";
 
 const schema = getSchema(noteExtensions());
 
@@ -68,6 +75,35 @@ describe("counting text", () => {
     const count = countText("ab cd\nef");
     expect(countFor(count, "characters")).toBe(7);
     expect(countFor(count, "charactersNoSpaces")).toBe(6);
+  });
+
+  test.each([
+    ["an empty Mind in English", "", "words", false, "words"],
+    ["an empty Mind in a Chinese interface", "", "words", true, "characters"],
+    ["a Mind of only a space in a Chinese interface", " ", "words", true, "characters"],
+    ["a Mind of only a comma in a Chinese interface", "，", "words", true, "characters"],
+    ["a Mind of only an emoji in a Chinese interface", "😀", "words", true, "characters"],
+    ["English text in a Chinese interface", "The tide turns", "words", true, "words"],
+    ["Chinese text in an English interface", "潮水每天涨落", "words", false, "characters"],
+    ["characters asked for", "The tide turns", "characters", false, "characters"],
+  ] as const)("%s is counted in %s", (_, written, basis, chinese, unit) => {
+    expect(countedUnit(countText(written), basis, chinese)).toBe(unit);
+  });
+
+  test("the first words of a sentence are cut after the last of them, and only when more follow", () => {
+    expect(firstWords("Cash and cash equivalents were £192.9m.", 12)).toEqual({
+      text: "Cash and cash equivalents were £192.9m.",
+      cut: false,
+    });
+    expect(firstWords("One two three, four five six seven.", 3)).toEqual({
+      text: "One two three",
+      cut: true,
+    });
+    expect(firstWords("One two three.", 3)).toEqual({ text: "One two three.", cut: false });
+    expect(firstWords("潮汐是海水的周期性涨落，由月球引力引起。", 6)).toEqual({
+      text: "潮汐是海水的",
+      cut: true,
+    });
   });
 
   test("an emoji is one character", () => {

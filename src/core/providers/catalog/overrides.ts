@@ -9,6 +9,7 @@
  * only in US dollars (the Chinese regions of providers that bill in yuan) have
  * their yuan prices here, from the providers' own price pages.
  */
+import { CLAUDE_BETWEEN_TOOLS, CLAUDE_LOW_EFFORT } from "./providers";
 import type { CatalogOverrides, OffPeak, Price } from "./types";
 
 /** A price in yuan per million tokens. */
@@ -46,10 +47,10 @@ const GLM = { structuredOutput: "json_object", forcedToolChoice: false } as cons
 export const OVERRIDES: CatalogOverrides = {
   cannotAnswer: {
     openai: {
-      // Background research through the Responses API, not a chat: https://platform.openai.com/docs/guides/deep-research
+      // Background research through the Responses API, not a chat: https://developers.openai.com/api/docs/guides/deep-research
       "o3-deep-research": "deep-research",
       "o4-mini-deep-research": "deep-research",
-      // Drives a computer through the Responses API's computer tool: https://platform.openai.com/docs/guides/tools-computer-use
+      // Drives a computer through the Responses API's computer tool: https://developers.openai.com/api/docs/guides/tools-computer-use
       "computer-use-preview": "computer-use",
     },
   },
@@ -59,7 +60,7 @@ export const OVERRIDES: CatalogOverrides = {
     anthropic: { calculates: true },
     openai: { calculates: true },
     // Google asks for its Gemini 3 models to run at their default temperature: lower makes
-    // them loop or reason worse. The 2.5 models retire on 2026-10-20.
+    // them loop or reason worse.
     google: { temperature: false },
     // DeepSeek takes JSON mode only (its prompt must say "json"), and answers 400 to a forced
     // Tool choice while it thinks, which it does by default; then it ignores the temperature.
@@ -74,10 +75,11 @@ export const OVERRIDES: CatalogOverrides = {
   },
   models: {
     anthropic: {
-      // These return 400 for a forced Tool choice ("any" or a named Tool).
-      "claude-fable-5-1": { forcedToolChoice: false },
-      "claude-opus-5-5": { forcedToolChoice: false },
-      "claude-sonnet-5-5": { forcedToolChoice: false },
+      // Measured 2026-10-15 (#907): these refuse `thinking: disabled`, and some a forced Tool choice.
+      "claude-fable-5": { thinkingOff: CLAUDE_LOW_EFFORT },
+      "claude-fable-5-1": { forcedToolChoice: false, thinkingOff: CLAUDE_LOW_EFFORT },
+      "claude-opus-5-5": { forcedToolChoice: false, thinkingOff: CLAUDE_LOW_EFFORT },
+      "claude-sonnet-5-5": { forcedToolChoice: false, thinkingOff: CLAUDE_BETWEEN_TOOLS },
       "claude-haiku-5-5": {
         price: {
           currency: "USD",

@@ -2,19 +2,25 @@ import { useT } from "../../i18n";
 import { turnOffLocalMode } from "../../localMode";
 import { useAppStore } from "../../store";
 import { ProblemLine } from "../ProblemLine";
+import { MODELS_UNDO_PLACE } from "./shared";
 
-/** A cloud choice while "Keep everything on this computer" is on: why it can't be used, and the way out. */
-export function LocalModeUnavailable() {
+/** Settings › Models, where a cloud choice is made while local mode is on: why it can't be used, and the way out. */
+export function LocalModeUnavailable({ className }: { className?: string }) {
   const t = useT();
+  const localMode = useAppStore((state) => state.embedding?.localOnly === true);
+  if (!localMode) return null;
   return (
     <ProblemLine
       role="status"
       testId="local-mode-unavailable"
+      {...(className && { className })}
       action={{
         label: t("localMode.turnOff"),
         testId: "local-mode-turn-off",
         onClick: () =>
-          turnOffLocalMode().catch((error: unknown) => useAppStore.getState().reportError(error)),
+          turnOffLocalMode(MODELS_UNDO_PLACE).catch((error: unknown) =>
+            useAppStore.getState().reportError(error),
+          ),
       }}
     >
       {t("composer.model.localModeOff")}

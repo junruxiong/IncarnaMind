@@ -35,7 +35,7 @@ What an Answer is generated from: in a Mind, every Block above its Question, exc
 _Avoid_: prompt, history
 
 **Search scope**:
-The Folders, Tags and individual Documents that a Question's Document search is limited to, resolved when the Question is asked: a Document filed into a Folder since is in it, one filed out is not. A Question in a Folder's Mind starts with the Folder as its Search scope, which the User can remove; a Question with no Search scope searches all Documents.
+The Folders, Tags and individual Documents that a Question's Document search is limited to, resolved when the Question is asked: a Document filed into a Folder since is in it, one filed out is not. A Question in a Folder's Mind starts with the Folder as its Search scope while the Folder holds a Document, and with every Document while it holds none; the User can remove the Folder; a Question with no Search scope searches all Documents.
 _Avoid_: filter, context
 
 ### The assistant
@@ -82,6 +82,10 @@ _Avoid_: loose files, imports
 A short span of a Document that can be retrieved and cited.
 _Avoid_: chunk, snippet
 
+**Own workings**:
+A Document the User marks with "Don't cite this Document", such as a spreadsheet of figures copied from a report, with their own ratios. It is still searched and read to understand a Question, but an Answer never cites it and no check uses it as evidence, so it can't corroborate the report it was copied from. A check that finds only an own working file stating a claim says so. The interface says "Not cited" beside its name.
+_Avoid_: private Document, hidden Document, excluded Document
+
 **Citation**:
 A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document. It names its Document as the Document is named now, so a rename shows in every Citation of it, on screen, in exports and in what a model or an outside agent reads; the name it was made with is kept, never rewritten, and shown only when the Document can't be found. A History comparison keeps each Checkpoint's own names.
 _Avoid_: source, reference
@@ -99,15 +103,15 @@ A note the User writes at a point in the text, shown there by its number; its te
 _Avoid_: endnote, annotation, comment
 
 **Reference record**:
-What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file, the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. A record of a known type that lacks its title, authors or date "needs details". A file exported from Zotero, EndNote or Mendeley (CSL JSON, BibTeX or RIS) can be imported: each reference is matched to a Document, or kept as a record with no Document until its PDF is added; the User's edits win over an import.
+What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file (its properties, and what a PDF's first page prints: title, authors, institution and year), the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. What was read from the file "needs checking" until the User marks it checked or edits it. A record of a known type that lacks its title, authors or date "needs details". A file exported from Zotero, EndNote or Mendeley (CSL JSON, BibTeX or RIS) can be imported: each reference is matched to a Document, or kept as a record with no Document until its PDF is added; the User's edits win over an import.
 _Avoid_: metadata, bibliographic entry, citation (a Citation is the reference in an Answer)
 
 **Citation style**:
-How a Mind's Citations read, in its text and its exports, and how its Bibliography lists their Documents: a style of the Citation Style Language, such as APA 7, IEEE or GB/T 7714—2015, written from the Documents' reference records, or Numbered, IncarnaMind's own (numbered markers, each a footnote naming its Document and Location). Each Mind has one; one that hasn't chosen is Numbered, and a new Mind starts in the style last chosen for a Mind in its Folder. A style changes how a Citation reads, never its check.
+How a Mind's Citations read, in its text and its exports, and how its Bibliography lists their Documents: any style of the Citation Style Language's repository, such as APA 7, IEEE, Nature or GB/T 7714—2015, or a journal's, which formats as the style it follows, written from the Documents' reference records, or Numbered, IncarnaMind's own (numbered markers, each a footnote naming its Document and Location). Each Mind has one; one that hasn't chosen is Numbered, or GB/T 7714—2015 when the interface and the Mind are in Chinese and it cites a paper or a book, and a new Mind starts in the style last chosen for a Mind in its Folder. A style changes how a Citation reads, never its check.
 _Avoid_: citation format, reference style
 
 **Bibliography**:
-Every Document a Mind cites, once each, in its citation style: the References at the Mind's end, kept up to date, and the end of its exports. A Mind in Numbered shows none. A Document whose reference record is too thin to cite is listed by its name, marked "needs details".
+Every Document a Mind cites, once each, in its citation style: the References at the Mind's end, kept up to date, and the end of its exports. A Mind in Numbered shows none. A Document whose reference record is too thin to cite is listed by its name, marked "needs details", in the Mind and in its exports.
 _Avoid_: works cited (except as a style's own heading), sources list
 
 **Source provider**:
@@ -115,7 +119,7 @@ A public service that Find sources searches for works to add to the Library: Ope
 _Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
 
 **Location**:
-Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, a range of lines in plain text, or a range of time in a Transcript (shown as the time the quote starts, "14:26").
+Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF (named as the page names itself, by its page label or the number printed on it, with its place in the PDF beside it when they differ: "p. 68 · page 69 of the PDF"), one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, a range of lines in plain text, or a range of time in a Transcript (shown as the time the quote starts, "14:26").
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Cited page**:
@@ -202,7 +206,7 @@ _Avoid_: default Skill, system Skill
 ### Changes
 
 **Proposal**:
-A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, though the assistant and exports show another person's as changes, with who made each, and it is out of date once the text it changes has changed. Each Proposal is one change in one place (the words it removes and those it adds there, or a whole Block), accepted or rejected on its own; one request, such as an Edit with AI, can make several. The interface calls them changes: "3 changes from the assistant".
+A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, though the assistant reads every one as a change (the AI's as waiting, another person's with who made each) and exports show another person's, and it is out of date once the text it changes has changed. The assistant revises its own while they wait, rather than adding a second version. Each Proposal is one change in one place (the words it removes and those it adds there, or a whole Block), accepted or rejected on its own; one request, such as an Edit with AI, can make several. The interface calls them changes: "3 changes from the assistant".
 _Avoid_: suggestion, edit, draft, diff
 
 **AI text**:
@@ -240,7 +244,7 @@ The result of a Citation check when the Citation's quote, or words its sentence 
 _Avoid_: broken, invalid, failed
 
 **Unsupported**:
-The result for a sentence when Find support, Verify or note health finds nothing in the Documents that backs it up. It is not a finding that the sentence is wrong.
+The result for a sentence when Find support, Verify or note health finds nothing in the Documents that backs it up. It is not a finding that the sentence is wrong. A sentence that cites a court decision none of the Documents holds is unsupported too, and its card says the case can't be checked here.
 _Avoid_: not found, unverified, false
 
 **Contradicted**:
@@ -294,7 +298,7 @@ The words of a Meeting, in order and with times, kept as a Document so that a Ci
 _Avoid_: captions, subtitles, minutes
 
 **Speaker**:
-A person in a Transcript who is told apart from the others. A Speaker is named by the User, and a Citation to a Transcript names who said the quote.
+A person in a Transcript who is told apart from the others. A Speaker is named by the User, and a Citation to a Transcript names who said the quote. Before that, a live Meeting's lines are "Me" (the microphone) or "Them" (the computer's sound), or "Speaker ?" with no computer sound.
 _Avoid_: voice, participant, user
 
 ### Files
@@ -318,8 +322,12 @@ Anonymous events about using IncarnaMind, such as "a Question was asked with a l
 _Avoid_: telemetry, tracking
 
 **AI use record**:
-What the AI put into a Mind, or proposed and the User turned down, and what became of it (kept, edited, deleted), kept per Mind on this computer. It holds kinds, sizes, the model and times, never text, and is never sent, whatever the User chose about Usage data.
+What the AI put into a Mind, or proposed and the User turned down, and what became of it (kept, edited, deleted), and each sentence a model checked, kept per Mind on this computer. It holds kinds, sizes, the model and times, never text, and is never sent, whatever the User chose about Usage data.
 _Avoid_: AI log, AI history
+
+**Check record**:
+A PDF or CSV the User saves from a Mind, listing each sentence and Citation IncarnaMind checked in it with the result, the Document version (name, size, SHA-256), the Location, the quote, the model and when, and whose text it is. It says what was checked and how, not whether a claim is right, and is written only where the User saves it.
+_Avoid_: audit log, report
 
 ### Window
 

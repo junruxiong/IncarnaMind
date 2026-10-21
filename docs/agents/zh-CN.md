@@ -23,7 +23,7 @@ Read this before adding or changing a string in `src/shared/i18n/zh-CN.ts`, whet
     - No long 的 chain before a noun: split the sentence ("添加一个问题，只搜索此文件夹", not "添加一个只搜索此文件夹的问题").
     - Drop 它/它的 and 你的 when they add nothing.
     - Put the condition first ("开启后，…").
-13. **One word for one thing.** Use the glossary everywhere and never a second word for the same concept: 不在文件夹中, not 未分类 or 未分组; 对话模型, not 聊天模型; 提供商, not 服务商.
+13. **One word for one thing.** Use the glossary everywhere and never a second word for the same concept: 不在文件夹中, not 未分类 or 未分组; AI 模型 in sentences (not 对话模型 or 聊天模型); a company's own name, or 服务 when generic (not 提供商 or 服务商).
 14. **Platform words go in their own keys.** Where macOS and Windows name a thing differently, add a key per platform and choose it in code, as `linkedFolders.reveal.mac` / `.windows` / `.other` and `menu.copy` / `menu.copy.other` do. Don't put one platform's word on the other.
 15. **Names stay as they are:** IncarnaMind, Mind, ChatGPT, Ollama, OpenAI, PDF, Word, Markdown. Write file types in capitals (ZIP, CSV), and keys as they are printed (Enter, Esc, Backspace, ⌘J).
 
@@ -37,7 +37,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 
 | English | Chinese | Notes |
 |---|---|---|
-| Mind | Mind | A product name, like Notion: no translation, no plural, no measure word in labels. "新建 Mind", "Mind（3）", "这个 Mind" in prose. Where the User first meets it (the example's banner, the first empty Mind, New Mind's tooltip) one sentence says what it is: "Mind 是你写作的页面，也可以在这里就你的文档提问，每条引文都会核对。" |
+| Mind | Mind | A product name, like Notion: no translation, no plural, no measure word in labels. "新建 Mind", "Mind（3）", "这个 Mind" in prose. Where the User first meets it (the example's banner, the first empty Mind, New Mind's tooltip) one sentence says what it is: "Mind：在这里写作、向文档提问，每条引文都会核对。" |
 | Assistant | 助手 | The one per window. "显示助手", "收起助手". As Kimi, Doubao and Yuanbao call themselves (智能助手, AI 助手). |
 | Conversation | 对话 | New chat is "新对话", History "历史对话", counted with 个: "3 个对话". As Doubao, Yuanbao, DeepSeek, Qwen, Feishu, Cherry Studio and Open WebUI show it. |
 | Note | 笔记 | |
@@ -47,32 +47,37 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Question context | 上下文 | |
 | Search scope | 搜索范围 | "仅搜索", "缩小范围". |
 | Document | 文档 | Counted with 个. |
-| Missing Document | (status) 文件缺失 | Long form: "找不到文件：它已从所在文件夹中移除。" |
+| Missing Document | (status) 文件缺失 | Long form: "找不到文件：引用保留原文，搜索不再包含它。" |
 | Unavailable Document | (status) 无法访问 | |
 | Linked folder | 同步文件夹 | "添加同步文件夹…", "移除同步文件夹…". As Tencent Docs does. Say IncarnaMind only reads it wherever a Linked folder is added. |
 | Other Documents | 其他文档 | |
 | Web page | 网页 | A Document saved from a web address (网址). Its snapshot is 快照, as search engines' 网页快照: "打开快照". Fetching it is 抓取: "重新抓取", "无法抓取：网页需要登录". The live page: 原网页 ("打开原网页"). |
 | Passage | 段落 | |
 | Citation | 引用 | The numbered reference in an Answer, as Kimi, Doubao, Qwen, Cherry Studio and Open WebUI show it. |
+| Own workings | 工作文件 | A Document the User keeps as their own workings: "不作为引用来源", "重新作为引用来源", its label "不引用", and on a check's card "只有你自己的工作文件这样写。" |
 | quote (of a Citation) | 引文 | "已在第 3 页找到引文", "未找到引文". |
 | Quote (block) | 引述 | The "/" menu's block for quoted text; not a Citation (引用) or its quote (引文). |
 | Location | 位置 | "第 3 页", "第 2 张幻灯片", "第 4–6 行", "§ 标题", a web page's "§ 历史，第 3 段". |
 | Cited page | 引用页面 | The saved picture of what a Citation points at: "打开引用页面". |
-| Source pack | PDF 引用页面合集 | The export of a Mind's cited pages. The name starts with PDF so that "导出为 {format}" keeps its space between Latin and Chinese. |
+| Source pack | PDF 引用页面合集 | The export of a Mind's cited pages. |
+| Web page to share | 可分享的网页 | The export a reader opens in a browser, each Citation's quote a click away: "可分享的网页（.html）". A template puts no space around `{format}`: the space comes only beside a Latin name ("导出为 PDF", "导出为可分享的网页（.html）"). |
 | Footnote | 脚注 | As Word, WPS and Feishu. "插入脚注", "脚注 3". |
 | Reference record | 引用信息 | The "Cite as" panel's title too. Its fields: 类型、标题、作者、日期、期刊（出处）、卷、期、页码、出版者、DOI、网址、语言. |
 | Needs details (a reference record) | 信息待补充 | |
 | Look up (a reference record) | 查询 | "按 DOI 从 Crossref 补全空白字段". |
-| Web search | 联网搜索 | Searching the web from an Answer: "允许回答联网搜索", "已联网搜索“…”". As Kimi, Doubao, Yuanbao and DeepSeek show it. |
-| Find sources | 查找资料 | "查找资料…". 资料 matches 资料库 (Library): what is found is added to it. |
-| Source provider | 资料来源 | "资料来源：OpenAlex arXiv PubMed". Not 提供商, which is an AI model's provider. |
+| Web search | 联网搜索 | Searching the web from an Answer: "允许回答联网搜索", "已联网搜索“…”", and the Unsupported card's action. Never 网页搜索. As Kimi, Doubao, Yuanbao and DeepSeek show it. |
+| Find sources | 查找资料 | "查找资料…". One name for the panel, its menu items and the button on a claim's card, never 查找来源. 资料 matches 资料库 (Library): what is found is added to it. |
+| Source provider | 资料来源 | "资料来源：OpenAlex arXiv PubMed". Not 服务, which is an AI model's company. |
 | Open access | 开放获取 | As CNKI and publishers say it. "仅开放获取", "无开放全文". |
 | Preprint / Accepted manuscript | 预印本 / 录用稿 | The version an open copy is. |
 | Cited by {count} | 被引 {count} 次 | As CNKI and Google Scholar show it. |
 | Import references | 导入引用信息… | From a CSL JSON, BibTeX or RIS file. Counted with 条: "导入了 3 条". |
 | Reference without a Document | 还没有文档 | Its list: "添加 PDF…" links it. |
 | Citation style | 引用格式 | "引用格式…", "引用格式已改为 APA 第 7 版". A style keeps its own name; its variant goes in full-width brackets, in the standard's words: "GB/T 7714—2015（顺序编码制）", "（著者-出版年制）". |
+| A citation style's form | 作者-年份, 作者, 编号, 代号, 脚注 | What the picker says after each style's name, for author-date, author, numeric, label and note. A label ("[Smi10]") is 代号, never 标签, which is a Tag. |
 | Bibliography | 参考文献 | Its heading in the Mind and in Chinese styles' exports. |
+| Style (a Mind's font and text size) | 样式 | "样式…" in the Mind's menu. Its parts: 字体 (font), 字号 (text size: 小、默认、大) and "设为新建 Mind 的默认样式". The three fonts are 默认, 衬线 and 等宽, as Notion's; a font the computer lacks is "此电脑未安装该字体". |
+| Format (the selection menu's Aa) | 格式 | As Word and WPS name formatting: 字体、字号; alignment 左对齐、居中、右对齐、两端对齐; 行距 with 单倍、1.15、1.5、双倍、自定义…; space around a paragraph 添加/移除段前间距, 添加/移除段后间距, as Google Docs words it; 增加缩进, 减少缩进 and 首行缩进 2 字符; 文字颜色 with 自动; 上标, 下标. A Mind's own line spacing in 样式 is 行距 too, its first choice 默认. |
 | Folder | 文件夹 | |
 | Source location | 文件位置 | The sidebar view of the files as they are on disk. |
 | Tag | 标签 | Tagging is 打标签; automatic tagging is 自动打标签. |
@@ -98,7 +103,9 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Needs re-check | 需重新核对 | |
 | Not checked | 未核对 | A claim that wasn't checked: the model declined, its reply couldn't be read, or a limit stopped the run ("未核对：已达花费上限"). |
 | Claim | 说法 | What a check looks at, in an Answer, a Mind or a document someone else wrote. Counted with 条: "核对 24 条说法". Not 论断, an argued conclusion, or 主张, a party's claim in law: neither fits a sentence in a contract or a site report. |
+| Shorten (an AI edit) | 精简 | "精简", "正在精简…". Not 缩写, which means abbreviate. The others: 润色, 翻译, 解释. |
 | Find support | 查找出处 | Finds a Passage to cite and offers Add as Citation. 出处 is the word for a source a writer cites (注明出处); not 依据, which reads as a check. |
+| Check record | 核对记录 | "将核对记录导出为 PDF". The PDF or CSV of what a Mind's checks left. |
 | Check against Documents | 对照文档核对 | Gives a verdict: 有依据, 无依据 or 与文档矛盾. |
 | Verify (a document) | 核对文档 | The verb is 核对, as for a Citation. |
 | Need a look | 需要留意 | The claims that are unsupported or contradicted: "3 条需要留意". |
@@ -115,6 +122,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Meeting | 会议 | |
 | Transcript | 转写稿 | |
 | Speaker | 发言人 | |
+| Me, Them, Speaker ? (a live line before speakers are told apart) | 我, 对方, 发言人 ? | "Me" is the microphone, "Them" the computer's sound, "Speaker ?" a meeting in a room, with no computer sound. |
 | Granted folder | 授权文件夹 | |
 | Output location | 保存位置 | |
 | Usage data | 使用数据 | |
@@ -133,7 +141,8 @@ A figure in an Answer is written as reports write it, with no space between the 
 | Input (of a calculation) | 所用数据 | "所用数据均已找到". |
 | Calculation check | 核对计算 | The verb is 核对, as for a Citation: "正在核对数字…". |
 | Unchecked figure | 未核对的数字 | |
-| Analysis | 数据分析 | |
+| Analysis | 数据分析 | Can't run: "这台电脑上无法运行数据分析：…". |
+| Sandbox (where Skill scripts and Analyses run) | 沙盒 | Never 沙箱. |
 | Recalculate | 重新计算 | |
 | Run again | 重新运行 | |
 | percentage points | 个百分点 | A difference of two percents: "2.3个百分点", never "2.3%". |
@@ -158,10 +167,10 @@ The year is left out when it is this year, except in a Date, and a time today is
 
 | English | Chinese | Notes |
 |---|---|---|
-| chat model | 对话模型 | |
 | embedding model | 嵌入模型 | |
 | reranking | 重新排序; the model: 重排序模型 | |
-| provider | 提供商 | As Open WebUI, Chatbox, AnythingLLM, Dify and Microsoft. |
+| provider | the company's name, or 服务 | "无法连接 OpenAI"; 服务 for the Settings row. Not 提供商. |
+| money | $1.40、¥1.40 | The narrow symbol of each currency, in both languages: "$", never "US$", and "¥". Two currencies in one line are told apart by them: "$3.20 和 ¥1.40". |
 | API key | API 密钥 | |
 | Server URL (base URL) | API 地址 | As Cherry Studio and Open WebUI. |
 | local / cloud | 本地 / 云端 | "本地模型", "云端模型", "在本机运行". |
@@ -174,6 +183,11 @@ The year is left out when it is this year, except in a Date, and a time today is
 | English | Chinese | Notes |
 |---|---|---|
 | Recently deleted | 回收站 | As Feishu, Yuque, Tencent Docs, WPS, DingTalk, Obsidian and Zotero. Restore: 恢复. Delete permanently: 彻底删除. |
+| Revoke (an allowed service) | 停止允许 | Not 撤销, which is Undo. For a service the User allowed to receive data (Privacy); approvals have their own words. |
+| Local mode | 所有内容都留在这台电脑上 | The one name, quoted: “所有内容都留在这台电脑上”; its button is 允许使用云端模型. Never 本地模式. A line that names it says what stopped, then the name: “未发送：已开启“所有内容都留在这台电脑上”。” |
+| Chat model | AI 模型 | In sentences and on Settings' labels. |
+| Embedding model | 搜索模型 · 按含义搜索 | "正在为搜索读取文档". Not 嵌入. |
+| Reranking | 把最相关的排在前面 | "最相关的排在前面" on Settings; never 重排序. |
 | Undo | 撤销 | The undo line: "已将 3 个文档移动到“财务” · 撤销". |
 | Rename | 重命名 | |
 | Move to… | 移动到… | |

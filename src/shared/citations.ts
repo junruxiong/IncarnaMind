@@ -19,12 +19,45 @@ import { displayName } from "./documentNames";
 import type { MessageKey } from "./i18n";
 import {
   citationLocation,
-  englishLocation,
+  englishPrintedLocation,
   formatLocation,
   isTranscriptLocation,
   readsIn,
   type Translate,
 } from "./locations";
+
+const CITATION_CHECKS: readonly CitationCheck[] = [
+  "checking",
+  "found",
+  "not-found",
+  "cant-check",
+  "unsupported",
+  "contradicted",
+];
+
+/** A Citation's attributes as a node holds them; what is missing or isn't the right type is left out. */
+export function citationAttributesOf(node: Record<string, unknown>): Partial<CitationAttributes> {
+  const text = (value: unknown) => (typeof value === "string" ? value : null);
+  const count = (value: unknown) => (typeof value === "number" ? value : null);
+  const check = CITATION_CHECKS.find((each) => each === node.check);
+  const verdict = text(node.verdict);
+  return {
+    passageId: text(node.passageId),
+    documentId: text(node.documentId),
+    documentName: text(node.documentName),
+    contentHash: text(node.contentHash),
+    pageFrom: count(node.pageFrom),
+    pageTo: count(node.pageTo),
+    location: citationLocation({
+      pageFrom: count(node.pageFrom),
+      pageTo: count(node.pageTo),
+      location: node.location,
+    }),
+    quote: text(node.quote),
+    ...(check && { check }),
+    ...(verdict !== null && { verdict }),
+  };
+}
 
 export interface CitationState {
   /** What the badge shows. */
@@ -107,7 +140,7 @@ function indexOf(documents: readonly LiveDocument[]): DocumentIndex {
 }
 
 /** The live Document a Citation opens: its own, or one with the same content added again after it was deleted. */
-function liveDocumentOf(
+export function liveDocumentOf(
   attributes: Partial<Pick<CitationAttributes, "documentId" | "contentHash">>,
   documents: readonly LiveDocument[],
 ): LiveDocument | undefined {
@@ -222,7 +255,7 @@ export function citationReference(attributes: Partial<CitationAttributes>): stri
   const name = attributes.documentName;
   if (!name) return "";
   const location = citationLocation(attributes);
-  return location ? `[${name}, ${englishLocation(location)}]` : `[${name}]`;
+  return location ? `[${name}, ${englishPrintedLocation(location)}]` : `[${name}]`;
 }
 
 /** How a Citation's place reads in a sentence, and the parameters its message takes. */
@@ -234,7 +267,7 @@ function placeOf(
   if (location === null) {
     return { where: "document", params: { document: attributes.documentName ?? "" } };
   }
-  const params = { location: formatLocation(location, t) };
+  const params = { location: formatLocation(location, t, false) };
   // A Transcript's is labelled so, so its check isn't taken for a page's.
   if (isTranscriptLocation(location)) return { where: "transcript", params };
   return { where: readsIn(location) ? "in" : "on", params };

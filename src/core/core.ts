@@ -1,11 +1,22 @@
 import { mkdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
-import { isCitationStyleId } from "../shared/citationStyles";
+import { cleanApiKey } from "../shared/apiKey";
+import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
+import { optionsFor } from "../shared/exportOptions";
 import { translate } from "../shared/i18n";
+import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
+import { holdsOnlyItsTitle } from "../shared/madeMind";
+import {
+  HEARD_FROM,
+  helpKindsFor,
+  helpLabel,
+  isMeetingHelpKind,
+  isMeetingTemplate,
+} from "../shared/meetingHelp";
 import { bibliographyShown } from "../shared/mindBibliography";
 import {
   chosenCitationStyle,
@@ -13,9 +24,22 @@ import {
   setCitationStyle,
 } from "../shared/mindCitationStyle";
 import { mindModelOf } from "../shared/mindModel";
+import {
+  DEFAULT_MIND_STYLE,
+  exportedFamily,
+  isMindStyle,
+  lineSpacingOf,
+  mindStyleOf,
+  sameStyle,
+  writeMindStyle,
+} from "../shared/mindStyle";
 import { mindName } from "../shared/naming";
 import { paperFor } from "../shared/printDocument";
-import { resolveProposals } from "../shared/proposals";
+import { resolveProposals, restoreRevised } from "../shared/proposals";
+import { isCitableWork } from "../shared/references";
+import { RESEARCH_TASK } from "../shared/research";
+import { hasSearchScope, holdsText, mindSearchScope } from "../shared/searchScope";
+import { SPEAKER_ME, SPEAKER_THEM } from "../shared/speakers";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
@@ -24,8 +48,8 @@ import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
-import { topLevelBlocks } from "./answers/blocks";
 import { createChecks } from "./answers/checks";
+import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
 import { recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
@@ -41,9 +65,9 @@ import type { AnswerSearchOptions } from "./answers/engine";
 import {
   type AddDocumentsResult,
   type ChatModelChoice,
+  type ConversationAskResult,
   type CoreApi,
   type CoreEventSource,
-  type CreateMindInput,
   DEFAULT_MIND_KIND,
   type Document,
   type DocumentStatus,
@@ -52,12 +76,14 @@ import {
   type ExportMindOptions,
   type ExternalService,
   type Meeting,
+  type MeetingHelpKind,
   type Mind,
   type MindCitationStyle,
   NOT_IN_A_FOLDER_ID,
   type OwnFileKind,
   type ProviderError,
   type SavedExport,
+  type ScannedQuoteInput,
   type SearchScope,
   type Task,
   type UnlockDocumentInput,
@@ -67,6 +93,7 @@ import {
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createCheckpoints } from "./checkpoints";
+import { createCheckRecord } from "./checkRecord";
 import { createCitationStyles } from "./citationStyles";
 import { type CitedPages, type CitedPlace, createCitedPages } from "./citedPages";
 import { COMPARISON_TASK, createComparisons } from "./comparisons";
@@ -74,7 +101,7 @@ import { createConnectors } from "./connectors";
 import { connectorDirectory } from "./connectors/directory";
 import { createConnectorRegistry, REGISTRY, REGISTRY_SENDS } from "./connectors/registry";
 import { createConsent, type DataFlowRegistry } from "./consent";
-import { createConversations } from "./conversations";
+import { createConversations, type QuestionInput } from "./conversations";
 import { createMeter } from "./cost/meter";
 import {
   createDocuments,
@@ -85,17 +112,20 @@ import {
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
 import { pdfIsLocked, pdfOpensWith } from "./documents/extract";
 import { statIdentity } from "./documents/files";
+import { openWordPackage } from "./documents/formats/docxPackage";
+import { readPageSetup } from "./documents/formats/docxPages";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
 import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
+import { LANGUAGE_SAMPLE, writtenInChinese } from "./documents/textLanguage";
 import { findUnreadDocuments } from "./documents/unread";
 import { createViewing } from "./documents/viewing";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
-import { createEdits } from "./edits";
+import { createEdits, editText } from "./edits";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import {
@@ -103,6 +133,7 @@ import {
   InvalidInputError,
   isRecord,
   LinkedFolderWritesDeclinedError,
+  LocalModeError,
   MindReadOnlyError,
   NotFoundError,
   TaggingNotReadyError,
@@ -110,19 +141,30 @@ import {
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
-import { createExports } from "./exports";
+import { createExports, type ExportsDependencies } from "./exports";
+import { createComparisonExport } from "./exports/comparisonExport";
 import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
+import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPictures";
 import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
-import { systemRegion } from "./language";
+import { LANGUAGES, systemRegion } from "./language";
 import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
 import { createBatches } from "./library/batches";
-import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
+import {
+  chatGroupClassifier,
+  decisionGroupClassifier,
+  type GroupClassifier,
+  pacedBy,
+  withPageReader,
+} from "./library/classifier";
 import { documentCitedPages, documentPageImages } from "./library/pageImages";
+import { createPlanPace } from "./library/planPace";
+import { createTagging } from "./library/tagging";
+import type { TaggingClassifier } from "./library/types";
 import { createMeetings } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
 import { createCaptureHealth } from "./meetings/health";
@@ -132,24 +174,34 @@ import { createMindContent } from "./mindContent";
 import { createMindIndex } from "./mindIndex";
 import {
   createMinds,
+  type NewMind,
   parseCreateMindInput,
   parseFolderChoice,
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf, readBlocks, theirChangesReading } from "./mindText";
+import { firstLineOf, readBlocks, textStart, theirChangesReading } from "./mindText";
 import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
+import { PAPER as PAGE_PAPER } from "./pageDefaults";
+import { nativePageSetup } from "./pageSetup";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
+import { KeyCharacterError, storedApiKey } from "./providers/apiKey";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
+import { createClaudeAccount } from "./providers/claudeAccount/account";
+import { ANTHROPIC_OAUTH } from "./providers/claudeAccount/config";
+import { createCopilotAccount } from "./providers/copilot/account";
+import { COPILOT_PROFILES } from "./providers/copilot/config";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
-import { ollamaBaseUrl } from "./providers/kinds";
+import { defaultOllamaUrl, ollamaBaseUrl } from "./providers/kinds";
+import { createLocalServers } from "./providers/localServers";
 import { createAiSdkChatModel } from "./providers/models";
 import {
   detectOllama,
   hasOllamaModel,
+  installedOllamaModels,
   OLLAMA_REGISTRY,
   OLLAMA_START_TIMEOUT_MS,
   pullOllamaModel,
@@ -159,7 +211,9 @@ import {
 import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
+import { createQuestions } from "./questions";
 import { createRecentlyDeleted } from "./recentlyDeleted";
+import { createReferenceChecks } from "./referenceChecks";
 import {
   createReferenceImport,
   createReferences,
@@ -168,6 +222,7 @@ import {
 } from "./referenceRecords";
 import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
+import { createResearch } from "./research";
 import { createTasks, type TaskKind, type TaskNotice } from "./runs/tasks";
 import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -176,21 +231,28 @@ import { createSkills } from "./skills";
 import { createSkillDrafts } from "./skills/draft";
 import { createScriptRunner } from "./skills/scripts";
 import { createSources, FIND_SOURCES_SENDS } from "./sources";
-import { createSourceHttp } from "./sources/http";
+import { createSourceHttp, SourceError } from "./sources/http";
 import { createPace, realTimers } from "./sources/pace";
 import { createSourceProviders, sourceKeySecret } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
 import { createSuggestions } from "./suggestions";
-import { createTags } from "./tags";
+import { createTags, tagsOfDocument } from "./tags";
 import { chatClassifier } from "./tags/classify";
-import { createJevTagging } from "./tags/jev";
+import { createJevTagging, decisionModelTagger } from "./tags/jev";
+import { createRateLimitPause } from "./tags/rateLimit";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
+import type { CommandsHost } from "./tools/commands/run";
+import { createCommandSteps } from "./tools/commands/steps";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
+import { createPublicFetch } from "./tools/web/fetcher";
+import { createCloudTranscription } from "./transcription/cloud/routes";
 import {
   createTranscriptionModel,
+  KEEPS_UP,
   QWEN3_ASR_0_6B,
   TRANSCRIPTION_SPEED,
 } from "./transcription/model";
+import { createUnsavedChanges } from "./unsavedChanges";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
 import { createWordImports } from "./wordImports";
@@ -211,9 +273,11 @@ export interface Core extends CoreApi, CoreEventSource {
   openDocumentFile(documentId: string): Promise<DocumentFile>;
   /**
    * Opens a picture a live Markdown Document shows from beside it, by the
-   * relative path written in the file ("figures/map.png"), for the host to
-   * serve to the viewer: only images, only from the file's folder or below
-   * it. Throws NotFoundError for anything else.
+   * relative path written in the file ("figures/map.png"), or one a saved web
+   * page shows, by its path in the snapshot ("pictures/<hash>.png", #756),
+   * for the host to serve to the viewer: only images, only from the file's
+   * folder or below it, only those the page's versions show. Throws
+   * NotFoundError for anything else.
    */
   openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
@@ -325,6 +389,22 @@ function parseUnlock(input: unknown): UnlockDocumentInput {
   return { documentId: parseDocumentId(input.documentId), password };
 }
 
+/** A Citation's Document, Units and quote, as `readScannedQuote` and `readableQuote` take them. */
+function parseQuoted(input: unknown): ScannedQuoteInput {
+  if (!isRecord(input) || typeof input.quote !== "string") {
+    throw new InvalidInputError("A Citation's Document, Units and quote are needed.");
+  }
+  const unit = (value: unknown) =>
+    typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+  return {
+    documentId: typeof input.documentId === "string" ? input.documentId : "",
+    contentHash: typeof input.contentHash === "string" ? input.contentHash : null,
+    pageFrom: unit(input.pageFrom),
+    pageTo: unit(input.pageTo),
+    quote: input.quote,
+  };
+}
+
 export function createCore(adapters: CoreAdapters): Core {
   const { dataDir } = adapters.paths;
   mkdirSync(dataDir, { recursive: true });
@@ -338,6 +418,8 @@ export function createCore(adapters: CoreAdapters): Core {
   }
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
+  const systemPaper = () =>
+    paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages()));
   try {
     ensureWorkspace(db, now);
   } catch (error) {
@@ -378,16 +460,26 @@ export function createCore(adapters: CoreAdapters): Core {
   // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
   const conversations = createConversations(db, now);
   const conversationsChanged = () => events.emit("conversations.changed", null);
-  const content = createMindContent(db, now, (mindId, update) => {
-    events.emit("mind.update", { mindId, update });
-    // Only notes the change; what became of AI text is worked out once the Mind is quiet.
-    aiUse.contentStored(mindId);
-    checkpoints.edited(mindId);
-    mindIndex.contentStored(mindId);
-    comparisons.mindChanged(mindId);
-    const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
-    if (minds.markEdited(mindId) || renamed) mindsChanged();
+  const unsaved = createUnsavedChanges({
+    dataDir: adapters.paths.dataDir,
+    tempDir: adapters.paths.tempDir ?? tmpdir(),
+    changed: (state) => events.emit("minds.unsaved", state),
   });
+  const content = createMindContent(
+    db,
+    now,
+    (mindId, update, cause) => {
+      events.emit("mind.update", { mindId, update, ...(cause && { cause }) });
+      // Only notes the change; what became of AI text is worked out once the Mind is quiet.
+      aiUse.contentStored(mindId);
+      checkpoints.edited(mindId);
+      mindIndex.contentStored(mindId);
+      comparisons.mindChanged(mindId);
+      const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
+      if (minds.markEdited(mindId) || renamed) mindsChanged();
+    },
+    { unsaved: unsaved.mindUnsaved },
+  );
   const mindIndex = createMindIndex({
     db,
     now,
@@ -433,7 +525,10 @@ export function createCore(adapters: CoreAdapters): Core {
   const tags = createTags(db, now);
   // First run: the preset Tags, in the interface language of the time.
   tags.seedPresets(settings.get().language);
-  const tagsChanged = () => events.emit("tags.changed", tags.list());
+  const tagsChanged = () => {
+    events.emit("tags.changed", tags.list());
+    tagger.tagsDefined();
+  };
   /** Set once automatic tagging exists: it hears about every Document that becomes ready. */
   let documentReady = (_documentId: string) => {};
   /** Set once rerank exists: a Document became ready, so the built-in reranking model is needed. */
@@ -531,6 +626,7 @@ export function createCore(adapters: CoreAdapters): Core {
       db,
       dataDir,
       now,
+      log: adapters.log ?? silentLogger,
       model: embedding.model,
       textRecognition: textRecognitionModel,
       pdfPassword: (id) => pdfPasswords.of(id),
@@ -643,6 +739,8 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
+  // A saved page's pictures may come from any host: only the public internet is reached (#756).
+  const pictureFetcher = createPublicFetch(adapters.web);
   const webPages = createWebPages({
     db,
     dataDir,
@@ -650,6 +748,11 @@ export function createCore(adapters: CoreAdapters): Core {
     documents,
     languages: () =>
       settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
+    pictureFetch: pictureFetcher.fetch,
+    ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
+    keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    signal: lifetime.signal,
+    reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
   });
   webPages.dropPurged().catch((error: unknown) => console.error(error));
@@ -757,6 +860,10 @@ export function createCore(adapters: CoreAdapters): Core {
   if (documents.searchableCount() > 0) rerank.prepare();
   /** Set once outside agents exist: Local mode pauses them. */
   let agentsLocalModeChanged = () => {};
+  /** Where meeting audio may go changed: a live cloud stream whose gate closed stops now (#141). */
+  let transcriptionGateChanged = () => {};
+  /** Set once Connectors exist: Local mode pauses those on other computers. */
+  let connectorsLocalModeChanged = () => {};
   /**
    * Local mode on or off: embeddings may switch back to the built-in model,
    * rerank pauses, usage data stops, and outside agents pause.
@@ -765,10 +872,19 @@ export function createCore(adapters: CoreAdapters): Core {
     const wasLocal = embedding.localOnly();
     await embedding.setLocalOnly(enabled);
     library.resume();
+    if (embedding.localOnly()) {
+      // A prompt still open for a cloud service closes: whatever the User answers, nothing goes (ADR-0022).
+      consent.refuseWaiting(
+        ({ flow }) => !consent.onThisComputer(flow.id, flow.service.id),
+        () => new LocalModeError(),
+      );
+    }
+    transcriptionGateChanged();
     if (wasLocal !== embedding.localOnly()) {
       usageData.localModeChanged();
       privacyChanged();
       agentsLocalModeChanged();
+      connectorsLocalModeChanged();
       await rerankChanged();
       // Questions to a cloud model are refused now (or allowed again): the chat model's readiness changed.
       await readinessChanged();
@@ -780,6 +896,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Sign-in changes can happen in the middle of a request (a refresh that fails), so they report through events.
   let chatGptChanged = () => {};
+  let chatGptLimitsChanged = () => {};
   const chatGptStore = adapters.chatGptStore;
   const chatGpt = createChatGptPlan({
     endpoints: { ...CHATGPT_PLAN_ENDPOINTS, ...adapters.chatGptPlan },
@@ -794,10 +911,30 @@ export function createCore(adapters: CoreAdapters): Core {
     browser: adapters.browser,
     now: () => (adapters.now?.() ?? new Date()).getTime(),
     onChange: () => chatGptChanged(),
+    onLimitsChange: () => chatGptLimitsChanged(),
   });
   // What the experimental ChatGPT provider left on this device goes (see migration 53).
   chatGpt.forgetCodexSignIn().catch((error: unknown) => {
     console.error("The experimental ChatGPT provider's sign-in couldn't be removed.", error);
+  });
+  let claudeAccountChanged = () => {};
+  const claudeProfile = adapters.claudeAccount ?? ANTHROPIC_OAUTH;
+  const claudeAccount = createClaudeAccount({
+    config: claudeProfile,
+    secrets,
+    language: () => settings.get().language,
+    browser: adapters.browser,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    onChange: () => claudeAccountChanged(),
+  });
+  let copilotChanged = () => {};
+  const copilotProfiles = adapters.copilotProfiles ?? COPILOT_PROFILES;
+  const copilot = createCopilotAccount({
+    profiles: copilotProfiles,
+    secrets,
+    browser: adapters.browser,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    onChange: () => copilotChanged(),
   });
   const meter = createMeter({
     db,
@@ -814,6 +951,8 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
+    claudeAccount,
+    copilot,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
     localOnly: () => embedding.localOnly(),
     meter,
@@ -829,6 +968,7 @@ export function createCore(adapters: CoreAdapters): Core {
     processes: adapters.processes,
     browser: adapters.browser,
     consent,
+    localOnly: () => embedding.localOnly(),
     signInPages: (name) => {
       const { language } = settings.get();
       return {
@@ -849,6 +989,7 @@ export function createCore(adapters: CoreAdapters): Core {
       timing: { signInTimeoutMs: adapters.connectorSignInTimeoutMs },
     }),
   });
+  connectorsLocalModeChanged = () => connectors.localModeChanged();
   /** Skill scripts can run: the User hasn't turned them off, and a Skill that is on has some. */
   const scriptsOffered = () =>
     settings.get().device.skillScriptsEnabled && skills.anyEnabledWithScripts();
@@ -900,6 +1041,8 @@ export function createCore(adapters: CoreAdapters): Core {
     },
   });
 
+  const questions = createQuestions(events);
+
   // Requests to one service kept apart, as its operator asks: Look up and Find sources share them.
   const paceTimers = adapters.paceTimers ?? realTimers;
   const pace = createPace(paceTimers);
@@ -912,9 +1055,15 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     localOnly: () => embedding.localOnly(),
     secrets,
-    providers: createSourceProviders(adapters.sourceProviders, (id) =>
-      secrets.tryGet(sourceKeySecret(id)),
-    ),
+    providers: createSourceProviders(adapters.sourceProviders, async (id) => {
+      try {
+        return storedApiKey(await secrets.tryGet(sourceKeySecret(id)));
+      } catch (error) {
+        if (error instanceof KeyCharacterError)
+          throw new SourceError("key-rejected", error.message);
+        throw error;
+      }
+    }),
     http: createSourceHttp(pace, paceTimers),
     folder: join(dataDir, "Sources"),
     checkFolder: (folderId) => {
@@ -933,7 +1082,8 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     async savePage(address, folderId, added) {
-      const result = await webPages.save({ address }, added);
+      // A found source's copy is the text the User asked for, not how its page looks.
+      const result = await webPages.save({ address, keepLook: false }, added);
       if (result.outcome === "failed") return null;
       if (!result.existing && folderId !== null) library.assign(result.document.id, folderId);
       return { document: documents.get(result.document.id), existing: result.existing };
@@ -975,6 +1125,67 @@ export function createCore(adapters: CoreAdapters): Core {
       organizedFolderDocuments: (folderId) => library.documentIds(folderId),
       documentIds: (filter) => documents.ids(filter),
     });
+  const searchedScope = (scope: SearchScope | null, mindId: string | null) => {
+    const folderId = mindId !== null && mindExists(mindId) ? minds.get(mindId).folderId : null;
+    const holds =
+      folderId !== null &&
+      documents
+        .getMany(resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] }) ?? [])
+        .some(holdsText);
+    const searched = mindSearchScope(
+      scope ?? { folderIds: [], tagIds: [], documentIds: [] },
+      folderId,
+      holds,
+    );
+    return hasSearchScope(searched) ? searched : null;
+  };
+  // A Folder of the Library holds no file that isn't a Document, so it names the folders on disk
+  // its Documents are in: a Linked folder filed into it whole names the Linked folder.
+  const foldersOnDisk = (folderIds: readonly string[]) => {
+    const all = folders.list();
+    const named = all.filter((folder) => folderIds.includes(folder.id));
+    const filed = new Set(
+      folderIds
+        .filter((id) => !named.some((folder) => folder.id === id))
+        .flatMap((id) => documents.getMany(library.documentIds(id)))
+        .map((document) => document.folderId),
+    );
+    return [...named, ...all.filter((folder) => filed.has(folder.id))];
+  };
+  const unreadIn = (wanted: SearchScope | null): UnreadFile[] => {
+    const inScope = wanted ? resolveScope(wanted) : null;
+    const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
+    // Files in a format not read belong to folders on disk only: a Tag or a Document can't name
+    // them. A folder holds those in it and under it, even where no Document is.
+    const named = wanted ? foldersOnDisk(wanted.folderIds) : null;
+    const files = documents.linkedFolders
+      .unsupportedFiles()
+      .filter(
+        (file) =>
+          named === null ||
+          named.some(
+            (folder) =>
+              folder.linkedFolderId === file.linkedFolderId &&
+              (folder.relativePath === "" ||
+                file.relativeFolder === folder.relativePath ||
+                file.relativeFolder.startsWith(`${folder.relativePath}/`)),
+          ),
+      )
+      .map(
+        (file): UnreadFile => ({
+          id: file.path,
+          name: file.name,
+          reason: "format",
+          extension: file.extension,
+          documentId: null,
+          pages: [],
+        }),
+      );
+    // By name, the same in every interface language: the order they were added in can tie.
+    return [...unread, ...files].sort(
+      (a, b) => a.name.localeCompare(b.name, "en", { numeric: true }) || a.id.localeCompare(b.id),
+    );
+  };
   // What checks and comparison tables search (#80): as Answers do, without IncarnaMind's own
   // files and the document being checked. Answers themselves search everything, as before.
   const evidence = createEvidence({
@@ -995,7 +1206,9 @@ export function createCore(adapters: CoreAdapters): Core {
     enabled: () => settings.get().user.webSearch && !embedding.localOnly(),
     readiness: (model) => chat.readiness(model),
     prepare: (model) => chat.prepareModel(model, "web-search", "off"),
-    savePage: (address, fetch) => webPages.save({ address }, undefined, fetch),
+    // A page an Answer saves is never loaded whole: that is for the User to ask for, page by page.
+    savePage: (address, fetch) =>
+      webPages.save({ address, keepLook: false }, undefined, fetch, "search"),
     folderOf: (place) => {
       try {
         if (place.mindId !== null) return minds.get(place.mindId).folderId;
@@ -1014,6 +1227,33 @@ export function createCore(adapters: CoreAdapters): Core {
 
   const answerEngine =
     adapters.answerEngine ?? createAiSdkAnswerEngine({ runEngine: adapters.runEngine });
+  // The assistant's commands go through the core's own interface, as the window's clicks do (#1110).
+  let api: Core | null = null;
+  const commandSteps = createCommandSteps();
+  const commandsHost: CommandsHost = {
+    get core() {
+      if (!api) throw new Error("The core isn't ready for commands yet.");
+      return api;
+    },
+    outputFolder: async () => outputs.settings().location,
+    exportMind: async (mindId, format, folder, approved) => {
+      const options = optionsFor(format, settings.get().user.exportOptions);
+      const { fileName, data, word } = await mindExports.export(mindId, options);
+      // The window shows first what a Word file can't keep (#105); the assistant can't.
+      if (word && word.notKept.length > 0) {
+        throw new InvalidInputError({ key: "error.commands.wordLoses" });
+      }
+      const file = await outputs.save({
+        name: fileName,
+        data,
+        ownFile: ownFileOf(options),
+        ...(folder !== null && { folder, approved }),
+      });
+      recordExport(options);
+      return file;
+    },
+  };
+
   const answers = createAnswers({
     content,
     events,
@@ -1023,17 +1263,30 @@ export function createCore(adapters: CoreAdapters): Core {
     readableMindName: (mindId) => {
       const found = minds.locate(mindId);
       if (!found || found.deletedAt !== null) return null;
-      return isKnownKind(minds.get(mindId).kind) ? found.name : null;
+      if (!isKnownKind(minds.get(mindId).kind)) return null;
+      return found.name || translate(settings.get().language, "mind.untitled");
     },
     liveTranscript: (mindId) => liveTranscriptOf(mindId),
+    meetingHelp: (mindId, question) => meetingHelpOf(mindId, question),
     providerExists: (providerId) => chat.exists(providerId),
-    readiness: (choice) => chat.readiness(choice),
-    prepareModel: (choice) => chat.prepareModel(choice),
+    readiness: async (choice) => chat.readiness(await chat.answeringModel(choice)),
+    prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
+    async prepareQuickModel(answers, prepared) {
+      const quick = chat.quickTasksModel(answers);
+      if (!quick || (quick.providerId === answers.providerId && quick.modelId === answers.modelId))
+        return prepared.model;
+      // An Answer on this computer keeps its small calls there too.
+      if (prepared.provider.service === null && chat.describeModel(quick)?.service !== null)
+        return prepared.model;
+      return (await chat.prepareModel(quick, "chat", "off")).model;
+    },
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       names: () => documents.names(),
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
+      searchableBySize: (documentIds) => documents.searchableBySize(documentIds ?? undefined),
+      passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       search: searchDocuments,
@@ -1060,6 +1313,20 @@ export function createCore(adapters: CoreAdapters): Core {
     ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     web: webSearch,
+    commands: {
+      host: commandsHost,
+      findable: async () => {
+        const { core } = commandsHost;
+        const [listed, mindsNow, libraryNow, tagsNow] = await Promise.all([
+          core.listDocuments(),
+          core.listMinds(),
+          core.getLibrary(),
+          core.listTags(),
+        ]);
+        return { documents: listed, minds: mindsNow, library: libraryNow, tags: tagsNow };
+      },
+      steps: commandSteps,
+    },
     // The assistant changes Minds and makes them, as Proposals (#202).
     minds: {
       list: () =>
@@ -1084,23 +1351,29 @@ export function createCore(adapters: CoreAdapters): Core {
       checkpoint: (mindId) => {
         checkpoints.save(mindId, "accept");
       },
-      create: (title, folderId) => {
-        const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId });
+      create: (title, folderId, headed) => {
+        const mind = makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }, { headed });
         return { id: mind.id, name: mindName(mind) || title };
+      },
+      discard: (mindId) => {
+        if (!mindExists(mindId)) return;
+        const { title } = minds.get(mindId);
+        if (content.read(mindId, (blocks) => holdsOnlyItsTitle(blocks, title))) removeMind(mindId);
       },
       folderName: (folderId) =>
         library.folders().find((folder) => folder.id === folderId)?.name ?? null,
       writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
       proposeInMind: (input) => edits.proposeInMind(input),
+      checkWritten: (input) => checks.checkWritten(input),
     },
     withdrawChanges: (changes) => {
       for (const change of changes) {
         if (!mindExists(change.mindId)) continue;
+        const { title } = minds.get(change.mindId);
         const emptied = content.edit(change.mindId, (blocks) => {
           resolveProposals(blocks, (ref) => ref.request === change.request, "reject");
-          return topLevelBlocks(blocks).every(
-            (block) => block.nodeName === "paragraph" && block.length === 0,
-          );
+          if (change.revised) restoreRevised(blocks, change.request);
+          return holdsOnlyItsTitle(blocks, title);
         });
         if (change.created && emptied) removeMind(change.mindId);
       }
@@ -1109,6 +1382,7 @@ export function createCore(adapters: CoreAdapters): Core {
       decide: (call) => approvals.decide(call),
       request: (call, signal) => approvals.request(call, signal),
     },
+    questions: { ask: (request, signal) => questions.ask(request, signal) },
     scripts: {
       enabled: () => settings.get().device.skillScriptsEnabled,
       timeoutSeconds: () => settings.get().device.skillScriptTimeoutSeconds,
@@ -1147,6 +1421,17 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     },
     resolveScope,
+    workingCopyOf: (mindId) => wordImports.originalOf(mindId)?.documentIds?.[0] ?? null,
+    searchedScope,
+    mindFolder: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
+    exampleDocuments: (mindId) => examples.documentsOf(mindId),
+    unscopedDocuments: (mindId) => {
+      const made = examples.made();
+      if (made.documentIds.length === 0 || (mindId && made.mindIds.includes(mindId))) return null;
+      const left = new Set(made.documentIds);
+      return documents.ids({}).filter((id) => !left.has(id));
+    },
+    interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => {
       background.setAnswering(writing);
@@ -1188,7 +1473,11 @@ export function createCore(adapters: CoreAdapters): Core {
   const taskName = (kind: string) =>
     translate(
       settings.get().language,
-      kind === COMPARISON_TASK ? "task.kind.comparison" : "task.kind.other",
+      kind === COMPARISON_TASK
+        ? "task.kind.comparison"
+        : kind === RESEARCH_TASK
+          ? "task.kind.research"
+          : "task.kind.other",
     );
   /** Whether a Mind is the tab shown in a group of one of these windows. */
   const mindShown = (mindId: string | null, windowIds: readonly string[]) =>
@@ -1219,12 +1508,13 @@ export function createCore(adapters: CoreAdapters): Core {
           : "task.notify.finished",
       { task: name },
     );
-    let body = "";
+    let mind = "";
     try {
-      body = task.mindId ? minds.get(task.mindId).title : "";
+      mind = task.mindId ? mindName(minds.get(task.mindId)) : "";
     } catch {
-      body = "";
+      mind = "";
     }
+    const body = [mind, what === "finished" ? task.summary : null].filter(Boolean).join(" · ");
     notifications.show(
       { title, body: body || translate(language, "task.notify.body") },
       (windowIds) => mindShown(task.mindId, windowIds),
@@ -1232,8 +1522,76 @@ export function createCore(adapters: CoreAdapters): Core {
         events.emit("task.shown", { taskId: task.id, mindId: task.mindId, blockId: task.blockId }),
     );
   };
-  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one.
-  const taskKinds: TaskKind[] = [comparisons.taskKind, ...(adapters.taskKinds ?? [])];
+  const research = createResearch({
+    requireMind: (mindId) => writableMind(mindId).id,
+    searchedScope,
+    mindExists,
+    mindName: (mindId) => (mindExists(mindId) ? mindName(minds.get(mindId)) || null : null),
+    folderOfMind: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
+    createMind: (title, folderId) => makeMind({ title, kind: DEFAULT_MIND_KIND, folderId }).id,
+    documents: {
+      webPagesSince: (ids, since) =>
+        documents
+          .getMany(ids)
+          .filter((document) => document.kind === "web" && document.createdAt >= since)
+          .map((document) => ({ id: document.id, name: document.name })),
+      live: (ids) => documents.getMany(ids).map((document) => document.id),
+    },
+    library: {
+      folderExists: (folderId) => library.folders().some((folder) => folder.id === folderId),
+      folderNames: () => library.folders().map((folder) => folder.name),
+      createFolder: (name, description) => library.create({ name, description }).id,
+      file: (documentIds, folderId) => {
+        db.transaction(() => library.move(documentIds, folderId));
+        library.moved([...documentIds]);
+      },
+    },
+    tags: {
+      list: () => tags.list().map((tag) => ({ id: tag.id, name: tag.name })),
+      create: (name, description) => {
+        const tag = tags.create({ name, description });
+        tagsChanged();
+        return tag.id;
+      },
+      apply: (documentId, tagIds) => {
+        const kept = tagsOfDocument(db, documentId)
+          .filter((link) => link.source === "automatic")
+          .map((link) => link.tagId);
+        const decided = [...new Set([...kept, ...tagIds])].map((tagId) => ({
+          tagId,
+          confidence: null,
+          needsReview: false,
+        }));
+        if (tags.applyAutomatic(documentId, decided)) announceTagged([documentId]);
+      },
+    },
+    notes: {
+      proposed: (mindId, request) => noteAdding.proposed(mindId, request),
+      propose: (mindId, blocks, request, made) => noteAdding.propose(mindId, blocks, request, made),
+    },
+    now: () => adapters.now?.() ?? new Date(),
+    reportError: (error) => console.error(error),
+    chat: {
+      providerExists: (providerId) => chat.exists(providerId),
+      readiness: (choice) => chat.readiness(choice),
+      prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
+      runsLocally: (choice) => chat.metered(choice)?.billing === "free",
+    },
+    answers,
+    resolveScope,
+    tasks: {
+      start: (kind, mindId, input) => tasks.start(kind, mindId, input),
+      get: (taskId) => tasks.record(taskId),
+      steps: (taskId) => tasks.steps(taskId),
+    },
+    say: (key, params) => translate(settings.get().language, key, params),
+  });
+  // Tasks (#126): their journal survives a force-quit; comparison tables fill as one, and Research is one.
+  const taskKinds: TaskKind[] = [
+    comparisons.taskKind,
+    research.taskKind,
+    ...(adapters.taskKinds ?? []),
+  ];
   const tasks = createTasks({
     db,
     now,
@@ -1267,6 +1625,7 @@ export function createCore(adapters: CoreAdapters): Core {
       writableMind(mindId);
     },
     resolveScope,
+    searchedScope,
     searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
     localOnly: () => embedding.localOnly(),
     events,
@@ -1276,26 +1635,39 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
+  const liveDocument = (id: string): Document | undefined => {
+    try {
+      return documents.get(id);
+    } catch (error) {
+      if (error instanceof NotFoundError) return undefined;
+      throw error;
+    }
+  };
   // Citation styles (#289): formatted on their own thread, from the Documents' reference records.
   const citationStyles = createCitationStyles({
     folder: adapters.paths.citationStyles,
-    document: (id): Document | undefined => {
-      try {
-        return documents.get(id);
-      } catch (error) {
-        if (error instanceof NotFoundError) return undefined;
-        throw error;
-      }
-    },
+    document: liveDocument,
   });
-  const mindCitationStyle = (mindId: string): MindCitationStyle => {
+  const mindStyleAndText = (mindId: string) => {
     const { folderId } = minds.get(mindId);
-    return content.readSettings(mindId, (mindSettings) => ({
-      style: citationStyleIn(mindSettings),
+    const { chineseText, cited } = content.read(mindId, (blocks) => {
+      const versions: CitedVersions = new Map();
+      addCitedVersions(blocks, versions);
+      return {
+        chineseText: writtenInChinese(textStart(blocks, LANGUAGE_SAMPLE)),
+        cited: [...versions.keys()],
+      };
+    });
+    const citesWorks = cited.some((id) => isCitableWork(liveDocument(id)?.reference ?? null));
+    const context = { language: settings.get().language, chineseText, citesWorks };
+    const style: MindCitationStyle = content.readSettings(mindId, (mindSettings) => ({
+      style: citationStyleIn(mindSettings, context),
       chosen: chosenCitationStyle(mindSettings) !== null,
       folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
+    return { style, textLanguage: chineseText ? ("zh-CN" as const) : ("en" as const) };
   };
+  const mindCitationStyle = (mindId: string): MindCitationStyle => mindStyleAndText(mindId).style;
   /** Sends a Mind to Recently deleted; its tabs close. */
   const removeMind = (mindId: unknown) => {
     const at = now();
@@ -1304,6 +1676,7 @@ export function createCore(adapters: CoreAdapters): Core {
       content.remove(mind.id, at);
       return mind;
     });
+    content.removed(deleted.id, at);
     meetings.mindDeleted(deleted.id);
     mindsChanged();
     layouts.forgetDeletedMinds();
@@ -1321,18 +1694,49 @@ export function createCore(adapters: CoreAdapters): Core {
     localOnly: () => embedding.localOnly(),
     recheck: (attributes) => recheckKept(documents, attributes),
     writing: (mindId, place) => events.emit("mind.writing", { mindId, place }),
+    checkpoint: (mindId) => {
+      checkpoints.save(mindId, "accept");
+    },
     now: () => adapters.now?.() ?? new Date(),
   });
 
   // Find support and Check against Documents (#96): check Runs that can only search and cite.
+  const startInWritingStyle = (mindId: string) => {
+    const style = settings.get().user.newMindStyle;
+    if (sameStyle(style, DEFAULT_MIND_STYLE)) return;
+    content.editSettings(mindId, (mindSettings) => writeMindStyle(mindSettings, style));
+  };
   /** A new Mind, in the citation style last chosen for a Mind in its Folder, as its own choice (#289). */
-  const makeMind = (input: Required<CreateMindInput>): Mind => {
+  /**
+   * With `headed`, the Mind's text starts with its title as a Heading 1 and an
+   * empty line under it: a page has no title field (#908), and a Mind made with
+   * its name reads as it did with one.
+   */
+  const makeMind = (input: NewMind, { headed = false } = {}): Mind => {
     if (input.folderId !== null) library.folder(input.folderId);
     const mind = minds.create(input);
+    if (headed) {
+      content.edit(mind.id, (note) =>
+        insertBlocks(
+          note,
+          mind.title === ""
+            ? [{ type: "heading", attrs: { level: 1 } }]
+            : [
+                {
+                  type: "heading",
+                  attrs: { level: 1 },
+                  content: [{ type: "text", text: mind.title }],
+                },
+                { type: "paragraph" },
+              ],
+        ),
+      );
+    }
     const style = input.folderId === null ? null : library.citationStyle(input.folderId);
     if (style !== null) {
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
     }
+    startInWritingStyle(mind.id);
     mindsChanged();
     usageData.record({ event: "mind_created", fields: {} });
     return mind;
@@ -1346,8 +1750,17 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     requireFolder: (folderId) => void library.folder(folderId),
     async addFile(path, folderId) {
-      const added = await addDocuments([path], folderId === null ? {} : { groupId: folderId });
-      return added.documents[0] ?? null;
+      const fresh = new Set<string>();
+      const added = await addDocuments(
+        [path],
+        folderId === null ? {} : { groupId: folderId },
+        (documentId) => fresh.add(documentId),
+      );
+      const [document] = added.documents;
+      // Someone else's file, checked: not proof of its own claims. One the Library already had keeps the User's choice.
+      return document && fresh.has(document.id)
+        ? documents.setNotCited(document.id, true)
+        : (document ?? null);
     },
     document: (documentId) => documents.get(documentId),
     onStatus: (listener) => events.on("document.status", listener),
@@ -1359,18 +1772,34 @@ export function createCore(adapters: CoreAdapters): Core {
         kind: DEFAULT_MIND_KIND,
         folderId,
       }),
+    watch: {
+      minds: () => minds.list().map((mind) => ({ id: mind.id, folderId: mind.folderId })),
+      documentVersions: () =>
+        new Map(documents.list().map((document) => [document.id, document.contentHash])),
+      background,
+      runCost: (runId) => meter.taskCost(runId),
+      delayMs: adapters.contradictionWatch?.delayMs ?? AFTER_NEW_VERSION_MS,
+      claimTimeLimitMs: adapters.contradictionWatch?.claimTimeLimitMs ?? CLAIM_TIME_LIMIT_MS,
+      log: adapters.log ?? silentLogger,
+    },
     mindFolder: (mindId) => minds.get(mindId).folderId,
+    searchedScope,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
+    recordAiUse: (inputs) => void aiUse.record(inputs),
     chat,
     consent,
     localOnly: () => embedding.localOnly(),
     resolveScope,
+    unread: unreadIn,
     evidence,
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      joinedAfter: (documentIds, since, folderId) =>
+        documents.searchableJoinedAfter(documentIds ?? undefined, since, folderId),
       names: () => documents.names(),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
+      savedBySearch: (documentId) => documents.getMany([documentId])[0]?.web?.origin === "search",
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
@@ -1378,6 +1807,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     engine: answerEngine,
     retention,
+    editText,
     now: () => adapters.now?.() ?? new Date(),
   });
 
@@ -1411,22 +1841,75 @@ export function createCore(adapters: CoreAdapters): Core {
     const marked = ownFiles.record(data, kind);
     for (const document of documents.getMany(marked)) events.emit("document.status", document);
   };
-  const mindExports = createExports({
+  const exportDependencies: ExportsDependencies = {
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
     liveDocuments: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),
+    readableQuote: ({ documentId, contentHash, pageFrom, pageTo, quote }) =>
+      documentId && quote
+        ? documents.readableQuote({
+            documentId,
+            contentHash: contentHash ?? null,
+            pageFrom: pageFrom ?? null,
+            pageTo: pageTo ?? null,
+            quote,
+          })
+        : null,
     language: () => settings.get().language,
-    citationStyle: (mindId) => mindCitationStyle(mindId).style,
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    citationStyle: (mindId) => {
+      const { style, textLanguage } = mindStyleAndText(mindId);
+      return { style: citationStyles.resolve(style.style, textLanguage), textLanguage };
+    },
+    font: (mindId) => exportedFamily(content.readSettings(mindId, mindStyleOf).font),
+    lineSpacing: (mindId) => {
+      const lineSpacing = lineSpacingOf(content.readSettings(mindId, mindStyleOf));
+      return lineSpacing === "default" ? null : lineSpacing;
+    },
     bibliography: (mindId) => content.readSettings(mindId, bibliographyShown),
     formatCitations: (request) => citationStyles.format(request),
     citedPage: (citation) => citedPages.image(citation),
+    citedUnits: ({ documentId, contentHash, pageFrom, pageTo }) => {
+      if (!documentId || !contentHash) return [];
+      const from = typeof pageFrom === "number" ? pageFrom : null;
+      const to = from === null ? null : Math.max(from, typeof pageTo === "number" ? pageTo : from);
+      return documents.pageTexts(documentId, contentHash, from, to);
+    },
+    sharePageTextOnly: (mindId) => content.readSettings(mindId, textOnlyDocuments),
     printer: adapters.printer ?? null,
-    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
+    paper: systemPaper,
     ...(adapters.pictures && { pictures: adapters.pictures }),
     wordPackage: (mindId) => wordImports.packageOf(mindId),
     author: () => settings.get().author,
     log: adapters.log ?? silentLogger,
+    now,
+  };
+  const mindExports = createExports(exportDependencies);
+  const comparisonExport = createComparisonExport(exportDependencies);
+  const checkRecord = createCheckRecord({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.peek(mindId, look),
+    providers: () => chat.list(),
+    documents: () => documents.list(),
+    keptCitationTexts: () => documents.keptCitationTexts(),
+    readableQuote: ({ documentId, contentHash, pageFrom, pageTo, quote }) =>
+      documentId && quote
+        ? documents.readableQuote({
+            documentId,
+            contentHash: contentHash ?? null,
+            pageFrom: pageFrom ?? null,
+            pageTo: pageTo ?? null,
+            quote,
+          })
+        : null,
+    folderName: (folderId) =>
+      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    localMode: () => embedding.localOnly(),
+    language: () => settings.get().language,
+    printer: adapters.printer ?? null,
+    paper: systemPaper,
     now,
   });
   const ownFileOf = (options: ExportMindOptions): OwnFileKind =>
@@ -1495,8 +1978,8 @@ export function createCore(adapters: CoreAdapters): Core {
       throw error;
     }
   };
-  const unlinkFolder = (linkedFolderId: string) => {
-    documents.linkedFolders.remove(linkedFolderId);
+  const unlinkFolder = (linkedFolderId: string, keep: readonly string[] = []) => {
+    documents.linkedFolders.remove(linkedFolderId, keep);
     outputs.forgetLinkedFolder(linkedFolderId);
   };
 
@@ -1508,15 +1991,57 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     hostedUrl: adapters.jevHostedUrl,
     signal: lifetime.signal,
+    localOnly: () => embedding.localOnly(),
   });
+  // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds.
+  const planPace = createPlanPace({
+    pace,
+    timers: paceTimers,
+    resumed: () => {
+      tagger.resume();
+      library.resume();
+    },
+    signal: lifetime.signal,
+  });
+  const rateLimit = createRateLimitPause({
+    timers: paceTimers,
+    resumed: () => {
+      tagger.resume();
+      library.resume();
+    },
+    signal: lifetime.signal,
+  });
+  // The one Tagging setting: the model automatic tagging uses, and Organize when picked by hand.
+  const tagging = createTagging({
+    setting: () => library.settings().classifier,
+    chat: {
+      list: () => chat.list(),
+      defaultModel: () => settings.get().user.chatModel,
+      describeModel: (choice) => chat.describeModel(choice),
+      quickTasksModel: (answers) => chat.quickTasksModel(answers),
+    },
+    jev,
+    localOnly: () => embedding.localOnly(),
+    ollamaUrl: adapters.ollamaUrl ?? defaultOllamaUrl(),
+    localModels: adapters.localModels ?? installedOllamaModels,
+    planPausedUntil: () => planPace.pausedUntil(),
+    now: () => paceTimers.now(),
+  });
+  const tagsWith = (): TaggingClassifier | null => {
+    const setting = library.settings().classifier;
+    return setting.kind === "automatic" ? tagging.lastResolved() : setting;
+  };
+  const onPlan = <T>(run: () => Promise<T>, signal: AbortSignal) => planPace.run(run, signal);
+  const taggingServices = async (): Promise<ExternalService[]> => {
+    const classifier = await tagging.resolve();
+    const service = classifier && tagging.service(classifier);
+    return service ? [service] : [];
+  };
   consent.registry.register({
     id: "tagging",
     sends: TAGGING_FLOW_SENDS,
     background: true,
-    async services() {
-      const service = jev.enabled() ? jev.service() : chat.defaultService();
-      return service ? [service] : [];
-    },
+    services: taggingServices,
   });
   /** Pushes "documents.tagged" for those of these Documents that still exist. */
   const announceTagged = (documentIds: readonly string[]) => {
@@ -1538,31 +2063,87 @@ export function createCore(adapters: CoreAdapters): Core {
     if (changed.length > 0) events.emit("documents.tagged", documents.getMany(changed));
     return documents.getMany(ids);
   };
-  // Existing installations keep the legacy tagger until organization is configured.
-  // Once folders are in use, only the selected organizer may suggest tags.
-  const organizationConfigured = () =>
-    !!settings.readDeviceValue("library") ||
+  const organizing = () =>
+    organizeModelOf(library.settings()) !== null &&
     !!db.get("SELECT 1 FROM library_groups WHERE deleted_at IS NULL LIMIT 1");
+  /**
+   * Organize tags and files new Documents itself only while it does so automatically; otherwise
+   * automatic tagging tags them, and they wait for Organize to be moved. Automatic covers tagging only.
+   */
+  const organizesNewDocuments = () => organizing() && library.settings().automatic;
+  // Ollama's decision models run only on this computer, as when one is picked by hand: elsewhere
+  // they would get Document text with no consent asked.
+  const decisionModelElsewhere = (classifier: TaggingClassifier) =>
+    (classifier.kind === "auto" || classifier.kind === "ollama") &&
+    tagging.service(classifier) !== null;
+  const notOnThisComputer = (classifier: TaggingClassifier) =>
+    new TaggingNotReadyError({
+      key:
+        classifier.kind === "auto" ? "error.library.autoNotLocal" : "error.library.ollamaNotLocal",
+    });
   const tagger = createTagger({
     db,
     now,
     tags,
-    enabled: () => !organizationConfigured(),
+    enabled: () => !organizesNewDocuments(),
+    organizing: (id) => organizing() && library.isOrganizing(id),
+    stopped: (id) => library.taggingStoppedFor(id),
     canRun: async () => {
-      if (jev.enabled()) return jev.canRun();
-      const readiness = await chat.readiness(undefined, "tagging");
-      return readiness.ready && readiness.consent !== "needed";
+      const classifier = await tagging.resolve();
+      if (!classifier) return false;
+      if (classifier.kind === "jev") return jev.canRun();
+      if (classifier.kind === "chat") {
+        const readiness = await chat.readiness(classifier.choice, "tagging");
+        return readiness.ready && readiness.consent !== "needed";
+      }
+      return !decisionModelElsewhere(classifier);
     },
-    mightBeReady: () => (jev.enabled() ? jev.mightBeReady() : chat.mightBeReady("tagging")),
+    mightBeReady: () => {
+      const classifier = tagsWith();
+      if (!classifier || decisionModelElsewhere(classifier)) return false;
+      if (embedding.localOnly() && tagging.service(classifier)) return false;
+      if (classifier.kind === "jev") return jev.mightBeReady();
+      if (classifier.kind === "chat") return chat.mightBeReady("tagging", classifier.choice);
+      return true;
+    },
     prepare: async () => {
-      if (jev.enabled()) return jev.prepare();
-      const prepared = await chat.prepareModel(undefined, "tagging");
-      // No service to send to: the model runs on a server on this computer.
-      return chatClassifier(prepared.model, { local: prepared.provider.service === null });
+      const classifier = await tagging.resolve();
+      if (!classifier) throw new TaggingNotReadyError({ key: "error.tagging.noModel" });
+      if (decisionModelElsewhere(classifier)) throw notOnThisComputer(classifier);
+      if (embedding.localOnly() && tagging.service(classifier))
+        throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
+      switch (classifier.kind) {
+        case "jev":
+          return jev.prepare();
+        case "auto": {
+          const model = await tagging.textDecisionModel(classifier.baseUrl);
+          if (!model)
+            throw new TaggingNotReadyError({
+              key: "error.tagging.installModel",
+              values: { model: "tev1:4b" },
+            });
+          return decisionModelTagger({ baseUrl: classifier.baseUrl, model });
+        }
+        case "ollama":
+          return decisionModelTagger({ baseUrl: classifier.baseUrl, model: classifier.modelId });
+        case "chat": {
+          const prepared = await chat.prepareModel(classifier.choice, "tagging");
+          if (embedding.localOnly() && prepared.provider.service)
+            throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
+          // No service to send to: the model runs on a server on this computer.
+          const chosen = chatClassifier(prepared.model, {
+            local: prepared.provider.service === null,
+          });
+          if (prepared.provider.kind !== "chatgpt") return chosen;
+          return { ...chosen, decide: (input) => onPlan(() => chosen.decide(input), input.signal) };
+        }
+      }
     },
     announce: announceTagged,
     reportError: (error) => console.error(error),
     background,
+    rateLimit,
+    timers: paceTimers,
   });
   const automaticClassifiers = new Map<string, ReturnType<typeof automaticGroupClassifier>>();
   const library = createLibrary({
@@ -1581,7 +2162,19 @@ export function createCore(adapters: CoreAdapters): Core {
       batches.changed(assignments.map((each) => each.documentId));
     },
     providerExists: (id) => chat.exists(id),
-    chatReadsImages: (choice) => chat.readsImages(choice),
+    rateLimit,
+    readsPages: (classifier) => {
+      switch (classifier.kind) {
+        case "auto":
+          return true;
+        case "ollama":
+          return supportsLibraryImages(classifier.modelId) && classifier.usePageImages === true;
+        case "jev":
+          return false;
+        case "chat":
+          return chat.readsImages(classifier.choice) || chat.imageModel(classifier.choice) !== null;
+      }
+    },
     async pageImages(id, contentHash, signal) {
       try {
         return await documentPageImages(
@@ -1595,8 +2188,10 @@ export function createCore(adapters: CoreAdapters): Core {
         throw new Error(error instanceof Error ? error.message : String(error), { cause: error });
       }
     },
-    async prepare({ classifier }) {
-      if (!classifier) throw new TaggingNotReadyError({ key: "error.tagging.noModel" });
+    async prepare(settings) {
+      const classifier = organizeModelOf(settings);
+      if (!classifier) throw new TaggingNotReadyError({ key: "error.library.noClassifier" });
+      if (decisionModelElsewhere(classifier)) throw notOnThisComputer(classifier);
       if (classifier.kind === "auto") {
         let automatic = automaticClassifiers.get(classifier.baseUrl);
         if (!automatic) {
@@ -1621,32 +2216,43 @@ export function createCore(adapters: CoreAdapters): Core {
           throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
         return prepared;
       }
-      const ready = await chat.readiness(classifier.choice, "classification");
+      const { choice } = classifier;
+      const ready = await chat.readiness(choice, "classification");
       if (embedding.localOnly() && "provider" in ready && ready.provider.service)
         throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
-      const prepared = await chat.prepareModel(classifier.choice, "classification");
+      const prepared = await chat.prepareModel(choice, "classification");
       if (embedding.localOnly() && prepared.provider.service)
         throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
       // prepareModel got consent for everything the classification flow sends, page images included.
       const images = readsImages(prepared.capabilities);
-      return {
+      let chosen: GroupClassifier = {
         ...chatGroupClassifier(prepared.model, prepared.provider.service === null, images),
-        model: { id: classifier.choice.modelId, images, reason: "selected" as const },
+        model: { id: choice.modelId, images, reason: "selected" as const },
       };
+      // A scan goes to the image model when this one can't read its pages.
+      const imageModel = images ? null : chat.imageModel(choice);
+      if (imageModel) {
+        chosen = withPageReader(chosen, async () => {
+          const reader = await chat.prepareModel(imageModel, "classification");
+          return {
+            ...chatGroupClassifier(reader.model, reader.provider.service === null, true),
+            model: { id: imageModel.modelId, images: true, reason: "selected" as const },
+          };
+        });
+      }
+      return prepared.provider.kind === "chatgpt" ? pacedBy(chosen, onPlan) : chosen;
     },
   });
-  /** The service the model organizing Documents sends to, if it isn't on this computer. */
+  /** The services Organize sends to: its model's, and the image model's for the scans it can't read. */
   const classificationServices = async (): Promise<ExternalService[]> => {
-    const selected = library.settings().classifier;
-    if (selected?.kind === "jev") {
-      const service = jev.service();
-      return service ? [service] : [];
-    }
-    if (selected?.kind === "chat") {
-      const provider = (await chat.list()).find((item) => item.id === selected.choice.providerId);
-      return provider?.service ? [provider.service] : [];
-    }
-    return [];
+    const classifier = organizeModelOf(library.settings());
+    const service = classifier && tagging.service(classifier);
+    const reader =
+      classifier?.kind === "chat" && !chat.readsImages(classifier.choice)
+        ? chat.imageModel(classifier.choice)
+        : null;
+    const pages = reader && chat.describeModel(reader)?.service;
+    return [...(service ? [service] : []), ...(pages && pages.id !== service?.id ? [pages] : [])];
   };
   consent.registry.register({
     id: "classification",
@@ -1669,6 +2275,19 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (list) => events.emit("references.changed", list),
     signal: lifetime.signal,
     pace,
+  });
+  // Checking a Mind's reference list sends each reference only, to Crossref, OpenAlex
+  // and arXiv, once the User starts it where a line says so; never in local mode.
+  const referenceChecks = createReferenceChecks({
+    consent,
+    localOnly: () => embedding.localOnly(),
+    http: createSourceHttp(pace, paceTimers),
+    urls: adapters.referenceLookup,
+    content,
+    db,
+    now,
+    progress: (event) => events.emit("referenceCheck.progress", event),
+    signal: lifetime.signal,
   });
   // Importing references (#287) reads a file the User chose and sends nothing.
   const referenceImport = createReferenceImport({
@@ -1737,6 +2356,7 @@ export function createCore(adapters: CoreAdapters): Core {
     tags,
     library,
     mindsChanged,
+    mindsRestored: (mindIds) => wordImports.resume(mindIds),
     conversationsChanged,
     tagsChanged,
     tagged: announceTagged,
@@ -1748,16 +2368,70 @@ export function createCore(adapters: CoreAdapters): Core {
     console.error("Deleting what waited 30 days in Recently deleted failed.", error);
   }
 
+  /**
+   * What tagging may use changed (a model, a key, local mode): Automatic picks
+   * again, and Documents waiting may go on, a rate-limit pause ended too, unless
+   * this is the start, which keeps the pause a quit interrupted.
+   */
+  const taggingChanged = async (endsPause = true) => {
+    try {
+      await tagging.resolve();
+    } catch (error) {
+      if (lifetime.signal.aborted) return;
+      console.error("The model to tag with couldn't be worked out.", error);
+    }
+    if (lifetime.signal.aborted) return;
+    if (endsPause) rateLimit.resumeNow();
+    tagger.resume();
+    library.resume();
+  };
+
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
     const status = await jev.status();
     if (lifetime.signal.aborted) return status;
     events.emit("jev.changed", status);
-    tagger.resume();
-    library.resume();
+    await taggingChanged();
     return status;
   };
-  documentReady = (documentId) => tagger.documentReady(documentId);
+  /**
+   * Automatic found no model to tag with: work it out again, asking Ollama afresh, so a model
+   * installed since is picked up without a restart. Waiting Documents then go on. One Ollama list
+   * call per lookup, never a model call. A lookup already under way may have asked before what
+   * the caller knows changed, so one more follows it, and later callers share that one.
+   */
+  let lookingForModel: Promise<void> | null = null;
+  let lookingAgain: Promise<void> | null = null;
+  const lookForTaggingModel = (): Promise<void> => {
+    if (tagsWith() !== null) return Promise.resolve();
+    if (lookingForModel) {
+      lookingAgain ??= lookingForModel.then(() => {
+        lookingAgain = null;
+        return lookForTaggingModel();
+      });
+      return lookingAgain;
+    }
+    lookingForModel = (async () => {
+      try {
+        await tagging.resolve(undefined, true);
+      } catch (error) {
+        if (!lifetime.signal.aborted) {
+          console.error("The model to tag with couldn't be worked out.", error);
+        }
+        return;
+      } finally {
+        lookingForModel = null;
+      }
+      if (lifetime.signal.aborted || tagsWith() === null) return;
+      tagger.resume();
+      library.resume();
+    })();
+    return lookingForModel;
+  };
+  documentReady = (documentId) => {
+    tagger.documentReady(documentId);
+    void lookForTaggingModel();
+  };
 
   const settingsChanged = () => events.emit("settings.changed", settings.get());
   const readinessChanged = async () => {
@@ -1769,10 +2443,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) throw error;
     }
     // Documents waiting for a chat model may be able to go on now.
-    if (!lifetime.signal.aborted) {
-      tagger.resume();
-      library.resume();
-    }
+    if (!lifetime.signal.aborted) await taggingChanged();
   };
   chatGptChanged = () => {
     const report = async () => {
@@ -1785,9 +2456,51 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) console.error(error);
     });
   };
+  claudeAccountChanged = () => {
+    const report = async () => {
+      const status = await claudeAccount.status();
+      if (lifetime.signal.aborted) return;
+      events.emit("claudeAccount.changed", status);
+      await readinessChanged();
+    };
+    report().catch((error: unknown) => {
+      if (!lifetime.signal.aborted) console.error(error);
+    });
+  };
+  // Not a readiness change: the renderer keeps its model lists.
+  chatGptLimitsChanged = () => {
+    chatGpt.status().then(
+      (status) => {
+        if (!lifetime.signal.aborted) events.emit("chatGptPlan.changed", status);
+      },
+      (error: unknown) => {
+        if (!lifetime.signal.aborted) console.error(error);
+      },
+    );
+  };
+  copilotChanged = () => {
+    const report = async () => {
+      const status = await copilot.status();
+      if (lifetime.signal.aborted) return;
+      events.emit("copilot.changed", status);
+      await readinessChanged();
+    };
+    report().catch((error: unknown) => {
+      if (!lifetime.signal.aborted) console.error(error);
+    });
+  };
 
-  // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
-  tagger.start();
+  // Tagging a quit interrupted starts again, once Automatic knows what it tags with;
+  // Documents waiting for a model are checked.
+  const stillLimited = db.get<{ ends: string | null }>(
+    `SELECT max(tagging_error_resets_at) AS ends FROM documents
+     WHERE deleted_at IS NULL AND tagging_status = 'waiting-for-provider'
+       AND tagging_error_kind = 'rate-limit'`,
+  )?.ends;
+  if (stillLimited) rateLimit.restore(Date.parse(stillLimited));
+  void taggingChanged(false).then(() => {
+    if (!lifetime.signal.aborted) tagger.start();
+  });
 
   // Traffic that carries nothing of the User's, for the Privacy page.
   const modelSource = adapters.embeddingModelSource ?? BUILT_IN_EMBEDDING_MODEL.source;
@@ -1833,11 +2546,7 @@ export function createCore(adapters: CoreAdapters): Core {
       id: transcriptionHost.origin,
       name: transcriptionHost.host === "huggingface.co" ? "Hugging Face" : transcriptionHost.host,
     },
-    // Where this copy transcribes, once Meetings are on.
-    listed: () =>
-      transcriber !== undefined &&
-      transcriptionSource.files.length > 0 &&
-      settings.get().device.meetingsEnabled,
+    listed: () => transcriber !== undefined && transcriptionSource.files.length > 0,
   });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
   const chatGptSignIn = new URL(
@@ -1847,6 +2556,38 @@ export function createCore(adapters: CoreAdapters): Core {
     id: "chatgpt-sign-in",
     service: { id: chatGptSignIn.origin, name: "OpenAI" },
     listed: () => chatGpt.used(),
+  });
+  if (claudeProfile) {
+    const { authorizeUrl, tokenUrl, revokeUrl } = claudeProfile;
+    const signInHosts = new Map(
+      [authorizeUrl, tokenUrl, revokeUrl]
+        .filter((url): url is string => url !== undefined)
+        .map((url) => new URL(url))
+        .map((url) => [url.origin, url.host]),
+    );
+    privacy.traffic.register({
+      id: "claude-sign-in",
+      services: () => [...signInHosts].map(([id, name]) => ({ id, name })),
+      listed: () => claudeAccount.used(),
+    });
+  }
+  const copilotHosts = new Map(
+    Object.values(copilotProfiles)
+      .flatMap((profile) => [
+        profile.deviceCodeUrl,
+        profile.tokenUrl,
+        profile.tokenExchange?.url,
+        profile.apiBaseUrl,
+        profile.accountUrl,
+      ])
+      .filter((url): url is string => url !== undefined)
+      .map((url) => new URL(url))
+      .map((url) => [url.origin, url.host]),
+  );
+  privacy.traffic.register({
+    id: "copilot-sign-in",
+    services: () => [...copilotHosts].map(([id, name]) => ({ id, name })),
+    listed: () => copilot.used(),
   });
   privacy.traffic.register({
     id: "remote-connectors",
@@ -1934,10 +2675,12 @@ export function createCore(adapters: CoreAdapters): Core {
     mindExists: (mindId) => minds.list().some((mind) => mind.id === mindId),
     deleteMind: (mindId) => {
       const at = now();
-      db.transaction(() => {
+      const deleted = db.transaction(() => {
         const mind = minds.delete(mindId, at);
         content.remove(mind.id, at);
+        return mind;
       });
+      content.removed(deleted.id, at);
       mindsChanged();
       layouts.forgetDeletedMinds();
     },
@@ -1947,11 +2690,16 @@ export function createCore(adapters: CoreAdapters): Core {
     linkedFolderExists: (linkedFolderId) =>
       documents.linkedFolders.list().some((folder) => folder.id === linkedFolderId),
     documentsIn: (linkedFolderId) => documents.list({ linkedFolderId }),
+    mindFolder: (mindId) => minds.get(mindId).folderId,
+    now,
     checksRelyOn: (documentIds) => retention.isRetained("check-result", documentIds),
     recheck: (input) => recheckCitation(documents, input),
     changed: (value) => events.emit("examples.changed", value),
   });
   events.on("document.status", () => examples.documentChanged());
+  // A new version of a Document in a Folder: its Minds' cited claims are checked for contradictions (#112).
+  checks.startWatching();
+  events.on("document.status", (document) => checks.documentChanged(document));
   // Linked folders and single files are compared with the disk, then watched.
   documents.start();
 
@@ -1960,9 +2708,12 @@ export function createCore(adapters: CoreAdapters): Core {
     return ollamaBaseUrl(input?.baseUrl);
   };
   const ollamaInstalled = async () => (await adapters.ollamaApp?.installed()) ?? false;
+  const localServers = adapters.localServers ?? createLocalServers();
 
   // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
   let listMeetings: (() => Meeting[]) | undefined;
+  /** See `AnswersOptions.meetingHelp`; set once Meetings are. */
+  let meetingHelpOf = (_mindId: string, _question: string): MeetingHelpKind | null => null;
   /** See `AnswersOptions.liveTranscript`; set once Meetings are. */
   let liveTranscriptOf = async (_mindId: string): Promise<WindowedPassage[] | null> => null;
   const meetingsChanged = () => {
@@ -1975,21 +2726,41 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: meetingsChanged,
   });
   const transcriber = adapters.transcriber;
+  const transcriptionModel =
+    transcriber &&
+    createTranscriptionModel({
+      dataDir,
+      transcriber,
+      ...(adapters.transcriptionModelSource && { source: adapters.transcriptionModelSource }),
+      speed: () => {
+        const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
+        return isRecord(value) ? (value as Record<string, number>) : {};
+      },
+      emitStatus: () => meetingsChanged(),
+    });
+  // Where meeting audio is transcribed (#141): this computer, or the cloud service the User chose.
+  const cloudTranscription = createCloudTranscription({
+    settings,
+    secrets,
+    consent,
+    meter,
+    localOnly: () => embedding.localOnly(),
+    providerKey: (catalogId) => chat.apiKeyOf(catalogId),
+    log: adapters.log ?? silentLogger,
+    ...(adapters.transcriptionKeyFetch && { fetch: adapters.transcriptionKeyFetch }),
+    vadFile: async () => {
+      if (!transcriptionModel) throw new Error("This copy can't transcribe.");
+      return transcriptionModel.vadFile();
+    },
+  });
   const transcripts =
     transcriber &&
+    transcriptionModel &&
     createTranscripts({
       dataDir,
       transcriber,
-      model: createTranscriptionModel({
-        dataDir,
-        transcriber,
-        ...(adapters.transcriptionModelSource && { source: adapters.transcriptionModelSource }),
-        speed: () => {
-          const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
-          return isRecord(value) ? (value as Record<string, number>) : {};
-        },
-        emitStatus: () => meetingsChanged(),
-      }),
+      model: transcriptionModel,
+      cloud: cloudTranscription,
       documents: {
         add: (id, name, file) => documents.addSnapshot(id, name, file, () => {}, "transcript"),
         file: (documentId, folderId) => library.assign(documentId, folderId),
@@ -2018,6 +2789,8 @@ export function createCore(adapters: CoreAdapters): Core {
         return meeting ? minds.get(meeting.mindId).folderId : null;
       },
       partsOf: (meetingId) => listParts(meetingFolder(dataDir, meetingId)),
+      audioDeleted: (meetingId) =>
+        listMeetings?.().find((each) => each.id === meetingId)?.audio.deletedAt != null,
       recordSpeed: (modelId, ratio) => {
         const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
         settings.writeDeviceValue(TRANSCRIPTION_SPEED, {
@@ -2036,12 +2809,12 @@ export function createCore(adapters: CoreAdapters): Core {
     dataDir,
     now,
     capture: adapters.audioCapture,
-    enabled: () => settings.get().device.meetingsEnabled,
     noticeAccepted: () => settings.get().device.meetingNoticeAccepted,
     systemAudioByDefault: () => settings.get().device.meetingSystemAudio,
     language: () => settings.get().language,
-    createMind: (title) => {
-      const mind = minds.create(parseCreateMindInput({ title }));
+    createMind: (title, folderId) => {
+      const mind = minds.create(parseCreateMindInput({ title, folderId }));
+      startInWritingStyle(mind.id);
       mindsChanged();
       return mind;
     },
@@ -2054,6 +2827,7 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     changed: (list) => events.emit("meetings.changed", list),
+    level: (level) => events.emit("meetings.level", level),
     onCapturingChange: (capturing) => {
       background.setRecording(capturing);
       tasks.setRecording(capturing);
@@ -2064,6 +2838,66 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
   listMeetings = () => meetings.list();
+  transcriptionGateChanged = () => transcripts?.recheckCloud();
+  meetingHelpOf = (mindId, question) => {
+    const meeting = meetings.liveOf(mindId);
+    if (!meeting) return null;
+    return (
+      helpKindsFor(meeting.helpTemplate).find((kind) =>
+        LANGUAGES.some((language) => translate(language, helpLabel(kind)) === question),
+      ) ?? null
+    );
+  };
+  /** The conversation each live Meeting's help went to last: the panel's goes on there. */
+  const helpConversations = new Map<string, string>();
+  const askMeetingHelp = async (given: unknown): Promise<ConversationAskResult> => {
+    const input = isRecord(given) ? given : {};
+    const meeting = meetings.get(input.meetingId);
+    if (meeting.status !== "recording" && meeting.status !== "paused") {
+      throw new InvalidInputError({ key: "error.meeting.notBeingRecorded" });
+    }
+    const { kind } = input;
+    if (!isMeetingHelpKind(kind) || !helpKindsFor(meeting.helpTemplate).includes(kind)) {
+      throw new InvalidInputError({ key: "error.meeting.helpButton" });
+    }
+    const { folderId } = minds.get(meeting.mindId);
+    const question = (conversationId: unknown) =>
+      conversations.parseQuestion({
+        conversationId,
+        text: translate(settings.get().language, helpLabel(kind)),
+        mindId: meeting.mindId,
+        scope: folderId ? { folderIds: [folderId], tagIds: [], documentIds: [] } : null,
+      });
+    let asked: QuestionInput;
+    if (input.conversationId !== undefined) asked = question(input.conversationId);
+    else {
+      try {
+        asked = question(helpConversations.get(meeting.id) ?? null);
+      } catch (error) {
+        // The conversation it went to last was deleted: a new one.
+        if (!(error instanceof NotFoundError)) throw error;
+        asked = question(null);
+      }
+    }
+    const result = await answers.askInConversation(asked);
+    if (result.asked) {
+      helpConversations.set(meeting.id, result.conversation.id);
+      const from = HEARD_FROM[kind];
+      const newest = (speaker?: string) => transcripts?.newestLine(meeting.id, speaker) ?? null;
+      meetings.helped(meeting.id, {
+        kind,
+        conversationId: result.conversation.id,
+        answerId: result.answerId,
+        heard:
+          from === undefined
+            ? null
+            : from === "anyone"
+              ? newest()
+              : (newest(from === "me" ? SPEAKER_ME : SPEAKER_THEM) ?? newest()),
+      });
+    }
+    return result;
+  };
   /** Resolves once a Document's newest version has its Passages, or after `ms` with the last version's. */
   const extracted = (documentId: string, ms: number) =>
     new Promise<void>((resolve) => {
@@ -2107,6 +2941,8 @@ export function createCore(adapters: CoreAdapters): Core {
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
   const { home } = adapters.paths;
   const agents = createAgents({
+    offered: adapters.agents?.offered ?? true,
+    log: adapters.log ?? silentLogger,
     db,
     now,
     clock: () => performance.now(),
@@ -2139,6 +2975,7 @@ export function createCore(adapters: CoreAdapters): Core {
       passage: (passageId) => documents.passage(passageId),
       passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
       citing,
+      notCited: (passageId) => documents.citationSource(passageId)?.notCited ?? false,
       recheck: (input) => recheckCitation(documents, input),
       minds: () => minds.list().filter((mind) => isKnownKind(mind.kind)),
       liveDocuments: () => documents.names(),
@@ -2186,11 +3023,18 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
-  const addDocuments: CoreApi["addDocuments"] = async (paths, options) => {
+  const addDocuments = async (
+    paths: string[],
+    options?: Parameters<CoreApi["addDocuments"]>[1],
+    onNew?: (documentId: string) => void,
+  ): ReturnType<CoreApi["addDocuments"]> => {
     const batchId = batches.begin(library.target(options));
     const since = now();
     const result = await documents
-      .add(paths, (documentId) => batches.added(batchId, documentId))
+      .add(paths, (documentId) => {
+        batches.added(batchId, documentId);
+        onNew?.(documentId);
+      })
       .finally(() => batches.done(batchId));
     usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
     return { ...result, batchId };
@@ -2201,8 +3045,9 @@ export function createCore(adapters: CoreAdapters): Core {
   tasks.settleOrphans();
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
-  return {
-    createMind: async (input) => makeMind(parseCreateMindInput(input)),
+  api = {
+    createMind: async (input) =>
+      makeMind(parseCreateMindInput(input), { headed: isRecord(input) && input.headed === true }),
     checkWordFile: async (path, folderId) => wordImports.check(path, folderId),
     importWordFile: async (input) => wordImports.import(input),
     addWordOriginal: async (mindId, path) => {
@@ -2232,6 +3077,12 @@ export function createCore(adapters: CoreAdapters): Core {
     applyMindUpdate: async (mindId, update) => {
       content.apply(writableMind(mindId).id, update);
     },
+    unsavedChanges: async () => unsaved.summary(),
+    saveChangesAgain: async () => {
+      content.storeWaiting();
+      return unsaved.summary();
+    },
+    takeLostChanges: async () => unsaved.takeLost(),
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
     },
@@ -2241,12 +3092,47 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreCheckpoint: async (mindId, checkpointId) => checkpoints.restore(mindId, checkpointId),
     askInConversation: async (input) =>
       answers.askInConversation(conversations.parseQuestion(input)),
+    askReadyQuestion: async () => {
+      const ready = examples.readyAnswer();
+      if (!ready) {
+        throw new InvalidInputError({ key: "error.examples.reading" });
+      }
+      const turn = conversations.add(
+        {
+          conversationId: null,
+          text: ready.question,
+          mind: { id: ready.mindId, folderId: minds.get(ready.mindId).folderId },
+          focus: null,
+          scope: null,
+          model: null,
+          forcedSkill: null,
+        },
+        null,
+        null,
+      );
+      const answer = conversations.writeAnswer(turn.answer.id, {
+        text: ready.answer,
+        citations: ready.citations,
+        figures: [],
+        toolCalls: [],
+        support: null,
+        textOrigin: null,
+        read: null,
+        steps: { sentAt: null, finishedAt: now(), phases: [], reasoning: null, example: true },
+        outcome: { status: "done", error: null },
+      });
+      events.emit("conversation.message", turn.question);
+      events.emit("conversation.message", answer ?? turn.answer);
+      conversationsChanged();
+      return { conversationId: turn.conversation.id, answerId: turn.answer.id };
+    },
     regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
     countScopeDocuments: async (scope) => {
       const wanted = parseSearchScope(scope);
       return documents.searchableCount((wanted ? resolveScope(wanted) : null) ?? undefined);
     },
     stopConversationAnswer: async (input) => answers.stopInConversation(input),
+    usualAnswerWait: async (answerId) => conversations.usualWait(answerId),
     listConversations: async (options) => conversations.list(options),
     getConversation: async (conversationId) => conversations.content(conversationId),
     searchConversations: async (query) => conversations.search(query),
@@ -2281,10 +3167,13 @@ export function createCore(adapters: CoreAdapters): Core {
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),
     updateSettings: async (patch) => {
-      // The default chat model must be on a saved provider.
-      const chatModel = isRecord(patch) && isRecord(patch.user) ? patch.user.chatModel : undefined;
-      if (isChatModelChoice(chatModel) && !chat.exists(chatModel.providerId)) {
-        throw new InvalidInputError("That chat provider doesn't exist.");
+      // The default chat model, and the quick-tasks and image models, must be on a saved provider.
+      const user = isRecord(patch) && isRecord(patch.user) ? patch.user : {};
+      const chatModel = user.chatModel;
+      for (const choice of [chatModel, user.quickTasksModel, user.imageModel]) {
+        if (isChatModelChoice(choice) && !chat.exists(choice.providerId)) {
+          throw new InvalidInputError("That chat provider doesn't exist.");
+        }
       }
       const scriptsWere = settings.get().device.skillScriptsEnabled;
       let change = patch;
@@ -2295,8 +3184,16 @@ export function createCore(adapters: CoreAdapters): Core {
           change = { ...patch, user };
         }
       }
+      const route =
+        isRecord(patch) && isRecord(patch.device) ? patch.device.transcriptionRoute : undefined;
+      if (route !== undefined) await cloudTranscription.check(route);
       const languageWas = settings.get().language;
       const updated = settings.update(change);
+      // Choosing a cloud service where its line says meeting audio goes to it is the consent (ADR-0022).
+      if (route !== undefined) {
+        cloudTranscription.chose(updated.device.transcriptionRoute);
+        transcriptionGateChanged();
+      }
       if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
@@ -2306,6 +3203,9 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const flowChanged = syncChatFlow();
       if (chatModel !== undefined || flowChanged) await readinessChanged();
+      // Automatic may tag with another model now.
+      else if (user.quickTasksModel !== undefined || user.imageModel !== undefined)
+        await taggingChanged();
       // The examples follow the new language before this returns, so whoever awaits it can rely on it.
       if (updated.language !== languageWas) {
         await examples
@@ -2338,6 +3238,7 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { ...result, document: documents.get(result.document.id) }
         : result;
     },
+    keepWebPageLook: async (documentId) => webPages.keepLook(documentId),
     fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
@@ -2366,10 +3267,16 @@ export function createCore(adapters: CoreAdapters): Core {
         linkedFolderId,
       });
     },
-    renameDocument: async (id, name) => documents.rename(id, name),
+    renameDocument: async (id, name) => {
+      const renamed = documents.rename(id, name);
+      events.emit("documents.renamed", [renamed]);
+      return renamed;
+    },
     deleteDocument: async (id) => {
-      await documents.delete(id);
-      activity.documentDeleted(id as string);
+      for (const deleted of await documents.delete(id)) activity.documentDeleted(deleted);
+    },
+    deleteDocuments: async (ids) => {
+      for (const deleted of await documents.delete(ids)) activity.documentDeleted(deleted);
     },
     retryDocument: async (id) => documents.retry(id),
     unlockDocument: async (input) => {
@@ -2399,22 +3306,8 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     readDocumentText: async (id) => documents.readText(id),
     readScannedText: async (id) => documents.readScannedText(id),
-    readScannedQuote: async (input) => {
-      if (!isRecord(input) || typeof input.quote !== "string") {
-        throw new InvalidInputError(
-          "readScannedQuote needs a Citation's Document, Units and quote.",
-        );
-      }
-      const unit = (value: unknown) =>
-        typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
-      return documents.readScannedQuote({
-        documentId: typeof input.documentId === "string" ? input.documentId : "",
-        contentHash: typeof input.contentHash === "string" ? input.contentHash : null,
-        pageFrom: unit(input.pageFrom),
-        pageTo: unit(input.pageTo),
-        quote: input.quote,
-      });
-    },
+    readScannedQuote: async (input) => documents.readScannedQuote(parseQuoted(input)),
+    readableQuote: async (input) => documents.readableQuote(parseQuoted(input)),
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
     addLinkedFolder: async (path, options) => {
       const groupId = library.target(options);
@@ -2429,48 +3322,20 @@ export function createCore(adapters: CoreAdapters): Core {
       return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
-    listUnreadFiles: async (scope) => {
-      const wanted = parseSearchScope(scope);
-      const inScope = wanted ? resolveScope(wanted) : null;
-      const unread = findUnreadDocuments(documents.unread(inScope ?? undefined));
-      // Files in a format not read belong to Folders only: a Tag or a Document can't name them.
-      // A Folder holds those in it and under it, even where no Document is.
-      const named = wanted
-        ? folders.list().filter((folder) => wanted.folderIds.includes(folder.id))
-        : null;
-      const files = documents.linkedFolders
-        .unsupportedFiles()
-        .filter(
-          (file) =>
-            named === null ||
-            named.some(
-              (folder) =>
-                folder.linkedFolderId === file.linkedFolderId &&
-                (folder.relativePath === "" ||
-                  file.relativeFolder === folder.relativePath ||
-                  file.relativeFolder.startsWith(`${folder.relativePath}/`)),
-            ),
-        )
-        .map(
-          (file): UnreadFile => ({
-            id: file.path,
-            name: file.name,
-            reason: "format",
-            extension: file.extension,
-            documentId: null,
-            pages: [],
-          }),
-        );
-      return [...unread, ...files];
-    },
+    listUnreadFiles: async (scope) => unreadIn(parseSearchScope(scope)),
     locateLinkedFolder: (linkedFolderId, path) =>
       documents.linkedFolders.locate(linkedFolderId, path),
-    removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
+    removeLinkedFolder: async (linkedFolderId, options) =>
+      unlinkFolder(linkedFolderId, options?.keep),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
     updateReference: async (documentId, patch) => references.update(documentId, patch),
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
+    confirmReference: async (documentId) => references.confirm(documentId),
     lookUpReference: (documentId) => references.lookUp(documentId),
+    checkReferences: (mindId, options) =>
+      referenceChecks.check(mindId, isRecord(options) && options.again === true),
+    stopReferenceCheck: async (mindId) => referenceChecks.stop(mindId),
     listSourceProviders: () => sources.list(),
     setSourceProviderKey: (providerId, key) => sources.setKey(providerId, key),
     findSources: (input) => sources.search(input),
@@ -2520,6 +3385,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     setCountedAsEvidence: async (documentId, counted) =>
       documents.setCountedAsEvidence(documentId, counted),
+    setNotCited: async (documentId, notCited) => documents.setNotCited(documentId, notCited),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
     getTextRecognitionModel: async () =>
@@ -2557,32 +3423,50 @@ export function createCore(adapters: CoreAdapters): Core {
     listChatProviders: () => chat.list(),
     saveChatProvider: async (input) => {
       const provider = await chat.save(input);
+      await cloudTranscription.refreshKeys();
+      transcriptionGateChanged();
       settingsChanged();
       await dataFlowsChanged();
       return provider;
     },
     deleteChatProvider: async (id) => {
       await chat.delete(id);
+      // A transcription route that used this provider's key has none now.
+      await cloudTranscription.refreshKeys();
+      transcriptionGateChanged();
       settingsChanged();
       await readinessChanged();
     },
     testChatConnection: (input) => loggingTest("chat")(chat.test(input)),
+    testChatProvider: (providerId) => loggingTest("chat")(chat.testProvider(providerId)),
+    getModelRoles: async () => ({ quickTasks: chat.quickTasksModel(), images: chat.imageModel() }),
     getChatReadiness: () => chat.readiness(),
     listChatModels: () => chat.listModels(),
     setChatModelInMenu: async (input) => chat.setInMenu(input),
     getCostSummary: async () => meter.summary(),
     estimateRun: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("estimateRun expects an object.");
-      const { items, model } = input;
+      const { items, model, searches = 0, each = "answer" } = input;
+      if (each !== "answer" && each !== "check") {
+        throw new InvalidInputError({ key: "error.estimate.each" });
+      }
       if (typeof items !== "number" || !Number.isInteger(items) || items < 0 || items > 100_000) {
         throw new InvalidInputError("items must be a whole number from 0 to 100,000.");
       }
       if (model !== undefined && !isChatModelChoice(model)) {
         throw new InvalidInputError("model must be a provider and a model.");
       }
+      if (
+        typeof searches !== "number" ||
+        !Number.isInteger(searches) ||
+        searches < 0 ||
+        searches > 1_000
+      ) {
+        throw new InvalidInputError({ key: "error.estimate.searches", values: { max: 1_000 } });
+      }
       const metered = chat.metered(model);
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
-      return meter.estimate(metered, items);
+      return meter.estimate(metered, items, searches, each);
     },
     compareDocuments: (input) => comparisons.compareDocuments(input),
     fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
@@ -2594,6 +3478,11 @@ export function createCore(adapters: CoreAdapters): Core {
     stopTask: (taskId) => tasks.stop(taskId),
     answerTaskAsk: (taskId, answer) => tasks.answer(taskId, answer),
     listTaskSteps: async (taskId) => tasks.listSteps(taskId),
+    tellTask: async (taskId, text) => tasks.tell(taskId, text),
+    untellTask: async (taskId, messageId) => tasks.untell(taskId, messageId),
+    getResearchPlan: async (taskId) => research.planView(taskId),
+    planResearch: (input) => research.plan(input),
+    startResearch: (input) => research.start(input),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) =>
@@ -2612,11 +3501,31 @@ export function createCore(adapters: CoreAdapters): Core {
     verifyDocument: (input) => checks.verifyDocument(input),
     findClaims: (input) => checks.findClaims(input),
     verifyClaims: (input) => checks.verifyClaims(input),
+    planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
+    checkContradictions: (input) => checks.checkContradictions(input),
+    planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
+    findMindClaims: (input) => checks.findMindClaims(input),
+    checkMind: (input) => checks.checkMind(input),
+    documentsAddedSinceChecks: async (mindId) => checks.documentsAddedSinceChecks(mindId),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
 
     detectOllama: (input) => detectOllama(ollamaUrl(input), ollamaInstalled),
+    detectLocalServer: async (input) => {
+      if (!isRecord(input) || typeof input.catalogId !== "string") {
+        throw new InvalidInputError({
+          key: "error.provider.unknown",
+          values: { provider: String(isRecord(input) ? input.catalogId : input) },
+        });
+      }
+      const apiKey = (typeof input.apiKey === "string" && cleanApiKey(input.apiKey)) || null;
+      return localServers.detect(
+        input.catalogId,
+        apiKey,
+        typeof input.address === "string" ? input.address : null,
+      );
+    },
     openOllama: async (input) => {
       const baseUrl = ollamaUrl(input);
       if (!(await ollamaInstalled())) {
@@ -2647,7 +3556,13 @@ export function createCore(adapters: CoreAdapters): Core {
           lifetime.signal,
         );
       }
-      const provider = await chat.save({ kind: "ollama", baseUrl, modelId: model });
+      const provider = await chat.save({
+        kind: "ollama",
+        baseUrl,
+        modelId: model,
+        // Local mode leaves only a model on this computer to answer.
+        keepDefault: input?.keepDefault === true && input.localOnly !== true,
+      });
       settingsChanged();
       await readinessChanged();
       // Local mode is the User's choice here (#545), made in the box under the button.
@@ -2656,6 +3571,22 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     getChatGptPlan: () => chatGpt.status(),
+    answerWithPlanModel: async (input) => {
+      const models = await chatGpt.models();
+      if (
+        !isRecord(input) ||
+        typeof input.insteadOf !== "string" ||
+        !models.some((model) => model.id === input.modelId)
+      ) {
+        throw new InvalidInputError({ key: "error.chatgpt.notPlanModel" });
+      }
+      chatGpt.limits.answerWith(input.insteadOf, input.modelId);
+      return chatGpt.status();
+    },
+    endPlanStandIn: async () => {
+      chatGpt.limits.endStandIn();
+      return chatGpt.status();
+    },
     signInToChatGpt: (input) =>
       chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
@@ -2663,6 +3594,22 @@ export function createCore(adapters: CoreAdapters): Core {
     signOutOfChatGpt: () => chatGpt.signOut(),
     pasteChatGptSignInAddress: async (address) =>
       chatGpt.pasteSignInAddress(typeof address === "string" ? address : ""),
+    getClaudeAccount: () => claudeAccount.status(),
+    signInToClaude: () => claudeAccount.signIn(),
+    cancelClaudeSignIn: () => claudeAccount.cancelSignIn(),
+    reopenClaudeSignIn: () => claudeAccount.reopenSignInPage(),
+    signOutOfClaude: () => claudeAccount.signOut(),
+    pasteClaudeSignInAddress: async (address) =>
+      claudeAccount.pasteSignInAddress(typeof address === "string" ? address : ""),
+    getCopilot: () => copilot.status(),
+    signInToCopilot: (input) =>
+      copilot.signIn(
+        isRecord(input) && (input.profile === "own" || input.profile === "editor")
+          ? { profile: input.profile }
+          : {},
+      ),
+    cancelCopilotSignIn: () => copilot.cancelSignIn(),
+    signOutOfCopilot: () => copilot.signOut(),
 
     listDataFlows: () => consent.list(),
     listConsentRequests: async () => consent.requests(),
@@ -2672,6 +3619,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     revokeConsent: async (flowId, serviceId) => {
       consent.revoke(flowId, serviceId);
+      if (typeof flowId === "string" && typeof serviceId === "string") {
+        cloudTranscription.revoked(flowId, serviceId);
+      }
+      transcriptionGateChanged();
+      settingsChanged();
       await dataFlowsChanged();
     },
     listRegisteredDataFlows: () => consent.listRegistered(),
@@ -2720,21 +3672,37 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
     saveLibrarySettings: async (input) => {
-      const before = JSON.stringify(library.settings().classifier);
-      const saved = library.saveSettings(input);
-      // Choosing the model that organizes Documents, where Settings says what goes, allows it
-      // (ADR-0022). Saving the same one again, for another setting, isn't a new choice.
-      if (JSON.stringify(library.settings().classifier) !== before) {
+      const before = library.settings();
+      library.saveSettings(input);
+      const after = library.settings();
+      // Choosing the model that tags or organizes Documents, where a line says what goes,
+      // allows it (ADR-0022). Saving the same one again, for another setting, isn't a new choice.
+      const tagsAnew = JSON.stringify(after.classifier) !== JSON.stringify(before.classifier);
+      const organizesAnew =
+        JSON.stringify(organizeModelOf(after)) !== JSON.stringify(organizeModelOf(before));
+      if (tagsAnew) {
+        for (const service of await taggingServices()) consent.choose(["tagging"], service);
+      }
+      if (organizesAnew) {
         for (const service of await classificationServices()) {
           consent.choose(["classification"], service);
         }
-        await dataFlowsChanged();
       }
-      return saved;
+      if (tagsAnew || organizesAnew) await dataFlowsChanged();
+      await taggingChanged();
+    },
+    getTaggingModels: async () => {
+      const hadModel = tagsWith() !== null;
+      const models = await tagging.models();
+      if (!hadModel && tagsWith() !== null && !lifetime.signal.aborted) {
+        tagger.resume();
+        library.resume();
+      }
+      return models;
     },
     classifyDocuments: async (ids) => {
       library.classify(ids);
-      const classifier = library.settings().classifier;
+      const classifier = organizeModelOf(library.settings());
       if (classifier) {
         usageData.record({
           event: "organize_run",
@@ -2749,6 +3717,8 @@ export function createCore(adapters: CoreAdapters): Core {
     assignDocumentGroup: async (id, groupId) => library.assign(id, groupId),
     restoreAssignment: async (id, previous) => library.restoreAssignment(id, previous),
     restore: async (refs) => recentlyDeleted.restore(refs),
+    undoCommands: async (run) => commandSteps.undo(run),
+    redoCommands: async (run) => commandSteps.redo(run),
     listDeleted: async () => recentlyDeleted.list(),
     deletePermanently: async (refs) => {
       recentlyDeleted.deletePermanently(refs);
@@ -2833,8 +3803,31 @@ export function createCore(adapters: CoreAdapters): Core {
       return { tag: tags.get(intoTagId), merged: { kind: "tag", id: tagId, links } };
     },
     retagDocuments: async (documentIds) => {
-      if (organizationConfigured()) return library.classify(documentIds);
-      tagger.retag(documentIds);
+      rateLimit.resumeNow();
+      const byTagger = async (ids: unknown) => {
+        await lookForTaggingModel();
+        tagger.retag(ids);
+      };
+      if (!organizesNewDocuments()) return byTagger(documentIds);
+      // Organize re-tags the Documents it holds, and the tagger the rest.
+      if (!Array.isArray(documentIds)) return library.classify(documentIds);
+      const held = documentIds.filter((id) => typeof id === "string" && library.isOrganizing(id));
+      const rest = documentIds.filter((id) => !held.includes(id));
+      if (rest.length > 0) await byTagger(rest);
+      if (held.length > 0 || rest.length === 0) library.classify(held);
+    },
+    stopTagging: async () => {
+      const places = library.taggingPlaces();
+      library.setTaggingStopped(places, true);
+      tagger.resume();
+      return places;
+    },
+    setTaggingWithAi: async (folderId, on) => {
+      if ((folderId !== null && typeof folderId !== "string") || typeof on !== "boolean") {
+        throw new InvalidInputError({ key: "error.tagging.place" });
+      }
+      library.setTaggingStopped([folderId], !on);
+      tagger.resume();
     },
 
     getJevSettings: () => jev.status(),
@@ -2888,6 +3881,8 @@ export function createCore(adapters: CoreAdapters): Core {
     setApprovalPolicy: async (input) => approvals.set(input),
     revokeApprovalPolicy: async (policyId) => approvals.revoke(policyId),
     listApprovalRequests: async () => approvals.requests(),
+    listUserQuestions: async () => questions.list(),
+    answerUserQuestion: async (requestId, answer) => questions.answer(requestId, answer),
     respondToApproval: async (requestId, decision, options) =>
       approvals.respond(requestId, decision, options),
 
@@ -2935,11 +3930,27 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
+    previewSharePage: (mindId, options) => mindExports.previewSharePage(mindId, options),
+    setSharePageTextOnly: async (mindId, documentIds) => {
+      if (!Array.isArray(documentIds) || documentIds.some((each) => typeof each !== "string")) {
+        throw new InvalidInputError({ key: "error.export.textOnly" });
+      }
+      const mind = writableMind(mindId);
+      content.editSettings(mind.id, (mindSettings) =>
+        setTextOnlyDocuments(mindSettings, documentIds),
+      );
+    },
     exportMind: async (mindId, options) => {
       const exported = await mindExports.export(mindId, options);
-      // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
-      recordOwnFile(exported.data, ownFileOf(options));
-      recordExport(options);
+      // The host saves these bytes as a file: IncarnaMind's, wherever it goes. Noting so is
+      // never needed for the file itself: a copy saved while storage refuses every write (#1119)
+      // still goes out.
+      try {
+        recordOwnFile(exported.data, ownFileOf(options));
+        recordExport(options);
+      } catch (error) {
+        console.error("export: the file couldn't be noted as IncarnaMind's", error);
+      }
       return exported;
     },
     saveMindExport: async (mindId, options) => {
@@ -2962,6 +3973,19 @@ export function createCore(adapters: CoreAdapters): Core {
       );
       return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
     },
+    saveCheckRecord: async (mindId, format) => {
+      const { fileName, data } = await checkRecord.file(mindId, format);
+      return saveExport(fileName, data);
+    },
+    saveComparisonExport: async (input) => {
+      const ref: Record<string, unknown> = isRecord(input) ? input : {};
+      const { fileName, data, unverifiedCitations } = comparisonExport.workbook(
+        ref.mindId,
+        ref.tableId,
+      );
+      const saved = await saveExport(fileName, data);
+      return saved.status === "saved" ? { ...saved, unverifiedCitations } : saved;
+    },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);
       return saveExport(fileName, data);
@@ -2980,6 +4004,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const mind = writableMind(mindId);
       content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
+      // Undo passes the Folder's style back; what it puts back isn't a style the User chose.
+      if (style !== null && folderDefault === undefined) {
+        const recent = withRecentStyle(settings.get().user.recentCitationStyles, style);
+        settings.update({ user: { recentCitationStyles: recent } });
+        settingsChanged();
+      }
       // The style chosen is the one new Minds in its Folder start in, as a document app keeps
       // the last template used; Undo puts back the one before.
       const { folderId } = minds.get(mind.id);
@@ -2988,6 +4018,30 @@ export function createCore(adapters: CoreAdapters): Core {
         else if (style !== null) library.setCitationStyle(folderId, style);
       }
       return mindCitationStyle(mind.id);
+    },
+    listCitationStyles: async () => citationStyles.list(),
+    openCitationStyleLicences: async () => {
+      if (!adapters.shell)
+        throw new Error("This copy of IncarnaMind can't open files in other apps.");
+      // The notice is compressed in the pack, so it is written out, into a folder of its own.
+      const folder = await mkdtemp(join(adapters.paths.tempDir ?? tmpdir(), "incarnamind-"));
+      const path = join(folder, "IncarnaMind citation styles.txt");
+      await writeFile(path, citationStyles.notice());
+      await adapters.shell.openPath(path);
+    },
+    getMindStyle: async (mindId) => content.readSettings(minds.get(mindId).id, mindStyleOf),
+    getPageSetup: async (mindId) => {
+      const mind = minds.get(mindId);
+      const paper = systemPaper();
+      if (wordImports.originalOf(mind.id) === null) return nativePageSetup(paper);
+      const pkg = await openWordPackage(await wordImports.packageOf(mind.id));
+      return readPageSetup(pkg, PAGE_PAPER[paper]);
+    },
+    setMindStyle: async (mindId, style) => {
+      if (!isMindStyle(style)) throw new InvalidInputError({ key: "error.mindStyle.invalid" });
+      const mind = writableMind(mindId);
+      content.editSettings(mind.id, (mindSettings) => writeMindStyle(mindSettings, style));
+      return content.readSettings(mind.id, mindStyleOf);
     },
     getOutputSettings: async () => outputs.settings(),
     setOutputLocation: (path) => outputs.setLocation(path),
@@ -3005,7 +4059,29 @@ export function createCore(adapters: CoreAdapters): Core {
     stopMeeting: async (meetingId) => meetings.stop(meetingId),
     deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
+    listTranscriptionServices: () => cloudTranscription.list(),
+    setTranscriptionKey: (input) => cloudTranscription.setKey(input),
+    getTranscriptionSpeed: async () => {
+      const speed = settings.readDeviceValue(TRANSCRIPTION_SPEED);
+      const ratio =
+        transcriptionModel && isRecord(speed) ? speed[transcriptionModel.definition.id] : undefined;
+      return { keepsUp: typeof ratio === "number" ? ratio <= KEEPS_UP : null };
+    },
+    removeTranscriptionKey: async (route) => {
+      const listed = await cloudTranscription.removeKey(route);
+      transcriptionGateChanged();
+      settingsChanged();
+      return listed;
+    },
     openAudioSettings: (source) => meetings.openSettings(source),
+    askMeetingHelp,
+    setMeetingTemplate: async (input) => {
+      const { meetingId, template } = isRecord(input) ? input : {};
+      if (template !== null && !isMeetingTemplate(template)) {
+        throw new InvalidInputError({ key: "error.meeting.template" });
+      }
+      return meetings.setTemplate(meetingId, template);
+    },
 
     openDocumentFile: async (documentId) => {
       const file = await documents.openFile(documentId);
@@ -3084,11 +4160,13 @@ export function createCore(adapters: CoreAdapters): Core {
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
       void webSearch.close().catch((error: unknown) => console.error(error));
+      void pictureFetcher.close().catch((error: unknown) => console.error(error));
       suggestions.stop();
       edits.stopAll();
       checks.stopAll();
       skillDrafts.stopAll();
       scriptRunner.close();
+      adapters.analysisRuntime?.close();
       approvals.close();
       connectors.close();
       tagger.close();
@@ -3109,9 +4187,11 @@ export function createCore(adapters: CoreAdapters): Core {
       mindIndex.close();
       events.clear();
       content.closeAll();
+      unsaved.quit();
       db.close();
     },
   };
+  return api;
 }
 
 /** The account's name, or "" where the OS can't say (`userInfo` throws for a user without one). */

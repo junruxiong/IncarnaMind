@@ -13,12 +13,12 @@ import {
   PROPOSAL_ATTRIBUTE,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
+  WORD_TAB_MARK,
   type WordAtomAttributes,
   type WordAtomKind,
   type WordFileInfo,
   type WordImportProgress,
   type WordImportReport,
-  type WordLayout,
   type WordOrigin,
   type WordSource,
 } from "../core/api";
@@ -88,25 +88,6 @@ export function wordAtomText(atom: Pick<WordAtomAttributes, "kind" | "label" | "
   // A comment and a footnote are notes beside the text, not part of it.
   if (atom.kind === "comment" || atom.kind === "footnote" || atom.kind === "endnote") return "";
   return atom.text || atom.label;
-}
-
-/**
- * Whether a Word file's look is mostly what a Mind doesn't draw (#735), so the
- * import screen says it is kept: two kinds of it at least, one of them placing
- * the text (shading, rules, tab stops, tables with no borders) rather than only
- * colouring or sizing it. Each bar sits above what the Word corpus's memos,
- * contracts and reports reach; its résumés and forms pass them.
- */
-export function layoutNotShown(layout: WordLayout | undefined): boolean {
-  if (!layout) return false;
-  const placing = [
-    layout.shading >= 10,
-    layout.borders >= 2,
-    layout.tabStops >= 4,
-    layout.layoutTables >= 1,
-  ].filter(Boolean).length;
-  const type = [layout.colours >= 2, layout.sizes >= 4].filter(Boolean).length;
-  return placing >= 1 && placing + type >= 2;
 }
 
 const wordMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_FIELD);
@@ -207,7 +188,7 @@ export function observeWordFile(doc: Y.Doc, listener: () => void): () => void {
  * it, its Word look (given later to earlier imports, which mustn't count as an edit).
  */
 const NOT_CONTENT = new Set(["id", "includeInContext", PROPOSAL_ATTRIBUTE, WORD_LOOK_ATTRIBUTE]);
-const NOT_TEXT_CONTENT = new Set([WORD_RUN_MARK]);
+const NOT_TEXT_CONTENT = new Set([WORD_RUN_MARK, WORD_TAB_MARK]);
 /** Mark attributes that are how a link opens, not where it leads. */
 const NOT_MARK_CONTENT = new Set(["target", "rel", "class"]);
 

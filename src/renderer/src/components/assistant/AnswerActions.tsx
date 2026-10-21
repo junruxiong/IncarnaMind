@@ -2,12 +2,11 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { ConversationAnswer } from "../../../../core/api";
 import { copyAnswer } from "../../answerEditors";
 import { shortcutLabel } from "../../commands/keymap";
-import { stopAnswer } from "../../conversations";
 import { useDismissOnEscape } from "../../escapeDismiss";
 import { useT } from "../../i18n";
+import { saidInLine } from "../../lineNames";
 import { useAppStore } from "../../store";
-import { answerUndoPlace, useUndo } from "../../undo";
-import { StopIcon } from "../icons";
+import { useAnswerLine, useUndo } from "../../undo";
 import { CheckLineIcon, ChevronDownLineIcon, CopyLineIcon, PlusLineIcon } from "../lineIcons";
 import { useGoesBy } from "../UndoLine";
 
@@ -18,8 +17,9 @@ const COPIED_MS = 1500;
  * Under an Answer in the assistant (#201, #391; DESIGN.md, Answer): only
  * "Copy · Add to note ▾", after "Stopped" for one stopped; on hover or focus,
  * and always on the newest. Its model, scope and searches are in its steps.
- * While it is written, Stop. Once added, "Added to “{Mind}” · Undo" (⌘Z
- * too), while that can be taken back. Tab reaches each by its name.
+ * While it is written, Stop is the composer's and the wait line's, not here.
+ * Once added, "Added to “{Mind}” · Undo" (⌘Z too), while that can be taken
+ * back. Tab reaches each by its name.
  */
 export function AnswerActions({
   answer,
@@ -42,9 +42,7 @@ export function AnswerActions({
   const pick = useRef<HTMLButtonElement>(null);
   const undoButton = useRef<HTMLButtonElement>(null);
   const [copied, setCopied] = useState(false);
-  const addedLine = useUndo((state) =>
-    state.line?.change?.shownAt === answerUndoPlace(answer.id) ? state.line : null,
-  );
+  const addedLine = useAnswerLine(answer.id);
   const added = addedLine?.change ?? null;
   useGoesBy(addedLine?.id ?? null);
   useDismissOnEscape(added !== null, () => useUndo.getState().dismiss());
@@ -62,24 +60,25 @@ export function AnswerActions({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  if (streaming) return <WritingLine onStop={() => stopAnswer(answer.id)} />;
+  if (streaming) return <WritingLine />;
 
   if (added) {
+    const said = saidInLine(t, added.said);
     return (
       <div
         data-testid="answer-added"
         className="assistant-answer-actions assistant-answer-actions--added"
       >
         <CheckLineIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-secondary" />
-        <span role="status" className="assistant-answer-added">
-          {added.message}
+        <span role="status" title={said.fullMessage} className="assistant-answer-added">
+          {said.message}
         </span>
         <span aria-hidden="true">·</span>
         <button
           ref={undoButton}
           type="button"
           data-testid="answer-added-undo"
-          aria-label={t("move.undoLabel", { message: added.message })}
+          aria-label={t("move.undoLabel", { message: said.fullMessage ?? said.message })}
           onClick={() => {
             useUndo
               .getState()
@@ -165,25 +164,14 @@ export function AnswerActions({
 }
 
 /**
- * Under an Answer being written, or on its way: Stop, or what it says
- * instead (that it stopped before it started). Its step is on its steps' line.
+ * Under an Answer being written, or on its way: the room its actions take, so
+ * they come without moving the page, and "Stopped" for one stopped before it
+ * started. Its step is on its steps' line.
  */
-export function WritingLine({ status, onStop }: { status?: ReactNode; onStop?: () => void }) {
-  const t = useT();
+export function WritingLine({ status }: { status?: ReactNode }) {
   return (
     <div data-testid="answer-actions" className="assistant-answer-actions">
       {status}
-      {onStop && (
-        <button
-          type="button"
-          data-testid="answer-stop"
-          onClick={onStop}
-          className="assistant-answer-action"
-        >
-          <StopIcon className="size-3" />
-          {t("answer.stop")}
-        </button>
-      )}
     </div>
   );
 }

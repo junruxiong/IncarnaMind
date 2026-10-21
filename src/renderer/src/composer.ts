@@ -8,13 +8,17 @@ import { hasSearchScope } from "../../shared/searchScope";
 export interface Draft {
   text: string;
   /**
-   * What the Mind's next Questions search, once the User changed it (a chip
-   * removed, or one added with "@"): kept after asking. Empty: every Document.
-   * Null until then: the Mind's own, its Folder (see `composerScope`).
+   * The Mind's Search scope once the User changed it (a chip removed, or one
+   * added with "@"): kept after asking. Empty: every Document. Null until
+   * then: the Mind's own, which `mindSearchScope` turns into what is searched.
    */
   scope: SearchScope | null;
   /** The Skill chosen with "/" for the next Question only. */
   skill: string | null;
+  /** "Research…" was chosen: what is typed next is a topic to plan research for (#130). */
+  research?: boolean;
+  /** Tell it…: the Task what is typed goes to, by id, which reads it at its next step (#130). */
+  tell?: string;
   /** Long pastes, each a chip above the text until it is put back, saved as a Document, or asked with. */
   pastes: Paste[];
 }
@@ -37,15 +41,10 @@ export const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [
 
 const EMPTY_DRAFT: Draft = { text: "", scope: null, skill: null, pastes: [] };
 
-/** A Mind's own Search scope: its Folder, or every Document for a Mind Not in a Folder. */
 export const folderScope = (folderId: string | null): SearchScope =>
   folderId === null ? NO_SCOPE : { folderIds: [folderId], tagIds: [], documentIds: [] };
 
-/**
- * What the composer's next Question searches: the scope the User chose, or
- * else the Mind's own (`folderScope`). The Folder is resolved when the
- * Question is asked, so Documents filed in or out since count as they are then.
- */
+/** The core decides what this searches (`mindSearchScope`), when the Question is asked. */
 export const composerScope = (draft: Draft, folderId: string | null): SearchScope =>
   draft.scope ?? folderScope(folderId);
 

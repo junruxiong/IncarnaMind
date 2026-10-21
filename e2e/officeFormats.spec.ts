@@ -20,11 +20,14 @@ import {
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
+  exportFromMenu,
   launchApp,
   linkFolderFromSidebar,
+  nameMind,
   newMind,
   openDocumentAt,
   removeDataFolder,
+  savedLine,
   setWindowSize,
   useLocalChatModel,
   useOutputLocation,
@@ -94,7 +97,7 @@ async function expectMarkBeside(mark: Locator, highlight: Locator) {
  */
 async function ask(window: Page, text: string) {
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Formats");
+  await nameMind(window, "Formats");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await addToNote(window, await askInAssistant(window, text));
@@ -257,9 +260,9 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   const target = join(sources, "Formats.docx");
   await useOutputLocation(window, sources);
   await window.keyboard.press("Escape");
-  await window.getByTestId("export-mind").click();
+  await exportFromMenu(window);
   const result = window.getByTestId("export-result");
-  await expect(result.getByTestId("export-done")).toHaveText("Saved Formats.docx");
+  await expect(result.getByTestId("export-done")).toHaveText(savedLine("Formats.docx", sources));
   // Every quote was found: no line about one that wasn't.
   await expect(result.getByTestId("export-unverified")).toHaveCount(0);
   const footnotes = Object.values(

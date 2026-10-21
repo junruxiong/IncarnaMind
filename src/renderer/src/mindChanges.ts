@@ -14,13 +14,13 @@
  */
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import * as Y from "yjs";
-import { MIND_CONTENT_FIELD, type ProposalRef } from "../../core/api";
-import { aiUseOfAccepted, pendingProposals, resolveProposals } from "../../shared/proposals";
+import { MIND_CONTENT_FIELD, MIND_PROPOSAL_REQUESTS_FIELD, type ProposalRef } from "../../core/api";
+import { holdsOnlyItsTitle } from "../../shared/madeMind";
+import { aiUseOfAccepted, decideProposals, pendingProposals } from "../../shared/proposals";
 import type { ChangedMind } from "./changedMinds";
 import { readMindHandle } from "./commands/handles";
 import { core } from "./core";
 import { pendingIn } from "./editor/proposalReview";
-import { translateNow as t } from "./i18n";
 import { openMindCopy } from "./mindCopies";
 import { useAppStore } from "./store";
 import { answerUndoPlace, type Undoable, useUndo } from "./undo";
@@ -85,12 +85,22 @@ function release(mindId: string): void {
 const belongsTo = (requests: readonly string[]) => (proposal: ProposalRef) =>
   requests.includes(proposal.request);
 
-/** How many of a row's changes wait in its Mind; null until its copy has arrived. */
-function waiting(row: ChangedMind): number | null {
+/** Changes in a Mind: those of `requests`, or, for null, every change waiting there. */
+interface WaitingIn {
+  mindId: string;
+  requests: readonly string[] | null;
+}
+
+/**
+ * How many of a row's changes wait in its Mind, counted as the Mind's bar and its change card
+ * count them (what Accept and Reject act on), or every change from anyone; null until its copy
+ * has arrived.
+ */
+function waiting(row: WaitingIn): number | null {
   const doc = held.get(row.mindId)?.doc;
   if (!doc) return null;
-  return pendingProposals(doc.getXmlFragment(MIND_CONTENT_FIELD)).filter(belongsTo(row.requests))
-    .length;
+  const pending = pendingProposals(doc.getXmlFragment(MIND_CONTENT_FIELD));
+  return row.requests ? pending.filter(belongsTo(row.requests)).length : pending.length;
 }
 
 /** How many of a row's changes wait in its Mind: a count, "gone" for a Mind deleted, null until its copy arrives. */
@@ -100,7 +110,7 @@ export type Waiting = number | "gone" | null;
  * How many of each row's changes wait in its Mind, as they change. Holds a
  * copy of each Mind still there while the card is shown.
  */
-export function useWaitingChanges(rows: readonly ChangedMind[]): Waiting[] {
+export function useWaitingChanges(rows: readonly WaitingIn[]): Waiting[] {
   const minds = useAppStore((state) => state.minds);
   const live = useMemo(
     () => rows.filter((row) => minds.some((mind) => mind.id === row.mindId)),
@@ -133,6 +143,12 @@ export function useWaitingChanges(rows: readonly ChangedMind[]): Waiting[] {
     .map((count) => (count === "gone" ? "gone" : count === "" ? null : Number(count)));
 }
 
+/** How many changes wait in a Mind, from anyone, as they change. */
+export function useWaitingIn(mindId: string | null): Waiting {
+  const rows = useMemo(() => (mindId ? [{ mindId, requests: null }] : []), [mindId]);
+  return useWaitingChanges(rows)[0] ?? null;
+}
+
 /** Brings a Mind up beside the focused one, where it is open, else in a new tab. */
 const openBeside = (mindId: string) =>
   useAppStore.getState().changeLayout({
@@ -144,11 +160,15 @@ const openBeside = (mindId: string) =>
 /** Frames to wait for a Mind just opened to show its changes. */
 const REVEAL_FRAMES = 60;
 
-/** Puts the cursor in the first of the requests' changes in a Mind open in the editor, once it shows them. */
-function revealChange(mindId: string, requests: readonly string[], frames = REVEAL_FRAMES): void {
+/** Puts the cursor in the first of the changes `picked` picks in a Mind open in the editor, once it shows them. */
+function revealChange(
+  mindId: string,
+  picked: (proposal: ProposalRef) => boolean,
+  frames = REVEAL_FRAMES,
+): void {
   const read = readMindHandle.current;
   if (read && read.mindId === mindId && !read.editor.isDestroyed) {
-    const first = pendingIn(read.editor.state).find(belongsTo(requests));
+    const first = pendingIn(read.editor.state).find(picked);
     if (first) {
       const at = first.block ? first.from + 1 : first.from;
       read.editor
@@ -160,13 +180,19 @@ function revealChange(mindId: string, requests: readonly string[], frames = REVE
       return;
     }
   }
-  if (frames > 0) requestAnimationFrame(() => revealChange(mindId, requests, frames - 1));
+  if (frames > 0) requestAnimationFrame(() => revealChange(mindId, picked, frames - 1));
 }
 
 /** Review and Open: the Mind, at its first change from the Answer. */
 export function showChanges(row: ChangedMind): void {
   useAppStore.getState().openMind(row.mindId);
-  revealChange(row.mindId, row.requests);
+  revealChange(row.mindId, belongsTo(row.requests));
+}
+
+/** Review, where changes waiting kept the assistant from changing a Mind: the Mind, at its first change. */
+export function showWaitingChanges(mindId: string): void {
+  useAppStore.getState().openMind(mindId);
+  revealChange(mindId, () => true);
 }
 
 /** One Mind's part of Accept all or Reject all: how many changes it took, and how to take it back and do it again. */
@@ -178,16 +204,6 @@ interface Done {
   forget(): void;
 }
 
-/** Whether a Mind's copy holds nothing: only empty lines. */
-const isEmpty = (doc: Y.Doc) =>
-  doc
-    .getXmlFragment(MIND_CONTENT_FIELD)
-    .toArray()
-    .every(
-      (block) =>
-        block instanceof Y.XmlElement && block.nodeName === "paragraph" && block.length === 0,
-    );
-
 /**
  * Reject all in a Mind the Answer made: its changes go, and so does the Mind,
  * closing its tab, once nothing else is in it (the User may have written in
@@ -196,7 +212,10 @@ const isEmpty = (doc: Y.Doc) =>
 async function rejectMade(row: ChangedMind): Promise<Done | null> {
   const rejected = await resolveRow(row, "reject");
   const doc = held.get(row.mindId)?.doc;
-  if (!rejected || !doc || !isEmpty(doc)) return rejected;
+  const title = useAppStore.getState().minds.find((mind) => mind.id === row.mindId)?.title ?? "";
+  if (!rejected || !doc || !holdsOnlyItsTitle(doc.getXmlFragment(MIND_CONTENT_FIELD), title)) {
+    return rejected;
+  }
   await core.deleteMind(row.mindId);
   return {
     count: rejected.count,
@@ -233,10 +252,13 @@ async function resolveRow(row: ChangedMind, outcome: "accept" | "reject"): Promi
     }
   }
   const origin = { mindChanges: row.mindId };
-  const steps = new Y.UndoManager(blocks, { trackedOrigins: new Set([origin]) });
-  let resolved: ReturnType<typeof resolveProposals> = [];
+  // The requests' map too, which keeps what the User decided (`decideProposals`).
+  const steps = new Y.UndoManager([blocks, doc.getMap(MIND_PROPOSAL_REQUESTS_FIELD)], {
+    trackedOrigins: new Set([origin]),
+  });
+  let resolved: ReturnType<typeof decideProposals> = [];
   doc.transact(() => {
-    resolved = resolveProposals(blocks, picked, outcome);
+    resolved = decideProposals(blocks, picked, outcome);
   }, origin);
   if (outcome === "accept") {
     const entries = aiUseOfAccepted(doc, row.mindId, resolved, new Date().toISOString());
@@ -297,16 +319,15 @@ export async function resolveAllChanges(
   }
   if (done.length === 0) return;
   const count = done.reduce((sum, step) => sum + step.count, 0);
-  const message =
-    outcome === "accept"
-      ? count === 1
-        ? t("proposal.accepted.one")
-        : t("proposal.accepted", { count })
-      : count === 1
-        ? t("proposal.rejected.one")
-        : t("proposal.rejected", { count });
   const change: Undoable = {
-    message,
+    said: (t) =>
+      outcome === "accept"
+        ? count === 1
+          ? t("proposal.accepted.one")
+          : t("proposal.accepted", { count })
+        : count === 1
+          ? t("proposal.rejected.one")
+          : t("proposal.rejected", { count }),
     shownAt: answerUndoPlace(answerId),
     undo: async () => {
       for (const step of [...done].reverse()) await step.undo();

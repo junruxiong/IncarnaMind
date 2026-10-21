@@ -1,12 +1,26 @@
 import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/dom";
 import { type Editor, isMacOS, posToDOMRect } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
-import { type MouseEvent as ReactMouseEvent, useEffect, useLayoutEffect, useRef } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { formatDate } from "../../../shared/dates";
+import { actOnAppliedEdit, restoreChange } from "../appliedEdits";
 import { PencilLineIcon, SparkLineIcon } from "../components/lineIcons";
 import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import {
+  appliedLineIn,
+  isAppliedAction,
+  redrawAppliedLine,
+  toggleAppliedOriginal,
+} from "./appliedEditLine";
+import { type BarRoom, roomForBar } from "./barRoom";
 import {
   changeReason,
   clearHovered,
@@ -18,6 +32,9 @@ import {
   sourcesRemoved,
   theirChange,
 } from "./proposalReview";
+import { redrawProposalRewrites, toggleProposalOriginal } from "./proposalRewrites";
+
+const GAP_PX = 6;
 
 /** How long the bar stays once the pointer leaves its change, so it can reach the bar. */
 const LEAVE_MS = 300;
@@ -60,7 +77,9 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
     const dom = editor.view.dom;
     const buttonOf = (event: Event) =>
       event.target instanceof Element
-        ? event.target.closest<HTMLElement>("[data-proposal-regenerate], [data-proposal-reject]")
+        ? event.target.closest<HTMLElement>(
+            "[data-proposal-regenerate], [data-proposal-reject], [data-applied-action], [data-applied-restore], [data-change-original]",
+          )
         : null;
     // The text keeps the focus and its selection.
     const press = (event: MouseEvent) => {
@@ -70,6 +89,24 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       const button = buttonOf(event);
       if (!button || repeated(event)) return;
       event.preventDefault();
+      const original = button.dataset.changeOriginal;
+      if (original) {
+        if (original.startsWith("applied:")) toggleAppliedOriginal(editor, original);
+        else toggleProposalOriginal(editor, original);
+        return;
+      }
+      const applied = button.dataset.appliedAction;
+      if (applied && isAppliedAction(applied)) {
+        actOnAppliedEdit(editor, applied);
+        if (!editor.isDestroyed) editor.commands.focus();
+        return;
+      }
+      const restored = button.dataset.appliedRestore;
+      if (restored !== undefined) {
+        restoreChange(editor, Number(restored));
+        if (!editor.isDestroyed) editor.commands.focus();
+        return;
+      }
       const rejected = button.dataset.proposalReject;
       if (rejected) {
         resolveProposalsIn(editor, mindId, [rejected], "reject");
@@ -89,6 +126,12 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       dom.removeEventListener("click", click);
     };
   }, [editor, mindId]);
+  // The applied edit's lines and the "Was: …" lines are drawn outside React: again once the language changes.
+  const language = useLanguage();
+  useEffect(() => {
+    redrawAppliedLine(editor, language);
+    redrawProposalRewrites(editor);
+  }, [editor, language]);
   return (
     <>
       <ProposalsBar editor={editor} mindId={mindId} />
@@ -96,6 +139,12 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
       <Spoken editor={editor} mindId={mindId} />
     </>
   );
+}
+
+function barRoom(editor: Editor): BarRoom {
+  const card = editor.view.dom.closest(".app-card")?.getBoundingClientRect() ?? null;
+  const dock = document.querySelector<HTMLElement>("[data-assistant]")?.dataset.dock;
+  return roomForBar(card, dock, { width: window.innerWidth, height: window.innerHeight });
 }
 
 /** The second click of a double click: it does nothing more. */
@@ -116,7 +165,11 @@ function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
     selector: ({ editor: current }): Group[] => {
       const theirs = new Map<string | null, Group>();
       const assistant: Group = { ids: [], stale: false };
+      const line = appliedLineIn(current.state);
+      // An edit held back has its own line.
+      const ownLine = line?.kind === "held" ? line.request : null;
       for (const each of pendingIn(current.state)) {
+        if (each.request === ownLine) continue;
         let group = assistant;
         if (each.theirs) {
           const author = theirChange(current, each)?.author ?? null;
@@ -249,6 +302,7 @@ interface Shown {
   count: number;
   from: number;
   to: number;
+  end: number;
   dropped: number;
   citations: PendingProposal["citations"];
   /** Who made someone's change, and when; null for the assistant's. */
@@ -257,6 +311,74 @@ interface Shown {
   reason: string | null;
   /** The cursor is in it, not only the pointer on it. */
   focused: boolean;
+}
+
+function textUnder(editor: Editor, x: number, y: number, size: DOMRect): boolean {
+  return [8, size.width / 2, size.width - 8].some((across) =>
+    document
+      .elementsFromPoint(x + across, y + size.height / 2)
+      .some(
+        (found) =>
+          found !== editor.view.dom &&
+          editor.view.dom.contains(found) &&
+          (found.textContent ?? "").trim() !== "",
+      ),
+  );
+}
+
+/**
+ * A change's bar sits over the first line of its change, following it as the Mind scrolls; under
+ * its last line instead when it would cover text above and nothing below (#1358).
+ */
+function useBarOver(
+  editor: Editor,
+  bar: RefObject<HTMLDivElement | null>,
+  change: { from: number; to: number; end: number } | null,
+): void {
+  useLayoutEffect(() => {
+    const element = bar.current;
+    if (!change || !element || editor.isDestroyed) return;
+    const reference = {
+      getBoundingClientRect: () => posToDOMRect(editor.view, change.from, change.to),
+      contextElement: editor.view.dom,
+    };
+    const place = () => {
+      if (editor.isDestroyed) return;
+      // Never over the Mind's bar of changes, which stays at the top as the Mind scrolls, nor an
+      // applied edit's line above the change: under the change's line then.
+      const covered = editor.view.dom
+        .closest(".mind-editor-frame")
+        ?.querySelector(".proposals-bar")
+        ?.getBoundingClientRect().bottom;
+      const changeTop = reference.getBoundingClientRect().top;
+      const lines = [...editor.view.dom.querySelectorAll(".applied-line")]
+        .map((line) => line.getBoundingClientRect().bottom)
+        .filter((bottom) => bottom <= changeTop + 1);
+      const top = Math.max(8, covered ?? 0, ...lines);
+      const size = element.getBoundingClientRect();
+      const first = reference.getBoundingClientRect();
+      const whole = posToDOMRect(editor.view, change.from, change.end);
+      const below =
+        textUnder(editor, first.left, first.top - GAP_PX - size.height, size) &&
+        !textUnder(editor, first.left, whole.bottom + GAP_PX, size);
+      void computePosition(
+        below ? { ...reference, getBoundingClientRect: () => whole } : reference,
+        element,
+        {
+          placement: below ? "bottom-start" : "top-start",
+          strategy: "fixed",
+          middleware: [
+            offset(GAP_PX),
+            flip({ padding: { top } }),
+            shift({ padding: 8, rootBoundary: barRoom(editor) }),
+          ],
+        },
+      ).then(({ x, y }) => {
+        Object.assign(element.style, { left: `${x}px`, top: `${y}px`, visibility: "visible" });
+      });
+    };
+    return autoUpdate(reference, element, place);
+  }, [editor, bar, change]);
 }
 
 function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
@@ -271,12 +393,14 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
       if (!proposal || proposal.outOfDate) return null;
       const all = pendingIn(current.state);
       const first = proposal.ranges[0] ?? proposal;
+      const last = proposal.ranges.at(-1) ?? proposal;
       return {
         id: proposal.id,
         index: all.findIndex((each) => each.id === proposal.id) + 1,
         count: all.length,
         from: first.from,
         to: first.to,
+        end: last.to,
         dropped: proposal.droppedCitations,
         citations: proposal.citations,
         made: proposal.theirs ? theirChange(current, proposal) : null,
@@ -315,32 +439,7 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
     };
   }, [editor]);
 
-  // Sits over the first line of its change, following it as the Mind scrolls.
-  useLayoutEffect(() => {
-    const element = bar.current;
-    if (!shown || !element || editor.isDestroyed) return;
-    const reference = {
-      getBoundingClientRect: () => posToDOMRect(editor.view, shown.from, shown.to),
-      contextElement: editor.view.dom,
-    };
-    const place = () => {
-      if (editor.isDestroyed) return;
-      // Never over the Mind's bar of changes, which stays at the top as the Mind scrolls: under the line then.
-      const covered = editor.view.dom
-        .closest(".mind-editor-frame")
-        ?.querySelector(".proposals-bar")
-        ?.getBoundingClientRect().bottom;
-      const top = Math.max(8, covered ?? 0);
-      void computePosition(reference, element, {
-        placement: "top-start",
-        strategy: "fixed",
-        middleware: [offset(6), flip({ padding: { top } }), shift({ padding: 8 })],
-      }).then(({ x, y }) => {
-        Object.assign(element.style, { left: `${x}px`, top: `${y}px`, visibility: "visible" });
-      });
-    };
-    return autoUpdate(reference, element, place);
-  }, [editor, shown]);
+  useBarOver(editor, bar, shown);
 
   if (!shown) return null;
   const removedSources = sourcesRemoved(shown, documents, kept);

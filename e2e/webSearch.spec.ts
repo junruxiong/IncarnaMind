@@ -89,9 +89,9 @@ test("asked to search the web, an Answer saves the page it reads as a Document a
   await pointAndClick(window, toggle);
   await expect(toggle).toBeChecked();
   await expect(section.getByTestId("web-search-status")).toHaveText(
-    `${MODEL_NAME} searches through Anthropic.`,
+    `${MODEL_NAME} searches the web through Anthropic.`,
   );
-  await expect(section.getByTestId("web-search-route")).toHaveText("The model's own search");
+  await expect(section.getByTestId("web-search-route")).toHaveText("The model’s own search");
   await section.scrollIntoViewIfNeeded();
   await screenshot(window, "web-search-settings");
   await closeSettings(window);
@@ -125,7 +125,7 @@ test("asked to search the web, an Answer saves the page it reads as a Document a
   );
   await expect(calls.nth(1)).toContainText(`Saved “${TITLE}”`);
   await expect(calls.nth(2)).toHaveText(
-    "Couldn't save http://news.test/members: the page needs a sign-in",
+    "Couldn’t save http://news.test/members: the page needs a sign-in",
   );
   await screenshot(window, "web-search-answer");
 
@@ -138,13 +138,18 @@ test("asked to search the web, an Answer saves the page it reads as a Document a
     window.getByTestId("viewer").locator("[data-quote-highlight]").first(),
   ).toBeVisible();
 
-  // It is a Web page Document now, and nothing but the pages the search found was fetched.
+  // It is a Web page Document now, and nothing but the pages the search found, and the saved
+  // page's picture (#756), was fetched.
   const documents = await window.evaluate(() =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listDocuments(),
   );
   expect(documents.map((each) => [each.kind, each.name, each.web?.address])).toEqual([
     ["web", TITLE, "http://encyclopedia.test/tea"],
   ]);
-  expect(heard).toEqual(["encyclopedia.test/tea", "news.test/members"]);
+  expect([...heard].sort()).toEqual([
+    "encyclopedia.test/tea",
+    "images.example/tea-plantation.jpg",
+    "news.test/members",
+  ]);
   await app.close();
 });

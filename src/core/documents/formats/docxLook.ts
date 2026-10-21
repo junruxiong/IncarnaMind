@@ -4,27 +4,36 @@
  * Paragraphs: defaults, table style, style chain, list level, direct.
  */
 
+import type { MarkJSON } from "../../../shared/blockJson";
 import { targetHash } from "../../../shared/proposals";
 import { sorted } from "../../../shared/wordFiles";
 import { defined } from "../../../shared/wordLook";
-import type {
-  WordBorder,
-  WordBorders,
-  WordCellLook,
-  WordLook,
-  WordParagraphLook,
-  WordRunLook,
-  WordTableLook,
-  WordTabStop,
-  WordWidth,
+import {
+  type ParagraphFormat,
+  SUBSCRIPT_MARK,
+  SUPERSCRIPT_MARK,
+  TEXT_COLOR_MARK,
+  type WordBorder,
+  type WordBorders,
+  type WordCellLook,
+  type WordLook,
+  type WordParagraphLook,
+  type WordRunLook,
+  type WordTableLook,
+  type WordTabStop,
+  type WordWidth,
 } from "../../api";
 import { child, descendants, elements, local, onOff, parseXml, type XmlElement } from "./xml";
 
 /**
  * How the look was read. A Mind whose look an earlier version read has it
  * cleared (attributes, marks and map) and given again at the next start.
+ * From 6 the look keeps only what styles and lists give (`splitDirect`).
  */
-export const WORD_LOOK_VERSION = 1;
+export const WORD_LOOK_VERSION = 6;
+
+/** The first version that read table styles' conditional formatting. */
+export const CONDITIONAL_FORMATTING_VERSION = 3;
 
 const MAX_STYLE_DEPTH = 20;
 
@@ -33,6 +42,11 @@ function points(value: string | undefined, per = 20): number | undefined {
   if (value === undefined) return undefined;
   const number = Number(value);
   return Number.isFinite(number) ? Math.round((number / per) * 100) / 100 : undefined;
+}
+
+function count(value: string | undefined): number | undefined {
+  const number = Number(value);
+  return value !== undefined && Number.isInteger(number) ? number : undefined;
 }
 
 function hex(value: string | undefined): string | undefined {
@@ -70,6 +84,11 @@ interface Indents {
   right?: number;
   firstLine?: number;
   hanging?: number;
+  /** In hundredths of a character; when not 0, they win over the lengths. */
+  leftChars?: number;
+  rightChars?: number;
+  firstLineChars?: number;
+  hangingChars?: number;
 }
 
 interface Spacing {
@@ -108,6 +127,8 @@ interface TableProps {
   borders?: Record<string, WordBorder | null>;
   margins?: Record<string, number>;
   fixed?: boolean;
+  rowBand?: number;
+  columnBand?: number;
 }
 
 interface CellProps {
@@ -119,14 +140,19 @@ interface CellProps {
   noWrap?: boolean;
 }
 
-interface StyleDefinition {
+interface StyleParts {
+  pPr?: XmlElement;
+  rPr?: XmlElement;
+  tcPr?: XmlElement;
+}
+
+interface StyleDefinition extends StyleParts {
   type: string;
   basedOn: string | null;
   next: string | null;
-  pPr?: XmlElement;
-  rPr?: XmlElement;
   tblPr?: XmlElement;
-  tcPr?: XmlElement;
+  /** A table style's formatting for parts of the table (`w:tblStylePr`), by `w:type`. */
+  conditional: Map<string, StyleParts>;
 }
 
 const ALIGN: Record<string, WordParagraphLook["align"]> = {
@@ -319,6 +345,10 @@ function readParagraph(pPr: XmlElement | undefined): ParagraphProps {
           right: points(attrs["w:right"] ?? attrs["w:end"]),
           firstLine: points(attrs["w:firstLine"]),
           hanging: points(attrs["w:hanging"]),
+          leftChars: count(attrs["w:leftChars"] ?? attrs["w:startChars"]),
+          rightChars: count(attrs["w:rightChars"] ?? attrs["w:endChars"]),
+          firstLineChars: count(attrs["w:firstLineChars"]),
+          hangingChars: count(attrs["w:hangingChars"]),
         });
         break;
       case "w:spacing":
@@ -397,6 +427,12 @@ function readTable(tblPr: XmlElement | undefined): TableProps {
       case "w:tblLayout":
         props.fixed = element.attrs["w:type"] === "fixed";
         break;
+      case "w:tblStyleRowBandSize":
+        props.rowBand = count(element.attrs["w:val"]);
+        break;
+      case "w:tblStyleColBandSize":
+        props.columnBand = count(element.attrs["w:val"]);
+        break;
     }
   }
   return props;
@@ -467,8 +503,17 @@ function mergeParagraph(base: ParagraphProps, over: ParagraphProps): ParagraphPr
   if (base.indents || over.indents) {
     const indents = { ...base.indents, ...over.indents };
     // A first line and a hanging indent replace each other.
-    if (over.indents?.firstLine !== undefined) delete indents.hanging;
-    if (over.indents?.hanging !== undefined) delete indents.firstLine;
+    const firstLine =
+      over.indents?.firstLine !== undefined || over.indents?.firstLineChars !== undefined;
+    const hanging = over.indents?.hanging !== undefined || over.indents?.hangingChars !== undefined;
+    if (firstLine && !hanging) {
+      delete indents.hanging;
+      delete indents.hangingChars;
+    }
+    if (hanging && !firstLine) {
+      delete indents.firstLine;
+      delete indents.firstLineChars;
+    }
     merged.indents = indents;
   }
   if (base.spacing || over.spacing) merged.spacing = { ...base.spacing, ...over.spacing };
@@ -497,6 +542,148 @@ function mergeCell(base: CellProps, over: CellProps): CellProps {
   if (base.borders || over.borders) merged.borders = { ...base.borders, ...over.borders };
   if (base.margins || over.margins) merged.margins = { ...base.margins, ...over.margins };
   return merged;
+}
+
+const BOX = ["top", "bottom", "left", "right"] as const;
+type Side = (typeof BOX)[number];
+const INSIDE = { top: "insideH", bottom: "insideH", left: "insideV", right: "insideV" } as const;
+
+/** A cell's "none" hides the table's line on that side, as in Word: "nil" on the table's edge, "none" between cells. */
+const noLine = (style: "nil" | "none"): WordBorder => ({ style, width: 0, color: null, space: 0 });
+
+const edgesOf = (place: CellPlace): Record<Side, boolean> => ({
+  top: place.row === 0,
+  bottom: place.row + place.rowSpan === place.rows,
+  left: place.column === 0,
+  right: place.column + place.span === place.columns,
+});
+
+function cellBorders(
+  borders: Record<string, WordBorder | null> | undefined,
+  place: CellPlace | undefined,
+): WordBorders<Side> | undefined {
+  if (!borders) return undefined;
+  const edge = place ? edgesOf(place) : null;
+  const kept: WordBorders<Side> = {};
+  for (const side of BOX) {
+    const border = borders[side];
+    if (border !== undefined) kept[side] = border ?? noLine(!edge || edge[side] ? "nil" : "none");
+  }
+  return Object.keys(kept).length > 0 ? kept : undefined;
+}
+
+/** Where a cell is: the row and grid column it starts in, what it spans, and the table's size. */
+export interface CellPlace {
+  row: number;
+  rows: number;
+  rowSpan: number;
+  column: number;
+  span: number;
+  columns: number;
+}
+
+type Region = "table" | "row" | "column" | "cell";
+
+/** In the order Office applies them, each over those before (MS-OI29500, 17.7.6.6). */
+const CONDITIONS: readonly (readonly [string, Region])[] = [
+  ["wholeTable", "table"],
+  ["band1Horz", "row"],
+  ["band2Horz", "row"],
+  ["band1Vert", "column"],
+  ["band2Vert", "column"],
+  ["firstCol", "column"],
+  ["lastCol", "column"],
+  ["firstRow", "row"],
+  ["lastRow", "row"],
+  ["nwCell", "cell"],
+  ["neCell", "cell"],
+  ["swCell", "cell"],
+  ["seCell", "cell"],
+];
+
+interface TableOptions {
+  firstRow: boolean;
+  lastRow: boolean;
+  firstColumn: boolean;
+  lastColumn: boolean;
+  rowBands: boolean;
+  columnBands: boolean;
+}
+
+const LOOK_BITS = {
+  firstRow: 0x20,
+  lastRow: 0x40,
+  firstColumn: 0x80,
+  lastColumn: 0x100,
+  noHBand: 0x200,
+  noVBand: 0x400,
+} as const;
+
+function readOptions(tblLook: XmlElement | undefined): TableOptions {
+  // Word takes a missing tblLook as 04A0 (MS-OI29500, 17.4.55).
+  const bits = tblLook ? Number.parseInt(tblLook.attrs["w:val"] ?? "0", 16) || 0 : 0x04a0;
+  const on = (name: keyof typeof LOOK_BITS) => {
+    const value = tblLook?.attrs[`w:${name}`];
+    return value === undefined
+      ? (bits & LOOK_BITS[name]) !== 0
+      : !["false", "0", "off"].includes(value);
+  };
+  return {
+    firstRow: on("firstRow"),
+    lastRow: on("lastRow"),
+    firstColumn: on("firstColumn"),
+    lastColumn: on("lastColumn"),
+    rowBands: !on("noHBand"),
+    columnBands: !on("noVBand"),
+  };
+}
+
+function conditionsAt(
+  options: TableOptions,
+  bands: { rows: number; columns: number },
+  place: CellPlace,
+): Set<string> {
+  const firstRow = options.firstRow && place.row === 0;
+  const lastRow = options.lastRow && place.row === place.rows - 1;
+  const firstCol = options.firstColumn && place.column === 0;
+  const lastCol = options.lastColumn && place.column + place.span === place.columns;
+  const on = new Set(["wholeTable"]);
+  if (options.rowBands && bands.rows > 0 && !firstRow && !lastRow) {
+    const band = Math.floor((place.row - (options.firstRow ? 1 : 0)) / bands.rows);
+    on.add(band % 2 === 0 ? "band1Horz" : "band2Horz");
+  }
+  if (options.columnBands && bands.columns > 0 && !firstCol && !lastCol) {
+    const band = Math.floor((place.column - (options.firstColumn ? 1 : 0)) / bands.columns);
+    on.add(band % 2 === 0 ? "band1Vert" : "band2Vert");
+  }
+  const flags: [string, boolean][] = [
+    ["firstCol", firstCol],
+    ["lastCol", lastCol],
+    ["firstRow", firstRow],
+    ["lastRow", lastRow],
+    ["nwCell", firstRow && firstCol],
+    ["neCell", firstRow && lastCol],
+    ["swCell", lastRow && firstCol],
+    ["seCell", lastRow && lastCol],
+  ];
+  for (const [name, applies] of flags) if (applies) on.add(name);
+  return on;
+}
+
+/** A conditional format's borders frame its region: a row's left side is only its first cell's, and insideV is between. */
+function regionBorders(props: CellProps, region: Region, place: CellPlace): CellProps {
+  const sides = props.borders;
+  if (!sides || region === "cell") return props;
+  const edge = edgesOf(place);
+  const across = (side: Side) =>
+    region === "table" ||
+    (region === "row" ? side === "left" || side === "right" : side === "top" || side === "bottom");
+  const borders: Record<string, WordBorder | null> = {};
+  for (const side of BOX) {
+    const value = across(side) && !edge[side] ? sides[INSIDE[side]] : sides[side];
+    if (value !== undefined) borders[side] = value;
+  }
+  return { ...props, borders };
 }
 
 function keptBorders<Side extends string>(
@@ -570,15 +757,24 @@ export interface LookParts {
 
 export interface ParagraphLookContext {
   look: WordParagraphLook;
+  /** The paragraph's direct formatting that the look leaves out. */
+  format: ParagraphFormat;
   /** The table style's run formatting, then the paragraph style's. */
   runs: RunProps[];
 }
 
 export interface TableLookContext {
-  key: string | null;
-  styleId: string | null;
-  style: StyleDefinition[];
+  key: string;
+  /** Names the levels, for the look Enter gives (`next`). */
+  id: string;
+  /** What the table's paragraphs and runs take: its style's levels, then a cell's conditional ones. */
+  levels: StyleParts[];
   cellBase: CellProps;
+  chain: StyleDefinition[];
+  options: TableOptions;
+  bands: { rows: number; columns: number };
+  /** A cell's place, in its context. */
+  place?: CellPlace;
 }
 
 /** Each look under a key made from the look itself, so a key names the same look in every Mind. */
@@ -617,16 +813,28 @@ export class LookReader {
   private readonly theme: ThemeFonts;
   private readonly levels = new Map<string, Map<number, { pPr?: XmlElement; rPr?: XmlElement }>>();
   private readonly width: number | null;
+  private readonly defaultTab: number | null;
+  private readonly tablesHang: boolean;
   /** Parts the look would read but couldn't parse; the look goes on without them. */
   readonly unreadable: string[] = [];
 
   constructor(parts: LookParts) {
-    const language = this.readable(
-      "settings",
-      parts.settings,
-      (root) => child(root, "w:themeFontLang")?.attrs["w:eastAsia"],
-    );
-    this.theme = this.readable("theme", parts.theme, (root) => readTheme(root, language)) ?? {
+    const settings = this.readable("settings", parts.settings, (root) => ({
+      language: child(root, "w:themeFontLang")?.attrs["w:eastAsia"],
+      defaultTab: points(child(root, "w:defaultTabStop")?.attrs["w:val"]),
+      mode: Number(
+        elements(child(root, "w:compat") ?? EMPTY).find(
+          (setting) =>
+            setting.name === "w:compatSetting" && setting.attrs["w:name"] === "compatibilityMode",
+        )?.attrs["w:val"],
+      ),
+    }));
+    this.defaultTab = settings?.defaultTab ?? null;
+    // A file that names no mode is opened in an earlier one: only Word 2013's mode 15 and later stop the hang.
+    this.tablesHang = !(Number.isFinite(settings?.mode) && (settings?.mode ?? 0) >= 15);
+    this.theme = this.readable("theme", parts.theme, (root) =>
+      readTheme(root, settings?.language),
+    ) ?? {
       major: {},
       minor: {},
     };
@@ -644,6 +852,16 @@ export class LookReader {
       const isDefault = style.attrs["w:default"] === "1" || style.attrs["w:default"] === "true";
       if (isDefault && type === "paragraph") this.defaultParagraph = id;
       if (isDefault && type === "table") this.defaultTable = id;
+      const conditional = new Map<string, StyleParts>();
+      for (const part of elements(style)) {
+        const condition = part.name === "w:tblStylePr" ? part.attrs["w:type"] : undefined;
+        if (!condition) continue;
+        conditional.set(condition, {
+          pPr: child(part, "w:pPr"),
+          rPr: child(part, "w:rPr"),
+          tcPr: child(part, "w:tcPr"),
+        });
+      }
       this.styles.set(`${type}:${id}`, {
         type,
         basedOn: child(style, "w:basedOn")?.attrs["w:val"] ?? null,
@@ -652,6 +870,7 @@ export class LookReader {
         rPr: child(style, "w:rPr"),
         tblPr: child(style, "w:tblPr"),
         tcPr: child(style, "w:tcPr"),
+        conditional,
       });
     }
     this.readNumbering(parts.numbering);
@@ -757,7 +976,36 @@ export class LookReader {
       fixed: props.fixed ? (true as const) : undefined,
       columns: columns.length > 0 ? columns : undefined,
     });
-    return { key: this.tables.key(look), styleId, style, cellBase };
+    return {
+      // Every table gets a key, so the look draws it, not the app's table.
+      key: this.tables.key(look) ?? this.tables.empty(look),
+      id: `table:${styleId ?? ""}`,
+      levels: style,
+      cellBase,
+      chain: style,
+      options: readOptions(tblPr && child(tblPr, "w:tblLook")),
+      bands: { rows: props.rowBand ?? 1, columns: props.columnBand ?? 1 },
+    };
+  }
+
+  cellAt(table: TableLookContext, place: CellPlace): TableLookContext {
+    if (!table.chain.some((style) => style.conditional.size > 0)) return { ...table, place };
+    const on = conditionsAt(table.options, table.bands, place);
+    const levels = [...table.levels];
+    const taken: string[] = [];
+    let cellBase = table.cellBase;
+    for (const [condition, region] of CONDITIONS) {
+      if (!on.has(condition)) continue;
+      for (const style of table.chain) {
+        const parts = style.conditional.get(condition);
+        if (!parts) continue;
+        levels.push(parts);
+        cellBase = mergeCell(cellBase, regionBorders(readCell(parts.tcPr), region, place));
+        if (taken.at(-1) !== condition) taken.push(condition);
+      }
+    }
+    if (taken.length === 0) return { ...table, place };
+    return { ...table, id: `${table.id}|${taken.join(",")}`, levels, cellBase, place };
   }
 
   cell(tc: XmlElement, table: TableLookContext): string | null {
@@ -765,7 +1013,7 @@ export class LookReader {
     const look: WordCellLook = defined({
       width: props.width ?? undefined,
       shade: props.shade ?? undefined,
-      borders: keptBorders(props.borders, ["top", "bottom", "left", "right"] as const),
+      borders: cellBorders(props.borders, table.place),
       vertical: props.vertical && props.vertical !== "top" ? props.vertical : undefined,
       margins: props.margins && Object.keys(props.margins).length > 0 ? props.margins : undefined,
       noWrap: props.noWrap ? (true as const) : undefined,
@@ -780,7 +1028,7 @@ export class LookReader {
     let props = this.paragraphDefaults;
     let tableRuns: RunProps = {};
     let paragraphRuns: RunProps = {};
-    for (const level of table?.style ?? []) {
+    for (const level of table?.levels ?? []) {
       props = mergeParagraph(props, readParagraph(level.pPr));
       tableRuns = mergeRun(tableRuns, readRun(level.rPr));
     }
@@ -795,20 +1043,33 @@ export class LookReader {
     const level =
       numId !== undefined && numId !== "0" ? this.levels.get(numId)?.get(ilvl) : undefined;
     if (level) props = mergeParagraph(props, readParagraph(level.pPr));
-    props = mergeParagraph(props, own);
+    const merged = mergeParagraph(props, own);
     const next = style.at(-1)?.next;
-    const look = paragraphLook(props);
+    // Character indents are in the paragraph's size, as Word draws them.
+    const size = paragraphRuns.size ?? tableRuns.size ?? this.runDefaults.size ?? WORD_DEFAULT_SIZE;
+    const { look, direct } = splitDirect(
+      paragraphLook(merged, size),
+      paragraphLook(props, size),
+      PARAGRAPH_DIRECT,
+    );
+    const format: ParagraphFormat = direct;
+    const chars = direct.firstLine !== undefined ? characterIndent(merged.indents) : undefined;
+    if (chars !== undefined) {
+      delete format.firstLine;
+      format.firstLineChars = chars;
+      look.characterSize = size;
+    }
     if (next && styleId && next !== styleId) {
       const nextKey = this.nextLook(next, table);
       if (nextKey) look.next = nextKey;
     }
-    return { look, runs: [tableRuns, paragraphRuns] };
+    return { look, format, runs: [tableRuns, paragraphRuns] };
   }
 
   private readonly nextLooks = new Map<string, string | null>();
 
   private nextLook(styleId: string, table: TableLookContext | null): string | null {
-    const id = `${table ? `table:${table.styleId ?? ""}` : "body"}|${styleId}`;
+    const id = `${table?.id ?? "body"}|${styleId}`;
     const known = this.nextLooks.get(id);
     if (known !== undefined) return known;
     // Two styles can name each other as next.
@@ -825,14 +1086,18 @@ export class LookReader {
       ],
     };
     const context = this.paragraph(paragraph, table);
-    const run = this.run(undefined, context, 0);
+    const run = this.run(undefined, context, 0).key;
     const key = this.paragraphKey(context, run && this.canBeParagraphRun(run) ? run : null);
     this.nextLooks.set(id, key);
     return key;
   }
 
   paragraphKey(paragraph: ParagraphLookContext, run: string | null): string | null {
-    return this.paragraphs.key(run ? { ...paragraph.look, run } : paragraph.look);
+    const look = run ? { ...paragraph.look, run } : paragraph.look;
+    const key = this.paragraphs.key(look);
+    if (key || Object.keys(paragraph.format).length === 0) return key;
+    // With no key, a paragraph draws in the Mind's style rather than as Word draws its format.
+    return this.paragraphs.empty(look);
   }
 
   /** Drawn on a paragraph, these would cover all its text, not only the text that has them. */
@@ -853,25 +1118,33 @@ export class LookReader {
     return this.runs.empty({});
   }
 
-  /** Also counts `characters` toward the body size. */
+  /** Also counts `characters` toward the body size. `marks`: the run's direct formatting the look leaves out. */
   run(
     rPr: XmlElement | undefined,
     paragraph: ParagraphLookContext,
     characters: number,
-  ): string | null {
+  ): { key: string | null; look: WordRunLook; marks: MarkJSON[] } {
     const styleId = rPr && child(rPr, "w:rStyle")?.attrs["w:val"];
     let characterRuns: RunProps = {};
     for (const level of this.chain("character", styleId ?? null)) {
       characterRuns = mergeRun(characterRuns, readRun(level.rPr));
     }
-    const props = resolveRun(this.runDefaults, [...paragraph.runs, characterRuns], readRun(rPr));
+    const styles = [...paragraph.runs, characterRuns];
+    const own = readRun(rPr);
+    const props = resolveRun(this.runDefaults, styles, own);
     if (props.size !== undefined && characters > 0) {
       this.charactersBySize.set(
         props.size,
         (this.charactersBySize.get(props.size) ?? 0) + characters,
       );
     }
-    return this.runs.key(this.runLook(props));
+    const { color: _color, vertical: _vertical, ...styled } = own;
+    const { look, direct } = splitDirect(
+      this.runLook(props),
+      this.runLook(resolveRun(this.runDefaults, styles, styled)),
+      RUN_DIRECT,
+    );
+    return { key: this.runs.key(look), look, marks: runFormatMarks(direct) };
   }
 
   private runLook(props: RunProps): WordRunLook {
@@ -915,6 +1188,8 @@ export class LookReader {
       version: WORD_LOOK_VERSION,
       body,
       width: this.width,
+      defaultTab: this.defaultTab,
+      ...(this.tablesHang && { tablesHang: true as const }),
       paragraphs: this.paragraphs.entries,
       runs: this.runs.entries,
       tables: this.tables.entries,
@@ -925,8 +1200,81 @@ export class LookReader {
 
 const EMPTY: XmlElement = { name: "", attrs: {}, children: [] };
 
-function paragraphLook(props: ParagraphProps): WordParagraphLook {
-  const indents = props.indents ?? {};
+const WORD_DEFAULT_SIZE = 10;
+
+/** For each property direct formatting can set apart from the look, what says "none" where a style gave one; null where nothing can. */
+type Direct<T, K extends keyof T> = readonly { [P in K]: readonly [P, T[P] | null] }[K][];
+
+const PARAGRAPH_DIRECT: Direct<
+  WordParagraphLook,
+  "align" | "left" | "right" | "firstLine" | "before" | "after" | "line"
+> = [
+  ["align", "left"],
+  ["left", 0],
+  ["right", 0],
+  ["firstLine", 0],
+  ["before", 0],
+  ["after", 0],
+  ["line", null],
+];
+
+/** Word's "auto" colour or "baseline" over a style's can't be said as a mark. */
+const RUN_DIRECT: Direct<WordRunLook, "color" | "vertical"> = [
+  ["color", null],
+  ["vertical", null],
+];
+
+/**
+ * Decides what of a paragraph's or run's direct formatting the Mind keeps
+ * as its own formatting rather than in the look: each property of `kinds`
+ * the direct formatting changed (`full`, with it, against `base`, as the
+ * styles and lists give it) that a format or mark can say. The rest stays
+ * in the look, as `full` has it, so the look and the formatting together
+ * draw what `full` does.
+ */
+export function splitDirect<T extends object, K extends keyof T>(
+  full: T,
+  base: T,
+  kinds: Direct<T, K>,
+): { look: T; direct: Partial<Pick<T, K>> } {
+  const look: T = { ...full };
+  const direct: Partial<Pick<T, K>> = {};
+  for (const [name, unset] of kinds) {
+    if (JSON.stringify(full[name]) === JSON.stringify(base[name])) continue;
+    const value = full[name] ?? unset;
+    if (value === null || value === undefined) continue;
+    direct[name] = value;
+    if (base[name] === undefined) delete look[name];
+    else look[name] = base[name];
+  }
+  return { look, direct };
+}
+
+/** As `paragraphLook` resolves the first line: its indent in characters, signed, when characters gave it. */
+function characterIndent(indents: Indents | undefined): number | undefined {
+  if (indents?.hangingChars) return -indents.hangingChars / 100;
+  if (indents?.hanging) return undefined;
+  return indents?.firstLineChars ? indents.firstLineChars / 100 : undefined;
+}
+
+function runFormatMarks(direct: Partial<WordRunLook>): MarkJSON[] {
+  const marks: MarkJSON[] = [];
+  if (direct.color) marks.push({ type: TEXT_COLOR_MARK, attrs: { color: direct.color } });
+  if (direct.vertical === "superscript") marks.push({ type: SUPERSCRIPT_MARK });
+  if (direct.vertical === "subscript") marks.push({ type: SUBSCRIPT_MARK });
+  return marks;
+}
+
+function paragraphLook(props: ParagraphProps, size: number): WordParagraphLook {
+  const given = props.indents ?? {};
+  const chars = (hundredths: number | undefined) =>
+    hundredths ? Math.round((hundredths / 100) * size * 100) / 100 : undefined;
+  const indents = {
+    left: chars(given.leftChars) ?? given.left,
+    right: chars(given.rightChars) ?? given.right,
+    firstLine: chars(given.firstLineChars) ?? given.firstLine,
+    hanging: chars(given.hangingChars) ?? given.hanging,
+  };
   const firstLine =
     indents.hanging !== undefined && indents.hanging !== 0
       ? -indents.hanging

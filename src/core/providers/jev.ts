@@ -21,6 +21,8 @@
  */
 import type { ExternalService, ProviderErrorKind } from "../api";
 import { isRecord } from "../errors";
+import { readApiKey } from "./apiKey";
+import { retryAfterMs } from "./retryAfter";
 
 /** TypeSafe's hosted API, the default base URL. */
 export const JEV_HOSTED_URL = "https://api.typesafe.ai";
@@ -46,6 +48,8 @@ export class JevRequestError extends Error {
     message: string,
     /** The HTTP status, when there was a response. */
     readonly status?: number,
+    /** How long the response asked to wait, when it said (a rate limit's `retry-after`). */
+    readonly retryAfterMs: number | null = null,
   ) {
     super(message);
   }
@@ -58,25 +62,16 @@ function kindOfStatus(status: number): JevRequestError["kind"] {
   return "provider";
 }
 
-/** Statuses worth another try, as TypeSafe's SDKs do: timeouts, rate limits and server errors. */
-const retryable = (status: number) => status === 408 || status === 429 || status >= 500;
+/**
+ * Statuses worth another try: timeouts and server errors. Not a 429: Tagging's shared pause
+ * (see ../tags/rateLimit) waits that out for every Document, which a retry here would only meet.
+ */
+const retryable = (status: number) => status === 408 || status >= 500;
 
 const INITIAL_BACKOFF_MS = 500;
 const MAX_BACKOFF_MS = 5_000;
 /** The longest `retry-after` honoured; a longer one fails the request instead. */
 const MAX_RETRY_AFTER_MS = 20_000;
-
-/** How long the server asks us to wait, from `retry-after-ms` or `retry-after` (seconds or a date). */
-function retryAfterMs(headers: Headers): number | null {
-  const ms = Number(headers.get("retry-after-ms") ?? Number.NaN);
-  if (Number.isFinite(ms) && ms >= 0) return ms;
-  const value = headers.get("retry-after");
-  if (value === null) return null;
-  const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
-  const date = Date.parse(value);
-  return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
-}
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -128,6 +123,8 @@ export interface AskJevInput {
   retries: number;
   /** Each attempt fails after this long. */
   timeoutMs: number;
+  /** Called as each attempt is sent, retries included; throws to send nothing more. */
+  beforeSend?: () => void;
 }
 
 /**
@@ -146,7 +143,8 @@ async function requestJev(
     questions: Record<string, JevNoulQuestion | JevChoiceQuestion>;
   },
 ): Promise<unknown> {
-  const { baseUrl, apiKey, model, state, questions, signal, retries, timeoutMs } = input;
+  const { baseUrl, model, state, questions, signal, retries, timeoutMs } = input;
+  const apiKey = readApiKey(input.apiKey);
   const body = JSON.stringify({
     state,
     model,
@@ -155,6 +153,7 @@ async function requestJev(
   });
   for (let attempt = 0; ; attempt++) {
     const backoff = Math.min(INITIAL_BACKOFF_MS * 2 ** attempt, MAX_BACKOFF_MS);
+    input.beforeSend?.();
     let response: Response;
     try {
       response = await fetch(`${baseUrl}${JEV_PATH}`, {
@@ -184,7 +183,12 @@ async function requestJev(
         await sleep(wait, signal);
         continue;
       }
-      throw new JevRequestError(kindOfStatus(response.status), message, response.status);
+      throw new JevRequestError(
+        kindOfStatus(response.status),
+        message,
+        response.status,
+        retryAfterMs(response.headers),
+      );
     }
 
     let answer: unknown;

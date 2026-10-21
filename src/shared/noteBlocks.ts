@@ -149,6 +149,21 @@ export function textLength(blocks: readonly NodeJSON[]): number {
 const textOf = (node: NodeJSON): string =>
   node.type === "text" ? (node.text ?? "") : (node.content ?? []).map(textOf).join("");
 
+/** The first stretch of text in a Block: a list's first item or a table's first cell, not all of them run together. */
+function firstText(node: NodeJSON): string {
+  const children = node.content ?? [];
+  if (node.type === "text" || children.some((child) => child.type === "text")) return textOf(node);
+  for (const child of children) {
+    const text = firstText(child);
+    if (text.trim() !== "") return text;
+  }
+  return "";
+}
+
+/** The text of the first Block that has any: what an unnamed Mind is called once they are in it. */
+export const firstLineOfBlocks = (blocks: readonly NodeJSON[]): string =>
+  blocks.map(firstText).find((text) => text.trim() !== "") ?? "";
+
 const holdsCitation = (node: NodeJSON): boolean =>
   node.type === CITATION_NODE || (node.content ?? []).some(holdsCitation);
 
@@ -204,8 +219,15 @@ export function citedTables(blocks: readonly NodeJSON[]): NodeJSON[] {
 
 const LEAD_IN =
   /^(?:(?:sure|certainly|of course|okay|ok)\b|here(?:'s| is| are)\b|below (?:is|are)\b|以下是|下面是|好的|当然|如下)/iu;
+// Only the shape "you didn't say which…, so I…": a first paragraph that starts "I have written…" or "我先后给…写了" is often the content itself (#1061).
+const EXPLAINING =
+  /^(?:(?:since|as|because)\s+)?you\s+(?:didn['’]t|did not)\s+(?:say|specify|mention)\s+which\b[^.!?]*?(?:,\s*|\bso\s+)(?:so\s+)?i\b|^(?:由于|因为)?你(?:没有|没)(?:说明|指定|说|提到)[^。！？]*?哪[^。！？]*?[，,]\s*(?:所以|因此|于是)?我/iu;
 const CLOSING_NOTE =
-  /^(?:(?:note|notes|please note|n\.b\.|i hope|hope this|let me know|feel free)\b|注[：:]|备注|说明[：:]|希望|如需|如果需要|如有)/iu;
+  /^(?:(?:note|notes|please note|n\.b\.|feel free)\b|(?:i\s+)?hope (?:this|that|it) helps\b|注[：:]|备注|说明[：:]|希望(?:这|以上|对你))/iu;
+// Only the assistant offering more or asking the User, whatever it holds: a drafted letter ends
+// "If you don't pay by Friday, I'll start proceedings." or "如需开具发票，请扫描…" itself. When in doubt, keep.
+const OFFER =
+  /^(?:(?:please\s+|just\s+)?(?:let me know|tell me)\b|would you like\b|if you['’]d like\b|if you want me to\b|(?:do you\s+)?want me to\b|需要的话|如果需要我|要不要我|请?告诉我|如有需要[，,]\s*我可以)/iu;
 /** A figure or a bracketed unit, "(GBP m)": framing that says something about the content stays. */
 const SAYS_SOMETHING =
   /\d|[(（][^)）]+[)）]|\b(?:figures?|currency|units?|thousands?|millions?|billions?|[A-Z]{3})\b|[%％万亿元]/u;
@@ -213,9 +235,11 @@ const CONTENT_BLOCKS = new Set(["table", "bulletList", "orderedList", "heading",
 
 /**
  * An Answer's content without its framing, for Add to note: the model's
- * lead-in before the content ("Here is a draft:", "以下是…：") and its closing
- * note after it ("Note: …", "注：…"), when they hold no Citation, figure or bracketed unit and the
- * Answer has more than the one paragraph. What the User selected is added as it
+ * lead-in before the content ("Here is a draft:", "以下是…：", or how it went
+ * about the request, "你没有说明是哪一份合同，所以我…") and its closing
+ * note after it ("Note: …", "注：…"), when they hold no Citation, figure or bracketed unit, and
+ * its offer or question to the User after it ("Tell me if you meant the 2019 lease.") when it
+ * holds no Citation, and the Answer has more than the one paragraph. What the User selected is added as it
  * is: this is for a whole Answer.
  */
 export function withoutFraming(blocks: readonly NodeJSON[]): NodeJSON[] {
@@ -228,17 +252,18 @@ export function withoutFraming(blocks: readonly NodeJSON[]): NodeJSON[] {
     !holdsCitation(first) &&
     !SAYS_SOMETHING.test(textOf(first)) &&
     (LEAD_IN.test(textOf(first).trim()) ||
+      EXPLAINING.test(textOf(first).trim()) ||
       (/[:：]\s*$/u.test(textOf(first)) && CONTENT_BLOCKS.has(next.type)))
   ) {
     kept = kept.slice(1);
   }
   const last = kept.at(-1);
+  const closing = last ? textOf(last).trim() : "";
   if (
     last?.type === "paragraph" &&
     kept.length > 1 &&
     !holdsCitation(last) &&
-    !SAYS_SOMETHING.test(textOf(last)) &&
-    CLOSING_NOTE.test(textOf(last).trim())
+    (OFFER.test(closing) || (!SAYS_SOMETHING.test(closing) && CLOSING_NOTE.test(closing)))
   ) {
     kept = kept.slice(0, -1);
   }

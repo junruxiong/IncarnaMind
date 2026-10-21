@@ -26,6 +26,7 @@
  * lines, narrowed to those the quote covers ("Revenue, rows 12–14"); for
  * sections, the heading it sits under.
  */
+import { shownRanges } from "../../shared/answerBlocks";
 import { citationNode, type NodeJSON } from "../../shared/blockJson";
 import { parseQuotedWords } from "../../shared/citations";
 import {
@@ -37,8 +38,9 @@ import {
   resolveRequested,
   unitLocation,
 } from "../../shared/locations";
+import { citesSource, type NamedSource } from "../../shared/namedSources";
 import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteMatch";
-import { foldRadicals } from "../../shared/text";
+import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
 import {
   type Citation,
@@ -49,9 +51,10 @@ import {
   type QuotedWords,
   type RejectedRecord,
 } from "../api";
-import type { CitationSource } from "../documents";
+import type { CitationSource, DocumentDate } from "../documents";
 import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
+import { writtenInCjk } from "../documents/textLanguage";
 import { closestWords } from "./closestWords";
 import { withCueMarks } from "./cueMarks";
 import type {
@@ -62,9 +65,17 @@ import type {
   SearchResultForModel,
   UnfoundQuote,
 } from "./engine";
+import { NOT_CITED_ATTRIBUTE } from "./prompt";
 
-/** How many times one Answer may search; later searches are refused, so the model answers. */
-const MAX_SEARCHES_PER_ANSWER = 5;
+const SEARCHED_ALREADY =
+  "You already searched for this, and have its Passages: answer with them, or search for something different.";
+
+const sameSearch = (query: string) =>
+  query
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
 
 const FIX_THESE = "Fix these with another cite call:";
 
@@ -117,13 +128,6 @@ export function cleanQuote(raw: string): string {
     if (quote === before) return quote;
   }
 }
-
-/** A name read for comparing: its letters and digits, in lower case ("Gradient Descent: The Ultimate Optimizer" is a file named without its colon). */
-const nameKey = (name: string) =>
-  name
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "");
 
 /** How a Document's text is matched: whether it lost its f-ligatures (see `lostLigatures`). */
 type Matching = Pick<MatchOptions, "lostLigatures">;
@@ -318,7 +322,9 @@ export interface AnswerDocuments {
     to: number | null,
   ): PageText[];
   /** A live Document's date, shown with its Passages (see `documentDate` in ../documents); null if none is known. */
-  documentDate(documentId: string): string | null;
+  documentDate(documentId: string): DocumentDate | null;
+  /** The id of the Document to search named `name`, as the instructions list it; null for none. */
+  documentNamed?(name: string): string | null;
 }
 
 /** What re-checking a Citation against the current version needs from Documents. */
@@ -543,25 +549,29 @@ interface ShownPassage {
   id: string;
   documentName: string;
   /** Its Document's date, when known: what tells the newer of two Documents that disagree (#548). */
-  date: string | null;
+  date: DocumentDate | null;
   range: PageRange;
   /** For every kind but PDF: the label of the Units it covers, e.g. "slides 3–4". */
   location: string | null;
   text: string;
+  notCited: boolean;
 }
 
 /** Passages as the model sees them, each with its short id, Document, its date, and pages or Location. */
 function formatPassages(passages: readonly ShownPassage[]): string {
   return passages
-    .map(({ id, documentName, date, range, location, text }) => {
+    .map(({ id, documentName, date, range, location, text, notCited }) => {
       const pages = pagesLabel(range);
       const where = location
         ? ` location="${attribute(location)}"`
         : pages
           ? ` pages="${pages}"`
           : "";
-      const dated = date ? ` date="${attribute(date)}"` : "";
-      return `<passage id="${id}" document="${attribute(documentName)}"${dated}${where}>\n${text}\n</passage>`;
+      const dated = date
+        ? ` ${date.of === "document" ? "date" : date.of}="${attribute(date.date)}"`
+        : "";
+      const never = notCited ? NOT_CITED_ATTRIBUTE : "";
+      return `<passage id="${id}" document="${attribute(documentName)}"${dated}${where}${never}>\n${text}\n</passage>`;
     })
     .join("\n\n");
 }
@@ -626,9 +636,15 @@ export interface CitationSessionEvents {
 /**
  * One Answer's Citations: the Passages it was given (each with a short id such
  * as "P3", which is what the model cites), the records it gave, and the Tools
- * the Answer engine offers the model.
+ * the Answer engine offers the model. `opening`, when the Question is asked
+ * beside the working copy of a Document (#1036): that Document's opening
+ * Passages, which a search that finds nothing gives instead, once.
  */
-export function createCitationSession(documents: AnswerDocuments, events: CitationSessionEvents) {
+export function createCitationSession(
+  documents: AnswerDocuments,
+  events: CitationSessionEvents,
+  opening?: { documentId: string; name: string; passages(): WindowedPassage[] },
+) {
   const handles = new Map<string, string>();
   const handleOf = new Map<string, string>();
   /** Each Passage's text as the model was given it, by its short id. */
@@ -636,7 +652,8 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
   const records = new Map<number, Accepted>();
   /** Records naming no Passage the model was given, or no marker: as given, and why. */
   const rejected: RejectedRecord[] = [];
-  let searches = 0;
+  const searched = new Set<string>();
+  let openingGiven = false;
   /** Markers in the final text, in order of first appearance, and those that had no record. */
   const finalMarkers: number[] = [];
   let removedMarkers = 0;
@@ -739,7 +756,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     if (!quote) return null;
     for (const [passageId, handle] of handleOf) {
       const source = documents.citationSource(passageId);
-      if (!source || source.documentDeleted) continue;
+      if (!source || source.documentDeleted || source.notCited) continue;
       const units = documents.pageTexts(
         source.documentId,
         source.contentHash,
@@ -796,6 +813,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       return {
         ok: false,
         problem: `there is no Passage "${String(input.passage)}" in your search results; use a Passage's id, such as P1.`,
+      };
+    }
+    if (source.notCited) {
+      return {
+        ok: false,
+        problem: `${found.handle} is from the User's own working file, which is read but never cited; cite a Passage from another Document, or leave the claim without a marker.`,
       };
     }
     const passageUnits = documents.pageTexts(
@@ -878,6 +901,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     }
     if (!record.quote) return `the quote is empty; copy a short quote from ${handle}.`;
     if (check(record).check !== "not-found") return null;
+    if (
+      writtenInCjk(record.quote) !== writtenInCjk(passageUnits.map((unit) => unit.text).join("\n"))
+    ) {
+      return `the quote is a translation: copy it from ${handle} in the Passage's own language, word for word, never translated.`;
+    }
     return where
       ? `the quote isn't word for word at ${cutLocation(record) ?? where} in ${handle}; copy it exactly, and check where it is.`
       : `the quote isn't word for word${record.range.pageFrom === null ? "" : ` on p. ${pagesLabel(record.range)}`} in ${handle}; copy it exactly, and check its page.`;
@@ -928,9 +956,13 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     };
   }
 
-  /** The Passages as the model reads them, each under the id it cites it by. */
-  function show(found: readonly WindowedPassage[]): string {
-    const dates = new Map<string, string | null>();
+  /**
+   * The Passages as the model reads them, each under the id it cites it by.
+   * `measuring`: only to count what showing them would send, so nothing is recorded as shown.
+   */
+  function show(found: readonly WindowedPassage[], measuring = false): string {
+    let unseen = 0;
+    const dates = new Map<string, DocumentDate | null>();
     const dateOf = (documentId: string) => {
       if (!dates.has(documentId)) dates.set(documentId, documents.documentDate(documentId));
       return dates.get(documentId) ?? null;
@@ -950,10 +982,14 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         units.length > 1 || units.some((unit) => innerMarks(unit).length > 0)
           ? withUnitMarks(passage.text, units)
           : passage.text;
-      const id = handleFor(passage.passageId);
+      const id = measuring
+        ? (handleOf.get(passage.passageId) ?? `P${handleOf.size + ++unseen}`)
+        : handleFor(passage.passageId);
       // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
       const text = foldRadicals(withCueMarks(marked, units));
-      shownTexts.set(id, text);
+      const notCited = documents.citationSource(passage.passageId)?.notCited ?? false;
+      // What later requests offer for citing is what was shown here: never a Passage no record may name.
+      if (!notCited && !measuring) shownTexts.set(id, text);
       return {
         id,
         documentName: passage.documentName,
@@ -961,6 +997,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         range,
         location: passageLocation(units),
         text,
+        notCited,
       };
     });
     return formatPassages(formatted);
@@ -976,14 +1013,35 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       signal?: AbortSignal,
       options?: AnswerSearchOptions,
     ): Promise<SearchResultForModel> {
-      searches++;
-      if (searches > MAX_SEARCHES_PER_ANSWER) {
-        return {
-          text: "You have searched enough for this Question: answer with the Passages you have.",
-          passageCount: 0,
-        };
+      // The same words over another Document are a new search.
+      const same = sameSearch(options?.document ? `${options.document}\n${query}` : query);
+      if (searched.has(same)) return { text: SEARCHED_ALREADY, passageCount: 0 };
+      searched.add(same);
+      let within: string[] | undefined;
+      if (options?.document) {
+        const id = documents.documentNamed?.(options.document) ?? null;
+        if (!id) {
+          return {
+            text: `No Document to search is called “${options.document}”: name one as the instructions list it, or leave document out.`,
+            passageCount: 0,
+          };
+        }
+        within = [id];
       }
-      return search(query, signal, undefined, options);
+      const found = await search(query, signal, within, options);
+      if (found.passageCount > 0 || !opening || openingGiven) return found;
+      if (within && !within.includes(opening.documentId)) return found;
+      const passages = opening.passages();
+      if (passages.length === 0) return found;
+      openingGiven = true;
+      return {
+        text: `No Passages match these words. The opening of “${opening.name}”, which the Mind is the working copy of, instead:\n${show(passages)}`,
+        passageCount: passages.length,
+        passageIds: passages.map((passage) => passage.passageId),
+        ...(passages.some((passage) => passage.documentKind === "web") && {
+          thirdParty: ["web-page"] as const,
+        }),
+      };
     },
 
     cite,
@@ -1103,10 +1161,18 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       search(query, signal, [documentId]),
 
     /**
-     * Gives the model Passages without a search: a meeting's live transcript (#144). They can
-     * be cited as a search's are, and don't count as one of the Answer's searches.
+     * Gives the model Passages without a search: a meeting's live transcript (#144), a short
+     * Document's whole text (#1036). They can be cited as a search's are, and don't count as
+     * one of the Answer's searches.
      */
-    show,
+    show: (found: readonly WindowedPassage[]) => show(found),
+
+    /** What `show` would send for these Passages, recording nothing. */
+    measure: (found: readonly WindowedPassage[]) => show(found, true),
+
+    /** Searches the Answer's Search scope as its search Tool does, for Passages to `show`. */
+    find: (query: string, signal?: AbortSignal, options?: AnswerSearchOptions) =>
+      documents.search(query, signal, undefined, options),
 
     quotes,
 
@@ -1135,9 +1201,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
      * matching in the Units cited in its sentence. One found changes nothing.
      * One not found makes the Citation whose Units are nearest it "not found",
      * with the Answer's words and the Document's nearest for its card. Where a
-     * Citation of the sentence couldn't be checked, no span of it is.
+     * Citation of the sentence couldn't be checked, no span of it is. Words in
+     * another language than every page cited are a translation: they aren't
+     * checked, and are returned to lose their quotation marks.
      */
-    checkQuotedWords(quoted: readonly { words: string; markers: readonly number[] }[]): void {
+    checkQuotedWords(quoted: readonly { words: string; markers: readonly number[] }[]): string[] {
+      const translated: string[] = [];
       // A Document's name in quotation marks, as an Answer gives a title, is a name, not a quote.
       const names = new Set(
         [...records.values()].map(({ source }) => nameKey(source.documentName)),
@@ -1152,6 +1221,16 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         });
         if (cited.some(({ record }) => record.result?.check === "cant-check")) continue;
         if (cited.some(({ units, matching }) => quoteInUnits(units, words, matching))) continue;
+        const inCjk = writtenInCjk(words);
+        if (
+          cited.length > 0 &&
+          cited.every(
+            ({ units }) => writtenInCjk(units.map((unit) => unit.text).join("\n")) !== inCjk,
+          )
+        ) {
+          translated.push(words);
+          continue;
+        }
         let nearest: { record: Accepted; closest: ReturnType<typeof closestWords> } | undefined;
         for (const { record, units, matching } of cited) {
           const closest = closestWords(units, words, matching);
@@ -1163,6 +1242,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         nearest.record.result = { check: "not-found", checkReason: "quoted-words-not-on-pages" };
         nearest.record.quotedWords = nearest.closest.shown;
       }
+      return translated;
     },
 
     finalCitation,
@@ -1177,6 +1257,14 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       placedElsewhere.add(marker);
       record.result ??= check(record);
       return citationNode(toCitation(record, record.result));
+    },
+
+    /** The marker of a Citation recorded for a source written as its name in brackets; null for none. */
+    markerFor(source: NamedSource): number | null {
+      for (const record of records.values()) {
+        if (citesSource(toCitation(record, record.result), source)) return record.marker;
+      }
+      return null;
     },
 
     /** A marker's node once the Answer has finished: `finalCitation`'s, or null to remove the marker. */
@@ -1215,4 +1303,26 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
  */
 export function withoutFootnoteDefinitions(markdown: string): string {
   return markdown.replace(/^ {0,3}\[\^\d{1,4}\]:.*(?:\n|$)/gm, "");
+}
+
+export function withoutDeadMarkers(markdown: string, backed: (marker: number) => boolean): string {
+  const found = [...markdown.matchAll(/([ \t]*)\[\^(\d{1,4})\](?!:)/g)].map((each) => ({
+    from: each.index,
+    space: (each[1] ?? "").length,
+    end: each.index + each[0].length,
+    marker: Number(each[2]),
+  }));
+  const shown = shownRanges(
+    markdown,
+    found.map((each) => ({ start: each.from + each.space, end: each.end })),
+  );
+  let text = "";
+  let at = 0;
+  found.forEach((each, index) => {
+    if (!shown[index] || backed(each.marker)) return;
+    const keepsSpace = /^\p{L}/u.test(markdown.charAt(each.end));
+    text += markdown.slice(at, keepsSpace ? each.from + each.space : each.from);
+    at = each.end;
+  });
+  return text + markdown.slice(at);
 }

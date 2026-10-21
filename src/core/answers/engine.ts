@@ -75,6 +75,7 @@ import {
 import type {
   AnswerPhase,
   CitationSupport,
+  ClaimedChange,
   FigureRetry,
   ProviderError,
   QuoteRetry,
@@ -95,7 +96,9 @@ import { createAiSdkRunEngine, reasoningReader } from "../runs/aiSdkEngine";
 import type {
   GateDecision,
   RunEngine,
+  RunEvent,
   RunMessage,
+  RunRequest,
   RunToolCall,
   RunWindow,
   TokenUsage,
@@ -107,14 +110,15 @@ import { earlierContext, type RequestMind } from "./context";
 import { retryFigures } from "./figureRetry";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import {
-  datedDocumentsNote,
   SEARCH_QUERY_INSTRUCTIONS,
   searchQueryPrompt,
   TRANSLATE_QUERY_INSTRUCTIONS,
   translateQueryPrompt,
-  unreadDocumentsNote,
+  withPassageNotes,
 } from "./prompt";
 import { retryQuotes } from "./quoteRetry";
+import { heldBackFrom, TOOL_TEXT_TAGS, takeToolText } from "./toolText";
+import { claimsOf, createNudges, settleReply, type TurnCheck } from "./turnChecks";
 import { citeUnmarked } from "./unmarkedQuotes";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
@@ -170,6 +174,8 @@ export interface AnswerSearchOptions {
   rerank?: boolean;
   /** Counts for this search instead of the Tool's defaults. */
   parameters?: Partial<SearchToolParameters>;
+  /** Only this Document, by its name as the instructions list it. */
+  document?: string;
 }
 
 /** What a search gives the model. */
@@ -245,6 +251,12 @@ export interface AnswerTools {
    */
   correctQuote?(marker: number, quote: string): boolean;
   /**
+   * Whether the Answer wrote its text into a Mind: its Citations are
+   * there, so its reply only reports what was done, and no marker the model
+   * left out of the reply is placed in it, nor any asked for.
+   */
+  wroteIntoMind?(): boolean;
+  /**
    * Takes calculated figures (ADR-0021, ./calculations); returns what to tell
    * the model about them. Absent: the Answer offers no `calculate`.
    */
@@ -280,6 +292,8 @@ export interface InstructionOptions {
   webTools?: boolean;
   /** The model is offered the Minds' Tools (#202). */
   mindTools?: boolean;
+  /** The model is offered the commands' Tools (#1110). */
+  commandTools?: boolean;
 }
 
 /** A Tool call at the Answer's gate. */
@@ -305,9 +319,12 @@ export interface GatedCall extends RunToolCall {
  * - "check": a check Run's (find support, verify, a comparison table's
  *   cells, contradiction watch): the Documents' search and `cite` only,
  *   whatever the request brings, so the text it checks can't steer a write or
- *   a send.
+ *   a send;
+ * - "documents": the Documents' Tools as an Answer has them, and nothing the
+ *   request brings: help during a call, which reads a transcript
+ *   someone else spoke.
  */
-export type ToolSet = "answer" | "check";
+export type ToolSet = "answer" | "check" | "documents";
 
 export interface AnswerRequest {
   /**
@@ -329,6 +346,13 @@ export interface AnswerRequest {
   question: string;
   /** The model to answer with, from `Core.prepareChatModel`. */
   model: ChatLanguageModel;
+  /**
+   * The quick-tasks model, for the calls that don't write the Answer:
+   * rewriting a follow-up Question into a search query, and translating the
+   * query. Asked for only when one is made; without it, or when it can't be
+   * had (e.g. its flow was declined), the Answer's model makes them.
+   */
+  quickModel?(): Promise<ChatLanguageModel>;
   /** Searching and citing the Documents: the Documents' Tools, and the search of a model without Tools. */
   documents: AnswerTools;
   /**
@@ -347,6 +371,8 @@ export interface AnswerRequest {
   streamsInput?(tool: Tool): boolean;
   /** Which Tools the Run is offered. Absent: "answer", every Tool. */
   toolSet?: ToolSet;
+  /** What a search says of the Answer's language after its Passages (see `DocumentToolsHooks`). */
+  languageNote?(): string | null;
   /**
    * The Run counts as having read third-party text from its start: its
    * Question context holds some, or (a check Run) it reads the document it
@@ -379,6 +405,20 @@ export interface AnswerRequest {
    * providers that route requests to a prompt cache by a key (see ../providers/promptCache).
    */
   cacheKey?: string;
+  /**
+   * The end-of-turn checks (see ./turnChecks), in order. In the Tool loop the
+   * model is asked once more with a check's note, and a reply that still
+   * trips one, or one written without Tools, ends with "claims-unbacked".
+   */
+  turnChecks?: readonly TurnCheck[];
+  /**
+   * How much of a reply being written may show while it streams: up to the
+   * first sentence that may claim a change, which waits for the checks.
+   * Absent: all of it.
+   */
+  shownUpTo?(text: string): number;
+  /** Whether a reply with no text still answers: the Answer changed a Mind, which its card reports. */
+  mayEndBlank?(): boolean;
   /** Stops generating. The stream then ends, with neither "finished" nor "failed". */
   signal: AbortSignal;
 }
@@ -386,6 +426,8 @@ export interface AnswerRequest {
 export type AnswerEngineEvent =
   /** How the model gives Citations, once its provider has accepted the request. */
   | { type: "support"; support: CitationSupport }
+  /** The Answer is written without Tools: its model can't call them, so it can't change a Mind. */
+  | { type: "without-tools" }
   /**
    * What the Answer is doing now: searching the Documents, the model's turn,
    * or asking the model once more for exact quotes (see ./quoteRetry).
@@ -403,6 +445,8 @@ export type AnswerEngineEvent =
   | { type: "cited-after-checking"; count: number; asked: boolean }
   /** The model's window holds only part of the Mind read with the Question: this share of it (0: none). */
   | { type: "mind-cut"; share: number }
+  /** The model's window left out the whole text of the Documents that went with the Question. */
+  | { type: "documents-dropped" }
   /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
   | { type: "quotes-retried"; retry: QuoteRetry }
   /** The model was asked once more for the figures it gave that couldn't be worked out (see ./figureRetry). */
@@ -449,6 +493,8 @@ export type AnswerEngineEvent =
   | { type: "read-third-party"; source: ReadThirdPartySource }
   /** A model call ended, with the tokens its provider counted, the cached ones too. */
   | { type: "usage"; usage: TokenUsage }
+  /** The reply claims these changes to a Mind, which none of the Answer's Tool calls made. */
+  | { type: "claims-unbacked"; claims: ClaimedChange[] }
   /** The Answer is complete. Nothing follows. */
   | { type: "finished" }
   /** The model or its provider failed. Nothing follows. */
@@ -532,7 +578,7 @@ export function searchToolDescription(languages: readonly DocumentLanguage[]): s
   const names = languages.map((each) =>
     languages.length > 1 ? `${each.language} (${each.documents})` : each.language,
   );
-  return `${base} The Documents are in ${listed(names)}. Search finds Passages best in their own language: when the Question is in another language than the Documents it may be about, search with the query translated into their language too.`;
+  return `${base} The Documents are in ${listed(names)}. Search finds Passages best in their own language: when the Question is in another language than the Documents it may be about, search with the query translated into their language too. Only the query is in their language: write the reply in the Question's.`;
 }
 /** A Citation marker ("[^1]") or a figure marker ("[=1]"): the Answer is being written. */
 const MARKER = /\[[\^=]\d{1,4}\]/;
@@ -703,13 +749,16 @@ const recordsSchema = {
 
 /** Records from the model's JSON, kept only where they have the right shape. */
 function parseRecords(value: unknown): CitationRecordInput[] {
-  // Some models send the array as a JSON string.
+  // Some models send the array as a JSON string, or one record alone.
   if (typeof value === "string") {
     try {
       return parseRecords(JSON.parse(value));
     } catch {
       return [];
     }
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return parseRecords([value]);
   }
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): CitationRecordInput[] => {
@@ -762,6 +811,39 @@ function queryIn(reply: string): string {
     .slice(0, MAX_QUERY_LENGTH);
 }
 
+/** The model a call that doesn't write the Answer goes to, with the temperature it gets. */
+interface SmallCallModel {
+  model: ChatLanguageModel;
+  temperature: number | undefined;
+}
+
+/** What a call that doesn't write the Answer gave: its text, and the tokens it counted. */
+interface SmallCallResult<T> {
+  value: T;
+  usage: TokenUsage | null;
+}
+
+/**
+ * The quick-tasks model, else the Answer's (see `AnswerRequest.quickModel`).
+ * Another model than the Answer's runs at its provider's own temperature.
+ */
+async function smallCallModel(
+  request: AnswerRequest,
+  temperature: number | undefined,
+): Promise<SmallCallModel> {
+  if (request.quickModel) {
+    try {
+      const quick = await request.quickModel();
+      if (quick !== request.model) return { model: quick, temperature: undefined };
+    } catch (error) {
+      if (!request.signal.aborted) {
+        console.error(`The quick-tasks model couldn't be used: ${messageOf(error)}`);
+      }
+    }
+  }
+  return { model: request.model, temperature };
+}
+
 /**
  * What a model that can't call Tools searches for: the Question, rewritten by
  * the model into one query that stands on its own, from the Question context
@@ -772,14 +854,15 @@ function queryIn(reply: string): string {
  */
 async function searchQuery(
   request: AnswerRequest,
-  temperature: number | undefined,
-): Promise<string> {
+  small: () => Promise<SmallCallModel>,
+): Promise<SmallCallResult<string>> {
   const { question, signal } = request;
   const earlier = earlierContext(request.messages, question);
-  if (!earlier) return question;
+  if (!earlier) return { value: question, usage: null };
   try {
-    const { text } = await generateText({
-      model: request.model,
+    const { model, temperature } = await small();
+    const { text, usage } = await generateText({
+      model,
       instructions: SEARCH_QUERY_INSTRUCTIONS,
       prompt: searchQueryPrompt(earlier, question),
       temperature,
@@ -789,12 +872,12 @@ async function searchQuery(
       maxRetries: 0,
       abortSignal: signal,
     });
-    return queryIn(text) || question;
+    return { value: queryIn(text) || question, usage: tokenUsageOf(usage) };
   } catch (error) {
     if (!signal.aborted) {
       console.error(`The Question couldn't be rewritten for search: ${messageOf(error)}`);
     }
-    return question;
+    return { value: question, usage: null };
   }
 }
 
@@ -859,11 +942,12 @@ async function translatedQuery(
   request: AnswerRequest,
   query: string,
   language: string,
-  temperature: number | undefined,
-): Promise<string | null> {
+  small: () => Promise<SmallCallModel>,
+): Promise<SmallCallResult<string | null>> {
   try {
-    const { text } = await generateText({
-      model: request.model,
+    const { model, temperature } = await small();
+    const { text, usage } = await generateText({
+      model,
       instructions: TRANSLATE_QUERY_INSTRUCTIONS,
       prompt: translateQueryPrompt(query, language),
       temperature,
@@ -873,12 +957,15 @@ async function translatedQuery(
       abortSignal: request.signal,
     });
     const translated = queryIn(text);
-    return translated && translated !== query ? translated : null;
+    return {
+      value: translated && translated !== query ? translated : null,
+      usage: tokenUsageOf(usage),
+    };
   } catch (error) {
     if (!request.signal.aborted) {
       console.error(`The search query couldn't be translated: ${messageOf(error)}`);
     }
-    return null;
+    return { value: null, usage: null };
   }
 }
 
@@ -896,8 +983,9 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
 
   return {
     async *generate(asked) {
-      // A check Run is offered the Documents' search and `cite` only (see `ToolSet`).
-      const request: AnswerRequest = asked.toolSet === "check" ? { ...asked, tools: [] } : asked;
+      // Only an ordinary Answer is offered the Tools the request brings (see `ToolSet`).
+      const request: AnswerRequest =
+        asked.toolSet && asked.toolSet !== "answer" ? { ...asked, tools: [] } : asked;
       const failed = (error: unknown): AnswerEngineEvent => ({
         type: "failed",
         error: classifyProviderError(error),
@@ -998,6 +1086,7 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
             return;
           }
           if (fit.mindCut !== undefined) yield { type: "mind-cut", share: fit.mindCut };
+          if (fit.documentsDropped) yield { type: "documents-dropped" };
           const sized = { ...request, messages: fit.messages };
           const window: Sized = {
             estimated: fit.estimated,
@@ -1034,6 +1123,7 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
           }
           if (!unsupported || signal.aborted) return;
         }
+        yield { type: "without-tools" };
         for await (const event of onePass("no-documents")) {
           if (event.type === "unsupported") return;
           yield event;
@@ -1047,15 +1137,25 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
       let searched: SearchResultForModel | undefined;
       async function* searchOnce(): AsyncGenerator<AnswerEngineEvent, SearchResultForModel> {
         if (searched !== undefined) return searched;
-        const query = await searchQuery(request, temperature());
+        // The quick-tasks model is asked for once, and only if a call needs it.
+        let small: Promise<SmallCallModel> | undefined;
+        const smallModel = () => {
+          small ??= smallCallModel(request, temperature());
+          return small;
+        };
+        const rewrite = await searchQuery(request, smallModel);
+        if (rewrite.usage) yield { type: "usage", usage: rewrite.usage };
+        const query = rewrite.value;
         signal.throwIfAborted();
         const language = searchLanguage(
           request.question,
           request.documents.documentLanguages ?? [],
         );
-        const translated = language
-          ? await translatedQuery(request, query, language, temperature())
+        const translation = language
+          ? await translatedQuery(request, query, language, smallModel)
           : null;
+        if (translation?.usage) yield { type: "usage", usage: translation.usage };
+        const translated = translation?.value ?? null;
         signal.throwIfAborted();
         const searches: [string, string][] = [
           ["question-search", query],
@@ -1146,6 +1246,7 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
           if (!announced && event.type !== "failed") {
             announced = true;
             yield { type: "support", support };
+            if (support !== "tools") yield { type: "without-tools" };
           }
           yield event;
         }
@@ -1157,18 +1258,20 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
 
 /**
  * Passes on an Answer's events, but an Answer that finishes with no text
- * fails as "no-answer" instead: a reply that ended empty, or whose stream
- * held nothing the provider could read, would otherwise be a blank Answer.
+ * fails as "no-answer" instead, unless `mayEndBlank`: a reply that ended
+ * empty, or whose stream held nothing the provider could read, would
+ * otherwise be a blank Answer.
  */
 async function* endedBlank(
   events: AsyncIterable<AnswerEngineEvent>,
-  model: AnswerRequest["model"],
+  request: AnswerRequest,
 ): AsyncGenerator<AnswerEngineEvent> {
+  const { model } = request;
   let text = "";
   for await (const event of events) {
     if (event.type === "text-delta") text += event.text;
     else if (event.type === "text-retracted") text = text.slice(0, -event.length);
-    if (event.type === "finished" && text.trim() === "") {
+    if (event.type === "finished" && text.trim() === "" && !request.mayEndBlank?.()) {
       console.warn(`The model sent no Answer: provider=${model.provider} model=${model.modelId}`);
       yield { type: "failed", error: { kind: "no-answer", message: "The model sent no Answer." } };
       return;
@@ -1179,7 +1282,7 @@ async function* endedBlank(
 
 export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}): AnswerEngine {
   const writer = createWritingEngine(options);
-  return { generate: (request) => endedBlank(writer.generate(request), request.model) };
+  return { generate: (request) => endedBlank(writer.generate(request), request) };
 }
 
 /** What one go of the Tool-calling loop keeps of its calls of the Documents' Tools. */
@@ -1192,6 +1295,8 @@ interface DocumentToolsHooks {
   failed?(toolCallId: string, error: unknown): void;
   /** The model gave these records: the engine places their markers if it leaves them out. */
   cited(records: readonly CitationRecordInput[]): void;
+  /** What to say of the Answer's language after a search's Passages, if anything, asked for each search. */
+  languageNote?(): string | null;
 }
 
 /**
@@ -1220,17 +1325,28 @@ export function documentTools(
             description:
               'What to look for: words likely to be in the Passages, in their language. Name what the Question refers to instead of pronouns or words that point back, such as "it", "they" or "that paper".',
           },
+          document: {
+            type: "string",
+            description:
+              "Search only this Document, named as the instructions list it: to find what each of several Documents says.",
+          },
         },
         required: ["query"],
       },
-      shownInput: ({ query }) => ({ query: String(query ?? "") }),
+      shownInput: ({ query, document }) => ({
+        query: String(query ?? ""),
+        ...(typeof document === "string" && document !== "" && { document }),
+      }),
       effects: () => [{ action: "read", scope: { kind: "documents" } }],
       // The User didn't write their Documents.
       untrustedResult: true,
-      async call({ query }, { toolCallId, signal, readThirdParty }) {
+      async call({ query, document }, { toolCallId, signal, readThirdParty }) {
         let found: SearchResultForModel;
         try {
-          found = await documents.searchDocuments(String(query ?? ""), signal, { rerank: false });
+          found = await documents.searchDocuments(String(query ?? ""), signal, {
+            rerank: false,
+            ...(typeof document === "string" && document !== "" && { document }),
+          });
         } catch (error) {
           // A failed search is the app's problem, so it is logged; the model is told it failed.
           if (!signal.aborted) {
@@ -1243,11 +1359,9 @@ export function documentTools(
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount, found.passageIds);
         // The dates are named from the Passages that fit, so never a Document the model wasn't handed.
-        const notes = [
-          datedDocumentsNote(result.text),
-          unreadDocumentsNote(documents.unreadDocuments?.() ?? []),
-        ];
-        return [result.text, ...notes].filter((part) => part !== "").join("\n\n");
+        const passages = withPassageNotes(result.text, documents.unreadDocuments?.() ?? []);
+        const note = hooks.languageNote?.();
+        return note ? `${passages}\n\n${note}` : passages;
       },
     },
     cite: {
@@ -1270,7 +1384,7 @@ export function documentTools(
     calculate: documents.calculate
       ? {
           ...own(DOCUMENT_TOOLS.calculate),
-          description: `Work out a number from numbers in the Passages instead of in your head, and get its result back. Give figures, each {marker, label, inputs, formula, as}. Each input is {name, label, citation, number}: citation is the marker of a cite record whose quote has the number (1 for [^1]), or give passage, location and quote instead; number is the number as it is written there. The formula is in Excel's syntax over the inputs' names. For example: {"figures": [{"marker": 1, "label": "Revenue growth 2025", "inputs": [{"name": "r24", "label": "Revenue 2024", "citation": 1, "number": "$1,231.0 million"}, {"name": "r25", "label": "Revenue 2025", "citation": 1, "number": "$1,482.6 million"}], "formula": "r25 / r24 - 1", "as": "percent"}]}. IncarnaMind reads each number from its quote, checks the quote and does the arithmetic. Inputs are read in base units with their page's scale ("单位：万元", "in millions") applied, so give scale ("亿", "billion") for the scale a figure is shown in, never multiply or divide by 1000 or 10000 in the formula. ${
+          description: `Work out a number from numbers in the Passages instead of in your head, and get its result back. Give figures, each {marker, label, inputs, formula, as}. Each input is {name, label, citation, number}: citation is the marker of a cite record whose quote has the number (1 for [^1]), or give passage, location and quote instead; number is the number as it is written there. The formula is in Excel's syntax over the inputs' names. For example: {"figures": [{"marker": 1, "label": "Revenue growth 2025", "inputs": [{"name": "r24", "label": "Revenue 2024", "citation": 1, "number": "$1,231.0 million"}, {"name": "r25", "label": "Revenue 2025", "citation": 1, "number": "$1,482.6 million"}], "formula": "r25 / r24 - 1", "as": "percent"}]}. IncarnaMind reads each number from its quote, checks the quote and does the arithmetic. Inputs are read in base units with their page's scale ("单位：万元", "in millions") applied, so give scale ("亿", "billion") for the scale a figure is shown in, never multiply or divide by 1000 or 10000 in the formula. An input keeps its sign as the Passage writes it: an amount in brackets, "(12,500)", is negative, so take a deduction off by adding it, never by subtracting it. ${
             checking
               ? "Give stated, the number as the sentence to check writes it: IncarnaMind compares the result with it."
               : "Write the figure's marker, such as [=1], in the number's place; never write the number yourself."
@@ -1368,6 +1482,7 @@ async function* toolLoop(
             },
             failed: (toolCallId, error) => failures.set(toolCallId, classifyProviderError(error)),
             cited: (records) => cited.push(...records),
+            ...(request.languageNote && { languageNote: request.languageNote }),
           },
           request.toolSet,
         )
@@ -1435,6 +1550,7 @@ async function* toolLoop(
     sourceTools: tools.some((each) => each.provider.kind === "sources"),
     webTools: tools.some((each) => each.provider.kind === "web"),
     mindTools: tools.some((each) => each.provider.kind === "minds"),
+    commandTools: tools.some((each) => each.provider.kind === "commands"),
   });
 
   // Within a window: the Question context that fits beside the instructions, the Tools and a search.
@@ -1455,6 +1571,7 @@ async function* toolLoop(
       return;
     }
     if (fit.mindCut !== undefined) yield { type: "mind-cut", share: fit.mindCut };
+    if (fit.documentsDropped) yield { type: "documents-dropped" };
     ({ messages, estimated } = fit);
     const account = budget.loop(fit.estimated);
     loop = account;
@@ -1486,12 +1603,61 @@ async function* toolLoop(
   const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
   let searching = 0;
-  for await (const event of engine.run({
+  /** The reply that stands if the model, asked once more, fails: as it was before the last ask. */
+  let standing: string | null = null;
+  let again: readonly RunMessage[] | null = null;
+  /** Model calls made so far: asked once more, the model gets what is left of `maxSteps`. */
+  let steps = 0;
+  const nudges = createNudges(maxSteps, () => steps);
+  /** How much of `keptText + stepText` the Answer shows: a claim of a change waits until it is checked. */
+  let released = 0;
+  function* release(upTo: number): Generator<AnswerEngineEvent> {
+    const text = keptText + stepText;
+    const end = Math.min(upTo, text.length);
+    if (end <= released) return;
+    yield { type: "text-delta", text: text.slice(released, end) };
+    released = end;
+  }
+  const toolTextTags = [...new Set([...TOOL_TEXT_TAGS, ...offered.keys()])];
+  const releasable = (text: string) =>
+    Math.min(request.shownUpTo?.(text) ?? text.length, heldBackFrom(text, toolTextTags));
+  function* flag(text: string): Generator<AnswerEngineEvent> {
+    const claims = claimsOf(request.turnChecks ?? [], text);
+    if (claims.length > 0) yield { type: "claims-unbacked", claims };
+  }
+  function* backToFirst(written: string): Generator<AnswerEngineEvent> {
+    if (released > 0) yield { type: "text-retracted", length: released };
+    released = 0;
+    keptText = written;
+    stepText = "";
+    yield* release(keptText.length);
+    yield* flag(keptText);
+  }
+  async function* endAnswer(): AsyncGenerator<AnswerEngineEvent> {
+    if (!request.documents.wroteIntoMind?.()) {
+      const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
+      yield* citeUnmarked(request, placed, temperature, budget, () =>
+        nudges.take("unmarked-quotes"),
+      );
+    }
+    yield { type: "finished" };
+  }
+  const runTools = tools.map(tracked);
+  async function* runs(): AsyncGenerator<RunEvent> {
+    let history: readonly RunMessage[] = messages.map(runMessage);
+    for (;;) {
+      yield* engine.run(runRequest(history, maxSteps - steps));
+      if (!again) return;
+      history = [...history, ...again];
+      again = null;
+    }
+  }
+  const runRequest = (history: readonly RunMessage[], stepsLeft: number): RunRequest => ({
     model: request.model,
     instructions,
-    messages: messages.map(runMessage),
-    tools: tools.map(tracked),
-    maxSteps,
+    messages: history,
+    tools: runTools,
+    maxSteps: stepsLeft,
     cacheKey: request.cacheKey,
     gate: async (call) => {
       const tool = offered.get(call.tool);
@@ -1515,7 +1681,8 @@ async function* toolLoop(
       ),
     temperature,
     signal,
-  })) {
+  });
+  for await (const event of runs()) {
     if (signal.aborted) return;
     switch (event.type) {
       case "reasoning":
@@ -1526,7 +1693,7 @@ async function* toolLoop(
         // A new step's text goes on from the last kept text in a new paragraph.
         if (stepText === "" && keptText !== "" && !/\s$/.test(keptText)) text = `\n\n${text}`;
         stepText += text;
-        yield { type: "text-delta", text };
+        yield* release(releasable(keptText + stepText));
         break;
       }
       case "tool-input-started": {
@@ -1586,6 +1753,7 @@ async function* toolLoop(
         break;
       }
       case "step-finished": {
+        steps++;
         yield { type: "usage", usage: event.usage };
         // Text before a call with a Tool-call card (a search, a Skill, a Connector's Tool), or
         // before records or figures with no marker in it, was a preamble.
@@ -1596,7 +1764,9 @@ async function* toolLoop(
         // writes the Answer again.
         const again = answered && MARKER.test(stepText);
         if ((preamble || again) && stepText) {
-          yield { type: "text-retracted", length: stepText.length };
+          const shown = released - keptText.length;
+          if (shown > 0) yield { type: "text-retracted", length: shown };
+          released = Math.min(released, keptText.length);
           if (recorded && !stepTools.some((each) => !recording(each)) && !again)
             unmarked = stepText;
         } else {
@@ -1608,6 +1778,12 @@ async function* toolLoop(
         break;
       }
       case "refused":
+        // Asked once more, the reply before stands: trying another way now would call its Tools again.
+        if (standing !== null) {
+          yield* backToFirst(standing);
+          yield* endAnswer();
+          return;
+        }
         // Too long only with a window, so sized to one.
         yield event.what === "tools"
           ? { type: "unsupported" }
@@ -1621,19 +1797,52 @@ async function* toolLoop(
         return;
       case "failed":
         for (const source of unannounced.splice(0)) yield { type: "read-third-party", source };
+        if (standing !== null) {
+          console.error(`Asking again for a better reply failed: ${event.error.message}`);
+          yield* backToFirst(standing);
+          yield* endAnswer();
+          return;
+        }
         yield { type: "failed", error: event.error };
         return;
-      case "finished":
-        if (keptText.trim() === "" && unmarked.trim() !== "") {
-          keptText = unmarked;
-          yield { type: "text-delta", text: unmarked };
+      case "finished": {
+        if (keptText.trim() === "" && unmarked.trim() !== "") keptText = unmarked;
+        const taken = takeToolText(keptText, toolTextTags);
+        if (mode === "tools" && !request.documents.wroteIntoMind?.()) {
+          const records = parseRecords(taken.records).filter(
+            ({ marker }) => !request.documents.hasRecord?.(marker),
+          );
+          cited.push(...records);
+          try {
+            request.documents.cite(records, { structured: true });
+          } catch (error) {
+            console.error(
+              `The Citations written as text couldn't be recorded: ${messageOf(error)}`,
+            );
+          }
         }
-        {
-          const placed = yield* missingMarkerEvents(keptText, cited, request.documents);
-          yield* citeUnmarked(request, placed, temperature, budget);
+        const settled = settleReply(request.turnChecks ?? [], taken.text, nudges);
+        if ("nudge" in settled) {
+          standing = taken.text;
+          if (released > 0) yield { type: "text-retracted", length: released };
+          released = 0;
+          keptText = "";
+          stepText = "";
+          answered = false;
+          unmarked = "";
+          again = [...event.messages, { role: "user", text: settled.nudge }];
+          break;
         }
-        yield { type: "finished" };
+        if (taken.text !== keptText) {
+          yield* textEdits(keptText.slice(0, released), taken.text);
+          keptText = taken.text;
+          released = keptText.length;
+        }
+        yield* release(keptText.length);
+        if (settled.claims.length > 0) yield { type: "claims-unbacked", claims: settled.claims };
+        yield* endAnswer();
         return;
+      }
     }
   }
 }
@@ -1737,7 +1946,7 @@ async function* structured(
   } catch (error) {
     console.error(`The Citations couldn't be recorded: ${messageOf(error)}`);
   }
-  yield* emit(answer);
+  yield* emit(typeof answer === "string" ? takeToolText(answer).text : answer);
   if (typeof answer === "string") {
     // A small model often gives the records but leaves their markers out.
     const marked = yield* missingMarkerEvents(emitted, records, request.documents);
@@ -1757,7 +1966,13 @@ async function* structured(
       if (signal.aborted) return;
     }
   }
+  yield* flagClaims(request, emitted);
   yield { type: "finished" };
+}
+
+function* flagClaims(request: AnswerRequest, text: string): Generator<AnswerEngineEvent> {
+  const claims = claimsOf(request.turnChecks ?? [], text);
+  if (claims.length > 0) yield { type: "claims-unbacked", claims };
 }
 
 /** A plain streamed Answer, with no Tools and no Citations. */
@@ -1769,7 +1984,7 @@ async function* plain(
 ): Attempt {
   const { signal } = request;
   const estimated = sized?.estimated;
-  let produced = false;
+  let produced = "";
   const reasoning = reasoningReader();
   try {
     const result = streamText({
@@ -1788,7 +2003,7 @@ async function* plain(
         if (event) yield event;
       } else if (part.type === "text-delta") {
         if (!part.text) continue;
-        produced = true;
+        produced += part.text;
         yield { type: "text-delta", text: part.text };
       } else if (part.type === "finish-step") {
         yield { type: "usage", usage: tokenUsageOf(part.usage) };
@@ -1805,5 +2020,9 @@ async function* plain(
     yield refused ?? { type: "failed", error: classifyProviderError(error) };
     return;
   }
-  if (!signal.aborted) yield { type: "finished" };
+  if (signal.aborted) return;
+  const written = takeToolText(produced).text;
+  yield* textEdits(produced, written);
+  yield* flagClaims(request, written);
+  yield { type: "finished" };
 }
