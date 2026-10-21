@@ -215,11 +215,18 @@ import type {
   GatedCall,
   ToolSet,
 } from "./engine";
-import { listenedTokens, newestWithin, withBeforeQuestion, withTranscript } from "./liveTranscript";
+import {
+  type LiveTranscript,
+  listenedTokens,
+  newestWithin,
+  withBeforeQuestion,
+  withTranscript,
+} from "./liveTranscript";
 import { markdownToBlocks } from "./markdown";
 import {
   FOUND_TOKEN_LIMIT,
   foundWithin,
+  LIVE_TEXT_BEHIND_NOTE,
   languageSaid,
   meetingHelpInstructions,
   newestSaid,
@@ -448,9 +455,10 @@ export interface AnswersOptions {
   readableMindName(mindId: string): string | null;
   /**
    * The live Transcript of the Meeting a Mind records now (#144), indexed up to now: its
-   * Passages in reading order; null when the Mind's Meeting isn't recording or has no lines yet.
+   * Passages in reading order, none while it has no line, and whether it is behind; null when the
+   * Mind's Meeting isn't recording.
    */
-  liveTranscript(mindId: string): Promise<WindowedPassage[] | null>;
+  liveTranscript(mindId: string): Promise<LiveTranscript | null>;
   /**
    * The help button a Question in a conversation is, asked from a Mind whose Meeting
    * records or is paused: its text is the button's name. Null for any other Question.
@@ -493,6 +501,13 @@ export interface AnswersOptions {
   exampleDocuments?(mindId: string): string[] | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
   emptyScopeAnswer(): string;
+  /**
+   * The line a help button's Answer starts with while its Meeting's live text is behind (#1366),
+   * in the User's language: that none of the call is written yet, or, with `lines`, that it rests
+   * on the lines so far. With no line there is nothing to answer from, so it is the whole Answer
+   * and the model isn't asked.
+   */
+  liveTextBehind(lines: boolean): string;
   /** The User's Skills. */
   skills: AnswerSkills;
   /** The assistant's conversations, which Answers are written into too. */
@@ -857,7 +872,7 @@ export function createAnswers(options: AnswersOptions) {
      * Asked from a Mind whose Meeting may be recording (#144): its live Transcript, indexed up
      * to now, to go with the Question. Absent: none.
      */
-    listening?: () => Promise<WindowedPassage[] | null>;
+    listening?: () => Promise<LiveTranscript | null>;
     /**
      * One-click help during the call: the button pressed. Its Answer is laid out as
      * the panel reads it, and is offered the Documents' Tools only.
@@ -934,6 +949,8 @@ export function createAnswers(options: AnswersOptions) {
     let mindRequest = input.mind?.request;
     /** It listened to a meeting's live transcript: the Question went with it. */
     let listening = false;
+    /** Help asked while its Meeting's live text was behind (#1366). */
+    let textBehind = false;
     /** The Documents whose whole text went with the Question; null until the assistant's request is built. */
     let sentDocuments: Set<string> | null = null;
     /** The Documents the live transcript came from: the "listened" step names them. */
@@ -1026,6 +1043,7 @@ export function createAnswers(options: AnswersOptions) {
         ...(withoutMindTools && { withoutMindTools: true as const }),
         ...(coverage && { coverage }),
         ...(writtenFrom && { writtenFrom }),
+        ...(textBehind && { textBehind: true as const }),
         ...(reading && { stillReading: reading }),
         ...(sentDocuments && {
           sent: {
@@ -1657,14 +1675,26 @@ export function createAnswers(options: AnswersOptions) {
         if (read) read = within.request.text ? { ...read, partial: true } : null;
       }
       if (input.listening) {
-        let heard: WindowedPassage[] | null = null;
+        let heard: LiveTranscript | null = null;
         try {
           heard = await input.listening();
         } catch (error) {
           options.reportError(error);
         }
         if (finished) return;
-        const kept = newestWithin(heard ?? [], listenedTokens(prepared.window));
+        const kept = newestWithin(heard?.passages ?? [], listenedTokens(prepared.window));
+        if (help && heard?.behind) {
+          textBehind = true;
+          const text = options.liveTextBehind(kept.length > 0);
+          if (kept.length === 0) {
+            markdown = text;
+            announce("answer.delta", { ...place, answerId, text });
+            finish({ status: "done" });
+            return;
+          }
+          markdown = `${text}\n\n`;
+          announce("answer.delta", { ...place, answerId, text: markdown });
+        }
         if (kept.length > 0) {
           messages = withTranscript(messages, session.show(kept));
           listening = true;
@@ -2086,13 +2116,16 @@ export function createAnswers(options: AnswersOptions) {
             emptyMindNote(withMindTools, focusedEmpty),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
-            help
-              ? meetingHelpInstructions(help, {
-                  found: foundAhead,
-                  language: options.interfaceLanguage(),
-                  callLanguage,
-                })
-              : language,
+            ...(help
+              ? [
+                  meetingHelpInstructions(help, {
+                    found: foundAhead,
+                    language: options.interfaceLanguage(),
+                    callLanguage,
+                  }),
+                  ...(textBehind ? [LIVE_TEXT_BEHIND_NOTE] : []),
+                ]
+              : [language]),
           ]
             .filter(Boolean)
             .join("\n\n"),

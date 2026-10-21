@@ -62,6 +62,7 @@ import {
 import { createCiting } from "./answers/citing";
 import { readMind } from "./answers/context";
 import type { AnswerSearchOptions } from "./answers/engine";
+import type { LiveTranscript } from "./answers/liveTranscript";
 import {
   type AddDocumentsResult,
   type ChatModelChoice,
@@ -118,7 +119,6 @@ import { createOwnFiles } from "./documents/ownFiles";
 import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
-import type { WindowedPassage } from "./documents/search";
 import { tunedSearch } from "./documents/searchTuning";
 import { LANGUAGE_SAMPLE, writtenInChinese } from "./documents/textLanguage";
 import { findUnreadDocuments } from "./documents/unread";
@@ -363,6 +363,8 @@ export interface Core extends CoreApi, CoreEventSource {
 
 /** How long a Question asked during a call waits for the live transcript's newest lines to be indexed (#144). */
 const LIVE_TRANSCRIPT_WAIT_MS = 3_000;
+
+const isBehind = (meeting: Meeting) => meeting.transcript?.state === "behind";
 
 /**
  * Opens (or creates) the data folder and its database, brings the schema up to
@@ -1436,6 +1438,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     interfaceLanguage: () => settings.get().language,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
+    liveTextBehind: (lines) =>
+      translate(
+        settings.get().language,
+        lines ? "meetings.help.textBehind.some" : "meetings.help.textBehind",
+      ),
     onWritingChange: (writing) => {
       background.setAnswering(writing);
       tasks.setAnswering(writing);
@@ -2742,7 +2749,7 @@ export function createCore(adapters: CoreAdapters): Core {
   /** See `AnswersOptions.meetingHelp`; set once Meetings are. */
   let meetingHelpOf = (_mindId: string, _question: string): MeetingHelpKind | null => null;
   /** See `AnswersOptions.liveTranscript`; set once Meetings are. */
-  let liveTranscriptOf = async (_mindId: string): Promise<WindowedPassage[] | null> => null;
+  let liveTranscriptOf = async (_mindId: string): Promise<LiveTranscript | null> => null;
   const meetingsChanged = () => {
     if (listMeetings) events.emit("meetings.changed", listMeetings());
   };
@@ -2958,11 +2965,16 @@ export function createCore(adapters: CoreAdapters): Core {
         (each) =>
           each.mindId === mindId && (each.status === "recording" || each.status === "paused"),
       );
-    const documentId = meeting?.transcript?.documentId;
-    if (!meeting || !documentId || !transcripts) return null;
+    if (!meeting) return null;
+    const documentId = meeting.transcript?.documentId;
+    if (!documentId || !transcripts) return { passages: [], behind: isBehind(meeting) };
     await transcripts.refresh(meeting.id);
     await extracted(documentId, LIVE_TRANSCRIPT_WAIT_MS);
-    return documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
+    const now = meetings.list().find((each) => each.id === meeting.id) ?? meeting;
+    return {
+      passages: await documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER),
+      behind: isBehind(now),
+    };
   };
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
