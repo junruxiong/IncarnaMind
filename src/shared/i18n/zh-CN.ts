@@ -2272,6 +2272,7 @@ export const zhCN = {
   "composer.scope.all": "全部文档",
   "composer.scope.allLabel": "搜索范围：你的全部文档。缩小范围（@）",
   "composer.scope.allTitle": "搜索你的全部文档。输入 @ 缩小范围",
+  "composer.scope.allEmptyFolder": "“{folder}”中还没有文档，因此搜索你的全部文档。输入 @ 缩小范围",
   "composer.scope.change": "{name}。更改搜索范围（@）",
   "composer.skills.label": "技能",
   "composer.skills.manage": "管理技能…",

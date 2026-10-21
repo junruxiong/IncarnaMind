@@ -37,6 +37,7 @@ import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
+import { hasSearchScope, holdsText, mindSearchScope } from "../shared/searchScope";
 import { SPEAKER_ME, SPEAKER_THEM } from "../shared/speakers";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -1113,6 +1114,20 @@ export function createCore(adapters: CoreAdapters): Core {
       organizedFolderDocuments: (folderId) => library.documentIds(folderId),
       documentIds: (filter) => documents.ids(filter),
     });
+  const searchedScope = (scope: SearchScope | null, mindId: string | null) => {
+    const folderId = mindId !== null && mindExists(mindId) ? minds.get(mindId).folderId : null;
+    const holds =
+      folderId !== null &&
+      documents
+        .getMany(resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] }) ?? [])
+        .some(holdsText);
+    const searched = mindSearchScope(
+      scope ?? { folderIds: [], tagIds: [], documentIds: [] },
+      folderId,
+      holds,
+    );
+    return hasSearchScope(searched) ? searched : null;
+  };
   // A Folder of the Library holds no file that isn't a Document, so it names the folders on disk
   // its Documents are in: a Linked folder filed into it whole names the Linked folder.
   const foldersOnDisk = (folderIds: readonly string[]) => {
@@ -1395,6 +1410,8 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     resolveScope,
     workingCopyOf: (mindId) => wordImports.originalOf(mindId)?.documentIds?.[0] ?? null,
+    searchedScope,
+    mindFolder: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
     exampleDocuments: (mindId) => examples.documentsOf(mindId),
     unscopedDocuments: (mindId) => {
       const made = examples.made();
@@ -1495,6 +1512,7 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   const research = createResearch({
     requireMind: (mindId) => writableMind(mindId).id,
+    searchedScope,
     mindExists,
     mindName: (mindId) => (mindExists(mindId) ? mindName(minds.get(mindId)) || null : null),
     folderOfMind: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
@@ -1595,6 +1613,7 @@ export function createCore(adapters: CoreAdapters): Core {
       writableMind(mindId);
     },
     resolveScope,
+    searchedScope,
     searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
     localOnly: () => embedding.localOnly(),
     events,
@@ -1752,6 +1771,7 @@ export function createCore(adapters: CoreAdapters): Core {
       log: adapters.log ?? silentLogger,
     },
     mindFolder: (mindId) => minds.get(mindId).folderId,
+    searchedScope,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
     recordAiUse: (inputs) => void aiUse.record(inputs),
