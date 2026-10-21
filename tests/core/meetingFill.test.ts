@@ -5,7 +5,7 @@
  * model fails, a quit cuts it short, or Local mode keeps it off the cloud.
  */
 import { describe, expect, test, vi } from "vitest";
-import type { Core, Meeting, MeetingFill } from "../../src/core";
+import type { Core, Meeting, MeetingFill, SpeakerSeparator } from "../../src/core";
 import type { WindowedPassage } from "../../src/core/documents/search";
 import { FILL_PART_TOKENS, transcriptParts } from "../../src/core/meetings/fill";
 import { setMindModel } from "../../src/shared/mindModel";
@@ -17,7 +17,7 @@ import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/d
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { heading, note, readMind, shownWithAiText, writeMind } from "../helpers/minds";
 import { type ModelCall, scriptedModel } from "../helpers/models";
-import { transcribingCore } from "../helpers/transcription";
+import { fakeSeparator, transcribingCore, until } from "../helpers/transcription";
 
 const SECOND = 1000;
 const MY_LINES = [
@@ -66,11 +66,13 @@ async function recorded(
   notes: Parameters<typeof writeMind>[1] | null,
   before?: (core: Core) => Promise<void>,
   inMind?: (client: MindClient) => void,
+  speakerSeparator?: SpeakerSeparator,
 ) {
   const dataDir = await createTempDataFolder();
   const { core, record } = await transcribingCore(dataDir, {
     model,
     engine: { lines: MY_LINES, theirLines: THEIR_LINES },
+    ...(speakerSeparator && { speakerSeparator }),
   });
   await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
   await before?.(core);
@@ -130,6 +132,30 @@ const NOTES = [
 describe("After Stop, the notes are filled in from the Transcript (#142)", {
   timeout: 60_000,
 }, () => {
+  // protects=with the speaker pass (#138) running after the save, the notes wait for it, so their Citations name the final speakers, and are filled in once it ends; fails_when=the fill starts while the pass runs, or never starts after it; no_claim=the pass's labels, which tests/core/speakerPass.test.ts covers.
+  test("the notes wait for the speakers to be told apart, then are filled in", async () => {
+    let release = () => {};
+    const holds = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const model = fillingModel("### L1\nThe enterprise price is 45 dollars a seat [^1].", {
+      1: MY_LINES[0] as string,
+    });
+    const { separator } = fakeSeparator({ holds });
+    const { core, meeting } = await recorded(model, NOTES, undefined, undefined, separator);
+    await until(
+      core,
+      meeting.id,
+      (transcript) => transcript.state === "saved" && transcript.separating,
+    );
+    // Time the fill would take to start, were it not waiting.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect((await fillOf(core, meeting.id))?.state).toBe("waiting");
+    release();
+    expect(await settledFill(core, meeting)).toMatchObject({ state: "filled" });
+    core.close();
+  });
+
   // protects=each of the User's lines gets what the call said about it right under it, as AI text citing the Transcript, in their order and under their headings, the User's own text unchanged, with no Proposal and a Checkpoint before; Undo leaves the notes as the User left them; fails_when=a line moves or changes, an addition isn't AI text or uncited, a Proposal is made, or Undo leaves anything; no_claim=a real model's wording.
   test("under each of the User's lines, in place, cited, with one Undo", async () => {
     const model = fillingModel(
