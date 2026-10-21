@@ -26,8 +26,8 @@
  * 折线图) searches, cites each quarter's revenue, and adds them as a table with its
  * chart (#1091); "Make a bar chart of rent by lease" does the same with each unit's
  * monthly rent, so Use all can draw it again from every lease.
- * "Write a short summary of this agreement" (为这份协议写一份简短摘要) calls
- * add_to_mind with it, for the Mind in focus.
+ * "Write a short summary of this agreement" (为这份协议写一份简短摘要, 为这份劳动合同写一个简短的摘要)
+ * writes it where the route says, from the Document "this" means, else those it is asked over.
  * "Write a brief summary" (写一份简要总结) adds one to the Mind in <mind>, but
  * answers that no Mind is open when that Mind has no name, as models did (#1212).
  */
@@ -105,8 +105,12 @@ const SUMMARY = [
   "Neap tides come in between, at the quarter moons.",
 ].join("\n\n");
 
-/** The newcomer's first request (#1174): a short summary of "this agreement", written into the Mind in focus. */
-const SUMMARY_HERE = /\bwrite a short summary of this agreement\b|为这份协议写一份简短摘要/i;
+/**
+ * The newcomer's first request (#1174): a short summary of "this agreement", written where the
+ * route says, naming the Documents it is from when there are any (#1334).
+ */
+const SUMMARY_HERE =
+  /\bwrite a short summary of this agreement\b|为这份协议写一份简短摘要|为这份劳动合同写一个简短的摘要/i;
 
 /** A request to change the Mind so it has a table: "…, with a table" (加上表格). */
 const WITH_A_TABLE = /\bwith a table\b|加上?表格/i;
@@ -124,6 +128,19 @@ const ADD_AND_NEW =
   /^add\s+(.+?)\s+to\s+[“"]?(.+?)[”"]?\s+and\s+(?:make|create)\s+a\s+new\s+note\s+called\s+[“"]?(.+?)[”"]?[.。]?$/iu;
 
 const RISKS_AND_MORE = /^add a section on the risks[.。]?$/i;
+
+function namesListed(prompt: Prompt): string[] {
+  const system = systemOf(prompt);
+  const listed =
+    /^(?:Their names, newest first|Its name):\n((?:- .+\n?)+)/m.exec(system)?.[1] ?? "";
+  return [...listed.matchAll(/^- (.+)$/gm)].map((line) => line[1] ?? "").sort();
+}
+
+// An empty Mind is filled; any other gets a new one beside it.
+const writePiece = (prompt: Prompt, content: string): Reply =>
+  systemOf(prompt).includes("write it there with add_to_mind")
+    ? { tool: "add_to_mind", input: { content } }
+    : { tool: "create_mind", input: { title: "Summary", content } };
 
 /** The first sentence of what a call came to, as the scripted assistant's reply. */
 const firstSentence = (result: string) => /^[^.。]*[.。]?/u.exec(result)?.[0] ?? result;
@@ -165,13 +182,7 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
   if (LEASES_SUMMARY.test(question)) {
     const made = lastResult(prompt, "create_mind") ?? lastResult(prompt, "add_to_mind");
     if (made !== undefined) return { text: firstSentence(made) };
-    const listed = /^Their names, newest first:\n((?:- .+\n?)+)/m.exec(systemOf(prompt))?.[1] ?? "";
-    const names = [...listed.matchAll(/^- (.+)$/gm)].map((line) => line[1]).sort();
-    const content = `Written from ${names.join(", ")}.`;
-    // An empty Mind is filled; any other gets a new one beside it.
-    return systemOf(prompt).includes("write it there with add_to_mind")
-      ? { tool: "add_to_mind", input: { content } }
-      : { tool: "create_mind", input: { title: "Summary", content } };
+    return writePiece(prompt, `Written from ${namesListed(prompt).join(", ")}.`);
   }
   if (BRIEF_SUMMARY.test(question)) {
     const mind = userText(prompt.find((message) => message.role === "user"));
@@ -193,9 +204,14 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     return { text: firstSentence(made) };
   }
   if (SUMMARY_HERE.test(question)) {
-    const added = lastResult(prompt, "add_to_mind");
-    if (added === undefined) return { tool: "add_to_mind", input: { content: SUMMARY } };
-    return { text: firstSentence(added) };
+    const made = lastResult(prompt, "add_to_mind") ?? lastResult(prompt, "create_mind");
+    if (made !== undefined) return { text: firstSentence(made) };
+    const meant = /By "this", the User means the Document "([^"]+)"/.exec(systemOf(prompt))?.[1];
+    const names = meant ? [meant] : namesListed(prompt);
+    return writePiece(
+      prompt,
+      names.length > 0 ? `## Summary\n\nWritten from ${names.join(", ")}.` : SUMMARY,
+    );
   }
   if (
     SHORTEN.test(question) ||

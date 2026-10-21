@@ -716,7 +716,7 @@ for (const language of ["en", "zh-CN"] as const) {
 
 for (const language of ["en", "zh-CN"] as const) {
   const instruction =
-    language === "en" ? "Summarise this agreement for me." : "为这份协议写一份摘要。";
+    language === "en" ? "Summarise this agreement for me." : "帮我总结一下这份协议。";
 
   test(`a new Mind made from an Answer is named by its first line, not by the conversation's name from the first instruction; a name the User gave the conversation is kept (${language})`, async () => {
     const { app, window } = await launchApp(dataDir, { fakeChat: true });
@@ -747,7 +747,7 @@ for (const language of ["en", "zh-CN"] as const) {
       first?.id ?? "",
     );
     expect(preview.fileName).toMatch(/^This is a scripted Answer to/);
-    expect(preview.fileName).not.toMatch(/^Summarise this agreement|^为这份协议/);
+    expect(preview.fileName).not.toMatch(/^Summarise this agreement|^帮我总结/);
 
     const conversationId = (await core.evaluate((each) => each.listConversations()))[0]?.id ?? "";
     await core.evaluate(

@@ -195,6 +195,7 @@ import {
   readMind,
 } from "./context";
 import { coverageInstructions, coverageOf, documentsAsked, type SizedDocument } from "./coverage";
+import { citedIn, documentMeant, documentMeantInstructions, type InView } from "./documentMeant";
 import {
   documentTextBlock,
   givenUpFront,
@@ -236,6 +237,7 @@ import {
   loadedSkillText,
   meetingInstructions,
   mindInstructions,
+  shortNote,
   signInNeededInstructions,
   skillInstructions,
   skillLanguageNote,
@@ -246,7 +248,7 @@ import {
   workingCopyNote,
 } from "./prompt";
 import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
-import { type RequestContext, routeRequest } from "./routeRequest";
+import { type RequestContext, type RequestRoute, routeRequest } from "./routeRequest";
 import { withoutSearchTalk } from "./searchTalk";
 import type { ChangeStates } from "./toolRecord";
 import type { TurnCheck } from "./turnChecks";
@@ -424,6 +426,11 @@ function lastAnswerOf(
     folderId: question?.kind === "question" ? filedIn(question.scope, question.askedFrom) : null,
   };
 }
+
+const answerCited = (answer: ConversationMessage | undefined): string[] =>
+  answer?.kind === "answer"
+    ? [...new Set(answer.citations.map((citation) => citation.documentId))]
+    : [];
 
 const followsAChange = (answer: ConversationAnswer | undefined) =>
   answer !== undefined &&
@@ -875,10 +882,11 @@ export function createAnswers(options: AnswersOptions) {
       RequestContext & {
         /** What the commands of the Conversation's earlier Answers renamed, oldest first. */
         renames: readonly CommandRename[];
+        /** What the User has in view, but the working copy's own Document: what "this" may mean. */
+        inView: Omit<InView, "original">;
       };
   }): void {
     const { home, answerId, model, context, forcedSkill } = input;
-    const scoped = input.scoped ?? input.documentIds !== null;
     const asked =
       input.outside === true
         ? { each: false, main: null }
@@ -889,12 +897,36 @@ export function createAnswers(options: AnswersOptions) {
       asked.each || asked.main !== null
         ? coverageOf(asked, options.documents.searchableBySize(input.documentIds))
         : null;
-    const documentIds = coverage ? coverage.used.map((each) => each.id) : input.documentIds;
     const outside = input.outside === true;
-    const routed =
+    const worded =
       !outside && options.minds && input.assistant
         ? routeRequest(context.question, input.assistant)
         : null;
+    const inAssistant = !outside && input.assistant !== undefined;
+    const mindIn = input.assistant?.focused?.mindId ?? null;
+    const originalId =
+      inAssistant && mindIn !== null ? (options.workingCopyOf?.(mindIn) ?? null) : null;
+    const [workingOriginal = null] =
+      originalId !== null && (input.documentIds === null || input.documentIds.includes(originalId))
+        ? options.documents.searchableBySize([originalId])
+        : [];
+    const meant =
+      inAssistant &&
+      input.assistant &&
+      !coverage &&
+      worded?.kind !== "edit" &&
+      !worded?.fromAnswer &&
+      !worded?.addsAnswer
+        ? documentMeant(context.question, {
+            documents: () => options.documents.searchableBySize(input.documentIds),
+            inView: { ...input.assistant.inView, original: workingOriginal?.id ?? null },
+            folder: input.assistant.folderId !== null,
+          })
+        : null;
+    const documentIds = coverage ? coverage.used.map((each) => each.id) : input.documentIds;
+    const scoped = input.scoped ?? input.documentIds !== null;
+    const routed: RequestRoute | null =
+      meant?.kind === "which" ? { kind: "unclear", newMind: false } : worded;
     const writtenFrom =
       routed?.kind === "write" && !routed.fromAnswer
         ? someOfTheDocuments(input.documentIds, input.assistant?.focused?.mindId ?? null)
@@ -1015,14 +1047,10 @@ export function createAnswers(options: AnswersOptions) {
     };
     let skills: SkillSession | null = null;
     const searched = inScope(options.documents, documentIds);
-    const inAssistant = !outside && input.assistant !== undefined;
-    const mindIn = input.assistant?.focused?.mindId ?? null;
-    const originalId =
-      inAssistant && mindIn !== null ? (options.workingCopyOf?.(mindIn) ?? null) : null;
-    const [original = null] =
-      originalId !== null && (documentIds === null || documentIds.includes(originalId))
-        ? options.documents.searchableBySize([originalId])
-        : [];
+    const original =
+      workingOriginal && (documentIds === null || documentIds.includes(workingOriginal.id))
+        ? workingOriginal
+        : null;
     const exampleIds =
       inAssistant && mindIn !== null ? (options.exampleDocuments?.(mindIn) ?? null) : null;
     const exampleNames = exampleIds
@@ -1685,8 +1713,11 @@ export function createAnswers(options: AnswersOptions) {
           options.documents.searchableCount(documentIds) <= SMALL_SCOPE_DOCUMENTS
             ? options.documents.searchableBySize(documentIds)
             : [];
+        // The Document "this" means comes whole when it's short, and before the rest of the scope.
+        const meantUpFront =
+          meant?.kind === "one" ? options.documents.searchableBySize([meant.document.id]) : [];
         const given = givenUpFront(
-          [original ? [original] : [], scope],
+          [original ? [original] : [], meantUpFront, scope],
           upFrontTokens(prepared.window),
           passagesOf,
           (passages) => blockOf(passages, session.measure),
@@ -2035,6 +2066,8 @@ export function createAnswers(options: AnswersOptions) {
               asked.each,
               options.documents.searchableCount(documentIds),
             ),
+            documentMeantInstructions(meant),
+            routed?.kind === "edit" ? "" : shortNote(context.question),
             skillInstructions(listed, forced, withSkillTools, scripts),
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
@@ -2412,6 +2445,17 @@ export function createAnswers(options: AnswersOptions) {
     }));
   };
 
+  const mindCites = (mindId: string, focus: MindFocus | null) =>
+    options.content.read(mindId, (blocks) => {
+      const top = blocks.toArray().filter((each) => each instanceof Y.XmlElement);
+      const selected = focus?.selection
+        ? top.filter((each) =>
+            focus.blockIds.includes(String(each.getAttribute(BLOCK_ID_ATTRIBUTE))),
+          )
+        : null;
+      return { mind: citedIn(top), selected: selected && citedIn(selected) };
+    });
+
   /**
    * Writes the Answer of a Question in a conversation, added or emptied in `turn`, from
    * the messages before it, the Mind it reads and its Search scope as it is now.
@@ -2423,6 +2467,7 @@ export function createAnswers(options: AnswersOptions) {
     emptyScope: boolean,
     mind: MindToRead | null,
     remake: string | null = null,
+    inView: readonly string[] = [],
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
     const help = mind ? (options.meetingHelp?.(mind.mindId, question.text) ?? null) : null;
@@ -2504,6 +2549,11 @@ export function createAnswers(options: AnswersOptions) {
         lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier, filedIn) !== null,
         remake,
         renames: renamesIn(turn.earlier),
+        inView: {
+          open: inView,
+          ...(mind ? mindCites(mind.mindId, question.focus) : { selected: null, mind: [] }),
+          lastAnswer: answerCited(turn.earlier.findLast((message) => message.kind === "answer")),
+        },
       },
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
@@ -2686,7 +2736,7 @@ export function createAnswers(options: AnswersOptions) {
       const { documentIds, emptyScope } = scopeNow(scope, question.mind?.id ?? null);
       const mind = mindToRead(question.mind?.id ?? null, question.focus, question.text);
       const turn = options.conversations.add({ ...question, scope }, ready.model, readOf(mind));
-      return startInConversation(turn, ready, documentIds, emptyScope, mind);
+      return startInConversation(turn, ready, documentIds, emptyScope, mind, null, question.inView);
     },
 
     /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */

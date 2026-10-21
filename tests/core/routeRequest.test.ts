@@ -771,7 +771,7 @@ describe("Routing everyday requests", () => {
     expect(routeRequest(request, FIRST)).toMatchObject({ kind: "write", newMind });
   });
 
-  // protects=a request to write a piece goes into a new Mind, the owner's sentence among them, in English and Chinese, while a question about the Documents stays in the panel (#1109); fails_when=one is answered in the panel, or a question writes a Mind; no_claim=every wording a User may use.
+  // protects=a request to write a piece goes into a new Mind, the owner's sentence among them, in English and Chinese, "为这份…写" as "write … of this" (#1334), while a question about the Documents stays in the panel (#1109); fails_when=one is answered in the panel, or a question writes a Mind; no_claim=every wording a User may use.
   test.each([
     ["根据我现有的文件帮我写一份summary", true],
     ["帮我写一份关于租赁的总结", true],
@@ -782,6 +782,10 @@ describe("Routing everyday requests", () => {
     ["Based on my files, write a summary", true],
     ["Draft a memo to the board about the lease", true],
     ["Write me a short report on the leases", true],
+    ["请为这份劳动合同写一个简短的摘要。", true],
+    ["为这篇论文写一份摘要", true],
+    ["给这份合同写一份总结", true],
+    ["Write a short summary of this agreement.", true],
     ["Summarise the agreement?", false],
     ["总结一下", false],
     ["这些文件讲了什么？", false],
@@ -915,7 +919,11 @@ describe("Routing everyday requests", () => {
   test.each(["add it to my notes", "把这个加到我的笔记里"])(
     "%s writes into the Mind in focus",
     (request) => {
-      expect(routeRequest(request, NO_CHANGE)).toEqual({ kind: "write", newMind: false });
+      expect(routeRequest(request, NO_CHANGE)).toEqual({
+        kind: "write",
+        newMind: false,
+        addsAnswer: true,
+      });
     },
   );
 });

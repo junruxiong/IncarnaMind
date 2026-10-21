@@ -49,6 +49,7 @@ import { type Dragged, type Dropped, useDropTarget } from "../dragDrop";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import { documentsShownOf, groupsMerged } from "../layoutSlice";
 import { newNoteTitle } from "../newNoteRequest";
 import {
   cancelResearch,
@@ -520,6 +521,7 @@ export function Composer({
       mindId,
       text,
       focus: selection.focus(),
+      inView: documentsShownOf(useAppStore.getState().layout, groupsMerged()),
       scope: composerScope(current, folderId),
       model: mind ? mindModelOf(mind.doc) : useComposer.getState().modelWithoutMind,
       forcedSkill: draft.skill,

@@ -30,6 +30,8 @@ export interface RequestRoute {
   newMind: boolean;
   /** The last Answer goes into a new Mind as it is: its text, Citations and scope. */
   fromAnswer?: true;
+  /** "This" or "it" is the last Answer, added to a Mind ("add it to my notes", "把这个加到我的笔记里"). */
+  addsAnswer?: true;
   /** A piece, or the last Answer, fills the empty Mind the User is in rather than making another. */
   fillsEmpty?: true;
   /**
@@ -249,7 +251,7 @@ const ZH_PIECE_NOUN =
   "(?:总结|摘要|报告|备忘录|综述|简报|计划|概述|方案|纪要|summary|report|memo|review|brief|plan|overview)";
 const ZH_PIECES = [
   new RegExp(
-    `^(?:(?:根据|基于|按照|结合|参考)${ZH_FREE}，?)?(?:帮我)?(?:写|起草|整理|做|出)一[份篇个][^，。？！?吗呢吧么]{0,20}?${ZH_PIECE_NOUN}$`,
+    `^(?:(?:根据|基于|按照|结合|参考|为|给|替)${ZH_FREE}，?)?(?:帮我)?(?:写|起草|整理|做|出)一[份篇个][^，。？！?吗呢吧么]{0,20}?${ZH_PIECE_NOUN}$`,
     "iu",
   ),
   new RegExp(
@@ -263,7 +265,7 @@ const ZH_AS_A_MIND =
 // "你不给我建一份文档吗", "能不能帮我做成文档": for the User (给我, 帮我), unlike "你能写文档吗".
 const ZH_ASKED_FOR_A_DOCUMENT =
   /^[^，。？！?]{0,8}?(?:给我|帮我|为我|替我)(?:把(?:这个|这些|它|刚才的回答|这个回答|上面的回答|上面的内容|你的回答))?(?:(?:建|做|生成)一[份个篇]|(?:做成|建成|写成|生成|整理成)(?:一[份个篇])?)(?:新的?)?(?:文档|笔记|Mind)(?:吗|呢|吧|么|嘛)?[？?。！!]*$/u;
-const ZH_INTO_THEIRS = /这里|这篇|这个笔记|我的笔记|笔记里|笔记中|下面|本页|这页/;
+const ZH_INTO_THEIRS = /这里|这篇笔记|这份笔记|这个笔记|我的笔记|笔记里|笔记中|下面|本页|这页/;
 // A new page asked for in so many words goes in one, whatever it is about: "a new page on the intro".
 const SAYS_NEW =
   /\b(?:new|separate|another|fresh)\s+(?:[\p{L}-]+\s+){0,2}(?:page|note|mind|document|doc)\b|另起一页|新建一[页篇个份]|单独(?:写)?一[份页篇]|新的?(?:页面|笔记|文档)/u;
@@ -286,7 +288,7 @@ export interface RequestContext {
   lastAnswerHasText?: boolean;
 }
 
-type PlainKind = "edit" | "write" | "piece" | "as-a-mind" | "chart";
+type PlainKind = "edit" | "write" | "piece" | "as-a-mind" | "add-it" | "chart";
 
 function plainKind(
   question: string,
@@ -307,7 +309,7 @@ function plainKind(
     if (lastAnswerHasText && ZH_AS_A_MIND.test(chinese)) return "as-a-mind";
     if (matches(ZH_EDITS, chinese)) return "edit";
     if (matches(ZH_CHARTS, chinese)) return "chart";
-    if (ZH_ADD_IT.test(chinese)) return followsAnAnswer ? "write" : null;
+    if (ZH_ADD_IT.test(chinese)) return followsAnAnswer ? "add-it" : null;
     if (matches(ZH_PIECES, chinese)) return "piece";
     if (matches(ZH_WRITES, chinese)) return "write";
     if (!followsAChange) return null;
@@ -333,7 +335,7 @@ function plainKind(
   if (lastAnswerHasText && AS_A_MIND.test(english)) return "as-a-mind";
   if (matches(EDITS, english)) return WHOLE_MIND.test(english) ? null : "edit";
   if (matches(CHARTS, english)) return "chart";
-  if (ADD_IT.test(english)) return followsAnAnswer ? "write" : null;
+  if (ADD_IT.test(english)) return followsAnAnswer ? "add-it" : null;
   if (matches(PIECES, english)) return "piece";
   if (matches(WRITES, english)) return "write";
   if (!followsAChange) return null;
@@ -356,7 +358,7 @@ export function routeRequest(question: string, context: RequestContext): Request
       },
     };
   }
-  const kind = plain === "piece" ? "write" : (plain ?? "unclear");
+  const kind = plain === "piece" || plain === "add-it" ? "write" : (plain ?? "unclear");
   const lower = question.toLocaleLowerCase();
   const intoTheirs =
     !SAYS_NEW.test(lower) &&
@@ -366,5 +368,6 @@ export function routeRequest(question: string, context: RequestContext): Request
     !NAMES_A_MIND.test(question) &&
     !intoTheirs &&
     (plain === "piece" || NEW_MIND.test(lower));
+  if (plain === "add-it") return { kind, newMind, addsAnswer: true };
   return newMind && plain === "piece" ? { kind, newMind, fillsEmpty: true } : { kind, newMind };
 }
