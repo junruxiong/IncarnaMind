@@ -136,7 +136,7 @@ describe("The record of an Answer's Tool calls", () => {
       other: false,
       answer: { skipped: false, chosen: ["Leave it out"], wrote: null },
     } as const;
-    const lines = (each: AnswerToolCall) => toolRecordLines([each], names, 0).at(0);
+    const lines = (each: AnswerToolCall) => toolRecordLines([each], names, () => null).at(0);
     expect(lines(exported({ choice: "leave", how: "kept" }, answered as never))).toBe(
       "- run_command mind.export: 1 item (“Tides”), saved as “Tides.docx” in the Output location, /out; the text IncarnaMind wrote is left unmarked: the User was asked in the tray and answered “Leave it out”, a choice now saved for every Word export",
     );
