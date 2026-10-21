@@ -1403,6 +1403,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     resolveScope,
     workingCopyOf: (mindId) => wordImports.originalOf(mindId)?.documentIds?.[0] ?? null,
+    exampleDocuments: (mindId) => examples.documentsOf(mindId),
     unscopedDocuments: (mindId) => {
       const made = examples.made();
       if (made.documentIds.length === 0 || (mindId && made.mindIds.includes(mindId))) return null;
@@ -1551,7 +1552,7 @@ export function createCore(adapters: CoreAdapters): Core {
     chat: {
       providerExists: (providerId) => chat.exists(providerId),
       readiness: (choice) => chat.readiness(choice),
-      prepareModel: (choice) => chat.prepareModel(choice),
+      prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
       runsLocally: (choice) => chat.metered(choice)?.billing === "free",
     },
     answers,
@@ -1953,8 +1954,8 @@ export function createCore(adapters: CoreAdapters): Core {
       throw error;
     }
   };
-  const unlinkFolder = (linkedFolderId: string) => {
-    documents.linkedFolders.remove(linkedFolderId);
+  const unlinkFolder = (linkedFolderId: string, keep: readonly string[] = []) => {
+    documents.linkedFolders.remove(linkedFolderId, keep);
     outputs.forgetLinkedFolder(linkedFolderId);
   };
 
@@ -2521,7 +2522,6 @@ export function createCore(adapters: CoreAdapters): Core {
       id: transcriptionHost.origin,
       name: transcriptionHost.host === "huggingface.co" ? "Hugging Face" : transcriptionHost.host,
     },
-    // Where this copy transcribes.
     listed: () => transcriber !== undefined && transcriptionSource.files.length > 0,
   });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
@@ -3247,8 +3247,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return renamed;
     },
     deleteDocument: async (id) => {
-      await documents.delete(id);
-      activity.documentDeleted(id as string);
+      for (const deleted of await documents.delete(id)) activity.documentDeleted(deleted);
+    },
+    deleteDocuments: async (ids) => {
+      for (const deleted of await documents.delete(ids)) activity.documentDeleted(deleted);
     },
     retryDocument: async (id) => documents.retry(id),
     unlockDocument: async (input) => {
@@ -3297,7 +3299,8 @@ export function createCore(adapters: CoreAdapters): Core {
     listUnreadFiles: async (scope) => unreadIn(parseSearchScope(scope)),
     locateLinkedFolder: (linkedFolderId, path) =>
       documents.linkedFolders.locate(linkedFolderId, path),
-    removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
+    removeLinkedFolder: async (linkedFolderId, options) =>
+      unlinkFolder(linkedFolderId, options?.keep),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
     updateReference: async (documentId, patch) => references.update(documentId, patch),
     restoreReference: async (documentId, before, fields) =>
