@@ -17,6 +17,7 @@ import { useSettled } from "../settling";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { useTaggingAlert } from "../taggingAlert";
 import { useTaggingExplained } from "../taggingExplained";
+import { taggingProblem } from "../taggingProblem";
 import { failedTagging, retryTagging } from "../taggingRetry";
 import { placesText, resumeTagging, stoppedDocumentPlaces, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
@@ -504,7 +505,7 @@ function useStatuses(): Status[] {
   if (counts.failedTagging > 0) {
     const reasons = failedTagging(useAppStore.getState()).flatMap((each) =>
       each.taggingError && each.taggingError.kind !== "network"
-        ? [t(testErrorKey(each.taggingError.kind))]
+        ? [taggingProblem(each.taggingError, t)]
         : [],
     );
     statuses.push({
