@@ -118,6 +118,8 @@ export interface ChecksOptions
   originalOf(mindId: string): CheckedDocument | null;
   /** The default chat model, used when the Mind has none of its own. */
   defaultModel(): ChatModelChoice | null;
+  /** The model a Mind whose own pick is `own` is checked with: see `modelInUse`. */
+  modelInUse(own: ChatModelChoice | null): ChatModelChoice | null;
   chat: {
     readiness(choice: ChatModelChoice | undefined, flow: "checks"): Promise<ChatReadiness>;
     prepareModel(choice: ChatModelChoice | undefined, flow: "checks"): Promise<PreparedChatModel>;

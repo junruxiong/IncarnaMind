@@ -1787,6 +1787,7 @@ export function createCore(adapters: CoreAdapters): Core {
     searchedScope,
     originalOf: (mindId) => wordImports.originalOf(mindId),
     defaultModel: () => settings.get().user.chatModel,
+    modelInUse: (own) => chat.modelInUse(own),
     recordAiUse: (inputs) => void aiUse.record(inputs),
     chat,
     consent,
@@ -1928,6 +1929,12 @@ export function createCore(adapters: CoreAdapters): Core {
             : options.format === "markdown",
       },
     });
+  const modelInUseIn = (mindId: string) =>
+    chat.modelInUse(
+      content.readSettings(mindId, (mindSettings) =>
+        mindSettings.doc ? mindModelOf(mindSettings.doc) : null,
+      ),
+    );
   // Make this a Skill: the chat model drafts it from the Mind, on the chat flow's consent.
   const skillDrafts = createSkillDrafts({
     mindMarkdown: async (mindId) => {
@@ -1941,9 +1948,7 @@ export function createCore(adapters: CoreAdapters): Core {
         .map(({ question, answer }) => [`**${label}** ${question}`, answer].filter(Boolean));
       return [mind, ...asked.flat()].join("\n\n");
     },
-    modelFor: (mindId) =>
-      content.read(mindId, (blocks) => (blocks.doc ? mindModelOf(blocks.doc) : null)) ??
-      settings.get().user.chatModel,
+    modelFor: modelInUseIn,
     chat,
   });
   // New files: in the Output location, or inside a Linked folder the User allowed.
@@ -2868,6 +2873,7 @@ export function createCore(adapters: CoreAdapters): Core {
         text: translate(settings.get().language, helpLabel(kind)),
         mindId: meeting.mindId,
         scope: folderId ? { folderIds: [folderId], tagIds: [], documentIds: [] } : null,
+        model: modelInUseIn(meeting.mindId),
       });
     let asked: QuestionInput;
     if (input.conversationId !== undefined) asked = question(input.conversationId);
@@ -3244,10 +3250,16 @@ export function createCore(adapters: CoreAdapters): Core {
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),
     updateSettings: async (patch) => {
-      // The default chat model, and the quick-tasks and image models, must be on a saved provider.
+      // Each chat model chosen (default, last, quick tasks, images) must be on a saved provider.
       const user = isRecord(patch) && isRecord(patch.user) ? patch.user : {};
+      const device = isRecord(patch) && isRecord(patch.device) ? patch.device : {};
       const chatModel = user.chatModel;
-      for (const choice of [chatModel, user.quickTasksModel, user.imageModel]) {
+      for (const choice of [
+        chatModel,
+        user.quickTasksModel,
+        user.imageModel,
+        device.lastChatModel,
+      ]) {
         if (isChatModelChoice(choice) && !chat.exists(choice.providerId)) {
           throw new InvalidInputError("That chat provider doesn't exist.");
         }

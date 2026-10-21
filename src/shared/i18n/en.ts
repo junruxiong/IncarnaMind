@@ -2418,7 +2418,7 @@ export const en = {
   "models.defaults.title": "Defaults",
   "models.defaults.answers": "Answers",
   "models.defaults.answers.tip":
-    "New Minds and conversations start with this; each can switch in the composer.",
+    "A Mind or conversation with no model of its own uses the one you last chose; until then, this one.",
   "models.defaults.quickTasks": "Quick tasks",
   "models.defaults.quickTasks.tip":
     "Rewrites searches and suggests Tags. A small, cheap model is enough.",
