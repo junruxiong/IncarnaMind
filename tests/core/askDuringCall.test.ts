@@ -113,6 +113,7 @@ describe("Asking during a call", { timeout: 60_000 }, () => {
         check: "found",
       }),
     ]);
+    expect(answer.steps?.sent).toEqual({ documents: [], transcript: true });
     expect(readMind(client).textContent).toBe("");
   });
 

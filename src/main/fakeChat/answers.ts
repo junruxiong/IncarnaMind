@@ -22,7 +22,9 @@
  * citations" (四十条引用) gets forty sentences, each with a marker, and one that asks for "twelve in a
  * row" (连续十二条) gets one sentence with twelve markers side by side; one with "cited below" (or 引用在下) gets a
  * table whose one Citation stands in a paragraph under it, and one with "framed" (or 带说明)
- * gets a lead-in before its content and a closing note after it (#702).
+ * gets a lead-in before its content and a closing note after it (#702); one that says "without
+ * searching" (不用搜索) cites the Passages given with it, as a model does that is given a short
+ * Document's whole text, and calls no search.
  * One that asks how much something grew (增长) has the growth from the first
  * two numbers of its quote calculated, and writes it with its marker.
  * As models did (#1172), one for a "short summary" (简短的摘要) ends with a
@@ -42,6 +44,7 @@ import { cellReply, isCell } from "./cells";
 import { FORTY_CITATIONS, passagesIn, recordFor, recordsFor, TWELVE_IN_A_ROW } from "./passages";
 import {
   lastQuestion,
+  lastUserText,
   type Prompt,
   type Reply,
   type StreamPart,
@@ -82,6 +85,8 @@ const FOUND_PAGES = [
 
 /** The scripted Answer when it cited something: one sentence with a marker. */
 export const CITED_ANSWER = "Your Documents answer this [^1].\n\nThat is all.";
+
+const WITHOUT_SEARCHING = /\bwithout searching\b|不用搜索/i;
 
 /** A Question the model answers with a marker and no `cite` call. */
 const WITHOUT_CITING = /\bwithout citing\b|不引用/i;
@@ -348,7 +353,8 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   }
   const skill = skillFollowed(prompt);
   if (!tools.includes("search_documents")) return { text: fakeAnswer(question, skill) };
-  const searches = toolResults(prompt, "search_documents");
+  const given = passagesIn(lastUserText(prompt)).length > 0 && WITHOUT_SEARCHING.test(question);
+  const searches = given ? [lastUserText(prompt)] : toolResults(prompt, "search_documents");
   if (searches.length === 0) {
     return {
       tool: "search_documents",
