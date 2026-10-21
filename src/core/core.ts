@@ -167,6 +167,7 @@ import { createTagging } from "./library/tagging";
 import type { TaggingClassifier } from "./library/types";
 import { createMeetings } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
+import { createMeetingFill } from "./meetings/fill";
 import { createCaptureHealth } from "./meetings/health";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
@@ -2743,6 +2744,7 @@ export function createCore(adapters: CoreAdapters): Core {
   let meetingHelpOf = (_mindId: string, _question: string): MeetingHelpKind | null => null;
   /** See `AnswersOptions.liveTranscript`; set once Meetings are. */
   let liveTranscriptOf = async (_mindId: string): Promise<WindowedPassage[] | null> => null;
+  let transcriptSaved = (_meetingId: string) => {};
   const meetingsChanged = () => {
     if (listMeetings) events.emit("meetings.changed", listMeetings());
   };
@@ -2826,6 +2828,7 @@ export function createCore(adapters: CoreAdapters): Core {
         });
       },
       health: captureHealth,
+      saved: (meetingId) => transcriptSaved(meetingId),
       changed: meetingsChanged,
       log: adapters.log ?? silentLogger,
     });
@@ -2951,6 +2954,84 @@ export function createCore(adapters: CoreAdapters): Core {
         if (document.id === documentId && !busy(document.status)) done();
       });
     });
+  // After Stop, the notes filled in from the Transcript (#142), on the Answers route.
+  const meetingFill = createMeetingFill({
+    content,
+    meetings,
+    transcript: async (documentId) => {
+      await extracted(documentId, LIVE_TRANSCRIPT_WAIT_MS);
+      return documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
+    },
+    async route(mindId) {
+      const language = settings.get().language;
+      const choice = await chat.answeringModel(modelInUseIn(mindId) ?? undefined);
+      const readiness = await chat.readiness(choice);
+      if (!readiness.ready) {
+        return {
+          problem:
+            readiness.reason === "local-mode"
+              ? {
+                  kind: "local-mode",
+                  message: translate(language, "meetings.fill.problem.localMode"),
+                }
+              : { kind: "no-model", message: translate(language, "meetings.fill.problem.noModel") },
+        };
+      }
+      // Filling in never asks: a service the User hasn't allowed yet waits for an Answer to ask.
+      if (readiness.consent === "needed") {
+        const service = readiness.provider.service?.name ?? readiness.provider.kind;
+        return {
+          problem: {
+            kind: "not-allowed",
+            message: translate(language, "meetings.fill.problem.notAllowed", { service }),
+            service,
+          },
+        };
+      }
+      const model = { providerId: readiness.provider.id, modelId: readiness.modelId };
+      const prepared = await chat.prepareModel(model);
+      return {
+        model,
+        local: chat.metered(model)?.billing === "free",
+        windowTokens: prepared.window?.tokens ?? null,
+      };
+    },
+    answers,
+    async supports({ claim, mindId, transcriptId, model }) {
+      const { folderId } = minds.get(mindId);
+      const result = await checks.checkClaim({
+        claim,
+        scope: folderId ? { folderIds: [folderId], tagIds: [], documentIds: [] } : null,
+        checked: { documentIds: [transcriptId] },
+        model,
+      });
+      return result.verdict === "supported";
+    },
+    checkpoint: (mindId) => checkpoints.save(mindId, "enhance"),
+    language: () => settings.get().language,
+    filled(meeting) {
+      const notifications = adapters.notifications;
+      if (!notifications) return;
+      let name = "";
+      try {
+        name = mindName(minds.get(meeting.mindId));
+      } catch {
+        name = "";
+      }
+      notifications.show(
+        {
+          title: translate(settings.get().language, "meetings.fill.notify", { meeting: name }),
+          body: "",
+        },
+        (windowIds) => mindShown(meeting.mindId, windowIds),
+        () => events.emit("meetings.notesShown", { mindId: meeting.mindId }),
+      );
+    },
+    log: adapters.log ?? silentLogger,
+  });
+  transcriptSaved = (meetingId) => meetingFill.transcriptSaved(meetingId);
+  meetingFill.resume();
+
   liveTranscriptOf = async (mindId) => {
     const meeting = meetings
       .list()
@@ -4097,7 +4178,13 @@ export function createCore(adapters: CoreAdapters): Core {
     startMeeting: async (input) => meetings.start(input),
     pauseMeeting: async (meetingId) => meetings.pause(meetingId),
     resumeMeeting: async (meetingId) => meetings.resume(meetingId),
-    stopMeeting: async (meetingId) => meetings.stop(meetingId),
+    stopMeeting: async (meetingId) => {
+      const stopped = meetings.stop(meetingId);
+      meetingFill.stopped(stopped.id);
+      return meetings.get(stopped.id);
+    },
+    fillMeetingNotes: async (meetingId) => meetingFill.retry(meetings.get(meetingId).id),
+    undoMeetingFill: async (meetingId) => meetingFill.undo(meetings.get(meetingId).id),
     deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
     retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
     listTranscriptionServices: () => cloudTranscription.list(),
@@ -4186,6 +4273,8 @@ export function createCore(adapters: CoreAdapters): Core {
       // What a Meeting has captured is saved before anything else stops.
       meetings.close();
       transcripts?.close();
+      // Notes being filled in are left as they were: the next start says so.
+      meetingFill.close();
       // Outside agents can't reach the core while it closes.
       void agents.close().catch((error: unknown) => console.error(error));
       // First, so stopping the Answers below starts no background work.
