@@ -248,9 +248,8 @@ test("removing the examples deletes the example Mind, its Documents and the copi
     .toBe("gone");
   await first.app.close();
 
-  // A first run happens once: the next launch doesn't make them again.
   const again = await launchApp(dataDir, { examples: true });
-  await expect(again.window.getByTestId("mind-none-open")).toBeVisible();
+  await expect(again.window.getByTestId("home")).toBeVisible();
   await expect(again.window.getByTestId("mind-list-item")).toHaveCount(0);
   await again.window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -580,6 +579,57 @@ test("a double-click on the ready Question asks it once, and Enter on it moves t
   await removeDataFolder(keyboard);
 });
 
+test("on a fresh install, a first checked Citation from the User's own file takes eight steps", async () => {
+  const notes = join(sources, "Harbour notes.md");
+  await writeFile(
+    notes,
+    "# Harbour notes\n\nThe harbour master publishes the tide tables every Monday morning.\n",
+  );
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  try {
+    await setWindowSize(app, window, 1440, 900);
+    await acceptPlainTextKeys(window);
+    await expect(window.getByTestId("mind-pane")).toBeVisible();
+    const taken: string[] = [];
+    const step = async (name: string, action: () => Promise<unknown>) => {
+      taken.push(name);
+      await action();
+    };
+
+    await step("drop the file", () =>
+      window.getByTestId("add-documents-input").setInputFiles([notes]),
+    );
+    await expect(
+      window.locator('[data-testid="document-list-item"][data-status="ready"]').filter({
+        hasText: "Harbour notes",
+      }),
+    ).toHaveCount(1);
+    await step("⌘J", () => window.keyboard.press("ControlOrMeta+j"));
+    await expect(window.getByTestId("composer-input")).toBeFocused();
+    await step("type the Question", () =>
+      window.keyboard.type("When does the harbour master publish the tide tables?"),
+    );
+    await step("Enter", () => window.keyboard.press("Enter"));
+    const card = window.getByTestId("model-setup");
+    await step("Paste an API key", () => pointAndClick(window, card.getByTestId("setup-key")));
+    const form = card.getByTestId("provider-form");
+    await expect(form.getByLabel(/^API key/)).toBeFocused();
+    await step("paste the key", () => window.keyboard.insertText("sk-ant-a-key-from-the-company"));
+    await step("Use this key", () => pointAndClick(window, form.getByTestId("provider-use-key")));
+    await step("Continue", () => continueSetup(window));
+
+    const citation = assistantAnswers(window).last().getByTestId("citation").first();
+    await expect(citation).toHaveAttribute("data-check", "found", { timeout: 20_000 });
+    await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
+      "aria-label",
+      /Harbour notes/,
+    );
+    expect(taken).toHaveLength(8);
+  } finally {
+    await app.close();
+  }
+});
+
 test("the steps can be hidden once all are done, and stay hidden", async () => {
   const first = await launchApp(dataDir, { examples: true });
   await useLocalChatModel(first.window);
@@ -591,6 +641,8 @@ test("the steps can be hidden once all are done, and stay hidden", async () => {
   await first.app.close();
 
   const again = await launchApp(dataDir, { examples: true });
+  await expect(again.window.getByTestId("home")).toBeVisible();
+  await again.window.getByTestId("mind-tab").click();
   await expect(again.window.getByTestId("example-banner")).toBeVisible();
   await expect(again.window.getByTestId("first-open-steps")).toHaveCount(0);
   await again.app.close();
@@ -836,7 +888,7 @@ test("the banner offers the other examples in an order picked once per install; 
 
   // The same order after a restart.
   const again = await launchApp(dataDir, { examples: true });
-  const credit = again.window.getByTestId("tab-title").first();
+  const credit = again.window.getByTestId("mind-tab").getByTestId("tab-title").first();
   await expect(credit).toHaveText("Draft: credit committee paper");
   await credit.click();
   await expect(again.window.getByTestId("first-open-steps")).toBeVisible();

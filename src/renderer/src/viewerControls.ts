@@ -5,11 +5,12 @@
  * from the group the User is in, and, not about the viewer, answer the Skill
  * picker without the system's dialog, add files and folders by path as a drop
  * would, or wait for, slow down and look at what moves, shorten how long an Answer
- * is silent before its line says how long it takes, or read the command registry
- * as data.
+ * is silent before its line says how long it takes, read the command registry
+ * as data, or give Home's Coming up its meetings.
  */
 import type { TestHooks } from "../../shared/testHooks";
 import { setSilentWaitMs } from "./answerWaitWords";
+import { useComingUp } from "./comingUp";
 import { menuEntries, menuKinds } from "./commands/menus";
 import { COMMAND_GROUPS, commands } from "./commands/registry";
 import { findable } from "./finding";
@@ -54,6 +55,7 @@ export function installTestHooks(): void {
       found: findable.all().map((kind) => kind.kind),
     }),
     setSilentWaitMs,
+    setComingUp: (meetings) => useComingUp.setState({ meetings }),
     motionRunning,
     setMotionSpeed,
     leavingCopies,
