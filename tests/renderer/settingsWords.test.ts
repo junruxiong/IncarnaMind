@@ -68,7 +68,7 @@ const ON_DEMAND = /\.(tip|details)$/;
 
 /** An error, a problem or a state a failure leaves: said where it happened, in as many words as it takes. */
 const ERROR =
-  /(\.error|\.problem|\.failed|\.expired|keyMissing|loadFailed|unreachable|unconfirmed|too-large)/;
+  /(\.error|\.problem|\.failed|\.expired|keyMissing|keyCharacter|loadFailed|unreachable|unconfirmed|too-large)/;
 
 /**
  * Consent facts: what goes where, who receives it, what a choice allows

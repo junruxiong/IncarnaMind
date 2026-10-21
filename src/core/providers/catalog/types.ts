@@ -153,7 +153,11 @@ export interface CatalogProvider {
   id: string;
   name: Localized;
   support: Support;
+  /** A best-effort provider the first-run key form offers too, as its key line says (#1375). */
+  firstRun?: boolean;
   group: "international" | "china" | "local" | "other";
+  /** A provider with a region in each (Kimi) is listed under the other heading too. */
+  alsoListedIn?: "international" | "china";
   adapter: Adapter;
   /**
    * Its API, one per region, the first the default. Empty for a server the
@@ -251,6 +255,12 @@ export interface ModelFacts {
   maxInput: number;
   /** The most it writes in one reply, in tokens. */
   maxOutput: number;
+  /**
+   * It refuses a thinking block once the request's tool list differs from the one the block was
+   * made with (Anthropic): the last step of an Answer keeps the Tools in its request and is told
+   * to call none, instead of choosing none, which drops them (#1344).
+   */
+  toolsEveryRequest: boolean;
   price: Price;
   /** How it cites, when that was measured or the server decides it (a small local model). */
   citing: Citing;

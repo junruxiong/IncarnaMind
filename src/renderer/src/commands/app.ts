@@ -36,6 +36,8 @@ import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
 import { formatCommands } from "./format";
 import { citationHandle, findHandle, readMindHandle, sidebarHandle } from "./handles";
+import { languageCommands } from "./language";
+import { libraryCommands } from "./library";
 import { linkCommands } from "./links";
 import { meetingHelpCommands } from "./meetingHelp";
 import { meetingCommands } from "./meetings";
@@ -98,8 +100,16 @@ const appCommands: readonly Command[] = [
     ...fromMenu("mind.new"),
     shortcut: { keys: MENU_COMMANDS["mind.new"].keys, also: "CmdOrCtrl+N" },
     group: "main",
+    top: 20,
     reversible: true,
     run: () => useAppStore.getState().createMind({ titled: true }),
+  },
+  {
+    id: "home.open",
+    label: "home.title",
+    group: "open",
+    reversible: true,
+    run: () => useAppStore.getState().openHome(),
   },
   {
     id: "word.import",
@@ -130,6 +140,8 @@ const appCommands: readonly Command[] = [
   ...tagCommands,
   ...linkedFolderCommands,
   ...deletedCommands,
+  ...libraryCommands,
+  ...languageCommands,
   ...answerCommands,
   ...citationCommands,
   ...tabCommands,
@@ -244,6 +256,7 @@ const appCommands: readonly Command[] = [
     label: "mindCheck.command",
     keywords: ["mindCheck.command.keywords"],
     group: "main",
+    top: 12,
     // It changes no words: its marks go with Check again, or when the sentence is edited.
     reversible: true,
     when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,

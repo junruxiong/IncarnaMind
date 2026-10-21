@@ -41,6 +41,7 @@ export function answerInstructions(): string {
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it; never tell the User to disregard an earlier Answer.",
+    '- Never send the reader to an earlier Answer for part of what you write ("covered in my earlier answer", "as above", "见上一条回答", "见上文"): someone who never saw this conversation may read it on a page, so write that part out.',
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
     "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
   ].join("\n");
@@ -129,11 +130,26 @@ export function workingCopyNote(original: string | null): string {
 }
 
 /**
+ * The example's Documents, by name, when the Mind in focus is an example's;
+ * empty for any other. Asked beside it about their own file, a model told the
+ * User it "has nothing to do with Northwind" (#1172).
+ */
+export function exampleNote(documents: readonly string[] | null): string {
+  if (documents === null) return "";
+  const names = documents.map((name) => `"${listedName(name)}"`).join(", ");
+  return `The Mind in <mind> is an example IncarnaMind made${names ? `, with Documents of its own (${names})` : ""}: none of it is the User's own work. Mention the example only when the Question is about it, never to say the User's Documents have nothing to do with it.`;
+}
+
+/**
  * Passages as the model reads them, from a search or given whole, with the
  * notes their text calls for: dates, the User's own workings, amounts in
  * brackets, and Documents that couldn't be read.
  */
-export function withPassageNotes(passages: string, unread: readonly UnreadFile[]): string {
+export function withPassageNotes(
+  passages: string,
+  unread: readonly UnreadFile[],
+  reading: readonly { name: string }[] = [],
+): string {
   return [
     passages,
     datedDocumentsNote(passages),
@@ -141,6 +157,7 @@ export function withPassageNotes(passages: string, unread: readonly UnreadFile[]
     notCitedNote(passages),
     bracketedAmountsNote(passages),
     unreadDocumentsNote(unread),
+    stillReadingNote(reading),
   ]
     .filter((part) => part !== "")
     .join("\n\n");
@@ -255,6 +272,13 @@ const CITED_SAYS_ONLY_ITS_QUOTE =
   '- A sentence with a Citation says only what its quote supports. Your inference, judgement or comparison goes in a sentence of its own with no marker, worded as a reading: "This suggests…" / "这意味着…".';
 
 /**
+ * A model read "54,000" in a UK contract as pounds and wrote "£54,000", cited (#1332): a
+ * currency, unit or scale the Document doesn't state reads as one it does.
+ */
+const FIGURES_AS_STATED =
+  '- A figure taken from a Passage keeps exactly the currency, unit and scale its Document gives it: "salary is 54,000" stays "54,000 (currency not stated)" / "54,000（未注明币种）", never "£54,000"; "2 percentage points" never becomes "2%".';
+
+/**
  * A premise the Passages don't support, and Passages that disagree (#548):
  * what a careful reader catches. The examples are in English and Chinese, so
  * an Answer in either has its model. `cite`: the Answer cites with markers.
@@ -349,6 +373,7 @@ const CALCULATE = [
   'Never work out a number yourself, not even a simple one: for any number the Answer gives that isn\'t written in a Passage (a difference, sum, average, ratio, share, growth rate, CAGR, change in percentage points, conversion between 万 and 亿 or millions and billions, or which of two is larger), call calculate and write its marker in the number\'s place, with no number or unit beside it: "grew [=1] in 2025", not "grew 20.4% [=1]".',
   '- Name each input\'s number as it is written in its quote, labelled with what it is and its period; give a table heading\'s unit line ("单位：万元", "in millions") as unitQuote. Inputs come in base units with that scale applied: give scale ("亿", "billion") to show another, never convert in the formula.',
   "- A number copied as it is from a Passage is cited with [^n]; calculate is only for numbers you work out.",
+  "- If calculate refuses a figure, fix what its reply says and call it again; never write that you couldn't calculate a number whose inputs you cited.",
 ].join("\n");
 
 /** Structured output's `calculations`, for a model offered them: what `CALCULATE` is to the Tool loop. */
@@ -419,6 +444,18 @@ export function unreadDocumentsNote(unread: readonly UnreadFile[]): string {
 }
 
 /**
+ * A reminder after a search's Passages when Documents in the Search scope are still being read
+ * (#1503): no search finds anything in them yet, so a model that finds nothing says they are
+ * being read, never that a Document isn't there.
+ */
+export function stillReadingNote(reading: readonly { name: string }[]): string {
+  if (reading.length === 0) return "";
+  const named = reading.slice(0, NAMED_UNREAD).map((file) => `"${listedName(file.name)}"`);
+  const more = reading.length - named.length;
+  return `IncarnaMind is still reading ${reading.length === 1 ? "a Document" : `${reading.length} Documents`} in the search: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. No Passage comes from ${reading.length === 1 ? "it" : "them"} yet. If the Passages don't clearly answer the Question and it may be about ${reading.length === 1 ? "it" : "one of them"}, say that ${reading.length === 1 ? "it is" : "they are"} still being read and to ask again when ${reading.length === 1 ? "it's" : "they're"} ready. Never say ${reading.length === 1 ? "it doesn't exist or wasn't added" : "they don't exist or weren't added"}, and never take another Document's figure for what ${reading.length === 1 ? "it" : "they"} would say.`;
+}
+
+/**
  * How many Documents there are and what they are called, so the model can
  * tell which ones a Question means ("compare A with B") and say which there
  * are. Past `LISTED_DOCUMENTS`, the rest are counted.
@@ -476,6 +513,7 @@ export function documentInstructions(
         "- Write nothing before your Tool calls: only the Answer, after them.",
         notCovered(true),
         CITED_SAYS_ONLY_ITS_QUOTE,
+        FIGURES_AS_STATED,
         readingRules(true),
         ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
@@ -499,6 +537,7 @@ export function documentInstructions(
         ...(calculate ? [CALCULATIONS] : []),
         notCovered(true),
         CITED_SAYS_ONLY_ITS_QUOTE,
+        FIGURES_AS_STATED,
         readingRules(true),
       ].join("\n");
     case "none":
@@ -512,6 +551,7 @@ export function documentInstructions(
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),
+        FIGURES_AS_STATED,
         readingRules(false),
       ].join("\n");
   }

@@ -1,12 +1,14 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import type {
-  CoreEventName,
-  CoreEvents,
-  Document,
-  DocumentGroupAssignment,
-  Folder,
-  LibrarySnapshot,
-  Mind,
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  type CoreEventName,
+  type CoreEvents,
+  DEFAULT_ASSISTANT,
+  type Document,
+  type DocumentGroupAssignment,
+  type Folder,
+  type LibrarySnapshot,
+  type Mind,
+  type WindowLayout,
 } from "../../src/core/api";
 import type { Translate } from "../../src/renderer/src/objects";
 import { isFreed } from "../helpers/freed";
@@ -306,11 +308,14 @@ describe("changes the User can take back", () => {
     await useUndo.getState().undo();
     expect(method("restore")).toHaveBeenCalledWith([{ kind: "document", id: "a" }]);
     await useUndo.getState().redo();
-    expect(method("deleteDocument")).toHaveBeenCalledTimes(2);
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(2);
   });
 
-  test("several Documents deleted together are one change, said by their count", async () => {
+  // protects=deleting several Documents is one call to the core and one change, said by their count (#1349); fails_when=the core is asked once per Document, which took 90 s for 1,700; no_claim=how long the core takes.
+  test("several Documents deleted together are one call and one change, said by their count", async () => {
     await useAppStore.getState().deleteDocuments(["a", "b"]);
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(1);
+    expect(method("deleteDocuments")).toHaveBeenCalledWith(["a", "b"]);
     expect(said(top())).toBe("Moved 2 Documents to Recently deleted");
     expect(named(top())).toBe("Delete 2 Documents");
     expect(useAppStore.getState().documents.map((each) => each.id)).toEqual(["c"]);
@@ -319,6 +324,82 @@ describe("changes the User can take back", () => {
       { kind: "document", id: "a" },
       { kind: "document", id: "b" },
     ]);
+  });
+
+  const slow = () => {
+    let finish: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    return { done, finish };
+  };
+  const note = () => useUndo.getState().line?.note?.(words);
+  const ids = () => useAppStore.getState().documents.map((each) => each.id);
+
+  // protects=a delete still going after a second says so where its result will show, until it is done, and its Undo puts every row back at once, in its place, before the core answers (#1349); fails_when=nothing shows meanwhile, the note outlives the delete, or the rows wait for the core; no_claim=how long the core takes.
+  test("a delete that takes longer than a second says so until it is done, and its Undo puts the rows back at once", async () => {
+    const deleting = slow();
+    method("deleteDocuments").mockReturnValue(deleting.done);
+    const deleted = useAppStore.getState().deleteDocuments(["a", "b"]);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(note()).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(note()).toBe("Moving 2 Documents to Recently deleted…");
+    deleting.finish();
+    await deleted;
+    expect(said(useUndo.getState().line?.change)).toBe("Moved 2 Documents to Recently deleted");
+    expect(ids()).toEqual(["c"]);
+
+    const restoring = slow();
+    method("restore").mockReturnValue(restoring.done);
+    const undone = useUndo.getState().undo();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ids()).toEqual(["a", "b", "c"]);
+    restoring.finish();
+    await undone;
+    expect(ids()).toEqual(["a", "b", "c"]);
+  });
+
+  // protects=an Undo the core refuses takes the rows it put back out again, and says why; fails_when=the rows stay though the Documents are still deleted; no_claim=none beyond protects.
+  test("an Undo the core refuses takes the rows out again", async () => {
+    await useAppStore.getState().deleteDocuments(["a", "b"]);
+    method("restore").mockRejectedValue(new Error("The folder was unlinked."));
+    await useUndo.getState().undo();
+    expect(ids()).toEqual(["c"]);
+    expect(useUndo.getState().line?.problem?.step).toBe("undo");
+  });
+
+  // protects=a second ⌘⌫ on the same Documents while the first delete runs finds nothing left to delete, and says nothing wrong (#1349); fails_when=the core is asked twice and the second fails with "There is no such Document"; no_claim=none beyond protects.
+  test("a second delete of the same Documents during the first does nothing", async () => {
+    const deleting = slow();
+    method("deleteDocuments").mockReturnValue(deleting.done);
+    const first = useAppStore.getState().deleteDocuments(["a", "b"]);
+    const second = useAppStore.getState().deleteDocuments(["a", "b"]);
+    deleting.finish();
+    await first;
+    await second;
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(1);
+    expect(said(useUndo.getState().line?.change)).toBe("Moved 2 Documents to Recently deleted");
+  });
+
+  // protects=⌘Z pressed while a delete is still running takes back that delete once it lands, never an earlier change (#1349); fails_when=the earlier change is undone and the Documents stay deleted; no_claim=none beyond protects.
+  test("⌘Z pressed while a delete is running takes back that delete, not an earlier change", async () => {
+    method("renameMind").mockResolvedValue({ ...mind, title: "Budget" });
+    await useAppStore.getState().renameMind("m", "Budget");
+    const deleting = slow();
+    method("deleteDocuments").mockReturnValue(deleting.done);
+    const deleted = useAppStore.getState().deleteDocuments(["a", "b"]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const undone = useUndo.getState().undo();
+    deleting.finish();
+    await deleted;
+    await undone;
+    expect(method("restore")).toHaveBeenCalledWith([
+      { kind: "document", id: "a" },
+      { kind: "document", id: "b" },
+    ]);
+    expect(method("renameMind")).toHaveBeenCalledTimes(1);
+    expect(ids()).toEqual(["a", "b", "c"]);
   });
 
   test("a Tag added is undone by putting each link back as it was, with who chose it", async () => {
@@ -435,6 +516,73 @@ describe("making a Mind", () => {
     }
     expect(method("createMind")).toHaveBeenCalledWith({ title: "Tides", headed: true });
     expect(method("deleteMind")).not.toHaveBeenCalled();
+  });
+
+  describe("its Folder, when none is given (#1362)", () => {
+    const inFolder = { ...made, id: "m", folderId: "contracts" };
+    const alone = (folderId: string) => ({ folderIds: [folderId], tagIds: [], documentIds: [] });
+    const front = (mind: Mind | null) =>
+      useAppStore.setState({
+        minds: mind ? [mind] : [],
+        layout: {
+          groups: [
+            {
+              id: "group",
+              tabs: mind
+                ? [
+                    {
+                      id: "tab",
+                      item: { kind: "mind", mindId: mind.id },
+                      preview: false,
+                      pinned: false,
+                      place: null,
+                      opened: 0,
+                    },
+                  ]
+                : [],
+              activeTabId: mind ? "tab" : null,
+              width: 1,
+            },
+          ],
+          focusedGroupId: "group",
+          reopenable: 0,
+          assistant: DEFAULT_ASSISTANT,
+        } satisfies WindowLayout,
+      });
+    const madeIn = () => method("createMind").mock.lastCall?.[0];
+
+    afterEach(() => useAppStore.setState({ layout: null }));
+
+    test("it is the Folder of the Mind in front, and no Folder when none is", async () => {
+      front(inFolder);
+      await useAppStore.getState().createMind({ titled: true });
+      expect(madeIn()).toEqual({ headed: true, folderId: "contracts" });
+
+      front(null);
+      await useAppStore.getState().createMind({ titled: true });
+      expect(madeIn()).toEqual({ headed: true });
+    });
+
+    test("it is the one Folder a scope names, over the Folder of the Mind in front", async () => {
+      front(inFolder);
+      await useAppStore.getState().createMind({ startQuestion: true, scope: alone("board") });
+      expect(madeIn()).toEqual({ folderId: "board" });
+
+      front(inFolder);
+      await useAppStore
+        .getState()
+        .createMind({ startQuestion: true, scope: { ...alone("board"), tagIds: ["urgent"] } });
+      expect(madeIn()).toEqual({ folderId: "contracts" });
+    });
+
+    test("a Folder given, or none (null), is kept, whichever Mind is in front", async () => {
+      front(inFolder);
+      await useAppStore.getState().createMind({ titled: true, folderId: "board" });
+      expect(madeIn()).toEqual({ headed: true, folderId: "board" });
+
+      await useAppStore.getState().createMind({ titled: true, folderId: null });
+      expect(madeIn()).toEqual({ headed: true });
+    });
   });
 
   test("a Mind made leaves the line of the change before it, and that change, as they were", async () => {
@@ -789,6 +937,7 @@ describe("making a Folder", () => {
 
 describe("loading keeps a list the core pushed after reading it", () => {
   beforeEach(() => {
+    method("listMinds").mockResolvedValue([]);
     method("getSettings").mockResolvedValue({ device: { gettingStarted: { askedOwn: false } } });
     method("getExamples").mockResolvedValue({
       group: "credit",

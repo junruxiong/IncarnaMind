@@ -5,7 +5,17 @@
  * own net.
  */
 import { describe, expect, test } from "vitest";
-import { chineseShare, type RequestOutcome, requestFailures } from "../../eval/everyday/checks";
+import {
+  chineseShare,
+  givenToMindsOf,
+  guardLosses,
+  guardTook,
+  pointersIn,
+  type RequestOutcome,
+  requestFailures,
+  rewrittenLater,
+  takenOut,
+} from "../../eval/everyday/checks";
 import { judgeClaims, verdictIn } from "../../eval/everyday/judge";
 import { languageRates, rowRates } from "../../eval/everyday/rates";
 import { ASKED_AGAIN } from "../../eval/everyday/reasks";
@@ -262,25 +272,196 @@ describe("Only what was asked changes", () => {
   });
 });
 
-describe("Asked after the example's Answer", () => {
-  const reply = (text: string) =>
+describe("Standing on its own, and the example unasked", () => {
+  const failed = (text: string) =>
     requestFailures(
       outcome({
-        expected: { write: false, cite: false, coverAll: false, noEarlier: true },
+        expected: {
+          write: false,
+          cite: false,
+          coverAll: false,
+          noEarlier: true,
+          standsAlone: true,
+          noExample: true,
+        },
         answer: { text, citations: [], toolCalls: [], steps: null },
       }),
     ).map((failure) => failure.kind);
+  const lost = (
+    text: string,
+    addedToPage?: string,
+    givenToMinds?: string[],
+    writtenInMinds?: string[],
+  ) =>
+    requestFailures(
+      outcome({
+        expected: { write: false, cite: false, coverAll: false },
+        answer: { text, citations: [], toolCalls: [], steps: null },
+        addedToPage,
+        givenToMinds: givenToMinds?.map((content) => ({ content, landed: true })),
+        writtenInMinds,
+      }),
+    ).map((failure) => failure.kind);
 
-  // protects=a reply that goes back to an earlier Answer or the example fails, in English and in Chinese, and one about the Question doesn't; fails_when=it passes, or an ordinary reply that says "leverages" or "忽略" fails; no_claim=none beyond protects.
-  test("a reply about an earlier Answer or the example fails", () => {
-    expect(reply("GraphST leverages spatial information to ignore the noise.")).toEqual([]);
-    expect(reply("GraphST 利用空间信息，忽略了噪声。")).toEqual([]);
-    expect(reply("It claims this. My first answer cited a facilities agreement.")).toEqual([
-      "earlier",
+  // protects=asked after the example's Answer, a reply that talks about an earlier Answer fails, in English and in Chinese, and one that says it all again doesn't; fails_when=it passes, or an ordinary reply that says "earlier" or "忽略" fails; no_claim=none beyond protects.
+  test("a reply that talks about an earlier Answer fails", () => {
+    expect(failed("GraphST leverages spatial information to ignore the noise.")).toEqual([]);
+    expect(failed("GraphST 利用空间信息，忽略了噪声。")).toEqual([]);
+    expect(failed("An earlier study found the same effect.")).toEqual([]);
+    expect(failed("Its results are covered in my earlier answer.")).toEqual(["earlier"]);
+    expect(failed("Its datasets are listed above.")).toEqual(["earlier"]);
+    expect(failed("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual(["earlier"]);
+    expect(failed("居家办公的规定见上一条回答。")).toEqual(["earlier"]);
+    expect(failed("数据集见上文。")).toEqual(["earlier"]);
+  });
+
+  // protects=the pointers counted in what goes into a page are its sentences that point back, in English and in Chinese; fails_when=one is missed, or an ordinary sentence is counted; no_claim=none beyond protects.
+  test("pointers left in a page are counted by sentence", () => {
+    expect(
+      pointersIn(
+        "## Summary\n\nIts results are strong. They are covered in my earlier answer.\n\n- 数据集见上文。\n- An earlier study found the same effect.",
+      ),
+    ).toEqual(["They are covered in my earlier answer.", "数据集见上文。"]);
+    expect(
+      pointersIn("Its MAE is 1.1285 in Chicago, as covered in my earlier answer."),
+    ).toHaveLength(1);
+  });
+
+  // protects=the reply is held to the gate as Add to note puts it: a pointer paragraph taken out passes, and a correction or a pointer cut from inside a paragraph fails as content lost; fails_when=lost content passes, or a pointer taken out fails; no_claim=none beyond protects.
+  test("content left out of the reply as Add to note puts it fails", () => {
+    const correction = "I made an error in my previous answer and the total excludes VAT.";
+    expect(lost(`Pay is 5k. ${correction}`, "Pay is 5k.")).toEqual(["content-lost"]);
+    expect(lost("Pay is 5k.\n\nSee my earlier answer.", "Pay is 5k.")).toEqual([]);
+    expect(lost("Pay is 5k. See my earlier answer.", "Pay is 5k.")).toEqual(["content-lost"]);
+  });
+
+  // protects=the gate holds the guard to its own input and output: a Block it took that says more than a pointer, or a Block it changed, is content lost; a pointer paragraph it took is not; fails_when=either loss is missed, or a kept Block is taken for changed; no_claim=none beyond protects.
+  test("the guard may take out only a pointer paragraph, and change nothing", () => {
+    expect(guardTook("Pay is 5k.\n\nSee my earlier answer.", "Pay is 5k.")).toEqual({
+      removed: ["See my earlier answer."],
+      changed: [],
+    });
+    expect(guardTook("**Total: £45,000**\n\nSee above.\n\nVAT is extra.", "VAT is extra.")).toEqual(
+      { removed: ["**Total: £45,000**", "See above."], changed: [] },
+    );
+    expect(
+      guardTook("Pay is 5k. See above.\n\nBonus is 1k.", "Pay is 5k.\n\nBonus is 1k."),
+    ).toEqual({ removed: ["Pay is 5k. See above."], changed: ["Pay is 5k."] });
+  });
+
+  // protects=the gate lets the guard take out only a paragraph of one line and one sentence that is only a pointer: a list item, a heading or quote with its pointer, two lines, a table row, code, or a claim before the pointer, taken out, each fails, in English and Chinese; fails_when=a wrong removal passes, or a true one fails; no_claim=none beyond protects.
+  test("the gate refuses any removal but a pointer paragraph", () => {
+    const own = "Pay is 5k a month.";
+    for (const wrong of [
+      "- See above.",
+      "- Holiday: see my earlier answer.",
+      "## Pay\nSee my earlier answer.",
+      "> As mentioned above.",
+      "Covered above.\nSee my earlier answer.",
+      "Holiday is unpaid. See my earlier answer.",
+      "| Notice | See my earlier answer. |",
+      "```\nSee above.\n```",
+      "1. See my earlier answer.",
+      "年假不带薪。见上一条回答。",
+      "- 见上一条回答。",
+      "## 薪酬\n见上一条回答。",
+      "> 如上所述。",
+      "如上所述。\n详见上文。",
+    ]) {
+      expect(guardLosses(`${own}\n\n${wrong}`, own)).toEqual([wrong]);
+    }
+    for (const pointer of [
+      "See my earlier answer.",
+      "Notice, holiday and home working are covered in my earlier answer.",
+      "居家办公的规定见上一条回答。",
+      "同上。",
+      "具体内容请参考上文。",
+    ]) {
+      expect(guardLosses(`${own}\n\n${pointer}`, own)).toEqual([]);
+    }
+  });
+
+  // protects=a copy of the last Answer into a Mind (answer: true) is held to the gate, read as Add to note reads it, and its `content` set aside as the app sets it aside; edit_mind's own content is held too; fails_when=a copy goes ungated or the wrong text is gated; no_claim=none beyond protects.
+  test("a copy of the last Answer is gated as Add to note reads it", () => {
+    const earlier = { text: "Pay is 5k.\n\nSee my earlier answer.", question: "Summarise this" };
+    const call = (tool: string, input: Record<string, unknown>): AnswerToolCall => ({
+      ...created,
+      tool,
+      input,
+    });
+    const given = givenToMindsOf(
+      [
+        call("add_to_mind", { answer: true, content: "set aside" }),
+        call("create_mind", { answer: true }),
+        call("edit_mind", { content: "Pay is 6k." }),
+        call("search_documents", { query: "pay" }),
+      ],
+      earlier,
+    );
+    expect(given).toEqual([
+      { content: earlier.text, question: "Summarise this", landed: true },
+      { content: earlier.text, question: "Summarise this", landed: true },
+      { content: "Pay is 6k.", landed: true },
     ]);
-    expect(reply("It claims this. Please disregard the 3.5x leverage limit.")).toEqual(["earlier"]);
-    expect(reply("它的主张是这样。另外，上一个回答讲的是租赁合同。")).toEqual(["earlier"]);
-    expect(reply("它的主张是这样。请忽略之前的杠杆率数字。")).toEqual(["earlier"]);
+    const copied = outcome({
+      expected: { write: true, cite: false, coverAll: false },
+      givenToMinds: [given[0] ?? { content: "", landed: false }],
+    });
+    expect(takenOut(copied)).toEqual({ removed: ["See my earlier answer."], lost: [] });
+    const askedAbout = outcome({
+      expected: { write: true, cite: false, coverAll: false },
+      givenToMinds: [
+        { content: earlier.text, question: "Did your earlier answer cover it?", landed: true },
+      ],
+    });
+    expect(takenOut(askedAbout)).toEqual({ removed: [], lost: [] });
+    expect(givenToMindsOf([call("add_to_mind", { answer: true })], null)).toEqual([]);
+  });
+
+  // protects=through the real guard, what each Mind tool's content loses is only pointer paragraphs, as the evaluation reads them in English and Chinese (同上, 参考上文 included), and a sentence the model or the app rewrote after the guard is counted apart, not as lost; fails_when=a correct removal reads as lost, or a later rewrite fails the guard; no_claim=none beyond protects.
+  test("what a call gave to write into a Mind, through the guard", () => {
+    for (const pointer of [
+      "See my earlier answer.",
+      "年假见上文。",
+      "同上。",
+      "具体内容请参考上文。",
+    ]) {
+      expect(lost("Done.", undefined, [`Pay is 5k.\n\n${pointer}`], ["Pay is 5k."])).toEqual([]);
+    }
+    const rewritten = outcome({
+      expected: { write: true, cite: false, coverAll: false },
+      givenToMinds: [{ content: "Key results. Highlights are below[^8]:", landed: true }],
+      writtenInMinds: ["Key results. All of them."],
+    });
+    expect(requestFailures(rewritten).map((failure) => failure.kind)).not.toContain("content-lost");
+    expect(rewrittenLater(rewritten)).toEqual([{ given: "Highlights are below[^8]:", now: null }]);
+    const cut = outcome({
+      expected: { write: true, cite: false, coverAll: false },
+      givenToMinds: [
+        { content: "It fuses mobility and POIs, which geography can miss [^2].", landed: true },
+        { content: "A call the app refused, which wrote nothing.", landed: false },
+      ],
+      writtenInMinds: ["Pay is 5k.", "It fuses mobility and POIs."],
+    });
+    expect(rewrittenLater(cut)).toEqual([
+      {
+        given: "It fuses mobility and POIs, which geography can miss [^2].",
+        now: "It fuses mobility and POIs.",
+      },
+    ]);
+  });
+
+  // protects=a reply about the User's own Documents that mentions the example fails, in English and in Chinese; fails_when=it passes; no_claim=none beyond protects.
+  test("a reply that mentions the example fails", () => {
+    expect(failed("It claims this, and has nothing to do with Northwind.")).toEqual(["example"]);
+    expect(failed("It claims this. Please disregard the 3.5x leverage limit.")).toEqual([
+      "example",
+    ]);
+    expect(failed("It claims this. My first answer cited a facilities agreement.")).toEqual([
+      "earlier",
+      "example",
+    ]);
+    expect(failed("它的主张是这样。请忽略之前的杠杆率数字。")).toEqual(["earlier", "example"]);
   });
 });
 
@@ -351,6 +532,45 @@ describe("The Question's language (#892, #1273)", () => {
       "The contract says “合同期限为三年，自起始日期算起。” which is three years from the start date.";
     expect(chineseShare(quoting)).toBe(0);
     expect(summary(quoting, "en")).toEqual([]);
+  });
+});
+
+describe("A figure the numbers give is calculated (#1444)", () => {
+  const asked = (text: string, shown: string[]) =>
+    requestFailures(
+      outcome({
+        expected: { write: false, cite: true, coverAll: false, figure: /11\.73亿美元/ },
+        answer: {
+          text,
+          citations: [citation("reserves", 1)],
+          toolCalls: [],
+          steps: null,
+          figures: shown.map((each) => ({ shown: each })),
+        },
+        scoped: [{ id: "reserves", name: "官方储备资产（2026年）" }],
+        citedInMinds: [],
+      }),
+    );
+
+  // protects=an Answer that gives both cited figures and says it couldn't work out their difference fails twice, for the missing figure and for giving up; fails_when=it passes; no_claim=the figure's value.
+  test("an Answer with no figure that gives up on the difference fails", () => {
+    const failures = asked(
+      "9月末为34002.51亿美元[^1]。我没能算出两者的差额，所以这里不给具体数字。",
+      [],
+    );
+    expect(failures).toEqual([
+      { kind: "no-figure", wanted: "11\\.73亿美元", shown: [] },
+      { kind: "gave-up", said: "我没能算出两者的差额，所以这里不给具体数字。" },
+    ]);
+  });
+
+  test("an English Answer that says it couldn't calculate it fails; one with the figure passes", () => {
+    expect(
+      asked("I couldn't calculate the change, so I haven't worked out the difference.", [])
+        .map((each) => each.kind)
+        .sort(),
+    ).toEqual(["gave-up", "no-figure"]);
+    expect(asked("增加了11.73亿美元。", ["11.73亿美元"])).toEqual([]);
   });
 });
 

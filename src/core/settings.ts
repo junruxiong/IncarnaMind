@@ -8,6 +8,9 @@ import {
   EXPORT_FORMATS,
   type ExportPreferences,
   type GettingStarted,
+  MARK_AI_TEXT_CHOICES,
+  MAX_MONTHLY_CAP,
+  type MarkAiTextChoice,
   MOTION_PREFERENCES,
   type MonthlyCap,
   type MotionPreference,
@@ -61,14 +64,31 @@ const hasOnly = (value: unknown, keys: readonly string[]): value is Record<strin
 const isQuestionsOption = (value: unknown) =>
   hasOnly(value, ["includeQuestions"]) && isBoolean(value.includeQuestions);
 
-const WORD_CHOICES = ["trackChanges", "markAiText", "commentFailedChecks"] as const;
+const WORD_SWITCHES = ["trackChanges", "commentFailedChecks"] as const;
 
-/** Word's choices of #107 came later: choices saved before them have none, and read as the defaults. */
+const isMarkAiTextAnswer = (value: unknown): value is MarkAiTextChoice | null =>
+  value === null || MARK_AI_TEXT_CHOICES.some((choice) => choice === value);
+
+/**
+ * Word's choices of #107 came later: choices saved before them have none, and read as the
+ * defaults. Marking AI text was a switch before it became a question (#1380), so a boolean is
+ * still read, as `markAiTextRead` says.
+ */
 const isWordOption = (value: unknown) =>
   isQuestionsOption(value) ||
-  (hasOnly(value, ["includeQuestions", ...WORD_CHOICES]) &&
+  (hasOnly(value, ["includeQuestions", "markAiText", ...WORD_SWITCHES]) &&
     isBoolean(value.includeQuestions) &&
-    WORD_CHOICES.every((choice) => isBoolean(value[choice])));
+    WORD_SWITCHES.every((choice) => isBoolean(value[choice])) &&
+    (isBoolean(value.markAiText) || isMarkAiTextAnswer(value.markAiText)));
+
+/**
+ * The switch was on by default, so a saved "on" was never an answer: the question is still to be
+ * asked. A saved "off" was a choice not to mark.
+ */
+function markAiTextRead(saved: unknown): MarkAiTextChoice | null {
+  if (isMarkAiTextAnswer(saved)) return saved;
+  return saved === false ? "leave" : null;
+}
 
 const SHARE_PAGE_CHOICES = ["includeQuestions", "citationCards", "checkedLine"] as const;
 
@@ -101,12 +121,13 @@ const isExportPreferences = (value: unknown): value is ExportPreferences => {
   );
 };
 
-/** The Word choices on by default (#107), so a file says what IncarnaMind changed and wrote. */
+/** The Word switches on by default (#107), so a file says what IncarnaMind changed and checked. */
 const WORD_DEFAULTS: Omit<WordExportPreferences, "includeQuestions"> = {
   trackChanges: true,
-  markAiText: true,
+  markAiText: null,
   commentFailedChecks: true,
 };
+
 /** A cap of up to a million a month, in dollars or yuan. */
 const isMonthlyCap = (value: unknown): value is MonthlyCap =>
   isRecord(value) &&
@@ -114,7 +135,7 @@ const isMonthlyCap = (value: unknown): value is MonthlyCap =>
   typeof value.amount === "number" &&
   Number.isFinite(value.amount) &&
   value.amount >= 0 &&
-  value.amount <= 1_000_000 &&
+  value.amount <= MAX_MONTHLY_CAP &&
   (value.currency === "USD" || value.currency === "CNY");
 
 const userScope: Scope<UserSettings> = {
@@ -191,6 +212,7 @@ const deviceScope: Scope<DeviceSettings> = {
     sidebarHidden: false,
     chatSetupDismissed: false,
     sandboxNoticeDismissed: false,
+    openedBefore: false,
     gettingStarted: {
       started: false,
       citationChecked: false,
@@ -209,12 +231,14 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingPanelHidden: true,
     meetingHelpKeys: {},
     motion: "system",
+    lastChatModel: null,
   },
   validators: {
     sidebarWidth: isPaneWidth,
     sidebarHidden: isBoolean,
     chatSetupDismissed: isBoolean,
     sandboxNoticeDismissed: isBoolean,
+    openedBefore: isBoolean,
     gettingStarted: isGettingStarted,
     skillScriptsEnabled: isBoolean,
     skillScriptTimeoutSeconds: isScriptTimeout,
@@ -229,6 +253,7 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingHelpKeys: isHelpKeys,
     motion: (value): value is MotionPreference =>
       MOTION_PREFERENCES.some((preference) => preference === value),
+    lastChatModel: isModelSetting,
   },
 };
 
@@ -313,7 +338,11 @@ export function createSettings(
     const stored: Partial<ExportPreferences> = user.exportOptions;
     user.exportOptions = {
       ...user.exportOptions,
-      docx: { ...WORD_DEFAULTS, ...user.exportOptions.docx },
+      docx: {
+        ...WORD_DEFAULTS,
+        ...user.exportOptions.docx,
+        markAiText: markAiTextRead(user.exportOptions.docx.markAiText),
+      },
       html: stored.html ?? { includeQuestions: false },
       "share-page": stored["share-page"] ?? SHARE_PAGE_DEFAULTS,
     };

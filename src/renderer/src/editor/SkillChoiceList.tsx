@@ -21,6 +21,7 @@ export function SkillChoiceList({
   query,
   onChoose,
   onResearch,
+  researchHint,
   onManage,
   id,
   onSelect,
@@ -33,6 +34,8 @@ export function SkillChoiceList({
   onChoose(name: string): void;
   /** "Research…", when it can be chosen. */
   onResearch?(): void;
+  /** What Research does with the composer's model: the web and the Library, or the Library only and why. */
+  researchHint?: string;
   /** "Manage Skills…": Settings → Skills. */
   onManage(): void;
   /** The listbox's id, and its options' (`${id}-${index}`). */
@@ -47,7 +50,7 @@ export function SkillChoiceList({
         {
           id: RESEARCH_ID,
           label: "research.command",
-          hint: t("research.command.hint"),
+          hint: researchHint ?? t("research.command.hint"),
           keywords: ["deep", "web", "sources"],
           icon: null,
           run: () => undefined,

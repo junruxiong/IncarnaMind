@@ -10,7 +10,8 @@
  * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
  * Tools and structured output, as a small server model does, so its Answers have no Citations.
  * A Document whose text says "slowly" takes a moment to tag or organize; one whose text says "unreachable"
- * can't reach the model the first time it is tagged (nor on the retry that follows), and one that says
+ * can't reach the model the first time it is tagged or organized (nor on the retry that follows; one that
+ * says "stays unreachable" never can), and one that says
  * "rate-limited" meets its rate limit.
  */
 
@@ -22,7 +23,7 @@ import { isCell } from "./cells";
 import { fakeClaims, findsClaims } from "./claims";
 import { fakeConfirm } from "./confirm";
 import { editParts, fakeEdit } from "./edit";
-import { fakePlan } from "./plan";
+import { asksForPlan, fakePlan } from "./plan";
 import {
   type GenerateOptions,
   lastQuestion,
@@ -47,6 +48,8 @@ const WORD_DELAY_MS = 60;
 /** For a Question asked "slowly": the wait before each step, and between two words of the Answer. */
 const SLOW_STEP_MS = 1200;
 const SLOW_WORD_MS = 250;
+/** An Edit with AI asked "forever" writes nothing until it is stopped, or this long. */
+const HOLD_MS = 120_000;
 /** Between two words of Edit with AI's new text: a passage takes a moment, not seconds. */
 const EDIT_WORD_MS = 10;
 
@@ -126,6 +129,15 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           isRetryable: true,
         });
       }
+      // A model id ending "-always-thinks" thinks through its whole reply to a plan, as one with no off switch may (#1369).
+      if (spec.modelId.endsWith("-always-thinks") && asksForPlan(options)) {
+        return {
+          content: [{ type: "text", text: "" }],
+          finishReason: { unified: "length", raw: undefined },
+          usage: USAGE,
+          warnings: [],
+        };
+      }
       return {
         content: [
           {
@@ -184,6 +196,15 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
           if (!part) {
             controller.close();
             return;
+          }
+          if (edit?.holds && part.type === "stream-start") {
+            await new Promise<void>((resolve) => {
+              const timer = setTimeout(resolve, HOLD_MS);
+              abortSignal?.addEventListener("abort", () => {
+                clearTimeout(timer);
+                resolve();
+              });
+            });
           }
           if (slow && part.type === "stream-start") await wait(SLOW_STEP_MS);
           if (part.type === "text-delta" || part.type === "tool-input-delta") {

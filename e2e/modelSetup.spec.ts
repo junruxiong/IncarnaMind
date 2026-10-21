@@ -90,24 +90,24 @@ const WORDS = {
     title: "Choose your AI",
     chatgpt: "Plus or Pro · no key needed",
     sends: "Sends your questions and document text to OpenAI. · Details",
-    key: "OpenAI, Anthropic, Google, DeepSeek and more",
+    key: "OpenAI, Anthropic, Google, DeepSeek, Kimi and more",
   },
   "zh-CN": {
     title: "选择你的 AI",
     chatgpt: "Plus 或 Pro（中国大陆不可用）· 无需密钥",
     sends: "会把你的问题和文档内容发送给 OpenAI。 · 详情",
-    key: "OpenAI、Anthropic、Google、DeepSeek 等",
+    key: "DeepSeek、通义千问、Kimi、智谱 GLM 等",
   },
 } as const;
 
-/** One line of text: no taller than its line height, with room for rounding. */
-async function expectOneLine(line: Locator): Promise<void> {
+/** At most `lines` lines of text, with room for rounding. */
+async function expectLines(line: Locator, lines = 1): Promise<void> {
   const [box, lineHeight] = await Promise.all([
     line.boundingBox(),
     line.evaluate((element) => Number.parseFloat(getComputedStyle(element).lineHeight)),
   ]);
   if (!box) throw new Error("The line isn't laid out.");
-  expect(box.height).toBeLessThan(lineHeight * 1.5);
+  expect(box.height).toBeLessThan(lineHeight * (lines + 0.5));
 }
 
 for (const [width, height] of [
@@ -130,8 +130,8 @@ for (const [width, height] of [
         await expect(card.getByTestId("setup-chatgpt-sends").locator("p")).toHaveText(words.sends);
         await expect(card.getByTestId("setup-key-for")).toHaveText(words.key);
         if (width === 1440) {
-          await expectOneLine(card.getByTestId("setup-chatgpt-line"));
-          await expectOneLine(card.getByTestId("setup-key-for"));
+          await expectLines(card.getByTestId("setup-chatgpt-line"));
+          await expectLines(card.getByTestId("setup-key-for"), 2);
         }
         await expect(plan).toBeInViewport({ ratio: 1 });
         await expect(key).toBeInViewport({ ratio: 1 });
@@ -605,6 +605,12 @@ async function expectJobsCard(window: Page, card: Locator) {
   await expect(window.getByTestId("assistant-waiting-model")).toHaveCount(0);
 }
 
+const storedRoute = (window: Page) =>
+  window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await core.getSettings()).device.transcriptionRoute;
+  });
+
 for (const language of ["en", "zh-CN"] as const) {
   test(`once a model works, the card lists what each job uses with Change in place, and Continue asks the waiting Question (${language})`, async () => {
     const { app, window } = await launchApp(dataDir, { fakeChat: true });
@@ -660,19 +666,23 @@ for (const language of ["en", "zh-CN"] as const) {
 
     // Meetings offers this computer only until cloud routes come, and choosing it is a choice: it is stored.
     const meetings = card.getByTestId("setup-job-meetings");
-    await pointAndClick(window, meetings.getByTestId("setup-job-meetings-change"));
+    const meetingsChange = meetings.getByTestId("setup-job-meetings-change");
+    await pointAndClick(window, meetingsChange);
     const route = meetings.getByTestId("meetings-route");
     await expect(route).toBeFocused();
     await expect(route.locator("option:not([hidden])")).toHaveText([words.meetings]);
+    // Esc is no choice: the words come back, nothing is stored, and the first Record still asks.
+    await window.keyboard.press("Escape");
+    await expect(meetings.getByTestId("setup-job-meetings-value")).toHaveText(words.meetings);
+    await expect(meetingsChange).toBeFocused();
+    expect(await storedRoute(window)).toBeNull();
+    // From the keyboard alone, Enter on Change opens the picker, focused, and its one choice is stored.
+    await window.keyboard.press("Enter");
+    await expect(route).toBeFocused();
     await route.selectOption("local");
     await expect(meetings.getByTestId("setup-job-meetings-value")).toHaveText(words.meetings);
-    await expect(meetings.getByTestId("setup-job-meetings-change")).toBeFocused();
-    expect(
-      await window.evaluate(async () => {
-        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-        return (await core.getSettings()).device.transcriptionRoute;
-      }),
-    ).toBe("local");
+    await expect(meetingsChange).toBeFocused();
+    expect(await storedRoute(window)).toBe("local");
 
     await continueSetup(window);
     await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
@@ -733,12 +743,7 @@ test("Continue works without touching a row, and Models and Meetings in Settings
   await expect(inMeetings).toHaveValue("");
   // Choosing the one route there stores it, and the other page shows the same.
   await inMeetings.selectOption("local");
-  expect(
-    await window.evaluate(async () => {
-      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-      return (await core.getSettings()).device.transcriptionRoute;
-    }),
-  ).toBe("local");
+  expect(await storedRoute(window)).toBe("local");
   await showSettingsPage(window, "models");
   await expect(window.getByTestId("model-defaults").getByTestId("meetings-route")).toHaveValue(
     "local",
@@ -860,6 +865,8 @@ test("a slow list of models changes nothing: the heading names the provider, and
   const card = await askFirstQuestion(window);
   await useLocalChatModel(window);
   await expect(card.getByTestId("setup-ready-title")).toHaveText("Ollama works");
+  // The Answers row names its provider at once too, as the list of models is not what says it.
+  await expect(card.getByTestId("setup-job-chatModel-value")).toHaveText(/^fake-model · Ollama/);
   // No wait for the list: Continue is there, focused, and asks the Question.
   await expect(card.getByTestId("setup-continue")).toBeFocused();
   await continueSetup(window);
@@ -900,6 +907,8 @@ test("a Question waiting for Continue is kept if the app quits, and is in the co
 
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await setWindowSize(app, window, 1100, 900);
+  await expect(window.getByTestId("home")).toBeVisible();
+  await window.getByTestId("mind-tab").click();
   await expect(window.getByTestId("composer-input")).toHaveValue("What is in my Documents?");
   await app.close();
 });

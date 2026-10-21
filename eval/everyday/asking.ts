@@ -21,12 +21,12 @@ import {
   type MindFocus,
   messageReference,
 } from "../../src/core";
+import { forPage } from "../../src/core/answers/pointersBack";
 import { toolRecordLines } from "../../src/core/answers/toolRecord";
 import { plainText } from "../../src/core/mindText";
 import type { createAiSdkChatModel } from "../../src/core/providers/models";
-import { answerBlocks } from "../../src/shared/answerBlocks";
+import { pageBlocks } from "../../src/shared/answerBlocks";
 import { namesOneOf, sourcesAsText } from "../../src/shared/namedSources";
-import { withoutFraming } from "../../src/shared/noteBlocks";
 import { resolveProposals } from "../../src/shared/proposals";
 import { connectToMind } from "../../tests/helpers/mindClient";
 import { heading, note, writeMind } from "../../tests/helpers/minds";
@@ -37,7 +37,15 @@ import type { EvalDocument } from "../lib/evaluationSet";
 import type { Library } from "../lib/library";
 import type { Log } from "../lib/log";
 import type { EverydayCase } from "./cases";
-import { type RequestFailure, requestFailures } from "./checks";
+import {
+  givenToMindsOf,
+  pointersIn,
+  type RequestFailure,
+  type RequestOutcome,
+  requestFailures,
+  rewrittenLater,
+  takenOut,
+} from "./checks";
 import { DATED_TEXTS } from "./dated";
 import { citedClaims } from "./dates";
 import { judgeClaims } from "./judge";
@@ -49,8 +57,16 @@ const ROOT = resolve(__dirname, "../..");
 /** A request as `runCase` asks it: which Documents it is asked over is the caller's. */
 export type AskedRequest = Omit<EverydayCase, "library">;
 
-/** The two arXiv papers of the owner's own conversation, fetched once into the cache and checked. */
-export const PAPERS = [
+/** A public file the evaluation fetches once into the cache, checked against its SHA-256. */
+interface FetchedFile {
+  key: string;
+  url: string;
+  file: string;
+  sha256: string;
+}
+
+/** The two arXiv papers of the owner's own conversation. */
+export const PAPERS: readonly FetchedFile[] = [
   {
     key: "graphst",
     url: "https://arxiv.org/pdf/2306.10683v1",
@@ -65,34 +81,56 @@ export const PAPERS = [
   },
 ];
 
+/** The State Administration of Foreign Exchange's table of official reserve assets, in Chinese and English, whose cells give the figures of a difference (#1444). */
+export const RESERVES: readonly FetchedFile[] = [
+  {
+    key: "reserves",
+    url: "https://www.safe.gov.cn/safe/file/file/20261007/ce2e1161712644ecb5337cb5cf64dcc4.xlsx",
+    file: "官方储备资产（2026年）.xlsx",
+    sha256: "1d572c50679ca8e6f5bad9f21231986a2d9e61aaf6835117840e19bf9710208b",
+  },
+];
+
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 /** A request whose Answer takes longer is stopped and counted as failed. */
 export const ANSWER_TIMEOUT_MS = 5 * 60_000;
 
-export async function fetchPapers(cacheDir: string, log: Log): Promise<EvalDocument[]> {
+async function fetchChecked(
+  cacheDir: string,
+  files: readonly FetchedFile[],
+  log: Log,
+  pauseMs: number,
+): Promise<EvalDocument[]> {
   const folder = join(cacheDir, "everyday");
   await mkdir(folder, { recursive: true });
   const documents: EvalDocument[] = [];
-  for (const paper of PAPERS) {
-    const path = join(folder, paper.file);
-    if (!existsSync(path) || sha256(await readFile(path)) !== paper.sha256) {
-      log(`Fetching ${paper.url}`);
-      // arXiv asks for one request every three seconds.
-      await new Promise((done) => setTimeout(done, 3_000));
-      const response = await fetch(paper.url, {
+  for (const wanted of files) {
+    const path = join(folder, wanted.file);
+    if (!existsSync(path) || sha256(await readFile(path)) !== wanted.sha256) {
+      log(`Fetching ${wanted.url}`);
+      await new Promise((done) => setTimeout(done, pauseMs));
+      const response = await fetch(wanted.url, {
         headers: { "User-Agent": "IncarnaMind document evaluation" },
       });
-      if (!response.ok) throw new Error(`${paper.url} answered HTTP ${response.status}.`);
+      if (!response.ok) throw new Error(`${wanted.url} answered HTTP ${response.status}.`);
       const bytes = new Uint8Array(await response.arrayBuffer());
-      if (sha256(bytes) !== paper.sha256) throw new Error(`${paper.url} isn't the file expected.`);
+      if (sha256(bytes) !== wanted.sha256)
+        throw new Error(`${wanted.url} isn't the file expected.`);
       await writeFile(`${path}.partial`, bytes);
       await rename(`${path}.partial`, path);
     }
-    documents.push({ key: paper.key, path });
+    documents.push({ key: wanted.key, path });
   }
   return documents;
 }
+
+/** arXiv asks for one request every three seconds. */
+export const fetchPapers = (cacheDir: string, log: Log) =>
+  fetchChecked(cacheDir, PAPERS, log, 3_000);
+
+export const fetchReserves = (cacheDir: string, log: Log) =>
+  fetchChecked(cacheDir, RESERVES, log, 0);
 
 export async function reports(): Promise<EvalDocument[]> {
   const folder = join(ROOT, "data");
@@ -108,6 +146,14 @@ export interface CaseResult {
   model: string;
   failures: RequestFailure[];
   reply: string;
+  page: string;
+  /** What the guard took out: sentences of the reply, by Add to note, and Blocks of what the calls gave to write into Minds. */
+  removed: string[];
+  /** Sentences of what the calls gave that the model's edit_mind or the app's own check rewrote after the guard, and what the Mind holds now. */
+  rewritten: { given: string; now: string | null }[];
+  /** Calls that copied the last Answer into a Mind (`answer: true`). */
+  copies: number;
+  pointersLeft: number;
   calls: string[];
   /** The Mind's Blocks that changed, as they read before and once its changes are accepted. */
   changes: { block: number; before: string; after: string }[];
@@ -286,11 +332,12 @@ export async function runCase(
   const earlierCalls: ConversationAnswer["toolCalls"] = [];
   let last: ConversationAnswer | null = null;
   for (const earlier of each.before ?? []) {
+    const fromExample = each.beforeInExample === true;
     const answer = await ask(core, {
       text: earlier,
-      mindId: mind?.id ?? null,
+      mindId: (fromExample ? example?.mindId : mind?.id) ?? null,
       conversationId,
-      focus,
+      focus: fromExample ? null : focus,
     });
     conversationId = answer.conversationId;
     earlierCalls.push(...answer.toolCalls);
@@ -301,7 +348,7 @@ export async function runCase(
     const earlier = new Set(ids);
     await core.addToNote({
       mindId: mind.id,
-      blocks: withoutFraming(answerBlocks({ ...last, status: "done" })),
+      blocks: pageBlocks(last, each.before?.at(-1) ?? ""),
       origin: {
         from: messageReference(last.conversationId, last.id),
         question: each.before?.at(-1) ?? "",
@@ -341,15 +388,18 @@ export async function runCase(
   );
   const citedInMinds: string[] = [];
   const sourcesAsTextIn: string[] = [];
+  const writtenInMinds: string[] = [];
   const documentNames = scoped.map((document) => document.name);
   for (const mindId of changed) {
     const written = await connectToMind(core, mindId);
     await written.settled();
     citedInMinds.push(...citedDocuments(written.doc));
-    for (const text of acceptedTexts(written.doc, requests).values()) {
+    const was = mindId === mind?.id ? before : new Map<string, string>();
+    for (const [id, text] of acceptedTexts(written.doc, requests)) {
       sourcesAsTextIn.push(
         ...sourcesAsText(text, (source) => namesOneOf(source.name, documentNames)),
       );
+      if (was.get(id) !== text) writtenInMinds.push(text);
     }
   }
   let changes: CaseResult["changes"] = [];
@@ -363,7 +413,12 @@ export async function runCase(
     );
   }
   const changedBlocks = changes.map((change) => change.block);
-  const failures = requestFailures({
+  const page = forPage(answer.text, each.request);
+  const givenToMinds = givenToMindsOf(
+    answer.toolCalls,
+    last ? { text: last.text, question: each.before?.at(-1) ?? "" } : null,
+  );
+  const outcome: RequestOutcome = {
     expected: each.expected,
     answer,
     verdict,
@@ -371,10 +426,14 @@ export async function runCase(
     changedBlocks,
     addedBlocks,
     sourcesAsText: sourcesAsTextIn,
+    writtenInMinds,
+    addedToPage: page,
+    givenToMinds,
     askedAgain: asks.again > 0,
     scoped,
     texts: each.expected.textDates ? DATED_TEXTS : undefined,
-  });
+  };
+  const failures = requestFailures(outcome);
   return {
     id: each.id,
     language: each.language,
@@ -382,6 +441,11 @@ export async function runCase(
     model,
     failures,
     reply: answer.text,
+    page,
+    removed: takenOut(outcome).removed,
+    rewritten: rewrittenLater(outcome),
+    copies: givenToMinds.filter((given) => given.question !== undefined).length,
+    pointersLeft: pointersIn([page, ...writtenInMinds].join("\n\n")).length,
     calls: record,
     changes,
     seconds: (Date.now() - started) / 1000,

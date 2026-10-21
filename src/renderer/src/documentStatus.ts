@@ -26,6 +26,12 @@ const failureMessages: Record<DocumentFailureReason, MessageKey> = {
   "app-stopped": "documents.failure.appStopped",
 };
 
+export const isProcessing = (status: DocumentStatus) =>
+  status === "queued" ||
+  status === "extracting" ||
+  status === "waiting-for-model" ||
+  status === "embedding";
+
 /**
  * Where a Document's reading is, in full words, with the reason if it
  * failed. `scanning` is what says so while its scanned pages are read.

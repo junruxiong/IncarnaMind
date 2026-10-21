@@ -68,7 +68,8 @@ export interface Mind {
   /**
    * The Folder (an in-app one, a `LibraryGroup`) the Mind belongs to, or null:
    * Not in a Folder. A Mind in a Folder starts each Question with the Folder
-   * as its Search scope; one in none searches every Document.
+   * as its Search scope while the Folder holds a Document, and searches every
+   * Document while it holds none, as one in no Folder does (#1359).
    */
   folderId: string | null;
 }
@@ -831,9 +832,10 @@ export interface AnswerToolCall {
    * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128);
    * "minds", the Minds' Tools of an Answer in the assistant (#202:
    * `read_mind`, `edit_mind`, `add_to_mind`, `create_mind`, see `mindChange`); "commands",
-   * the commands it runs for the User (#1110: `list_commands`, `run_command`, see `command`).
+   * the commands it runs for the User (#1110: `list_commands`, `run_command`, see `command`);
+   * "asks", a question it asked the User (#1374: `ask_user`, see `asked`).
    */
-  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds" | "commands";
+  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds" | "commands" | "asks";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -898,6 +900,52 @@ export interface AnswerToolCall {
   command?: CommandDone;
   /** `run_command` that changed nothing: why (#1110). Absent otherwise. */
   commandProblem?: CommandProblem;
+  /** `ask_user`: the question, and the User's answer once they gave it (#1374). */
+  asked?: UserQuestion;
+}
+
+/** One of the choices in a question the assistant asks the User (#1374). */
+export interface UserQuestionOption {
+  label: string;
+  /** One line that says what choosing it means; empty: none. */
+  description: string;
+  /** The one the assistant would go with; at most one option is. */
+  recommended: boolean;
+  /** Ticked already when the question shows, for the User to change. */
+  preselected: boolean;
+}
+
+/**
+ * The User's answer to a question: the labels of the options chosen, in their
+ * order, and what they wrote under Other… (null: nothing); or that they
+ * skipped it.
+ */
+export type UserAnswer =
+  | { skipped: false; chosen: string[]; wrote: string | null }
+  | { skipped: true };
+
+/** A question the assistant asks the User with options (#1374), as its Answer keeps it. */
+export interface UserQuestion {
+  question: string;
+  /** One line under the question, such as what is ticked already and why; null: none. */
+  detail: string | null;
+  /** 2 to 4, the recommended one first. */
+  options: UserQuestionOption[];
+  /** More than one option may be chosen. */
+  multiple: boolean;
+  /** The User may write their own answer, under Other…. */
+  other: boolean;
+  /** Null while it waits for the User. */
+  answer: UserAnswer | null;
+}
+
+/** A question waiting in the tray for the User's answer (#1374). */
+export interface UserQuestionRequest extends AnswerPlace {
+  requestId: string;
+  answerId: string;
+  /** The call's id among the Answer's `toolCalls`. */
+  toolCallId: string;
+  question: UserQuestion;
 }
 
 /** What the assistant finds and runs commands on (#1110). */
@@ -1985,6 +2033,8 @@ export interface DeviceSettings {
   chatSetupDismissed: boolean;
   /** The User dismissed the sidebar's line saying the app runs without its sandbox (#1179). */
   sandboxNoticeDismissed: boolean;
+  /** The app has opened on this device before: from its second launch it opens on Home. */
+  openedBefore: boolean;
   /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
   gettingStarted: GettingStarted;
   /**
@@ -2026,6 +2076,12 @@ export interface DeviceSettings {
   meetingHelpKeys: HelpKeys;
   /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
   motion: MotionPreference;
+  /**
+   * The model the User last chose here, in a composer or as the Answers default: a Mind with no
+   * pick of its own and the assistant with no Mind in focus use it (`modelInUse`). Null until
+   * they choose, and again once its provider is removed: they follow `UserSettings.chatModel` then.
+   */
+  lastChatModel: ChatModelChoice | null;
 }
 
 /**
@@ -2114,6 +2170,7 @@ export const MAX_TAB_GROUPS = 3;
 export type TabItem =
   | { kind: "mind"; mindId: string }
   | { kind: "library" }
+  | { kind: "home" }
   | { kind: "document"; documentId: string };
 
 /** What the viewer knows of the Citation a Document was opened from. */
@@ -2267,6 +2324,11 @@ export type LayoutChange =
       keep?: boolean;
       /** Its group becomes the focused one: true unless false. */
       focus?: boolean;
+      /**
+       * Opened behind the tab shown, which stays in front with the focus, as a middle click opens
+       * a browser's tab; several in a row keep the order they were opened in.
+       */
+      behind?: boolean;
       /** A Document: where in it, e.g. a Citation's quote. */
       place?: DocumentPlace;
     }
@@ -3953,6 +4015,8 @@ export interface Money {
   amount: number;
 }
 
+export const MAX_MONTHLY_CAP = 1_000_000;
+
 /**
  * The most IncarnaMind may spend in a calendar month on models billed per
  * token. Before each such request its most (its prompt and its output limit)
@@ -4778,9 +4842,10 @@ export interface CheckClaimInput {
 
 /**
  * Where a sentence's check searched: the Mind's Folder (null for a Mind in
- * none, which searches every Document), or every Document because the User
- * asked ("Search all Documents"). A Mind moved to another Folder since needs
- * its sentences checked again; one the User widened doesn't.
+ * none, which searches every Document), or every Document (`widened`)
+ * because the User asked ("Search all Documents") or the Mind's Folder held
+ * no Document (#1359). A Mind moved to another Folder since needs its
+ * sentences checked again; one whose check was widened doesn't.
  */
 export interface ClaimCheckScope {
   folderId: string | null;
@@ -5196,10 +5261,22 @@ export interface AnswerSteps {
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
   /**
+   * Documents in its Search scope were still being read (Queued or Extracting) when it ended, so
+   * no search could find their text yet (#1503): how many, and the name when there is one.
+   * Absent: none.
+   */
+  stillReading?: { count: number; name?: string };
+  /**
    * A request to write, written from a Search scope that holds `documents` of the User's
    * `total` Documents (#1149). Absent: from all of them, or not a request to write.
    */
   writtenFrom?: { documents: number; total: number };
+  /**
+   * What its request held besides the Mind it read (`ConversationAnswer.read`), by id: the
+   * Documents whose whole text went with the Question, and whether the live transcript of a
+   * meeting did. Absent: an Answer written before this was kept, or one that isn't in the assistant.
+   */
+  sent?: { documents: string[]; transcript?: true };
 }
 
 /**
@@ -5569,6 +5646,12 @@ export interface ConversationMatch {
 
 // ---------------------------------------------------------------------------
 // The words inside Minds and Documents (⌘K, #116)
+
+/** A Mind's first line of text that isn't its name (`CoreApi.listMindSnippets`). */
+export interface MindSnippet {
+  mindId: string;
+  text: string;
+}
 
 /**
  * A Mind whose Blocks hold every word searched for (`CoreApi.searchMinds`): its best Block, one
@@ -7312,11 +7395,19 @@ export interface SharePagePreferences {
  */
 export type TheirChangesShown = "shown" | "accepted";
 
-/** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
+/** What a Word file does with the text IncarnaMind wrote: marks it with a comment, or leaves it out. */
+export const MARK_AI_TEXT_CHOICES = ["mark", "leave"] as const;
+
+export type MarkAiTextChoice = (typeof MARK_AI_TEXT_CHOICES)[number];
+
+/**
+ * A Word export's own choices (#107). The switches are on until the User turns them off; marking
+ * AI text is the User's to answer, once: null until they have (see `ExportMindOptions`).
+ */
 export interface WordExportPreferences {
   includeQuestions: boolean;
   trackChanges: boolean;
-  markAiText: boolean;
+  markAiText: MarkAiTextChoice | null;
   commentFailedChecks: boolean;
 }
 
@@ -8409,6 +8500,11 @@ export interface CoreApi {
    */
   searchMinds(query: string): Promise<MindTextMatch[]>;
   /**
+   * Home's Recent: each Mind's first line of text under its name, as the words typed a moment
+   * ago are; Minds with none, or not read yet, are left out.
+   */
+  listMindSnippets(): Promise<MindSnippet[]>;
+  /**
    * ⌘K's "In your Documents" and the Library's search: live Documents whose Passages hold every
    * word of `query`, as `searchMinds` reads it, best match first, one Passage each, at most
    * `limit` (20 unless asked; InvalidInputError outside 1 to 200). Keyword search over the
@@ -8523,6 +8619,8 @@ export interface CoreApi {
    * linked again.
    */
   deleteDocument(id: string): Promise<void>;
+  /** Removes Documents from the index as `deleteDocument` does, all in one step: or none, when one isn't found. */
+  deleteDocuments(ids: string[]): Promise<void>;
   /**
    * Processes a Document that failed again, from its file as it is now, e.g.
    * once the User has fixed it. Returns it, queued; "document.status" events
@@ -8625,9 +8723,11 @@ export interface CoreApi {
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
    * Units the Citations in Minds point to are kept, so those Citations can
-   * still be checked: "keptCitationTexts.changed" reports them.
+   * still be checked: "keptCitationTexts.changed" reports them. Its Documents
+   * in `options.keep` stay, as files added on their own: Undo of a link keeps
+   * those that were there before it (#1361).
    */
-  removeLinkedFolder(linkedFolderId: string): Promise<void>;
+  removeLinkedFolder(linkedFolderId: string, options?: { keep?: string[] }): Promise<void>;
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
   /**
@@ -9441,6 +9541,15 @@ export interface CoreApi {
   revokeApprovalPolicy(policyId: string): Promise<void>;
   /** Tool calls still waiting for the User's approval, e.g. for a window that opened after they were raised. */
   listApprovalRequests(): Promise<ApprovalRequest[]>;
+  /** The assistant's questions still waiting for the User's answer, oldest first (#1374). */
+  listUserQuestions(): Promise<UserQuestionRequest[]>;
+  /**
+   * Answers one of the assistant's questions. Answering one no longer waiting (answered in
+   * another window, or its Answer stopped) does nothing. Throws InvalidInputError for a choice it
+   * didn't offer, more than one where one may be chosen, nothing chosen or written, or text where
+   * none may be written.
+   */
+  answerUserQuestion(requestId: string, answer: UserAnswer): Promise<void>;
   /**
    * Answers an approval request. Answering one that's no longer waiting (decided
    * in another window, or its Answer stopped) does nothing. "always-allow" of a
@@ -9892,6 +10001,10 @@ export interface CoreEvents {
    * stopped ("deny"): every window takes its card away.
    */
   "approval.resolved": { requestId: string; decision: ApprovalDecision };
+  /** The assistant asks the User a question (#1374): it waits in the tray, in every window. */
+  "question.asked": UserQuestionRequest;
+  /** A question was answered, here or in another window, or withdrawn (null) as its Answer stopped. */
+  "question.answered": { requestId: string; answer: UserAnswer | null };
   /**
    * The Answer event stream. The core writes each Answer into its Mind's Yjs
    * document as it streams (its text, Citations and Tool calls), so every
@@ -9981,6 +10094,7 @@ const methods: Record<CoreApiMethod, true> = {
   getConversation: true,
   searchConversations: true,
   searchMinds: true,
+  listMindSnippets: true,
   searchDocumentText: true,
   renameConversation: true,
   deleteConversation: true,
@@ -9999,6 +10113,7 @@ const methods: Record<CoreApiMethod, true> = {
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
+  deleteDocuments: true,
   retryDocument: true,
   unlockDocument: true,
   forgetDocumentPassword: true,
@@ -10201,6 +10316,8 @@ const methods: Record<CoreApiMethod, true> = {
   revokeApprovalPolicy: true,
   listApprovalRequests: true,
   respondToApproval: true,
+  listUserQuestions: true,
+  answerUserQuestion: true,
   listSkills: true,
   previewSkillImport: true,
   importSkill: true,

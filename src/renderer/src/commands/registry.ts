@@ -12,7 +12,15 @@ import { useUndo } from "../undo";
 import { checkKeys } from "./keys";
 
 /** Where the User is acting, as `data-surface` marks it on the page. */
-export const SURFACES = ["sidebar", "library", "deleted", "mind", "viewer", "palette"] as const;
+export const SURFACES = [
+  "sidebar",
+  "library",
+  "deleted",
+  "home",
+  "mind",
+  "viewer",
+  "palette",
+] as const;
 export type Surface = (typeof SURFACES)[number];
 
 /** The menus' order of commands (docs/agents/interaction.md, rule 5). */
@@ -84,6 +92,8 @@ export interface Command {
   globalKeys?(): string | null;
   /** False keeps it out of ⌘K; it then needs a shortcut. */
   palette?: false;
+  /** Listed in ⌘K before anything is typed, where it applies, the lowest first and six at most. */
+  top?: number;
   group: CommandGroup;
   /** The kinds it acts on, as the selection or the focus. Without them, it acts on the window. */
   appliesTo?: readonly ObjectKind[];

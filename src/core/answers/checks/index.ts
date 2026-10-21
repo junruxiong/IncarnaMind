@@ -28,6 +28,7 @@ import type * as Y from "yjs";
 import { caseCitations } from "../../../shared/caseCitations";
 import { type LiveDocument, withShownName } from "../../../shared/citations";
 import { restsOn } from "../../../shared/claimChecks";
+import { oneFolderOf } from "../../../shared/searchScope";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import { recordCheckUnread } from "../../../shared/unreadFiles";
 import {
@@ -95,6 +96,8 @@ export interface ChecksOptions
     | "document"
     | "onStatus"
     | "readText"
+    | "readTables"
+    | "readScanned"
     | "createMind"
     | "recordAiUse"
     | "unread"
@@ -111,10 +114,14 @@ export interface ChecksOptions
   requireMind(mindId: string): void;
   /** The Folder the Mind is in; null for none. */
   mindFolder(mindId: string): string | null;
+  /** What a check from a Mind searches, by the one rule (`mindSearchScope`); null: every Document. */
+  searchedScope(scope: SearchScope | null, mindId: string): SearchScope | null;
   /** The file a Mind was imported from (#720), which its own checks never use as evidence. */
   originalOf(mindId: string): CheckedDocument | null;
   /** The default chat model, used when the Mind has none of its own. */
   defaultModel(): ChatModelChoice | null;
+  /** The model a Mind whose own pick is `own` is checked with: see `modelInUse`. */
+  modelInUse(own: ChatModelChoice | null): ChatModelChoice | null;
   chat: {
     readiness(choice: ChatModelChoice | undefined, flow: "checks"): Promise<ChatReadiness>;
     prepareModel(choice: ChatModelChoice | undefined, flow: "checks"): Promise<PreparedChatModel>;
@@ -356,16 +363,20 @@ export function createChecks(options: ChecksOptions) {
 
   /** Where a Mind's sentences are checked: its Folder, or every Document. */
   function scopeOf(mindId: string, allDocuments: boolean, checked?: CheckedDocument) {
-    const folderId = options.mindFolder(mindId);
-    const marked: ClaimCheckScope = { folderId, widened: allDocuments };
-    const wanted: SearchScope | null =
-      allDocuments || folderId === null
-        ? null
-        : { folderIds: [folderId], tagIds: [], documentIds: [] };
+    const own = options.mindFolder(mindId);
+    const wanted = allDocuments
+      ? null
+      : options.searchedScope(
+          own === null ? null : { folderIds: [own], tagIds: [], documentIds: [] },
+          mindId,
+        );
+    const folderId = oneFolderOf(wanted);
+    // An own Folder that holds no Document searches everything, as "Search all Documents" does.
+    const marked: ClaimCheckScope = { folderId: own, widened: allDocuments || own !== folderId };
     const scope = options.evidence.scope(wanted && options.resolveScope(wanted), checked);
     return {
       searchable: options.documents.searchableCount(scope.documentIds),
-      folderId: allDocuments ? null : folderId,
+      folderId,
       check: { scope, marked, wanted },
     };
   }

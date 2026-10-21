@@ -16,6 +16,7 @@ import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
 import { HistoryView } from "./components/history/HistoryView";
 import { InfoPanel } from "./components/InfoPanel";
+import { DocumentMoveTo } from "./components/library/DocumentMoveTo";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
 import { MindStyleHost } from "./components/MindStyle";
 import { Peek } from "./components/Peek";
@@ -297,6 +298,7 @@ function Workspace() {
         <TagsDialog />
         <RequestedDialogs />
         <SortMenu />
+        <DocumentMoveTo />
         <InfoPanel />
         <Peek />
         <AddWebPageDialog />

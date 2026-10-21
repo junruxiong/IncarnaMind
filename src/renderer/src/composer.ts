@@ -1,16 +1,16 @@
 import type { Editor } from "@tiptap/core";
 import type * as Y from "yjs";
 import { create } from "zustand";
-import type { ChatModelChoice, SearchScope } from "../../core/api";
+import type { SearchScope } from "../../core/api";
 import { hasSearchScope } from "../../shared/searchScope";
 
 /** What the composer holds for one Mind until it is asked: the text, the Search scope and a Skill. */
 export interface Draft {
   text: string;
   /**
-   * What the Mind's next Questions search, once the User changed it (a chip
-   * removed, or one added with "@"): kept after asking. Empty: every Document.
-   * Null until then: the Mind's own, its Folder (see `composerScope`).
+   * The Mind's Search scope once the User changed it (a chip removed, or one
+   * added with "@"): kept after asking. Empty: every Document. Null until
+   * then: the Mind's own, which `mindSearchScope` turns into what is searched.
    */
   scope: SearchScope | null;
   /** The Skill chosen with "/" for the next Question only. */
@@ -41,15 +41,10 @@ export const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [
 
 const EMPTY_DRAFT: Draft = { text: "", scope: null, skill: null, pastes: [] };
 
-/** A Mind's own Search scope: its Folder, or every Document for a Mind Not in a Folder. */
 export const folderScope = (folderId: string | null): SearchScope =>
   folderId === null ? NO_SCOPE : { folderIds: [folderId], tagIds: [], documentIds: [] };
 
-/**
- * What the composer's next Question searches: the scope the User chose, or
- * else the Mind's own (`folderScope`). The Folder is resolved when the
- * Question is asked, so Documents filed in or out since count as they are then.
- */
+/** The core decides what this searches (`mindSearchScope`), when the Question is asked. */
 export const composerScope = (draft: Draft, folderId: string | null): SearchScope =>
   draft.scope ?? folderScope(folderId);
 
@@ -78,8 +73,6 @@ interface ComposerState {
    * it), and says so with `focusTaken`.
    */
   focusWanted: boolean;
-  /** The model chosen in the composer with no Mind in focus; null: the default. Lost on quitting. */
-  modelWithoutMind: ChatModelChoice | null;
   /**
    * The Mind the assistant reads, once its editor is open: what the one composer
    * needs of it (see `Assistant`). Null before then and with no Mind in focus.
@@ -99,7 +92,6 @@ interface ComposerState {
 export const useComposer = create<ComposerState>()((set, get) => ({
   drafts: {},
   focusWanted: false,
-  modelWithoutMind: null,
   seat: null,
   draft: (mindId) => get().drafts[mindId] ?? EMPTY_DRAFT,
   update(mindId, change) {

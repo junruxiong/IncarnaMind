@@ -37,14 +37,17 @@ const SWITCHES: Readonly<Record<string, PageNumberFormat>> = {
   ALPHABETIC: "upperLetter",
 };
 
-const START_TYPES = {
+const START_TYPES: Readonly<Record<string, PageSection["start"]>> = {
   nextPage: "nextPage",
   continuous: "continuous",
   evenPage: "evenPage",
   oddPage: "oddPage",
-} as const;
+};
 
 const FIELDS = new Set(["PAGE", "NUMPAGES", "SECTIONPAGES"]);
+
+const own = <T>(record: Readonly<Record<string, T>>, key: string | undefined): T | undefined =>
+  key !== undefined && Object.hasOwn(record, key) ? record[key] : undefined;
 
 const twips = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
@@ -137,10 +140,9 @@ async function stylesOf(
 
 const alignOf = (pPr: XmlElement | undefined): Align | undefined => {
   const jc = pPr && child(pPr, "w:jc")?.attrs["w:val"];
-  return jc === undefined ? undefined : (ALIGNS[jc] ?? "left");
+  return jc === undefined ? undefined : (own(ALIGNS, jc) ?? "left");
 };
 
-/** A style and the styles it is based on, itself first. */
 function styleChain(styles: Styles, id: string | null): ParagraphStyle[] {
   const chain: ParagraphStyle[] = [];
   const seen = new Set<string>();
@@ -154,7 +156,6 @@ function styleChain(styles: Styles, id: string | null): ParagraphStyle[] {
   return chain;
 }
 
-/** A paragraph's alignment and tab stops: its own, else its style's, down the styles it is based on. */
 function paragraphLayout(
   styles: Styles,
   pPr: XmlElement | undefined,
@@ -174,10 +175,10 @@ function paragraphLayout(
         stops.delete(position);
         continue;
       }
-      const leader = TAB_LEADERS[tab.attrs["w:leader"] ?? ""];
+      const leader = own(TAB_LEADERS, tab.attrs["w:leader"]);
       stops.set(position, {
         position: Math.round(position),
-        align: TAB_ALIGNS[kind] ?? "left",
+        align: own(TAB_ALIGNS, kind) ?? "left",
         ...(leader && { leader }),
       });
     }
@@ -304,9 +305,9 @@ class RunReader {
       const shown = result.find((run) => run.kind === "text");
       const bold = format.bold ?? (shown?.kind === "text" ? shown.bold : undefined);
       const italic = format.italic ?? (shown?.kind === "text" ? shown.italic : undefined);
-      const given = words.flatMap((word, at) =>
-        words[at - 1] === "\\*" ? (SWITCHES[word] ? [SWITCHES[word]] : []) : [],
-      )[0];
+      const given = words
+        .map((word, at) => (words[at - 1] === "\\*" ? own(SWITCHES, word) : undefined))
+        .find((each) => each !== undefined);
       this.add({
         kind: "field",
         field: name as "PAGE" | "NUMPAGES" | "SECTIONPAGES",
@@ -458,7 +459,7 @@ export async function readPageSetup(
     const start = numbering?.attrs["w:start"];
     sections.push({
       breakPlace,
-      start: START_TYPES[type as keyof typeof START_TYPES] ?? "nextPage",
+      start: own(START_TYPES, type) ?? "nextPage",
       width,
       height,
       // Word draws the box by `w:w` and `w:h`; a `w:orient` that disagrees with them is not what is drawn.
@@ -475,7 +476,7 @@ export async function readPageSetup(
       differentFirstPage: sectPr ? onOff(child(sectPr, "w:titlePg")) === true : false,
       pageNumbers: {
         start: start !== undefined && Number.isFinite(Number(start)) ? Number(start) : null,
-        format: FORMATS[numbering?.attrs["w:fmt"] ?? ""] ?? "decimal",
+        format: own(FORMATS, numbering?.attrs["w:fmt"]) ?? "decimal",
       },
       headers,
       footers,

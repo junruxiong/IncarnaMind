@@ -226,6 +226,8 @@ function storedSteps(value: string | null): AnswerSteps | null {
     withoutMindTools,
     coverage,
     writtenFrom,
+    stillReading,
+    sent,
   } = parsed;
   const claimed = Array.isArray(unbackedClaims)
     ? unbackedClaims.filter((each): each is ClaimedChange =>
@@ -262,6 +264,21 @@ function storedSteps(value: string | null): AnswerSteps | null {
       isCount(writtenFrom.documents) &&
       isCount(writtenFrom.total) && {
         writtenFrom: { documents: writtenFrom.documents, total: writtenFrom.total },
+      }),
+    ...(isRecord(stillReading) &&
+      isCount(stillReading.count) && {
+        stillReading: {
+          count: stillReading.count,
+          ...(typeof stillReading.name === "string" &&
+            stillReading.name !== "" && { name: stillReading.name }),
+        },
+      }),
+    ...(isRecord(sent) &&
+      Array.isArray(sent.documents) && {
+        sent: {
+          documents: sent.documents.filter((each): each is string => typeof each === "string"),
+          ...(sent.transcript === true && { transcript: true as const }),
+        },
       }),
   };
 }
