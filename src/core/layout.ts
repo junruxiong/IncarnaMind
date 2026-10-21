@@ -478,11 +478,19 @@ function tidy(layout: Layout): void {
   }
 }
 
+/** The tab opened behind last, and the tab that was in front of it then. */
+interface OpenedBehind {
+  tabId: string;
+  shownId: string | null;
+}
+
+/** Applies an `open` change; returns the tab it opened behind, if it did. */
 function open(
   layout: Layout,
   change: Extract<LayoutChange, { type: "open" }>,
   newId: () => string,
-): void {
+  openedBehind: OpenedBehind | null,
+): OpenedBehind | null {
   const { item, place } = change;
   const where = change.where ?? { in: "place" };
   const behind = change.behind === true;
@@ -518,7 +526,7 @@ function open(
     (where.in === "side" || where.in === "beside");
   if (found && !behindMind) {
     reveal(found.group, found.tab);
-    return;
+    return null;
   }
 
   let target: LayoutGroup;
@@ -546,12 +554,12 @@ function open(
     if (displaced) takeOut(target, displaced);
     const pinned = target.tabs.filter((tab) => tab.pinned).length;
     insert(target, found.tab, found.tab.pinned ? pinned : undefined);
-    show(layout, target, found.tab, focus);
+    if (!behind || target.activeTabId === null) show(layout, target, found.tab, focus);
   } else if (replaced) {
     replaced.item = item;
     replaced.place = place ?? null;
     replaced.opened += 1;
-    show(layout, target, replaced, focus);
+    if (!behind) show(layout, target, replaced, focus);
   } else {
     const tab: LayoutTab = {
       id: newId(),
@@ -562,9 +570,29 @@ function open(
       opened: place ? 1 : 0,
     };
     const at = before ? target.tabs.findIndex((each) => each.id === before) : -1;
-    insert(target, tab, before === undefined ? undefined : at === -1 ? target.tabs.length : at);
-    if (!behind || target.activeTabId === null) show(layout, target, tab, focus);
+    // Tabs opened behind one after another keep the order they were opened in, as a browser's do.
+    const chained =
+      behind && openedBehind?.shownId === target.activeTabId
+        ? target.tabs.findIndex((each) => each.id === openedBehind?.tabId)
+        : -1;
+    insert(
+      target,
+      tab,
+      before !== undefined
+        ? at === -1
+          ? target.tabs.length
+          : at
+        : chained === -1
+          ? undefined
+          : chained + 1,
+    );
+    if (!behind || target.activeTabId === null) {
+      show(layout, target, tab, focus);
+      return null;
+    }
+    return { tabId: tab.id, shownId: target.activeTabId };
   }
+  return null;
 }
 
 /** A window's layout and the tabs it closed, with every change it can take. */
@@ -574,6 +602,8 @@ class WindowState {
     private readonly newId: () => string,
     readonly closed: ClosedTab[] = [],
   ) {}
+
+  private openedBehind: OpenedBehind | null = null;
 
   private close(group: LayoutGroup, tab: LayoutTab): void {
     const groupIndex = this.layout.groups.indexOf(group);
@@ -589,9 +619,11 @@ class WindowState {
 
   apply(change: LayoutChange, valid: (item: TabItem) => boolean): void {
     const { layout, newId } = this;
+    const openedBehind = this.openedBehind;
+    this.openedBehind = null;
     switch (change.type) {
       case "open":
-        open(layout, change, newId);
+        this.openedBehind = open(layout, change, newId, openedBehind);
         break;
       case "show": {
         const { group, tab } = requireTab(layout, change.tabId);
