@@ -8,6 +8,7 @@ import {
   EXPORT_FORMATS,
   type ExportPreferences,
   type GettingStarted,
+  MAX_MONTHLY_CAP,
   MOTION_PREFERENCES,
   type MonthlyCap,
   type MotionPreference,
@@ -114,7 +115,7 @@ const isMonthlyCap = (value: unknown): value is MonthlyCap =>
   typeof value.amount === "number" &&
   Number.isFinite(value.amount) &&
   value.amount >= 0 &&
-  value.amount <= 1_000_000 &&
+  value.amount <= MAX_MONTHLY_CAP &&
   (value.currency === "USD" || value.currency === "CNY");
 
 const userScope: Scope<UserSettings> = {
