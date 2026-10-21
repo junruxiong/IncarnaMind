@@ -167,18 +167,21 @@ test("a Citation shows its Document's current name after a rename on disk and in
     // What the Mind stores is what it stored when it was cited.
     expect(await storedNames(editor)).toEqual(["Ferry"]);
 
-    // Deleted: the name it was cited with, and no Open.
+    // Deleted: the name it was cited with, and its Open shows the quote it kept.
     await bridge(window).remove();
     await expect.poll(() => bridge(window).names()).toEqual([]);
-    await expect(chip).toHaveAttribute("aria-label", /^Citation 1: Ferry, p\. 2\. Can't check/);
+    await expect(chip).toHaveAttribute("aria-label", /^Citation 1: Ferry, p\. 2\. Can’t check/);
     await window.mouse.move(0, 0);
     await chip.focus();
     await expect(card).toBeVisible();
     await expect(card.getByText("Ferry, p. 2", { exact: true })).toBeVisible();
     await expect(card.getByTestId("citation-reason")).toHaveText("The Document has been deleted.");
-    await expect(card.getByTestId("citation-open")).toHaveCount(0);
-    await window.keyboard.press("Escape");
+    await expect(card.getByTestId("citation-open")).toHaveText("Show the quoted text");
+    await card.getByTestId("citation-open").click();
     await expect(card).toHaveCount(0);
+    await expect(window.getByTestId("viewer")).toContainText(
+      "This Document has been deleted from IncarnaMind",
+    );
     await expect(source.locator(".answer-step-source-name")).toHaveText("Ferry");
     await expect(references.getByTestId("reference-entry")).toHaveText("Ferry. Cited: p. 2");
     expect(await copiedText(editor)).toMatch(/\nSources\n\[1\] Ferry, p\. 2$/);
@@ -217,11 +220,11 @@ test("in a citation style, the References and the Citations ask again and read t
     await expect(references).toHaveAttribute("data-style", "harvard");
     const entry = references.getByTestId("reference-entry");
     const chip = editor.getByTestId("citation-chip");
-    await expect(entry).toContainText("Ferry. PDF");
+    await expect(entry).toContainText("Ferry.");
     await expect(chip).toHaveText("(“Ferry,” no date, p. 2)");
 
     await rename(join(library, "Ferry.pdf"), join(library, "Ferry-timetable.pdf"));
-    await expect(entry).toContainText("Ferry-timetable. PDF");
+    await expect(entry).toContainText("Ferry-timetable.");
     await expect(chip).toHaveText("(“Ferry-timetable,” no date, p. 2)");
   } finally {
     await app.close();

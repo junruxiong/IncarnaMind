@@ -178,10 +178,11 @@ test("A1 first run: the example Mind and its Citation card", async () => {
     const { window } = app;
     await sealShell(app.app);
     await step(T, "example mind", async () => {
-      await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper", {
-        timeout: 20_000,
-      });
-      await expect(window.getByTestId("margin-check")).toHaveCount(2, { timeout: 20_000 });
+      await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+        "Draft: credit committee paper",
+        { timeout: 20_000 },
+      );
+      await expect(window.getByTestId("claim-mark")).toHaveCount(1, { timeout: 20_000 });
       await window.mouse.move(700, 400);
       await shot(window, "A01-first-run-example-mind");
       await scan(window, "A01-first-run-example-mind");
@@ -204,26 +205,28 @@ test("A1 first run: the example Mind and its Citation card", async () => {
       await window.waitForTimeout(250);
       record("walk.escape.citationCard", { closes: !(await card.isVisible()) });
     });
-    await step(T, "get started card", async () => {
-      const card = window.getByTestId("get-started");
+    await step(T, "the first open's steps", async () => {
+      const card = window.getByTestId("first-open-steps");
       await expect(card).toBeVisible();
-      await shot(card, "A04-get-started-card");
+      await shot(card, "A04-first-open-steps");
     });
     await step(T, "focus walk from the window", async () => {
       await window.mouse.click(5, 5);
       const stops = await focusWalk(window, 45, "focus/A05");
       record("walk.focus.exampleMind", stops);
     });
-    await step(T, "add your own: the ways to add Documents, in place", async () => {
-      await window.keyboard.press("Escape");
-      await click(window, window.getByTestId("example-add-own"));
-      await window.waitForTimeout(800);
-      await shot(window, "A06-after-add-your-own");
-      const ways = window.getByTestId("example-add-items");
-      await window.keyboard.press("Escape");
-      await window.waitForTimeout(300);
-      record("walk.escape.addYourDocuments", { closes: !(await ways.isVisible()) });
-    });
+    await step(
+      T,
+      "the ready question: the assistant with its Answer, written in advance",
+      async () => {
+        await window.keyboard.press("Escape");
+        await click(window, window.getByTestId("first-open-ready"));
+        const answer = window.getByTestId("assistant-answer").last();
+        await expect(answer).toHaveAttribute("data-status", "done");
+        await window.waitForTimeout(300);
+        await shot(window, "A06-ready-question");
+      },
+    );
   } finally {
     if (app) await close(app);
     removeDir(dataDir);
@@ -374,12 +377,10 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
       }
     });
 
-    await step(T, "a Mind: title, a Note, Questions", async () => {
+    await step(T, "a Mind: a heading, a Note, Questions", async () => {
       await click(window, window.getByTestId("plus-menu"));
       await click(window, window.getByTestId("plus-new-mind"));
-      const title = window.getByTestId("mind-title");
-      await click(window, title);
-      await typeLike(window, "Harbour survey: what the documents say", 50);
+      await typeLike(window, "# Harbour survey: what the documents say", 50);
       await window.keyboard.press("Enter");
       await typeLike(
         window,
@@ -538,8 +539,8 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
     await step(T, "export dialog", async () => {
       const tab = window.getByTestId("mind-tab").filter({ hasText: "Harbour survey" });
       await click(window, tab);
-      await tab.click({ button: "right" });
-      await click(window, tab.getByTestId("tab-actions").getByTestId("mind.exportOptions"));
+      await click(window, window.getByTestId("export-mind"));
+      await click(window, window.getByTestId("export-options"));
       const dialog = window.getByTestId("export-dialog");
       await expect(dialog).toBeVisible();
       await window.waitForTimeout(500);
@@ -794,9 +795,10 @@ test("A6 window sizes, the three steps, the @ and / menus, hover states", async 
     const { window } = app;
     await sealShell(app.app);
     await step(T, "three steps in an empty Mind (Get started showing)", async () => {
-      await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper", {
-        timeout: 20_000,
-      });
+      await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+        "Draft: credit committee paper",
+        { timeout: 20_000 },
+      );
       await click(window, window.getByTestId("new-tab"));
       await expect(window.getByTestId("start-guide")).toBeVisible();
       await window.mouse.move(700, 600, { steps: 6 });
@@ -864,7 +866,9 @@ test("A6 window sizes, the three steps, the @ and / menus, hover states", async 
         window,
         window.getByTestId("mind-list-item").filter({ hasText: "Draft: credit committee paper" }),
       );
-      await expect(window.getByTestId("mind-title")).toHaveValue("Draft: credit committee paper");
+      await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
+        "Draft: credit committee paper",
+      );
       await click(window, window.getByTestId("citation-chip").first());
       await window.waitForTimeout(600);
       const open = window.getByTestId("citation-card").getByTestId("citation-open");

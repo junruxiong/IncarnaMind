@@ -1,8 +1,9 @@
 import { type KeyboardEvent, memo, type Ref, useId, useRef, useState } from "react";
 import type { Document, ReferenceField, ReferenceRecord } from "../../../../core/api";
 import { displayName, sourceOf } from "../../../../shared/documentNames";
-import { missingDetails } from "../../../../shared/references";
+import { missingDetails, needsCheck } from "../../../../shared/references";
 import { commands } from "../../commands/registry";
+import { useDragSource } from "../../dragDrop";
 import { useLanguage, useT } from "../../i18n";
 import { FORMAT_LABELS } from "../../libraryFilters";
 import { addedLabel, foundLine, type SearchMatch } from "../../libraryPage";
@@ -10,6 +11,7 @@ import { atPassage, passagePlace } from "../../palette";
 import { usePeekKey } from "../../peek";
 import { missingList } from "../../referenceEditing";
 import { useSelectable } from "../../selection";
+import { rowDrag } from "../../sidebarMoves";
 import { useAppStore } from "../../store";
 import { isDeleteKey, isMoveToKey, isTagsKey, TREE_ROW } from "../../treeKeys";
 import { typesText } from "../../undo";
@@ -29,14 +31,14 @@ import { documentsToMove, useDocumentMove } from "./DocumentMoveTo";
 import { RowTags } from "./RowTags";
 
 /**
- * The columns past the name, and the widths of the page at which they give
- * way, Added first, then Format, then Tags, so the name keeps its room.
+ * The columns past the name: as far as it takes for no name to be cut (`useFittingColumns`),
+ * Added goes first, then Format, then the Tags' room shrinks, then the chips go. Narrow, only the
+ * chips go: the "+" stays, so Tags… from the menu still has its place.
  */
 export const COLUMN_CLASSES = {
-  // Narrow, only the chips go: the "+" stays, so Tags… from the menu still has its place.
-  tags: "w-[200px] shrink-0 @max-[512px]/page:w-auto @max-[512px]/page:[&_[data-testid^=tag-chip]]:hidden",
-  format: "w-[76px] shrink-0 @max-[704px]/page:hidden",
-  added: "w-24 shrink-0 @max-[768px]/page:hidden",
+  tags: "w-[200px] shrink-0 group-data-[hide~=narrow]/page:w-[152px] group-data-[hide~=narrower]/page:w-[112px] group-data-[hide~=narrowest]/page:w-[88px] group-data-[hide~=chips]/page:w-auto group-data-[hide~=chips]/page:[&_[data-testid^=tag-chip]]:hidden",
+  format: "w-[76px] shrink-0 group-data-[hide~=format]/page:hidden",
+  added: "w-24 shrink-0 group-data-[hide~=added]/page:hidden",
   more: "flex w-7 shrink-0 justify-end",
 } as const;
 
@@ -81,6 +83,10 @@ function deleteFrom(row: HTMLElement | null, documentId: string): void {
   const ids = documentsToMove(documentId);
   const gone = new Set(ids);
   const grid = row?.closest('[role="grid"]');
+  // With every row gone, Add Documents: the focus stays in the Library, where ⌘Z still works.
+  const add = row
+    ?.closest('[data-testid="library"]')
+    ?.querySelector<HTMLElement>('[data-testid="library-add-documents"]');
   const rows = [...(grid?.querySelectorAll<HTMLElement>("[data-document-id]") ?? [])];
   const at = rows.findIndex((each) => each.dataset.documentId === documentId);
   const stays = (each: HTMLElement) => !gone.has(each.dataset.documentId ?? "");
@@ -93,10 +99,12 @@ function deleteFrom(row: HTMLElement | null, documentId: string): void {
       surface: "library",
     })
     .then(() => {
-      if (!nextId) return;
-      grid
-        ?.querySelector<HTMLElement>(`[data-document-id="${CSS.escape(nextId)}"] [data-row-main]`)
-        ?.focus();
+      const target = nextId
+        ? grid?.querySelector<HTMLElement>(
+            `[data-document-id="${CSS.escape(nextId)}"] [data-row-main]`,
+          )
+        : add;
+      target?.focus();
     })
     .catch(useAppStore.getState().reportError);
 }
@@ -109,7 +117,8 @@ const OWN_CLICKS = "button:not([data-row-main]), input, a, [role=menu], [role=di
  * problem's word, and "Suggested" while Organize's Folder waits), its Tags, its
  * format and when it was added, then ⋯; the checkbox hangs in the margin. A
  * click anywhere but its Tags, checkbox and ⋯ opens it beside the list; ⌘-click
- * and Shift-click select. Memoised (#156): while Organize goes through
+ * and Shift-click select. It drags onto a Folder or a Tag, with the rows
+ * selected with it. Memoised (#156): while Organize goes through
  * thousands of Documents, only the rows whose Document changed are drawn again.
  */
 export const LibraryRow = memo(function LibraryRow({
@@ -134,6 +143,8 @@ export const LibraryRow = memo(function LibraryRow({
   const place = useTabPlace();
   const name = displayName(doc);
   const source = sourceOf(doc);
+  const format = t(FORMAT_LABELS[doc.kind]);
+  const added = addedLabel(doc.createdAt, new Date(), language);
   const [citing, setCiting] = useState<{ focus: ReferenceField | null } | null>(null);
   const citeToggle = useRef<HTMLButtonElement>(null);
   const citePanelId = useId();
@@ -160,6 +171,7 @@ export const LibraryRow = memo(function LibraryRow({
     if (anchor) useDocumentMove.getState().show({ anchor, documentIds: documentsToMove(doc.id) });
   };
   const menuButton = () => row.current?.querySelector<HTMLElement>("[data-object-menu]") ?? null;
+  const dragSource = useDragSource(() => rowDrag({ kind: "document", id: doc.id }, "library"));
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     objectMenu.rowProps.onKeyDown(event);
@@ -172,7 +184,7 @@ export const LibraryRow = memo(function LibraryRow({
       openTags(row.current, doc.id);
     } else if (isDeleteKey(event)) {
       event.preventDefault();
-      deleteFrom(row.current, doc.id);
+      if (!event.repeat) deleteFrom(row.current, doc.id);
     }
   };
 
@@ -197,7 +209,10 @@ export const LibraryRow = memo(function LibraryRow({
       className={`${pageRowClass(select.selected)} cursor-default`}
     >
       <LibrarySelectBox document={doc} />
-      <div className="flex min-h-[39px] items-center gap-4 pr-1.5 pl-3">
+      <div
+        {...(rename.renaming ? {} : dragSource)}
+        className="flex min-h-[39px] items-center gap-4 pr-1.5 pl-3 group-data-[hide~=narrowest]/page:gap-2"
+      >
         <div className="flex min-w-0 flex-1 items-center">
           <span aria-hidden="true" className="w-5 shrink-0" />
           <div className={`min-w-0 flex-1 ${match ? "py-1.5" : ""}`}>
@@ -217,12 +232,15 @@ export const LibraryRow = memo(function LibraryRow({
                   type="button"
                   {...TREE_ROW}
                   data-row-main=""
-                  title={name === source ? name : `${name}\n${source}`}
+                  title={[name, ...(name === source ? [] : [source]), `${format} · ${added}`].join(
+                    "\n",
+                  )}
                   className="flex min-w-0 items-center gap-2 text-left focus-visible:outline-0"
                 >
                   <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
                   <span
                     data-testid="library-document-name"
+                    data-fit-name=""
                     className="min-w-0 truncate text-ui text-ink"
                   >
                     {match ? <Marked text={name} ranges={match.ranges} /> : name}
@@ -291,20 +309,23 @@ export const LibraryRow = memo(function LibraryRow({
             )}
           </div>
         </div>
-        <div data-row-cell="tags" className={`${COLUMN_CLASSES.tags} flex min-w-0 items-center`}>
+        <div
+          data-row-cell="tags"
+          className={`${COLUMN_CLASSES.tags} flex min-w-0 items-center overflow-hidden`}
+        >
           <RowTags document={doc} />
         </div>
         <span
           data-testid="library-document-format"
           className={`${COLUMN_CLASSES.format} truncate text-[13px] text-ink-secondary`}
         >
-          {t(FORMAT_LABELS[doc.kind])}
+          {format}
         </span>
         <span
           data-testid="library-document-added"
           className={`${COLUMN_CLASSES.added} truncate text-[13px] whitespace-nowrap text-ink-secondary`}
         >
-          {addedLabel(doc.createdAt, new Date(), language)}
+          {added}
         </span>
         <span className={COLUMN_CLASSES.more}>
           <ObjectMenu
@@ -339,8 +360,9 @@ export const LibraryRow = memo(function LibraryRow({
 /**
  * A row's way into "Cite as" (#286), after its name: "Needs details", with the
  * waiting dot, while the record is too thin to cite, which opens it at the
- * first missing field; otherwise "Cite as", shown while the row is pointed at
- * or focused.
+ * first missing field; "Needs checking", with the review ring, while what was
+ * read from the file waits for the User to check it; otherwise "Cite as",
+ * shown while the row is pointed at or focused.
  */
 function CiteAsToggle({
   ref,
@@ -361,22 +383,27 @@ function CiteAsToggle({
   const language = useLanguage();
   const missing = missingDetails(record);
   const list = missingList(language, record);
+  const unchecked = missing.length === 0 && needsCheck(record);
   const label = t("reference.citeAs.label", { name: displayName(document) });
+  const said = list
+    ? t("reference.needsDetails.title", { missing: list })
+    : unchecked
+      ? t("reference.toCheck.title")
+      : null;
   return (
     <button
       ref={ref}
       type="button"
       data-testid="cite-as-toggle"
       data-needs-details={missing.length > 0 ? "" : undefined}
+      data-needs-check={unchecked ? "" : undefined}
       aria-expanded={open}
       aria-controls={open ? panelId : undefined}
-      aria-label={
-        list ? `${label}. ${t("reference.needsDetails.title", { missing: list })}` : label
-      }
-      title={list ? t("reference.needsDetails.title", { missing: list }) : undefined}
+      aria-label={said ? `${label}. ${said}` : label}
+      title={said ?? undefined}
       onClick={() => onToggle(missing[0] ?? null)}
       className={`inline-flex shrink-0 items-center gap-1.5 rounded-sm text-[12px] leading-5 whitespace-nowrap text-ink-meta hover:text-ink hover:underline ${
-        missing.length > 0 || open
+        missing.length > 0 || unchecked || open
           ? ""
           : "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100"
       }`}
@@ -384,7 +411,14 @@ function CiteAsToggle({
       {missing.length > 0 && (
         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention" />
       )}
-      {t(missing.length > 0 ? "reference.needsDetails" : "reference.citeAs")}
+      {unchecked && <ReviewRing />}
+      {t(
+        missing.length > 0
+          ? "reference.needsDetails"
+          : unchecked
+            ? "reference.toCheck"
+            : "reference.citeAs",
+      )}
     </button>
   );
 }

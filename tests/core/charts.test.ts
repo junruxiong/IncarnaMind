@@ -213,8 +213,6 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     const exported = await core.exportMind(mind.id, { format: "markdown" });
     expect(new TextDecoder().decode(exported.data)).toBe(
       [
-        "# Tides",
-        "",
         "*Chart: Revenue by quarter*",
         "",
         "| Quarter | 2024 | 2025 |",
@@ -255,8 +253,6 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     const exported = await core.exportMind(mind.id, { format: "markdown" });
     expect(new TextDecoder().decode(exported.data)).toBe(
       [
-        "# Tides",
-        "",
         "*Chart: Revenue by quarter*",
         "",
         "| Quarter | 2025 |",
@@ -350,7 +346,7 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     expect(body).toContain(
       '<p class="caption keep-next">Chart: Revenue by quarter</p>' +
         '<p class="caption chart-sources">Source: <sup class="note-ref" data-note="1">1</sup>' +
-        '<sup class="note-ref" data-note="2">2</sup> 1 value has no Citation.</p>',
+        '<sup class="note-ref" data-note="2">,2</sup> 1 value has no Citation.</p>',
     );
     expect(printed[0]?.notes).toEqual(["Acme, p. 1", "Acme, p. 2"]);
 
@@ -360,7 +356,8 @@ describe("a chart from a cited table", { timeout: 30_000 }, () => {
     expect(printed[1]?.body).toContain(
       '<p class="caption chart-sources">Source: <sup class="note-ref" data-note="1">1</sup> 1 value',
     );
-    expect(printed[1]?.notes).toEqual(["“Acme,” n.d., 1; “Acme,” 2."]);
+    // One Document cited twice in the cluster is one source with both its pages.
+    expect(printed[1]?.notes).toEqual(["“Acme,” n.d., 1, 2."]);
 
     // A host that can't draw pictures: the table of its values instead.
     const plain = fakePrinter();

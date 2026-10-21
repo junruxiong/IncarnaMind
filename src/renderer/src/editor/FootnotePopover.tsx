@@ -4,6 +4,7 @@ import { type Editor, useEditorState } from "@tiptap/react";
 import { useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "../i18n";
+import { useWritingProperties } from "../mindStyles";
 import { numberedFootnotes } from "./citationNumbers";
 import { FootnoteText, type FootnoteTextHandle } from "./FootnoteText";
 import {
@@ -13,6 +14,7 @@ import {
   openFootnoteOf,
   returnToFootnote,
 } from "./footnoteSchema";
+import { useMindId } from "./mindContext";
 import { Popover } from "./Popover";
 import { asOwnUndoStep } from "./selectionCommands";
 
@@ -36,6 +38,7 @@ export function FootnotePopover({
   citationView: NodeViewRenderer | null;
 }) {
   const t = useT();
+  const writing = useWritingProperties(useMindId());
   const open = useEditorState({
     editor,
     selector: ({ editor: current }) => {
@@ -76,6 +79,8 @@ export function FootnotePopover({
       aria-label={label}
       data-testid="footnote-popover"
       className="editor-menu footnote-popover"
+      // In the body, outside the Mind's page: the footnote is still written in the Mind's font.
+      style={writing}
     >
       <FootnoteText
         ref={text}

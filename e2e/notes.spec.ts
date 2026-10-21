@@ -1,8 +1,10 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
+  coreOf,
   createDataFolder,
   dismissChatSetup,
   dragBlock,
+  fontsDrawing,
   launchApp,
   newMind,
   removeDataFolder,
@@ -163,28 +165,7 @@ test("a Block is deleted from its handle's menu, and with the keyboard", async (
   await app.close();
 });
 
-/** The fonts Chromium drew an element's text with, by name, and whether each is bundled with the app. */
-async function fontsDrawing(window: Page, selector: string) {
-  const session = await window.context().newCDPSession(window);
-  try {
-    await session.send("DOM.enable");
-    await session.send("CSS.enable");
-    const { root } = await session.send("DOM.getDocument", { depth: -1 });
-    const { nodeId } = await session.send("DOM.querySelector", { nodeId: root.nodeId, selector });
-    const { fonts } = await session.send("CSS.getPlatformFontsForNode", { nodeId });
-    return fonts
-      .map((font) => ({
-        family: font.familyName,
-        name: font.postScriptName,
-        bundled: font.isCustomFont,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  } finally {
-    await session.detach();
-  }
-}
-
-test("Latin text is drawn in the bundled Source Serif 4, and Chinese text in a system serif", async () => {
+test("a Mind is written in the system's font, and in the bundled Source Serif 4 once it is in the Serif style, Chinese in a system face of the same kind", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
@@ -199,14 +180,33 @@ test("Latin text is drawn in the bundled Source Serif 4, and Chinese text in a s
     "Spring tides come at new moon",
     "大潮在新月和满月时出现。",
   ]);
-
-  const family = await editor
-    .locator("p")
-    .first()
-    .evaluate((paragraph) => getComputedStyle(paragraph).fontFamily);
-  expect(family).toMatch(/^"?Source Serif 4"?,/);
-  // Upright and italic are both the bundled font, which the CSP (font-src 'self') lets load.
   const paragraph = '[data-testid="mind-editor"] p';
+  const familyOf = () =>
+    editor
+      .locator("p")
+      .first()
+      .evaluate((first) => getComputedStyle(first).fontFamily);
+
+  // By default the text is the system's font, which nothing bundled draws; Chinese is its sans.
+  expect(await familyOf()).not.toMatch(/Source Serif 4/);
+  expect((await fontsDrawing(window, paragraph)).filter((font) => font.bundled)).toEqual([]);
+  const sansChinese = await fontsDrawing(window, `${paragraph}:nth-child(2)`);
+  expect(sansChinese).not.toEqual([]);
+  expect(sansChinese.filter((font) => font.bundled)).toEqual([]);
+  // By its PostScript name: the system's font has no Chinese, and the face macOS falls back to
+  // comes with its family named in one of the system's languages ("蘋方-簡" on CI's Mac).
+  if (process.platform === "darwin") {
+    expect(sansChinese.map((font) => font.name)).toEqual([expect.stringMatching(/^PingFangSC-/)]);
+  }
+
+  const [mind] = await (await coreOf(window)).evaluate((core) => core.listMinds());
+  if (!mind) throw new Error("The Mind wasn't made.");
+  await (await coreOf(window)).evaluate(
+    (core, mindId) => core.setMindStyle(mindId, { font: "serif", size: "default" }),
+    mind.id,
+  );
+  await expect.poll(familyOf).toMatch(/^"?Source Serif 4"?,/);
+  // Upright and italic are both the bundled font, which the CSP (font-src 'self') lets load.
   const latin = await fontsDrawing(window, paragraph);
   expect(latin).toHaveLength(2);
   expect(latin.every((font) => font.family === "Source Serif 4" && font.bundled)).toBe(true);
@@ -214,6 +214,7 @@ test("Latin text is drawn in the bundled Source Serif 4, and Chinese text in a s
   const chinese = await fontsDrawing(window, `${paragraph}:nth-child(2)`);
   expect(chinese).not.toEqual([]);
   expect(chinese.filter((font) => font.bundled)).toEqual([]);
+  expect(chinese.map((font) => font.family)).not.toEqual(sansChinese.map((font) => font.family));
   if (process.platform === "darwin")
     expect(chinese.map((font) => font.family)).toEqual(["Songti SC"]);
 

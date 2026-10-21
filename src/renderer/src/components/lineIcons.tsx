@@ -91,6 +91,15 @@ export function FolderPlusLineIcon(props: IconProps) {
   );
 }
 
+export function LinkLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+      <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+    </LineIcon>
+  );
+}
+
 /** Find sources: a page with a magnifying glass over its corner. */
 export function FindSourcesLineIcon(props: IconProps) {
   return (
@@ -366,6 +375,15 @@ export function ComputerLineIcon(props: IconProps) {
   );
 }
 
+/** A cloud service, for what leaves this computer for one (#141): a cloud. */
+export function CloudLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.75 4.75 0 0 1-.25 9.5z" />
+    </LineIcon>
+  );
+}
+
 /** Recording a meeting, as an action ("Record a meeting", "Start recording"): a ring and a dot. */
 export function RecordingLineIcon(props: IconProps) {
   return (
@@ -529,6 +547,44 @@ export function FloatLineIcon(props: IconProps) {
     <LineIcon {...props}>
       {WINDOW_FRAME}
       <rect x="10.5" y="10.5" width="7" height="6" rx="1" />
+    </LineIcon>
+  );
+}
+
+/** Kept out of the User's screen share: an eye struck through. */
+export function EyeOffLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M3.5 3.5l17 17" />
+      <path d="M10.6 6.1A9.9 9.9 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3.2 3.7M6.6 6.6C4.3 8.1 3 12 3 12s4 6 9 6a9 9 0 0 0 4.2-1" />
+    </LineIcon>
+  );
+}
+
+/** Collapse a floating panel: a dash, as a window's minimise button. */
+export function MinusLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M6 12h12" />
+    </LineIcon>
+  );
+}
+
+/** Something to fix: a triangle with an exclamation mark. */
+export function WarningLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M12 4.5 20.5 19h-17z" />
+      <path d="M12 10v4M12 16.75v.01" />
+    </LineIcon>
+  );
+}
+
+export function InfoLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11v5M12 8v.01" />
     </LineIcon>
   );
 }

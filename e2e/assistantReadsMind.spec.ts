@@ -8,7 +8,9 @@ import {
   createDataFolder,
   dismissChatSetup,
   enterContent,
+  frontMindName,
   launchApp,
+  nameMind,
   newMind,
   openSteps,
   pointAndClick,
@@ -60,12 +62,11 @@ async function start(language: "en" | "zh-CN") {
   return { app, window };
 }
 
-/** A new Mind, its title and its Notes typed as a person types them. */
+/** A new Mind, named, and its Notes typed as a person types them. */
 async function writeMind(window: Page, title: string, notes: string[]): Promise<void> {
   await newMind(window);
-  await expect(window.getByTestId("mind-title")).toBeFocused();
-  await window.keyboard.type(title);
   await enterContent(window);
+  await nameMind(window, title);
   for (const [index, line] of notes.entries()) {
     if (index > 0) await window.keyboard.press("Enter");
     await window.keyboard.type(line);
@@ -101,7 +102,7 @@ async function longMind(window: Page, title: string): Promise<void> {
     { name: title, update: Array.from(Y.encodeStateAsUpdate(doc)) },
   );
   await pointAndClick(window, window.getByTestId("mind-list-item").filter({ hasText: title }));
-  await expect(window.getByTestId("mind-title")).toHaveValue(title);
+  await expect(frontMindName(window)).toHaveText(title);
 }
 
 test("“Summarise my notes” beside a Mind reads it: the consent says so, the Answer shows its text, the steps say Read; a selection leads; a long one is read in part", async () => {
@@ -117,7 +118,10 @@ test("“Summarise my notes” beside a Mind reads it: the consent says so, the 
   const answer = await ask(window, "Summarise my notes");
   const consent = window.getByTestId("consent-dialog");
   await expect(consent).toContainText(
-    "The Mind you're in: its text, your Notes and earlier Answers, except Notes you've excluded",
+    "This Mind’s text, Notes and earlier Answers, minus excluded Notes",
+  );
+  await expect(consent).toContainText(
+    "Nothing is sent unless you allow it. Change it any time in Settings → Privacy.",
   );
   await screenshot(window, "consent-en");
   await pointAndClick(window, consent.getByTestId("consent-allow"));
@@ -158,9 +162,9 @@ test("“Summarise my notes” beside a Mind reads it: the consent says so, the 
   await screenshot(window, "steps-read-share-en");
 
   // The Mind's name in the folded line goes to that Mind.
-  await expect(window.getByTestId("mind-title")).toHaveValue("Long notes");
+  await expect(frontMindName(window)).toHaveText("Long notes");
   await pointAndClick(window, second.getByTestId("answer-steps-mind"));
-  await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
+  await expect(frontMindName(window)).toHaveText("Tide notes");
   await app.close();
 });
 
@@ -171,7 +175,10 @@ test("in Chinese: the consent, the Answer that read the Mind, and the steps", as
 
   const answer = await ask(window, "总结我的笔记");
   const consent = window.getByTestId("consent-dialog");
-  await expect(consent).toContainText("你所在的 Mind：正文、笔记和之前的回答，不含你排除的笔记");
+  await expect(consent).toContainText("当前 Mind 的正文、笔记和之前的回答，不含已排除的笔记");
+  await expect(consent).toContainText(
+    "在你允许之前不会发送任何内容。你可以随时在“设置”的“隐私”中更改。",
+  );
   await screenshot(window, "consent-zh");
   await pointAndClick(window, consent.getByTestId("consent-allow"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });

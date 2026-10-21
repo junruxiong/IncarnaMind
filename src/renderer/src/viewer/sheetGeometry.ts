@@ -5,6 +5,7 @@
  */
 import type { CSSProperties } from "react";
 import type { BorderEdge, CellStyle, FontStyle } from "../../../core/documents/formats/xlsxStyles";
+import { fontKind } from "../../../shared/fontKinds";
 
 /**
  * Rows or columns: each the default size unless set (0 hides it). Offsets
@@ -95,20 +96,16 @@ export function rowHeightFor(points: number, lines: number): number {
   return Math.round((lines * points * 4 * 15) / (3 * 11));
 }
 
-const SERIF =
-  /^(?:times|georgia|cambria|garamond|book antiqua|palatino|constantia|baskerville|century|bookman|didot|hoefler|songti|simsun|source serif|noto serif|minion|caslon|charter|perpetua|rockwell)/i;
-const MONO =
-  /^(?:consolas|courier|lucida console|menlo|monaco|andale mono|source code|jetbrains|sf mono)/i;
+const FALLBACKS = {
+  serif: "var(--font-serif)",
+  mono: "var(--font-mono)",
+  sans: "var(--font-sans)",
+};
 
 /** A font's name as a CSS family, falling back to the app's own font of the same kind. */
 export function fontFamily(name: string | undefined): string {
-  if (!name) return "var(--font-sans)";
-  const fallback = SERIF.test(name)
-    ? "var(--font-serif)"
-    : MONO.test(name)
-      ? "var(--font-mono)"
-      : "var(--font-sans)";
-  return `"${name.replace(/["\\]/g, "")}", ${fallback}`;
+  if (!name) return FALLBACKS.sans;
+  return `"${name.replace(/["\\]/g, "")}", ${FALLBACKS[fontKind(name)]}`;
 }
 
 /** Points as CSS pixels, to two places. */

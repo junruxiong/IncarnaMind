@@ -34,7 +34,7 @@ const IN_CONVERSATION: Record<ThirdPartySource, MessageKey> = {
 /**
  * Why an approval card asks whatever the User's policy: its Answer had read
  * third-party text, and the call writes or sends data (#78). One line, for the
- * first reason: "This Answer read a web page, so it asks you first." Nothing
+ * first reason: "Asks first: this Answer read a web page." Nothing
  * for a call that asks for another reason.
  */
 export function ThirdPartyLine({ request }: { request: ApprovalRequest }) {

@@ -13,12 +13,12 @@ import {
   PROPOSAL_ATTRIBUTE,
   WORD_LOOK_ATTRIBUTE,
   WORD_RUN_MARK,
+  WORD_TAB_MARK,
   type WordAtomAttributes,
   type WordAtomKind,
   type WordFileInfo,
   type WordImportProgress,
   type WordImportReport,
-  type WordLayout,
   type WordOrigin,
   type WordSource,
 } from "../core/api";
@@ -88,16 +88,6 @@ export function wordAtomText(atom: Pick<WordAtomAttributes, "kind" | "label" | "
   // A comment and a footnote are notes beside the text, not part of it.
   if (atom.kind === "comment" || atom.kind === "footnote" || atom.kind === "endnote") return "";
   return atom.text || atom.label;
-}
-
-/**
- * Whether a Word file lays text out in columns of tab stops, which the Mind
- * doesn't draw yet, so the import screen says they are kept (#735). The bar
- * sits above what the Word corpus's memos, contracts and reports reach; its
- * résumés and forms pass it.
- */
-export function layoutNotShown(layout: WordLayout | undefined): boolean {
-  return layout !== undefined && layout.tabStops >= 4;
 }
 
 const wordMap = (doc: Y.Doc) => doc.getMap<unknown>(MIND_WORD_FIELD);
@@ -198,7 +188,7 @@ export function observeWordFile(doc: Y.Doc, listener: () => void): () => void {
  * it, its Word look (given later to earlier imports, which mustn't count as an edit).
  */
 const NOT_CONTENT = new Set(["id", "includeInContext", PROPOSAL_ATTRIBUTE, WORD_LOOK_ATTRIBUTE]);
-const NOT_TEXT_CONTENT = new Set([WORD_RUN_MARK]);
+const NOT_TEXT_CONTENT = new Set([WORD_RUN_MARK, WORD_TAB_MARK]);
 /** Mark attributes that are how a link opens, not where it leads. */
 const NOT_MARK_CONTENT = new Set(["target", "rel", "class"]);
 

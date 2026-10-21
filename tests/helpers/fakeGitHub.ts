@@ -7,13 +7,14 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { onTestFinished } from "vitest";
 import type { Browser, CopilotProfileId } from "../../src/core";
 import type { CopilotProfile } from "../../src/core/providers/copilot/config";
 
 export const ANSWER = "Hello from your Copilot plan.";
 export const USER_CODE = "WDJB-MJHT";
 export const EDITOR_HEADER = "test-editor/1";
+/** The GitHub account the fake signs in. */
+export const LOGIN = "priya-shah";
 /** GitHub asks for five seconds between polls; the fake asks for a moment, so tests needn't wait. */
 const POLL_SECONDS = 0.01;
 
@@ -77,6 +78,14 @@ export interface FakeGitHub {
   exchangeOffline: boolean;
   /** The token exchange answers with GitHub's own error for an account without Copilot. */
   exchangeNoCopilot: boolean;
+  /** The token exchange answers that an organization's policy blocks the app. */
+  exchangePolicy: boolean;
+  /** What the token exchange says of the plan. */
+  sku: string;
+  /** The account's name isn't given: GitHub answers this status instead. */
+  userStatus: number | null;
+  /** What Copilot's model list holds. */
+  listedModels: unknown[];
   /** The token exchange answers only once this resolves. */
   holdExchange: Promise<void> | null;
   /** The next replies of the chat API, then answers. */
@@ -91,6 +100,7 @@ export interface FakeGitHub {
   expire(): void;
   /** Tokens GitHub no longer takes, as when the User revokes the app. */
   revoke(): void;
+  close(): Promise<void>;
 }
 
 const readBody = (request: IncomingMessage) =>
@@ -108,7 +118,8 @@ const sendJson = (response: ServerResponse, status: number, body: unknown) => {
   response.end(JSON.stringify(body));
 };
 
-export async function startFakeGitHub(): Promise<FakeGitHub> {
+/** Starts the fake on a free port. Call `close` when done. */
+export async function createFakeGitHub(): Promise<FakeGitHub> {
   let origin = "";
   let deviceState: "pending" | "approved" | "denied" | "expired" = "pending";
   const live = new Set<string>();
@@ -147,6 +158,7 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
       scopes: id === "own" ? ["read:user", "offline_access"] : ["read:user"],
       format: "json",
       apiBaseUrl: origin,
+      accountUrl: `${origin}/user`,
       ...(id === "editor" && {
         experimental: true,
         signInHeaders: { "Editor-Version": EDITOR_HEADER },
@@ -166,6 +178,10 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
     exchangeStatus: null,
     exchangeOffline: false,
     exchangeNoCopilot: false,
+    exchangePolicy: false,
+    sku: "plus_monthly_subscriber_quota",
+    userStatus: null,
+    listedModels: LISTED_MODELS,
     holdExchange: null,
     replies: [],
     script: null,
@@ -179,6 +195,11 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
       deviceState = "expired";
     },
     revoke: () => live.clear(),
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
   };
 
   const token = (body: Record<string, unknown>, response: ServerResponse) => {
@@ -319,6 +340,11 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
               },
             });
           }
+          if (fake.exchangePolicy) {
+            return sendJson(response, 403, {
+              message: "Copilot is disabled for this app by your organization's policy.",
+            });
+          }
           if (fake.exchangeStatus) {
             const status = fake.exchangeStatus;
             const message =
@@ -335,12 +361,19 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
           return sendJson(response, 200, {
             token: session,
             expires_at: Math.floor(Date.parse("2026-10-06T09:25:00.000Z") / 1000),
+            sku: fake.sku,
           });
+        }
+        if (request.method === "GET" && path === "/user") {
+          if (!live.has(bearer(request)))
+            return sendJson(response, 401, { message: "Bad credentials" });
+          if (fake.userStatus) return sendJson(response, fake.userStatus, { message: "Error" });
+          return sendJson(response, 200, { login: LOGIN, id: 1 });
         }
         if (request.method === "GET" && path === "/models") {
           if (!live.has(bearer(request)))
             return sendJson(response, 401, { message: "Bad credentials" });
-          return sendJson(response, 200, { data: LISTED_MODELS, object: "list" });
+          return sendJson(response, 200, { data: fake.listedModels, object: "list" });
         }
         if (request.method === "POST" && path === "/chat/completions") {
           return chat(body, request, response);
@@ -353,13 +386,6 @@ export async function startFakeGitHub(): Promise<FakeGitHub> {
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  onTestFinished(
-    () =>
-      new Promise<void>((resolve) => {
-        server.close(() => resolve());
-        server.closeAllConnections();
-      }),
-  );
   return fake;
 }
 

@@ -80,8 +80,11 @@ test("Automatic says which model it uses; another one is chosen from the list an
       "Using the local decision models on this computer (Tev1, Clef-Flash)",
     );
     await expect(section.getByTestId("tagging-review")).toHaveText(
-      "This model says how likely each Tag is, and marks the ones it isn't sure of for you to review.",
+      "Uncertain Tags are marked for review.",
     );
+    await expect(
+      section.getByRole("checkbox", { name: "Move new Documents into Folders automatically" }),
+    ).toBeChecked();
 
     // The list: the models on this computer, labelled, and what they cost.
     await expect(section.getByText("On this computer", { exact: true })).toBeVisible();
@@ -95,9 +98,7 @@ test("Automatic says which model it uses; another one is chosen from the list an
     await chat.click();
     await expect(chat.getByRole("radio")).toBeChecked();
     await expect(automatic.getByRole("radio")).not.toBeChecked();
-    await expect(section.getByTestId("tagging-review")).toHaveText(
-      "This model doesn't say how sure it is, so every Tag it adds is kept. Remove any you don't want.",
-    );
+    await expect(section.getByTestId("tagging-review")).toHaveText("Every Tag it adds is kept.");
     await expect
       .poll(() =>
         window.evaluate(
@@ -148,12 +149,11 @@ test("in Chinese: 自动打标签, with the model Automatic uses and the list's 
       "正在使用本地分类模型（Tev1, Clef-Flash）",
     );
     await expect(section.getByText("在本机运行", { exact: true })).toBeVisible();
+    await expect(section.getByRole("checkbox", { name: "自动把新文档移入文件夹" })).toBeChecked();
     await expect(option(section, "Tev1 0.8B")).toContainText("本地分类模型");
     await expect(option(section, "Tev1 0.8B")).toContainText("免费，在本机运行");
     await option(section, "fake-model").click();
-    await expect(section.getByTestId("tagging-review")).toHaveText(
-      "此模型不会给出把握程度，所以它添加的标签都会保留。不需要的可以移除。",
-    );
+    await expect(section.getByTestId("tagging-review")).toHaveText("它添加的标签都会保留。");
   } finally {
     await app.close();
   }

@@ -1,11 +1,12 @@
 import { describe, expect, test } from "vitest";
 import type { AnswerToolCall, MindChange } from "../../src/core/api";
 import { changedMinds } from "../../src/renderer/src/changedMinds";
+import { translate } from "../../src/shared/i18n";
 
 /*
  * The rows of an Answer's card of Minds changed (#202): one per Mind, in the
  * order the Answer first changed each, with every request of its changes there
- * and what its calls did: paragraphs written whole, places changed.
+ * and what its calls did: paragraphs written whole, paragraphs changed.
  */
 
 let calls = 0;
@@ -25,7 +26,7 @@ describe("The Minds an Answer changed", () => {
     const rows = changedMinds({
       toolCalls: [
         call("read_mind"),
-        call("edit_mind", { mindId: "a", created: false, request: "r1", proposals: 2 }),
+        call("edit_mind", { mindId: "a", created: false, request: "r1", proposals: 5, changed: 2 }),
         call("create_mind", {
           mindId: "b",
           created: true,
@@ -58,7 +59,10 @@ describe("The Minds an Answer changed", () => {
         wrote: 1,
         changed: 2,
         tables: 0,
+        charts: 0,
+        chartNotDrawn: null,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
       {
@@ -68,7 +72,10 @@ describe("The Minds an Answer changed", () => {
         wrote: 3,
         changed: 0,
         tables: 0,
+        charts: 0,
+        chartNotDrawn: null,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
     ]);
@@ -88,7 +95,10 @@ describe("The Minds an Answer changed", () => {
         wrote: 0,
         changed: 0,
         tables: 0,
+        charts: 0,
+        chartNotDrawn: null,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
     ]);
@@ -118,7 +128,10 @@ describe("The Minds an Answer changed", () => {
         wrote: 3,
         changed: 0,
         tables: 0,
+        charts: 0,
+        chartNotDrawn: null,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
     ]);
@@ -142,7 +155,10 @@ describe("The Minds an Answer changed", () => {
         wrote: 0,
         changed: 0,
         tables: 0,
+        charts: 0,
+        chartNotDrawn: null,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
     ]);
@@ -184,7 +200,10 @@ describe("The Minds an Answer changed", () => {
         wrote: 0,
         changed: 4,
         tables: 1,
+        charts: 0,
+        chartNotDrawn: null,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
       {
@@ -194,7 +213,10 @@ describe("The Minds an Answer changed", () => {
         wrote: 0,
         changed: 0,
         tables: 1,
+        charts: 0,
+        chartNotDrawn: null,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
       {
@@ -204,7 +226,10 @@ describe("The Minds an Answer changed", () => {
         wrote: 0,
         changed: 0,
         tables: 1,
+        charts: 0,
+        chartNotDrawn: null,
         unlinkedSources: 0,
+        droppedSources: 0,
         extraCells: 0,
       },
     ]);
@@ -221,6 +246,7 @@ describe("The Minds an Answer changed", () => {
           proposals: 1,
           tables: 1,
           unlinkedSources: 2,
+          droppedSources: 1,
         }),
         call("edit_mind", {
           mindId: "a",
@@ -233,6 +259,17 @@ describe("The Minds an Answer changed", () => {
         }),
       ],
     });
-    expect(row).toMatchObject({ tables: 2, unlinkedSources: 3, extraCells: 3 });
+    expect(row).toMatchObject({ tables: 2, unlinkedSources: 3, droppedSources: 1, extraCells: 3 });
+  });
+
+  // protects=the card's note on a table's sources uses the glossary's word for a Citation's source, 出处, in Chinese (#961); fails_when=it says 来源; no_claim=how the card lays it out.
+  test("the note on a table's sources says 出处 in Chinese", () => {
+    expect(translate("zh-CN", "mindChanges.unlinked.one")).toBe("· 1 处出处未关联，显示为文字");
+    expect(translate("zh-CN", "mindChanges.unlinked", { count: 3 })).toBe(
+      "· 3 处出处未关联，显示为文字",
+    );
+    expect(translate("zh-CN", "mindChanges.dropped", { count: 2 })).toBe(
+      "· 有 2 处出处无法匹配，已删去",
+    );
   });
 });

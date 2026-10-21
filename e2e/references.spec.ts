@@ -112,7 +112,8 @@ test("Needs details opens Cite as at the first missing field, and each field is 
     await window.keyboard.type("Harris, Charles R.; 张三");
     await window.keyboard.press("Enter");
     await expect(panel.getByTestId("reference-authors")).toHaveText("Harris, Charles R.; 张三");
-    await expect(toggle).toHaveText("Cite as");
+    // The type, which the DOI suggested, is still a guess to check.
+    await expect(toggle).toHaveText("Needs checking");
 
     // Undo takes the last change back.
     await expect(window.getByTestId("undo-message")).toHaveText(
@@ -163,7 +164,7 @@ test("Look up asks once, sends only the DOI, and fills the empty fields; in Chin
     await panel.getByTestId("reference-title-input").press("Escape");
     await expect(panel.getByTestId("reference-look-up")).toHaveAttribute(
       "title",
-      "按 DOI 从 Crossref 补全空白字段。只发送 DOI。",
+      "从 Crossref 补全空白字段。只发送 DOI。",
     );
 
     // Asked first: nothing is sent until the User allows it.

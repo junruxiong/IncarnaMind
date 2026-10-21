@@ -5,7 +5,8 @@ import { errorMessage } from "../errors";
 import { translateNow, useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import { chooseOutputLocation } from "../outputFiles";
-import { useAppStore } from "../store";
+import { useSettingsTarget } from "../settingsTarget";
+import { InfoTip } from "./InfoTip";
 import { PathText } from "./PathText";
 import { ProblemLine } from "./ProblemLine";
 import {
@@ -16,6 +17,8 @@ import {
   sectionNoteClass,
   sectionTitleClass,
 } from "./ui";
+
+const TARGET = ["output-location"] as const;
 
 /**
  * Settings → General → Output location: where new files go, the default
@@ -46,15 +49,10 @@ export function OutputLocationSettings() {
     };
   }, []);
 
-  const section = useRef<HTMLElement>(null);
   const changeButton = useRef<HTMLButtonElement>(null);
-  const drawn = settings !== null;
-  useEffect(() => {
-    if (!drawn || useAppStore.getState().settingsAt !== "output-location") return;
-    useAppStore.setState({ settingsAt: null });
-    section.current?.scrollIntoView({ block: "start" });
-    changeButton.current?.focus({ preventScroll: true });
-  }, [drawn]);
+  const section = useSettingsTarget<HTMLElement>(TARGET, settings !== null, () =>
+    changeButton.current?.focus({ preventScroll: true }),
+  );
 
   const change = async (action: () => Promise<OutputSettings | null>) => {
     setProblem(null);
@@ -72,10 +70,12 @@ export function OutputLocationSettings() {
   return (
     <section ref={section} data-testid="output-location-settings" className="flex flex-col gap-7">
       <div>
-        <h4 id={titleId} className={sectionTitleClass}>
-          {t("outputLocation.title")}
-        </h4>
-        <p className={sectionNoteClass}>{t("outputLocation.body")}</p>
+        <div className="mb-2 flex items-center">
+          <h4 id={titleId} className={sectionTitleClass}>
+            {t("outputLocation.title")}
+          </h4>
+          <InfoTip text={t("outputLocation.body.tip")} />
+        </div>
         <div className="flex min-w-0 items-center gap-2">
           <PathText
             path={location ?? settings.suggested}

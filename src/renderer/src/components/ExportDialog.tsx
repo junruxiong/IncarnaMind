@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
 import {
   EXPORT_FORMATS,
   type ExportFormat,
@@ -11,12 +11,13 @@ import {
   type TheirChangesShown,
   type WordExportPreferences,
 } from "../../../core/api";
+import { hasQuestionsOption } from "../../../shared/exportOptions";
 import type { MessageKey } from "../../../shared/i18n";
-import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
+import { useCitationStylePicker, useStyleLabel } from "../citationStylePicker";
 import { shortcutLabel } from "../commands/keymap";
 import { core } from "../core";
 import { errorMessage } from "../errors";
-import { exportPreferences, FORMAT_LABELS, hasQuestionsOption } from "../exports";
+import { exportPreferences, FORMAT_LABELS } from "../exports";
 import { useT } from "../i18n";
 import { chooseOutputLocation, outputFolderLabel } from "../outputFiles";
 import { useAppStore } from "../store";
@@ -56,7 +57,7 @@ function SwitchRow({
   testId,
 }: {
   label: string;
-  hint?: string;
+  hint?: ReactNode;
   checked: boolean;
   onChange(checked: boolean): void;
   testId: string;
@@ -89,6 +90,29 @@ function SwitchRow({
   );
 }
 
+/** The hint of the tracked-changes switch, with the name a link to where it is changed. */
+function TrackedAsHint({ name }: { name: string }) {
+  const t = useT();
+  const openSettings = useAppStore((state) => state.openSettings);
+  // The name sits in the sentence wherever the language puts it, so the sentence is cut at it.
+  const mark = "\u0000";
+  const [before = "", after = ""] = t("export.trackChanges.hint", { name: mark }).split(mark);
+  return (
+    <>
+      {before}
+      <button
+        type="button"
+        data-testid="export-author-name"
+        onClick={() => openSettings("general", "author-name")}
+        className="underline"
+      >
+        {name}
+      </button>
+      {after}
+    </>
+  );
+}
+
 /**
  * A Word file's review choices (#107): the User's edits as tracked changes,
  * for a Mind imported from a Word file, and IncarnaMind's comments on AI
@@ -110,7 +134,7 @@ function WordReviewRows({
       {fromWord && (
         <SwitchRow
           label={t("export.trackChanges")}
-          hint={t("export.trackChanges.hint", { name: author })}
+          hint={<TrackedAsHint name={author} />}
           checked={draft.trackChanges}
           onChange={(trackChanges) => onChange({ ...draft, trackChanges })}
           testId="export-track-changes"
@@ -223,6 +247,8 @@ function TheirChangesRow({
 /**
  * The Mind's citation style (#289), which its export is written in, with the button that
  * changes it: the same picker as the References block's. It changes at once, not on Save.
+ * A Mind that hasn't chosen and isn't Numbered follows the Chinese default (GB/T 7714), which the
+ * row says.
  */
 function CitationStyleRow({ mindId }: { mindId: string }) {
   const t = useT();
@@ -242,11 +268,23 @@ function CitationStyleRow({ mindId }: { mindId: string }) {
       current = false;
     };
   }, [mindId, picking]);
+  const byDefault = style !== null && !style.chosen && style.style !== "numbered";
+  const label = useStyleLabel(style?.style);
   return (
     <div className={rowClass}>
-      <span id="export-citation-style" className="text-ui text-ink">
-        {t("export.citationStyle")}
-      </span>
+      <div className="flex min-w-0 flex-col">
+        <span id="export-citation-style" className="text-ui text-ink">
+          {t("export.citationStyle")}
+        </span>
+        {byDefault && (
+          <span
+            data-testid="export-citation-style-default"
+            className="text-[13px] leading-5 text-ink-meta"
+          >
+            {t("export.citationStyle.default")}
+          </span>
+        )}
+      </div>
       <button
         type="button"
         data-testid="export-citation-style"
@@ -256,7 +294,7 @@ function CitationStyleRow({ mindId }: { mindId: string }) {
         className={`${buttonClass} min-w-0 gap-1`}
       >
         <span id="export-citation-style-value" className="truncate">
-          {style ? styleLabel(style.style, t) : "…"}
+          {label ?? "…"}
         </span>
         <ChevronDownLineIcon className="size-3.5 shrink-0 text-ink-meta" />
       </button>

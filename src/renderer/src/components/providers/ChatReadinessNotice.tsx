@@ -1,9 +1,15 @@
 import type { ChatReadiness } from "../../../../core/api";
+import {
+  isSignInRoute,
+  SIGN_IN_ROUTES,
+  wayBackLabel,
+} from "../../../../core/providers/signInRoutes";
 import { signInAgain } from "../../chatGptSignIn";
 import { useLanguage, useT } from "../../i18n";
 import { turnOffLocalMode } from "../../localMode";
-import { useModelSetup } from "../../modelSetup";
+import { useSettingUp } from "../../modelSetup";
 import { useRequests } from "../../requests";
+import { wayBackRun } from "../../routeSignIn";
 import type { SettingsPage } from "../../settingsPages";
 import { useAppStore } from "../../store";
 import { ProblemLine } from "../ProblemLine";
@@ -14,9 +20,32 @@ export const settingsPageFor = (
   readiness: Extract<ChatReadiness, { ready: false }>,
 ): SettingsPage => (readiness.reason === "consent-declined" ? "privacy" : "models");
 
+/** A sign-in route's way back from being signed out: the `index`th, first the main one. */
+function routeWayBack(
+  readiness: Extract<ChatReadiness, { ready: false }>,
+  index: number,
+  t: ReturnType<typeof useT>,
+  openSettings: (page: SettingsPage) => void,
+  before?: () => void,
+): { label: string; onClick(): void } | undefined {
+  if (readiness.reason !== "sign-in-required") return undefined;
+  const { kind } = readiness.provider;
+  if (!isSignInRoute(kind)) return undefined;
+  const wayBack = SIGN_IN_ROUTES[kind].problems["signed-out"].waysBack[index];
+  const run = wayBack && wayBackRun(kind, wayBack, { onOpenSettings: openSettings });
+  if (!wayBack || !run) return undefined;
+  return {
+    label: t(wayBackLabel(kind, wayBack)),
+    onClick: () => {
+      before?.();
+      run();
+    },
+  };
+}
+
 /**
  * The one action that fixes `readiness`, labelled `label` (its Settings page
- * by default): for an ended ChatGPT sign-in, "Sign in again", right there;
+ * by default): for an ended sign-in, signing in again with its own provider;
  * else opening the Settings page that fixes it. `before` runs first, e.g. to
  * dismiss the problem.
  */
@@ -27,6 +56,8 @@ export function readinessAction(
   label: string,
   before?: () => void,
 ): { label: string; onClick(): void } {
+  const route = routeWayBack(readiness, 0, t, openSettings, before);
+  if (route) return route;
   if (readiness.reason === "sign-in-required") {
     return {
       label: t("chatgpt.signInAgain"),
@@ -45,6 +76,14 @@ export function readinessAction(
   };
 }
 
+/** A sign-in route's second way back from being signed out, beside `readinessAction`. */
+export const readinessAlso = (
+  readiness: Extract<ChatReadiness, { ready: false }>,
+  t: ReturnType<typeof useT>,
+  openSettings: (page: SettingsPage) => void,
+  before?: () => void,
+) => routeWayBack(readiness, 1, t, openSettings, before);
+
 /**
  * What to configure before Questions can be asked. `inLine`: ahead of an
  * action on the same line, so without the full stop that ends it otherwise.
@@ -59,32 +98,28 @@ export function ReadinessExplanation({
   const t = useT();
   const language = useLanguage();
   const service = "provider" in readiness ? serviceName(readiness.provider, t, language) : "";
-  const words = t(readinessKey(readiness.reason), { service });
-  return <>{inLine ? words.replace(/[.。]$/, "") : words}</>;
+  const words = t(readinessKey(readiness), { service });
+  if (inLine) return <>{words.replace(/[.。]$/, "")}</>;
+  return <>{/[.。]$/.test(words) ? words : `${words}${language === "zh-CN" ? "。" : "."}`}</>;
 }
 
 /**
  * Why Questions can't be asked, as one line with the one thing that fixes it.
  * Local mode refusing a cloud model has two ways out, so it offers both: a
  * local model, or turning local mode off (which can be undone).
- * `refused`: a Question was just asked and not sent, rather than Questions
- * being off in general.
  */
 export function ReadinessLine({
   readiness,
   testId,
   className,
   setUpLabel,
-  refused = false,
 }: {
   readiness: Extract<ChatReadiness, { ready: false }>;
   testId: string;
   className?: string;
   setUpLabel: string;
-  refused?: boolean;
 }) {
   const t = useT();
-  const language = useLanguage();
   const openSettings = useAppStore((state) => state.openSettings);
   if (readiness.reason === "local-mode") {
     return (
@@ -104,11 +139,7 @@ export function ReadinessLine({
             turnOffLocalMode().catch((error: unknown) => useAppStore.getState().reportError(error)),
         }}
       >
-        {refused ? (
-          <>{t("localMode.refused", { service: serviceName(readiness.provider, t, language) })}</>
-        ) : (
-          <ReadinessExplanation readiness={readiness} inLine />
-        )}
+        <ReadinessExplanation readiness={readiness} inLine />
       </ProblemLine>
     );
   }
@@ -118,6 +149,7 @@ export function ReadinessLine({
       testId={testId}
       {...(className && { className })}
       action={readinessAction(readiness, t, openSettings, setUpLabel)}
+      also={readinessAlso(readiness, t, openSettings)}
     >
       <ReadinessExplanation readiness={readiness} inLine />
     </ProblemLine>
@@ -131,8 +163,8 @@ export function ReadinessLine({
 export function ChatReadinessNotice() {
   const t = useT();
   const readiness = useAppStore((state) => state.chatReadiness);
-  // The setup card, waiting with the Question, already says it.
-  const settingUp = useModelSetup((state) => state.waiting !== null);
+  // The setup card already says it.
+  const settingUp = useSettingUp();
   if (!readiness || readiness.ready || settingUp) return null;
   return (
     <ReadinessLine

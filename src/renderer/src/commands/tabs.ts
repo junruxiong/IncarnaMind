@@ -70,16 +70,6 @@ const focusGroupCommands = [1, 2, 3].map(
 
 export const tabCommands: readonly Command[] = [
   {
-    id: "tab.new",
-    label: "command.tab.new",
-    shortcut: { keys: "CmdOrCtrl+T" },
-    // The same as New Mind, which ⌘K offers.
-    palette: false,
-    group: "main",
-    reversible: true,
-    run: () => store().createMind(),
-  },
-  {
     ...fromMenu("tab.close"),
     menuLabel: "tabs.menu.close",
     group: "danger",
@@ -103,7 +93,7 @@ export const tabCommands: readonly Command[] = [
   },
   {
     ...fromMenu("tab.split"),
-    menuLabel: "tabs.menu.side",
+    menuLabel: "tabs.menu.split",
     group: "open",
     reversible: true,
     when: (ctx) => targetOf(ctx) !== null,
@@ -182,10 +172,12 @@ export const tabCommands: readonly Command[] = [
     shortcut: { keys: "F2", list: true },
     group: "edit",
     reversible: true,
-    // Not from another list's F2: only on a tab, or on the shown one from ⌘K.
+    // Not from another list's F2: only on a tab, or on the shown one from ⌘K, where its Mind's own Rename comes first.
     when: (ctx) =>
       targetOf(ctx)?.tab.item.kind === "mind" &&
-      (ctx.focus?.kind === "tab" || ctx.surface === "palette" || keyboardTab() !== undefined),
+      (ctx.focus?.kind === "tab" ||
+        (ctx.surface === "palette" && ctx.here?.["mind.rename"] === undefined) ||
+        keyboardTab() !== undefined),
     run: onTarget(({ tab }) => store().renameTab(tab.id)),
   },
   {

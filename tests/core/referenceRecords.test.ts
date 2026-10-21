@@ -525,7 +525,11 @@ describe("Look up", () => {
     );
     // One GET, with the DOI in its address and nothing else.
     expect(services.requests).toEqual([
-      { method: "GET", path: `/works/${encodeURIComponent(NUMPY_DOI)}`, bodyLength: 0 },
+      expect.objectContaining({
+        method: "GET",
+        path: `/works/${encodeURIComponent(NUMPY_DOI)}`,
+        bodyLength: 0,
+      }),
     ]);
 
     // Asked once: the next Look up asks nothing.
@@ -634,6 +638,25 @@ describe("Look up", () => {
     expect(result).toMatchObject({ outcome: "failed", reason: "local-mode" });
     expect(asked).toBe(false);
     expect(services.requests).toEqual([]);
+  });
+
+  test("local mode turned on while it waits for consent: the prompt closes, it says local mode, and nothing is sent", async () => {
+    const { core, services } = await startWithServices();
+    const { documents } = await addFiles(core, { "s41586-020-2649-2.pdf": numpyPdf() });
+    const requested = nextEvent(core, "consent.requested");
+    const result = core.lookUpReference(documents["s41586-020-2649-2.pdf"]?.id as string);
+    const request = await requested;
+    const closed = nextEvent(core, "consent.resolved");
+
+    await core.setLocalOnly(true);
+
+    expect(await closed).toEqual({ requestId: request.requestId, accepted: false });
+    expect(await result).toMatchObject({ outcome: "failed", reason: "local-mode" });
+    await core.respondToConsent(request.requestId, true);
+    expect(services.requests).toEqual([]);
+    expect(await core.listDataFlows()).not.toContainEqual(
+      expect.objectContaining({ flow: expect.objectContaining({ id: "reference-lookup" }) }),
+    );
   });
 
   test("an unknown DOI, a service that fails, or no identifier says so and changes nothing", async () => {

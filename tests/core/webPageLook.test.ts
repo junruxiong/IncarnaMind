@@ -6,13 +6,14 @@
  * makes it stands in here.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { type Core, DATABASE_FILE } from "../../src/core";
 import type { PageLook } from "../../src/core/adapters";
 import type { Document, WebPageLookFailure } from "../../src/core/api";
 import { openDatabase } from "../../src/core/storage";
-import { createTempDataFolder, startCore } from "../helpers/core";
+import { createTempDataFolder, nextTurn, queryDatabase, startCore } from "../helpers/core";
 import { waitForDocuments, waitForProcessing } from "../helpers/documents";
 import { startWeb } from "../helpers/web";
 
@@ -30,6 +31,11 @@ function standInLook(fail: () => WebPageLookFailure | null = () => null) {
     },
   };
   return { look, asked };
+}
+
+/** Work on files that was started takes several round trips to the disk: this takes more. */
+async function lateFileWork(dir: string) {
+  for (let hop = 0; hop < 12; hop++) await stat(dir);
 }
 
 async function startSite() {
@@ -183,6 +189,75 @@ describe("A web page kept as it looks", { timeout: 30_000 }, () => {
     expect(stand.asked).toEqual([site.address]);
   });
 
+  test.each([
+    ["fails", { failure: "stopped", message: "Synthetic late result." }],
+    ["is made", { pdf: new TextEncoder().encode("%PDF-1.7 late") }],
+  ] as const)(
+    "closed while a look is made, one that %s late is kept nowhere and none waiting is started; the next start makes them",
+    async (_ending, late) => {
+      const web = await startWeb({
+        "/a": () => ({ status: 200, body: REPORT }),
+        "/b": () => ({ status: 200, body: REPORT }),
+      });
+      const [a, b] = ["a", "b"].map((name) => `http://127.0.0.1:${web.port}/${name}`);
+      if (!a || !b) throw new Error("No addresses.");
+      const dataDir = await createTempDataFolder();
+      const rendered: string[] = [];
+      let finish: (made: typeof late) => void = () => undefined;
+      const pageLook: PageLook = {
+        render: (address) => {
+          rendered.push(address);
+          if (rendered.length > 1) {
+            return Promise.resolve({ failure: "stopped", message: "Rendered after close." });
+          }
+          return new Promise((resolve) => {
+            finish = resolve;
+          });
+        },
+      };
+      const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const first = startCore(dataDir, { ...web.adapters, pageLook });
+      const idA = await saved(first, { address: a, keepLook: true });
+      await expect.poll(() => rendered.length).toBe(1);
+      const idB = await saved(first, { address: b, keepLook: true });
+      expect(rendered).toEqual([a]);
+
+      first.close();
+      finish(late);
+      await nextTurn();
+      await lateFileWork(dataDir);
+
+      expect(rendered).toEqual([a]);
+      expect(errors).not.toHaveBeenCalled();
+      expect(
+        queryDatabase<{ look_status: string; look_hash: string | null }>(
+          dataDir,
+          "SELECT look_status, look_hash FROM web_pages ORDER BY address",
+        ),
+      ).toEqual([
+        { look_status: "saving", look_hash: null },
+        { look_status: "saving", look_hash: null },
+      ]);
+      expect(existsSync(join(dataDir, "Web pages", "looks"))).toBe(false);
+
+      const stand = standInLook();
+      const second = startCore(dataDir, { ...web.adapters, pageLook: stand.look });
+      await Promise.all([settled(second, idA), settled(second, idB)]);
+      expect((await lookOf(second, idA))?.status).toBe("saved");
+      expect((await lookOf(second, idB))?.status).toBe("saved");
+      expect([...stand.asked].sort()).toEqual([a, b]);
+    },
+  );
+
+  test("closed as the app starts, the clean-up of deleted pages leaves the closed storage alone", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    core.close();
+    await lateFileWork(dataDir);
+    expect(errors).not.toHaveBeenCalled();
+  });
+
   test("one made again after a quit, which the app quit during again, is given up, saying why", async () => {
     const site = await startSite();
     const dataDir = await createTempDataFolder();
@@ -234,23 +309,29 @@ describe("A web page kept as it looks", { timeout: 30_000 }, () => {
     const restored = await saved(core, { address: site.address, keepLook: true });
     await expect.poll(() => releases.length).toBe(1);
     await core.deleteDocument(restored);
-    releases.shift()?.();
-    await expect.poll(() => (existsSync(looks) ? readdirSync(looks).length : 0)).toBe(1);
-    await core.restore([{ kind: "document", id: restored }]);
-    expect((await lookOf(core, restored))?.status).toBe("saved");
 
     const other = await startWeb({ "/other": () => ({ status: 200, body: REPORT }) });
     const purged = await saved(core, {
       address: `http://127.0.0.1:${other.port}/other`,
       keepLook: true,
     });
+    // The next render starts only after the previous write, status and cleanup finish (#1473).
+    releases.shift()?.();
     await expect.poll(() => releases.length).toBe(1);
+    await core.restore([{ kind: "document", id: restored }]);
+    expect((await lookOf(core, restored))?.status).toBe("saved");
+
     await core.deleteDocument(purged);
     await core.deletePermanently([{ kind: "document", id: purged }]);
+    site.change();
+    await core.fetchWebPageAgain(restored);
+    await waitForProcessing(core, [restored]);
     releases.shift()?.();
-    await expect
-      .poll(() => readdirSync(looks).filter((name) => name.endsWith(".pdf")))
-      .toHaveLength(1);
+    await expect.poll(() => releases.length).toBe(1);
+    expect(readdirSync(looks).filter((name) => name.endsWith(".pdf"))).toHaveLength(1);
+    releases.shift()?.();
+    await settled(core, restored);
+    expect((await lookOf(core, restored))?.status).toBe("saved");
   });
 
   test("deleted permanently, its PDF goes with it", async () => {

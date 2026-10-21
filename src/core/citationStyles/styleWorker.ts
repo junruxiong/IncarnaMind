@@ -1,42 +1,39 @@
 /**
  * The citation-style engine's thread (ADR-0016): formatting a few hundred references in a
  * note style takes most of a second, so it happens here, never on the core's thread. It loads
- * the engine and the locales from the folder it is given, parses each style once, and answers
- * one request at a time.
+ * the engine from the folder it is given and styles and locales from its pack, parses each
+ * style once for each locale it is asked in, and answers one request at a time.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parentPort, workerData } from "node:worker_threads";
 import { formatJob } from "./format";
-import type { WorkerRequest, WorkerResponse } from "./protocol";
+import { createPackStyles } from "./packStyles";
+import type { EngineStyle, WorkerRequest, WorkerResponse } from "./protocol";
 import { CslEngine, type StyleDescription, StyleError } from "./wasm";
 
 const { folder } = workerData as { folder: string };
 
-/** The locales the shipped styles use; a style's own `<locale>` terms override them. */
-const LOCALES = ["en-US", "en-GB", "zh-CN"];
-
 let module: WebAssembly.Module | undefined;
-let locales: string[] | undefined;
 let engine: CslEngine | undefined;
+const pack = createPackStyles(folder);
 const styles = new Map<string, { handle: number; description: StyleDescription }>();
 
-function styleOf(file: string) {
-  const known = styles.get(file);
+function styleOf(style: EngineStyle) {
+  const key = `${style.packId} ${style.locale ?? ""}`;
+  const known = styles.get(key);
   if (known) return known;
   module ??= new WebAssembly.Module(readFileSync(join(folder, "engine.wasm")));
   engine ??= new CslEngine(module);
-  locales ??= LOCALES.map((code) =>
-    readFileSync(join(folder, "locales", `locales-${code}.xml`), "utf8"),
-  );
-  const parsed = engine.parse(readFileSync(join(folder, "styles", file), "utf8"), locales);
-  styles.set(file, parsed);
+  const { text, locales } = pack.style(style);
+  const parsed = engine.parse(text, locales);
+  styles.set(key, parsed);
   return parsed;
 }
 
 function answer(request: WorkerRequest): WorkerResponse {
   try {
-    const { handle, description } = styleOf(request.style.file);
+    const { handle, description } = styleOf(request.style);
     const live = engine as CslEngine;
     const output = formatJob(request.job, (each) => live.render(handle, each));
     return { id: request.id, ok: true, description, output };

@@ -4,7 +4,7 @@ import * as Y from "yjs";
 import type { Core } from "../../src/core";
 import { EDIT_INSTRUCTIONS } from "../../src/core/edits/prompt";
 import { waitingProblemOf } from "../../src/renderer/src/changeProblems";
-import { pendingProposals, resolveProposals } from "../../src/shared/proposals";
+import { pendingProposals, proposalRequestOf, resolveProposals } from "../../src/shared/proposals";
 import { askAssistant, changesIn, lastResult, mindCalls } from "../helpers/assistant";
 import { answerEnded } from "../helpers/citations";
 import { createTempDataFolder, startCore } from "../helpers/core";
@@ -144,7 +144,9 @@ describe("The assistant revises its own changes still waiting", { timeout: 30_00
     expect(revised).toMatchObject({ mindId: made?.mindId, revised: true, proposals: 2 });
     expect(pendingProposals(page.blocks)).toHaveLength(revised?.proposals ?? -1);
     expect(waitingFrom(page, made?.request ?? "")).toBe(0);
-    expect(lastResult(model)).toMatch(/^Revised your own waiting text in “Tide notes”/);
+    expect(lastResult(model)).toMatch(
+      /^Revised your own text in “Tide notes”.*applies in the Mind at once/,
+    );
     expect(second.steps?.unbackedClaims).toBeUndefined();
   });
 
@@ -782,4 +784,202 @@ describe("Asking again for a reply that claims a change", { timeout: 30_000 }, (
     const answer = messages.find((message) => message.id === asked.answerId);
     expect(answer?.kind === "answer" && answer.text).not.toContain("added a risks section");
   });
+});
+
+describe("The assistant's own text already in the Mind (#1061)", { timeout: 30_000 }, () => {
+  // protects=“make the summary longer” after Add to note replaces the added summary with the longer one, tagged as asked so it applies, in English and Chinese; fails_when=the longer text goes in beside the old one, or the change isn't asked for; no_claim=that a real model chooses content over instruction.
+  test.each([
+    [
+      "Make the summary longer.",
+      "The paper is",
+      "The paper is about spring tides.",
+      "The paper is about spring tides, which come at new and full moon, when the tide rises highest.",
+    ],
+    [
+      "把摘要写长一点。",
+      "这篇论文讲的是",
+      "这篇论文讲的是大潮。",
+      "这篇论文讲的是大潮：大潮出现在新月和满月前后，这时潮水涨得最高。",
+    ],
+  ])(
+    "“%s” replaces the summary added from an Answer, never adding a second",
+    async (request, part, summary, longer) => {
+      const model = scriptedModel((call): ScriptedReply => {
+        if (call.results.length > 0) return { text: "Done." };
+        return {
+          calls: [{ tool: "edit_mind", input: { part, content: longer } }],
+        };
+      });
+      const { core, mind, client } = await setUp(model);
+      await core.addToNote({
+        mindId: mind.id,
+        blocks: [{ type: "paragraph", content: [{ type: "text", text: summary }] }],
+        origin: null,
+        model: null,
+      });
+      await client.settled();
+
+      const answer = await askAssistant(core, { text: request, mindId: mind.id });
+
+      await client.settled();
+      const [change] = changesIn(answer);
+      expect(proposalRequestOf(client.doc, change?.request ?? "")).toMatchObject({
+        requested: "edit",
+      });
+      expect(lastResult(model)).toContain("applies in the Mind at once");
+      expect(lastResult(model)).toContain("don't describe it");
+      expect(shownWithChanges(client).slice(-2)).toEqual([`- ${summary}`, `+ ${longer}`]);
+      client.doc.transact(() => resolveProposals(client.blocks, () => true, "accept"));
+      await client.settled();
+      expect(shownWithChanges(client)).toEqual([
+        "Summary",
+        "The quarter was very good, and sales were really strong.",
+        longer,
+      ]);
+    },
+  );
+
+  // protects=new text for the assistant's summary that leaves out a Citation tells the model so, as an instruction's rewrite does; fails_when=the Citation goes with no word to the model; no_claim=what the model then says.
+  test("new text that leaves out a Citation of the summary says so to the model", async () => {
+    const model = scriptedModel((call): ScriptedReply => {
+      if (call.results.length > 0) return { text: "Done." };
+      return {
+        calls: [
+          {
+            tool: "edit_mind",
+            input: {
+              part: "The paper is about",
+              content: "The paper is about spring tides, at new and full moon.",
+            },
+          },
+        ],
+      };
+    });
+    const { core, mind, client } = await setUp(model);
+    await core.addToNote({
+      mindId: mind.id,
+      blocks: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "The paper is about spring tides." },
+            { type: "citation", attrs: { documentId: "tides", quote: "spring tides" } },
+          ],
+        },
+      ],
+      origin: null,
+      model: null,
+    });
+    await client.settled();
+
+    await askAssistant(core, { text: "Make the summary longer.", mindId: mind.id });
+
+    expect(lastResult(model)).toContain("1 Citation would be removed");
+  });
+
+  // protects=a formula the User put inside or between the assistant's paragraphs already in the Mind stays theirs: new text for those paragraphs is refused, and the Mind is left as it was; fails_when=“make the summary longer” deletes the formula with the summary; no_claim=formulas in the assistant's text still waiting.
+  test.each([
+    ["inside its paragraph", "The paper is about"],
+    ["between its paragraphs", "Spring tides"],
+  ])("a formula the User put %s keeps the summary from being written anew", async (_, part) => {
+    const model = scriptedModel((call): ScriptedReply => {
+      if (call.results.length > 0) return { text: "Done." };
+      return {
+        calls: [
+          {
+            tool: "edit_mind",
+            input: { part, content: "The paper is about spring tides, at new and full moon." },
+          },
+        ],
+      };
+    });
+    const { core, mind, client } = await setUp(model);
+    const paragraph = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
+    const inline = part === "The paper is about";
+    await core.addToNote({
+      mindId: mind.id,
+      blocks: inline
+        ? [paragraph("The paper is about spring tides.")]
+        : [
+            { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: part }] },
+            paragraph("Spring tides come at new and full moon."),
+            paragraph("Neap tides come at the quarter moons."),
+          ],
+      origin: null,
+      model: null,
+    });
+    await client.settled();
+    client.doc.transact(() => {
+      const formula = new Y.XmlElement(inline ? "inlineMath" : "blockMath");
+      formula.setAttribute("latex", "h = a \\cos(\\omega t)");
+      const last = client.blocks.get(client.blocks.length - 1);
+      if (inline && last instanceof Y.XmlElement) last.insert(last.length, [formula]);
+      else client.blocks.insert(client.blocks.length - 1, [formula]);
+    });
+    await client.settled();
+    const before = exactly(client);
+
+    const answer = await askAssistant(core, { text: "Make the summary longer.", mindId: mind.id });
+
+    await client.settled();
+    expect(mindCalls(answer)[0]?.mindProblem).toMatchObject({ kind: "content-not-own" });
+    expect(exactly(client)).toEqual(before);
+  });
+
+  // protects=asked to make the summary longer, a longer version added beside the summary from an Answer is refused, with how to change it in place, and the change in place follows; fails_when=a second summary goes in, or the model isn't told to use edit_mind; no_claim=that a real model then changes it in place.
+  test.each([
+    [
+      "in one paragraph",
+      "The paper is about spring tides and the times they come at, new and full moon, when the tide rises highest.",
+    ],
+    [
+      "split into paragraphs",
+      "The paper looks at spring tides, new and full moon.\n\nThey come at the times the tide rises highest.",
+    ],
+  ])(
+    "a longer version added beside it %s is refused, and the summary is changed in place",
+    async (_, beside) => {
+      const summary = "The paper is about spring tides and the times they come at.";
+      const longer =
+        "The paper is about spring tides and the times they come at, new and full moon, when the tide rises highest.";
+      const told: string[] = [];
+      const model = scriptedModel((call): ScriptedReply => {
+        const results = call.results.map((each) => each.text);
+        if (results.length === 0) {
+          return { calls: [{ tool: "add_to_mind", input: { content: beside } }] };
+        }
+        if (results.length === 1) {
+          told.push(results[0] ?? "");
+          return {
+            calls: [{ tool: "edit_mind", input: { part: "The paper is about", content: longer } }],
+          };
+        }
+        return { text: "Done." };
+      });
+      const { core, mind, client } = await setUp(model);
+      await core.addToNote({
+        mindId: mind.id,
+        blocks: [{ type: "paragraph", content: [{ type: "text", text: summary }] }],
+        origin: null,
+        model: null,
+      });
+      await client.settled();
+
+      const answer = await askAssistant(core, {
+        text: "Make the summary longer.",
+        mindId: mind.id,
+      });
+
+      await client.settled();
+      expect(told[0]).toContain("Change that text in place with edit_mind");
+      expect(mindCalls(answer)[0]?.mindProblem).toMatchObject({ kind: "new-version" });
+      client.doc.transact(() => resolveProposals(client.blocks, () => true, "accept"));
+      await client.settled();
+      expect(shownWithChanges(client)).toEqual([
+        "Summary",
+        "The quarter was very good, and sales were really strong.",
+        longer,
+      ]);
+    },
+  );
 });

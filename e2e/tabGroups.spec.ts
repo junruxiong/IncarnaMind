@@ -10,8 +10,11 @@ import {
   documentIdOf,
   dragBy,
   dragTabTo,
+  enterContent,
   expectFirstTabAtCardStart,
+  frontMind,
   launchApp,
+  nameMind,
   openDocumentAt,
   removeDataFolder,
   setWindowSize,
@@ -92,9 +95,8 @@ async function addSources(window: Page) {
 /** A new Mind in a new tab of the focused group, named. */
 async function newMind(window: Page, title: string): Promise<void> {
   await window.keyboard.press("ControlOrMeta+t");
-  const field = window.getByTestId("mind-title").last();
-  await expect(field).toBeFocused();
-  await window.keyboard.type(title);
+  await expect(frontMind(window).getByTestId("mind-editor")).toBeFocused();
+  await nameMind(window, title);
   await expect(window.getByRole("tab", { selected: true }).last()).toContainText(title);
 }
 
@@ -116,7 +118,7 @@ test("a Citation opens its Document as a preview in the group to the right, the 
   await setWindowSize(app, window, 2000, 800);
   const ids = await addSources(window);
   await newMind(window, "Lit review: urban heat islands");
-  await window.getByTestId("mind-title").press("Enter");
+  await enterContent(window);
   const editor = window.getByTestId("mind-editor");
   await expect(editor).toBeFocused();
 

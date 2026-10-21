@@ -6,7 +6,12 @@ import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { checkUnreadOf } from "../../src/shared/unreadFiles";
 import { checkingModel, type Plan } from "../helpers/checks";
 import { createTempDataFolder, startCore } from "../helpers/core";
-import { createSourceFolder, linkAndProcess, writeSourceFile } from "../helpers/documents";
+import {
+  createSourceFolder,
+  linkAndProcess,
+  waitForProcessing,
+  writeSourceFile,
+} from "../helpers/documents";
 import { lockedPdf } from "../helpers/lockedPdf";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind, writeMind } from "../helpers/minds";
@@ -198,9 +203,20 @@ describe("What a check couldn't read", () => {
   test("a check in another Folder names only what that Folder couldn't read; Search all Documents names every one", async () => {
     const { core } = await withUnreadFiles();
     const elsewhere = await core.createLibraryGroup({ name: "Elsewhere", description: "" });
+    // A Document of its own, which reads, so its checks search Elsewhere alone (#1359).
+    const sources = await createSourceFolder();
+    const added = await core.addDocuments(
+      [await writeSourceFile(sources, "Moon.md", "# Moon\n\nThe moon pulls the sea.\n")],
+      { groupId: elsewhere.id },
+    );
+    await waitForProcessing(
+      core,
+      added.documents.map((document) => document.id),
+    );
     const { client, check } = await mindOf(core, elsewhere.id, [SUPPORTED]);
 
-    expect(await check()).toMatchObject({ kind: "no-documents" });
+    expect(await check()).toMatchObject({ kind: "checked" });
+    expect(named(await unreadOfChecks(client))).toEqual([]);
     expect(await check(true)).toMatchObject({ kind: "checked" });
 
     expect(named(await unreadOfChecks(client))).toEqual(UNREAD);
@@ -209,7 +225,7 @@ describe("What a check couldn't read", () => {
 
 describe("The AI use statement", () => {
   test.each([
-    ["en", "When these sentences were checked, 3 files they were checked against couldn't be read"],
+    ["en", "When these sentences were checked, 3 files they were checked against couldn’t be read"],
     ["zh-CN", "核对这些说法时，有 3 个文件未能读取"],
   ] as const)("lists what the checks couldn't read, with why (%s)", async (language, intro) => {
     const { core, folderId } = await withUnreadFiles();

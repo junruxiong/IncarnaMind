@@ -8,6 +8,7 @@ import {
   comparisonQuestionsOf,
   MAX_COMPARISON_QUESTIONS,
 } from "../../../shared/comparisons";
+import { mindName } from "../../../shared/naming";
 import { readProposalAttribute } from "../../../shared/proposals";
 import {
   expandComparisonTable,
@@ -16,11 +17,12 @@ import {
   stopComparisonTable,
   useComparisons,
 } from "../comparisons";
-import { PlusLineIcon } from "../components/lineIcons";
+import { ExportLineIcon, PlusLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessLine } from "../components/providers/ChatReadinessNotice";
 import { runStopParts } from "../cost";
 import { resolveProposalsIn } from "../editWithAi";
+import { exportComparison } from "../exports";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { tableTask, useTasks } from "../tasks";
@@ -121,9 +123,10 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
   const waiting = useTasks((state) => tableTask(state, tableId) !== null);
   const expanded = useComparisons((state) => state.expanded === tableId);
   const problem = useComparisons((state) => state.problems[tableId]);
-  const mindTitle = useAppStore(
-    (state) => state.minds.find((mind) => mind.id === mindId)?.title ?? "",
-  );
+  const mindTitle = useAppStore((state) => {
+    const mind = state.minds.find((each) => each.id === mindId);
+    return mind ? mindName(mind) : "";
+  });
   const wrapper = useRef<HTMLDivElement>(null);
   const [adding, setAdding] = useState(false);
   const { total, settled, toFill, stop } = cellCounts(node);
@@ -238,6 +241,17 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
         )}
         <span className="comparison-head-end">
           {addButton("head")}
+          {expanded && (
+            <button
+              type="button"
+              data-testid="comparison-export-excel"
+              className="comparison-export"
+              onClick={() => void exportComparison(mindId, tableId)}
+            >
+              <ExportLineIcon className="size-3.5" />
+              {t("export.excel.button")}
+            </button>
+          )}
           {expanded ? (
             <button
               type="button"
@@ -270,7 +284,6 @@ export function ComparisonTableView({ node, editor }: ReactNodeViewProps) {
               readiness={problem.readiness}
               testId="comparison-not-ready"
               setUpLabel={t("question.setUp")}
-              refused
             />
           ) : (
             <ProblemLine testId="comparison-not-sent">

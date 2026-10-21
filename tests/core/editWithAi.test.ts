@@ -287,7 +287,7 @@ describe("Edit with AI", () => {
 
     expect(result).toMatchObject({ kind: "proposed", droppedCitations: 1 });
     expect(shownWithChanges(client)).toEqual([
-      "Spring tides [-happen-]{+come+} at new [-moon and at -]{+and +}full moon [-⟨not-found⟩, and they are the highest ⟨found⟩-]{+⟨found⟩+}.",
+      "[-Spring tides happen at new moon and at full moon ⟨not-found⟩, and they are the highest ⟨found⟩.-]{+Spring tides come at new and full moon ⟨found⟩.+}",
     ]);
 
     await resolveChanges(client, "accept");
@@ -651,6 +651,57 @@ describe("Edit with AI", () => {
     expect(pendingProposals(client.blocks)).toEqual([]);
   });
 
+  test("asked to remove a paragraph, a reply of no text but why removes it; any other empty reply fails with its reason", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(({ passage }) =>
+        passage.startsWith("Pensions")
+          ? "<why>Removed.</why>"
+          : passage.startsWith("Health") || passage.startsWith("Sick")
+            ? "<why>I can't do this.</why>"
+            : "",
+      ),
+    );
+    const pensions = paragraph(text("Pensions match up to 5% of salary."));
+    const leave = paragraph(text("Leave is 25 days."));
+    const health = paragraph(text("Health cover starts after three months."));
+    const sick = paragraph(text("Sick pay is full for six weeks, then half for six more."));
+    writeMind(client, [pensions, leave, health, sick]);
+    await client.settled();
+
+    const removed = await core.editWithAi(
+      wholeParagraph(client, mind.id, pensions.attrs.id, "instruction", "Remove it"),
+    );
+    const silent = await core.editWithAi(
+      wholeParagraph(client, mind.id, leave.attrs.id, "instruction", "Remove it"),
+    );
+    const refused = await core.editWithAi(
+      wholeParagraph(client, mind.id, health.attrs.id, "instruction", "Make it more formal"),
+    );
+
+    expect(removed).toMatchObject({ kind: "proposed" });
+    expect(silent).toMatchObject({ kind: "failed" });
+    const shortened = await core.editWithAi(
+      wholeParagraph(client, mind.id, sick.attrs.id, "instruction", "Cut it down to two sentences"),
+    );
+    expect(refused).toMatchObject({
+      kind: "failed",
+      error: { message: "I can't do this." },
+    });
+    expect(shortened).toMatchObject({ kind: "failed" });
+    expect(shownWithChanges(client)).toEqual([
+      "- Pensions match up to 5% of salary.",
+      "Leave is 25 days.",
+      "Health cover starts after three months.",
+      "Sick pay is full for six weeks, then half for six more.",
+    ]);
+    await resolveChanges(client, "accept");
+    expect(shownWithChanges(client)).toEqual([
+      "Leave is 25 days.",
+      "Health cover starts after three months.",
+      "Sick pay is full for six weeks, then half for six more.",
+    ]);
+  });
+
   test("a model that fails says why, and nothing is written", async () => {
     const { core, mind, client } = await setUp(
       new MockLanguageModelV4({
@@ -1010,8 +1061,8 @@ describe("Edit with AI as the model writes (#202)", () => {
     controlled.push("Les marées sont fortes ici.\n\nLa lune brille ce soir.\n\nLes ports");
     await vi.waitFor(() =>
       expect(shownWithChanges(client)).toEqual([
-        "[-The tides here are very strong-]{+Les marées sont fortes ici+}.",
-        "[-The moon is really bright tonight-]{+La lune brille ce soir+}.",
+        "[-The tides here are very strong.-]{+Les marées sont fortes ici.+}",
+        "[-The moon is really bright tonight.-]{+La lune brille ce soir.+}",
         "Harbours are quite busy in spring.",
       ]),
     );
@@ -1021,7 +1072,7 @@ describe("Edit with AI as the model writes (#202)", () => {
     await client.settled();
     expect(shownWithChanges(client)).toHaveLength(3);
     expect(shownWithChanges(client)[2]).toBe(
-      "[-Harbours are quite busy in spring-]{+Les ports sont animés au printemps+}.",
+      "[-Harbours are quite busy in spring.-]{+Les ports sont animés au printemps.+}",
     );
   });
 
@@ -1382,8 +1433,8 @@ describe("Edit with AI over Blocks of several kinds", () => {
     ]);
   });
 
-  // protects=a list turned into a table gets a table Block beside it, out of the list, its cell keeping the item's Citation (#961); the list, which the instruction doesn't name, is kept as left out (#880); fails_when=the table is pipe text, lands in the list, or the Citation is lost; no_claim=how a real model lays out a table.
-  test("a list made into a table gets a table beside it, its Citation in its cell, the list kept as left out", async () => {
+  // protects=a list made into a table becomes a table Block where the list was, out of it, its cell keeping the item's Citation: asking for a table replaces the text it is made from (#961); fails_when=the table is pipe text or lands in the list, the Citation is lost, or the list is kept as left out; no_claim=how a real model lays out a table.
+  test("a list made into a table becomes a table, out of the list, its Citation in its cell", async () => {
     const { core, mind, client, tides } = await setUp(
       editingModel(() =>
         [
@@ -1408,13 +1459,14 @@ describe("Edit with AI over Blocks of several kinds", () => {
       instruction: "Make it a table",
     });
 
-    expect(result).toMatchObject({ kind: "proposed", leftOut: [{}, {}] });
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("leftOut");
     await resolveChanges(client, "accept");
     expect(
       readMind(client)
         .toJSON()
         .content?.map((block: JSONContent) => block.type),
-    ).toEqual(["table", "bulletList"]);
+    ).toEqual(["table"]);
     expect(await exported(core, mind.id)).toContain(
       "| Tide | When |\n| :--- | ---: |\n| Spring | At new moon[^1] |\n| Neap | Weakest \\| smallest |",
     );
@@ -1425,8 +1477,6 @@ describe("Edit with AI over Blocks of several kinds", () => {
       "p At new moon ⟨found⟩",
       "p Neap",
       "p Weakest | smallest",
-      "• Spring tides are strongest at new moon. ⟨found⟩",
-      "• Neap tides are weakest.",
     ]);
   });
 
@@ -1733,6 +1783,78 @@ describe("Edit with AI and the model's service", () => {
     expect(calls).toHaveLength(1);
   });
 
+  test("Local mode turned on while the edit waits for consent: the prompt closes, nothing is sent, and the edit says Local mode (#1120)", async () => {
+    const calls: EditCall[] = [];
+    const model = editingModel(() => "合成私密段落：已改写。", calls);
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: scriptedModels(model).createChatModel,
+    });
+    await saveProviderUnasked(core, { kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    const mind = await core.createMind({ title: "Private" });
+    const client = await connectToMind(core, mind.id);
+    const note = paragraph(text("合成私密段落：此文字不应离开本机。"));
+    writeMind(client, [note]);
+    await client.settled();
+
+    const asked = nextEvent(core, "consent.requested");
+    const editing = core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
+    const request = (await asked) as ConsentRequest;
+    const closed = nextEvent(core, "consent.resolved");
+    await core.setLocalOnly(true);
+
+    expect(await closed).toEqual({ requestId: request.requestId, accepted: false });
+    expect(await core.listConsentRequests()).toEqual([]);
+    // The old prompt, answered late, changes nothing.
+    await core.respondToConsent(request.requestId, true);
+    expect(await editing).toEqual({ kind: "local-mode" });
+    expect(calls).toHaveLength(0);
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual(["合成私密段落：此文字不应离开本机。"]);
+
+    // Local mode off, the usual consent flow runs again.
+    await core.setLocalOnly(false);
+    const again = nextEvent(core, "consent.requested");
+    const second = core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
+    const prompt = (await again) as ConsentRequest;
+    expect(prompt.flow).toMatchObject({ id: "edits" });
+    await core.respondToConsent(prompt.requestId, true);
+    expect(await second).toMatchObject({ kind: "proposed" });
+    expect(calls).toHaveLength(1);
+  });
+
+  test("Local mode turned on while a rate-limited request waits to be tried again: nothing more is sent, and the edit says Local mode", async () => {
+    const calls: EditCall[] = [];
+    const model = editingModel((call) => {
+      if (calls.length === 1) {
+        throw new APICallError({
+          message: "Rate limit reached.",
+          url: "https://api.openai.com/v1/responses",
+          requestBodyValues: {},
+          statusCode: 429,
+          responseHeaders: { "retry-after-ms": "2000" },
+          isRetryable: true,
+        });
+      }
+      return call.passage;
+    }, calls);
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: scriptedModels(model).createChatModel,
+    });
+    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    const mind = await core.createMind({ title: "Private" });
+    const client = await connectToMind(core, mind.id);
+    const note = paragraph(text("合成私密段落：此文字不应离开本机。"));
+    writeMind(client, [note]);
+    await client.settled();
+
+    const editing = core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    await core.setLocalOnly(true);
+
+    expect(await editing).toEqual({ kind: "local-mode" });
+    expect(calls).toHaveLength(1);
+  });
+
   test("with no chat model it says so, and nothing is written", async () => {
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir);
@@ -1995,5 +2117,215 @@ describe("An edit the User asked for (#880)", () => {
     stop();
 
     expect(causes.every((cause) => cause === undefined)).toBe(true);
+  });
+});
+
+describe("How a change reads (#1028)", () => {
+  const heading = (value: string): JSONContent => ({
+    type: "heading",
+    attrs: { id: `block-${++ids}`, level: 2 },
+    content: [text(value)],
+  });
+  const bullets = (...items: string[]): JSONContent => ({
+    type: "bulletList",
+    content: items.map((item) => ({ type: "listItem", content: [paragraph(text(item))] })),
+  });
+
+  /** As `shownWithChanges` shows them, a paragraph added or removed whole marked by a Block around it too. */
+  const shownWhole = (client: MindClient): string[] => {
+    const lines: string[] = [];
+    const visit = (node: ReturnType<typeof readMind>, whole: string | null) => {
+      const kind = (node.attrs?.[PROPOSAL_ATTRIBUTE] as { kind?: string } | null)?.kind ?? whole;
+      if (!node.isTextblock) {
+        node.forEach((child) => {
+          visit(child, kind);
+        });
+        return;
+      }
+      let line = "";
+      node.forEach((child) => {
+        const marks = child.marks.map((mark) => mark.type.name);
+        const words = child.text ?? "￼";
+        line += marks.includes("proposalDelete")
+          ? `[-${words}-]`
+          : marks.includes("proposalInsert")
+            ? `{+${words}+}`
+            : words;
+      });
+      lines.push(`${kind === "insert" ? "+ " : kind === "delete" ? "- " : ""}${line}`);
+    };
+    visit(readMind(client), null);
+    return lines.map((line) => line.replace(/-\]\[-|\+\}\{\+/g, ""));
+  };
+
+  /** The whole Mind, asked to change as `instruction` says. */
+  const everything = (client: MindClient, mindId: string, instruction: string) => {
+    const blocks: { id: string; size: number }[] = [];
+    readMind(client).descendants((node) => {
+      if (!node.isTextblock) return true;
+      blocks.push({ id: String(node.attrs.id), size: node.content.size });
+      return false;
+    });
+    const first = blocks[0] as { id: string };
+    const last = blocks.at(-1) as { id: string; size: number };
+    return {
+      requestId: `edit-${++ids}`,
+      mindId,
+      from: { blockId: first.id, offset: 0 },
+      to: { blockId: last.id, offset: last.size },
+      text: blocks.map((block) => plainOf(client, block.id)).join("\n"),
+      action: "instruction" as const,
+      instruction,
+    };
+  };
+
+  test("a word replaced reads word by word; a paragraph 40% or more of whose words change reads whole, before and after, never interleaved", async () => {
+    const before = [
+      "The tides here are strong and regular.",
+      "Spring tides happen at new moon and at full moon every month.",
+    ];
+    const after = [
+      "The tides here are strong and predictable.",
+      "Twice a month the Sun and the Moon pull together.",
+    ];
+    const { core, mind, client } = await setUp(editingModel(() => after.join("\n\n")));
+    writeMind(
+      client,
+      before.map((line) => paragraph(text(line))),
+    );
+    await client.settled();
+
+    await core.editWithAi(everything(client, mind.id, "Make it clearer"));
+    await client.settled();
+
+    expect(shownWithChanges(client)).toEqual([
+      "The tides here are strong and [-regular-]{+predictable+}.",
+      `[-${before[1]}-]{+${after[1]}+}`,
+    ]);
+  });
+
+  test("a heading changed at all reads whole", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() => "## Key strengths\n\nSpring tides are strongest at new moon."),
+    );
+    writeMind(client, [
+      heading("Highlights and points to check"),
+      paragraph(text("Spring tides are strongest at new moon.")),
+    ]);
+    await client.settled();
+
+    await core.editWithAi(everything(client, mind.id, "Rename the heading"));
+    await client.settled();
+
+    expect(shownWithChanges(client)).toEqual([
+      "[-Highlights and points to check-]{+Key strengths+}",
+      "Spring tides are strongest at new moon.",
+    ]);
+  });
+
+  test("a list item replaced by one about something else is removed and the new one added: the degree never turns into the job", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() =>
+        [
+          "## 经历",
+          "- 2014.09—2018.06 上海财经大学 会计学 学士",
+          "- 2021.04—至今 某证券公司研究所 食品饮料行业研究员",
+        ].join("\n\n"),
+      ),
+    );
+    writeMind(client, [
+      heading("经历"),
+      bullets("2014.09—2018.06 上海财经大学 会计学 学士", "2018.09—2020.06 复旦大学 金融学 硕士"),
+    ]);
+    await client.settled();
+
+    await core.editWithAi(everything(client, mind.id, "删掉硕士那一条，换成现在的工作"));
+    await client.settled();
+
+    expect(shownWhole(client)).toEqual([
+      "经历",
+      "2014.09—2018.06 上海财经大学 会计学 学士",
+      "+ 2021.04—至今 某证券公司研究所 食品饮料行业研究员",
+      "- 2018.09—2020.06 复旦大学 金融学 硕士",
+    ]);
+  });
+
+  test("asked to replace a list item, without saying to remove it, the old item goes and the new one comes: neither is kept as left out, nor read as a translation", async () => {
+    const degree = "2016.09—2018.06 上海财经大学 会计学 硕士";
+    const job = "2018.10—至今 Deloitte Touche Tohmatsu, Senior Manager";
+    const { core, mind, client } = await setUp(
+      editingModel(() =>
+        ["## 经历", "- 2012.09—2016.06 复旦大学 金融学 学士", `- ${job}`].join("\n\n"),
+      ),
+    );
+    writeMind(client, [heading("经历"), bullets("2012.09—2016.06 复旦大学 金融学 学士", degree)]);
+    await client.settled();
+
+    const result = await core.editWithAi(everything(client, mind.id, "把硕士那条换成现在的工作"));
+    await client.settled();
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("leftOut");
+    expect(shownWhole(client)).toEqual([
+      "经历",
+      "2012.09—2016.06 复旦大学 金融学 学士",
+      `+ ${job}`,
+      `- ${degree}`,
+    ]);
+    await resolveChanges(client, "accept");
+    expect(shownWhole(client)).toEqual(["经历", "2012.09—2016.06 复旦大学 金融学 学士", job]);
+  });
+
+  test("list items reworded past matching, in Chinese and English, each go once and their new wording comes once: none is doubled", async () => {
+    const before = [
+      "熟悉财务建模与估值，曾主导三个并购项目的尽职调查。",
+      "Led quarterly forecasting for a team of twelve analysts.",
+      "Presented findings to the board every month.",
+      "Cut month-end close from ten days to six.",
+    ];
+    const after = [
+      "主导过三起并购尽调，独立搭建估值模型。",
+      "Ran the quarterly forecast with twelve analysts reporting to me.",
+      "Briefed the board monthly on results.",
+      "Shortened the monthly close by four days.",
+    ];
+    const { core, mind, client } = await setUp(
+      editingModel(() => after.map((item) => `- ${item}`).join("\n\n")),
+    );
+    writeMind(client, [bullets(...before)]);
+    await client.settled();
+
+    const result = await core.editWithAi(everything(client, mind.id, "把这些要点写得更有力"));
+    await client.settled();
+
+    expect(result).toMatchObject({ kind: "proposed" });
+    expect(result).not.toHaveProperty("leftOut");
+    await resolveChanges(client, "accept");
+    expect(shownWhole(client)).toEqual(after);
+  });
+
+  test("in Chinese, a date range changed is one change, and a paragraph mostly rewritten reads whole, no old and new words alternating", async () => {
+    const before = [
+      "2017.05—2017.04 某咨询公司 分析师",
+      "张瑜的主要优势是跨医疗、金融两个行业的数据分析经验，熟悉财务建模。",
+    ];
+    const after = [
+      "2017.05—2018.09 某咨询公司 分析师",
+      "十年咨询与审计项目经验，擅长跨部门沟通与团队管理，熟悉财务建模。",
+    ];
+    const { core, mind, client } = await setUp(editingModel(() => after.join("\n\n")));
+    writeMind(
+      client,
+      before.map((line) => paragraph(text(line))),
+    );
+    await client.settled();
+
+    await core.editWithAi(everything(client, mind.id, "把日期改对，第二段重写"));
+    await client.settled();
+
+    expect(shownWithChanges(client)).toEqual([
+      "[-2017.05—2017.04-]{+2017.05—2018.09+} 某咨询公司 分析师",
+      `[-${before[1]}-]{+${after[1]}+}`,
+    ]);
   });
 });
