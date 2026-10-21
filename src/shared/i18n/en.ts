@@ -2811,6 +2811,7 @@ export const en = {
   "cost.cap.interrupted.one": "1 request was interrupted; its cost isn’t known.",
   "cost.cap.interrupted": "{count} requests were interrupted; their cost isn’t known.",
   "cost.cap.amount": "Monthly cap",
+  "cost.cap.problem": "Enter an amount from 0 to {max}. The active cap is still {cap}.",
   "cost.cap.currency": "Currency",
   "cost.provider.thisMonth": "This month: {spent} spent",
   "cost.setAside": "{amount} set aside for work in progress",
