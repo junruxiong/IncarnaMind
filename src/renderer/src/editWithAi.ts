@@ -16,7 +16,6 @@ import {
   type EditWithAiResult,
   type ProviderError,
 } from "../../core/api";
-import { mindModelOf } from "../../shared/mindModel";
 import { aiUseOfAccepted, proposalRequestOf } from "../../shared/proposals";
 import { useAnswers } from "./answers";
 import { type Applying, appliedMessage, finishApplying, startApplying } from "./appliedEdits";
@@ -37,6 +36,7 @@ import { failedEdit } from "./editProblems";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import type { Words } from "./lineNames";
+import { modelInUseOf } from "./modelInUse";
 import { useAppStore } from "./store";
 
 /** The languages Translate… offers: each in its own name, and as the model is told it. */
@@ -224,7 +224,7 @@ export async function requestEdit(
       text: selection.text,
       action,
       ...(instruction !== undefined && { instruction }),
-      model: mindModelOf(doc),
+      model: modelInUseOf(doc),
     });
   } catch (error) {
     result = failure(error);
@@ -358,7 +358,7 @@ export async function regenerateChange(
       requestId,
       mindId,
       proposalId: proposal.id,
-      model: mindModelOf(doc),
+      model: modelInUseOf(doc),
     });
   } catch (error) {
     result = failure(error);

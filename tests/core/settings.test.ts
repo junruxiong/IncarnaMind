@@ -98,6 +98,7 @@ describe("Settings", () => {
         meetingPanelHidden: true,
         meetingHelpKeys: {},
         motion: "system",
+        lastChatModel: null,
       },
       language: "en",
       scriptSandbox: "none",
@@ -202,6 +203,7 @@ describe("Settings", () => {
       meetingPanelHidden: true,
       meetingHelpKeys: {},
       motion: "system",
+      lastChatModel: null,
     });
   });
 
@@ -275,6 +277,7 @@ describe("Settings", () => {
       meetingPanelHidden: false,
       meetingHelpKeys: { say: "Ctrl+Alt+Q" },
       motion: "reduced" as const,
+      lastChatModel: null,
     };
     await before.updateSettings({
       user: {
@@ -386,6 +389,10 @@ describe("Settings", () => {
     {
       name: "a default model without a model",
       patch: { user: { chatModel: { providerId: "x" } } },
+    },
+    {
+      name: "a last chosen model without a model",
+      patch: { device: { lastChatModel: { providerId: "x" } } },
     },
     {
       name: "a default model on a provider that doesn't exist",
