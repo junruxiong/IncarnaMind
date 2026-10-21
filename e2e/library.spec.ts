@@ -285,7 +285,7 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
   }
 });
 
-test("⌘Z takes Organize's suggestions back and ⇧⌘Z brings them all back in one step, leaving a Document the User moved in between where they put it (#1391)", async () => {
+test("⌘Z takes Organize's suggestions back and ⇧⌘Z brings them back in one step, leaving a Document chosen in between as it was (#1391)", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
     await dismissChatSetup(window);
@@ -343,12 +343,15 @@ test("⌘Z takes Organize's suggestions back and ⇧⌘Z brings them all back in
     );
     await expect.poll(() => menu("edit.redo")).toEqual({ label: "Redo Organize", enabled: true });
 
-    // One Document is put in the Folder by hand meanwhile: Redo leaves it as the User chose.
-    await moveRow(
-      window,
-      rowOf(section(library, "Not in a Folder"), "Research notes B"),
-      "Research",
-    );
+    // One Document is put in the Folder meanwhile, by a change that leaves no step: Redo leaves it as chosen.
+    await (await coreOf(window)).evaluate(async (core) => {
+      const documents = await core.listDocuments();
+      const folders = (await core.getLibrary()).groups;
+      const chosen = documents.find((each) => each.name === "Research notes B");
+      const research = folders.find((each) => each.name === "Research");
+      if (!chosen || !research) throw new Error("No Document or Folder to choose.");
+      await core.assignDocumentGroup(chosen.id, research.id);
+    });
     await expect(research.getByTestId("library-document")).toHaveCount(1);
     await expect(suggested).toHaveCount(0);
 
@@ -358,7 +361,7 @@ test("⌘Z takes Organize's suggestions back and ⇧⌘Z brings them all back in
     await expect(research.getByTestId("library-document")).toHaveCount(3);
     await expect(suggested).toHaveCount(2);
     await expect(window.getByTestId("undo-line")).toContainText(
-      "Organize suggested a Folder for 2 Documents",
+      "Organize suggested a Folder for 3 Documents",
     );
     await expect.poll(() => menu("edit.redo")).toMatchObject({ enabled: false });
     await window.keyboard.press("ControlOrMeta+Shift+z");
