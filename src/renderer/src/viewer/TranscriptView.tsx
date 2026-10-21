@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import type { Document } from "../../../core/api";
 import {
   type Cue,
+  listedGaps,
   readVtt,
   type Transcript,
   type TranscriptGap,
@@ -35,6 +36,7 @@ const GAP_REASONS: Record<TranscriptGap["reason"], MessageKey> = {
   sleep: "transcript.gap.sleep",
   interrupted: "transcript.gap.interrupted",
   lost: "transcript.gap.lost",
+  uncaptured: "transcript.gap.uncaptured",
   cloud: "transcript.gap.cloud",
 };
 
@@ -155,7 +157,7 @@ function TranscriptContent({
           cue,
           at: cue.startMs,
         })),
-        ...transcript.gaps.map((gap): Row & { at: number } => ({
+        ...listedGaps(transcript.gaps).map((gap): Row & { at: number } => ({
           kind: "gap",
           gap,
           at: gap.fromMs,
