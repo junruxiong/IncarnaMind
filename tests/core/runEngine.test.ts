@@ -9,6 +9,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
@@ -165,6 +166,65 @@ function stepsModel(steps: { tool: string; input: unknown }[][], text = "High wa
     return calls ? { calls } : { text };
   });
 }
+
+/** One Anthropic stream event, as its API frames it. */
+const sse = (type: string, data: Record<string, unknown>) =>
+  `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+
+/** An Anthropic reply of a thinking block, then a call of `search_documents` (`signature` seals the thinking). */
+const thinkingThenSearch = (step: number) =>
+  [
+    sse("message_start", {
+      message: {
+        id: `msg_${step}`,
+        type: "message",
+        role: "assistant",
+        content: [],
+        usage: { input_tokens: 5, output_tokens: 1 },
+      },
+    }),
+    sse("content_block_start", {
+      index: 0,
+      content_block: { type: "thinking", thinking: "", signature: "" },
+    }),
+    sse("content_block_delta", {
+      index: 0,
+      delta: { type: "thinking_delta", thinking: "Look it up." },
+    }),
+    sse("content_block_delta", {
+      index: 0,
+      delta: { type: "signature_delta", signature: `SEALED-${step}` },
+    }),
+    sse("content_block_stop", { index: 0 }),
+    sse("content_block_start", {
+      index: 1,
+      content_block: { type: "tool_use", id: `toolu_${step}`, name: "search_documents", input: {} },
+    }),
+    sse("content_block_delta", {
+      index: 1,
+      delta: { type: "input_json_delta", partial_json: `{"query":"tide ${step}"}` },
+    }),
+    sse("content_block_stop", { index: 1 }),
+    sse("message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 20 } }),
+    sse("message_stop", {}),
+  ].join("");
+
+const writtenReply = [
+  sse("message_start", {
+    message: {
+      id: "msg_last",
+      type: "message",
+      role: "assistant",
+      content: [],
+      usage: { input_tokens: 5, output_tokens: 1 },
+    },
+  }),
+  sse("content_block_start", { index: 0, content_block: { type: "text", text: "" } }),
+  sse("content_block_delta", { index: 0, delta: { type: "text_delta", text: "Written." } }),
+  sse("content_block_stop", { index: 0 }),
+  sse("message_delta", { delta: { stop_reason: "end_turn" }, usage: { output_tokens: 3 } }),
+  sse("message_stop", {}),
+].join("");
 
 describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
   test("a Tool call, its result, then text; a step's Tool events come before its end", async () => {
@@ -418,6 +478,52 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     expect(lastText).toContain("You can make no more calls");
     expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).not.toContain("no more calls");
     expect(run.text).toBe("Written.");
+  });
+
+  // protects=on the last step the Tools sent are the ones every step before sent, so Anthropic accepts the thinking blocks it made (it refuses them once the tool list differs, as tool_choice none makes it with the AI SDK's provider: every Answer on Claude with thinking that reached its last step failed with a 400); fails_when=the last step drops or changes the Tools; no_claim=other providers' wire formats (#1344).
+  test("on Anthropic with thinking, the last step sends the same Tools as the steps before", async () => {
+    const bodies: { tools?: unknown; tool_choice?: { type: string }; max_tokens?: number }[] = [];
+    const server = async (_url: unknown, init?: { body?: unknown }): Promise<Response> => {
+      const body = JSON.parse(String(init?.body));
+      bodies.push(body);
+      const sealed = JSON.stringify(body.messages).includes("SEALED-");
+      if (
+        sealed &&
+        JSON.stringify(body.tools ?? null) !== JSON.stringify(bodies[0]?.tools ?? null)
+      ) {
+        return new Response(
+          JSON.stringify({
+            type: "error",
+            error: {
+              type: "invalid_request_error",
+              message:
+                "messages.1.content.0: Invalid `signature` in `thinking` block. The `tools` list differs from the one this block was created with.",
+            },
+          }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        );
+      }
+      const reply = bodies.length < 3 ? thinkingThenSearch(bodies.length) : writtenReply;
+      return new Response(reply, { headers: { "content-type": "text/event-stream" } });
+    };
+    const anthropic = createAnthropic({ apiKey: "test-key", fetch: server })("claude-haiku-5-5");
+    const search = testTool("search_documents");
+
+    const run = await collect(
+      create(),
+      request(
+        scriptedModel(() => ({ text: "" })),
+        { model: anthropic, tools: [search], maxSteps: 3 },
+      ),
+    );
+
+    expect(bodies).toHaveLength(3);
+    expect(JSON.stringify(bodies[1]?.tools)).toBe(JSON.stringify(bodies[0]?.tools));
+    expect(JSON.stringify(bodies[2]?.tools)).toBe(JSON.stringify(bodies[0]?.tools));
+    expect(bodies[2]?.tool_choice?.type).not.toBe("none");
+    expect(bodies[2]?.max_tokens).toBe(8_000);
+    expect(run.text).toBe("Written.");
+    expect(run.events.at(-1)?.type).toBe("finished");
   });
 
   test("endsAfter: the Run ends after the step it names, with no further model call", async () => {
