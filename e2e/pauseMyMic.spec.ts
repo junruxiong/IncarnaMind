@@ -427,9 +427,9 @@ test("the recording bar never wraps: from 1,600 px down to 900 px, in English an
       if (!beside) continue;
 
       // Where Mark has folded the ⋯ shows, and the keyboard reaches it and what it lists.
-      const [width] = folded;
+      const width = folded.at(-1);
       expect(width).toBeDefined();
-      await setWindowSize(app, window, width ?? 1000, 800);
+      await setWindowSize(app, window, width ?? 900, 800);
       await window.mouse.move(1, 1);
       await expect(more).toBeVisible();
       await bar.getByTestId("meeting-pause").focus();
@@ -440,7 +440,12 @@ test("the recording bar never wraps: from 1,600 px down to 900 px, in English an
       const items = menu.getByRole("menuitem");
       await expect(items.first()).toBeFocused();
       await expect(menu.getByTestId("meeting-more-mark")).toBeEnabled();
-      expect(await items.count()).toBeGreaterThanOrEqual(2);
+      const hidden = [];
+      for (const id of ["meeting-mark", "meeting-call-help", "meeting-transcript-toggle"]) {
+        if (!(await bar.getByTestId(id).isVisible())) hidden.push(id);
+      }
+      await expect(items).toHaveCount(hidden.length);
+      expect(hidden.length).toBeGreaterThanOrEqual(2);
       await window.keyboard.press("ArrowDown");
       await expect(items.nth(1)).toBeFocused();
       await window.keyboard.press("ArrowUp");
