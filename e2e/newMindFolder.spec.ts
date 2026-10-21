@@ -68,7 +68,8 @@ test("⌘T, the + menu and the tab strip's + make the new Mind in the front Mind
   expect((await made()).folderId).toBe(folderId);
 
   // Moved out of the Folder, the Mind in front makes the next one in none.
-  const front = [...known].at(-1) as string;
+  const front = [...known].at(-1);
+  if (!front) throw new Error("No Mind in front.");
   await (await coreOf(window)).evaluate(async (core: CoreBridge, id: string) => {
     await core.moveToFolder({ mindIds: [id], folderId: null });
   }, front);
