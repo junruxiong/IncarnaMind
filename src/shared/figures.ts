@@ -1983,16 +1983,21 @@ export function currenciesOf(figure: Figure): string[] {
 }
 
 // A Document that says its amounts are in Canadian dollars writes them "$54,000".
+const ANY_DOLLAR = ["USD", ...new Set(Object.values(DOLLARS))];
 const SIGN_CURRENCIES: Readonly<Record<string, readonly string[]>> = {
-  $: ["USD", ...new Set(Object.values(DOLLARS))],
+  $: ANY_DOLLAR,
+  dollar: ANY_DOLLAR,
+  dollars: ANY_DOLLAR,
   元: ["CNY", ...Object.values(YUAN)],
   圆: ["CNY", ...Object.values(YUAN)],
   "¥": ["CNY", "JPY"],
 };
 
-/** Every currency a figure's own sign stands for in some Document: "$" for any dollar, "元" for yuan, or Hong Kong, Taiwan or Macau dollars. */
+/** Every currency a figure's own sign stands for in some Document: "$" or "dollars" for any dollar, "元" for yuan, or Hong Kong, Taiwan or Macau dollars. */
 export const currenciesOfSign = (figure: Figure): readonly string[] =>
-  (figure.currency !== null && SIGN_CURRENCIES[figure.currency]) || [];
+  (figure.currency !== null &&
+    (SIGN_CURRENCIES[figure.currency] ?? SIGN_CURRENCIES[figure.currency.toLowerCase()])) ||
+  [];
 
 const longestFirst = (words: readonly string[]) => [...words].sort((a, b) => b.length - a.length);
 const CURRENCY_NAMES = new RegExp(

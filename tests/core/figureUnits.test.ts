@@ -103,6 +103,16 @@ describe("A currency the Document doesn't state", () => {
   });
 
   test.each([
+    [
+      "All amounts in this agreement are in Canadian dollars.",
+      "The annual salary is 54,000 dollars.",
+    ],
+    ["All amounts are in Hong Kong dollars.", "The annual salary is 54,000 Dollars."],
+  ])("the word named elsewhere in %j: %s", (words, claim) => {
+    expect(unitNotStated(claim, read(STATED, `${words}\n${STATED}.`))).toBeNull();
+  });
+
+  test.each([
     ["本合同所有款项以港币支付。", "年薪为 54,000元。"],
     ["本合同以新台币计价。", "年薪为 54,000元。"],
     ["本合同以日元支付。", "年薪为¥54,000。"],
