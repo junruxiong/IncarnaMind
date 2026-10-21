@@ -82,6 +82,15 @@ export const KNOWN: readonly Known[] = [
     issue: 1325,
   },
   {
+    flow: "assistant-table",
+    step: "fill the thread",
+    kind: "shift",
+    moved: ["assistant-answer", "assistant-question"],
+    max: 0.006,
+    sometimes: true,
+    issue: 1330,
+  },
+  {
     flow: "library-2000",
     step: "add 2,000 Documents",
     kind: "shift",

@@ -2033,6 +2033,60 @@ export async function setSidebarWidth(window: Page, width: number): Promise<void
     .toBeCloseTo(width, 0);
 }
 
+/**
+ * Sizes the assistant as a person does from the keyboard: on its resize line, ← widens and →
+ * narrows, 10px a press and 50px with Shift. `width` is a whole number of presses from its width now.
+ */
+export async function sizeAssistant(window: Page, width: number): Promise<void> {
+  const assistant = window.getByTestId("assistant");
+  const widthNow = () => assistant.evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  const change = width - (await widthNow());
+  const key = change > 0 ? "ArrowLeft" : "ArrowRight";
+  await window.getByTestId("assistant-resize").focus();
+  for (let step = 0; step < Math.trunc(Math.abs(change) / 50); step++) {
+    await window.keyboard.press(`Shift+${key}`);
+  }
+  for (let step = 0; step < (Math.abs(change) % 50) / 10; step++) await window.keyboard.press(key);
+  await expect.poll(widthNow).toBe(width);
+}
+
+export interface TableSample {
+  status: string | null;
+  top: number;
+  button: string | null;
+}
+
+/** From now until `stopSamples`, once a frame, the table and button of the next Answer to be asked. */
+export const startSamples = (window: Page) =>
+  window.evaluate(() => {
+    const holder = globalThis as unknown as { samples: TableSample[]; sampling: boolean };
+    holder.samples = [];
+    holder.sampling = true;
+    const asked = document.querySelectorAll("[data-testid=assistant-answer]").length;
+    const sample = () => {
+      const answer = document.querySelectorAll("[data-testid=assistant-answer]")[asked];
+      const frame = answer?.querySelector(".tableWrapper");
+      const text = answer?.querySelector("[data-testid=assistant-answer-text]");
+      if (answer && frame && text) {
+        const button = answer.querySelector("[data-testid=answer-open-table]");
+        holder.samples.push({
+          status: answer.getAttribute("data-status"),
+          top: frame.getBoundingClientRect().top - text.getBoundingClientRect().top,
+          button: button ? (button.getAttribute("aria-disabled") ?? "false") : null,
+        });
+      }
+      if (holder.sampling) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+
+export const stopSamples = (window: Page) =>
+  window.evaluate(() => {
+    const holder = globalThis as unknown as { samples: TableSample[]; sampling: boolean };
+    holder.sampling = false;
+    return holder.samples;
+  });
+
 /** The assistant's Answers (#201), in the conversation it shows. */
 export const assistantAnswers = (window: Page) =>
   window.getByTestId("assistant").getByTestId("assistant-answer");

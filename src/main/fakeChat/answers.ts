@@ -20,7 +20,8 @@
  * two small ones; one that asks for "nine rows" (九行) gets
  * three peers' figures in nine rows, with the first column's labels; one that asks to "compare the
  * two contracts" (比较两份合同) gets a table of three columns, its cells short if the instructions
- * ask for that and the quotes if not (#1382); one that asks for "forty
+ * ask for that and the quotes if not (#1382); one that asks for "narrow then wide" (先窄后宽) gets a
+ * line, then a table whose first rows fit the assistant and whose last is wider than it; one that asks for "forty
  * citations" (四十条引用) gets forty sentences, each with a marker, and one that asks for "twelve in a
  * row" (连续十二条) gets one sentence with twelve markers side by side; one with "cited below" (or 引用在下) gets a
  * table whose one Citation stands in a paragraph under it, and one with "framed" (or 带说明)
@@ -282,6 +283,39 @@ function contractComparisonAnswer(prompt: Prompt, question: string, marker: stri
   ].join("\n");
 }
 
+const NARROW_THEN_WIDE = /\bnarrow then wide\b|先窄后宽/i;
+
+function narrowThenWideAnswer(question: string, marker: string): string {
+  if (/\p{Script=Han}/u.test(question)) {
+    return [
+      "对比如下。",
+      "",
+      "| 条款 | 阿尔德公司 | 伯奇公司 |",
+      "|:--|:--|:--|",
+      "| 法律 | 英国普通法 | 纽约州法律 |",
+      "| 上限 | 十二个月费用 | 无上限责任 |",
+      `| 通知期 | 三十日 | 提前三十日书面通知 ${marker} |`,
+      "| 费用 | 按月 | 按季 |",
+      "| 期限 | 三年 | 两年 |",
+      "| 续约 | 自动 | 手动 |",
+      "| 数据 | 欧盟 | 美国 |",
+    ].join("\n");
+  }
+  return [
+    "Here is the comparison.",
+    "",
+    "| Term | Alder Ltd | Birch Inc |",
+    "|:--|:--|:--|",
+    "| Law | England | New York |",
+    "| Cap | 12 months | Unlimited |",
+    `| Notice | 30 days | Thirty days' written notice ${marker} |`,
+    "| Fees | Monthly | Quarterly |",
+    "| Years | 3 years | 2 years |",
+    "| Renewal | Auto | Manual |",
+    "| Data | EU | US |",
+  ].join("\n");
+}
+
 function fortyCitationsAnswer(question: string): string {
   const chinese = /\p{Script=Han}/u.test(question);
   const sentences = Array.from({ length: 40 }, (_, index) =>
@@ -502,9 +536,11 @@ export function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
                     ? tableAnswer(recorded.join(" "))
                     : CONTRACT_COMPARISON.test(question)
                       ? contractComparisonAnswer(prompt, question, recorded[0] ?? "")
-                      : recorded.length > 1
-                        ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
-                        : CITED_ANSWER;
+                      : NARROW_THEN_WIDE.test(question)
+                        ? narrowThenWideAnswer(question, recorded[0] ?? "")
+                        : recorded.length > 1
+                          ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
+                          : CITED_ANSWER;
   const said = withAsides(prompt, question, answer);
   return { text: skill ? `Following the Skill ${skill}.\n\n${said}` : said };
 }

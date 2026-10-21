@@ -6657,30 +6657,48 @@
       background: linear-gradient(to right, var(--color-sheet), transparent);
       pointer-events: none;
     }
+    /*
+     * Where a table starts, with no height: the Expand is laid over the table's top-right corner,
+     * on its faded edge, and the heading row keeps a strip clear under it, so text is never
+     * covered and a table that widens mid-answer gains it without pushing anything.
+     */
     .answer-table-slot {
-      margin-top: 4px;
+      position: relative;
+      height: 0;
 
-      &:empty {
-        display: none;
+      + * {
+        margin-top: 0;
+      }
+      &:has(> .answer-table-open) + .tableWrapper tr:first-child > :last-child {
+        padding-right: 36px;
       }
     }
     .answer-table-open {
+      position: absolute;
+      top: 0;
+      right: 2px;
+      z-index: 2;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      justify-content: center;
+      width: 26px;
       height: 26px;
-      margin-left: -6px;
-      padding: 0 7px 0 6px;
       border-radius: 6px;
-      font-size: 13px;
-      line-height: 18px;
-      font-weight: 600;
+      background: var(--color-sheet);
       color: var(--color-ink-secondary);
       user-select: none;
 
       &:hover {
         background: var(--color-hover);
         color: var(--color-ink);
+      }
+      &[aria-disabled="true"] {
+        cursor: default;
+        color: var(--color-ink-placeholder);
+
+        &:hover {
+          background: var(--color-sheet);
+        }
       }
     }
     /*
