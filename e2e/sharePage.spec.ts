@@ -19,8 +19,10 @@ import {
   nameMind,
   newMind,
   openOptions,
+  openSavedPage,
   pointAndClick,
   removeDataFolder,
+  requestsMade,
   savedPath,
   setLanguage,
   useLocalChatModel,
@@ -62,39 +64,6 @@ function citation(document: Document, quote: string, line: number, check: "found
 
 const paragraph = (...children: MindChild[]) =>
   mindNode("paragraph", { id: randomUUID() }, children);
-
-/**
- * Opens a saved page in a window of its own, in a session with the network off that records
- * every request it is asked for, as a reader opening the file in a browser would.
- */
-async function openOffline(app: ElectronApplication, path: string): Promise<Page> {
-  const opened = app.waitForEvent("window");
-  await app.evaluate(async ({ BrowserWindow, session }, file) => {
-    const offline = session.fromPartition("shared-page", { cache: false });
-    offline.enableNetworkEmulation({ offline: true });
-    const requested: string[] = [];
-    (globalThis as { sharedPageRequests?: string[] }).sharedPageRequests = requested;
-    offline.webRequest.onBeforeRequest((details, callback) => {
-      requested.push(details.url);
-      callback({ cancel: !details.url.startsWith("file:") });
-    });
-    const window = new BrowserWindow({
-      width: 1100,
-      height: 760,
-      useContentSize: true,
-      // macOS keeps a window no taller than the screen otherwise, and CI's Mac has a small one.
-      enableLargerThanScreen: true,
-      webPreferences: { session: offline, sandbox: true, contextIsolation: true },
-    });
-    await window.loadFile(file);
-  }, path);
-  const page = await opened;
-  await page.waitForLoadState("load");
-  return page;
-}
-
-const requestsMade = (app: ElectronApplication) =>
-  app.evaluate(() => (globalThis as { sharedPageRequests?: string[] }).sharedPageRequests ?? []);
 
 async function resize(app: ElectronApplication, page: Page, width: number, height: number) {
   const window = await app.browserWindow(page);
@@ -184,7 +153,7 @@ test("a web page to share: the sheet offers it, and the file loads nothing and o
   await expect(window.getByTestId("export-mind")).toHaveAttribute("data-format", "share-page");
 
   await exportFromMenu(window);
-  const page = await openOffline(app, await savedPath(window, "Tides.html"));
+  const page = await openSavedPage(app, await savedPath(window, "Tides.html"));
 
   // Nothing but the file was asked for, and the page's policy refuses a request it tries.
   await expect(page.locator(".shared-foot a")).toHaveText("Citations checked with IncarnaMind");
@@ -377,7 +346,7 @@ test("page pictures: the sheet says what goes in the file and updates as a Docum
   await expect(sheet).toBeHidden();
 
   await exportFromMenu(window);
-  const page = await openOffline(app, await savedPath(window, "Gauges.html"));
+  const page = await openSavedPage(app, await savedPath(window, "Gauges.html"));
   const pictureOf = (name: string) =>
     page
       .locator("section.card", { has: page.locator(".card-source", { hasText: name }) })

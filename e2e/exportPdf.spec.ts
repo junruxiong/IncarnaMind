@@ -27,6 +27,7 @@ import {
   nameMind,
   newMind,
   openOptions,
+  openSavedPage,
   pathsOpened,
   pathsShown,
   pointAndClick,
@@ -597,17 +598,7 @@ test("Export as HTML saves one .html file whose footnotes link both ways, and th
   expect(html).toContain('<a class="backref" href="#ref-2"');
   expect(html).not.toMatch(/<script|<link|src="http/);
 
-  const opened = app.waitForEvent("window");
-  await app.evaluate(async ({ BrowserWindow }, file) => {
-    const reader = new BrowserWindow({
-      width: 1280,
-      height: 844,
-      show: false,
-      webPreferences: { backgroundThrottling: false },
-    });
-    await reader.loadFile(file);
-  }, path);
-  const reader = await opened;
+  const reader = await openSavedPage(app, path);
   try {
     for (const width of [1280, 390]) {
       await setWindowSize(app, reader, width, 844);
