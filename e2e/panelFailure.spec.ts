@@ -99,7 +99,7 @@ for (const [width, language, line, reload] of [
   });
 }
 
-test("the sidebar and the assistant fail alone; the assistant's conversation and draft stay through Reload", async () => {
+test("the sidebar, the overlays and the assistant fail alone; the assistant's conversation and draft stay through Reload", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -108,6 +108,18 @@ test("the sidebar and the assistant fail alone; the assistant's conversation and
   await askInAssistant(window, "Which tide is the highest?");
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("A draft for the next Question");
+
+  // The dialogs and ⌘K are drawn apart from the panels: their failure is a line beside the card.
+  await fail(window, "overlays");
+  await expect(failed(window, "overlays")).toBeVisible();
+  await expect(window.getByTestId("card")).toBeVisible();
+  await expect(window.getByTestId("sidebar")).toBeVisible();
+  await screenshot(window, "overlays-failed");
+  await failed(window, "overlays").getByTestId("panel-reload").click();
+  await expect(failed(window, "overlays")).toHaveCount(0);
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.press("Escape");
 
   await fail(window, "sidebar");
   await expect(failed(window, "sidebar")).toBeVisible();
