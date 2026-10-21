@@ -3351,7 +3351,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (result.outcome === "saved" && !result.existing && typeof folderId === "string") {
         library.assign(result.document.id, folderId);
       }
-      const added: Omit<AddDocumentsResult, "batchId"> =
+      const added: Pick<AddDocumentsResult, "documents" | "skipped"> =
         result.outcome === "saved"
           ? { documents: [result.document], skipped: [] }
           : { documents: [], skipped: [{ path: result.address, reason: "unreadable" }] };

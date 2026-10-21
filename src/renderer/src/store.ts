@@ -22,6 +22,7 @@ import type {
   Mind,
   PrivacySettings,
   RerankSettings,
+  RestoreRef,
   SearchScope,
   Settings,
   SettingsPatch,
@@ -39,6 +40,7 @@ import { filingFolder } from "../../shared/searchScope";
 import { tagLinks } from "../../shared/tagLinks";
 import {
   deleted,
+  documentsAdded,
   folderLinked,
   linkedFolderPaused,
   linkedFolderShown,
@@ -543,6 +545,23 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
   const push = (change: Undoable) => useUndo.getState().push(change);
+  const removeOwn = async (ids: readonly string[]): Promise<RestoreRef[]> => {
+    // One deleted since, or taken over by a Linked folder, is no longer this add's.
+    const own = new Set(
+      (await core.listDocuments({ linkedFolderId: null })).map((each) => each.id),
+    );
+    const taken: RestoreRef[] = [];
+    for (const id of ids) {
+      if (!own.has(id)) continue;
+      await core.deleteDocument(id);
+      taken.push({ kind: "document", id });
+    }
+    documentUpdates.flush();
+    set((state) => ({
+      documents: state.documents.filter((each) => !taken.some((ref) => ref.id === each.id)),
+    }));
+    return taken;
+  };
   const libraryBefore = async (path: string): Promise<LibraryBefore> => {
     const [documents, linked] = await Promise.all([core.listDocuments(), core.listLinkedFolders()]);
     return {
@@ -776,7 +795,9 @@ export const useAppStore = create<AppState>()((set, get) => {
     documentUpdates.flush();
     const known = new Set(get().documents.map((each) => each.id));
     const result =
-      paths.length > 0 ? await core.addDocuments([...paths]) : { documents: [], skipped: [] };
+      paths.length > 0
+        ? await core.addDocuments([...paths])
+        : { documents: [], skipped: [], added: [] };
     const linkable: LinkingFolder[] = folders.map((path) => ({ path, preview: null, error: null }));
     const skipped = [...notOnDisk];
     for (const { path } of result.skipped) {
@@ -804,6 +825,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       };
     });
     offerLinks(linkable);
+    if (result.added.length === 0) return;
+    push(documentsAdded(result.added.length, () => removeOwn(result.added)));
   };
 
   /** Dropped or picked files' paths, and the names of those that aren't on disk. */
