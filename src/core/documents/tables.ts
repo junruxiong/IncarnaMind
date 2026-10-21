@@ -259,29 +259,39 @@ function gridOf(
   const bodyRows = rows.slice(headingCount);
   const spans = spansOf(bodyRows.filter((row) => row.length >= 2));
   if (spans.length < 2) return null;
-  // Over the row of headings next to the body, a row heads the columns only if it fills them, or
-  // groups the ones right of the labels (2025 over Q1 and Q2): a form's fields above aren't headings.
-  // The labels' own heading may sit level with the groups, or centred in its merged cell between
-  // rows: it is theirs when a row above it heads the columns. A bullet's line starts left of them,
-  // and a caption, a title or a page header centred above the table is one line, not groups.
+  // Over the row of headings next to the body, a row heads the columns only if each of its pieces
+  // heads a group of figure columns (2025 over Q1 and Q2), starting inside the table, or is the
+  // labels' own heading, no wider than their column. A caption, a page header or a statement's
+  // 编制单位 line runs wider, or past the table, and stays text; so do a form's fields and a
+  // bullet's line. The labels' heading may also sit alone between two heading rows, centred in its
+  // merged cell: it is theirs when a row above it heads the columns.
+  const labels = spans[0];
   const overLabels = (fragment: Fragment) =>
     fragment.right <= (spans[1]?.left ?? Number.POSITIVE_INFINITY);
-  const groups = (fragment: Fragment) => fragment.left > (spans[0]?.right ?? 0);
-  const overFigures = (fragment: Fragment) =>
-    fragment.left >= (spans[1]?.left ?? 0) - fragment.size && widthOf(fragment.text) <= MAX_CELL;
+  const labelsHeading = (fragment: Fragment) =>
+    overLabels(fragment) &&
+    fragment.left >= (labels?.left ?? 0) - fragment.size &&
+    fragment.right - fragment.left <= (labels ? labels.right - labels.left : 0) + fragment.size;
+  const groupHeading = (fragment: Fragment) =>
+    fragment.left > (labels?.right ?? 0) &&
+    fragment.left < (spans.at(-1)?.right ?? 0) &&
+    widthOf(fragment.text) <= MAX_CELL;
+  const headsColumns = (row: readonly Fragment[]) => {
+    if (!row.every((fragment) => labelsHeading(fragment) || groupHeading(fragment))) return false;
+    const [only, another] = row.filter((fragment) => !labelsHeading(fragment));
+    if (another) return true;
+    if (!only) return false;
+    // One heading over several columns ("Year ended 31 December" over 2025 and 2024), or over the
+    // only one beside the labels' heading.
+    const covered = overlapping(only, spans).length;
+    return covered >= 2 || (row.length >= 2 && covered >= spans.length - 1);
+  };
   let dropped = headingCount;
   let top = headingCount;
   while (dropped > 0) {
     const row = rows[dropped - 1] ?? [];
-    const heads =
-      dropped === headingCount ||
-      row.length >= spans.length ||
-      (row.length >= 2 && row.every(groups)) ||
-      (row.length >= 2 &&
-        row.some(groups) &&
-        row.every((fragment) => overLabels(fragment) || overFigures(fragment)));
-    if (heads) top = dropped - 1;
-    else if (!row.every(overLabels)) break;
+    if (dropped === headingCount || headsColumns(row)) top = dropped - 1;
+    else if (!row.every(labelsHeading)) break;
     dropped--;
   }
   dropped = top;
