@@ -1,8 +1,9 @@
-import { createContext, type ReactNode, useContext, useState } from "react";
+import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 import type { Document } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
 import { CountItLine } from "../components/CountItLine";
 import { InlineName } from "../components/InlineName";
+import { moveDocumentsBeside } from "../components/library/DocumentMoveTo";
 import { DocumentLineIcon, PinLineIcon } from "../components/lineIcons";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
@@ -11,6 +12,7 @@ import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useLeftOutOfEvidence } from "../evidence";
 import { useLanguage, useT } from "../i18n";
+import { type Said, saidInLine } from "../lineNames";
 import { useAppStore } from "../store";
 import { useRename } from "../useRename";
 import { pageDate } from "../webPages";
@@ -61,10 +63,11 @@ export function ViewerHeader({
   const language = useLanguage();
   const { document, preview, keep } = useContext(ViewerFrameContext);
   /** Why the Document's own app couldn't open it, until it is tried again. */
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<Said | null>(null);
   const leftOut = useLeftOutOfEvidence(document);
   const objectMenu = useObjectMenu({ kind: "document", id: document?.id ?? "" });
   const rename = useRename<HTMLButtonElement>(`viewer:${document?.id}`);
+  const header = useRef<HTMLElement>(null);
   const renameDocument = useAppStore((state) => state.renameDocument);
 
   // A copy named after the Document opens, as from the sidebar's file menu.
@@ -73,7 +76,9 @@ export function ViewerHeader({
     setProblem(null);
     files.openDocumentExternally(document.id).catch((failure: unknown) => {
       setProblem(
-        t("viewer.file.openFailed", { name: document.name, reason: errorMessage(failure, t) }),
+        saidInLine(t, (t) =>
+          t("viewer.file.openFailed", { name: document.name, reason: errorMessage(failure, t) }),
+        ),
       );
     });
   };
@@ -83,6 +88,7 @@ export function ViewerHeader({
       <header
         data-testid="viewer-header"
         {...(document ? objectMenu.rowProps : {})}
+        ref={header}
         className="viewer-header"
       >
         {leading}
@@ -156,14 +162,21 @@ ${sourceOf(document)}`
           <ObjectMenu
             target={{ kind: "document", id: document.id }}
             label={t("documents.more", { name: displayName(document) })}
-            here={{ "document.rename": rename.start }}
+            here={{
+              "document.rename": rename.start,
+              "document.moveTo": () => moveDocumentsBeside(header.current, [document.id]),
+            }}
             className="viewer-icon-button"
           />
         )}
       </header>
       {problem && (
-        <ProblemLine testId="viewer-open-problem" className="shrink-0 px-4 py-2">
-          {problem}
+        <ProblemLine
+          testId="viewer-open-problem"
+          title={problem.fullMessage}
+          className="shrink-0 px-4 py-2"
+        >
+          {problem.message}
         </ProblemLine>
       )}
       {document && leftOut && (

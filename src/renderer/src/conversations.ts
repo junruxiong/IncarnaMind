@@ -8,8 +8,10 @@ import type {
 } from "../../core/api";
 import { conversationName } from "../../shared/naming";
 import { settleAsk, useAnswers } from "./answers";
+import { applyWhatWasAsked } from "./askedChanges";
+import { watchCommands } from "./assistantCommands";
 import { watchMindsMadeBy } from "./assistantMinds";
-import { composerKey } from "./composer";
+import { composerKey, useComposer } from "./composer";
 import { core } from "./core";
 import { translateNow } from "./i18n";
 import { useModelSetup, waitForModel } from "./modelSetup";
@@ -136,6 +138,23 @@ export async function openConversation(conversationId: string, answerId?: string
   }
 }
 
+let readyAsking = false;
+
+export async function askReadyQuestion(): Promise<void> {
+  // A double-click asks it once.
+  if (readyAsking) return;
+  readyAsking = true;
+  try {
+    const { conversationId } = await core.askReadyQuestion();
+    useAppStore.getState().updateGettingStarted({ askedReady: true });
+    await openConversation(conversationId);
+  } catch (error) {
+    report(error);
+  } finally {
+    readyAsking = false;
+  }
+}
+
 /**
  * Asks a Question from the composer in the assistant's conversation (a
  * new one for a new chat): it shows at once, and its Answer streams in there.
@@ -170,6 +189,8 @@ export async function askInAssistant(
     settleAsk(key, result);
     if (!result.asked) return false;
     watchMindsMadeBy(result.answerId);
+    applyWhatWasAsked(result.answerId);
+    watchCommands(result.answerId);
     const id = result.conversation.id;
     if (useConversations.getState().stopWanted) {
       core.stopConversationAnswer({ conversationId: id, answerId: result.answerId }).catch(report);
@@ -206,8 +227,23 @@ function askWaitingQuestion(): void {
 }
 
 core.on("chatReadiness.changed", (readiness) => {
-  if (readiness.ready) askWaitingQuestion();
+  if (!readiness.ready) {
+    // The model that worked is gone: the card asks for one again.
+    useModelSetup.setState({ ready: false });
+    return;
+  }
+  const { wanted, waiting } = useModelSetup.getState();
+  // The setup card stays, saying what each job uses, until the User continues.
+  if (wanted || waiting) useModelSetup.setState({ ready: true });
 });
+
+/** Continue on the setup card: the Question that waited is asked, and the composer takes the card's place. */
+export function continueSetup(): void {
+  useModelSetup.setState({ wanted: false, ready: false });
+  // The setup card goes with the focus in it: the composer, where the User asks next, takes it.
+  useComposer.getState().requestFocus();
+  askWaitingQuestion();
+}
 
 /**
  * Writes an Answer of the open conversation again; why it couldn't be is kept under its id.
@@ -222,6 +258,8 @@ export async function regenerateAnswer(
   settleAsk(answerId, null);
   try {
     watchMindsMadeBy(answerId);
+    applyWhatWasAsked(answerId, { keepWritten: clearScope });
+    watchCommands(answerId);
     settleAsk(
       answerId,
       await core.regenerateConversationAnswer({
@@ -295,11 +333,12 @@ export function stopWriting(): void {
 export async function clearConversation(): Promise<void> {
   const { openId } = useConversations.getState();
   if (!openId) return;
-  const name = conversationLabel(conversationById(openId));
+  const conversation = conversationById(openId);
+  const name = (conversation && conversationName(conversation)) || "";
   await core.deleteConversation(openId);
   startNewChat();
   useUndo.getState().push({
-    message: translateNow("assistant.cleared", { title: name }),
+    said: (t) => t("assistant.cleared", { title: name || t("conversation.untitled") }),
     undo: async () => {
       await core.restore([{ kind: "conversation", id: openId }]);
       await openConversation(openId);

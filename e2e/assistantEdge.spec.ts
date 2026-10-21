@@ -7,6 +7,8 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  moveAssistant,
+  nameMind,
   newMind,
   removeDataFolder,
   setLanguage,
@@ -40,8 +42,7 @@ type Dock = "right" | "left" | "bottom" | "float";
 const DOCKS: Dock[] = ["right", "left", "bottom", "float"];
 
 async function dockAs(window: Page, dock: Dock) {
-  await window.getByTestId("assistant-more").click();
-  await window.getByTestId(`assistant-menu-${dock}`).click();
+  await moveAssistant(window, dock);
   await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", dock);
 }
 
@@ -113,7 +114,7 @@ test("the header, the thread, the Task tray and the composer share one left edge
   await dismissChatSetup(window);
   await connectLocalChatModel(window);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Credit memo");
+  await nameMind(window, "Credit memo");
   const assistant = window.getByTestId("assistant");
 
   // The empty conversation's "Reads …" icon, before any Answer.

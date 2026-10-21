@@ -130,8 +130,8 @@ export function UsageDataCard() {
             ))}
           </ul>
           <p className="text-ink-meta">
-            {t("usageData.card.change")}
-            {gap(t("usageData.card.change"), t("usageData.card.details"))}
+            {t("privacy.changeAnyTime")}
+            {gap(t("privacy.changeAnyTime"), t("usageData.card.details"))}
             <a
               href={USAGE_DATA_DETAILS_URL}
               target="_blank"

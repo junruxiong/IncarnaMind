@@ -89,13 +89,13 @@ export const mindCommands: readonly Command[] = [
     run: (ctx) => store().openMind(idsOf(ctx, "mind")[0] ?? ""),
   },
   {
-    id: "mind.openSide",
-    label: "mind.openSide",
+    id: "mind.openTab",
+    label: "mind.openTab",
     group: "open",
     appliesTo: ["mind"],
     when: onlyOne,
     reversible: true,
-    run: (ctx) => store().openMind(idsOf(ctx, "mind")[0] ?? "", { side: true }),
+    run: (ctx) => store().openMind(idsOf(ctx, "mind")[0] ?? "", { newTab: true }),
   },
   // Exporting (Export as…, Export options…) is in ./exports.
   {
@@ -103,6 +103,7 @@ export const mindCommands: readonly Command[] = [
     label: "mind.moveTo",
     rowKeys: "CmdOrCtrl+Shift+M",
     group: "move",
+    top: 30,
     appliesTo: ["mind", "tab"],
     when: (ctx) => ofMind(ctx) && ctx.here?.["mind.moveTo"] !== undefined,
     reversible: true,
@@ -111,8 +112,10 @@ export const mindCommands: readonly Command[] = [
   {
     id: "mind.rename",
     label: "mind.rename",
+    keywords: ["command.rename.keywords"],
     rowKeys: RENAME_KEYS,
     group: "edit",
+    top: 32,
     appliesTo: ["mind"],
     reversible: true,
     ...needsHere("mind.rename"),
@@ -145,7 +148,7 @@ export const documentCommands: readonly Command[] = [
   },
   {
     id: "document.openTab",
-    label: "document.openTab",
+    label: "mind.openTab",
     group: "open",
     appliesTo: ["document"],
     when: onlyOne,
@@ -196,6 +199,7 @@ export const documentCommands: readonly Command[] = [
     label: "documents.moveTo",
     rowKeys: "CmdOrCtrl+Shift+M",
     group: "move",
+    top: 30,
     appliesTo: ["document"],
     reversible: true,
     ...needsHere("document.moveTo"),
@@ -256,6 +260,7 @@ export const documentCommands: readonly Command[] = [
     id: "document.tags",
     label: "document.tags",
     group: "tags",
+    top: 31,
     appliesTo: ["document"],
     reversible: true,
     ...needsHere("document.tags"),
@@ -263,8 +268,10 @@ export const documentCommands: readonly Command[] = [
   {
     id: "document.rename",
     label: "documents.renameAction",
+    keywords: ["command.rename.keywords"],
     rowKeys: RENAME_KEYS,
     group: "edit",
+    top: 32,
     appliesTo: ["document"],
     reversible: true,
     ...needsHere("document.rename"),
@@ -328,9 +335,10 @@ export const folderCommands: readonly Command[] = [
     id: "folder.newMind",
     label: "folder.newMindHere",
     group: "main",
+    top: 22,
     appliesTo: ["folder"],
     reversible: true,
-    run: (ctx) => store().createMind({ folderId: idsOf(ctx, "folder")[0] ?? null }),
+    run: (ctx) => store().createMind({ titled: true, folderId: idsOf(ctx, "folder")[0] ?? null }),
   },
   {
     id: "folder.ask",
@@ -348,6 +356,7 @@ export const folderCommands: readonly Command[] = [
     id: "folder.organize",
     label: "folder.organize",
     group: "main",
+    top: 24,
     appliesTo: ["folder"],
     enabled: (ctx) =>
       folderDocumentIds(ctx).length > 0 ? true : { reason: "folder.organize.empty" },
@@ -361,6 +370,7 @@ export const folderCommands: readonly Command[] = [
   {
     id: "folder.tagWithAi",
     label: "folder.tagWithAi",
+    keywords: ["tagging.resume.keywords"],
     group: "main",
     appliesTo: ["folder"],
     when: (ctx) => {
@@ -389,8 +399,10 @@ export const folderCommands: readonly Command[] = [
   {
     id: "folder.rename",
     label: "folder.rename",
+    keywords: ["command.rename.keywords"],
     rowKeys: RENAME_KEYS,
     group: "edit",
+    top: 32,
     appliesTo: ["folder"],
     reversible: true,
     ...needsHere("folder.rename"),
@@ -425,6 +437,7 @@ export const tagCommands: readonly Command[] = [
   {
     id: "tag.rename",
     label: "tag.rename",
+    keywords: ["command.rename.keywords"],
     rowKeys: RENAME_KEYS,
     group: "edit",
     appliesTo: ["tag"],
@@ -452,6 +465,44 @@ export const tagCommands: readonly Command[] = [
     appliesTo: ["tag"],
     reversible: true,
     run: () => store().openTagsDialog(),
+  },
+  {
+    // From anywhere, as ⌘K offers it: the sidebar lists only the Tags in use.
+    id: "tags.manage",
+    label: "tags.menu.manage",
+    group: "main",
+    reversible: true,
+    run: () => store().openTagsDialog(),
+  },
+];
+
+const kindsIn = (ctx: CommandContext) => new Set(ctx.selection.map((each) => each.kind)).size;
+const rowMoveTo = (ctx: CommandContext) =>
+  ctx.here?.["mind.moveTo"] ?? ctx.here?.["document.moveTo"];
+
+/** A selection of several kinds: only what applies to all of it, as `registerMixedMenu` lists. */
+export const mixedSelectionCommands: readonly Command[] = [
+  {
+    id: "selection.moveTo",
+    label: (ctx, t) => t("selection.moveTo", { count: ctx.selection.length }),
+    rowKeys: "CmdOrCtrl+Shift+M",
+    group: "move",
+    // Folders don't go inside Folders until #246.
+    appliesTo: ["mind", "document"],
+    when: (ctx) => kindsIn(ctx) > 1 && rowMoveTo(ctx) !== undefined,
+    reversible: true,
+    run: (ctx) => rowMoveTo(ctx)?.(),
+  },
+  {
+    id: "selection.delete",
+    label: (ctx, t) => t("selection.delete", { count: ctx.selection.length }),
+    rowKeys: "CmdOrCtrl+Backspace",
+    group: "danger",
+    destructive: true,
+    appliesTo: ["mind", "document", "folder"],
+    when: (ctx) => kindsIn(ctx) > 1,
+    reversible: true,
+    run: (ctx) => store().deleteSelection(ctx.selection),
   },
 ];
 

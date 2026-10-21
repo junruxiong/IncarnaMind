@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
-import { files } from "../core";
+import { core, files } from "../core";
 import { useT } from "../i18n";
 import { offeredSettingsPages, type SettingsPage, settingsPageLabels } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
@@ -14,21 +14,16 @@ import { MeetingsSettings } from "./MeetingsSettings";
 import { MotionSettings } from "./MotionSettings";
 import { OutputLocationSettings } from "./OutputLocationSettings";
 import { PrivacySettings } from "./PrivacySettings";
-import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
-import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
-import { OtherModelsSettings } from "./providers/OtherModelsSettings";
-import { PlansSettings } from "./providers/PlansSettings";
+import { ModelsSettings } from "./providers/ModelsSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { SavedWebPagesSettings } from "./SavedWebPagesSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
 import { SpendingCapSettings } from "./SpendingCapSettings";
 import { SuggestionSettings } from "./SuggestionSettings";
-import { TaggingSettings } from "./TaggingSettings";
 import {
   buttonClass,
   dialogFrameClass,
-  hintClass,
   navRowClass,
   ruledListClass,
   sectionNoteClass,
@@ -158,17 +153,7 @@ function PageContent({ page }: { page: SettingsPage }) {
         </Page>
       );
     case "models":
-      return (
-        <Page>
-          <Titled title="providers.settings.title">
-            <ChatModelSettings />
-          </Titled>
-          <OtherModelsSettings />
-          <PlansSettings />
-          <ChatGptPlanSettings />
-          <TaggingSettings />
-        </Page>
-      );
+      return <ModelsSettings />;
     case "search":
       return (
         <Page>
@@ -284,7 +269,11 @@ function DataFolderSettings() {
   return (
     <section data-testid="data-folder-settings">
       <h4 className={sectionTitleClass}>{t("export.dataFolder.title")}</h4>
-      <p className={sectionNoteClass}>{t("export.dataFolder.body")}</p>
+      <p className={sectionNoteClass}>
+        {t("export.dataFolder.body")}
+        <br />
+        {t("export.dataFolder.backup")}
+      </p>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -297,13 +286,13 @@ function DataFolderSettings() {
         <button
           type="button"
           data-testid="open-logs-folder"
+          title={t("export.dataFolder.logs.tip")}
           onClick={() => void open(files.openLogsFolder())}
           className={buttonClass}
         >
           {t("export.dataFolder.openLogs")}
         </button>
       </div>
-      <p className={hintClass}>{t("export.dataFolder.logs")}</p>
     </section>
   );
 }
@@ -315,14 +304,24 @@ function AboutSettings() {
     <section data-testid="about-settings">
       <h4 className={sectionTitleClass}>{t("settings.about.title")}</h4>
       <p className={sectionNoteClass}>{t("settings.about.body")}</p>
-      <a
-        href={REPOSITORY_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="text-ui text-accent underline-offset-2 hover:text-accent-strong hover:underline"
-      >
-        {t("settings.about.repository")}
-      </a>
+      <div className="flex flex-col items-start gap-1">
+        <a
+          href={REPOSITORY_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-ui text-accent underline-offset-2 hover:text-accent-strong hover:underline"
+        >
+          {t("settings.about.repository")}
+        </a>
+        <button
+          type="button"
+          data-testid="about-citation-licences"
+          onClick={() => core.openCitationStyleLicences().catch(useAppStore.getState().reportError)}
+          className="text-ui text-accent underline-offset-2 hover:text-accent-strong hover:underline"
+        >
+          {t("settings.about.citationLicences")}
+        </button>
+      </div>
     </section>
   );
 }

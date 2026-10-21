@@ -10,6 +10,7 @@ import {
   dismissChatSetup,
   interceptOpenPath,
   launchApp,
+  nameMind,
   newMind,
   pathsOpened,
   pointAndClick,
@@ -99,7 +100,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await setWindowSize(app, window, 1440, 900);
     await addDocuments(window, [join(sources, "Tides.pdf")]);
     await newMind(window);
-    await window.getByTestId("mind-title").fill("Tides");
+    await nameMind(window, "Tides");
     const editor = window.getByTestId("mind-editor").filter({ visible: true });
     await editor.click();
     await window.keyboard.type(SENTENCES.join(" "));

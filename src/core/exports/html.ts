@@ -5,6 +5,8 @@
  * styles or fonts) and pictures are data URIs; the page's policy refuses everything else.
  */
 
+import { cssString } from "../../shared/mindStyle";
+import { lineHeightCss } from "../../shared/paragraphFormat";
 import type { Language } from "../language";
 import type { Block } from "../mindText";
 import type { ExportLabels } from "./labels";
@@ -27,7 +29,6 @@ p{margin:0 0 .9rem}
 .question-label{font-weight:600}
 sup.note-ref{margin-left:.05rem;font-family:var(--sans);font-size:.7em;line-height:0}
 sup.note-ref a{text-decoration:none;color:#2457a7}
-sup.note-ref + sup.note-ref::before{content:","}
 .unverified{color:var(--warning)}
 ins.change{text-decoration:underline;text-underline-offset:.15em}
 del.change{color:var(--ink-meta);text-decoration:line-through}
@@ -62,6 +63,18 @@ img{max-width:100%;height:auto}
 @media (prefers-color-scheme:dark){:root{--ink:#e8eaed;--ink-answer:#c3c7ce;--ink-meta:#9aa0a8;--rule-strong:#3b4048;--frame:#23262b;--warning:#e0a15a}body{background:#17191c}mark,.notes li:target{background:#5a4a1a}sup.note-ref a,.backref{color:#8ab4f8}}
 @media print{main{padding-top:0}sup.note-ref a,.backref{color:inherit}}
 `.replace(/\n/g, "");
+
+/** The Mind's own font ahead of the export's, which the reader's computer falls back to. */
+export const bodyFamily = (family: string) => `${cssString(family)},var(--serif)`;
+
+export const bodyFontStyle = (family: string | null) =>
+  family === null ? "" : `body{font-family:${bodyFamily(family)}}`;
+
+/** The Mind's line spacing, a multiple of a single line, over the export's. */
+export const bodyLineStyle = (multiple: number | null) =>
+  multiple === null
+    ? ""
+    : `body{line-height:${lineHeightCss({ rule: "auto", value: multiple }, String)}}`;
 
 /** The print page lays tables out itself; a browser's tables, and the validator, want a body. */
 export const withTableBodies = (body: string) =>
@@ -111,17 +124,21 @@ export function htmlFile({
 
 /** A Mind's HTML file: its text in `<main>`, its notes as a numbered list after it. */
 export function renderHtml(
-  title: string,
   blocks: readonly Block[],
   labels: ExportLabels,
-  { language, name }: { language: Language; name: string },
+  {
+    language,
+    name,
+    font,
+    lineSpacing,
+  }: { language: Language; name: string; font: string | null; lineSpacing: number | null },
 ): string {
-  const printed = renderPrintHtml(title, blocks, labels, { linkNotes: true });
+  const printed = renderPrintHtml(blocks, labels, { linkNotes: true });
   return htmlFile({
     language,
     name,
     policy: "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
-    styles: HTML_STYLES,
+    styles: HTML_STYLES + bodyFontStyle(font) + bodyLineStyle(lineSpacing),
     body: `<main>${withTableBodies(printed.body)}</main>\n${notesSection(printed.notes, labels)}`,
   });
 }

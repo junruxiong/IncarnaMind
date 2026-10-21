@@ -5,11 +5,13 @@ import {
   type ApprovalRequest,
   BLOCK_ID_ATTRIBUTE,
   type ProviderErrorKind,
+  type SignInRouteProblem,
   SKILL_SCRIPT_LIMITS,
   type SkillScriptApprovalRequest,
   SOURCE_KIND_PROVIDERS,
   type ToolApprovalRequest,
 } from "../../../core/api";
+import { isSignInRoute, isSignInRouteProblem } from "../../../core/providers/signInRoutes";
 import { asksAfterThirdParty } from "../../../shared/approvalRules";
 import { toolCallsOf } from "../../../shared/toolCalls";
 import { AnswerWriting } from "../answerPhase";
@@ -17,7 +19,10 @@ import { isCalculated, RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
+import { AskCall } from "../components/assistant/AskCall";
+import { CommandCall } from "../components/assistant/CommandCall";
 import { MindCall } from "../components/assistant/MindCall";
+import { DetailsLine } from "../components/DetailsLine";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { DocumentLineIcon, FindSourcesLineIcon } from "../components/lineIcons";
@@ -27,6 +32,7 @@ import {
   LocalModelRefusedLine,
   OllamaNotRunningLine,
 } from "../components/providers/OllamaProblems";
+import { RouteProblemLine } from "../components/providers/RouteProblemLine";
 import { core } from "../core";
 import { formatResetTime } from "../cost";
 import { useFindSources } from "../findSources";
@@ -35,14 +41,18 @@ import { useKeyRefusals, useKeySavedSince } from "../keyRefusals";
 import { requestModelMenu } from "../modelMenu";
 import { useModelNames } from "../modelNames";
 import { useStoppedByPlanLimit } from "../planLimits";
-import { ANSWER_PROBLEMS, answerProblem } from "../problems";
+import { ANSWER_PROBLEMS, failedAnswerLine } from "../problems";
+import { useRouteOffered } from "../routeSignIn";
 import type { SettingsPage } from "../settingsPages";
+import { skillTitle } from "../skills";
 import { useAppStore } from "../store";
 import { reasonKey } from "../webPages";
+import { CommandApprovalCard } from "./CommandApprovalCard";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
 import { PlanLimitLine } from "./PlanLimitLine";
 import { ThirdPartyLine } from "./ThirdPartyLine";
+import { withShortcut } from "./withShortcut";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
 
@@ -180,6 +190,9 @@ export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
           modelId={modelId}
           providerId={text(node.attrs.providerId)}
           resetsAt={text(node.attrs.errorResetsAt)}
+          signInRoute={
+            isSignInRouteProblem(node.attrs.errorSignInRoute) ? node.attrs.errorSignInRoute : null
+          }
           details={text(node.attrs.errorMessage)}
           onRetry={questionId ? () => writeAgain() : undefined}
           onOpenSettings={openSettings}
@@ -269,9 +282,6 @@ export function NoCitationsLine({
   );
 }
 
-/** Asked for once per run: while offline, asking again on every error would only fail again. */
-let modelsAsked = false;
-
 /** Failures that can come of a model that can't answer, rather than of the connection. */
 const WRONG_MODEL: ReadonlySet<ProviderErrorKind> = new Set([
   "model",
@@ -286,6 +296,7 @@ export function AnswerError({
   modelId,
   providerId,
   resetsAt,
+  signInRoute = null,
   details,
   failedAt = null,
   onRetry,
@@ -296,6 +307,7 @@ export function AnswerError({
   providerId: string | null;
   /** When the plan's limit resets, when its provider said. */
   resetsAt: string | null;
+  signInRoute?: SignInRouteProblem | null;
   details: string | null;
   /**
    * When it failed, ISO 8601, said beside a refused key; an Answer in a Mind keeps no time, so
@@ -317,12 +329,12 @@ export function AnswerError({
     : t("answer.error.thisService");
   const [shownAt] = useState(() => new Date().toISOString());
   const keySaved = useKeySavedSince(providerId, failedAt ?? shownAt);
-  // Whose plan it was decides where its usage is managed.
+  // Whose plan or sign-in it was decides the line. A sign-in that ends changes readiness, which
+  // clears the list, so it is read again then, and not on every error (offline, that only fails).
+  const readiness = useAppStore((state) => state.chatReadiness);
   useEffect(() => {
-    if (modelsAsked) return;
-    modelsAsked = true;
-    useAnswers.getState().loadModels();
-  }, []);
+    if (readiness) useAnswers.getState().loadModels();
+  }, [readiness]);
   // A model the User added to the menu that then failed: one click takes it back out.
   const added = useAnswers((state) =>
     state.models?.some(
@@ -339,7 +351,22 @@ export function AnswerError({
           });
         }
       : undefined;
-  const { line, fix } = answerProblem(kind, provider);
+  const offered = useRouteOffered(isSignInRoute(provider) ? provider : null);
+  const shown = failedAnswerLine(kind, provider, signInRoute, offered);
+  if (shown.kind === "route") {
+    return (
+      <RouteProblemLine
+        route={shown.route}
+        words={shown.words}
+        kind={kind}
+        resetsAt={resetsAt}
+        details={details}
+        onRetry={onRetry}
+        onOpenSettings={onOpenSettings}
+      />
+    );
+  }
+  const { line, fix } = shown.problem;
   if (fix.kind === "ollama") return <OllamaNotRunningLine details={details} onRetry={onRetry} />;
   if (fix.kind === "local-model") {
     return (
@@ -436,7 +463,9 @@ export function CallRows({
 
 /** The row of a call through a Connector, of Find sources, of web search, of a Minds' Tool, or of a Skill script. */
 export function CallRow({ call }: { call: AnswerToolCall }) {
+  if (call.source === "asks") return <AskCall call={call} />;
   if (call.source === "minds") return <MindCall call={call} />;
+  if (call.source === "commands") return <CommandCall call={call} />;
   if (call.source === "connector") return <ConnectorCall call={call} />;
   if (call.source === "sources") return <SourcesCall call={call} />;
   if (call.source === "web") return <WebCall call={call} />;
@@ -444,18 +473,11 @@ export function CallRow({ call }: { call: AnswerToolCall }) {
 }
 
 /**
- * A button's tooltip and name with its shortcut: its label drops the hint when
- * the assistant is narrow (#612), and the shortcut still works.
- */
-export function withShortcut(label: string, keys: string | undefined) {
-  return keys ? { title: `${label} (${keys})`, "aria-label": `${label} (${keys})` } : {};
-}
-
-/**
  * The approval card for a request: a Connector's Tool, or a Skill script.
  * `keys`: the shortcut that allows it once, shown on its button (the Task tray's ⌘↵).
  */
 export function ApprovalCard({ request, keys }: { request: ApprovalRequest; keys?: string }) {
+  if ("ask" in request) return <CommandApprovalCard request={request} keys={keys} />;
   return request.subject.kind === "skill-script" ? (
     <ScriptApprovalCard request={request as SkillScriptApprovalRequest} keys={keys} />
   ) : (
@@ -579,7 +601,7 @@ function ScriptApprovalCard({
   const [warning, setWarning] = useState(false);
   const titleId = useId();
   const warningId = useId();
-  const params = { skill: request.skill.name, script: request.script };
+  const params = { skill: skillTitle(request.skill.name, t), script: request.script };
   return (
     <div
       contentEditable={false}
@@ -598,20 +620,29 @@ function ScriptApprovalCard({
             code={request.script}
           />
         </p>
-        <p
+        <div
           data-testid="approval-sandbox"
           data-sandbox={sandboxed ? "os" : "none"}
           className="approval-explanation"
         >
-          {t(sandboxed ? "scripts.card.sandboxed" : "scripts.card.noSandbox")}
-        </p>
+          {sandboxed ? (
+            <DetailsLine
+              testId="approval-sandbox-reach"
+              details={t("scripts.card.sandboxed.details")}
+            >
+              {t("scripts.card.sandboxed")}
+            </DetailsLine>
+          ) : (
+            <p>{t("scripts.card.noSandbox")}</p>
+          )}
+        </div>
         <ThirdPartyLine request={request} />
       </div>
       <div className="approval-details">
         <p className="approval-label">{t("scripts.card.wouldRun")}</p>
         <dl data-testid="approval-script" className="approval-args">
           <dt>{t("scripts.card.skill")}</dt>
-          <dd data-testid="approval-script-skill">{request.skill.name}</dd>
+          <dd data-testid="approval-script-skill">{skillTitle(request.skill.name, t)}</dd>
           <dt>{t("scripts.card.script")}</dt>
           <dd data-testid="approval-script-path" className="font-mono">
             {request.script}
@@ -644,9 +675,18 @@ function ScriptApprovalCard({
             <ProblemMark />
             {t("scripts.alwaysRun.title", params)}
           </p>
-          <p className="approval-warning-body">
-            {t(sandboxed ? "scripts.alwaysRun.bodySandboxed" : "scripts.alwaysRun.body", params)}
-          </p>
+          {sandboxed ? (
+            <DetailsLine
+              testId="always-run-reach"
+              className="approval-warning-body"
+              details={t("scripts.alwaysRun.bodySandboxed.details")}
+            >
+              {t("scripts.alwaysRun.bodySandboxed", params)}
+            </DetailsLine>
+          ) : (
+            <p className="approval-warning-body">{t("scripts.alwaysRun.body", params)}</p>
+          )}
+          <p className="approval-warning-body">{t("scripts.alwaysRun.trust")}</p>
           <div className="approval-buttons">
             <button
               type="button"
@@ -743,7 +783,7 @@ function ApprovalArguments({ input }: { input: Record<string, unknown> }) {
 function ScriptCall({ call }: { call: AnswerToolCall }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
-  const params = { skill: field(call, "skill"), script: field(call, "script") };
+  const params = { skill: skillTitle(field(call, "skill"), t), script: field(call, "script") };
   const args = Array.isArray(call.input.args) ? call.input.args.map(String) : [];
   const run = call.script;
   const running = call.status === "running";
@@ -1047,12 +1087,13 @@ function skillRows(calls: AnswerToolCall[]): SkillUse[] {
 export function SkillRow({ name, use, reads }: SkillUse) {
   const t = useT();
   const status = use?.status ?? "done";
+  const title = skillTitle(name, t);
   const summary =
     status === "running"
-      ? t("skills.answer.loading", { name })
+      ? t("skills.answer.loading", { name: title })
       : status === "failed"
-        ? t("skills.answer.failed", { name })
-        : t("skills.answer.used", { name });
+        ? t("skills.answer.failed", { name: title })
+        : t("skills.answer.used", { name: title });
   return (
     <div
       data-testid="answer-skill"

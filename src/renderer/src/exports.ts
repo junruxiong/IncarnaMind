@@ -2,14 +2,15 @@ import { create } from "zustand";
 import type {
   CheckRecordFormat,
   ExportFormat,
-  ExportMindOptions,
   ExportPreferences,
   SavedCheckRecord,
+  SavedComparisonExport,
   SavedExport,
   SavedMindExport,
   SentenceChecksExported,
   WordExportReport,
 } from "../../core/api";
+import { optionsFor } from "../../shared/exportOptions";
 import type { MessageKey } from "../../shared/i18n";
 import { core } from "./core";
 import { errorMessage } from "./errors";
@@ -44,38 +45,17 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
 export const exportPreferences = (): ExportPreferences =>
   useAppStore.getState().settings?.user.exportOptions ?? DEFAULT_PREFERENCES;
 
-/** Whether a format has the Include Questions option: Markdown keeps them, and a source pack has none. */
-export const hasQuestionsOption = (
-  format: ExportFormat,
-): format is Exclude<ExportFormat, "markdown" | "source-pack"> =>
-  format !== "markdown" && format !== "source-pack";
+export const COMPARISON_EXCEL = "comparison-xlsx";
 
-/** What an export of `format` asks the core for. */
-export const optionsFor = (
-  format: ExportFormat,
-  preferences: ExportPreferences,
-): ExportMindOptions => {
-  if (format === "docx") return { format, ...preferences.docx };
-  if (format === "source-pack") return { format };
-  if (format === "share-page") {
-    return {
-      format,
-      ...preferences["share-page"],
-      theirChanges: preferences.theirChanges ?? "shown",
-    };
-  }
-  const theirChanges = preferences.theirChanges ?? "shown";
-  return hasQuestionsOption(format)
-    ? { format, includeQuestions: preferences[format].includeQuestions, theirChanges }
-    : { format, theirChanges };
-};
-
-export type ExportKind = ExportFormat | "check-record";
+export type ExportKind = ExportFormat | "check-record" | typeof COMPARISON_EXCEL;
 
 export const isCheckRecord = (kind: ExportKind): kind is "check-record" => kind === "check-record";
 
-/** How the last export went, said in the Mind it exported (`ExportResultLine`). */
-export type ExportResult =
+/**
+ * How the last export went, said in the Mind it exported (`ExportResultLine`); `tableId` names
+ * the comparison table a workbook was made from.
+ */
+export type ExportResult = { tableId?: string } & (
   | { mindId: string; state: "saving"; format: ExportKind }
   | {
       mindId: string;
@@ -99,6 +79,8 @@ export type ExportResult =
       tracked: number;
       /** The header and footer kept in a Word file though deleted from the Mind (#105). */
       kept: ("header" | "footer")[];
+      /** The Documents whose entries are too thin to cite, marked so in the file. */
+      needsDetails: string[];
       /** The first save, which took Documents › IncarnaMind: the line says where (D209). */
       defaulted: boolean;
     }
@@ -113,7 +95,8 @@ export type ExportResult =
       format: ExportKind;
       linkedFolderId: string;
       folder: string;
-    };
+    }
+);
 
 export const useExports = create<{
   result: ExportResult | null;
@@ -125,10 +108,16 @@ export const useExports = create<{
 
 // Null while the same Mind is still exporting, so a held ⇧⌘E makes one file; a newer export or a
 // dismissal wins over a late answer.
-function begin(mindId: string, kind: ExportKind): ((next: ExportResult | null) => void) | null {
+function begin(
+  mindId: string,
+  kind: ExportKind,
+  tableId?: string,
+): ((next: ExportResult | null) => void) | null {
   const { result } = useExports.getState();
   if (result?.mindId === mindId && result.state === "saving") return null;
-  useExports.setState({ result: { mindId, state: "saving", format: kind } });
+  useExports.setState({
+    result: { mindId, state: "saving", format: kind, ...(tableId && { tableId }) },
+  });
   return (next) => {
     const current = useExports.getState().result;
     if (current?.mindId === mindId && current.state === "saving") {
@@ -147,7 +136,11 @@ const NO_CHECKS: SentenceChecksExported = {
 function savedResult(
   mindId: string,
   format: ExportKind,
-  saved: Exclude<SavedMindExport, { status: "review" }> | SavedExport | SavedCheckRecord,
+  saved:
+    | Exclude<SavedMindExport, { status: "review" }>
+    | SavedExport
+    | SavedCheckRecord
+    | SavedComparisonExport,
 ): ExportResult | null {
   if (saved.status === "saved") {
     return {
@@ -171,6 +164,7 @@ function savedResult(
       checks: "sentenceChecks" in saved ? saved.sentenceChecks : NO_CHECKS,
       tracked: "trackedChanges" in saved ? saved.trackedChanges : 0,
       kept: "word" in saved ? (saved.word?.keptFurniture ?? []) : [],
+      needsDetails: "needsDetails" in saved ? saved.needsDetails : [],
       defaulted: saved.file.defaulted,
     };
   }
@@ -261,13 +255,61 @@ export async function exportCheckRecord(
   }
 }
 
-export function exportAgain(
+/**
+ * Saves a comparison table as an Excel workbook (#132) into the Output location, as an export
+ * does; the result line says how it went.
+ */
+export async function exportComparison(
   mindId: string,
-  kind: ExportKind,
+  tableId: string,
+  first?: () => Promise<boolean>,
+): Promise<void> {
+  const settle = begin(mindId, COMPARISON_EXCEL, tableId);
+  if (!settle) return;
+  try {
+    if (first && !(await first())) {
+      settle(null);
+      return;
+    }
+    const saved = savedResult(
+      mindId,
+      COMPARISON_EXCEL,
+      await core.saveComparisonExport({ mindId, tableId }),
+    );
+    settle(saved && { ...saved, tableId });
+  } catch (failure) {
+    settle({
+      mindId,
+      state: "failed",
+      format: COMPARISON_EXCEL,
+      tableId,
+      message: errorMessage(failure, translateNow),
+    });
+  }
+}
+
+export function exportAgain(
+  result: Pick<ExportResult, "mindId" | "format" | "tableId">,
   first: () => Promise<boolean>,
 ): Promise<void> {
+  const { mindId, format: kind } = result;
+  if (kind === COMPARISON_EXCEL) return exportComparison(mindId, result.tableId ?? "", first);
   if (!isCheckRecord(kind)) return exportMind(mindId, kind, first);
   return exportCheckRecord(mindId, first);
+}
+
+/**
+ * Shows the first entry of the Mind's References too thin to cite, as the result line's Show
+ * does: scrolled to the middle, its "Needs details" focused, which opens its "Cite as" on Enter.
+ */
+export function revealNeedsDetails(mindId: string): boolean {
+  const needs = document.querySelector<HTMLElement>(
+    `article[data-mind-id="${CSS.escape(mindId)}"] [data-testid="reference-entry"][data-needs-details] [data-testid="reference-needs-details"]`,
+  );
+  if (!needs) return false;
+  needs.scrollIntoView({ block: "center" });
+  needs.focus();
+  return true;
 }
 
 /**

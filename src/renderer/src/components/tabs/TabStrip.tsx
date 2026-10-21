@@ -8,9 +8,11 @@ import {
 } from "react";
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
+import { useFirstOpen } from "../../firstOpen";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
+import { focusTab } from "../../tabFocus";
 import { tabLabelEm } from "../../tabLabel";
 import { InlineName } from "../InlineName";
 import { CloseLineIcon, PinLineIcon, PlusLineIcon, SplitLineIcon } from "../lineIcons";
@@ -19,9 +21,9 @@ import { SidebarToggle } from "../SidebarToggle";
 import { TasksChip } from "../TasksChip";
 import { ExportMenu } from "./ExportMenu";
 import { GroupMenu, StripButton } from "./TabMenus";
-import { focusTab, splitToTheRight } from "./tabActions";
+import { splitToTheRight } from "./tabActions";
 import { MeetingTabTime, TabIcon, useTabTitle } from "./tabItems";
-import type { TabDrag } from "./useTabDrag";
+import { type TabDrag, useTabSource } from "./useTabDrag";
 
 /*
  * A group's tab strip (DESIGN.md, Components: Mind tabs, which now hold
@@ -51,7 +53,6 @@ export function TabStrip({
   const tabs = merged && layout ? layout.groups.flatMap((each) => each.tabs) : group.tabs;
   const shownId = group.activeTabId;
   const shown = group.tabs.find((tab) => tab.id === shownId);
-  const focused = merged || layout?.focusedGroupId === group.id;
   const last = merged || index === (layout?.groups.length ?? 1) - 1;
 
   // The shown tab stays in sight when there are more tabs than room.
@@ -81,6 +82,21 @@ export function TabStrip({
     void useAppStore.getState().changeLayout({ type: "show", tabId: next.id });
     focusTab(next.id);
   };
+
+  const quiet = useFirstOpen() && layout?.groups.flatMap((each) => each.tabs).length === 1;
+  if (quiet) {
+    return (
+      <header
+        data-testid="tab-strip"
+        data-group-id={group.id}
+        data-first-group={index === 0 || undefined}
+        data-quiet=""
+        className="tab-strip title-bar"
+      >
+        {index === 0 && <SidebarToggle place="band" />}
+      </header>
+    );
+  }
 
   return (
     <header
@@ -116,11 +132,9 @@ export function TabStrip({
               tab={tab}
               groupId={owner?.id ?? group.id}
               selected={selected}
-              focusedGroup={focused}
               // A divider on a tab's right edge: not on the last, nor next to the shown one.
               divider={!selected && next !== undefined && next.id !== shownId}
-              dragged={drag.dragged?.tabId === tab.id}
-              drag={drag}
+              dragged={drag.draggedTabId === tab.id}
             />
           );
         })}
@@ -128,9 +142,9 @@ export function TabStrip({
       <button
         type="button"
         data-testid="new-tab"
-        aria-label={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
-        title={t("tabs.new.about", { shortcut: shortcutLabel("tab.new") })}
-        onClick={() => void createMind({ groupId: group.id })}
+        aria-label={t("tabs.new", { shortcut: shortcutLabel("mind.new") })}
+        title={t("tabs.new.about", { shortcut: shortcutLabel("mind.new") })}
+        onClick={() => void createMind({ titled: true, groupId: group.id })}
         className="tab-new"
       >
         <PlusLineIcon />
@@ -166,18 +180,16 @@ interface TabProps {
   /** The group it is in. */
   groupId: string;
   selected: boolean;
-  /** Its group is the one the User is in: its shown tab's title is in ink. */
-  focusedGroup: boolean;
   divider: boolean;
   dragged: boolean;
-  drag: TabDrag;
 }
 
 /** One tab: its icon, its title (italic while a preview), and ✕, or a pin for a pinned one. */
-function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: TabProps) {
+function Tab({ tab, groupId, selected, divider, dragged }: TabProps) {
   const t = useT();
   const title = useTabTitle(tab.item);
   const renaming = useAppStore((state) => state.renamingTabId === tab.id);
+  const source = useTabSource(tab.id, title);
   const { changeLayout, closeTab, renameTab } = useAppStore.getState();
   const isMind = tab.item.kind === "mind";
   const objectMenu = useObjectMenu({ kind: "tab", id: tab.id });
@@ -216,16 +228,13 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
       data-document-id={tab.item.kind === "document" ? tab.item.documentId : undefined}
       data-preview={tab.preview || undefined}
       data-pinned={tab.pinned || undefined}
-      data-focused-group={focusedGroup || undefined}
       data-divider={divider || undefined}
       data-dragging={dragged || undefined}
       style={{ "--tab-label-min": `${tabLabelEm(title)}em` } as CSSProperties}
       className="tab"
-      onPointerDown={(event) => {
-        if (!renaming && !fromInside(event)) drag.onTabPointerDown(event, tab.id);
-      }}
+      {...(renaming ? {} : source)}
       onClick={(event) => {
-        if (!drag.justDragged() && !renaming && !fromInside(event)) show();
+        if (!renaming && !fromInside(event)) show();
       }}
       onDoubleClick={(event) => {
         if (fromInside(event) || (event.target as Element).closest("button")) return;
@@ -315,16 +324,19 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
   );
 }
 
-/** A Mind's title typed in its tab. */
+/** A Mind's name typed in its tab; blank, it is named by its first line again. */
 function RenameTab({ mindId, title, onDone }: { mindId: string; title: string; onDone(): void }) {
   const t = useT();
   const renameMind = useAppStore((state) => state.renameMind);
+  const typed = useAppStore((state) => state.minds.find((each) => each.id === mindId)?.title ?? "");
   return (
     <InlineName
-      value={title}
+      value={typed}
       label={t("mind.renameLabel", { title })}
+      placeholder={title}
       testId="tab-rename"
       className="tab-rename"
+      clearable
       onCommit={(name) => {
         onDone();
         return renameMind(mindId, name);

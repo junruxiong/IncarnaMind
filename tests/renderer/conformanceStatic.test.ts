@@ -99,15 +99,11 @@ describe("dragging", () => {
   // Undo and has a menu twin. The note's own dragging stays ProseMirror's, undone by the note's
   // ⌘Z: its block handle, and the Word blocks and pictures that move inside the text.
   const LAYER = [
+    "src/renderer/src/dragDrop.ts",
     "src/renderer/src/editor/BlockHandle.tsx",
     "src/renderer/src/editor/wordSchema.ts",
   ];
-  const KNOWN: Record<string, string> = {
-    "src/renderer/src/components/MindRow.tsx":
-      "a Mind drags onto a Folder before the layer, which #233 moves onto it",
-    "src/renderer/src/components/DocumentsSection.tsx":
-      "a Document drags onto a Folder before the layer, which #212 moves onto it",
-  };
+  const KNOWN: Record<string, string> = {};
   // The attribute turned on; `draggable={false}` and `draggable: false` keep something still.
   const DRAGGABLE = /\bdraggable\b(?!\s*(?:=\s*\{\s*false\s*\}|:\s*false))/;
 
@@ -183,8 +179,15 @@ describe("a question about deleting", () => {
   // Deleting a Mind, Chat, Document, Folder or Tag asks nothing: it goes to Recently deleted,
   // with Undo. Only what can't be taken back asks, and says what is lost: a command marked
   // `reversible: { confirm }`, whose text and question share a key prefix
-  // (`deleted.confirm.*`, `linkedFolders.unlink.*`).
+  // (`deleted.confirm.*`, `linkedFolders.unlink.*`). The one exception is a delete the
+  // assistant starts, which always waits for the User (DESIGN.md, Approval; #1274).
   const KNOWN: Record<string, string> = {};
+  const ASSISTANT_DELETES = [
+    "commands.ask.change.document.delete",
+    "commands.ask.change.document.delete.one",
+    "commands.ask.change.mind.delete",
+    "commands.ask.change.mind.delete.one",
+  ];
   const ASKS = /^(Delete|Remove|Unlink|Empty|Erase)\b[^?]*\?/;
 
   function questions(
@@ -198,7 +201,7 @@ describe("a question about deleting", () => {
         ([key, text]) => ASKS.test(text) && !prefixes.some((prefix) => key.startsWith(prefix)),
       )
       .map(([key]) => key);
-    return violations(found, [], known);
+    return violations(found, ASSISTANT_DELETES, known);
   }
 
   const asking = () =>

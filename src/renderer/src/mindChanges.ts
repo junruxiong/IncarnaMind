@@ -15,12 +15,12 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import * as Y from "yjs";
 import { MIND_CONTENT_FIELD, MIND_PROPOSAL_REQUESTS_FIELD, type ProposalRef } from "../../core/api";
+import { holdsOnlyItsTitle } from "../../shared/madeMind";
 import { aiUseOfAccepted, decideProposals, pendingProposals } from "../../shared/proposals";
 import type { ChangedMind } from "./changedMinds";
 import { readMindHandle } from "./commands/handles";
 import { core } from "./core";
 import { pendingIn } from "./editor/proposalReview";
-import { translateNow as t } from "./i18n";
 import { openMindCopy } from "./mindCopies";
 import { useAppStore } from "./store";
 import { answerUndoPlace, type Undoable, useUndo } from "./undo";
@@ -91,7 +91,11 @@ interface WaitingIn {
   requests: readonly string[] | null;
 }
 
-/** How many of a row's changes wait in its Mind; null until its copy has arrived. */
+/**
+ * How many of a row's changes wait in its Mind, counted as the Mind's bar and its change card
+ * count them (what Accept and Reject act on), or every change from anyone; null until its copy
+ * has arrived.
+ */
 function waiting(row: WaitingIn): number | null {
   const doc = held.get(row.mindId)?.doc;
   if (!doc) return null;
@@ -200,16 +204,6 @@ interface Done {
   forget(): void;
 }
 
-/** Whether a Mind's copy holds nothing: only empty lines. */
-const isEmpty = (doc: Y.Doc) =>
-  doc
-    .getXmlFragment(MIND_CONTENT_FIELD)
-    .toArray()
-    .every(
-      (block) =>
-        block instanceof Y.XmlElement && block.nodeName === "paragraph" && block.length === 0,
-    );
-
 /**
  * Reject all in a Mind the Answer made: its changes go, and so does the Mind,
  * closing its tab, once nothing else is in it (the User may have written in
@@ -218,7 +212,10 @@ const isEmpty = (doc: Y.Doc) =>
 async function rejectMade(row: ChangedMind): Promise<Done | null> {
   const rejected = await resolveRow(row, "reject");
   const doc = held.get(row.mindId)?.doc;
-  if (!rejected || !doc || !isEmpty(doc)) return rejected;
+  const title = useAppStore.getState().minds.find((mind) => mind.id === row.mindId)?.title ?? "";
+  if (!rejected || !doc || !holdsOnlyItsTitle(doc.getXmlFragment(MIND_CONTENT_FIELD), title)) {
+    return rejected;
+  }
   await core.deleteMind(row.mindId);
   return {
     count: rejected.count,
@@ -322,16 +319,15 @@ export async function resolveAllChanges(
   }
   if (done.length === 0) return;
   const count = done.reduce((sum, step) => sum + step.count, 0);
-  const message =
-    outcome === "accept"
-      ? count === 1
-        ? t("proposal.accepted.one")
-        : t("proposal.accepted", { count })
-      : count === 1
-        ? t("proposal.rejected.one")
-        : t("proposal.rejected", { count });
   const change: Undoable = {
-    message,
+    said: (t) =>
+      outcome === "accept"
+        ? count === 1
+          ? t("proposal.accepted.one")
+          : t("proposal.accepted", { count })
+        : count === 1
+          ? t("proposal.rejected.one")
+          : t("proposal.rejected", { count }),
     shownAt: answerUndoPlace(answerId),
     undo: async () => {
       for (const step of [...done].reverse()) await step.undo();

@@ -1,8 +1,11 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { type DocumentKind, EXPORT_FORMATS, type ExportFormat } from "../../../../core/api";
 import type { CommandId } from "../../../../shared/commands";
+import { useMindFormatting } from "../../citationFormatting";
+import { useCitationStylePicker, useStyleLabel } from "../../citationStylePicker";
 import { shortcutLabel } from "../../commands/keymap";
 import { commands } from "../../commands/registry";
+import { takeExportMenuRequest, useExportMenuRequests } from "../../exportMenuRequest";
 import { FORMAT_LABELS, useExports } from "../../exports";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
@@ -13,7 +16,7 @@ import {
   MoreLineIcon,
   SettingsLineIcon,
 } from "../lineIcons";
-import { menuClass, menuItemClass, menuRuleClass } from "../ui";
+import { menuClass, menuItemClass, menuRuleClass, tallMenuItemClass } from "../ui";
 import { usePopoverMenu, useSubmenu } from "../usePopoverMenu";
 
 const MAIN_FORMATS: readonly ExportFormat[] = ["docx", "pdf"];
@@ -55,11 +58,16 @@ function Item({
       role="menuitem"
       data-testid={testId}
       onClick={onClick}
-      className={`${menuItemClass} pl-2`}
+      // A long hint (a style's name) wraps under itself rather than being cut short.
+      className={`${tallMenuItemClass} pl-2`}
     >
       {icon}
-      <span className="flex-1">{label}</span>
-      {hint && <span className="pl-4 text-[13px] text-ink-meta">{hint}</span>}
+      <span className="flex-1 whitespace-nowrap">{label}</span>
+      {hint && (
+        <span className="max-w-56 min-w-0 pl-4 text-right text-[13px] leading-5 break-keep text-ink-meta">
+          {hint}
+        </span>
+      )}
     </button>
   );
 }
@@ -72,7 +80,17 @@ export function ExportMenu({ mindId }: { mindId: string }) {
   const saving = useExports(
     (state) => state.result?.mindId === mindId && state.result.state === "saving",
   );
+  // The style the export is written in, as the Mind's editor last formatted it.
+  const formatting = useMindFormatting(mindId);
+  const styleName = useStyleLabel(formatting?.style, formatting?.formatted?.unavailable === true);
   const { shown, more } = exportChoices(last);
+
+  // "Export…" in a Mind's menus: this Mind's button opens its menu, as if it had been clicked.
+  const asked = useExportMenuRequests((state) => state.request);
+  const button = menu.buttonProps.ref;
+  useEffect(() => {
+    if (asked?.mindId === mindId && takeExportMenuRequest(mindId)) button.current?.click();
+  }, [asked, mindId, button]);
 
   const run = (id: CommandId) => {
     menu.close();
@@ -130,6 +148,17 @@ export function ExportMenu({ mindId }: { mindId: string }) {
               <ChevronRightLineIcon className="size-3.5 text-ink-meta" />
             </button>
             <div className={menuRuleClass} />
+            <Item
+              testId="export-citation-style-menu"
+              icon={<span aria-hidden="true" className="size-4 shrink-0" />}
+              label={t("export.citationStyle")}
+              {...(styleName && { hint: styleName })}
+              onClick={() => {
+                const button = menu.buttonProps.ref.current;
+                menu.close();
+                useCitationStylePicker.getState().show(mindId, button);
+              }}
+            />
             <Item
               testId="export-options"
               icon={<SettingsLineIcon className="size-4 shrink-0 text-ink-meta" />}

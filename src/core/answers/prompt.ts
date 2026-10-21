@@ -1,4 +1,6 @@
 /** The instructions every Answer is written with. Kept short: every word is sent with every Question. */
+import type { ChartKind } from "../../shared/charts";
+import { figureContextOf, readFigures } from "../../shared/figures";
 import { CJK, nameKey } from "../../shared/text";
 import type { CitationSupport, SkillFile, UnreadFile, UnreadReason } from "../api";
 import { detectLanguage } from "../documents/textLanguage";
@@ -15,7 +17,7 @@ const countOf = (text: string, pattern: RegExp) => text.match(pattern)?.length ?
 // A Question is short, so two common words tell its language where a Document's sample needs three.
 const QUESTION_COMMON_WORDS = 2;
 
-function questionLanguage(question: string): string | null {
+export function questionLanguage(question: string): string | null {
   const cjk = countOf(question, CJK_CHARACTERS);
   const words = countOf(question, LATIN_WORDS);
   // A few CJK characters among Latin words are a name, as in "What does 合同条款 say?".
@@ -38,6 +40,8 @@ export function answerInstructions(): string {
     "The first user message may start with the notebook page the User asks beside, in <mind> (earlier Q&A in <question> and <answer>; […] marks cuts), the last with what they selected in it, in <selection>: the Question is about that first, the rest is background.",
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
+    "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it; never tell the User to disregard an earlier Answer.",
+    '- Never send the reader to an earlier Answer for part of what you write ("covered in my earlier answer", "as above", "见上一条回答", "见上文"): someone who never saw this conversation may read it on a page, so write that part out.',
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
     "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
   ].join("\n");
@@ -108,6 +112,55 @@ export function webInstructions(offered: boolean): string {
   ].join("\n");
 }
 
+export function commandInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    'You can also do in the app what the User asks of their Documents and Minds, with list_commands and run_command: rename, move to a Folder, tag, delete (to Recently deleted), export a Mind as a file, and add files from a folder ("rename these by date", "move the leases into Real estate", "tag every invoice Finance", "export this Mind as Word", "add the PDFs in ~/Downloads/deals", "把发票都加上财务标签").',
+    "- First find what to act on with list_commands, by the words of the request, then run a command on exactly what it found, by id, one call per command. Never act on something it didn't find, and never guess an id. If nothing matches, say so and change nothing.",
+    "- Renaming by date: use the dates list_commands gives, as YYYY-MM-DD before the name, unless the User says otherwise.",
+    "- A Question about the Documents isn't a command: answer it. Writing into a Mind is the Minds' Tools' work.",
+    "- Say only what the calls returned, in a sentence or two: what changed, and what didn't and why. A command that failed or that the User didn't allow didn't happen: never say it did. The User can undo the changes with Undo.",
+  ].join("\n");
+}
+
+/** The Document the Mind in focus is the working copy of (#1036), by name; empty for none. */
+export function workingCopyNote(original: string | null): string {
+  if (original === null) return "";
+  return `The Mind in <mind> is the User's working copy of the Document "${listedName(original)}", imported from it: "this document", "the file", "this résumé" ("这份文档", "这份简历") and the like mean that Document. It is among the User's Documents: never say it isn't there or couldn't be found.`;
+}
+
+/**
+ * The example's Documents, by name, when the Mind in focus is an example's;
+ * empty for any other. Asked beside it about their own file, a model told the
+ * User it "has nothing to do with Northwind" (#1172).
+ */
+export function exampleNote(documents: readonly string[] | null): string {
+  if (documents === null) return "";
+  const names = documents.map((name) => `"${listedName(name)}"`).join(", ");
+  return `The Mind in <mind> is an example IncarnaMind made${names ? `, with Documents of its own (${names})` : ""}: none of it is the User's own work. Mention the example only when the Question is about it, never to say the User's Documents have nothing to do with it.`;
+}
+
+/**
+ * Passages as the model reads them, from a search or given whole, with the
+ * notes their text calls for: dates, the User's own workings, amounts in
+ * brackets, and Documents that couldn't be read.
+ */
+export function withPassageNotes(passages: string, unread: readonly UnreadFile[]): string {
+  return [
+    passages,
+    datedDocumentsNote(passages),
+    fileDatesNote(passages),
+    notCitedNote(passages),
+    bracketedAmountsNote(passages),
+    unreadDocumentsNote(unread),
+  ]
+    .filter((part) => part !== "")
+    .join("\n\n");
+}
+
+const NO_MIND_TOOLS =
+  "You can't change the User's Minds (their notes) or make new ones in this chat. When the User asks you to write into a Mind or to change one, write the text in your reply, and never say or promise that you wrote, added, changed or made anything in a Mind: IncarnaMind tells the User that you can't, and lets them add your reply to a Mind.";
+
 /**
  * The Minds' Tools, when offered (#202): the User's words decide whether the
  * Answer answers, changes a Mind or makes one, and `route` says how
@@ -115,14 +168,14 @@ export function webInstructions(offered: boolean): string {
  * from the calls; the reply never repeats the new text.
  */
 export function mindInstructions(offered: boolean, route: RequestRoute | null = null): string {
-  if (!offered) return "";
+  if (!offered) return route ? NO_MIND_TOOLS : "";
   return [
-    "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects.",
+    "You can also change the User's Minds (their notes) and make new ones, with read_mind, edit_mind, add_to_mind and create_mind. What you write into a Mind arrives there as changes the User accepts or rejects; what the User asked you to write or change applies at once, with Undo, unless it would take out most of their own text. Each call's result says which.",
     '- The User\'s words decide. A Question (what, why, how, compare, find, explain…) is answered in your reply and changes no Mind. A request to write or change something in a Mind ("shorten the summary", "add a risks section", "fix the typos", "把这段改短") changes that Mind. A request for a new note ("make notes on these papers", "summarise this into a new Mind", "新建一篇笔记") makes one.',
     "- A <tool-record> is IncarnaMind's record of what an earlier Answer's Tools really did, and what the User did with the changes since: trust it over that Answer's words, and never write one. A change the User rejected is gone: don't bring it back or say it is still there. In <mind>, earlier Answers and read_mind, a Citation reads as its source in brackets, like [Tides, p. 3].",
     "- The Mind is the one in <mind>, unless the User names another, or means a page your <tool-record> says you made or changed earlier in this conversation: then give that Mind's name in mind. If they ask to change a Mind but none is in <mind> and they name none, change nothing: say so, and that they can open one or ask for a new Mind.",
     "- In <mind> and read_mind, [waiting change, adds: …] and [waiting change, removes: …] mark changes still waiting for the User, often your own. To change text that waits (make it longer or shorter, reword it, remove part of it), call edit_mind on it, naming its heading in part: that revises the waiting text itself. Never add a second copy. To add more from the Documents, search and cite first, then give edit_mind the section's whole new text as content.",
-    "- edit_mind's rewrite reads only the text it changes: it can't search or cite. To add facts from the Documents to the User's text, a table of them too, search and cite first, then add them with add_to_mind, cited in each table cell as in a paragraph. Never write a source into a Mind as its name in brackets, like [Tides, p. 3]: cite it.",
+    "- edit_mind's rewrite reads only the text it changes: it can't search or cite. To add facts from the Documents to the User's text, a table of them too, search and cite first, then add them with add_to_mind, cited in each table cell as in a paragraph. To make text you wrote longer from the Documents, a summary added from an Answer among it, search and cite first, then give edit_mind its whole new text as content: it replaces that text, so the Mind never holds two versions. Never write a source into a Mind as text, like [Tides, p. 3]: record it with cite before the call and write its marker, like [^3]. Text with a source written out is refused.",
     "- If a Tool says nothing was changed, say that first, in one sentence, with why, and don't make the change another way.",
     "- What you write into a Mind follows the same rules as your replies: the language of the Question, and quotation marks only around a Document's own words.",
     "- Don't say what you changed or made in a Mind, nor repeat its new text: IncarnaMind writes under your reply what each call changed, and how much. Once the Tools are done, reply in a sentence or two, with no Citation markers, with only what that line can't say: why, what you left out, or plainly what you couldn't do and why. A Tool that asks you to give its text in your reply instead is the exception.",
@@ -132,17 +185,41 @@ export function mindInstructions(offered: boolean, route: RequestRoute | null = 
     .join("\n");
 }
 
+function chartLine(newMind: boolean, chart: { kind: ChartKind | null; existing?: true }): string {
+  const asked = chart.kind ? `kind "${chart.kind}"` : "no kind, as the User named none";
+  if (chart.existing) {
+    return `- This request asks for a chart of a table already in the Mind: call add_to_mind with chart, ${asked} and a short title from the User's words, and content empty. IncarnaMind draws it from the table the User's cursor is in, or the Mind's only table, right after it: never write the table again.`;
+  }
+  const tool = newMind ? "a new Mind with create_mind" : "the Mind with add_to_mind";
+  return `- This request asks for a chart: search and cite the figures, then write them as a table into ${tool}, each cell cited, and give chart with ${asked} and a short title from the User's words. IncarnaMind draws the chart from that table, right after it. Chart only figures the Documents state, or ones calculate gives: for a series they don't state, say you can chart only the figures the Documents state.`;
+}
+
 function routeLine(route: RequestRoute | null): string {
   switch (route?.kind) {
     case "write":
+      if (route.fromAnswer) {
+        return route.newMind
+          ? "- This request asks for your last Answer as a document: call create_mind with a short title and answer: true, and nothing else. It puts in that Answer as it is, with its Citations and every Document it covered: don't search again or write it anew."
+          : "- This request asks for your last Answer as a document: the Mind in <mind> is empty, so call add_to_mind with answer: true, and nothing else. It puts in that Answer as it is, with its Citations and every Document it covered: don't search again or write it anew.";
+      }
+      if (route.chart) return chartLine(route.newMind, route.chart);
       return route.newMind
-        ? "- This request asks for a new page or note: write it into a new Mind with create_mind, not in your reply."
+        ? "- This request asks for a new page or note: write it into a new Mind with create_mind, not in your reply and not into the Mind in <mind>."
         : "- This request asks for text in a Mind: write it there with add_to_mind, not in your reply. If text of yours still waiting already covers it, revise that with edit_mind instead of writing it again.";
     case "edit":
-      return "- This request asks to change text in a Mind: change it there with edit_mind, not in your reply.";
+      return "- This request asks to change text in a Mind: change it there with edit_mind, not in your reply, and in place: never add a new version beside it with add_to_mind. Text you wrote, an Answer added with Add to note among it, takes its whole new text as content, cited.";
     default:
       return "";
   }
+}
+
+/**
+ * The Mind in focus has nothing in it yet (#1212): read as an empty <mind>,
+ * models took it for no Mind open and refused to write there.
+ */
+export function emptyMindNote(offered: boolean, empty: boolean): string {
+  if (!offered || !empty) return "";
+  return "- The Mind in <mind> is open and still empty: it is the page the User is in. A request to write something goes into it; never say that no Mind is open.";
 }
 
 /**
@@ -183,6 +260,20 @@ function notCovered(cite: boolean): string {
 }
 
 /**
+ * The claim check holds a cited sentence to its quote, so an inference written
+ * into it makes the whole sentence Unsupported (#1073).
+ */
+const CITED_SAYS_ONLY_ITS_QUOTE =
+  '- A sentence with a Citation says only what its quote supports. Your inference, judgement or comparison goes in a sentence of its own with no marker, worded as a reading: "This suggests…" / "这意味着…".';
+
+/**
+ * A model read "54,000" in a UK contract as pounds and wrote "£54,000", cited (#1332): a
+ * currency, unit or scale the Document doesn't state reads as one it does.
+ */
+const FIGURES_AS_STATED =
+  '- A figure taken from a Passage keeps exactly the currency, unit and scale its Document gives it: "salary is 54,000" stays "54,000 (currency not stated)" / "54,000（未注明币种）", never "£54,000"; "2 percentage points" never becomes "2%".';
+
+/**
  * A premise the Passages don't support, and Passages that disagree (#548):
  * what a careful reader catches. The examples are in English and Chinese, so
  * an Answer in either has its model. `cite`: the Answer cites with markers.
@@ -191,12 +282,15 @@ function readingRules(cite: boolean): string {
   const marker = (n: number) => (cite ? `[^${n}]` : "");
   return [
     `- If the Question takes for granted what the Passages don't say (an approval, a date, a figure, a cause), say so first, in one plain sentence, then answer from what they say: "The Documents don't record a Board approval; the 14 May memo asks for one." / "文档中没有董事会批准的记录；5 月 14 日的备忘录是在申请批准。"`,
-    `- If Passages from different Documents disagree, or give different figures for the same thing (one updates the other), lead with the newer Document by its date (a Passage's date is its Document's: the date it states, else when its file last changed)${cite ? " and cite it" : ""}. Then write one sentence naming the older Document, its date and its figure${cite ? ", with a Citation" : ""}; never leave it out: "Report outages over 4 hours (memo, May 2025)${marker(1)}. The older handbook (January 2024) says 6 hours${marker(2)}." / "2025 年 5 月的备忘录要求报告超过 4 小时的停电${marker(1)}。较早的手册（2024 年 1 月）写的是 6 小时${marker(2)}。" Say "probably" (可能) only when neither is dated or newer.`,
+    `- If Passages from different Documents disagree, or give different figures for the same thing (one updates the other), lead with the newer Document by its date (a Passage's date, else its file-created or file-modified date)${cite ? " and cite it" : ""}. Then write one sentence naming the older Document, its date and its figure${cite ? ", with a Citation" : ""}; never leave it out: "Report outages over 4 hours (memo, May 2025)${marker(1)}. The older handbook (January 2024) says 6 hours${marker(2)}." / "2025 年 5 月的备忘录要求报告超过 4 小时的停电${marker(1)}。较早的手册（2024 年 1 月）写的是 6 小时${marker(2)}。" Say "probably" (可能) only when neither is dated or newer.`,
   ].join("\n");
 }
 
 /** A Passage's Document and its date, as `formatPassages` (./citations) writes them. */
-const DATED_PASSAGE = /<passage id="[^"]*" document="([^"]*)" date="([^"]+)"/g;
+const DATED_PASSAGE =
+  /<passage id="[^"]*" document="([^"]*)" (date|file-created|file-modified)="([^"]+)"/g;
+
+const FILE_DATED_PASSAGE = /<passage [^>]*\bfile-(?:created|modified)="/;
 
 /**
  * A reminder after Passages that come from Documents of different dates
@@ -207,18 +301,45 @@ const DATED_PASSAGE = /<passage id="[^"]*" document="([^"]*)" date="([^"]+)"/g;
  * in NIST CSF 2.0 for the Core's count.
  */
 export function datedDocumentsNote(passages: string): string {
-  const dates = new Map<string, string>();
-  for (const [, document, date] of passages.matchAll(DATED_PASSAGE)) {
-    if (document !== undefined && date !== undefined && !dates.has(document)) {
-      dates.set(document, date);
+  const dates = new Map<string, { date: string; of: string }>();
+  for (const [, document, of, date] of passages.matchAll(DATED_PASSAGE)) {
+    if (document !== undefined && of !== undefined && date !== undefined && !dates.has(document)) {
+      dates.set(document, { date, of });
     }
   }
-  if (new Set(dates.values()).size < 2) return "";
+  if (new Set([...dates.values()].map(({ date }) => date)).size < 2) return "";
   const listed = [...dates]
-    .sort(([, a], [, b]) => b.localeCompare(a))
-    .map(([document, date]) => `"${document}" (${date})`)
+    .sort(([, a], [, b]) => b.date.localeCompare(a.date))
+    .map(
+      ([document, { date, of }]) =>
+        `"${document}" (${of === "date" ? "" : `${of.replace("-", " ")} `}${date})`,
+    )
     .join(", ");
   return `These Passages come from Documents of different dates: ${listed}. Take each Document's figure only from a sentence that states it for that Document, never from a passing mention. Where they give different figures for the same thing, lead with the newer Document, then write one sentence naming the older one, its date and its figure, with a Citation.`;
+}
+
+/**
+ * A reminder after Passages dated by their file's information (#1173): a
+ * contract whose text gives no date was summarised as signed on the day its
+ * PDF was made. Empty when every Passage's date is its Document's, or none has one.
+ */
+export function fileDatesNote(passages: string): string {
+  if (!FILE_DATED_PASSAGE.test(passages)) return "";
+  return 'A Passage\'s file-created or file-modified date is when its file was made or last changed, not a date the Document states: never give it as the Document\'s date, such as when it was signed, issued or takes effect. Mention it only as the file\'s, with no marker: "file created on …" / "文件创建于 …".';
+}
+
+/**
+ * A reminder after Passages in which the reader (../../shared/figures) finds an
+ * amount in brackets read as negative: a deduction written that way is added
+ * to a total, never subtracted (#978). Kept out of the instructions, which go
+ * with every Question. Empty when none does.
+ */
+export function bracketedAmountsNote(passages: string): string {
+  const negative = readFigures(passages, figureContextOf(passages)).some(
+    (figure) => figure.value < 0 && /[(（]/.test(figure.chars),
+  );
+  if (!negative) return "";
+  return 'An amount in brackets in these Passages is negative, as accountants write it: "(12,500)" is minus 12,500, a deduction or a loss, never a plain amount. / 括号里的金额是负数：“（12,500）”是负的 12,500，是扣减或亏损，不是正数。';
 }
 
 /** What marks a Passage of a Document the User keeps as their own workings, in a search's result. */
@@ -251,7 +372,7 @@ const CALCULATE = [
 
 /** Structured output's `calculations`, for a model offered them: what `CALCULATE` is to the Tool loop. */
 const CALCULATIONS =
-  '- calculations: one for each number the Answer works out from numbers in Passages (a difference, sum, average, ratio, share, growth rate, a change in percentage points, a conversion between 万 and 亿 or millions and billions), with [=1] in the answer where the number goes, never the number itself: its marker; its inputs, each a name for the formula, a label with its year or period, the marker of the Citation whose quote holds the number, and the number as it is written there; and a formula over the names in Excel\'s syntax, such as (b - a) / a, with "as": "percent" for a growth rate or share. When a number\'s unit or scale is only in a table\'s heading ("单位：万元"), give that line as unitQuote. Inputs are read in base units with that scale applied: give "scale" ("亿", "billion") for the scale a figure is shown in, never a division by 10000 or 1000.';
+  '- calculations: one for each number the Answer works out from numbers in Passages (a difference, sum, average, ratio, share, growth rate, a change in percentage points, a conversion between 万 and 亿 or millions and billions), with [=1] in the answer where the number goes, never the number itself: its marker; its inputs, each a name for the formula, a label with its year or period, the marker of the Citation whose quote holds the number, and the number as it is written there; and a formula over the names in Excel\'s syntax, such as (b - a) / a, with "as": "percent" for a growth rate or share. When a number\'s unit or scale is only in a table\'s heading ("单位：万元"), give that line as unitQuote. Inputs are read in base units with that scale applied: give "scale" ("亿", "billion") for the scale a figure is shown in, never a division by 10000 or 1000. An input keeps its sign as the Passage writes it: an amount in brackets, "(12,500)", is negative, so take a deduction written in brackets off a total by adding it, never by subtracting it.';
 
 /** The Citation check finds a quote with an ellipsis only part by part (see ../../shared/quoteMatch): best avoided. */
 const UNBROKEN_QUOTE =
@@ -351,7 +472,12 @@ export function documentInstructions(
 ): string {
   const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
   const dated = datedDocumentsNote(passages);
-  const notes = [dated, notCitedNote(passages)].filter(Boolean);
+  const notes = [
+    dated,
+    fileDatesNote(passages),
+    notCitedNote(passages),
+    bracketedAmountsNote(passages),
+  ].filter(Boolean);
   const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, Word, PowerPoint, Excel, CSV, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
@@ -368,6 +494,8 @@ export function documentInstructions(
         "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
         notCovered(true),
+        CITED_SAYS_ONLY_ITS_QUOTE,
+        FIGURES_AS_STATED,
         readingRules(true),
         ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
@@ -390,6 +518,8 @@ export function documentInstructions(
         QUOTATION_MARKS,
         ...(calculate ? [CALCULATIONS] : []),
         notCovered(true),
+        CITED_SAYS_ONLY_ITS_QUOTE,
+        FIGURES_AS_STATED,
         readingRules(true),
       ].join("\n");
     case "none":
@@ -399,10 +529,11 @@ export function documentInstructions(
         "",
         "Passages found in the User's Documents for this Question:",
         passages,
-        ...(dated ? [dated] : []),
+        ...[dated, fileDatesNote(passages), bracketedAmountsNote(passages)].filter(Boolean),
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),
+        FIGURES_AS_STATED,
         readingRules(false),
       ].join("\n");
   }
@@ -590,6 +721,28 @@ export function loadedSkillText(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+const NAMES_A_LANGUAGE =
+  /\blanguage\b|English|Chinese|Mandarin|Cantonese|Spanish|French|German|Japanese|Korean|Portuguese|Russian|Arabic|Italian|Hindi|语言|中文|英文|英语|日语|日文|法语|德语|西班牙语|韩语/i;
+
+/** What the built-in Skills say (#892), which is what the note says: no language of their own. */
+const NO_LANGUAGE_OF_ITS_OWN =
+  /\blanguage (?:that |which )?the Question is written in|\bthe Question's language|\blanguage of the (?:Question|report)\b|\b(?:another|other|that) languages?\b/gi;
+
+/** Whether a Skill's instructions name a language to write in other than the Question's, so its choice stands (#1273). */
+export function skillSetsLanguage(instructions: string): boolean {
+  return NAMES_A_LANGUAGE.test(instructions.replace(NO_LANGUAGE_OF_ITS_OWN, ""));
+}
+
+/**
+ * Said after a search's Passages while the Answer follows a Skill that names no language: the
+ * Skill and the Passages both come after the instructions' own language line, and whatever
+ * language they are in must not win over the Question's (#1273). `language` is the line
+ * `languageInstruction` made.
+ */
+export function skillLanguageNote(language: string): string {
+  return `The Skill's instructions don't change the language of your Answer. ${language.replace(/^- /, "")}`;
 }
 
 const SCRIPTS =

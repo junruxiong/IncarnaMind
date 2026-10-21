@@ -9,11 +9,15 @@ import {
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
+  enterContent,
   launchApp,
+  leaveFirstOpen,
   leaveText,
+  nameMind,
   newMind,
   openDocumentMenu,
   openDocumentTags,
+  openManageTags,
   pointAndClick,
   removeDataFolder,
   sidebarFolder,
@@ -83,9 +87,9 @@ test("Minds and Folders: renamed, moved and deleted, each back with ⌘Z and aga
     async (core) => (await core.createLibraryGroup({ name: "Finance", description: "" })).id,
   );
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Shortlist");
-  // Leaving the title makes what was typed one step.
-  await window.getByTestId("mind-title").press("Enter");
+  await window.getByTestId("mind-list-item").dblclick();
+  await window.getByTestId("mind-rename").fill("Shortlist");
+  await window.getByTestId("mind-rename").press("Enter");
   await expect(undoLine(window).getByTestId("undo-message")).toHaveText("Renamed to “Shortlist”");
   const shortlist = mindRow(window, "Shortlist");
 
@@ -331,12 +335,8 @@ test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back wi
     read(window, async (core) => (await core.listDocuments())[0]?.tags.map((link) => link.tagId));
   const dialog = window.getByTestId("tags-dialog");
   const row = (id: string) => dialog.locator(`[data-testid="tag-row"][data-tag-id="${id}"]`);
-  // Manage Tags, from the sidebar's Tags menu.
-  const manage = async () => {
-    await pointAndClick(window, window.getByTestId("tag-filter-menu"));
-    await pointAndClick(window, window.getByTestId("manage-tags"));
-    await expect(dialog).toBeVisible();
-  };
+  // Manage Tags, from ⌘K.
+  const manage = () => openManageTags(window);
   const done = async () => {
     await pointAndClick(window, dialog.getByRole("button", { name: "Done" }));
     await expect(dialog).toBeHidden();
@@ -402,6 +402,7 @@ test("Tags: renamed, recoloured, merged and deleted in Manage Tags, each back wi
 
 test("Remove the examples: made again by ⌘Z, removed again by ⇧⌘Z", async () => {
   const { window } = await launchApp(dataDir, { examples: true });
+  await leaveFirstOpen(window);
   await expect(window.getByTestId("example-banner")).toBeVisible();
   const exampleMind = () => read(window, async (core) => (await core.getExamples()).mindId);
   await pointAndClick(window, window.getByTestId("example-remove"));
@@ -432,8 +433,8 @@ test("⌘Z goes to the note's own undo in the note, to a field's in a field, and
     async (core) => (await core.createLibraryGroup({ name: "Finance", description: "" })).id,
   );
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Shortlist");
-  await window.getByTestId("mind-title").press("Enter");
+  await nameMind(window, "Shortlist");
+  await enterContent(window);
   const shortlist = mindRow(window, "Shortlist");
   await shortlist.hover();
   await shortlist.getByTestId("mind-menu").click();
@@ -508,32 +509,22 @@ test("⌘Z goes to the note's own undo in the note, to a field's in a field, and
   await expect.poll(() => mindFolder(window, "Shortlist")).toBeNull();
 });
 
-test("in a Mind's title and the composer, a run of typing is one step to undo and to redo, with ⌘Z and the Edit menu", async () => {
+test("in the composer, a run of typing is one step to undo and to redo, with ⌘Z and the Edit menu", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
-  const title = window.getByTestId("mind-title");
-  await title.fill("Upgrade test");
-  const composer = window.getByTestId("composer-input");
-
-  for (const [field, before] of [
-    [title, "Upgrade test"],
-    [composer, ""],
-  ] as const) {
-    await pointAndClick(window, field);
-    await window.keyboard.press("End");
-    await window.keyboard.type(" abc");
-    await expect(field).toHaveValue(`${before} abc`);
-    await undo(window);
-    await expect(field).toHaveValue(before);
-    await redo(window);
-    await expect(field).toHaveValue(`${before} abc`);
-    await clickEditItem(app, "edit.undo");
-    await expect(field).toHaveValue(before);
-    await clickEditItem(app, "edit.redo");
-    await expect(field).toHaveValue(`${before} abc`);
-  }
-  await expect.poll(() => mindTitles(window)).toEqual(["Upgrade test abc"]);
+  const field = window.getByTestId("composer-input");
+  await pointAndClick(window, field);
+  await window.keyboard.type("abc");
+  await expect(field).toHaveValue("abc");
+  await undo(window);
+  await expect(field).toHaveValue("");
+  await redo(window);
+  await expect(field).toHaveValue("abc");
+  await clickEditItem(app, "edit.undo");
+  await expect(field).toHaveValue("");
+  await clickEditItem(app, "edit.redo");
+  await expect(field).toHaveValue("abc");
 });
 
 test("an undo the core can't do shows one problem line where it happened, in Chinese too, and its action lets it happen", async () => {

@@ -12,6 +12,7 @@ import type {
   DocumentTextMatch,
   Mind,
   MindTextMatch,
+  TabItem,
   TextRange,
 } from "../../core/api";
 import type { Language } from "../../core/language";
@@ -21,11 +22,11 @@ import { translate } from "../../shared/i18n";
 import { formatLocation } from "../../shared/locations";
 import { mindName } from "../../shared/naming";
 import { focusComposer } from "./commands/assistant";
-import { objectAt, shortcutLabel, surfaceOf } from "./commands/keymap";
+import { placeHere } from "./commands/here";
+import { menuKeysLabel, objectAt, surfaceOf } from "./commands/keymap";
 import {
   COMMAND_GROUPS,
   type CommandContext,
-  type CommandGroup,
   commands,
   isEnabled,
   labelOf,
@@ -40,16 +41,37 @@ import { matchName, type NameMatch, queryWords } from "./matcher";
 import type { ObjectRef, Translate } from "./objects";
 import { useSelection } from "./selection";
 import { refKey } from "./selectionModel";
+import { moveFromPalette } from "./sidebarMoves";
 import { useAppStore } from "./store";
+import { findTab } from "./tabs";
 
 const NOTHING: CommandContext = { selection: [], focus: null, surface: "palette" };
 
-/** What the tab in front shows, as an object. */
-function objectInFront(): ObjectRef | null {
-  const item = currentTabOf(useAppStore.getState().layout)?.item;
+function objectShown(item: TabItem | undefined): ObjectRef | null {
   if (item?.kind === "mind") return { kind: "mind", id: item.mindId };
   if (item?.kind === "document") return { kind: "document", id: item.documentId };
   return null;
+}
+
+/** What the tab in front shows, as an object. */
+const objectInFront = () => objectShown(currentTabOf(useAppStore.getState().layout)?.item);
+
+/** A tab's Mind or Document is what ⌘K acts on, not the tab: its Rename and Move to… are the object's. */
+function underTab(focus: ObjectRef | null): ObjectRef | null {
+  if (focus?.kind !== "tab") return focus;
+  const shown = objectShown(findTab(useAppStore.getState().layout, focus.id)?.item);
+  return shown ?? focus;
+}
+
+function acting(
+  target: ObjectRef | undefined,
+  active: Element | null,
+  on: Pick<CommandContext, "selection" | "focus">,
+): CommandContext {
+  const targets = on.selection.length > 0 ? on.selection : on.focus ? [on.focus] : [];
+  const moveTo = () => moveFromPalette(targets);
+  const here = target && placeHere(target, active);
+  return { ...NOTHING, ...on, here: { "mind.moveTo": moveTo, "document.moveTo": moveTo, ...here } };
 }
 
 /**
@@ -60,9 +82,13 @@ function objectInFront(): ObjectRef | null {
 export function contextAt(active: Element | null): CommandContext {
   const { surface, items } = useSelection.getState();
   if (surface !== null && items.length > 0 && surfaceOf(active) === surface) {
-    return { ...NOTHING, selection: items };
+    return acting(items.length === 1 ? items[0] : undefined, active, {
+      selection: items,
+      focus: null,
+    });
   }
-  return { ...NOTHING, focus: objectAt(active) ?? objectInFront() };
+  const focus = underTab(objectAt(active)) ?? objectInFront();
+  return acting(focus ?? undefined, active, { selection: [], focus });
 }
 
 interface PaletteState {
@@ -202,12 +228,17 @@ export function nameGroups(words: readonly string[], found: Findings): PaletteGr
   });
 }
 
-/** With nothing typed: the Minds edited last. */
-export function recentGroup(minds: readonly Mind[], found: Findings): PaletteGroup[] {
+/** With nothing typed: the Minds edited last, other than the one in front. */
+export function recentGroup(
+  minds: readonly Mind[],
+  found: Findings,
+  inFront: string | null = null,
+): PaletteGroup[] {
   const objects = new Map(
     found.kinds.flatMap(({ objects }) => objects.map((object) => [refKey(object.ref), object])),
   );
-  const items = [...minds]
+  const items = minds
+    .filter((mind) => mind.id !== inFront)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, SHOWN.recent)
     .flatMap((mind): PaletteItem[] => {
@@ -218,20 +249,18 @@ export function recentGroup(minds: readonly Mind[], found: Findings): PaletteGro
   return items.length > 0 ? [{ id: "recent", items }] : [];
 }
 
-/** With nothing typed, what makes something new comes first, then the menus' order. */
-const browsingOrder = (group: CommandGroup) =>
-  group === "main" ? -1 : COMMAND_GROUPS.indexOf(group);
-
 /**
  * The registry's commands that apply here, with their shortcuts and, when they
  * act on one thing, its name: those whose name or keywords, in English or
- * Chinese, hold every word typed, best first, or all of them with nothing typed.
+ * Chinese, hold every word typed, best first; with nothing typed, the few that
+ * are `top`, in its order, or, for ">" (`all`), every one in the menus' order.
  */
 export function actionGroup(
   words: readonly string[],
   ctx: CommandContext,
   language: Language,
   names: Findings["names"],
+  all = false,
 ): PaletteGroup[] {
   const t: Translate = (key, params) => translate(language, key, params);
   const otherLanguage = language === "zh-CN" ? "en" : "zh-CN";
@@ -241,7 +270,12 @@ export function actionGroup(
   const targetName = targets.length === 1 && target ? (names.get(refKey(target)) ?? "") : "";
   const offered = commands
     .list(ctx)
-    .filter((command) => command.palette !== false && isEnabled(command, ctx));
+    .filter(
+      (command) =>
+        command.palette !== false &&
+        (words.length > 0 || all || command.top !== undefined) &&
+        isEnabled(command, ctx),
+    );
   const items = offered.flatMap((command) => {
     const name = labelOf(command, ctx, t);
     const byName = words.length > 0 ? matchName(words, name) : null;
@@ -262,15 +296,20 @@ export function actionGroup(
       name,
       ranges: byName?.ranges ?? [],
       meta: command.appliesTo ? targetName : "",
-      shortcut: command.shortcut ? shortcutLabel(command.id) : null,
+      shortcut: menuKeysLabel(command),
     };
     // A match by keyword or in the other language ranks below one by its name.
     const score = byName?.score ?? (elsewhere ? elsewhere.score - 4000 : 0);
     return [{ item, score, group: command.group }];
   });
+  const topOf = (id: CommandId) => commands.get(id)?.top ?? Number.MAX_SAFE_INTEGER;
   if (words.length > 0) items.sort((a, b) => b.score - a.score);
-  else items.sort((a, b) => browsingOrder(a.group) - browsingOrder(b.group));
-  const shown = (words.length > 0 ? items.slice(0, SHOWN.actions) : items).map(({ item }) => item);
+  else if (all)
+    items.sort((a, b) => COMMAND_GROUPS.indexOf(a.group) - COMMAND_GROUPS.indexOf(b.group));
+  else items.sort((a, b) => topOf(a.item.id) - topOf(b.item.id));
+  const shown = (all && words.length === 0 ? items : items.slice(0, SHOWN.actions)).map(
+    ({ item }) => item,
+  );
   return shown.length > 0 ? [{ id: "actions", items: shown }] : [];
 }
 
@@ -381,7 +420,6 @@ export function conversationTextGroup(found: readonly ConversationMatch[]): Pale
   return items.length > 0 ? [{ id: "conversationText", items: items.slice(0, SHOWN.words) }] : [];
 }
 
-/** When nothing matches: asking about what was typed, in the assistant's open conversation. */
 export function askGroup(text: string, conversation: string, t: Translate): PaletteGroup[] {
   return [
     {
@@ -391,12 +429,30 @@ export function askGroup(text: string, conversation: string, t: Translate): Pale
           kind: "ask",
           key: "ask",
           text,
-          name: t("palette.ask", { text }),
+          name: t("palette.askRow", { text }),
           meta: t("palette.ask.in", { conversation }),
         },
       ],
     },
   ];
+}
+
+/**
+ * The row Enter acts on: the one chosen with the arrows or the pointer, else the
+ * first that isn't the Ask row. While the words inside are still being searched
+ * for, the Ask row isn't the fallback: more may be found, and a row lit
+ * for a moment would lose the highlight to it.
+ */
+export function activeOf(
+  items: readonly PaletteItem[],
+  chosen: string | null,
+  searching: boolean,
+): PaletteItem | undefined {
+  return (
+    items.find((item) => item.key === chosen) ??
+    items.find((item) => item.kind !== "ask") ??
+    (searching ? undefined : items[0])
+  );
 }
 
 /** Resolves with the open note that holds the Block, once its Mind shows; null if it doesn't. */

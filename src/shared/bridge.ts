@@ -1,6 +1,9 @@
 /** Names shared by the main process and the preload script for the typed core bridge. */
-import type { CoreApiMethod } from "../core/api";
+import type { AudioSource, CoreApiMethod } from "../core/api";
 import type { MenuCommandId } from "./commands";
+import type { GeneralHelpKind } from "./meetingHelp";
+import type { PanelCommand, PanelState } from "./meetingPanel";
+import type { GuidePlacement, PermissionGuideState } from "./permissionGuide";
 import type { TitleBar } from "./titleBar";
 
 /** The renderer reaches the core as `window.incarnamind`. */
@@ -31,6 +34,11 @@ export interface FilesBridge {
    * the folder's absolute path, or null if the User cancelled.
    */
   pickOutputLocation(): Promise<string | null>;
+  /**
+   * Saves the Mind as a .docx where the User chooses, in the system's save dialog: a copy of
+   * changes storage refused (#1119). False when they chose nowhere.
+   */
+  saveMindCopy(mindId: string): Promise<boolean>;
   /** Shows the data folder in the system's file manager, e.g. to back it up. */
   openDataFolder(): Promise<void>;
   /** Shows the data folder's `logs/` in the system's file manager, e.g. to attach the log to a bug report. */
@@ -86,6 +94,11 @@ export interface FilesBridge {
    * reached.
    */
   showLinkedFolder(linkedFolderId: string): Promise<void>;
+  /**
+   * Whether Chromium's sandbox is off for this app (`--no-sandbox` or
+   * `ELECTRON_DISABLE_SANDBOX`), the check Analyses make too: the window says so.
+   */
+  runsWithoutSandbox(): Promise<boolean>;
   /** Writes an error nothing in the window caught to the log, scrubbed of the User's content. */
   logError(report: RendererErrorReport): void;
   /** Calls `listener` with each command chosen in the application menu. Returns how to stop. */
@@ -94,6 +107,10 @@ export interface FilesBridge {
   setSidebarHidden(hidden: boolean): void;
   /** Tells the Edit menu where Undo and Redo go now, and what they would take back or do again. */
   setEditMenu(state: EditMenuState): void;
+  /** The Mind File › Export names: its name, or null when no Mind is open, which disables the item. */
+  setExportMenu(mindName: string | null): void;
+  /** Whether the examples are removed: Help › Show the examples again appears only then. */
+  setExamplesRemoved(removed: boolean): void;
   /** The window's title bar (./titleBar.ts), for the page to keep room for the window's buttons. */
   readonly titleBar: TitleBar;
   /**
@@ -101,6 +118,30 @@ export interface FilesBridge {
    * macOS hides its traffic lights, and false when it leaves. Returns how to stop.
    */
   onFullScreenChange(listener: (fullScreen: boolean) => void): () => void;
+  /**
+   * Calls `listener` when a help button's global shortcut is pressed during a call while
+   * the floating panel isn't shown: the window asks for that help itself. Returns how to stop.
+   */
+  onMeetingHelp(listener: (kind: GeneralHelpKind) => void): () => void;
+  /** Whether no other app holds these keys as its global shortcut, as far as the system says. */
+  globalKeysFree(keys: string): Promise<boolean>;
+  /** Shows the floating panel during a call again after the User closed it, or hides it. */
+  showMeetingPanel(shown: boolean): void;
+  /** Calls `listener` with the floating panel's state, now and when it changes. Returns how to stop. */
+  onMeetingPanel(listener: (state: PanelState) => void): () => void;
+  /** ⌘K: pins the floating panel's latest suggestion, or folds or unfolds the panel. */
+  meetingPanelCommand(command: PanelCommand): void;
+  /** Calls `listener` when the floating panel's Set up was clicked: the window shows where a model is chosen. */
+  onSetUpModel(listener: () => void): () => void;
+  /**
+   * Shows the guide for a permission the User must add by hand in System Settings (#1105), beside
+   * it if the screen has room: where it showed, "none" where this system has no such guide.
+   */
+  showPermissionGuide(source: AudioSource): Promise<GuidePlacement>;
+  /** Closes the guide, and the steps in the window. */
+  closePermissionGuide(): void;
+  /** Calls `listener` with the guide's state, now and when it changes; null when there is none. Returns how to stop. */
+  onPermissionGuide(listener: (state: PermissionGuideState | null) => void): () => void;
 }
 
 /** The command the application menu asks the window to run (see src/main/menu.ts). */
@@ -134,6 +175,7 @@ export const FILES_CHANNELS = {
   showSavedFile: "files:showSavedFile",
   openSavedFile: "files:openSavedFile",
   pickOutputLocation: "files:pickOutputLocation",
+  saveMindCopy: "files:saveMindCopy",
   openDataFolder: "files:openDataFolder",
   openLogsFolder: "files:openLogsFolder",
   pickSkill: "files:pickSkill",
@@ -145,13 +187,36 @@ export const FILES_CHANNELS = {
   pickWordFile: "files:pickWordFile",
   pickPdfFile: "files:pickPdfFile",
   showLinkedFolder: "files:showLinkedFolder",
+  runsWithoutSandbox: "files:runsWithoutSandbox",
   logError: "files:logError",
   /** From the page: the sidebar is hidden (true) or shown (false), for the View menu's label. */
   sidebarHidden: "app:sidebarHidden",
   /** From the page: where the Edit menu's Undo and Redo go now (`EditMenuState`). */
   editMenu: "app:editMenu",
+  exportMenu: "app:exportMenu",
+  examplesRemoved: "app:examplesRemoved",
   /** From the main process: a command chosen in the application menu. */
   menuCommand: "app:menuCommand",
   /** From the main process: the window entered (true) or left (false) full screen. */
   fullScreen: "app:fullScreen",
+  /** From the main process: a help button's shortcut was pressed with no floating panel shown. */
+  meetingHelp: "app:meetingHelp",
+  globalKeysFree: "app:globalKeysFree",
+  /** From the page: show (true) or hide (false) the floating panel. */
+  showMeetingPanel: "app:showMeetingPanel",
+  /** From the page: what the floating panel's state is now; the main process answers on `meetingPanel`. */
+  meetingPanelWanted: "app:meetingPanelWanted",
+  /** From the main process: the floating panel's state (`PanelState`). */
+  meetingPanel: "app:meetingPanel",
+  /** From the page: a `PanelCommand` for the floating panel. */
+  meetingPanelCommand: "app:meetingPanelCommand",
+  /** From the main process: the floating panel's Set up was clicked. */
+  setUpModel: "app:setUpModel",
+  /** From the page: show the guide beside System Settings for a source; the main process answers where. */
+  showPermissionGuide: "app:showPermissionGuide",
+  closePermissionGuide: "app:closePermissionGuide",
+  /** From the page: what the guide's state is now; the main process answers on `permissionGuide`. */
+  permissionGuideWanted: "app:permissionGuideWanted",
+  /** From the main process: the guide's state (`PermissionGuideState`), or null. */
+  permissionGuide: "app:permissionGuide",
 } as const;

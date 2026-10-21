@@ -4,6 +4,7 @@
  * text is only ever escaped, never read as markup (ADR-0016).
  */
 import type { BibliographyEntry, StyledRun } from "../../../core/api";
+import { withNeedsDetailsMark } from "../../../shared/references";
 
 /** A web address a run may link to; anything else stays text. */
 export const isWebLink = (href: string) => /^https?:\/\//i.test(href);
@@ -30,19 +31,24 @@ export function runsHtml(runs: readonly StyledRun[]): string {
 /** Runs as plain text. */
 export const runsText = (runs: readonly StyledRun[]) => runs.map((run) => run.text).join("");
 
-/** A Bibliography as the clipboard takes it: a paragraph per entry, its number first. */
-export function bibliographyClipboard(entries: readonly BibliographyEntry[]): {
-  text: string;
-  html: string;
-} {
+/**
+ * A Bibliography as the clipboard takes it: a paragraph per entry, its number first, and
+ * `needsDetails` after an entry too thin to cite, as an export marks it.
+ */
+export function bibliographyClipboard(
+  entries: readonly BibliographyEntry[],
+  needsDetails: string,
+): { text: string; html: string } {
+  const runsOf = (entry: BibliographyEntry) =>
+    entry.needsDetails ? withNeedsDetailsMark(entry.runs, needsDetails) : entry.runs;
   return {
     text: entries
-      .map((entry) => `${entry.label ? `${runsText(entry.label)} ` : ""}${runsText(entry.runs)}`)
+      .map((entry) => `${entry.label ? `${runsText(entry.label)} ` : ""}${runsText(runsOf(entry))}`)
       .join("\n"),
     html: entries
       .map(
         (entry) =>
-          `<p>${entry.label ? `${runsHtml(entry.label)} ` : ""}${runsHtml(entry.runs)}</p>`,
+          `<p>${entry.label ? `${runsHtml(entry.label)} ` : ""}${runsHtml(runsOf(entry))}</p>`,
       )
       .join(""),
   };

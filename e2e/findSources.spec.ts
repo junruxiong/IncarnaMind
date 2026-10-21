@@ -183,7 +183,7 @@ test("Add Documents ▾ → Find sources… asks each provider once, then adds a
     services.fail("files", 403);
     await page.getByTestId("find-sources-add").click();
     await expect(page.getByTestId("find-sources-added")).toHaveText(
-      "Couldn't download the open copy, so its reference was added",
+      "Couldn’t download the open copy, so its reference was added",
     );
     await expect(page.getByTestId("find-sources-get-pdf")).toHaveText("Open the free text…");
     services.fail("files", null);
@@ -216,6 +216,7 @@ test("in Chinese at the narrowest window, Find sources from + fits and speaks Ch
     await setWindowSize(app, window, 900, 660);
 
     await window.getByTestId("plus-menu").click();
+    await window.getByTestId("plus-more").click();
     await window.getByTestId("plus-find-sources").click();
     const panel = window.getByTestId("find-sources");
     await expect(panel.getByRole("heading")).toHaveText("查找资料");
@@ -256,7 +257,7 @@ test("in Chinese at the narrowest window, Find sources from + fits and speaks Ch
     await panel.getByTestId("find-sources-query").fill("base editing");
     await panel.getByTestId("find-sources-query").press("Enter");
     await expect(panel.getByTestId("find-sources-local-mode")).toHaveText(
-      "开启“所有内容都留在这台电脑上”时无法查找资料 · 隐私设置",
+      "无法查找资料：已开启“所有内容都留在这台电脑上” · 隐私设置",
     );
     expect(services.requests).toHaveLength(sent);
     await expect(window.getByTestId("consent-dialog")).toBeHidden();

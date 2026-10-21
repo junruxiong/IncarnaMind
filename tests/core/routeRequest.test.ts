@@ -38,6 +38,8 @@ const REVIEWED: readonly Row[] = [
   ["把它写长一点", "edit", "after a change"],
   ["把它写长一点", "unclear", "after no change"],
   ["把第二段写得更正式", "edit"],
+  ["把摘要写长一点。", "edit"],
+  ["把这份总结写短一些", "edit"],
   ["把第二段改得更正式，其他段落保持不变", "edit"],
   ["这篇论文说了什么？把这个加到我的笔记里", "unclear"],
   ["What does the paper claim and add it to my notes", "unclear"],
@@ -605,6 +607,11 @@ const OURS: readonly Row[] = [
 const FIRST: RequestContext = { followsAChange: false, followsAnAnswer: false };
 const NO_CHANGE: RequestContext = { followsAChange: false, followsAnAnswer: true };
 const CHANGE: RequestContext = { followsAChange: true, followsAnAnswer: true };
+const WITH_TEXT: RequestContext = {
+  followsAChange: false,
+  followsAnAnswer: true,
+  lastAnswerHasText: true,
+};
 
 const contexts = (after: After | undefined): RequestContext[] =>
   after === "after a change"
@@ -742,7 +749,7 @@ describe("Routing everyday requests", () => {
     expect(routeRequest(request, CHANGE).kind).toBe("unclear");
   });
 
-  // protects=a request for a new page or note says so, and one that writes into a Mind, named or in focus, doesn't; fails_when=a new page is written into the Mind in focus, or the reverse; no_claim=none beyond protects.
+  // protects=a request for a new page or note, or for a piece of writing (a summary, a report, #1109), says so, and one that writes into a Mind, named or in focus, doesn't; fails_when=a new page is written into the Mind in focus, or the reverse; no_claim=none beyond protects.
   test.each([
     ["write a summary page", true],
     ["写一个总结页面", true],
@@ -751,16 +758,164 @@ describe("Routing everyday requests", () => {
     ["make notes on these papers", true],
     ["新建一篇叫“田野计划”的笔记", true],
     ["Write a summary page in English", true],
-    ["I mean write a summary about these 2 papers", false],
+    ["I mean write a summary about these 2 papers", true],
     ["Add a risks section", false],
     ["Add a note to Project plan about the meeting", false],
     ["Add a note about the meeting to Project plan", false],
     ["帮我在笔记里添加一个风险部分", false],
-    ["写一份这两篇论文的总结", false],
+    ["写一份这两篇论文的总结", true],
     ["新建一篇笔记，总结这两篇论文", true],
     ["Write a one-page summary of the paper in a new note", true],
     ["Write the conclusion", false],
   ] as const)("%s asks for a new Mind: %s", (request, newMind) => {
-    expect(routeRequest(request, FIRST)).toEqual({ kind: "write", newMind });
+    expect(routeRequest(request, FIRST)).toMatchObject({ kind: "write", newMind });
   });
+
+  // protects=a request to write a piece goes into a new Mind, the owner's sentence among them, in English and Chinese, while a question about the Documents stays in the panel (#1109); fails_when=one is answered in the panel, or a question writes a Mind; no_claim=every wording a User may use.
+  test.each([
+    ["根据我现有的文件帮我写一份summary", true],
+    ["帮我写一份关于租赁的总结", true],
+    ["起草一份租赁备忘录", true],
+    ["写一份报告", true],
+    ["把这些文件整理成一份报告", true],
+    ["Write a summary of my documents", true],
+    ["Based on my files, write a summary", true],
+    ["Draft a memo to the board about the lease", true],
+    ["Write me a short report on the leases", true],
+    ["Summarise the agreement?", false],
+    ["总结一下", false],
+    ["这些文件讲了什么？", false],
+  ] as const)("%s goes into a new Mind: %s", (request, written) => {
+    for (const context of [FIRST, NO_CHANGE, CHANGE]) {
+      expect(routeRequest(request, context)).toEqual(
+        written
+          ? { kind: "write", newMind: true, fillsEmpty: true }
+          : { kind: "unclear", newMind: false },
+      );
+    }
+  });
+
+  // protects=after an Answer with text, asking for it as a document, a new note or a Mind puts that Answer in a new Mind as it is (#1109); with no Answer, or one with no text, it is no such request; fails_when=one of these stays in the panel, or routes with nothing to put in; no_claim=none beyond protects.
+  test.each([
+    "make it a document",
+    "make this a document",
+    "put this in a new note",
+    "turn that answer into a doc",
+    "做成文档",
+    "把这个放进一个新笔记",
+    "把上面的回答做成文档",
+  ])("%s puts the last Answer in a new Mind", (request) => {
+    expect(routeRequest(request, WITH_TEXT)).toEqual({
+      kind: "write",
+      newMind: true,
+      fromAnswer: true,
+      fillsEmpty: true,
+    });
+    expect(routeRequest(request, FIRST).fromAnswer).toBeUndefined();
+    expect(routeRequest(request, NO_CHANGE).fromAnswer).toBeUndefined();
+  });
+
+  // protects=a request for a document phrased as a question, for the User, puts the last Answer in a new Mind, the owner's "你不给我建一份文档吗" among them (#1109); fails_when=one of them stays in the panel; no_claim=none beyond protects.
+  test.each([
+    "你不给我建一份文档吗",
+    "能不能帮我做成文档",
+    "can you make me a document of this?",
+    "why didn't you make a document?",
+  ])("%s, asked as a question, puts the last Answer in a new Mind", (request) => {
+    expect(routeRequest(request, WITH_TEXT)).toEqual({
+      kind: "write",
+      newMind: true,
+      fromAnswer: true,
+      fillsEmpty: true,
+    });
+    expect(routeRequest(request, NO_CHANGE).fromAnswer).toBeUndefined();
+  });
+
+  // protects=a question, or a request to organize files, after an Answer is never read as putting the Answer in a Mind (#1133 review); fails_when=one of them makes a Mind of the last Answer; no_claim=none beyond protects.
+  test.each([
+    "how do I make a document?",
+    "can you make a document?",
+    "怎么给我建一份文档",
+    "怎么帮我生成文档？",
+    "如何帮我整理成文档",
+    "tell me how to create a doc?",
+    "你能写文档吗",
+    "你可以整理文件吗",
+    "帮我整理文件",
+    "存文件",
+    "生成文件",
+    "Can you make it a document?",
+    "整理成文档",
+  ])("%s doesn't put the last Answer in a Mind", (request) => {
+    expect(routeRequest(request, WITH_TEXT).fromAnswer).toBeUndefined();
+  });
+
+  // protects=a request that names the Mind the User is in as where the writing goes writes there, in English and Chinese, and is never sent to a new Mind (#1133 review); fails_when=it routes to a new Mind; no_claim=none beyond protects.
+  test.each([
+    "Write a summary of the lease in my notes",
+    "Write a summary of the lease into this note",
+    "Write a summary for my notes",
+    "Draft a plan for this page",
+    "Create a summary of the documents below",
+    "Add a short note to the summary",
+    "写一份这篇笔记的总结",
+    "根据我的笔记写一份总结",
+  ])("%s writes into the Mind in focus", (request) => {
+    expect(routeRequest(request, WITH_TEXT)).toEqual({ kind: "write", newMind: false });
+  });
+
+  // protects=a new, separate or another page asked for in so many words goes into a new Mind, whatever it is about, in English and Chinese (#1133 review); fails_when=what it is about reads as where it goes, and it lands in the User's Mind; no_claim=none beyond protects.
+  test.each([
+    "write a new page on the introduction",
+    "make a separate page for the summary",
+    "根据我的笔记另起一页写一份总结",
+  ])("%s goes into a new Mind", (request) => {
+    expect(routeRequest(request, WITH_TEXT)).toMatchObject({ kind: "write", newMind: true });
+  });
+
+  // protects=a request for a chart, in English or Chinese, writes into the Mind in focus with the kind it names, the one named last when two are, or none; fails_when=it reads as a Question, goes to a new Mind, or gets the wrong kind; no_claim=none beyond protects.
+  test.each([
+    ["make a bar chart of revenue by quarter", "bar"],
+    ["Make a chart of revenue by quarter as a line chart", "line"],
+    ["Draw a pie chart of costs", "pie"],
+    ["make a scatter chart of rent against size", "scatter"],
+    ["plot revenue by quarter", null],
+    ["画一个各季度收入的柱状图", "bar"],
+    ["画一个各季度收入的折线图", "line"],
+    ["把收入做成饼图", "pie"],
+    ["生成一个图表", null],
+  ] as const)("%s asks for a chart in the Mind in focus, of kind %s", (request, kind) => {
+    expect(routeRequest(request, FIRST)).toEqual({
+      kind: "write",
+      newMind: false,
+      chart: { kind },
+    });
+  });
+
+  // protects=a chart of a table already in the Mind ("chart this table") is read as such, so the table isn't written again (#1091 review); fails_when=it reads as a new table to write; no_claim=none beyond protects.
+  test.each([
+    ["chart this table", null],
+    ["Make a bar chart of this table", "bar"],
+    ["把这个表格画成柱状图", "bar"],
+  ] as const)("%s charts the table there, of kind %s", (request, kind) => {
+    expect(routeRequest(request, FIRST).chart).toEqual({ kind, existing: true });
+  });
+
+  // protects=a Question about a chart, or a change to one, isn't a request for a new chart (#1091); fails_when=one of them routes as a chart; no_claim=none beyond protects.
+  test.each([
+    "what does the chart show?",
+    "can you make a bar chart?",
+    "make the chart a line chart",
+    "这个图表说明了什么？",
+  ])("%s asks for no chart", (request) => {
+    expect(routeRequest(request, FIRST).chart).toBeUndefined();
+  });
+
+  // protects=adding the last Answer to my notes writes it into the Mind in focus, not a new one; fails_when=it makes a new Mind; no_claim=none beyond protects.
+  test.each(["add it to my notes", "把这个加到我的笔记里"])(
+    "%s writes into the Mind in focus",
+    (request) => {
+      expect(routeRequest(request, NO_CHANGE)).toEqual({ kind: "write", newMind: false });
+    },
+  );
 });

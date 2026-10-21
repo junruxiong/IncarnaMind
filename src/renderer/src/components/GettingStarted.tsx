@@ -1,46 +1,13 @@
 import { Fragment, type ReactNode } from "react";
-import type { ExampleGroup, GettingStarted } from "../../../core/api";
+import type { ExampleGroup } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { CheckMarkIcon } from "../editor/icons";
 import { useGap, useT } from "../i18n";
-import { gettingStartedShown } from "../nudges";
 import { allExamples, useAppStore } from "../store";
 import { useAddYourDocuments } from "./AddYourDocuments";
 import { AskIcon, PlugIcon } from "./icons";
-import { ChevronRightLineIcon, CloseLineIcon } from "./lineIcons";
 import { SLOT, Slotted } from "./Slotted";
 import { buttonStyle } from "./ui";
-
-/**
- * Onboarding (DESIGN.md, First run): the example Mind ("Example" chips, its
- * banner, its Answer written in advance), the "Get started" checklist at the
- * bottom of the sidebar, and the three steps in an empty Mind.
- */
-
-type StepKey = "citation" | "documents" | "question";
-
-interface Step {
-  key: StepKey;
-  done: boolean;
-}
-
-/**
- * The checklist's steps while it is shown: from a first run on, until the
- * User hides it or has done all three. Null otherwise.
- */
-export function useGettingStarted(): Step[] | null {
-  const progress = useAppStore((state) => state.settings?.device.gettingStarted);
-  return progress ? stepsOf(progress) : null;
-}
-
-function stepsOf(progress: GettingStarted): Step[] | null {
-  if (!gettingStartedShown(progress)) return null;
-  return [
-    { key: "citation", done: progress.citationChecked },
-    { key: "documents", done: progress.indexed },
-    { key: "question", done: progress.askedOwn },
-  ];
-}
 
 /** Whether a Mind is the example one. */
 export const useIsExample = (mindId: string | undefined) =>
@@ -61,130 +28,6 @@ export function ExampleChip() {
   );
 }
 
-/** A step's mark: its number, ringed (blue for the next one), or a green tick once done. */
-function StepMark({ number, done, next }: { number: number; done: boolean; next: boolean }) {
-  if (done) {
-    return (
-      <span
-        aria-hidden="true"
-        className="flex size-4 shrink-0 items-center justify-center rounded-full bg-success text-white"
-      >
-        <CheckMarkIcon check="found" className="size-2.5" />
-      </span>
-    );
-  }
-  return (
-    <span
-      aria-hidden="true"
-      className={`flex size-4 shrink-0 items-center justify-center rounded-full border-[1.5px] text-[10px] leading-none font-bold ${
-        next ? "border-accent text-accent" : "border-tab-divider text-ink-meta"
-      }`}
-    >
-      {number}
-    </span>
-  );
-}
-
-/**
- * "Get started · N of 3", at the bottom of the sidebar: each step ticks
- * itself as the User does it, and the next one to do takes them there. It can
- * be hidden, and goes once all three are done. "Add your Documents" is a menu
- * of the two ways, Add files… and Link a folder… (#766).
- */
-export function GetStartedCard() {
-  const t = useT();
-  const gap = useGap();
-  const steps = useGettingStarted();
-  const updateGettingStarted = useAppStore((state) => state.updateGettingStarted);
-  const openExamples = useAppStore((state) => state.openExamples);
-  const startQuestion = useAppStore((state) => state.startQuestion);
-  const addMenu = useAddYourDocuments("get-started-add");
-  if (!steps) return null;
-
-  const done = steps.filter((step) => step.done).length;
-  const next = steps.find((step) => !step.done)?.key;
-  const go: Record<Exclude<StepKey, "documents">, () => void> = {
-    citation: () => void openExamples(),
-    question: startQuestion,
-  };
-  return (
-    <section
-      aria-labelledby="get-started-title"
-      data-testid="get-started"
-      className="mx-2 mb-2 flex shrink-0 flex-col rounded-lg bg-sheet px-2 pt-2.5 pb-1.5 shadow-[inset_0_0_0_1px_var(--color-rule)]"
-    >
-      <div className="flex items-center justify-between pb-1 pl-2">
-        <h2 id="get-started-title" className="text-[13px] leading-5 font-semibold text-ink">
-          {t("gettingStarted.title")}
-          {gap(t("gettingStarted.title"), t("gettingStarted.count", { done, total: steps.length }))}
-          <span data-testid="get-started-count" className="font-normal text-ink-meta">
-            {t("gettingStarted.count", { done, total: steps.length })}
-          </span>
-        </h2>
-        <button
-          type="button"
-          data-testid="get-started-hide"
-          aria-label={t("gettingStarted.hide")}
-          title={t("gettingStarted.hide")}
-          onClick={() => updateGettingStarted({ hidden: true })}
-          className="inline-flex size-[22px] items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0"
-        >
-          <CloseLineIcon strokeWidth={2.5} className="size-3" />
-        </button>
-      </div>
-      <ol className="flex flex-col">
-        {steps.map((step, index) => {
-          const label = t(`gettingStarted.step.${step.key}`);
-          const mark = <StepMark number={index + 1} done={step.done} next={step.key === next} />;
-          // 28px, or taller when a long step wraps (as on the canvas): it isn't cut short.
-          const rowClass =
-            "flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] leading-5";
-          return (
-            <li key={step.key} data-testid="get-started-step" data-step={step.key}>
-              {step.done ? (
-                <span data-done="" className={`${rowClass} text-ink-meta line-through`}>
-                  {mark}
-                  <span className="min-w-0">
-                    <span className="sr-only">{t("gettingStarted.done")}</span>
-                    {label}
-                  </span>
-                </span>
-              ) : step.key === next ? (
-                <button
-                  {...(step.key === "documents" ? addMenu.buttonProps : { onClick: go[step.key] })}
-                  type="button"
-                  className={`${rowClass} font-semibold text-ink hover:bg-hover focus-visible:outline-offset-0`}
-                >
-                  {mark}
-                  <span className="min-w-0 flex-1">{label}</span>
-                  <ChevronRightLineIcon
-                    strokeWidth={2}
-                    className="size-3.5 shrink-0 text-ink-meta"
-                  />
-                </button>
-              ) : (
-                <span className={`${rowClass} text-ink-secondary`}>
-                  {mark}
-                  <span className="min-w-0">{label}</span>
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-      {addMenu.menu}
-      <button
-        type="button"
-        data-testid="onboarding-groups"
-        className={`${buttonStyle("ghost", "sm")} mt-1 justify-start`}
-        onClick={() => useAppStore.getState().openLibrary("starters")}
-      >
-        {t("library.chooseStarters")}
-      </button>
-    </section>
-  );
-}
-
 /**
  * Above the example Mind's title: what a Mind is, and the ways on: adding
  * one's own Documents, in place (#766), or removing the examples.
@@ -194,10 +37,6 @@ export function ExampleBanner({ mindId }: { mindId: string }) {
   const gap = useGap();
   const addMenu = useAddYourDocuments("example-add");
   const removeExamples = useAppStore((state) => state.removeExamples);
-  const openExample = useAppStore((state) => state.openExample);
-  const more = useAppStore(
-    (state) => allExamples(state).find((each) => each.mindId === mindId)?.more,
-  );
   const tea = useAppStore((state) => state.examples?.group === "tea");
   const body = t(tea ? "examples.banner.body.tea" : "examples.banner.body");
   return (
@@ -246,28 +85,39 @@ export function ExampleBanner({ mindId }: { mindId: string }) {
             {t("examples.banner.remove")}
           </button>
         </div>
-        {more && more.length > 0 && (
-          <p data-testid="example-more" className="pt-1.5 text-[13px] leading-5 text-ink-secondary">
-            {t("examples.banner.more")}
-            {gap(t("examples.banner.more"), t(`examples.group.${more[0] as ExampleGroup}`))}
-            {more.map((group, index) => (
-              <Fragment key={group}>
-                {index > 0 && " · "}
-                <button
-                  type="button"
-                  data-testid="example-more-link"
-                  data-group={group}
-                  onClick={() => void openExample(group)}
-                  className="rounded-sm text-accent-strong underline-offset-2 hover:underline focus-visible:outline-offset-0"
-                >
-                  {t(`examples.group.${group}`)}
-                </button>
-              </Fragment>
-            ))}
-          </p>
-        )}
+        <OtherExamples mindId={mindId} />
       </div>
     </aside>
+  );
+}
+
+export function OtherExamples({ mindId }: { mindId: string }) {
+  const t = useT();
+  const gap = useGap();
+  const openExample = useAppStore((state) => state.openExample);
+  const more = useAppStore(
+    (state) => allExamples(state).find((each) => each.mindId === mindId)?.more,
+  );
+  if (!more || more.length === 0) return null;
+  return (
+    <p data-testid="example-more" className="pt-1.5 text-[13px] leading-5 text-ink-secondary">
+      {t("examples.banner.more")}
+      {gap(t("examples.banner.more"), t(`examples.group.${more[0] as ExampleGroup}`))}
+      {more.map((group, index) => (
+        <Fragment key={group}>
+          {index > 0 && " · "}
+          <button
+            type="button"
+            data-testid="example-more-link"
+            data-group={group}
+            onClick={() => void openExample(group)}
+            className="rounded-sm text-accent-strong underline-offset-2 hover:underline focus-visible:outline-offset-0"
+          >
+            {t(`examples.group.${group}`)}
+          </button>
+        </Fragment>
+      ))}
+    </p>
   );
 }
 
@@ -342,6 +192,7 @@ export function StartGuide() {
             <button
               type="button"
               data-testid="start-link-folder"
+              title={t("startGuide.documents.linkFolder.tip")}
               onClick={() => void addLinkedFolder()}
               className={buttonStyle("primary")}
             >

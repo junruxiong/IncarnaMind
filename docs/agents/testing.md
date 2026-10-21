@@ -9,12 +9,12 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_r
 | Check | Where | What it runs |
 |---|---|---|
 | Typecheck, lint and unit tests | Ubuntu | `npm ci`, `npm run typecheck`, `npm run lint`, `npm test` |
-| Electron smoke test (Linux) | Ubuntu | `npm ci`, the Noto CJK fonts (the runner has no Chinese face), then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, split into eight shards that run at once, balanced by how long each spec takes (`scripts/smoke-shard.mjs`, `e2e/durations.json`; refresh it from a green run's log when specs are added or slow down) (`Smoke shard N/8`); this check passes when all eight do |
+| Electron smoke test (Linux) | Ubuntu | `npm ci`, the Noto CJK fonts (the runner has no Chinese face) and ffmpeg (for the feel check's videos; a failed install doesn't fail the check), then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, the feel check's among them, split into eight shards that run at once, balanced by how long each spec takes (`scripts/smoke-shard.mjs`, `e2e/durations.json`; refresh it from a green run's log when specs are added or slow down) (`Smoke shard N/8`); this check passes when all eight do. Each shard uploads the feel check's tables and videos as `feel-linux-N`, kept 14 days |
 | Every commit is signed off (DCO) | Ubuntu | a `Signed-off-by:` line on each commit (`git commit -s`) |
 
 `main` must stay green. A pull request merges through GitHub's merge queue once all three pass: the queue builds it together with `main` and the pull requests ahead of it, runs the checks again, and merges only if they pass. Nobody brings a branch up to date by hand. If `main` goes red, fixing it comes before new work.
 
-Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`.
+Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, in four shards (`Smoke shard N/4 (macOS)`), with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`.
 
 ## Before you open a pull request
 
@@ -27,7 +27,7 @@ Every night, and by hand from the Actions tab, the Electron smoke test (macOS) i
 ## After you open it
 
 - Watch the checks until they finish: `gh pr checks <number> --watch`. Don't report the work as done, or ask for a merge, while a check is red or still running.
-- When a check fails, read why: `gh run view <run id> --log-failed`, and for the smoke test, the failing shard's log and the Playwright traces uploaded as its `smoke-test-results-linux-N` artifact (`smoke-test-results-macos` from the nightly run). Fix it in this pull request, whether or not your change caused it, and say which in the pull request.
+- When a check fails, read why: `gh run view <run id> --log-failed`, and for the smoke test, the failing shard's log and the Playwright traces uploaded as its `smoke-test-results-linux-N` artifact (`smoke-test-results-macos-N` from the nightly run). Fix it in this pull request, whether or not your change caused it, and say which in the pull request.
 - "Flaky" is a claim that needs evidence: it failed, then passed on a rerun with nothing changed, and you can say what timing it depends on. Then fix the test. Don't hide it with more retries, longer timeouts or a skip.
 
 ## Tests that pass on any machine
@@ -36,13 +36,52 @@ Every night, and by hand from the Actions tab, the Electron smoke test (macOS) i
 - **Set the window size the test needs,** with `setWindowSize` in `e2e/app.ts`. Never depend on the screen's size, the display's scale, the window being in front, or the computer's fonts and language. CI's screens, a virtual one on Linux and a small one on macOS, are not yours.
 - **Assert relations, not exact pixels.** For example, "the controls sit under the text", "it wraps by word", or "it fits inside the card". Exact sizes are for what `DESIGN.md` fixes, such as a 44px band.
 - **Wait for a state, not a time.** Use `expect(locator).toBeVisible()`, a test id or a value from the bridge, never `waitForTimeout` in new tests.
+- **Let the editor finish before a key or click moves its selection.** An update the editor makes by itself (the wash that ends after Add to note, ProseMirror's check 20 ms after it takes the focus) rewrites the page's selection from its own, which has not yet caught up with a key or click just before: that key or click is lost. Wait for the update first: `addToNote` waits out the wash, `focusSettled` the check.
 - **Drive the app like a person.** Move the mouse to an element before clicking or dragging it (as `slideToHandle`, `dragBy` and `dragBlock` in `e2e/app.ts` do), and use the keyboard where a person would. A helper needed in a second spec moves into `e2e/app.ts` rather than being copied.
 - **Keep wall-clock limits out of unit tests.** CI machines run two to five times slower than a laptop. A speed budget belongs in a dedicated speed test with headroom, not in a unit test with a tight millisecond limit.
 - **Make each test stand alone.** It must pass on its own and in any order, and it cleans up what it made.
 - **Unit tests run in plain Node.** They must not need the Electron binary (CI doesn't download it) or a model download.
+- **Load each real engine at least once.** The fake engines (the fake embedding model, `--fake` transcription, the scripted chat model) keep tests fast and repeatable. But they never load the real module, so an import that only breaks in the built app goes unseen: meeting transcription failed in alphas 1 to 3 while every test passed (#1233).
+  - A feature that runs a real engine (transcription, OCR, embeddings, the reranker, Python analysis) has at least one unit test that loads the installed module through the app's own loader, not a copy of its import.
+  - That test checks the module has what the code calls. It needs no model download.
+  - The release build checks the same in the packaged app before it uploads (#1239).
 - **Tests and the evaluation never touch the real home folder.** `tests/setup/home.ts` gives each test file a temporary HOME (and `USERPROFILE` and the XDG folders), and fails a test that writes under the real one outside the cache and report folders the run was given; the core takes its home and Documents folders from its host, so `startCore` and the evaluation pass temporary ones.
 - **Write paths and text that work on every platform.** Use `path.join`, never assume `/` or a case-insensitive file system, and give the Chinese strings the same tests as the English ones.
 - **Write each spec for Linux and macOS.** Pull requests run the smoke test on Linux; macOS runs it each night. Press shortcuts with `ControlOrMeta+…`, never `Meta+…`, and expect a shortcut's label in either form (`⌘J` or `Ctrl+J`). A spec for something only macOS has, such as the traffic lights or full screen, skips elsewhere with `test.skip(process.platform !== "darwin", "<why>")`, and the nightly run covers it.
+
+## The feel check
+
+The feel check (`e2e/feel.ts`, and the specs `e2e/feel*.spec.ts`) holds the main flows to DESIGN.md › Feel. It runs each flow step by step in the built app and measures, in the window, what the User would feel. It fails a step:
+
+- **Shift:** the layout shifts that no recent input caused sum to more than 0.001, and the table names what moved.
+- **Focus:** after a close, a create or a delete, focus isn't on the target the step names (the opener, the new thing's name, the next item).
+- **Input to next paint** over 500 ms, or a **long task** over 1 s. The target is 100 ms on a laptop. CI's runners are two to five times slower, so these ceilings fail only a real freeze. Every run reports both times for every step. Only CI fails them: a busy laptop varies too much, so a local table marks a slow step "fails on CI".
+
+It can't see everything (#1331 adds what it can):
+
+- **The 500 ms after an input.** Chromium marks every shift in the 500 ms after a click or a key as the User's own, and the check doesn't count those. So a shift the User's action set off somewhere else, or a jump while typing, goes unseen. A green feel check doesn't mean nothing moved: look at the video too.
+- **A flash or a lost scroll position**, since nothing moves. The videos show both.
+- **Slightly high times.** The check films every frame while it measures, so times on CI read a little high.
+
+To run it on what you touch, build once, then run each matching spec on its own:
+
+```sh
+npx electron-vite build --mode test
+npx playwright test e2e/feelSidebar.spec.ts --workers=1
+```
+
+Each flow's table goes to `test-results/feel/<flow>.md`, and its video to `<flow>.mp4`. Without ffmpeg, the frames are kept in `<flow>-frames/` instead. Each Playwright run clears `test-results/`, so read a spec's tables before you run the next. On CI, the tables are also in the job summary.
+
+When it fails:
+
+1. Read the flow's table and watch its video at that step.
+2. Fix it if your change caused it.
+3. If `main` does it too, file it as its own issue. Then add an entry for it to `KNOWN` in `e2e/feel.ts`, bounded by what was measured. Anything worse, or in another step, still fails.
+   - Focus: where it landed.
+   - Shift: what moved, and the largest score. The bound holds under 0.001 too, so a listed shift that grows fails even while it is small.
+   - Time: twice the slowest measured on CI, since runners vary two to five times.
+   - Mark it `sometimes` when it depends on timing and doesn't happen on every run.
+4. The pull request that fixes a known problem removes its entry. A shift or focus entry whose problem no longer happens fails the check, so the list stays true. A known time, or a problem marked `sometimes`, may not happen on every run. The non-required job "Feel check, known problems that didn't happen" lists those on each run, so their entries go once their issues close.
 
 ## The interaction rules are checked for you
 
@@ -50,7 +89,7 @@ Three checks hold every object and command to `docs/agents/interaction.md`, read
 
 - `tests/renderer/conformance.test.ts`: every kind in `OBJECT_KINDS` has a registered menu, in the order of rule 5; every command has English and Chinese labels, a group, `reversible` set, and a shortcut or a ⌘K entry.
 - `tests/renderer/conformanceStatic.test.ts`: no "Back to…" label, no confirmation of a delete that no irreversible command stands behind, no right-click listener outside `useObjectMenu`, no `draggable` outside the drag layer.
-- `e2e/conformance.spec.ts`: for each kind, on the built app with a slid mouse: right-click and ⋯ open one menu, rename in place, and every reversible command from the menu followed by ⌘Z puts the core back, read through the bridge.
+- `e2e/conformance.spec.ts`: for each kind, on the built app with a slid mouse: right-click and ⋯ open one menu, rename in place, and every reversible command from the menu followed by ⌘Z puts the core back, read through the bridge. A command that only makes a Mind is the exception: it says nothing and leaves nothing for ⌘Z, and the check takes the Mind back by deleting it.
 
 A new kind of object needs a menu (`registerMenu`) and a stage in the e2e (how to make one and show it); the type-check fails until it has one. A reversible command that changes the core returns an `Undoable`. What `main` doesn't do yet is listed with its issue (`NO_MENU_YET`, `NO_UNDO_YET`, the known lists in the static test), never skipped: a fix takes its line out, and a stale line fails.
 

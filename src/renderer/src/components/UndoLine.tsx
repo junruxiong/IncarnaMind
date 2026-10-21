@@ -1,13 +1,25 @@
-import { useEffect, useRef } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import { NAME_IN_LINE_COLUMNS } from "../../../shared/naming";
 import { shortcutLabel } from "../commands/keymap";
 import { useDismissOnEscape } from "../escapeDismiss";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
+import { type Said, saidInLine } from "../lineNames";
 import { useFade } from "../motion";
 import { useAppStore } from "../store";
 import { UNDO_SHOWN_MS, type UndoLineState, useUndo } from "../undo";
 
 const lineClass =
   "mx-2 flex min-w-0 shrink-0 gap-1 pt-0.5 pb-1 pl-2 text-[12px] leading-4 text-ink-secondary";
+const changeLineClass =
+  "mx-2 min-w-0 shrink-0 pt-0.5 pb-1 pl-2 text-[12px] leading-4 text-ink-secondary";
 const actionClass =
   "h-6 shrink-0 rounded-md px-1 text-[12px] leading-5 font-semibold text-ink-secondary hover:bg-hover hover:text-ink";
 
@@ -45,17 +57,24 @@ function Line({ line }: { line: UndoLineState }) {
   const shown = useRef<HTMLDivElement>(null);
   useFade(shown);
 
-  useGoesBy(line.change ? line.id : null);
+  useGoesBy(line.change || (line.note && !line.busy) ? line.id : null);
   useDismissOnEscape(true, () => useUndo.getState().dismiss());
 
+  if (line.note) {
+    return (
+      <div ref={shown} data-testid="undo-note" className={lineClass}>
+        <span className="min-w-0 break-words">{line.note(t)}</span>
+      </div>
+    );
+  }
+
   if (line.problem) {
-    const { step, wording, fix } = line.problem;
-    const reason = wording ? t(wording.key, wording.values) : line.problem.reason;
+    const { step, reason, fix } = line.problem;
     return (
       <div ref={shown} role="alert" data-testid="undo-problem" className={`${lineClass} items-end`}>
         <span aria-hidden="true" className="mb-[9px] size-1.5 shrink-0 rounded-full bg-attention" />
         <span className="line-clamp-2 min-w-0 mb-1 break-words">
-          {t(step === "undo" ? "undo.refused" : "redo.refused", { reason })}
+          {t(step === "undo" ? "undo.refused" : "redo.refused", { reason: reason(t) })}
         </span>
         <span aria-hidden="true" className="mb-1">
           ·
@@ -66,29 +85,123 @@ function Line({ line }: { line: UndoLineState }) {
           onClick={() => (fix ? void fix.run().catch(report) : useUndo.getState().dismiss())}
           className={actionClass}
         >
-          {fix ? fix.label : t("move.dismiss")}
+          {fix ? fix.label(t) : t("move.dismiss")}
         </button>
       </div>
     );
   }
 
-  const { message } = line.change;
+  const said = saidInLine(t, line.change.said);
+  const { message, fullMessage } = said;
+  const { also } = line.change;
+  const undo = (
+    <button
+      type="button"
+      data-testid="undo-action"
+      aria-label={t("move.undoLabel", { message: fullMessage ?? message })}
+      title={t("undo.title", { shortcut: shortcutLabel("edit.undo") })}
+      onClick={() => void useUndo.getState().undo()}
+      className={actionClass}
+    >
+      {t("move.undo")}
+    </button>
+  );
+  if (also) {
+    // A longer line, said for the User rather than by them: all of it, its actions under it.
+    return (
+      <div ref={shown} className={`${lineClass} flex-col`}>
+        <span data-testid="undo-message" className="min-w-0 break-words">
+          {message}
+        </span>
+        <span className="-ml-1 flex items-center gap-1">
+          <button
+            type="button"
+            data-testid={also.testId}
+            onClick={() => {
+              useUndo.getState().dismiss();
+              also.run();
+            }}
+            className={actionClass}
+          >
+            {also.label(t)}
+          </button>
+          <span aria-hidden="true">·</span>
+          {undo}
+        </span>
+      </div>
+    );
+  }
+  return <ChangeLine said={said} undo={undo} line={shown} />;
+}
+
+const MAX_LINES = 2;
+const LEAST_NAME_COLUMNS = 8;
+
+/**
+ * The message takes two lines at most (DESIGN.md, Sidebar): a name in it is cut shorter, two
+ * columns at a time, until it does, and again when the sidebar changes width or the language
+ * changes, its words being of another length. Its words never are cut.
+ */
+function ChangeLine({
+  said,
+  undo,
+  line,
+}: {
+  said: Said;
+  undo: ReactNode;
+  line: RefObject<HTMLDivElement | null>;
+}) {
+  const { within } = said;
+  const [columns, setColumns] = useState(NAME_IN_LINE_COLUMNS);
+  const [, measureAgain] = useReducer((times: number) => times + 1, 0);
+  const language = useLanguage();
+  const [measuredIn, setMeasuredIn] = useState(language);
+  if (measuredIn !== language) {
+    setMeasuredIn(language);
+    setColumns(NAME_IN_LINE_COLUMNS);
+  }
+
+  // After every render, as the room can change without the columns. The whole line is measured:
+  // "· Undo" goes with the message's last word, so it can push that word to a line of its own.
+  useLayoutEffect(() => {
+    const element = line.current;
+    if (!element || columns <= LEAST_NAME_COLUMNS) return;
+    const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+    const padding =
+      Number.parseFloat(getComputedStyle(element).paddingTop) +
+      Number.parseFloat(getComputedStyle(element).paddingBottom);
+    if (element.getBoundingClientRect().height - padding > lineHeight * MAX_LINES + 1) {
+      setColumns(columns - 2);
+    }
+  });
+
+  useEffect(() => {
+    const element = line.current;
+    if (!element) return;
+    let width: number | null = null;
+    const watch = new ResizeObserver(([entry]) => {
+      const next = entry?.contentRect.width ?? 0;
+      if (width !== null && next !== width) {
+        setColumns(NAME_IN_LINE_COLUMNS);
+        measureAgain();
+      }
+      width = next;
+    });
+    watch.observe(element);
+    return () => watch.disconnect();
+  }, [line]);
+
+  const shown = within(columns);
+  const whole = said.fullMessage ?? said.message;
+  // No-break spaces join the message's last word, the dot and Undo, so a wrapped line never leaves
+  // "· Undo" alone at the end of its second line.
   return (
-    <div ref={shown} className={`${lineClass} items-center`}>
-      <span data-testid="undo-message" title={message} className="min-w-0 truncate">
-        {message}
+    <div ref={line} className={`${changeLineClass} break-words`}>
+      <span data-testid="undo-message" title={shown === whole ? undefined : whole}>
+        {shown}
       </span>
-      <span aria-hidden="true">·</span>
-      <button
-        type="button"
-        data-testid="undo-action"
-        aria-label={t("move.undoLabel", { message })}
-        title={t("undo.title", { shortcut: shortcutLabel("edit.undo") })}
-        onClick={() => void useUndo.getState().undo()}
-        className={actionClass}
-      >
-        {t("move.undo")}
-      </button>
+      <span aria-hidden="true">{"\u00A0·\u00A0"}</span>
+      <span className="-my-1 inline-block align-middle">{undo}</span>
     </div>
   );
 }

@@ -1,23 +1,26 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ConversationAnswer, ConversationQuestion, Task } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
+import { mindSearchScope } from "../../../../shared/searchScope";
 import { type AddTarget, addAnswer, openTable } from "../../addToNote";
 import { notesToAdd } from "../../answerEditors";
 import { readsLine, stepsScope } from "../../assistantContext";
 import { readMindHandle } from "../../commands/handles";
-import { composerScope, NO_MIND, useComposer } from "../../composer";
+import { NO_MIND, useComposer } from "../../composer";
 import {
   conversationLabel,
-  stopWriting,
   useAnswerOnItsWay,
   useConversations,
   useOpenConversation,
 } from "../../conversations";
+import { askedAgainCounts } from "../../coverage";
 import { useT } from "../../i18n";
 import { isLive, useMeetings } from "../../meetings";
 import { useModelSetup } from "../../modelSetup";
 import { togglePlanView, useResearch } from "../../research";
 import { type ScopeChip, scopeChips } from "../../scope";
+import { useFolderHoldsDocuments } from "../../scopeDocuments";
+import { skillTitle } from "../../skills";
 import { useAppStore } from "../../store";
 import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
 import { loadTasks, useTasks } from "../../tasks";
@@ -55,6 +58,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const messages = useConversations((state) => state.messages);
   const asking = useConversations((state) => state.asking);
   const waitingQuestion = useModelSetup((state) => state.waiting);
+  const modelWorks = useModelSetup((state) => state.ready);
   const askingQuote = useConversations((state) => state.askingQuote);
   const onItsWay = useAnswerOnItsWay();
   const stopWanted = useConversations((state) => state.stopWanted);
@@ -147,6 +151,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       message.kind === "question" ? [[message.id, message] as const] : [],
     ),
   );
+  const askedAgain = askedAgainCounts(messages);
   return (
     <div
       ref={log}
@@ -161,13 +166,12 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         !plan &&
         !tasks.some(asked) && (
           <>
-            <p data-testid="assistant-reads" title={reads} className="assistant-reads">
-              <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
-              <span className="assistant-reads-text">{reads}</span>
-            </p>
-            <p data-testid="assistant-empty" className="assistant-empty">
-              {t("assistant.empty")}
-            </p>
+            <div data-testid="assistant-empty" className="assistant-empty">
+              <p data-testid="assistant-reads" title={reads} className="assistant-reads">
+                <SearchIcon aria-hidden="true" className="assistant-reads-icon" />
+                <span className="assistant-reads-text">{reads}</span>
+              </p>
+            </div>
             {listening && <MeetingStarters />}
           </>
         )}
@@ -193,6 +197,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
             question={questions.get(message.questionId)}
             sought={message.id === sought}
             keeping={keeping}
+            askedAgain={askedAgain.get(message.id)}
           />
         );
       })}
@@ -200,9 +205,11 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
       {waitingQuestion && (
         <>
           <QuestionBubble text={waitingQuestion.text} quote="" />
-          <p data-testid="assistant-waiting-model" className="assistant-empty">
-            {t("setup.waiting")}
-          </p>
+          {!modelWorks && (
+            <p data-testid="assistant-waiting-model" className="assistant-empty">
+              {t("setup.waiting")}
+            </p>
+          )}
         </>
       )}
       {plan && (
@@ -221,7 +228,8 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         </>
       )}
       {onItsWay && (
-        // Its line shows at rest, as an Answer's being written does.
+        // Its line shows at rest, as an Answer's being written does, with room kept for its first
+        // line of text, so the Question above doesn't move when the Answer starts.
         <div
           data-testid="assistant-answer-on-its-way"
           data-status="streaming"
@@ -241,18 +249,17 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
               nextScope.filter((chip) => !chip.deleted),
             )}
           />
-          {stopWanted ? (
+          <div aria-hidden="true" className="assistant-answer-first-line" />
+          <WritingLine
             // Stopped before it started: it says so at once, and stops as it starts.
-            <WritingLine
-              status={
+            status={
+              stopWanted ? (
                 <span data-testid="answer-stopped" className="assistant-answer-status">
                   {t("answer.status.stopped")}
                 </span>
-              }
-            />
-          ) : (
-            <WritingLine onStop={stopWriting} />
-          )}
+              ) : undefined
+            }
+          />
         </div>
       )}
       {picking && (
@@ -317,7 +324,7 @@ function QuestionBubble({
         {skill && (
           <span data-testid="assistant-question-skill" className="assistant-question-skill">
             <SparkLineIcon aria-hidden="true" className="size-3" />
-            {skill}
+            {skillTitle(skill, t)}
           </span>
         )}
         {research && (
@@ -341,11 +348,9 @@ function useNextScope(mindId: string | null): ScopeChip[] {
   const deletedGroups = useAppStore((state) => state.library?.deletedGroups);
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
+  const folderHolds = useFolderHoldsDocuments(mind?.folderId ?? null);
   if (mindId !== null && !mind) return [];
-  const scope = composerScope(
-    draft ?? { text: "", scope: null, skill: null, pastes: [] },
-    mind?.folderId ?? null,
-  );
+  const scope = mindSearchScope(draft?.scope ?? null, mind?.folderId ?? null, folderHolds);
   return scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
 }
 

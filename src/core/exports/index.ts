@@ -9,11 +9,7 @@ import * as Y from "yjs";
 import { layoutChart } from "../../shared/chartLayout";
 import { chartSvg } from "../../shared/chartSvg";
 import { seriesName } from "../../shared/charts";
-import {
-  type CitationStyle,
-  type CitationStyleId,
-  citationStyle,
-} from "../../shared/citationStyles";
+import type { ResolvedCitationStyle } from "../../shared/citationStyles";
 import { citationState, citedLocation, shownDocumentName } from "../../shared/citations";
 import type { DrawnPage } from "../../shared/citedPage";
 import { titleWithoutSite } from "../../shared/documentNames";
@@ -63,7 +59,7 @@ import { withChangesAccepted } from "../shownChanges";
 import { type CitationCard, citationCard } from "./citationCards";
 import { addSources, styleCitations } from "./citations";
 import { piecesOf, renderDocx } from "./docx";
-import { renderHtml } from "./html";
+import { bodyFamily, renderHtml } from "./html";
 import { exportLabels } from "./labels";
 import { renderMarkdown } from "./markdown";
 import { unifyIdeographs } from "./pdfUnicode";
@@ -98,8 +94,12 @@ export interface ExportsDependencies {
   /** The interface language, which the export's own words are in. */
   language(): Language;
   folderName(folderId: string): string | null;
-  /** The Mind's citation style (#289). */
-  citationStyle(mindId: string): CitationStyleId;
+  /** The Mind's citation style (#289), and the language its text is in, which a style may take. */
+  citationStyle(mindId: string): { style: ResolvedCitationStyle; textLanguage: Language };
+  /** The family the Mind's font is written as in Word and HTML; null: the default. */
+  font(mindId: string): string | null;
+  /** The Mind's line spacing, a multiple of a single line; null: its text size's own. */
+  lineSpacing(mindId: string): number | null;
   /** Whether the Mind shows its Bibliography without a citation style (#102). */
   bibliography(mindId: string): boolean;
   /** Formats Citations in a style, as the editor does (see `CoreApi.formatCitations`). */
@@ -140,6 +140,15 @@ const EXTENSIONS: Readonly<Record<ExportFormat, string>> = {
   "share-page": "html",
 };
 
+/** A new Mind's title line left empty says nothing in a file: no empty heading at its top. */
+function withoutEmptyTitle(blocks: Block[]): Block[] {
+  const [first] = blocks;
+  const empty =
+    first?.kind === "heading" &&
+    first.content.every((inline) => inline.kind === "text" && inline.text.trim() === "");
+  return empty ? blocks.slice(1) : blocks;
+}
+
 /** What an export holds, read once for both its preview and its file. */
 interface Prepared {
   format: ExportFormat;
@@ -154,9 +163,12 @@ interface Prepared {
   failedSentences: FailedSentence[];
   trackedChanges: number;
   language: Language;
-  style: CitationStyle;
+  style: ResolvedCitationStyle;
+  textLanguage: Language;
   documents: readonly SourceDocument[];
   bibliography: boolean;
+  font: string | null;
+  lineSpacing: number | null;
   /** Each Citation's footnote with the attributes it was made from, for the source pack. */
   attributesOf: ReadonlyMap<Footnote, Partial<CitationAttributes>>;
 }
@@ -167,7 +179,7 @@ export function createExports(deps: ExportsDependencies) {
     const { format, includeQuestions } = options;
     const mind = deps.mind(mindId);
     const language = deps.language();
-    const style = citationStyle(deps.citationStyle(mind.id));
+    const { style, textLanguage } = deps.citationStyle(mind.id);
     const documents = deps.liveDocuments();
     const kept = deps.keptCitationTexts();
     const attributesOf = new Map<Footnote, Partial<CitationAttributes>>();
@@ -228,8 +240,9 @@ export function createExports(deps: ExportsDependencies) {
         };
       },
     );
+    const shown = withoutEmptyTitle(read);
     const blocks =
-      format !== "docx" && options.theirChanges === "accepted" ? withChangesAccepted(read) : read;
+      format !== "docx" && options.theirChanges === "accepted" ? withChangesAccepted(shown) : shown;
     // A source pack holds the Citations the Mind numbers; the others, every footnote.
     const footnotes =
       format === "source-pack"
@@ -250,7 +263,7 @@ export function createExports(deps: ExportsDependencies) {
       format,
       options,
       mindId: mind.id,
-      title: mind.title,
+      title: mindName(mind),
       readOptions,
       word,
       blocks,
@@ -259,8 +272,11 @@ export function createExports(deps: ExportsDependencies) {
       trackedChanges,
       language,
       style,
+      textLanguage,
       documents,
       bibliography: deps.bibliography(mind.id),
+      font: deps.font(mind.id),
+      lineSpacing: deps.lineSpacing(mind.id),
       attributesOf,
     };
   };
@@ -283,6 +299,7 @@ export function createExports(deps: ExportsDependencies) {
       unverifiedCitations: pages.flatMap((page) => page.entries).filter(isUnverified).length,
       data: unifyIdeographs(printed),
       word: null,
+      needsDetails: [],
       sentenceChecks: { contradicted: 0, unsupported: 0, needsRecheck: 0, commented: false },
       trackedChanges: 0,
     };
@@ -340,10 +357,9 @@ export function createExports(deps: ExportsDependencies) {
     cards: ReadonlyMap<Footnote, CitationCard>,
     pictures: readonly SharePicture[] = [],
   ) => {
-    const { title, language, preview } = prepared;
+    const { language, preview } = prepared;
     return new TextEncoder().encode(
       renderSharePage({
-        title,
         blocks: await withPictures(blocks, language, deps),
         labels: exportLabels(language),
         language,
@@ -352,6 +368,8 @@ export function createExports(deps: ExportsDependencies) {
         cards,
         pictures,
         checkedLine: prepared.options.checkedLine,
+        font: prepared.font,
+        lineSpacing: prepared.lineSpacing,
       }),
     );
   };
@@ -485,18 +503,25 @@ export function createExports(deps: ExportsDependencies) {
         throw new Error("This copy of IncarnaMind can't make PDFs.");
       }
       if (format === "source-pack") return sourcePack(prepared);
-      if (format === "docx" && prepared.word) return exportIntoWord(prepared, prepared.word);
+      const thin = thinEntries((request) =>
+        deps.formatCitations({ ...request, language: prepared.textLanguage }),
+      );
+      if (format === "docx" && prepared.word) {
+        return exportIntoWord(prepared, prepared.word, thin);
+      }
       if (format === "share-page" && prepared.options.citationCards) {
         return {
           ...preview,
           data: await sharePage(prepared),
           word: null,
+          needsDetails: [],
           ...reviewOf(prepared, []),
         };
       }
+      const labels = exportLabels(language);
       const blocks =
         style.form !== "numbered"
-          ? await styleCitations(prepared.blocks, style, deps.formatCitations)
+          ? await styleCitations(prepared.blocks, style, thin.format, labels.needsDetails)
           : prepared.bibliography
             ? addSources(
                 prepared.blocks,
@@ -504,11 +529,10 @@ export function createExports(deps: ExportsDependencies) {
                 translate(language, "bibliography.title"),
               )
             : prepared.blocks;
-      const labels = exportLabels(language);
       let data: Uint8Array;
       let commented: readonly FailedSentence[] = [];
       if (format === "markdown") {
-        data = new TextEncoder().encode(renderMarkdown(title, blocks, labels));
+        data = new TextEncoder().encode(renderMarkdown("", blocks, labels));
       } else if (format === "docx") {
         ({ data, commented } = renderDocx(await withPictures(blocks, language, deps), {
           title,
@@ -517,29 +541,40 @@ export function createExports(deps: ExportsDependencies) {
           paper: language === "en" ? "letter" : "a4",
           created: deps.now(),
           review: reviewChoices(prepared, false),
+          font: prepared.font,
+          lineSpacing: prepared.lineSpacing,
         }));
       } else if (format === "html" || format === "share-page") {
         const drawn = await withPictures(blocks, language, deps);
         data = new TextEncoder().encode(
-          renderHtml(title, drawn, labels, {
+          renderHtml(drawn, labels, {
             language,
             name: preview.fileName.slice(0, -".html".length),
+            font: prepared.font,
+            lineSpacing: prepared.lineSpacing,
           }),
         );
       } else {
         // Charts as Word has them: the picture, drawn at twice its size, else the table of values.
         const drawn = await withPictures(blocks, language, deps);
-        const { body, notes } = renderPrintHtml(title, drawn, labels);
+        const { body, notes } = renderPrintHtml(drawn, labels);
         const printed = await (deps.printer as Printer).print({
           language,
           paper: deps.paper(),
           title: preview.fileName.slice(0, -".pdf".length),
+          ...(prepared.font !== null && { fontFamily: bodyFamily(prepared.font) }),
           body,
           notes,
         });
         data = unifyIdeographs(printed);
       }
-      return { ...preview, data, word: null, ...reviewOf(prepared, commented) };
+      return {
+        ...preview,
+        data,
+        word: null,
+        needsDetails: [...thin.documents],
+        ...reviewOf(prepared, commented),
+      };
     },
   };
 
@@ -558,6 +593,7 @@ export function createExports(deps: ExportsDependencies) {
   async function exportIntoWord(
     prepared: Prepared,
     word: NonNullable<Prepared["word"]>,
+    thin: ThinEntries,
   ): Promise<MindExport> {
     if (word.importing) throw new Error("This Mind is still being imported from its Word file.");
     const { language, style, documents } = prepared;
@@ -577,7 +613,7 @@ export function createExports(deps: ExportsDependencies) {
         bibliography: prepared.bibliography,
         bibliographyHeading: translate(language, "bibliography.title"),
         sources: { language, documents },
-        formatCitations: deps.formatCitations,
+        formatCitations: thin.format,
         withPictures: (blocks) => withPictures(blocks, language, deps),
         review: reviewChoices(prepared, true),
       });
@@ -585,11 +621,38 @@ export function createExports(deps: ExportsDependencies) {
         notKept: report.notKept.length,
         unknownParts: report.unknownParts.length,
       });
-      return { ...prepared.preview, data, word: report, ...reviewOf(prepared, commented) };
+      return {
+        ...prepared.preview,
+        data,
+        word: report,
+        needsDetails: [...thin.documents],
+        ...reviewOf(prepared, commented),
+      };
     } finally {
       doc.destroy();
     }
   }
+}
+
+interface ThinEntries {
+  format(request: CitationFormatRequest): Promise<FormattedCitations>;
+  documents: ReadonlySet<string>;
+}
+
+function thinEntries(
+  format: (request: CitationFormatRequest) => Promise<FormattedCitations>,
+): ThinEntries {
+  const documents = new Set<string>();
+  return {
+    documents,
+    async format(request) {
+      const formatted = await format(request);
+      for (const entry of formatted.bibliography) {
+        if (entry.needsDetails && entry.documentId !== null) documents.add(entry.documentId);
+      }
+      return formatted;
+    },
+  };
 }
 
 function reviewOf(
@@ -732,7 +795,7 @@ function dayOf(at: string, language: Language): string {
  * "accessed" date citation styles read: "Tides, Tide Wiki, § History, ¶ 3,
  * https://tides.example/history, accessed 3 October 2026".
  */
-function footnoteOf(
+export function footnoteOf(
   attributes: Partial<CitationAttributes>,
   documents: readonly LiveDocument[],
   kept: readonly KeptCitationText[],

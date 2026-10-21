@@ -91,6 +91,7 @@ function checked(
         }
       : null,
     says: found ? "Tides says spring tides happen at new moon." : null,
+    unsupported: null,
     calculation: null,
     citedCaseUnchecked: false,
     citedCaseFound: false,
@@ -300,7 +301,7 @@ describe("The check record as CSV", () => {
         Kind: "Sentence",
         Sentence: "Their report says tides follow the Moon.",
         Result: "Contradicted",
-        Text: "Someone else's text",
+        Text: "Someone else’s text",
         ...tidesVersion,
         ...haiku,
         Checked: CHECKED,
@@ -603,7 +604,7 @@ describe("The check record as PDF", () => {
       title: "Check record – Harbour notes",
       notes: [],
       footer:
-        "This record lists what IncarnaMind checked and how. “Quote found” means the quoted words are on that page; it doesn't mean they support the sentence.",
+        "This record lists what IncarnaMind checked and how. “Quote found” means the quoted words are on that page; it doesn’t mean they support the sentence.",
     });
     const body = document?.body ?? "";
     const sha256 = createHash("sha256").update(readFileSync(setup.file)).digest("hex");
@@ -633,7 +634,7 @@ describe("The check record as PDF", () => {
       `<code class="record-hash">${sha256.slice(0, 4)}…${sha256.slice(-4)}</code>`,
     );
     expect(body).not.toContain(sha256);
-    expect(body).toContain("Contradicted</b> · Sentence · Someone else&#39;s text");
+    expect(body).toContain("Contradicted</b> · Sentence · Someone else’s text");
     expect(body).toContain("Quote not found</b> · Citation · AI text");
     expect(body.match(/class="record-shape"/g)).toHaveLength(7);
   });
@@ -734,7 +735,7 @@ describe("Saving a check record", () => {
       failures: [
         {
           format: "pdf",
-          message: "This copy of IncarnaMind can't make PDFs.",
+          message: "This copy of IncarnaMind can’t make PDFs.",
           wording: { key: "error.checkRecord.noPdf" },
         },
       ],

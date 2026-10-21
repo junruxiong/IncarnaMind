@@ -16,7 +16,7 @@
 
 import { deflateRawSync } from "node:zlib";
 import type { TableAlign } from "../../shared/markdownTables";
-import type { StyledRun } from "../api";
+import type { ParagraphFormat, StyledRun } from "../api";
 import { writeZip } from "../documents/formats/zip";
 import {
   type Block,
@@ -29,9 +29,11 @@ import {
   type TableCell,
   tableLayout,
 } from "../mindText";
+import { HEADER_AND_FOOTER_DISTANCE, MARGIN, PAPER } from "../pageDefaults";
 import { changeKey } from "./citations";
 import type { ExportLabels } from "./labels";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
+import { changedElement, formatChanges } from "./paragraphFormat";
 import {
   COMMENTS_CONTENT_TYPE,
   COMMENTS_RELATIONSHIP,
@@ -52,7 +54,7 @@ import {
 import { type Piece, Review, type ReviewChoices, trackBlocks, trackInline } from "./wordReview";
 
 export interface DocxOptions {
-  /** The Mind's title, as the document's title. Empty: none. */
+  /** The Mind's name, as the file's Title property (`dc:title`); the page has no title line. Empty: none. */
   title: string;
   labels: ExportLabels;
   /** The language Word checks the text in, e.g. "en-US". */
@@ -62,6 +64,10 @@ export interface DocxOptions {
   created: string;
   /** What the file says for review (#107); none: Blocks read for review are written as they read. */
   review?: ReviewChoices;
+  /** The Mind's font by name, which the body is written in; null: Word's own body font. */
+  font: string | null;
+  /** The Mind's line spacing, a multiple of a single line; null: the export's own. */
+  lineSpacing: number | null;
 }
 
 /** The prefixes the writer writes, and their namespaces. */
@@ -99,13 +105,6 @@ const RELATIONSHIP = {
 
 const MAIN_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml";
 
-/** Page sizes and margins, in twentieths of a point ("twips"): 1 inch margins. */
-const PAPER = {
-  letter: { width: 12240, height: 15840 },
-  a4: { width: 11906, height: 16838 },
-} as const;
-const MARGIN = 1440;
-
 /** One level of a list, or of a quote, indents this much (half an inch). */
 const INDENT = 720;
 /** A list item's number or bullet hangs this far left of its text. */
@@ -125,13 +124,12 @@ export function renderDocx(
     : null;
   review?.mark(piecesOf(blocks));
   const writer = new DocxWriter(options.labels, paper.width - 2 * MARGIN, target, review);
-  const title = options.title ? paragraph({ style: "Title" }, run(options.title)) : "";
   const body = writer.body(blocks);
 
   const document =
     `${XML_DECLARATION}<w:document xmlns:w="${NS.w}" xmlns:r="${NS.r}" xmlns:wp="${NS.wp}" xmlns:a="${NS.a}" xmlns:pic="${NS.pic}" xmlns:m="${NS.m}"><w:body>` +
-    `${title}${body}` +
-    `<w:sectPr><w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>` +
+    body +
+    `<w:sectPr><w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="${HEADER_AND_FOOTER_DISTANCE}" w:footer="${HEADER_AND_FOOTER_DISTANCE}" w:gutter="0"/></w:sectPr>` +
     "</w:body></w:document>";
 
   const comments = review?.comments ?? [];
@@ -159,7 +157,10 @@ export function renderDocx(
       { name: "docProps/core.xml", data: coreProperties(options) },
       { name: "word/document.xml", data: document },
       { name: "word/_rels/document.xml.rels", data: relationshipsXml(relationships) },
-      { name: "word/styles.xml", data: styles(options.language, comments.length > 0) },
+      {
+        name: "word/styles.xml",
+        data: styles(options.language, comments.length > 0, options.font, options.lineSpacing),
+      },
       { name: "word/settings.xml", data: SETTINGS },
       { name: "word/numbering.xml", data: numbering(target.lists) },
       { name: "word/footnotes.xml", data: footnotesPart(writer.footnotes) },
@@ -390,12 +391,17 @@ export class DocxWriter {
     switch (block.kind) {
       case "paragraph":
         return paragraph(
-          { style: context.style, indent, align: context.align },
+          { style: context.style, indent, align: context.align, format: block.format },
           this.inline(block.content, context),
         );
       case "heading":
         return paragraph(
-          { style: this.styles.heading(block.level), indent, align: context.align },
+          {
+            style: this.styles.heading(block.level),
+            indent,
+            align: context.align,
+            format: block.format,
+          },
           this.inline(block.content, context),
         );
       case "question":
@@ -820,11 +826,29 @@ interface ParagraphProperties {
   /** How far the first line hangs left of `indent`, in twips. */
   hanging?: number;
   align?: TableAlign;
+  /** The User's, over the rest; its left indent is from `indent`. */
+  format?: ParagraphFormat;
 }
 
 function paragraph(properties: ParagraphProperties, content: string): string {
   const { style, keepNext, numbering, bottomBorder, spacingAfter, indent, hanging, align } =
     properties;
+  const format = properties.format ?? {};
+  const changes = formatChanges(
+    { ...format, ...(format.left !== undefined && { left: format.left + (indent ?? 0) / 20 }) },
+    {},
+  );
+  const spacing = changedElement(
+    "w:spacing",
+    spacingAfter !== undefined ? `<w:spacing w:after="${spacingAfter}"/>` : null,
+    changes.spacing,
+  );
+  const ind = changedElement(
+    "w:ind",
+    indent ? `<w:ind w:left="${indent}"${hanging ? ` w:hanging="${hanging}"` : ""}/>` : null,
+    changes.ind,
+  );
+  const jc = changes.jc ?? align;
   // In the order the schema requires.
   const pPr = [
     style ? `<w:pStyle w:val="${escapeXml(style)}"/>` : "",
@@ -835,9 +859,9 @@ function paragraph(properties: ParagraphProperties, content: string): string {
     bottomBorder
       ? '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr>'
       : "",
-    spacingAfter !== undefined ? `<w:spacing w:after="${spacingAfter}"/>` : "",
-    indent ? `<w:ind w:left="${indent}"${hanging ? ` w:hanging="${hanging}"` : ""}/>` : "",
-    align ? `<w:jc w:val="${align}"/>` : "",
+    spacing ?? "",
+    ind ?? "",
+    jc ? `<w:jc w:val="${jc}"/>` : "",
   ].join("");
   return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${content}</w:p>`;
 }
@@ -851,6 +875,10 @@ function formatOf(marks: Marks, context: Context, styles: DocxStyles, style?: st
     highlight: marks.highlight,
     underline: marks.underline,
     monospace: marks.code && style !== undefined,
+    font: marks.font,
+    size: marks.size,
+    color: marks.color,
+    script: marks.vertical,
   };
 }
 
@@ -1145,7 +1173,15 @@ export const NEW_DOCUMENT_STYLE_IDS: Readonly<Record<StyleRole, string>> = {
 /** The styles only a document with comments needs. */
 const COMMENT_ROLES: ReadonlySet<StyleRole> = new Set(["commentText", "commentReference"]);
 
-function styles(language: string, comments: boolean): string {
+const DEFAULT_BODY_FONT = "Calibri";
+
+function styles(
+  language: string,
+  comments: boolean,
+  font: string | null,
+  lineSpacing: number | null,
+): string {
+  const family = escapeXml(font ?? DEFAULT_BODY_FONT);
   const bases: StyleBases = {
     paragraph: "Normal",
     character: "DefaultParagraphFont",
@@ -1157,8 +1193,8 @@ function styles(language: string, comments: boolean): string {
     .join("");
   return (
     `${XML_DECLARATION}<w:styles xmlns:w="${NS.w}">` +
-    `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="${language}"/></w:rPr></w:rPrDefault>` +
-    '<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+    `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${family}" w:hAnsi="${family}" w:cs="${family}"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="${language}"/></w:rPr></w:rPrDefault>` +
+    `<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="${lineSpacing === null ? 259 : Math.round(lineSpacing * 240)}" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` +
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
     '<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/><w:unhideWhenUsed/></w:style>' +
     '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>' +

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { ExclamationIcon } from "../viewer/icons";
 import { MetaLine } from "./MetaLine";
 
@@ -19,7 +19,7 @@ export function ProblemMark({ className = "mr-1.5 inline align-[-2px]" }: { clas
 /** The one action a problem offers. */
 export interface ProblemAction {
   label: string;
-  onClick(): void;
+  onClick(event: MouseEvent<HTMLButtonElement>): void;
   testId?: string;
   /** Not while it is already running. */
   disabled?: boolean;
