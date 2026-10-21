@@ -145,7 +145,11 @@ export function exampleNote(documents: readonly string[] | null): string {
  * notes their text calls for: dates, the User's own workings, amounts in
  * brackets, and Documents that couldn't be read.
  */
-export function withPassageNotes(passages: string, unread: readonly UnreadFile[]): string {
+export function withPassageNotes(
+  passages: string,
+  unread: readonly UnreadFile[],
+  reading: readonly { name: string }[] = [],
+): string {
   return [
     passages,
     datedDocumentsNote(passages),
@@ -153,6 +157,7 @@ export function withPassageNotes(passages: string, unread: readonly UnreadFile[]
     notCitedNote(passages),
     bracketedAmountsNote(passages),
     unreadDocumentsNote(unread),
+    stillReadingNote(reading),
   ]
     .filter((part) => part !== "")
     .join("\n\n");
@@ -436,6 +441,18 @@ export function unreadDocumentsNote(unread: readonly UnreadFile[]): string {
     .map((file) => `"${listedName(file.name)}" (${UNREAD_WORDS[file.reason](file.pages)})`);
   const more = unread.length - named.length;
   return `IncarnaMind couldn't read the text of some Documents in the search, so no Passage comes from that text: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. If the Passages don't clearly answer the Question and it may be about one of them, say in one sentence that it couldn't be read, so the answer may be there, rather than taking another Document's figure for it.`;
+}
+
+/**
+ * A reminder after a search's Passages when Documents in the Search scope are still being read
+ * (#1503): no search finds anything in them yet, so a model that finds nothing says they are
+ * being read, never that a Document isn't there.
+ */
+export function stillReadingNote(reading: readonly { name: string }[]): string {
+  if (reading.length === 0) return "";
+  const named = reading.slice(0, NAMED_UNREAD).map((file) => `"${listedName(file.name)}"`);
+  const more = reading.length - named.length;
+  return `IncarnaMind is still reading ${reading.length === 1 ? "a Document" : `${reading.length} Documents`} in the search: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. No Passage comes from ${reading.length === 1 ? "it" : "them"} yet. If the Passages don't clearly answer the Question and it may be about ${reading.length === 1 ? "it" : "one of them"}, say that ${reading.length === 1 ? "it is" : "they are"} still being read and to ask again when ${reading.length === 1 ? "it's" : "they're"} ready. Never say ${reading.length === 1 ? "it doesn't exist or wasn't added" : "they don't exist or weren't added"}, and never take another Document's figure for what ${reading.length === 1 ? "it" : "they"} would say.`;
 }
 
 /**
