@@ -20,6 +20,7 @@ import { buttonStyle } from "../components/ui";
 import { core } from "../core";
 import { type EstimateLine, estimateLine, runStopParts } from "../cost";
 import { useLanguage, useT } from "../i18n";
+import { useModelInUse } from "../modelInUse";
 import { enter } from "../motion";
 import { useAppStore } from "../store";
 import { useCheckUnread } from "../unreadFiles";
@@ -33,7 +34,7 @@ import {
 import { AnswerError } from "./AnswerView";
 import { coverageOf, type ShownClaim, sameCoverage, shownClaims } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
-import { useMindModel, useRunModel } from "./ModelChip";
+import { useRunModel } from "./ModelChip";
 import { Counted } from "./NoteHealth";
 import { ReferencesLine } from "./ReferencesLine";
 import { UncoveredLine } from "./UncoveredLine";
@@ -105,7 +106,7 @@ export function useVerifyState(
 ) {
   const t = useT();
   const language = useLanguage();
-  const model = useMindModel(doc);
+  const model = useModelInUse(doc);
   const running = useVerify((state) =>
     state.running?.mindId === mindId ? state.running.phase : null,
   );

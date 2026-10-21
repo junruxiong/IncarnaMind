@@ -302,7 +302,13 @@ describe("Automatic tagging in the background queue", () => {
       reportError: (error) => {
         throw error;
       },
-      rateLimit: { pausedUntil: () => null, pause: () => null, succeeded: () => {} },
+      rateLimit: {
+        pausedUntil: () => null,
+        pause: () => null,
+        succeeded: () => {},
+        refusal: () => null,
+        refuse: () => null,
+      },
       timers: { now: () => 0, sleep: async () => {} },
     });
     /** A classification job, as Organize queues: one model call, which answers at once. */

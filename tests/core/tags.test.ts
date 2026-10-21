@@ -540,7 +540,7 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     const { core, tagging } = await startTagging(["Paper"]);
     const failure = (statusCode?: number) =>
       new APICallError({
-        message: statusCode ? "Invalid API key" : "fetch failed",
+        message: statusCode ? "The model does not exist" : "fetch failed",
         url: "http://127.0.0.1:11434/v1/chat/completions",
         requestBodyValues: {},
         ...(statusCode && { statusCode }),
@@ -550,14 +550,14 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
     tagging.fail(failure());
     const offline = await addDocument(core, "Attention.md", PAPER_TEXT);
     await waitForTagging(core, [offline.id], (each) => each.tagging === "failed");
-    tagging.fail(failure(401));
-    const keyRefused = await addDocument(core, "Refused.md", PAPER_TEXT);
-    const [refused] = await waitForTagging(
+    tagging.fail(failure(404));
+    const unknownModel = await addDocument(core, "Unknown.md", PAPER_TEXT);
+    const [unknown] = await waitForTagging(
       core,
-      [keyRefused.id],
+      [unknownModel.id],
       (each) => each.tagging === "failed",
     );
-    expect(refused?.taggingError?.kind).toBe("auth");
+    expect(unknown?.taggingError?.kind).toBe("model");
     const before = tagging.requests.length;
 
     tagging.fail(null);
@@ -566,7 +566,7 @@ describe("Automatic tagging", { timeout: 30_000 }, () => {
 
     expect(tagging.requests).toHaveLength(before + 1);
     expect(await tagNamesOf(core, offline.id)).toEqual(["Paper"]);
-    expect((await core.listDocuments()).find((each) => each.id === keyRefused.id)?.tagging).toBe(
+    expect((await core.listDocuments()).find((each) => each.id === unknownModel.id)?.tagging).toBe(
       "failed",
     );
   });

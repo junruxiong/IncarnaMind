@@ -2074,6 +2074,12 @@ export interface DeviceSettings {
   meetingHelpKeys: HelpKeys;
   /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
   motion: MotionPreference;
+  /**
+   * The model the User last chose here, in a composer or as the Answers default: a Mind with no
+   * pick of its own and the assistant with no Mind in focus use it (`modelInUse`). Null until
+   * they choose, and again once its provider is removed: they follow `UserSettings.chatModel` then.
+   */
+  lastChatModel: ChatModelChoice | null;
 }
 
 /**
@@ -5246,6 +5252,12 @@ export interface AnswerSteps {
   withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
+  /**
+   * Documents in its Search scope were still being read (Queued or Extracting) when it ended, so
+   * no search could find their text yet (#1503): how many, and the name when there is one.
+   * Absent: none.
+   */
+  stillReading?: { count: number; name?: string };
   /**
    * A request to write, written from a Search scope that holds `documents` of the User's
    * `total` Documents (#1149). Absent: from all of them, or not a request to write.

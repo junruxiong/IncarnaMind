@@ -8,11 +8,12 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  closeSettings,
   createDataFolder,
   launchApp,
   removeDataFolder,
@@ -20,6 +21,11 @@ import {
   setLanguage,
   setWindowSize,
 } from "./app";
+
+const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
+async function screenshot(target: Page | Locator, name: string): Promise<void> {
+  if (SCREENSHOTS) await target.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+}
 
 let dataDir: string;
 let sources: string;
@@ -32,9 +38,9 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-async function unreachable(name: string): Promise<string> {
+async function unreachable(name: string, says = "was unreachable"): Promise<string> {
   const path = join(sources, `${name}.txt`);
-  await writeFile(path, `${name}. The invoice server was unreachable.\n`);
+  await writeFile(path, `${name}. The invoice server ${says}.\n`);
   return path;
 }
 
@@ -121,6 +127,77 @@ test("A rate limit pauses Tagging: one line says when it resumes, and Retry goes
   await app.close();
 });
 
+test("A refused key stops Tagging after one request: one line says so, Check the key opens the Models settings, and a key that works carries it on", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1280, 800);
+  await acceptPlainTextKeys(window);
+  const useKey = (apiKey: string) =>
+    window.evaluate(async (apiKey) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await core.saveChatProvider({ kind: "openai", apiKey, modelId: "gpt-6-luna" });
+    }, apiKey);
+  await useKey("sk-refused");
+  const footer = window.getByTestId("sidebar-status");
+  const paths: string[] = [];
+  for (const name of ["Invoice 81", "Invoice 82", "Invoice 83", "Invoice 84"]) {
+    const path = join(sources, `${name}.txt`);
+    await writeFile(path, `${name}. Nothing in the way.\n`);
+    paths.push(path);
+  }
+
+  await addDocuments(window, paths);
+  const refused = footer.getByTestId("tagging-key-refused");
+  for (const name of ["Invoice 81", "Invoice 82", "Invoice 83", "Invoice 84"]) {
+    await expect(item(window, name)).toHaveAttribute("data-tagging", "waiting-for-provider");
+  }
+  await expect(refused.getByTestId("status-label")).toHaveText("The key was refused");
+  await expect(refused.getByTestId("tagging-key-refused-check")).toHaveText("Check the key");
+  // Not counted as failed, and not "No AI model": the model is there, its key isn't accepted.
+  await expect(footer.getByTestId("tagging-failed")).toHaveCount(0);
+  await expect(footer.getByTestId("tagging-waiting")).toHaveCount(0);
+  await setLanguage(window, "zh-CN");
+  await expect(refused.getByTestId("status-label")).toHaveText("密钥被拒绝了");
+  await expect(refused.getByTestId("tagging-key-refused-check")).toHaveText("检查密钥");
+  await setLanguage(window, "en");
+
+  // Held at both widths, and in both languages, in one line the sidebar's width holds.
+  for (const [language, width] of [
+    ["en", 900],
+    ["en", 1440],
+    ["zh-CN", 900],
+    ["zh-CN", 1440],
+  ] as const) {
+    await setLanguage(window, language);
+    await setWindowSize(app, window, width, 800);
+    await expect(refused).toBeVisible();
+    const row = await refused.boundingBox();
+    const sidebar = await window.getByTestId("sidebar").boundingBox();
+    expect(row && sidebar && row.x + row.width <= sidebar.x + sidebar.width).toBe(true);
+    await screenshot(window, `tagging-key-refused-${language === "en" ? "en" : "zh"}-${width}`);
+  }
+  await setLanguage(window, "en");
+
+  // As on a refused Answer, Check the key opens that company's key field, with the refusal by it.
+  await refused.getByTestId("tagging-key-refused-check").click();
+  const settings = window.getByTestId("settings");
+  await expect(settings).toHaveAttribute("data-page", "models");
+  const page = settings.getByTestId("provider-page");
+  await expect(page.getByTestId("provider-page-title")).toHaveText("OpenAI");
+  const key = page.getByTestId("provider-page-key");
+  await expect(key).toBeFocused();
+  await expect(page.getByTestId("provider-key-refused")).toHaveText("OpenAI refused this key.");
+
+  await window.keyboard.type("sk-good");
+  await window.keyboard.press("Enter");
+  await expect(page.getByTestId("provider-key-refused")).toHaveCount(0);
+  await closeSettings(window);
+  for (const name of ["Invoice 81", "Invoice 82", "Invoice 83", "Invoice 84"]) {
+    await expect(item(window, name)).toHaveAttribute("data-tagging", "tagged");
+  }
+  await expect(refused).toHaveCount(0);
+  await app.close();
+});
+
 test("With Organize filing new Documents, a failure for a Document the tagger holds still has its row, and one Organize holds has only Organize's", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await setWindowSize(app, window, 1280, 800);
@@ -128,27 +205,26 @@ test("With Organize filing new Documents, a failure for a Document the tagger ho
   const providerId = await window.evaluate(async () => {
     const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     const provider = await core.saveChatProvider({
-      kind: "anthropic",
-      apiKey: "sk-ant-refused",
-      modelId: "claude-sonnet-5-5",
+      kind: "openai",
+      apiKey: "sk-test",
+      modelId: "gpt-6-luna",
     });
     return provider.id;
   });
   const footer = window.getByTestId("sidebar-status");
   const failed = footer.getByTestId("tagging-failed");
 
-  // Added before there were Folders: the tagger has it, and the key is refused.
-  const held = join(sources, "Invoice 71.txt");
-  await writeFile(held, "Invoice 71. Nothing in the way.\n");
+  // Added before there were Folders: the tagger has it, and the model can't be reached.
+  const held = await unreachable("Invoice 71", "stays unreachable");
   await addDocuments(window, [held]);
   await expect(item(window, "Invoice 71")).toHaveAttribute("data-tagging", "failed");
 
-  // Organize now files new Documents by itself, with the same refused key.
+  // Organize now files new Documents by itself, with the same model.
   await window.evaluate(async (providerId) => {
     const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await core.createLibraryGroup({ name: "Invoices", description: "Invoices" });
     await core.saveLibrarySettings({
-      classifier: { kind: "chat", choice: { providerId, modelId: "claude-sonnet-5-5" } },
+      classifier: { kind: "chat", choice: { providerId, modelId: "gpt-6-luna" } },
       automatic: true,
     });
   }, providerId);
@@ -156,8 +232,7 @@ test("With Organize filing new Documents, a failure for a Document the tagger ho
   await expect(failed.getByTestId("tagging-failed-retry")).toBeVisible();
 
   // A Document added now is Organize's: it fails there, and says so in Organize's row alone.
-  const own = join(sources, "Invoice 72.txt");
-  await writeFile(own, "Invoice 72. Nothing in the way.\n");
+  const own = await unreachable("Invoice 72", "stays unreachable");
   await window.getByTestId("add-documents-input").setInputFiles([own]);
   await expect(item(window, "Invoice 72")).toHaveAttribute("data-tagging", "failed");
   await expect(failed.getByTestId("status-label")).toHaveText("1 Document couldn’t be tagged");

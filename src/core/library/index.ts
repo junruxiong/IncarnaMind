@@ -199,7 +199,7 @@ export function createLibrary(options: {
   readsPages(classifier: TaggingClassifier): boolean;
   pageImages(id: string, contentHash: string, signal: AbortSignal): Promise<DocumentPageImage[]>;
   /** The pause a rate limit puts on all Tagging (see ../tags/rateLimit). */
-  rateLimit: Pick<RateLimitPause, "pausedUntil" | "pause" | "succeeded">;
+  rateLimit: Pick<RateLimitPause, "pausedUntil" | "pause" | "succeeded" | "refusal" | "refuse">;
 }) {
   const { db, now, settings, background, changed } = options;
   const lifetime = new AbortController();
@@ -510,6 +510,11 @@ export function createLibrary(options: {
             state(id, "waiting", rateLimitError(limitedUntil));
             return;
           }
+          const refusal = options.rateLimit.refusal();
+          if (refusal !== null) {
+            state(id, "waiting", refusal);
+            return;
+          }
           state(id, "classifying");
           const classifier = await options.prepare(getSettings());
           if (classifier.local) call.runsLocally();
@@ -565,9 +570,11 @@ export function createLibrary(options: {
           if (!stale()) {
             if (error instanceof NotFoundError) return;
             const limitedUntil = options.rateLimit.pause(error);
+            const refused = limitedUntil === null ? options.rateLimit.refuse(error) : null;
             // The plan's limit: it waits for the plan to reset (see ./planPace).
             const waiting =
               limitedUntil !== null ||
+              refused !== null ||
               error instanceof ChatNotReadyError ||
               error instanceof ConsentDeclinedError ||
               error instanceof ConsentNeededError ||
@@ -578,7 +585,7 @@ export function createLibrary(options: {
               id,
               waiting ? "waiting" : "failed",
               limitedUntil === null
-                ? classifyProviderError(error)
+                ? (refused ?? classifyProviderError(error))
                 : rateLimitError(limitedUntil, error),
             );
           }
@@ -1044,7 +1051,8 @@ export function createLibrary(options: {
       });
       options.tagged([doc.id]);
       announce([doc.id]);
-      resume();
+      // A Document put back as waiting waits as it did: resuming now would organize it again at once (#1391).
+      if (status === "pending") resume();
     },
     // A new request id makes a run already under way for these Documents stale.
     accept(input: unknown): AssignmentChange[] {

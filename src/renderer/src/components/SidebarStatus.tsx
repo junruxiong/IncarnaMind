@@ -7,6 +7,7 @@ import { organizeHeld, organizes, organizesNewDocuments } from "../../../shared/
 import { commands } from "../commands/registry";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
+import { useKeyRefusals } from "../keyRefusals";
 import { saidInLine } from "../lineNames";
 import { useCapturing, useMeetings } from "../meetings";
 import { downloadProgress } from "../modelDownload";
@@ -301,6 +302,7 @@ function useStatuses(): Status[] {
       let waitingForTagger = 0;
       let waitingForPlan = 0;
       let rateLimited = 0;
+      let keyRefused = 0;
       let rateLimitEnds: string | null = null;
       let failedTagging = 0;
       let unreached = 0;
@@ -329,6 +331,8 @@ function useStatuses(): Status[] {
               if (ends !== null && (rateLimitEnds === null || ends > rateLimitEnds)) {
                 rateLimitEnds = ends;
               }
+            } else if (item.taggingError?.kind === "auth") {
+              keyRefused++;
             } else {
               if (!held) waitingForTagger++;
               if (item.taggingError?.kind === "plan-limit") waitingForPlan++;
@@ -350,6 +354,7 @@ function useStatuses(): Status[] {
         waitingForTagger,
         waitingForPlan,
         rateLimited,
+        keyRefused,
         rateLimitEnds,
         failedTagging,
         unreached,
@@ -386,6 +391,10 @@ function useStatuses(): Status[] {
   );
   const taggingNeedsOk =
     taggingWaits && taggingService && !taggingService.allowed ? taggingService.service : null;
+  const refusedService = useTaggingService(
+    organizesNew ? "classification" : "tagging",
+    counts.keyRefused > 0,
+  );
   const places = useAppStore(
     useShallow((state) =>
       tagging || organizingNow ? taggingPlaces(state.documents, state.library) : [],
@@ -642,6 +651,23 @@ function useStatuses(): Status[] {
     });
   }
 
+  if (counts.keyRefused > 0) {
+    statuses.push({
+      testId: "tagging-key-refused",
+      tone: "waiting",
+      short: t("status.taggingKeyRefused"),
+      full: t("status.taggingKeyRefused.full"),
+      wraps: true,
+      needsYou: true,
+      alerts: true,
+      action: {
+        label: t("answer.error.checkKey"),
+        testId: "tagging-key-refused-check",
+        run: () => void useKeyRefusals.getState().checkService(refusedService?.service.id ?? null),
+      },
+    });
+  }
+
   if (counts.waitingForPlan > 0) {
     statuses.push({
       testId: "tagging-paused",
@@ -795,7 +821,9 @@ function useStatuses(): Status[] {
     ).length;
     const attention = library.assignments.filter(
       (item) =>
-        (item.status === "waiting" && item.error?.kind !== "rate-limit") ||
+        (item.status === "waiting" &&
+          item.error?.kind !== "rate-limit" &&
+          item.error?.kind !== "auth") ||
         item.status === "failed",
     ).length;
     if (attention)
