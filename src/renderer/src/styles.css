@@ -994,27 +994,6 @@
     animation: none;
   }
 
-  /* The tab, following the pointer. */
-  .tab-drag-ghost {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 60;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    max-width: 260px;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 6px;
-    background: var(--color-sheet);
-    box-shadow: var(--shadow-popover);
-    color: var(--color-ink);
-    font-size: 13px;
-    font-weight: 600;
-    white-space: nowrap;
-    pointer-events: none;
-  }
   /* Where a tab dropped on a strip will land. */
   .tab-drop-line {
     position: fixed;
@@ -2023,6 +2002,25 @@
     background: var(--color-sheet);
     font-family: var(--font-sans);
   }
+  .meeting-bar-room {
+    visibility: hidden;
+    pointer-events: none;
+  }
+  /* Hangs in the 24px the bar keeps below it; notes scrolled under the bar pass behind it, not through it. */
+  .meeting-bar .meeting-line-over {
+    position: absolute;
+    top: 100%;
+    left: -1px;
+    right: -1px;
+    box-sizing: border-box;
+    height: 24px;
+    margin-top: 1px;
+    padding: 2px 16px 0;
+    background: var(--color-sheet);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   .meeting-line {
     padding: 0 4px 2px;
   }
@@ -2470,7 +2468,6 @@
       line-height: var(--text-body--line-height);
     }
 
-    /* Lists: the text keeps the edge; bullets and numbers hang in the margin. */
     :where(ul, ol) {
       margin: 0;
       padding: 0;
@@ -2497,7 +2494,51 @@
       padding-left: 24px;
     }
 
-    /* A checklist: the box hangs in the margin like a bullet; a done item is struck through. */
+    /*
+     * A Mind's own lists (the editor's blocks carry a data-id) are indented as DESIGN.md says. Their
+     * markers are drawn on the first paragraph, where its own line height centres them; a list
+     * a node view draws, and an Answer in the panel, keep the browser's.
+     */
+    &:not(.assistant-answer-text) {
+      :where(ul, ol)[data-id] {
+        padding-left: 48px;
+        list-style: none;
+      }
+      :where(ul, ol)[data-id] > li {
+        position: relative;
+      }
+      :where(ul, ol)[data-id] > li > p:first-child::before {
+        position: absolute;
+        color: var(--color-ink-secondary);
+        pointer-events: none;
+      }
+      ol[data-id] > li > p:first-child::before {
+        content: counter(list-item) ".";
+        right: calc(100% + 8px);
+        white-space: nowrap;
+      }
+      ul[data-id] > li:not([data-checked]) > p:first-child::before {
+        content: "";
+        left: -24px;
+        margin-top: calc(0.5lh - 3px);
+        box-sizing: border-box;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-ink-secondary);
+      }
+      ul[data-id] ul[data-id] > li:not([data-checked]) > p:first-child::before {
+        border: 1.5px solid var(--color-ink-secondary);
+        background: none;
+      }
+      ul[data-id] ul[data-id] ul[data-id] > li:not([data-checked]) > p:first-child::before {
+        border: none;
+        border-radius: 0;
+        background: var(--color-ink-secondary);
+      }
+    }
+
+    /* A checklist: the box sits where a bullet does; a done item is struck through. */
     ul:has(> li[data-checked]) {
       list-style: none;
     }
@@ -3878,6 +3919,19 @@
       color: var(--color-ink);
     }
   }
+  .mind-editor .applied-line .edit-pending-dot {
+    margin-right: 0;
+  }
+  .mind-editor .applied-line--problem {
+    color: var(--color-ink-meta);
+  }
+  .applied-problem-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-attention);
+  }
   .mind-editor .applied-restore-holder {
     margin-inline-start: 6px;
     font-family: var(--font-sans);
@@ -4984,10 +5038,16 @@
   }
 
   /* The menu under selected text: Turn into, the format buttons, and the AI section. */
+  .selection-menu-frame {
+    /* Over the fade that ends the page above the check badge and the count. */
+    z-index: 1;
+  }
   .selection-menu {
     width: 280px;
+    max-height: max(var(--selection-menu-room, 100vh), 140px);
     padding: 4px;
     border-radius: 10px;
+    overflow-y: auto;
   }
   .selection-turn {
     font-weight: 500;
@@ -5046,6 +5106,64 @@
     font-size: var(--text-meta);
     line-height: 16px;
     color: var(--color-ink-meta);
+  }
+  .selection-edit-foot {
+    position: sticky;
+    bottom: 0;
+    margin: 0 -4px -4px;
+    padding: 4px;
+    border-radius: 0 0 10px 10px;
+    background: var(--color-sheet);
+  }
+  .selection-edit {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    padding: 0 3px 0 10px;
+    border-radius: 6px;
+    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+
+    &:focus-within {
+      box-shadow: inset 0 0 0 1px var(--color-accent);
+    }
+  }
+  .selection-edit-input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    background: transparent;
+    font: inherit;
+    color: var(--color-ink);
+    outline: none;
+
+    &::placeholder {
+      color: var(--color-ink-placeholder);
+    }
+  }
+  .selection-edit-handoff {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .selection-problem {
+    padding: 4px 4px 0;
+  }
+  .selection-working {
+    width: 280px;
+    padding: 8px 12px;
   }
   /* The selection menu's Aa: font and size, alignment, spacing and indents, colour, raise. */
   .format-menu {
@@ -8757,6 +8875,7 @@
   }
   .comparison-action,
   .comparison-back,
+  .comparison-export,
   .comparison-add-question {
     display: inline-flex;
     flex: none;
@@ -9054,6 +9173,10 @@
     padding: 14px 16px 12px;
     border-bottom: 1px solid var(--color-rule);
   }
+  .compare-sheet-documents {
+    /* Drawn first, though after the Questions in the Tab order: Tab from a Question reaches select all. */
+    order: -1;
+  }
   .compare-sheet-heading {
     display: flex;
     align-items: center;
@@ -9069,6 +9192,24 @@
   .compare-sheet-count {
     flex: none;
     font-weight: 400;
+    color: var(--color-ink-meta);
+  }
+  .compare-sheet-scope {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+  .compare-sheet-select-all {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    accent-color: var(--color-ink);
+  }
+  .compare-sheet-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 16px;
     color: var(--color-ink-meta);
   }
   .compare-sheet-source {
@@ -9198,17 +9339,32 @@
   .compare-sheet-problem {
     padding: 0 16px 4px;
   }
+  .compare-sheet-estimate {
+    padding: 0 16px 8px;
+    text-align: end;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink);
+
+    &[aria-hidden="true"] {
+      visibility: hidden;
+    }
+  }
   .compare-sheet-foot {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 0 8px 8px 12px;
   }
+  .compare-sheet-ask {
+    padding: 0 8px 8px;
+  }
   .compare-sheet-chip {
     display: inline-flex;
     flex: none;
     align-items: center;
     gap: 6px;
+    margin-right: auto;
     height: 26px;
     padding: 0 4px 0 8px;
     border: 1px solid var(--color-rule);
@@ -9230,15 +9386,6 @@
       background: var(--color-hover);
       color: var(--color-ink);
     }
-  }
-  .compare-sheet-note {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 12px;
-    color: var(--color-ink-meta);
   }
   @container mind (width < 760px) {
     .compare-sheet-body {
@@ -9299,9 +9446,7 @@
   display: none;
 }
 
-/* While a tab or the assistant is dragged: no text is selected, and the pointer says so (last, so it wins). */
-body.tab-dragging,
-body.tab-dragging *,
+/* While the assistant is dragged: no text is selected, and the pointer says so (last, so it wins). */
 body.assistant-dragging,
 body.assistant-dragging * {
   cursor: grabbing;

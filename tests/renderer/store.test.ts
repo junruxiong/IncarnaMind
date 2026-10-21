@@ -306,11 +306,14 @@ describe("changes the User can take back", () => {
     await useUndo.getState().undo();
     expect(method("restore")).toHaveBeenCalledWith([{ kind: "document", id: "a" }]);
     await useUndo.getState().redo();
-    expect(method("deleteDocument")).toHaveBeenCalledTimes(2);
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(2);
   });
 
-  test("several Documents deleted together are one change, said by their count", async () => {
+  // protects=deleting several Documents is one call to the core and one change, said by their count (#1349); fails_when=the core is asked once per Document, which took 90 s for 1,700; no_claim=how long the core takes.
+  test("several Documents deleted together are one call and one change, said by their count", async () => {
     await useAppStore.getState().deleteDocuments(["a", "b"]);
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(1);
+    expect(method("deleteDocuments")).toHaveBeenCalledWith(["a", "b"]);
     expect(said(top())).toBe("Moved 2 Documents to Recently deleted");
     expect(named(top())).toBe("Delete 2 Documents");
     expect(useAppStore.getState().documents.map((each) => each.id)).toEqual(["c"]);
@@ -319,6 +322,82 @@ describe("changes the User can take back", () => {
       { kind: "document", id: "a" },
       { kind: "document", id: "b" },
     ]);
+  });
+
+  const slow = () => {
+    let finish: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    return { done, finish };
+  };
+  const note = () => useUndo.getState().line?.note?.(words);
+  const ids = () => useAppStore.getState().documents.map((each) => each.id);
+
+  // protects=a delete still going after a second says so where its result will show, until it is done, and its Undo puts every row back at once, in its place, before the core answers (#1349); fails_when=nothing shows meanwhile, the note outlives the delete, or the rows wait for the core; no_claim=how long the core takes.
+  test("a delete that takes longer than a second says so until it is done, and its Undo puts the rows back at once", async () => {
+    const deleting = slow();
+    method("deleteDocuments").mockReturnValue(deleting.done);
+    const deleted = useAppStore.getState().deleteDocuments(["a", "b"]);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(note()).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(note()).toBe("Moving 2 Documents to Recently deleted…");
+    deleting.finish();
+    await deleted;
+    expect(said(useUndo.getState().line?.change)).toBe("Moved 2 Documents to Recently deleted");
+    expect(ids()).toEqual(["c"]);
+
+    const restoring = slow();
+    method("restore").mockReturnValue(restoring.done);
+    const undone = useUndo.getState().undo();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ids()).toEqual(["a", "b", "c"]);
+    restoring.finish();
+    await undone;
+    expect(ids()).toEqual(["a", "b", "c"]);
+  });
+
+  // protects=an Undo the core refuses takes the rows it put back out again, and says why; fails_when=the rows stay though the Documents are still deleted; no_claim=none beyond protects.
+  test("an Undo the core refuses takes the rows out again", async () => {
+    await useAppStore.getState().deleteDocuments(["a", "b"]);
+    method("restore").mockRejectedValue(new Error("The folder was unlinked."));
+    await useUndo.getState().undo();
+    expect(ids()).toEqual(["c"]);
+    expect(useUndo.getState().line?.problem?.step).toBe("undo");
+  });
+
+  // protects=a second ⌘⌫ on the same Documents while the first delete runs finds nothing left to delete, and says nothing wrong (#1349); fails_when=the core is asked twice and the second fails with "There is no such Document"; no_claim=none beyond protects.
+  test("a second delete of the same Documents during the first does nothing", async () => {
+    const deleting = slow();
+    method("deleteDocuments").mockReturnValue(deleting.done);
+    const first = useAppStore.getState().deleteDocuments(["a", "b"]);
+    const second = useAppStore.getState().deleteDocuments(["a", "b"]);
+    deleting.finish();
+    await first;
+    await second;
+    expect(method("deleteDocuments")).toHaveBeenCalledTimes(1);
+    expect(said(useUndo.getState().line?.change)).toBe("Moved 2 Documents to Recently deleted");
+  });
+
+  // protects=⌘Z pressed while a delete is still running takes back that delete once it lands, never an earlier change (#1349); fails_when=the earlier change is undone and the Documents stay deleted; no_claim=none beyond protects.
+  test("⌘Z pressed while a delete is running takes back that delete, not an earlier change", async () => {
+    method("renameMind").mockResolvedValue({ ...mind, title: "Budget" });
+    await useAppStore.getState().renameMind("m", "Budget");
+    const deleting = slow();
+    method("deleteDocuments").mockReturnValue(deleting.done);
+    const deleted = useAppStore.getState().deleteDocuments(["a", "b"]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const undone = useUndo.getState().undo();
+    deleting.finish();
+    await deleted;
+    await undone;
+    expect(method("restore")).toHaveBeenCalledWith([
+      { kind: "document", id: "a" },
+      { kind: "document", id: "b" },
+    ]);
+    expect(method("renameMind")).toHaveBeenCalledTimes(1);
+    expect(ids()).toEqual(["a", "b", "c"]);
   });
 
   test("a Tag added is undone by putting each link back as it was, with who chose it", async () => {
@@ -418,57 +497,31 @@ describe("making a Mind", () => {
 
   const top = () => useUndo.getState().done.at(-1);
 
-  test("is one change, resolved to, which Undo sends to Recently deleted and Redo brings back", async () => {
-    const change = await useAppStore.getState().createMind();
-    expect(change).toBe(top());
-    expect(said(change)).toBe("Made a new Mind");
-    expect(named(change)).toBe("New Mind");
-    await useUndo.getState().undo();
-    expect(method("deleteMind")).toHaveBeenCalledWith("n");
-    await useUndo.getState().redo();
-    expect(method("restore")).toHaveBeenCalledWith([{ kind: "mind", id: "n" }]);
-    expect(useUndo.getState().done).toEqual([change]);
-  });
-
-  test("one started from Documents or a Folder is said by its name, in Chinese too", async () => {
-    method("createMind").mockResolvedValue({ ...made, title: "Tides" });
-    await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
+  test("a Mind made says nothing and leaves nothing for ⌘Z, however it is made: Delete takes it back", async () => {
+    const titled = { ...made, title: "Tides" };
+    const ways = [
+      () => useAppStore.getState().createMind(),
+      () => useAppStore.getState().createMind({ titled: true, folderId: "f" }),
+      () => {
+        method("createMind").mockResolvedValue(titled);
+        return useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
+      },
+    ];
+    for (const makeOne of ways) {
+      await makeOne();
+      expect(top()).toBeUndefined();
+      expect(useUndo.getState().line).toBeNull();
+    }
     expect(method("createMind")).toHaveBeenCalledWith({ title: "Tides", headed: true });
-    expect(said(top())).toBe("Started “Tides”");
-    useAppStore.setState({ settings: { language: "zh-CN" } as never });
-    await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
-    expect(said(top())).toBe("已新建“Tides”");
-    expect(named(top())).toBe("新建 Mind");
-    method("createMind").mockResolvedValue(made);
-    await useAppStore.getState().createMind();
-    expect(said(top())).toBe("已新建 Mind");
+    expect(method("deleteMind")).not.toHaveBeenCalled();
   });
 
-  test("its line follows a switch of language, and Undo still works", async () => {
+  test("a Mind made leaves the line of the change before it, and that change, as they were", async () => {
+    const before = { said: () => "Moved “Quarterly” to Finance", undo: async () => undefined };
+    useUndo.getState().push(before);
     await useAppStore.getState().createMind();
-    expect(said(top())).toBe("Made a new Mind");
-    expect(named(top())).toBe("New Mind");
-    useAppStore.setState({ settings: { language: "zh-CN" } as never });
-    expect(said(top())).toBe("已新建 Mind");
-    expect(named(top())).toBe("新建 Mind");
-    await useUndo.getState().undo();
-    expect(method("deleteMind")).toHaveBeenCalledWith("n");
-  });
-
-  test("a line with a name in it follows a switch of language, the name cut as before", async () => {
-    method("createMind").mockResolvedValue({ ...made, title: "Tides" });
-    await useAppStore.getState().createMind({ title: "Tides", startQuestion: true });
-    expect(said(top())).toBe("Started “Tides”");
-    useAppStore.setState({ settings: { language: "zh-CN" } as never });
-    expect(said(top())).toBe("已新建“Tides”");
-    const long = "Quarterly review of harbour dues and the wider coastal levy schedule 2026";
-    method("createMind").mockResolvedValue({ ...made, title: long });
-    await useAppStore.getState().createMind({ title: long, startQuestion: true });
-    const zh = said(top());
-    useAppStore.setState({ settings: { language: "en" } as never });
-    expect(zh).toMatch(/^已新建“Quarterly.*…/u);
-    expect(said(top())).toMatch(/^Started “Quarterly.*…/u);
-    expect(said(top())).not.toContain(long);
+    expect(top()).toBe(before);
+    expect(useUndo.getState().line?.change).toBe(before);
   });
 
   test("a Mind the core can't make is a problem, with no step to undo", async () => {
@@ -483,12 +536,12 @@ describe("making a Mind", () => {
   test("asking about Documents makes a Mind only when there is none to ask in", async () => {
     const scope = { folderIds: [], tagIds: [], documentIds: ["a"] };
     const bridge = { kind: "documents" as const, title: "a", count: 1, scope };
-    const change = await useAppStore.getState().askAbout(bridge);
-    expect(said(change)).toBe("Made a new Mind");
-    useUndo.setState({ done: [], undone: [], line: null });
-    useAppStore.setState({ minds: [made] });
-    expect(await useAppStore.getState().askAbout(bridge)).toBeUndefined();
+    await useAppStore.getState().askAbout(bridge);
+    expect(method("createMind")).toHaveBeenCalledTimes(1);
     expect(useUndo.getState().done).toEqual([]);
+    useAppStore.setState({ minds: [made] });
+    await useAppStore.getState().askAbout(bridge);
+    expect(method("createMind")).toHaveBeenCalledTimes(1);
   });
 });
 

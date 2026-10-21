@@ -134,13 +134,10 @@ export function DeletedSection() {
           </button>
         }
         count={rows.length}
+        tip={t("deleted.intro")}
         testId="deleted-section-head"
-      />
-      {open && (
-        <>
-          <p className="flex flex-wrap items-baseline gap-x-1 py-2 pl-14 text-[13px] text-ink-meta">
-            <span>{t("deleted.intro")}</span>
-            <span aria-hidden="true">·</span>
+        end={
+          open && (
             <button
               type="button"
               data-testid="deleted-empty"
@@ -151,7 +148,11 @@ export function DeletedSection() {
             >
               {t("deleted.emptyAction")}
             </button>
-          </p>
+          )
+        }
+      />
+      {open && (
+        <>
           {chosen.length > 0 && (
             <div
               role="toolbar"

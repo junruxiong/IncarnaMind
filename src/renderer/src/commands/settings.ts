@@ -17,6 +17,14 @@ export const settingsPageCommands: readonly Command[] = [
       }),
     ),
   {
+    id: "settings.localMode",
+    label: "embeddingProviders.localOnly.label",
+    keywords: ["settings.title", "command.settings.localMode.keywords"],
+    group: "open",
+    reversible: true,
+    run: () => useAppStore.getState().openSettings("privacy", "local-mode"),
+  },
+  {
     id: "settings.addProvider",
     label: "command.settings.addProvider",
     keywords: ["settings.title", "settings.pages.models"],

@@ -43,7 +43,7 @@
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { asGenerated } from "../../shared/aiText";
-import { answerBlocks, hasText } from "../../shared/answerBlocks";
+import { hasText, pageBlocks } from "../../shared/answerBlocks";
 import { runsByDefault } from "../../shared/approvalRules";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
@@ -56,7 +56,6 @@ import {
   namesOneOf,
   sourcesAsText,
 } from "../../shared/namedSources";
-import { withoutFraming } from "../../shared/noteBlocks";
 import {
   decisionsOn,
   pendingProposals,
@@ -226,6 +225,7 @@ import {
   connectorInstructions,
   documentInstructions,
   emptyMindNote,
+  exampleNote,
   LISTED_DOCUMENTS,
   type ListedDocuments,
   languageInstruction,
@@ -411,9 +411,9 @@ function lastAnswerOf(
   const at = earlier.findLastIndex((message) => message.kind === "answer");
   const answer = earlier[at];
   if (answer?.kind !== "answer") return null;
-  const blocks = withoutFraming(answerBlocks({ ...answer, status: "done" }));
-  if (!hasText(blocks)) return null;
   const question = earlier.slice(0, at).findLast((message) => message.kind === "question");
+  const blocks = pageBlocks(answer, question?.text ?? "");
+  if (!hasText(blocks)) return null;
   return {
     blocks,
     origin: { from: messageReference(conversationId, answer.id), question: question?.text ?? "" },
@@ -481,6 +481,8 @@ export interface AnswersOptions {
   mindFolder(mindId: string): string | null;
   /** The Document a Mind imported from Word was also added as (#720); null for none. */
   workingCopyOf?(mindId: string): string | null;
+  /** An example Mind's own Documents, by id; null for a Mind that isn't an example's. */
+  exampleDocuments?(mindId: string): string[] | null;
   /** What an Answer says when its Question's Search scope has no Documents to search. */
   emptyScopeAnswer(): string;
   /** The User's Skills. */
@@ -1002,6 +1004,11 @@ export function createAnswers(options: AnswersOptions) {
       originalId !== null && (documentIds === null || documentIds.includes(originalId))
         ? options.documents.searchableBySize([originalId])
         : [];
+    const exampleIds =
+      inAssistant && mindIn !== null ? (options.exampleDocuments?.(mindIn) ?? null) : null;
+    const exampleNames = exampleIds
+      ? options.documents.searchableBySize(exampleIds).map((each) => each.name)
+      : null;
     const passagesOf = (documentId: string) =>
       options.documents.passagesBetween(documentId, 0, Number.MAX_SAFE_INTEGER);
     const session = createCitationSession(
@@ -1989,6 +1996,7 @@ export function createAnswers(options: AnswersOptions) {
             sourcesInstructions(sourceTools),
             webInstructions(withWebTools),
             workingCopyNote(original?.name ?? null),
+            exampleNote(exampleNames),
             mindInstructions(withMindTools, route),
             commandInstructions(withCommandTools),
             emptyMindNote(withMindTools, focusedEmpty),

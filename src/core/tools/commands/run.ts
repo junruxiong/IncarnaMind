@@ -45,7 +45,7 @@ export type CommandsCore = Pick<
   | "deleteTag"
   | "addTagToDocuments"
   | "revertDocumentTags"
-  | "deleteDocument"
+  | "deleteDocuments"
   | "deleteMind"
   | "deletePermanently"
   | "listConversations"
@@ -474,7 +474,7 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
   "document.delete": async (input, { core }) => {
     const documents = await documentsOf(core, input.ids);
     const refs = documents.map((each) => ({ kind: "document" as const, id: each.id }));
-    const remove = () => deleteAll(refs, (id) => core.deleteDocument(id), core.restore);
+    const remove = () => core.deleteDocuments(refs.map((ref) => ref.id));
     const items = documents.map((each) => documentItem(each));
     return inApp("document.delete", items, null, async () => {
       await remove();
@@ -589,7 +589,7 @@ const CHECKERS: Readonly<Record<AssistantCommandId, Checker>> = {
               ? null
               : {
                   undo: async () => {
-                    await deleteAll(refs, (id) => core.deleteDocument(id), core.restore);
+                    await core.deleteDocuments(refs.map((ref) => ref.id));
                     return null;
                   },
                   redo: () => core.restore(refs),

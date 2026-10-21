@@ -111,6 +111,8 @@ import {
 import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
 import { pdfIsLocked, pdfOpensWith } from "./documents/extract";
 import { statIdentity } from "./documents/files";
+import { openWordPackage } from "./documents/formats/docxPackage";
+import { readPageSetup } from "./documents/formats/docxPages";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
@@ -138,7 +140,8 @@ import {
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
-import { createExports } from "./exports";
+import { createExports, type ExportsDependencies } from "./exports";
+import { createComparisonExport } from "./exports/comparisonExport";
 import { exportLabels } from "./exports/labels";
 import { renderMarkdown } from "./exports/markdown";
 import { setTextOnlyDocuments, textOnlyDocuments } from "./exports/sharedPictures";
@@ -179,6 +182,8 @@ import {
 import { firstLineOf, readBlocks, textStart, theirChangesReading } from "./mindText";
 import { createNoteAdding, insertBlocks } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
+import { PAPER as PAGE_PAPER } from "./pageDefaults";
+import { nativePageSetup } from "./pageSetup";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
@@ -410,6 +415,8 @@ export function createCore(adapters: CoreAdapters): Core {
   }
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
+  const systemPaper = () =>
+    paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages()));
   try {
     ensureWorkspace(db, now);
   } catch (error) {
@@ -1405,6 +1412,7 @@ export function createCore(adapters: CoreAdapters): Core {
     workingCopyOf: (mindId) => wordImports.originalOf(mindId)?.documentIds?.[0] ?? null,
     searchedScope,
     mindFolder: (mindId) => (mindExists(mindId) ? minds.get(mindId).folderId : null),
+    exampleDocuments: (mindId) => examples.documentsOf(mindId),
     unscopedDocuments: (mindId) => {
       const made = examples.made();
       if (made.documentIds.length === 0 || (mindId && made.mindIds.includes(mindId))) return null;
@@ -1554,7 +1562,7 @@ export function createCore(adapters: CoreAdapters): Core {
     chat: {
       providerExists: (providerId) => chat.exists(providerId),
       readiness: (choice) => chat.readiness(choice),
-      prepareModel: (choice) => chat.prepareModel(choice),
+      prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
       runsLocally: (choice) => chat.metered(choice)?.billing === "free",
     },
     answers,
@@ -1821,7 +1829,7 @@ export function createCore(adapters: CoreAdapters): Core {
     const marked = ownFiles.record(data, kind);
     for (const document of documents.getMany(marked)) events.emit("document.status", document);
   };
-  const mindExports = createExports({
+  const exportDependencies: ExportsDependencies = {
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
     liveDocuments: () => documents.list(),
@@ -1859,13 +1867,15 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     sharePageTextOnly: (mindId) => content.readSettings(mindId, textOnlyDocuments),
     printer: adapters.printer ?? null,
-    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
+    paper: systemPaper,
     ...(adapters.pictures && { pictures: adapters.pictures }),
     wordPackage: (mindId) => wordImports.packageOf(mindId),
     author: () => settings.get().author,
     log: adapters.log ?? silentLogger,
     now,
-  });
+  };
+  const mindExports = createExports(exportDependencies);
+  const comparisonExport = createComparisonExport(exportDependencies);
   const checkRecord = createCheckRecord({
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.peek(mindId, look),
@@ -1887,7 +1897,7 @@ export function createCore(adapters: CoreAdapters): Core {
     localMode: () => embedding.localOnly(),
     language: () => settings.get().language,
     printer: adapters.printer ?? null,
-    paper: () => paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages())),
+    paper: systemPaper,
     now,
   });
   const ownFileOf = (options: ExportMindOptions): OwnFileKind =>
@@ -1956,8 +1966,8 @@ export function createCore(adapters: CoreAdapters): Core {
       throw error;
     }
   };
-  const unlinkFolder = (linkedFolderId: string) => {
-    documents.linkedFolders.remove(linkedFolderId);
+  const unlinkFolder = (linkedFolderId: string, keep: readonly string[] = []) => {
+    documents.linkedFolders.remove(linkedFolderId, keep);
     outputs.forgetLinkedFolder(linkedFolderId);
   };
 
@@ -2524,7 +2534,6 @@ export function createCore(adapters: CoreAdapters): Core {
       id: transcriptionHost.origin,
       name: transcriptionHost.host === "huggingface.co" ? "Hugging Face" : transcriptionHost.host,
     },
-    // Where this copy transcribes.
     listed: () => transcriber !== undefined && transcriptionSource.files.length > 0,
   });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
@@ -3250,8 +3259,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return renamed;
     },
     deleteDocument: async (id) => {
-      await documents.delete(id);
-      activity.documentDeleted(id as string);
+      for (const deleted of await documents.delete(id)) activity.documentDeleted(deleted);
+    },
+    deleteDocuments: async (ids) => {
+      for (const deleted of await documents.delete(ids)) activity.documentDeleted(deleted);
     },
     retryDocument: async (id) => documents.retry(id),
     unlockDocument: async (input) => {
@@ -3300,7 +3311,8 @@ export function createCore(adapters: CoreAdapters): Core {
     listUnreadFiles: async (scope) => unreadIn(parseSearchScope(scope)),
     locateLinkedFolder: (linkedFolderId, path) =>
       documents.linkedFolders.locate(linkedFolderId, path),
-    removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
+    removeLinkedFolder: async (linkedFolderId, options) =>
+      unlinkFolder(linkedFolderId, options?.keep),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
     updateReference: async (documentId, patch) => references.update(documentId, patch),
     restoreReference: async (documentId, before, fields) =>
@@ -3949,6 +3961,15 @@ export function createCore(adapters: CoreAdapters): Core {
       const { fileName, data } = await checkRecord.file(mindId, format);
       return saveExport(fileName, data);
     },
+    saveComparisonExport: async (input) => {
+      const ref: Record<string, unknown> = isRecord(input) ? input : {};
+      const { fileName, data, unverifiedCitations } = comparisonExport.workbook(
+        ref.mindId,
+        ref.tableId,
+      );
+      const saved = await saveExport(fileName, data);
+      return saved.status === "saved" ? { ...saved, unverifiedCitations } : saved;
+    },
     saveSkillExport: async (skillId) => {
       const { fileName, data } = await skills.exportZip(skillId);
       return saveExport(fileName, data);
@@ -3993,6 +4014,13 @@ export function createCore(adapters: CoreAdapters): Core {
       await adapters.shell.openPath(path);
     },
     getMindStyle: async (mindId) => content.readSettings(minds.get(mindId).id, mindStyleOf),
+    getPageSetup: async (mindId) => {
+      const mind = minds.get(mindId);
+      const paper = systemPaper();
+      if (wordImports.originalOf(mind.id) === null) return nativePageSetup(paper);
+      const pkg = await openWordPackage(await wordImports.packageOf(mind.id));
+      return readPageSetup(pkg, PAGE_PAPER[paper]);
+    },
     setMindStyle: async (mindId, style) => {
       if (!isMindStyle(style)) throw new InvalidInputError({ key: "error.mindStyle.invalid" });
       const mind = writableMind(mindId);

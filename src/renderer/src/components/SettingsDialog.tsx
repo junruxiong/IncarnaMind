@@ -24,7 +24,6 @@ import { SuggestionSettings } from "./SuggestionSettings";
 import {
   buttonClass,
   dialogFrameClass,
-  hintClass,
   navRowClass,
   ruledListClass,
   sectionNoteClass,
@@ -287,13 +286,13 @@ function DataFolderSettings() {
         <button
           type="button"
           data-testid="open-logs-folder"
+          title={t("export.dataFolder.logs.tip")}
           onClick={() => void open(files.openLogsFolder())}
           className={buttonClass}
         >
           {t("export.dataFolder.openLogs")}
         </button>
       </div>
-      <p className={hintClass}>{t("export.dataFolder.logs")}</p>
     </section>
   );
 }

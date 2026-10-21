@@ -42,12 +42,12 @@ import { useUnreadFiles } from "../unreadFiles";
 import { FindSourcesPanel } from "./FindSourcesPanel";
 import { LibrarySelectionBar } from "./LibrarySelection";
 import { DeletedSection } from "./library/DeletedSection";
-import { DocumentMoveTo } from "./library/DocumentMoveTo";
 import { StarterFolders } from "./library/FolderForm";
 import { LibraryBar } from "./library/LibraryBar";
 import { LibraryEmpty } from "./library/LibraryEmpty";
 import { LibraryHeader } from "./library/LibraryHeader";
 import { LibrarySection } from "./library/LibrarySection";
+import { useFittingColumns } from "./library/useFittingColumns";
 import { ProblemLine } from "./ProblemLine";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
 import { UnreadFilesLine } from "./UnreadFilesLine";
@@ -83,6 +83,8 @@ export function LibraryPane() {
   const [facetFilter, setFacetFilter] = useState<FilterSelection>({});
   const field = useRef<HTMLInputElement>(null);
   const grid = useRef<HTMLDivElement>(null);
+  const page = useRef<HTMLDivElement>(null);
+  useFittingColumns(page);
 
   const groups = snapshot?.groups ?? NO_GROUPS;
   const assignments = useMemo(
@@ -235,7 +237,7 @@ export function LibraryPane() {
       aria-labelledby="library-tab"
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sheet text-ui text-ink"
     >
-      <div className="@container/page min-h-0 flex-1 overflow-y-auto">
+      <div ref={page} className="group/page @container/page min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1084px] pt-5 pr-8 pb-24 pl-11 @max-[680px]/page:pr-4 @max-[680px]/page:pl-9">
           <LibraryHeader
             count={documents.length}
@@ -373,7 +375,6 @@ export function LibraryPane() {
           {!narrowing && <DeletedSection />}
         </div>
       </div>
-      <DocumentMoveTo />
     </section>
   );
 }

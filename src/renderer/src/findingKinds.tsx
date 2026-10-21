@@ -13,6 +13,7 @@ import { TagDot } from "./components/TagColour";
 import { conversationLabel, openConversation, useConversations } from "./conversations";
 import { KIND_LABELS } from "./fileInfo";
 import { type FoundObject, findable } from "./finding";
+import { folderCounts } from "./libraryPage";
 import type { ObjectRef, Translate } from "./objects";
 import { useAppStore } from "./store";
 
@@ -123,11 +124,8 @@ findable.register({
   kind: "folder",
   group: { id: "foldersAndTags", title: "palette.group.foldersAndTags" },
   objects(t) {
-    const { library } = store();
-    const inFolder = new Map<string, number>();
-    for (const { groupId } of library?.assignments ?? []) {
-      if (groupId) inFolder.set(groupId, (inFolder.get(groupId) ?? 0) + 1);
-    }
+    const { library, documents } = store();
+    const inFolder = folderCounts(library?.groups ?? [], documents, library?.assignments ?? []);
     return (library?.groups ?? []).map(
       (folder): FoundObject => ({
         ref: { kind: "folder", id: folder.id },
@@ -137,7 +135,10 @@ findable.register({
       }),
     );
   },
-  subscribe: onStore((state) => state.library),
+  subscribe: onStore(
+    (state) => state.library,
+    (state) => state.documents,
+  ),
   open: (ref) => openWith("folder.open", ref),
 });
 
