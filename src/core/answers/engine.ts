@@ -395,6 +395,10 @@ export interface AnswerRequest {
    * known: requests are sent as they are.
    */
   window?: ContextWindow;
+  /** The most the model writes in one reply, in tokens, when the catalog says. */
+  maxOutput?: number;
+  /** The model needs the Tools in every request, the last step's too (`ModelFacts.toolsEveryRequest`). */
+  toolsEveryRequest?: boolean;
   /**
    * In structured output, ask the model once more for the quotes the check
    * doesn't find (see ./quoteRetry): a local model, never a cloud one.
@@ -584,9 +588,10 @@ export function searchToolDescription(languages: readonly DocumentLanguage[]): s
 const MARKER = /\[[\^=]\d{1,4}\]/;
 
 /**
- * A backstop: a step that has read the Documents and has written this much with no Citation
- * marker in it is a model running on, not an Answer (#1344). The last step is told to write and
- * capped (src/core/runs/aiSdkEngine.ts), so this should never cut.
+ * A backstop: a step before the last that has read the Documents and has written this much with no
+ * Citation marker in it is a model running on, not an Answer (#1344). The last step may write an
+ * Answer with no marker, as it is told no Citation can be recorded then; it is capped instead
+ * (src/core/runs/aiSdkEngine.ts).
  */
 const RUNAWAY_CHARS = 12_000;
 
@@ -1668,6 +1673,10 @@ async function* toolLoop(
     tools: runTools,
     maxSteps: stepsLeft,
     cacheKey: request.cacheKey,
+    lastStep: {
+      ...(request.maxOutput !== undefined && { tokens: request.maxOutput }),
+      ...(request.toolsEveryRequest && { keepTools: true }),
+    },
     gate: async (call) => {
       const tool = offered.get(call.tool);
       return tool && request.gate
@@ -1703,7 +1712,12 @@ async function* toolLoop(
         // A new step's text goes on from the last kept text in a new paragraph.
         if (stepText === "" && keptText !== "" && !/\s$/.test(keptText)) text = `\n\n${text}`;
         stepText += text;
-        if (searched && stepText.length > RUNAWAY_CHARS && !MARKER.test(stepText)) {
+        if (
+          searched &&
+          steps < maxSteps - 1 &&
+          stepText.length > RUNAWAY_CHARS &&
+          !MARKER.test(stepText)
+        ) {
           rambling.abort();
           break;
         }

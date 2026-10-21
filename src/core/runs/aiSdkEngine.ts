@@ -154,6 +154,7 @@ export function toToolSet(
   tools: readonly RunTool[],
   signal: AbortSignal,
   canCallAgain: () => boolean = () => true,
+  refused: () => boolean = () => false,
 ): ToolSet {
   const set: ToolSet = {};
   for (const each of tools) {
@@ -161,11 +162,13 @@ export function toToolSet(
       description: each.description,
       inputSchema: checkedSchema(each.inputSchema),
       execute: async (input, { abortSignal, toolCallId }) =>
-        each.call(isPlainObject(input) ? forTool(input, each.inputSchema) : {}, {
-          toolCallId,
-          signal: abortSignal ?? signal,
-          canCallAgain,
-        }),
+        refused()
+          ? NO_MORE_CALLS
+          : each.call(isPlainObject(input) ? forTool(input, each.inputSchema) : {}, {
+              toolCallId,
+              signal: abortSignal ?? signal,
+              canCallAgain,
+            }),
     });
   }
   return set;
@@ -306,17 +309,19 @@ function fromModelMessages(messages: readonly ModelMessage[]): RunMessage[] {
 }
 
 /**
- * What the last step is told. A model forced to write with `tool_choice: none`, though it wanted
- * another call, writes the call out as text (a tag, JSON, "Let me search…", "I need to record the
- * citations first") and may think for pages first, as Kimi K2.6 does (#1344). The Tools stay in the
- * request as they were: Anthropic refuses a thinking block once the tool list differs from the one
- * it was made with, which is what `none` does there.
+ * What the last step is told. A model that wanted another call writes it out as text (a tag, JSON,
+ * "Let me search…", "I need to record the citations first") when it may make none, and may think
+ * for pages first, as Kimi K2.6 does (#1344).
  */
 const LAST_STEP_NOTE =
   "You can make no more calls, and none can record a Citation now. Write the Answer now from what has been read, without Citation markers, and say plainly what you didn't check. Don't write a call, and don't say what you would do next.";
 
-/** The most the last step may write, its thinking included. */
+/** The most the last step may write, its thinking included, unless the model's own most is less. */
 const LAST_STEP_TOKENS = 8_000;
+
+/** What a call on the last step is answered with: it isn't made. */
+const NO_MORE_CALLS =
+  "No more calls are allowed: that was the last step. Write the Answer now from what has been read, and say plainly what you didn't check.";
 
 /** Messages with others put in where they were taken: `at` counts the messages before, without them. */
 function splice(
@@ -385,10 +390,13 @@ function failure(
 async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
   const { signal, window, maxSteps } = request;
   let canCallAgain = maxSteps > 2;
+  /** The step now drawn is one that must write: a call in it is refused. */
+  let writing = false;
   const tools = toToolSet(
     request.tools.map((each) => gated(each, request)),
     signal,
     () => canCallAgain && (window === undefined || window.canCallTools()),
+    () => writing,
   );
   const initial = toModelMessages(request.messages);
   /** Steering messages, where each was taken among the responses. */
@@ -402,7 +410,9 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
     temperature: request.temperature,
     providerOptions: cacheProviderOptions(request.cacheKey),
     stopWhen: [
-      stepCountIs(maxSteps) as StopCondition<ToolSet>,
+      // One more than `maxSteps`: a model that calls a Tool on the last step has it refused and
+      // gets one more call to write.
+      stepCountIs(maxSteps + 1) as StopCondition<ToolSet>,
       ({ steps }) => {
         const last = steps.at(-1);
         return (
@@ -432,6 +442,7 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
       // The last step must write; so must a step with no room left for a Tool's result.
       const noRoom = window !== undefined && !window.canCallTools();
       const write = stepNumber >= maxSteps - 1 || noRoom;
+      writing = write;
       canCallAgain = stepNumber + 1 < maxSteps - 1;
       if (!write) return { ...(messages && { messages }) };
       return {
@@ -439,9 +450,8 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
           ...(messages ?? [...initialMessages, ...splice(responseMessages, inserted)]),
           { role: "user" as const, content: LAST_STEP_NOTE },
         ],
-        // With no room for a result the Tools go, as they did; on the last step they stay (see above).
-        ...(noRoom && { toolChoice: "none" as const }),
-        maxOutputTokens: LAST_STEP_TOKENS,
+        ...((noRoom || !request.lastStep?.keepTools) && { toolChoice: "none" as const }),
+        maxOutputTokens: Math.min(LAST_STEP_TOKENS, request.lastStep?.tokens ?? LAST_STEP_TOKENS),
       };
     },
     abortSignal: signal,
