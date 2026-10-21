@@ -1788,6 +1788,15 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE chat_menu_models ADD COLUMN in_menu INTEGER NOT NULL DEFAULT 1;
     `,
   },
+  {
+    version: 102,
+    description: "A Meeting's notes filled in from its Transcript after Stop (#142)",
+    // JSON: the fill's state, mode, problem, and the ids of the Blocks it added, for Undo.
+    // NULL before Stop.
+    sql: `
+      ALTER TABLE meetings ADD COLUMN fill TEXT;
+    `,
+  },
 ];
 
 /**
