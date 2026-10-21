@@ -13,10 +13,9 @@ import type {
   Settings,
 } from "../../core/api";
 import { messageReference } from "../../core/references";
-import { answerBlocks } from "../../shared/answerBlocks";
+import { pageBlocks } from "../../shared/answerBlocks";
 import { type HelpShortcut, helpKeysOf, helpLabel, isHelpShortcut } from "../../shared/meetingHelp";
 import type { PanelState } from "../../shared/meetingPanel";
-import { withoutFraming } from "../../shared/noteBlocks";
 import { keysHere } from "./commands/keymap";
 import { openConversation, useConversations } from "./conversations";
 import { core, files } from "./core";
@@ -127,13 +126,11 @@ export async function addHelpToNotes(
   if (answer?.kind !== "answer" || answer.status !== "done") {
     throw new Error(translateNow("meetings.help.stillWriting"));
   }
+  const question = translateNow(helpLabel(help.kind));
   const { blockIds } = await core.addToNote({
     mindId: meeting.mindId,
-    blocks: withoutFraming(answerBlocks(answer)),
-    origin: {
-      from: messageReference(answer.conversationId, answer.id),
-      question: translateNow(helpLabel(help.kind)),
-    },
+    blocks: pageBlocks(answer, question),
+    origin: { from: messageReference(answer.conversationId, answer.id), question },
     model: answer.model,
   });
   return { mindId: meeting.mindId, blockIds };
