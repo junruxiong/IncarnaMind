@@ -80,7 +80,7 @@ function scaleChangeProblem(change: ScaleChange, language: Language): string {
 export const MAX_FIGURES_PER_CALL = 20;
 export const MAX_INPUTS_PER_FIGURE = 30;
 /** How many times one Answer may call `calculate`; later calls are refused, so the model answers. */
-const MAX_CALLS_PER_ANSWER = 3;
+const MAX_CALLS_PER_ANSWER = 5;
 
 const FIX_FIGURES = "Fix these with another calculate call:";
 
@@ -492,7 +492,7 @@ export function createCalculationSession(options: CalculationSessionOptions) {
       );
       if ("problem" in line || line.check().check !== "found")
         return `the unitQuote isn't word for word in ${quoted.passage}; copy the line that states the unit exactly, from the same Passage.`;
-      const statements = readStatedUnits(line.citation.quote, context);
+      const statements = readStatedUnits(line.citation.quote, context, true);
       if (statements.length === 0)
         return `the unitQuote "${line.citation.quote}" states no unit or scale; give the line that does, such as "单位：万元" or "in millions".`;
       const yen = figureContextOf(line.citation.quote, context.language).yen ?? context.yen;
@@ -728,11 +728,9 @@ export function createCalculationSession(options: CalculationSessionOptions) {
     // its own unit, which is the right one, rather than refused.
     if (!shown.ok && show.as !== null) {
       const own = showResult(result, { ...show, as: null });
-      if (own.ok) {
-        note += ` It is shown in its own unit: ${shown.message}`;
-        show = { ...show, as: null };
-        shown = own;
-      }
+      if (own.ok) note += ` It is shown in its own unit: ${shown.message}`;
+      show = { ...show, as: null };
+      shown = own;
     }
     if (!shown.ok) return { problems: [`${lead}: ${shown.message}`] };
 

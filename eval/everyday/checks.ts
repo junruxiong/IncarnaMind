@@ -26,10 +26,13 @@
  *   reply that was not asked again may speak of a message the User did read.
  * - **Only the text's dates**: every date the reply gives is one the
  *   Documents' text writes, or is named as a file's (./dates).
+ * - **A figure the numbers give is calculated**: asked for a difference of
+ *   figures it cites, the Answer has a Calculated figure with the result, and
+ *   never says it couldn't calculate it (#1444).
  */
 import { changeLogOf } from "../../src/core/answers/claimedChanges";
 import { toolTextIn } from "../../src/core/answers/toolText";
-import type { ConversationAnswer, MarkedCitation } from "../../src/core/api";
+import type { ConversationAnswer, MarkedCitation, MarkedFigure } from "../../src/core/api";
 import { markersWithoutCitation } from "../../src/shared/answerBlocks";
 import { datesNotInText } from "./dates";
 import type { ClaimVerdict } from "./judge";
@@ -52,12 +55,15 @@ export interface Expected {
   textDates?: boolean;
   /** Its reply is in the Question's language, whatever language the Documents are in (#892, #1273); quoted words don't count. */
   language?: "en" | "zh-CN";
+  /** It asks for a figure the Documents' numbers give: a Calculated figure shows a result matching this, and the reply never says it couldn't calculate (#1444). */
+  figure?: RegExp;
 }
 
 export interface RequestOutcome {
   expected: Expected;
   answer: Pick<ConversationAnswer, "text" | "toolCalls" | "steps"> & {
     citations: readonly Pick<MarkedCitation, "documentId" | "marker">[];
+    figures?: readonly Pick<MarkedFigure, "shown">[];
   };
   verdict: ClaimVerdict;
   /** The Documents the Citations it wrote into Minds quote, by id. */
@@ -90,7 +96,9 @@ export type RequestFailure =
   | { kind: "earlier"; said: string }
   | { kind: "unseen-attempt"; said: string }
   | { kind: "date-not-in-text"; dates: string[] }
-  | { kind: "wrong-language"; wanted: "en" | "zh-CN"; share: number };
+  | { kind: "wrong-language"; wanted: "en" | "zh-CN"; share: number }
+  | { kind: "no-figure"; wanted: string; shown: string[] }
+  | { kind: "gave-up"; said: string };
 
 const QUOTED = /“[^”]*”|"[^"]*"|「[^」]*」|『[^』]*』/g;
 const CITATION_MARKER = /\[\^\d+\]/g;
@@ -147,6 +155,19 @@ export function aboutAnUnseenAttempt(reply: string): string | null {
       .split(/(?<=[.!?])\s+|(?<=[。！？])|\n+/)
       .map((sentence) => sentence.trim())
       .find((sentence) => UNSEEN_ATTEMPT.test(sentence)) ?? null
+  );
+}
+
+const COULDNT_CALCULATE =
+  /\b(?:couldn't|could not|can't|cannot|unable to|wasn't able to) (?:calculate|compute|work out)\b|没能算出|没有算出|无法计算|未能计算|不能计算|没法计算/i;
+
+/** The first sentence that says a number couldn't be calculated. */
+export function givesUpOnCalculating(reply: string): string | null {
+  return (
+    reply
+      .split(/(?<=[.!?])\s+|(?<=[。！？])|\n+/)
+      .map((sentence) => sentence.trim())
+      .find((sentence) => COULDNT_CALCULATE.test(sentence)) ?? null
   );
 }
 
@@ -229,6 +250,14 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
       share: chineseShare(answer.text),
     });
   }
+  if (expected.figure) {
+    const shown = (answer.figures ?? []).map((figure) => figure.shown);
+    if (!shown.some((each) => expected.figure?.test(each))) {
+      failures.push({ kind: "no-figure", wanted: expected.figure.source, shown });
+    }
+    const gaveUp = givesUpOnCalculating(answer.text);
+    if (gaveUp) failures.push({ kind: "gave-up", said: gaveUp });
+  }
   return failures;
 }
 
@@ -261,6 +290,10 @@ export function failureLine(failure: RequestFailure): string {
       return `says something of an earlier try the User never saw: “${failure.said}”`;
     case "date-not-in-text":
       return `gives a date the Documents' text doesn't: ${failure.dates.join(", ")}`;
+    case "no-figure":
+      return `has no Calculated figure matching /${failure.wanted}/ (figures: ${failure.shown.length > 0 ? failure.shown.join(", ") : "none"})`;
+    case "gave-up":
+      return `says it couldn't calculate what its Citations give: “${failure.said}”`;
     case "wrong-language":
       return `is not written in ${failure.wanted === "en" ? "English" : "Chinese"}, the Question's language (${Math.round(failure.share * 100)}% of its letters are Chinese characters)`;
   }

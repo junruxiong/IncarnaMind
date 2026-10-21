@@ -285,7 +285,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
       system.split("\n\n").find((block) => block.startsWith("Never work out a number yourself")) ??
       "";
     expect(steer).toMatch(/call calculate/);
-    expect(steer.length).toBeLessThan(900);
+    expect(steer.length).toBeLessThan(1000);
     expect(model.doStreamCalls[0]?.tools?.map((tool) => tool.name)).toContain("calculate");
     // The model is told what each came to, with the numbers it read, in one line each.
     expect(told(model, "calculate")).toEqual([
@@ -878,7 +878,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
     );
   });
 
-  test("a marker given again replaces its figure, and the model is told; past three calls in one Answer, calculate is refused so the model answers", async () => {
+  test("a marker given again replaces its figure, and the model is told; past five calls in one Answer, calculate is refused so the model answers", async () => {
     const growth = (passages: ShownPassage[], formula: string): Call[] => [
       {
         tool: "calculate",
@@ -916,6 +916,8 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
         (passages) => growth(passages, "a / b - 1"),
         (passages) => growth(passages, "b / a - 1"),
         (passages) => growth(passages, "b / a - 1"),
+        (passages) => growth(passages, "b / a - 1"),
+        (passages) => growth(passages, "b / a - 1"),
         (passages) => growth(passages, "a / b - 1"),
       ],
       answer: "Revenue changed by [=1].",
@@ -928,7 +930,7 @@ describe("The calculate Tool", { timeout: 60_000 }, () => {
     expect(results[1]).toMatch(
       /^Recorded \[=1\] = -17\.0% \(\$1,231\.0 million ÷ \$1,482\.6 million − 1\)\. It replaces the earlier \[=1\] = 20\.4%: give each figure a marker of its own\./,
     );
-    expect(results[3]).toBe(
+    expect(results[5]).toBe(
       "You have called calculate enough for this Question: write the Answer now with the figures recorded, and say which numbers couldn't be calculated rather than working them out.",
     );
     expect(answer.figures).toMatchObject([
@@ -1696,4 +1698,107 @@ describe("A Calculated figure keeps the scale its inputs are worked in (#1442)",
       expect(answer.figures[0]?.shown).toBe(table.shown);
     },
   );
+});
+
+/** The reserves table of SAFE's workbook: each month's figures as text, under a Chinese and an English unit line. */
+function reservesBook(): Buffer {
+  const text = (ref: string, value: string) =>
+    `<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`;
+  const row = (at: number, cells: string[]) =>
+    `<row r="${at}">${cells.map((value, column) => (value ? text(`${"ABCD"[column]}${at}`, value) : "")).join("")}</row>`;
+  return xlsxPackage({
+    sheets: [
+      {
+        name: "Sheet1",
+        xml: `<sheetData>${[
+          row(1, ["官方储备资产"]),
+          row(2, ["Official reserve assets"]),
+          row(4, ["项目 Item", "2026.01", "", "2026.09"]),
+          row(5, ["", "亿美元", "亿SDR", "亿美元"]),
+          row(6, ["", "100million USD", "100million SDR", "100million USD"]),
+          row(8, ["1. 外汇储备", "33990.78 ", "24597.67 ", "34002.51 "]),
+        ].join("")}</sheetData>`,
+      },
+    ],
+  });
+}
+
+describe("The difference of two cited cells is calculated, not given up on (#1444)", {
+  timeout: 60_000,
+}, () => {
+  const RESERVES = { name: "官方储备资产（2026年）.xlsx", contents: reservesBook() };
+
+  /** What a model did against this table: a calculate call per step, each as given. */
+  function reserves(steps: Record<string, unknown>[], answer: string) {
+    return calculatingModel({
+      queries: ["外汇储备"],
+      steps: steps.map((figure) => (passages: ShownPassage[]): Call[] => {
+        const passage = passageOf(passages, "官方储备资产");
+        const input = (name: string, number: string, label: string) => ({
+          name,
+          label,
+          passage,
+          location: "Sheet1, row 8",
+          quote: number,
+          number,
+          ...(figure.unitQuote ? { unitQuote: figure.unitQuote } : {}),
+        });
+        const { unitQuote: _, ...rest } = figure;
+        return [
+          {
+            tool: "calculate",
+            input: {
+              figures: [
+                {
+                  marker: 1,
+                  label: "Change in foreign currency reserves",
+                  formula: "sep - jan",
+                  ...rest,
+                  inputs: [
+                    input("sep", "34002.51", "2026.09"),
+                    input("jan", "33990.78", "2026.01"),
+                  ],
+                },
+              ],
+            },
+          },
+        ];
+      }),
+      answer,
+    });
+  }
+
+  test("the English half of a bilingual unit line, '100million USD', states the scale; a Chinese Answer shows 11.73亿美元", async () => {
+    const model = reserves(
+      [{ unitQuote: "100million USD", as: "number" }],
+      "9月末比1月末增加了[=1]。",
+    );
+    const { core } = await setUpCalculating(model, [RESERVES]);
+
+    const { answer } = await askAndRead(core, "9月末外汇储备与1月末相比变化了多少？");
+
+    expect(answer.figures).toMatchObject([{ value: 1_173_000_000, shown: "11.73亿美元" }]);
+    expect(calculateCall(answer)).toMatchObject({ resultCount: 1 });
+  });
+
+  test("a figure refused for its scale says so, not for a way of showing it it has already dropped; five calls are allowed", async () => {
+    const model = reserves(
+      [
+        { unitQuote: "100million USD", as: "number", scale: "亿" },
+        { unitQuote: "100million USD", as: "number", scale: "billion", decimals: 2 },
+      ],
+      "The reserves rose by [=1].",
+    );
+    const { core } = await setUpCalculating(model, [RESERVES]);
+
+    const { answer } = await askAndRead(
+      core,
+      "How much did the reserves change from January to September?",
+    );
+
+    const [first] = told(model, "calculate");
+    expect(first).toContain("scale must be one of");
+    expect(first).not.toContain("can't be shown as a number");
+    expect(answer.figures).toMatchObject([{ value: 1_173_000_000, shown: "$1.17 billion" }]);
+  });
 });

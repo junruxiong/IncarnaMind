@@ -16,7 +16,7 @@ import type { EvalDocument } from "../lib/evaluationSet";
 import { openLibrary } from "../lib/library";
 import { createLog, type Log } from "../lib/log";
 import { createWorkerCrossEncoder } from "../lib/rerank";
-import { type CaseResult, fetchPapers, judgeOf, reports, runCase } from "./asking";
+import { type CaseResult, fetchPapers, fetchReserves, judgeOf, reports, runCase } from "./asking";
 import { CASES, type EverydayCase, floorOf, type LibraryName } from "./cases";
 import { failureLine } from "./checks";
 import { writeDatedDocuments } from "./dated";
@@ -39,11 +39,12 @@ async function runModel(
     papers: await fetchPapers(config.cacheDir, log),
     reports: await reports(),
     dated: await writeDatedDocuments(datedFolder),
+    reserves: await fetchReserves(config.cacheDir, log),
   };
   const judge = createAiSdkChatModel({ ...chatModelSpecOf(judging), thinking: "off" });
   const model = `${chat.kind}/${chat.modelId}`;
   const results: CaseResult[] = [];
-  for (const name of ["papers", "reports", "dated"] as const) {
+  for (const name of ["papers", "reports", "dated", "reserves"] as const) {
     const wanted = cases.filter((each) => each.library === name);
     if (wanted.length === 0) continue;
     const watch = watchReasks();
