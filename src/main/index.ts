@@ -342,6 +342,7 @@ app.whenReady().then(async () => {
     rendererUrl,
     appWindows,
     trusted: isFromOurRenderer,
+    mac: process.platform === "darwin",
     log: logger,
     testHooks,
   });
