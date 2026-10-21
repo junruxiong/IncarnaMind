@@ -47,7 +47,7 @@ import {
 import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
-import { errorMessage } from "./errors";
+import { describeError, errorMessage } from "./errors";
 import { languageNow } from "./i18n";
 import {
   createLayoutSlice,
@@ -422,7 +422,6 @@ const linkSteps = new Map<Undoable, LinkStep>();
 const inside = (folder: string, path: string) =>
   path !== folder && (path.startsWith(`${folder}/`) || path.startsWith(`${folder}\\`));
 
-/** Moves the link steps' folders, and the folders they merged, from where a folder was to where it is now. */
 function moveLinkSteps(from: string, to: string): void {
   const moved = (path: string) =>
     path === from || inside(from, path) ? to + path.slice(from.length) : path;
@@ -537,7 +536,21 @@ export const useAppStore = create<AppState>()((set, get) => {
     if (!now) throw new UndoRefused((t) => t("error.linkedFolder.notFound"), null);
     if (now.path !== link.path) moveLinkSteps(link.path, now.path);
     // A merged folder that can't be linked again refuses the Undo before anything changes.
-    for (const inner of link.before.linkedFolders) await core.previewLinkedFolder(inner.path);
+    for (const inner of link.before.linkedFolders) {
+      try {
+        await core.previewLinkedFolder(inner.path);
+      } catch (error) {
+        if (describeError(error).wording?.key !== "error.path.noFolder") throw error;
+        // Its own link's Undo could only be refused too.
+        for (const [step, other] of linkSteps) {
+          if (other.path !== inner.path) continue;
+          linkSteps.delete(step);
+          useUndo.getState().withdraw(step);
+        }
+        const name = linkedFolderName(inner.path);
+        throw new UndoRefused((t) => t("undo.linkedFolder.mergedGone", { name }), null);
+      }
+    }
     await core.removeLinkedFolder(now.id, { keep: link.before.documentIds });
     // The Linked folders it merged are linked again, their Documents keeping their ids.
     for (const inner of link.before.linkedFolders) {
