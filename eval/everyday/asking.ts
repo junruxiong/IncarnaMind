@@ -422,6 +422,7 @@ export async function runCase(
     expected: each.expected,
     answer,
     verdict,
+    askedFrom: mind?.id ?? null,
     citedInMinds,
     changedBlocks,
     addedBlocks,
