@@ -9,7 +9,7 @@
  */
 import * as Y from "yjs";
 import { citationState, type LiveDocument } from "../../shared/citations";
-import { type ClaimCheckShown, claimCheckShown } from "../../shared/claimChecks";
+import { claimCheckShown, type SentenceResult, sentenceResultOf } from "../../shared/claimChecks";
 import { readProposalAttribute } from "../../shared/proposals";
 import { comparableSentence } from "../../shared/sentences";
 import { toolCallsOf } from "../../shared/toolCalls";
@@ -101,22 +101,6 @@ export interface SentenceCounts {
 
 export const SENTENCE_WORDS = 12;
 
-/** A checked sentence's result as the statement lists it: a count's key, or "changed" once its words were edited. */
-export type SentenceResult = keyof SentenceCounts | "changed";
-
-function resultOf(shown: ClaimCheckShown): SentenceResult | null {
-  switch (shown.state) {
-    case "checking":
-      return null;
-    case "needs-recheck":
-      return shown.why === "edited" ? "changed" : "needsRecheck";
-    case "not-checked":
-      return "notChecked";
-    default:
-      return shown.state;
-  }
-}
-
 /** One sentence checked against the Documents, with the latest result of its check. */
 export interface CheckedSentence {
   /** Its first words, with "…" when it goes on, as it reads in the Mind now. */
@@ -163,7 +147,7 @@ export const totalCitations = (counts: CitationCounts) => sum({ ...counts });
 export const totalSentences = (counts: SentenceCounts) => sum({ ...counts });
 
 /** Every inline run of text in some Blocks, a run being what a paragraph, a heading or a cell holds. */
-function groupsOf(blocks: readonly Block[]): Inline[][] {
+export function groupsOf(blocks: readonly Block[]): Inline[][] {
   return blocks.flatMap((block): Inline[][] => {
     if (block.inserted) return [];
     switch (block.kind) {
@@ -186,7 +170,7 @@ function groupsOf(blocks: readonly Block[]): Inline[][] {
 }
 
 /** A Block a change still waiting would add, which isn't the Mind's until it is accepted. */
-const isProposed = (element: Y.XmlElement) =>
+export const isProposed = (element: Y.XmlElement) =>
   readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE))?.kind === "insert";
 
 function placeIds(
@@ -337,7 +321,7 @@ export function readFigures(sources: FigureSources): AiUseFigures {
   for (const { check, sentence } of checkedSentences(fragment)) {
     requests.push(check.request);
     const shown = claimCheckShown(check, { text: sentence, versions, folderId: sources.folderId });
-    const result = resultOf(shown);
+    const result = sentenceResultOf(shown);
     if (!result) continue;
     sentences[result === "changed" ? "needsRecheck" : result]++;
     const quoted = firstWords(comparableSentence(sentence), SENTENCE_WORDS);

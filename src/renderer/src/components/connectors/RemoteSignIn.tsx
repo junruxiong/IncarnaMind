@@ -168,7 +168,9 @@ export function ClientForm({
       onSubmit={(event) => void submit(event)}
       className="mt-2 flex flex-col gap-2"
     >
-      <p className={hintClass}>{t("remoteConnectors.client.hint")}</p>
+      <p className={hintClass}>
+        {t("remoteConnectors.client.hint")} {t("remoteConnectors.client.redirect")}
+      </p>
       <label className={fieldLabelClass}>
         {t("remoteConnectors.client.id")}
         <input

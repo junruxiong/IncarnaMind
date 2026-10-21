@@ -52,6 +52,13 @@ export const newFolderCommands: readonly Command[] = [
     },
   },
   {
+    id: "folder.starters",
+    label: "library.chooseStarters",
+    group: "main",
+    reversible: true,
+    run: () => store().openLibrary("starters"),
+  },
+  {
     id: "folder.newWith",
     label: (ctx, t) => {
       const chosen = chosenBy(ctx);

@@ -16,10 +16,12 @@ import {
   menuCommands,
   mindWrittenBefore,
   motionSettled,
+  nameMind,
   newMind,
+  openPageMenu,
   removeDataFolder,
+  setLanguage,
   setWindowSize,
-  showFolders,
   showSourceLocations,
   sidebarFolder,
   useLocalChatModel,
@@ -139,15 +141,16 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     { question: "When do spring tides happen?", answer: "At new moon and at full moon." },
   ]);
   await newMind(window);
-  await window.getByTestId("mind-title").fill("Cited notes");
+  await nameMind(window, "Cited notes");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await addToNote(window, await askInAssistant(window, "When do spring tides happen?"));
   await expect(editor.getByTestId("citation")).toHaveCount(1);
   await newMind(window);
 
-  // A Mind: Open, Open to the side; Export as… (the last format first), Export options…; Move to…,
-  // New Folder with this Mind; Rename; then Delete after a rule.
+  // A Mind: Open, Open in new tab; Export… (one item, which opens the Export button's menu),
+  // the AI use statement and check record; Move to…, New Folder with this Mind; Rename; then
+  // Delete after a rule.
   const mind = window.getByTestId("mind-row").first();
   const mindMenu = await sameFromBothWays(
     window,
@@ -158,21 +161,18 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   );
   expect(mindMenu).toEqual([
     "mind.open",
-    "mind.openSide",
+    "mind.openTab",
     "—",
     "mind.outline",
-    "mind.export",
-    "mind.exportAs.pdf",
-    "mind.exportAs.source-pack",
-    "mind.exportAs.html",
-    "mind.exportAs.share-page",
-    "mind.exportAs.markdown",
-    "mind.exportOptions",
+    "mind.exportMenu",
     "mind.aiUseStatement",
+    "mind.checkRecord.pdf",
+    "mind.checkRecord.csv",
     "mind.history",
-    "mind.checkAll",
+    "mind.check",
     "mind.checkContradictions",
     "mind.citationStyle",
+    "mind.style",
     "skill.fromMind",
     "—",
     "mind.moveTo",
@@ -205,6 +205,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "document.startMind",
     "document.dontCite",
     "—",
+    "document.moveTo",
     "folder.newWith",
     "—",
     "document.tags",
@@ -243,11 +244,12 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "folder.rename",
     "—",
+    "file.info",
+    "—",
     "folder.delete",
   ]);
 
-  // A Tag, in the sidebar's Tags view.
-  await window.getByTestId("browse-views").getByRole("button", { name: "Tags" }).click();
+  // A Tag, in the sidebar's Tags section.
   const tag = window.getByTestId("sidebar-tag").first();
   const tagMenu = await sameFromBothWays(
     window,
@@ -257,9 +259,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     tag.getByTestId("tag-actions"),
   );
   expect(tagMenu).toEqual(["tag.open", "—", "tag.manage", "tag.rename", "—", "tag.delete"]);
-  await showFolders(window);
 
-  // A Linked folder, in Folders on disk.
+  // A Linked folder, in the Linked folders section.
   await linkFolderFromSidebar(app, window, library);
   await showSourceLocations(window);
   const linked = linkedFolderRow(window, "Library");
@@ -282,7 +283,6 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "—",
     "linkedFolder.unlink",
   ]);
-  await showFolders(window);
 
   // A tab: its own actions, then Close and Close other tabs last. The keyboard opens the same menu
   // as the right-click, its ⋯ being out of sight in the tab.
@@ -290,27 +290,24 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await rightClick(window, tab);
   const tabMenu = tab.getByTestId("tab-actions");
   const byRightClick = await menuCommands(tabMenu);
-  // Its Mind's items first, then the tab's own.
-  expect(byRightClick.slice(0, 15)).toEqual([
+  // Its Mind's items first, then the tab's own, and Delete last.
+  expect(byRightClick.slice(0, 11)).toEqual([
     "mind.outline",
-    "mind.export",
-    "mind.exportAs.pdf",
-    "mind.exportAs.source-pack",
-    "mind.exportAs.html",
-    "mind.exportAs.share-page",
-    "mind.exportAs.markdown",
-    "mind.exportOptions",
+    "mind.exportMenu",
     "mind.aiUseStatement",
+    "mind.checkRecord.pdf",
+    "mind.checkRecord.csv",
     "mind.history",
-    "mind.checkAll",
+    "mind.check",
     "mind.checkContradictions",
+    "mind.style",
     "—",
-    "mind.delete",
-    "—",
+    "tab.split",
   ]);
+  expect(byRightClick.slice(-2)).toEqual(["—", "mind.delete"]);
   expect(byRightClick.indexOf("tab.rename")).toBeLessThan(byRightClick.indexOf("tab.close"));
   expect(byRightClick.indexOf("tab.close")).toBeLessThan(byRightClick.indexOf("tab.closeOthers"));
-  // Close and its kin end the menu, after a rule.
+  // Close and its kin come before Delete, after a rule.
   expect(byRightClick[byRightClick.indexOf("tab.close") - 1]).toBe("—");
   await window.keyboard.press("Escape");
   await expect(tabMenu).toBeHidden();
@@ -373,8 +370,8 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
     await expect(menu.getByTestId("mind.open")).toBeFocused();
     await expect.poll(() => ringShows(menu.getByTestId("mind.open"))).toBe(true);
     await window.keyboard.press("ArrowDown");
-    await expect(menu.getByTestId("mind.openSide")).toBeFocused();
-    await expect.poll(() => ringShows(menu.getByTestId("mind.openSide"))).toBe(true);
+    await expect(menu.getByTestId("mind.openTab")).toBeFocused();
+    await expect.poll(() => ringShows(menu.getByTestId("mind.openTab"))).toBe(true);
     await expect.poll(() => ringShows(menu.getByTestId("mind.open"))).toBe(false);
     await window.keyboard.press("ArrowUp");
     await window.keyboard.press("ArrowUp");
@@ -385,14 +382,17 @@ test("the context-menu key and Shift+F10 open the focused row's menu; arrows mov
     await expect(row).toBeFocused();
   }
 
-  // Enter runs the focused item: Export options… opens the options sheet for this Mind.
+  // Enter runs the focused item: Export… opens the Export button's menu for this Mind, whose
+  // Export options… opens the sheet.
   await row.focus();
   await window.keyboard.press("Shift+F10");
-  for (let step = 0; step < 9; step++) await window.keyboard.press("ArrowDown");
-  await expect(menu.getByTestId("mind.exportOptions")).toBeFocused();
+  for (let step = 0; step < 3; step++) await window.keyboard.press("ArrowDown");
+  await expect(menu.getByTestId("mind.exportMenu")).toBeFocused();
   await window.keyboard.press("Enter");
-  await expect(window.getByTestId("export-dialog")).toBeVisible();
+  await expect(window.getByTestId("export-menu")).toBeVisible();
   await expect(menu).toBeHidden();
+  await window.getByTestId("export-options").click();
+  await expect(window.getByTestId("export-dialog")).toBeVisible();
   await window.keyboard.press("Escape");
   await expect(window.getByTestId("export-dialog")).toBeHidden();
   await app.close();
@@ -420,20 +420,17 @@ test("each item shows its shortcut as the system writes it, and the labels are i
   await rightClick(window, mind.getByTestId("mind-list-item"));
   await expect(menu.getByRole("menuitem")).toHaveText([
     "打开",
-    "在侧边打开",
+    "在新标签页中打开",
     /^大纲(⌥⌘L|Ctrl\+Alt\+L)$/,
-    /^导出为 Word（\.docx）(⇧⌘E|Ctrl\+Shift\+E)$/,
-    "导出为 PDF",
-    "导出为 PDF 引用页面合集",
-    "导出为 HTML",
-    "导出为可分享的网页（.html）",
-    "导出为 Markdown（.md）",
-    "导出选项…",
+    "导出…",
     "导出 AI 使用声明",
+    "将核对记录导出为 PDF",
+    "将核对记录导出为 CSV",
     "历史版本",
-    "核对整个 Mind",
+    "核对此 Mind",
     "检查矛盾",
     "引用格式…",
+    "样式…",
     "做成技能",
     /^移动到…(⇧⌘M|Ctrl\+Shift\+M)$/,
     /^新建文件夹并放入此 Mind(⌃⌘N)?$/,
@@ -520,7 +517,6 @@ test("a Document's Tags…, a Folder's Edit description and a Tag's Rename and D
   await expect(window.getByTestId("library").locator("form input").first()).toHaveValue("Finance");
   await expect(window.getByTestId("library").locator("form textarea")).toHaveValue("Invoices");
 
-  await window.getByTestId("browse-views").getByRole("button", { name: "Tags" }).click();
   const tag = window.getByTestId("sidebar-tag").filter({ hasText: "Tides" });
   await rightClick(window, tag.getByTestId("row-text"));
   await tag.getByTestId("tag.rename").click();
@@ -576,3 +572,109 @@ test("a menu opens at once while another is closing, and a right-click on anothe
   await expect(secondMenu).toBeHidden();
   await app.close();
 });
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`the sidebar's, the tab's and the page's Mind menus have one Export… and no format rows, fit at 900px tall without scrolling and end with Delete; Export… opens the Export button's menu (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, 1440, 900);
+    await newMind(window);
+    await nameMind(window, "Harbour survey");
+    await window.getByTestId("mind-editor").click();
+    await window.keyboard.type("Spring tides come twice a month.");
+    const row = window.getByTestId("mind-row").first();
+    const tab = window.getByRole("tab", { selected: true }).first();
+    const exportLabel = language === "en" ? "Export…" : "导出…";
+
+    const surfaces: readonly [string, () => Promise<Locator>][] = [
+      [
+        "sidebar",
+        async () => {
+          await rightClick(window, row.getByTestId("mind-list-item"));
+          return row.getByTestId("mind-actions");
+        },
+      ],
+      [
+        "tab",
+        async () => {
+          await rightClick(window, tab);
+          return tab.getByTestId("tab-actions");
+        },
+      ],
+      ["page", () => openPageMenu(window)],
+    ];
+    for (const [name, open] of surfaces) {
+      const menu = await open();
+      const items = menu.getByRole("menuitem");
+      await expect(items.first()).toBeVisible();
+      const ids = await items.evaluateAll((all) =>
+        all.map((each) => each.getAttribute("data-testid")),
+      );
+      expect(
+        ids.filter((id) => id === "mind.exportMenu"),
+        name,
+      ).toHaveLength(1);
+      expect(
+        ids.filter(
+          (id) =>
+            id?.startsWith("mind.exportAs") || id === "mind.export" || id === "mind.exportOptions",
+        ),
+        name,
+      ).toEqual([]);
+      await expect(menu.getByTestId("mind.exportMenu"), name).toContainText(exportLabel);
+      // Delete is the last item (the page's counts and switch follow it, outside the list).
+      expect(ids.at(-1), name).toBe("mind.delete");
+      if (name === "page") {
+        // The Mind is open on this page: nothing to open it with.
+        expect(ids, name).not.toContain("mind.open");
+        expect(ids, name).not.toContain("mind.openTab");
+      }
+      // One name per way of opening: the Mind's menu says Open and Open in new tab, with no keys,
+      // the tab's has one Split to the right with its keys, and none says "Open to the side".
+      const texts = await items.allTextContents();
+      expect(texts.join("\n"), name).not.toMatch(/Open to the side|在旁边打开|在侧边打开/);
+      if (name === "sidebar") {
+        expect(texts.slice(0, 2), name).toEqual(
+          language === "en" ? ["Open", "Open in new tab"] : ["打开", "在新标签页中打开"],
+        );
+      }
+      if (name === "tab") {
+        expect(
+          ids.filter((id) => id === "tab.split"),
+          name,
+        ).toHaveLength(1);
+        await expect(menu.getByTestId("tab.split"), name).toHaveText(
+          language === "en"
+            ? /^Split to the right(⌥⌘\\|Ctrl\+Alt\+\\)$/
+            : /^向右拆分(⌥⌘\\|Ctrl\+Alt\+\\)$/,
+        );
+      }
+      expect(ids.length, name).toBeLessThanOrEqual(17);
+      // It fits: no scrollbar, and inside the window.
+      const fits = await menu.evaluate((element) => ({
+        scrolls: element.scrollHeight > element.clientHeight + 1,
+        bottom: element.getBoundingClientRect().bottom,
+      }));
+      expect(fits.scrolls, name).toBe(false);
+      expect(fits.bottom, name).toBeLessThanOrEqual(900);
+      await screenshot(window, `menu-mind-${name}-${language}`);
+      await window.keyboard.press("Escape");
+      await expect(menu, name).toBeHidden();
+    }
+
+    // Export… opens the Export button's own short menu, from each.
+    for (const [name, open] of surfaces) {
+      const menu = await open();
+      await menu.getByTestId("mind.exportMenu").click();
+      const exportMenu = window.getByTestId("export-menu");
+      await expect(exportMenu, name).toBeVisible();
+      await expect(menu, name).toBeHidden();
+      await expect(exportMenu.getByRole("menuitem"), name).toHaveCount(5);
+      await window.keyboard.press("Escape");
+      await expect(exportMenu, name).toBeHidden();
+    }
+    await app.close();
+  });
+}

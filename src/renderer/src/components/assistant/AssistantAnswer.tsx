@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { ConversationAnswer, ConversationQuestion } from "../../../../core/api";
+import { answerBlocks, hasText } from "../../../../shared/answerBlocks";
 import type { NodeJSON } from "../../../../shared/blockJson";
-import { answerBlocks, hasText } from "../../answerBlocks";
 import { useAnswers } from "../../answers";
 import { useAnswerWait } from "../../answerWait";
 import { useApprovals, waitingFor } from "../../approvals";
@@ -17,6 +17,7 @@ import { AskProblem } from "../../editor/AskProblem";
 import { PlanLimitLine } from "../../editor/PlanLimitLine";
 import { useT } from "../../i18n";
 import { useStoppedByPlanLimit } from "../../planLimits";
+import { useQuestions } from "../../questions";
 import { useScopeEmpty } from "../../scopeDocuments";
 import { useAppStore } from "../../store";
 import { useUnreadFiles } from "../../unreadFiles";
@@ -25,8 +26,12 @@ import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
-import { UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
+import { AskedLines } from "./AskCall";
+import { NoMindToolsLine, UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
+import { CommandsCard } from "./CommandsCard";
+import { CoverageLine, WrittenFromLine } from "./CoverageLines";
 import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
+import { SelfCheckLines } from "./SelfCheckLines";
 
 /** What adding an Answer needs from the thread around it. */
 export interface AnswerKeeping {
@@ -50,12 +55,15 @@ export function AssistantAnswer({
   question,
   sought,
   keeping,
+  askedAgain,
 }: {
   answer: ConversationAnswer;
   question: ConversationQuestion | undefined;
   /** A link back from a Note led here: it is flashed. */
   sought: boolean;
   keeping: AnswerKeeping;
+  /** It was asked again with this many Documents an earlier Answer didn't use. */
+  askedAgain?: number;
 }) {
   const t = useT();
   const { text, citations, figures, status } = answer;
@@ -69,7 +77,14 @@ export function AssistantAnswer({
   const waiting = useApprovals((state) => state.waiting);
   const approvals = useMemo(() => waitingFor(waiting, answer.id), [waiting, answer.id]);
   const consenting = useAnswers((state) => state.phases[answer.id] === "waiting-for-consent");
-  const { silent, usual } = useAnswerWait(answer, streaming, approvals.length > 0 || consenting);
+  const asking = useQuestions((state) =>
+    Object.values(state.waiting).some((each) => each.answerId === answer.id),
+  );
+  const { silent, usual } = useAnswerWait(
+    answer,
+    streaming,
+    approvals.length > 0 || consenting || asking,
+  );
   const openSettings = useAppStore((state) => state.openSettings);
   const regenerate = () => void regenerateAnswer(answer.id);
   const written = hasText(blocks);
@@ -93,20 +108,24 @@ export function AssistantAnswer({
       aria-label={t("answer.label")}
       className="assistant-answer"
     >
+      {!streaming && <WrittenFromLine answer={answer} />}
       <AnswerSteps
         answer={answer}
         question={question}
+        askedAgain={askedAgain}
         streaming={streaming}
         waitingForApproval={approvals.length > 0}
         wait={silent ? { usual } : null}
         onRegenerate={regenerate}
       />
+      <AskedLines answer={answer} />
       {answer.citationSupport === "none" && (
         <NoCitationsLine
           modelId={answer.model?.modelId ?? null}
           providerId={answer.model?.providerId ?? null}
         />
       )}
+      <CoverageLine answer={answer} question={question} />
       {(written || streaming) && (
         <AnswerText
           answerId={answer.id}
@@ -118,11 +137,21 @@ export function AssistantAnswer({
         />
       )}
       <MindChangesCard answer={answer} streaming={streaming} />
+      <CommandsCard answer={answer} streaming={streaming} />
+      {!streaming && <SelfCheckLines answer={answer} />}
       {!streaming && question && !question.askedFrom && wantedAMind(answer) && (
         <NoMindLine question={question} />
       )}
       {!streaming && <WaitingChangesLine answer={answer} />}
       {!streaming && <UnbackedClaimLine answer={answer} onRegenerate={regenerate} />}
+      {!streaming && written && status !== "failed" && answer.steps?.withoutMindTools && (
+        <NoMindToolsLine
+          answerId={answer.id}
+          onAdd={(button) =>
+            keeping.focusedMindName ? keeping.add(answer) : keeping.pick(answer, button)
+          }
+        />
+      )}
       {!streaming && scopeEmpty && (
         <ProblemLine
           role="status"
@@ -145,6 +174,7 @@ export function AssistantAnswer({
           providerId={answer.model?.providerId ?? null}
           // A conversation doesn't keep when a plan's limit resets: the line says so without it.
           resetsAt={null}
+          signInRoute={answer.errorSignInRoute}
           details={answer.errorMessage}
           failedAt={answer.updatedAt}
           onRetry={regenerate}
@@ -179,7 +209,6 @@ export function AssistantAnswer({
       <AnswerActions
         answer={answer}
         streaming={streaming}
-        stopAbove={silent}
         canKeep={written}
         focusedMindName={keeping.focusedMindName}
         onAdd={() => keeping.add(answer)}

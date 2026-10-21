@@ -125,7 +125,6 @@ describe("exporting the User's footnotes", () => {
     checkWellFormed(footnotes);
 
     expect(paragraphsOf(document).map((each) => each.text)).toEqual([
-      "Tides",
       "Neap tides[1] are weak.",
       "Spring tides come at new moon[2].",
       "潮汐[3]",

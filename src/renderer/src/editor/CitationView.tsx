@@ -30,10 +30,19 @@ import { citationHandle } from "../commands/handles";
 import { type CommandContext, commands } from "../commands/registry";
 import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
+import { useAnswerBeingWritten } from "../conversations";
 import { useGap, useLanguage, useT } from "../i18n";
-import { groupsMerged } from "../layoutSlice";
+import { currentTabOf, groupsMerged } from "../layoutSlice";
+import { useBreathing } from "../motion";
 import type { ObjectRef } from "../objects";
 import { openCited as openCitedPlace, quoteSaysSo } from "../openCited";
+import {
+  pinCitation,
+  pinnedMind,
+  staysPinned,
+  takePinnedCitation,
+  unpinCitation,
+} from "../pinnedCitation";
 import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
 import { CitationQuotedWords } from "./CitationQuotedWords";
@@ -51,6 +60,11 @@ import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
 import { runsText } from "./styledText";
+
+useAppStore.subscribe((state) => {
+  const mindId = pinnedMind();
+  if (mindId !== null && !staysPinned(currentTabOf(state.layout)?.item, mindId)) unpinCitation();
+});
 
 /** How long a pointer rests on a Citation before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
@@ -80,15 +94,17 @@ function answerAround(
  * style's words, "(Bowler et al., 2010, p. 4)" or "[1]", which the first of
  * Citations side by side draws for all of them (see `CitationClusters`); in a
  * note style, or in Numbered, an 18px marker with its number, its place among
- * the Mind's footnotes (see `CitationNumbers`). It stays neutral unless the
- * quote wasn't found; the check itself shows in the margin (`MarginChecks`),
- * or, in a narrow Mind and in an Answer in the assistant, as an icon inside the marker. In a footnote's text
- * it is part of the footnote: the marker shows where it points and its
- * check's icon instead of a number. Hovering or focusing it (or its mark in
- * the margin) shows its card: the check in words, the quote, and Open; Esc
- * closes it. Clicking it opens the cited page and keeps the card; when the
- * quote wasn't found, the card offers ways on: open the page anyway, remove
- * the Citation, or regenerate the Answer.
+ * the Mind's footnotes (see `CitationNumbers`). It stays neutral while the
+ * quote is found, turns amber when it wasn't and red when the Document now
+ * says otherwise; an Answer in the assistant shows the check as an icon inside
+ * the marker. The margin holds the sentences' own checks (`MarginChecks`). In a
+ * footnote's text it is part of the footnote: the marker shows where it points
+ * and its check's icon instead of a number. Hovering or focusing it shows its
+ * card: the check in words, the quote, and Open; Esc closes it. Clicking it
+ * opens the cited page and keeps the card; where the window shows one group,
+ * the page would cover the Mind, so the click keeps the card alone and its
+ * Open brings the page (#963). When the quote wasn't found, the card offers
+ * ways on: open the page anyway, remove the Citation, or regenerate the Answer.
  */
 export function CitationView({
   node,
@@ -116,7 +132,8 @@ export function CitationView({
   const badgeText = t(badge.key, badge.params);
   const number = citationNumberOf(decorations);
   // In a footnote's text it is part of the footnote: it shows where it points, not a number.
-  const inFootnote = useContext(InFootnoteContext);
+  const footnoteId = useContext(InFootnoteContext);
+  const inFootnote = footnoteId !== null;
   const pointsTo = citationSource(shown, t).text;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
@@ -124,6 +141,11 @@ export function CitationView({
   const [peeking, setPeeking] = useState(false);
   const open = pinned || peeking;
   const marker = useRef<HTMLButtonElement>(null);
+  // Its dot breathes only while a check the User started runs: an Answer is being written.
+  const writing = useAnswers((store) => store.writing.size > 0);
+  const answering = useAnswerBeingWritten() !== null;
+  const dot = useRef<SVGSVGElement>(null);
+  useBreathing(dot, state.check === "checking" && (writing || answering));
   /** The marker whose card the pointer over this one asks for: its own, or a neighbour's. */
   const pointed = useRef<HTMLElement | null>(null);
   const formatting = useMindFormatting(mindId);
@@ -143,6 +165,20 @@ export function CitationView({
     window.clearTimeout(timer.current);
     setPinned(false);
     setPeeking(false);
+    unpinCitation();
+  }, []);
+  const placeOf = () => {
+    const at = getPos();
+    return at === undefined ? null : `${footnoteId ?? "text"}:${at}`;
+  };
+  // The window showed one group and the Document came to the front: the card is open when the Mind returns.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the node view is made.
+  useEffect(() => {
+    const place = placeOf();
+    if (!mindId || place === null || !takePinnedCitation(mindId, place)) return;
+    setPinned(true);
+    const frame = requestAnimationFrame(() => marker.current?.scrollIntoView({ block: "center" }));
+    return () => cancelAnimationFrame(frame);
   }, []);
   useEffect(() => {
     const element = marker.current;
@@ -160,6 +196,7 @@ export function CitationView({
   const openCited = (withQuote: boolean, keep = false) => {
     const documentId = state.documentId ?? attributes.documentId;
     if (!documentId) return;
+    recordUsage({ event: "citation_opened", fields: { check: state.check } });
     openCitedPlace(
       { ...attributes, documentId },
       { check: state.check, withQuote, number, label: where, from: place?.groupId, keep },
@@ -168,9 +205,9 @@ export function CitationView({
 
   const onClick = () => {
     setPinned(true);
-    // "Open a check in the example", in Get started.
+    // Step 1 of the first open's steps, and step 3 of the steps in an empty Mind.
     useAppStore.getState().updateGettingStarted({ citationChecked: true });
-    recordUsage({ event: "citation_opened", fields: { check: state.check } });
+    if (groupsMerged()) return;
     if (quoteSaysSo(state.check)) openCited(true);
     // A deleted Document: the viewer shows the stored quote with "Document removed".
     else if (state.reason === "document-removed") openCited(true);
@@ -178,11 +215,16 @@ export function CitationView({
   };
 
   /** What the card's Open does: the cited place, the quote washed where the check found it. */
-  const openFromCard = () => {
-    openCited(quoteSaysSo(state.check), true);
+  const openFromCard = (withQuote = quoteSaysSo(state.check)) => {
+    openCited(withQuote, true);
     dismiss();
-    // The focus stays in the Mind, unless the window shows one group and the Document came to the front.
-    if (!groupsMerged()) editor.view.focus();
+    if (!groupsMerged()) {
+      editor.view.focus();
+      return;
+    }
+    // The Document came to the front of a one-group window: the card is open again when the Mind comes back.
+    const place = placeOf();
+    if (mindId && place !== null) pinCitation(mindId, place);
   };
   const openFromCardRef = useRef(openFromCard);
   openFromCardRef.current = openFromCard;
@@ -273,6 +315,9 @@ export function CitationView({
         onMouseDown={(event) => event.preventDefault()}
         // In a cluster, the pointer shows the card of the Citation whose words it is over.
         onPointerMove={(event) => pointAt(markerOfWork(workAt(event.target, inCluster)))}
+        // The pointer can come back without moving: the card first placed before its font
+        // loaded grows and moves up off it, which a Citation that only heard moves took as a leave.
+        onPointerOver={(event) => pointAt(markerOfWork(workAt(event.target, inCluster)))}
         onPointerLeave={() => pointAt(null)}
         onFocus={() => hold("focus", true)}
         onBlur={() => hold("focus", false)}
@@ -282,7 +327,7 @@ export function CitationView({
           else onClick();
         }}
       >
-        <CheckMarkIcon check={state.check} className="citation-marker-icon" />
+        <CheckMarkIcon ref={dot} check={state.check} className="citation-marker-icon" />
         {inFootnote ? (
           <span>{pointsTo}</span>
         ) : styled.kind === "runs" ? (
@@ -330,11 +375,7 @@ export function CitationView({
               state={state}
               attributes={shown}
               badgeText={badgeText}
-              onOpen={(withQuote) => {
-                openCited(withQuote, true);
-                dismiss();
-                if (!groupsMerged()) editor.view.focus();
-              }}
+              onOpen={openFromCard}
               onRemove={
                 editor.isEditable
                   ? () => {
@@ -430,8 +471,9 @@ function workAt(target: EventTarget | null, place: ClusterPlace | null): number 
 }
 
 /**
- * A cluster in the style's words, each work's words in its own Citation's colours (a quote
- * not found turns amber), and no links: a click here opens the Citation, not an address.
+ * A cluster in the style's words, each work's words in its own Citation's colours and, when
+ * its quote isn't found, with its mark (not found turns amber), and no links: a click here
+ * opens the Citation, not an address.
  */
 function ClusterRuns({
   runs,
@@ -441,17 +483,26 @@ function ClusterRuns({
   /** Each member's check, by its place in the cluster. */
   checks: readonly CitationCheck[];
 }) {
-  return runs.map(({ work, link: _, ...run }, index) => (
-    <span
-      // biome-ignore lint/suspicious/noArrayIndexKey: runs have no identity but their place.
-      key={index}
-      data-work={work}
-      data-check={work === undefined ? undefined : checks[work]}
-      className="citation-run"
-    >
-      <StyledRunView run={run} />
-    </span>
-  ));
+  let marked: number | undefined;
+  return runs.map(({ work, link: _, ...run }, index) => {
+    const check = work === undefined ? undefined : checks[work];
+    const first = work !== undefined && work !== marked;
+    if (work !== undefined) marked = work;
+    return (
+      <span
+        // biome-ignore lint/suspicious/noArrayIndexKey: runs have no identity but their place.
+        key={index}
+        data-work={work}
+        data-check={check}
+        className="citation-run"
+      >
+        {first && check !== undefined && check !== "found" && (
+          <CheckMarkIcon check={check} className="citation-run-icon" />
+        )}
+        <StyledRunView run={run} />
+      </span>
+    );
+  });
 }
 
 /**
@@ -604,16 +655,15 @@ function CitationCard({
             )}
           </>
         ) : (
-          !removed && (
-            <button
-              type="button"
-              data-testid="citation-open"
-              className="citation-card-action citation-card-action--primary"
-              onClick={() => onOpen(quoteSaysSo(state.check))}
-            >
-              {t(`citation.open.${opens}`)}
-            </button>
-          )
+          <button
+            type="button"
+            data-testid="citation-open"
+            className="citation-card-action citation-card-action--primary"
+            // A deleted Document's view shows the quote it kept.
+            onClick={() => onOpen(removed || quoteSaysSo(state.check))}
+          >
+            {t(removed ? "citation.open.removed" : `citation.open.${opens}`)}
+          </button>
         )}
         <ObjectMenu
           target={menu.target}

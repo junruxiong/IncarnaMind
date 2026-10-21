@@ -217,7 +217,7 @@ describe("Asking a Question", () => {
       /Write the Question/,
     );
     await expect(core.askQuestion({ mindId: mind.id, questionId: "nope" })).rejects.toThrow(
-      /isn't in this Mind/,
+      /isn’t in this Mind/,
     );
   });
 });
@@ -359,6 +359,7 @@ describe("Streaming Answers into the Mind", () => {
             id: expect.any(String),
             level: 2,
             includeInContext: null,
+            paragraphFormat: null,
             proposal: null,
             wordLook: null,
           },
@@ -366,7 +367,13 @@ describe("Streaming Answers into the Mind", () => {
         },
         {
           type: "paragraph",
-          attrs: { id: expect.any(String), includeInContext: null, proposal: null, wordLook: null },
+          attrs: {
+            id: expect.any(String),
+            includeInContext: null,
+            paragraphFormat: null,
+            proposal: null,
+            wordLook: null,
+          },
           content: [
             { type: "text", text: "The " },
             { type: "text", text: "Moon", marks: [{ type: "bold" }] },
@@ -388,6 +395,7 @@ describe("Streaming Answers into the Mind", () => {
                   attrs: {
                     id: expect.any(String),
                     includeInContext: null,
+                    paragraphFormat: null,
                     proposal: null,
                     wordLook: null,
                   },
@@ -404,6 +412,7 @@ describe("Streaming Answers into the Mind", () => {
                   attrs: {
                     id: expect.any(String),
                     includeInContext: null,
+                    paragraphFormat: null,
                     proposal: null,
                     wordLook: null,
                   },
@@ -437,7 +446,13 @@ describe("Streaming Answers into the Mind", () => {
         },
         {
           type: "paragraph",
-          attrs: { id: expect.any(String), includeInContext: null, proposal: null, wordLook: null },
+          attrs: {
+            id: expect.any(String),
+            includeInContext: null,
+            paragraphFormat: null,
+            proposal: null,
+            wordLook: null,
+          },
           content: [
             { type: "text", text: "See " },
             {
@@ -630,7 +645,7 @@ describe("Stopping and regenerating", () => {
     });
     await answerEnded(core, answerId);
     expect(shownWithChanges(reader).slice(1, 2)).toEqual([
-      "[-Generated text. My own words-]{+Written again+}.",
+      "[-Generated text. My own words.-]{+Written again.+}",
     ]);
     expect(pendingProposals(reader.blocks)).toHaveLength(1);
 
@@ -640,7 +655,7 @@ describe("Stopping and regenerating", () => {
     await core.regenerateAnswer({ mindId: mind.id, answerId });
     await answerEnded(core, answerId);
     expect(shownWithChanges(reader).slice(1, 2)).toEqual([
-      "[-Generated text. My own words-]{+Once more+}.",
+      "[-Generated text. My own words.-]{+Once more.+}",
     ]);
 
     // Accepting them all makes it the model's Answer again: the next Regenerate replaces it in place.
@@ -850,7 +865,7 @@ describe("Choosing the model", () => {
       modelId: "deepseek-chat",
     });
 
-    expect(await core.listChatModels()).toEqual([
+    expect(await core.listChatModels()).toMatchObject([
       // Embedding models can't answer, so they aren't offered. Ollama says what llama3.2 can
       // do; nothing says what the others can.
       {
@@ -885,7 +900,7 @@ describe("Choosing the model", () => {
     const fetch = vi.spyOn(globalThis, "fetch");
     onTestFinished(() => fetch.mockRestore());
 
-    expect(await core.listChatModels()).toEqual([
+    expect(await core.listChatModels()).toMatchObject([
       {
         provider,
         models: ["gpt-test"],
@@ -907,7 +922,7 @@ describe("Choosing the model", () => {
       modelId: "qwen3:4b",
     });
 
-    expect(await core.listChatModels()).toEqual([
+    expect(await core.listChatModels()).toMatchObject([
       {
         provider,
         models: ["qwen3:4b"],

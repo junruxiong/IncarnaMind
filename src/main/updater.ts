@@ -8,8 +8,9 @@
  *   with a Developer ID), it downloads in the background and installs when the User quits.
  *   Once it's downloaded, the User can restart to install it straight away.
  * - An unsigned macOS build can't install updates: Squirrel.Mac refuses to update an app
- *   that isn't signed with a Developer ID. The User is told that a new version is out
- *   and offered its download page instead.
+ *   that isn't signed with a Developer ID. The Linux .deb doesn't either: electron-updater
+ *   installs it as root through `pkexec bash -c 'dpkg -i …'` (#1178). In both, the User is
+ *   told that a new version is out and offered its download page instead.
  *
  * The check sends nothing of the User's, so it needs no consent; the Privacy page lists
  * it, and the User can turn automatic checks off there. They are on by default.
@@ -21,6 +22,7 @@ import type { Core, CoreApi, ExternalService, Language } from "../core";
 import { translate } from "../shared/i18n";
 import { systemBrowser } from "./platform";
 import { RELEASES_PAGE } from "./startupError";
+import { restartToInstall } from "./updateRestart";
 
 /** Where update checks go. */
 const GITHUB_RELEASES: Readonly<ExternalService> = {
@@ -43,22 +45,30 @@ export function registerUpdateCheck(core: Pick<Core, "networkTraffic" | "getPriv
  * Starts this run's update check in the background. Does nothing in an
  * unpackaged app, or when the User turned automatic update checks off.
  */
-export function startAutoUpdates(core: SettingsSource): void {
+export function startAutoUpdates(
+  core: SettingsSource,
+  settleQuit: () => Promise<boolean>,
+  releaseDataFolder: () => void,
+): void {
   if (!app.isPackaged) return;
-  checkForUpdates(core).catch((error: unknown) => {
+  checkForUpdates(core, settleQuit, releaseDataFolder).catch((error: unknown) => {
     // Offline, rate-limited, or no release yet: the next start tries again.
     console.warn("The update check failed:", error);
   });
 }
 
-async function checkForUpdates(core: SettingsSource): Promise<void> {
+async function checkForUpdates(
+  core: SettingsSource,
+  settleQuit: () => Promise<boolean>,
+  releaseDataFolder: () => void,
+): Promise<void> {
   if (!(await core.getPrivacySettings()).automaticUpdateChecks) return;
   const { autoUpdater } = await import("./autoUpdater");
   const installable = await canInstallUpdates();
   autoUpdater.autoDownload = installable;
   autoUpdater.autoInstallOnAppQuit = installable;
 
-  // Null when the updater is inactive, e.g. on Linux outside an AppImage.
+  // Null when the updater is inactive, e.g. on Linux outside an AppImage and a .deb.
   const result = await autoUpdater.checkForUpdates();
   if (!result?.isUpdateAvailable) return;
   const { version } = result.updateInfo;
@@ -73,11 +83,17 @@ async function checkForUpdates(core: SettingsSource): Promise<void> {
 
   await result.downloadPromise;
   const { language } = await core.getSettings();
-  if (await ask(language, "ready", version)) autoUpdater.quitAndInstall();
+  if (await ask(language, "ready", version)) {
+    await restartToInstall(autoUpdater, settleQuit, releaseDataFolder);
+  }
 }
 
-/** Squirrel.Mac only installs updates into an app signed with a Developer ID. */
+/**
+ * Squirrel.Mac only installs updates into an app signed with a Developer ID, and on Linux only
+ * an AppImage replaces itself (the AppImage runtime sets APPIMAGE).
+ */
 function canInstallUpdates(): Promise<boolean> {
+  if (process.platform === "linux") return Promise.resolve(Boolean(process.env.APPIMAGE));
   if (process.platform !== "darwin") return Promise.resolve(true);
   // …/IncarnaMind.app/Contents/MacOS/IncarnaMind → …/IncarnaMind.app
   const bundle = resolve(process.execPath, "../../..");

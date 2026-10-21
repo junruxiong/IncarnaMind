@@ -418,7 +418,7 @@ describe("Small calls skip thinking", () => {
 
   test.each([
     ["deepseek", "deepseek-flash", "thinking", { type: "disabled" }],
-    ["qwen", "qwen3.7-flash", "enable_thinking", false],
+    ["qwen", "qwen3.8-flash", "enable_thinking", false],
     ["kimi", "kimi-k2.6", "thinking", { type: "disabled" }],
     ["glm", "glm-4.7-flash", "thinking", { type: "disabled" }],
     ["siliconflow", "Qwen/Qwen3-8B", "enable_thinking", false],

@@ -12,6 +12,7 @@ import {
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
+  frontMindName,
   launchApp,
   openSteps,
   pointAndClick,
@@ -46,6 +47,22 @@ const TIDES = buildPdf([
   { lines: ["Tides and the Moon", "The Moon raises two bulges of water on the Earth."] },
   { lines: ["Spring and neap tides", SPRING] },
 ]);
+const LEASE = buildPdf([
+  {
+    lines: [
+      "Lease agreement",
+      "Term: 36 months from 1 March 2026.",
+      "Monthly rent: $4,800.",
+      "Deposit: $9,600.",
+    ],
+  },
+]);
+const LEASE_ZH = [
+  "租赁合同-2026",
+  "租期：2026 年 3 月 1 日至 2029 年 2 月 28 日，共三年。",
+  "月租金：人民币 4,800 元整。",
+  "押金：人民币 9,600 元。",
+].join("\n");
 const MODEL = "claude-haiku-5-5";
 const MODEL_NAME = "Claude Haiku 5.5";
 const LONG_FOLDER = "Thesis: urban heat islands and the night-time cooling of city parks";
@@ -85,7 +102,7 @@ const core = (window: Page) => ({
       }
     }
     await pointAndClick(window, window.getByTestId("mind-list-item").filter({ hasText: title }));
-    await expect(window.getByTestId("mind-title")).toHaveValue(title);
+    await expect(frontMindName(window)).toHaveText(title);
   },
   /** A Folder holding every Document so far. */
   folderOfAll: (name: string) =>
@@ -241,6 +258,7 @@ test("a slow Answer shows its step line from the start, then how long it is taki
   await expect(answer.getByTestId("answer-steps-live")).toBeVisible();
   await expect(answer.getByTestId("answer-stop")).toHaveCount(1);
   await expect(answer.getByTestId("answer-stop")).toBeVisible();
+  await expect(answer.getByTestId("answer-actions").getByRole("button")).toHaveCount(0);
   await screenshot(window, "wait-still-en");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
   expect((await shown()).filter((state) => state !== "none")).toEqual(["line", "wait", "text"]);
@@ -321,7 +339,7 @@ test("with earlier Answers that took about a minute, the line says how long this
   await app.close();
 });
 
-test("a long model name wraps inside the wait line, and Stop stays inside the Answer", async () => {
+test("a long model name stays on one line inside the wait line, and Stop stays inside the Answer", async () => {
   const { app, window } = await startWithMinuteHistory(
     "claude-haiku-5-5-with-a-very-long-experimental-identifier-20261016",
   );
@@ -329,6 +347,8 @@ test("a long model name wraps inside the wait line, and Stop stays inside the An
   const answer = assistantAnswers(window).last();
   const wait = answer.getByTestId("answer-wait");
   await expect(wait).toContainText("Usually about a minute with claude-haiku-5-5-with-a-very-long");
+  const name = wait.getByTestId("answer-wait-model");
+  expect(await name.evaluate((node) => node.getClientRects().length)).toBe(1);
   const stop = await wait.getByTestId("answer-stop").boundingBox();
   const inside = await answer.boundingBox();
   expect((stop?.x ?? 0) + (stop?.width ?? 0)).toBeLessThanOrEqual(
@@ -338,6 +358,51 @@ test("a long model name wraps inside the wait line, and Stop stays inside the An
   await screenshot(window, "wait-long-name-en");
   await pointAndClick(window, wait.getByTestId("answer-stop"));
   await expect(answer).toHaveAttribute("data-status", "stopped");
+  await app.close();
+});
+
+test("at 1,100 × 760, in English and Chinese, the wait line keeps the model's name on one line, and Stop is only the composer's ■ until the wait line brings its own, each stopping the Answer", async () => {
+  const { app, window } = await startWithMinuteHistory();
+  await setWindowSize(app, window, 1100, 760);
+  const composerStop = window.getByTestId("composer-stop");
+  const languages = [
+    ["en", "Usually about a minute with Claude Haiku 5.5 · Stop"],
+    ["zh-CN", "用 Claude Haiku 5.5 通常要 1 分钟左右 · 停止"],
+  ] as const;
+
+  for (const [language, said] of languages) {
+    await core(window).language(language);
+
+    // Before the wait line: nothing under the step line stops the Answer; the composer's ■ does.
+    await setSilentWaitMs(window, 600_000);
+    await askSlowly(window, "When do spring tides happen? Answer slowly.");
+    const early = assistantAnswers(window).last();
+    await expect(early.getByTestId("answer-steps-live")).toBeVisible();
+    await expect(early.getByTestId("answer-wait")).toHaveCount(0);
+    await expect(early.getByTestId("answer-stop")).toHaveCount(0);
+    await expect(early.getByTestId("answer-actions").getByRole("button")).toHaveCount(0);
+    await expect(composerStop).toBeVisible();
+    const resting = await composerStop.boundingBox();
+    await screenshot(window, `wait-before-${language}`);
+    await pointAndClick(window, composerStop);
+    await expect(early).toHaveAttribute("data-status", "stopped");
+
+    // The wait line brings its own Stop beside the composer's, which has not moved.
+    await setSilentWaitMs(window, 600);
+    await askSlowly(window, "When do neap tides happen? Answer slowly.");
+    const answer = assistantAnswers(window).last();
+    const wait = answer.getByTestId("answer-wait");
+    await expect(wait).toHaveText(said);
+    const name = wait.getByTestId("answer-wait-model");
+    await expect(name).toHaveText(MODEL_NAME);
+    expect(await name.evaluate((node) => node.getClientRects().length)).toBe(1);
+    await expect(answer.getByTestId("answer-stop")).toHaveCount(1);
+    await expect(answer.getByTestId("answer-actions").getByRole("button")).toHaveCount(0);
+    expect(await composerStop.boundingBox()).toEqual(resting);
+    await screenshot(window, `wait-after-${language}`);
+    await pointAndClick(window, wait.getByTestId("answer-stop"));
+    await expect(answer).toHaveAttribute("data-status", "stopped");
+  }
   await app.close();
 });
 
@@ -354,7 +419,13 @@ test("the folded line opens by click, Enter and Space, at once, to the reasoning
   const timeline = answer.getByTestId("answer-timeline");
   await expect(timeline).toBeVisible();
   expect(await answer.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
-  expect(await stepsOf(timeline)).toEqual(["reasoning", "read", "search", "check"]);
+  expect(await stepsOf(timeline)).toEqual([
+    "reasoning",
+    "read",
+    "read-documents",
+    "search",
+    "check",
+  ]);
   const reasoning = timeline.locator('[data-step="reasoning"]');
   await expect(reasoning).toContainText(new RegExp(`^${MODEL_NAME} thought for \\d+s`));
   await expect(reasoning.getByTestId("answer-reasoning")).toContainText(
@@ -362,6 +433,8 @@ test("the folded line opens by click, Enter and Space, at once, to the reasoning
   );
   await expect(reasoning.getByTestId("answer-reasoning-more")).toHaveCount(0);
   await expect(timeline.locator('[data-step="read"]')).toHaveText("Read “Lit review: tides”");
+  // The Documents sent whole with the Question are read too, a search or not.
+  await expect(timeline.locator('[data-step="read-documents"]')).toContainText("Read “Tides”");
   const search = timeline.locator('[data-step="search"]');
   await expect(search).toContainText("Searched All Documents for “When do spring tides happen?”");
   await expect(search.getByTestId("answer-step-found")).toContainText(/passages? found, 1 used/);
@@ -400,9 +473,9 @@ test("the folded line opens by click, Enter and Space, at once, to the reasoning
     window,
     window.getByTestId("mind-list-item").filter({ hasText: "Moon notes" }),
   );
-  await expect(window.getByTestId("mind-title")).toHaveValue("Moon notes");
+  await expect(frontMindName(window)).toHaveText("Moon notes");
   await pointAndClick(window, timeline.getByTestId("answer-step-read"));
-  await expect(window.getByTestId("mind-title")).toHaveValue("Lit review: tides");
+  await expect(frontMindName(window)).toHaveText("Lit review: tides");
   await app.close();
 });
 
@@ -447,9 +520,154 @@ test("in Chinese, the line and the timeline; after a restart the steps are still
   await expect(line).toHaveText("已搜索全部文档 · 1 个来源");
   await expect(line).toHaveAttribute("aria-expanded", "false");
   timeline = await openSteps(window, answer);
-  expect(await stepsOf(timeline)).toEqual(["reasoning", "read", "search", "check"]);
+  expect(await stepsOf(timeline)).toEqual([
+    "reasoning",
+    "read",
+    "read-documents",
+    "search",
+    "check",
+  ]);
   await expect(timeline.getByTestId("answer-reasoning")).toHaveText(summary ?? "");
   await second.app.close();
+});
+
+test("an Answer whose Citations are all from a Document given with the Question names that Document beside the Mind it read, in the line and the timeline, in English and Chinese", async () => {
+  const { app, window } = await start({ documents: false });
+  await writeFile(join(sources, "Lease 2026.pdf"), LEASE);
+  await addDocuments(window, [join(sources, "Lease 2026.pdf")]);
+  await core(window).mind("Credit report draft");
+  const answer = await ask(
+    window,
+    "What are the term, monthly rent and deposit in the lease? Answer without searching.",
+  );
+
+  const line = answer.getByTestId("answer-steps-line");
+  await expect(line).toHaveText("Read “Credit report draft” and “Lease 2026”");
+  await expect(answer.getByTestId("answer-steps")).toHaveAttribute("data-kind", "read-documents");
+  const timeline = await openSteps(window, answer);
+  expect(await stepsOf(timeline)).toEqual(["answered", "read", "read-documents", "check"]);
+  await expect(timeline.locator('[data-step="read"]')).toHaveText("Read “Credit report draft”");
+  const read = timeline.locator('[data-step="read-documents"]');
+  await expect(read).toContainText("Read “Lease 2026”");
+  const source = read.getByTestId("answer-step-source");
+  await expect(source).toHaveText("Lease 2026p. 1");
+  await screenshot(window, "steps-read-documents-en");
+
+  await core(window).language("zh-CN");
+  await expect(line).toHaveText("读了“Credit report draft”，还读了“Lease 2026”");
+  await expect(read).toContainText("读了“Lease 2026”");
+  await screenshot(window, "steps-read-documents-zh");
+
+  // The Mind's name stays the button that opens it.
+  await core(window).mind("Moon notes");
+  await pointAndClick(window, answer.getByTestId("answer-steps-mind"));
+  await expect(frontMindName(window)).toHaveText("Credit report draft");
+
+  // Like a search's source, it opens its Document beside the Mind, at its page.
+  await pointAndClick(window, source);
+  await expect(window.getByTestId("viewer-title")).toHaveText("Lease 2026");
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("1");
+  await app.close();
+});
+
+test("Documents sent whole are read whether or not the Answer cites them: the line counts them beside the Mind", async () => {
+  const { app, window } = await start({ documents: false });
+  await writeFile(join(sources, "Lease 2026.pdf"), LEASE);
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  await addDocuments(window, [join(sources, "Lease 2026.pdf"), join(sources, "Tides.pdf")]);
+  await core(window).mind("Credit report draft");
+  const answer = await ask(
+    window,
+    "What is the monthly rent in the lease? Answer without searching and without citing.",
+  );
+  await expect(answer.getByTestId("citation-chip")).toHaveCount(0);
+
+  const line = answer.getByTestId("answer-steps-line");
+  await expect(line).toHaveText("Read “Credit report draft” and 2 Documents");
+  const timeline = await openSteps(window, answer);
+  expect(await stepsOf(timeline)).toEqual(["answered", "read", "read-documents"]);
+  const read = timeline.locator('[data-step="read-documents"]');
+  await expect(read).toContainText("Read 2 Documents");
+  await expect(read.getByTestId("answer-step-source")).toHaveCount(0);
+
+  await core(window).language("zh-CN");
+  await expect(line).toHaveText("读了“Credit report draft”，还读了 2 个文档");
+  await expect(read).toContainText("读了 2 个文档");
+  await app.close();
+});
+
+test("at a 320px assistant a long Mind title and a long Document name are cut, the line stays on one line inside the Answer, and the whole line is its tooltip", async () => {
+  const { app, window } = await start({ documents: false });
+  const name = "Lease agreement for the north wing of the harbour offices 2026";
+  await writeFile(join(sources, `${name}.pdf`), LEASE);
+  await addDocuments(window, [join(sources, `${name}.pdf`)]);
+  await core(window).mind(LONG_FOLDER);
+  expect(Math.round((await window.getByTestId("assistant").boundingBox())?.width ?? 0)).toBe(320);
+  const answer = await ask(
+    window,
+    "What is the monthly rent in the lease? Answer without searching.",
+  );
+
+  const line = answer.getByTestId("answer-steps-line");
+  const whole = `Read “${LONG_FOLDER}” and “${name}”`;
+  await expect(line).toHaveAttribute("title", whole);
+  const box = await line.boundingBox();
+  expect(box?.height ?? 0).toBeLessThan(30);
+  const edge = await answer.boundingBox();
+  expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(
+    (edge?.x ?? 0) + (edge?.width ?? 0),
+  );
+  expect(await line.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  // The chevron is still on the line.
+  const chevron = await line.locator(".answer-steps-chevron").boundingBox();
+  expect((chevron?.x ?? 0) + (chevron?.width ?? 0)).toBeLessThanOrEqual(
+    (box?.x ?? 0) + (box?.width ?? 0) + 1,
+  );
+  await screenshot(window, "steps-read-documents-narrow-en");
+
+  await core(window).language("zh-CN");
+  await expect(line).toHaveAttribute("title", `读了“${LONG_FOLDER}”，还读了“${name}”`);
+  expect((await line.boundingBox())?.height ?? 0).toBeLessThan(30);
+  await app.close();
+});
+
+test("with a Chinese lease and the Chinese interface, the line names 租赁合同-2026 beside the open Mind, and a Mind with no lease says only that it read the Mind", async () => {
+  const { app, window } = await start({ documents: false });
+  await core(window).language("zh-CN");
+  await core(window).mind("授信委员会报告（草稿）");
+  const before = await ask(window, "春潮什么时候出现？");
+  await expect(before.getByTestId("answer-steps-line")).toHaveText("读了“授信委员会报告（草稿）”");
+
+  await writeFile(join(sources, "租赁合同-2026.txt"), LEASE_ZH);
+  await addDocuments(window, [join(sources, "租赁合同-2026.txt")]);
+  const answer = await ask(window, "租赁合同-2026 里的租期、月租金和押金分别是多少？不用搜索");
+  await expect(answer.getByTestId("answer-steps-line")).toHaveText(
+    "读了“授信委员会报告（草稿）”，还读了“租赁合同-2026”",
+  );
+  const timeline = await openSteps(window, answer);
+  expect(await stepsOf(timeline)).toEqual(["answered", "read", "read-documents", "check"]);
+  await expect(timeline.locator('[data-step="read-documents"]')).toContainText(
+    "读了“租赁合同-2026”",
+  );
+  await expect(timeline.getByTestId("answer-step-source")).toContainText("租赁合同-2026");
+  await app.close();
+});
+
+test("a search that finds nothing says nothing was found, and names no Document or Mind as read, in English and Chinese", async () => {
+  const { app, window } = await start();
+  await core(window).mind("Lit review: tides");
+  const answer = await ask(window, "Quokka zebra?");
+
+  const line = answer.getByTestId("answer-steps");
+  await expect(line).toHaveText("Searched All Documents · nothing found");
+  const timeline = await openSteps(window, answer);
+  expect(await stepsOf(timeline)).toEqual(["reasoning", "read", "read-documents", "search"]);
+  await expect(timeline.getByTestId("answer-step-found")).toHaveText("0 passages found, 0 used");
+  await expect(timeline.getByTestId("answer-step-source")).toHaveCount(0);
+
+  await core(window).language("zh-CN");
+  await expect(line).toHaveText("已搜索全部文档 · 没有找到相关内容");
+  await app.close();
 });
 
 test("an empty conversation says once what it reads and searches, following focus; nothing under the header, and only Copy · Add to note under an Answer", async () => {

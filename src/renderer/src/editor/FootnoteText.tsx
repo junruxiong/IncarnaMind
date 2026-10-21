@@ -282,7 +282,7 @@ export function FootnoteText({
   const empty = useEditorState({ editor, selector: ({ editor: text }) => text.isEmpty });
 
   return (
-    <InFootnoteContext.Provider value={true}>
+    <InFootnoteContext.Provider value={id}>
       <EditorContent
         editor={editor}
         className={`footnote-text-frame ${empty ? "footnote-text-frame--empty" : ""}`}

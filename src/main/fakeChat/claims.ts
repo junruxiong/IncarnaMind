@@ -4,9 +4,13 @@ import { type GenerateOptions, lastUserText, systemOf } from "./prompt";
 const FIND_CLAIMS =
   /^You sort the sentences of (?:a document someone else wrote|the User's own draft)/m;
 
+/** Whether a request is one to find the claims among numbered sentences. */
+export const findsClaims = (options: GenerateOptions): boolean =>
+  FIND_CLAIMS.test(systemOf(options.prompt));
+
 /** The numbers of the listed sentences ("[3] …") that claim something: all but questions, thanks and opinions. */
 export function fakeClaims(options: GenerateOptions): string | null {
-  if (!FIND_CLAIMS.test(systemOf(options.prompt))) return null;
+  if (!findsClaims(options)) return null;
   const claims = lastUserText(options.prompt)
     .split("\n")
     .flatMap((line) => {
