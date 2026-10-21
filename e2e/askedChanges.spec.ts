@@ -232,7 +232,7 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
   await expect(paragraphs).toHaveText(NOTES);
 
   const answer = await askInAssistant(window, "Rewrite the intro to be clearer");
-  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 waiting");
+  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 changes waiting");
   const line = editor.getByTestId("applied-line");
   await expect(line.getByTestId("applied-count")).toHaveText(
     "Waiting for you: this rewrites most of your text",
@@ -305,11 +305,11 @@ test("a request to write applies what it wrote, and a rewrite of the User's text
   await expect(answer.getByTestId("mind-changes-title")).toHaveText(
     "Wrote 1 paragraph in “Harbour notes”",
   );
-  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 waiting");
+  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 changes waiting");
   await expect(editor.locator("del.proposal-delete, ins.proposal-insert").first()).toBeVisible();
   await expect(editor).toContainText("The supplier is late.");
   await setLanguage(window, "zh-CN");
-  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 个段落待确认");
+  await expect(answer.getByTestId("mind-changes-left")).toHaveText("· 2 处修订待确认");
   await setLanguage(window, "en");
 });
 

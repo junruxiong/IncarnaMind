@@ -105,10 +105,12 @@ function AskedRow({
           {changeFact(t, facts, name)}
         </span>
         {left && (
-          <span data-testid="mind-changes-left" className="mind-changes-count">
+          <>
             {" "}
-            {left}
-          </span>
+            <span data-testid="mind-changes-left" className="mind-changes-count whitespace-nowrap">
+              {left}
+            </span>
+          </>
         )}
         {kept && (
           <span data-testid="mind-changes-kept" className="mind-changes-count">

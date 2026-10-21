@@ -7034,6 +7034,17 @@
   .answer-steps-part--end {
     padding-left: 6px;
   }
+  /* The Documents read beside the Mind: a long name is cut, and the chevron stays. */
+  .answer-steps-part--tail {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .answer-steps-tail {
+    min-width: 0;
+    overflow: hidden;
+    white-space: pre;
+    text-overflow: ellipsis;
+  }
   .answer-steps-mind {
     min-width: 0;
     overflow: hidden;

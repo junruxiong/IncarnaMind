@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import type { SecretStorageStatus, TranscriptionServiceStatus } from "../../../../core/api";
+import { checkApiKey } from "../../../../shared/apiKey";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
@@ -9,6 +10,7 @@ import {
   useTranscriptionServices,
   useTranscriptionServicesList,
 } from "../../transcriptionServices";
+import { KeyCharacterLine } from "../KeyCharacterLine";
 import { ProblemLine } from "../ProblemLine";
 import { SecretStorageNotice } from "../providers/ProviderForm";
 import {
@@ -112,6 +114,7 @@ function TranscriptionKeyRow({ service }: { service: TranscriptionServiceStatus 
     }
   };
   const [key, setKey] = useState("");
+  const { key: text, stray } = checkApiKey(key);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const name = { service: service.name };
@@ -153,7 +156,7 @@ function TranscriptionKeyRow({ service }: { service: TranscriptionServiceStatus 
             className="mt-1.5 flex flex-wrap items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
-              if (key.trim() !== "" && !saving) void save();
+              if (text !== "" && !stray && !saving) void save();
             }}
           >
             <input
@@ -165,6 +168,8 @@ function TranscriptionKeyRow({ service }: { service: TranscriptionServiceStatus 
               autoFocus
               data-testid="transcription-key-input"
               placeholder={t("meetings.key.placeholder")}
+              aria-invalid={stray ? true : undefined}
+              aria-describedby={stray ? `${inputId}-stray` : undefined}
               value={key}
               onChange={(event) => setKey(event.target.value)}
               onKeyDown={(event) => {
@@ -179,13 +184,16 @@ function TranscriptionKeyRow({ service }: { service: TranscriptionServiceStatus 
             <button
               type="submit"
               data-testid="transcription-key-save"
-              disabled={key.trim() === "" || saving || (storage !== null && !storage.canSave)}
+              disabled={
+                text === "" || stray !== null || saving || (storage !== null && !storage.canSave)
+              }
               className={buttonStyle("primary")}
             >
               {t(saving ? "meetings.key.checking" : "meetings.key.save")}
             </button>
           </form>
         )}
+        {open && stray && <KeyCharacterLine id={`${inputId}-stray`} stray={stray} />}
         {open && storage && !storage.canSave && (
           <SecretStorageNotice status={storage} onAccept={() => void acceptPlainText()} />
         )}

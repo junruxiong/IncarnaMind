@@ -4,6 +4,7 @@ import { useExportDialog } from "../../exportDialog";
 import { useT } from "../../i18n";
 import { activeTabOf, focusedGroupOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
+import { forgetTabCloseFocus, resumeTabCloseFocus } from "../../tabFocus";
 import { useGroupsMerged } from "../../useWindowWidth";
 import { ExportDialog } from "../ExportDialog";
 import { LibraryPane } from "../LibraryPane";
@@ -165,6 +166,10 @@ function TabGroup({
   const t = useT();
   const focused = useAppStore((state) => merged || state.layout?.focusedGroupId === group.id);
   const tab = activeTabOf(group);
+  useEffect(() => {
+    resumeTabCloseFocus();
+    return () => forgetTabCloseFocus(group.id, group.activeTabId);
+  }, [group.id, group.activeTabId]);
   return (
     <section
       data-testid="tab-group"

@@ -758,6 +758,7 @@ export async function addProviderPage(settings: Locator, catalogId: string): Pro
   await settings
     .getByTestId("provider-directory")
     .locator(`[data-catalog-id="${catalogId}"]`)
+    .first()
     .click();
   const page = settings.getByTestId("provider-add");
   await expect(page).toHaveAttribute("data-catalog-id", catalogId);
