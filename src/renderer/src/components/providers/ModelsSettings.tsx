@@ -27,7 +27,7 @@ import { PlansSettings } from "./PlansSettings";
 import { ProviderDirectory } from "./ProviderDirectory";
 import { logoIdOf, ProviderLogo } from "./ProviderLogo";
 import { ProviderPage, providerName, type RemovedProvider } from "./ProviderPage";
-import { defaultRegion } from "./shared";
+import { catalogIdOf, regionFor, savedProviderFor } from "./shared";
 
 type View =
   | { page: "list" }
@@ -37,8 +37,6 @@ type View =
 
 const ANSWERS_TARGET = ["chat-model"] as const;
 const DIRECTORY_TARGET = ["add-provider"] as const;
-
-const catalogIdOf = (provider: ChatProvider) => provider.catalogId ?? provider.kind;
 
 export function ModelsSettings() {
   const language = useLanguage();
@@ -114,21 +112,10 @@ export function ModelsSettings() {
     groups?.find((each) => each.provider.id === providerId);
 
   const pageFor = (catalogId: string, endpoint: string | null): View => {
-    const catalog = catalogProvider(catalogId);
-    const region = catalog
-      ? (endpointOf(catalog, endpoint ?? defaultRegion(catalogId, language))?.id ?? null)
-      : null;
-    // A server the User gives can be added again at another address.
-    const saved =
-      catalogId === "openai-compatible"
-        ? undefined
-        : providers.find(
-            (each) =>
-              catalogIdOf(each) === catalogId && (region === null || each.endpoint === region),
-          );
+    const saved = savedProviderFor(providers, catalogId, endpoint, language);
     return saved
       ? { page: "provider", providerId: saved.id }
-      : { page: "add", catalogId, endpoint: region };
+      : { page: "add", catalogId, endpoint: regionFor(catalogId, endpoint, language) };
   };
 
   const added = (provider: ChatProvider) => {
@@ -143,7 +130,7 @@ export function ModelsSettings() {
       <ProviderDirectory
         providers={providers}
         onBack={back}
-        onOpen={(catalogId) => setView(pageFor(catalogId, null))}
+        onOpen={(catalogId, endpoint) => setView(pageFor(catalogId, endpoint))}
       />
     );
   } else if (view.page === "add") {
