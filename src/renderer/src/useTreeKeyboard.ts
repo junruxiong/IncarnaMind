@@ -107,6 +107,13 @@ function useOneTabStop(tree: RefObject<HTMLElement | null>): void {
     const keepFocus = () => {
       const lost = last;
       if (!holdsFocus || !lost || lost.isConnected) return;
+      const rows = rowsIn(root);
+      // A row that's gone hands the focus on at once, not a frame or two later: on a slow
+      // machine a key pressed straight after a Delete went to the page and did nothing.
+      if (!rows.some((row) => thingOf(row) === lastThing)) {
+        if (document.activeElement === document.body) remembered(rows)?.focus();
+        return;
+      }
       // After a renamed row has taken the focus back itself (`useRename`), if it will.
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
