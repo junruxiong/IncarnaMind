@@ -7,7 +7,8 @@
  * sound, "Speaker ?". The Transcript is a Document from its first line, in the
  * data folder's "Transcripts" while the Meeting records, indexed again as
  * lines come; at Stop it is finished and saved as a WebVTT file in the Output
- * location, and the Document follows it there.
+ * location, and the Document follows it there. Then, while the audio is kept,
+ * the speaker pass (./speakerPass, #138) tells voices apart and relabels it.
  *
  * Its audio stays on disk, so nothing is lost when live text can't keep up:
  * - while the model downloads or starts, the audio waits, and what waited
@@ -1101,7 +1102,7 @@ export function createTranscripts(options: TranscriptsOptions) {
    */
   function separate(state: State): void {
     const pass = options.speakers;
-    if (!pass || state.separating) return;
+    if (!pass || state.separating || closed) return;
     const done = () => {
       state.speakers = "done";
       persist(state);

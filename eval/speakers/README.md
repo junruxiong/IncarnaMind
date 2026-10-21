@@ -1,0 +1,24 @@
+# Telling speakers apart after the call
+
+How well, and how fast, the speaker pass (#138) tells a Meeting's voices apart on this computer: pyannote's segmentation-3.0 and 3D-Speaker's CAM++ through sherpa-onnx-node's speaker diarization, on the CPU. It runs the pass's own code: `createSherpaSeparator` in `src/core/transcription/diarization.ts` reads the audio as a Meeting keeps it, in 10-second parts, and `labelled` in `src/core/meetings/speakerPass.ts` gives the Transcript's lines their labels.
+
+## Running it
+
+```sh
+npm run eval:meetings:fetch            # the meeting audio set (eval/meetings, #85)
+npm run eval:speakers
+npm run eval:meetings:score -- eval/results/speakers-<time>/lines-<threshold>
+```
+
+- **The set:** eval/meetings' cases, online and in a room, in English, Chinese and both. Online, the pass separates the computer's sound and the microphone's lines are "Me"; in a room it separates the room's track.
+- **The lines:** cut with Silero VAD as the transcription process cuts them, then labelled by the pass's rule. That is what DER is scored on: the final labels, a line at a time. `turns-<threshold>` holds the engine's own turns, for comparison.
+- **The models:** downloaded the first time into `~/.cache/incarnamind-eval/models/` (about 30 MB) and checked against the SHA-256 hashes in `src/core/transcription/speakerModel.ts`, as the app downloads them.
+- **Options:** `INCARNAMIND_EVAL_SPEAKER_CASES` picks cases by id, `INCARNAMIND_EVAL_SPEAKER_THRESHOLDS` tries clustering thresholds (`CLUSTER_THRESHOLD` is the app's), `INCARNAMIND_EVAL_SPEAKER_MINUTES` keeps only the start of each case, and `INCARNAMIND_EVAL_SPEAKER_HOUR=1` adds an hour of the room cases for the real-time factor.
+- **Reported:** each case's voices found, labels given and time over audio, with the machine's load average, in `speakers.md`. The scorer gives DER with a 0.25 s collar, overlap scored. The hypotheses carry no text, so its word error rate means nothing here.
+
+## The models' licences
+
+Checked for redistribution on 2026-10-21:
+
+- **pyannote segmentation-3.0:** MIT, © 2022 CNRS. sherpa-onnx's authors' int8 ONNX export carries the licence.
+- **3D-Speaker CAM++ (Chinese and English, `speech_campplus_sv_zh_en_16k-common_advanced`):** Apache-2.0, as its ModelScope card says. sherpa-onnx's authors exported it to ONNX.
