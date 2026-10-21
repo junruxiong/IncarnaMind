@@ -200,10 +200,12 @@ export const Numbering = Extension.create<object, NumberingStorage>({
                 ? { "data-numbering": attributes[NUMBERING_ATTRIBUTE] }
                 : {},
           },
+          // Absent (null), not 0 or false, when unset: the editor's Yjs binding writes any value
+          // it holds, so a default would rewrite every list the core wrote.
           [START_LEVEL_ATTRIBUTE]: {
-            default: 0,
+            default: null,
             parseHTML: (element: HTMLElement) =>
-              Number(element.getAttribute("data-start-level")) || 0,
+              Number(element.getAttribute("data-start-level")) || null,
             renderHTML: (attributes: Record<string, unknown>) => {
               const level = Number(attributes[START_LEVEL_ATTRIBUTE]) || 0;
               return level > 0
@@ -212,8 +214,8 @@ export const Numbering = Extension.create<object, NumberingStorage>({
             },
           },
           [CONTINUES_ATTRIBUTE]: {
-            default: false,
-            parseHTML: (element: HTMLElement) => element.hasAttribute("data-continues"),
+            default: null,
+            parseHTML: (element: HTMLElement) => element.hasAttribute("data-continues") || null,
             renderHTML: (attributes: Record<string, unknown>) =>
               attributes[CONTINUES_ATTRIBUTE] === true ? { "data-continues": "" } : {},
           },
@@ -261,7 +263,7 @@ export const Numbering = Extension.create<object, NumberingStorage>({
           return {
             start: typed.start,
             [NUMBERING_ATTRIBUTE]: typed.scheme === "default" ? null : typed.scheme,
-            [START_LEVEL_ATTRIBUTE]: typed.level,
+            [START_LEVEL_ATTRIBUTE]: typed.level || null,
           };
         },
         joinPredicate: (match, node) => {
@@ -393,7 +395,7 @@ export function setNumbering(editor: Editor, scheme: NumberingScheme): boolean {
 }
 
 export const restartNumbering = (editor: Editor): boolean =>
-  asOneStep(editor, () => setListAttributes(editor, { start: 1, [CONTINUES_ATTRIBUTE]: false }));
+  asOneStep(editor, () => setListAttributes(editor, { start: 1, [CONTINUES_ATTRIBUTE]: null }));
 
 /** Whether the list the caret is in can go on from a numbered list before it, and doesn't yet. */
 export function canContinueNumbering(editor: Editor): boolean {
@@ -485,7 +487,7 @@ export function deepenList(editor: Editor): boolean {
     rest.size === 0
       ? editor.state.tr.setNodeMarkup(listPos, undefined, deeper)
       : editor.state.tr.replaceWith(listPos, listPos + list.nodeSize, [
-          list.type.create({ ...deeper, start: 1, [CONTINUES_ATTRIBUTE]: false }, first),
+          list.type.create({ ...deeper, start: 1, [CONTINUES_ATTRIBUTE]: null }, first),
           list.type.create(list.attrs, rest),
         ]);
   tr.setSelection(TextSelection.create(tr.doc, from));
@@ -516,7 +518,7 @@ export function raiseFromStartLevel(editor: Editor): boolean {
   const nested = after.length
     ? [
         list.type.create(
-          { ...list.attrs, start: 1, [START_LEVEL_ATTRIBUTE]: 0, [CONTINUES_ATTRIBUTE]: false },
+          { ...list.attrs, start: 1, [START_LEVEL_ATTRIBUTE]: null, [CONTINUES_ATTRIBUTE]: null },
           after,
         ),
       ]
@@ -528,8 +530,8 @@ export function raiseFromStartLevel(editor: Editor): boolean {
       {
         ...list.attrs,
         start: 1,
-        [START_LEVEL_ATTRIBUTE]: level - 1,
-        [CONTINUES_ATTRIBUTE]: false,
+        [START_LEVEL_ATTRIBUTE]: level - 1 || null,
+        [CONTINUES_ATTRIBUTE]: null,
       },
       [raised],
     ),

@@ -105,6 +105,8 @@ async function rightClickWords(window: Page, line: Locator, words: string): Prom
 
 /** Opens Aa › Numbering on a selection of `words`. */
 async function aaNumbering(window: Page, line: Locator, words: string): Promise<Locator> {
+  // A menu closed over a selection stays closed until the selection changes: start from elsewhere.
+  await pointAndClick(window, window.getByTestId("mind-editor").locator(":scope > p").first());
   await slideSelect(window, line, words);
   const selectionMenu = window.getByTestId("selection-menu");
   await expect(selectionMenu).toBeVisible();

@@ -72,7 +72,7 @@ const lists = (editor: Editor) => {
     if (node.type.name !== "orderedList") return;
     found.push({
       numbering: node.attrs.numbering,
-      startLevel: node.attrs.startLevel,
+      startLevel: node.attrs.startLevel ?? 0,
       items: node.childCount,
     });
   });
