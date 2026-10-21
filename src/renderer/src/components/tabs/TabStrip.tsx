@@ -12,6 +12,7 @@ import { useFirstOpen } from "../../firstOpen";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
+import { focusTab } from "../../tabFocus";
 import { tabLabelEm } from "../../tabLabel";
 import { InlineName } from "../InlineName";
 import { CloseLineIcon, PinLineIcon, PlusLineIcon, SplitLineIcon } from "../lineIcons";
@@ -20,7 +21,7 @@ import { SidebarToggle } from "../SidebarToggle";
 import { TasksChip } from "../TasksChip";
 import { ExportMenu } from "./ExportMenu";
 import { GroupMenu, StripButton } from "./TabMenus";
-import { focusTab, splitToTheRight } from "./tabActions";
+import { splitToTheRight } from "./tabActions";
 import { MeetingTabTime, TabIcon, useTabTitle } from "./tabItems";
 import { type TabDrag, useTabSource } from "./useTabDrag";
 

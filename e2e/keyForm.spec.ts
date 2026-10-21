@@ -554,6 +554,47 @@ for (const height of [560, 700]) {
   });
 }
 
+for (const { value, line, chips, titles } of [
+  {
+    value: "en",
+    line: "OpenAI, Anthropic, Google, DeepSeek, Kimi and more",
+    chips: ["Anthropic", "OpenAI", "Google", "DeepSeek", "Kimi", "Qwen"],
+    titles: ["Anthropic", "OpenAI", "Google", "DeepSeek", "Kimi"],
+  },
+  {
+    value: "zh-CN",
+    line: "DeepSeek、通义千问、Kimi、智谱 GLM 等",
+    chips: ["DeepSeek", "通义千问", "Kimi", "智谱 GLM", "Anthropic", "OpenAI", "Google"],
+    titles: ["DeepSeek", "通义千问", "Kimi", "智谱 GLM"],
+  },
+] as const) {
+  test(`the first-run key line names the services that work for the language, and each opens its key form in one step (${value})`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1100, 900);
+      await acceptPlainTextKeys(window);
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await expect(card.getByTestId("setup-key-for")).toHaveText(line);
+      await card.getByTestId("setup-key").click();
+      const form = card.getByTestId("provider-form");
+      const row = form.getByRole("radio");
+      await expect(row).toHaveCount(chips.length);
+      for (const [index, name] of chips.entries()) {
+        await expect(row.nth(index)).toHaveAccessibleName(name);
+      }
+      for (const name of titles) {
+        await form.getByRole("radio", { name, exact: true }).check({ force: true });
+        await expect(card.getByTestId("provider-form-title")).toContainText(name);
+        await expect(form.locator('input[type="password"]')).toBeVisible();
+        await expect(form.getByRole("radio", { checked: true })).toHaveAccessibleName(name);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+}
+
 test("in Settings, a key that is not the page's service goes nowhere on Add a provider and on a provider's page, and the page stays the provider's", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
@@ -609,6 +650,94 @@ test("in Settings, a key that is not the page's service goes nowhere on Add a pr
     await pageKey.fill(KEYS.anthropic);
     await expect(page.getByTestId("provider-key-wrong")).toHaveCount(0);
     await expect(save).toBeEnabled();
+  } finally {
+    await app.close();
+  }
+});
+
+test("Kimi is listed under International and under China, and each opens its form on that region (#1348)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    const settings = await openSettings(window, "models");
+    const region = (form: Locator) => form.getByRole("combobox", { name: /^(Region|地域)/ });
+    const open = async (group: string) => {
+      await settings.getByTestId("models-add-provider").click();
+      await settings.getByTestId("provider-directory-search").fill("kimi");
+      const tiles = settings.locator(
+        `[data-testid="provider-directory-group"][data-group="${group}"]`,
+      );
+      await tiles.locator('[data-catalog-id="kimi"]').click();
+      return region(settings.getByTestId("provider-add").getByTestId("provider-form"));
+    };
+
+    await settings.getByTestId("models-add-provider").click();
+    await settings.getByTestId("provider-directory-search").fill("kimi");
+    await expect(settings.getByTestId("provider-directory-group")).toHaveCount(2);
+    await expect(settings.getByTestId("provider-directory-group").first()).toHaveAttribute(
+      "data-group",
+      "international",
+    );
+    await settings.getByTestId("models-back").click();
+
+    await expect(await open("international")).toHaveValue("intl");
+    await settings.getByTestId("models-back").click();
+    await expect(await open("china")).toHaveValue("cn");
+    await settings.getByTestId("models-back").click();
+
+    await language(window, "zh-CN");
+    await settings.getByTestId("models-add-provider").click();
+    await settings.getByTestId("provider-directory-search").fill("kimi");
+    await expect(settings.getByTestId("provider-directory-group")).toHaveCount(2);
+    await settings.getByTestId("models-back").click();
+    await expect(await open("international")).toHaveValue("intl");
+    await settings.getByTestId("models-back").click();
+    // Popular, in Chinese, is Kimi's own region.
+    await expect(await open("popular")).toHaveValue("cn");
+  } finally {
+    await app.close();
+  }
+});
+
+test("with Kimi saved on China, only the China tile says Added and opens it, and International opens an empty form (#1348)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
+    const saved = await window.evaluate(async () => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      return core.saveChatProvider({
+        kind: "kimi",
+        endpoint: "cn",
+        apiKey: "sk-not-real",
+        modelId: "kimi-k2.6",
+      });
+    });
+    const settings = await openSettings(window, "models");
+    const tile = (group: string) =>
+      settings.locator(
+        `[data-testid="provider-directory-group"][data-group="${group}"] [data-catalog-id="kimi"]`,
+      );
+    const directory = async () => {
+      await settings.getByTestId("models-add-provider").click();
+      await settings.getByTestId("provider-directory-search").fill("kimi");
+    };
+
+    await directory();
+    await expect(tile("china")).toContainText("Added");
+    await expect(tile("international")).not.toContainText("Added");
+    await tile("international").click();
+    const form = settings.getByTestId("provider-add").getByTestId("provider-form");
+    await expect(form.getByRole("combobox", { name: /^Region/ })).toHaveValue("intl");
+    await expect(form.getByLabel(/^API key/)).toHaveValue("");
+    await settings.getByTestId("models-back").click();
+
+    await directory();
+    await tile("china").click();
+    await expect(settings.getByTestId("provider-page")).toHaveAttribute(
+      "data-provider-id",
+      saved.id,
+    );
   } finally {
     await app.close();
   }

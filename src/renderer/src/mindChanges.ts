@@ -16,12 +16,7 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import * as Y from "yjs";
 import { MIND_CONTENT_FIELD, MIND_PROPOSAL_REQUESTS_FIELD, type ProposalRef } from "../../core/api";
 import { holdsOnlyItsTitle } from "../../shared/madeMind";
-import {
-  aiUseOfAccepted,
-  changedParagraphs,
-  decideProposals,
-  pendingProposals,
-} from "../../shared/proposals";
+import { aiUseOfAccepted, decideProposals, pendingProposals } from "../../shared/proposals";
 import type { ChangedMind } from "./changedMinds";
 import { readMindHandle } from "./commands/handles";
 import { core } from "./core";
@@ -97,17 +92,15 @@ interface WaitingIn {
 }
 
 /**
- * How many of a row's changes wait in its Mind, by paragraph as its card
- * counts what changed (#1028), or every change from anyone; null until its
- * copy has arrived.
+ * How many of a row's changes wait in its Mind, counted as the Mind's bar and its change card
+ * count them (what Accept and Reject act on), or every change from anyone; null until its copy
+ * has arrived.
  */
 function waiting(row: WaitingIn): number | null {
   const doc = held.get(row.mindId)?.doc;
   if (!doc) return null;
-  const blocks = doc.getXmlFragment(MIND_CONTENT_FIELD);
-  return row.requests
-    ? changedParagraphs(blocks, belongsTo(row.requests))
-    : pendingProposals(blocks).length;
+  const pending = pendingProposals(doc.getXmlFragment(MIND_CONTENT_FIELD));
+  return row.requests ? pending.filter(belongsTo(row.requests)).length : pending.length;
 }
 
 /** How many of a row's changes wait in its Mind: a count, "gone" for a Mind deleted, null until its copy arrives. */

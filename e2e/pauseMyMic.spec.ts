@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import { readVtt } from "../src/core/documents/formats/vtt";
+import { listedGaps, readVtt } from "../src/core/documents/formats/vtt";
 import type { FakeCapture } from "../src/core/meetings/fakeCapture";
 import {
   createDataFolder,
@@ -292,13 +292,15 @@ test("Pause my mic: the bar's button, ⌘K and the shortcut pause and resume the
   await expect(window.getByTestId("meeting-transcript-line")).toContainText("Transcript saved", {
     timeout: 20_000,
   });
-  expect((await marksOf(transcript)).length).toBeGreaterThanOrEqual(3);
   const [stopped] = await window.evaluate(() =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.listMeetings(),
   );
   const { cues, gaps } = readVtt(readFileSync(stopped?.transcript?.savedPath ?? "", "utf8"));
   const stretches = gaps.filter((gap) => gap.reason === "muted");
-  expect(stretches.length).toBe((await marksOf(transcript)).length);
+  expect(stretches.length).toBeGreaterThanOrEqual(3);
+  // A stretch under a second is in the file but not listed, as every gap is.
+  expect(listedGaps(stretches).length).toBeGreaterThanOrEqual(1);
+  expect((await marksOf(transcript)).length).toBe(listedGaps(stretches).length);
   for (const { fromMs, toMs } of stretches) {
     expect(
       cues.filter((cue) => cue.speaker === "Me" && cue.endMs > fromMs && cue.startMs < toMs),

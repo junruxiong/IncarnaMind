@@ -49,6 +49,7 @@ import { looksLikeTable } from "../../../shared/markdownTables";
 import {
   changedParagraphs,
   pendingProposals,
+  proposalRequestOf,
   readProposalAttribute,
   recordProposalRequest,
   resolveProposals,
@@ -1066,6 +1067,23 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     writer.written = blocks.length;
   };
 
+  /**
+   * A chart a call draws is a write the User asked for, whatever their words were: its change
+   * applies at once with Undo, as the text writes do (#1358). In one Mind only, and not in one
+   * the Answer made, as for any other.
+   */
+  const asksForChart = (writer: Pick<Writer, "mind" | "request" | "made">): void => {
+    if (writer.made) return;
+    askedMind ??= writer.mind.id;
+    if (askedMind !== writer.mind.id) return;
+    minds.edit(writer.mind.id, (note) => {
+      const doc = note.doc;
+      const made = doc ? proposalRequestOf(doc, writer.request) : null;
+      if (!doc || made?.source !== "answer-added" || made.requested) return;
+      recordProposalRequest(doc, writer.request, { ...made, requested: "write" });
+    });
+  };
+
   /** What a request did in a Mind: how many of its changes wait there now. */
   const changeIn = (mindId: string, request: string, created: boolean): MindChange => {
     const { proposals, paragraphs, tables, charts } = minds.read(mindId, (note) => ({
@@ -1375,7 +1393,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   };
 
   const drawChart = (
-    writer: Pick<Writer, "mind" | "request" | "origin"> & { ids: readonly string[] },
+    writer: Pick<Writer, "mind" | "request" | "origin" | "made"> & { ids: readonly string[] },
     blocks: readonly NodeJSON[],
     asked: ChartAsked,
     markdown: string | null,
@@ -1401,6 +1419,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       const doc = note.doc;
       if (doc) setOrigins(doc, ids, writer.origin);
     });
+    asksForChart(writer);
     return { said: "IncarnaMind drew the chart from the table, right after it." };
   };
 
@@ -1427,6 +1446,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     const writer = writerFor(mind, null, false);
     writer.anchor = table.picked.id;
     writeMore(writer, [drawn.chart]);
+    asksForChart(writer);
     const change = changeOf(writer, false);
     options.changed(toolCallId, change);
     return `Proposed a chart of the table in “${mind.name}”, right after it. ${outcomeOf(mind, change.request)}`;
@@ -1998,6 +2018,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       request: written.change.request,
       ids: written.blocks.ids,
       origin: options.origin,
+      // Over text the User typed in, the request keeps the rule `writeOver` gave it.
+      made: true,
     };
     const later = chart !== null && written.unrecorded > 0;
     const drawn =
