@@ -73,6 +73,36 @@ describe("What “this” means", () => {
     }
   });
 
+  // protects=a Document's word alone after "this" ("this contract", "本合同", "this agreement") lets the Document on screen decide over a name that holds the word, in both languages, and a name that says more ("this employment agreement") still decides; fails_when=another Document whose name holds the word wins over the one on screen; no_claim=names in other words.
+  test.each([
+    ["What is the notice period in this contract?", ["en"], EN],
+    ["本合同的通知期是多久？", ["en"], EN],
+    ["这份合同的通知期是多久？", ["en"], EN],
+    ["Summarise this agreement", ["nda"], NDA],
+    ["总结这份协议", ["nda"], NDA],
+    ["What is the notice period in this employment agreement?", ["nda"], EN],
+    ["这份劳动合同的通知期是多久？", ["nda"], ZH],
+  ])("“%s” with %o on screen means %o", (question, open, document) => {
+    expect(meant(question, CONTRACTS, { open })).toEqual({ kind: "one", document });
+  });
+
+  // protects=with two Documents open side by side, the selected text's Citation decides, and so does a Document's word only one of them holds; fails_when=the User is asked which though the selection or the words tell; no_claim=none beyond protects.
+  test("with two open, the selection or the one the words fit decides", () => {
+    const both = { open: ["en", "nda"] };
+    expect(meant("Summarise this document", CONTRACTS, { ...both, selected: ["nda"] })).toEqual({
+      kind: "one",
+      document: NDA,
+    });
+    expect(meant("Summarise this agreement", CONTRACTS, both)).toEqual({
+      kind: "one",
+      document: EN,
+    });
+    expect(meant("Summarise this document", CONTRACTS, both)).toEqual({
+      kind: "which",
+      documents: [EN, NDA],
+    });
+  });
+
   // protects=with nothing open, what is in view decides in order: the selected text's Citation, the working copy's own Document, the Mind's Citation, the last Answer's; fails_when=a later source wins, or the User is asked; no_claim=none beyond protects.
   test("with nothing open: the selection, the working copy, the Mind, the last Answer", () => {
     const all = { selected: ["l1"], original: "l2", mind: ["l2"], lastAnswer: ["l2"] };

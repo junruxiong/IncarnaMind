@@ -3,8 +3,9 @@
  * "this document", "this one", "这份", "这个", "该合同". What the User has in view decides: the
  * Document open in the focused group, the one the selected text cites, the one the Mind in focus
  * is the working copy of, the one the Mind cites, the one the last Answer cited. The words decide
- * only whether the request says "this", and which Document when what follows is in its name
- * ("this agreement" in "Employment agreement", "这份劳动合同" in "劳动合同").
+ * only whether the request says "this", and which Document when what follows names it more
+ * plainly than a Document's word ("this employment agreement", "这份劳动合同"), or nothing is in
+ * view ("this agreement" for "Employment agreement").
  */
 import * as Y from "yjs";
 import { CITATION_NODE } from "../api";
@@ -39,6 +40,7 @@ const EN_DOCUMENT =
   /^(?:document|doc|file|pdf|agreement|contract|report|statement|spreadsheet|sheet|invoice|memo|letter|deck|presentation|paper|article|minutes|lease|policy|proposal|plan|brief|budget|filing|résumé|resume|cv)s?$/i;
 const ZH_DOCUMENT =
   "(?:文件|文档|协议|合同|报告|报表|表格|表|发票|备忘录|函|信|演示|幻灯片|论文|文章|纪要|租约|政策|方案|计划|诉状|预算|简历|说明书|手册|章程)";
+const ZH_DOCUMENT_ONLY = new RegExp(`^${ZH_DOCUMENT}$`, "u");
 const EN_THIS = /\bthis\b((?:\s+[\p{L}\p{N}'’-]+){0,3})/iu;
 // 这份 and its kind; 此 not in 因此; 该 and 本 only before a Document's word, so not in 我该, 本周 or 成本.
 const ZH_THIS = new RegExp(
@@ -85,28 +87,36 @@ function wordsAfterThis(question: string): AfterThis | null {
   };
 }
 
+/**
+ * The Documents whose names hold the words after "this", the most of them that any name holds;
+ * `specific` when those words say more than a Document's word ("this employment agreement",
+ * "这份劳动合同", not "this agreement" or "本合同").
+ */
 function namedBy(
   { words, chinese }: AfterThis,
   documents: readonly NamedDocument[],
-): NamedDocument[] {
+): { documents: NamedDocument[]; specific: boolean } {
   if (chinese) {
     const run = words[0] ?? "";
     for (let length = run.length; length >= SHORTEST_ZH_NAME; length--) {
       const part = run.slice(0, length).toLocaleLowerCase();
       const named = documents.filter((each) => each.name.toLocaleLowerCase().includes(part));
-      if (named.length > 0) return named;
+      if (named.length > 0) return { documents: named, specific: !ZH_DOCUMENT_ONLY.test(part) };
     }
-    return [];
+    return { documents: [], specific: false };
   }
   for (let count = words.length; count > 0; count--) {
+    const said = words.slice(0, count);
     const phrase = new RegExp(
-      `(?:^|[^\\p{L}\\p{N}])${escaped(words.slice(0, count).join(" "))}s?(?=$|[^\\p{L}\\p{N}])`,
+      `(?:^|[^\\p{L}\\p{N}])${escaped(said.join(" "))}s?(?=$|[^\\p{L}\\p{N}])`,
       "iu",
     );
     const named = documents.filter((each) => phrase.test(each.name));
-    if (named.length > 0) return named;
+    if (named.length > 0) {
+      return { documents: named, specific: !said.every((word) => EN_DOCUMENT.test(word)) };
+    }
   }
-  return [];
+  return { documents: [], specific: false };
 }
 
 /** Every Document the Citations in these Blocks cite, by id, each once. */
@@ -153,13 +163,16 @@ export function documentMeant(
   };
   const open = among(inView.open);
   const named = namedBy(after, all);
-  const [first, second] = named;
-  if (first && !second) return { kind: "one", document: first };
+  const [first, second] = named.documents;
+  // A name decides first only when the words say more than a Document's word: "this agreement"
+  // with the NDA on screen is the NDA, not the Employment agreement.
+  if (named.specific && first && !second) return { kind: "one", document: first };
   // "This" alone, with nothing on screen, is the last Answer or the User's own text.
   const pointsAtDocument = after.saysDocument || first !== undefined;
+  const selected = only(inView.selected ?? []);
   const viewed = [
     ...(open.length === 1 ? open : []),
-    only(inView.selected ?? []),
+    selected,
     ...(pointsAtDocument
       ? [
           inView.original ? byId.get(inView.original) : undefined,
@@ -168,14 +181,22 @@ export function documentMeant(
         ]
       : []),
   ].filter((each): each is NamedDocument => each !== undefined);
-  if (first) {
-    const seen = [...open, ...viewed].find((each) => named.includes(each));
+  if (named.specific) {
+    const seen = [...open, ...viewed].find((each) => named.documents.includes(each));
     if (seen) return { kind: "one", document: seen };
-    return folder ? null : { kind: "which", documents: named };
+    return folder ? null : { kind: "which", documents: named.documents };
   }
-  if (open.length > 1) return { kind: "which", documents: open };
+  // The selected text's Citation is plainer than two Documents open side by side.
+  if (selected) return { kind: "one", document: selected };
+  if (open.length > 1) {
+    const [openNamed, another] = open.filter((each) => named.documents.includes(each));
+    if (openNamed && !another) return { kind: "one", document: openNamed };
+    return { kind: "which", documents: open };
+  }
   const [inSight] = viewed;
   if (inSight) return { kind: "one", document: inSight };
+  if (first && !second) return { kind: "one", document: first };
+  if (first) return folder ? null : { kind: "which", documents: named.documents };
   if (!pointsAtDocument) return null;
   const [alone, another] = all;
   if (alone && !another) return { kind: "one", document: alone };
