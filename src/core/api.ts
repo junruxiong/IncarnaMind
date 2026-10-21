@@ -402,9 +402,10 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 export const MIND_REVISIONS_FIELD = "revisions";
 
 /**
- * What the User's words in the assistant asked for, as `routeRequest` read
- * them: text changed ("make it longer") or written ("write a summary page").
- * Absent: neither, or a revision of the assistant's own waiting changes.
+ * What a change the assistant made in a Mind was (#880, #1559): text changed
+ * ("make it longer") or written ("write a summary page"); such a change applies
+ * at once, with Undo. Absent: one that waits for the User, such as a revision
+ * of the assistant's own changes still waiting.
  */
 export type RequestedChange = "edit" | "write";
 
@@ -1011,6 +1012,7 @@ export type MindProblem =
         | "stopped"
         | "no-table"
         | "uncited"
+        // Only in Answers written before #1559.
         | "new-mind";
       mindId: string;
     }
@@ -1048,6 +1050,8 @@ export interface MindChange {
   mindId: string;
   /** The call made the Mind. */
   created: boolean;
+  /** It wrote into a Mind that held nothing yet: the empty Mind in front (#1559). Absent: it held text, or the call made it. */
+  filled?: true;
   /** The request its Proposals belong to (`ProposalRef.request`). */
   request: string;
   /** How many Proposals it made there. */
@@ -5245,11 +5249,6 @@ export interface AnswerSteps {
   unbackedClaims?: ClaimedChange[];
   /** Written in advance for the example (`askReadyQuestion`): no model wrote it, and nothing was searched. */
   example?: true;
-  /**
-   * Its model can't call Tools, and the User's words asked to write into a
-   * Mind or change one (`routeRequest`): nothing was written. Absent: neither.
-   */
-  withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
   /**

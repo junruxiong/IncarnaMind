@@ -8,6 +8,7 @@
  * and misses a vague sentence rather than flag an honest one.
  */
 import type { AnswerToolCall, ClaimedChange } from "../api";
+import type { UnmadeFixes } from "./claimedFixes";
 import { type MindNames, toolRecordLines } from "./toolRecord";
 
 /** A change a sentence of the reply says was made, and the Mind it names, by its name; null for none. */
@@ -77,7 +78,7 @@ const READY =
 
 const CHINESE_KINDS = [
   ["新建|创建|建立|生成", "made"],
-  ["添加|加入|写入|写进|插入|补充|追加|写好|写了|新增", "added"],
+  ["添加|加入|加进|加到|放进|放入|放到|写入|写进|写到|插入|补充|追加|写好|写了|新增", "added"],
   [
     "修改|改写|更新|扩写|扩展|扩充|缩短|精简|压缩|翻译|调整|重写|润色|修正|改正|改短|改长|改成|加长|写长|写短|完善",
     "changed",
@@ -304,10 +305,27 @@ export function askAgainNote(
   ].join("\n");
 }
 
-export function askToWriteNote(calls: readonly AnswerToolCall[], names: MindNames): string {
+/** The record of what the calls did, then what the reply says its edits fixed that they didn't (./claimedFixes). */
+export function unmadeFixesNote(
+  unmade: UnmadeFixes,
+  calls: readonly AnswerToolCall[],
+  names: MindNames,
+): string {
+  const said = [
+    ...(unmade.words.length > 0
+      ? [
+          `that you fixed ${unmade.words.map((word) => `“${word}”`).join(", ")}, but your edits left ${unmade.words.length === 1 ? "it" : "them"} in the Mind as before`,
+        ]
+      : []),
+    ...(unmade.count
+      ? [
+          `${unmade.count.claimed} ${unmade.count.of === "places" ? "fixes" : "paragraphs changed"}, but your edits made ${unmade.count.made}`,
+        ]
+      : []),
+  ];
   return [
     thisAnswersRecord(calls, names),
-    "The User asked for this in a Mind, but no Tool changed one. Write it there now with the Minds' Tools, then reply in a sentence or two without repeating it. If you can't, say why in one sentence.",
+    `Your reply says ${said.join(", and ")}. If the User's request still needs that change, make it now with edit_mind. Then write your reply again from its start, saying only what your edits did.`,
     UNSEEN_REPLY,
   ].join("\n");
 }

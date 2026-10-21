@@ -1,10 +1,9 @@
 import type { ConversationAnswer } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
-import { unbackedClaimKey, waitingProblemOf } from "../../changeProblems";
+import { notWrittenReason, waitingProblemOf } from "../../changeProblems";
 import { useT } from "../../i18n";
 import { showWaitingChanges, useWaitingIn } from "../../mindChanges";
 import { useAppStore } from "../../store";
-import { useAnswerLine } from "../../undo";
 import { ProblemLine } from "../ProblemLine";
 
 /**
@@ -44,55 +43,32 @@ export function WaitingChangesLine({ answer }: { answer: Pick<ConversationAnswer
 }
 
 /**
- * Under a reply that claims a change to a Mind that none of its Tool calls
- * made, even once the model was asked again: it says so, with Regenerate.
+ * In place of a reply that claimed a change to a Mind none of its Tool calls
+ * made, even once the model was asked again (#1559): "Nothing was written:
+ * {reason} · Try again", the reason a write call gave for changing nothing,
+ * else that none ran. An Answer that did change a Mind shows its card instead.
  */
-export function UnbackedClaimLine({
+export function NotWrittenLine({
   answer,
-  onRegenerate,
+  onRetry,
 }: {
-  answer: Pick<ConversationAnswer, "steps">;
-  onRegenerate(): void;
+  answer: Pick<ConversationAnswer, "steps" | "toolCalls">;
+  onRetry(): void;
 }) {
   const t = useT();
-  const key = unbackedClaimKey(answer.steps?.unbackedClaims);
-  if (!key) return null;
+  const reason = notWrittenReason(t, answer);
+  if (reason === null) return null;
   return (
     <ProblemLine
       role="status"
-      testId="answer-unbacked-claim"
+      testId="answer-not-written"
       action={{
-        label: t("answer.regenerate"),
-        testId: "answer-unbacked-regenerate",
-        onClick: onRegenerate,
+        label: t("answer.notWritten.retry"),
+        testId: "answer-not-written-retry",
+        onClick: onRetry,
       }}
     >
-      {t(key)}
-    </ProblemLine>
-  );
-}
-
-export function NoMindToolsLine({
-  answerId,
-  onAdd,
-}: {
-  answerId: string;
-  onAdd(button: HTMLElement): void;
-}) {
-  const t = useT();
-  const added = useAnswerLine(answerId);
-  if (added) return null;
-  return (
-    <ProblemLine
-      role="status"
-      testId="answer-no-mind-tools"
-      action={{
-        label: t("answer.noMindTools.add"),
-        testId: "answer-no-mind-tools-add",
-        onClick: (event) => onAdd(event.currentTarget),
-      }}
-    >
-      {t("answer.noMindTools")}
+      {t("answer.notWritten", { reason })}
     </ProblemLine>
   );
 }

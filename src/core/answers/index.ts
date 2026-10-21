@@ -41,7 +41,7 @@
  * Everything here depends on the `AnswerEngine` port, not on the AI SDK.
  */
 import { randomUUID } from "node:crypto";
-import * as Y from "yjs";
+import type * as Y from "yjs";
 import { asGenerated } from "../../shared/aiText";
 import { hasText, pageBlocks } from "../../shared/answerBlocks";
 import { runsByDefault } from "../../shared/approvalRules";
@@ -82,7 +82,6 @@ import {
   type CommandDone,
   type CommandProblem,
   type CommandsFound,
-  type ConversationAnswer,
   type ConversationAskResult,
   type ConversationMessage,
   type ConversationQuestion,
@@ -141,6 +140,7 @@ import { asksForSources } from "../sources/intent";
 import {
   COMMAND_TOOLS,
   DOCUMENT_TOOLS,
+  MIND_TOOLS,
   SKILL_TOOLS,
   type Tool,
   type ToolCallContext,
@@ -160,6 +160,7 @@ import {
   contentHash,
   createElement,
   findBlock,
+  holdsNothing,
   isEdited,
   type NodeJSON,
   syncContent,
@@ -176,10 +177,11 @@ import {
 } from "./citations";
 import {
   askAgainNote,
-  askToWriteNote,
   unbackedClaims as claimsNoCallMade,
   holdBack,
+  unmadeFixesNote,
 } from "./claimedChanges";
+import { unmadeFixesIn } from "./claimedFixes";
 import {
   conversationContext,
   conversationContextOf,
@@ -250,7 +252,6 @@ import {
   workingCopyNote,
 } from "./prompt";
 import { quotedWordsIn, withoutQuotationMarks } from "./quotedWords";
-import { type RequestContext, routeRequest } from "./routeRequest";
 import { withoutSearchTalk } from "./searchTalk";
 import type { ChangeStates } from "./toolRecord";
 import type { TurnCheck } from "./turnChecks";
@@ -401,16 +402,6 @@ const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 const changesAMind = (change: MindChange) =>
   change.created || change.revised === true || change.proposals > 0;
 
-const holdsNothing = (blocks: Y.XmlFragment): boolean =>
-  blocks
-    .toArray()
-    .filter((block): block is Y.XmlElement => block instanceof Y.XmlElement)
-    .every((block, index) =>
-      block.nodeName === "paragraph"
-        ? block.length === 0
-        : index === 0 && block.nodeName === "heading",
-    );
-
 function lastAnswerOf(
   conversationId: string,
   earlier: readonly ConversationMessage[],
@@ -428,11 +419,6 @@ function lastAnswerOf(
     folderId: question?.kind === "question" ? filedIn(question.scope, question.askedFrom) : null,
   };
 }
-
-const followsAChange = (answer: ConversationAnswer | undefined) =>
-  answer !== undefined &&
-  (answer.steps?.withoutMindTools === true ||
-    answer.toolCalls.some((call) => call.mindChange && changesAMind(call.mindChange)));
 
 export interface AnswersOptions {
   content: MindContent;
@@ -877,11 +863,10 @@ export function createAnswers(options: AnswersOptions) {
     assistant?: Pick<
       MindToolsOptions,
       "focused" | "folderId" | "origin" | "lastAnswer" | "remake"
-    > &
-      RequestContext & {
-        /** What the commands of the Conversation's earlier Answers renamed, oldest first. */
-        renames: readonly CommandRename[];
-      };
+    > & {
+      /** What the commands of the Conversation's earlier Answers renamed, oldest first. */
+      renames: readonly CommandRename[];
+    };
   }): void {
     const { home, answerId, model, context, forcedSkill } = input;
     const scoped = input.scoped ?? input.documentIds !== null;
@@ -897,13 +882,10 @@ export function createAnswers(options: AnswersOptions) {
         : null;
     const documentIds = coverage ? coverage.used.map((each) => each.id) : input.documentIds;
     const outside = input.outside === true;
-    const routed =
-      !outside && options.minds && input.assistant
-        ? routeRequest(context.question, input.assistant)
-        : null;
+    // Worked out now, shown only once the Answer has written into a Mind from new text.
     const writtenFrom =
-      routed?.kind === "write" && !routed.fromAnswer
-        ? someOfTheDocuments(input.documentIds, input.assistant?.focused?.mindId ?? null)
+      !outside && options.minds && input.assistant
+        ? someOfTheDocuments(input.documentIds, input.assistant.focused?.mindId ?? null)
         : null;
     const { place } = home;
     const announce = <E extends CoreEventName>(event: E, payload: CoreEvents[E]) => {
@@ -953,7 +935,8 @@ export function createAnswers(options: AnswersOptions) {
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
     let figureRetry: FigureRetry | null = null;
     let unbackedClaims: ClaimedChange[] = [];
-    let withoutMindTools = false;
+    /** Its model couldn't call Tools after all, so a claim in its reply had no Tool to back it. */
+    let withoutTools = false;
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
       inputTokens: 0,
@@ -962,6 +945,16 @@ export function createAnswers(options: AnswersOptions) {
       cacheWriteTokens: 0,
     };
     const toolCalls: AnswerToolCall[] = [];
+    // Its last Answer put in as it is ("make it a document") holds what that Answer covered.
+    const wroteNewText = () =>
+      toolCalls.some(
+        (call) =>
+          call.source === "minds" &&
+          call.tool !== MIND_TOOLS.edit &&
+          call.input.answer !== true &&
+          call.mindChange !== undefined &&
+          changesAMind(call.mindChange),
+      );
     /** When the Question went to the model, and when the Answer ended, in ms since the epoch. */
     let sentAt: number | null = null;
     const waitsForUser: [from: number, to: number][] = [];
@@ -1023,9 +1016,8 @@ export function createAnswers(options: AnswersOptions) {
           firstWordAt !== Infinity && { firstWordMs: wordAfter(sentAt, firstWordAt) }),
         ...(careful && { careful: true as const }),
         ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
-        ...(withoutMindTools && { withoutMindTools: true as const }),
         ...(coverage && { coverage }),
-        ...(writtenFrom && { writtenFrom }),
+        ...(writtenFrom && wroteNewText() && { writtenFrom }),
         ...(reading && { stillReading: reading }),
         ...(sentDocuments && {
           sent: {
@@ -1826,18 +1818,12 @@ export function createAnswers(options: AnswersOptions) {
       // A new piece fills the empty Mind the User is in rather than making another (#1109).
       const focusedEmpty =
         minds !== undefined && focusedId !== null && minds.read(focusedId, holdsNothing);
-      const route = routed?.fillsEmpty && focusedEmpty ? { ...routed, newMind: false } : routed;
-      const requested =
-        route && (route.kind === "write" || route.kind === "edit")
-          ? { change: route.kind, newMind: route.newMind }
-          : null;
       let documentNames: string[] | undefined;
       const mindsTools =
         minds && input.assistant
           ? mindTools({
               minds,
               prepared,
-              requested,
               paragraph: paragraphAsked(context.question),
               ...input.assistant,
               language: answerLanguage(context.question),
@@ -2022,7 +2008,6 @@ export function createAnswers(options: AnswersOptions) {
         return mindsNow;
       };
       const changedAMind = () => [...mindChanges.values()].some(changesAMind);
-      const owesAWrite = () => requested !== null && !changedAMind() && mindProblems.size === 0;
       const heldBack = holdBack(() => mindsListed().map((mind) => mind.name));
       const turnChecks: TurnCheck[] = [
         {
@@ -2036,11 +2021,23 @@ export function createAnswers(options: AnswersOptions) {
           },
         },
         {
-          name: "owed-write",
-          check: () =>
-            owesAWrite()
-              ? { claims: [], note: askToWriteNote(toolCalls, options.readableMindName) }
-              : null,
+          name: "claimed-fixes",
+          check: (text) => {
+            const unmade = minds
+              ? unmadeFixesIn(
+                  text,
+                  toolCalls,
+                  minds,
+                  mindsListed().map((mind) => mind.name),
+                )
+              : null;
+            return unmade
+              ? {
+                  claims: ["changed"],
+                  note: unmadeFixesNote(unmade, toolCalls, options.readableMindName),
+                }
+              : null;
+          },
         },
       ];
       for await (const event of engine.generate({
@@ -2081,7 +2078,10 @@ export function createAnswers(options: AnswersOptions) {
             webInstructions(withWebTools),
             workingCopyNote(original?.name ?? null),
             exampleNote(exampleNames),
-            mindInstructions(withMindTools, route),
+            mindInstructions(withMindTools, {
+              inAssistant: mindsTools !== null && !help,
+              lastAnswer: input.assistant?.lastAnswer != null,
+            }),
             commandInstructions(withCommandTools),
             emptyMindNote(withMindTools, focusedEmpty),
             meetingInstructions(listening),
@@ -2125,7 +2125,7 @@ export function createAnswers(options: AnswersOptions) {
         cacheKey: place.conversationId ?? place.mindId ?? undefined,
         ...(input.assistant && {
           turnChecks,
-          shownUpTo: (text: string) => (owesAWrite() ? 0 : heldBack(text)),
+          shownUpTo: heldBack,
           mayEndBlank: changedAMind,
         }),
         signal: controller.signal,
@@ -2171,7 +2171,7 @@ export function createAnswers(options: AnswersOptions) {
             writeSoon();
             break;
           case "without-tools":
-            withoutMindTools = requested !== null;
+            withoutTools = true;
             break;
           case "usage":
             usage.inputTokens += event.usage.inputTokens ?? 0;
@@ -2247,6 +2247,10 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "finished":
             outcome = { status: "done" };
+            // A claim no call made stands even once asked again: the reply goes, and the Answer
+            // says what was written, or that nothing was (#1559). With no Tools, the reply is all
+            // there is to put into a Mind by hand.
+            if (unbackedClaims.length > 0 && !withoutTools) markdown = "";
             break;
           case "failed":
             outcome = { status: "failed", error: event.error };
@@ -2537,11 +2541,6 @@ export function createAnswers(options: AnswersOptions) {
         folderId: filedIn(question.scope, question.askedFrom),
         origin: { from: messageReference(conversation.id, answer.id), question: question.text },
         lastAnswer: lastAnswerOf(conversation.id, turn.earlier, filedIn),
-        followsAChange: followsAChange(
-          turn.earlier.findLast((message) => message.kind === "answer"),
-        ),
-        followsAnAnswer: turn.earlier.some((message) => message.kind === "answer"),
-        lastAnswerHasText: lastAnswerOf(conversation.id, turn.earlier, filedIn) !== null,
         remake,
         renames: renamesIn(turn.earlier),
       },

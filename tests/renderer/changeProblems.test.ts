@@ -1,16 +1,17 @@
 import { describe, expect, test } from "vitest";
 import type { AnswerToolCall, MindProblem } from "../../src/core/api";
 import {
+  notWrittenReason,
   problemText,
-  unbackedClaimKey,
   waitingProblemOf,
 } from "../../src/renderer/src/changeProblems";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
 /*
  * What an Answer says under its reply about changes it couldn't make:
- * the changes waiting that stopped it, a reply that claims a change none of
- * its calls made, and why a call changed nothing, in English and Chinese.
+ * the changes waiting that stopped it, why nothing was written when its reply
+ * claimed a change none of its calls made, and why a call changed nothing, in
+ * English and Chinese.
  */
 
 const en = (key: MessageKey, params?: MessageParams) => translate("en", key, params);
@@ -44,18 +45,35 @@ describe("The changes waiting that kept an Answer from changing a Mind", () => {
   });
 });
 
-describe("A reply that claims a change none of its calls made", () => {
-  // protects=the line names the weightiest unmade change; fails_when=a made-up Mind reads as a change, or none shows; no_claim=none beyond protects.
-  test("the line for the weightiest claim", () => {
-    expect(unbackedClaimKey(undefined)).toBeNull();
-    expect(unbackedClaimKey([])).toBeNull();
-    expect(unbackedClaimKey(["added", "made"])).toBe("answer.unbacked.made");
-    expect(unbackedClaimKey(["removed"])).toBe("answer.unbacked.removed");
-    expect(unbackedClaimKey(["removed", "changed"])).toBe("answer.unbacked.changed");
-    expect(en("answer.unbacked.changed")).toBe(
-      "This reply says it changed a Mind, but no change was made.",
+describe("Nothing was written, in place of a reply that claimed a change (#1559)", () => {
+  const claimed = { steps: { unbackedClaims: ["added" as const] } };
+
+  // protects=with no write call, the reason says none ran, in English and Chinese; fails_when=the line names no reason, or shows a key; no_claim=how the line is drawn.
+  test("no write call ran", () => {
+    expect(notWrittenReason(en, { ...claimed, toolCalls: [] })).toBe(
+      "the assistant didn’t run the write",
     );
-    expect(zh("answer.unbacked.changed")).toBe("这条回答说修改了 Mind，但实际没有任何改动。");
+    expect(notWrittenReason(zh, { ...claimed, toolCalls: [] })).toBe("助手没有执行写入");
+    expect(en("answer.notWritten", { reason: "the assistant didn’t run the write" })).toBe(
+      "Nothing was written: the assistant didn’t run the write",
+    );
+    expect(zh("answer.notWritten", { reason: "助手没有执行写入" })).toBe(
+      "未写入任何内容：助手没有执行写入",
+    );
+  });
+
+  // protects=a write call that changed nothing gives its own reason; fails_when=the generic reason hides why; no_claim=none beyond protects.
+  test("a write call that changed nothing gives its reason", () => {
+    const failed = { ...call({ kind: "no-mind" }), tool: "add_to_mind" };
+    expect(notWrittenReason(en, { ...claimed, toolCalls: [failed] })).toBe(
+      en("mindCall.failed.noMind"),
+    );
+  });
+
+  // protects=no line without a claim, nor when a Mind did change, whose card says so; fails_when="Nothing was written" shows beside a write; no_claim=none beyond protects.
+  test("no line without a claim, or once a Mind changed", () => {
+    expect(notWrittenReason(en, { steps: null, toolCalls: [] })).toBeNull();
+    expect(notWrittenReason(en, { ...claimed, toolCalls: [call(null, "a")] })).toBeNull();
   });
 });
 
