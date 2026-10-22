@@ -2342,6 +2342,11 @@ export const en = {
   "privacy.flows.allow": "Allow",
   "privacy.flows.partly": "Some uses aren’t allowed yet",
   "privacy.flows.stopped": "Stopped allowing {service}",
+  "privacy.flows.stopFlow": "Stop allowing {flow}",
+  "privacy.flows.allowFlow": "Allow {flow}",
+  "privacy.flows.chatMore": "Chat sends more than its line names.",
+  "privacy.flows.chatMore.details":
+    "Up to 50 Document names, another Mind a Question names, and the live Transcript while a Meeting records.",
   "privacy.flows.stoppedFlow": "Stopped allowing {flow} for {service}",
   "privacy.traffic.title": "Other network traffic",
   "privacy.traffic.intro": "These services receive nothing of yours.",
@@ -2379,7 +2384,8 @@ export const en = {
   "privacy.traffic.remote-connectors.tip":
     "Connects to your remote Connectors’ servers to list their Tools, and to the sign-in services they name. What their Tools are sent is the Connectors flow above.",
   "privacy.skills.title": "Skill scripts",
-  "privacy.skills.body": "Skill scripts run here and can send what they read. Each run asks first.",
+  "privacy.skills.body":
+    "Skill scripts run here and can send what they read. Each asks before it runs, unless you set it to Always allow.",
   "privacy.aiUse.title": "AI use record",
   "privacy.aiUse.body": "Records what AI wrote and checked.",
   "privacy.aiUse.private": "No text, and never sent.",

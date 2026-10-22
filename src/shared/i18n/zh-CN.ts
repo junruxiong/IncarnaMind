@@ -2254,6 +2254,11 @@ export const zhCN = {
   "privacy.flows.partly": "部分用途尚未允许",
   "privacy.flows.stopped": "已停止允许 {service}",
   "privacy.flows.stoppedFlow": "已停止允许 {service} 用于“{flow}”",
+  "privacy.flows.stopFlow": "停止允许“{flow}”",
+  "privacy.flows.allowFlow": "允许“{flow}”",
+  "privacy.flows.chatMore": "“对话”发送的内容比说明里列出的更多。",
+  "privacy.flows.chatMore.details":
+    "最多 50 个文档的名称、问题中提到的另一个 Mind，以及会议录制时的实时转写稿。",
   "privacy.traffic.title": "其他网络连接",
   "privacy.traffic.intro": "这些服务不会收到你的任何内容。",
   "privacy.traffic.on": "开",
@@ -2287,7 +2292,8 @@ export const zhCN = {
   "privacy.traffic.remote-connectors.tip":
     "连接你的远程连接器的服务器以列出工具，并连接它们指定的登录服务。发送给工具的内容属于上面的连接器数据流。",
   "privacy.skills.title": "技能脚本",
-  "privacy.skills.body": "技能脚本在这台电脑上运行，可发送它读取的内容。每次运行前都会询问。",
+  "privacy.skills.body":
+    "技能脚本在这台电脑上运行，可发送它读取的内容。每个脚本运行前都会询问，除非你设为“始终允许”。",
   "privacy.aiUse.title": "AI 使用记录",
   "privacy.aiUse.body": "记录 AI 写了什么、核对了什么。",
   "privacy.aiUse.private": "不含任何文字，绝不发送。",

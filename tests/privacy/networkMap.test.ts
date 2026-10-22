@@ -14,20 +14,36 @@ const root = join(__dirname, "../..");
 const page = readFileSync(join(root, "docs/privacy.md"), "utf8");
 const [flows = "", codeTable = ""] = page.split("## Where the code reaches the network");
 
-/** What reaches the network from the core: a call to `fetch`, a socket, the AI SDK's providers, a model's download host. */
-const REACHES_NETWORK =
-  /\bfetch\s*\(|\bfetch(?:Fn|Impl)\b|node:https?|node:net|new WebSocket|from "@ai-sdk\/|huggingface\.co|\bundici\b/;
+/**
+ * What can reach the network, by what a file says: a mention of `fetch` (a call, a type, a
+ * parameter, an alias of one passed in), a socket, an HTTP client, a hidden page's address, and, in
+ * the text with its comments only taken out, the packages that send (the AI SDK's providers, the
+ * updater, the crash reporter) and a model's download host.
+ */
+const MENTIONS =
+  /\bfetch\b|\bundici\b|\bnew WebSocket\b|\bnet\.(?:request|fetch)\b|\bloadURL\b|node:https?|node:net/;
+const IMPORTS = /@ai-sdk\/|electron-updater|posthog-node|@sentry\/|huggingface\.co/;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) return sourceFiles(path);
-    return path.endsWith(".ts") ? [path] : [];
+    return /\.tsx?$/.test(path) ? [path] : [];
   });
 }
 
 const withoutComments = (source: string) =>
   source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+
+/** Also without what is between quotes, so a word in a message or a column name is no mention. */
+const withoutStrings = (source: string) =>
+  withoutComments(source)
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
+    .replace(/`(?:[^`\\]|\\.)*`/g, "``");
+
+const reaches = (source: string) =>
+  MENTIONS.test(withoutStrings(source)) || IMPORTS.test(withoutComments(source));
 
 describe("docs/privacy.md", () => {
   test.each([...dataFlowIds, ...networkTrafficIds])("has a row for `%s`", (id) => {
@@ -41,14 +57,17 @@ describe("docs/privacy.md", () => {
     expect(listed.filter((path) => !existsSync(join(root, path)))).toEqual([]);
   });
 
-  test("covers every file in src/core that reaches the network", () => {
-    const uncovered = sourceFiles(join(root, "src/core"))
-      .filter((file) => REACHES_NETWORK.test(withoutComments(readFileSync(file, "utf8"))))
-      .map((file) => relative(root, file).split("\\").join("/"))
-      .filter(
-        (file) =>
-          !listed.some((path) => path === file || (path.endsWith("/") && file.startsWith(path))),
-      );
-    expect(uncovered).toEqual([]);
-  });
+  test.each(["src/core", "src/main"])(
+    "covers every file in %s that can reach the network",
+    (folder) => {
+      const uncovered = sourceFiles(join(root, folder))
+        .filter((file) => reaches(readFileSync(file, "utf8")))
+        .map((file) => relative(root, file).split("\\").join("/"))
+        .filter(
+          (file) =>
+            !listed.some((path) => path === file || (path.endsWith("/") && file.startsWith(path))),
+        );
+      expect(uncovered).toEqual([]);
+    },
+  );
 });

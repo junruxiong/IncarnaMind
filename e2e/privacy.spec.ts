@@ -39,6 +39,10 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(statement).toContainText("Only these services receive anything");
   await privacy.getByTestId("privacy-flows-intro-details").click();
   await expect(privacy).toContainText("asks it not to store your requests");
+  // The Chat line names the main parts only, and says so.
+  await expect(privacy.getByTestId("privacy-chat-more")).toContainText(
+    "Chat sends more than its line names",
+  );
 
   // The statement, then the services, then the switch, then the other traffic.
   const service = privacy.getByTestId("data-service");
@@ -116,7 +120,9 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(privacy.locator('[data-traffic-id="ollama-pull"]')).toContainText("Ollama");
 
   // Skill scripts are their own matter.
-  await expect(privacy.getByTestId("skill-scripts-note")).toContainText("Each run asks first");
+  await expect(privacy.getByTestId("skill-scripts-note")).toContainText(
+    "unless you set it to Always allow",
+  );
 
   // A copy built without a crash-report address doesn't offer crash reports.
   await expect(privacy.getByTestId("crash-reports")).toHaveCount(0);
@@ -183,6 +189,47 @@ async function startFakeSentry(): Promise<{ server: Server; dsn: string; events:
   const { port } = server.address() as AddressInfo;
   return { server, dsn: `http://public@127.0.0.1:${port}/1`, events };
 }
+
+test("each use of a service has a button named for it, a service with one use has only its own, and focus stays on the last button", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.saveChatProvider({
+      kind: "openai-compatible",
+      baseUrl: "https://llm.example.com/v1",
+      modelId: "example-model",
+    });
+    await bridge.saveRerankSettings({ kind: "cohere", apiKey: "not-a-real-key" });
+  });
+  const privacy = await openPrivacySettings(window);
+  const services = privacy.getByTestId("data-service");
+  await expect(services).toHaveCount(2);
+  const cohere = services.filter({ hasText: "Cohere" });
+  await cohere.getByTestId("data-service-decision-details").click();
+  await expect(cohere.getByTestId("data-flow")).toHaveCount(1);
+  await expect(cohere.getByTestId("data-flow-revoke")).toHaveCount(0);
+  await expect(cohere.getByTestId("data-service-revoke")).toHaveCount(1);
+
+  const llm = services.filter({ hasText: "llm.example.com" });
+  await llm.getByTestId("data-service-decision-details").click();
+  await expect(llm.getByRole("button", { name: "Stop allowing Chat", exact: true })).toHaveCount(1);
+  const count = await llm.getByTestId("data-flow").count();
+  expect(count).toBeGreaterThan(1);
+  const allowed = await llm.getByTestId("data-flow-revoke").count();
+  for (let stopped = 1; stopped <= allowed; stopped++) {
+    await llm.getByTestId("data-flow-revoke").first().click();
+    await expect(llm.getByTestId("data-flow-revoke")).toHaveCount(allowed - stopped);
+  }
+  await expect(llm).toHaveAttribute("data-consent", "not-asked");
+  // Every use left can be allowed again, and the focus is on a button of the service, not the page.
+  await expect(llm.getByTestId("data-flow-revoke")).toHaveCount(0);
+  await expect(llm.getByTestId("data-flow-allow")).toHaveCount(
+    await llm.getByTestId("data-flow").count(),
+  );
+  await expect(llm.locator("button:focus")).toHaveCount(1);
+  await app.close();
+});
 
 test("with a crash-report address, crash reports are off until opted in, scrubbed, and stop on opting out", async () => {
   const sentry = await startFakeSentry();
