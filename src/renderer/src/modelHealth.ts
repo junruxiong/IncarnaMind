@@ -11,7 +11,8 @@ export interface ModelFailure {
 
 /**
  * Each chat provider's last real failure, from the Answers it wrote: a later Answer that works,
- * or a key saved for it, clears it. Nothing asks the provider just to fill this.
+ * a key saved for it, or signing in to it again clears it. Nothing asks the provider just to
+ * fill this.
  */
 export const useModelHealth = create<{ failures: Readonly<Record<string, ModelFailure>> }>(() => ({
   failures: {},
@@ -20,7 +21,6 @@ export const useModelHealth = create<{ failures: Readonly<Record<string, ModelFa
 const UNHEALTHY: ReadonlySet<ProviderErrorKind> = new Set([
   "auth",
   "model",
-  "rate-limit",
   "network",
   "provider",
   "not-signed-in",

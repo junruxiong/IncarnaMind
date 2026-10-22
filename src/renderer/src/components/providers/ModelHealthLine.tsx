@@ -3,7 +3,6 @@ import { useModelHealth } from "../../modelHealth";
 import { useModelInUse } from "../../modelInUse";
 import { useAppStore } from "../../store";
 
-/** Under the Answers row: the last real failure of the provider of the model the assistant uses, as the failed Answer said it. */
 export function ModelHealthLine() {
   const choice = useModelInUse(null);
   const failure = useModelHealth((state) =>
@@ -20,7 +19,11 @@ export function ModelHealthLine() {
   }
   return (
     <div data-testid="model-health" className="flex basis-full items-start gap-2">
-      <span aria-hidden="true" className="mt-[11px] size-1.5 shrink-0 rounded-full bg-attention" />
+      <span
+        aria-hidden="true"
+        data-testid="model-health-dot"
+        className="mt-[11px] size-1.5 shrink-0 rounded-full bg-attention"
+      />
       <AnswerError
         kind={failure.error.kind}
         modelId={failure.modelId}

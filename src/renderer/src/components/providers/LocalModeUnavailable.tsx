@@ -4,7 +4,6 @@ import { useAppStore } from "../../store";
 import { ProblemLine } from "../ProblemLine";
 import { MODELS_UNDO_PLACE } from "./shared";
 
-/** Settings › Models, where a cloud choice is made while local mode is on: why it can't be used, and the way out. */
 export function LocalModeUnavailable({ className }: { className?: string }) {
   const t = useT();
   const localMode = useAppStore((state) => state.embedding?.localOnly === true);

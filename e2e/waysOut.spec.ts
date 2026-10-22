@@ -2,9 +2,11 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge, SaveChatProviderInput } from "../src/core/api";
+import { createFakeGitHub, LOGIN, USER_CODE } from "../tests/helpers/fakeGitHub";
 import {
   acceptPlainTextKeys,
   addDocuments,
+  addProviderForm,
   addProviderPage,
   assistantAnswers,
   closeSettings,
@@ -38,6 +40,8 @@ async function screenshot(target: Page | Locator, name: string): Promise<void> {
 /** Nothing listens here: as if Ollama weren't on this computer. */
 const NO_OLLAMA = "http://127.0.0.1:9";
 
+const ATTENTION = "rgb(217, 119, 6)";
+
 let dataDir: string;
 let sources: string;
 test.beforeEach(async () => {
@@ -62,6 +66,15 @@ const setLocalMode = (window: Page, on: boolean) =>
       (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.setLocalOnly(value),
     on,
   );
+
+/** The dot leads the line: it ends before the text and sits on its first line. */
+async function expectDotLeads(dot: Locator, line: Locator): Promise<void> {
+  const [dotBox, lineBox] = await Promise.all([dot.boundingBox(), line.boundingBox()]);
+  if (!dotBox || !lineBox) throw new Error("The dot and its line aren't laid out.");
+  expect(dotBox.x + dotBox.width).toBeLessThanOrEqual(lineBox.x);
+  expect(dotBox.y).toBeGreaterThanOrEqual(lineBox.y);
+  expect(dotBox.y + dotBox.height).toBeLessThanOrEqual(lineBox.y + 22);
+}
 
 /** Asks in the assistant beside the Mind, and returns the Answer once it has ended. */
 async function ask(window: Page, question: string): Promise<Locator> {
@@ -94,10 +107,12 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   const answer = await ask(window, "What is in my Documents?");
   await expect(answer).toHaveAttribute("data-status", "failed");
 
-  // Settings › Models says it under the default model: the attention dot, the line and its fix.
   const models = await openSettings(window, "models");
   const health = models.getByTestId("model-health");
   await expect(health).toHaveText("The key for Claude Haiku 5.5 was refused · Check the key");
+  const dot = health.getByTestId("model-health-dot");
+  await expect(dot).toHaveCSS("background-color", ATTENTION);
+  await expectDotLeads(dot, health.getByTestId("answer-error"));
   await screenshot(models, "model-health-refused");
   await setLanguage(window, "zh-CN");
   await expect(health).toHaveText("Claude Haiku 5.5 的密钥被拒绝了 · 检查密钥");
@@ -127,6 +142,8 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   await window.keyboard.press("Enter");
   await expect(refusal).toHaveCount(0);
   await expect(key).toHaveValue("");
+  await settings.getByTestId("models-back").click();
+  await expect(settings.getByTestId("model-health")).toHaveCount(0);
   await window.keyboard.press("Escape");
   await expect(settings).toBeHidden();
 
@@ -137,8 +154,6 @@ test("a refused key: Check the key opens its field with the refusal, and once a 
   const answered = assistantAnswers(window).last();
   await expect(answered).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answered.getByTestId("assistant-answer-text")).not.toBeEmpty();
-  await openSettings(window, "models");
-  await expect(window.getByTestId("model-health")).toHaveCount(0);
   await app.close();
 });
 
@@ -254,7 +269,6 @@ test("a choice that can't be used right now says why, with its next step: Ollama
   await expect(plansLine).toHaveText(unavailable);
   await closeSettings(window);
 
-  // A cloud model in the menu while local mode is on: why on the model, and the way out below.
   await saveProvider(window, {
     kind: "anthropic",
     apiKey: "sk-ant-test-0000",
@@ -282,5 +296,146 @@ test("a choice that can't be used right now says why, with its next step: Ollama
         ).localOnly,
     ),
   ).toBe(false);
+  await app.close();
+});
+
+test("the default model's failure line is about the model in use: another model of the same provider doesn't show a model's failure; English and Chinese", async () => {
+  const unknown = "claude-haiku-5-5-not-found";
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, ollama: NO_OLLAMA });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1440, 900);
+  await acceptPlainTextKeys(window);
+  await window.evaluate(async (modelId) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const provider = await bridge.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test-0000",
+      modelId,
+    });
+    await bridge.setChatModelInMenu({
+      providerId: provider.id,
+      modelId: "claude-haiku-5-5",
+      inMenu: true,
+    });
+  }, unknown);
+  await newMind(window);
+  await window.getByTestId("mind-editor").click();
+  const answer = await ask(window, "What is in my Documents?");
+  await expect(answer).toHaveAttribute("data-status", "failed");
+
+  const models = await openSettings(window, "models");
+  const health = models.getByTestId("model-health");
+  await expect(health).toHaveText(`Anthropic doesn’t know ${unknown} · Choose another model`);
+  await setLanguage(window, "zh-CN");
+  await expect(health).toHaveText(`Anthropic 找不到 ${unknown} · 换一个模型`);
+  await setLanguage(window, "en");
+
+  await models
+    .getByTestId("model-default-chatModel")
+    .selectOption({ label: "Claude Haiku 5.5 · Anthropic" });
+  await expect(health).toHaveCount(0);
+  await app.close();
+});
+
+test("signing in again to a plan clears its failure line before anything is asked again, and so does an Answer that works", async () => {
+  const github = await createFakeGitHub();
+  const { app, window } = await launchApp(dataDir, { copilot: github.origin, ollama: NO_OLLAMA });
+  try {
+    await interceptOpenExternal(app);
+    await setWindowSize(app, window, 1440, 900);
+    await acceptPlainTextKeys(window);
+    const settings = await openSettings(window, "models");
+    const row = settings.getByTestId("plans-copilot");
+    await row.getByTestId("plans-copilot-sign-in").focus();
+    await window.keyboard.press("Enter");
+    await expect(row.getByTestId("copilot-cancel")).toBeFocused();
+    await window.keyboard.press("Shift+Tab");
+    await window.keyboard.press("Enter");
+    await expect(row.getByTestId("copilot-code")).toBeVisible();
+    github.approve();
+    await expect(row.getByTestId("plans-copilot-account")).toHaveText(`Copilot Pro+ · ${LOGIN}`);
+    await closeSettings(window);
+
+    const refusal = {
+      kind: "error" as const,
+      status: 403,
+      body: JSON.stringify({ message: "Resource not accessible by integration" }),
+    };
+    github.replies.push(refusal, refusal, refusal, refusal);
+    await newMind(window);
+    await window.getByTestId("mind-editor").click();
+    const answer = await ask(window, "What does my plan cover?");
+    await expect(answer).toHaveAttribute("data-status", "failed");
+
+    await openSettings(window, "models");
+    const health = settings.getByTestId("model-health");
+    await expect(health).toHaveText(
+      "GitHub didn’t let IncarnaMind use your Copilot plan · Sign in again · Use an API key instead",
+    );
+    await setLanguage(window, "zh-CN");
+    await expect(health).toHaveText(
+      "GitHub 不允许 IncarnaMind 使用你的 Copilot 订阅 · 重新登录 · 改用 API 密钥",
+    );
+    await setLanguage(window, "en");
+    await pointAndClick(window, health.getByTestId("answer-error-action"));
+    await pointAndClick(window, row.getByTestId("copilot-sign-in"));
+    await expect(row.getByTestId("copilot-code")).toHaveText(USER_CODE);
+    github.approve();
+    await expect(row.getByTestId("copilot-notice")).toBeHidden();
+    await expect(health).toHaveCount(0);
+    await expect(assistantAnswers(window)).toHaveCount(1);
+    await closeSettings(window);
+
+    github.replies.push(refusal, refusal, refusal, refusal);
+    const refused = await ask(window, "Who pays for it?");
+    await expect(refused).toHaveAttribute("data-status", "failed");
+    await openSettings(window, "models");
+    await expect(health).toBeVisible();
+    await closeSettings(window);
+    github.replies.length = 0;
+    const answered = await ask(window, "Who owns it?");
+    await expect(answered).toHaveAttribute("data-status", "done");
+    await openSettings(window, "models");
+    await expect(health).toHaveCount(0);
+  } finally {
+    await app.close();
+    await github.close();
+  }
+});
+
+test("with local mode on, a hosted provider's key can still be saved: its field stays usable beside the line", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true, ollama: NO_OLLAMA });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1440, 900);
+  await acceptPlainTextKeys(window);
+  await saveProvider(window, {
+    kind: "anthropic",
+    apiKey: "sk-ant-first-0000",
+    modelId: "claude-haiku-5-5",
+  });
+  await setLocalMode(window, true);
+
+  const settings = await openSettings(window, "models");
+  await settings.getByTestId("provider-row").first().click();
+  const page = settings.getByTestId("provider-page");
+  await expect(page.getByTestId("local-mode-unavailable")).toBeVisible();
+  const key = page.getByTestId("provider-page-key");
+  await expect(key).toBeEditable();
+  await key.fill("sk-ant-second-0000");
+  const save = page.getByTestId("provider-page-save-key");
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(key).toHaveValue("");
+  await expect(page.getByTestId("provider-page-key-error")).toHaveCount(0);
+  await settings.getByTestId("models-back").click();
+
+  const form = await addProviderForm(settings, "openai");
+  const addKey = form.locator('input[type="password"]');
+  await expect(addKey).toBeEditable();
+  await addKey.fill(`sk-proj-${"aZ3".repeat(20)}`);
+  const use = form.getByTestId("provider-use-key");
+  await expect(use).toBeEnabled();
+  await use.click();
+  await expect(settings.getByTestId("provider-page-title")).toHaveText("OpenAI");
   await app.close();
 });
