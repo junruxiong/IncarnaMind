@@ -216,14 +216,32 @@ export function createConsent(
     record(flow, "accepted", [...new Set([...previous, ...flow.sends])], chosen);
   };
 
-  /** Records the User's answer to a waiting request, and lets the requests waiting on it go on. */
-  const answer = (entry: Pending, accepted: boolean, chosen = false) => {
-    const { requestId, flow } = entry.request;
+  const close = (entry: Pending, accepted: boolean) => {
+    const { requestId } = entry.request;
     pending.delete(requestId);
-    if (accepted) recordAccepted(flow, chosen);
-    else record(flow, "declined", []);
     events.emit("consent.resolved", { requestId, accepted });
     entry.settle();
+  };
+
+  /** Records the User's answer to a waiting request, and lets the requests waiting on it go on. */
+  const answer = (entry: Pending, accepted: boolean, chosen = false) => {
+    const { flow } = entry.request;
+    if (accepted) recordAccepted(flow, chosen);
+    else record(flow, "declined", []);
+    close(entry, accepted);
+  };
+
+  /**
+   * A decision brought back answers the request waiting on the same flow and service, as allowing
+   * it does, unless the flow has grown since: that still asks about what is new.
+   */
+  const settleWaiting = (flowId: DataFlowId, serviceId: string) => {
+    for (const entry of [...pending.values()]) {
+      const { flow } = entry.request;
+      if (flow.id !== flowId || flow.service.id !== serviceId) continue;
+      const { consent } = statusOf(flowFor(flowId, flow.service));
+      if (consent !== "not-asked") close(entry, consent === "accepted");
+    }
   };
 
   /**
@@ -248,7 +266,6 @@ export function createConsent(
     });
   };
 
-  /** The flow and service the window names, checked. */
   const named = (flowId: unknown, serviceId: unknown) => {
     if (!isDataFlowId(flowId)) throw new InvalidInputError(`Unknown data flow "${flowId}".`);
     if (typeof serviceId !== "string") throw new InvalidInputError("serviceId must be text.");
@@ -376,7 +393,8 @@ export function createConsent(
 
     /**
      * Brings back the decision `revoke` forgot at `revokedAt`, as it was: the same kinds of data,
-     * chosen or not, even for a service the flow no longer goes to. A decision made since stands.
+     * chosen or not, even for a service the flow no longer goes to. A decision made since stands,
+     * and so does a later forgetting. A request waiting on it is answered.
      */
     restore(flowInput: unknown, serviceInput: unknown, revokedAt: unknown): void {
       const { flowId, serviceId } = named(flowInput, serviceInput);
@@ -385,12 +403,18 @@ export function createConsent(
       }
       db.transaction(() => {
         if (find(flowId, serviceId)) return;
+        // Only the newest forgetting comes back: an older one is stale once a later decision was made.
         db.run(
           `UPDATE data_flow_consents SET deleted_at = NULL, updated_at = ?
-           WHERE flow = ? AND service_id = ? AND deleted_at = ?`,
+           WHERE id = (
+             SELECT id FROM data_flow_consents
+             WHERE flow = ? AND service_id = ? AND deleted_at IS NOT NULL
+             ORDER BY deleted_at DESC, rowid DESC LIMIT 1
+           ) AND deleted_at = ?`,
           [now(), flowId, serviceId, revokedAt],
         );
       });
+      settleWaiting(flowId, serviceId);
     },
 
     listRegistered,

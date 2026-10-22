@@ -9398,14 +9398,14 @@ export interface CoreApi {
   listConsentRequests(): Promise<ConsentRequest[]>;
   respondToConsent(requestId: string, accept: boolean): Promise<void>;
   /**
-   * Forgets the User's decision: the next request on the flow asks again. Returns when, for
-   * `restoreConsent`; null when there was no decision.
+   * Forgets the User's decision: the next request on the flow asks again. Returns the time it was
+   * forgotten (ISO 8601), for `restoreConsent`; null when there was no decision.
    */
   revokeConsent(flowId: DataFlowId, serviceId: string): Promise<string | null>;
   /**
    * Brings back the decision `revokeConsent` forgot at `revokedAt`, as it was: no more kinds of
    * data than were accepted, even for a service the flow no longer goes to. A decision made
-   * since stands.
+   * since stands, and so does a later forgetting: only the newest comes back.
    */
   restoreConsent(flowId: DataFlowId, serviceId: string, revokedAt: string): Promise<void>;
   /**
