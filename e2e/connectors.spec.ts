@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { startFakeRegistry } from "../tests/helpers/fakeRegistry";
 import { type FakeRemote, startFakeRemote } from "../tests/helpers/remoteMcp";
@@ -269,6 +269,73 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     await app.close();
   } finally {
     await fake.close();
+  }
+});
+
+/** Marks a field Chromium would show its own bubble for: one whose `invalid` event nothing handled. */
+async function markBrowserBubble(field: Locator): Promise<void> {
+  await field.evaluate((element) =>
+    element.addEventListener("invalid", (event) => {
+      if (!event.defaultPrevented) element.setAttribute("data-browser-bubble", "");
+    }),
+  );
+}
+
+test("an empty or wrong field of a custom Connector says why under it in the interface's language, not the system's, and the focus goes to the first, in English and Chinese (#1456)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await dismissChatSetup(window);
+    await openSettings(window, "connectors");
+    const page = window.getByTestId("settings-page-connectors");
+    await page.getByTestId("connector-add-custom").click();
+    await setLanguage(window, "zh-CN");
+    const form = page.getByTestId("connector-form");
+    const name = form.getByLabel(/^名称/);
+    const url = form.getByLabel(/^服务器 URL/);
+    await markBrowserBubble(name);
+    await markBrowserBubble(url);
+
+    await form.getByRole("button", { name: "添加连接器" }).click();
+    await expect(name).toBeFocused();
+    await expect(name).toHaveAttribute("aria-invalid", "true");
+    await expect(name).toHaveAccessibleDescription("连接器名称不能为空。");
+    await expect(url).toHaveAttribute("aria-invalid", "true");
+    await expect(url).toHaveAccessibleDescription("输入服务器 URL。");
+
+    // A line goes once its field is right; Enter takes the focus to the field still wrong.
+    await name.fill("Wiki");
+    await expect(name).not.toHaveAttribute("aria-invalid");
+    await url.fill("wiki.example.test");
+    await expect(url).toHaveAccessibleDescription("“wiki.example.test”不是有效的 URL。");
+    await name.press("Enter");
+    await expect(url).toBeFocused();
+    await setLanguage(window, "en");
+    const urlInEnglish = form.getByLabel(/^Server URL/);
+    await expect(urlInEnglish).toHaveAccessibleDescription(
+      "“wiki.example.test” isn’t a valid URL.",
+    );
+    await urlInEnglish.fill("https://wiki.example.test/mcp");
+    await expect(urlInEnglish).not.toHaveAttribute("aria-invalid");
+    await expect(form.getByRole("alert")).toHaveCount(0);
+    await expect(urlInEnglish).not.toHaveAttribute("data-browser-bubble");
+    await expect(form.getByLabel(/^Name/)).not.toHaveAttribute("data-browser-bubble");
+
+    await page.getByRole("tab", { name: "Command" }).click();
+    const localName = form.getByLabel(/^Name/);
+    const command = form.getByLabel(/^Command/);
+    await markBrowserBubble(localName);
+    await markBrowserBubble(command);
+    await form.getByRole("button", { name: "Add Connector" }).click();
+    await expect(localName).toBeFocused();
+    await expect(localName).toHaveAccessibleDescription("A Connector’s name can’t be empty.");
+    await expect(command).toHaveAttribute("aria-invalid", "true");
+    await expect(command).toHaveAccessibleDescription(
+      "Enter the command that starts the Connector.",
+    );
+    await expect(localName).not.toHaveAttribute("data-browser-bubble");
+    await expect(command).not.toHaveAttribute("data-browser-bubble");
+  } finally {
+    await app.close();
   }
 });
 
