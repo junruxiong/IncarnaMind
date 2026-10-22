@@ -37,6 +37,7 @@ import {
   type AudioSource,
   MEETING_AUDIO_KEPT_MS,
   type Meeting,
+  type MeetingFill,
   type MeetingGap,
   type MeetingHelp,
   type MeetingHelpTemplate,
@@ -100,12 +101,27 @@ interface MeetingRow {
   stopped_at: string | null;
   audio_expires_at: string | null;
   audio_deleted_at: string | null;
+  fill: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const COLUMNS =
-  "id, mind_id, status, paused_by, system_audio, periods, started_at, stopped_at, audio_expires_at, audio_deleted_at, created_at, updated_at";
+  "id, mind_id, status, paused_by, system_audio, periods, started_at, stopped_at, audio_expires_at, audio_deleted_at, fill, created_at, updated_at";
+
+/** A Meeting's fill as stored: as the API has it, and the ids of the Blocks it added, for Undo. */
+export interface StoredFill extends MeetingFill {
+  blocks: string[];
+}
+
+function storedFillOf(row: Pick<MeetingRow, "fill">): StoredFill | null {
+  if (row.fill === null) return null;
+  try {
+    return JSON.parse(row.fill) as StoredFill;
+  } catch {
+    return null;
+  }
+}
 
 /** One source's samples since its run began: what is saved, and what waits to fill a part. */
 interface Run {
@@ -208,6 +224,13 @@ export function createMeetings(options: MeetingsOptions) {
   /** Where the stretch ends in wall-clock time, in ms. */
   const endOf = (period: Period) => Date.parse(period.start) + (period.durationMs ?? 0);
 
+  function fillOf(row: MeetingRow): MeetingFill | null {
+    const stored = storedFillOf(row);
+    if (!stored) return null;
+    const { blocks: _blocks, ...fill } = stored;
+    return fill;
+  }
+
   function toMeeting(row: MeetingRow): Meeting {
     const periods = periodsOf(row);
     const last = periods.at(-1);
@@ -246,6 +269,7 @@ export function createMeetings(options: MeetingsOptions) {
       health: health.of(row.id),
       help: help.get(row.id) ?? null,
       helpTemplate: templates.get(row.id) ?? null,
+      fill: fillOf(row),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -754,6 +778,32 @@ export function createMeetings(options: MeetingsOptions) {
       log.info("meeting.stopped", { meetingId: row.id });
       changed();
       return toMeeting(rowOf(row.id));
+    },
+
+    /** The Meeting's fill as stored (#142), with the Blocks it added. */
+    storedFill(meetingId: string): StoredFill | null {
+      return storedFillOf(rowOf(meetingId));
+    },
+
+    /** Records the Meeting's fill (#142) and reports the change. */
+    setFill(meetingId: string, fill: StoredFill): Meeting {
+      save(meetingId, { fill: JSON.stringify(fill) });
+      changed();
+      return toMeeting(rowOf(meetingId));
+    },
+
+    /** The stopped Meetings whose fill was under way or waiting (#142): what a quit left. */
+    unfinishedFills(): { meetingId: string; mindId: string; fill: StoredFill }[] {
+      return db
+        .all<MeetingRow>(
+          `SELECT ${COLUMNS} FROM meetings
+           WHERE deleted_at IS NULL AND status = 'stopped'
+             AND json_extract(fill, '$.state') IN ('waiting', 'filling')`,
+        )
+        .flatMap((row) => {
+          const fill = storedFillOf(row);
+          return fill ? [{ meetingId: row.id, mindId: row.mind_id, fill }] : [];
+        });
     },
 
     retryTranscript(meetingId: unknown): Meeting {
