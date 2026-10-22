@@ -40,7 +40,7 @@ const SENDS_EN = {
     "each sentence you check",
     "the paragraph you pause on, for writing suggestions",
     "the text you ask the assistant to change",
-    "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
+    "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it. Page images of scans go only if you allow them in Settings → Privacy",
   ],
 };
 const SENDS_ZH = {
@@ -51,7 +51,7 @@ const SENDS_ZH = {
     "你核对的每一句话",
     "写作建议时你停下的那一段",
     "你让助手修改的文字",
-    "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档（没有文字的扫描件会发送页面图片）",
+    "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档。扫描件的页面图片只有在你于“设置 → 隐私”中允许后才会发送",
   ],
 };
 

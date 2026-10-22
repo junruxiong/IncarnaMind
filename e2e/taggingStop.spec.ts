@@ -324,6 +324,8 @@ test("while Organize runs, the status names the company too, with Stop", async (
       classifier: { kind: "chat", choice: { providerId, modelId: "claude-sonnet-5-5" } },
       automatic: true,
     });
+    // Page images of a scan go only where the User allows them.
+    await core.allowDataFlow("scan-images", "https://api.anthropic.com");
   }, providerId);
   const scan = join(sources, "Scanned receipt.pdf");
   await writeFile(scan, buildPdf([{ image: true }]));

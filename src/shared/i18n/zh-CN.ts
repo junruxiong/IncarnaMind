@@ -1842,7 +1842,7 @@ export const zhCN = {
   "providers.sends.suggestions": "写作建议时你停下的那一段",
   "providers.sends.edits": "你让助手修改的文字",
   "providers.sends.tagging":
-    "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档（没有文字的扫描件会发送页面图片）",
+    "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档。扫描件的页面图片只有在你于“设置 → 隐私”中允许后才会发送",
   "providers.sends.tagsOnSave": "保存密钥后就开始打标签。",
   "providers.form.saving": "正在保存…",
   "providers.form.moreShort": "更多…",
@@ -2081,7 +2081,9 @@ export const zhCN = {
   "consent.data.tags": "你的标签的名称和描述",
   "consent.data.document-excerpts":
     "每个文档的名称、类型和开头的一段摘录（约 1,500 token），演示文稿还有幻灯片标题，工作簿还有工作表名称",
-  "consent.data.page-images": "没有文字的扫描件：开头最多 3 页的图片（仅当模型能读取图片时）",
+  "consent.flow.scan-images": "扫描件的页面图片",
+  "consent.flow.scan-images.purpose": "读取没有文字的扫描件，以便整理",
+  "consent.data.page-images": "没有文字的扫描件：最多 3 页的页面图片",
   "consent.flow.embeddings": "文档搜索",
   "consent.flow.embeddings.purpose": "按含义搜索你的文档",
   "consent.data.document-text": "每个文档的文字，每段都带着所属文档的名称；更换模型时会重新发送",
@@ -3658,6 +3660,9 @@ export const zhCN = {
   "error.agent.undoChanged": "{path} 之后已有改动，IncarnaMind 未作更改。",
   "error.library.noClassifier": "先选择分类模型。",
   "error.library.noFolders": "先新建或选择文件夹。",
+  "error.library.scanImagesOff":
+    "这份扫描件没有文字，它的页面图片不会发送给 {service}。允许后才能整理它。",
+  "scan.images.allow": "允许发送页面图片",
   "error.library.classifierModel": "选择已连接的提供商和模型。",
   "error.library.autoNotLocal": "自动分类必须在这台电脑上运行。",
   "error.library.localModelMissing": "输入本地服务器和分类模型。",

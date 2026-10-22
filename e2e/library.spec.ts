@@ -8,6 +8,7 @@ import type { CoreBridge } from "../src/core/api";
 import { AUTO_CLASSIFICATION } from "../src/core/library/automatic";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
+  acceptPlainTextKeys,
   addDocuments,
   closeSettings,
   useLocalChatModel as connectLocalChatModel,
@@ -24,6 +25,8 @@ import {
   pointAndClick,
   pointAt,
   removeDataFolder,
+  setLanguage,
+  setWindowSize,
   sidebarFolder,
   tabTo,
 } from "./app";
@@ -883,6 +886,52 @@ test("a bulk Organize leaves the Library's sections, filters and sidebar as the 
       .getByRole("treeitem", { name: /^Invoice/ })
       .click({ position: { x: 120, y: 12 } });
     await expect(library.getByTestId("library-filter")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a scan with no text waits for its page images to be allowed with a cloud model, and the Info panel's button allows them", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await setWindowSize(app, window, 1440, 900);
+    await acceptPlainTextKeys(window);
+    await (await coreOf(window)).evaluate(async (core) => {
+      const provider = await core.saveChatProvider({
+        kind: "anthropic",
+        apiKey: "sk-ant-not-a-real-key",
+        modelId: "claude-sonnet-5-5",
+      });
+      await core.createLibraryGroup({ name: "Receipts", description: "Receipts and invoices" });
+      await core.saveLibrarySettings({
+        classifier: {
+          kind: "chat",
+          choice: { providerId: provider.id, modelId: "claude-sonnet-5-5" },
+        },
+        automatic: true,
+      });
+    });
+    const scan = join(sources, "Scanned receipt.pdf");
+    await writeFile(scan, buildPdf([{ image: true }]));
+    await window.getByTestId("add-documents-input").setInputFiles([scan]);
+    await window.getByTestId("open-library").click();
+    const library = window.getByTestId("library");
+    const info = await infoOf(window, rowOf(library, "Scanned receipt"));
+    const organize = info.getByTestId("info-organize");
+    await expect(organize).toContainText("its page images aren’t sent to Anthropic");
+    const allow = info.getByTestId("info-allow-page-images");
+    await expect(allow).toHaveText("Allow page images");
+    await setLanguage(window, "zh-CN");
+    await expect(allow).toHaveText("允许发送页面图片");
+    await setLanguage(window, "en");
+    await allow.click();
+    await expect(allow).toHaveCount(0);
+    await expect(organize).not.toContainText("aren’t sent");
+    expect(
+      await (await coreOf(window)).evaluate(async (core) => {
+        return (await core.listDataFlows()).find((each) => each.flow.id === "scan-images")?.consent;
+      }),
+    ).toBe("accepted");
   } finally {
     await app.close();
   }

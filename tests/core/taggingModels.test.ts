@@ -553,6 +553,7 @@ describe("The image model reads scans the model that tags can't", () => {
       automatic: true,
       organizeWith: { kind: "chat", choice: { providerId: ollama.id, modelId: "local-model" } },
     });
+    await core.allowDataFlow("scan-images", ANTHROPIC);
     await core.createLibraryGroup({ name: "Scans", description: "Scanned papers" });
     const [scan] = await addAndProcess(core, [
       await writeSourceFile(await createTempDataFolder(), "scan.pdf", SCAN),

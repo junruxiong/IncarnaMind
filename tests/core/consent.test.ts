@@ -88,7 +88,7 @@ describe("Choosing a service is the consent (ADR-0022)", () => {
       allowed("edits", ["selection"]),
       allowed("checks", ["selection", "passages", "verified-document", "blocks"]),
       allowed("tagging", ["tags", "document-excerpts"]),
-      allowed("classification", ["groups", "tags", "document-excerpts", "page-images"]),
+      allowed("classification", ["groups", "tags", "document-excerpts"]),
     ]);
     // The Privacy page hears of it at once.
     expect((await changed).find((flow) => flow.id === "chat")?.services).toEqual([

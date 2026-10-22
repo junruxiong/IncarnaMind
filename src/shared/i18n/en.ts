@@ -1911,7 +1911,7 @@ export const en = {
   "providers.sends.suggestions": "the paragraph you pause on, for writing suggestions",
   "providers.sends.edits": "the text you ask the assistant to change",
   "providers.sends.tagging":
-    "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
+    "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it. Page images of scans go only if you allow them in Settings → Privacy",
   "providers.sends.tagsOnSave": "Tagging starts when you save the key.",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
@@ -2164,7 +2164,9 @@ export const en = {
   "consent.data.tags": "The names and descriptions of your Tags",
   "consent.data.document-excerpts":
     "Each Document’s name and type and an excerpt of its start (about 1,500 tokens), with a deck’s slide titles or a workbook’s sheet names",
-  "consent.data.page-images": "A scan with no text: up to 3 page images, if the model reads images",
+  "consent.flow.scan-images": "Page images of scans",
+  "consent.flow.scan-images.purpose": "read a scan that has no text, so it can be sorted",
+  "consent.data.page-images": "Up to 3 page images of a scan with no text",
   "consent.flow.embeddings": "Document search",
   "consent.flow.embeddings.purpose": "search your Documents by their meaning",
   "consent.data.document-text":
@@ -3807,6 +3809,9 @@ export const en = {
   "error.agent.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
   "error.library.noClassifier": "Choose a classification model first.",
   "error.library.noFolders": "Create or choose Folders first.",
+  "error.library.scanImagesOff":
+    "No text in this scan, and its page images aren’t sent to {service}. Allow them to sort it.",
+  "scan.images.allow": "Allow page images",
   "error.library.classifierModel": "Choose a connected provider and a model.",
   "error.library.autoNotLocal": "Automatic classification must run on this computer.",
   "error.library.localModelMissing": "Enter the local server and decision model.",

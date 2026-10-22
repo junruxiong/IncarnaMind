@@ -3,7 +3,7 @@ import type { Document, LibraryGroup, LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
 import { mindName } from "../../../shared/naming";
 import { copyText } from "../copied";
-import { files } from "../core";
+import { core, files } from "../core";
 import { useDocumentFolder, useUnitCount } from "../documentFacts";
 import { documentStatusText } from "../documentStatus";
 import { providerErrorText } from "../errors";
@@ -27,6 +27,7 @@ import { chipsOf } from "../tagEditing";
 import { DocumentLineIcon, FolderLineIcon } from "./lineIcons";
 import { TagDot } from "./TagColour";
 import { buttonClass } from "./ui";
+import { useTaggingService } from "./useTaggingService";
 
 const WIDTH_PX = 340;
 const EDGE_PX = 8;
@@ -229,6 +230,10 @@ function DocumentInfo({ document }: { document: Document }) {
   const assignment = useAppStore((state) =>
     state.library?.assignments.find((each) => each.documentId === document.id),
   );
+  const scanImages = useTaggingService(
+    "scan-images",
+    assignment?.error?.wording?.key === "error.library.scanImagesOff",
+  );
   const folder = useDocumentFolder(document.id);
   const linkedName = useAppStore((state) => {
     const linked = state.linkedFolders.find((each) => each.id === document.linkedFolderId);
@@ -322,6 +327,20 @@ function DocumentInfo({ document }: { document: Document }) {
           )}
           {assignment?.error && (
             <span className="block text-ink-meta">{providerErrorText(assignment.error, t)}</span>
+          )}
+          {scanImages && !scanImages.allowed && (
+            <button
+              type="button"
+              data-testid="info-allow-page-images"
+              onClick={() =>
+                void core
+                  .allowDataFlow("scan-images", scanImages.service.id)
+                  .catch((error: unknown) => useAppStore.getState().reportError(error))
+              }
+              className={`${buttonClass} mt-1.5`}
+            >
+              {t("scan.images.allow")}
+            </button>
           )}
         </Row>
       </Rows>

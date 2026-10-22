@@ -4,7 +4,13 @@ import { wordingOf } from "../../shared/errorWording";
 import { translate } from "../../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../../shared/libraryModels";
 import { libraryPresetKeys } from "../../shared/libraryPresets";
-import type { DocumentKind, FolderDeletion, MovedDocument, ProviderError } from "../api";
+import type {
+  DocumentKind,
+  ExternalService,
+  FolderDeletion,
+  MovedDocument,
+  ProviderError,
+} from "../api";
 import type { BackgroundQueue } from "../backgroundQueue";
 import {
   ChatNotReadyError,
@@ -163,17 +169,14 @@ function parsePreviousAssignment(
 }
 
 /**
- * What Organize sends to a cloud model: the Folders and Tags, each
- * Document's excerpt, and a scan's page images, which go only to a chat
- * model that reads images. Page images are a kind of their own, so a User
- * who allowed the flow before it sent them is asked again.
+ * What Organize sends to a cloud model: the Folders and Tags, and each
+ * Document's excerpt. A scan's page images are the "scan-images" flow's, which
+ * choosing the provider doesn't allow.
  */
-export const CLASSIFICATION_FLOW_SENDS = [
-  "groups",
-  "tags",
-  "document-excerpts",
-  "page-images",
-] as const;
+export const CLASSIFICATION_FLOW_SENDS = ["groups", "tags", "document-excerpts"] as const;
+
+/** Up to 3 page images of a PDF with no text, to a model that reads images. */
+export const SCAN_IMAGES_FLOW_SENDS = ["page-images"] as const;
 
 /**
  * One flat group per Document; user choices, including Not in a Folder, always win.
@@ -197,6 +200,11 @@ export function createLibrary(options: {
    * no text, a scan: itself, or through the image model.
    */
   readsPages(classifier: TaggingClassifier): boolean;
+  /**
+   * The service that would read a scan's pages for this classifier if the User
+   * allowed it, while they haven't; null when it reads them, or can't.
+   */
+  pagesWaitFor(classifier: TaggingClassifier): ExternalService | null;
   pageImages(id: string, contentHash: string, signal: AbortSignal): Promise<DocumentPageImage[]>;
   /** The pause a rate limit puts on all Tagging (see ../tags/rateLimit). */
   rateLimit: Pick<RateLimitPause, "pausedUntil" | "pause" | "succeeded" | "refusal" | "refuse">;
@@ -324,6 +332,19 @@ export function createLibrary(options: {
           doc.id,
         ]))
     );
+  };
+  /** Why a scan with no text waits: its page images may not go to the service that would read them yet. */
+  const scanWaits = (doc: DocumentRow): ProviderError | undefined => {
+    if (doc.kind !== "pdf" || doc.status !== "no-text") return undefined;
+    const classifier = organizeModelOf(getSettings());
+    const service = classifier && options.pagesWaitFor(classifier);
+    return service
+      ? {
+          kind: "consent-declined",
+          message: `Page images of scans aren't sent to ${service.name}.`,
+          wording: { key: "error.library.scanImagesOff", values: { service: service.name } },
+        }
+      : undefined;
   };
   /** What Organize reads of the indexed version (see ./excerpt). */
   const source = (doc: DocumentRow, withPassages = true): OrganizeSource => ({
@@ -476,7 +497,14 @@ export function createLibrary(options: {
     } catch {
       return;
     }
-    if (!hasContent(doc) || !assignment(id)) return;
+    const current = assignment(id);
+    if (!current) return;
+    if (!hasContent(doc)) {
+      const waits = scanWaits(doc);
+      const saidSo = current.error_wording?.includes("error.library.scanImagesOff") === true;
+      if (current.status !== "classified" && !!waits !== saidSo) state(id, "waiting", waits);
+      return;
+    }
     queued.add(id);
     background.add({
       kind: "classification",
@@ -492,7 +520,7 @@ export function createLibrary(options: {
           if (!initial || initial.status === "classified") return;
           const current = document(id);
           if (!hasContent(current)) {
-            state(id, "waiting");
+            state(id, "waiting", scanWaits(current));
             return;
           }
           const definitions = groups();
@@ -1101,6 +1129,26 @@ export function createLibrary(options: {
           (doc.status === "no-text" || doc.status === "failed")
         )
           state(id, "classified");
+        // A scan whose page images may not go yet is left unsorted, with the reason.
+        const waits = scanWaits(doc);
+        if (
+          waits &&
+          existing?.source !== "user" &&
+          getSettings().automatic &&
+          groups().length > 0 &&
+          !taggingStoppedFor(id) &&
+          (!existing || existing.content_hash !== doc.content_hash)
+        ) {
+          write(
+            doc,
+            existing?.group_id ?? null,
+            existing?.source ?? "automatic",
+            "waiting",
+            null,
+            false,
+          );
+          state(id, "waiting", waits);
+        }
         return;
       }
       if (

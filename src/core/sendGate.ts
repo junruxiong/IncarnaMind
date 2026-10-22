@@ -45,6 +45,18 @@ function checkedBefore<T extends object>(model: T, method: string, check: () => 
   });
 }
 
+/** Whether a request carries a picture: Organize's page images, which only their own flow may send. */
+const carriesImages = (
+  prompt: readonly { content: string | readonly { type: string; mediaType?: string }[] }[],
+) =>
+  prompt.some(
+    (message) =>
+      typeof message.content !== "string" &&
+      message.content.some(
+        (part) => part.type === "file" && part.mediaType?.startsWith("image/") === true,
+      ),
+  );
+
 export function createSendGate(consent: Consent, localOnly: () => boolean) {
   /** Throws `LocalModeError`, `ConsentRevokedError` or `ConsentNeededError` when nothing may go to `service` on `flowId` now. */
   const check = (flowId: DataFlowId, service: ExternalService): void => {
@@ -70,12 +82,18 @@ export function createSendGate(consent: Consent, localOnly: () => boolean) {
         model,
         middleware: {
           specificationVersion: "v4",
-          wrapGenerate: ({ doGenerate }) => {
+          wrapGenerate: ({ doGenerate, params }) => {
             check(flowId, service);
+            if (flowId === "classification" && carriesImages(params.prompt)) {
+              check("scan-images", service);
+            }
             return doGenerate();
           },
-          wrapStream: ({ doStream }) => {
+          wrapStream: ({ doStream, params }) => {
             check(flowId, service);
+            if (flowId === "classification" && carriesImages(params.prompt)) {
+              check("scan-images", service);
+            }
             return doStream();
           },
         },
