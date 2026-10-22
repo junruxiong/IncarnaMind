@@ -420,7 +420,7 @@ describe("A Citation's Location label (ADR-0011)", () => {
   });
 
   describe("of a Document with no headings (#1601)", () => {
-    const RESUME = "7年设计经验-张瑜 2";
+    const RESUME = "示例简历-设计师 2";
     const none = at({ kind: "section", heading: null }, RESUME);
     const paragraph = (from: number, to = from) =>
       at({ kind: "section", heading: null, paragraphs: { from, to } }, RESUME);

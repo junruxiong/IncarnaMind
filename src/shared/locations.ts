@@ -387,10 +387,7 @@ function commentAt(unit: UnitText, offset: number): { author: string | null } | 
   return null;
 }
 
-/**
- * Whether a section's Location names paragraphs: a web page's, numbered from its heading, and the
- * text of a Word file with no headings, numbered from its start, which has no place but them.
- */
+// A Word file with no headings has no place but its paragraphs.
 function numbersParagraphs({ label }: UnitText): boolean {
   if (label?.paragraphs) return true;
   return label?.path?.length === 0 && !label.beforeHeading && !label.notes;

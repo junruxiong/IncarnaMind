@@ -62,13 +62,12 @@ const COMMENTED = await extractUnits(
   ]),
 );
 
-/** A résumé with no headings, and a letter with one, as Word files. */
 const SKILLS = "主导过三个品牌的视觉升级，带领五人设计团队。";
 const RESUME = await extractUnits(
   "docx",
   new Uint8Array(
     docxOf([
-      { text: "张瑜" },
+      { text: "示例员工" },
       { text: "" },
       { text: "资深视觉设计师" },
       { text: "7年设计经验，擅长品牌与界面设计。" },
@@ -325,7 +324,7 @@ describe("A Word file with and without headings (#1601)", () => {
   });
 
   test("is cited by its name and paragraph, in English and Chinese, and by its name alone when no paragraph is known", () => {
-    const name = "7年设计经验-张瑜 2";
+    const name = "示例简历-设计师 2";
     const where = cited(name, RESUME, SKILLS);
     expect(citationSource(where, t("en")).text).toBe(`${name}, ¶\u00a04`);
     expect(citationSource(where, t("zh-CN")).text).toBe(`${name}，第 4 段`);
@@ -573,7 +572,7 @@ describe("Citing Word, PowerPoint and Excel Documents in an Answer", { timeout: 
   });
 
   test("a Word file with no headings is cited by its paragraph, one with headings from before the first as '§ Start', and the footnotes say so (#1601)", async () => {
-    const name = "7年设计经验-张瑜 2";
+    const name = "示例简历-设计师 2";
     const model = citingModel({
       query: "品牌 视觉 Figma Dear team Payment",
       records: (passages) => [
@@ -588,7 +587,7 @@ describe("Citing Word, PowerPoint and Excel Documents in an Answer", { timeout: 
         name: `${name}.docx`,
         contents: new Uint8Array(
           docxOf([
-            { text: "张瑜" },
+            { text: "示例员工" },
             { text: "资深视觉设计师" },
             { text: "主导过三个品牌的视觉升级，带领五人设计团队。" },
             { text: "Figma、Sketch 与 Photoshop。" },

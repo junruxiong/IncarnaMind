@@ -23,9 +23,9 @@ const MODEL =
   process.env.INCARNAMIND_LIVE_ANTHROPIC_MODEL ??
   (catalogProvider("anthropic")?.roles.quickTasks as string);
 
-const NAME = "7年设计经验-张瑜 2";
+const NAME = "示例简历-设计师 2";
 const RESUME = docxOf([
-  { text: "张瑜" },
+  { text: "示例员工" },
   { text: "资深视觉设计师，7年设计经验" },
   {
     text: "2019年至今：在一家电商公司担任视觉设计负责人，主导过三个品牌的视觉升级，带领五人设计团队。",
