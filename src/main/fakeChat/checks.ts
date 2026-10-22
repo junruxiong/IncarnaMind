@@ -3,9 +3,9 @@
  * three words with a Passage's line is supported, or contradicted when it has a
  * number the line doesn't; otherwise unsupported. A sentence the User cites a
  * quote for that `PARTLY` lists, or one with no Citation that `PARTLY_UNCITED`
- * lists, is unsupported and says what the quote covers and what it doesn't. Offered calculate, a sentence
- * that states a multiple ("1.1x") has it worked out as the line's first number
- * over its second (#707).
+ * lists, is unsupported and says what the quote covers and what it doesn't.
+ * Offered calculate, a sentence that states a multiple ("1.1x") has it worked
+ * out as the line's first number over its second (#707).
  */
 
 import { passagesIn, recordFor } from "./passages";

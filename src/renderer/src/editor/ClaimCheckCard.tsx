@@ -313,9 +313,10 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * holds, that it can't be checked here, with Remove the mark only; for a
  * sentence with a Citation, the part the Citation doesn't cover, with its
  * quote, and Cut the unsupported part, Search all Documents and Keep as my view
- * (#1111); for one without, a Passage the check quoted for part of it, with
- * what that part is and what it doesn't cover; otherwise why, with Check again. A Passage from a saved web page
- * names the page. Documents IncarnaMind wrote that matched are named, with Count it.
+ * (#1111); for one without, the Passage the check quoted for part of it, with
+ * what that part is and what it doesn't cover; otherwise why, with Check again.
+ * A Passage from a saved web page names the page. Documents IncarnaMind wrote
+ * that matched are named, with Count it.
  */
 function ClaimCard({
   claim,
