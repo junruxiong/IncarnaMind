@@ -646,11 +646,8 @@ export function createDocuments(options: DocumentsOptions) {
     return keep.size > 0 ? { contentHash: row.content_hash, units: [...keep.values()] } : null;
   }
 
-  /**
-   * The pages read so far of another version than the one indexed, by a read that a quit, a
-   * crash or a stop ended (#1504): those written last. The job uses them only if the file is
-   * still that version.
-   */
+  // A read that a quit, a crash or a stop ended leaves the pages of a version not yet indexed
+  // (#1504); the job uses them only if the file is still that version.
   function unfinishedScan(row: Pick<DocumentRow, "id" | "content_hash">): ScanJob["keep"] {
     const latest = db.get<{ content_hash: string }>(
       `SELECT content_hash FROM document_pages
@@ -682,10 +679,8 @@ export function createDocuments(options: DocumentsOptions) {
     return units.length > 0 ? { contentHash: latest.content_hash, units } : null;
   }
 
-  /**
-   * Writes a scanned page as soon as it is read, in place of the one before it for its version,
-   * so a quit or a crash keeps it (#1504); the finished read writes them all again.
-   */
+  // Written as soon as it is read, so a quit or a crash keeps it (#1504); the finished read
+  // writes them all again.
   function keepScannedPage(documentId: string, contentHash: string, unit: TextUnit): void {
     db.transaction(() => {
       // A job stopped meanwhile read it all the same: the next one keeps it.
