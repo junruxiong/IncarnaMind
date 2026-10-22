@@ -88,7 +88,7 @@ const releaseDataFolder = () => instanceLock?.release();
 app.on("quit", releaseDataFolder);
 
 // Whether Skill scripts run in the OS sandbox, found out while Electron starts.
-const scriptExecutor = chooseExecutor(logger);
+const scriptExecutor = ownsDataFolder ? chooseExecutor(logger) : Promise.resolve(undefined);
 
 /** Set by electron-vite in development; absent in a built app. */
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
