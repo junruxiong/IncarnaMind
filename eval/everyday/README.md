@@ -47,7 +47,7 @@ INCARNAMIND_EVAL_CHAT_KEY=sk-ant-... \
 npm run eval:everyday
 ```
 
-- `INCARNAMIND_EVAL_EVERYDAY=hard` asks only the hard requests, for a stronger model such as Claude Sonnet 5.5, `research` only the research questions, and `dates` only the contracts and minutes. A list of ids asks only those: `INCARNAMIND_EVAL_EVERYDAY=owner-1,only-second-en`.
+- `INCARNAMIND_EVAL_EVERYDAY=hard` asks only the hard requests, for a stronger model such as Claude Sonnet 5.5, `research` only the research questions, `dates` only the contracts and minutes, and `chinese` only the requests in Chinese. A list of ids asks only those: `INCARNAMIND_EVAL_EVERYDAY=owner-1,only-second-en`.
 - `INCARNAMIND_EVAL_EVERYDAY_RUNS` sets how many times each request is asked (3 by default).
 - Another model judges the claims, never the one asked: Claude Sonnet 5.5 on the Anthropic key (Opus 5.5 when Sonnet is asked), or the one `INCARNAMIND_EVAL_JUDGE_KIND`, `_MODEL` and `_KEY` name, which a run on another provider must set. The report says which.
 - The report goes into `eval/results/<start time>-everyday/`. `report.md` has the pass rates by language and by request, against each request's floor, the Answers' tokens, then every run's result with its reply and the Blocks it changed. `report.json` has the same data.
