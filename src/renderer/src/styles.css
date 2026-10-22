@@ -2210,6 +2210,20 @@
       cursor: default;
     }
   }
+  /*
+   * A menu that scrolls shows it: a shadow at the edge with more beyond it, which the menu's own
+   * background covers once that end is reached (#1501).
+   */
+  .menu-scrolls {
+    background:
+      linear-gradient(var(--color-sheet) 30%, transparent) 0 0 / 100% 28px no-repeat local,
+      linear-gradient(transparent, var(--color-sheet) 70%) 0 100% / 100% 28px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 0.22), transparent) 0 0 / 100% 10px
+      no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 0.22), transparent) 0 100% / 100% 10px
+      no-repeat scroll,
+      var(--color-sheet);
+  }
   /* The "@" and "/" pickers: above the composer, at its left edge. */
   .composer-picker {
     position: absolute;

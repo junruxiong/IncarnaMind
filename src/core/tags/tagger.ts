@@ -39,7 +39,7 @@ import {
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
-import { isPlanLimit } from "../providers/chatgpt/errors";
+import { reachedPlanLimit } from "../library/planPace";
 import { classifyProviderError } from "../providers/providerErrors";
 import { gateStop } from "../sendGate";
 import type { PaceTimers } from "../sources/pace";
@@ -265,8 +265,8 @@ export function createTagger(options: TaggerOptions) {
           const why = rateLimitError(limitedUntil, error);
           if (setState(id, "waiting-for-provider", why)) announce([id]);
           park(why);
-        } else if (isPlanLimit(error)) {
-          // The ChatGPT plan's limit: this and the rest wait for it to reset (see ../library/planPace).
+        } else if (reachedPlanLimit(error)) {
+          // The plan's limit: this and the rest wait for it to reset (see ../library/planPace).
           const why = classifyProviderError(error);
           if (setState(id, "waiting-for-provider", why)) announce([id]);
           park(why);
@@ -504,6 +504,19 @@ export function createTagger(options: TaggerOptions) {
       if (changed.length > 0) announce(changed);
       if (!ready) return;
       for (const { id, row } of rows) if (row.status === "ready") enqueue(id, true);
+    },
+
+    /** The ready Documents whose tagging, or Organize's, couldn't reach the AI model, unless stopped. */
+    unreached(): string[] {
+      return db
+        .all<{ id: string }>(
+          `SELECT id FROM documents
+           WHERE deleted_at IS NULL AND status = 'ready'
+             AND tagging_status = 'failed' AND tagging_error_kind = 'network'
+           ORDER BY created_at, rowid`,
+        )
+        .map((row) => row.id)
+        .filter((id) => !options.stopped(id));
     },
 
     /** Stops: Documents keep their state, and the next start picks them up. */
