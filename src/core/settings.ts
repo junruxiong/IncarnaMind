@@ -73,8 +73,7 @@ const isMarkAiTextAnswer = (value: unknown): value is MarkAiTextChoice | null =>
 
 /**
  * Word's choices of #107 came later: choices saved before them have none, and read as the
- * defaults. Marking AI text was a switch before it became a question (#1380), so a boolean is
- * still read, as `markAiTextRead` says.
+ * defaults. A boolean is still read for marking AI text, as `markAiTextRead` says.
  */
 const isWordOption = (value: unknown) =>
   isQuestionsOption(value) ||
@@ -83,11 +82,8 @@ const isWordOption = (value: unknown) =>
     WORD_SWITCHES.every((choice) => isBoolean(value[choice])) &&
     (isBoolean(value.markAiText) || isMarkAiTextAnswer(value.markAiText)));
 
-/**
- * The switch was on by default, so a saved "on" was never an answer: the question is still to be
- * asked. A saved "off" was a choice not to mark.
- */
 function markAiTextRead(saved: unknown): MarkAiTextChoice | null {
+  // The switch was on by default, so a saved "on" was never an answer; "off" was a choice.
   if (isMarkAiTextAnswer(saved)) return saved;
   return saved === false ? "leave" : null;
 }
