@@ -22,6 +22,12 @@ export const SAME_PERSON = 0.6;
 const STRAY_SHARE = 0.02;
 /** A voiceprint is taken from a voice's longest stretches, up to this much of them. */
 const PRINT_SECONDS = 30;
+/**
+ * The engine clusters at most this much audio at once; a longer recording is cut into even
+ * windows whose voices are then joined by voiceprint. Its clustering compares every stretch with
+ * every other, so its memory grows with the square of the length: 2.1 GB for two hours at once.
+ */
+export const WINDOW_SECONDS = 60 * 60;
 
 const WAV_HEADER_BYTES = 44;
 const SAMPLES_PER_MS = MEETING_SAMPLE_RATE / 1000;
@@ -88,7 +94,7 @@ export function toMeetingTime(
   return turns;
 }
 
-interface Segment {
+export interface Segment {
   start: number;
   end: number;
   speaker: number;
@@ -201,16 +207,43 @@ function voiceprintsOf(
   return voices;
 }
 
+/** The engine's segments over the recording, a window at a time, each window's voices its own. */
+export function segmentsByWindow(
+  samples: Float32Array,
+  windowSeconds: number,
+  process: (window: Float32Array) => readonly Segment[],
+): Segment[] {
+  const count = Math.max(1, Math.ceil(samples.length / (windowSeconds * MEETING_SAMPLE_RATE)));
+  const length = Math.ceil(samples.length / count);
+  const all: Segment[] = [];
+  let voices = 0;
+  for (let from = 0; from < samples.length; from += length) {
+    const seconds = from / MEETING_SAMPLE_RATE;
+    const found = process(samples.subarray(from, from + length));
+    for (const segment of found) {
+      all.push({
+        start: segment.start + seconds,
+        end: segment.end + seconds,
+        speaker: voices + segment.speaker,
+      });
+    }
+    voices += found.reduce((most, segment) => Math.max(most, segment.speaker + 1), 0);
+  }
+  return all;
+}
+
 /**
  * Separates the voices in a request's parts. The models load for each request, as each is one
- * Meeting. `threshold` is for the evaluation's tuning.
+ * Meeting. `threshold`, `samePerson` and `windowSeconds` are for the evaluation's tuning.
  */
 export async function createSherpaSeparator({
   threshold = CLUSTER_THRESHOLD,
   samePerson = SAME_PERSON,
+  windowSeconds = WINDOW_SECONDS,
 }: {
   threshold?: number;
   samePerson?: number;
+  windowSeconds?: number;
 } = {}): Promise<(request: SeparationRequest) => VoiceTurn[]> {
   const sherpa = await loadSherpa();
   return (request) => {
@@ -228,7 +261,7 @@ export async function createSherpaSeparator({
     });
     const { samples, spans } = joinParts(request.parts);
     if (samples.length === 0) return [];
-    const segments = engine.process(samples);
+    const segments = segmentsByWindow(samples, windowSeconds, (window) => engine.process(window));
     const extractor = new sherpa.SpeakerEmbeddingExtractor({
       model: model.embedding,
       numThreads: model.threads,

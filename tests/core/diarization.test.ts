@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { joinedVoices, toMeetingTime } from "../../src/core/transcription/diarization";
+import {
+  joinedVoices,
+  segmentsByWindow,
+  toMeetingTime,
+} from "../../src/core/transcription/diarization";
 
 const SECOND_SAMPLES = 16_000;
 
@@ -66,5 +70,34 @@ describe("Voices joined by voiceprint after the engine's clustering (#138)", () 
     );
     expect(joined.get(2)).toBe(joined.get(1));
     expect(new Set(joined.values()).size).toBe(2);
+  });
+});
+
+describe("A long recording is clustered a window at a time (#138)", () => {
+  // protects=the engine's clustering, whose memory grows with the square of the audio's length, sees at most one window: a long recording is cut into even windows, each window's segments are put back at its place, and each window's voices stay its own for the voiceprint join; fails_when=a window is longer than asked, the last one is a sliver, a segment keeps its window's time, or two windows share a voice number; no_claim=whether the join then finds the same person across windows, which eval/speakers measures.
+  test("in even windows, each segment at its place, each window's voices its own", () => {
+    const samples = new Float32Array(2.5 * SECOND_SAMPLES);
+    const windows: number[] = [];
+    const segments = segmentsByWindow(samples, 1, (window) => {
+      windows.push(window.length);
+      return [
+        { start: 0.1, end: 0.3, speaker: 1 },
+        { start: 0.4, end: 0.6, speaker: 0 },
+      ];
+    });
+    expect(windows).toEqual([13_334, 13_334, 13_332]);
+    expect(segments.map((segment) => segment.speaker)).toEqual([1, 0, 3, 2, 5, 4]);
+    expect(segments[2]?.start).toBeCloseTo(13_334 / SECOND_SAMPLES + 0.1);
+    expect(segments[4]?.end).toBeCloseTo((2 * 13_334) / SECOND_SAMPLES + 0.3);
+  });
+
+  // protects=a recording no longer than a window is clustered whole, as the evaluation measured it; fails_when=it is cut; no_claim=the engine's turns.
+  test("a recording no longer than a window is clustered whole", () => {
+    const windows: number[] = [];
+    segmentsByWindow(new Float32Array(SECOND_SAMPLES), 1, (window) => {
+      windows.push(window.length);
+      return [];
+    });
+    expect(windows).toEqual([SECOND_SAMPLES]);
   });
 });

@@ -14,6 +14,7 @@
  * INCARNAMIND_EVAL_SPEAKER_SAME: how alike two voiceprints are to be one person, to try (default: the app's).
  * INCARNAMIND_EVAL_SPEAKER_MINUTES: only the first minutes of each case, for tuning.
  * INCARNAMIND_EVAL_SPEAKER_HOUR=1: also an hour of the room cases one after the other, for the real-time factor.
+ * INCARNAMIND_EVAL_SPEAKER_WINDOW: minutes the engine clusters at once (default: the app's), to check the join across windows on cases shorter than the app's window.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
@@ -30,6 +31,7 @@ import {
   CLUSTER_THRESHOLD,
   createSherpaSeparator,
   SAME_PERSON,
+  WINDOW_SECONDS,
 } from "../../src/core/transcription/diarization";
 import { SILERO_VAD } from "../../src/core/transcription/model";
 import { createSileroDetectors } from "../../src/core/transcription/sherpa";
@@ -46,6 +48,9 @@ const SAME = (process.env.INCARNAMIND_EVAL_SPEAKER_SAME ?? String(SAME_PERSON))
   .split(",")
   .map(Number);
 const MINUTES = Number(process.env.INCARNAMIND_EVAL_SPEAKER_MINUTES ?? "0");
+const WINDOW = process.env.INCARNAMIND_EVAL_SPEAKER_WINDOW
+  ? Number(process.env.INCARNAMIND_EVAL_SPEAKER_WINDOW) * 60
+  : WINDOW_SECONDS;
 const RATE = 16_000;
 const PART_SAMPLES = 10 * RATE;
 
@@ -191,7 +196,11 @@ describe.runIf(existsSync(CASES))("The speaker pass on the meeting audio set", (
     for (const [threshold, samePerson] of THRESHOLDS.flatMap((t) =>
       SAME.map((same) => [t, same] as const),
     )) {
-      const separate = await createSherpaSeparator({ threshold, samePerson });
+      const separate = await createSherpaSeparator({
+        threshold,
+        samePerson,
+        windowSeconds: WINDOW,
+      });
       const lines = join(out, `lines-${threshold}-${samePerson}`);
       const raw = join(out, `turns-${threshold}-${samePerson}`);
       await mkdir(lines, { recursive: true });
