@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ElectronApplication, expect, type Page, test } from "@playwright/test";
+import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
@@ -328,6 +328,104 @@ test("Ask a question and Add your own files do their step on a click, Enter or S
       askedReady: false,
       indexed: false,
     });
+  }
+  await app.close();
+});
+
+const BUTTON_STATES = [
+  { name: "start", done: NONE, question: "later", files: "later" },
+  {
+    name: "first step done",
+    done: { ...NONE, mistakeSeen: true },
+    question: "open",
+    files: "later",
+  },
+  {
+    name: "second step done",
+    done: { ...NONE, mistakeSeen: true, askedReady: true },
+    question: "done",
+    files: "open",
+  },
+  {
+    name: "all done",
+    done: { ...NONE, mistakeSeen: true, askedReady: true, indexed: true },
+    question: "done",
+    files: "done",
+  },
+] as const;
+
+test("a step's title looks like a button in every state, open, later and done: an icon, a name that says the action, a hover state and a focus ring, in English and Chinese (#1489)", async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  await cancelFilePicker(app);
+  const look = (button: Locator) =>
+    button.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        background: style.backgroundColor,
+        ring: style.outlineStyle,
+        ringWidth: Number.parseFloat(style.outlineWidth),
+      };
+    });
+
+  for (const language of ["en", "zh-CN"] as const) {
+    await setLanguage(window, language);
+    for (const state of BUTTON_STATES) {
+      await markSteps(window, state.done);
+      for (const key of ["question", "files"] as const) {
+        const where = `${language}, ${state.name}, ${key} is ${state[key]}`;
+        await expect(step(window, key), where).toHaveAttribute("data-state", state[key]);
+        const button = step(window, key).getByTestId("first-open-step-do");
+        await expect(button, where).toBeVisible();
+        await expect(button, where).toHaveAccessibleName(TITLES[language][key]);
+
+        const icon = button.getByTestId("first-open-step-icon");
+        await expect(icon, where).toHaveCount(1);
+        const [box, iconBox, labelBox] = await Promise.all([
+          button.boundingBox(),
+          icon.boundingBox(),
+          button.locator("span").last().boundingBox(),
+        ]);
+        if (!box || !iconBox || !labelBox) throw new Error(`${where}: not laid out`);
+        expect(iconBox.x, `${where}: the icon follows the title`).toBeGreaterThanOrEqual(
+          labelBox.x + labelBox.width - 1,
+        );
+        expect(iconBox.x + iconBox.width, `${where}: the icon is inside it`).toBeLessThanOrEqual(
+          box.x + box.width + 1,
+        );
+
+        await window.mouse.move(5, 5);
+        const rest = await look(button);
+        expect(rest.ring, `${where}: no ring at rest`).toBe("none");
+        await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
+        await expect
+          .poll(async () => (await look(button)).background, { message: `${where}: hover` })
+          .not.toBe(rest.background);
+        await window.mouse.move(5, 5);
+
+        await window.getByTestId("first-open-hide").focus();
+        for (
+          let tabs = 0;
+          tabs < 10 && !(await button.evaluate((el) => el === document.activeElement));
+          tabs++
+        ) {
+          await window.keyboard.press("Tab");
+        }
+        await expect(button, `${where}: reached by Tab`).toBeFocused();
+        const focused = await look(button);
+        expect(focused.ring, `${where}: focus ring`).not.toBe("none");
+        expect(focused.ringWidth, `${where}: focus ring`).toBeGreaterThan(0);
+      }
+    }
+
+    const shown = await pickersShown(app);
+    await pointAndClick(window, step(window, "files").getByTestId("first-open-step-do"));
+    await expect
+      .poll(() => pickersShown(app), { message: `${language}: done, still adds` })
+      .toBe(shown + 1);
+    await pointAndClick(window, step(window, "question").getByTestId("first-open-step-do"));
+    await expect(window.getByTestId("composer-input")).toBeFocused();
+    await markSteps(window, NONE);
   }
   await app.close();
 });

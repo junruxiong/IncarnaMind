@@ -12,7 +12,7 @@ import { stepsShownOf } from "../nudges";
 import { revealAssistant } from "../quietAssistant";
 import { useAppStore } from "../store";
 import { ExampleBanner } from "./GettingStarted";
-import { CloseLineIcon } from "./lineIcons";
+import { ChatLineIcon, CloseLineIcon, PlusLineIcon } from "./lineIcons";
 import { ProblemLine } from "./ProblemLine";
 import { SLOT, Slotted } from "./Slotted";
 import { buttonStyle } from "./ui";
@@ -42,6 +42,11 @@ const stateAt = (current: StepKey | undefined, key: StepKey): StepState => {
   if (current === undefined) return "done";
   const after = STEPS.indexOf(key) - STEPS.indexOf(current);
   return after < 0 ? "done" : after === 0 ? "open" : "later";
+};
+
+const DO_ICONS: Partial<Record<StepKey, typeof PlusLineIcon>> = {
+  question: ChatLineIcon,
+  files: PlusLineIcon,
 };
 
 const CARD_PADDING = "px-3.5 pt-3.5 pb-2.5";
@@ -87,7 +92,8 @@ function Step({
   children?: ReactNode;
 }) {
   const t = useT();
-  const doable = onDo !== undefined && state !== "done";
+  const DoIcon = DO_ICONS[step];
+  const action = t(`firstOpen.step.${step}.title`);
   const tone = state === "open" ? "font-semibold text-ink" : "text-ink-meta";
   const marks = live
     ? { "data-testid": "first-open-step", "data-step": step, "data-state": state }
@@ -95,12 +101,7 @@ function Step({
   const heading = (
     <>
       <Mark number={number} state={state} />
-      <span
-        className={
-          doable ? `${tone} underline-offset-2 group-hover:text-ink group-hover:underline` : tone
-        }
-      >
-        {state === "done" && <span className="sr-only">{t("gettingStarted.done")}</span>}
+      <span className={`${tone} group-hover:text-ink`}>
         {t(`firstOpen.step.${step}.${state === "done" ? "done" : "title"}`)}
       </span>
     </>
@@ -108,14 +109,21 @@ function Step({
   return (
     <li {...marks} className="flex flex-col gap-1">
       <div className="flex items-center text-[14px] leading-5">
-        {doable ? (
+        {state === "done" && <span className="sr-only">{t("gettingStarted.done")}</span>}
+        {onDo && DoIcon ? (
           <button
             type="button"
             data-testid={live ? "first-open-step-do" : undefined}
+            aria-label={action}
+            title={action}
             onClick={onDo}
-            className="group flex items-center gap-2.5 rounded-sm text-left"
+            className="group -mx-1.5 -my-0.5 flex items-center gap-2.5 rounded-md px-1.5 py-0.5 text-left hover:bg-chip"
           >
             {heading}
+            <DoIcon
+              data-testid={live ? "first-open-step-icon" : undefined}
+              className="size-3.5 shrink-0 text-ink-meta group-hover:text-ink"
+            />
           </button>
         ) : (
           <div className="flex items-center gap-2.5">{heading}</div>
