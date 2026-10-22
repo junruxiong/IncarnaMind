@@ -258,7 +258,6 @@ function show(key: string, effect: DropEffect, point: Point): void {
   useDragState.setState({ ...(changed && { over: { key, effect } }), at });
 }
 
-/** The lifted picture, where it is let go, shrinks into the target that took it, or fades there. */
 function letGo(at: Point, into?: Element): void {
   if (!lifted) return;
   const picture = lifted;
@@ -276,8 +275,9 @@ const untakenOwnDrag = (event: globalThis.DragEvent) =>
   !event.defaultPrevented &&
   event.dataTransfer?.types.includes(OBJECTS_TYPE) === true;
 
-// A drag of this window's own is dropped wherever it is let go in it: the picture of a refused one,
-// macOS slides back and holds on screen until the pointer next moves (#1513).
+// A drag of this window's own is taken wherever it is let go in it. Left refused, macOS holds its
+// picture on screen until the pointer next moves (#1513). Over places nothing takes, Windows and
+// Linux then show the move cursor, not the no-drop one.
 function takeAnywhere(event: globalThis.DragEvent): void {
   if (!event.dataTransfer || !untakenOwnDrag(event)) return;
   event.preventDefault();

@@ -382,7 +382,6 @@ test("files dropped on the window still reach the add, through the layer, with i
   }
 });
 
-/** Whether the drag's picture is leaving over `row`, fading: shrinking into it (`into`), or in place. */
 async function pictureLeaving(window: Page, row: Locator, into: boolean): Promise<boolean> {
   const box = await row.boundingBox();
   if (!box) return false;
@@ -449,10 +448,6 @@ test("a drop nothing takes ends as the button is let go, its picture fading wher
     await expect(window.getByTestId("mind-row").filter({ hasText: "Plan" })).toBeVisible();
     const before = await where(window);
 
-    // Refused, from each kind of row: a Document onto the Folder it is in, a Mind onto a Tag, and a
-    // Library row onto its own Folder's section. Nothing lights or says anything; let go there,
-    // the drag is over at once (Not in a Folder, shown while it lasts, goes), its picture fades
-    // where it was, and nothing moves.
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
     await expect(libraryRow(library, "Budget")).toBeVisible();
