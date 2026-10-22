@@ -262,6 +262,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await window.keyboard.type("[ ] ");
       await window.keyboard.type(setting.long);
       const task = editor.locator("li[data-checked]").first();
+      await screenshot(window, `todo-edge-${language}-${width}`);
       const box = task.locator("> label > input");
       const boxLeft = await box.evaluate((input) => input.getBoundingClientRect().left);
       near(boxLeft - edgeLeft, 0);
