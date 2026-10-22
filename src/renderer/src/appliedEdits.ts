@@ -59,6 +59,7 @@ import {
   setApplying,
 } from "./editor/proposalReview";
 import { blockAt } from "./editor/writingPlace";
+import { speak } from "./editWithAi";
 import { translateNow as t } from "./i18n";
 import { EDIT_FROM_CORE, takeEditUpdates } from "./mindCopies";
 import { useAppStore } from "./store";
@@ -569,12 +570,15 @@ function resolveHeld(editor: Editor, outcome: "accept" | "reject"): void {
   if (line.asked && outcome === "accept") {
     const { mindId, requests, facts } = line.asked;
     setAppliedLine(editor, null);
-    applyArrived(editor, mindId, new Set(requests), facts, { holds: false });
+    if (applyArrived(editor, mindId, new Set(requests), facts, { holds: false }) === "applied") {
+      speak(mindId, changeFact(t, facts, null));
+    }
     return;
   }
   const edit = latest.get(editor);
   if (outcome === "accept" && edit?.request === line.request) {
-    apply(edit, line.request);
+    const changed = apply(edit, line.request);
+    if (changed.paragraphs + changed.tables > 0) speak(edit.mindId, appliedMessage(changed));
     return;
   }
   const asked = new Set(line.asked?.requests ?? [line.request]);

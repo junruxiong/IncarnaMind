@@ -267,9 +267,16 @@ test("a rewrite that would take out most of the User's own text waits, in Englis
   ]);
   await expect(line.getByTestId("applied-count")).toHaveText(/^Changed \d+ paragraphs?$/);
   await expect(spoken).not.toContainText("Suggested change");
+  await expect(spoken).toHaveText(/^Changed \d+ paragraphs?$/);
   await editor.focus();
   await window.keyboard.press("ControlOrMeta+z");
   await expect(paragraphs).toHaveText(NOTES);
+
+  await setLanguage(window, "zh-CN");
+  await askInAssistant(window, "Rewrite the intro to be clearer");
+  await pointAndClick(window, line.getByTestId("applied-apply"));
+  await expect(spoken).toHaveText(/^修改了 \d+ 个段落$/);
+  await setLanguage(window, "en");
 });
 
 /** The request the newest Answer's change made, once that Answer is done; null before. */
