@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useId, useState } from "react";
 import type { Connector, LocalConnector, SecretStorageStatus } from "../../../../core/api";
+import { nameInLine } from "../../../../shared/naming";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
@@ -190,7 +191,7 @@ export function ConnectorForm({
               <FieldProblem id={problems.lineId("connector-url")}>
                 {problems.fault("connector-url") === "missing"
                   ? t("error.connector.urlMissing")
-                  : t("error.connector.urlInvalid", { url })}
+                  : t("error.connector.urlInvalid", { url: nameInLine(url) })}
               </FieldProblem>
             )}
           </label>

@@ -37,7 +37,6 @@ export function useFieldProblems() {
     });
   };
   return {
-    /** Spread on the `<form>`. */
     form: {
       onInvalidCapture(event: FormEvent<HTMLFormElement>) {
         const control = namedControl(event.target);
@@ -53,7 +52,6 @@ export function useFieldProblems() {
         if (control && faults.has(control.name)) note(control);
       },
     },
-    /** Spread on a field: its name and, while it fails, its line as its description. */
     field: (name: string) => ({
       name,
       "aria-invalid": faults.has(name) ? true : undefined,

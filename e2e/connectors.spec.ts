@@ -13,6 +13,7 @@ import {
   openSettings,
   removeDataFolder,
   setLanguage,
+  setWindowSize,
   showSettingsPage,
   urlsOpened,
 } from "./app";
@@ -334,6 +335,51 @@ test("an empty or wrong field of a custom Connector says why under it in the int
     );
     await expect(localName).not.toHaveAttribute("data-browser-bubble");
     await expect(command).not.toHaveAttribute("data-browser-bubble");
+  } finally {
+    await app.close();
+  }
+});
+
+test("a long address in a Connector's URL problem is cut in the middle, and the line's mark shares a line with its words at the narrowest window, in English and Chinese (#1456)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 900, 760);
+    await dismissChatSetup(window);
+    await openSettings(window, "connectors");
+    const page = window.getByTestId("settings-page-connectors");
+    await page.getByTestId("connector-add-custom").click();
+    const form = page.getByTestId("connector-form");
+    const address = `wiki.example.test/${"a-long-path/".repeat(8)}end`;
+    await form.getByLabel(/^Name/).fill("Wiki");
+    await form.getByLabel(/^Server URL/).fill(address);
+    await form.getByRole("button", { name: "Add Connector" }).click();
+
+    for (const language of ["en", "zh-CN"] as const) {
+      await setLanguage(window, language);
+      const line = form.getByRole("alert");
+      await expect(line).toHaveCount(1);
+      await expect(line).toContainText(/wiki\.example\.test\/\S*…\S*end/);
+      await expect(line).not.toContainText(address);
+      const shape = await line.evaluate((element) => {
+        const mark = element.querySelector("svg")?.getBoundingClientRect();
+        const words = Array.from(element.childNodes).find((node) => node.nodeType === 3);
+        if (!mark || !words) return null;
+        const range = document.createRange();
+        range.selectNodeContents(words);
+        const first = range.getClientRects()[0];
+        if (!first) return null;
+        return {
+          markMiddle: mark.top + mark.height / 2,
+          firstTop: first.top,
+          firstBottom: first.bottom,
+          rows: element.getBoundingClientRect().height / first.height,
+        };
+      });
+      expect(shape, `${language}: the line has a mark and words`).not.toBeNull();
+      expect(shape?.markMiddle).toBeGreaterThan(shape?.firstTop ?? Infinity);
+      expect(shape?.markMiddle).toBeLessThan(shape?.firstBottom ?? -Infinity);
+      expect(shape?.rows).toBeLessThan(2);
+    }
   } finally {
     await app.close();
   }
