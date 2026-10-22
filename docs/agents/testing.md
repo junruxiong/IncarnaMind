@@ -16,6 +16,11 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_r
 
 Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, in four shards (`Smoke shard N/4 (macOS)`), with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`.
 
+Every night too, `.github/workflows/nightly-real-model.yml` asks real models, since the scripted one can't tell whether an AI feature works: the live tests (`tests/live`) and the everyday requests (`eval/everyday`) on Claude Haiku 5.5, a live test of Kimi International, and the everyday requests in Chinese on Kimi K2.6 (Kimi sees only the evaluation's own public and made-up Documents). It runs once a night on one runner and writes `summary.md` to the `nightly-real-model` artifact: a result for every case, which key it used, and what it spent, counted from every request's tokens at the catalog's prices. A failing night is fixed like a red `main`.
+
+- **Secrets (the owner sets them; use capped API keys):** `NIGHTLY_ANTHROPIC_KEY_1`, `NIGHTLY_ANTHROPIC_KEY_2` and `NIGHTLY_KIMI_KEY`. The run moves to key 2 for good when key 1 is out of credit, and says so in the summary. A missing secret fails the job at once, with one line naming it.
+- **By hand:** Actions › Nightly real models › Run workflow, or `NIGHTLY_ANTHROPIC_KEY_1=… NIGHTLY_ANTHROPIC_KEY_2=… NIGHTLY_KIMI_KEY=… npm run nightly:real-model`. `NIGHTLY_STEPS` (`live`, `everyday`, `kimi-live`, `kimi-everyday`, separated by commas) runs only those, and `INCARNAMIND_EVAL_EVERYDAY` only some everyday requests (`eval/everyday/README.md`). Keep to a few requests when you run it for a check: the whole night costs a few dollars.
+
 ## Before you open a pull request
 
 1. Merge `main` into your branch only to resolve a conflict or to pick up something you need; the merge queue tests your change on top of `main` anyway.
