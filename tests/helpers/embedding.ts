@@ -15,6 +15,8 @@ export interface FileBehaviour {
   held?: boolean;
   /** Sends the body in ten parts, waiting this long before each. */
   chunkDelayMs?: number;
+  /** Sends this many bytes of the response body, then nothing more, holding the connection open. */
+  stallAfter?: number;
 }
 
 export interface ModelServer {
@@ -33,11 +35,17 @@ export interface ModelServer {
 /**
  * A local HTTP server for a fake embedding model's files: random bytes of the
  * given sizes, served with Range support like Hugging Face's CDN. Closed when
- * the test finishes.
+ * the test finishes. `copyOf` serves another server's files instead, each under
+ * `folder/`, as a copy of the models elsewhere would (#1578).
  */
-export async function startModelServer(files: Record<string, number>): Promise<ModelServer> {
+export async function startModelServer(
+  files: Record<string, number>,
+  copyOf?: { server: ModelServer; folder: string },
+): Promise<ModelServer> {
   const contents = new Map<string, Uint8Array>(
-    Object.entries(files).map(([path, size]) => [path, new Uint8Array(randomBytes(size))]),
+    copyOf
+      ? [...copyOf.server.contents].map(([path, content]) => [`${copyOf.folder}/${path}`, content])
+      : Object.entries(files).map(([path, size]) => [path, new Uint8Array(randomBytes(size))]),
   );
   const behaviours = new Map<string, FileBehaviour>();
   const requests: ModelServer["requests"] = [];
@@ -79,6 +87,10 @@ export async function startModelServer(files: Record<string, number>): Promise<M
         response.write(part.subarray(at, at + size));
       }
       response.end();
+      return;
+    }
+    if (behaviour.stallAfter !== undefined && behaviour.stallAfter < part.byteLength) {
+      response.write(part.subarray(0, behaviour.stallAfter));
       return;
     }
     if (behaviour.cutAfter !== undefined && behaviour.cutAfter < part.byteLength) {

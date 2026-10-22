@@ -362,6 +362,7 @@ describe("Settings", () => {
       suggestionOffers: 1,
       meetingSystemAudio: false,
       transcriptionRoute: "local" as const,
+      modelSource: "modelscope" as const,
       meetingNoticeAccepted: true,
       meetingPanel: false,
       meetingPanelHidden: false,

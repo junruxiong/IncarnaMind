@@ -234,7 +234,7 @@ async function fetchInto(
     if (stall.signal.aborted) {
       return new ModelDownloadError(
         "network",
-        `${url.host} sent nothing for ${Math.round((sources?.stallMs ?? 0) / 1000)} s.`,
+        `${url.host} sent nothing for ${(sources?.stallMs ?? 0) / 1000} s.`,
       );
     }
     return new ModelDownloadError("network", `${what}: ${messageOf(error)}`);

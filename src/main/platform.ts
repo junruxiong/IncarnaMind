@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { availableParallelism, homedir, tmpdir, totalmem } from "node:os";
 import { join, resolve } from "node:path";
-import { app, safeStorage, shell } from "electron";
+import { app, net, safeStorage, session, shell } from "electron";
 import { Agent, fetch as undiciFetch } from "undici";
 import {
   type AnalysisRuntime,
@@ -710,6 +710,12 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     },
     systemLanguages: () => app.getPreferredSystemLanguages(),
     systemRegion: () => app.getLocaleCountryCode(),
+    // Chromium's network stack follows the system proxy, which is how many Users reach
+    // Hugging Face at all (#1578); Node's own fetch doesn't.
+    modelDownloads: {
+      fetch: (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
+      proxy: () => session.defaultSession.resolveProxy("https://huggingface.co/"),
+    },
     systemUserName: () => systemUserName(log),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
