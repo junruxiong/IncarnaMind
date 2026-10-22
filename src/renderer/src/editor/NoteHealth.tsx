@@ -200,8 +200,8 @@ export function HealthCard({
     const at = Math.min(next, doc.content.size);
     editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(doc.resolve(at))));
     editor.view.focus();
-    const { node } = editor.view.domAtPos(at);
-    (node instanceof Element ? node : node.parentElement)?.scrollIntoView({
+    const shown = cited ? editor.view.nodeDOM(at - 1) : editor.view.domAtPos(at).node;
+    (shown instanceof Element ? shown : shown?.parentElement)?.scrollIntoView({
       block: "center",
       behavior: "instant",
     });
