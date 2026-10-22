@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { ModelSourceChoice } from "../../src/core";
+import { BUILT_IN_EMBEDDING_MODEL } from "../../src/core/embedding";
 import { downloadModel, ModelDownloadError } from "../../src/core/embedding/download";
 import {
   createModelSources,
@@ -11,8 +12,14 @@ import {
   PROBE_KEPT_MS,
 } from "../../src/core/embedding/modelSources";
 import type { Language } from "../../src/core/language";
-import { LOCAL_FETCH } from "../helpers/core";
-import { type ModelServer, startModelServer } from "../helpers/embedding";
+import { createTempDataFolder, LOCAL_FETCH, startCore } from "../helpers/core";
+import {
+  createControlledEmbedder,
+  type ModelServer,
+  startModelServer,
+  turnOnEmbeddings,
+  waitForModel,
+} from "../helpers/embedding";
 
 const FOLDER = "multilingual-e5-small";
 const PINNED = "https://huggingface.co/intfloat/multilingual-e5-small/resolve/abc123/";
@@ -279,5 +286,30 @@ describe("A built-in model downloads from the next source when one fails (#1578)
     expect(new Uint8Array(await readFile(join(directory, "model.onnx")))).toEqual(
       pinned.contents.get("model.onnx"),
     );
+  });
+
+  // protects=Try again pressed twice at once downloads the model once, through the core as the app does: each file is fetched once, from the source that serves it right, and a source that failed one file goes last for the next; fails_when=two downloads run side by side, a file is fetched twice, or the failed source is asked first for the next file; no_claim=the line's button, which the smoke test presses.
+  test("twice at once, the model downloads once, the next file from the source that worked", async () => {
+    const folder = BUILT_IN_EMBEDDING_MODEL.folder;
+    const pinned = await startModelServer({ "onnx/model.onnx": 4096, "tokenizer.json": 512 });
+    pinned.behave("onnx/model.onnx", { corrupt: true });
+    const copy = await startModelServer({}, { server: pinned, folder });
+    const core = startCore(await createTempDataFolder(), {
+      embedder: createControlledEmbedder(),
+      embeddingModelSource: pinned.source,
+      modelDownloads: {
+        fetch: LOCAL_FETCH,
+        copies: { modelscope: `${copy.source.baseUrl}{folder}/` },
+      },
+    });
+    await turnOnEmbeddings(core);
+    await Promise.all([core.downloadEmbeddingModel(), core.downloadEmbeddingModel()]);
+    await waitForModel(core, (status) => status.state === "ready");
+    expect(pinned.requests.map((each) => each.path)).toEqual(["onnx/model.onnx"]);
+    expect(copy.requests.map((each) => each.path)).toEqual([
+      `${folder}/onnx/model.onnx`,
+      `${folder}/tokenizer.json`,
+    ]);
+    core.close();
   });
 });
