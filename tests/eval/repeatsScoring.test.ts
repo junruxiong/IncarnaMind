@@ -1,0 +1,110 @@
+/**
+ * The repeated checks' scoring (eval/repeats): how a mark's card shows, and
+ * what a run of checks of an unchanged Mind comes to.
+ */
+import { describe, expect, test } from "vitest";
+import { SETS } from "../../eval/repeats/cases";
+import { type Outcome, outcomeOf } from "../../eval/repeats/repeat";
+import { type RepeatRow, summarise } from "../../eval/repeats/score";
+import type { ClaimCheckAttributes } from "../../src/core";
+
+const QUOTE = {
+  passageId: "p1",
+  documentId: "d1",
+  documentName: "Agreement",
+  contentHash: "h1",
+  pageFrom: 1,
+  pageTo: 1,
+  location: null,
+  quote: "The Employee may work from home two days a week",
+  check: "found" as const,
+  checkReason: null,
+};
+
+const mark = (change: Partial<ClaimCheckAttributes>): ClaimCheckAttributes => ({
+  id: "c1",
+  request: "r1",
+  action: "check-against-documents",
+  state: "unsupported",
+  reason: null,
+  detail: null,
+  providerId: null,
+  modelId: null,
+  text: "Staff may work from home two days a week.",
+  evidence: null,
+  says: null,
+  unsupported: { reason: null, covered: null, uncovered: null },
+  calculation: null,
+  citedCaseUnchecked: false,
+  citedCaseFound: false,
+  scope: { folderId: null, widened: false },
+  versions: [],
+  excluded: [],
+  checkedAt: "2026-10-22T20:00:00.000Z",
+  ...change,
+});
+
+const row = (repeat: number, key: string, outcome: Outcome): RepeatRow => {
+  const sentence = SETS[0]?.sentences.find((each) => each.key === key);
+  if (!sentence) throw new Error(`No sentence ${key}`);
+  return {
+    repeat,
+    sentence: sentence.text,
+    outcome,
+    says: null,
+    covered: null,
+    uncovered: null,
+    quote: null,
+    failure: null,
+    set: "en",
+    model: "anthropic/claude-haiku-5-5",
+    key,
+    kind: sentence.kind,
+    expected: sentence.expected,
+  };
+};
+
+describe("the repeated checks", () => {
+  test("name an Unsupported card by what it shows: a quoted part, a different line, or nothing", () => {
+    const partly = { reason: null, covered: "two days a week", uncovered: "all staff" };
+    expect(outcomeOf(mark({ unsupported: { ...partly, quoted: QUOTE } }))).toBe("partly");
+    expect(outcomeOf(mark({ unsupported: partly }))).toBe("nothing");
+    expect(outcomeOf(mark({ evidence: QUOTE, unsupported: { ...partly, quoted: QUOTE } }))).toBe(
+      "differs",
+    );
+    expect(outcomeOf(mark({}))).toBe("nothing");
+    expect(outcomeOf(mark({ state: "supported" }))).toBe("supported");
+    expect(outcomeOf(mark({ state: "not-checked", reason: "failed" }))).toBe("not-checked");
+    expect(outcomeOf(undefined)).toBe("no-mark");
+  });
+
+  test("count false Supported, nothing on a stated sentence, and checks that differ from the one before", () => {
+    const [summary] = summarise([
+      row(1, "staff-home", "supported"),
+      row(1, "car", "nothing"),
+      row(2, "staff-home", "partly"),
+      row(2, "car", "nothing"),
+      row(3, "staff-home", "nothing"),
+      row(3, "car", "supported"),
+    ]);
+
+    expect(summary).toMatchObject({ repeats: 3, falseSupported: 1, nothingOnStated: 1 });
+    expect(summary?.disagreeing).toBe(2);
+    expect(summary?.followed).toBe(2);
+    expect(summary?.sentences.find((each) => each.key === "staff-home")).toMatchObject({
+      steady: 2,
+      outcomes: { supported: 1, partly: 1, nothing: 1 },
+    });
+    expect(summary?.misses.map((each) => [each.repeat, each.key])).toEqual([
+      [2, "staff-home"],
+      [3, "staff-home"],
+      [3, "car"],
+    ]);
+  });
+
+  test("give every set's sentences a verdict to expect, the same keys in English and Chinese", () => {
+    const keys = (id: string) => SETS.find((each) => each.id === id)?.sentences.map((s) => s.key);
+    expect(keys("en")).toEqual(keys("zh"));
+    expect(keys("en-control")).toEqual(keys("zh-control"));
+  });
+});
