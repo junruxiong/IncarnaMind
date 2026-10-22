@@ -4933,6 +4933,24 @@
   .claim-wash--contradicted {
     background: var(--color-danger-wash);
   }
+  /* A line of the sentence whose check card is open, outlined as a selected Citation marker is. */
+  .claim-outline {
+    position: absolute;
+    box-sizing: border-box;
+    border: 2px solid var(--color-accent);
+    border-radius: 4px;
+    pointer-events: none;
+  }
+  /* Which sentence the card is about: its words, two lines at most, under the verdict's title. */
+  .claim-card-sentence {
+    display: -webkit-box;
+    padding-left: 22px;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+    color: var(--color-ink-meta);
+  }
   .claim-card-says {
     padding-left: 22px;
     color: var(--color-ink-secondary);
