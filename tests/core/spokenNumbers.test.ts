@@ -13,7 +13,9 @@ describe("English numbers in a transcript", () => {
     ["six point eight percent to eighteen point four million", "6.8% to 18.4 million"],
     ["four hundred and twelve to three hundred and thirty-seven", "412 to 337"],
     ["the thirtieth of November", "the 30th of November"],
-    ["on November twenty-first", "on November 21st"],
+    ["on November the twenty-first", "on November the 21st"],
+    ["0.5 percent", "0.5%"],
+    ["up 50 percent", "up 50%"],
     ["a hundred percent sure", "100% sure"],
     ["it cost twelve million dollars", "it cost 12 million dollars"],
     ["five dollars and fifty cents", "5 dollars and 50 cents"],
@@ -33,6 +35,14 @@ describe("English numbers in a transcript", () => {
     "hundreds of thousands",
     "a million reasons",
     "Twenty twenty-five was good",
+    "We may first need to check",
+    "I may second that motion",
+    "March third parties out of the building",
+    "May the first of us to arrive wait",
+    "May the second round go well",
+    "on November twenty-first",
+    "the first of may be the problem",
+    "25 percentage points",
   ])("%s stays as it is", (said) => {
     expect(writtenNumbers(said)).toBe(said);
   });
@@ -72,6 +82,8 @@ describe("Chinese numbers in a transcript", () => {
     ["二零二五年十一月三十日", "2025年11月30日"],
     ["三月", "3月"],
     ["五元", "5元"],
+    ["三百块", "300块"],
+    ["两块钱", "2块钱"],
   ])("%s is %s", (said, written) => {
     expect(writtenNumbers(said)).toBe(written);
   });
@@ -97,6 +109,12 @@ describe("Chinese numbers in a transcript", () => {
     "这是唯一",
     "我们十分高兴，三个人一起去",
     "一方面，另一方面",
+    "我们一块去吃饭",
+    "一块去吃饭",
+    "一块儿走吧",
+    "两块儿走",
+    "一块蛋糕",
+    "一块钱",
   ])("%s stays as it is", (said) => {
     expect(writtenNumbers(said)).toBe(said);
   });

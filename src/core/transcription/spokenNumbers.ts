@@ -69,7 +69,9 @@ const ORDINALS: ReadonlyMap<string, number> = new Map([
   ["thirtieth", 30],
 ]);
 const MONTHS =
-  "january|february|march|april|may|june|july|august|september|october|november|december";
+  "January|February|March|April|May|June|July|August|September|October|November|December";
+// "may" and "march" are verbs too: "May the first of us win", "We may first need to".
+const DATED_MONTHS = MONTHS.replace("|March|April|May|", "|April|");
 const MONEY = /^(?:dollars?|euros?|pounds?|yuan|cents?|pence|rupees?|yen|bucks)$/;
 
 const word = (token: string) => token.toLowerCase();
@@ -187,11 +189,9 @@ function yearOf(century: string, rest: string): string {
 }
 
 const ORDINAL_WORD = `(?:${[...ORDINALS.keys()].join("|")}|twenty[- ](?:${[...ORDINALS.keys()].slice(0, 9).join("|")})|thirty[- ]first)`;
-/** An ordinal that names a day: "the thirtieth of November", "November thirtieth". */
-const DAY = new RegExp(
-  `\\b${ORDINAL_WORD}(?= of (?:${MONTHS})\\b)|(?<=\\b(?:${MONTHS}) )${ORDINAL_WORD}(?![A-Za-z-])`,
-  "gi",
-);
+const DAY = new RegExp(`\\b${ORDINAL_WORD}(?![A-Za-z-])`, "gi");
+const OF_MONTH = new RegExp(`^ of (?:${MONTHS})\\b`);
+const MONTH_THE = new RegExp(`\\b(?:${DATED_MONTHS}) the $`);
 
 function dayOf(match: string): string {
   const lower = word(match);
@@ -250,7 +250,12 @@ function englishNumbers(text: string): string {
   const dated = text
     .replace(/\ba hundred percent\b/gi, "100%")
     .replace(YEAR, (_whole, century: string, rest: string) => yearOf(century, rest))
-    .replace(DAY, dayOf);
+    .replace(/(\d)(?: per cent| percent)\b(?!-)/gi, "$1%")
+    .replace(DAY, (ordinal: string, offset: number, whole: string) =>
+      OF_MONTH.test(whole.slice(offset + ordinal.length)) || MONTH_THE.test(whole.slice(0, offset))
+        ? dayOf(ordinal)
+        : ordinal,
+    );
   return dated.replace(RUN, (run: string, offset: number) => {
     // Beside a digit it is part of a figure the engine already wrote.
     const before = dated.slice(0, offset).trimEnd().at(-1) ?? "";
@@ -440,6 +445,8 @@ function chineseNumbers(text: string): string {
       if (unit === "日" || unit === "号")
         return value >= 1 && value <= 31 ? `${value}${unit}` : match;
       if (unit === "年") return value >= 100 && value <= 2999 ? `${value}年` : match;
+      // 块 is also "together" (一块去吃饭, 一块儿) and "a piece" (一块蛋糕): money from two up.
+      if (unit === "块" && (value < 2 || after === "儿")) return match;
       const unitful = /[百千万亿]/.test(whole) || value > 10;
       if (ZH_MONEY.includes(unit)) return `${zhShown(whole, value)}${unit}`;
       return unitful ? `${zhShown(whole, value)}${unit}` : match;
