@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { RegisteredDataFlow } from "../../../core/api";
 import { formatDate } from "../../../shared/dates";
 import { core } from "../core";
@@ -48,6 +48,7 @@ function ServiceItem({ group }: { group: ServiceGroup }) {
   const t = useT();
   const language = useLanguage();
   const [busy, setBusy] = useState(false);
+  const item = useRef<HTMLLIElement>(null);
   const { service, uses } = group;
   const decision = decisionOf(uses);
 
@@ -78,6 +79,12 @@ function ServiceItem({ group }: { group: ServiceGroup }) {
   const stopUse = (use: ServiceUse) =>
     run(async () => {
       await revokeAll(service.id, [use]);
+      // A use nothing else holds goes from the list once stopped, and its button with it: the
+      // focus goes to the service's own button then, not to the page.
+      requestAnimationFrame(() => {
+        if (document.activeElement?.isConnected && document.activeElement !== document.body) return;
+        item.current?.querySelector<HTMLElement>('button[data-testid^="data-service-"]')?.focus();
+      });
       useUndo.getState().push({
         said: (words) =>
           words("privacy.flows.stoppedFlow", {
@@ -162,6 +169,7 @@ function ServiceItem({ group }: { group: ServiceGroup }) {
 
   return (
     <li
+      ref={item}
       data-testid="data-service"
       data-service-id={service.id}
       data-consent={decision.kind}
@@ -221,11 +229,14 @@ function Uses({
   onStop(use: ServiceUse): void;
 }) {
   const t = useT();
+  // A service with one use has its button above: a second one would say the same.
+  const eachOwn = uses.length > 1;
   return (
     <ul className="flex flex-col gap-2 pt-1.5">
       {uses.map((use) => {
         const allowed = use.status.consent === "accepted";
         const waiting = partly && !allowed;
+        const flow = t(`consent.flow.${use.flow}`);
         return (
           <li
             key={use.flow}
@@ -233,18 +244,21 @@ function Uses({
             data-flow-id={use.flow}
             data-consent={use.status.consent}
           >
-            <p className="font-semibold text-ink">{t(`consent.flow.${use.flow}`)}</p>
+            <p className="font-semibold text-ink">{flow}</p>
             <ul aria-label={t("privacy.flows.sends")} className="list-disc pl-4">
               {use.sends.map((kind) => (
                 <li key={kind}>{t(`consent.data.${kind}`)}</li>
               ))}
             </ul>
-            {(allowed || waiting) && (
+            {eachOwn && (
               <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                 {waiting && <span className="text-ink-meta">{t(waitingStatus(use))}</span>}
                 <button
                   type="button"
                   data-testid={allowed ? "data-flow-revoke" : "data-flow-allow"}
+                  aria-label={t(allowed ? "privacy.flows.stopFlow" : "privacy.flows.allowFlow", {
+                    flow,
+                  })}
                   onClick={() => (allowed ? onStop(use) : onAllow(use))}
                   className={buttonStyle("secondary", "sm")}
                 >

@@ -15,7 +15,7 @@ A service receives only the flows it is used for. The names in the first column 
 
 | Flow (`id`) | What it sends | Goes to | In local mode |
 | --- | --- | --- | --- |
-| Chat (`chat`) | A Question and its context. In a Mind: every Block above the Question except Notes you excluded. In the assistant: its earlier Questions and Answers, and the Mind in focus. The Passages the search found, each with its Document's name and pages, and the names of up to 50 Documents the Question may search. Results of Connectors and Skill scripts the Answer used. A Question that names another Mind also sends up to about 12,000 tokens of it. While a Meeting records, the newest live Transcript lines, up to about 8,000 tokens, from both sides. A model that can't use Tools also sends the Question rewritten as a search query, and that query translated, in short separate requests to the quick-tasks model (the provider's small model, or the one you chose in Settings → Models). | The chat model's provider | Only a model on this computer |
+| Chat (`chat`) | A Question and its context. In a Mind: every Block above the Question except Notes you excluded. In the assistant: its earlier Questions and Answers, and the Mind in focus. The Passages the search found, each with its Document's name and pages, and the names of up to 50 Documents the Question may search. Results of Connectors and Skill scripts the Answer used. A Question that names another Mind also sends up to about 12,000 tokens of it. When the assistant runs a command for you, the names of the Documents and Minds it found, with their dates, Folders and Tags. When you press Make this a Skill, up to 40,000 characters from the end of the Mind. While a Meeting records, the newest live Transcript lines, up to about 8,000 tokens, from both sides. A model that can't use Tools also sends the Question rewritten as a search query, and that query translated, in short separate requests to the quick-tasks model (the provider's small model, or the one you chose in Settings → Models). | The chat model's provider, and the quick-tasks model's provider when it is another | Only a model on this computer |
 | Edit with AI (`edits`) | The text you select with the paragraphs it is in, each time you ask. | The chat model's provider | Only a model on this computer |
 | Find support and Verify (`checks`) | The sentences you check, or the sentences of a document or Mind you verify to find its claims, then each claim with its paragraph and the Passages found for it. When a new version of a Document arrives, the cited sentences of the Minds in its Folder, to check them for contradictions: background work, which waits until this flow is allowed. | The chat model's provider | Only a model on this computer |
 | Writing suggestions (`suggestions`) | Only once you turn suggestions on: the paragraph you pause in and up to 8 Passages that match it. | The chat model's provider | Only a model on this computer |
@@ -78,7 +78,7 @@ What local mode does not stop:
 - **The cost record** stays on this computer and is never sent. For each request to a cloud model it notes the model, the tokens its provider reported and what that cost at its price, with no text, for this month's figure and the monthly cap in Settings → General.
 - **A Word file you import as a Mind** is read on this computer and sends nothing. A copy of it is kept in your data folder ("Word imports"), so export can write your changes back into it after the file has moved; it is deleted once no Mind made from it is left, Recently deleted included.
 - **A web page to share** (an export format) is written on this computer like any export, and nothing is uploaded: you send the file yourself. Besides the Mind, it holds each Citation's quote and the passage of its Document around it, and, for a PDF, a scan or a slide, a picture of the part of the page around the quote (at most a third of a page) or of the slide, taken from the page saved when the Citation was made; never a whole Document. Anyone you send it to can read those. In the export options you can keep a Document's Citations as text, without pictures. The page loads nothing when it is opened.
-- **Skill scripts** run on this computer and can send what they read; each run asks first.
+- **Skill scripts** run on this computer and can send what they read. Each script asks before it runs, unless you set it to Always allow in Settings → Privacy (Approvals).
 
 ## Your keys and the logs
 
@@ -88,13 +88,13 @@ What local mode does not stop:
 
 ## Where the code reaches the network
 
-For a reviewer: each file in `src/core` that can send to the network, and the part of this page that describes it. A test (`tests/privacy/networkMap.test.ts`) fails when a file reaches the network and isn't covered here, or when a flow or connection has no row above.
+For a reviewer: each file in `src/core` and `src/main` that can send to the network, and the part of this page that describes it. A test (`tests/privacy/networkMap.test.ts`) fails when a file reaches the network and isn't covered here, or when a flow or connection has no row above.
 
 | Code | Reaches | Described in |
 | --- | --- | --- |
-| `src/core/providers/models.ts`, `src/core/providers/modelLists.ts` | The chat model's provider through the AI SDK, and the list of its models (the key only) | Chat, Edit with AI, Find support and Verify, Writing suggestions, Automatic Tags, Document organization |
+| `src/core/providers/models.ts`, `src/core/providers/modelLists.ts`, `src/core/providers/providerErrors.ts` | The chat model's provider through the AI SDK, and the list of its models (the key only) | Chat, Edit with AI, Find support and Verify, Writing suggestions, Automatic Tags, Document organization |
 | `src/core/providers/ollama.ts`, `src/core/providers/ollamaChat.ts`, `src/core/providers/ollamaModels.ts`, `src/core/library/automatic.ts` | Ollama, on this computer or another, and the cloud models it forwards to ollama.com | The same flows; Ollama pulls |
-| `src/core/providers/chatgpt/`, `src/core/providers/claudeAccount/`, `src/core/providers/copilot/`, `src/core/oauth.ts` | The ChatGPT plan, a Claude account and a GitHub Copilot plan: their sign-ins and the requests made with them | Sign-ins |
+| `src/core/providers/chatgpt/`, `src/core/providers/claudeAccount/`, `src/core/providers/copilot/`, `src/core/providers/signedFetch.ts`, `src/core/oauth.ts`, `src/core/oauthAccount.ts` | The ChatGPT plan, a Claude account and a GitHub Copilot plan: their sign-ins and the requests made with them | Sign-ins |
 | `src/core/providers/jev.ts` | TypeSafe Jev | Automatic Tags, Document organization |
 | `src/core/providers/embeddings.ts`, `src/core/embedding/download.ts`, `src/core/embedding/model.ts` | A cloud embedding provider; the built-in search model's download | Document search; model downloads |
 | `src/core/providers/rerank.ts`, `src/core/reranking/model.ts` | Cohere or Voyage AI; the built-in reranking model's download | Reranking; model downloads |
@@ -104,9 +104,9 @@ For a reviewer: each file in `src/core` that can send to the network, and the pa
 | `src/core/agents/` | A socket on this computer that the agents you connect reach; no network | Your AI agents |
 | `src/core/documents/web/`, `src/core/tools/web/` | The sites of web pages you add, and of pages a web search reads | Web pages |
 | `src/core/sources/`, `src/core/referenceRecords/lookup.ts`, `src/core/referenceChecks/` | Source providers; Crossref and arXiv | Find sources, Reference look-up, Reference check |
-| `src/core/core.ts` | Hands the adapters above their `fetch`; sends nothing itself | |
+| `src/core/core.ts`, `src/core/adapters.ts` | Hand the adapters above their `fetch`, and name what the host gives the core; send nothing themselves | |
 
-Outside `src/core`, the main process makes three connections: update checks (`src/main/updater.ts`), usage data (`src/main/usageData.ts`) and crash reports (`src/main/crashReports.ts`). Each is described above and is off unless it says otherwise.
+Outside `src/core`, the main process makes four connections of its own: update checks (`src/main/updater.ts`, `src/main/autoUpdater.ts`), usage data (`src/main/usageData.ts`), crash reports (`src/main/crashReports.ts`, `src/main/crashScrubber.ts`) and, only if you tick "Keep the page as it looks", the hidden page that loads a web page through a proxy that refuses your own computer and network (`src/main/pageLook.ts`, `src/main/lookProxy.ts`). It also gives the core its `fetch` for web pages and sources (`src/main/platform.ts`, `src/main/index.ts`), and opens the app's own pages in its windows, which reach no network (`src/main/analysis.ts`, `src/main/citedPageCapture.ts`, `src/main/printPdf.ts`, `src/main/pictures.ts`, `src/main/meetings/`). Each connection is described above and is off unless it says otherwise.
 
 ## Usage data
 
