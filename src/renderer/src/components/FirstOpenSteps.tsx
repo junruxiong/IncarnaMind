@@ -10,10 +10,12 @@ import { openModelSetup } from "../modelSetup";
 import { stepsShownOf } from "../nudges";
 import { revealAssistant } from "../quietAssistant";
 import { useAppStore } from "../store";
+import { useUnreadFiles } from "../unreadFiles";
 import { ExampleBanner, OtherExamples } from "./GettingStarted";
 import { CloseLineIcon } from "./lineIcons";
 import { ProblemLine } from "./ProblemLine";
 import { SLOT, Slotted } from "./Slotted";
+import { UnreadFilesLine } from "./UnreadFilesLine";
 import { buttonStyle } from "./ui";
 
 type StepKey = "citation" | "question" | "files";
@@ -96,10 +98,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
   // The ready Question's button goes once it is asked: the focus moves on to the next step.
   const focusNext = useRef(false);
   const filesOpen =
-    progress !== undefined &&
-    progress.citationChecked &&
-    (progress.askedOwn || progress.askedReady) &&
-    !progress.indexed;
+    progress?.citationChecked && (progress.askedOwn || progress.askedReady) && !progress.indexed;
   useEffect(() => {
     if (!filesOpen || !focusNext.current) return;
     focusNext.current = false;
@@ -212,6 +211,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
               {t("documents.skipped", { names: skipped.join(", ") })}
             </ProblemLine>
           )}
+          <UnreadFiles />
         </Step>
       </ol>
       {allDone && !modelReady && (
@@ -262,6 +262,12 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
       </div>
     </section>
   );
+}
+
+/** Why the step stays open after a file was added: it couldn't be read (#1457). */
+function UnreadFiles() {
+  const files = useUnreadFiles(null);
+  return <UnreadFilesLine files={files} testId="first-open-unread" />;
 }
 
 function OwnQuestion({ message }: { message: MessageKey }) {
