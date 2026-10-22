@@ -25,6 +25,7 @@ import { GroupMenu, StripButton } from "./TabMenus";
 import { splitToTheRight } from "./tabActions";
 import { MeetingTabTime, TabIcon, useTabTitle } from "./tabItems";
 import { type TabDrag, useTabSource } from "./useTabDrag";
+import { useTabStripFit } from "./useTabStripFit";
 
 /*
  * A group's tab strip (DESIGN.md, Components: Mind tabs, which now hold
@@ -56,13 +57,8 @@ export function TabStrip({
   const shown = group.tabs.find((tab) => tab.id === shownId);
   const last = merged || index === (layout?.groups.length ?? 1) - 1;
 
-  // The shown tab stays in sight when there are more tabs than room.
-  useEffect(() => {
-    if (!shownId) return;
-    list.current
-      ?.querySelector(`[data-tab-id="${CSS.escape(shownId)}"]`)
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [shownId]);
+  const spacer = useRef<HTMLSpanElement>(null);
+  useTabStripFit(list, spacer, shownId ?? null, tabs.map((tab) => tab.id).join());
 
   /** Arrow keys, Home and End move to another tab of the strip and show it, as in any tab list. */
   const moveFocus = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -116,12 +112,6 @@ export function TabStrip({
         data-hidden-after={overflow.after || undefined}
         className="tab-list"
         onKeyDown={moveFocus}
-        // A mouse wheel turns vertically; the strip scrolls sideways.
-        onWheel={(event) => {
-          if (Math.abs(event.deltaY) > Math.abs(event.deltaX) && list.current) {
-            list.current.scrollLeft += event.deltaY;
-          }
-        }}
       >
         {tabs.map((tab, position) => {
           const owner = merged ? groupOfTab(layout, tab.id)?.group : group;
@@ -150,7 +140,7 @@ export function TabStrip({
       >
         <PlusLineIcon />
       </button>
-      <span className="tab-strip-spacer" />
+      <span ref={spacer} className="tab-strip-spacer" />
       {last && <TasksChip />}
       {shown?.item.kind === "mind" && <ExportMenu mindId={shown.item.mindId} />}
       {!merged && (
