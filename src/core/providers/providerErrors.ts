@@ -78,6 +78,16 @@ export class SignInRouteError extends Error {
   }
 }
 
+/**
+ * A Claude account's plan limit, which tagging waits out (../library/planPace).
+ * Copilot's is a monthly allowance, so its tagging fails instead.
+ */
+export class ClaudePlanLimitError extends SignInRouteError {
+  constructor(message: string, resetsAt: number | null) {
+    super("plan-limit", message, resetsAt);
+  }
+}
+
 const ROUTE_KINDS: Record<SignInRouteError["problem"], ProviderErrorKind> = {
   "signed-out": "not-signed-in",
   "sign-in-expired": "not-signed-in",

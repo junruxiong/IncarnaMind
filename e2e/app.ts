@@ -25,6 +25,7 @@ import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import { EVENT_CHANNEL } from "../src/shared/bridge";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import { translate } from "../src/shared/i18n";
+import { defaultHelpKeys, HELP_SHORTCUTS, type HelpKeys } from "../src/shared/meetingHelp";
 import type { TestHooks } from "../src/shared/testHooks";
 import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
 import { APP_ARGS, homeEnv, KEYCHAIN_ARGS } from "../tests/helpers/home";
@@ -149,6 +150,8 @@ export interface LaunchOptions {
    * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
    */
   scans?: string;
+  /** How many scans are read at once (#1502), whatever the computer. A test build honours it. */
+  scansAtOnce?: number;
   /**
    * The scripted Task that asks for approval and writes files (src/main/scriptedTask.ts),
    * started with `startScriptedTask`. Needs a test build.
@@ -236,6 +239,7 @@ export async function launchApp(
     noAudioEngine = false,
     transcriber,
     scans,
+    scansAtOnce,
     web,
     lookLimit,
     scriptedTasks = false,
@@ -272,6 +276,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_COPILOT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
+  delete env.INCARNAMIND_TEST_SCANS_AT_ONCE;
   delete env.INCARNAMIND_TEST_WEB;
   delete env.INCARNAMIND_TEST_LOOK_LIMIT;
   delete env.INCARNAMIND_TEST_TASKS;
@@ -305,6 +310,7 @@ export async function launchApp(
   if (claudeSignInMs) env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS = String(claudeSignInMs);
   if (copilot) env.INCARNAMIND_TEST_COPILOT = copilot;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
+  if (scansAtOnce) env.INCARNAMIND_TEST_SCANS_AT_ONCE = String(scansAtOnce);
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
   if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
@@ -345,7 +351,6 @@ export async function launchApp(
   return { app, window };
 }
 
-/** Answers the first Word export's question "Mark it", unless it has an answer. */
 async function answerMarkAiText(window: Page): Promise<void> {
   await window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -388,6 +393,114 @@ export const flushUsageData = (app: ElectronApplication) =>
       throw new Error("Launch with `usageData`: only then has the app a usage data sender.");
     await hooks.flush();
   });
+
+export async function panelOf(app: ElectronApplication): Promise<Page> {
+  const find = () => app.windows().find((page) => page.url().includes("meetingPanel.html"));
+  await expect.poll(() => find() !== undefined, { timeout: 15_000 }).toBe(true);
+  const page = find();
+  if (!page) throw new Error("The floating panel didn't open.");
+  await page.getByTestId("meeting-panel").waitFor();
+  return page;
+}
+
+export async function expectBarOneRow(bar: Locator): Promise<void> {
+  await expect
+    .poll(() =>
+      bar.evaluate((element) => {
+        const controls = element.querySelector<HTMLElement>('[data-testid="meeting-controls"]');
+        if (!controls) throw new Error("The bar has no controls.");
+        const shown = (id: string) => {
+          const found = element.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+          return found !== null && found.offsetParent !== null;
+        };
+        const row = parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--meeting-bar-row"),
+        );
+        const frame = controls.getBoundingClientRect();
+        const seen = [...controls.children].filter(
+          (each): each is HTMLElement => each instanceof HTMLElement && each.offsetParent !== null,
+        );
+        const middle = (each: Element) => {
+          const box = each.getBoundingClientRect();
+          return box.top + box.height / 2;
+        };
+        const buttons = [...element.querySelectorAll<HTMLElement>(".meeting-button")].filter(
+          (each) => each.offsetParent !== null,
+        );
+        return {
+          rowHeight: Math.abs(frame.height - row) < 1,
+          oneRow: seen.every(
+            (each) =>
+              Math.abs(middle(each) - middle(controls)) < 2 &&
+              each.getBoundingClientRect().right <= frame.right + 1,
+          ),
+          kept:
+            ["meeting-dot", "meeting-time", "meeting-mic", "meeting-stop"].every(shown) &&
+            (shown("meeting-pause") || shown("meeting-resume")),
+          fits: element.scrollWidth <= element.clientWidth + 1,
+          cut: buttons.some((button) =>
+            [button, ...button.querySelectorAll("span")].some(
+              (each) => each.scrollWidth > each.clientWidth + 1,
+            ),
+          ),
+          foldedHaveMore:
+            [
+              "meeting-mark",
+              "meeting-call-help",
+              "meeting-transcript-toggle",
+              "meeting-details-toggle",
+            ].every(shown) || shown("meeting-more"),
+        };
+      }),
+    )
+    .toEqual({
+      rowHeight: true,
+      oneRow: true,
+      kept: true,
+      fits: true,
+      cut: false,
+      foldedHaveMore: true,
+    });
+}
+
+export const panelOpen = (app: ElectronApplication) =>
+  app.windows().some((page) => !page.isClosed() && page.url().includes("meetingPanel.html"));
+
+export const focusMainWindow = (app: ElectronApplication, focused: boolean) =>
+  app.evaluate((_electron, front) => {
+    (
+      globalThis as unknown as { incarnamindMainFocused(focused: boolean): void }
+    ).incarnamindMainFocused(front);
+  }, focused);
+
+export const heldGlobalKeys = (app: ElectronApplication, keys: string) =>
+  app.evaluate(({ globalShortcut }, asked) => globalShortcut.isRegistered(asked), keys);
+
+/**
+ * Gives Windows and Linux the keys macOS holds by default (⌃⌥1–7, H and M), which they ship
+ * without, and then `chosen` over them on every system: a spec that presses the meeting's
+ * shortcuts sets them first, as Settings › Meetings does. macOS keeps its own where `chosen`
+ * says nothing.
+ */
+export async function setMeetingKeys(window: Page, chosen: HelpKeys = {}): Promise<void> {
+  const keys: HelpKeys = {};
+  if (process.platform !== "darwin") {
+    for (const shortcut of HELP_SHORTCUTS) keys[shortcut] = defaultHelpKeys(shortcut, true) ?? "";
+  }
+  Object.assign(keys, chosen);
+  if (Object.keys(keys).length === 0) return;
+  await window.evaluate(async (all) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.updateSettings({ device: { meetingHelpKeys: all } });
+  }, keys);
+}
+
+export const pressHeldKeys = (app: ElectronApplication, kind: string) =>
+  app.evaluate((_electron, pressed) => {
+    (
+      globalThis as unknown as { incarnamindPressHelpKeys(kind: string): void }
+    ).incarnamindPressHelpKeys(pressed);
+  }, kind);
 
 /**
  * Stands in for the system's notifications: each one shown is recorded
@@ -474,6 +587,16 @@ export async function newMind(
   await expect(first).toHaveJSProperty("tagName", "H1");
   await window.keyboard.press("Backspace");
   await expect(first).toHaveJSProperty("tagName", "P");
+}
+
+/** Runs a command from ⌘K by its label, as the User types and clicks it. */
+export async function runFromPalette(window: Page, label: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(label);
+  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
+  await expect(item).toBeVisible();
+  await item.click();
 }
 
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
@@ -1245,6 +1368,13 @@ export async function catchCopies(window: Page): Promise<void> {
 /** What the page last copied since `catchCopies`. */
 export const copied = (window: Page) =>
   window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
+
+/** What the Edit menu's Undo would take back now, by its label. */
+export const undoMenuItem = (app: ElectronApplication) =>
+  app.evaluate(({ Menu }) => {
+    const item = Menu.getApplicationMenu()?.getMenuItemById("edit.undo");
+    return { label: item?.label ?? "", enabled: item?.enabled ?? false };
+  });
 
 /** Pushes a core event to the window, as the core does when something happens. */
 export const emit = (app: ElectronApplication, name: string, payload: unknown) =>
@@ -2056,6 +2186,66 @@ export async function setSidebarWidth(window: Page, width: number): Promise<void
     .poll(async () => (await window.getByTestId("sidebar").boundingBox())?.width)
     .toBeCloseTo(width, 0);
 }
+
+/**
+ * Sizes the assistant as a person does from the keyboard: on its resize line, ← widens and →
+ * narrows, 10px a press and 50px with Shift. It presses until the width is `width`, which must
+ * be a whole number of presses away, and focuses the line before each press, so a press that
+ * lands elsewhere is made again rather than counted.
+ */
+export async function sizeAssistant(window: Page, width: number): Promise<void> {
+  const assistant = window.getByTestId("assistant");
+  const widthNow = () => assistant.evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  for (let presses = 0; presses < 80; presses++) {
+    const now = await widthNow();
+    if (now === width) return;
+    const key = width > now ? "ArrowLeft" : "ArrowRight";
+    await window.getByTestId("assistant-resize").focus();
+    await window.keyboard.press(Math.abs(width - now) >= 50 ? `Shift+${key}` : key);
+    await expect
+      .poll(widthNow, { timeout: 2000 })
+      .not.toBe(now)
+      .catch(() => undefined);
+  }
+  await expect.poll(widthNow).toBe(width);
+}
+
+export interface TableSample {
+  status: string | null;
+  top: number;
+  button: string | null;
+}
+
+/** From now until `stopSamples`, once a frame, the table and button of the next Answer to be asked. */
+export const startSamples = (window: Page) =>
+  window.evaluate(() => {
+    const holder = globalThis as unknown as { samples: TableSample[]; sampling: boolean };
+    holder.samples = [];
+    holder.sampling = true;
+    const asked = document.querySelectorAll("[data-testid=assistant-answer]").length;
+    const sample = () => {
+      const answer = document.querySelectorAll("[data-testid=assistant-answer]")[asked];
+      const frame = answer?.querySelector(".tableWrapper");
+      const text = answer?.querySelector("[data-testid=assistant-answer-text]");
+      if (answer && frame && text) {
+        const button = answer.querySelector("[data-testid=answer-open-table]");
+        holder.samples.push({
+          status: answer.getAttribute("data-status"),
+          top: frame.getBoundingClientRect().top - text.getBoundingClientRect().top,
+          button: button ? (button.getAttribute("aria-disabled") ?? "false") : null,
+        });
+      }
+      if (holder.sampling) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+
+export const stopSamples = (window: Page) =>
+  window.evaluate(() => {
+    const holder = globalThis as unknown as { samples: TableSample[]; sampling: boolean };
+    holder.sampling = false;
+    return holder.samples;
+  });
 
 /** The assistant's Answers (#201), in the conversation it shows. */
 export const assistantAnswers = (window: Page) =>

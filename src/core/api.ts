@@ -966,6 +966,13 @@ export interface CommandItem {
   renamed?: string;
 }
 
+/** How a Word export settled whether to mark the text IncarnaMind wrote (#1535): `how` says where the choice came from. */
+export interface ExportMarking {
+  choice: MarkAiTextChoice;
+  /** Kept as the answer by this export (asked in the tray, or named in the request); for this file only; or saved before. */
+  how: "kept" | "this-file" | "earlier";
+}
+
 /** What a call of `run_command` did (#1110), from what its command returned. */
 export interface CommandDone {
   command: AssistantCommandId;
@@ -976,6 +983,10 @@ export interface CommandDone {
   into?: { kind: "folder" | "tag"; id: string; name: string; made: boolean };
   /** The file an export saved. */
   file?: Pick<SavedFile, "path" | "name" | "folder" | "inDefaultFolder">;
+  /** For a file saved: whether it is in the Output location itself, not a folder the request named. */
+  inOutputLocation?: boolean;
+  /** For a Word file: how its marking of the text IncarnaMind wrote was settled. */
+  marking?: ExportMarking;
 }
 
 /** Why a call of `run_command` changed nothing (#1110). */
@@ -2553,7 +2564,11 @@ export interface Document {
   status: DocumentStatus;
   /** While `status` is "embedding": the share of its Passages embedded so far, from 0 to 1. Null otherwise. */
   progress: number | null;
-  /** While `status` is "extracting" and its scanned pages are read (#397): how far that is. Null otherwise. */
+  /**
+   * While `status` is "extracting" and its scanned pages are read (#397): how far that is.
+   * While "queued" after its scanned pages were found, waiting its turn to be read beside the
+   * other Documents (#1502): how many there are. Null otherwise.
+   */
   scan: DocumentScanProgress | null;
   /** Set when `status` is "failed": why the latest version read failed. */
   failure: DocumentFailure | null;
@@ -3567,6 +3582,8 @@ export interface AddDocumentsResult {
   documents: Document[];
   /** Files that were not added. */
   skipped: SkippedFile[];
+  /** The Documents this call made new, in order. A file in the Library already is in `documents` and not here. */
+  added: string[];
   /** The batch of the new Documents: "documents.batch" events report its progress. */
   batchId: string;
 }
@@ -4701,6 +4718,7 @@ export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
  * - "malformed": its reply held no verdict that could be read.
  * - "empty": its reply was empty.
  * - "no-evidence": it gave a verdict, but no quote the Citation check finds in the Passage it named.
+ * - "unread": it gave a verdict without searching the Documents, even when asked once more.
  * - "rate-limit": the model's service refused more requests for now.
  * - "cost-cap": it could pass the monthly cap, so nothing was sent.
  * - "plan-limit": the plan's usage limit is reached.
@@ -4715,6 +4733,7 @@ export type ClaimCheckFailure =
   | "malformed"
   | "empty"
   | "no-evidence"
+  | "unread"
   | "rate-limit"
   | "cost-cap"
   | "plan-limit"
@@ -6824,6 +6843,8 @@ export type ConnectorSignInErrorKind =
   | "client-id-required"
   /** This device can't store the sign-in securely (see `getSecretStorage`). */
   | "secret-storage"
+  /** "Keep everything on this computer" is on and the sign-in's server isn't on this computer: nothing was sent. */
+  | "held-back"
   | "failed";
 
 export interface ConnectorSignInError {
@@ -6838,6 +6859,13 @@ export interface RemoteConnectorSignIn {
   signedIn: boolean;
   /** Renewing the last sign-in failed, so its tokens were removed: the User signs in again. */
   expired: boolean;
+  /**
+   * "Keep everything on this computer" is on, and the server this sign-in is
+   * with isn't on this computer (the MCP server's own is, or the Connector
+   * would be "paused"): it isn't renewed or started, its Tools aren't offered,
+   * and its tokens are kept for when that is off.
+   */
+  heldBack: boolean;
   /** Why the last browser sign-in didn't work; null once one works or starts again. */
   error: ConnectorSignInError | null;
 }
@@ -7809,6 +7837,11 @@ export interface Meeting {
   transcript: MeetingTranscript | null;
   /** How well its capture went, so a bad recording can be explained (#161). */
   health: CaptureHealth;
+  /**
+   * While the User has paused their microphone: where in the Meeting's time that began, in ms of
+   * recording before it; otherwise null. The computer's sound is still recorded.
+   */
+  microphonePausedAtMs: number | null;
   /** The help asked for last during the call, whose Answer the floating panel shows; null before any and after Stop. */
   help: MeetingHelp | null;
   /** The kind of meeting the help buttons are for, as the User chose it; null: the general buttons only. */
@@ -7884,6 +7917,11 @@ export interface AskMeetingHelpInput {
 export interface SetMeetingTemplateInput {
   meetingId: string;
   template: MeetingHelpTemplate | null;
+}
+
+export interface SetMeetingMicrophoneInput {
+  meetingId: string;
+  paused: boolean;
 }
 
 /** How loud each source of a recording Meeting is now, from 0 (silence) to 1. */
@@ -9481,6 +9519,11 @@ export interface CoreApi {
    * events report progress. Documents still being processed are tagged when they finish.
    */
   retagDocuments(documentIds?: string[]): Promise<void>;
+  /**
+   * The computer is back online: the Documents whose tagging couldn't reach
+   * the AI model are tagged again, once however often it is said.
+   */
+  backOnline(): Promise<void>;
 
   /** TypeSafe Jev, the optional tagger: whether it is set up on this device, and how. */
   getJevSettings(): Promise<JevSettings>;
@@ -9838,6 +9881,12 @@ export interface CoreApi {
   askMeetingHelp(input: AskMeetingHelpInput): Promise<ConversationAskResult>;
   /** Sets the kind of meeting a live Meeting's help buttons are for: its template adds two or three. */
   setMeetingTemplate(input: SetMeetingTemplateInput): Promise<Meeting>;
+  /**
+   * Pauses the microphone of a Meeting that records or is paused, or resumes it. Paused, nothing
+   * from the microphone is saved, transcribed or sent to a transcription service, and the Transcript
+   * marks the stretch; the computer's sound goes on. Every Meeting starts with its microphone on.
+   */
+  setMeetingMicrophone(input: SetMeetingMicrophoneInput): Promise<Meeting>;
 
   /** Outside agents (#351, experimental): the setting, what pauses them, and every pairing. */
   getAgents(): Promise<AgentSettings>;
@@ -10338,6 +10387,7 @@ const methods: Record<CoreApiMethod, true> = {
   revertDocumentTags: true,
   mergeTags: true,
   retagDocuments: true,
+  backOnline: true,
   getJevSettings: true,
   saveJevSettings: true,
   removeJevSettings: true,
@@ -10421,6 +10471,7 @@ const methods: Record<CoreApiMethod, true> = {
   openAudioSettings: true,
   askMeetingHelp: true,
   setMeetingTemplate: true,
+  setMeetingMicrophone: true,
   getAgents: true,
   setAgentsEnabled: true,
   connectAgent: true,

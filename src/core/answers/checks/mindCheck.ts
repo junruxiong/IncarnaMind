@@ -29,6 +29,7 @@ import type {
   CheckMindInput,
   CheckMindMode,
   CheckMindResult,
+  CitedQuote,
   ClaimCheckAttributes,
   DocumentsAddedSince,
   FindMindClaimsResult,
@@ -64,6 +65,8 @@ export interface MindCheckOptions extends RunChecksOptions {
   ): { searchable: number; folderId: string | null; check: CheckScope };
   /** The Folder the Mind is in; null for none. */
   mindFolder(mindId: string): string | null;
+  /** What the Citations quote, each Document named as it is now. */
+  citedNow(cited: readonly CitedQuote[]): { documentName: string; quote: string }[];
   /** Each live Document's version now, for which checks need a re-check. */
   documentVersions(): ReadonlyMap<string, string>;
   documents: {
@@ -350,7 +353,7 @@ export function createMindCheck(options: MindCheckOptions) {
             id: mark.id,
             claim: sentence.text,
             context: sentence.context,
-            cited: sentence.cited,
+            cited: options.citedNow(sentence.cited),
             scope: within.scope,
           },
         ];

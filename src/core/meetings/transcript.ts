@@ -133,10 +133,19 @@ interface Saved {
 }
 
 interface LiveStream {
+  stream: string;
   baseMs: number;
   doneMs: number;
   /** A cloud stream's audio held in the core until its connection opens; absent once it has. */
   waiting?: Int16Array[];
+}
+
+interface Finishing {
+  stream: string;
+  reading: Reading;
+  /** Settles once its last lines are in, or it is dropped. */
+  done: Promise<void>;
+  drop(): void;
 }
 
 interface Live {
@@ -149,6 +158,10 @@ interface Live {
   tracks: Tracks;
   /** The streams opened, each with its source's first audio: the computer's sound may come later, or never. */
   streams: Partial<Record<AudioSource, LiveStream>>;
+  /** The microphone's streams opened since `stream` began: each pause ends one and the next audio starts another. */
+  microphoneStreams: number;
+  /** Microphone streams a pause ended, until their last lines are in: a closed gate drops them too. */
+  finishing: Finishing[];
   started: boolean;
   /** Audio waiting for the engine to start. */
   held: TrackedAudio[];
@@ -251,12 +264,11 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 
 const SOURCES: readonly AudioSource[] = ["microphone", "system"];
 
-const streamName = (prefix: string, source: AudioSource) => `${prefix}:${source}`;
+const streamName = (prefix: string, source: AudioSource, generation = 0) =>
+  generation === 0 ? `${prefix}:${source}` : `${prefix}:${source}:${generation}`;
 
 const speakerOf = (source: AudioSource, callSound: boolean) =>
   source === "system" ? SPEAKER_THEM : callSound ? SPEAKER_ME : SPEAKER_UNKNOWN;
-
-const lengthOf = (audio: TrackedAudio) => audio.microphone.length / SAMPLE_RATE_MS;
 
 const msOf = (chunks: readonly Int16Array[]) =>
   chunks.reduce((sum, samples) => sum + samples.length / SAMPLE_RATE_MS, 0);
@@ -451,7 +463,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       const live = state.live;
       for (const source of SOURCES) {
         const own = live?.streams[source];
-        if (live && own && stream === streamName(live.stream, source)) {
+        if (live && own && stream === own.stream) {
           return {
             state,
             baseMs: own.baseMs,
@@ -845,23 +857,83 @@ export function createTranscripts(options: TranscriptsOptions) {
     }
     for (const source of SOURCES) {
       const samples = audio[source];
-      if (!samples) continue;
-      const name = streamName(live.stream, source);
+      if (!samples) {
+        if (source === "microphone") endMicrophone(state, live, audio.atMs);
+        continue;
+      }
       let own = live.streams[source];
       if (!own) {
-        own = { baseMs: audio.atMs, doneMs: audio.atMs, ...(live.cloud && { waiting: [] }) };
+        own = {
+          stream: streamName(
+            live.stream,
+            source,
+            source === "microphone" ? live.microphoneStreams++ : 0,
+          ),
+          baseMs: audio.atMs,
+          doneMs: audio.atMs,
+          ...(live.cloud && { waiting: [] }),
+        };
         live.streams[source] = own;
-        if (live.cloud) transcriber.open(name, live.cloud.stream);
+        if (live.cloud) transcriber.open(own.stream, live.cloud.stream);
       }
       if (own.waiting) own.waiting.push(samples);
-      else transcriber.push(name, samples);
+      else transcriber.push(own.stream, samples);
     }
-    live.pushedMs = audio.atMs + lengthOf(audio);
+    live.pushedMs = audio.atMs + audio.lengthMs;
+  }
+
+  function endMicrophone(state: State, live: Live, atMs: number): void {
+    const own = live.streams.microphone;
+    if (!own) return;
+    delete live.streams.microphone;
+    if (own.waiting) {
+      // A cloud stream that never opened has sent nothing: this computer transcribes its stretch.
+      transcriber.drop(own.stream);
+      state.pending = addRange(state.pending, { fromMs: own.baseMs, toMs: atMs });
+      return;
+    }
+    const callSound = live.callSound();
+    const reading: Reading = {
+      baseMs: own.baseMs,
+      source: "microphone",
+      speaker: () => speakerOf("microphone", callSound),
+    };
+    state.catchUps.set(own.stream, reading);
+    let drop = () => {};
+    const dropped = new Promise<void>((resolve) => {
+      drop = resolve;
+    });
+    const done: Promise<void> = Promise.race([transcriber.finish(own.stream), dropped])
+      .then(
+        () => {
+          if (reading.lost)
+            state.pending = addRange(state.pending, { fromMs: own.baseMs, toMs: atMs });
+        },
+        (error: unknown) => {
+          log.warn("transcript.endFailed", {
+            meetingId: state.meetingId,
+            message: messageOf(error),
+          });
+          state.pending = addRange(state.pending, { fromMs: own.baseMs, toMs: atMs });
+        },
+      )
+      .finally(() => {
+        state.catchUps.delete(own.stream);
+        live.finishing = live.finishing.filter((each) => each.done !== done);
+        if (closed) return;
+        writeLines(state);
+        options.changed();
+      });
+    live.finishing.push({ stream: own.stream, reading, done, drop });
   }
 
   function dropStreams(live: Live): void {
-    for (const source of SOURCES) {
-      if (live.streams[source]) transcriber.drop(streamName(live.stream, source));
+    for (const own of Object.values(live.streams)) transcriber.drop(own.stream);
+    for (const each of live.finishing) {
+      transcriber.drop(each.stream);
+      // Its stretch is transcribed from the audio after Stop, as any stream lost is.
+      each.reading.lost = true;
+      each.drop();
     }
   }
 
@@ -931,10 +1003,10 @@ export function createTranscripts(options: TranscriptsOptions) {
     }
     live.held.push(audio);
     // Audio that waited too long is transcribed after Stop: live text starts from what is left.
-    const newest = audio.atMs + audio.microphone.length / SAMPLE_RATE_MS;
+    const newest = audio.atMs + audio.lengthMs;
     while ((live.held[0]?.atMs ?? newest) < newest - HELD_MS) {
       const old = live.held.shift() as TrackedAudio;
-      const end = old.atMs + old.microphone.length / SAMPLE_RATE_MS;
+      const end = old.atMs + old.lengthMs;
       state.pending = addRange(state.pending, { fromMs: old.atMs, toMs: end });
       live.doneMs = end;
       live.pushedMs = end;
@@ -962,6 +1034,8 @@ export function createTranscripts(options: TranscriptsOptions) {
     for (const part of parts) {
       covered = addRange(covered, { fromMs: part.offsetMs, toMs: part.offsetMs + part.durationMs });
     }
+    const pauses = state.gaps.filter((gap) => gap.reason === "muted");
+    for (const pause of pauses) covered = addRange(covered, pause);
     const reason = options.audioDeleted(state.meetingId) ? "lost" : "uncaptured";
     let at = range.fromMs;
     for (const each of [...covered, { fromMs: range.toMs, toMs: range.toMs }]) {
@@ -973,14 +1047,19 @@ export function createTranscripts(options: TranscriptsOptions) {
     const prefix = `${state.meetingId}:catch-up:${++streams}`;
     let callSound = false;
     const opened: string[] = [];
+    let microphoneStreams = 0;
+    let microphoneOpen = false;
     try {
       const tracks = createTracks(range.fromMs);
       const end = Math.min(
         range.toMs,
         Math.max(...parts.map((part) => part.offsetMs + part.durationMs)),
       );
-      for (let from = range.fromMs; from < end; from += CATCH_UP_CHUNK_MS) {
-        const to = Math.min(end, from + CATCH_UP_CHUNK_MS);
+      // No chunk crosses the edge of a stretch the microphone was paused: it sends nothing for one.
+      const edges = pauses.flatMap((pause) => [pause.fromMs, pause.toMs]);
+      for (let from = range.fromMs, to = from; from < end; from = to) {
+        to = Math.min(end, from + CATCH_UP_CHUNK_MS, ...edges.filter((edge) => edge > from));
+        const paused = pauses.some((pause) => pause.fromMs <= from && pause.toMs >= to);
         for (const part of parts) {
           const partEnd = part.offsetMs + part.durationMs;
           if (part.offsetMs >= to || partEnd <= from) continue;
@@ -1000,7 +1079,17 @@ export function createTranscripts(options: TranscriptsOptions) {
         for (const source of SOURCES) {
           const track = audio?.[source];
           if (!audio || !track) continue;
-          const stream = streamName(prefix, source);
+          if (source === "microphone" && paused) {
+            if (microphoneOpen) microphoneStreams++;
+            microphoneOpen = false;
+            continue;
+          }
+          if (source === "microphone") microphoneOpen = true;
+          const stream = streamName(
+            prefix,
+            source,
+            source === "microphone" ? microphoneStreams : 0,
+          );
           if (!state.catchUps.has(stream)) {
             state.catchUps.set(stream, {
               baseMs: audio.atMs,
@@ -1167,8 +1256,9 @@ export function createTranscripts(options: TranscriptsOptions) {
     // A cloud stream that never opened has sent nothing: this computer transcribes its stretch.
     let unopened = false;
     for (const source of SOURCES) {
-      if (!live.streams[source]?.waiting) continue;
-      transcriber.drop(streamName(live.stream, source));
+      const own = live.streams[source];
+      if (!own?.waiting) continue;
+      transcriber.drop(own.stream);
       delete live.streams[source];
       unopened = true;
     }
@@ -1178,7 +1268,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       return own
         ? [
             {
-              stream: streamName(live.stream, source),
+              stream: own.stream,
               reading: {
                 baseMs: own.baseMs,
                 source,
@@ -1193,6 +1283,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     const done: Promise<void> = Promise.all([
       before,
       ...ending.map(({ stream }) => transcriber.finish(stream)),
+      ...live.finishing.map((each) => each.done),
     ])
       .then(
         () => {
@@ -1331,6 +1422,8 @@ export function createTranscripts(options: TranscriptsOptions) {
         choosing: options.cloud !== undefined,
         tracks: createTracks(offsetMs),
         streams: {},
+        microphoneStreams: 0,
+        finishing: [],
         started: false,
         held: [],
         pushedMs: offsetMs,
@@ -1353,6 +1446,34 @@ export function createTranscripts(options: TranscriptsOptions) {
     hear(meetingId: string, source: AudioSource, samples: Int16Array, atMs: number): void {
       const state = states.get(meetingId);
       if (state?.live) feed(state, state.live.tracks.add(source, samples, atMs));
+    },
+
+    /**
+     * The User paused their microphone at `atMs` in the Meeting's time: what it heard up to there
+     * is let out and its stream finished, so its lines are final. Nothing is sent for it, not even
+     * silence, until `microphoneResumed`.
+     */
+    microphonePaused(meetingId: string, atMs: number): void {
+      const state = states.get(meetingId);
+      const live = state?.live;
+      if (!state || !live) return;
+      feed(state, live.tracks.pauseMicrophone(atMs));
+      feed(state, { atMs: live.tracks.atMs, lengthMs: 0, microphone: null, system: null });
+    },
+
+    /** The User's microphone is on again from `atMs` in the Meeting's time: its next audio starts a stream. */
+    microphoneResumed(meetingId: string, atMs: number): void {
+      const state = states.get(meetingId);
+      if (state?.live) feed(state, state.live.tracks.resumeMicrophone(atMs));
+    },
+
+    markMicrophonePause(meetingId: string, fromMs: number, toMs: number): void {
+      if (toMs <= fromMs) return;
+      const state = load(meetingId);
+      if (state.savedPath) return;
+      state.gaps.push({ fromMs, toMs, reason: "muted" });
+      writeLines(state, { now: true });
+      options.changed();
     },
 
     /** Audio stopped being captured, at `endMs` in the Meeting's time: paused, asleep or stopped. */

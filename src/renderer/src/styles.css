@@ -141,6 +141,13 @@
   --font-mono-writing:
     "JetBrains Mono", var(--font-cjk-sans), ui-monospace, "SFMono-Regular", Menlo, Consolas,
     monospace;
+  /*
+   * The recording bar's controls are one row at every width and in every language, so the bar
+   * with nothing under it is this high: the row, its 6px padding twice and its 1px borders. A
+   * layout that keeps room for the bar before it appears holds `--meeting-bar-height`.
+   */
+  --meeting-bar-row: 28px;
+  --meeting-bar-height: calc(var(--meeting-bar-row) + 14px);
 }
 
 /*
@@ -2001,6 +2008,7 @@
     border-radius: 8px;
     background: var(--color-sheet);
     font-family: var(--font-sans);
+    container: meeting-bar / inline-size;
   }
   .meeting-bar-room {
     visibility: hidden;
@@ -2063,14 +2071,13 @@
       color: var(--color-ink);
     }
   }
-  /* Too narrow for one row, the last controls wrap to a second, never inside a button. */
+  /* Never a second row: the container queries below take words, then buttons, out of it. */
   .meeting-controls {
     display: flex;
     flex-shrink: 0;
-    flex-wrap: wrap;
     align-items: center;
     gap: 2px;
-    min-height: 28px;
+    height: var(--meeting-bar-row);
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink);
@@ -2134,6 +2141,51 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .meeting-more {
+    display: none;
+  }
+  /*
+   * As the bar narrows its buttons give up their words and keep their icons (their names and
+   * keys are in their tooltips), then Mark, then Call help, then the transcript and details
+   * buttons fold into the ⋯. The state and timer, Pause my mic, Pause and Stop stay. By the
+   * bar's own width, so nothing is measured and nothing moves while the window is dragged. A
+   * row needs, in English, which needs most: 567px with words, 334px with icons, 308px without
+   * Call help (Mark is folded for the same width the ⋯ takes) and 256px with only the four that
+   * stay and the ⋯; each query below leaves 12px over that.
+   */
+  @container meeting-bar (width < 580px) {
+    .meeting-button--words {
+      justify-content: center;
+      width: 24px;
+      padding: 0;
+    }
+    .meeting-button-word,
+    .meeting-button-label {
+      display: none;
+    }
+  }
+  @container meeting-bar (width < 346px) {
+    .meeting-more {
+      display: inline-flex;
+    }
+    [data-fold="mark"] {
+      display: none;
+    }
+  }
+  @container meeting-bar (width < 340px) {
+    [data-fold="help"] {
+      display: none;
+    }
+  }
+  @container meeting-bar (width < 320px) {
+    [data-fold="transcript"],
+    [data-fold="details"] {
+      display: none;
+    }
+    .meeting-more {
+      margin-left: auto;
+    }
   }
   /* A quiet 22px chip: no fill until pointed at (the model, "All Documents"). */
   .composer-chip {
@@ -2209,6 +2261,20 @@
       color: var(--color-ink-placeholder);
       cursor: default;
     }
+  }
+  /*
+   * A menu that scrolls shows it: a shadow at the edge with more beyond it, which the menu's own
+   * background covers once that end is reached (#1501).
+   */
+  .menu-scrolls {
+    background:
+      linear-gradient(var(--color-sheet) 30%, transparent) 0 0 / 100% 28px no-repeat local,
+      linear-gradient(transparent, var(--color-sheet) 70%) 0 100% / 100% 28px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 0.22), transparent) 0 0 / 100% 10px
+      no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 0.22), transparent) 0 100% / 100% 10px
+      no-repeat scroll,
+      var(--color-sheet);
   }
   /* The "@" and "/" pickers: above the composer, at its left edge. */
   .composer-picker {
@@ -6657,30 +6723,64 @@
       background: linear-gradient(to right, var(--color-sheet), transparent);
       pointer-events: none;
     }
+    /*
+     * Where a table starts, with no height: the Expand is laid over the table's top-right corner.
+     * While there is more table to its right, a fade of the heading row reaches 28px past it, so
+     * heading text slides out under the fade, never under the bare icon; scrolled to the end, the
+     * fade is gone and a strip of the row stays clear under the icon. A table that widens
+     * mid-answer gains all this without pushing anything.
+     */
     .answer-table-slot {
-      margin-top: 4px;
+      position: relative;
+      height: 0;
 
-      &:empty {
-        display: none;
+      + * {
+        margin-top: 0;
+      }
+      &:has(> .answer-table-open) + .tableWrapper tr:first-child > :last-child {
+        padding-right: 36px;
       }
     }
+    .answer-table-fade {
+      position: absolute;
+      top: 0;
+      right: 0;
+      z-index: 1;
+      width: 56px;
+      height: 29px;
+      background: linear-gradient(to right, transparent, var(--color-sheet) 28px);
+      opacity: 0;
+      pointer-events: none;
+    }
+    .answer-table-slot:has(+ .tableWrapper[data-more-after]) .answer-table-fade {
+      opacity: 1;
+    }
     .answer-table-open {
+      position: absolute;
+      top: 0;
+      right: 2px;
+      z-index: 2;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      justify-content: center;
+      width: 26px;
       height: 26px;
-      margin-left: -6px;
-      padding: 0 7px 0 6px;
       border-radius: 6px;
-      font-size: 13px;
-      line-height: 18px;
-      font-weight: 600;
+      background: var(--color-sheet);
       color: var(--color-ink-secondary);
       user-select: none;
 
       &:hover {
         background: var(--color-hover);
         color: var(--color-ink);
+      }
+      &[aria-disabled="true"] {
+        cursor: default;
+        color: var(--color-ink-placeholder);
+
+        &:hover {
+          background: var(--color-sheet);
+        }
       }
     }
     /*

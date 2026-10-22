@@ -575,14 +575,24 @@ export type CaptureState = "recording" | "denied" | "unavailable" | "ended";
 
 /** Where a capture delivers what it hears. */
 export interface AudioSink {
-  /** Samples from one source, in the order captured: `MEETING_SAMPLE_RATE` mono, signed 16-bit. */
-  audio(source: AudioSource, samples: Int16Array): void;
+  /**
+   * Samples from one source, in the order captured: `MEETING_SAMPLE_RATE` mono, signed 16-bit.
+   * `capturedAt` is when the last of them was captured, in ms since the epoch on the clock `now`
+   * reads; without it they count as captured as they arrive. Microphone samples captured while
+   * the User had it paused are dropped, however late they arrive.
+   */
+  audio(source: AudioSource, samples: Int16Array, capturedAt?: number): void;
   /** A source started, couldn't start, or stopped. */
   state(source: AudioSource, state: CaptureState): void;
 }
 
 /** One recording in progress, from `AudioCapture.start`. */
 export interface CaptureSession {
+  /**
+   * Stops the microphone at its source, or starts it again; the computer's sound goes on. A
+   * microphone that is off isn't open, so no samples come from it.
+   */
+  setMicrophone(on: boolean): void;
   /** Stops capturing. Resolves once the last samples have reached the sink. */
   stop(): Promise<void>;
 }
@@ -888,6 +898,11 @@ export interface CoreAdapters {
    * pinned Hugging Face revisions; tests give no files for a fake that needs none.
    */
   textRecognitionModelSource?: EmbeddingModelSource;
+  /**
+   * How many scans are read at once (#1502): what the computer can bear, as the host works it
+   * out with `scansAtOnce` (src/core/documents/processor.ts). Absent: one.
+   */
+  scansAtOnce?: number;
   /**
    * Where the built-in reranking model's files come from. Defaults to the
    * pinned Hugging Face revision; tests give no files for a fake that needs none.
