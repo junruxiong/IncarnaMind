@@ -41,9 +41,14 @@ function fillingModel(
   reply: string,
   quotes: Record<number, string>,
   plans: Record<string, Plan> = {},
-  { failing = () => false, held }: { failing?: () => boolean; held?: Promise<void> } = {},
+  {
+    failing = () => false,
+    held,
+    seen,
+  }: { failing?: () => boolean; held?: Promise<void>; seen?: (call: ModelCall) => void } = {},
 ) {
   return scriptedModel((call) => {
+    seen?.(call);
     if (isCheckRun(call)) return checkReply(call, plans);
     if (!isFill(call)) return { text: "OK" };
     if (failing()) return { error: { status: 500, message: "The model is overloaded." } };
@@ -138,21 +143,45 @@ describe("After Stop, the notes are filled in from the Transcript (#142)", {
     const holds = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const model = fillingModel("### L1\nThe enterprise price is 45 dollars a seat [^1].", {
-      1: MY_LINES[0] as string,
-    });
-    const { separator } = fakeSeparator({ holds });
+    let passing = true;
+    const whilePassing: boolean[] = [];
+    const model = fillingModel(
+      "### L1\nThe enterprise price is 45 dollars a seat [^1].",
+      { 1: MY_LINES[0] as string },
+      {},
+      {
+        seen: (call) => {
+          if (isFill(call)) whilePassing.push(passing);
+        },
+      },
+    );
+    const { separator, requests } = fakeSeparator({ holds });
     const { core, meeting } = await recorded(model, NOTES, undefined, undefined, separator);
     await until(
       core,
       meeting.id,
       (transcript) => transcript.state === "saved" && transcript.separating,
     );
-    // Time the fill would take to start, were it not waiting.
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
     expect((await fillOf(core, meeting.id))?.state).toBe("waiting");
+    passing = false;
     release();
     expect(await settledFill(core, meeting)).toMatchObject({ state: "filled" });
+    expect(whilePassing.length).toBeGreaterThan(0);
+    expect(whilePassing.filter(Boolean)).toEqual([]);
+    core.close();
+  });
+
+  // protects=a speaker pass that fails releases the notes: they are filled in with the labels the Transcript has, and the Transcript says its speakers couldn't be told apart; fails_when=the fill waits for the rest of the session, or the failure says nothing; no_claim=why the pass failed, which only the log says.
+  test("a speaker pass that fails doesn't hold up the notes", async () => {
+    const model = fillingModel("### L1\nThe enterprise price is 45 dollars a seat [^1].", {
+      1: MY_LINES[0] as string,
+    });
+    const { separator } = fakeSeparator({ fails: "The speaker process stopped." });
+    const { core, meeting } = await recorded(model, NOTES, undefined, undefined, separator);
+    expect(await settledFill(core, meeting)).toMatchObject({ state: "filled" });
+    const transcript = await until(core, meeting.id, (each) => !each.separating);
+    expect(transcript.problem?.kind).toBe("speakers");
     core.close();
   });
 

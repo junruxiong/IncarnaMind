@@ -15,6 +15,8 @@ import type { EmbeddingModelSource, Logger, SpeakerModelFiles } from "../adapter
 import { downloadModel, isModelDownloaded } from "../embedding/download";
 
 const SEGMENTATION_REVISION = "9403a6902bb58e3d5ae8c7e77c3422de279db2e0";
+// This mirror has no licence file: the licence is on the original's card,
+// https://modelscope.cn/models/iic/speech_campplus_sv_zh_en_16k-common_advanced
 const EMBEDDING_REVISION = "0743f301363dec56491a490f6d6cbc9d67f9a3bf";
 
 export const SPEAKER_SEGMENTATION = {

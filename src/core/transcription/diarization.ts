@@ -5,7 +5,7 @@
  * thread until it is done, so the desktop app runs it in a process of its own
  * (src/main/speakerProcess.ts).
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import type { SpeakerEmbeddingExtractor } from "sherpa-onnx-node";
 import { MEETING_SAMPLE_RATE, type SpeakerModelFiles, type VoiceTurn } from "../adapters";
 import { loadSherpa } from "./sherpa";
@@ -26,6 +26,8 @@ const PRINT_SECONDS = 30;
 const WAV_HEADER_BYTES = 44;
 const SAMPLES_PER_MS = MEETING_SAMPLE_RATE / 1000;
 
+const samplesIn = (bytes: number) => Math.max(0, Math.floor((bytes - WAV_HEADER_BYTES) / 2));
+
 export interface SeparationRequest {
   parts: readonly { path: string; offsetMs: number }[];
   model: SpeakerModelFiles;
@@ -38,31 +40,23 @@ interface Span {
   offsetMs: number;
 }
 
-/** A part's samples, from our own WAV files, as the engine reads them: -1 to 1. */
-function samplesOf(path: string): Float32Array {
-  const bytes = readFileSync(path);
-  const count = Math.floor((bytes.byteLength - WAV_HEADER_BYTES) / 2);
-  const samples = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    samples[i] = bytes.readInt16LE(WAV_HEADER_BYTES + i * 2) / 32768;
-  }
-  return samples;
-}
-
-/** The parts' samples one after the other, in the Meeting's order, and where each came from. */
+// Read straight into one array, a part at a time: the whole recording is held once, not twice.
 function joinParts(parts: SeparationRequest["parts"]): { samples: Float32Array; spans: Span[] } {
-  const read = [...parts]
-    .sort((a, b) => a.offsetMs - b.offsetMs)
-    .map((part) => ({ offsetMs: part.offsetMs, samples: samplesOf(part.path) }));
-  const samples = new Float32Array(read.reduce((sum, part) => sum + part.samples.length, 0));
+  const sorted = [...parts].sort((a, b) => a.offsetMs - b.offsetMs);
+  const lengths = sorted.map((part) => samplesIn(statSync(part.path).size));
+  const samples = new Float32Array(lengths.reduce((sum, length) => sum + length, 0));
   const spans: Span[] = [];
   let at = 0;
-  for (const part of read) {
-    samples.set(part.samples, at);
-    spans.push({ at, length: part.samples.length, offsetMs: part.offsetMs });
-    at += part.samples.length;
+  for (const [index, part] of sorted.entries()) {
+    const bytes = readFileSync(part.path);
+    const length = Math.min(lengths[index] ?? 0, samplesIn(bytes.byteLength));
+    for (let i = 0; i < length; i++) {
+      samples[at + i] = bytes.readInt16LE(WAV_HEADER_BYTES + i * 2) / 32768;
+    }
+    spans.push({ at, length, offsetMs: part.offsetMs });
+    at += length;
   }
-  return { samples, spans };
+  return { samples: samples.subarray(0, at), spans };
 }
 
 /**
@@ -120,7 +114,6 @@ interface Group {
   seconds: number;
 }
 
-/** `from` joins `into`: its voiceprint becomes their speech-weighted mean. */
 function join(into: Group, from: Group): void {
   const total = into.seconds + from.seconds || 1;
   into.print = into.print.map(
@@ -175,7 +168,6 @@ export function joinedVoices(
   return joined;
 }
 
-/** Each voice's voiceprint, from its longest stretches, and how much it speaks. */
 function voiceprintsOf(
   extractor: SpeakerEmbeddingExtractor,
   samples: Float32Array,

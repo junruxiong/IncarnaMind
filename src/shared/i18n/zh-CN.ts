@@ -4167,6 +4167,7 @@ export const zhCN = {
   "meetings.transcript.engineStopped": "转写已停止。",
   "meetings.transcript.saveFailed": "无法保存转写稿：{message}",
   "meetings.transcript.notSaved": "未保存转写稿：尚未选择新文件的保存位置。",
+  "meetings.transcript.speakersFailed": "转写稿已保存，但未能区分发言人。",
   "meetings.transcript.retry": "重试",
   "meetings.transcript.save": "保存",
   "meetings.fill.section.summary": "摘要",

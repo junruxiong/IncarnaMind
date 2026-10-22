@@ -59,6 +59,7 @@ import type {
   Document,
   MeetingTranscript,
   SavedFile,
+  TranscriptionModelStatus,
   TranscriptProblem,
   TranscriptState,
 } from "../api";
@@ -129,7 +130,7 @@ interface Saved {
   /** The number each speaker a cloud service told apart has, by stream and its own label. */
   voices?: Record<string, number>;
   /** The speaker pass (#138): it runs after the save, again after a quit cut it short. */
-  speakers?: "due" | "done";
+  speakers?: "due" | "done" | "failed";
 }
 
 interface LiveStream {
@@ -1184,48 +1185,69 @@ export function createTranscripts(options: TranscriptsOptions) {
     else options.saved?.(state.meetingId);
   }
 
-  // ---- Speakers ----
-
-  /** A cloud service told the voices of the side the pass would separate apart as they spoke: theirs stand. */
+  // Voices a cloud service told apart as they spoke stand: the pass leaves that side.
   const toldApart = (state: State) => {
     const side = `:${sourceToSeparate(isCall(state.cues))}:`;
     return Object.keys(state.voices ?? {}).some((key) => key.includes(side));
   };
 
-  /**
-   * The saved Transcript's speakers told apart while its audio is kept, then its labels in one
-   * write. A quit meanwhile leaves it due, for the next start.
-   */
+  // A quit during the pass leaves it due, for the next start. Whatever else ends it, the notes
+  // go ahead with the labels the Transcript has, so a failed pass never holds them up.
   function separate(state: State): void {
     const pass = options.speakers;
     if (!pass || state.separating || closed) return;
-    const done = () => {
-      state.speakers = "done";
-      persist(state);
-      options.changed();
-      options.saved?.(state.meetingId);
-    };
     if (!state.savedPath || options.audioDeleted(state.meetingId) || toldApart(state)) {
-      done();
+      settle(state, "done");
       return;
     }
     state.separating = true;
     options.changed();
     const saved = transcriptOf(state);
+    const current = () => !closed && states.get(state.meetingId) === state;
     pass
       .run(state.meetingId, [...state.cues])
-      .then((cues) => {
+      .then(
+        (cues) => {
+          if (current() && cues?.some((cue, at) => cue.speaker !== state.cues[at]?.speaker)) {
+            relabel(state, cues, saved);
+          }
+          return "done" as const;
+        },
+        (error: unknown) => {
+          log.error("speakers.failed", { meetingId: state.meetingId, message: messageOf(error) });
+          return "failed" as const;
+        },
+      )
+      .then((outcome) => {
         state.separating = false;
-        if (closed || states.get(state.meetingId) !== state) return;
-        if (cues?.some((cue, at) => cue.speaker !== state.cues[at]?.speaker)) {
-          relabel(state, cues, saved);
-        }
-        done();
+        if (current()) settle(state, outcome);
       })
       .catch((error: unknown) => {
-        log.error("speakers.failed", { meetingId: state.meetingId, message: messageOf(error) });
+        log.error("speakers.settleFailed", {
+          meetingId: state.meetingId,
+          message: messageOf(error),
+        });
       });
   }
+
+  function settle(state: State, outcome: "done" | "failed"): void {
+    state.speakers = outcome;
+    persist(state);
+    options.changed();
+    options.saved?.(state.meetingId);
+  }
+
+  function modelProblem(state: State, status: TranscriptionModelStatus): TranscriptProblem | null {
+    if (status.state !== "failed") return null;
+    if (state.state !== "preparing" && state.state !== "finishing") return null;
+    return {
+      kind: status.error?.kind === "load" ? "engine" : "download",
+      message: status.error?.message ?? "",
+    };
+  }
+
+  const speakersProblem = (state: State): TranscriptProblem | null =>
+    state.speakers === "failed" ? { kind: "speakers", message: "" } : null;
 
   function relabel(state: State, cues: Cue[], saved: string): void {
     const path = state.savedPath;
@@ -1361,8 +1383,8 @@ export function createTranscripts(options: TranscriptsOptions) {
       return cue ? { text: cue.text, speaker: cue.speaker } : null;
     },
 
-    /** The Meeting's Transcript, as the window shows it. */
-    of(meetingId: string): MeetingTranscript {
+    /** The Meeting's Transcript, as the window shows it. `audioKept`: its audio is still on this computer. */
+    of(meetingId: string, audioKept: boolean): MeetingTranscript {
       const state = load(meetingId);
       const status = model.status();
       return {
@@ -1387,12 +1409,8 @@ export function createTranscripts(options: TranscriptsOptions) {
         separating: state.speakers === "due",
         problem:
           state.problem ??
-          (status.state === "failed" && (state.state === "preparing" || state.state === "finishing")
-            ? {
-                kind: status.error?.kind === "load" ? "engine" : "download",
-                message: status.error?.message ?? "",
-              }
-            : null),
+          modelProblem(state, status) ??
+          (audioKept ? speakersProblem(state) : null),
       };
     },
 
@@ -1522,6 +1540,12 @@ export function createTranscripts(options: TranscriptsOptions) {
 
     retry(meetingId: string): void {
       const state = load(meetingId);
+      if (state.speakers === "failed") {
+        state.speakers = "due";
+        persist(state);
+        separate(state);
+        return;
+      }
       const status = model.status();
       if (status.state === "failed") model.retry();
       state.problem = null;

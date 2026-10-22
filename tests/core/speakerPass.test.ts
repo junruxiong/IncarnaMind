@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
-import type { Core } from "../../src/core";
+import type { Core, SpeakerSeparator } from "../../src/core";
 import { type Cue, readVtt } from "../../src/core/documents/formats/vtt";
 import { labelled } from "../../src/core/meetings/speakerPass";
 import { createTempDataFolder } from "../helpers/core";
@@ -22,6 +22,12 @@ async function savedCues(core: Core, meetingId: string) {
     (transcript) => transcript.state === "saved" && !transcript.separating,
   );
   return readVtt(readFileSync(saved.savedPath as string, "utf8")).cues;
+}
+
+async function meetingOf(core: Core, meetingId: string) {
+  const meeting = (await core.listMeetings()).find((each) => each.id === meetingId);
+  if (!meeting) throw new Error(`No Meeting ${meetingId}`);
+  return meeting;
 }
 
 async function recordedCall(
@@ -60,6 +66,33 @@ describe("The labels the speaker pass gives (#138)", () => {
     expect(
       labelled(room, [{ startMs: 0, endMs: 4000, voice: 3 }], false)?.map((cue) => cue.speaker),
     ).toEqual(["Speaker 1", "Speaker 1"]);
+  });
+
+  // protects=after the pass numbers the voices, no line keeps the label they replaced: a line no voice overlaps takes the nearest voice, in a call and in a room; fails_when=a line stays "Them" beside "Speaker 1, 2…", or "Speaker ?" after a room's pass, or takes a voice farther away; no_claim=whether the nearest voice is the right person, which eval/speakers measures.
+  test("a line no voice overlaps takes the nearest voice, so none is left with the old label", () => {
+    const call = [line(0, "Me"), line(2000, "Them"), line(4000, "Them"), line(9000, "Them")];
+    const turns = [
+      { startMs: 1900, endMs: 4100, voice: 5 },
+      { startMs: 4100, endMs: 6100, voice: 2 },
+      { startMs: 11_500, endMs: 12_000, voice: 5 },
+    ];
+    expect(labelled(call, turns, true)?.map((cue) => cue.speaker)).toEqual([
+      "Me",
+      "Speaker 1",
+      "Speaker 2",
+      "Speaker 1",
+    ]);
+    const room = [line(0, "Speaker ?"), line(2000, "Speaker ?"), line(7000, "Speaker ?")];
+    expect(
+      labelled(
+        room,
+        [
+          { startMs: 0, endMs: 2000, voice: 1 },
+          { startMs: 2000, endMs: 4000, voice: 0 },
+        ],
+        false,
+      )?.map((cue) => cue.speaker),
+    ).toEqual(["Speaker 1", "Speaker 2", "Speaker 2"]);
   });
 
   // protects=a pass that heard too little of the lines' speech changes nothing, so a broken or empty result never relabels a Transcript; fails_when=the lines are relabelled from a voice covering a fraction of them; no_claim=the threshold's best value, which #85's set tunes.
@@ -115,7 +148,7 @@ describe("The speaker pass after the call (#138)", { timeout: 60_000 }, () => {
     core.close();
   });
 
-  // protects=in a room the pass numbers every voice, and when it fails the room's lines stay "Speaker ?"; fails_when=a failure leaves the Meeting separating, changes a label, or loses a line; no_claim=why the engine failed, which only the log says.
+  // protects=in a room the pass numbers every voice, and when it fails the room's lines stay "Speaker ?" and the Transcript says its speakers couldn't be told apart; fails_when=a failure leaves the Meeting separating, says nothing, changes a label, or loses a line; no_claim=why the engine failed, which only the log says.
   test('in a room the voices are numbered, and a pass that fails leaves "Speaker ?"', async () => {
     const room = fakeSeparator();
     const told = await recordedCall(
@@ -137,10 +170,48 @@ describe("The speaker pass after the call (#138)", { timeout: 60_000 }, () => {
     const unchanged = await savedCues(kept.core, kept.meeting.id);
     expect(unchanged.length).toBeGreaterThan(0);
     expect(new Set(unchanged.map((cue) => cue.speaker))).toEqual(new Set(["Speaker ?"]));
+    expect((await meetingOf(kept.core, kept.meeting.id)).transcript?.problem?.kind).toBe(
+      "speakers",
+    );
     kept.core.close();
   });
 
-  // protects=with the speaker models missing (their download failing), the pass gives up, the labels stay and the Meeting stops separating; fails_when=it hangs, or relabels with no model; no_claim=a download that comes back later, which the next Meeting's start retries.
+  // protects=after a failed pass, Try again runs it again while the audio is kept, and its labels replace the old ones; once the audio is deleted, nothing offers it; fails_when=Try again does nothing, the problem stays after a pass that worked, or it is offered with no audio left; no_claim=why the first pass failed.
+  test("Try again runs a failed pass again while the audio is kept", async () => {
+    const working = fakeSeparator();
+    let failed = 0;
+    const separator: SpeakerSeparator = {
+      separate: (request) =>
+        failed++ === 0
+          ? Promise.reject(new Error("The speaker process stopped."))
+          : working.separator.separate(request),
+    };
+    const { core, meeting } = await recordedCall(await createTempDataFolder(), {
+      speakerSeparator: separator,
+    });
+    await until(core, meeting.id, (transcript) => transcript.problem?.kind === "speakers");
+    await core.retryTranscript(meeting.id);
+    const cues = await savedCues(core, meeting.id);
+    expect(new Set(cues.map((cue) => cue.speaker))).toEqual(
+      new Set(["Me", "Speaker 1", "Speaker 2"]),
+    );
+    expect((await meetingOf(core, meeting.id)).transcript?.problem).toBeNull();
+    core.close();
+
+    const gone = await recordedCall(await createTempDataFolder(), {
+      speakerSeparator: fakeSeparator({ fails: "The speaker process stopped." }).separator,
+    });
+    await until(
+      gone.core,
+      gone.meeting.id,
+      (transcript) => transcript.problem?.kind === "speakers",
+    );
+    await gone.core.deleteMeetingAudio(gone.meeting.id);
+    expect((await meetingOf(gone.core, gone.meeting.id)).transcript?.problem).toBeNull();
+    gone.core.close();
+  });
+
+  // protects=with the speaker models missing (their download failing), the pass gives up, the labels stay, the Meeting stops separating and says its speakers couldn't be told apart; fails_when=it hangs, says nothing, or relabels with no model; no_claim=a download that comes back later, which the next Meeting's start retries.
   test("with the speaker models missing, the labels stay", async () => {
     const { separator, requests } = fakeSeparator();
     const missing = await transcribingCore(await createTempDataFolder(), {
@@ -161,6 +232,7 @@ describe("The speaker pass after the call (#138)", { timeout: 60_000 }, () => {
     const cues = await savedCues(missing.core, meeting.id);
     expect(new Set(cues.map((cue) => cue.speaker))).toEqual(new Set(["Me", "Them"]));
     expect(requests).toHaveLength(0);
+    expect((await meetingOf(missing.core, meeting.id)).transcript?.problem?.kind).toBe("speakers");
     missing.core.close();
   });
 
