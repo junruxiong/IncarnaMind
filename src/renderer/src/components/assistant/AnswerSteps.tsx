@@ -1,4 +1,12 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type FocusEvent,
+  type ReactNode,
+  type Ref,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type {
   AnswerToolCall,
   AskedFrom,
@@ -14,6 +22,7 @@ import {
   type LiveStep,
   liveStep,
   liveStepKey,
+  plainSummary,
   type ReadDocument,
   type StepRow,
   type StepSource,
@@ -91,18 +100,42 @@ export function AnswerSteps({
   const selection = (question?.focus?.selection ?? "").trim() !== "";
   const scopeOf = useStepsScopeOf(question);
   const [open, setOpen] = useState(false);
-  // Written again, it starts folded.
-  if (streaming && open) setOpen(false);
+  const toggle = useRef<HTMLButtonElement | null>(null);
+  const focusOnToggle = useRef(false);
+  const onToggle = () => setOpen((was) => !was);
+  // The live line and the folded one are two buttons: the one that replaces the other takes its focus.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: it runs when the Answer starts or ends being written.
+  useLayoutEffect(() => {
+    if (focusOnToggle.current) toggle.current?.focus();
+  }, [streaming]);
+  const focus = {
+    onFocus: () => {
+      focusOnToggle.current = true;
+    },
+    // A button taken out of the page while it has the focus may say it lost it: that is the swap.
+    onBlur: (event: FocusEvent<HTMLButtonElement>) => {
+      if (event.currentTarget.isConnected) focusOnToggle.current = false;
+    },
+  };
   if (streaming) {
+    const step = liveStep({ answer, phase, waitingForApproval });
     return (
-      <>
+      <div className="answer-steps">
         <LiveLine
-          step={liveStep({ answer, phase, waitingForApproval })}
+          step={step}
           scope={scopeOf(0)}
           askedFrom={askedFrom}
+          toggle={{ open, onToggle, ref: toggle, ...focus }}
         />
         {wait && <AnswerWait answer={answer} usual={wait.usual} />}
-      </>
+        {open && (
+          <Timeline
+            rows={stepRows({ answer, askedFrom, meeting, selection }, step)}
+            scope={scopeOf(0)}
+            onRegenerate={onRegenerate}
+          />
+        )}
+      </div>
     );
   }
   if (answer.steps?.example) {
@@ -123,7 +156,9 @@ export function AnswerSteps({
         scopeOf={scopeOf}
         askedAgain={askedAgain}
         open={open}
-        onToggle={() => setOpen((was) => !was)}
+        onToggle={onToggle}
+        toggleRef={toggle}
+        {...focus}
       />
       {open && (
         <>
@@ -156,11 +191,20 @@ export function LiveLine({
   step,
   scope,
   askedFrom = null,
+  toggle,
 }: {
   step: LiveStep;
   scope: string;
   /** The Mind the Question was asked from: the one a Minds' Tool changes when it names none. */
   askedFrom?: AskedFrom | null;
+  /** Opens and folds the steps, by a button over the whole line. */
+  toggle?: {
+    open: boolean;
+    onToggle(): void;
+    ref: Ref<HTMLButtonElement>;
+    onFocus(): void;
+    onBlur(event: FocusEvent<HTMLButtonElement>): void;
+  };
 }) {
   const t = useT();
   const shown = useHeldStep(step);
@@ -175,6 +219,7 @@ export function LiveLine({
       ? call.input.mind
       : askedFrom?.name || namedMind(t, call);
   };
+  const summary = shown.kind === "thinking" ? shown.summary : "";
   const label = liveText(t, shown, scope, mindOf);
   const waiting = shown.kind === "waiting" || shown.kind === "consent";
   return (
@@ -188,9 +233,38 @@ export function LiveLine({
         aria-hidden="true"
         className={`answer-steps-dot ${waiting ? "answer-steps-dot--waiting" : ""}`}
       />
-      <span data-testid="answer-writing" title={label} className="answer-steps-text">
+      <span
+        data-testid="answer-writing"
+        title={summary ? `${label} · ${summary}` : label}
+        className={summary ? "answer-steps-label" : "answer-steps-text"}
+      >
         {label}
       </span>
+      {/* Not read out: it changes with every word, and the steps hold it whole. */}
+      {summary && (
+        <span
+          aria-hidden="true"
+          data-testid="answer-steps-summary"
+          className="answer-steps-text answer-steps-summary"
+        >
+          {` · ${summary}`}
+        </span>
+      )}
+      {toggle && (
+        <button
+          type="button"
+          data-testid="answer-steps"
+          aria-expanded={toggle.open}
+          aria-label={t("steps.label")}
+          ref={toggle.ref}
+          onClick={toggle.onToggle}
+          onFocus={toggle.onFocus}
+          onBlur={toggle.onBlur}
+          className="answer-steps-live-toggle"
+        >
+          <ChevronRightLineIcon aria-hidden="true" className="answer-steps-chevron" />
+        </button>
+      )}
     </p>
   );
 }
@@ -204,6 +278,8 @@ function useHeldStep(step: LiveStep): LiveStep {
   hold.current ??= holdSteps(taken.current ?? { step, since: Date.now() }, setShown);
   const latest = useRef(step);
   latest.current = step;
+  // The step on screen with the latest it said, such as the summary, while a later one waits its turn.
+  const said = useRef(shown);
   const key = liveStepKey(step);
   useEffect(() => hold.current?.mount(), []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a step is offered when its kind changes; its count rides along in `step`.
@@ -211,8 +287,10 @@ function useHeldStep(step: LiveStep): LiveStep {
     hold.current?.offer(latest.current);
     return () => hold.current?.stop();
   }, [key]);
+  if (key === liveStepKey(shown)) said.current = step;
+  else if (liveStepKey(said.current) !== liveStepKey(shown)) said.current = shown;
   // The same step with a new count (Citations) shows the new one.
-  return key === liveStepKey(shown) ? step : shown;
+  return key === liveStepKey(shown) ? step : said.current;
 }
 
 function liveText(
@@ -235,7 +313,7 @@ function liveText(
     case "call":
       return runningText(t, step.call, mindOf);
     case "thinking":
-      return t("steps.live.thinking");
+      return t(step.summary ? "steps.live.thinkingAbout" : "steps.live.thinking");
     case "writing":
       return t("answer.phase.writing");
     case "checking":
@@ -296,12 +374,18 @@ function FoldedToggle({
   askedAgain,
   open,
   onToggle,
+  toggleRef,
+  onFocus,
+  onBlur,
 }: {
   line: FoldedLine;
   scopeOf(extra: number): string;
   askedAgain?: number | undefined;
   open: boolean;
   onToggle(): void;
+  toggleRef: Ref<HTMLButtonElement>;
+  onFocus(): void;
+  onBlur(event: FocusEvent<HTMLButtonElement>): void;
 }) {
   const t = useT();
   const nameOf = useModelNames();
@@ -351,7 +435,10 @@ function FoldedToggle({
           data-kind={line.kind}
           aria-expanded={open}
           aria-label={label}
+          ref={toggleRef}
           onClick={onToggle}
+          onFocus={onFocus}
+          onBlur={onBlur}
           className="answer-steps-toggle answer-steps-part"
         >
           {icon}
@@ -388,7 +475,10 @@ function FoldedToggle({
       data-kind={line.kind}
       aria-expanded={open}
       title={line.kind === "answered" ? `${label} · ${line.model}` : label}
+      ref={toggleRef}
       onClick={onToggle}
+      onFocus={onFocus}
+      onBlur={onBlur}
       className="answer-steps-line answer-steps-toggle"
     >
       {icon}
@@ -440,11 +530,13 @@ function StepItem({
   switch (row.kind) {
     case "reasoning":
       return (
-        <Step kind={row.kind} icon={<SparkLineIcon />}>
+        <Step kind={row.kind} icon={<SparkLineIcon />} running={row.thinking}>
           <p className="answer-step-title" title={shown.id}>
-            {t("steps.thought", { model: shown.name, seconds: row.seconds })}
+            {row.thinking
+              ? t("steps.live.thinking")
+              : t("steps.thought", { model: shown.name, seconds: row.seconds })}
           </p>
-          <ReasoningSummary summary={row.summary} />
+          {row.summary && <ReasoningSummary summary={row.summary} />}
         </Step>
       );
     case "answered":
@@ -523,23 +615,31 @@ function StepItem({
         </Step>
       );
     case "check":
-      return <CheckStep count={row.count} notFound={row.notFound} />;
+      return <CheckStep count={row.count} notFound={row.notFound} running={row.running} />;
   }
 }
 
 function Step({
   kind,
   icon,
+  running,
   children,
 }: {
   kind: StepRow["kind"];
   icon: ReactNode;
+  /** The step is going on: the pulsing dot of the live line stands for its icon. */
+  running?: boolean | undefined;
   children: ReactNode;
 }) {
   return (
-    <li data-testid="answer-step" data-step={kind} className="answer-step">
+    <li
+      data-testid="answer-step"
+      data-step={kind}
+      data-running={running || undefined}
+      className="answer-step"
+    >
       <span aria-hidden="true" className="answer-step-icon">
-        {icon}
+        {running ? <span className="answer-steps-dot" /> : icon}
       </span>
       <div className="answer-step-body">{children}</div>
     </li>
@@ -552,6 +652,7 @@ function ReasoningSummary({ summary }: { summary: string }) {
   const text = useRef<HTMLParagraphElement>(null);
   const [whole, setWhole] = useState(false);
   const [cut, setCut] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a summary that grows while it streams is measured again.
   useLayoutEffect(() => {
     const element = text.current;
     if (!element || whole) return;
@@ -560,7 +661,7 @@ function ReasoningSummary({ summary }: { summary: string }) {
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [whole]);
+  }, [whole, summary]);
   return (
     <>
       <p
@@ -586,19 +687,18 @@ function ReasoningSummary({ summary }: { summary: string }) {
   );
 }
 
-/** A summary's Markdown emphasis left out: providers set its headings in bold. */
-const plainSummary = (summary: string) => summary.replace(/\*\*(.+?)\*\*/g, "$1");
-
 /** A search, or several in a row: what was searched for, what was found and used, and its sources. */
 function SearchStep({ row, scope }: { row: Extract<StepRow, { kind: "search" }>; scope: string }) {
   const t = useT();
   const queries = row.calls.map((call) => field(call, "query"));
   return (
-    <Step kind={row.kind} icon={<SearchIcon />}>
+    <Step kind={row.kind} icon={<SearchIcon />} running={row.running}>
       <p className="answer-step-title">
-        {queries.length > 1
-          ? t("steps.search.times", { scope, count: queries.length })
-          : t("steps.search", { scope, query: queries[0] ?? "" })}
+        {row.running
+          ? t("steps.search.running", { scope, query: queries.at(-1) ?? "" })
+          : queries.length > 1
+            ? t("steps.search.times", { scope, count: queries.length })
+            : t("steps.search", { scope, query: queries[0] ?? "" })}
       </p>
       {queries.length > 1 && (
         <ul className="answer-step-queries">
@@ -741,8 +841,23 @@ function FailedSearch({
 }
 
 /** The Citations checked against their sources: all found, or how many weren't, with the margin's mark. */
-function CheckStep({ count, notFound }: { count: number; notFound: number }) {
+function CheckStep({
+  count,
+  notFound,
+  running,
+}: {
+  count: number;
+  notFound: number;
+  running?: boolean | undefined;
+}) {
   const t = useT();
+  if (running) {
+    return (
+      <Step kind="check" icon={null} running>
+        <p className="answer-step-title">{checkingWords(t, count)}</p>
+      </Step>
+    );
+  }
   const allFound = notFound === 0;
   const result = allFound
     ? t(count === 1 ? "steps.check.found" : "steps.check.allFound")

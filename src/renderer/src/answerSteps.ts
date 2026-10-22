@@ -53,8 +53,11 @@ export interface MindReadLine {
 }
 
 export type StepRow =
-  /** The model's reasoning summary, and how long it thought. */
-  | { kind: "reasoning"; model: string; summary: string; seconds: number }
+  /**
+   * The model's reasoning summary, and how long it thought. `thinking`: it is still
+   * working, so far with this summary (see `LiveRows`).
+   */
+  | { kind: "reasoning"; model: string; summary: string; seconds: number; thinking?: true }
   /** A model that gave no reasoning summary, and how long the Answer took when that is known. */
   | { kind: "answered"; model: string; seconds: number | null }
   /** The Mind the Answer read, all of it or part of it: `share` of it (#564), when part and known. */
@@ -68,6 +71,8 @@ export type StepRow =
       found: number;
       used: number;
       sources: StepSource[];
+      /** One of its searches is still running. */
+      running?: true;
     }
   /** The Documents whose whole text went with the Question, and where its Citations point into them. */
   | { kind: "read-documents"; documents: ReadDocument[]; sources: StepSource[] }
@@ -79,8 +84,8 @@ export type StepRow =
   | { kind: "skill"; name: string; use: AnswerToolCall | null; reads: AnswerToolCall[] }
   /** The figures the Answer shows, each calculated from its cited inputs. */
   | { kind: "calculated"; count: number }
-  /** The Citations checked against their sources, and how many weren't found. */
-  | { kind: "check"; count: number; notFound: number };
+  /** The Citations checked against their sources, and how many weren't found; `running`: being checked now. */
+  | { kind: "check"; count: number; notFound: number; running?: true };
 
 export type FoldedLine =
   | { kind: "searched"; sources: number; extraScopes: number }
@@ -105,7 +110,7 @@ export type LiveStep =
   | { kind: "reading"; mind: AskedFrom }
   | { kind: "searching" }
   | { kind: "call"; call: AnswerToolCall }
-  | { kind: "thinking" }
+  | { kind: "thinking"; summary: string }
   | { kind: "writing" }
   | { kind: "checking"; count: number }
   | { kind: "checking-figures" };
@@ -123,6 +128,29 @@ const field = (call: AnswerToolCall, name: string): string => {
   return typeof value === "string" ? value : "";
 };
 
+/** A summary's Markdown emphasis left out: providers set its headings in bold. */
+export const plainSummary = (summary: string) =>
+  summary.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*\*/g, "");
+
+/**
+ * The latest of a reasoning summary, for the one live line: the last of its
+ * headings (a provider titles each part in bold), else its last sentence,
+ * which is the one still being written.
+ */
+export function latestReasoning(summary: string | null | undefined): string {
+  const paragraphs = (summary ?? "")
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  const heading = paragraphs.findLast((paragraph) => /^\*\*[^*]+\*\*$/.test(paragraph));
+  if (heading) return plainSummary(heading);
+  const sentences = plainSummary(paragraphs.at(-1) ?? "")
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?。！？][”"’')）」]*)(?![”"’')）」])\s*/)
+    .filter((sentence) => /[\p{L}\p{N}]/u.test(sentence));
+  return sentences.at(-1)?.trim() ?? "";
+}
+
 /** The Citations an Answer shows, one for each marker in its text that has one. */
 function shownCitations({ text, citations }: Pick<StepsInput["answer"], "text" | "citations">) {
   const cited = new Map(citations.map((citation) => [citation.marker, citation]));
@@ -130,10 +158,19 @@ function shownCitations({ text, citations }: Pick<StepsInput["answer"], "text" |
 }
 
 /** The first row: the model's reasoning, or the model that answered and how long it took. */
-function modelRow(answer: StepsInput["answer"]): StepRow | null {
+function modelRow(answer: StepsInput["answer"], live: LiveStep | undefined): StepRow | null {
   const model = answer.model?.modelId;
   if (!model) return null;
   const reasoning = answer.steps?.reasoning;
+  if (live) {
+    return {
+      kind: "reasoning",
+      model,
+      summary: reasoning?.summary ?? "",
+      seconds: seconds(reasoning?.ms ?? 0),
+      ...((live.kind === "thinking" || !reasoning) && { thinking: true as const }),
+    };
+  }
   if (reasoning) {
     return { kind: "reasoning", model, summary: reasoning.summary, seconds: seconds(reasoning.ms) };
   }
@@ -236,15 +273,21 @@ const unansweredQuestion = (call: AnswerToolCall) =>
  * one, a failed one where it happened), the figures calculated, and the check
  * of the Citations last. A call still waiting for the User has no row: its
  * approval card shows instead.
+ *
+ * While the Answer is written (`live`: its step now), the rows are the same in
+ * the same order, so each is added where it will stay: the model's from the
+ * start, with the summary so far; every call as it starts; the Citations'
+ * check only once it begins. The Mind read is there from the start too, even
+ * where the folded line will say so once the Answer is written.
  */
-export function stepRows(input: StepsInput): StepRow[] {
+export function stepRows(input: StepsInput, live?: LiveStep): StepRow[] {
   const { answer } = input;
   const rows: StepRow[] = [];
-  const first = modelRow(answer);
+  const first = modelRow(answer, live);
   if (first) rows.push(first);
   const mind = mindRow(input);
   const shared = mind?.kind === "read" && mind.share !== null;
-  if (mind && (shared || foldedLine(input)?.kind !== mind.kind)) rows.push(mind);
+  if (mind && (live || shared || foldedLine(input)?.kind !== mind.kind)) rows.push(mind);
   const read = input.meeting && !answer.steps?.sent ? [] : readDocuments(answer);
   if (read.length > 0) {
     rows.push({
@@ -277,6 +320,7 @@ export function stepRows(input: StepsInput): StepRow[] {
       }
       joining.calls.push(call);
       joining.found += call.resultCount ?? 0;
+      if (call.status === "running") joining.running = true;
       continue;
     }
     joining = null;
@@ -312,7 +356,11 @@ export function stepRows(input: StepsInput): StepRow[] {
 
   if (calculated > 0) rows.push({ kind: "calculated", count: calculated });
   const shown = shownCitations(answer);
-  if (shown.length > 0) {
+  if (live) {
+    if (live.kind === "checking") {
+      rows.push({ kind: "check", count: live.count, notFound: 0, running: true });
+    }
+  } else if (shown.length > 0) {
     rows.push({
       kind: "check",
       count: shown.length,
@@ -421,7 +469,9 @@ export function liveStep({
       ? { kind: "checking", count: markers.length }
       : { kind: "writing" };
   }
-  if (phase === "writing") return { kind: "thinking" };
+  if (phase === "writing") {
+    return { kind: "thinking", summary: latestReasoning(answer.steps?.reasoning?.summary) };
+  }
   if (answer.read && !answer.toolCalls.some(isSearch))
     return { kind: "reading", mind: answer.read };
   return { kind: "searching" };
