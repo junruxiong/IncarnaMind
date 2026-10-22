@@ -248,6 +248,13 @@ export function createConsent(
     });
   };
 
+  /** The flow and service the window names, checked. */
+  const named = (flowId: unknown, serviceId: unknown) => {
+    if (!isDataFlowId(flowId)) throw new InvalidInputError(`Unknown data flow "${flowId}".`);
+    if (typeof serviceId !== "string") throw new InvalidInputError("serviceId must be text.");
+    return { flowId, serviceId };
+  };
+
   /** Every registered flow, including one going nowhere now, with each service and its decision. */
   const listRegistered = async (): Promise<RegisteredDataFlow[]> => {
     const result: RegisteredDataFlow[] = [];
@@ -339,9 +346,8 @@ export function createConsent(
      * The User allows a flow to a service from Settings, without being asked.
      * The service must be one the flow goes to now, or one already decided on.
      */
-    async allow(flowId: unknown, serviceId: unknown): Promise<void> {
-      if (!isDataFlowId(flowId)) throw new InvalidInputError(`Unknown data flow "${flowId}".`);
-      if (typeof serviceId !== "string") throw new InvalidInputError("serviceId must be text.");
+    async allow(flowInput: unknown, serviceInput: unknown): Promise<void> {
+      const { flowId, serviceId } = named(flowInput, serviceInput);
       const definition = definitions.get(flowId);
       const services = definition ? await servicesOf(definition) : [];
       const service = services.find((each) => each.id === serviceId);
@@ -354,9 +360,8 @@ export function createConsent(
     },
 
     /** Forgets the decision. Returns when, for `restore`; null when there was none. */
-    revoke(flowId: unknown, serviceId: unknown): string | null {
-      if (!isDataFlowId(flowId)) throw new InvalidInputError(`Unknown data flow "${flowId}".`);
-      if (typeof serviceId !== "string") throw new InvalidInputError("serviceId must be text.");
+    revoke(flowInput: unknown, serviceInput: unknown): string | null {
+      const { flowId, serviceId } = named(flowInput, serviceInput);
       return db.transaction(() => {
         if (!find(flowId, serviceId)) return null;
         const at = now();
@@ -373,9 +378,8 @@ export function createConsent(
      * Brings back the decision `revoke` forgot at `revokedAt`, as it was: the same kinds of data,
      * chosen or not, even for a service the flow no longer goes to. A decision made since stands.
      */
-    restore(flowId: unknown, serviceId: unknown, revokedAt: unknown): void {
-      if (!isDataFlowId(flowId)) throw new InvalidInputError(`Unknown data flow "${flowId}".`);
-      if (typeof serviceId !== "string") throw new InvalidInputError("serviceId must be text.");
+    restore(flowInput: unknown, serviceInput: unknown, revokedAt: unknown): void {
+      const { flowId, serviceId } = named(flowInput, serviceInput);
       if (typeof revokedAt !== "string" || revokedAt === "") {
         throw new InvalidInputError("revokedAt must be the time the decision was revoked.");
       }
