@@ -710,11 +710,13 @@ function SearchStep({ row, scope }: { row: Extract<StepRow, { kind: "search" }>;
           ))}
         </ul>
       )}
-      <p data-testid="answer-step-found" className="answer-step-detail">
-        {row.found === 1
-          ? t("steps.search.found.one", { used: row.used })
-          : t("steps.search.found", { found: row.found, used: row.used })}
-      </p>
+      {!row.running && (
+        <p data-testid="answer-step-found" className="answer-step-detail">
+          {row.found === 1
+            ? t("steps.search.found.one", { used: row.used })
+            : t("steps.search.found", { found: row.found, used: row.used })}
+        </p>
+      )}
       <SourceList sources={row.sources} />
     </Step>
   );
