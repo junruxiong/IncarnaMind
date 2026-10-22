@@ -840,7 +840,7 @@ interface SmallCallResult<T> {
 
 /**
  * The model for the small calls, else the Answer's (see `AnswerRequest.quickModel`).
- * The first runs at its provider's own temperature.
+ * Another model than the Answer's runs at its provider's own temperature.
  */
 async function smallCallModel(
   request: AnswerRequest,
@@ -848,7 +848,10 @@ async function smallCallModel(
 ): Promise<SmallCallModel> {
   if (request.quickModel) {
     try {
-      return { model: await request.quickModel(), temperature: undefined };
+      const quick = await request.quickModel();
+      const sameModel =
+        quick.provider === request.model.provider && quick.modelId === request.model.modelId;
+      return { model: quick, temperature: sameModel ? temperature : undefined };
     } catch (error) {
       if (!request.signal.aborted) {
         console.error(`The quick-tasks model couldn't be used: ${messageOf(error)}`);
