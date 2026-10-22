@@ -195,7 +195,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.heavy == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A shard's specs take about 20 minutes; the rest is for a slow package mirror.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -227,9 +228,10 @@ jobs:
       # none, so a printed PDF would hold no Chinese for the export specs to read back.
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
       # ffmpeg makes the feel check's films into videos (e2e/feel.ts). Without it the frames are
-      # kept, so a mirror that fails here doesn't fail the check.
+      # kept, so a mirror that fails here, or is slow, doesn't fail the check or take the specs' time.
       - name: Install ffmpeg for the feel check's videos
         continue-on-error: true
+        timeout-minutes: 3
         run: |
           for attempt in 1 2 3; do
             sudo apt-get install -y -qq --no-install-recommends ffmpeg && exit 0
