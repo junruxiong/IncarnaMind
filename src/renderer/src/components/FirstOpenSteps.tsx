@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import type { CommandId } from "../../../shared/commands";
 import type { MessageKey } from "../../../shared/i18n";
+import { focusComposer } from "../commands/assistant";
 import { shortcutLabel } from "../commands/keymap";
 import { type CommandContext, commands, offered } from "../commands/registry";
 import { askReadyQuestion } from "../conversations";
@@ -75,27 +76,50 @@ function Step({
   number,
   state,
   live,
+  onDo,
   children,
 }: {
   step: StepKey;
   number: number;
   state: StepState;
   live: boolean;
+  onDo?: () => void;
   children?: ReactNode;
 }) {
   const t = useT();
+  const doable = onDo !== undefined && state !== "done";
   const tone = state === "open" ? "font-semibold text-ink" : "text-ink-meta";
   const marks = live
     ? { "data-testid": "first-open-step", "data-step": step, "data-state": state }
     : {};
+  const heading = (
+    <>
+      <Mark number={number} state={state} />
+      <span
+        className={
+          doable ? `${tone} underline-offset-2 group-hover:text-ink group-hover:underline` : tone
+        }
+      >
+        {state === "done" && <span className="sr-only">{t("gettingStarted.done")}</span>}
+        {t(`firstOpen.step.${step}.${state === "done" ? "done" : "title"}`)}
+      </span>
+    </>
+  );
   return (
     <li {...marks} className="flex flex-col gap-1">
-      <div className="flex items-center gap-2.5 text-[14px] leading-5">
-        <Mark number={number} state={state} />
-        <span className={tone}>
-          {state === "done" && <span className="sr-only">{t("gettingStarted.done")}</span>}
-          {t(`firstOpen.step.${step}.${state === "done" ? "done" : "title"}`)}
-        </span>
+      <div className="flex items-center text-[14px] leading-5">
+        {doable ? (
+          <button
+            type="button"
+            data-testid={live ? "first-open-step-do" : undefined}
+            onClick={onDo}
+            className="group flex items-center gap-2.5 rounded-sm text-left"
+          >
+            {heading}
+          </button>
+        ) : (
+          <div className="flex items-center gap-2.5">{heading}</div>
+        )}
       </div>
       {state === "open" && <div className="flex flex-col gap-2 pl-7">{children}</div>}
     </li>
@@ -116,10 +140,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
   // The ready Question's button goes once it is asked: the focus moves on to the next step.
   const focusNext = useRef(false);
   const filesOpen =
-    progress !== undefined &&
-    progress.citationChecked &&
-    (progress.askedOwn || progress.askedReady) &&
-    !progress.indexed;
+    progress?.mistakeSeen && (progress.askedOwn || progress.askedReady) && !progress.indexed;
   useEffect(() => {
     if (!filesOpen || !focusNext.current) return;
     focusNext.current = false;
@@ -128,7 +149,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
   if (!progress) return null;
 
   const done: Record<StepKey, boolean> = {
-    citation: progress.citationChecked,
+    citation: progress.mistakeSeen,
     question: progress.askedOwn || progress.askedReady,
     files: progress.indexed,
   };
@@ -172,7 +193,13 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
               {t("firstOpen.step.citation.body")}
             </p>
           </Step>
-          <Step step="question" number={2} state={stateOf("question")} live={live}>
+          <Step
+            step="question"
+            number={2}
+            state={stateOf("question")}
+            live={live}
+            onDo={focusComposer}
+          >
             {ready ? (
               <>
                 <p className="text-[13px] leading-5 text-ink-secondary">
@@ -201,7 +228,13 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
               </p>
             )}
           </Step>
-          <Step step="files" number={3} state={stateOf("files")} live={live}>
+          <Step
+            step="files"
+            number={3}
+            state={stateOf("files")}
+            live={live}
+            onDo={() => void pickDocuments()}
+          >
             <p className="text-[13px] leading-5 text-ink-secondary">
               {t("firstOpen.step.files.body")}
             </p>

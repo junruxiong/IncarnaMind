@@ -639,6 +639,7 @@ describe("Get started's Add your Documents", () => {
             started: true,
             hidden: false,
             citationChecked: false,
+            mistakeSeen: false,
             indexed: false,
             askedOwn: false,
             askedReady: false,
@@ -1204,5 +1205,55 @@ describe("an undo line keeps only what it shows", () => {
     const change = await stopTagging();
     await freedOnceReplaced(held);
     expect(said(change)).toBe("Stopped Tagging Documents in “Research” and not in a Folder");
+  });
+});
+
+describe("Get started's Ask a question", () => {
+  const finished = (answerId: string, status: "done" | "stopped") =>
+    emit("answer.finished", { answerId, status } as CoreEvents["answer.finished"]);
+  const asked = () => useAppStore.getState().settings?.device.gettingStarted.askedOwn;
+
+  beforeEach(() => {
+    useAppStore.setState({
+      examples: {
+        group: "credit",
+        available: true,
+        mindId: "m",
+        linkedFolderId: "f",
+        answerId: "example",
+        more: [],
+        ready: null,
+      } satisfies CoreEvents["examples.changed"],
+      otherExamples: [],
+      settings: {
+        device: {
+          gettingStarted: {
+            started: true,
+            hidden: false,
+            citationChecked: false,
+            mistakeSeen: false,
+            indexed: false,
+            askedOwn: false,
+            askedReady: false,
+          },
+        },
+      } as unknown as NonNullable<ReturnType<typeof useAppStore.getState>["settings"]>,
+    });
+  });
+
+  test("it ticks once an Answer to the User's own Question arrives, not when it fails, is stopped or is the example's", () => {
+    emit("answer.failed", { answerId: "own" } as CoreEvents["answer.failed"]);
+    finished("own", "stopped");
+    finished("example", "done");
+    expect(asked()).toBe(false);
+
+    finished("own", "done");
+    expect(asked()).toBe(true);
+  });
+
+  test("a later failed Answer doesn't take the tick back", () => {
+    finished("own", "done");
+    emit("answer.failed", { answerId: "again" } as CoreEvents["answer.failed"]);
+    expect(asked()).toBe(true);
   });
 });

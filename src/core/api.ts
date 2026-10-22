@@ -2013,6 +2013,8 @@ export interface GettingStarted {
   started: boolean;
   /** The User opened a Citation's card. */
   citationChecked: boolean;
+  /** The User opened a red ≠ mark, a mistake the check caught, in the example or in a Mind of their own. */
+  mistakeSeen: boolean;
   /** The User added Documents of their own, or connected an app. */
   indexed: boolean;
   /** The User asked a Question of their own, not the example's. */

@@ -127,7 +127,7 @@ export function ClaimMark({
 
   const guided = useAppStore((app) => {
     const progress = app.settings?.device.gettingStarted;
-    return state === "contradicted" && !progress?.citationChecked && firstOpenOf(progress);
+    return state === "contradicted" && !progress?.mistakeSeen && firstOpenOf(progress);
   });
 
   /** After an action the card goes, and the focus stays in the Mind. */
@@ -162,8 +162,9 @@ export function ClaimMark({
         onClick={() => {
           setPinned(true);
           // Step 1 of the first open's steps, "See a mistake it caught".
-          const { examples, updateGettingStarted } = useAppStore.getState();
-          if (examples?.mindId === mindId) updateGettingStarted({ citationChecked: true });
+          if (state === "contradicted") {
+            useAppStore.getState().updateGettingStarted({ mistakeSeen: true });
+          }
         }}
         onAnimationEnd={(event) => {
           if (event.target === event.currentTarget && reveal) onRevealed();

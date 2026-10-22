@@ -85,6 +85,7 @@ describe("Settings", () => {
         gettingStarted: {
           started: false,
           citationChecked: false,
+          mistakeSeen: false,
           indexed: false,
           askedOwn: false,
           askedReady: false,
@@ -191,6 +192,7 @@ describe("Settings", () => {
       gettingStarted: {
         started: false,
         citationChecked: false,
+        mistakeSeen: false,
         indexed: false,
         askedOwn: false,
         askedReady: false,
@@ -308,7 +310,7 @@ describe("Settings", () => {
     core.close();
   });
 
-  test("Get started's progress kept before the ready Question reads it as not asked (#123)", async () => {
+  test("Get started's progress kept before the ready Question or the mistake step reads them as not done (#123)", async () => {
     const dataDir = await createTempDataFolder();
     const before = startCore(dataDir);
     const kept = {
@@ -327,6 +329,7 @@ describe("Settings", () => {
     expect((await after.getSettings()).device.gettingStarted).toEqual({
       ...kept,
       askedReady: false,
+      mistakeSeen: false,
     });
   });
 
@@ -350,6 +353,7 @@ describe("Settings", () => {
       gettingStarted: {
         started: true,
         citationChecked: true,
+        mistakeSeen: true,
         indexed: false,
         askedOwn: false,
         askedReady: true,

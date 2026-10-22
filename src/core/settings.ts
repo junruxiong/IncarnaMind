@@ -183,18 +183,21 @@ const userScope: Scope<UserSettings> = {
 const GETTING_STARTED_STEPS = [
   "started",
   "citationChecked",
+  "mistakeSeen",
   "indexed",
   "askedOwn",
   "askedReady",
   "hidden",
 ];
 
-// Progress kept before the ready Question (#123) has no `askedReady`; `get` reads it as not asked.
+// Progress kept before the ready Question (#123) has no `askedReady`, and before the mistake had its
+// own step no `mistakeSeen`; `get` reads either as not done.
+const ADDED_LATER = ["askedReady", "mistakeSeen"];
 const isGettingStarted = (value: unknown): value is GettingStarted =>
   isRecord(value) &&
   Object.keys(value).every((key) => GETTING_STARTED_STEPS.includes(key)) &&
   GETTING_STARTED_STEPS.every(
-    (key) => isBoolean(value[key]) || (key === "askedReady" && value[key] === undefined),
+    (key) => isBoolean(value[key]) || (ADDED_LATER.includes(key) && value[key] === undefined),
   );
 
 const isScriptTimeout = (value: unknown): value is number =>
@@ -216,6 +219,7 @@ const deviceScope: Scope<DeviceSettings> = {
     gettingStarted: {
       started: false,
       citationChecked: false,
+      mistakeSeen: false,
       indexed: false,
       askedOwn: false,
       askedReady: false,
