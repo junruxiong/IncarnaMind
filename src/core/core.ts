@@ -65,6 +65,7 @@ import type { AnswerSearchOptions } from "./answers/engine";
 import {
   type AddDocumentsResult,
   type ChatModelChoice,
+  type ChatProviderKind,
   type ConversationAskResult,
   type CoreApi,
   type CoreEventSource,
@@ -162,7 +163,7 @@ import {
   withPageReader,
 } from "./library/classifier";
 import { documentCitedPages, documentPageImages } from "./library/pageImages";
-import { createPlanPace } from "./library/planPace";
+import { createPlanPace, type Plan } from "./library/planPace";
 import { createTagging } from "./library/tagging";
 import type { TaggingClassifier } from "./library/types";
 import { createMeetings } from "./meetings";
@@ -2017,16 +2018,22 @@ export function createCore(adapters: CoreAdapters): Core {
     signal: lifetime.signal,
     localOnly: () => embedding.localOnly(),
   });
-  // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds.
-  const planPace = createPlanPace({
-    pace,
-    timers: paceTimers,
-    resumed: () => {
-      tagger.resume();
-      library.resume();
-    },
-    signal: lifetime.signal,
-  });
+  // Tagging on a plan goes gently, and waits while the plan's limit holds.
+  const planPaceFor = (plan: Plan) =>
+    createPlanPace({
+      plan,
+      pace,
+      timers: paceTimers,
+      resumed: () => {
+        tagger.resume();
+        library.resume();
+      },
+      signal: lifetime.signal,
+    });
+  const chatGptPace = planPaceFor("chatgpt");
+  const claudePace = planPaceFor("claude-account");
+  const planPaceOf = (kind: ChatProviderKind) =>
+    kind === "chatgpt" ? chatGptPace : kind === "claude-account" ? claudePace : null;
   const rateLimit = createRateLimitPause({
     timers: paceTimers,
     resumed: () => {
@@ -2048,14 +2055,13 @@ export function createCore(adapters: CoreAdapters): Core {
     localOnly: () => embedding.localOnly(),
     ollamaUrl: adapters.ollamaUrl ?? defaultOllamaUrl(),
     localModels: adapters.localModels ?? installedOllamaModels,
-    planPausedUntil: () => planPace.pausedUntil(),
+    planPausedUntil: () => chatGptPace.pausedUntil(),
     now: () => paceTimers.now(),
   });
   const tagsWith = (): TaggingClassifier | null => {
     const setting = library.settings().classifier;
     return setting.kind === "automatic" ? tagging.lastResolved() : setting;
   };
-  const onPlan = <T>(run: () => Promise<T>, signal: AbortSignal) => planPace.run(run, signal);
   const taggingServices = async (): Promise<ExternalService[]> => {
     const classifier = await tagging.resolve();
     const service = classifier && tagging.service(classifier);
@@ -2158,8 +2164,12 @@ export function createCore(adapters: CoreAdapters): Core {
           const chosen = chatClassifier(prepared.model, {
             local: prepared.provider.service === null,
           });
-          if (prepared.provider.kind !== "chatgpt") return chosen;
-          return { ...chosen, decide: (input) => onPlan(() => chosen.decide(input), input.signal) };
+          const plan = planPaceOf(prepared.provider.kind);
+          if (!plan) return chosen;
+          return {
+            ...chosen,
+            decide: (input) => plan.run(() => chosen.decide(input), input.signal),
+          };
         }
       }
     },
@@ -2264,7 +2274,8 @@ export function createCore(adapters: CoreAdapters): Core {
           };
         });
       }
-      return prepared.provider.kind === "chatgpt" ? pacedBy(chosen, onPlan) : chosen;
+      const plan = planPaceOf(prepared.provider.kind);
+      return plan ? pacedBy(chosen, plan.run) : chosen;
     },
   });
   /** The services Organize sends to: its model's, and the image model's for the scans it can't read. */
@@ -3351,7 +3362,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (result.outcome === "saved" && !result.existing && typeof folderId === "string") {
         library.assign(result.document.id, folderId);
       }
-      const added: Omit<AddDocumentsResult, "batchId"> =
+      const added: Pick<AddDocumentsResult, "documents" | "skipped"> =
         result.outcome === "saved"
           ? { documents: [result.document], skipped: [] }
           : { documents: [], skipped: [{ path: result.address, reason: "unreadable" }] };
@@ -3937,6 +3948,14 @@ export function createCore(adapters: CoreAdapters): Core {
       const rest = documentIds.filter((id) => !held.includes(id));
       if (rest.length > 0) await byTagger(rest);
       if (held.length > 0 || rest.length === 0) library.classify(held);
+    },
+    // Both mark them pending before anything is awaited, so saying it again finds none.
+    backOnline: async () => {
+      const ids = tagger.unreached();
+      const held = organizesNewDocuments() ? ids.filter((id) => library.isOrganizing(id)) : [];
+      if (held.length > 0) library.classify(held);
+      const rest = ids.filter((id) => !held.includes(id));
+      if (rest.length > 0) tagger.retag(rest);
     },
     stopTagging: async () => {
       const places = library.taggingPlaces();

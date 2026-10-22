@@ -212,6 +212,29 @@ describe("with Organize moving new Documents by itself", () => {
 
     expect(chat.calls.map((call) => call.purpose)).toEqual(["organize"]);
   });
+
+  test("back online, a Document Organize couldn't reach the model for is organized again, once however many windows say so", async () => {
+    const { core, chat, reports } = await start(true);
+    chat.fail(
+      new APICallError({
+        message: "fetch failed",
+        url: "http://127.0.0.1:11434/v1/chat/completions",
+        requestBodyValues: {},
+        isRetryable: false,
+      }),
+    );
+    const [document] = await add(core, { "One.txt": "The first report, about revenue." });
+    if (!document) throw new Error("Nothing was added.");
+    const [failed] = await waitForTagging(core, [document.id], (each) => each.tagging === "failed");
+    expect(failed?.taggingError).toMatchObject({ kind: "network" });
+    const before = chat.calls.length;
+
+    chat.fail(null);
+    await Promise.all([core.backOnline(), core.backOnline()]);
+
+    await filed(core, [document.id], reports.id);
+    expect(chat.calls.slice(before).map((call) => call.purpose)).toEqual(["organize"]);
+  });
 });
 
 describe("turning on Organize filing new Documents by itself", () => {

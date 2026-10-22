@@ -476,6 +476,16 @@ export async function newMind(
   await expect(first).toHaveJSProperty("tagName", "P");
 }
 
+/** Runs a command from ⌘K by its label, as the User types and clicks it. */
+export async function runFromPalette(window: Page, label: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(label);
+  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
+  await expect(item).toBeVisible();
+  await item.click();
+}
+
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
 export const sidebarFolder = (window: Page, name: string) =>
   window
@@ -1245,6 +1255,13 @@ export async function catchCopies(window: Page): Promise<void> {
 /** What the page last copied since `catchCopies`. */
 export const copied = (window: Page) =>
   window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
+
+/** What the Edit menu's Undo would take back now, by its label. */
+export const undoMenuItem = (app: ElectronApplication) =>
+  app.evaluate(({ Menu }) => {
+    const item = Menu.getApplicationMenu()?.getMenuItemById("edit.undo");
+    return { label: item?.label ?? "", enabled: item?.enabled ?? false };
+  });
 
 /** Pushes a core event to the window, as the core does when something happens. */
 export const emit = (app: ElectronApplication, name: string, payload: unknown) =>
