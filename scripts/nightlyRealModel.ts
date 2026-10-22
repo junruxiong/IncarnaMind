@@ -81,7 +81,7 @@ const vitestRun = (files: string, folder: string) => [
   `--outputFile.json=${join(folder, "vitest.json")}`,
 ];
 
-const requests = (fallback?: string) => {
+const requests = (fallback?: string): Record<string, string> => {
   const asked = process.env.INCARNAMIND_EVAL_EVERYDAY?.trim() || fallback;
   return asked ? { INCARNAMIND_EVAL_EVERYDAY: asked } : {};
 };

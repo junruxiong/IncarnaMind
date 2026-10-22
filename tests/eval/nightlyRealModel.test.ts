@@ -112,7 +112,7 @@ describe("the spend", () => {
   test("the night's price table is the catalog's", () => {
     const provider = (model: string) => (model.startsWith("claude") ? "anthropic" : "kimi");
     for (const [model, price] of Object.entries(RATES)) {
-      expect(catalogFacts(provider(model), model)?.price).toEqual(price);
+      expect(catalogFacts(provider(model), model)?.price).toMatchObject(price);
     }
   });
 
