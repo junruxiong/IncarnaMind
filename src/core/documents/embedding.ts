@@ -36,6 +36,8 @@ export interface EmbeddingQueueOptions {
   announce(documentId: string): void;
   /** A Document just became ready (e.g. for automatic tagging). Called before it is announced. */
   onReady?: (documentId: string) => void;
+  /** It became ready, embedded in `ms` (by `performance.now()`) once the model had loaded. */
+  onEmbedded?: (documentId: string, ms: number) => void;
   /**
    * The Document's Linked folder is paused: it is left "embedding" until it
    * is resumed, which queues it again.
@@ -180,6 +182,7 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
     const stopped = () => closed || generation !== started;
     if (!(await model.load())) return stopped() ? "skipped" : "model-unavailable";
     if (stopped()) return "skipped";
+    const begun = performance.now();
     let dimensions = document.embedding_dimensions;
     if (document.embedding_model !== model.id) {
       startOver(id);
@@ -252,6 +255,7 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
     }
     setStatus(id, "ready", "embedding");
     if (stateOf(id)?.status === "ready") {
+      options.onEmbedded?.(id, performance.now() - begun);
       try {
         options.onReady?.(id);
       } catch (error) {

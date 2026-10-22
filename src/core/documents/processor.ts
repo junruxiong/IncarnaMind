@@ -16,6 +16,7 @@
 import type { Worker } from "node:worker_threads";
 import type { TextUnit } from "../../shared/units";
 import type { LogFields, PagePicture, PictureRead, RecognizedLine } from "../adapters";
+import type { DocumentKind } from "../api";
 import type {
   MetadataJob,
   MetadataResult,
@@ -31,8 +32,12 @@ import startDocumentWorker from "./worker?nodeWorker";
 export interface ProcessorHandlers {
   /** How many scans are read at once (the host works it out with `scansAtOnce`). Default: one. */
   scansAtOnce?: number | undefined;
-  /** A processing job is about to go to a worker: from the queue, or its turn in the scan lane. */
-  onStart(job: ProcessingJob): void;
+  /**
+   * A processing job is about to go to a worker: from the queue, or its turn in the scan lane.
+   * `warm`: the worker has run a job of its kind before, so it has nothing to load first (a new
+   * worker starts up, and loads PDF.js for its first PDF).
+   */
+  onStart(job: ProcessingJob, warm: boolean): void;
   /** A job that reads scanned pages stopped to wait its turn in the scan lane. */
   onWaiting(job: ProcessingJob): void;
   onResult(job: ProcessingJob, result: ProcessingResult): void;
@@ -225,7 +230,7 @@ export function createProcessor(
 
   function startWorker(): WorkerHandle {
     const thread = startDocumentWorker({ name: "incarnamind-documents" });
-    const handle: WorkerHandle = { thread, alive: true };
+    const handle: WorkerHandle = { thread, alive: true, kinds: new Set() };
     thread.on("message", (response: WorkerResponse) => {
       if ("result" in response) {
         finish(response.id, response.result);
@@ -268,17 +273,20 @@ export function createProcessor(
 
   function start(job: WorkerJob, lane: "queue" | "scan"): void {
     const id = nextId++;
+    const worker = idle.pop() ?? startWorker();
+    const warm = worker.kinds.has(job.kind);
+    worker.kinds.add(job.kind);
     const run: Run = {
       id,
       job,
-      worker: idle.pop() ?? startWorker(),
+      worker,
       lane,
       posted: false,
       stopped: false,
       cancelled: false,
     };
     running.set(id, run);
-    if (job.task === "process") call(() => handlers.onStart(job));
+    if (job.task === "process") call(() => handlers.onStart(job, warm));
     const send = (password: string | undefined) => {
       if (closed || running.get(id) !== run || !run.worker.alive) return;
       // Stopped while its password was read: it never starts.
@@ -375,6 +383,8 @@ interface WorkerHandle {
   thread: Worker;
   /** False once it has died: its job is failed, and it takes no other. */
   alive: boolean;
+  /** The kinds of file it has run jobs for. */
+  kinds: Set<DocumentKind>;
 }
 
 interface Run {

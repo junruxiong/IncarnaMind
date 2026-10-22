@@ -25,6 +25,7 @@ import {
   waitForProcessing,
   writeSourceFile,
 } from "../helpers/documents";
+import { turnOnEmbeddings } from "../helpers/embedding";
 import { buildPdf } from "../helpers/pdf";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -147,7 +148,7 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
     expect(await second.listFolders()).toEqual(before);
   });
 
-  test("a preview counts the files and bytes, and guesses the time and the layout, without indexing anything", async () => {
+  test("a preview counts the files and bytes, and suggests the layout, without indexing anything", async () => {
     const library = await createSourceFolder();
     // Zotero's storage: one folder per item, each with one file (and its hidden cache).
     const pdf = buildPdf([{ lines: ["A paper about tides."] }]);
@@ -165,12 +166,12 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
       files: 20,
       bytes: pdf.byteLength * 20,
       onlineOnly: { files: 0, bytes: 0 },
-      estimatedSeconds: expect.any(Number),
+      // Nothing has been read on this computer yet, so there is no telling how long it takes.
+      estimatedSeconds: null,
       layout: "flat",
       insideLinkedFolderId: null,
       containsLinkedFolderIds: [],
     });
-    expect(preview.estimatedSeconds).toBeGreaterThan(0);
     expect(await core.listDocuments()).toEqual([]);
     expect(await core.listLinkedFolders()).toEqual([]);
 
@@ -184,6 +185,38 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
     );
     await expect(core.previewLinkedFolder(join(library, "nowhere"))).rejects.toThrow(NotFoundError);
     await expect(core.addLinkedFolder("relative/path")).rejects.toThrow(InvalidInputError);
+  });
+
+  test("a preview says how long reading takes once files of its kinds have been read on this computer (#1506)", async () => {
+    const dataDir = await createTempDataFolder();
+    const sources = await createSourceFolder();
+    const notes = join(sources, "Notes");
+    const more = join(sources, "More");
+    for (const [index, line] of [TIDES, NEAP, RIVERS].entries()) {
+      await writeSourceFile(notes, `Note ${index}.md`, `# Note ${index}\n\n${line}`);
+      await writeSourceFile(more, `More ${index}.md`, `# More ${index}\n\n${line}`);
+    }
+    await writeSourceFile(sources, "Papers/tides.pdf", buildPdf([{ lines: ["Spring tides."] }]));
+    const estimate = async (core: Core, folder: string) =>
+      (await core.previewLinkedFolder(folder)).estimatedSeconds;
+    const first = startCore(dataDir);
+    expect(await estimate(first, notes)).toBeNull();
+
+    await linkAndProcess(first, notes);
+
+    expect(await estimate(first, more)).toEqual(expect.any(Number));
+    // No PDF has been read here yet.
+    expect(await estimate(first, sources)).toBeNull();
+    first.close();
+    // It is this computer's, and kept.
+    const core = startCore(dataDir);
+    expect(await estimate(core, more)).toEqual(expect.any(Number));
+
+    // Embedding is part of reading, so it takes another time, measured afresh.
+    await turnOnEmbeddings(core);
+    expect(await estimate(core, more)).toBeNull();
+    await linkAndProcess(core, more);
+    expect(await estimate(core, notes)).toEqual(expect.any(Number));
   });
 
   test("only a big library of one-file folders starts flat; a small one keeps its folders", () => {
