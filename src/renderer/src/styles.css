@@ -7273,14 +7273,20 @@
   .answer-steps-summary {
     flex: 0 1 auto;
   }
-  /* The live line opens the steps from anywhere on it: the button covers the line, its chevron at the end. */
+  /*
+   * The live line opens the steps from anywhere on it: the button covers the line. The line is the
+   * column's width and its chevron at the end, so the chevron stays where it is as the step's words
+   * change (a layout shift the feel check counts).
+   */
   .answer-steps-live {
     position: relative;
+    align-self: stretch;
   }
   .answer-steps-live-toggle {
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
+    margin-left: auto;
     border-radius: 6px;
 
     &::after {
