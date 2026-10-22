@@ -80,6 +80,7 @@ import {
   type MeetingHelpKind,
   type Mind,
   type MindCitationStyle,
+  type NetworkTrafficId,
   NOT_IN_A_FOLDER_ID,
   type OwnFileKind,
   type ProviderError,
@@ -129,6 +130,7 @@ import { createWebPages } from "./documents/web";
 import { createEdits, editText } from "./edits";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
+import { createModelSources, MODEL_COPIES } from "./embedding/modelSources";
 import {
   FileWriteCancelledError,
   InvalidInputError,
@@ -555,9 +557,21 @@ export function createCore(adapters: CoreAdapters): Core {
   const consent = createConsent(db, events, now);
   /** Aborts work still running (model downloads, a ChatGPT sign-in, provider requests) when the core closes. */
   const lifetime = new AbortController();
+  const downloads = adapters.modelDownloads;
+  const modelCopies = downloads?.copies ?? MODEL_COPIES;
+  const modelSources = createModelSources({
+    fetch: downloads?.fetch ?? fetch,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    language: () => settings.get().language,
+    choice: () => settings.get().device.modelSource,
+    ...(downloads?.proxy && { proxy: downloads.proxy }),
+    copies: modelCopies,
+    ...(downloads?.stallMs !== undefined && { stallMs: downloads.stallMs }),
+  });
   const embeddingModel = createEmbeddingModel({
     definition: BUILT_IN_EMBEDDING_MODEL,
     source: adapters.embeddingModelSource,
+    sources: modelSources,
     dataDir,
     embedder: adapters.embedder,
     emitStatus: (status) => events.emit("embeddingModel.status", status),
@@ -567,6 +581,7 @@ export function createCore(adapters: CoreAdapters): Core {
     ? createTextRecognitionModel({
         definition: BUILT_IN_TEXT_RECOGNITION_MODEL,
         source: adapters.textRecognitionModelSource,
+        sources: modelSources,
         dataDir,
         recognizer: adapters.textRecognizer,
         emitStatus: (status) => events.emit("textRecognitionModel.status", status),
@@ -829,6 +844,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const rerankingModel = createRerankingModel({
     definition: BUILT_IN_RERANKING_MODEL,
     source: adapters.rerankingModelSource,
+    sources: modelSources,
     dataDir,
     crossEncoder: adapters.crossEncoder,
     emitStatus: () => reportRerank(),
@@ -2587,6 +2603,28 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     listed: () => transcriber !== undefined && transcriptionSource.files.length > 0,
   });
+  // Any built-in model may come from these instead, and the probe asks ModelScope (#1578).
+  const otherSources: { id: NetworkTrafficId; service: ExternalService }[] = [
+    {
+      id: "model-source-modelscope",
+      service: { id: "https://www.modelscope.cn", name: "ModelScope" },
+    },
+    {
+      id: "model-source-hf-mirror",
+      service: { id: "https://hf-mirror.com", name: "hf-mirror.com" },
+    },
+    ...(modelCopies.r2
+      ? [
+          {
+            id: "model-source-copy" as const,
+            service: { id: new URL(modelCopies.r2).origin, name: "IncarnaMind" },
+          },
+        ]
+      : []),
+  ];
+  for (const { id, service } of otherSources) {
+    privacy.traffic.register({ id, service, listed: () => modelSource.files.length > 0 });
+  }
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
   const chatGptSignIn = new URL(
     adapters.chatGptPlan?.authorizeUrl ?? CHATGPT_PLAN_ENDPOINTS.authorizeUrl,
@@ -2771,6 +2809,7 @@ export function createCore(adapters: CoreAdapters): Core {
     createTranscriptionModel({
       dataDir,
       transcriber,
+      sources: modelSources,
       ...(adapters.transcriptionModelSource && { source: adapters.transcriptionModelSource }),
       speed: () => {
         const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);

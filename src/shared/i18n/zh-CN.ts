@@ -2261,6 +2261,14 @@ export const zhCN = {
   "privacy.traffic.transcription-model": "下载语音模型",
   "privacy.traffic.transcription-model.tip":
     "会议的语音模型只在第一次转写会议时下载一次。你说的内容不会发送出去。",
+  "privacy.traffic.model-source-modelscope": "从 ModelScope 下载内置模型",
+  "privacy.traffic.model-source-modelscope.tip":
+    "内置模型需要下载时，IncarnaMind 会同时询问 Hugging Face 和 ModelScope 哪个先响应，并可能从 IncarnaMind 在 ModelScope 上的副本下载文件。不会发送你的任何内容。",
+  "privacy.traffic.model-source-hf-mirror": "从 hf-mirror.com 下载内置模型",
+  "privacy.traffic.model-source-hf-mirror.tip":
+    "如果无法连接 Hugging Face，内置模型的文件可能从这个镜像下载。不会发送你的任何内容。",
+  "privacy.traffic.model-source-copy": "从 IncarnaMind 的副本下载内置模型",
+  "privacy.traffic.model-source-copy.tip": "内置模型文件的最后一个来源。不会发送你的任何内容。",
   "privacy.traffic.ollama-pull": "下载本地模型",
   "privacy.traffic.ollama-pull.tip": "当你选择本地模型时，Ollama 会从它的模型库下载这个模型。",
   "privacy.traffic.chatgpt-sign-in": "使用 ChatGPT 登录",

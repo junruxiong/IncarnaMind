@@ -2058,6 +2058,11 @@ export interface DeviceSettings {
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
   /**
+   * The source a failed model download's line picked on this device (#1578), leading the others.
+   * "auto" by default: the probe orders them.
+   */
+  modelSource: ModelSourceChoice;
+  /**
    * Where meeting audio is transcribed, once the User has chosen: at first run (Change on the
    * Meetings job) or in Settings. Null: not chosen, so this computer, and a first Meeting may
    * ask once cloud routes exist (#141).
@@ -3653,7 +3658,23 @@ export interface EmbeddingModelError {
   kind: "network" | "integrity" | "storage" | "load";
   /** Technical detail in English, for logs and tooltips. */
   message: string;
+  /** A download every source failed (#1578): what each one said, in the order tried. */
+  sources?: { source: ModelSourceId; message: string }[];
 }
+
+/**
+ * Where the built-in models download from (#1578): Hugging Face, IncarnaMind's copy on
+ * ModelScope, hf-mirror.com, IncarnaMind's copy on Cloudflare R2.
+ */
+export type ModelSourceId = "huggingface" | "modelscope" | "hf-mirror" | "r2";
+
+/** The source the User picked on a failed download's line; "auto" tries them all in the probe's order. */
+export type ModelSourceChoice = "auto" | "huggingface" | "modelscope";
+export const MODEL_SOURCE_CHOICES: readonly ModelSourceChoice[] = [
+  "auto",
+  "huggingface",
+  "modelscope",
+];
 
 export interface EmbeddingModelStatus {
   /** The model's name, e.g. "multilingual-e5-small". */
@@ -6466,6 +6487,10 @@ export interface PageSetup {
  *   model's files (#397), once, when the first scanned page needs reading.
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
  *   once, when a Meeting is first transcribed on this computer (#136).
+ * - "model-source-modelscope", "model-source-hf-mirror", "model-source-copy": where else a
+ *   built-in model's files may come from when Hugging Face doesn't give them (#1578):
+ *   IncarnaMind's copy on ModelScope (whose front page the probe asks whenever a model
+ *   downloads), hf-mirror.com, and IncarnaMind's own copy on Cloudflare R2, once it exists.
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
@@ -6488,6 +6513,9 @@ export const networkTrafficIds = [
   "reranking-model",
   "text-recognition-model",
   "transcription-model",
+  "model-source-modelscope",
+  "model-source-hf-mirror",
+  "model-source-copy",
   "ollama-pull",
   "chatgpt-sign-in",
   "claude-sign-in",

@@ -2349,6 +2349,15 @@ export const en = {
   "privacy.traffic.transcription-model": "Speech model download",
   "privacy.traffic.transcription-model.tip":
     "The speech model for meetings is downloaded once, the first time a meeting is transcribed. Nothing you say is sent.",
+  "privacy.traffic.model-source-modelscope": "Built-in models from ModelScope",
+  "privacy.traffic.model-source-modelscope.tip":
+    "When a built-in model needs downloading, IncarnaMind asks Hugging Face and ModelScope which answers first, and may take the files from IncarnaMind's copy on ModelScope. Nothing of yours is sent.",
+  "privacy.traffic.model-source-hf-mirror": "Built-in models from hf-mirror.com",
+  "privacy.traffic.model-source-hf-mirror.tip":
+    "If Hugging Face can't be reached, a built-in model's files may come from this mirror of it. Nothing of yours is sent.",
+  "privacy.traffic.model-source-copy": "Built-in models from IncarnaMind's copy",
+  "privacy.traffic.model-source-copy.tip":
+    "The last source for a built-in model's files. Nothing of yours is sent.",
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.tip":
     "When you choose a local model, Ollama downloads it from its library.",
