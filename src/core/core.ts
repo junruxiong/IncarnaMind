@@ -4153,6 +4153,8 @@ export function createCore(adapters: CoreAdapters): Core {
         fileName,
         fromWord: _,
         theirChanges: _waiting,
+        citedDocuments: _cited,
+        numbered: _numbered,
         data,
         word,
         ...counts

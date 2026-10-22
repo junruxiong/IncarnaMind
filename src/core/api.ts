@@ -7573,7 +7573,7 @@ export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
-      "fileName" | "fromWord" | "theirChanges"
+      "fileName" | "fromWord" | "theirChanges" | "citedDocuments" | "numbered"
     > &
       Pick<MindExport, "sentenceChecks" | "trackedChanges" | "needsDetails">)
   /**
