@@ -43,6 +43,12 @@ const isPaneWidth = (value: unknown): value is number =>
 
 const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 
+const isTipCounts = (value: unknown): value is Record<string, number> =>
+  isRecord(value) &&
+  Object.values(value).every(
+    (count) => typeof count === "number" && Number.isInteger(count) && count >= 0 && count <= 100,
+  );
+
 const isNonBlankText = (value: unknown): value is string =>
   typeof value === "string" && value.trim() !== "" && value.length <= 500;
 
@@ -220,6 +226,7 @@ const deviceScope: Scope<DeviceSettings> = {
     skillScriptsEnabled: true,
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
     suggestionOffers: 0,
+    tips: {},
     meetingSystemAudio: true,
     transcriptionRoute: null,
     meetingNoticeAccepted: false,
@@ -240,6 +247,7 @@ const deviceScope: Scope<DeviceSettings> = {
     skillScriptTimeoutSeconds: isScriptTimeout,
     suggestionOffers: (value): value is number =>
       typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100,
+    tips: isTipCounts,
     meetingSystemAudio: isBoolean,
     transcriptionRoute: (value): value is TranscriptionRoute | null =>
       value === null || TRANSCRIPTION_ROUTES.some((route) => route === value),

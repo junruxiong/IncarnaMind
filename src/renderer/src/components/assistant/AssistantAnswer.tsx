@@ -38,6 +38,8 @@ import { StillReadingLine } from "./StillReadingLine";
 export interface AnswerKeeping {
   /** The name of the Mind Add to note adds to; null with no Mind in focus (the ▾ opens). */
   focusedMindName: string | null;
+  /** The Mind in focus has nothing written in it. */
+  mindEmpty: boolean;
   add(answer: ConversationAnswer): void;
   pick(answer: ConversationAnswer, anchor: HTMLElement): void;
   openTable(answer: ConversationAnswer, table: NodeJSON): void;
@@ -213,6 +215,7 @@ export function AssistantAnswer({
         streaming={streaming}
         canKeep={written}
         focusedMindName={keeping.focusedMindName}
+        mindEmpty={keeping.mindEmpty}
         onAdd={() => keeping.add(answer)}
         onPick={(anchor) => keeping.pick(answer, anchor)}
       />

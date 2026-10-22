@@ -1,13 +1,17 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { ConversationAnswer } from "../../../../core/api";
+import { addNamesItsMind } from "../../answerAdd";
 import { copyAnswer } from "../../answerEditors";
 import { shortcutLabel } from "../../commands/keymap";
 import { useDismissOnEscape } from "../../escapeDismiss";
 import { useT } from "../../i18n";
 import { saidInLine } from "../../lineNames";
+import { chooseNudge, stepsShownOf } from "../../nudges";
 import { useAppStore } from "../../store";
+import { closeTip, offerTip, useTipShown } from "../../tips";
 import { useAnswerLine, useUndo } from "../../undo";
 import { CheckLineIcon, ChevronDownLineIcon, CopyLineIcon, PlusLineIcon } from "../lineIcons";
+import { Tip } from "../Tip";
 import { useGoesBy } from "../UndoLine";
 
 /** How long "Copied" says so. */
@@ -19,13 +23,15 @@ const COPIED_MS = 1500;
  * and always on the newest. Its model, scope and searches are in its steps.
  * While it is written, Stop is the composer's and the wait line's, not here.
  * Once added, "Added to “{Mind}” · Undo" (⌘Z too), while that can be taken
- * back. Tab reaches each by its name.
+ * back. Tab reaches each by its name. In an empty Mind, or under a long Answer with
+ * Citations, Add to note comes first and names its Mind.
  */
 export function AnswerActions({
   answer,
   streaming,
   canKeep,
   focusedMindName,
+  mindEmpty,
   onAdd,
   onPick,
 }: {
@@ -35,11 +41,14 @@ export function AnswerActions({
   canKeep: boolean;
   /** The Mind in focus, which Add to note adds to; null opens the ▾ instead. */
   focusedMindName: string | null;
+  /** The Mind in focus has nothing written in it. */
+  mindEmpty: boolean;
   onAdd(): void;
   onPick(anchor: HTMLElement): void;
 }) {
   const t = useT();
   const pick = useRef<HTMLButtonElement>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
   const undoButton = useRef<HTMLButtonElement>(null);
   const [copied, setCopied] = useState(false);
   const addedLine = useAnswerLine(answer.id);
@@ -54,6 +63,32 @@ export function AnswerActions({
       undoButton.current?.focus();
     }
   }, [added]);
+  const named = useMemo(
+    () => canKeep && !streaming && focusedMindName !== null && addNamesItsMind(answer, mindEmpty),
+    [canKeep, streaming, focusedMindName, answer, mindEmpty],
+  );
+  const otherAsk = useAppStore(
+    (state) => stepsShownOf(state.settings?.device.gettingStarted) || chooseNudge(state) !== null,
+  );
+  const tipWanted =
+    canKeep &&
+    focusedMindName !== null &&
+    answer.citations.length > 0 &&
+    answer.status === "done" &&
+    !otherAsk;
+  // Only an Answer seen being written gets the tip: one opened later, from History, doesn't.
+  const sawWriting = useRef(streaming);
+  useEffect(() => {
+    if (streaming) sawWriting.current = true;
+    else if (sawWriting.current && tipWanted) {
+      sawWriting.current = false;
+      offerTip("add-answer", answer.id);
+    }
+  }, [streaming, tipWanted, answer.id]);
+  const tipShown = useTipShown("add-answer", answer.id);
+  useEffect(() => {
+    if (added && tipShown) closeTip("add-answer");
+  }, [added, tipShown]);
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), COPIED_MS);
@@ -96,70 +131,101 @@ export function AnswerActions({
   const addTitle = focusedMindName
     ? t("answer.add.to", { mind: focusedMindName, shortcut: shortcutLabel("answer.addToNote") })
     : t("answer.add.choose");
-  return (
-    // biome-ignore lint/a11y/useSemanticElements: an Answer's buttons, named together; a fieldset is for a form's.
-    <div
-      role="group"
-      aria-label={t("answer.actions")}
-      data-testid="answer-actions"
-      className="assistant-answer-actions"
+  const copyButton = (
+    <button
+      type="button"
+      data-testid="answer-copy"
+      aria-label={
+        copied
+          ? t("answer.copied")
+          : t("answer.copy.label", { shortcut: shortcutLabel("assistant.copyAnswer") })
+      }
+      title={t("answer.copy.label", { shortcut: shortcutLabel("assistant.copyAnswer") })}
+      // A selection in the Answer stays as it is: Copy copies just that.
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => {
+        void copyAnswer(answer.id).then((done) => setCopied(done));
+      }}
+      className="assistant-answer-action"
     >
-      {answer.status === "stopped" && (
-        <span data-testid="answer-stopped" className="assistant-answer-status">
-          {t("answer.status.stopped")}
+      <CopyLineIcon className="size-3.5" />
+      {copied ? t("answer.copied") : t("answer.copy")}
+    </button>
+  );
+  const addButtons = (
+    <span className="assistant-answer-add">
+      <button
+        ref={addButton}
+        type="button"
+        data-testid="answer-add"
+        aria-label={addTitle}
+        title={addTitle}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => (focusedMindName ? onAdd() : pick.current && onPick(pick.current))}
+        className="assistant-answer-action assistant-answer-add-main"
+      >
+        <PlusLineIcon className="size-3.5 shrink-0" />
+        <span data-testid="answer-add-label" className="assistant-answer-add-label">
+          {named && focusedMindName
+            ? t("answer.add.named", { mind: focusedMindName })
+            : t("answer.add")}
         </span>
-      )}
-      {canKeep && (
-        <>
-          <button
-            type="button"
-            data-testid="answer-copy"
-            aria-label={
-              copied
-                ? t("answer.copied")
-                : t("answer.copy.label", { shortcut: shortcutLabel("assistant.copyAnswer") })
-            }
-            title={t("answer.copy.label", { shortcut: shortcutLabel("assistant.copyAnswer") })}
-            // A selection in the Answer stays as it is: Copy copies just that.
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
-              void copyAnswer(answer.id).then((done) => setCopied(done));
-            }}
-            className="assistant-answer-action"
-          >
-            <CopyLineIcon className="size-3.5" />
-            {copied ? t("answer.copied") : t("answer.copy")}
-          </button>
-          <span className="assistant-answer-add">
-            <button
-              type="button"
-              data-testid="answer-add"
-              aria-label={addTitle}
-              title={addTitle}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => (focusedMindName ? onAdd() : pick.current && onPick(pick.current))}
-              className="assistant-answer-action assistant-answer-add-main"
-            >
-              <PlusLineIcon className="size-3.5" />
-              {t("answer.add")}
-            </button>
-            <button
-              ref={pick}
-              type="button"
-              data-testid="answer-add-to"
-              aria-haspopup="dialog"
-              aria-label={t("answer.addTo")}
-              title={t("answer.addTo")}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={(event) => onPick(event.currentTarget)}
-              className="assistant-answer-action assistant-answer-add-more"
-            >
-              <ChevronDownLineIcon className="size-3" />
-            </button>
+      </button>
+      <button
+        ref={pick}
+        type="button"
+        data-testid="answer-add-to"
+        aria-haspopup="dialog"
+        aria-label={t("answer.addTo")}
+        title={t("answer.addTo")}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={(event) => onPick(event.currentTarget)}
+        className="assistant-answer-action assistant-answer-add-more"
+      >
+        <ChevronDownLineIcon className="size-3" />
+      </button>
+    </span>
+  );
+  return (
+    <>
+      {/* biome-ignore lint/a11y/useSemanticElements: an Answer's buttons, named together; a fieldset is for a form's. */}
+      <div
+        role="group"
+        aria-label={t("answer.actions")}
+        data-testid="answer-actions"
+        data-named={named || undefined}
+        className="assistant-answer-actions"
+      >
+        {answer.status === "stopped" && (
+          <span data-testid="answer-stopped" className="assistant-answer-status">
+            {t("answer.status.stopped")}
           </span>
-        </>
+        )}
+        {canKeep &&
+          (named ? (
+            <>
+              {addButtons}
+              {copyButton}
+            </>
+          ) : (
+            <>
+              {copyButton}
+              {addButtons}
+            </>
+          ))}
+      </div>
+      {tipShown && (
+        <Tip
+          id="add-answer"
+          onClose={() => {
+            closeTip("add-answer");
+            addButton.current?.focus();
+          }}
+        >
+          {t("tip.addAnswer")}
+        </Tip>
       )}
-    </div>
+    </>
   );
 }
 

@@ -119,6 +119,7 @@ import { skillDescription, skillTitle } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { resumeTabCloseFocus } from "../tabFocus";
+import { forgetReadMind, publishReadMindEmpty } from "./assistant/readMind";
 import { CompareSheet } from "./CompareSheet";
 import { StartGuide, useIsExample } from "./GettingStarted";
 import { CheckLineIcon, MineLineIcon, SearchLineIcon } from "./lineIcons";
@@ -671,6 +672,10 @@ function MindEditorView({
     editor,
     selector: ({ editor: current }) => isEmptyMind(current.state.doc),
   });
+  useEffect(() => {
+    if (reads) publishReadMindEmpty(mindId, empty);
+  }, [reads, mindId, empty]);
+  useEffect(() => (reads ? () => forgetReadMind(mindId) : undefined), [reads, mindId]);
   // The first empty Mind says what a Mind is until something is written in it, and never again (#721).
   const wasEmpty = useRef(empty);
   useEffect(() => {

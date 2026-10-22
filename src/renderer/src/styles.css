@@ -7020,6 +7020,24 @@
   .assistant-answer-add:hover > .assistant-answer-action {
     background: var(--color-hover);
   }
+  /* Named, Add to note comes first and its Mind's title gives way, cut with "…", before Copy does. */
+  .assistant-answer-actions[data-named] {
+    flex-wrap: nowrap;
+
+    & > .assistant-answer-add {
+      flex-shrink: 1;
+      min-width: 0;
+    }
+    & .assistant-answer-add-main {
+      flex-shrink: 1;
+      min-width: 0;
+    }
+  }
+  .assistant-answer-add-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .assistant-answer-actions > .assistant-answer-status {
     padding: 0 6px;
     color: var(--color-ink-meta);
