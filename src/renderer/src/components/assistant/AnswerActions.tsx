@@ -6,9 +6,8 @@ import { shortcutLabel } from "../../commands/keymap";
 import { useDismissOnEscape } from "../../escapeDismiss";
 import { useT } from "../../i18n";
 import { saidInLine } from "../../lineNames";
-import { chooseNudge, stepsShownOf } from "../../nudges";
 import { useAppStore } from "../../store";
-import { closeTip, offerTip, useTipShown } from "../../tips";
+import { closeTip, offerTip, useTipRoom, useTipShown } from "../../tips";
 import { useAnswerLine, useUndo } from "../../undo";
 import { CheckLineIcon, ChevronDownLineIcon, CopyLineIcon, PlusLineIcon } from "../lineIcons";
 import { Tip } from "../Tip";
@@ -67,35 +66,46 @@ export function AnswerActions({
     () => canKeep && !streaming && focusedMindName !== null && addNamesItsMind(answer, mindEmpty),
     [canKeep, streaming, focusedMindName, answer, mindEmpty],
   );
-  const otherAsk = useAppStore(
-    (state) => stepsShownOf(state.settings?.device.gettingStarted) || chooseNudge(state) !== null,
-  );
+  const room = useTipRoom("add-answer", answer.id);
   const tipWanted =
+    room &&
     canKeep &&
     focusedMindName !== null &&
     answer.citations.length > 0 &&
-    answer.status === "done" &&
-    !otherAsk;
+    answer.status === "done";
   // Only an Answer seen being written gets the tip: one opened later, from History, doesn't.
-  const sawWriting = useRef(streaming);
+  const [watched, setWatched] = useState(streaming);
   useEffect(() => {
-    if (streaming) sawWriting.current = true;
-    else if (sawWriting.current && tipWanted) {
-      sawWriting.current = false;
+    if (streaming) setWatched(true);
+  }, [streaming]);
+  const offered = useRef(false);
+  useEffect(() => {
+    if (!streaming && watched && tipWanted && !offered.current) {
+      offered.current = true;
       offerTip("add-answer", answer.id);
     }
-  }, [streaming, tipWanted, answer.id]);
+  }, [streaming, watched, tipWanted, answer.id]);
   const tipShown = useTipShown("add-answer", answer.id);
   useEffect(() => {
     if (added && tipShown) closeTip("add-answer");
   }, [added, tipShown]);
+  const keepsRoom =
+    tipShown ||
+    (watched && room && focusedMindName !== null && (streaming || answer.status === "done"));
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), COPIED_MS);
     return () => clearTimeout(timer);
   }, [copied]);
 
-  if (streaming) return <WritingLine />;
+  if (streaming) {
+    return (
+      <>
+        <WritingLine />
+        {keepsRoom && <TipRoom />}
+      </>
+    );
+  }
 
   if (added) {
     const said = saidInLine(t, added.said);
@@ -214,18 +224,31 @@ export function AnswerActions({
             </>
           ))}
       </div>
-      {tipShown && (
-        <Tip
-          id="add-answer"
-          onClose={() => {
-            closeTip("add-answer");
-            addButton.current?.focus();
-          }}
-        >
-          {t("tip.addAnswer")}
-        </Tip>
+      {keepsRoom && (
+        <TipRoom>
+          {tipShown && (
+            <Tip
+              id="add-answer"
+              onClose={() => {
+                closeTip("add-answer");
+                addButton.current?.focus();
+              }}
+            >
+              {t("tip.addAnswer")}
+            </Tip>
+          )}
+        </TipRoom>
       )}
     </>
+  );
+}
+
+/** The line a tip takes under an Answer's actions, kept before the tip comes so the thread doesn't move. */
+export function TipRoom({ children }: { children?: ReactNode }) {
+  return (
+    <div data-testid="tip-room" className="assistant-answer-tip-room">
+      {children}
+    </div>
   );
 }
 

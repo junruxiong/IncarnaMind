@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { chooseNudge, stepsShownOf } from "./nudges";
 import { useAppStore } from "./store";
 
 export type TipId = "add-answer";
@@ -37,5 +38,19 @@ export function closeTip(id: TipId): void {
 export const useTipShown = (id: TipId, key: string): boolean =>
   useShowing((state) => state.showing?.id === id && state.showing.key === key);
 
-/** Whichever tip shows, for what must make room for it. */
-export const useTipKey = (): string | null => useShowing((state) => state.showing?.key ?? null);
+/**
+ * Whether the tip could show next. Its room is kept from the start, so nothing under or above it
+ * moves when it comes: no tip shows during the first-run steps or beside another ask.
+ */
+export function useTipRoom(id: TipId, key: string | null): boolean {
+  const left = useAppStore((state) => (state.settings?.device.tips[id] ?? 0) < TIP_SHOWS);
+  const free = useShowing(
+    (state) =>
+      state.showing === null ||
+      (state.showing.id === id && key !== null && state.showing.key === key),
+  );
+  const quiet = useAppStore(
+    (state) => !stepsShownOf(state.settings?.device.gettingStarted) && chooseNudge(state) === null,
+  );
+  return left && free && quiet;
+}

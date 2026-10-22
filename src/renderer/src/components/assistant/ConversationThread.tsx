@@ -25,11 +25,11 @@ import { useAppStore } from "../../store";
 import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
 import { loadTasks, useTasks } from "../../tasks";
 import { aimAt } from "../../taskTell";
-import { useTipKey } from "../../tips";
+import { useTipRoom } from "../../tips";
 import { SearchIcon } from "../icons";
 import { PlanLineIcon, SearchLineIcon, SparkLineIcon } from "../lineIcons";
 import { AddToMindPicker } from "./AddToMindPicker";
-import { WritingLine } from "./AnswerActions";
+import { TipRoom, WritingLine } from "./AnswerActions";
 import { LiveLine } from "./AnswerSteps";
 import { type AnswerKeeping, AssistantAnswer } from "./AssistantAnswer";
 import { MeetingStarters } from "./MeetingStarters";
@@ -108,14 +108,14 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   // A Research topic asked, or a Task started, grows it too; a Task's every step doesn't move it.
   const started = tasks.length;
   const askedAt = plan?.askedAt;
-  const tipAt = useTipKey();
+  const tipRoomOpen = useTipRoom("add-answer", null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: each change to the messages may grow the thread.
   useLayoutEffect(() => {
     const scroller = log.current?.parentElement;
     if (scroller && (atFoot.current || asking) && !sought) {
       scroller.scrollTop = scroller.scrollHeight;
     }
-  }, [messages, asking, sought, started, askedAt, tipAt]);
+  }, [messages, asking, sought, started, askedAt]);
 
   // A link back led here: that Answer comes into view, flashed, once it shows (its conversation's
   // messages may come a moment after it is opened).
@@ -265,6 +265,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
               ) : undefined
             }
           />
+          {focusedMindId !== null && tipRoomOpen && <TipRoom />}
         </div>
       )}
       {picking && (

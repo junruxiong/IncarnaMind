@@ -5,6 +5,7 @@ import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
   askInAssistant,
+  assistantAnswers,
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
@@ -267,6 +268,30 @@ for (const language of LANGUAGES) {
     await app.close();
   });
 
+  test(`the line for the tip is kept while the Answer is written, so nothing moves when the tip comes (${language})`, async () => {
+    const { app, window } = await start(language);
+    await mindWithText(window, w.mind, w.typed);
+    await window.keyboard.press("ControlOrMeta+j");
+    await expect(window.getByTestId("composer-input")).toBeFocused();
+    await window.keyboard.type(`${w.short} slowly`);
+    await window.keyboard.press("Enter");
+    const rooms = window.getByTestId("assistant").getByTestId("tip-room");
+    await expect(rooms).toHaveCount(1);
+    const answer = assistantAnswers(window).last();
+    await expect(answer).toHaveAttribute("data-status", "streaming");
+    await expect(rooms).toHaveCount(1);
+    const early = await center(rooms);
+    await expect(answer).toHaveAttribute("data-status", "done", { timeout: 60_000 });
+    const tip = window.getByTestId("tip");
+    await expect(tip).toBeVisible();
+    const late = await center(rooms);
+    expect(late.height).toBe(early.height);
+    const shown = await center(tip);
+    expect(shown.y).toBeGreaterThanOrEqual(late.y - 1);
+    expect(shown.y + shown.height).toBeLessThanOrEqual(late.y + late.height + 1);
+    await app.close();
+  });
+
   test(`the tip shows at most twice on a device, and an Answer already written gets none after a reload (${language})`, async () => {
     const { app, window } = await start(language);
     await mindWithText(window, w.mind, w.typed);
@@ -281,6 +306,7 @@ for (const language of LANGUAGES) {
     await reload(window);
     await askInAssistant(window, w.short);
     await expect(window.getByTestId("tip")).toHaveCount(0);
+    await expect(window.getByTestId("tip-room")).toHaveCount(0);
     await app.close();
   });
 
