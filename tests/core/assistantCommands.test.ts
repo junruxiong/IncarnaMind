@@ -2,9 +2,14 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import type { ApprovalRequest, ConversationAnswer, Core } from "../../src/core";
+import type {
+  ApprovalRequest,
+  ConversationAnswer,
+  Core,
+  UserQuestionRequest,
+} from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
-import { askAssistant } from "../helpers/assistant";
+import { askAssistant, lastResult } from "../helpers/assistant";
 import { answerEnded, askAndFinish, setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent } from "../helpers/core";
 import { waitForProcessing } from "../helpers/documents";
@@ -79,6 +84,19 @@ const answering = (core: Core, response: "allow-once" | "deny") => {
   return asked;
 };
 const deny = (core: Core) => answering(core, "deny");
+
+/** Answers each question the assistant asks in its tray, and gives back what was asked. */
+const answeringQuestions = (
+  core: Core,
+  answer: (asked: UserQuestionRequest) => Parameters<Core["answerUserQuestion"]>[1],
+) => {
+  const asked: UserQuestionRequest[] = [];
+  core.on("question.asked", (request) => {
+    asked.push(request);
+    void core.answerUserQuestion(request.requestId, answer(request));
+  });
+  return asked;
+};
 
 /** Documents enough to pass the limit of what one Answer changes without asking. */
 const receipts = (count: number) =>
@@ -313,6 +331,115 @@ describe("Commands that reach outside IncarnaMind wait for the User (#1110)", {
       );
     },
   );
+
+  // protects=a Word export the assistant starts, with no answer stored about marking the text IncarnaMind wrote, asks that question in the tray, keeps the answer as the export line keeps it and saves the file, and a later export doesn't ask again; fails_when=the file is saved before the answer, the answer isn't kept or isn't the one chosen, or a second export asks; no_claim=the window's own question.
+  test.each([
+    { chose: "Mark it", kept: "mark" },
+    { chose: "Leave it out", kept: "leave" },
+  ])("a Word export asks about marking once, and $chose is kept", async ({ chose, kept }) => {
+    const model = calling(
+      find("Tides", "mind"),
+      run("mind.export", { format: "docx" }),
+      run("mind.export", { format: "docx" }),
+    );
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const output = await createTempDataFolder();
+    await core.setOutputLocation(output);
+    const asked = answeringQuestions(core, () => ({
+      skipped: false,
+      chosen: [chose],
+      wrote: null,
+    }));
+
+    const answer = await askAssistant(core, { text: "Export this to Word", mindId: mind.id });
+
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.question).toMatchObject({
+      question: "Mark the text IncarnaMind wrote?",
+      multiple: false,
+      other: false,
+      options: [{ label: "Mark it" }, { label: "Leave it out" }],
+    });
+    expect((await core.getSettings()).user.exportOptions.docx.markAiText).toBe(kept);
+    expect((await readdir(output)).sort()).toEqual(["Tides 2.docx", "Tides.docx"]);
+    // The second export, with the answer already kept, still says how the text was marked.
+    expect(lastResult(model)).toContain(
+      `${kept === "mark" ? "marks the text IncarnaMind wrote with comments" : "leaves the text IncarnaMind wrote unmarked"}, following the answer the User saved for Word exports`,
+    );
+    expect(commandCalls(answer).map((call) => call.status)).not.toContain("failed");
+    // What the record keeps of the first export, for the next Question's reading of it.
+    expect(commandCalls(answer).find((call) => call.asked)?.command).toMatchObject({
+      command: "mind.export",
+      inOutputLocation: true,
+      marking: { choice: kept, how: "kept" },
+    });
+    expect(commandCalls(answer).find((call) => call.asked)?.asked?.answer).toMatchObject({
+      chosen: [chose],
+    });
+  });
+
+  // protects=closing the question exports nothing and keeps nothing: the call says why, and the next export asks again; fails_when=a file is saved, an answer is kept, or the call doesn't say the question was closed; no_claim=how the tray shows it.
+  test("closing the question about marking exports nothing and keeps no answer", async () => {
+    const model = calling(find("Tides", "mind"), run("mind.export", { format: "docx" }));
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const output = await createTempDataFolder();
+    await core.setOutputLocation(output);
+    const asked = answeringQuestions(core, () => ({ skipped: true }));
+
+    const answer = await askAssistant(core, { text: "Export this to Word", mindId: mind.id });
+
+    expect(asked).toHaveLength(1);
+    expect(
+      commandCalls(answer).map((call) => [call.status, call.commandProblem?.wording?.key]),
+    ).toContainEqual(["failed", "error.commands.markAiTextClosed"]);
+    expect(await readdir(output)).toEqual([]);
+    expect((await core.getSettings()).user.exportOptions.docx.markAiText).toBeNull();
+  });
+
+  // protects=a request that names the choice ("without the AI marks") skips the question and keeps the answer, and with an answer kept already a request that names the other one is followed for that file only; fails_when=the question is asked, the choice isn't kept, or a kept answer is changed by a one-off request; no_claim=how a model reads the request.
+  test("a request that names the choice skips the question, and keeps it only when there was no answer", async () => {
+    const model = calling(
+      find("Tides", "mind"),
+      run("mind.export", { format: "docx", marks: "leave" }),
+      run("mind.export", { format: "docx", marks: "mark" }),
+    );
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const output = await createTempDataFolder();
+    await core.setOutputLocation(output);
+    const asked = answeringQuestions(core, () => ({ skipped: true }));
+
+    const answer = await askAssistant(core, { text: "Export this to Word", mindId: mind.id });
+
+    expect(asked).toEqual([]);
+    // The second request names the other choice: followed for that file, the kept answer unchanged.
+    expect(lastResult(model)).toContain(
+      "marks the text IncarnaMind wrote with comments, as the User asked for it; their saved answer for Word exports is unchanged",
+    );
+    expect((await core.getSettings()).user.exportOptions.docx.markAiText).toBe("leave");
+    expect((await readdir(output)).sort()).toEqual(["Tides 2.docx", "Tides.docx"]);
+    expect(commandCalls(answer).map((call) => call.status)).not.toContain("failed");
+  });
+
+  // protects=in Chinese the question and its options are asked in Chinese, and an answer given by its Chinese label is kept; fails_when=the question is in English or the answer isn't read; no_claim=the wording beyond the key's.
+  test("the question about marking is asked in Chinese for a Chinese interface", async () => {
+    const model = calling(find("Tides", "mind"), run("mind.export", { format: "docx" }));
+    const { core, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    await core.setOutputLocation(await createTempDataFolder());
+    const asked = answeringQuestions(core, () => ({
+      skipped: false,
+      chosen: ["不标"],
+      wrote: null,
+    }));
+
+    await askAssistant(core, { text: "Export this to Word", mindId: mind.id });
+
+    expect(asked[0]?.question).toMatchObject({
+      question: "标出 IncarnaMind 写的内容？",
+      options: [{ label: "标出" }, { label: "不标" }],
+    });
+    expect((await core.getSettings()).user.exportOptions.docx.markAiText).toBe("leave");
+  });
 
   // protects=adding files from a folder asks first, listing the files of the kinds asked for that are right in it and nothing a link leads to outside it, then adds them, and Undo takes them out; fails_when=a file outside the folder is listed or read, or files are added before Allow; no_claim=how each file is processed.
   test("adding a folder's files asks first, then adds only those", async () => {

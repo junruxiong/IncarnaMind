@@ -25,6 +25,7 @@
 import { generateText } from "ai";
 import { type CaseCitation, caseCitations, isOpinionOf } from "../../../shared/caseCitations";
 import type { FigureContext } from "../../../shared/figures";
+import { type MessageKey, type MessageParams, translate } from "../../../shared/i18n";
 import type {
   CheckedVersion,
   Citation,
@@ -74,6 +75,7 @@ import {
   readsAsRefusal,
   readVerdict,
 } from "./prompt";
+import { unitNotStated } from "./units";
 
 export interface ClaimCheckDependencies {
   /** The interface language: what a check's sentence is written in. */
@@ -149,9 +151,13 @@ export function recordJudged(
   ]);
 }
 
+const SEARCH_FIRST =
+  "You gave a verdict without searching the User's Documents. Search them with search_documents first, then give your verdict from what you find.";
+
 export function createClaimCheck(deps: ClaimCheckDependencies) {
   return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
     const { scope, signal } = request;
+    let searched = false;
     const read = new Map<string, string>();
     const excluded = new Map<string, LeftOutDocument>();
     const decisions = caseCitations(request.claim);
@@ -202,8 +208,11 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         return session.tools.documentCount;
       },
       documentLanguages: deps.documents.searchableLanguages(scope.documentIds),
-      searchDocuments: (query, searchSignal, options) =>
-        session.tools.searchDocuments(query, searchSignal, options),
+      // Only the model's searches count: looking up a cited court decision shows it nothing.
+      searchDocuments: (query, searchSignal, options) => {
+        searched = true;
+        return session.tools.searchDocuments(query, searchSignal, options);
+      },
       cite: (records, options) => session.tools.cite(records, options),
       hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
       unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
@@ -222,6 +231,34 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       }),
     };
 
+    const unstatedUnit = (citations: readonly Citation[]): UnsupportedReason | null => {
+      const checked = citations.map((citation) => {
+        const text = (from: number | null, to: number | null) =>
+          scoped
+            .pageTexts(citation.documentId, citation.contentHash, from, to)
+            .map((unit) => unit.text)
+            .join("\n");
+        return {
+          cited: () =>
+            citation.pageFrom === null ? citation.quote : text(citation.pageFrom, citation.pageTo),
+          document: () => text(null, null),
+        };
+      });
+      const found = unitNotStated(request.claim, checked);
+      if (!found) return null;
+      const t = (key: MessageKey, params?: MessageParams) =>
+        translate(deps.language(), key, params);
+      const { amount } = found;
+      if (found.kind === "unit") {
+        const reason = t("claim.unsupported.unit", { amount, figure: found.figure });
+        return { reason, covered: null, uncovered: null };
+      }
+      return {
+        reason: t("claim.unsupported.currency.reason", { amount }),
+        covered: t("claim.unsupported.currency.covered", { amount }),
+        uncovered: t("claim.unsupported.currency.uncovered", { currency: found.currency }),
+      };
+    };
     const facts = () => ({
       versions: [...read].map(
         ([documentId, contentHash]): CheckedVersion => ({ documentId, contentHash }),
@@ -282,6 +319,15 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       window: model.window,
       retryQuotes: model.retryQuotes,
       cacheKey: request.cacheKey,
+      // A model may give its verdict before it has looked: Claude Haiku 5.5 did, about one check
+      // in six of a whole Mind.
+      turnChecks: [
+        {
+          name: "search-first",
+          check: (text) =>
+            !searched && readVerdict(text) ? { claims: [], note: SEARCH_FIRST } : null,
+        },
+      ],
       signal,
     })) {
       if (event.type === "text-delta") reply += event.text;
@@ -326,6 +372,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     if (!verdict) {
       return byCalculation ?? notChecked(readsAsRefusal(reply) ? "refused" : "malformed");
     }
+    if (!searched) return notChecked("unread");
     if (byCalculation && verdict.verdict !== "contradicted") return byCalculation;
     /** Unsupported, with the nearest line when it states another value for the same thing (#770). */
     const unsupported = async (
@@ -358,12 +405,17 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       (await askForEvidence(request, verdict, session, signal));
     if (signal.aborted) return notChecked("stopped");
     if (!evidence) return byCalculation ?? notChecked("no-evidence");
+    const unit = byCalculation
+      ? null
+      : unstatedUnit([evidence, ...foundCitations(session.finalCitation, evidence)]);
+    if (unit && verdict.verdict !== "contradicted") return unsupported(unit);
     if (verdict.verdict === "contradicted") {
       const judged = await confirmContradiction(request, evidence, session, signal);
       if (signal.aborted) return notChecked("stopped");
       // The Passage is about something else: what is nearest may still say something different.
       if (judged === "neither") return byCalculation ?? unsupported();
       if (judged === "same") {
+        if (unit) return unsupported(unit);
         return (
           byCalculation ?? {
             verdict: "supported",
@@ -571,6 +623,20 @@ const NEAREST_MARKER = 98;
 
 /** The marker the record asked for once more is given: apart from any the model gave. */
 const EVIDENCE_MARKER = 99;
+
+function foundCitations(
+  finalCitation: (marker: number) => Citation | null,
+  deciding: Citation,
+): Citation[] {
+  const found: Citation[] = [];
+  for (let marker = 1; marker <= 4; marker++) {
+    const citation = finalCitation(marker);
+    if (citation?.check !== "found") continue;
+    if (citation.documentId === deciding.documentId && citation.quote === deciding.quote) continue;
+    found.push(citation);
+  }
+  return found;
+}
 
 /** The Citation that decides a claim: marker 1's, or the first other marker's, whose quote the check found. */
 function decidingCitation(finalCitation: (marker: number) => Citation | null): Citation | null {

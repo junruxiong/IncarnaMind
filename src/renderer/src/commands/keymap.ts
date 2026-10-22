@@ -115,8 +115,10 @@ export function useKeymap(): void {
     window.addEventListener("keydown", onKey);
     const stopMenu = files.onMenuCommand((id) => {
       const focus = document.activeElement;
-      // In text, Undo and Redo are the text's own, as their keys are, in a dialog too.
-      const textsOwn = commands.get(id)?.shortcut?.outsideText === true && typesText(focus);
+      // macOS sends text commands through the menu even when a dialog holds focus (#1351).
+      const textsOwn =
+        typesText(focus) &&
+        (id === "edit.selectAll" || commands.get(id)?.shortcut?.outsideText === true);
       if (textsOwn || !dialogOpen()) commands.run(id, contextAt(focus)).catch(report);
     });
     return () => {

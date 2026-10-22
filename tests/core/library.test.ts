@@ -173,6 +173,42 @@ describe("Library groups", () => {
     expect(specs).toHaveLength(0);
   });
 
+  // protects=Undo of an Organize that began with Documents waiting for a model puts them back waiting and sends nothing; fails_when=putting them back organizes them again, one request each; no_claim=the Organize step's wording.
+  test("a Document put back as waiting waits: restoring it doesn't organize it again", async () => {
+    const fake = classifierModel();
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: () => fake.model,
+    });
+    await core.createLibraryGroup({ name: "Research", description: "Scientific research papers." });
+    const first = await add(core, "one.txt", "A research paper about membranes.");
+    const second = await add(core, "two.txt", "A research paper about water filtration.");
+    await core.retagDocuments([first.id, second.id]);
+    const waiting = await settled(core, first.id, "waiting");
+    expect(fake.calls).toHaveLength(0);
+
+    const provider = await core.saveChatProvider({ kind: "ollama", modelId: "main-model" });
+    await core.saveLibrarySettings({
+      classifier: {
+        kind: "chat",
+        choice: { providerId: provider.id, modelId: "small-classifier" },
+      },
+      automatic: false,
+    });
+    await settled(core, first.id);
+    await settled(core, second.id);
+    expect(fake.calls).toHaveLength(2);
+
+    if (!waiting) throw new Error("No assignment.");
+    const { documentId: _id, ...before } = waiting;
+    await core.restoreAssignment(first.id, before);
+    // Nothing is due, so no request comes: a short window for the one a restore would start.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(fake.calls).toHaveLength(2);
+    expect(await settled(core, first.id, "waiting")).toMatchObject({ groupId: null });
+    expect(await settled(core, second.id)).toMatchObject({ status: "classified" });
+  });
+
   test("removing the last folder during inference stops progress until a folder exists", async () => {
     const { core, fake, group } = await setup();
     const doc = await add(core);

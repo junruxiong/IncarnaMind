@@ -54,6 +54,7 @@ test.afterEach(async () => {
 
 async function screenshot(window: Page, name: string): Promise<void> {
   if (!SCREENSHOTS) return;
+  await motionSettled(window);
   await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
@@ -94,6 +95,33 @@ const ringShows = (item: Locator) =>
   });
 
 /**
+ * Every row of the menu is in view, or the menu scrolls and shows it does (#1501): a row outside the
+ * menu's frame is a row reached only by scrolling, which nothing must leave unsaid.
+ */
+async function expectReachable(menu: Locator): Promise<void> {
+  await expect(menu.getByRole("menuitem").first()).toBeVisible();
+  const reach = await menu.evaluate((element) => {
+    const frame = element.getBoundingClientRect();
+    const out = [...element.querySelectorAll('[role^="menuitem"]')].filter((row) => {
+      const box = row.getBoundingClientRect();
+      return box.top < frame.top - 1 || box.bottom > frame.bottom + 1;
+    });
+    return {
+      inWindow: frame.top >= 0 && frame.bottom <= window.innerHeight,
+      out: out.map((row) => row.getAttribute("data-testid")),
+      scrolls: element.scrollHeight > element.clientHeight + 1,
+      says: getComputedStyle(element).backgroundImage.includes("gradient"),
+    };
+  });
+  expect(reach.inWindow).toBe(true);
+  if (reach.out.length > 0) {
+    expect(reach.scrolls && reach.says, `${reach.out.join(", ")} out of view and no cue`).toBe(
+      true,
+    );
+  }
+}
+
+/**
  * Right-clicks an object, reads its menu, closes it, then opens the ⋯ button of the
  * same object and reads that: they are one menu. Returns the commands.
  */
@@ -106,6 +134,7 @@ async function sameFromBothWays(
 ): Promise<string[]> {
   await rightClick(window, hit);
   const byRightClick = await menuCommands(menu);
+  await expectReachable(menu);
   await window.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await slideTo(window, hit);
@@ -117,6 +146,64 @@ async function sameFromBothWays(
   await expect(menu).toBeHidden();
   return byRightClick;
 }
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`a Mind's menu shows every row in a window 800 px tall, Delete last after its rule (${language})`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, 1280, 800);
+    await newMind(window);
+    const mind = window.getByTestId("mind-row").first();
+    await rightClick(window, mind.getByTestId("mind-list-item"));
+    const menu = mind.getByTestId("mind-actions");
+    const commands = await menuCommands(menu);
+    expect(commands.slice(-2)).toEqual(["—", "mind.delete"]);
+    await expect(menu.getByTestId("mind.delete")).toBeInViewport({ ratio: 1 });
+    const scrolls = await menu.evaluate(
+      (element) => element.scrollHeight > element.clientHeight + 1,
+    );
+    expect(scrolls).toBe(false);
+    await expectReachable(menu);
+    await screenshot(window, `menu-mind-800-${language}`);
+    await app.close();
+  });
+}
+
+test("a menu the window can't hold scrolls and says so: its cut edge shows, the wheel and End reach the rest", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await setWindowSize(app, window, 1280, 800);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  const document = window.getByTestId("document-list-item").first();
+  await rightClick(window, document.getByTestId("open-document"));
+  const menu = document.getByTestId("document-file-actions");
+  await menuCommands(menu);
+  await expectReachable(menu);
+  // The window's shortest height holds every menu, so a short frame stands in for a taller menu.
+  await menu.evaluate((element) => {
+    element.style.maxHeight = "240px";
+  });
+  await expectReachable(menu);
+  expect(await menu.evaluate((element) => element.scrollHeight > element.clientHeight + 1)).toBe(
+    true,
+  );
+  await screenshot(window, "menu-scrolls-top");
+  const scrolled = () => menu.evaluate((element) => element.scrollTop);
+  expect(await scrolled()).toBe(0);
+  const box = await menu.boundingBox();
+  if (!box) throw new Error("The menu isn't laid out.");
+  await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await window.mouse.wheel(0, 120);
+  await expect.poll(scrolled).toBeGreaterThan(0);
+  await expect(menu.getByTestId("document.open")).toBeFocused();
+  await window.keyboard.press("End");
+  await expect(menu.getByTestId("document.delete")).toBeFocused();
+  await expect(menu.getByTestId("document.delete")).toBeInViewport();
+  await screenshot(window, "menu-scrolls-end");
+  await app.close();
+});
 
 test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document, a Folder, a Tag, a Linked folder, a tab, an Answer and a Citation", async () => {
   const library = join(sources, "Library");
@@ -452,6 +539,7 @@ test("each item shows its shortcut as the system writes it, and the labels are i
 test("a right-click opens the menu at the pointer, the ⋯ at its button, and the keyboard at the row", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
+  await setWindowSize(app, window, 1600, 900);
   await newMind(window);
   const mind = window.getByTestId("mind-row").first();
   const menu = mind.getByTestId("mind-actions");
@@ -535,6 +623,7 @@ test("a Document's Tags…, a Folder's Edit description and a Tag's Rename and D
 test("a menu opens at once while another is closing, and a right-click on another row replaces the open menu", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
+  await setWindowSize(app, window, 1600, 900);
   await newMind(window);
   await newMind(window);
   const [first, second] = [

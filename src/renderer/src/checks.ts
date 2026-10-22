@@ -17,12 +17,12 @@ import {
   type ClaimCheckAction,
   type ProviderError,
 } from "../../core/api";
-import { mindModelOf } from "../../shared/mindModel";
 import { core } from "./core";
 import type { ShownClaim } from "./editor/claimChecks";
 import { selectionForEdit } from "./editor/editSelection";
 import { type BlockPlace, pendingIn, placeOnAccept, positionOf } from "./editor/proposalReview";
 import { resolveProposalsIn } from "./editWithAi";
+import { modelInUseOf } from "./modelInUse";
 
 /** Why a check gave no marks, or what it left out, for the check badge's card. */
 export type CheckProblem =
@@ -147,7 +147,7 @@ export async function checkSentences(
       ...(more.length > 0 && { more: more.map(({ from, to }) => ({ from, to })) }),
       action,
       allDocuments,
-      model: mindModelOf(doc),
+      model: modelInUseOf(doc),
     });
   } catch (error) {
     result = {

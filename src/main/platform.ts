@@ -22,6 +22,7 @@ import {
   type Keychain,
   type Logger,
   type OllamaApp,
+  type Transcriber,
   type UsageDataSender,
 } from "../core";
 import { runAnalysis } from "../core/analysis";
@@ -579,6 +580,20 @@ function copilotStandIn(): CoreAdapters["copilotProfiles"] {
   };
 }
 
+// The smoke tests read when each stream's audio went to the fake transcriber, to check that none
+// goes for a microphone the User paused.
+function recordingSent(transcriber: Transcriber): Transcriber {
+  const sent: { stream: string; at: number }[] = [];
+  (globalThis as { incarnamindTranscribed?: typeof sent }).incarnamindTranscribed = sent;
+  return {
+    ...transcriber,
+    push(stream, samples) {
+      sent.push({ stream, at: Date.now() });
+      transcriber.push(stream, samples);
+    },
+  };
+}
+
 /**
  * What records Meetings: the hidden capture window (ADR-0015). Test-only
  * launch flags: the smoke tests record a fake that makes a tone in real time,
@@ -729,7 +744,9 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       openLink: openAgentLink,
     },
     embedder: createUtilityProcessEmbedder({ fake: fakeEmbedder }),
-    transcriber: createUtilityProcessTranscriber(fakeTranscriber ? { fake: fakeTranscriber } : {}),
+    transcriber: fakeTranscriber
+      ? recordingSent(createUtilityProcessTranscriber({ fake: fakeTranscriber }))
+      : createUtilityProcessTranscriber(),
     ...(fakeTranscriber && {
       transcriptionModelSource: {
         model: { baseUrl: "http://localhost/", files: [] },

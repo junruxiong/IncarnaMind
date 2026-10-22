@@ -12,6 +12,7 @@ import { useAudioKeptKey } from "../transcriptionServices";
 import { CaptureDetails, CaptureDetailsLine, CaptureProblem } from "./CaptureDetails";
 import { CloseLineIcon, RecordingLineIcon } from "./lineIcons";
 import { MeetingBar, MeetingBarRoom } from "./MeetingBar";
+import { MeetingFillLine } from "./MeetingFillLine";
 import { ProblemLine } from "./ProblemLine";
 import { TranscriptLines } from "./TranscriptLines";
 import { buttonStyle, fieldLabelClass, inputClass } from "./ui";
@@ -42,6 +43,7 @@ export function MeetingInMind({ mindId }: { mindId: string }) {
   return (
     <div className="mb-4">
       <TranscriptLines meeting={meeting} className="" />
+      <MeetingFillLine meeting={meeting} />
       <CaptureProblem meeting={meeting} />
       <MeetingAudioLine meeting={meeting} />
       <CaptureDetailsLine meeting={meeting} />

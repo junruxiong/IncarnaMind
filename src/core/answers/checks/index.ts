@@ -96,6 +96,8 @@ export interface ChecksOptions
     | "document"
     | "onStatus"
     | "readText"
+    | "readTables"
+    | "readScanned"
     | "createMind"
     | "recordAiUse"
     | "unread"
@@ -118,6 +120,8 @@ export interface ChecksOptions
   originalOf(mindId: string): CheckedDocument | null;
   /** The default chat model, used when the Mind has none of its own. */
   defaultModel(): ChatModelChoice | null;
+  /** The model a Mind whose own pick is `own` is checked with: see `modelInUse`. */
+  modelInUse(own: ChatModelChoice | null): ChatModelChoice | null;
   chat: {
     readiness(choice: ChatModelChoice | undefined, flow: "checks"): Promise<ChatReadiness>;
     prepareModel(choice: ChatModelChoice | undefined, flow: "checks"): Promise<PreparedChatModel>;
@@ -357,8 +361,20 @@ export function createChecks(options: ChecksOptions) {
     recordCheckUnread(blocks.doc, request, files, requests);
   }
 
-  /** Where a Mind's sentences are checked: its Folder, or every Document. */
-  function scopeOf(mindId: string, allDocuments: boolean, checked?: CheckedDocument) {
+  function leftOutOf(mindId: string, checked: CheckedDocument = {}): CheckedDocument {
+    const original = options.originalOf(mindId);
+    return {
+      documentIds: [...(original?.documentIds ?? []), ...(checked.documentIds ?? [])],
+      contentHashes: [...(original?.contentHashes ?? []), ...(checked.contentHashes ?? [])],
+    };
+  }
+
+  /**
+   * Where a Mind's sentences are checked: its Folder, or every Document, never the file the
+   * Mind was imported from. The contradiction watch leaves out the same, so a sentence finds
+   * the same evidence alone or in a whole check.
+   */
+  function scopeOf(mindId: string, allDocuments: boolean, checked: CheckedDocument = {}) {
     const own = options.mindFolder(mindId);
     const wanted = allDocuments
       ? null
@@ -369,7 +385,10 @@ export function createChecks(options: ChecksOptions) {
     const folderId = oneFolderOf(wanted);
     // An own Folder that holds no Document searches everything, as "Search all Documents" does.
     const marked: ClaimCheckScope = { folderId: own, widened: allDocuments || own !== folderId };
-    const scope = options.evidence.scope(wanted && options.resolveScope(wanted), checked);
+    const scope = options.evidence.scope(
+      wanted && options.resolveScope(wanted),
+      leftOutOf(mindId, checked),
+    );
     return {
       searchable: options.documents.searchableCount(scope.documentIds),
       folderId,
@@ -386,8 +405,7 @@ export function createChecks(options: ChecksOptions) {
     const read = content.read(mindId, (blocks) => selectedSentences(blocks, stretches));
     if (!read.ok) return { kind: read.reason };
 
-    const original = options.originalOf(mindId) ?? undefined;
-    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments, original);
+    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments);
     if (searchable === 0) return { kind: "no-documents", folderId };
     const { scope: evidenceScope, marked: scope } = check;
 
@@ -504,8 +522,8 @@ export function createChecks(options: ChecksOptions) {
     ...options.watch,
     folderDocuments: (folderId) =>
       options.resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] }) ?? [],
-    evidenceScope: (documentIds, citedIds) =>
-      options.evidence.scope(documentIds, { documentIds: [...citedIds] }),
+    evidenceScope: (mindId, documentIds, citedIds) =>
+      options.evidence.scope(documentIds, leftOutOf(mindId, { documentIds: [...citedIds] })),
     searchableCount: (documentIds) => options.documents.searchableCount(documentIds),
     prepare,
     prepareQuietly,
@@ -533,6 +551,7 @@ export function createChecks(options: ChecksOptions) {
     documentVersions: options.watch.documentVersions,
     prepare,
     scopeOf: (mindId, allDocuments) => scopeOf(mindId, allDocuments),
+    citedNow,
     recordUnread,
     isRunning: (requestId) => running.has(requestId),
     claimCheck,
@@ -547,7 +566,7 @@ export function createChecks(options: ChecksOptions) {
     prepare: (answer) =>
       prepareQuietly({ providerId: answer.provider.id, modelId: answer.modelId }),
     claimCheck,
-    scopeOf: (mindId) => scopeOf(mindId, false, options.originalOf(mindId) ?? undefined),
+    scopeOf: (mindId) => scopeOf(mindId, false),
     citedNow,
     withResult,
     retainEvidence,

@@ -249,7 +249,7 @@ test("F2 on a tab right after a rename ended keeps its field when the frame the 
   await app.close();
 });
 
-test("open tabs, their order and the shown one come back after a restart", async () => {
+test("open tabs and their order come back after a restart, behind Home", async () => {
   const first = await launchApp(dataDir);
   await dismissChatSetup(first.window);
   for (const title of ["Alpha", "Beta", "Gamma", "Delta"]) await newMind(first.window, title);
@@ -267,7 +267,10 @@ test("open tabs, their order and the shown one come back after a restart", async
 
   const second = await launchApp(dataDir);
   const { window } = second;
+  await expect(window.getByRole("tab").first()).toHaveAttribute("data-kind", "home");
+  await expect(activeTab(window)).toHaveAttribute("data-kind", "home");
   await expect(titlesOf(window)).toHaveText(["Beta", "Alpha", "Gamma"]);
+  await window.getByTestId("home-tab").getByTestId("tab-close").click();
   await expect(activeTab(window)).toContainText("Beta");
   await expect(window.getByTestId("mind-pane")).toHaveAttribute("data-mind-id", `${betaId}`);
   await expect(frontMindName(window)).toHaveText("Beta");

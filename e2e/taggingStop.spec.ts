@@ -20,6 +20,7 @@ import {
   openDocumentTags,
   openSettings,
   removeDataFolder,
+  runFromPalette,
   setLanguage,
   setWindowSize,
   sidebarFolder,
@@ -209,15 +210,6 @@ test("in Chinese, the status names the company, and Stop names the Folder", asyn
   await expect(window.getByTestId("undo-message")).toHaveText(`已停止给“${FOLDER}”里的文档打标签`);
   await app.close();
 });
-
-async function runFromPalette(window: Page, label: string): Promise<void> {
-  await window.keyboard.press("ControlOrMeta+k");
-  await expect(window.getByTestId("palette-search")).toBeFocused();
-  await window.keyboard.type(label);
-  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
-  await expect(item).toBeVisible();
-  await item.click();
-}
 
 async function saveAnthropicKey(window: Page): Promise<string> {
   await acceptPlainTextKeys(window);

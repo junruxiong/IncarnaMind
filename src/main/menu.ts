@@ -172,7 +172,7 @@ function buildMenu(): void {
         { role: "cut", label: t("menu.cut") },
         { role: "copy", label: t(isMac ? "menu.copy" : "menu.copy.other") },
         { role: "paste", label: t("menu.paste") },
-        command("edit.selectAll"),
+        { ...command("edit.selectAll"), id: "edit.selectAll" },
       ],
     },
     {

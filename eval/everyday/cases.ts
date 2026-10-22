@@ -8,9 +8,10 @@ import type { Expected } from "./checks";
 
 /**
  * The Documents a request is asked over: two arXiv papers, the repository's seven sample PDFs,
- * or contracts and minutes whose files' dates are none of their text's (./dated).
+ * contracts and minutes whose files' dates are none of their text's (./dated), or the table of
+ * China's official reserve assets, whose cells give a difference (#1444).
  */
-export type LibraryName = "papers" | "reports" | "dated";
+export type LibraryName = "papers" | "reports" | "dated" | "reserves";
 
 export interface EverydayCase {
   id: string;
@@ -966,5 +967,23 @@ export const CASES: readonly EverydayCase[] = [
     mind: null,
     request: "董事会是哪天开的会？做了什么决定？",
     expected: TEXT_DATES_ZH,
+  },
+  {
+    id: "reserves-change-zh",
+    language: "zh-CN",
+    library: "reserves",
+    mind: null,
+    request:
+      "2026年9月末我国外汇储备是多少？与1月末相比变化了多少？黄金储备的数量增加了多少？\n\n请根据这些文档回答，并注明出处。",
+    expected: { ...ANSWER, figure: /11\.73亿美元/ },
+  },
+  {
+    id: "reserves-change-en",
+    language: "en",
+    library: "reserves",
+    mind: null,
+    request:
+      "What were China's foreign exchange reserves at the end of September 2026, and how much did they change since the end of January?",
+    expected: { ...ANSWER, figure: /1\.17\d* billion|1,17\d(?:\.\d+)? million/ },
   },
 ];

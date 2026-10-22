@@ -2225,7 +2225,11 @@ export function createDocuments(options: DocumentsOptions) {
       added?: (documentId: string) => void,
     ): Promise<Omit<AddDocumentsResult, "batchId">> {
       const paths = parsePaths(input);
-      const results = await library.addFiles(paths, added);
+      const brought: string[] = [];
+      const results = await library.addFiles(paths, (documentId) => {
+        brought.push(documentId);
+        added?.(documentId);
+      });
       const documents: Document[] = [];
       const skipped: SkippedFile[] = [];
       results.forEach((result, at) => {
@@ -2239,7 +2243,7 @@ export function createDocuments(options: DocumentsOptions) {
           });
         }
       });
-      return { documents, skipped };
+      return { documents, skipped, added: brought };
     },
 
     /** See the library's `newVersionFrom`: a newer draft of a Word file imported before (#720). */
@@ -2325,6 +2329,19 @@ export function createDocuments(options: DocumentsOptions) {
         .all<DocumentRow>(
           `SELECT ${COLUMNS} FROM documents
            WHERE ${where} AND (status IN ('failed', 'no-text') OR failure_reason IS NOT NULL)
+           ORDER BY created_at DESC, rowid DESC`,
+          params,
+        )
+        .map(toDocument);
+    },
+
+    /** The live Documents (of these, or all of them) whose text is still being read: queued or extracting, newest first. */
+    reading(documentIds?: readonly string[]): Document[] {
+      const { where, params } = filterWhere(documentIds ? { ids: documentIds } : {});
+      return db
+        .all<DocumentRow>(
+          `SELECT ${COLUMNS} FROM documents
+           WHERE ${where} AND status IN ('queued', 'extracting')
            ORDER BY created_at DESC, rowid DESC`,
           params,
         )

@@ -535,6 +535,45 @@ describe("The Question's language (#892, #1273)", () => {
   });
 });
 
+describe("A figure the numbers give is calculated (#1444)", () => {
+  const asked = (text: string, shown: string[]) =>
+    requestFailures(
+      outcome({
+        expected: { write: false, cite: true, coverAll: false, figure: /11\.73亿美元/ },
+        answer: {
+          text,
+          citations: [citation("reserves", 1)],
+          toolCalls: [],
+          steps: null,
+          figures: shown.map((each) => ({ shown: each })),
+        },
+        scoped: [{ id: "reserves", name: "官方储备资产（2026年）" }],
+        citedInMinds: [],
+      }),
+    );
+
+  // protects=an Answer that gives both cited figures and says it couldn't work out their difference fails twice, for the missing figure and for giving up; fails_when=it passes; no_claim=the figure's value.
+  test("an Answer with no figure that gives up on the difference fails", () => {
+    const failures = asked(
+      "9月末为34002.51亿美元[^1]。我没能算出两者的差额，所以这里不给具体数字。",
+      [],
+    );
+    expect(failures).toEqual([
+      { kind: "no-figure", wanted: "11\\.73亿美元", shown: [] },
+      { kind: "gave-up", said: "我没能算出两者的差额，所以这里不给具体数字。" },
+    ]);
+  });
+
+  test("an English Answer that says it couldn't calculate it fails; one with the figure passes", () => {
+    expect(
+      asked("I couldn't calculate the change, so I haven't worked out the difference.", [])
+        .map((each) => each.kind)
+        .sort(),
+    ).toEqual(["gave-up", "no-figure"]);
+    expect(asked("增加了11.73亿美元。", ["11.73亿美元"])).toEqual([]);
+  });
+});
+
 describe("Pass rates", () => {
   // protects=a request is held to its floor over its runs, per model, and runs are counted per language; fails_when=one failed run marks a request that meets its floor, or a request under it passes; no_claim=none beyond protects.
   test("per request against its floor, and per language", () => {
