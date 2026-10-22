@@ -625,6 +625,55 @@ describe("Data flows on the Privacy page", () => {
     expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
   });
 
+  test("Undo of a revoke brings the decision back as it was: chosen, with the kinds accepted then", async () => {
+    const { core } = await startWithModel();
+    await core.saveChatProvider(OPENAI);
+    const chatStatus = async () =>
+      (await core.listRegisteredDataFlows()).find((flow) => flow.id === "chat")?.services[0];
+    const before = await chatStatus();
+
+    const revokedAt = await core.revokeConsent("chat", OPENAI_SERVICE.id);
+    if (!revokedAt) throw new Error("There was no decision to revoke.");
+    const changed = nextEvent(core, "dataFlows.changed");
+    const readiness = nextEvent(core, "chatReadiness.changed");
+    await core.restoreConsent("chat", OPENAI_SERVICE.id, revokedAt);
+
+    expect((await changed).find((flow) => flow.id === "chat")?.services).toEqual([
+      { ...before, decidedAt: expect.any(String) },
+    ]);
+    expect(await readiness).toMatchObject({ ready: true, consent: "accepted" });
+
+    // Taken back again, then the flow sends more: the decision comes back without the new kind.
+    const again = await core.revokeConsent("chat", OPENAI_SERVICE.id);
+    if (!again) throw new Error("There was no decision to revoke.");
+    const chat = core.dataFlows.get("chat");
+    if (!chat) throw new Error("The chat flow isn't registered.");
+    core.dataFlows.register({ ...chat, sends: [...chat.sends, "tool-results"] });
+    await core.restoreConsent("chat", OPENAI_SERVICE.id, again);
+    expect(await core.getChatReadiness()).toMatchObject({ consent: "needed" });
+  });
+
+  test("Undo of a revoke leaves a decision made since, and a revoke with nothing to forget gives no time", async () => {
+    const { core } = await startWithModel();
+    await core.saveChatProvider(OPENAI);
+    const revokedAt = await core.revokeConsent("chat", OPENAI_SERVICE.id);
+    if (!revokedAt) throw new Error("There was no decision to revoke.");
+    expect(await core.revokeConsent("chat", OPENAI_SERVICE.id)).toBeNull();
+
+    const declined = await askAndWaitForConsent(core);
+    await core.respondToConsent(declined.request.requestId, false);
+    await declined.result.catch(() => undefined);
+    await core.restoreConsent("chat", OPENAI_SERVICE.id, revokedAt);
+
+    expect(await core.getChatReadiness()).toMatchObject({
+      ready: false,
+      reason: "consent-declined",
+    });
+    await expect(
+      core.restoreConsent("chat", OPENAI_SERVICE.id, undefined as unknown as string),
+    ).rejects.toThrow(InvalidInputError);
+  });
+
   test("allowing a flow while its dialog is open answers the dialog", async () => {
     const { core } = await startWithModel();
     await saveProviderUnasked(core, OPENAI);

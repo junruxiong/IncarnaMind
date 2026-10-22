@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RegisteredDataFlow } from "../../../core/api";
+import type { DataFlowId, RegisteredDataFlow } from "../../../core/api";
 import { formatDate } from "../../../shared/dates";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
@@ -14,8 +14,22 @@ const SERVICES_UNDO_PLACE = "settings:privacy:services";
 
 const reportError = (failure: unknown) => useAppStore.getState().reportError(failure);
 
-async function revokeAll(service: string, uses: readonly ServiceUse[]): Promise<void> {
-  for (const use of uses) await core.revokeConsent(use.flow, service);
+interface Revoked {
+  flow: DataFlowId;
+  at: string;
+}
+
+async function revokeAll(service: string, uses: readonly ServiceUse[]): Promise<Revoked[]> {
+  const revoked: Revoked[] = [];
+  for (const use of uses) {
+    const at = await core.revokeConsent(use.flow, service);
+    if (at) revoked.push({ flow: use.flow, at });
+  }
+  return revoked;
+}
+
+async function restoreAll(service: string, revoked: readonly Revoked[]): Promise<void> {
+  for (const { flow, at } of revoked) await core.restoreConsent(flow, service, at);
 }
 
 async function allowAll(service: string, uses: readonly ServiceUse[]): Promise<void> {
@@ -51,7 +65,7 @@ function ServiceItem({ group }: { group: ServiceGroup }) {
   const { service, uses } = group;
   const decision = decisionOf(uses);
 
-  const run = async (action: () => Promise<void>) => {
+  const run = async (action: () => Promise<unknown>) => {
     if (busy) return;
     setBusy(true);
     try {
@@ -67,11 +81,13 @@ function ServiceItem({ group }: { group: ServiceGroup }) {
   const stop = () =>
     run(async () => {
       const allowed = withConsent("accepted");
-      await revokeAll(service.id, allowed);
+      let revoked = await revokeAll(service.id, allowed);
       useUndo.getState().push({
         said: (words) => words("privacy.flows.stopped", { service: service.name }),
-        undo: () => allowAll(service.id, allowed),
-        redo: () => revokeAll(service.id, allowed),
+        undo: () => restoreAll(service.id, revoked),
+        redo: async () => {
+          revoked = await revokeAll(service.id, allowed);
+        },
         shownAt: SERVICES_UNDO_PLACE,
       });
     });

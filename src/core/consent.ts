@@ -353,15 +353,40 @@ export function createConsent(
       else recordAccepted(flow);
     },
 
-    revoke(flowId: unknown, serviceId: unknown): void {
+    /** Forgets the decision. Returns when, for `restore`; null when there was none. */
+    revoke(flowId: unknown, serviceId: unknown): string | null {
       if (!isDataFlowId(flowId)) throw new InvalidInputError(`Unknown data flow "${flowId}".`);
       if (typeof serviceId !== "string") throw new InvalidInputError("serviceId must be text.");
-      const at = now();
-      db.run(
-        `UPDATE data_flow_consents SET deleted_at = ?, updated_at = ?
-         WHERE flow = ? AND service_id = ? AND deleted_at IS NULL`,
-        [at, at, flowId, serviceId],
-      );
+      return db.transaction(() => {
+        if (!find(flowId, serviceId)) return null;
+        const at = now();
+        db.run(
+          `UPDATE data_flow_consents SET deleted_at = ?, updated_at = ?
+           WHERE flow = ? AND service_id = ? AND deleted_at IS NULL`,
+          [at, at, flowId, serviceId],
+        );
+        return at;
+      });
+    },
+
+    /**
+     * Brings back the decision `revoke` forgot at `revokedAt`, as it was: the same kinds of data,
+     * chosen or not, even for a service the flow no longer goes to. A decision made since stands.
+     */
+    restore(flowId: unknown, serviceId: unknown, revokedAt: unknown): void {
+      if (!isDataFlowId(flowId)) throw new InvalidInputError(`Unknown data flow "${flowId}".`);
+      if (typeof serviceId !== "string") throw new InvalidInputError("serviceId must be text.");
+      if (typeof revokedAt !== "string" || revokedAt === "") {
+        throw new InvalidInputError("revokedAt must be the time the decision was revoked.");
+      }
+      db.transaction(() => {
+        if (find(flowId, serviceId)) return;
+        db.run(
+          `UPDATE data_flow_consents SET deleted_at = NULL, updated_at = ?
+           WHERE flow = ? AND service_id = ? AND deleted_at = ?`,
+          [now(), flowId, serviceId, revokedAt],
+        );
+      });
     },
 
     listRegistered,

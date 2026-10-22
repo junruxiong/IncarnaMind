@@ -82,7 +82,8 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(undoLine).toContainText("Stopped allowing llm.example.com");
   await undoLine.getByTestId("undo-action").click();
   await expect(service).toHaveAttribute("data-consent", "accepted");
-  await expect(decision).toContainText(/Allowed on \d{1,2} [A-Z][a-z]+ \d{4}/);
+  // Back as it was, chosen, not allowed anew (#1463).
+  await expect(decision).toContainText("Allowed when you chose llm.example.com, ");
 
   // Allowed again from here, with the date.
   await revoke.click();
