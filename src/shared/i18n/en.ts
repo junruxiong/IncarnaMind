@@ -1117,6 +1117,10 @@ export const en = {
   "location.section.paragraph.one": "{section}, ¶\u00a0{range}",
   "location.section.paragraph.other": "{section}, ¶\u00a0{range}",
   "location.section.figure": "{section}, figure\u00a0{number}",
+  "location.paragraph": "¶\u00a0{range}",
+  "location.figure": "figure\u00a0{number}",
+  "location.comment": "comment by {author}",
+  "location.comment.anonymous": "comment",
   "location.lines.one": "line {range}",
   "location.lines.other": "lines {range}",
 
