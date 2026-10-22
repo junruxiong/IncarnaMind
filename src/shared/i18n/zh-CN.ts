@@ -1317,8 +1317,10 @@ export const zhCN = {
 
   "status.processing.one": "正在处理 1 个文档…",
   "status.processing.other": "正在处理 {count} 个文档…",
-  "status.scanning.one": "正在识别 1 页扫描件…",
-  "status.scanning.other": "正在识别 {count} 页扫描件…",
+  "status.scans.one": "正在识别 1 个扫描件…",
+  "status.scans.other": "正在识别 {count} 个扫描件…",
+  "status.scansWaiting.one": "正在识别 1 个扫描件，{waiting} 个排队中",
+  "status.scansWaiting.other": "正在识别 {count} 个扫描件，{waiting} 个排队中",
   "status.tagging.one": "正在为 1 个文档打标签…",
   "status.tagging.other": "正在为 {count} 个文档打标签…",
   "status.taggingWith.one": "正在用 {service} 给 1 个文档打标签…",

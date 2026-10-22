@@ -2564,7 +2564,11 @@ export interface Document {
   status: DocumentStatus;
   /** While `status` is "embedding": the share of its Passages embedded so far, from 0 to 1. Null otherwise. */
   progress: number | null;
-  /** While `status` is "extracting" and its scanned pages are read (#397): how far that is. Null otherwise. */
+  /**
+   * While `status` is "extracting" and its scanned pages are read (#397): how far that is.
+   * While "queued" after its scanned pages were found, waiting its turn to be read beside the
+   * other Documents (#1502): how many there are. Null otherwise.
+   */
   scan: DocumentScanProgress | null;
   /** Set when `status` is "failed": why the latest version read failed. */
   failure: DocumentFailure | null;

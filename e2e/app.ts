@@ -150,6 +150,8 @@ export interface LaunchOptions {
    * a JSON file of a `FakeScanScript`. Without, it reads nothing on them.
    */
   scans?: string;
+  /** How many scans are read at once (#1502), whatever the computer. A test build honours it. */
+  scansAtOnce?: number;
   /**
    * The scripted Task that asks for approval and writes files (src/main/scriptedTask.ts),
    * started with `startScriptedTask`. Needs a test build.
@@ -237,6 +239,7 @@ export async function launchApp(
     noAudioEngine = false,
     transcriber,
     scans,
+    scansAtOnce,
     web,
     lookLimit,
     scriptedTasks = false,
@@ -273,6 +276,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_COPILOT;
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
+  delete env.INCARNAMIND_TEST_SCANS_AT_ONCE;
   delete env.INCARNAMIND_TEST_WEB;
   delete env.INCARNAMIND_TEST_LOOK_LIMIT;
   delete env.INCARNAMIND_TEST_TASKS;
@@ -306,6 +310,7 @@ export async function launchApp(
   if (claudeSignInMs) env.INCARNAMIND_TEST_CLAUDE_SIGN_IN_MS = String(claudeSignInMs);
   if (copilot) env.INCARNAMIND_TEST_COPILOT = copilot;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
+  if (scansAtOnce) env.INCARNAMIND_TEST_SCANS_AT_ONCE = String(scansAtOnce);
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
   if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";

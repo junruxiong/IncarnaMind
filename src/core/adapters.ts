@@ -869,6 +869,11 @@ export interface CoreAdapters {
    */
   textRecognitionModelSource?: EmbeddingModelSource;
   /**
+   * How many scans are read at once (#1502): what the computer can bear, as the host works it
+   * out with `scansAtOnce` (src/core/documents/processor.ts). Absent: one.
+   */
+  scansAtOnce?: number;
+  /**
    * Where the built-in reranking model's files come from. Defaults to the
    * pinned Hugging Face revision; tests give no files for a fake that needs none.
    */
