@@ -72,11 +72,14 @@ const instanceLock = app.requestSingleInstanceLock()
 const ownsDataFolder = instanceLock?.held ?? false;
 if (instanceLock?.timedOut) {
   logger.error("app.dataFolderBusy", { folder: app.getPath("userData") });
-  const language = resolveLanguage("system", app.getPreferredSystemLanguages());
-  const { title, detail } = busyDialog(language);
-  dialog.showErrorBox(title, detail);
-}
-if (!ownsDataFolder) {
+  // Before `ready`, Linux writes an error box to stderr and shows nothing (#1493).
+  app.whenReady().then(() => {
+    const language = resolveLanguage("system", app.getPreferredSystemLanguages());
+    const { title, detail } = busyDialog(language);
+    dialog.showErrorBox(title, detail);
+    app.exit(0);
+  });
+} else if (!ownsDataFolder) {
   logger.info("app.anotherCopyRunning");
   // Not `quit`: its `app.quit` line in the log would read as the running copy's.
   app.exit(0);
