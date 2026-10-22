@@ -1,0 +1,273 @@
+/**
+ * The sets `npm run eval:repeats` checks again and again (README.md): an
+ * employment agreement in English and a 劳动合同 in Chinese, invented for the
+ * evaluation, and the sentences a User writes about them in a Mind of their
+ * own, each with the verdict the agreement gives it.
+ */
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { buildPdf, type PdfPage } from "../../tests/helpers/pdf";
+import type { EvalDocument } from "../lib/evaluationSet";
+
+/** What the Documents make of a sentence: "contradicted-or-unsupported" for a wrong figure, which either verdict flags. */
+export type Expected = "supported" | "contradicted-or-unsupported" | "unsupported";
+
+export interface RepeatSentence {
+  /** The same for the same kind of sentence in each language, so the two read side by side. */
+  key: string;
+  kind: "paraphrase" | "general-word" | "word-for-word" | "wrong-figure" | "absent" | "near-miss";
+  expected: Expected;
+  text: string;
+}
+
+export interface RepeatSet {
+  id: string;
+  language: "en" | "zh-CN";
+  /** The Mind's name: each set is a Mind of its own. */
+  mind: string;
+  /** Its sentences, one paragraph each, as a User types them. */
+  sentences: readonly RepeatSentence[];
+}
+
+export interface RepeatDocument {
+  language: "en" | "zh-CN";
+  file: string;
+  pages: readonly PdfPage[];
+}
+
+export const DOCUMENTS: readonly RepeatDocument[] = [
+  {
+    language: "en",
+    file: "Employment Agreement - T. Okoro.pdf",
+    pages: [
+      {
+        lines: [
+          "EMPLOYMENT AGREEMENT",
+          "This Employment Agreement is made between Larkfield Provisions Ltd (the Company) and Tunde Okoro (the Employee).",
+          "1. Role and start date",
+          "The Employee is employed as People Operations Partner and starts on 11 January 2027.",
+          "The Employee reports to the Director of People.",
+          "2. Pay",
+          "The salary is 61,500 per year, paid monthly in arrears on the last working day of the month.",
+          "3. Hours and place of work",
+          "Normal hours are 9:00 to 17:30, Monday to Friday, with a one-hour unpaid lunch break.",
+          "The Employee may work from home two days a week, agreed in advance with the manager.",
+          "The Company may ask the Employee to attend the office on a working-from-home day with 24 hours' notice.",
+          "4. Holiday",
+          "The Employee is entitled to 27 working days of paid holiday per year, in addition to public holidays.",
+          "Up to 5 unused days may be carried over into the next year and must be taken by 31 March.",
+        ],
+      },
+      {
+        lines: [
+          "5. Probation",
+          "The first three months are a probation period. During probation either side may end this agreement",
+          "by giving one week's written notice.",
+          "6. Notice",
+          "After probation, either side must give three months' written notice to end this agreement.",
+          "The Company may pay salary in lieu of notice instead of requiring the Employee to work the notice period.",
+          "7. Pension",
+          "The Company will enrol the Employee in its workplace pension scheme and contribute 6 percent of salary.",
+          "The Employee contributes 4 percent of salary through payroll.",
+          "8. Confidentiality",
+          "The Employee must keep the Company's confidential information secret during and after employment.",
+          "9. Governing law",
+          "This agreement is governed by the laws of England and Wales.",
+          "Signed for the Company: ____________________  Date: ____________",
+          "Signed by the Employee: ____________________  Date: ____________",
+        ],
+      },
+    ],
+  },
+  {
+    language: "zh-CN",
+    file: "劳动合同 - 林晓.pdf",
+    pages: [
+      {
+        chineseLines: [
+          "劳动合同书",
+          "甲方（用人单位）：明川食品有限公司",
+          "乙方（劳动者）：林晓",
+          "第一条　工作岗位：乙方担任人力资源业务伙伴，自2027年1月11日起入职，向人力资源总监汇报。",
+          "第二条　劳动报酬：乙方月工资为人民币一万八千元，于每月最后一个工作日发放。",
+          "第三条　工作时间和地点：工作时间为周一至周五9:00至17:30，午休一小时。",
+          "乙方每周可在家工作两天，须事先与主管商定。",
+          "甲方可提前24小时通知乙方在居家工作日到岗。",
+          "第四条　带薪年休假：乙方每年享有带薪年休假10天，法定节假日另计。",
+        ],
+      },
+      {
+        chineseLines: [
+          "第五条　试用期：试用期为三个月。试用期内任何一方提前三日书面通知对方，可以解除本合同。",
+          "第六条　解除合同：试用期满后，任何一方须提前三个月书面通知对方，方可解除本合同。",
+          "第七条　社会保险：甲方依法为乙方缴纳社会保险和住房公积金。",
+          "第八条　保密：乙方在职期间及离职后均须对甲方的商业秘密保密。",
+          "第九条　适用法律：本合同适用中华人民共和国法律。",
+          "甲方（盖章）：　　　　　　　　乙方（签字）：",
+          "签订日期：　　　　年　　月　　日",
+        ],
+      },
+    ],
+  },
+];
+
+/**
+ * The newcomer walk's three sentences (#1608) and three more: the agreement's
+ * own words, a sentence it doesn't state, and a near miss that names days it
+ * doesn't. The controls tell a general word for the agreement's term ("Staff"
+ * for "the Employee") from a plain paraphrase.
+ */
+export const SETS: readonly RepeatSet[] = [
+  {
+    id: "en",
+    language: "en",
+    mind: "Summary for the manager",
+    sentences: [
+      {
+        key: "notice",
+        kind: "paraphrase",
+        expected: "supported",
+        text: "Notice is three months after the probation period.",
+      },
+      {
+        key: "holiday",
+        kind: "wrong-figure",
+        expected: "contradicted-or-unsupported",
+        text: "Holiday is 30 days a year plus public holidays.",
+      },
+      {
+        key: "staff-home",
+        kind: "general-word",
+        expected: "supported",
+        text: "Staff may work from home two days a week.",
+      },
+      {
+        key: "own-words",
+        kind: "word-for-word",
+        expected: "supported",
+        text: "The Employee may work from home two days a week.",
+      },
+      {
+        key: "car",
+        kind: "absent",
+        expected: "unsupported",
+        text: "The Employee gets a car allowance of 300 pounds a month.",
+      },
+      {
+        key: "home-days",
+        kind: "near-miss",
+        expected: "unsupported",
+        text: "The Employee may work from home on Mondays and Fridays.",
+      },
+    ],
+  },
+  {
+    id: "zh",
+    language: "zh-CN",
+    mind: "给经理的摘要",
+    sentences: [
+      {
+        key: "notice",
+        kind: "paraphrase",
+        expected: "supported",
+        text: "试用期满后，解除合同需提前三个月通知。",
+      },
+      {
+        key: "holiday",
+        kind: "wrong-figure",
+        expected: "contradicted-or-unsupported",
+        text: "员工每年有15天带薪年休假。",
+      },
+      {
+        key: "staff-home",
+        kind: "general-word",
+        expected: "supported",
+        text: "员工每周可以居家办公两天。",
+      },
+      {
+        key: "own-words",
+        kind: "word-for-word",
+        expected: "supported",
+        text: "乙方每周可在家工作两天。",
+      },
+      { key: "car", kind: "absent", expected: "unsupported", text: "公司每月发放300元交通补贴。" },
+      {
+        key: "home-days",
+        kind: "near-miss",
+        expected: "unsupported",
+        text: "员工可以在每周一和周五居家办公。",
+      },
+    ],
+  },
+  {
+    id: "en-control",
+    language: "en",
+    mind: "Home working",
+    sentences: [
+      {
+        key: "same-subject",
+        kind: "paraphrase",
+        expected: "supported",
+        text: "The Employee can work from home for two days each week.",
+      },
+      {
+        key: "named",
+        kind: "paraphrase",
+        expected: "supported",
+        text: "Tunde Okoro may work from home two days a week.",
+      },
+      {
+        key: "staff-home",
+        kind: "general-word",
+        expected: "supported",
+        text: "Staff may work from home two days a week.",
+      },
+      {
+        key: "employees-home",
+        kind: "general-word",
+        expected: "supported",
+        text: "Employees may work from home two days a week.",
+      },
+    ],
+  },
+  {
+    id: "zh-control",
+    language: "zh-CN",
+    mind: "居家办公",
+    sentences: [
+      {
+        key: "same-subject",
+        kind: "paraphrase",
+        expected: "supported",
+        text: "乙方每周有两天可以在家办公。",
+      },
+      { key: "named", kind: "paraphrase", expected: "supported", text: "林晓每周可在家工作两天。" },
+      {
+        key: "staff-home",
+        kind: "general-word",
+        expected: "supported",
+        text: "员工每周可以居家办公两天。",
+      },
+      {
+        key: "employees-home",
+        kind: "general-word",
+        expected: "supported",
+        text: "职工每周可在家工作两天。",
+      },
+    ],
+  },
+];
+
+/** Writes a language's Documents into `folder`, as the files a User adds. */
+export async function writeDocuments(
+  folder: string,
+  language: RepeatDocument["language"],
+): Promise<EvalDocument[]> {
+  const written: EvalDocument[] = [];
+  for (const document of DOCUMENTS.filter((each) => each.language === language)) {
+    const path = join(folder, document.file);
+    await writeFile(path, buildPdf(document.pages));
+    written.push({ key: document.file, path });
+  }
+  return written;
+}
