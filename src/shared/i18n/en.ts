@@ -408,6 +408,7 @@ export const en = {
   "undo.name.editTag": "Edit Tag",
   "undo.name.editFolder": "Edit Folder",
   "undo.name.newFolder": "New Folder",
+  "undo.name.organize": "Organize",
   "undo.name.removeExamples": "Remove the Examples",
   "undo.name.showExamples": "Show the Examples",
   "firstOpen.remove": "Remove the examples",
@@ -1370,6 +1371,32 @@ export const en = {
   "status.taggingFailed.other": "{count} Documents couldn’t be tagged",
   "status.taggingFailed.offline": "Can’t reach the AI model. Tagging resumes when you’re online.",
   "status.taggingFailed.full": "The AI model couldn’t tag them. Retry to try again.",
+  "tagging.problem.network": "Couldn’t tag: the AI model couldn’t be reached.",
+  "tagging.problem.auth":
+    "Couldn’t tag: the AI model’s service refused its key. Check it in Settings.",
+  "tagging.problem.model":
+    "Couldn’t tag: the AI model’s service doesn’t have this model. Choose another in Settings.",
+  "tagging.problem.rate-limit":
+    "Couldn’t tag: the AI model’s service is limiting requests for now.",
+  "tagging.problem.provider": "Couldn’t tag: the AI model’s service returned an error.",
+  "tagging.problem.consent-declined":
+    "Couldn’t tag: sending excerpts to the AI model’s service isn’t allowed.",
+  "tagging.problem.consent-revoked":
+    "Couldn’t tag: you turned off sending to the AI model’s service.",
+  "tagging.problem.local-mode":
+    "Couldn’t tag: “Keep everything on this computer” is on, and this AI model isn’t on this computer.",
+  "tagging.problem.ollama-not-running": "Couldn’t tag: Ollama isn’t running.",
+  "tagging.problem.data-retention":
+    "Couldn’t tag: your organization turned off the data retention this AI model needs. Choose another in Settings.",
+  "tagging.problem.not-signed-in":
+    "Couldn’t tag: you’re signed out of the AI model’s service. Sign in again in Settings.",
+  "tagging.problem.plan-limit": "Couldn’t tag: your plan’s usage limit is reached.",
+  "tagging.problem.blocked":
+    "Couldn’t tag: the AI model’s service didn’t let IncarnaMind use your plan.",
+  "tagging.problem.too-long": "Couldn’t tag: the Document’s excerpt is too long for the AI model.",
+  "tagging.problem.cost-cap": "Couldn’t tag: it could pass your monthly cap.",
+  "tagging.problem.no-answer": "Couldn’t tag: the AI model sent no reply.",
+  "tagging.problem.unknown": "Couldn’t tag, and the AI model’s service didn’t say why.",
   "status.choose": "Choose…",
   "status.downloading": "Search model",
   "status.downloadFailed": "Search model download failed",
@@ -1708,6 +1735,7 @@ export const en = {
   "tagging.stop": "Stop",
   "tagging.stop.command": "Stop Tagging",
   "tagging.tagNotInFolder": "Tag Documents not in a Folder with AI",
+  "tagging.retry": "Retry Tagging",
   "tagging.stop.title":
     "Stop, and don’t tag new Documents {places} with AI until you turn it back on",
   "tagging.place.folders": "in {names}",
@@ -4102,7 +4130,12 @@ export const en = {
     "This service can’t register IncarnaMind itself. Enter the client ID of an OAuth app you registered.",
   "remoteConnectors.signIn.error.secret-storage":
     "IncarnaMind can’t store your sign-in securely on this system, because no keyring is available.",
+  "remoteConnectors.signIn.error.held-back":
+    "Its sign-in is with a server on another computer, so nothing was sent.",
   "remoteConnectors.signIn.error.failed": "The sign-in didn’t work.",
+  "remoteConnectors.signIn.heldBack": "Paused: its sign-in server is on another computer.",
+  "remoteConnectors.signIn.heldBack.details":
+    "“Keep everything on this computer” is on, and this sign-in is with a server on another computer, so it isn’t renewed or started and its Tools aren’t used. Turn that off and it goes on from where it was.",
   "remoteConnectors.error.unreachable":
     "Its server can’t be reached. Check the URL and your internet connection.",
   "remoteConnectors.consent.note": "The Tool’s arguments go to this server over the network.",

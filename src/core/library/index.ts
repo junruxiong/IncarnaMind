@@ -15,7 +15,6 @@ import {
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
-import { isPlanLimit } from "../providers/chatgpt/errors";
 import { normalizeBaseUrl, serviceForUrl } from "../providers/kinds";
 import { classifyProviderError } from "../providers/providerErrors";
 import { gateStop } from "../sendGate";
@@ -35,6 +34,7 @@ import {
   ROUTING_PAGES,
 } from "./excerpt";
 import type { DocumentPageImage } from "./pdfImages";
+import { reachedPlanLimit } from "./planPace";
 import type {
   AssignmentChange,
   ClassificationModel,
@@ -571,7 +571,7 @@ export function createLibrary(options: {
             if (error instanceof NotFoundError) return;
             const limitedUntil = options.rateLimit.pause(error);
             const refused = limitedUntil === null ? options.rateLimit.refuse(error) : null;
-            // The ChatGPT plan's limit: it waits for the plan to reset (see ./planPace).
+            // The plan's limit: it waits for the plan to reset (see ./planPace).
             const waiting =
               limitedUntil !== null ||
               refused !== null ||
@@ -580,7 +580,7 @@ export function createLibrary(options: {
               error instanceof ConsentNeededError ||
               gateStop(error) !== null ||
               error instanceof TaggingNotReadyError ||
-              isPlanLimit(error);
+              reachedPlanLimit(error);
             state(
               id,
               waiting ? "waiting" : "failed",
