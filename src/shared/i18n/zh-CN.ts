@@ -1844,6 +1844,7 @@ export const zhCN = {
   "providers.sends.tagging":
     "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档（没有文字的扫描件会发送页面图片）",
   "providers.sends.tagsOnSave": "保存密钥后就开始打标签。",
+  "providers.sends.tagsOnConnect": "连接服务器后就开始打标签。",
   "providers.form.saving": "正在保存…",
   "providers.form.moreShort": "更多…",
   "providers.form.whereKey": "在哪里找到密钥？",
@@ -1859,8 +1860,10 @@ export const zhCN = {
   "providers.form.title": "粘贴{provider}密钥",
   "providers.form.title.server": "连接 OpenAI 兼容服务器",
   "providers.form.useKey": "使用这个密钥",
+  "providers.form.connect": "连接服务器",
   "providers.untested": "尚未测试引用核对",
   "providers.form.checking": "正在检查密钥…",
+  "providers.form.connecting": "正在连接…",
   "providers.form.needsKey": "请先粘贴密钥。",
   "providers.form.needsAddress": "请先填写服务器地址。",
   "providers.form.needsField": "请先填写{field}。",

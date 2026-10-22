@@ -1913,6 +1913,7 @@ export const en = {
   "providers.sends.tagging":
     "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
   "providers.sends.tagsOnSave": "Tagging starts when you save the key.",
+  "providers.sends.tagsOnConnect": "Tagging starts when you connect the server.",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
   "providers.form.whereKey": "Where do I find it?",
@@ -1928,8 +1929,10 @@ export const en = {
   "providers.form.title": "Paste your {provider} key",
   "providers.form.title.server": "Connect an OpenAI-compatible server",
   "providers.form.useKey": "Use this key",
+  "providers.form.connect": "Connect server",
   "providers.untested": "Not yet tested for checked Citations",
   "providers.form.checking": "Checking the key…",
+  "providers.form.connecting": "Connecting…",
   "providers.form.needsKey": "Paste the key first.",
   "providers.form.needsAddress": "Enter the server’s address first.",
   "providers.form.needsField": "Fill in {field} first.",

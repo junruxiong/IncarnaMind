@@ -689,7 +689,7 @@ export function ProviderForm({
                   ? (hostOf(baseUrl) ?? t("providers.kind.openai-compatible"))
                   : providerName
               }
-              tagsOnSave={tagsAutomatically}
+              tagsStartOn={tagsAutomatically ? (keyRequired ? "key" : "server") : undefined}
               dataUse={catalog && dataUseOf(catalog, away)}
             />
           )}
@@ -701,8 +701,14 @@ export function ProviderForm({
               className={primaryButtonClass}
             >
               {busy
-                ? t("providers.form.checking")
-                : t(local && !keyRequired ? "providers.form.save" : "providers.form.useKey")}
+                ? t(keyRequired ? "providers.form.checking" : "providers.form.connecting")
+                : t(
+                    keyRequired
+                      ? "providers.form.useKey"
+                      : local
+                        ? "providers.form.save"
+                        : "providers.form.connect",
+                  )}
             </button>
             {missing && (
               <span data-testid="provider-use-key-why" className={hintClass}>
@@ -762,17 +768,18 @@ export function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusa
 
 /**
  * Above the button that chooses the chat model's provider: what goes to it.
- * Choosing it is the consent for all of that (ADR-0022). `tagsOnSave`: the
- * Tagging setting is Automatic, so saving the key starts tagging with it.
+ * Choosing it is the consent for all of that (ADR-0022). `tagsStartOn`: the
+ * Tagging setting is Automatic, so tagging with it starts once its key is
+ * saved, or once a server that needs no key is connected.
  */
 export function ProviderSendsLine({
   provider,
   dataUse,
-  tagsOnSave = false,
+  tagsStartOn,
 }: {
   provider: string;
   dataUse?: DataUse;
-  tagsOnSave?: boolean;
+  tagsStartOn?: "key" | "server";
 }) {
   const t = useT();
   const language = useLanguage();
@@ -783,8 +790,12 @@ export function ProviderSendsLine({
   return (
     <div className="flex flex-col">
       <SendsLine provider={provider} />
-      {tagsOnSave && (
-        <p className="text-[12px] leading-5 text-ink-meta">{t("providers.sends.tagsOnSave")}</p>
+      {tagsStartOn && (
+        <p className="text-[12px] leading-5 text-ink-meta">
+          {t(
+            tagsStartOn === "key" ? "providers.sends.tagsOnSave" : "providers.sends.tagsOnConnect",
+          )}
+        </p>
       )}
       {summary && (
         <p data-testid="provider-data-use" className={`${hintClass} mt-0`}>
