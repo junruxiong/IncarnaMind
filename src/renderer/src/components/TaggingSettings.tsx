@@ -164,6 +164,22 @@ export function TaggingSettings() {
                 ?.name ?? customName(organizeWith, t),
           })
         : t("tagging.organize.ask");
+  // Where tagging and sorting by themselves send: the model tagging uses, and the one Organize uses.
+  const organizer =
+    current.kind !== "automatic"
+      ? inUse
+      : organizeWith &&
+        models.options.find((option) => sameClassifier(option.classifier, organizeWith));
+  const clouds = [inUse, organizer].filter((each) => !!each && each.group !== "local");
+  const sendsLine = !inUse
+    ? null
+    : clouds.length === 0
+      ? t("tagging.automatic.local")
+      : t("tagging.automatic.sends", {
+          service: [
+            ...new Set(clouds.map((each) => (each && providerOf(each, language)) || "")),
+          ].join(", "),
+        });
   const localDecision = models.options.find((option) => option.decisionModel);
   const stopped = stoppedPlaces(library);
 
@@ -286,7 +302,14 @@ export function TaggingSettings() {
           onChange={(event) => void save({ automatic: event.target.checked })}
           className="mt-0.5 size-4 accent-ink"
         />
-        {t("library.automatic")}
+        <span className="flex min-w-0 flex-col">
+          {t("tagging.automatic.switch")}
+          {sendsLine && (
+            <span data-testid="tagging-automatic-sends" className="text-ink-meta">
+              {sendsLine}
+            </span>
+          )}
+        </span>
       </label>
       {error && (
         <p role="alert" className={`mt-2 ${errorTextClass}`}>

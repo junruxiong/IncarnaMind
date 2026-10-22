@@ -1797,6 +1797,46 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE meetings ADD COLUMN fill TEXT;
     `,
   },
+  {
+    version: 103,
+    description: "Tagging and sorting new Documents by themselves is off for a cloud model (#1617)",
+    // The Library setting "automatic" was saved as true by every save of the Tagging setting, so a
+    // true can't tell the User's choice from the old default. It is forgotten, and the switch
+    // follows the model: on for one on this computer, off for a cloud model. Only a false stays.
+    // Where the default chat model is on another computer and Documents were being sent, the
+    // Library says once that it is off now (the device value is cleared when the User closes it).
+    sql: `
+      INSERT INTO device_settings (id, key, value, created_at, updated_at)
+        SELECT lower(hex(randomblob(16))), 'libraryAutomaticOffNotice', 'true',
+          strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE EXISTS (SELECT 1 FROM documents WHERE deleted_at IS NULL)
+          AND EXISTS (
+            SELECT 1 FROM chat_providers p
+            WHERE p.deleted_at IS NULL
+              AND p.kind <> 'ollama'
+              AND NOT (p.kind = 'openai-compatible'
+                AND (p.base_url LIKE 'http://localhost%' OR p.base_url LIKE 'http://127.%'
+                  OR p.base_url LIKE 'http://[::1]%'))
+              AND p.id = json_extract(
+                (SELECT value FROM user_settings WHERE key = 'chatModel' AND deleted_at IS NULL),
+                '$.providerId')
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM device_settings
+            WHERE key = 'library' AND deleted_at IS NULL
+              AND (json_extract(value, '$.automatic') = 0
+                OR json_extract(value, '$.classifier.kind') IN ('auto', 'ollama'))
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM device_settings WHERE key = 'libraryAutomaticOffNotice'
+          );
+      UPDATE device_settings
+        SET value = json_remove(value, '$.automatic'),
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE key = 'library' AND deleted_at IS NULL
+          AND json_extract(value, '$.automatic') = 1;
+    `,
+  },
 ];
 
 /**

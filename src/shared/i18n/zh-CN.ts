@@ -127,7 +127,13 @@ export const zhCN = {
   "library.model": "模型名称",
   "library.server": "本地 Ollama 地址",
   "library.pageImages": "最多 3 张 PDF 页面图片交给本地的 Clef-Flash。",
-  "library.automatic": "自动把新文档移入文件夹",
+  "library.automaticOff": "已为 {service} 关闭自动打标签和整理，因为它会发送每个文档的名称和摘录。",
+  "library.automaticOff.turnOn": "在设置中开启",
+  "library.automaticOff.dismiss": "知道了",
+  "tagging.automatic.switch": "自动为新文档打标签并整理",
+  "tagging.automatic.sends":
+    "会把每个新文档的名称和开头的段落，以及你的文件夹和标签名称，发送给 {service}。",
+  "tagging.automatic.local": "在这台电脑上运行。",
   "library.preset.research": "研究论文",
   "library.preset.research.description": "学术论文、实验和研究方法。",
   "library.preset.reports": "报告与演示",
@@ -1841,9 +1847,8 @@ export const zhCN = {
   "providers.sends.checks": "你核对的每一句话",
   "providers.sends.suggestions": "写作建议时你停下的那一段",
   "providers.sends.edits": "你让助手修改的文字",
-  "providers.sends.tagging":
-    "每个文档的名称、目录和简短摘录，以及你的文件夹和标签名称，用于打标签和归档。扫描件的页面图片只有在你于“设置 → 隐私”中允许后才会发送",
-  "providers.sends.tagsOnSave": "保存密钥后就开始打标签。",
+  "providers.sends.onRequest":
+    "给文档打标签和整理，会发送每个文档的名称和摘录，以及你的文件夹和标签名称；只有在你开启或要求时才会发送。扫描件的页面图片只有在你于“设置 → 隐私”中允许后才会发送。",
   "providers.form.saving": "正在保存…",
   "providers.form.moreShort": "更多…",
   "providers.form.whereKey": "在哪里找到密钥？",

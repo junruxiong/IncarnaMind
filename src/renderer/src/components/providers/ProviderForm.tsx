@@ -52,7 +52,6 @@ import { KeyCheckLine, useKeyCheck } from "./keyCheck";
 import { LocalServerLine, useLocalServer } from "./LocalServerLine";
 import { SendsLine } from "./SendsLine";
 import { defaultRegion, keyProviderName, testErrorKey, useProviderKey } from "./shared";
-import { useJevSettings } from "./useJevSettings";
 
 type CatalogId = string;
 
@@ -171,15 +170,7 @@ export function ProviderForm({
   const [modelId, setModelId] = useState(refused?.modelId ?? suggestedModel(first));
   const [busy, setBusy] = useState<"saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
-  const [jev] = useJevSettings();
   const hasDefault = useAppStore((state) => (state.settings?.user.chatModel ?? null) !== null);
-  // Automatic tags with this key's provider unless a Jev key comes first, or nothing may leave the computer.
-  const tagsAutomatically =
-    useAppStore(
-      (state) =>
-        (state.library?.settings.classifier.kind ?? "automatic") === "automatic" &&
-        state.embedding?.localOnly !== true,
-    ) && !jev?.enabled;
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
   const [switchedFrom, setSwitchedFrom] = useState<CatalogId | null>(null);
@@ -689,7 +680,6 @@ export function ProviderForm({
                   ? (hostOf(baseUrl) ?? t("providers.kind.openai-compatible"))
                   : providerName
               }
-              tagsOnSave={tagsAutomatically}
               dataUse={catalog && dataUseOf(catalog, away)}
             />
           )}
@@ -762,18 +752,9 @@ export function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusa
 
 /**
  * Above the button that chooses the chat model's provider: what goes to it.
- * Choosing it is the consent for all of that (ADR-0022). `tagsOnSave`: the
- * Tagging setting is Automatic, so saving the key starts tagging with it.
+ * Choosing it is the consent for all of that (ADR-0022).
  */
-export function ProviderSendsLine({
-  provider,
-  dataUse,
-  tagsOnSave = false,
-}: {
-  provider: string;
-  dataUse?: DataUse;
-  tagsOnSave?: boolean;
-}) {
+export function ProviderSendsLine({ provider, dataUse }: { provider: string; dataUse?: DataUse }) {
   const t = useT();
   const language = useLanguage();
   const words = language === "zh-CN" ? "zh" : "en";
@@ -783,9 +764,6 @@ export function ProviderSendsLine({
   return (
     <div className="flex flex-col">
       <SendsLine provider={provider} />
-      {tagsOnSave && (
-        <p className="text-[12px] leading-5 text-ink-meta">{t("providers.sends.tagsOnSave")}</p>
-      )}
       {summary && (
         <p data-testid="provider-data-use" className={`${hintClass} mt-0`}>
           {summary}

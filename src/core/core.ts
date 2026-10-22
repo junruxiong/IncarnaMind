@@ -2148,6 +2148,7 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     tags,
     enabled: () => !organizesNewDocuments(),
+    automatic: () => library.settings().automatic,
     organizing: (id) => organizing() && library.isOrganizing(id),
     stopped: (id) => library.taggingStoppedFor(id),
     canRun: async () => {
@@ -2242,6 +2243,13 @@ export function createCore(adapters: CoreAdapters): Core {
           return reader !== null && scanImagesAllowed(reader);
         }
       }
+    },
+    usesCloud: ({ classifier, organizeWith }) => {
+      // Automatic's pick isn't known until it is worked out: until then it counts as a cloud model.
+      const tags = classifier.kind === "automatic" ? tagging.lastResolved() : classifier;
+      const sorts = classifier.kind === "automatic" ? organizeWith : classifier;
+      if (classifier.kind === "automatic" && tags === null) return true;
+      return [tags, sorts].some((each) => each !== null && tagging.service(each) !== null);
     },
     pagesWaitFor: (classifier) => {
       if (classifier.kind !== "chat") return null;
@@ -3867,18 +3875,20 @@ export function createCore(adapters: CoreAdapters): Core {
       const after = library.settings();
       // Choosing the model that tags or organizes Documents, where a line says what goes,
       // allows it (ADR-0022). Saving the same one again, for another setting, isn't a new choice.
+      const switchedOn = !before.automatic && after.automatic;
       const tagsAnew = JSON.stringify(after.classifier) !== JSON.stringify(before.classifier);
       const organizesAnew =
         JSON.stringify(organizeModelOf(after)) !== JSON.stringify(organizeModelOf(before));
-      if (tagsAnew) {
+      // Turning on tagging and sorting by themselves, where a line says what goes, is the consent too (#1617).
+      if (tagsAnew || switchedOn) {
         for (const service of await taggingServices()) consent.choose(["tagging"], service);
       }
-      if (organizesAnew) {
+      if (organizesAnew || switchedOn) {
         for (const service of await classificationServices()) {
           consent.choose(["classification"], service);
         }
       }
-      if (tagsAnew || organizesAnew) await dataFlowsChanged();
+      if (tagsAnew || organizesAnew || switchedOn) await dataFlowsChanged();
       await taggingChanged();
     },
     getTaggingModels: async () => {
@@ -4027,6 +4037,7 @@ export function createCore(adapters: CoreAdapters): Core {
       library.setTaggingStopped([folderId], !on);
       tagger.resume();
     },
+    dismissAutomaticOffNotice: async () => library.dismissAutomaticOffNotice(),
 
     getJevSettings: () => jev.status(),
     saveJevSettings: async (input) => {

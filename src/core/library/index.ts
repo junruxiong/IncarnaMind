@@ -201,6 +201,11 @@ export function createLibrary(options: {
    */
   readsPages(classifier: TaggingClassifier): boolean;
   /**
+   * Whether the model tagging or organizing would use runs on another computer:
+   * the switch for doing it by itself is off for one until the User turns it on.
+   */
+  usesCloud(settings: { classifier: LibraryClassifier; organizeWith: TaggingClassifier | null }): boolean;
+  /**
    * The service that would read a scan's pages for this classifier if the User
    * allowed it, while they haven't; null when it reads them, or can't.
    */
@@ -218,12 +223,13 @@ export function createLibrary(options: {
    * "Organize manually" before there was Automatic, gets Automatic; any other
    * choice is kept as it was saved.
    */
-  const getSettings = (): LibrarySettings => {
+  const savedSettings = () => {
     const stored = settings.readDeviceValue("library");
     const saved = isRecord(stored) ? stored : {};
     return {
       classifier: taggingClassifierOf(saved.classifier) ?? AUTOMATIC,
-      automatic: typeof saved.automatic === "boolean" ? saved.automatic : true,
+      // Null until the User sets the switch: it follows the model then (see `LibrarySettings.automatic`).
+      automatic: typeof saved.automatic === "boolean" ? saved.automatic : null,
       organizeWith: taggingClassifierOf(saved.organizeWith),
       taggingStopped: Array.isArray(saved.taggingStopped)
         ? saved.taggingStopped.filter(
@@ -231,6 +237,10 @@ export function createLibrary(options: {
           )
         : [],
     };
+  };
+  const getSettings = (): LibrarySettings => {
+    const saved = savedSettings();
+    return { ...saved, automatic: saved.automatic ?? !options.usesCloud(saved) };
   };
   const placeOf = (id: string): string | null =>
     db.get<{ group_id: string }>(
@@ -720,7 +730,7 @@ export function createLibrary(options: {
       const taggingStopped = stop
         ? [...new Set([...before.taggingStopped, ...places])]
         : before.taggingStopped.filter((each) => !places.includes(each));
-      settings.writeDeviceValue("library", { ...before, taggingStopped });
+      settings.writeDeviceValue("library", { ...savedSettings(), taggingStopped });
       changed();
       if (stop || !before.automatic || !organizeModelOf(before) || groups().length === 0) return;
       const ids = db
@@ -781,7 +791,19 @@ export function createLibrary(options: {
           `SELECT ${GROUP_COLUMNS} FROM library_groups WHERE deleted_at IS NOT NULL ORDER BY name COLLATE NOCASE, id`,
         )
         .map(toGroup);
-      return { groups: groups(), deletedGroups, assignments, settings: getSettings() };
+      return {
+        groups: groups(),
+        deletedGroups,
+        assignments,
+        settings: getSettings(),
+        automaticOffNotice: settings.readDeviceValue("libraryAutomaticOffNotice") === true,
+      };
+    },
+    /** The one-time line about automatic tagging and sorting going off is closed. */
+    dismissAutomaticOffNotice(): void {
+      if (settings.readDeviceValue("libraryAutomaticOffNotice") !== true) return;
+      settings.writeDeviceValue("libraryAutomaticOffNotice", false);
+      changed();
     },
     /** A live Folder, or NotFoundError. */
     folder: group,
@@ -968,11 +990,15 @@ export function createLibrary(options: {
         if (!isRecord(each)) throw new InvalidInputError("Choose a classifier.");
         checkClassifier(each);
       }
+      // A save that leaves the switch where it shows doesn't set it: it goes on following the model.
+      const before = savedSettings();
+      const showing = before.automatic ?? !options.usesCloud(before);
+      const setByUser = before.automatic !== null || input.automatic !== showing;
       settings.writeDeviceValue("library", {
         classifier: automaticChosen ? AUTOMATIC : chosen,
-        automatic: input.automatic,
+        ...(setByUser && { automatic: input.automatic }),
         organizeWith,
-        taggingStopped: getSettings().taggingStopped,
+        taggingStopped: before.taggingStopped,
       });
       revision++;
       changed();

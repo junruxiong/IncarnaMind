@@ -134,7 +134,14 @@ export const en = {
   "library.model": "Model name",
   "library.server": "Local Ollama address",
   "library.pageImages": "Up to 3 PDF page images go to local Clef-Flash.",
-  "library.automatic": "Move new Documents into Folders automatically",
+  "library.automaticOff":
+    "Automatic tagging and sorting is now off for {service}, since it sent each Document’s name and an excerpt.",
+  "library.automaticOff.turnOn": "Turn it on in Settings",
+  "library.automaticOff.dismiss": "Got it",
+  "tagging.automatic.switch": "Tag and sort new Documents automatically",
+  "tagging.automatic.sends":
+    "Sends each new Document’s name and first passages, and your Folder and Tag names, to {service}.",
+  "tagging.automatic.local": "Runs on this computer.",
   "library.preset.research": "Research papers",
   "library.preset.research.description": "Academic papers, experiments and research methods.",
   "library.preset.reports": "Reports & presentations",
@@ -1910,9 +1917,8 @@ export const en = {
   "providers.sends.checks": "each sentence you check",
   "providers.sends.suggestions": "the paragraph you pause on, for writing suggestions",
   "providers.sends.edits": "the text you ask the assistant to change",
-  "providers.sends.tagging":
-    "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it. Page images of scans go only if you allow them in Settings → Privacy",
-  "providers.sends.tagsOnSave": "Tagging starts when you save the key.",
+  "providers.sends.onRequest":
+    "Tagging and sorting your Documents send each Document’s name and an excerpt, with your Folder and Tag names, only when you turn them on or ask for them. Page images of scans go only if you allow them in Settings → Privacy.",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
   "providers.form.whereKey": "Where do I find it?",
