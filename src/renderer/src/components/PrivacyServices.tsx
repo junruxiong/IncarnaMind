@@ -75,6 +75,20 @@ function ServiceItem({ group }: { group: ServiceGroup }) {
         shownAt: SERVICES_UNDO_PLACE,
       });
     });
+  const stopUse = (use: ServiceUse) =>
+    run(async () => {
+      await revokeAll(service.id, [use]);
+      useUndo.getState().push({
+        said: (words) =>
+          words("privacy.flows.stoppedFlow", {
+            flow: words(`consent.flow.${use.flow}`),
+            service: service.name,
+          }),
+        undo: () => allowAll(service.id, [use]),
+        redo: () => revokeAll(service.id, [use]),
+        shownAt: SERVICES_UNDO_PLACE,
+      });
+    });
   const allow = () =>
     run(() =>
       allowAll(
@@ -158,7 +172,14 @@ function ServiceItem({ group }: { group: ServiceGroup }) {
         <DetailsLine
           testId="data-service-decision"
           className={rowTextClass}
-          details={<Uses uses={uses} partly={decision.kind === "partly"} onAllow={allowUse} />}
+          details={
+            <Uses
+              uses={uses}
+              partly={decision.kind === "partly"}
+              onAllow={allowUse}
+              onStop={(use) => void stopUse(use)}
+            />
+          }
         >
           {line}
         </DetailsLine>
@@ -192,16 +213,19 @@ function Uses({
   uses,
   partly,
   onAllow,
+  onStop,
 }: {
   uses: readonly ServiceUse[];
   partly: boolean;
   onAllow(use: ServiceUse): void;
+  onStop(use: ServiceUse): void;
 }) {
   const t = useT();
   return (
     <ul className="flex flex-col gap-2 pt-1.5">
       {uses.map((use) => {
-        const waiting = partly && use.status.consent !== "accepted";
+        const allowed = use.status.consent === "accepted";
+        const waiting = partly && !allowed;
         return (
           <li
             key={use.flow}
@@ -215,16 +239,16 @@ function Uses({
                 <li key={kind}>{t(`consent.data.${kind}`)}</li>
               ))}
             </ul>
-            {waiting && (
+            {(allowed || waiting) && (
               <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-ink-meta">{t(waitingStatus(use))}</span>
+                {waiting && <span className="text-ink-meta">{t(waitingStatus(use))}</span>}
                 <button
                   type="button"
-                  data-testid="data-flow-allow"
-                  onClick={() => onAllow(use)}
+                  data-testid={allowed ? "data-flow-revoke" : "data-flow-allow"}
+                  onClick={() => (allowed ? onStop(use) : onAllow(use))}
                   className={buttonStyle("secondary", "sm")}
                 >
-                  {t("privacy.flows.allow")}
+                  {t(allowed ? "consent.settings.revoke" : "privacy.flows.allow")}
                 </button>
               </p>
             )}

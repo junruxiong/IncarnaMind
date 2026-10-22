@@ -91,6 +91,18 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(service).toHaveAttribute("data-consent", "accepted");
   await expect(decision).toContainText(/Allowed on \d{1,2} [A-Z][a-z]+ \d{4}/);
 
+  // One use can be stopped on its own, with the rest left allowed, and taken back.
+  const tagging = service.locator('[data-testid="data-flow"][data-flow-id="tagging"]');
+  await tagging.getByTestId("data-flow-revoke").click();
+  await expect(service).toHaveAttribute("data-consent", "partly");
+  await expect(chat).toHaveAttribute("data-consent", "accepted");
+  await expect(tagging).toHaveAttribute("data-consent", "not-asked");
+  await expect(tagging.getByTestId("data-flow-allow")).toBeFocused();
+  await expect(undoLine).toContainText("Stopped allowing Automatic Tags for llm.example.com");
+  await undoLine.getByTestId("undo-action").click();
+  await expect(tagging).toHaveAttribute("data-consent", "accepted");
+  await expect(service).toHaveAttribute("data-consent", "accepted");
+
   // Traffic without the User's content: the update check, on by default, can be turned off.
   const updates = privacy.locator(
     '[data-testid="network-traffic-item"][data-traffic-id="update-check"]',
