@@ -1,5 +1,5 @@
 import type * as Y from "yjs";
-import { claimCheckShown } from "../../shared/claimChecks";
+import { claimCheckShown, coveredPart } from "../../shared/claimChecks";
 import { checkedSentences } from "../answers/checks/sentences";
 import type { CitationAttributes } from "../api";
 import type { FailedSentence } from "../mindText";
@@ -39,6 +39,7 @@ export function failedSentences(
       });
     } else if (shown.state === "unsupported") {
       const { evidence, scope } = check;
+      const covers = evidence ? null : coveredPart(check.unsupported);
       failed.set(id, {
         id,
         check: "unsupported",
@@ -47,6 +48,12 @@ export function failedSentences(
         nearest: evidence?.quote
           ? { quote: evidence.quote, source: context.sourceOf(evidence) }
           : null,
+        covers: covers && {
+          covered: covers.covered,
+          uncovered: covers.uncovered,
+          quote: covers.quote,
+          source: context.sourceOf(covers.quoted),
+        },
       });
     } else if (shown.state === "needs-recheck") {
       failed.set(id, { id, check: "needs-recheck", why: shown.why });

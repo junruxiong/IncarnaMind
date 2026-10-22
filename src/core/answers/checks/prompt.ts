@@ -148,16 +148,28 @@ export const EVIDENCE_INSTRUCTIONS = [
   'Reply with one JSON object and nothing else: {"passage": "P1", "location": "…", "quote": "…"}. If no Passage decides it, reply {"passage": null}.',
 ].join("\n");
 
-/** The request for that record: the sentence, the verdict, and the Passages the check read. */
+/**
+ * What a model is asked once more when it found a sentence unsupported and named a part the
+ * Passages do state, but recorded no Passage for it.
+ */
+export const COVERED_EVIDENCE_INSTRUCTIONS = [
+  "You checked a sentence the User wrote against Passages from the User's Documents, found it unsupported, and named the part of it that a Passage does state.",
+  `Give the Passage that states that part now: the Passage's id, where the quote is as the Passage names it, and ${QUOTE}.`,
+  'Reply with one JSON object and nothing else: {"passage": "P1", "location": "…", "quote": "…"}. If no Passage states it, reply {"passage": null}.',
+].join("\n");
+
+/** The request for that record: the sentence, the verdict, the part covered if asked for, and the Passages the check read. */
 export function evidencePrompt(input: {
   claim: string;
   verdict: ClaimVerdict;
   says: string | null;
+  covered?: string | null;
   passages: readonly { id: string; text: string }[];
 }): string {
   return [
     `<sentence>\n${input.claim.trim()}\n</sentence>`,
     `Your verdict: ${input.verdict}${input.says ? `. ${input.says}` : ""}`,
+    ...(input.covered ? [`Covered: ${input.covered}`] : []),
     "",
     "The Passages:",
     ...input.passages.map((each) => `<passage id="${each.id}">\n${each.text}\n</passage>`),

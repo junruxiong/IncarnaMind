@@ -4751,6 +4751,11 @@ export interface UnsupportedReason {
   covered: string | null;
   /** A short phrase for what they don't ("memory and robustness"); null when none. */
   uncovered: string | null;
+  /**
+   * The Passage the check quoted for what is covered, as a Citation whose quote the
+   * Citation check found; absent when it quoted none.
+   */
+  quoted?: CitationAttributes;
 }
 
 /** A Document version a check read, which it no longer holds for once the Document changes. */

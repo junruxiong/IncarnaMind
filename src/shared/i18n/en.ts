@@ -647,6 +647,8 @@ export const en = {
     "Your Citation supports {covered}, not the parts about {uncovered}.",
   "claim.unsupported.covers.other":
     "Your Citations support {covered}, not the parts about {uncovered}.",
+  "claim.unsupported.documentsCover":
+    "Your Documents support {covered}, not the parts about {uncovered}.",
   "claim.unsupported.noReason": "The check gave no reason",
   "claim.unsupported.currency.reason": "The Document gives {amount} without a currency.",
   "claim.unsupported.currency.covered": "the amount, {amount}",
@@ -3414,6 +3416,8 @@ export const en = {
   "export.comment.sentence.unsupported.folder": "Unsupported: nothing in “{folder}” says this.",
   "export.comment.sentence.unsupported.differs":
     "Unsupported: your Documents say something different (“{quote}”, {source})",
+  "export.comment.sentence.unsupported.covers":
+    "Unsupported: your Documents support {covered}, not the parts about {uncovered} (“{quote}”, {source})",
   "export.comment.sentence.needs-recheck.edited": "Needs re-check: changed since it was checked.",
   "export.comment.sentence.needs-recheck.new-version":
     "Needs re-check: a Document it was checked against has a new version.",

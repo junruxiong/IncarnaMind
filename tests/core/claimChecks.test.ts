@@ -954,6 +954,105 @@ describe("A count of people in brackets is a count (#1023)", () => {
   });
 });
 
+describe("A sentence the Documents state only part of, with no Citation", () => {
+  const STAFF = "Staff watch spring tides at new moon and at full moon from the harbour wall.";
+  const MOON = "Spring tides happen at new moon and at full moon";
+  const PARTLY =
+    "\nCovered: spring tides at new and full moon\nNot covered: the staff and the harbour wall";
+  const asked = (model: ReturnType<typeof checkingModel>, instructions: string) =>
+    model.doGenerateCalls.filter((call) => JSON.stringify(call.prompt).includes(instructions))
+      .length;
+
+  test("keeps the Passage the model quoted for the part it covers, found, beside what it covers and what not", async () => {
+    const model = checkingModel({
+      [STAFF]: {
+        verdict: "unsupported",
+        quote: MOON,
+        says: `Tides says when spring tides happen, not who watches them.${PARTLY}`,
+        judgement: "same",
+      },
+    });
+    const { core, client, check } = await mindWith([STAFF], model);
+
+    await check();
+
+    const [shown] = await shownChecks(core, client);
+    expect(shown).toMatchObject({
+      shown: { state: "unsupported" },
+      check: {
+        evidence: null,
+        unsupported: {
+          covered: "spring tides at new and full moon",
+          uncovered: "the staff and the harbour wall",
+          quoted: { documentName: "Tides", quote: MOON, check: "found" },
+        },
+      },
+    });
+    expect(asked(model, "named the part of it that a Passage does state")).toBe(0);
+  });
+
+  test("asks once for that Passage when the model named the part but quoted none, and keeps it once its quote is found", async () => {
+    const model = checkingModel(
+      { [STAFF]: { reply: { text: `Verdict: unsupported${PARTLY}` }, judgement: "same" } },
+      [],
+      JSON.stringify({ passage: "P1", location: null, quote: MOON }),
+    );
+    const { core, client, check } = await mindWith([STAFF], model);
+
+    await check();
+
+    expect(asked(model, "named the part of it that a Passage does state")).toBe(1);
+    expect((await shownChecks(core, client))[0]?.check.unsupported?.quoted).toMatchObject({
+      quote: MOON,
+      check: "found",
+    });
+  });
+
+  test("keeps none when the quote it gives isn't found, nor for a sentence nothing in the Documents states", async () => {
+    const model = checkingModel(
+      {
+        [STAFF]: { reply: { text: `Verdict: unsupported${PARTLY}` }, judgement: "same" },
+        [UNSUPPORTED]: { verdict: "unsupported" },
+      },
+      [],
+      JSON.stringify({ passage: "P1", location: null, quote: "Spring tides happen every Tuesday" }),
+    );
+    const { core, client, check } = await mindWith([STAFF, UNSUPPORTED], model);
+
+    await check();
+
+    const [staff, penguins] = await shownChecks(core, client);
+    expect(staff?.check.unsupported).toEqual({
+      reason: null,
+      covered: "spring tides at new and full moon",
+      uncovered: "the staff and the harbour wall",
+    });
+    expect(penguins?.check.unsupported).toEqual({ reason: null, covered: null, uncovered: null });
+    expect(asked(model, "named the part of it that a Passage does state")).toBe(1);
+  });
+
+  test("a nearest line that says something different still comes first", async () => {
+    const { core, client, check } = await mindWith(
+      [CONTRADICTED],
+      checkingModel({
+        [CONTRADICTED]: {
+          reply: {
+            text: "Verdict: unsupported\nCovered: the times of high water\nNot covered: every week",
+          },
+        },
+      }),
+    );
+
+    await check();
+
+    const [near] = await shownChecks(core, client);
+    expect(near?.check.evidence?.quote).toBe(
+      "Harbours publish the times of high water every year.",
+    );
+    expect(near?.check.unsupported?.quoted).toBeUndefined();
+  });
+});
+
 describe("When the model can't check a sentence", () => {
   const failing = (reply: ScriptedReply): Plan => ({ reply });
   test.each<{ reason: ClaimCheckAttributes["reason"]; plan: Plan }>([

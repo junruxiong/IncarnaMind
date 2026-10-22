@@ -635,6 +635,7 @@ export const zhCN = {
   "claim.unsupported.differs": "你的文档里是另一种说法：",
   "claim.unsupported.covers.one": "引用支持{covered}，但不支持{uncovered}的部分。",
   "claim.unsupported.covers.other": "引用支持{covered}，但不支持{uncovered}的部分。",
+  "claim.unsupported.documentsCover": "你的文档支持{covered}，但不支持{uncovered}的部分。",
   "claim.unsupported.noReason": "核对没有给出原因",
   "claim.unsupported.currency.reason": "文档写的是 {amount}，没有注明币种。",
   "claim.unsupported.currency.covered": "金额 {amount}",
@@ -3300,6 +3301,8 @@ export const zhCN = {
   "export.comment.sentence.unsupported.folder": "无依据：“{folder}”里没有这样写。",
   "export.comment.sentence.unsupported.differs":
     "无依据：你的文档里是另一种说法（“{quote}”，{source}）",
+  "export.comment.sentence.unsupported.covers":
+    "无依据：你的文档支持{covered}，但不支持{uncovered}的部分（“{quote}”，{source}）",
   "export.comment.sentence.needs-recheck.edited": "需重新核对：核对后已修改。",
   "export.comment.sentence.needs-recheck.new-version": "需重新核对：核对时用到的文档有了新版本。",
   "export.comment.sentence.needs-recheck.document-removed": "需重新核对：核对时用到的文档已删除。",

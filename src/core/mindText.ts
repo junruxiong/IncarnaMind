@@ -129,6 +129,7 @@ export type FailedSentence = { id: string } & (
       check: "unsupported";
       folder: string | null;
       nearest: { quote: string; source: string } | null;
+      covers: { covered: string; uncovered: string; quote: string; source: string } | null;
     }
   | { check: "needs-recheck"; why: RecheckReason }
   | { check: "cited-case-unchecked" }
