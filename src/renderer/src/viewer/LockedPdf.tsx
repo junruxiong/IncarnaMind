@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { SecretStorageStatus } from "../../../core/api";
+import { ProblemMark } from "../components/ProblemLine";
 import { SecretStorageNotice } from "../components/providers/ProviderForm";
 import { buttonStyle, errorTextClass, fieldClass } from "../components/ui";
 import { core } from "../core";
@@ -100,8 +101,9 @@ export function LockedPdf({ documentId, onUnlocked }: { documentId: string; onUn
           id="pdf-password-wrong"
           role="alert"
           data-testid="pdf-password-wrong"
-          className="text-ink-meta"
+          className={errorTextClass}
         >
+          <ProblemMark />
           {t("viewer.locked.wrong")}
         </p>
       )}
