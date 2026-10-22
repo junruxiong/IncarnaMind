@@ -894,7 +894,6 @@ test("Connect server shows a key the server refuses in place, and with a good on
     await form.getByLabel("Server URL").fill(fake.url);
     await form.getByTestId("provider-model-text").fill("any");
     await form.getByLabel(/^API key/).fill("wrong-key");
-    // The key is the server's, so the action is still the server's.
     await expect(form.getByTestId("provider-use-key")).toHaveText("Connect server");
     await form.getByTestId("provider-use-key").click();
     await expect(form.getByTestId("connection-test")).toContainText("The key was refused", {
