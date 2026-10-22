@@ -1,7 +1,10 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   createDataFolder,
+  interceptOpenDialog,
   launchApp,
   pointAndClick,
   removeDataFolder,
@@ -83,6 +86,55 @@ test("the Welcome card keeps one height through every step, so the page's text n
     }
   }
   await app.close();
+});
+
+test("a file that couldn't be read says so in step 3 without changing the card's height or moving its buttons, at every width in English and Chinese (#1457)", async () => {
+  const sources = await createDataFolder();
+  const damaged = join(sources, "damaged.pdf");
+  await writeFile(damaged, "%PDF-1.4 this is not a PDF");
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  try {
+    await markSteps(window, { ...NONE, citationChecked: true, askedReady: true });
+    const files = window.locator('[data-testid="first-open-step"][data-step="files"]');
+    await expect(files).toHaveAttribute("data-state", "open");
+    const add = files.getByTestId("first-open-add-files");
+    const places = async () => ({
+      ...(await measure(window)),
+      buttons: Math.round((await add.boundingBox())?.y ?? -1),
+    });
+    const views = (["en", "zh-CN"] as const).flatMap((language) =>
+      [900, 1100, 1440].map((width) => ({ language, width, name: `${language} ${width}` })),
+    );
+    const before: Record<string, Awaited<ReturnType<typeof places>>> = {};
+    for (const { language, width, name } of views) {
+      await setLanguage(window, language);
+      await setWindowSize(app, window, width, 900);
+      before[name] = await places();
+    }
+
+    await interceptOpenDialog(app, damaged);
+    await pointAndClick(window, add);
+    const unread = files.getByTestId("first-open-unread");
+    await expect(unread).toBeVisible({ timeout: 30_000 });
+    for (const { language, width, name } of views) {
+      await setLanguage(window, language);
+      await setWindowSize(app, window, width, 900);
+      await expect(unread).toBeVisible();
+      expect(await places(), `${name}, the line shown`).toEqual(before[name]);
+    }
+
+    // Show is the User's own click; one file's row still fits in the card.
+    await pointAndClick(window, unread.getByTestId("first-open-unread-show"));
+    await expect(unread.getByTestId("first-open-unread-list")).toBeVisible();
+    const open = await measure(window);
+    expect(open.card, "the list of one file, in the card's height").toBe(
+      before["zh-CN 1440"]?.card,
+    );
+    expect(open.title).toBe(before["zh-CN 1440"]?.title);
+  } finally {
+    await app.close();
+    await removeDataFolder(sources);
+  }
 });
 
 test("asking the ready Question opens the assistant without moving the page, at the narrowest window and at 1,100 px (#1195)", async () => {

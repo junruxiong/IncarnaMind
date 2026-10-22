@@ -97,11 +97,15 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
   const modelReady = useAppStore((state) => state.chatReadiness?.ready === true);
   const placeAssistant = useAppStore((state) => state.placeAssistant);
   const skipped = useAppStore((state) => state.skippedFiles);
+  const unread = useUnreadFiles(null);
   const addFiles = useRef<HTMLButtonElement>(null);
   // The ready Question's button goes once it is asked: the focus moves on to the next step.
   const focusNext = useRef(false);
   const filesOpen =
-    progress?.citationChecked && (progress.askedOwn || progress.askedReady) && !progress.indexed;
+    progress !== undefined &&
+    progress.citationChecked &&
+    (progress.askedOwn || progress.askedReady) &&
+    !progress.indexed;
   useEffect(() => {
     if (!filesOpen || !focusNext.current) return;
     focusNext.current = false;
@@ -184,9 +188,13 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
           )}
         </Step>
         <Step step="files" number={3} state={stateOf("files")}>
-          <p className="text-[13px] leading-5 text-ink-secondary">
-            {t("firstOpen.step.files.body")}
-          </p>
+          {unread.length > 0 ? (
+            <UnreadFilesLine files={unread} testId="first-open-unread" />
+          ) : (
+            <p className="text-[13px] leading-5 text-ink-secondary">
+              {t("firstOpen.step.files.body")}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <button
               ref={addFiles}
@@ -211,7 +219,6 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
               {t("documents.skipped", { names: skipped.join(", ") })}
             </ProblemLine>
           )}
-          <UnreadFiles />
         </Step>
       </ol>
       {allDone && !modelReady && (
@@ -251,12 +258,6 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
       )}
     </section>
   );
-}
-
-/** Why the step stays open after a file was added: it couldn't be read (#1457). */
-function UnreadFiles() {
-  const files = useUnreadFiles(null);
-  return <UnreadFilesLine files={files} testId="first-open-unread" />;
 }
 
 function OwnQuestion({ message }: { message: MessageKey }) {

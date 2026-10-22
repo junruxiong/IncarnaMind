@@ -1780,7 +1780,6 @@ const madeExamples = (state: Pick<AppState, "examples" | "otherExamples">): Exam
 export const exampleMindIds = (state: Pick<AppState, "examples" | "otherExamples">): string[] =>
   allExamples(state).flatMap((each) => (each.mindId ? [each.mindId] : []));
 
-/** A Document of the User's own that Answers can draw on: not one still being read, or one that couldn't be (#1457). */
 const readOwnDocument = (document: Document, state: AppState) =>
   isSearchable(document.status) && isOwnDocument(document, allExamples(state));
 
