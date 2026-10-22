@@ -25,6 +25,7 @@ import type { NumberedCitation } from "./citationNumbers";
 import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
+import { isQuietFocus } from "./mistakeMark";
 import { Popover } from "./Popover";
 import { UnsupportedCited } from "./UnsupportedCited";
 
@@ -157,7 +158,9 @@ export function ClaimMark({
         onMouseDown={(event) => event.preventDefault()}
         onPointerEnter={() => hold("pointer", true)}
         onPointerLeave={() => hold("pointer", false)}
-        onFocus={() => hold("focus", true)}
+        onFocus={(event) => {
+          if (!isQuietFocus(event.currentTarget)) hold("focus", true);
+        }}
         onBlur={() => hold("focus", false)}
         onClick={() => {
           setPinned(true);

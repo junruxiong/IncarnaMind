@@ -278,8 +278,12 @@ const pickersShown = (app: ElectronApplication) =>
   app.evaluate(() => (globalThis as { pickersShown?: { count: number } }).pickersShown?.count ?? 0);
 
 const TITLES = {
-  en: { question: "Ask a question", files: "Add your own files" },
-  "zh-CN": { question: "提一个问题", files: "添加你自己的文件" },
+  en: {
+    citation: "See a mistake it caught",
+    question: "Ask a question",
+    files: "Add your own files",
+  },
+  "zh-CN": { citation: "看看它查出的错误", question: "提一个问题", files: "添加你自己的文件" },
 } as const;
 
 test("Ask a question and Add your own files do their step on a click, Enter or Space at any time, and doing it alone ticks nothing (#1489)", async () => {
@@ -333,22 +337,25 @@ test("Ask a question and Add your own files do their step on a click, Enter or S
 });
 
 const BUTTON_STATES = [
-  { name: "start", done: NONE, question: "later", files: "later" },
+  { name: "start", done: NONE, citation: "open", question: "later", files: "later" },
   {
     name: "first step done",
     done: { ...NONE, mistakeSeen: true },
+    citation: "done",
     question: "open",
     files: "later",
   },
   {
     name: "second step done",
     done: { ...NONE, mistakeSeen: true, askedReady: true },
+    citation: "done",
     question: "done",
     files: "open",
   },
   {
     name: "all done",
     done: { ...NONE, mistakeSeen: true, askedReady: true, indexed: true },
+    citation: "done",
     question: "done",
     files: "done",
   },
@@ -372,7 +379,7 @@ test("a step's title looks like a button in every state, open, later and done: a
     await setLanguage(window, language);
     for (const state of BUTTON_STATES) {
       await markSteps(window, state.done);
-      for (const key of ["question", "files"] as const) {
+      for (const key of ["citation", "question", "files"] as const) {
         const where = `${language}, ${state.name}, ${key} is ${state[key]}`;
         await expect(step(window, key), where).toHaveAttribute("data-state", state[key]);
         const button = step(window, key).getByTestId("first-open-step-do");
@@ -429,6 +436,60 @@ test("a step's title looks like a button in every state, open, later and done: a
   }
   await app.close();
 });
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`See a mistake it caught goes to the red ≠ and focuses it without opening its card or ticking; opening it ticks, and the title goes there again, in ${language} (#1489)`, async () => {
+    const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+    await setWindowSize(app, window, 1440, 600);
+    await setLanguage(window, language);
+    const mark = window.getByTestId("mind-pane").getByTestId("claim-mark");
+    await expect(mark).toHaveAttribute("data-check", "contradicted");
+    const card = window.getByTestId("first-open-steps");
+    const title = step(window, "citation").getByTestId("first-open-step-do");
+    const height = async () => Math.round((await card.boundingBox())?.height ?? 0);
+    const before = await height();
+    const away = () =>
+      window.getByTestId("mind-pane").evaluate((element) => {
+        element.closest(".mind-scroller")?.scrollTo({ top: 0 });
+      });
+    const inView = () =>
+      mark.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return box.top >= 0 && box.bottom <= globalThis.innerHeight;
+      });
+
+    await away();
+    expect(await inView()).toBe(false);
+    await pointAndClick(window, title);
+    await expect.poll(inView).toBe(true);
+    await expect(mark).toBeFocused();
+    expect(await mark.evaluate((element) => element.matches(":focus-visible"))).toBe(true);
+    // The card opens a moment after a focus; waiting that out is the only way to see it never does.
+    await window.evaluate(() => new Promise((resolve) => setTimeout(resolve, 600)));
+    await expect(mark).toHaveAttribute("aria-expanded", "false");
+    await expect(window.getByTestId("claim-card")).toHaveCount(0);
+    await expect(step(window, "citation")).toHaveAttribute("data-state", "open");
+    expect(await gettingStarted(window)).toMatchObject({ mistakeSeen: false });
+    expect(await height()).toBe(before);
+
+    await window.keyboard.press("Enter");
+    await expect(window.getByTestId("claim-card")).toBeVisible();
+    await expect(step(window, "citation")).toHaveAttribute("data-state", "done");
+    expect(await gettingStarted(window)).toMatchObject({ mistakeSeen: true });
+    await window.keyboard.press("Escape");
+
+    await away();
+    expect(await inView()).toBe(false);
+    await title.focus();
+    await window.keyboard.press("Space");
+    await expect.poll(inView).toBe(true);
+    await expect(mark).toBeFocused();
+    await window.evaluate(() => new Promise((resolve) => setTimeout(resolve, 600)));
+    await expect(window.getByTestId("claim-card")).toHaveCount(0);
+    expect(await height()).toBe(before);
+    await app.close();
+  });
+}
 
 for (const language of ["en", "zh-CN"] as const) {
   test(`Ask a question ticks when the Answer arrives, never when the Question is only asked or its Answer fails, in ${language} (#1489)`, async () => {
