@@ -2182,6 +2182,66 @@ export async function setSidebarWidth(window: Page, width: number): Promise<void
     .toBeCloseTo(width, 0);
 }
 
+/**
+ * Sizes the assistant as a person does from the keyboard: on its resize line, ← widens and →
+ * narrows, 10px a press and 50px with Shift. It presses until the width is `width`, which must
+ * be a whole number of presses away, and focuses the line before each press, so a press that
+ * lands elsewhere is made again rather than counted.
+ */
+export async function sizeAssistant(window: Page, width: number): Promise<void> {
+  const assistant = window.getByTestId("assistant");
+  const widthNow = () => assistant.evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  for (let presses = 0; presses < 80; presses++) {
+    const now = await widthNow();
+    if (now === width) return;
+    const key = width > now ? "ArrowLeft" : "ArrowRight";
+    await window.getByTestId("assistant-resize").focus();
+    await window.keyboard.press(Math.abs(width - now) >= 50 ? `Shift+${key}` : key);
+    await expect
+      .poll(widthNow, { timeout: 2000 })
+      .not.toBe(now)
+      .catch(() => undefined);
+  }
+  await expect.poll(widthNow).toBe(width);
+}
+
+export interface TableSample {
+  status: string | null;
+  top: number;
+  button: string | null;
+}
+
+/** From now until `stopSamples`, once a frame, the table and button of the next Answer to be asked. */
+export const startSamples = (window: Page) =>
+  window.evaluate(() => {
+    const holder = globalThis as unknown as { samples: TableSample[]; sampling: boolean };
+    holder.samples = [];
+    holder.sampling = true;
+    const asked = document.querySelectorAll("[data-testid=assistant-answer]").length;
+    const sample = () => {
+      const answer = document.querySelectorAll("[data-testid=assistant-answer]")[asked];
+      const frame = answer?.querySelector(".tableWrapper");
+      const text = answer?.querySelector("[data-testid=assistant-answer-text]");
+      if (answer && frame && text) {
+        const button = answer.querySelector("[data-testid=answer-open-table]");
+        holder.samples.push({
+          status: answer.getAttribute("data-status"),
+          top: frame.getBoundingClientRect().top - text.getBoundingClientRect().top,
+          button: button ? (button.getAttribute("aria-disabled") ?? "false") : null,
+        });
+      }
+      if (holder.sampling) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+
+export const stopSamples = (window: Page) =>
+  window.evaluate(() => {
+    const holder = globalThis as unknown as { samples: TableSample[]; sampling: boolean };
+    holder.sampling = false;
+    return holder.samples;
+  });
+
 /** The assistant's Answers (#201), in the conversation it shows. */
 export const assistantAnswers = (window: Page) =>
   window.getByTestId("assistant").getByTestId("assistant-answer");
