@@ -17,6 +17,7 @@ import {
   type CoreAdapters,
   type CrashReporter,
   createOllamaModels,
+  type EmbeddingModelSource,
   type Executor,
   type FileShell,
   type Keychain,
@@ -28,6 +29,7 @@ import {
 import { runAnalysis } from "../core/analysis";
 import { scansAtOnce } from "../core/documents/processor";
 import type { PageFetch } from "../core/documents/web/fetch";
+import type { ModelCopies } from "../core/embedding/modelSources";
 import { createFakeCapture, type FakeCapture, wavSamples } from "../core/meetings/fakeCapture";
 import { type LocalServers, scriptedLocalServers } from "../core/providers/localServers";
 import { type Resolve, systemResolve } from "../core/tools/web/addresses";
@@ -206,6 +208,23 @@ const fakeEmbedder =
 const fakeScans = fakeEmbedder ? (process.env.INCARNAMIND_TEST_SCANS ?? null) : null;
 /** With the fake models, how many scans are read at once (#1502), whatever the computer. */
 const testScansAtOnce = fakeEmbedder ? Number(process.env.INCARNAMIND_TEST_SCANS_AT_ONCE ?? 0) : 0;
+/**
+ * With the fake models, the search model's files at a stand-in and IncarnaMind's copies at others
+ * (#1578), as JSON, so a smoke test can fail its download at every source.
+ */
+const testModelDownloads: { source: EmbeddingModelSource; copies: ModelCopies } | null =
+  fakeEmbedder && process.env.INCARNAMIND_TEST_MODEL_DOWNLOADS
+    ? JSON.parse(process.env.INCARNAMIND_TEST_MODEL_DOWNLOADS)
+    : null;
+
+// A test build reaches no model source but the stand-ins on this computer: not even the probe's.
+const modelFetch: typeof fetch = (input, init) => {
+  const url = input instanceof Request ? input.url : String(input);
+  if (import.meta.env.MODE === "test" && new URL(url).hostname !== "127.0.0.1") {
+    return Promise.reject(new TypeError(`A test build reaches no ${new URL(url).host}.`));
+  }
+  return net.fetch(input instanceof URL ? input.href : input, init);
+};
 
 /**
  * Test-only launch flags: the smoke tests transcribe Meetings with a fake
@@ -713,8 +732,9 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     // Chromium's network stack follows the system proxy, which is how many Users reach
     // Hugging Face at all (#1578); Node's own fetch doesn't.
     modelDownloads: {
-      fetch: (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
+      fetch: modelFetch,
       proxy: () => session.defaultSession.resolveProxy("https://huggingface.co/"),
+      ...(testModelDownloads && { copies: testModelDownloads.copies }),
     },
     systemUserName: () => systemUserName(log),
     keychain: createSafeStorageKeychain(dataDir),
@@ -772,7 +792,10 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       testScansAtOnce > 0 ? testScansAtOnce : scansAtOnce(availableParallelism(), totalmem()),
     // The fake models have no files to download.
     ...(fakeEmbedder && {
-      embeddingModelSource: { baseUrl: "http://localhost/", files: [] },
+      embeddingModelSource: testModelDownloads?.source ?? {
+        baseUrl: "http://localhost/",
+        files: [],
+      },
       rerankingModelSource: { baseUrl: "http://localhost/", files: [] },
       textRecognitionModelSource: { baseUrl: "http://localhost/", files: [] },
     }),
