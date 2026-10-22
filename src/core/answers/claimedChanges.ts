@@ -287,6 +287,9 @@ const CLAIMED_WORDS: Record<ClaimedChange, string> = {
   removed: "removed or replaced text in a Mind",
 };
 
+const UNSEEN_REPLY =
+  "The User will not read your earlier reply and does not know you were asked again. Write your reply as if for the first time: don't mention, apologise for or correct an earlier reply.";
+
 /** The record of what the calls did, then to write the reply again from it. */
 export function askAgainNote(
   claims: readonly ClaimedChange[],
@@ -297,6 +300,7 @@ export function askAgainNote(
   return [
     thisAnswersRecord(calls, names),
     `Your reply says you ${said}, but no Tool did that. Write your reply again from its start, without saying what you changed: IncarnaMind lists each change under your reply. Say plainly what wasn't done and why. If the User's request still needs a change you can make now, make it with the Tools first.`,
+    UNSEEN_REPLY,
   ].join("\n");
 }
 
@@ -304,6 +308,7 @@ export function askToWriteNote(calls: readonly AnswerToolCall[], names: MindName
   return [
     thisAnswersRecord(calls, names),
     "The User asked for this in a Mind, but no Tool changed one. Write it there now with the Minds' Tools, then reply in a sentence or two without repeating it. If you can't, say why in one sentence.",
+    UNSEEN_REPLY,
   ].join("\n");
 }
 

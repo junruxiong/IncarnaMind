@@ -213,10 +213,9 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(chosen).toHaveCount(2);
     await pointAndClick(window, mindRow(window, "Alpha"));
 
-    // Two groups: the lit row is the focused group's shown one.
+    // Two groups, the Document's beside the Mind: the lit row is the focused group's shown one.
     const groups = window.getByTestId("tab-group");
-    await pointAndClick(window, mindRow(window, "Gamma"), { button: "right" });
-    await pointAndClick(window, window.getByTestId("mind.openSide"));
+    await pointAndClick(window, mindRow(window, "Gamma"));
     await expect(groups).toHaveCount(2);
     await litIsShown(window);
     // Focus to the other group: the lit row moves to what that group shows.

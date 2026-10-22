@@ -17,6 +17,7 @@ import { AskProblem } from "../../editor/AskProblem";
 import { PlanLimitLine } from "../../editor/PlanLimitLine";
 import { useT } from "../../i18n";
 import { useStoppedByPlanLimit } from "../../planLimits";
+import { useQuestions } from "../../questions";
 import { useScopeEmpty } from "../../scopeDocuments";
 import { useAppStore } from "../../store";
 import { useUnreadFiles } from "../../unreadFiles";
@@ -25,10 +26,13 @@ import { UnreadFilesLine } from "../UnreadFilesLine";
 import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
+import { AskedLines } from "./AskCall";
 import { NoMindToolsLine, UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
+import { CommandsCard } from "./CommandsCard";
 import { CoverageLine, WrittenFromLine } from "./CoverageLines";
 import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
 import { SelfCheckLines } from "./SelfCheckLines";
+import { StillReadingLine } from "./StillReadingLine";
 
 /** What adding an Answer needs from the thread around it. */
 export interface AnswerKeeping {
@@ -74,7 +78,14 @@ export function AssistantAnswer({
   const waiting = useApprovals((state) => state.waiting);
   const approvals = useMemo(() => waitingFor(waiting, answer.id), [waiting, answer.id]);
   const consenting = useAnswers((state) => state.phases[answer.id] === "waiting-for-consent");
-  const { silent, usual } = useAnswerWait(answer, streaming, approvals.length > 0 || consenting);
+  const asking = useQuestions((state) =>
+    Object.values(state.waiting).some((each) => each.answerId === answer.id),
+  );
+  const { silent, usual } = useAnswerWait(
+    answer,
+    streaming,
+    approvals.length > 0 || consenting || asking,
+  );
   const openSettings = useAppStore((state) => state.openSettings);
   const regenerate = () => void regenerateAnswer(answer.id);
   const written = hasText(blocks);
@@ -108,6 +119,7 @@ export function AssistantAnswer({
         wait={silent ? { usual } : null}
         onRegenerate={regenerate}
       />
+      <AskedLines answer={answer} />
       {answer.citationSupport === "none" && (
         <NoCitationsLine
           modelId={answer.model?.modelId ?? null}
@@ -126,6 +138,7 @@ export function AssistantAnswer({
         />
       )}
       <MindChangesCard answer={answer} streaming={streaming} />
+      <CommandsCard answer={answer} streaming={streaming} />
       {!streaming && <SelfCheckLines answer={answer} />}
       {!streaming && question && !question.askedFrom && wantedAMind(answer) && (
         <NoMindLine question={question} />
@@ -154,6 +167,7 @@ export function AssistantAnswer({
         </ProblemLine>
       )}
       {!streaming && uncalculated > 0 && <UncalculatedLine count={uncalculated} />}
+      {!streaming && status !== "failed" && <StillReadingLine answer={answer} />}
       {!streaming && status !== "failed" && <UnreadFilesLine files={unread} />}
       {!streaming && status === "failed" && !planModel && (
         <AnswerError

@@ -12,7 +12,15 @@ import { useUndo } from "../undo";
 import { checkKeys } from "./keys";
 
 /** Where the User is acting, as `data-surface` marks it on the page. */
-export const SURFACES = ["sidebar", "library", "deleted", "mind", "viewer", "palette"] as const;
+export const SURFACES = [
+  "sidebar",
+  "library",
+  "deleted",
+  "home",
+  "mind",
+  "viewer",
+  "palette",
+] as const;
 export type Surface = (typeof SURFACES)[number];
 
 /** The menus' order of commands (docs/agents/interaction.md, rule 5). */
@@ -39,8 +47,16 @@ export interface Shortcut {
    * focus isn't in text: there they keep their meaning, the text's own undo.
    */
   outsideText?: true;
+  /**
+   * Keys that do nothing while the focus is in text, so a picker never opens over what the User
+   * is typing; the key is still taken, so the menu doesn't run it on macOS. Unlike `outsideText`,
+   * the menu item and ⌘K run the command from anywhere.
+   */
+  notInText?: true;
   /** The same command's second keys on Windows and Linux: Ctrl+Y redoes there, as Ctrl+Shift+Z does. */
   alsoOther?: Keys;
+  /** More keys that run it too but that nothing shows: ⌘N still makes a Mind, though ⌘T is the one shown. */
+  also?: Keys;
   /** Keys only macOS has (Finder's ⌃⌘N): elsewhere the command has none, and stays in menus and ⌘K. */
   macOnly?: true;
 }
@@ -76,6 +92,8 @@ export interface Command {
   globalKeys?(): string | null;
   /** False keeps it out of ⌘K; it then needs a shortcut. */
   palette?: false;
+  /** Listed in ⌘K before anything is typed, where it applies, the lowest first and six at most. */
+  top?: number;
   group: CommandGroup;
   /** The kinds it acts on, as the selection or the focus. Without them, it acts on the window. */
   appliesTo?: readonly ObjectKind[];
@@ -136,6 +154,7 @@ export const commands = {
     if (registered.has(command.id)) throw new Error(`Two commands are called ${command.id}.`);
     if (command.shortcut) checkKeys(command.shortcut.keys);
     if (command.shortcut?.alsoOther) checkKeys(command.shortcut.alsoOther);
+    if (command.shortcut?.also) checkKeys(command.shortcut.also);
     registered.set(command.id, command);
     return () => {
       if (registered.get(command.id) === command) registered.delete(command.id);

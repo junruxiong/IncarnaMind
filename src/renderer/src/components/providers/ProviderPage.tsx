@@ -9,10 +9,12 @@ import type {
 import type { Language } from "../../../../core/language";
 import {
   catalogProviderOf,
+  dataUseOf,
   endpointOf,
   fieldValueOf,
   isPreset,
 } from "../../../../core/providers/catalog/providers";
+import { OLLAMA_CLOUD } from "../../../../core/providers/ollamaCloud";
 import { formatDate } from "../../../../shared/dates";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 import { useAnswers } from "../../answers";
@@ -23,6 +25,7 @@ import { useLanguage, useT } from "../../i18n";
 import { type KeyRefusal, useKeyRefusals } from "../../keyRefusals";
 import { useModelNames } from "../../modelNames";
 import { useAppStore } from "../../store";
+import { KeyCharacterLine } from "../KeyCharacterLine";
 import { OnThisComputer } from "../OnThisComputer";
 import { ProblemMark } from "../ProblemLine";
 import { SettingsBackLink } from "../SettingsBackLink";
@@ -35,6 +38,7 @@ import {
   hintClass,
   successTextClass,
 } from "../ui";
+import { KeyCheckLine, useKeyCheck } from "./keyCheck";
 import { OtherModels } from "./OtherModels";
 import { KeyRefusedLine, ProviderSendsLine, TestResult } from "./ProviderForm";
 import { logoIdOf, ProviderLogo } from "./ProviderLogo";
@@ -109,6 +113,10 @@ export function ProviderPage({
   const takesKey = catalog !== undefined && catalog.apiKey !== "none";
   const keyUrl = endpoint?.keyUrl ?? catalog?.keyUrl;
   const key = useProviderKey();
+  const keyCheck = useKeyCheck(
+    takesKey && catalog.group !== "local" && catalog.id !== "openai-compatible" ? catalog.id : null,
+    key.apiKey,
+  );
   const keyField = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -149,8 +157,8 @@ export function ProviderPage({
 
   const saveKey = async (event: FormEvent) => {
     event.preventDefault();
-    const apiKey = key.apiKey.trim();
-    if (apiKey === "" || !someModel) return;
+    const apiKey = key.text;
+    if (apiKey === "" || key.stray || !someModel || keyCheck.blocked) return;
     setSaving(true);
     setKeyError(null);
     try {
@@ -263,7 +271,11 @@ export function ProviderPage({
       </header>
 
       {provider.service ? (
-        <ProviderSendsLine provider={provider.service.name} dataUse={catalog?.dataUse} />
+        <ProviderSendsLine
+          provider={provider.service.name}
+          // Ollama's cloud models run at ollama.com, which its own line covers.
+          dataUse={catalog && dataUseOf(catalog, provider.service.id !== OLLAMA_CLOUD.id)}
+        />
       ) : (
         <p className="text-[13px] leading-5">
           <OnThisComputer>{t("providers.choice.local")}</OnThisComputer>
@@ -290,15 +302,18 @@ export function ProviderPage({
               onChange={(event) => key.type(event.target.value)}
               autoComplete="off"
               spellCheck={false}
-              aria-describedby={refusedHere ? `${id}-refused` : undefined}
+              aria-invalid={key.stray ? true : undefined}
+              aria-describedby={
+                key.stray ? `${id}-stray` : refusedHere ? `${id}-refused` : undefined
+              }
               className={`${fieldClass} min-w-0 flex-1 basis-56`}
             />
           )}
-          {key.apiKey.trim() !== "" ? (
+          {key.text !== "" ? (
             <button
               type="submit"
               data-testid="provider-page-save-key"
-              disabled={saving || !someModel}
+              disabled={saving || !someModel || key.stray !== null || keyCheck.blocked}
               className={buttonClass}
             >
               {t("models.provider.saveKey")}
@@ -326,6 +341,13 @@ export function ProviderPage({
             </a>
           )}
         </div>
+        {key.stray && <KeyCharacterLine id={`${id}-stray`} stray={key.stray} />}
+        <KeyCheckLine
+          check={keyCheck.check}
+          provider={name}
+          nameOf={(catalogId) => keyProviderName(catalogId, t, language)}
+          onAnyway={() => keyCheck.agree()}
+        />
         {refusedHere && refused && <KeyRefusedLine id={`${id}-refused`} refused={refused} />}
         {keyError && (
           <p
@@ -659,7 +681,7 @@ function ProviderCostLine({ providerId }: { providerId: string }) {
       {setAside && (
         <>
           {" · "}
-          <span data-testid="chat-provider-set-aside" title={t("cost.setAside.hint")}>
+          <span data-testid="chat-provider-set-aside" title={t("cost.setAside.tip")}>
             {setAside}
           </span>
         </>

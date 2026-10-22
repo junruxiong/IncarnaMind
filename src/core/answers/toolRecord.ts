@@ -7,6 +7,7 @@
  * (./claimedChanges). In English, as the rest of the instructions are.
  */
 import type { AnswerToolCall, MindChange, MindProblem } from "../api";
+import { COMMAND_TOOLS } from "../tools";
 
 /** A Mind's name now, by its id; null for one deleted or unknown. */
 export type MindNames = (mindId: string) => string | null;
@@ -34,6 +35,14 @@ const quoted = (text: string) => `â€œ${text.replace(/\s+/g, " ").slice(0, 120)}â
 
 const counted = (count: number, one: string, many = `${one}s`) =>
   `${count} ${count === 1 ? one : many}`;
+
+const NO_CHART = {
+  several: "it has more than one table, and the User's cursor was in none",
+  noTable: "it has no table",
+  noNumbers: "its table has no column of numbers",
+  needsTwo: "a scatter chart needs two columns of numbers",
+  uncited: "some of its table's figures have no Citation",
+} as const satisfies Record<Extract<MindProblem, { kind: "no-chart" }>["problem"], string>;
 
 function whyNot(problem: MindProblem | undefined): string {
   switch (problem?.kind) {
@@ -79,6 +88,8 @@ function whyNot(problem: MindProblem | undefined): string {
       return "the model couldn't be used";
     case "model":
       return `the model failed: ${problem.message}`;
+    case "no-chart":
+      return NO_CHART[problem.problem];
     case undefined:
       return "it failed";
   }
@@ -199,7 +210,45 @@ function lineOf(call: AnswerToolCall, names: MindNames, states?: ChangeStates): 
             ? "the User denied it, so it wasn't made"
             : "failed"
       }`;
+    case "commands":
+      return commandLine(call);
+    case "asks":
+      return askLine(call);
   }
+}
+
+function askLine(call: AnswerToolCall): string {
+  const asked = call.asked;
+  const question = quoted(asked?.question ?? field(call, "question"));
+  const answer = asked?.answer;
+  if (!answer) return `ask_user ${question}: not answered`;
+  if (answer.skipped) return `ask_user ${question}: the User skipped it`;
+  const chose = [
+    ...answer.chosen.map(quoted),
+    ...(answer.wrote === null ? [] : [`in their own words ${quoted(answer.wrote)}`]),
+  ];
+  return `ask_user ${question}: the User answered ${chose.join(" and ")}`;
+}
+
+function commandLine(call: AnswerToolCall): string {
+  if (call.tool === COMMAND_TOOLS.list) {
+    if (!call.found) return "list_commands: failed";
+    const { kind, count, by } = call.found;
+    const words = Object.entries(by).map(([what, value]) => `${what} ${quoted(value)}`);
+    return `list_commands ${kind}s${words.length > 0 ? ` by ${words.join(", ")}` : ""}: found ${count}`;
+  }
+  const done = call.command;
+  if (!done) {
+    return `run_command ${field(call, "command")}: ${call.approval === "denied" ? "the User didn't allow it, so nothing changed" : "failed, so nothing changed"}`;
+  }
+  const items = done.items
+    .map((item) =>
+      item.renamed ? `${quoted(item.name)} to ${quoted(item.renamed)}` : quoted(item.name),
+    )
+    .join(", ");
+  const into = done.into ? ` into the ${done.into.kind} ${quoted(done.into.name)}` : "";
+  const file = done.file ? `, saved as ${quoted(done.file.name)} in ${done.file.folder}` : "";
+  return `run_command ${done.command}: ${counted(done.items.length, "item")}${items ? ` (${items})` : ""}${into}${file}`;
 }
 
 export function toolRecordLines(

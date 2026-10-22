@@ -1,4 +1,5 @@
 import type { BlockOrigin } from "../../../core/api";
+import { MENU_COMMANDS } from "../../../shared/commands";
 import { signInAgain } from "../chatGptSignIn";
 import { setCheckCardOpen } from "../checks";
 import { useCitationStylePicker } from "../citationStylePicker";
@@ -12,12 +13,13 @@ import { useFindSources } from "../findSources";
 import { useHistory } from "../history";
 import { frontTabOfMind, groupsMerged } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
-import { startMindCheck } from "../mindCheck";
+import { startCheckThisMind, startMindCheck } from "../mindCheck";
 import { useMindTools } from "../mindTools";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { verifyDocument } from "../verify";
 import { useWordImport } from "../wordImport";
+import { addDocumentCommands } from "./addDocuments";
 import { answerTableCommands } from "./answerTables";
 import { assistantCommands } from "./assistant";
 import { bibliographyCommands } from "./bibliography";
@@ -34,6 +36,8 @@ import { fileCommands } from "./fileInfo";
 import { footnoteCommands } from "./footnotes";
 import { formatCommands } from "./format";
 import { citationHandle, findHandle, readMindHandle, sidebarHandle } from "./handles";
+import { languageCommands } from "./language";
+import { libraryCommands } from "./library";
 import { linkCommands } from "./links";
 import { meetingHelpCommands } from "./meetingHelp";
 import { meetingCommands } from "./meetings";
@@ -45,6 +49,7 @@ import {
   folderCommands,
   linkedFolderCommands,
   mindCommands,
+  mixedSelectionCommands,
   tagCommands,
 } from "./objects";
 import { pageCommands } from "./page";
@@ -93,9 +98,18 @@ function mindOf(ctx: CommandContext): string | null {
 const appCommands: readonly Command[] = [
   {
     ...fromMenu("mind.new"),
+    shortcut: { keys: MENU_COMMANDS["mind.new"].keys, also: "CmdOrCtrl+N" },
     group: "main",
+    top: 20,
     reversible: true,
     run: () => useAppStore.getState().createMind({ titled: true }),
+  },
+  {
+    id: "home.open",
+    label: "home.title",
+    group: "open",
+    reversible: true,
+    run: () => useAppStore.getState().openHome(),
   },
   {
     id: "word.import",
@@ -113,17 +127,21 @@ const appCommands: readonly Command[] = [
     reversible: true,
     run: () => verifyDocument(),
   },
+  ...addDocumentCommands,
   ...editCommands,
   ...selectionCommands,
   ...mindCommands,
   ...documentCommands,
   ...peekCommands,
   ...folderCommands,
+  ...mixedSelectionCommands,
   ...taggingCommands,
   ...newFolderCommands,
   ...tagCommands,
   ...linkedFolderCommands,
   ...deletedCommands,
+  ...libraryCommands,
+  ...languageCommands,
   ...answerCommands,
   ...citationCommands,
   ...tabCommands,
@@ -234,11 +252,24 @@ const appCommands: readonly Command[] = [
     },
   },
   {
-    id: "mind.checkAll",
+    id: "mind.check",
     label: "mindCheck.command",
     keywords: ["mindCheck.command.keywords"],
     group: "main",
+    top: 12,
     // It changes no words: its marks go with Check again, or when the sentence is edited.
+    reversible: true,
+    when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
+    run: (ctx) => {
+      const mindId = mindShown(ctx);
+      if (mindId) return startCheckThisMind(mindId);
+    },
+  },
+  {
+    id: "mind.checkEverySentence",
+    label: "mindCheck.every",
+    keywords: ["mindCheck.command.keywords"],
+    group: "main",
     reversible: true,
     when: (ctx) => onlyOne(ctx) && mindShown(ctx) !== null,
     run: (ctx) => {

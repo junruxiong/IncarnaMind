@@ -22,7 +22,9 @@ import {
   type SaveChatProviderInput,
 } from "../src/core/api";
 import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
+import { EVENT_CHANNEL } from "../src/shared/bridge";
 import type { DocumentLocation } from "../src/shared/documentViewer";
+import { translate } from "../src/shared/i18n";
 import type { TestHooks } from "../src/shared/testHooks";
 import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
 import { APP_ARGS, homeEnv, KEYCHAIN_ARGS } from "../tests/helpers/home";
@@ -123,6 +125,15 @@ export interface LaunchOptions {
    * always a fake that makes a tone: no test opens a device.
    */
   computerSound?: "allowed" | "denied" | "silent";
+  /** Whether the Meeting's fake microphone is denied: no tone, and the line that says so. */
+  microphone?: "allowed" | "denied";
+  /**
+   * Where the guide for a permission added by hand opens, whatever the screen: in a window
+   * beside System Settings, or as text in the app's window. Without it, the system decides.
+   */
+  permissionGuide?: "beside" | "inline";
+  /** A copy with no way to record audio: Record says so. */
+  noAudioEngine?: boolean;
   /** What a Meeting's fake speech-to-text engine does: slow, failing to read stretches, failing over. */
   transcriber?: FakeTranscriberOptions;
   /**
@@ -161,6 +172,12 @@ export interface LaunchOptions {
    * its sandbox, where the line must not show. The sandbox is on in the last two on Linux too.
    */
   sandboxNotice?: "switch" | "environment" | "on";
+  /**
+   * The first Word export asks whether to mark the text IncarnaMind wrote. Without this, a launch
+   * answers it "Mark it" if nobody has, so a test that exports to Word is not stopped by it;
+   * with it, the app is left asking.
+   */
+  askToMarkAiText?: boolean;
 }
 
 /**
@@ -214,6 +231,9 @@ export async function launchApp(
     copilot,
     keepWindow = false,
     computerSound = "allowed",
+    microphone = "allowed",
+    permissionGuide,
+    noAudioEngine = false,
     transcriber,
     scans,
     web,
@@ -222,6 +242,7 @@ export async function launchApp(
     contradictionWatchDelayMs,
     sandboxed = false,
     sandboxNotice,
+    askToMarkAiText = false,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -260,8 +281,11 @@ export async function launchApp(
   if (sandboxNotice === "environment") env.ELECTRON_DISABLE_SANDBOX = "1";
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
-  env.INCARNAMIND_TEST_AUDIO = "fake";
+  env.INCARNAMIND_TEST_AUDIO = noAudioEngine ? "none" : "fake";
   env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
+  env.INCARNAMIND_TEST_AUDIO_MICROPHONE = microphone;
+  delete env.INCARNAMIND_TEST_GUIDE;
+  if (permissionGuide) env.INCARNAMIND_TEST_GUIDE = permissionGuide;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
   if (usageData) {
@@ -317,7 +341,19 @@ export async function launchApp(
       message: `the window is ${WINDOW_SIZE.width} × ${WINDOW_SIZE.height}: is the screen too short for it?`,
     });
   }
+  if (!askToMarkAiText) await answerMarkAiText(window);
   return { app, window };
+}
+
+/** Answers the first Word export's question "Mark it", unless it has an answer. */
+async function answerMarkAiText(window: Page): Promise<void> {
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const { exportOptions } = (await bridge.getSettings()).user;
+    if (exportOptions.docx.markAiText !== null) return;
+    const docx = { ...exportOptions.docx, markAiText: "mark" as const };
+    await bridge.updateSettings({ user: { exportOptions: { ...exportOptions, docx } } });
+  });
 }
 
 /**
@@ -393,10 +429,15 @@ export async function forceQuit(app: ElectronApplication): Promise<void> {
   await exited;
 }
 
-/** Chooses the Edit menu's Undo or Redo, as the application menu has it now. */
-export const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
+/** Chooses an editing command, as the application menu has it now. */
+export const clickEditItem = (
+  app: ElectronApplication,
+  id: "edit.undo" | "edit.redo" | "edit.selectAll",
+) =>
   app.evaluate(({ Menu }, itemId) => {
-    Menu.getApplicationMenu()?.getMenuItemById(itemId)?.click();
+    const item = Menu.getApplicationMenu()?.getMenuItemById(itemId);
+    if (!item) throw new Error(`No menu item ${itemId}.`);
+    item.click();
   }, id);
 
 /**
@@ -468,24 +509,52 @@ export async function editFolderInLibrary(window: Page, name: string): Promise<L
 }
 
 /**
- * Shows the sidebar's Folders on disk view: each Linked folder with its
- * folders as on disk, and "Other Documents".
+ * Waits for the sidebar's Linked folders section and each Linked folder's row. The rows don't
+ * unfold: their files sit in the Folders and Not in a Folder.
  */
 export async function showSourceLocations(window: Page): Promise<void> {
-  const button = window.getByTestId("browse-views").getByRole("button", {
-    name: "Folders on disk",
+  const section = window.getByTestId("linked-folders-section");
+  await expect(section).toBeVisible();
+  await expect(
+    section.locator('[data-testid="folder-item"][data-root="true"]').first(),
+  ).toBeVisible({
+    timeout: 15_000,
   });
-  await button.click();
-  await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
-/** Shows the sidebar's Folders view: the User's Folders with their Minds and Documents. */
-export async function showFolders(window: Page): Promise<void> {
-  const button = window
-    .getByTestId("browse-views")
-    .getByRole("button", { name: "Folders", exact: true });
-  await button.click();
-  await expect(button).toHaveAttribute("aria-pressed", "true");
+/**
+ * Puts a Tag on a Document through the core, each by its name (a Document's start will do): the
+ * sidebar's Tags section lists the Tags in use.
+ */
+export async function tagDocument(window: Page, documentName: string, tagName: string) {
+  await window.evaluate(
+    async (wanted) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const tag = (await core.listTags()).find((each) => each.name === wanted.tag);
+      const document = (await core.listDocuments()).find((each) =>
+        each.name.startsWith(wanted.document),
+      );
+      if (!tag || !document)
+        throw new Error(`No Tag ${wanted.tag} or Document ${wanted.document}.`);
+      await core.addTagToDocuments([document.id], tag.id);
+    },
+    { document: documentName, tag: tagName },
+  );
+  await expect(
+    window.getByTestId("sidebar-tag").filter({ hasText: tagName }).first(),
+  ).toBeAttached();
+}
+
+/** Manage Tags, from ⌘K, in the interface's language. */
+export async function openManageTags(window: Page, language: "en" | "zh-CN" = "en"): Promise<void> {
+  const label = translate(language, "tags.menu.manage");
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(label.replace(/…$/, ""));
+  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
+  await pointAt(window, item);
+  await item.click();
+  await expect(window.getByTestId("tags-dialog")).toBeVisible();
 }
 
 /**
@@ -516,6 +585,17 @@ export async function ollamaListing(models: string[], { delayMs = 0 }: { delayMs
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const { port } = server.address() as AddressInfo;
   return { server, url: `http://127.0.0.1:${port}` };
+}
+
+/**
+ * Continue on the setup card, once a key or sign-in works and the card says what each job uses:
+ * the Question that waited is asked then, and the composer takes the card's place.
+ */
+export async function continueSetup(window: Page): Promise<void> {
+  const next = window.getByTestId("setup-continue");
+  await expect(next).toBeVisible();
+  await pointAndClick(window, next);
+  await expect(window.getByTestId("model-setup")).toBeHidden();
 }
 
 /**
@@ -596,6 +676,7 @@ export async function addProviderPage(settings: Locator, catalogId: string): Pro
   await settings
     .getByTestId("provider-directory")
     .locator(`[data-catalog-id="${catalogId}"]`)
+    .first()
     .click();
   const page = settings.getByTestId("provider-add");
   await expect(page).toHaveAttribute("data-catalog-id", catalogId);
@@ -613,26 +694,28 @@ export async function closeSettings(window: Page): Promise<void> {
   await expect(settings).toBeHidden();
 }
 
-/** Settings → Meetings → Record meetings, by its switch; `whileOpen` runs before Settings closes. */
-export async function turnOnMeetings(window: Page, whileOpen?: () => Promise<void>): Promise<void> {
-  const settings = await openSettings(window, "meetings");
-  const recording = settings.getByTestId("meetings-enabled");
-  await recording.hover();
-  await recording.click();
-  await expect(recording).toBeChecked();
-  await whileOpen?.();
-  await closeSettings(window);
-}
-
 /** The + menu's "Record a meeting": a new Mind with the start block. */
 export async function recordMeeting(window: Page): Promise<Locator> {
   const plus = window.getByTestId("plus-menu");
   await plus.hover();
   await plus.click();
+  await window.getByTestId("plus-more").click();
   await window.getByRole("menuitem", { name: "Record a meeting" }).click();
   const start = window.getByTestId("meeting-start");
   await expect(start).toBeVisible();
   return start;
+}
+
+/** The + menu's "Record a meeting" once the recording notice is read: recording at once, in one action. */
+export async function recordMeetingNow(window: Page): Promise<Locator> {
+  const plus = window.getByTestId("plus-menu");
+  await plus.hover();
+  await plus.click();
+  await window.getByTestId("plus-more").click();
+  await window.getByRole("menuitem", { name: "Record a meeting" }).click();
+  const bar = window.getByTestId("meeting-bar");
+  await expect(bar).toHaveAttribute("data-status", "recording");
+  return bar;
 }
 
 /** Starts recording from the start block; the first time, through the one-time notice. */
@@ -680,18 +763,6 @@ export async function openDocumentTags(item: Locator): Promise<Locator> {
 }
 
 /**
- * Adds a Tag to the sidebar's filter (Documents with any Tag chosen show), or,
- * choosing a Tag already chosen, takes it out.
- */
-export async function filterByTag(window: Page, name: string): Promise<void> {
-  await window.getByTestId("tag-filter-menu").click();
-  await window
-    .getByTestId("tag-filters")
-    .getByRole("menuitemcheckbox", { name, exact: true })
-    .click();
-}
-
-/**
  * Sets where new files go (the Output location) through the core's bridge, as
  * Settings › General would, so the next save goes there without asking.
  */
@@ -707,6 +778,22 @@ export function savedLine(name: string, folder: string, language: "en" | "zh-CN"
   return language === "zh-CN"
     ? `已保存“${name}”到“${basename(folder)}”`
     : `Saved “${name}” in ${basename(folder)}`;
+}
+
+/** Opens the assistant's ⋯ and its Move assistant row, whose submenu has the places it docks. */
+export async function openMoveAssistant(window: Page): Promise<void> {
+  await window.getByTestId("assistant-more").click();
+  await window.getByTestId("assistant-menu-move").click();
+  await expect(window.getByTestId("assistant-menu-docks")).toBeVisible();
+}
+
+/** Docks or floats the assistant from its ⋯ › Move assistant. */
+export async function moveAssistant(
+  window: Page,
+  place: "right" | "left" | "bottom" | "float",
+): Promise<void> {
+  await openMoveAssistant(window);
+  await pointAndClick(window, window.getByTestId(`assistant-menu-${place}`));
 }
 
 /** The result line's saved file, once it says it saved one. */
@@ -725,6 +812,45 @@ export async function examplesMenu(window: Page): Promise<Locator> {
   return menu;
 }
 
+/**
+ * Opens a saved page in a window of its own, in a session with the network off that records
+ * every request it is asked for (`requestsMade`), as a reader opening the file in a browser would.
+ */
+export async function openSavedPage(app: ElectronApplication, path: string): Promise<Page> {
+  const opened = app.waitForEvent("window");
+  await app.evaluate(async ({ BrowserWindow, session }, file) => {
+    const offline = session.fromPartition("saved-page", { cache: false });
+    offline.enableNetworkEmulation({ offline: true });
+    const requested: string[] = [];
+    (globalThis as { savedPageRequests?: string[] }).savedPageRequests = requested;
+    offline.webRequest.onBeforeRequest((details, callback) => {
+      requested.push(details.url);
+      callback({ cancel: !details.url.startsWith("file:") });
+    });
+    const window = new BrowserWindow({
+      width: 1100,
+      height: 760,
+      useContentSize: true,
+      // macOS keeps a window no taller than the screen otherwise, and CI's Mac has a small one.
+      enableLargerThanScreen: true,
+      webPreferences: {
+        session: offline,
+        sandbox: true,
+        contextIsolation: true,
+        backgroundThrottling: false,
+      },
+    });
+    await window.loadFile(file);
+  }, path);
+  const page = await opened;
+  await page.waitForLoadState("load");
+  return page;
+}
+
+/** Every address the page `openSavedPage` opened has asked for, the ones it was refused included. */
+export const requestsMade = (app: ElectronApplication) =>
+  app.evaluate(() => (globalThis as { savedPageRequests?: string[] }).savedPageRequests ?? []);
+
 /** The menu of the Mind's tab, opened by a right-click on the tab, as a person opens it. */
 export async function tabMenu(window: Page): Promise<Locator> {
   const tab = window.getByRole("tab", { selected: true }).first();
@@ -734,9 +860,16 @@ export async function tabMenu(window: Page): Promise<Locator> {
   return menu;
 }
 
+/** Splits the shown tab to the right from its menu, as a person does: a copy of it in a new group. */
+export async function splitFromTabMenu(window: Page): Promise<void> {
+  const menu = await tabMenu(window);
+  await pointAndClick(window, menu.getByTestId("tab.split"));
+}
+
 /** "Import a Word file…" from the "+" menu; the test answers the system's open dialog first. */
 export async function importWordFromMenu(window: Page): Promise<Locator> {
   await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-more").click();
   await window.getByTestId("plus-import-word").click();
   const dialog = window.getByTestId("word-import-dialog");
   await expect(dialog).toBeVisible();
@@ -759,9 +892,15 @@ export async function importWordFile(
   await expect(dialog).toBeHidden();
 }
 
-/** Export options…, from the tab's menu; resolves once the sheet shows `title`. */
+/** The Export button's menu, then Export options…, which opens the sheet. */
+export async function openExportOptions(window: Page): Promise<void> {
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  await pointAndClick(window, window.getByTestId("export-options"));
+}
+
+/** Export options…, from the Export button's menu; resolves once the sheet shows `title`. */
 export async function openOptions(window: Page, title: string): Promise<void> {
-  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.exportOptions"));
+  await openExportOptions(window);
   await expect(window.getByTestId("export-dialog").getByRole("heading")).toHaveText(title);
 }
 
@@ -882,6 +1021,7 @@ export async function previewLink(
   if (button) await button.click();
   else {
     await window.getByTestId("plus-menu").click();
+    await window.getByTestId("plus-more").click();
     await window.getByTestId("plus-link-folder").click();
   }
   const dialog = window.getByTestId("link-folder-dialog");
@@ -1115,6 +1255,17 @@ export async function catchCopies(window: Page): Promise<void> {
 export const copied = (window: Page) =>
   window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
 
+/** Pushes a core event to the window, as the core does when something happens. */
+export const emit = (app: ElectronApplication, name: string, payload: unknown) =>
+  app.evaluate(
+    ({ BrowserWindow }, sent) => {
+      for (const each of BrowserWindow.getAllWindows()) {
+        each.webContents.send(sent.channel, sent.name, sent.payload);
+      }
+    },
+    { channel: EVENT_CHANNEL, name, payload },
+  );
+
 /** Switches the interface's language, as Settings does. */
 export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
   return window.evaluate(
@@ -1264,14 +1415,19 @@ export async function expectReadyDocuments(window: Page, count: number): Promise
 
 /** Ends the first open (hides its steps), so the shell shows everything, as it does for a returning User. */
 export async function leaveFirstOpen(window: Page): Promise<void> {
-  await window.evaluate(async () => {
+  await markSteps(window, { hidden: true });
+  await expect(window.getByTestId("first-open-steps")).toHaveCount(0);
+}
+
+/** Marks steps of the first open done (or hides it), as the User doing them would. */
+export async function markSteps(window: Page, done: object): Promise<void> {
+  await window.evaluate(async (patch) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     const { device } = await bridge.getSettings();
     await bridge.updateSettings({
-      device: { gettingStarted: { ...device.gettingStarted, hidden: true } },
+      device: { gettingStarted: { ...device.gettingStarted, ...patch } },
     });
-  });
-  await expect(window.getByTestId("first-open-steps")).toHaveCount(0);
+  }, done);
 }
 
 /** The id of the Document listed in the sidebar under `name`. */
@@ -1310,6 +1466,20 @@ export function textBoxOf(target: Locator) {
     range.selectNodeContents(element);
     const { x, y, width, height } = range.getBoundingClientRect();
     return { x, y, width, height };
+  });
+}
+
+/** ⌘K's rows for what it found, not its last row, which asks about the words typed. */
+export const paletteFound = (window: Page): Locator =>
+  window.locator('[data-testid="palette-item"]:not([data-kind="ask"])');
+
+export function lastLineBoxOf(target: Locator) {
+  return target.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const rect = [...range.getClientRects()].at(-1);
+    if (!rect) throw new Error("The element has no text.");
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
   });
 }
 
@@ -1441,7 +1611,10 @@ export async function pointAndClick(
   {
     button = "left",
     modifiers = [],
-  }: { button?: "left" | "right"; modifiers?: readonly ("ControlOrMeta" | "Shift")[] } = {},
+  }: {
+    button?: "left" | "right" | "middle";
+    modifiers?: readonly ("ControlOrMeta" | "Shift")[];
+  } = {},
 ): Promise<void> {
   // A list that redraws as the click begins swaps the element for an equal one: look again.
   let box: Awaited<ReturnType<Locator["boundingBox"]>> = null;
@@ -1578,7 +1751,7 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
  * Where `words` are drawn in a line of text: their left and right edges, and
  * their middle line. They may run across marks (AI text and the User's, bold).
  */
-async function wordsBox(line: Locator, words: string) {
+export async function wordsBox(line: Locator, words: string) {
   const box = await line.evaluate((element, wanted) => {
     const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     const texts: Text[] = [];
@@ -1782,6 +1955,28 @@ export async function pointAt(window: Page, target: Locator): Promise<{ x: numbe
   const point = { x: box.x + Math.min(box.width / 2, 40), y: box.y + box.height / 2 };
   await window.mouse.move(point.x, point.y, { steps: 8 });
   return point;
+}
+
+/**
+ * Drags `from` onto `to` as a person does: slides onto it, presses, slides onto `to` and rests
+ * there while `whileOver` looks at what the drag shows, then lets go.
+ */
+export async function dragOnto(
+  window: Page,
+  from: Locator,
+  to: Locator,
+  whileOver?: () => Promise<void>,
+): Promise<void> {
+  await pointAt(window, from);
+  await window.mouse.down();
+  try {
+    const point = await pointAt(window, to);
+    // A hand never rests quite still: during a drag the page hears where it is at the next move.
+    await window.mouse.move(point.x + 2, point.y);
+    await whileOver?.();
+  } finally {
+    await window.mouse.up();
+  }
 }
 
 /** Presses Tab, or Shift+Tab if `target` comes before the focus, until `target` has the focus. */

@@ -2,13 +2,15 @@ import { create } from "zustand";
 import type {
   CheckRecordFormat,
   ExportFormat,
-  ExportMindOptions,
   ExportPreferences,
+  MarkAiTextChoice,
+  SavedComparisonExport,
   SavedExport,
   SavedMindExport,
   SentenceChecksExported,
   WordExportReport,
 } from "../../core/api";
+import { optionsFor } from "../../shared/exportOptions";
 import type { MessageKey } from "../../shared/i18n";
 import { core } from "./core";
 import { errorMessage } from "./errors";
@@ -37,7 +39,7 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
   docx: {
     includeQuestions: false,
     trackChanges: true,
-    markAiText: true,
+    markAiText: null,
     commentFailedChecks: true,
   },
   pdf: { includeQuestions: false },
@@ -48,33 +50,12 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
 export const exportPreferences = (): ExportPreferences =>
   useAppStore.getState().settings?.user.exportOptions ?? DEFAULT_PREFERENCES;
 
-/** Whether a format has the Include Questions option: Markdown keeps them, and a source pack has none. */
-export const hasQuestionsOption = (
-  format: ExportFormat,
-): format is Exclude<ExportFormat, "markdown" | "source-pack"> =>
-  format !== "markdown" && format !== "source-pack";
+export const COMPARISON_EXCEL = "comparison-xlsx";
 
-/** What an export of `format` asks the core for. */
-export const optionsFor = (
-  format: ExportFormat,
-  preferences: ExportPreferences,
-): ExportMindOptions => {
-  if (format === "docx") return { format, ...preferences.docx };
-  if (format === "source-pack") return { format };
-  if (format === "share-page") {
-    return {
-      format,
-      ...preferences["share-page"],
-      theirChanges: preferences.theirChanges ?? "shown",
-    };
-  }
-  const theirChanges = preferences.theirChanges ?? "shown";
-  return hasQuestionsOption(format)
-    ? { format, includeQuestions: preferences[format].includeQuestions, theirChanges }
-    : { format, theirChanges };
-};
-
-export type ExportKind = ExportFormat | `check-record-${CheckRecordFormat}`;
+export type ExportKind =
+  | ExportFormat
+  | `check-record-${CheckRecordFormat}`
+  | typeof COMPARISON_EXCEL;
 
 export const isCheckRecord = (kind: ExportKind): kind is `check-record-${CheckRecordFormat}` =>
   kind.startsWith("check-record-");
@@ -82,8 +63,11 @@ export const isCheckRecord = (kind: ExportKind): kind is `check-record-${CheckRe
 export const checkRecordKind = (format: CheckRecordFormat): `check-record-${CheckRecordFormat}` =>
   `check-record-${format}`;
 
-/** How the last export went, said in the Mind it exported (`ExportResultLine`). */
-export type ExportResult =
+/**
+ * How the last export went, said in the Mind it exported (`ExportResultLine`); `tableId` names
+ * the comparison table a workbook was made from.
+ */
+export type ExportResult = { tableId?: string } & (
   | { mindId: string; state: "saving"; format: ExportKind }
   | {
       mindId: string;
@@ -110,6 +94,8 @@ export type ExportResult =
     }
   /** Not saved yet: what a Word file can't keep, for the User to see first (#105). */
   | { mindId: string; state: "review"; format: ExportFormat; word: WordExportReport }
+  /** Not started yet: a Word file waits for the User to say whether it marks the text IncarnaMind wrote. */
+  | { mindId: string; state: "ask-mark"; format: "docx" }
   | { mindId: string; state: "failed"; format: ExportKind; message: string }
   /** A source pack of a Mind with no Citations: nothing to make, and nothing went wrong. */
   | { mindId: string; state: "empty"; format: ExportFormat }
@@ -119,7 +105,8 @@ export type ExportResult =
       format: ExportKind;
       linkedFolderId: string;
       folder: string;
-    };
+    }
+);
 
 export const useExports = create<{
   result: ExportResult | null;
@@ -131,16 +118,40 @@ export const useExports = create<{
 
 // Null while the same Mind is still exporting, so a held ⇧⌘E makes one file; a newer export or a
 // dismissal wins over a late answer.
-function begin(mindId: string, kind: ExportKind): ((next: ExportResult | null) => void) | null {
+function begin(
+  mindId: string,
+  kind: ExportKind,
+  tableId?: string,
+): ((next: ExportResult | null) => void) | null {
   const { result } = useExports.getState();
   if (result?.mindId === mindId && result.state === "saving") return null;
-  useExports.setState({ result: { mindId, state: "saving", format: kind } });
+  useExports.setState({
+    result: { mindId, state: "saving", format: kind, ...(tableId && { tableId }) },
+  });
   return (next) => {
     const current = useExports.getState().result;
     if (current?.mindId === mindId && current.state === "saving") {
       useExports.setState({ result: next });
     }
   };
+}
+
+function askToMark(mindId: string): void {
+  const { result } = useExports.getState();
+  if (result?.mindId === mindId && result.state === "saving") return;
+  useExports.setState({ result: { mindId, state: "ask-mark", format: "docx" } });
+}
+
+/** Keeps the User's answer to the question the Word export asked, then exports as they asked. */
+export async function answerMarkAiText(mindId: string, answer: MarkAiTextChoice): Promise<void> {
+  const preferences = exportPreferences();
+  await useAppStore.getState().updateSettings({
+    user: {
+      exportOptions: { ...preferences, docx: { ...preferences.docx, markAiText: answer } },
+    },
+  });
+  // A refusal is already said in a notice, and the question stays for another try.
+  if (exportPreferences().docx.markAiText === answer) await exportMind(mindId, "docx");
 }
 
 const NO_CHECKS: SentenceChecksExported = {
@@ -153,7 +164,7 @@ const NO_CHECKS: SentenceChecksExported = {
 function savedResult(
   mindId: string,
   format: ExportKind,
-  saved: Exclude<SavedMindExport, { status: "review" }> | SavedExport,
+  saved: Exclude<SavedMindExport, { status: "review" }> | SavedExport | SavedComparisonExport,
 ): ExportResult | null {
   if (saved.status === "saved") {
     return {
@@ -191,6 +202,8 @@ function savedResult(
  * the last one, which it becomes; the result line says how it went. `first` fixes what stopped
  * the last try (another Output location, allowing a Linked folder), unless it returns false.
  * `accept` is what a Word file can't keep that the User has seen and exports anyway (#105).
+ * Until the User has said whether Word marks the text IncarnaMind wrote, a Word export asks
+ * that first, in the result line, and exports once it is answered (`answerMarkAiText`).
  */
 export async function exportMind(
   mindId: string,
@@ -200,6 +213,11 @@ export async function exportMind(
 ): Promise<void> {
   const preferences = exportPreferences();
   const chosen = format ?? preferences.format;
+  const options = optionsFor(chosen, preferences);
+  if (!options) {
+    askToMark(mindId);
+    return;
+  }
   const settle = begin(mindId, chosen);
   if (!settle) return;
   if (chosen !== preferences.format) {
@@ -220,7 +238,7 @@ export async function exportMind(
       return;
     }
     const saved = await core.saveMindExport(mindId, {
-      ...optionsFor(chosen, preferences),
+      ...options,
       ...(accept && { accept: [...accept] }),
     });
     settle(
@@ -257,11 +275,45 @@ export async function exportCheckRecord(
   }
 }
 
-export function exportAgain(
+/**
+ * Saves a comparison table as an Excel workbook (#132) into the Output location, as an export
+ * does; the result line says how it went.
+ */
+export async function exportComparison(
   mindId: string,
-  kind: ExportKind,
+  tableId: string,
+  first?: () => Promise<boolean>,
+): Promise<void> {
+  const settle = begin(mindId, COMPARISON_EXCEL, tableId);
+  if (!settle) return;
+  try {
+    if (first && !(await first())) {
+      settle(null);
+      return;
+    }
+    const saved = savedResult(
+      mindId,
+      COMPARISON_EXCEL,
+      await core.saveComparisonExport({ mindId, tableId }),
+    );
+    settle(saved && { ...saved, tableId });
+  } catch (failure) {
+    settle({
+      mindId,
+      state: "failed",
+      format: COMPARISON_EXCEL,
+      tableId,
+      message: errorMessage(failure, translateNow),
+    });
+  }
+}
+
+export function exportAgain(
+  result: Pick<ExportResult, "mindId" | "format" | "tableId">,
   first: () => Promise<boolean>,
 ): Promise<void> {
+  const { mindId, format: kind } = result;
+  if (kind === COMPARISON_EXCEL) return exportComparison(mindId, result.tableId ?? "", first);
   if (!isCheckRecord(kind)) return exportMind(mindId, kind, first);
   return exportCheckRecord(mindId, kind === "check-record-pdf" ? "pdf" : "csv", first);
 }

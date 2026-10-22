@@ -110,6 +110,7 @@ async function verifyPaper(width: number) {
   });
   await interceptOpenDialog(app, join(sources, "Memory paper.pdf"));
   await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
   await pointAndClick(window, window.getByTestId("plus-verify-document"));
   await expect(frontMindName(window)).toHaveText("Checking: Memory paper");
   return { app, window };
@@ -226,7 +227,7 @@ test("Stop ends a check; offline, it stops at the first failure with one problem
   services.fail("unreachable");
   await pointAndClick(window, line.getByTestId("references-check"));
   const stopped = window.getByTestId("references-stopped");
-  await expect(stopped).toContainText("Crossref couldn't be reached.");
+  await expect(stopped).toContainText("Crossref couldn’t be reached.");
   await expect(window.getByTestId("reference-check")).toHaveCount(0);
   expect(services.requests).toHaveLength(2);
   await screenshot(window, "references-offline-en");

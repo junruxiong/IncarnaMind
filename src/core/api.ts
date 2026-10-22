@@ -40,6 +40,7 @@ export type {
  * the renderer import it.
  */
 import type { CitationForm, CitationStyleId, StyleCatalogue } from "../shared/citationStyles";
+import type { AppCommandId, AssistantCommandId } from "../shared/commands";
 import type { FormulaInput, FormulaLiteral, ResultUnit, ShowAs } from "../shared/formula";
 import type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate } from "../shared/meetingHelp";
 import type { MindStyle } from "../shared/mindStyle";
@@ -67,7 +68,8 @@ export interface Mind {
   /**
    * The Folder (an in-app one, a `LibraryGroup`) the Mind belongs to, or null:
    * Not in a Folder. A Mind in a Folder starts each Question with the Folder
-   * as its Search scope; one in none searches every Document.
+   * as its Search scope while the Folder holds a Document, and searches every
+   * Document while it holds none, as one in no Folder does (#1359).
    */
   folderId: string | null;
 }
@@ -829,9 +831,11 @@ export interface AnswerToolCall {
    * `{ query, from_year?, to_year?, open_access_only? }`); "web", web search
    * (`search_web`, `{ query }`, and `read_web_page`, `{ url, query }`; #128);
    * "minds", the Minds' Tools of an Answer in the assistant (#202:
-   * `read_mind`, `edit_mind`, `add_to_mind`, `create_mind`, see `mindChange`).
+   * `read_mind`, `edit_mind`, `add_to_mind`, `create_mind`, see `mindChange`); "commands",
+   * the commands it runs for the User (#1110: `list_commands`, `run_command`, see `command`);
+   * "asks", a question it asked the User (#1374: `ask_user`, see `asked`).
    */
-  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds";
+  source: "documents" | "skill" | "connector" | "sources" | "web" | "minds" | "commands" | "asks";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -890,6 +894,96 @@ export interface AnswerToolCall {
   mindChange?: MindChange;
   /** A Minds' Tool that changed nothing: why, as its card says. Absent otherwise. */
   mindProblem?: MindProblem;
+  /** `list_commands`, once it ended: the Documents or Minds it found (#1110). Absent otherwise. */
+  found?: CommandsFound;
+  /** `run_command`, once it ran: what it changed, from what the command returned (#1110). */
+  command?: CommandDone;
+  /** `run_command` that changed nothing: why (#1110). Absent otherwise. */
+  commandProblem?: CommandProblem;
+  /** `ask_user`: the question, and the User's answer once they gave it (#1374). */
+  asked?: UserQuestion;
+}
+
+/** One of the choices in a question the assistant asks the User (#1374). */
+export interface UserQuestionOption {
+  label: string;
+  /** One line that says what choosing it means; empty: none. */
+  description: string;
+  /** The one the assistant would go with; at most one option is. */
+  recommended: boolean;
+  /** Ticked already when the question shows, for the User to change. */
+  preselected: boolean;
+}
+
+/**
+ * The User's answer to a question: the labels of the options chosen, in their
+ * order, and what they wrote under Other… (null: nothing); or that they
+ * skipped it.
+ */
+export type UserAnswer =
+  | { skipped: false; chosen: string[]; wrote: string | null }
+  | { skipped: true };
+
+/** A question the assistant asks the User with options (#1374), as its Answer keeps it. */
+export interface UserQuestion {
+  question: string;
+  /** One line under the question, such as what is ticked already and why; null: none. */
+  detail: string | null;
+  /** 2 to 4, the recommended one first. */
+  options: UserQuestionOption[];
+  /** More than one option may be chosen. */
+  multiple: boolean;
+  /** The User may write their own answer, under Other…. */
+  other: boolean;
+  /** Null while it waits for the User. */
+  answer: UserAnswer | null;
+}
+
+/** A question waiting in the tray for the User's answer (#1374). */
+export interface UserQuestionRequest extends AnswerPlace {
+  requestId: string;
+  answerId: string;
+  /** The call's id among the Answer's `toolCalls`. */
+  toolCallId: string;
+  question: UserQuestion;
+}
+
+/** What the assistant finds and runs commands on (#1110). */
+export type CommandTarget = "document" | "mind";
+
+/** What `list_commands` found (#1110): how many, and what matched them, each as given. */
+export interface CommandsFound {
+  kind: CommandTarget;
+  count: number;
+  by: { name?: string; tag?: string; folder?: string };
+}
+
+/** A Document or Mind a command changed, by its name before; `renamed`: the name it took. */
+export interface CommandItem {
+  kind: CommandTarget;
+  id: string;
+  name: string;
+  renamed?: string;
+}
+
+/** What a call of `run_command` did (#1110), from what its command returned. */
+export interface CommandDone {
+  command: AssistantCommandId;
+  /** The Run it was part of: one Undo takes back every change of the Run (`undoCommands`). */
+  run: string;
+  items: CommandItem[];
+  /** The Folder or Tag it put them in, as named then; `made`: the command made it. */
+  into?: { kind: "folder" | "tag"; id: string; name: string; made: boolean };
+  /** The file an export saved. */
+  file?: Pick<SavedFile, "path" | "name" | "folder" | "inDefaultFolder">;
+}
+
+/** Why a call of `run_command` changed nothing (#1110). */
+export interface CommandProblem {
+  command: string;
+  /** In English, for the log; `wording` says it in the interface language when there is one. */
+  message: string;
+  wording: ErrorWording | null;
 }
 
 /**
@@ -922,7 +1016,9 @@ export type MindProblem =
     }
   | { kind: "local-mode" | "not-ready" }
   | { kind: "model"; mindId: string; message: string }
-  | { kind: "copy" | "new-version"; mindId: string; text: string };
+  | { kind: "copy" | "new-version"; mindId: string; text: string }
+  /** A chart of a table already in the Mind (#1091): "several" tables, and the cursor in none. */
+  | { kind: "no-chart"; mindId: string; problem: ChartProblem | "several" };
 
 /**
  * Where the assistant writes next in a Mind, as its changes come in (#202):
@@ -936,6 +1032,13 @@ export interface MindWriting {
   mindId: string;
   place: WritingPlace | null;
 }
+
+/**
+ * Why a chart the User asked the assistant for wasn't drawn (#1091): no table to draw it from,
+ * no column of numbers, one column for a scatter chart, or figures with no Citation and no
+ * calculation.
+ */
+export type ChartProblem = "noTable" | "noNumbers" | "needsTwo" | "uncited";
 
 /**
  * What a call of a Minds' Tool did (#202): the changes it proposed in one
@@ -955,6 +1058,10 @@ export interface MindChange {
   paragraphs?: number;
   /** How many tables it added. Absent: none. */
   tables?: number;
+  /** How many charts it added (#1091). Absent: none. */
+  charts?: number;
+  /** Why the chart asked for wasn't drawn, the table kept (#1091). Absent: none was asked for, or it was drawn. */
+  chartNotDrawn?: ChartProblem;
   /** Sources in its tables' cells written as a name in brackets that matched no Citation, kept as text. Absent: none. */
   unlinkedSources?: number;
   /** Sources the assistant wrote as a name in brackets that matched no Citation it recorded, so left out. Absent: none. */
@@ -1926,6 +2033,8 @@ export interface DeviceSettings {
   chatSetupDismissed: boolean;
   /** The User dismissed the sidebar's line saying the app runs without its sandbox (#1179). */
   sandboxNoticeDismissed: boolean;
+  /** The app has opened on this device before: from its second launch it opens on Home. */
+  openedBefore: boolean;
   /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
   gettingStarted: GettingStarted;
   /**
@@ -1946,14 +2055,14 @@ export interface DeviceSettings {
    * shown on this device: it shows at most twice (docs/agents/interaction.md, rule 14).
    */
   suggestionOffers: number;
-  /**
-   * Meetings can be recorded on this device (Settings → Meetings). Off by
-   * default while recording is new: transcription and telling speakers apart
-   * come after it.
-   */
-  meetingsEnabled: boolean;
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
+  /**
+   * Where meeting audio is transcribed, once the User has chosen: at first run (Change on the
+   * Meetings job) or in Settings. Null: not chosen, so this computer, and a first Meeting may
+   * ask once cloud routes exist (#141).
+   */
+  transcriptionRoute: TranscriptionRoute | null;
   /**
    * The User has read, once on this device, what a recording captures and
    * that the other people should be told. Recording waits for it.
@@ -1967,6 +2076,39 @@ export interface DeviceSettings {
   meetingHelpKeys: HelpKeys;
   /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
   motion: MotionPreference;
+  /**
+   * The model the User last chose here, in a composer or as the Answers default: a Mind with no
+   * pick of its own and the assistant with no Mind in focus use it (`modelInUse`). Null until
+   * they choose, and again once its provider is removed: they follow `UserSettings.chatModel` then.
+   */
+  lastChatModel: ChatModelChoice | null;
+}
+
+/**
+ * Where a Meeting's audio is turned into text: on this computer, or by a cloud service with the
+ * User's own key (#141): OpenAI with the key of the OpenAI provider in Settings › Models, Soniox
+ * with a key of its own. #463 adds Qwen.
+ */
+export const TRANSCRIPTION_ROUTES = ["local", "openai", "soniox"] as const;
+export type TranscriptionRoute = (typeof TRANSCRIPTION_ROUTES)[number];
+export type CloudTranscriptionRoute = Exclude<TranscriptionRoute, "local">;
+
+/** A cloud transcription service, as Settings and the first-meeting sheet offer it. */
+export interface TranscriptionServiceStatus {
+  route: CloudTranscriptionRoute;
+  name: string;
+  model: string;
+  perHour: Money;
+  /** "provider": it uses the key of the chat provider of the same name in Settings › Models. */
+  key: "provider" | "own";
+  hasKey: boolean;
+  liveSpeakers: boolean;
+  keyUrl: string | null;
+}
+
+export interface SetTranscriptionKeyInput {
+  route: CloudTranscriptionRoute;
+  apiKey: string;
 }
 
 /**
@@ -2028,6 +2170,7 @@ export const MAX_TAB_GROUPS = 3;
 export type TabItem =
   | { kind: "mind"; mindId: string }
   | { kind: "library" }
+  | { kind: "home" }
   | { kind: "document"; documentId: string };
 
 /** What the viewer knows of the Citation a Document was opened from. */
@@ -2181,6 +2324,11 @@ export type LayoutChange =
       keep?: boolean;
       /** Its group becomes the focused one: true unless false. */
       focus?: boolean;
+      /**
+       * Opened behind the tab shown, which stays in front with the focus, as a middle click opens
+       * a browser's tab; several in a row keep the order they were opened in.
+       */
+      behind?: boolean;
       /** A Document: where in it, e.g. a Citation's quote. */
       place?: DocumentPlace;
     }
@@ -3867,6 +4015,8 @@ export interface Money {
   amount: number;
 }
 
+export const MAX_MONTHLY_CAP = 1_000_000;
+
 /**
  * The most IncarnaMind may spend in a calendar month on models billed per
  * token. Before each such request its most (its prompt and its output limit)
@@ -3952,6 +4102,12 @@ export type ComparisonResult =
   | { started: true; tableId: string }
   | { started: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   | { started: false; reason: "consent-declined" };
+
+/** What saving a comparison table as an Excel workbook did (`CoreApi.saveComparisonExport`). */
+export type SavedComparisonExport =
+  /** Saved, with how many of the workbook's Citations aren't "Quote found", which the result line says. */
+  | { status: "saved"; file: SavedFile; unverifiedCitations: number }
+  | Exclude<SavedExport, { status: "saved" }>;
 
 /** A comparison table whose cells are being filled ("comparison.filling"). */
 export interface ComparisonFilling extends ComparisonTableRef {
@@ -4686,9 +4842,10 @@ export interface CheckClaimInput {
 
 /**
  * Where a sentence's check searched: the Mind's Folder (null for a Mind in
- * none, which searches every Document), or every Document because the User
- * asked ("Search all Documents"). A Mind moved to another Folder since needs
- * its sentences checked again; one the User widened doesn't.
+ * none, which searches every Document), or every Document (`widened`)
+ * because the User asked ("Search all Documents") or the Mind's Folder held
+ * no Document (#1359). A Mind moved to another Folder since needs its
+ * sentences checked again; one whose check was widened doesn't.
  */
 export interface ClaimCheckScope {
   folderId: string | null;
@@ -5104,10 +5261,22 @@ export interface AnswerSteps {
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
   /**
+   * Documents in its Search scope were still being read (Queued or Extracting) when it ended, so
+   * no search could find their text yet (#1503): how many, and the name when there is one.
+   * Absent: none.
+   */
+  stillReading?: { count: number; name?: string };
+  /**
    * A request to write, written from a Search scope that holds `documents` of the User's
    * `total` Documents (#1149). Absent: from all of them, or not a request to write.
    */
   writtenFrom?: { documents: number; total: number };
+  /**
+   * What its request held besides the Mind it read (`ConversationAnswer.read`), by id: the
+   * Documents whose whole text went with the Question, and whether the live transcript of a
+   * meeting did. Absent: an Answer written before this was kept, or one that isn't in the assistant.
+   */
+  sent?: { documents: string[]; transcript?: true };
 }
 
 /**
@@ -5477,6 +5646,12 @@ export interface ConversationMatch {
 
 // ---------------------------------------------------------------------------
 // The words inside Minds and Documents (⌘K, #116)
+
+/** A Mind's first line of text that isn't its name (`CoreApi.listMindSnippets`). */
+export interface MindSnippet {
+  mindId: string;
+  text: string;
+}
 
 /**
  * A Mind whose Blocks hold every word searched for (`CoreApi.searchMinds`): its best Block, one
@@ -6021,6 +6196,7 @@ export const dataKinds = [
   "verified-document",
   "references",
   "connector-search",
+  "meeting-audio",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -6072,6 +6248,10 @@ export type DataKind = (typeof dataKinds)[number];
  * - "connector-registry": the words the User types in Settings › Connectors'
  *   search, to the official MCP Registry, which finds community Connectors
  *   (#148). Asked the first time they search; none in local mode.
+ * - "transcription": a Meeting's audio while it records, other people's
+ *   voices included, to the cloud transcription service the User chose in
+ *   Settings › Meetings or on the first-meeting sheet (#141). Choosing it
+ *   allows it; none in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -6089,6 +6269,7 @@ export const dataFlowIds = [
   "agents",
   "web-search",
   "connector-registry",
+  "transcription",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -6152,6 +6333,119 @@ export interface RegisteredDataFlow {
    * e.g. chat with a model on this computer.
    */
   services: DataFlowStatus[];
+}
+
+// ---------------------------------------------------------------------------
+// Page setup
+// ---------------------------------------------------------------------------
+
+/** How a page number is written: Word's `decimal`, `lowerRoman`, `upperRoman`, `lowerLetter` and `upperLetter`. */
+export type PageNumberFormat =
+  | "decimal"
+  | "lowerRoman"
+  | "upperRoman"
+  | "lowerLetter"
+  | "upperLetter";
+
+/** One run in a header or footer: text, a tab to a position the page sets, or a field that the page it is drawn on fills in. */
+export type PageFurnitureRun =
+  | { kind: "text"; text: string; bold?: true; italic?: true }
+  | {
+      kind: "field";
+      /** The page's number, the pages in the document, or the pages in the section. */
+      field: "PAGE" | "NUMPAGES" | "SECTIONPAGES";
+      /** The field's own `\* roman`-style switch; null: the section's number format. */
+      format: PageNumberFormat | null;
+      bold?: true;
+      italic?: true;
+    }
+  /** Word's absolute position tab (`w:ptab`): the text after it starts at the margin's left, centre or right. */
+  | {
+      kind: "alignedTab";
+      align: "left" | "center" | "right";
+      relativeTo: "margin" | "indent";
+    };
+
+/** A tab stop of a paragraph, from its style and itself as Word resolves them: `position` is from the text area's left edge, in twips. */
+export interface PageTabStop {
+  position: number;
+  align: "left" | "center" | "right" | "decimal" | "bar";
+  leader?: "dot" | "hyphen" | "underscore" | "heavy" | "middleDot";
+}
+
+export interface PageFurnitureParagraph {
+  /** From the paragraph or its style, as Word resolves it. */
+  align: "left" | "center" | "right" | "justify";
+  runs: PageFurnitureRun[];
+  /** Where the tabs ("\t") in the runs stop. Absent: none are set, so Word's default stops. */
+  tabStops?: PageTabStop[];
+  /** It is in a text box anchored in the paragraph before it, as a page number often is. */
+  inTextBox?: true;
+  /** It is a frame (`w:framePr`), which Word places beside the text, such as a page number at the margin: where is not read yet. */
+  framed?: true;
+}
+
+/** A header or a footer: its paragraphs, tables flattened to their paragraphs, a text box's after the one it is anchored in. */
+export interface PageFurniture {
+  paragraphs: PageFurnitureParagraph[];
+  /** How many pictures and shapes it holds that are not read yet (a logo): none is drawn. Absent: none. */
+  pictures?: number;
+}
+
+/** A header or footer for each kind of page: most pages, the first, and the even ones. */
+export interface PageFurnitureSet {
+  default: PageFurniture | null;
+  /** Used where the section has a different first page. */
+  first: PageFurniture | null;
+  /** Used where the document has different odd and even pages. */
+  even: PageFurniture | null;
+}
+
+/** One section of a document's pages. Lengths are in twips (twentieths of a point, 1,440 to the inch). */
+export interface PageSection {
+  /**
+   * The place ("w:sectPr#3") of the section break atom that ends it in the Mind,
+   * as `WordAtomAttributes.source` has it; null for the last section, which ends with the document.
+   */
+  breakPlace: string | null;
+  /** Where its first page starts: on a new page, on the same page, or on the next odd or even one. */
+  start: "nextPage" | "continuous" | "evenPage" | "oddPage";
+  width: number;
+  height: number;
+  /** From the box: landscape where it is wider than tall, as Word draws it, whatever `w:orient` says. */
+  orientation: "portrait" | "landscape";
+  margins: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+    gutter: number;
+    /** From the page's top edge to its header, and from its bottom edge to its footer. */
+    header: number;
+    footer: number;
+  };
+  /** The first page has its own header and footer. */
+  differentFirstPage: boolean;
+  pageNumbers: {
+    /** The number the section's first page takes; null: it carries on from the section before. */
+    start: number | null;
+    format: PageNumberFormat;
+  };
+  /** As this section has them: a header or footer the file doesn't give it is the section before's. */
+  headers: PageFurnitureSet;
+  footers: PageFurnitureSet;
+}
+
+/**
+ * How a Mind's pages are set up, for Page view: what the Word file it was imported
+ * from says, or, for a Mind that wasn't, the size and margins of the native export. Pages are
+ * layout only: none of this is in the Mind's content, its sync or its Questions.
+ */
+export interface PageSetup {
+  source: "word" | "native";
+  /** Odd and even pages have different headers and footers. */
+  oddAndEven: boolean;
+  sections: PageSection[];
 }
 
 // ---------------------------------------------------------------------------
@@ -6739,7 +7033,9 @@ export type ConnectorRegistrySearch =
 /**
  * What an approval policy is about:
  * - "tool": one Tool of one Connector;
- * - "skill-script": the scripts of one Skill.
+ * - "skill-script": the scripts of one Skill;
+ * - "command": a command the assistant runs for the User (#1110), which no policy covers: it
+ *   asks every time it reaches outside IncarnaMind.
  */
 export type ApprovalSubject =
   | {
@@ -6748,7 +7044,8 @@ export type ApprovalSubject =
       /** The Tool's name as the Connector gives it. */
       tool: string;
     }
-  | { kind: "skill-script"; skillId: string };
+  | { kind: "skill-script"; skillId: string }
+  | { kind: "command"; command: AssistantCommandId };
 
 export type ApprovalSubjectKind = ApprovalSubject["kind"];
 
@@ -6821,7 +7118,10 @@ export interface ApprovalResponseOptions {
  * a Skill script (`subject.kind` tells which). Its Answer is paused until they
  * decide; stopping the Answer, or closing IncarnaMind, denies it.
  */
-export type ApprovalRequest = ToolApprovalRequest | SkillScriptApprovalRequest;
+export type ApprovalRequest =
+  | ToolApprovalRequest
+  | SkillScriptApprovalRequest
+  | CommandApprovalRequest;
 
 interface ApprovalRequestBase extends AnswerPlace {
   requestId: string;
@@ -6872,6 +7172,8 @@ export type EffectScope =
   | { kind: "service"; serviceId: string; name: string } // an external service, as consent names it
   | { kind: "host"; host: string } // a web host
   | { kind: "mind"; mindId: string } // one of the User's Minds
+  | { kind: "library" } // the Library: its Documents' names, Folders and Tags, Recently deleted
+  | { kind: "output" } // the Output location, the folder the User chose for new files
   | { kind: "anywhere" };
 
 /**
@@ -6907,6 +7209,75 @@ export interface ToolApprovalRequest extends ApprovalRequestBase {
    * switched it to "ask". False: the Tool may change something.
    */
   readOnly: boolean;
+}
+
+/**
+ * Why a change inside IncarnaMind waits for the User (#1110): it would take the Answer's changes
+ * past `COMMAND_AT_ONCE`, or it deletes, which the assistant never does without asking.
+ */
+export type CommandAskReason = "many" | "delete";
+
+/** How many things one Answer's commands may change before the next change asks the User first (#1110). */
+export const COMMAND_AT_ONCE = 20;
+
+/**
+ * What a command the assistant runs for the User would do, as its approval shows it (#1110):
+ * save a Mind as a file in a folder other than the Output location; read a folder's files
+ * (`files`, by name, nothing outside it) and add them to the Library; or change things inside
+ * IncarnaMind that need the User's say (`reason`). `items` are the first of them, each by the
+ * name the User knew it by, with `renamed` when the Conversation's commands renamed it.
+ */
+export type CommandAsk =
+  | {
+      kind: "change";
+      command: AppCommandId;
+      reason: CommandAskReason;
+      count: number;
+      items: CommandItem[];
+      /** The Folder or Tag it would put them in, by name. */
+      into: string | null;
+      /** How many things the Answer changed without asking before this call. */
+      changed: number;
+    }
+  | {
+      kind: "export";
+      mind: { id: string; name: string };
+      format: ExportFormat;
+      /** Absolute, links followed. */
+      folder: string;
+      /** The name it would be saved under; the next free one if that is taken. */
+      fileName: string;
+    }
+  | { kind: "add"; folder: string; files: string[] };
+
+/** A Folder or Tag the commands of a Run made, left in place by their Undo: the User filed things in it since. */
+export interface CommandKept {
+  kind: "folder" | "tag";
+  name: string;
+}
+
+/** What `undoCommands` took back (#1110). */
+export interface CommandsUndone {
+  /** The Folders and Tags the Run made that its Undo left in place, from every try so far. */
+  kept: CommandKept[];
+  /**
+   * Why some of its changes weren't taken back, each in English; null: all of them were.
+   * `again`: trying again may take back the rest, once the User fixed the cause (restored a
+   * Document, say). False once a try again took back nothing more.
+   */
+  failed: { reasons: string[]; again: boolean } | null;
+}
+
+/**
+ * A command the assistant runs for the User (#1110) waiting for their approval: it would
+ * write outside IncarnaMind, read a folder of theirs, delete, or change more than an Answer
+ * changes at once. It offers no "always allow". `tainted`: its Run had read text the User didn't
+ * write: Passages, a Connector's reply, a web page or a web page's title.
+ */
+export interface CommandApprovalRequest extends ApprovalRequestBase {
+  subject: Extract<ApprovalSubject, { kind: "command" }>;
+  tool: "run_command";
+  ask: CommandAsk;
 }
 
 // ---------------------------------------------------------------------------
@@ -7024,11 +7395,19 @@ export interface SharePagePreferences {
  */
 export type TheirChangesShown = "shown" | "accepted";
 
-/** A Word export's own choices (#107), each on until the User turns it off (see `ExportMindOptions`). */
+/** What a Word file does with the text IncarnaMind wrote: marks it with a comment, or leaves it out. */
+export const MARK_AI_TEXT_CHOICES = ["mark", "leave"] as const;
+
+export type MarkAiTextChoice = (typeof MARK_AI_TEXT_CHOICES)[number];
+
+/**
+ * A Word export's own choices (#107). The switches are on until the User turns them off; marking
+ * AI text is the User's to answer, once: null until they have (see `ExportMindOptions`).
+ */
 export interface WordExportPreferences {
   includeQuestions: boolean;
   trackChanges: boolean;
-  markAiText: boolean;
+  markAiText: MarkAiTextChoice | null;
   commentFailedChecks: boolean;
 }
 
@@ -7539,8 +7918,11 @@ export type AudioLossCause = "full" | "denied" | "error" | "closed" | "stalled";
 /** Where a Meeting's speech is turned into text: on this computer, or by a cloud service (#141). */
 export type TranscriptionEngine = "local" | "cloud";
 
-/** Why transcription moved to another engine: the one before fell behind or failed, or the User chose. */
-export type EngineSwitchReason = "behind" | "failed" | "user";
+/**
+ * Why transcription moved to another engine: the one before fell behind or failed, the User
+ * chose, or the cloud service's audio reached the monthly cap.
+ */
+export type EngineSwitchReason = "behind" | "failed" | "user" | "cap";
 
 /**
  * Where a Meeting's Transcript is (#136):
@@ -7589,6 +7971,19 @@ export interface MeetingTranscript {
   partial: { startMs: number; text: string; speaker: string } | null;
   /** The speech-to-text model, while it is downloading or failed to. */
   model: TranscriptionModelStatus | null;
+  /** The cloud service transcribing the live audio now (#141); null: this computer. */
+  cloud: CloudTranscriptionRoute | null;
+  /**
+   * This computer took over from the cloud service the User chose, during this stretch of
+   * recording: where, in the Meeting's time, and why. "dropped": the connection was lost;
+   * "refused": the service didn't accept the key; "cap": the month reached the cap;
+   * "local-mode": “Keep everything on this computer” is on. Null otherwise.
+   */
+  fellBack: {
+    route: CloudTranscriptionRoute;
+    atMs: number;
+    reason: "dropped" | "refused" | "cap" | "local-mode";
+  } | null;
   /** The WebVTT file in the Output location, once saved. */
   savedPath: string | null;
   /** Its save took the default Output location, none being chosen yet (`SavedFile.defaulted`). */
@@ -7614,6 +8009,8 @@ export const MEETING_AUDIO_KEPT_MS = 24 * 60 * 60 * 1000;
 export interface CreateMeetingInput {
   /** An empty Mind to hold it. Not given: a new Mind, named for the day. */
   mindId?: string;
+  /** The Folder a new Mind goes in; not with `mindId`. Not given: none. */
+  folderId?: string | null;
 }
 
 export interface StartMeetingInput {
@@ -7938,6 +8335,14 @@ export interface CoreApi {
    * Linked folder unlinked). Never touches the User's files.
    */
   restore(refs: RestoreRef[]): Promise<void>;
+  /**
+   * Takes back every change the commands of one of the assistant's Runs made (#1110), the last
+   * first: `CommandDone.run`. A change that can't be taken back is skipped and the rest are;
+   * called again, it tries those left. Throws NotFoundError for a Run of an earlier session.
+   */
+  undoCommands(run: string): Promise<CommandsUndone>;
+  /** Makes again the changes `undoCommands` took back, as far as it can, saying what it couldn't. */
+  redoCommands(run: string): Promise<void>;
   /** What can be restored: the Minds, conversations, Documents, Folders and Tags deleted in the last `RECENTLY_DELETED_DAYS`, newest first. */
   listDeleted(): Promise<DeletedItem[]>;
   /**
@@ -8095,6 +8500,11 @@ export interface CoreApi {
    */
   searchMinds(query: string): Promise<MindTextMatch[]>;
   /**
+   * Home's Recent: each Mind's first line of text under its name, as the words typed a moment
+   * ago are; Minds with none, or not read yet, are left out.
+   */
+  listMindSnippets(): Promise<MindSnippet[]>;
+  /**
    * ⌘K's "In your Documents" and the Library's search: live Documents whose Passages hold every
    * word of `query`, as `searchMinds` reads it, best match first, one Passage each, at most
    * `limit` (20 unless asked; InvalidInputError outside 1 to 200). Keyword search over the
@@ -8209,6 +8619,8 @@ export interface CoreApi {
    * linked again.
    */
   deleteDocument(id: string): Promise<void>;
+  /** Removes Documents from the index as `deleteDocument` does, all in one step: or none, when one isn't found. */
+  deleteDocuments(ids: string[]): Promise<void>;
   /**
    * Processes a Document that failed again, from its file as it is now, e.g.
    * once the User has fixed it. Returns it, queued; "document.status" events
@@ -8291,7 +8703,7 @@ export interface CoreApi {
   /**
    * The files in a Search scope that couldn't be read, and why (#740): its
    * Documents with no text, password-protected or damaged, and the files in
-   * its Linked folders in a format not read. A scope of none (null) is every
+   * its Linked folders in a format not read, by file name. A scope of none (null) is every
    * Document. Empty when everything in it was read.
    */
   listUnreadFiles(scope?: SearchScope | null): Promise<UnreadFile[]>;
@@ -8311,9 +8723,11 @@ export interface CoreApi {
    * Stops syncing a Linked folder and removes its Documents and Folders from
    * the index. Nothing on disk is touched. Of their stored text, only the
    * Units the Citations in Minds point to are kept, so those Citations can
-   * still be checked: "keptCitationTexts.changed" reports them.
+   * still be checked: "keptCitationTexts.changed" reports them. Its Documents
+   * in `options.keep` stay, as files added on their own: Undo of a link keeps
+   * those that were there before it (#1361).
    */
-  removeLinkedFolder(linkedFolderId: string): Promise<void>;
+  removeLinkedFolder(linkedFolderId: string, options?: { keep?: string[] }): Promise<void>;
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
   /**
@@ -9127,6 +9541,15 @@ export interface CoreApi {
   revokeApprovalPolicy(policyId: string): Promise<void>;
   /** Tool calls still waiting for the User's approval, e.g. for a window that opened after they were raised. */
   listApprovalRequests(): Promise<ApprovalRequest[]>;
+  /** The assistant's questions still waiting for the User's answer, oldest first (#1374). */
+  listUserQuestions(): Promise<UserQuestionRequest[]>;
+  /**
+   * Answers one of the assistant's questions. Answering one no longer waiting (answered in
+   * another window, or its Answer stopped) does nothing. Throws InvalidInputError for a choice it
+   * didn't offer, more than one where one may be chosen, nothing chosen or written, or text where
+   * none may be written.
+   */
+  answerUserQuestion(requestId: string, answer: UserAnswer): Promise<void>;
   /**
    * Answers an approval request. Answering one that's no longer waiting (decided
    * in another window, or its Answer stopped) does nothing. "always-allow" of a
@@ -9252,6 +9675,13 @@ export interface CoreApi {
    * version, the model and the time. Nothing is sent anywhere.
    */
   saveCheckRecord(mindId: string, format: CheckRecordFormat): Promise<SavedExport>;
+  /**
+   * Saves a comparison table as an Excel workbook (#132) into the Output location, as
+   * `saveMindExport` does. A Document a row, a Question a column: each cell its Answer's text,
+   * or a number or date with its words as written in its note when the Answer is a single
+   * figure, and its Citations in its note; and a Sources sheet, a Citation a row.
+   */
+  saveComparisonExport(input: ComparisonTableRef): Promise<SavedComparisonExport>;
 
   /**
    * Formats Citations and their Bibliography in a citation style (#289), from the cited
@@ -9283,6 +9713,12 @@ export interface CoreApi {
   getMindStyle(mindId: string): Promise<MindStyle>;
   /** Sets the Mind's font and text size together, so Undo can put both back. */
   setMindStyle(mindId: string, style: MindStyle): Promise<MindStyle>;
+  /**
+   * The pages of a Mind, for Page view (#803): each section's size, orientation and margins, and its
+   * headers and footers with their page fields, as the Word file it was imported from has them; for
+   * any other Mind, the native export's paper (A4 or Letter by region) and margins in one section.
+   */
+  getPageSetup(mindId: string): Promise<PageSetup>;
 
   /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
   getOutputSettings(): Promise<OutputSettings>;
@@ -9305,8 +9741,8 @@ export interface CoreApi {
   listMeetings(): Promise<Meeting[]>;
   /**
    * A Meeting ready to record, in a new Mind named for the day or in an empty
-   * Mind given: its Mind shows the start block. Needs meetings turned on in
-   * Settings, and a Mind with no Meeting.
+   * Mind given: its Mind shows the start block. Needs a Mind with no Meeting,
+   * and a copy that can record audio.
    */
   createMeeting(input?: CreateMeetingInput): Promise<Meeting>;
   /** Takes back a Meeting that hasn't started ("Don't record; keep this as a note"): its Mind stays. */
@@ -9324,6 +9760,20 @@ export interface CoreApi {
   stopMeeting(meetingId: string): Promise<Meeting>;
   /** Deletes the Meeting's audio on this computer now; a recording goes on keeping what comes next. */
   deleteMeetingAudio(meetingId: string): Promise<Meeting>;
+  /** The cloud services that can transcribe meeting audio (#141), and whether each has a key. */
+  listTranscriptionServices(): Promise<TranscriptionServiceStatus[]>;
+  /**
+   * Keeps a transcription service's own key (Soniox), in the keychain, once the service accepts
+   * it. Throws `InvalidInputError` when it refuses the key.
+   */
+  setTranscriptionKey(input: SetTranscriptionKeyInput): Promise<TranscriptionServiceStatus[]>;
+  /** Forgets a transcription service's own key; meeting audio is then transcribed on this computer. */
+  removeTranscriptionKey(route: CloudTranscriptionRoute): Promise<TranscriptionServiceStatus[]>;
+  /**
+   * Whether this computer keeps up with live speech, as the last Meeting transcribed here
+   * measured it; null before one has been. The speed probe (#462) will measure it sooner.
+   */
+  getTranscriptionSpeed(): Promise<{ keepsUp: boolean | null }>;
   /**
    * Tries the Meeting's Transcript again after a problem (`MeetingTranscript.problem`):
    * downloads or starts the speech-to-text model, or saves the WebVTT file again.
@@ -9470,6 +9920,8 @@ export interface CoreEvents {
   "documents.moved": Document[];
   /** Documents removed from the index, by the User or with their Linked folder: their ids. */
   "documents.removed": string[];
+  /** A Document renamed, by the User or the assistant (#1110), whole as it is named now. */
+  "documents.renamed": Document[];
   /** The Documents whose PDF password is kept changed (#763): their ids now. */
   "documentPasswords.changed": string[];
   /** Folders appeared or went with the folders on disk: the list as `listFolders` now returns it. */
@@ -9549,6 +10001,10 @@ export interface CoreEvents {
    * stopped ("deny"): every window takes its card away.
    */
   "approval.resolved": { requestId: string; decision: ApprovalDecision };
+  /** The assistant asks the User a question (#1374): it waits in the tray, in every window. */
+  "question.asked": UserQuestionRequest;
+  /** A question was answered, here or in another window, or withdrawn (null) as its Answer stopped. */
+  "question.answered": { requestId: string; answer: UserAnswer | null };
   /**
    * The Answer event stream. The core writes each Answer into its Mind's Yjs
    * document as it streams (its text, Citations and Tool calls), so every
@@ -9638,6 +10094,7 @@ const methods: Record<CoreApiMethod, true> = {
   getConversation: true,
   searchConversations: true,
   searchMinds: true,
+  listMindSnippets: true,
   searchDocumentText: true,
   renameConversation: true,
   deleteConversation: true,
@@ -9656,6 +10113,7 @@ const methods: Record<CoreApiMethod, true> = {
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
+  deleteDocuments: true,
   retryDocument: true,
   unlockDocument: true,
   forgetDocumentPassword: true,
@@ -9815,6 +10273,8 @@ const methods: Record<CoreApiMethod, true> = {
   moveToFolder: true,
   restoreAssignment: true,
   restore: true,
+  undoCommands: true,
+  redoCommands: true,
   listDeleted: true,
   deletePermanently: true,
   listTags: true,
@@ -9856,6 +10316,8 @@ const methods: Record<CoreApiMethod, true> = {
   revokeApprovalPolicy: true,
   listApprovalRequests: true,
   respondToApproval: true,
+  listUserQuestions: true,
+  answerUserQuestion: true,
   listSkills: true,
   previewSkillImport: true,
   importSkill: true,
@@ -9877,6 +10339,7 @@ const methods: Record<CoreApiMethod, true> = {
   setSharePageTextOnly: true,
   saveMindExport: true,
   saveCheckRecord: true,
+  saveComparisonExport: true,
   formatCitations: true,
   getMindCitationStyle: true,
   setMindCitationStyle: true,
@@ -9884,6 +10347,7 @@ const methods: Record<CoreApiMethod, true> = {
   openCitationStyleLicences: true,
   getMindStyle: true,
   setMindStyle: true,
+  getPageSetup: true,
   getOutputSettings: true,
   setOutputLocation: true,
   setLinkedFolderWriting: true,
@@ -9897,6 +10361,10 @@ const methods: Record<CoreApiMethod, true> = {
   resumeMeeting: true,
   stopMeeting: true,
   deleteMeetingAudio: true,
+  listTranscriptionServices: true,
+  setTranscriptionKey: true,
+  removeTranscriptionKey: true,
+  getTranscriptionSpeed: true,
   retryTranscript: true,
   openAudioSettings: true,
   askMeetingHelp: true,

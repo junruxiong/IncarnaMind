@@ -55,10 +55,10 @@ const HELD = `A supplier lien attaches when the materials are delivered to the j
 const WORDS = {
   en: {
     title: "This cites a court decision.",
-    body: "IncarnaMind can't check that this case exists or says this. Check it in your legal research service before you rely on it.",
+    body: "IncarnaMind can’t check that this case exists or says this. Check it in your legal research service before you rely on it.",
     nothing: "Nothing in your Documents says this.",
     unchecked:
-      "Not checked: the cited case isn't in your Documents. Check it in your legal research service before you rely on it.",
+      "Not checked: the cited case isn’t in your Documents. Check it in your legal research service before you rely on it.",
     held: (document: string, location: string) =>
       `Quote found in your copy of the opinion (${document}, ${location}). Not checked whether it was overruled or changed. Check it in your legal research service before you rely on it.`,
     page: "p. 1",
@@ -241,6 +241,7 @@ test.describe("a web page the User saved", () => {
       await useLocalChatModel(window);
       await setLanguage(window, language);
       await window.getByTestId("plus-menu").click();
+      await window.getByTestId("plus-more").click();
       await window.getByTestId("plus-add-web-page").click();
       const dialog = window.getByTestId("add-web-page-dialog");
       await dialog.getByTestId("add-web-page-addresses").fill(address);

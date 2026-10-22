@@ -33,6 +33,14 @@ export function PlusLineIcon(props: IconProps) {
   );
 }
 
+export function HomeLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H5.5A1.5 1.5 0 0 1 4 19z" />
+    </LineIcon>
+  );
+}
+
 /** Search: a magnifier. */
 export function SearchLineIcon(props: IconProps) {
   return (
@@ -87,6 +95,15 @@ export function FolderPlusLineIcon(props: IconProps) {
     <LineIcon {...props}>
       <path d={FOLDER} />
       <path d="M12 10.5v5M9.5 13h5" />
+    </LineIcon>
+  );
+}
+
+export function LinkLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+      <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
     </LineIcon>
   );
 }
@@ -366,6 +383,15 @@ export function ComputerLineIcon(props: IconProps) {
   );
 }
 
+/** A cloud service, for what leaves this computer for one (#141): a cloud. */
+export function CloudLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.75 4.75 0 0 1-.25 9.5z" />
+    </LineIcon>
+  );
+}
+
 /** Recording a meeting, as an action ("Record a meeting", "Start recording"): a ring and a dot. */
 export function RecordingLineIcon(props: IconProps) {
   return (
@@ -558,6 +584,15 @@ export function WarningLineIcon(props: IconProps) {
     <LineIcon {...props}>
       <path d="M12 4.5 20.5 19h-17z" />
       <path d="M12 10v4M12 16.75v.01" />
+    </LineIcon>
+  );
+}
+
+export function InfoLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11v5M12 8v.01" />
     </LineIcon>
   );
 }

@@ -1,4 +1,5 @@
 /** The instructions every Answer is written with. Kept short: every word is sent with every Question. */
+import type { ChartKind } from "../../shared/charts";
 import { figureContextOf, readFigures } from "../../shared/figures";
 import { CJK, nameKey } from "../../shared/text";
 import type { CitationSupport, SkillFile, UnreadFile, UnreadReason } from "../api";
@@ -40,6 +41,7 @@ export function answerInstructions(): string {
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- Answer the Question asked. Mention an earlier Answer, or a Document or figure from one, only when the Question is about it; never tell the User to disregard an earlier Answer.",
+    '- Never send the reader to an earlier Answer for part of what you write ("covered in my earlier answer", "as above", "见上一条回答", "见上文"): someone who never saw this conversation may read it on a page, so write that part out.',
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
     "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
   ].join("\n");
@@ -110,6 +112,17 @@ export function webInstructions(offered: boolean): string {
   ].join("\n");
 }
 
+export function commandInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    'You can also do in the app what the User asks of their Documents and Minds, with list_commands and run_command: rename, move to a Folder, tag, delete (to Recently deleted), export a Mind as a file, and add files from a folder ("rename these by date", "move the leases into Real estate", "tag every invoice Finance", "export this Mind as Word", "add the PDFs in ~/Downloads/deals", "把发票都加上财务标签").',
+    "- First find what to act on with list_commands, by the words of the request, then run a command on exactly what it found, by id, one call per command. Never act on something it didn't find, and never guess an id. If nothing matches, say so and change nothing.",
+    "- Renaming by date: use the dates list_commands gives, as YYYY-MM-DD before the name, unless the User says otherwise.",
+    "- A Question about the Documents isn't a command: answer it. Writing into a Mind is the Minds' Tools' work.",
+    "- Say only what the calls returned, in a sentence or two: what changed, and what didn't and why. A command that failed or that the User didn't allow didn't happen: never say it did. The User can undo the changes with Undo.",
+  ].join("\n");
+}
+
 /** The Document the Mind in focus is the working copy of (#1036), by name; empty for none. */
 export function workingCopyNote(original: string | null): string {
   if (original === null) return "";
@@ -117,11 +130,26 @@ export function workingCopyNote(original: string | null): string {
 }
 
 /**
+ * The example's Documents, by name, when the Mind in focus is an example's;
+ * empty for any other. Asked beside it about their own file, a model told the
+ * User it "has nothing to do with Northwind" (#1172).
+ */
+export function exampleNote(documents: readonly string[] | null): string {
+  if (documents === null) return "";
+  const names = documents.map((name) => `"${listedName(name)}"`).join(", ");
+  return `The Mind in <mind> is an example IncarnaMind made${names ? `, with Documents of its own (${names})` : ""}: none of it is the User's own work. Mention the example only when the Question is about it, never to say the User's Documents have nothing to do with it.`;
+}
+
+/**
  * Passages as the model reads them, from a search or given whole, with the
  * notes their text calls for: dates, the User's own workings, amounts in
  * brackets, and Documents that couldn't be read.
  */
-export function withPassageNotes(passages: string, unread: readonly UnreadFile[]): string {
+export function withPassageNotes(
+  passages: string,
+  unread: readonly UnreadFile[],
+  reading: readonly { name: string }[] = [],
+): string {
   return [
     passages,
     datedDocumentsNote(passages),
@@ -129,6 +157,7 @@ export function withPassageNotes(passages: string, unread: readonly UnreadFile[]
     notCitedNote(passages),
     bracketedAmountsNote(passages),
     unreadDocumentsNote(unread),
+    stillReadingNote(reading),
   ]
     .filter((part) => part !== "")
     .join("\n\n");
@@ -161,6 +190,15 @@ export function mindInstructions(offered: boolean, route: RequestRoute | null = 
     .join("\n");
 }
 
+function chartLine(newMind: boolean, chart: { kind: ChartKind | null; existing?: true }): string {
+  const asked = chart.kind ? `kind "${chart.kind}"` : "no kind, as the User named none";
+  if (chart.existing) {
+    return `- This request asks for a chart of a table already in the Mind: call add_to_mind with chart, ${asked} and a short title from the User's words, and content empty. IncarnaMind draws it from the table the User's cursor is in, or the Mind's only table, right after it: never write the table again.`;
+  }
+  const tool = newMind ? "a new Mind with create_mind" : "the Mind with add_to_mind";
+  return `- This request asks for a chart: search and cite the figures, then write them as a table into ${tool}, each cell cited, and give chart with ${asked} and a short title from the User's words. IncarnaMind draws the chart from that table, right after it. Chart only figures the Documents state, or ones calculate gives: for a series they don't state, say you can chart only the figures the Documents state.`;
+}
+
 function routeLine(route: RequestRoute | null): string {
   switch (route?.kind) {
     case "write":
@@ -169,6 +207,7 @@ function routeLine(route: RequestRoute | null): string {
           ? "- This request asks for your last Answer as a document: call create_mind with a short title and answer: true, and nothing else. It puts in that Answer as it is, with its Citations and every Document it covered: don't search again or write it anew."
           : "- This request asks for your last Answer as a document: the Mind in <mind> is empty, so call add_to_mind with answer: true, and nothing else. It puts in that Answer as it is, with its Citations and every Document it covered: don't search again or write it anew.";
       }
+      if (route.chart) return chartLine(route.newMind, route.chart);
       return route.newMind
         ? "- This request asks for a new page or note: write it into a new Mind with create_mind, not in your reply and not into the Mind in <mind>."
         : "- This request asks for text in a Mind: write it there with add_to_mind, not in your reply. If text of yours still waiting already covers it, revise that with edit_mind instead of writing it again.";
@@ -231,6 +270,13 @@ function notCovered(cite: boolean): string {
  */
 const CITED_SAYS_ONLY_ITS_QUOTE =
   '- A sentence with a Citation says only what its quote supports. Your inference, judgement or comparison goes in a sentence of its own with no marker, worded as a reading: "This suggests…" / "这意味着…".';
+
+/**
+ * A model read "54,000" in a UK contract as pounds and wrote "£54,000", cited (#1332): a
+ * currency, unit or scale the Document doesn't state reads as one it does.
+ */
+const FIGURES_AS_STATED =
+  '- A figure taken from a Passage keeps exactly the currency, unit and scale its Document gives it: "salary is 54,000" stays "54,000 (currency not stated)" / "54,000（未注明币种）", never "£54,000"; "2 percentage points" never becomes "2%".';
 
 /**
  * A premise the Passages don't support, and Passages that disagree (#548):
@@ -327,6 +373,7 @@ const CALCULATE = [
   'Never work out a number yourself, not even a simple one: for any number the Answer gives that isn\'t written in a Passage (a difference, sum, average, ratio, share, growth rate, CAGR, change in percentage points, conversion between 万 and 亿 or millions and billions, or which of two is larger), call calculate and write its marker in the number\'s place, with no number or unit beside it: "grew [=1] in 2025", not "grew 20.4% [=1]".',
   '- Name each input\'s number as it is written in its quote, labelled with what it is and its period; give a table heading\'s unit line ("单位：万元", "in millions") as unitQuote. Inputs come in base units with that scale applied: give scale ("亿", "billion") to show another, never convert in the formula.',
   "- A number copied as it is from a Passage is cited with [^n]; calculate is only for numbers you work out.",
+  "- If calculate refuses a figure, fix what its reply says and call it again; never write that you couldn't calculate a number whose inputs you cited.",
 ].join("\n");
 
 /** Structured output's `calculations`, for a model offered them: what `CALCULATE` is to the Tool loop. */
@@ -397,6 +444,18 @@ export function unreadDocumentsNote(unread: readonly UnreadFile[]): string {
 }
 
 /**
+ * A reminder after a search's Passages when Documents in the Search scope are still being read
+ * (#1503): no search finds anything in them yet, so a model that finds nothing says they are
+ * being read, never that a Document isn't there.
+ */
+export function stillReadingNote(reading: readonly { name: string }[]): string {
+  if (reading.length === 0) return "";
+  const named = reading.slice(0, NAMED_UNREAD).map((file) => `"${listedName(file.name)}"`);
+  const more = reading.length - named.length;
+  return `IncarnaMind is still reading ${reading.length === 1 ? "a Document" : `${reading.length} Documents`} in the search: ${named.join(", ")}${more > 0 ? `, and ${more} more` : ""}. No Passage comes from ${reading.length === 1 ? "it" : "them"} yet. If the Passages don't clearly answer the Question and it may be about ${reading.length === 1 ? "it" : "one of them"}, say that ${reading.length === 1 ? "it is" : "they are"} still being read and to ask again when ${reading.length === 1 ? "it's" : "they're"} ready. Never say ${reading.length === 1 ? "it doesn't exist or wasn't added" : "they don't exist or weren't added"}, and never take another Document's figure for what ${reading.length === 1 ? "it" : "they"} would say.`;
+}
+
+/**
  * How many Documents there are and what they are called, so the model can
  * tell which ones a Question means ("compare A with B") and say which there
  * are. Past `LISTED_DOCUMENTS`, the rest are counted.
@@ -454,6 +513,7 @@ export function documentInstructions(
         "- Write nothing before your Tool calls: only the Answer, after them.",
         notCovered(true),
         CITED_SAYS_ONLY_ITS_QUOTE,
+        FIGURES_AS_STATED,
         readingRules(true),
         ...(calculate ? ["", CALCULATE] : []),
       ].join("\n");
@@ -477,6 +537,7 @@ export function documentInstructions(
         ...(calculate ? [CALCULATIONS] : []),
         notCovered(true),
         CITED_SAYS_ONLY_ITS_QUOTE,
+        FIGURES_AS_STATED,
         readingRules(true),
       ].join("\n");
     case "none":
@@ -490,6 +551,7 @@ export function documentInstructions(
         "",
         "Use them where they help. Don't write citation markers or a list of sources.",
         notCovered(false),
+        FIGURES_AS_STATED,
         readingRules(false),
       ].join("\n");
   }
@@ -677,6 +739,28 @@ export function loadedSkillText(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+const NAMES_A_LANGUAGE =
+  /\blanguage\b|English|Chinese|Mandarin|Cantonese|Spanish|French|German|Japanese|Korean|Portuguese|Russian|Arabic|Italian|Hindi|语言|中文|英文|英语|日语|日文|法语|德语|西班牙语|韩语/i;
+
+/** What the built-in Skills say (#892), which is what the note says: no language of their own. */
+const NO_LANGUAGE_OF_ITS_OWN =
+  /\blanguage (?:that |which )?the Question is written in|\bthe Question's language|\blanguage of the (?:Question|report)\b|\b(?:another|other|that) languages?\b/gi;
+
+/** Whether a Skill's instructions name a language to write in other than the Question's, so its choice stands (#1273). */
+export function skillSetsLanguage(instructions: string): boolean {
+  return NAMES_A_LANGUAGE.test(instructions.replace(NO_LANGUAGE_OF_ITS_OWN, ""));
+}
+
+/**
+ * Said after a search's Passages while the Answer follows a Skill that names no language: the
+ * Skill and the Passages both come after the instructions' own language line, and whatever
+ * language they are in must not win over the Question's (#1273). `language` is the line
+ * `languageInstruction` made.
+ */
+export function skillLanguageNote(language: string): string {
+  return `The Skill's instructions don't change the language of your Answer. ${language.replace(/^- /, "")}`;
 }
 
 const SCRIPTS =

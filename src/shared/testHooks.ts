@@ -41,6 +41,8 @@ export interface TestHooks {
    * usually takes (15 seconds), so a test needn't wait for it.
    */
   setSilentWaitMs(ms: number): void;
+  /** Home's Coming up shows these meetings, as a calendar would give them. */
+  setComingUp(meetings: { id: string; title: string; start: string }[]): void;
   /** How many animations are running, leaving copies of closed menus included: settled at 0. */
   motionRunning(): number;
   /** Plays every animation at this speed (0.25: four times slower), so a test can act during one. */

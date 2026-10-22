@@ -3,7 +3,13 @@
  * what they cite, as the app's own claim check (Check against Documents)
  * judges them, not a model of the evaluation's own.
  */
-import type { CitedQuote, Core, MarkedCitation, MarkedFigure } from "../../src/core";
+import type {
+  ChatModelChoice,
+  CitedQuote,
+  Core,
+  MarkedCitation,
+  MarkedFigure,
+} from "../../src/core";
 import { FIGURE_MARKER } from "../../src/shared/figureMarkers";
 import {
   comparableSentence,
@@ -90,7 +96,10 @@ export function citedSentences(
   return found;
 }
 
-/** Each cited sentence of an Answer, checked against the Documents as Check against Documents does. */
+/**
+ * Each cited sentence of an Answer, checked against the Documents as Check against Documents
+ * does, on `model` (the default chat model when null).
+ */
 export async function checkCitedSentences(
   core: Pick<Core, "checkClaim">,
   answer: {
@@ -98,6 +107,7 @@ export async function checkCitedSentences(
     citations: Parameters<typeof citedSentences>[1];
     figures?: Parameters<typeof citedSentences>[2];
   },
+  model: ChatModelChoice | null = null,
 ): Promise<SentenceSupport[]> {
   const results: SentenceSupport[] = [];
   for (const each of citedSentences(answer.text, answer.citations, answer.figures)) {
@@ -105,6 +115,7 @@ export async function checkCitedSentences(
       claim: each.sentence,
       context: each.context,
       cited: each.cited,
+      model,
     });
     results.push({ sentence: each.sentence, verdict: result.verdict });
   }

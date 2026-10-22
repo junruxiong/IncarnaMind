@@ -2,16 +2,12 @@ import type { ExampleGroup } from "../../../core/api";
 import { useT } from "../i18n";
 import { allExamples, useAppStore } from "../store";
 import { MoreLineIcon } from "./lineIcons";
-import { rowActionButtonClass, rowActionsClass } from "./sidebarRows";
+import { rowActionButtonClass } from "./sidebarRows";
 import { menuClass, menuItemClass, menuRuleClass } from "./ui";
 import { usePopoverMenu } from "./usePopoverMenu";
 
 const NONE: readonly ExampleGroup[] = [];
 
-/**
- * The ⋯ of the sidebar's Examples row: the other examples to try, closer to the User's work,
- * then removing the examples, which Undo takes back.
- */
 export function ExamplesMenu() {
   const t = useT();
   const menu = usePopoverMenu({ align: "end" });
@@ -27,18 +23,16 @@ export function ExamplesMenu() {
   if (!made) return null;
   return (
     <>
-      <span className={rowActionsClass}>
-        <button
-          {...menu.buttonProps}
-          type="button"
-          data-testid="examples-menu"
-          aria-label={label}
-          title={label}
-          className={rowActionButtonClass}
-        >
-          <MoreLineIcon className="size-4" />
-        </button>
-      </span>
+      <button
+        {...menu.buttonProps}
+        type="button"
+        data-testid="examples-menu"
+        aria-label={label}
+        title={label}
+        className={rowActionButtonClass}
+      >
+        <MoreLineIcon className="size-4" />
+      </button>
       <div
         {...menu.menuProps}
         role="menu"

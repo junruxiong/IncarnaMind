@@ -549,7 +549,7 @@ test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's
   await app.close();
 });
 
-test("the model chip chooses the model for one Mind, which remembers it after a restart, while new Minds take the default", async () => {
+test("the model chip chooses the model for one Mind, which remembers it after a restart, and a new Mind starts on the last one chosen", async () => {
   // Listed a second late, so the menu opens before its models are there, as on a slow machine
   // or with a provider far away: the current one still takes the focus once it is listed.
   const ollama = await ollamaListing(["fake-model", "other-model"], { delayMs: 1000 });
@@ -580,12 +580,15 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await expect(options).toHaveText([/fake-model/, /other-model/]);
     await expect(options.first()).toHaveAttribute("aria-checked", "true");
     await expect(options.first()).toBeFocused();
-    await expect(menu).toContainText("For this Mind’s Questions.");
+    await expect(menu).not.toContainText("For this Mind’s Questions.");
     await expect(menu).toContainText("Default for new Minds: fake-model · Change in Settings");
     // What stays on this computer says so with its icon, in ink-secondary: green is for checks.
     const stays = menu.getByTestId("on-this-computer").first();
     await expect(stays).toHaveCSS("color", "rgb(74, 79, 87)");
     expect(await stays.evaluate((element) => element.firstElementChild?.tagName)).toBe("svg");
+    // Where models run is said once, by the group's heading, not on every row.
+    await expect(menu.getByTestId("on-this-computer")).toHaveCount(1);
+    await expect(menu.getByText(/^Stays on this/)).toHaveCount(0);
     await screenshot(window, "composer-model-menu-en");
     await pointAndClick(window, options.nth(1));
     await expect(menu).toBeHidden();
@@ -597,20 +600,26 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(await openSteps(window, answer)).toContainText("Answered by other-model");
 
-    // A new Mind takes the default; by keyboard, the menu opens and closes again.
     await pointAndClick(window, window.getByTestId("plus-menu"));
     await pointAndClick(window, window.getByTestId("plus-new-mind"));
     await nameMind(window, "Default model");
-    await expect(chip).toHaveText("fake-model");
+    await expect(chip).toHaveText("other-model");
+    await expect(menu).toBeHidden();
     await chip.focus();
     await window.keyboard.press("Enter");
     await expect(menu).toBeVisible();
-    await expect(options.first()).toBeFocused();
-    await window.keyboard.press("ArrowDown");
     await expect(options.nth(1)).toBeFocused();
+    await window.keyboard.press("ArrowUp");
+    await expect(options.first()).toBeFocused();
     await window.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(chip).toBeFocused();
+    await expect(chip).toHaveText("other-model");
+    await window.keyboard.press("Enter");
+    await expect(options.nth(1)).toBeFocused();
+    await window.keyboard.press("ArrowUp");
+    await window.keyboard.press("Enter");
+    await expect(menu).toBeHidden();
     await expect(chip).toHaveText("fake-model");
     await first.app.close();
 
@@ -631,10 +640,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
 
     // In Chinese.
     await bridge(window).language("zh-CN");
-    await expect(window.getByTestId("composer-input")).toHaveAttribute(
-      "placeholder",
-      "提问，或说明要修改的内容…",
-    );
+    await expect(window.getByTestId("composer-input")).toHaveAttribute("placeholder", "追问…");
     await pointAndClick(window, window.getByTestId("composer-model"));
     const menuZh = window.getByTestId("composer-model-menu");
     await expect(menuZh.getByRole("group", { name: "在本机运行" })).toBeVisible();
@@ -790,7 +796,7 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await screenshot(window, "composer-skill-picker-zh");
   await window.keyboard.type("lit");
   await window.keyboard.press("Enter");
-  await expect(composer.getByTestId("composer-skill")).toHaveText("literature-review");
+  await expect(composer.getByTestId("composer-skill")).toHaveText("文献综述");
   await window.keyboard.type("大潮什么时候出现？");
   await screenshot(window, "composer-chips-zh");
 
@@ -800,7 +806,7 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(composer.getByTestId("composer-live")).toContainText("回答已生成。");
   const question = window.getByTestId("assistant-question");
-  await expect(question.getByTestId("assistant-question-skill")).toHaveText("literature-review");
+  await expect(question.getByTestId("assistant-question-skill")).toHaveText("文献综述");
   await expect(answer.getByTestId("answer-steps")).toContainText("已搜索“Tides”");
   await openSteps(window, answer);
   await expect(answer.getByTestId("answer-regenerate")).toHaveText("重新生成");

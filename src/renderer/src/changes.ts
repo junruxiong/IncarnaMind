@@ -5,9 +5,11 @@
  * links back as they were. Each says what happened in the words of the undo
  * line, and what it was, for the Edit menu.
  */
-import type { Document, LinkedFolderLayout, RestoreRef, TagLinkState } from "../../core/api";
+import type { LinkedFolderLayout, RestoreRef, TagLinkState } from "../../core/api";
 import { core } from "./core";
+import { languageNow } from "./i18n";
 import type { Words } from "./lineNames";
+import { formatCount } from "./linkedFolders";
 import type { Translate } from "./objects";
 import type { Undoable } from "./undo";
 
@@ -42,41 +44,50 @@ export function deleted(
   shown: Shown,
   refs: RestoreRef[],
   remove: () => Promise<unknown>,
+  here?: { putBack(): void; takeOut(): void },
 ): Undoable {
   const count = refs.length;
+  const counted = () => formatCount(count, languageNow());
   return {
     said: (t) =>
       count > 1
-        ? t("object.deleted.documents", { count })
+        ? t("object.deleted.documents", { count: counted() })
         : t("object.deleted", { name: shownIn(t, shown) }),
     name: (t) =>
       count > 1
-        ? t("undo.name.delete.documents", { count })
+        ? t("undo.name.delete.documents", { count: counted() })
         : t("undo.name.delete", { name: shownIn(t, shown) }),
-    undo: () => core.restore(refs),
+    undo: async () => {
+      if (!here) return core.restore(refs);
+      // Back on the page at once, as they went: the core follows, and a refusal takes them out again.
+      here.putBack();
+      try {
+        await core.restore(refs);
+      } catch (error) {
+        here.takeOut();
+        throw error;
+      }
+    },
     redo: async () => {
       await remove();
     },
   };
 }
 
-/**
- * A Mind made: undone by sending it to Recently deleted, as deleting it does, done again by
- * bringing it back as it is, with what was written in it since. One with a title is said by its name.
- */
-export function mindMade(
-  shown: string,
-  remove: () => Promise<unknown>,
-  bringBack: () => Promise<unknown>,
+/** A folder linked: undone by unlinking it, which touches nothing on disk, done again by linking it again. */
+export function folderLinked(
+  shown: () => string,
+  unlink: () => Promise<unknown>,
+  link: () => Promise<unknown>,
 ): Undoable {
   return {
-    said: (t) => (shown ? t("undo.mindStarted", { name: shown }) : t("undo.mindMade")),
-    name: (t) => t("menu.newMind"),
+    said: (t) => t("undo.folderLinked", { name: shown() }),
+    name: (t) => t("undo.name.linkFolder", { name: shown() }),
     undo: async () => {
-      await remove();
+      await unlink();
     },
     redo: async () => {
-      await bringBack();
+      await link();
     },
   };
 }
@@ -118,26 +129,6 @@ export function linkedFolderShown(
       await setLayout(after);
     },
   };
-}
-
-/** How each Document carries the Tag now, to put back with `revertDocumentTags`. */
-export function tagLinks(
-  documents: readonly Pick<Document, "id" | "tags">[],
-  documentIds: readonly string[],
-  tagId: string,
-): TagLinkState[] {
-  return documentIds.map((documentId) => {
-    const link = documents
-      .find((document) => document.id === documentId)
-      ?.tags.find((each) => each.tagId === tagId);
-    return {
-      documentId,
-      tagId,
-      link: link
-        ? { source: link.source, confidence: link.confidence, needsReview: link.needsReview }
-        : null,
-    };
-  });
 }
 
 /**

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import type { JSONContent } from "@tiptap/core";
+import { parseHTML } from "linkedom";
 import { describe, expect, test } from "vitest";
 import type {
   CitationCheck,
@@ -121,6 +122,27 @@ function writeBilingual(client: MindClient, tides: Document, chinese: Document):
 const marker = (number: number) => `<sup class="note-ref" data-note="${number}">${number}</sup>`;
 
 describe("exporting a Mind to PDF", () => {
+  test("the print page separates adjacent notes without adding commas across prose", async () => {
+    const { printed, printer } = fakePrinter();
+    const { core, mind, client, tides, chinese } = await setUp({ printer });
+    writeMind(client, [
+      paragraph(
+        text("Spring tides"),
+        citation(tides, 1, "found"),
+        text(". 大潮"),
+        citation(chinese, 1, "found"),
+        citation(tides, 1, "found"),
+      ),
+    ]);
+    await client.settled();
+    await core.exportMind(mind.id, { format: "pdf" });
+    const { document } = parseHTML(`<html><body>${printed[0]?.body ?? ""}</body></html>`);
+    expect(document.body.textContent).toBe("Spring tides1. 大潮2,3");
+    expect(
+      [...document.querySelectorAll("sup.note-ref")].map((node) => node.getAttribute("data-note")),
+    ).toEqual(["1", "2", "3"]);
+  });
+
   test("Word and Markdown are as they were: a fingerprint of the bilingual fixture's", async () => {
     const { core, mind, client, tides, chinese } = await setUp();
     writeBilingual(client, tides, chinese);

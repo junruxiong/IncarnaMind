@@ -15,6 +15,7 @@ import {
   addProviderForm,
   askInAssistant,
   closeSettings,
+  continueSetup,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -35,11 +36,11 @@ const SENDS_EN = {
   lead: "Sends your questions and document text to OpenAI. · Details",
   after: "Tagging starts when you save the key.",
   items: [
-    "your Questions, the Mind you're in, matching passages with their Document names and pages, and the names of other Documents in scope",
+    "your Questions, the Mind you’re in, matching passages with their Document names and pages, and the names of other Documents in scope",
     "each sentence you check",
     "the paragraph you pause on, for writing suggestions",
     "the text you ask the assistant to change",
-    "each Document's name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
+    "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it (page images for scans with no text)",
   ],
 };
 const SENDS_ZH = {
@@ -120,11 +121,11 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
     .click();
   await expectSends(form.getByTestId("provider-sends"), SENDS_EN);
   await acceptPlainTextKeys(window, form);
-  await form.getByLabel(/^API key/).fill("sk-not-a-real-key");
+  await form.getByLabel(/^API key/).fill("sk-proj-not-a-real-key");
   await form.getByTestId("provider-sends").scrollIntoViewIfNeeded();
   await screenshot(window, "choosing-line-setup-en");
   await form.getByTestId("provider-use-key").click();
-  await expect(setup).toBeHidden();
+  await continueSetup(window);
 
   // A Document is tagged without asking.
   await addDocuments(window, [await invoice("Invoice 41")]);
@@ -137,23 +138,25 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
   await expect(window.getByTestId("consent-dialog")).toBeHidden();
   expect(await consentAsked()).toEqual([]);
 
-  // Settings › Privacy: each flow says it was allowed when OpenAI was chosen.
+  // Settings › Privacy: OpenAI says once that it was allowed when it was chosen, for every use.
   const settings = await openSettings(window, "privacy");
-  const decisionOf = (flow: string) =>
-    settings
-      .locator(`[data-testid="data-flow"][data-flow-id="${flow}"]`)
-      .getByTestId("data-flow-service");
+  const service = settings.getByTestId("data-service");
+  await expect(service).toHaveCount(1);
+  await expect(service).toHaveAttribute("data-consent", "accepted");
+  await expect(service.getByTestId("data-service-decision")).toContainText(
+    /^Allowed when you chose OpenAI, /,
+  );
+  await service.getByTestId("data-service-decision-details").click();
   for (const flow of ["chat", "edits", "checks", "suggestions", "tagging", "classification"]) {
-    await expect(decisionOf(flow).getByTestId("data-flow-decision")).toHaveText(
-      /^Allowed when you chose OpenAI, /,
+    await expect(service.locator(`[data-testid="data-flow"][data-flow-id="${flow}"]`)).toHaveCount(
+      1,
     );
   }
   await screenshot(window, "privacy-chosen-en");
 
-  // Revoking Tags stops tagging alone: the next Document waits, saying why, with Allow in place.
-  await decisionOf("tagging").getByTestId("data-flow-revoke").click();
-  await expect(decisionOf("tagging")).toHaveAttribute("data-consent", "not-asked");
-  await expect(decisionOf("chat")).toHaveAttribute("data-consent", "accepted");
+  // Stopping OpenAI stops tagging too: the next Document waits, saying why, with Allow in place.
+  await service.getByTestId("data-service-revoke").click();
+  await expect(service).toHaveAttribute("data-consent", "not-asked");
   await closeSettings(window);
   await window.getByTestId("add-documents-input").setInputFiles([await invoice("Invoice 42")]);
   const second = window.getByTestId("document-list-item").filter({ hasText: "Invoice 42" });
@@ -166,13 +169,20 @@ test("first run: choosing a provider with a key is the consent, so no dialog com
     "Tags wait until you allow Document text to go to OpenAI.",
   );
   await screenshot(window, "tagging-permission-en");
-  await askInAssistant(window, "And now?");
-  expect(await consentAsked()).toEqual([]);
 
   await status.getByTestId("tagging-waiting-allow").click();
   await expect(second).toHaveAttribute("data-tagging", "tagged", { timeout: 15_000 });
   await expect(status).toHaveCount(0);
   expect(await consentAsked()).toEqual([]);
+
+  // Allowed for Tags alone, the service says some uses aren't allowed yet; Allow allows the rest.
+  const reopened = (await openSettings(window, "privacy")).getByTestId("data-service");
+  await expect(reopened).toHaveAttribute("data-consent", "partly");
+  await expect(reopened.getByTestId("data-service-decision")).toContainText(
+    "Some uses aren’t allowed yet",
+  );
+  await reopened.getByTestId("data-service-allow").click();
+  await expect(reopened).toHaveAttribute("data-consent", "accepted");
   await app.close();
 });
 
@@ -202,9 +212,7 @@ test("Settings › Models says in one line what the ChatGPT plan sends, with the
   const settings = await openSettings(window, "models");
 
   const plan = settings.getByTestId("chatgpt-settings");
-  await expect(plan).toContainText(
-    "Plus or Pro, no key needed. Answers count toward your plan's limits.",
-  );
+  await expect(plan).toContainText("No key needed. Counts toward your plan’s limits.");
   const sends = plan.getByTestId("provider-sends");
   await expect(sends.locator("p")).toHaveText(
     "Sends your questions and document text to OpenAI. · Details",

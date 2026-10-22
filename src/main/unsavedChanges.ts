@@ -10,6 +10,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { app, type BrowserWindow, dialog, type SaveDialogOptions } from "electron";
 import type { Core, UnsavedChanges } from "../core";
+import { quitCopyOptions } from "../shared/exportOptions";
 import { type MessageKey, type MessageParams, translate } from "../shared/i18n";
 import { systemReason } from "../shared/systemReasons";
 
@@ -30,7 +31,7 @@ export async function saveMindCopy(
   window: BrowserWindow | null,
   mindId: string,
 ): Promise<boolean> {
-  const [{ language }, minds] = await Promise.all([core.getSettings(), core.listMinds()]);
+  const [{ language, user }, minds] = await Promise.all([core.getSettings(), core.listMinds()]);
   const title = minds.find((mind) => mind.id === mindId)?.title ?? "";
   const options: SaveDialogOptions = {
     title: translate(language, "unsaved.saveCopy.title"),
@@ -41,7 +42,7 @@ export async function saveMindCopy(
     ? await dialog.showSaveDialog(window, options)
     : await dialog.showSaveDialog(options);
   if (canceled || !filePath) return false;
-  const { data } = await core.exportMind(mindId, { format: "docx" });
+  const { data } = await core.exportMind(mindId, quitCopyOptions(user.exportOptions));
   await writeFile(filePath, data);
   return true;
 }
@@ -53,7 +54,14 @@ function copyFailedText(t: (key: MessageKey, params?: MessageParams) => string, 
     : t("quit.unsaved.copyFailed", { reason: raw });
 }
 
-export function guardQuit(core: Core, focusedWindow: () => BrowserWindow | null): void {
+/**
+ * Guards quitting. Returns `settleQuit`, for what quits by itself (an update's restart): it asks
+ * the same question, and says whether quitting is certain, when the next quit goes through unasked.
+ */
+export function guardQuit(
+  core: Core,
+  focusedWindow: () => BrowserWindow | null,
+): () => Promise<boolean> {
   let unsaved: UnsavedChanges | null = null;
   core.on("minds.unsaved", (state) => {
     unsaved = state;
@@ -87,24 +95,28 @@ export function guardQuit(core: Core, focusedWindow: () => BrowserWindow | null)
       : await dialog.showMessageBox(options);
     return { choice: choices[response] ?? "keepOpen", window };
   };
-  const decide = async () => {
+  /** True once nothing waits, or the User chose to quit anyway or saved copies; false if they keep the app open. */
+  const settle = async (): Promise<boolean> => {
     let copyFailed: string | null = null;
     for (;;) {
       const left = await core.saveChangesAgain();
-      if (!left) break;
+      if (!left) return true;
       const { choice, window } = await ask(left, copyFailed);
-      if (choice === "quitAnyway") break;
-      if (choice !== "saveCopy") return;
+      if (choice === "quitAnyway") return true;
+      if (choice !== "saveCopy") return false;
       try {
         for (const mindId of left.mindIds) {
-          if (!(await saveMindCopy(core, window, mindId))) return;
+          if (!(await saveMindCopy(core, window, mindId))) return false;
         }
-        break;
+        return true;
       } catch (error) {
         console.error("quit: a copy of a Mind couldn't be saved", error);
         copyFailed = error instanceof Error ? error.message : String(error);
       }
     }
+  };
+  const decide = async () => {
+    if (!(await settle())) return;
     leaving = true;
     app.quit();
   };
@@ -116,4 +128,9 @@ export function guardQuit(core: Core, focusedWindow: () => BrowserWindow | null)
       console.error("quit: the changes waiting couldn't be dealt with", error);
     });
   });
+  return async () => {
+    if (!(await settle())) return false;
+    leaving = true;
+    return true;
+  };
 }

@@ -185,6 +185,13 @@ export function moveMessage(
   return t(`move.done.${what.kind}`, { count: what.count, folder: folderName });
 }
 
+/** What a drop on a Folder would do, as its target says it: "Move to Finance", "Move 3 Documents to Finance". */
+export function moveLabel(t: Translate, items: MoveItems, folderName: string): string {
+  const what = whatMoves(t, items, { minds: [], documents: [] });
+  if ("name" in what) return t("drop.moveTo", { folder: folderName });
+  return t(`drop.moveTo.${what.kind}`, { count: what.count, folder: folderName });
+}
+
 /**
  * What the line says once a Folder is made: "Made “Chapter 2”", and with what
  * went into it, "Made “Chapter 2” with 3 Documents".
@@ -203,6 +210,15 @@ export function madeMessage(
   if ("name" in what) return t("folder.made.one", { name: folderName, item: what.name });
   const kind = what.kind === "minds" || what.kind === "documents" ? what.kind : "items";
   return t(`folder.made.${kind}`, { name: folderName, count: what.count });
+}
+
+/** What is moved, as its drag and "Move to…" name it: "Shortlist", "3 Documents", "3 items". */
+export function movingName(t: Translate, items: MoveItems, names: Names): string {
+  const what = whatMoves(t, items, names);
+  if ("name" in what) return what.name;
+  if (what.kind === "minds") return t("mind.count", { count: what.count });
+  if (what.kind === "documents") return t("library.count", { count: what.count });
+  return t("move.items", { count: what.count });
 }
 
 /** The move as the Edit menu names it: "Move “Shortlist”", "Move 3 Documents". */

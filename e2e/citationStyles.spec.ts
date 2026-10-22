@@ -121,7 +121,11 @@ async function ask(window: Page, text: string): Promise<Locator> {
 /** Chooses a style in the open picker, typing to find it and pressing Enter, as a person would. */
 async function chooseStyle(window: Page, search: string, label: string): Promise<void> {
   const picker = window.getByTestId("citation-style-picker");
-  await expect(picker.getByTestId("citation-style-search")).toBeFocused();
+  const field = picker.getByTestId("citation-style-search");
+  await expect(field).toBeFocused();
+  // The catalogue's count is in the field once every style is listed: before it, the first match is
+  // the common list's, and Enter may take another's once the rest arrive.
+  await expect(field).toHaveAttribute("aria-label", /\d/);
   await window.keyboard.type(search);
   await expect(picker.getByTestId("citation-style-option-label").first()).toHaveText(label);
   await window.keyboard.press("Enter");
@@ -562,7 +566,7 @@ test("a Mind citing files with no details isn't offered a style until one is a p
   await pointAndClick(window, prompt.getByTestId("citation-style-prompt-dismiss"));
   await expect(prompt).toHaveCount(0);
   await expect(window.getByTestId("undo-line")).toContainText(
-    "Won't ask about a citation style in this Mind",
+    "Won’t ask about a citation style in this Mind",
   );
   await pointAndClick(window, window.getByTestId("undo-action"));
   await expect(prompt).toBeVisible();
@@ -708,7 +712,7 @@ test("every CSL style: ⌘K and the References' style open the one picker, which
     }
   });
   await expect(references).toHaveAttribute("data-style", "a-style-from-a-later-pack");
-  await expect(style).toHaveText("a-style-from-a-later-pack isn't available in this version");
+  await expect(style).toHaveText("a-style-from-a-later-pack isn’t available in this version");
   await expect(references.getByTestId("reference-entry").first()).toContainText("Tides");
   await expect(window.getByTestId("mind-editor").getByTestId("citation-chip").first()).toHaveText(
     "1",

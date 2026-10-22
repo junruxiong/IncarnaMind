@@ -11,9 +11,14 @@ import {
 } from "react";
 import type * as Y from "yjs";
 import type { AnswerPlace, SearchScope } from "../../../core/api";
-import { mindModelOf } from "../../../shared/mindModel";
 import { mindName } from "../../../shared/naming";
-import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/searchScope";
+import {
+  filingFolder,
+  hasSearchScope,
+  mindSearchScope,
+  type ScopeKind,
+  scopeIds,
+} from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
 import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon, StopIcon } from "../components/icons";
@@ -37,12 +42,14 @@ import {
   stopWriting,
   useAnswerBeingWritten,
   useConversations,
+  useHasMessage,
 } from "../conversations";
 import { core } from "../core";
-import { carriesDocuments, droppedDocumentIds } from "../documentDrag";
+import { type Dragged, type Dropped, useDropTarget } from "../dragDrop";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import { modelInUseOf, useModelInUse } from "../modelInUse";
 import { newNoteTitle } from "../newNoteRequest";
 import {
   cancelResearch,
@@ -50,9 +57,11 @@ import {
   openResearch,
   startResearch,
   useResearch,
+  useWebMissing,
   useWebReach,
 } from "../research";
 import type { ScopeChoice } from "../scope";
+import { useFolderHoldsDocuments } from "../scopeDocuments";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { tellTask, useTasks } from "../tasks";
@@ -62,7 +71,7 @@ import { AnswerAnnouncer } from "./AnswerAnnouncer";
 import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
-import { ModelChip, useMindModel } from "./ModelChip";
+import { ModelChip } from "./ModelChip";
 import { useMindSelection } from "./mindSelection";
 import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
@@ -119,8 +128,8 @@ const isCommand = (event: { metaKey: boolean; ctrlKey: boolean }) =>
  * "@" adds more), and the Ask button (an up arrow; Stop while an Answer is
  * written, which Enter waits for). Sending empties the text at once, and puts
  * it back if the Question couldn't be asked. A Mind in a Folder starts
- * with the Folder's chip; taking it out searches everything (see
- * `composerScope`). Why a Question couldn't be asked shows on one line above
+ * with the Folder's chip while the Folder holds a Document, and with All
+ * Documents while it holds none (`mindSearchScope`). Why a Question couldn't be asked shows on one line above
  * them, with the one thing that fixes it; so does the offer to suggest as the
  * User writes (`SuggestionOffer`).
  */
@@ -134,11 +143,16 @@ export function Composer({
   const mindId = mind?.mindId ?? null;
   const key = mindId ?? NO_MIND;
   const draft = useComposer((state) => state.drafts[key]) ?? EMPTY;
-  // The Mind's Folder, whose chip its Questions start with.
+  // The Mind's Folder: its own Search scope while it holds a Document, and where its new notes go.
   const folderId = useAppStore(
     (state) => state.minds.find((each) => each.id === mindId)?.folderId ?? null,
   );
-  const scope = composerScope(draft, folderId);
+  const folderHolds = useFolderHoldsDocuments(folderId);
+  const folderName = useAppStore(
+    (state) => state.library?.groups.find((each) => each.id === folderId)?.name ?? null,
+  );
+  // What the chips show: what the core will search (#1359). Asking sends `composerScope`.
+  const scope = mindSearchScope(draft.scope, folderId, folderHolds);
   // The Mind in focus changes under the one composer: what was typed with no Mind goes with the
   // User into the Mind that opens, whose draft is empty; the rest of its state starts over.
   const was = useRef(key);
@@ -165,6 +179,7 @@ export function Composer({
   const root = useRef<HTMLDivElement>(null);
   const list = useRef<ChoiceListHandle>(null);
   const listId = useId();
+  const dropKey = useId();
   const row = useRef<HTMLDivElement>(null);
   const controls = useRef<HTMLDivElement>(null);
   /** The text runs past one line: it takes the full width and the controls go under it. */
@@ -194,8 +209,12 @@ export function Composer({
   const target = mind && tellable(told) ? told : undefined;
   /** Why the last message couldn't reach its Task. */
   const [tellProblem, setTellProblem] = useState<string | null>(null);
-  const chosenModel = useMindModel(mind?.doc ?? null);
+  const chosenModel = useModelInUse(mind?.doc ?? null);
   const webReach = useWebReach(chosenModel);
+  const webMissing = useWebMissing(webReach, chosenModel);
+  const researchHint = webMissing
+    ? t("research.command.hint.libraryOnly", { reason: webMissing })
+    : t("research.command.hint");
   const selection = useMindSelection(mind, editing !== undefined);
   const mindTitle = useAppStore((state) => {
     const own = state.minds.find((each) => each.id === mindId);
@@ -204,7 +223,6 @@ export function Composer({
 
   const update = (change: Partial<Draft>) => useComposer.getState().update(key, change);
   /** Keeps the scope the User chose; the Mind's own follows it to another Folder. */
-  const [dropping, setDropping] = useState(false);
   const updateScope = (next: SearchScope) => update({ scope: chosenScope(next, folderId) });
 
   // Single-line text sits beside the controls; once it would run past one line, it takes the
@@ -335,13 +353,25 @@ export function Composer({
   };
 
   /** Documents dragged from the sidebar join the Search scope, as "@" would add them. */
-  const addDocuments = (ids: readonly string[]) => {
-    const have = scopeIds(scope, "document");
-    const fresh = ids.filter((id) => !have.includes(id));
+  const addDocuments = (fresh: readonly string[]) => {
     if (fresh.length === 0) return;
-    updateScope({ ...scope, documentIds: [...have, ...fresh] });
+    updateScope({ ...scope, documentIds: [...scopeIds(scope, "document"), ...fresh] });
     field.current?.focus();
   };
+  // Only those not in the scope yet: the composer never lights for a drop that would add nothing.
+  const freshIn = (dragged: Dragged | Dropped) => {
+    if (dragged.kind !== "objects") return [];
+    const have = scopeIds(scope, "document");
+    return dragged.refs.flatMap((ref) =>
+      ref.kind === "document" && !have.includes(ref.id) ? [ref.id] : [],
+    );
+  };
+  const drop = useDropTarget(`composer:${dropKey}`, {
+    accepts: (dragged) => (freshIn(dragged).length > 0 ? { kind: "attach" } : null),
+    drop(dropped) {
+      addDocuments(freshIn(dropped));
+    },
+  });
 
   /** Research…: what is typed next is a topic (#130). */
   const chooseResearch = () => {
@@ -409,7 +439,7 @@ export function Composer({
         text: paste.text,
       });
       const now = useComposer.getState().draft(key);
-      const nowScope = composerScope(now, folderId);
+      const nowScope = mindSearchScope(now.scope, folderId, folderHolds);
       const ids = scopeIds(nowScope, "document");
       update({
         pastes: now.pastes.filter((each) => each.id !== paste.id),
@@ -456,8 +486,8 @@ export function Composer({
       const topic = current.text.trim();
       if (!topic) return;
       update({ text: "", research: false });
-      if (plan) void changePlan(mind.mindId, topic, mindModelOf(mind.doc));
-      else openResearch(mind.mindId, topic, mindModelOf(mind.doc), webReach === "ready");
+      if (plan) void changePlan(mind.mindId, topic, modelInUseOf(mind.doc));
+      else openResearch(mind.mindId, topic, modelInUseOf(mind.doc), webReach === "ready");
       return;
     }
     // An Answer is being written, or its Question is on its way: Enter waits for it, as in
@@ -475,12 +505,10 @@ export function Composer({
     const title = current.pastes.length === 0 && !current.skill ? newNoteTitle(typed) : null;
     if (title) {
       update({ text: "" });
-      const scope = composerScope(current, folderId);
-      const scopeFolder =
-        scope.folderIds.length === 1 && scope.tagIds.length + scope.documentIds.length === 0
-          ? (scope.folderIds[0] ?? null)
-          : null;
-      void useAppStore.getState().createMind({ title, folderId: scopeFolder });
+      void useAppStore.getState().createMind({
+        title,
+        folderId: filingFolder(composerScope(current, folderId), folderId),
+      });
       return;
     }
     useAnswers.getState().dismiss(composerKey(mindId));
@@ -494,7 +522,7 @@ export function Composer({
       text,
       focus: selection.focus(),
       scope: composerScope(current, folderId),
-      model: mind ? mindModelOf(mind.doc) : useComposer.getState().modelWithoutMind,
+      model: modelInUseOf(mind?.doc ?? null),
       forcedSkill: draft.skill,
     });
     if (asked) {
@@ -510,6 +538,7 @@ export function Composer({
 
   const askWanted = useComposer((state) => state.askWanted);
   const writing = useAnswerBeingWritten();
+  const hasMessage = useHasMessage();
   const latestAsk = useRef(ask);
   latestAsk.current = ask;
   // Asked once the Answer being written is done, as Enter would be.
@@ -554,7 +583,7 @@ export function Composer({
     }
     if (event.key === "Enter" && isCommand(event) && plan && mind) {
       event.preventDefault();
-      void startResearch(mind.mindId, mindModelOf(mind.doc));
+      void startResearch(mind.mindId, modelInUseOf(mind.doc));
       return;
     }
     // The waiting ask in the tray, nearest the keyboard: ⌘↵ allows, ⌘⌫ (with nothing typed) denies.
@@ -631,28 +660,13 @@ export function Composer({
       : t("composer.ask");
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target; "@" adds a Document without dragging.
     <div
       ref={root}
       data-testid="composer"
       data-expanded={expanded || undefined}
-      data-dropping={dropping || undefined}
+      data-dropping={drop.over ? true : undefined}
       className={expanded ? "composer composer--expanded" : "composer"}
-      onDragOver={(event) => {
-        if (!carriesDocuments(event)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "link";
-        setDropping(true);
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
-      }}
-      onDrop={(event) => {
-        if (!carriesDocuments(event)) return;
-        event.preventDefault();
-        setDropping(false);
-        addDocuments(droppedDocumentIds(event));
-      }}
+      {...drop.props}
     >
       {mind && (
         <>
@@ -788,11 +802,7 @@ export function Composer({
           />
         )}
         {researching && !target && (
-          <span
-            data-testid="composer-research"
-            title={t("research.command.hint")}
-            className="question-skill"
-          >
+          <span data-testid="composer-research" title={researchHint} className="question-skill">
             <SearchLineIcon className="question-skill-icon" />
             <span className="truncate">{t("research.chip")}</span>
             <button
@@ -838,7 +848,9 @@ export function Composer({
                   ? t("research.placeholder.change")
                   : researching
                     ? t("research.placeholder")
-                    : t("composer.placeholder")
+                    : hasMessage
+                      ? t("composer.placeholder.followUp")
+                      : t("composer.placeholder")
           }
           aria-autocomplete="list"
           aria-controls={picking ? listId : undefined}
@@ -873,8 +885,16 @@ export function Composer({
             <button
               type="button"
               data-testid="composer-scope-all"
-              aria-label={t("composer.scope.allLabel")}
-              title={t("composer.scope.allTitle")}
+              aria-label={
+                folderName !== null && !folderHolds
+                  ? t("composer.scope.allEmptyFolder", { folder: folderName })
+                  : t("composer.scope.allLabel")
+              }
+              title={
+                folderName !== null && !folderHolds
+                  ? t("composer.scope.allEmptyFolder", { folder: folderName })
+                  : t("composer.scope.allTitle")
+              }
               onClick={openScopePicker}
               className="composer-chip composer-scope-all"
             >
@@ -949,6 +969,7 @@ export function Composer({
               ref={list}
               id={listId}
               onResearch={mind ? chooseResearch : undefined}
+              researchHint={researchHint}
               skills={enabledSkills}
               describe={(each) => skillDescription(each, t)}
               query={picking.query}

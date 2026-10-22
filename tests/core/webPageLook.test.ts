@@ -309,23 +309,29 @@ describe("A web page kept as it looks", { timeout: 30_000 }, () => {
     const restored = await saved(core, { address: site.address, keepLook: true });
     await expect.poll(() => releases.length).toBe(1);
     await core.deleteDocument(restored);
-    releases.shift()?.();
-    await expect.poll(() => (existsSync(looks) ? readdirSync(looks).length : 0)).toBe(1);
-    await core.restore([{ kind: "document", id: restored }]);
-    expect((await lookOf(core, restored))?.status).toBe("saved");
 
     const other = await startWeb({ "/other": () => ({ status: 200, body: REPORT }) });
     const purged = await saved(core, {
       address: `http://127.0.0.1:${other.port}/other`,
       keepLook: true,
     });
+    // The next render starts only after the previous write, status and cleanup finish (#1473).
+    releases.shift()?.();
     await expect.poll(() => releases.length).toBe(1);
+    await core.restore([{ kind: "document", id: restored }]);
+    expect((await lookOf(core, restored))?.status).toBe("saved");
+
     await core.deleteDocument(purged);
     await core.deletePermanently([{ kind: "document", id: purged }]);
+    site.change();
+    await core.fetchWebPageAgain(restored);
+    await waitForProcessing(core, [restored]);
     releases.shift()?.();
-    await expect
-      .poll(() => readdirSync(looks).filter((name) => name.endsWith(".pdf")))
-      .toHaveLength(1);
+    await expect.poll(() => releases.length).toBe(1);
+    expect(readdirSync(looks).filter((name) => name.endsWith(".pdf"))).toHaveLength(1);
+    releases.shift()?.();
+    await settled(core, restored);
+    expect((await lookOf(core, restored))?.status).toBe("saved");
   });
 
   test("deleted permanently, its PDF goes with it", async () => {

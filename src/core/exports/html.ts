@@ -29,7 +29,6 @@ p{margin:0 0 .9rem}
 .question-label{font-weight:600}
 sup.note-ref{margin-left:.05rem;font-family:var(--sans);font-size:.7em;line-height:0}
 sup.note-ref a{text-decoration:none;color:#2457a7}
-sup.note-ref + sup.note-ref::before{content:","}
 .unverified{color:var(--warning)}
 ins.change{text-decoration:underline;text-underline-offset:.15em}
 del.change{color:var(--ink-meta);text-decoration:line-through}

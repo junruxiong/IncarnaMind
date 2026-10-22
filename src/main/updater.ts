@@ -22,6 +22,7 @@ import type { Core, CoreApi, ExternalService, Language } from "../core";
 import { translate } from "../shared/i18n";
 import { systemBrowser } from "./platform";
 import { RELEASES_PAGE } from "./startupError";
+import { restartToInstall } from "./updateRestart";
 
 /** Where update checks go. */
 const GITHUB_RELEASES: Readonly<ExternalService> = {
@@ -44,15 +45,23 @@ export function registerUpdateCheck(core: Pick<Core, "networkTraffic" | "getPriv
  * Starts this run's update check in the background. Does nothing in an
  * unpackaged app, or when the User turned automatic update checks off.
  */
-export function startAutoUpdates(core: SettingsSource): void {
+export function startAutoUpdates(
+  core: SettingsSource,
+  settleQuit: () => Promise<boolean>,
+  releaseDataFolder: () => void,
+): void {
   if (!app.isPackaged) return;
-  checkForUpdates(core).catch((error: unknown) => {
+  checkForUpdates(core, settleQuit, releaseDataFolder).catch((error: unknown) => {
     // Offline, rate-limited, or no release yet: the next start tries again.
     console.warn("The update check failed:", error);
   });
 }
 
-async function checkForUpdates(core: SettingsSource): Promise<void> {
+async function checkForUpdates(
+  core: SettingsSource,
+  settleQuit: () => Promise<boolean>,
+  releaseDataFolder: () => void,
+): Promise<void> {
   if (!(await core.getPrivacySettings()).automaticUpdateChecks) return;
   const { autoUpdater } = await import("./autoUpdater");
   const installable = await canInstallUpdates();
@@ -74,7 +83,9 @@ async function checkForUpdates(core: SettingsSource): Promise<void> {
 
   await result.downloadPromise;
   const { language } = await core.getSettings();
-  if (await ask(language, "ready", version)) autoUpdater.quitAndInstall();
+  if (await ask(language, "ready", version)) {
+    await restartToInstall(autoUpdater, settleQuit, releaseDataFolder);
+  }
 }
 
 /**

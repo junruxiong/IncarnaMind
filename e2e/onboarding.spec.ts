@@ -7,6 +7,7 @@ import {
   acceptPlainTextKeys,
   addToNote,
   assistantAnswers,
+  continueSetup,
   createDataFolder,
   dismissChatSetup,
   examplesMenu,
@@ -16,7 +17,9 @@ import {
   leaveFirstOpen,
   leaveText,
   linkedFolderRow,
+  markSteps,
   newMind,
+  paletteFound,
   removeDataFolder,
   setLanguage,
   setWindowSize,
@@ -71,16 +74,6 @@ const gettingStarted = (window: Page) =>
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     return (await bridge.getSettings()).device.gettingStarted;
   });
-
-async function markSteps(window: Page, done: object): Promise<void> {
-  await window.evaluate(async (patch) => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const { device } = await bridge.getSettings();
-    await bridge.updateSettings({
-      device: { gettingStarted: { ...device.gettingStarted, ...patch } },
-    });
-  }, done);
-}
 
 /** Words a newcomer shouldn't meet on the first screens: the left column of #763's glossary. */
 const JARGON = [
@@ -256,9 +249,8 @@ test("removing the examples deletes the example Mind, its Documents and the copi
     .toBe("gone");
   await first.app.close();
 
-  // A first run happens once: the next launch doesn't make them again.
   const again = await launchApp(dataDir, { examples: true });
-  await expect(again.window.getByTestId("mind-none-open")).toBeVisible();
+  await expect(again.window.getByTestId("home")).toBeVisible();
   await expect(again.window.getByTestId("mind-list-item")).toHaveCount(0);
   await again.window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -351,7 +343,7 @@ test("an empty Mind of one's own shows the three steps, the example's steps tick
   await expect(step(window, "files")).toHaveAttribute("data-state", "done");
   await pointAndClick(window, checks.nth(0));
   const steps = window.getByTestId("first-open-steps");
-  await expect(steps).toContainText("You're set up.");
+  await expect(steps).toContainText("You’re set up.");
   await expect(steps.locator('[data-testid="first-open-step"][data-state="done"]')).toHaveText([
     /Saw a mistake it caught/,
     /Asked a question/,
@@ -423,7 +415,7 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   await expect(window.getByTestId("model-setup")).toContainText("选择你的 AI");
   await useLocalChatModel(window);
   await expect(steps).toContainText("准备好了。");
-  await expect(window.getByTestId("model-setup")).toHaveCount(0);
+  await continueSetup(window);
 });
 
 test('"Ask a question" is ticked by an Answer that arrives, not by one that fails (#766)', async () => {
@@ -591,17 +583,70 @@ test("a double-click on the ready Question asks it once, and Enter on it moves t
   await removeDataFolder(keyboard);
 });
 
+test("on a fresh install, a first checked Citation from the User's own file takes eight steps", async () => {
+  const notes = join(sources, "Harbour notes.md");
+  await writeFile(
+    notes,
+    "# Harbour notes\n\nThe harbour master publishes the tide tables every Monday morning.\n",
+  );
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  try {
+    await setWindowSize(app, window, 1440, 900);
+    await acceptPlainTextKeys(window);
+    await expect(window.getByTestId("mind-pane")).toBeVisible();
+    const taken: string[] = [];
+    const step = async (name: string, action: () => Promise<unknown>) => {
+      taken.push(name);
+      await action();
+    };
+
+    await step("drop the file", () =>
+      window.getByTestId("add-documents-input").setInputFiles([notes]),
+    );
+    await expect(
+      window.locator('[data-testid="document-list-item"][data-status="ready"]').filter({
+        hasText: "Harbour notes",
+      }),
+    ).toHaveCount(1);
+    await step("⌘J", () => window.keyboard.press("ControlOrMeta+j"));
+    await expect(window.getByTestId("composer-input")).toBeFocused();
+    await step("type the Question", () =>
+      window.keyboard.type("When does the harbour master publish the tide tables?"),
+    );
+    await step("Enter", () => window.keyboard.press("Enter"));
+    const card = window.getByTestId("model-setup");
+    await step("Paste an API key", () => pointAndClick(window, card.getByTestId("setup-key")));
+    const form = card.getByTestId("provider-form");
+    await expect(form.getByLabel(/^API key/)).toBeFocused();
+    await step("paste the key", () => window.keyboard.insertText("sk-ant-a-key-from-the-company"));
+    await step("Use this key", () => pointAndClick(window, form.getByTestId("provider-use-key")));
+    await step("Continue", () => continueSetup(window));
+
+    const citation = assistantAnswers(window).last().getByTestId("citation").first();
+    await expect(citation).toHaveAttribute("data-check", "found", { timeout: 20_000 });
+    await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
+      "aria-label",
+      /Harbour notes/,
+    );
+    expect(taken).toHaveLength(8);
+  } finally {
+    await app.close();
+  }
+});
+
 test("the steps can be hidden once all are done, and stay hidden", async () => {
   const first = await launchApp(dataDir, { examples: true });
   await useLocalChatModel(first.window);
   await markSteps(first.window, { citationChecked: true, askedOwn: true, indexed: true });
   const steps = first.window.getByTestId("first-open-steps");
-  await expect(steps).toContainText("You're set up.");
+  await expect(steps).toContainText("You’re set up.");
   await pointAndClick(first.window, steps.getByTestId("first-open-hide"));
   await expect(steps).toHaveCount(0);
   await first.app.close();
 
   const again = await launchApp(dataDir, { examples: true });
+  await expect(again.window.getByTestId("home")).toBeVisible();
+  await again.window.getByTestId("mind-tab").click();
   await expect(again.window.getByTestId("example-banner")).toBeVisible();
   await expect(again.window.getByTestId("first-open-steps")).toHaveCount(0);
   await again.app.close();
@@ -622,7 +667,7 @@ test("finishing the steps with no model asks for one in the card, never says You
   const steps = pane.getByTestId("first-open-steps");
   await expect(step(window, "files")).toHaveAttribute("data-state", "done");
   await expect(steps).toContainText("Choose an AI model to ask about your own files.");
-  await expect(steps).not.toContainText("You're set up.");
+  await expect(steps).not.toContainText("You’re set up.");
   await expect(steps.getByTestId("first-open-next")).toHaveCount(0);
   // Each part of the shell still waits for its own moment. The card asks for the model, and the
   // footer's one line says the files wait for it (#1128).
@@ -638,9 +683,9 @@ test("finishing the steps with no model asks for one in the card, never says You
   await expect(window.getByTestId("assistant")).toBeVisible();
   await expect(setup.getByRole("heading", { level: 2 })).toHaveText("Choose your AI");
   await useLocalChatModel(window);
-  await expect(steps).toContainText("You're set up.");
+  await expect(steps).toContainText("You’re set up.");
   await expect(steps.getByTestId("first-open-next").first()).toBeVisible();
-  await expect(setup).toHaveCount(0);
+  await continueSetup(window);
   await expect(sidebar.getByTestId("tagging-waiting")).toHaveCount(0);
   await expect(window.getByTestId("composer-input")).toBeVisible();
   await app.close();
@@ -669,8 +714,11 @@ test("by keyboard alone: Choose a model takes the focus into the setup, and a sa
   await expect(setup.getByLabel(/^API key/)).toBeFocused();
   await window.keyboard.insertText("sk-ant-a-key-from-the-company");
   await window.keyboard.press("Enter");
+  // The card lists what each job uses, with Continue under the focus: Enter goes on.
+  await expect(setup.getByTestId("setup-continue")).toBeFocused();
+  await window.keyboard.press("Enter");
   await expect(setup).toHaveCount(0);
-  await expect(window.getByTestId("first-open-steps")).toContainText("You're set up.");
+  await expect(window.getByTestId("first-open-steps")).toContainText("You’re set up.");
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await app.close();
 });
@@ -841,7 +889,7 @@ test("the Examples row's ⋯ offers the other examples in an order picked once p
 
   // The same order after a restart.
   const again = await launchApp(dataDir, { examples: true });
-  const credit = again.window.getByTestId("tab-title").first();
+  const credit = again.window.getByTestId("mind-tab").getByTestId("tab-title").first();
   await expect(credit).toHaveText("Draft: credit committee paper");
   const menu = await examplesMenu(again.window);
   expect(
@@ -867,7 +915,7 @@ test("Remove the examples removes every example Mind made, and Undo brings them 
   await app.close();
 });
 
-const paletteItems = (window: Page) => window.getByTestId("palette").getByTestId("palette-item");
+const paletteItems = paletteFound;
 
 async function askPalette(window: Page, text: string): Promise<void> {
   await window.keyboard.press("ControlOrMeta+k");

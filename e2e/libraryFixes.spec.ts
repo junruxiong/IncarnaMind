@@ -145,7 +145,10 @@ for (const language of ["en", "zh-CN"] as const) {
     );
     await window.getByTestId("open-library").click();
     const lib = window.getByTestId("library");
-    await expect(lib.getByTestId("library-organize-explain")).toHaveText(
+    // The line that said what Organize does is its button's tooltip.
+    await expect(lib.getByTestId("library-organize-explain")).toHaveCount(0);
+    await expect(lib.getByTestId("library-organize")).toHaveAttribute(
+      "title",
       language === "en"
         ? "Suggests a Folder and Tags for each Document. You decide."
         : "为每个文档建议文件夹和标签，由你决定。",
@@ -196,7 +199,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(details).toHaveAttribute("aria-expanded", "true");
     await expect(sends.getByTestId("library-organize-sends-list")).toHaveText(
       language === "en"
-        ? "Each Document's name and the start of its text (for a scan, images of its first pages), and your Folders' and Tags' names and descriptions, go to llm.example.com."
+        ? "Each Document’s name and the start of its text (for a scan, images of its first pages), and your Folders’ and Tags’ names and descriptions, go to llm.example.com."
         : "每个文档的名称和开头的文字（扫描件则是前几页的图片），以及文件夹和标签的名称与描述，会发送给 llm.example.com。",
     );
 

@@ -7,6 +7,7 @@ import type { FakeCapture } from "../src/core/meetings/fakeCapture";
 import type { TestHooks } from "../src/shared/testHooks";
 import {
   askInAssistant,
+  closeSettings,
   createDataFolder,
   DEFAULT_FOLDER_ZH,
   dismissChatSetup,
@@ -15,14 +16,16 @@ import {
   launchApp,
   motionSettled,
   openDocumentAt,
+  openSettings,
+  paletteFound,
   pointAndClick,
   recordMeeting,
+  recordMeetingNow,
   removeDataFolder,
   setLanguage,
   setWindowSize,
   showSettingsPage,
   startRecording,
-  turnOnMeetings,
   useLocalChatModel,
   useOutputLocation,
 } from "./app";
@@ -86,17 +89,18 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await dismissChatSetup(window);
   // The Transcript is saved at Stop without asking where.
   await useOutputLocation(window, sources);
-  // Off until turned on: the + menu has no "Record a meeting".
+  // From the first run: the + menu has "Record a meeting", with nothing to turn on first.
   await window.getByTestId("plus-menu").click();
-  await expect(window.getByRole("menuitem", { name: "Record a meeting" })).toHaveCount(0);
+  await window.getByTestId("plus-more").hover();
+  await expect(window.getByTestId("plus-more-menu")).toBeVisible();
+  await expect(window.getByRole("menuitem", { name: "Record a meeting" })).toBeVisible();
+  if (SCREENSHOTS) await shot(window, "plus-menu-record-en");
   await window.keyboard.press("Escape");
-  await turnOnMeetings(window, () => shot(window, "settings-meetings-en"));
-  if (SCREENSHOTS) {
-    await window.getByTestId("plus-menu").click();
-    await expect(window.getByRole("menuitem", { name: "Record a meeting" })).toBeVisible();
-    await shot(window, "plus-menu-record-en");
-    await window.keyboard.press("Escape");
-  }
+  const settings = await openSettings(window, "meetings");
+  await expect(settings.getByTestId("meetings-settings")).toBeVisible();
+  await expect(settings.getByTestId("meetings-enabled")).toHaveCount(0);
+  if (SCREENSHOTS) await shot(window, "settings-meetings-en");
+  await closeSettings(window);
 
   const start = await recordMeeting(window);
   await expect(frontMindName(window)).toHaveText(/^Meeting, \d{1,2} [A-Z][a-z]+$/);
@@ -241,7 +245,7 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   // ⌘K's "Delete audio" is the same command: the same question, in the same place, and Esc
   // or "Keep it" keeps the audio.
   const palette = window.getByTestId("palette");
-  const deleteAudio = palette.getByTestId("palette-item").filter({ hasText: "Delete audio" });
+  const deleteAudio = paletteFound(window).filter({ hasText: "Delete audio" });
   await searchPalette(window, "delete audio");
   await expect(deleteAudio).toHaveCount(1);
   await shot(window, "meeting-delete-audio-palette-en");
@@ -271,9 +275,10 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await window.keyboard.press("Escape");
   await expect(palette).toBeHidden();
 
-  // The notice comes once on a device: the next meeting records at once.
-  await startRecording(window, await recordMeeting(window));
+  // The notice comes once on a device: the next meeting records in one action, with no start block.
+  await recordMeetingNow(window);
   await expect(window.getByTestId("meeting-notice")).toBeHidden();
+  await expect(window.getByTestId("meeting-start")).toHaveCount(0);
 });
 
 test("an engine that can't start says so in plain words, never in its JavaScript error, in English and Chinese", async () => {
@@ -281,7 +286,6 @@ test("an engine that can't start says so in plain words, never in its JavaScript
   const { app, window } = await launchApp(dataDir, { transcriber: { failToLoad: error } });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await turnOnMeetings(window);
   await startRecording(window, await recordMeeting(window), { notice: true });
 
   const line = window.getByTestId("meeting-transcript-line");
@@ -300,7 +304,6 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
   // No Output location chosen: the Transcript goes to the default, Documents › IncarnaMind.
-  await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   const toggle = bar.getByTestId("meeting-transcript-toggle");
   await expect(toggle).toHaveText("Show transcript");
@@ -469,7 +472,6 @@ test("notes during the call: typed lines get their time, Mark (⌘D) and Add to 
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
   // No Output location chosen: the Transcript goes to the default, Documents › IncarnaMind.
-  await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   const toggle = bar.getByTestId("meeting-transcript-toggle");
   await expect(toggle).toBeEnabled({ timeout: 20_000 });
@@ -631,7 +633,6 @@ test("notes during the call: typed lines get their time, Mark (⌘D) and Add to 
 test("with the computer's sound denied, a line says so and opens System Settings; the microphone records on", async () => {
   const { app, window } = await launchApp(dataDir, { computerSound: "denied" });
   await dismissChatSetup(window);
-  await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
 
   const line = window.getByTestId("meeting-line-system");
@@ -683,7 +684,6 @@ test("with the computer's sound denied, a line says so and opens System Settings
 test("a device change keeps recording, the new microphone's audio at the right time", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   const time = window.getByTestId("meeting-time");
   await expect(time).toHaveText(/^0:0[2-9]$/);
@@ -706,7 +706,6 @@ test("a device change keeps recording, the new microphone's audio at the right t
 test("killed mid-recording, IncarnaMind recovers the audio up to the last part and marks the gap", async () => {
   const first = await launchApp(dataDir);
   await dismissChatSetup(first.window);
-  await turnOnMeetings(first.window);
   await startRecording(first.window, await recordMeeting(first.window), { notice: true });
   const [meeting] = await bridge(first.window);
   const meetingId = meeting?.id ?? "";
@@ -718,6 +717,8 @@ test("killed mid-recording, IncarnaMind recovers the audio up to the last part a
   await writeFile(join(dataDir, "meetings", meetingId, "microphone-0000010000.wav.writing"), "");
 
   const { app, window } = await launchApp(dataDir);
+  await expect(window.getByTestId("home")).toBeVisible();
+  await window.getByTestId("mind-tab").click();
   const bar = window.getByTestId("meeting-bar");
   await expect(bar).toHaveAttribute("data-status", "paused");
   // A recovered, paused Meeting opens no call help panel: it would open before the app's window.
@@ -767,7 +768,6 @@ test("recording details: a slow engine, a fallback and a part that can't be save
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
   await useOutputLocation(window, sources);
-  await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   const [meeting] = await bridge(window);
   const meetingId = meeting?.id ?? "";
@@ -874,7 +874,6 @@ test("asking during the call: the assistant listens to the live transcript, its 
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await useOutputLocation(window, sources);
-  await turnOnMeetings(window);
   const bar = await startRecording(window, await recordMeeting(window), { notice: true });
   const [meeting] = await bridge(window);
   if (!meeting) throw new Error("No Meeting.");

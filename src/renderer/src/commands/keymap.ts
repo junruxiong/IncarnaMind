@@ -64,7 +64,7 @@ const report = (error: unknown) => useAppStore.getState().reportError(error);
 
 /**
  * Runs the command this key is the shortcut of, if it is offered and enabled
- * here: true if it ran. Nothing while a dialog is open. With `objectsOnly`,
+ * here: true if it took the key. Nothing while a dialog is open. With `objectsOnly`,
  * only commands that act on objects are considered.
  */
 export function runShortcut(
@@ -81,10 +81,16 @@ export function runShortcut(
     const keys = [
       keysOn(shortcut.keys, isMac),
       ...(!isMac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
+      ...(shortcut.also ? [shortcut.also] : []),
     ];
     if (!keys.some((each) => pressed(each, event, isMac))) continue;
     if (shortcut.list && !inList(event.target)) continue;
     if (shortcut.outsideText && typesText(event.target)) continue;
+    if (shortcut.notInText && typesText(event.target)) {
+      // On macOS the menu takes a key the page leaves alone, and would run the command from the text.
+      event.preventDefault();
+      return true;
+    }
     // Only now, for keys that are a shortcut: the search goes through the whole page.
     if (dialogOpen()) return false;
     // A list's own keys act on the row the focus is in.
@@ -109,8 +115,10 @@ export function useKeymap(): void {
     window.addEventListener("keydown", onKey);
     const stopMenu = files.onMenuCommand((id) => {
       const focus = document.activeElement;
-      // In text, Undo and Redo are the text's own, as their keys are, in a dialog too.
-      const textsOwn = commands.get(id)?.shortcut?.outsideText === true && typesText(focus);
+      // macOS sends text commands through the menu even when a dialog holds focus (#1351).
+      const textsOwn =
+        typesText(focus) &&
+        (id === "edit.selectAll" || commands.get(id)?.shortcut?.outsideText === true);
       if (textsOwn || !dialogOpen()) commands.run(id, contextAt(focus)).catch(report);
     });
     return () => {

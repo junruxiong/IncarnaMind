@@ -1886,21 +1886,24 @@ export function createDocuments(options: DocumentsOptions) {
     /**
      * How many live Documents have Passages to search (of all of them, or only
      * of these), and the names of the `limit` most recently added, newest
-     * first, each with its title when its name doesn't hold it.
+     * first, each with its title when its name doesn't hold it; `webPage`: one
+     * of them is a saved web page, named by its own title.
      */
     searchableNames(
       documentIds: readonly string[] | undefined,
       limit: number,
-    ): { total: number; names: string[] } {
+    ): { total: number; names: string[]; webPage: boolean } {
       const { where, params } = searchable(documentIds);
-      const names = db
-        .all<{ name: string; title: string | null }>(
-          `SELECT d.name, d.title FROM documents d WHERE ${where}
-           ORDER BY d.created_at DESC, d.rowid DESC LIMIT ?`,
-          [...params, BigInt(limit)],
-        )
-        .map((row) => withTitle(row.name, row.title));
-      return { total: searchableCount(documentIds), names };
+      const rows = db.all<{ name: string; title: string | null; kind: string }>(
+        `SELECT d.name, d.title, d.kind FROM documents d WHERE ${where}
+         ORDER BY d.created_at DESC, d.rowid DESC LIMIT ?`,
+        [...params, BigInt(limit)],
+      );
+      return {
+        total: searchableCount(documentIds),
+        names: rows.map((row) => withTitle(row.name, row.title)),
+        webPage: rows.some((row) => row.kind === "web"),
+      };
     },
 
     /** The live Documents with Passages to search (of all of them, or only of these), the most text first: `size` characters. */
@@ -2278,6 +2281,19 @@ export function createDocuments(options: DocumentsOptions) {
         .map(toDocument);
     },
 
+    /** The live Documents (of these, or all of them) whose text is still being read: queued or extracting, newest first. */
+    reading(documentIds?: readonly string[]): Document[] {
+      const { where, params } = filterWhere(documentIds ? { ids: documentIds } : {});
+      return db
+        .all<DocumentRow>(
+          `SELECT ${COLUMNS} FROM documents
+           WHERE ${where} AND status IN ('queued', 'extracting')
+           ORDER BY created_at DESC, rowid DESC`,
+          params,
+        )
+        .map(toDocument);
+    },
+
     /** A live Document. Throws NotFoundError for an unknown or deleted one. */
     get(idInput: unknown): Document {
       const row = find(parseId(idInput));
@@ -2362,18 +2378,28 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
-     * Removes a Document from the index. The User's file isn't touched; only a
-     * copy the old layout made in the data folder is removed with it.
+     * Removes Documents from the index, all in one step, or none when one isn't found. The
+     * User's files aren't touched; only copies the old layout made in the data folder go with
+     * them.
      */
-    async delete(idInput: unknown): Promise<void> {
-      const id = parseId(idInput);
-      const row = find(id);
-      if (!row) throw new NotFoundError({ key: "error.document.notFound" });
-      removeFromIndex([id], now());
-      if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
-        await rm(row.path, { force: true }).catch(reportError);
+    async delete(idsInput: unknown): Promise<string[]> {
+      const ids = [...new Set((Array.isArray(idsInput) ? idsInput : [idsInput]).map(parseId))];
+      const rows = ids.map((id) => {
+        const row = find(id);
+        if (!row) throw new NotFoundError({ key: "error.document.notFound" });
+        return row;
+      });
+      removeFromIndex(ids, now());
+      for (const row of rows) {
+        if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
+          await rm(row.path, { force: true }).catch(reportError);
+        }
       }
-      library.documentsChanged(row.linked_folder_id);
+      // Once a Linked folder, not once a Document: 1,700 Documents took 90 s one by one (#1349).
+      for (const linkedFolderId of new Set(rows.map((row) => row.linked_folder_id))) {
+        library.documentsChanged(linkedFolderId);
+      }
+      return ids;
     },
 
     /**
@@ -2383,44 +2409,51 @@ export function createDocuments(options: DocumentsOptions) {
      */
     restore(ids: readonly string[]): void {
       const at = now();
-      for (const id of ids) {
-        const row = db.get<DocumentRow & { deleted_at: string }>(
-          `SELECT ${COLUMNS}, deleted_at FROM documents WHERE id = ? AND deleted_at IS NOT NULL`,
-          [id],
-        );
-        if (!row) continue;
-        const deleted = [at, id, row.deleted_at] as const;
-        db.run("UPDATE documents SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, id]);
+      const rows = db.all<DocumentRow & { deleted_at: string }>(
+        `SELECT ${COLUMNS}, deleted_at FROM documents
+         WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NOT NULL`,
+        [JSON.stringify(ids)],
+      );
+      if (rows.length === 0) return;
+      const list = JSON.stringify(rows.map((row) => row.id));
+      // What went with each Document, by its own delete time: read from its row, so its parts go
+      // back before it does. One statement a table, however many there are (#1349).
+      const deletedWith = (table: string) =>
+        `(SELECT d.deleted_at FROM documents d WHERE d.id = ${table}.document_id)`;
+      db.run(
+        `UPDATE passages SET deleted_at = NULL, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?))
+           AND deleted_at = ${deletedWith("passages")}
+           AND content_hash IS (SELECT d.content_hash FROM documents d WHERE d.id = passages.document_id)`,
+        [at, list],
+      );
+      for (const table of ["document_pages", "web_pages", "web_page_pictures"]) {
         db.run(
-          `UPDATE passages SET deleted_at = NULL, updated_at = ?
-           WHERE document_id = ? AND deleted_at = ? AND content_hash IS ?`,
-          [...deleted, row.content_hash],
+          `UPDATE ${table} SET deleted_at = NULL, updated_at = ?
+           WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at = ${deletedWith(table)}`,
+          [at, list],
         );
-        db.run(
-          "UPDATE document_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          "UPDATE web_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          "UPDATE web_page_pictures SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
-          deleted,
-        );
-        db.run(
-          `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
-           WHERE document_id = ? AND deleted_at = ?
-             AND NOT EXISTS (SELECT 1 FROM document_tags live
-                             WHERE live.document_id = document_tags.document_id
-                               AND live.tag_id = document_tags.tag_id AND live.deleted_at IS NULL)`,
-          deleted,
-        );
-        reindexName(id, row.name);
-        if (row.status === "extracting") setStatus(id, "queued");
+      }
+      db.run(
+        `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?))
+           AND deleted_at = ${deletedWith("document_tags")}
+           AND NOT EXISTS (SELECT 1 FROM document_tags live
+                           WHERE live.document_id = document_tags.document_id
+                             AND live.tag_id = document_tags.tag_id AND live.deleted_at IS NULL)`,
+        [at, list],
+      );
+      db.run(
+        `UPDATE documents SET deleted_at = NULL, updated_at = ?
+         WHERE id IN (SELECT value FROM json_each(?))`,
+        [at, list],
+      );
+      for (const row of rows) {
+        reindexName(row.id, row.name);
+        if (row.status === "extracting") setStatus(row.id, "queued");
         else if (["ready", "embedding", "waiting-for-model"].includes(row.status)) {
           const status = indexedStatus(row);
-          if (status !== null && status !== row.status) setStatus(id, status);
+          if (status !== null && status !== row.status) setStatus(row.id, status);
         }
       }
     },

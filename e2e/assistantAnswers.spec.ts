@@ -21,6 +21,7 @@ import {
   setWindowSize,
   slideToHandle,
   stubClipboard,
+  tabMenu,
 } from "./app";
 
 /**
@@ -226,6 +227,12 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   await expect(options.filter({ hasText: "Chapter 2 outline" })).toHaveCount(1);
   await expect(options.last()).toContainText("New Mind");
   await screenshot(window, "assistant-add-to-picker");
+  // Esc closes it and the focus goes back to the control that opened it.
+  await window.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+  await expect(answer.getByTestId("answer-add-to")).toBeFocused();
+  await pointAndClick(window, answer.getByTestId("answer-add-to"));
+  await expect(picker).toBeVisible();
   await window.keyboard.type("chapter");
   await expect(options).toHaveCount(2);
   await window.keyboard.press("Enter");
@@ -277,17 +284,16 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   await expect(shown.getByTestId("answer-add-to")).toBeVisible({ timeout: 15_000 });
   await pointAndClick(window, shown.getByTestId("answer-add-to"));
   await pointAndClick(window, window.getByTestId("add-to-option").last());
-  await expect(shown.getByTestId("answer-added")).toContainText(
-    "Made the Mind “Your Documents answer this” from this Answer",
-  );
+  // Making a Mind says nothing under the Answer either.
+  await expect(shown.getByTestId("answer-added")).toHaveCount(0);
   const tab = window.getByTestId("mind-tab").filter({ hasText: "Your Documents answer this" });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   const made = window.getByTestId("mind-editor");
   await expect(made.locator('[data-proposal="insert"]')).toHaveCount(2);
   await expect(window.getByTestId("proposals-bar")).toBeVisible();
   await screenshot(window, "assistant-new-mind");
-  // Undo removes it, and its tab.
-  await pointAndClick(window, shown.getByTestId("answer-added-undo"));
+  // Delete removes it, and its tab.
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.delete"));
   await expect(tab).toHaveCount(0);
 
   // Deleted, the conversation's link says so.

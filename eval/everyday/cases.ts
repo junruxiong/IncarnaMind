@@ -8,9 +8,10 @@ import type { Expected } from "./checks";
 
 /**
  * The Documents a request is asked over: two arXiv papers, the repository's seven sample PDFs,
- * or contracts and minutes whose files' dates are none of their text's (./dated).
+ * contracts and minutes whose files' dates are none of their text's (./dated), or the table of
+ * China's official reserve assets, whose cells give a difference (#1444).
  */
-export type LibraryName = "papers" | "reports" | "dated";
+export type LibraryName = "papers" | "reports" | "dated" | "reserves";
 
 export interface EverydayCase {
   id: string;
@@ -26,6 +27,8 @@ export interface EverydayCase {
   afterExample?: true;
   /** With `afterExample`: asked from the example's own Mind, where the User stays, instead of from a Mind of its own. */
   inExample?: true;
+  /** With `afterExample`: `before` is asked from the example's own Mind, as a newcomer does before opening a page of their own. */
+  beforeInExample?: true;
   /** Asked first, in the same conversation, and not checked. */
   before?: readonly string[];
   /** The last of `before` is put into the Mind with Add to note, as a whole Answer, before the request. */
@@ -38,6 +41,8 @@ export interface EverydayCase {
   research?: true;
   /** A summary: the report counts its sentences outside headings that carry a Citation (./dates). */
   summary?: true;
+  /** What the model's first reply is, in place of its own, so the app must ask again (./reasks). */
+  firstReply?: string;
 }
 
 /** The share of its runs a request must pass: two in three, one in three for a hard one. */
@@ -49,8 +54,18 @@ const WRITE = { write: true, cite: true, coverAll: false } as const;
 const WRITE_ALL = { write: true, cite: true, coverAll: true } as const;
 const EDIT = { write: true, cite: false, coverAll: false } as const;
 const NOTHING = { write: false, cite: false, coverAll: false } as const;
-const ABOUT_THE_QUESTION = { write: false, cite: false, coverAll: false, noEarlier: true } as const;
+const ABOUT_THE_QUESTION = {
+  write: false,
+  cite: false,
+  coverAll: false,
+  noEarlier: true,
+  standsAlone: true,
+  noExample: true,
+} as const;
 const TEXT_DATES = { write: false, cite: true, coverAll: false, textDates: true } as const;
+// The contracts and minutes have English and Chinese versions in the set: the reply follows the Question's language (#1273).
+const TEXT_DATES_EN = { ...TEXT_DATES, language: "en" } as const;
+const TEXT_DATES_ZH = { ...TEXT_DATES, language: "zh-CN" } as const;
 
 const READING_GROUP = {
   title: "Reading group",
@@ -289,6 +304,45 @@ export const CASES: readonly EverydayCase[] = [
     mind: READING_GROUP,
     request: "Write a summary page of these documents",
     expected: WRITE_ALL,
+  },
+  // The app asks the model again inside the turn, its first reply being one it would ask about: nothing the User reads is about that try (#1226).
+  {
+    id: "reask-write",
+    language: "en",
+    library: "papers",
+    mind: READING_GROUP,
+    request: "Write a summary page of these documents",
+    firstReply:
+      "Here is a summary of the two documents.\n\n## Summary\n\nThe first document is the paper 2306.10683v1. The second is “A Tutorial about Random Neural Networks in Supervised Learning”.",
+    expected: WRITE_ALL,
+  },
+  {
+    id: "reask-write-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: READING_GROUP_ZH,
+    request: "写一个总结页面",
+    firstReply:
+      "下面是这两份文档的总结。\n\n## 总结\n\n第一份文档是论文 2306.10683v1，第二份是《A Tutorial about Random Neural Networks in Supervised Learning》。",
+    expected: WRITE_ALL,
+  },
+  {
+    id: "reask-claim",
+    language: "en",
+    library: "papers",
+    mind: READING_GROUP,
+    request: "Add a short section on GraphST's results to my notes",
+    firstReply: "I've added a short section on GraphST's results to “Reading group”.",
+    expected: WRITE,
+  },
+  {
+    id: "reask-claim-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: READING_GROUP_ZH,
+    request: "把教程的主要观点加到我的笔记里",
+    firstReply: "我已经在“读书会”里添加了教程的主要观点。",
+    expected: WRITE,
   },
   // In a new, empty Mind with no name yet, a piece asked for goes into it (#1212).
   {
@@ -592,6 +646,62 @@ export const CASES: readonly EverydayCase[] = [
     request: "GraphST 这篇论文的主要主张是什么？",
     expected: ABOUT_THE_QUESTION,
   },
+  // A short summary for a page of their own, after a Question about their file from the example's page
+  // (#1172). In the panel (to add with Add to note) or in the page, what it writes is held to both guards.
+  {
+    id: "page-summary",
+    language: "en",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    beforeInExample: true,
+    before: ["What data does the GraphST paper use, and what are its main results?"],
+    request: "Write a short summary of the GraphST paper.",
+    expected: { ...ANSWER, standsAlone: true, noExample: true },
+  },
+  {
+    id: "page-summary-panel",
+    language: "en",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    beforeInExample: true,
+    before: ["What data does the GraphST paper use, and what are its main results?"],
+    request: "Summarise the GraphST paper for my manager.",
+    expected: { ...ANSWER, standsAlone: true, noExample: true },
+  },
+  {
+    id: "page-summary-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    beforeInExample: true,
+    before: ["GraphST 这篇论文用了哪些数据，主要结果是什么？"],
+    request: "请为 GraphST 这篇论文写一个简短的摘要。",
+    expected: { ...ANSWER, standsAlone: true, noExample: true },
+  },
+  // The summary answered in the panel, then put into the page as it is: the copy of the last Answer the guard reads too.
+  {
+    id: "page-copy",
+    language: "en",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    before: ["Summarise the GraphST paper for my manager."],
+    request: "Put that summary into this page as it is.",
+    expected: { ...WRITE, standsAlone: true, noExample: true },
+  },
+  {
+    id: "page-copy-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: { title: "", blocks: [] },
+    afterExample: true,
+    before: ["请为 GraphST 这篇论文写一份给经理看的摘要。"],
+    request: "把这份摘要原样放进这个页面。",
+    expected: { ...WRITE, standsAlone: true, noExample: true },
+  },
   // Research questions where an inference is tempting: a cited sentence says only what its quote supports (#1073).
   {
     id: "research-attention-long",
@@ -782,7 +892,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "Summarise the employment contract.",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_EN,
     summary: true,
   },
   {
@@ -791,7 +901,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "When was the employment contract signed?",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_EN,
   },
   {
     id: "dates-contract-key-dates",
@@ -799,7 +909,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "What are the key dates in the employment contract?",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_EN,
   },
   {
     id: "dates-nda-effective",
@@ -807,7 +917,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "When does the mutual NDA take effect?",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_EN,
   },
   {
     id: "dates-minutes",
@@ -815,7 +925,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "When did the board meet, and what did it decide?",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_EN,
   },
   {
     id: "dates-contract-summary-zh",
@@ -823,7 +933,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "总结一下这份劳动合同。",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_ZH,
     summary: true,
   },
   {
@@ -832,7 +942,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "这份劳动合同是什么时候签订的？",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_ZH,
   },
   {
     id: "dates-contract-key-dates-zh",
@@ -840,7 +950,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "劳动合同里有哪些关键日期？",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_ZH,
   },
   {
     id: "dates-nda-effective-zh",
@@ -848,7 +958,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "保密协议什么时候生效？",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_ZH,
   },
   {
     id: "dates-minutes-zh",
@@ -856,6 +966,24 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "董事会是哪天开的会？做了什么决定？",
-    expected: TEXT_DATES,
+    expected: TEXT_DATES_ZH,
+  },
+  {
+    id: "reserves-change-zh",
+    language: "zh-CN",
+    library: "reserves",
+    mind: null,
+    request:
+      "2026年9月末我国外汇储备是多少？与1月末相比变化了多少？黄金储备的数量增加了多少？\n\n请根据这些文档回答，并注明出处。",
+    expected: { ...ANSWER, figure: /11\.73亿美元/ },
+  },
+  {
+    id: "reserves-change-en",
+    language: "en",
+    library: "reserves",
+    mind: null,
+    request:
+      "What were China's foreign exchange reserves at the end of September 2026, and how much did they change since the end of January?",
+    expected: { ...ANSWER, figure: /1\.17\d* billion|1,17\d(?:\.\d+)? million/ },
   },
 ];

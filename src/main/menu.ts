@@ -16,11 +16,9 @@ function send(command: MenuCommand): void {
 }
 
 /**
- * The application menu, in the interface language: New Mind (⌘N), New Folder
- * (⇧⌘N), Close Tab (⌘W), Reopen Closed Tab (⇧⌘T) and Settings… (⌘,) with the usual Edit, View
- * and Window items. As in a browser, ⌘W closes the tab and Shift+⌘W the
- * window. Reload and the developer tools are only in development and test
- * builds. Ctrl stands in for ⌘ on Windows and Linux.
+ * The application menu, in the interface language. As in a browser, ⌘W closes
+ * the tab and Shift+⌘W the window. Reload and the developer tools are only in
+ * development and test builds. Ctrl stands in for ⌘ on Windows and Linux.
  */
 export function installAppMenu(language: Language, { developer }: { developer: boolean }): void {
   installed = { language, developer };
@@ -139,6 +137,9 @@ function buildMenu(): void {
         command("mind.new"),
         command("folder.new"),
         { type: "separator" },
+        command("documents.add"),
+        command("linkedFolder.add"),
+        { type: "separator" },
         {
           ...command("mind.export", "menu.export"),
           id: "mind.export",
@@ -171,7 +172,7 @@ function buildMenu(): void {
         { role: "cut", label: t("menu.cut") },
         { role: "copy", label: t(isMac ? "menu.copy" : "menu.copy.other") },
         { role: "paste", label: t("menu.paste") },
-        command("edit.selectAll"),
+        { ...command("edit.selectAll"), id: "edit.selectAll" },
       ],
     },
     {

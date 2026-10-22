@@ -5,6 +5,7 @@ import type { NodeJSON } from "../../../../shared/blockJson";
 import { lendAnswerEditor } from "../../answerEditors";
 import { AnswerTableSlots } from "../../editor/answerTables";
 import { CitationView } from "../../editor/CitationView";
+import { checklistLabel } from "../../editor/checklistLabel";
 import { CitationGlue, withCitationGlue } from "../../editor/citationGlue";
 import { CitationNumbers } from "../../editor/citationNumbers";
 import { CopyCitations } from "../../editor/copyCitations";
@@ -70,7 +71,7 @@ export function AnswerText({
       content: docOf(blocks),
       editorProps: editorPropsFor(label),
       extensions: [
-        ...noteExtensions({ citationView }),
+        ...noteExtensions({ citationView, checklistLabel }),
         CitationGlue,
         CitationNumbers,
         CopyCitations,

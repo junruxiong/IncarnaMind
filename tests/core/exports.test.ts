@@ -196,6 +196,73 @@ function docxParts(exported: MindExport) {
 }
 
 describe("exporting a Mind", () => {
+  test("Markdown preserves checked, unchecked and empty checklist items, nested beside ordinary lists", async () => {
+    const { core, mind, client } = await setUp();
+    const task = (checked: boolean, ...content: JSONContent[]): JSONContent => ({
+      type: "taskItem",
+      attrs: { checked },
+      content,
+    });
+    const checklist = (checked: boolean): JSONContent => ({
+      type: "taskList",
+      content: [
+        task(
+          checked,
+          paragraph(text("核查清单项")),
+          {
+            type: "taskList",
+            content: [
+              task(false, paragraph(text("Check sources"))),
+              task(true, paragraph(text("已核对"))),
+            ],
+          },
+          {
+            type: "bulletList",
+            content: [item(paragraph(text("Supporting note")))],
+          },
+        ),
+        task(false, paragraph(text("交付报告"))),
+        task(true, paragraph()),
+        task(true, paragraph(), {
+          type: "taskList",
+          content: [task(false, paragraph(text("Empty parent")))],
+        }),
+        task(false, paragraph()),
+      ],
+    });
+    const ordinary: JSONContent = {
+      type: "orderedList",
+      attrs: { start: 3 },
+      content: [
+        item(paragraph(text("Ordinary item")), {
+          type: "bulletList",
+          content: [item(paragraph(text("A bullet")))],
+        }),
+      ],
+    };
+    for (const checked of [true, false]) {
+      writeMind(client, [checklist(checked), ordinary]);
+      await client.settled();
+      const exported = await core.exportMind(mind.id, { format: "markdown" });
+      expect(new TextDecoder().decode(exported.data).trim()).toBe(
+        [
+          `- [${checked ? "x" : " "}] 核查清单项`,
+          "  - [ ] Check sources",
+          "  - [x] 已核对",
+          "  - Supporting note",
+          "- [ ] 交付报告",
+          "- [x] ",
+          "- [x] ",
+          "  - [ ] Empty parent",
+          "- [ ] ",
+          "",
+          "3. Ordinary item",
+          "   - A bullet",
+        ].join("\n"),
+      );
+    }
+  });
+
   test("the bytes of an export don't change: a fingerprint of the sample's Markdown and .docx", async () => {
     const { core, mind, client, tides } = await setUp();
     writeSample(client, tides);
@@ -410,6 +477,48 @@ describe("exporting a Mind", () => {
     expect(part(files, "word/styles.xml")).toContain(
       '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/>',
     );
+  });
+
+  // protects=a list in a Word export is indented as the Mind draws it (DESIGN.md, #1341): each level's text half an inch further in, its bullet or number a quarter inch before it; fails_when=the export's indents drift from the screen's 48px a level and 24px hang; no_claim=how Word draws them.
+  test("to .docx: a list's levels are indented 720 twips each, with a 360 hang, as the Mind draws them", async () => {
+    const { core, mind, client } = await setUp();
+    writeMind(client, [
+      {
+        type: "bulletList",
+        content: [
+          item(paragraph(text("One")), {
+            type: "bulletList",
+            content: [
+              item(paragraph(text("Two")), {
+                type: "bulletList",
+                content: [item(paragraph(text("Three")))],
+              }),
+            ],
+          }),
+        ],
+      },
+    ]);
+    await client.settled();
+
+    const { document, numbering } = docxParts(await core.exportMind(mind.id, { format: "docx" }));
+
+    // A level's text is 48px per level in, in twips: 720 each; its bullet 24px (360) before it.
+    expect(
+      [...document.matchAll(/<w:ind w:left="(\d+)" w:hanging="(\d+)"\/>/g)].map((m) => m.slice(1)),
+    ).toEqual([
+      ["720", "360"],
+      ["1440", "360"],
+      ["2160", "360"],
+    ]);
+    // The list's own definition says the same for each of its levels.
+    const levels = [
+      ...numbering.matchAll(/<w:lvl w:ilvl="(\d)">.*?<w:ind w:left="(\d+)" w:hanging="(\d+)"\/>/g),
+    ];
+    expect(levels.slice(0, 3).map((m) => m.slice(1))).toEqual([
+      ["0", "720", "360"],
+      ["1", "1440", "360"],
+      ["2", "2160", "360"],
+    ]);
   });
 
   test("a new Mind's title line left empty isn't exported: no empty heading at the top of the file", async () => {

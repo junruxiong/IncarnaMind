@@ -28,6 +28,7 @@ import {
 } from "./OllamaCard";
 import { ProviderForm } from "./ProviderForm";
 import { SendsLine } from "./SendsLine";
+import { SetupReady } from "./SetupReady";
 
 const CLAUDE_DOWNLOAD = "https://claude.ai/download";
 
@@ -41,6 +42,10 @@ type View = "key" | "local" | null;
  * dialog is added here.
  */
 export function ModelSetupCard() {
+  return useModelSetup((state) => state.ready) ? <SetupReady /> : <ChooseAnAi />;
+}
+
+function ChooseAnAi() {
   const t = useT();
   const chinese = useLanguage() === "zh-CN";
   const [view, setView] = useState<View>(null);
@@ -209,7 +214,7 @@ function LeadingWays({
         <KeyLineIcon className="size-4" />
         {t("setup.key.use")}
       </button>
-      <p data-testid="setup-key-for" className={lineClass}>
+      <p data-testid="setup-key-for" className={`${lineClass} text-balance`}>
         {t("setup.key.for")}
       </p>
     </div>

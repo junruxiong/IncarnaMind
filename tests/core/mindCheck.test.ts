@@ -10,6 +10,7 @@ import { updateCheck } from "../../src/core/answers/checks/sentences";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown } from "../../src/shared/claimChecks";
 import { mindCheckOf } from "../../src/shared/mindCheck";
+import { setMindModel } from "../../src/shared/mindModel";
 import { checkGenerate, checkReply, isCheckRun, type Plan } from "../helpers/checks";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -125,6 +126,47 @@ async function shownChecks(core: Core, client: MindClient, folderId: string | nu
 }
 
 describe("Check this Mind", () => {
+  test("the model it names is the one in use: an older Mind follows a new last pick, its own pick wins, and a removed provider falls back", async () => {
+    const { core, client, mindId } = await setUp();
+    const named = async () => {
+      const plan = await core.planMindCheck(mindId, "all");
+      return plan.kind === "ready" ? plan.model : undefined;
+    };
+    const defaultModel = (await core.getSettings()).user.chatModel;
+    expect(await named()).toEqual(defaultModel);
+
+    const claude = await core.saveChatProvider({
+      kind: "anthropic",
+      apiKey: "sk-ant-test",
+      modelId: "claude-haiku-5-5",
+      keepDefault: true,
+    });
+    const openai = await core.saveChatProvider({
+      kind: "openai",
+      apiKey: "sk-test",
+      modelId: "gpt-6-luna",
+      keepDefault: true,
+    });
+    const last = { providerId: claude.id, modelId: "claude-haiku-5-5" };
+    const own = { providerId: openai.id, modelId: "gpt-6-luna" };
+
+    await core.updateSettings({ device: { lastChatModel: last } });
+    expect(await named()).toEqual(last);
+
+    setMindModel(client.doc, own);
+    await client.settled();
+    expect(await named()).toEqual(own);
+    await core.updateSettings({
+      device: { lastChatModel: { providerId: claude.id, modelId: "claude-sonnet-5-5" } },
+    });
+    expect(await named()).toEqual(own);
+
+    await core.deleteChatProvider(openai.id);
+    expect(await named()).toEqual({ providerId: claude.id, modelId: "claude-sonnet-5-5" });
+    await core.deleteChatProvider(claude.id);
+    expect(await named()).toEqual(defaultModel);
+  });
+
   test("checks every claim, each marked; the heading, the question and the User's opinion aren't; the run is recorded", async () => {
     const { core, client, mindId, folderId, checks, finds } = await setUp();
     expect(await core.planMindCheck(mindId, "all")).toEqual({
@@ -132,7 +174,7 @@ describe("Check this Mind", () => {
       sentences: 5,
       findsClaims: true,
       inFolder: true,
-      model: null,
+      model: (await core.getSettings()).user.chatModel,
     });
 
     expect(await core.checkMind(request(mindId, "all"))).toEqual({
@@ -182,7 +224,7 @@ describe("Check this Mind", () => {
       sentences: 2,
       findsClaims: false,
       inFolder: true,
-      model: null,
+      model: (await core.getSettings()).user.chatModel,
     });
     expect(await core.checkMind(request(mindId, "changed"))).toMatchObject({
       kind: "checked",
@@ -350,7 +392,7 @@ describe("Check this Mind", () => {
     expect(estimate.tokens / (run?.tokens ?? 0)).toBeLessThan(1.5);
   });
 
-  test("says why there is nothing to check: no sentences, or no Documents to check against, unless every Document is", async () => {
+  test("says why there is nothing to check: no sentences; a Mind in a Folder with no Documents checks every Document (#1359)", async () => {
     const { core } = await setUp();
     const empty = await core.createMind({ title: "Empty", folderId: null });
     expect(await core.planMindCheck(empty.id, "all")).toEqual({ kind: "nothing" });
@@ -359,12 +401,7 @@ describe("Check this Mind", () => {
     const client = await connectToMind(core, lonely.id);
     writeMind(client, [{ type: "paragraph", attrs: { id: "moon" }, content: [text(MOON)] }]);
     await client.settled();
-    expect(await core.planMindCheck(lonely.id, "all")).toEqual({
-      kind: "no-documents",
-      folderId: emptyFolder.id,
-    });
-    // Against every Document, the Folder's emptiness doesn't stop it.
-    expect(await core.planMindCheck(lonely.id, "all", true)).toMatchObject({
+    expect(await core.planMindCheck(lonely.id, "all")).toMatchObject({
       kind: "ready",
       sentences: 1,
     });

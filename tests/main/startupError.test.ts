@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DataFromNewerVersionError } from "../../src/core/errors";
-import { startupDialog } from "../../src/main/startupError";
+import { busyDialog, startupDialog } from "../../src/main/startupError";
 
 describe("startupDialog", () => {
   const newer = new DataFromNewerVersionError(58);
@@ -27,8 +27,17 @@ describe("startupDialog", () => {
 
   it("keeps the message of any other start-up failure", () => {
     const dialog = startupDialog(new Error("disk full"), "en");
-    expect(dialog.title).toBe("IncarnaMind couldn't start");
+    expect(dialog.title).toBe("IncarnaMind couldn’t start");
     expect(dialog.detail).toContain("disk full");
     expect(dialog.buttons).toEqual([]);
+  });
+
+  it("says in plain words that another copy may still be starting, in both languages", () => {
+    expect(busyDialog("en").detail).toBe(
+      "IncarnaMind couldn’t open its data folder. Another copy may still be starting. Try again in a moment.",
+    );
+    expect(busyDialog("zh-CN").detail).toBe(
+      "IncarnaMind 无法打开数据文件夹。可能另一个副本仍在启动，请稍后再试。",
+    );
   });
 });

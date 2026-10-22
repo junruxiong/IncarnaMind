@@ -77,14 +77,19 @@ export type Role = "answers" | "strongest" | "quickTasks" | "images" | "tagging"
 export interface DataUse {
   /**
    * Whether it may train its models on API data: "no"; "opt-out" (it may,
-   * unless the User turns it off); "free-tier" (on a free plan only);
-   * "unknown" (it depends on the server, or its terms don't say).
+   * unless the User turns it off or agrees otherwise in writing); "free-tier"
+   * (on a free plan only); "unknown" (it depends on the server, or its terms
+   * don't say).
    */
   training: "no" | "opt-out" | "free-tier" | "unknown";
   /** One plain line, shown where the User picks the provider. */
   summary: Localized;
   /** The provider's own page on it (terms, privacy policy or data-retention page), when there is one place for it; shown as "Data use". */
   url?: string;
+  /** The page to open from the Chinese interface, when `url` is English only and the provider has one in Chinese. */
+  zhUrl?: string;
+  /** Other pages of the provider that a claim in `summary` rests on, for the next re-read; the app doesn't show them. */
+  sources?: readonly string[];
 }
 
 export type ProviderOptions = Record<string, Record<string, unknown>>;
@@ -148,7 +153,11 @@ export interface CatalogProvider {
   id: string;
   name: Localized;
   support: Support;
+  /** A best-effort provider the first-run key form offers too, as its key line says (#1375). */
+  firstRun?: boolean;
   group: "international" | "china" | "local" | "other";
+  /** A provider with a region in each (Kimi) is listed under the other heading too. */
+  alsoListedIn?: "international" | "china";
   adapter: Adapter;
   /**
    * Its API, one per region, the first the default. Empty for a server the
@@ -246,6 +255,12 @@ export interface ModelFacts {
   maxInput: number;
   /** The most it writes in one reply, in tokens. */
   maxOutput: number;
+  /**
+   * It refuses a thinking block once the request's tool list differs from the one the block was
+   * made with (Anthropic): the last step of an Answer keeps the Tools in its request and is told
+   * to call none, instead of choosing none, which drops them (#1344).
+   */
+  toolsEveryRequest: boolean;
   price: Price;
   /** How it cites, when that was measured or the server decides it (a small local model). */
   citing: Citing;

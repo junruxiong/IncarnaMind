@@ -19,6 +19,8 @@ import { isCalculated, RUN_SCRIPT, SEARCH } from "../answerSteps";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { signInAgain } from "../chatGptSignIn";
+import { AskCall } from "../components/assistant/AskCall";
+import { CommandCall } from "../components/assistant/CommandCall";
 import { MindCall } from "../components/assistant/MindCall";
 import { DetailsLine } from "../components/DetailsLine";
 import { useIsExampleAnswer } from "../components/GettingStarted";
@@ -42,12 +44,15 @@ import { useStoppedByPlanLimit } from "../planLimits";
 import { ANSWER_PROBLEMS, failedAnswerLine } from "../problems";
 import { useRouteOffered } from "../routeSignIn";
 import type { SettingsPage } from "../settingsPages";
+import { skillTitle } from "../skills";
 import { useAppStore } from "../store";
 import { reasonKey } from "../webPages";
+import { CommandApprovalCard } from "./CommandApprovalCard";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
 import { PlanLimitLine } from "./PlanLimitLine";
 import { ThirdPartyLine } from "./ThirdPartyLine";
+import { withShortcut } from "./withShortcut";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
 
@@ -458,7 +463,9 @@ export function CallRows({
 
 /** The row of a call through a Connector, of Find sources, of web search, of a Minds' Tool, or of a Skill script. */
 export function CallRow({ call }: { call: AnswerToolCall }) {
+  if (call.source === "asks") return <AskCall call={call} />;
   if (call.source === "minds") return <MindCall call={call} />;
+  if (call.source === "commands") return <CommandCall call={call} />;
   if (call.source === "connector") return <ConnectorCall call={call} />;
   if (call.source === "sources") return <SourcesCall call={call} />;
   if (call.source === "web") return <WebCall call={call} />;
@@ -466,18 +473,11 @@ export function CallRow({ call }: { call: AnswerToolCall }) {
 }
 
 /**
- * A button's tooltip and name with its shortcut: its label drops the hint when
- * the assistant is narrow (#612), and the shortcut still works.
- */
-export function withShortcut(label: string, keys: string | undefined) {
-  return keys ? { title: `${label} (${keys})`, "aria-label": `${label} (${keys})` } : {};
-}
-
-/**
  * The approval card for a request: a Connector's Tool, or a Skill script.
  * `keys`: the shortcut that allows it once, shown on its button (the Task tray's ⌘↵).
  */
 export function ApprovalCard({ request, keys }: { request: ApprovalRequest; keys?: string }) {
+  if ("ask" in request) return <CommandApprovalCard request={request} keys={keys} />;
   return request.subject.kind === "skill-script" ? (
     <ScriptApprovalCard request={request as SkillScriptApprovalRequest} keys={keys} />
   ) : (
@@ -601,7 +601,7 @@ function ScriptApprovalCard({
   const [warning, setWarning] = useState(false);
   const titleId = useId();
   const warningId = useId();
-  const params = { skill: request.skill.name, script: request.script };
+  const params = { skill: skillTitle(request.skill.name, t), script: request.script };
   return (
     <div
       contentEditable={false}
@@ -642,7 +642,7 @@ function ScriptApprovalCard({
         <p className="approval-label">{t("scripts.card.wouldRun")}</p>
         <dl data-testid="approval-script" className="approval-args">
           <dt>{t("scripts.card.skill")}</dt>
-          <dd data-testid="approval-script-skill">{request.skill.name}</dd>
+          <dd data-testid="approval-script-skill">{skillTitle(request.skill.name, t)}</dd>
           <dt>{t("scripts.card.script")}</dt>
           <dd data-testid="approval-script-path" className="font-mono">
             {request.script}
@@ -783,7 +783,7 @@ function ApprovalArguments({ input }: { input: Record<string, unknown> }) {
 function ScriptCall({ call }: { call: AnswerToolCall }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
-  const params = { skill: field(call, "skill"), script: field(call, "script") };
+  const params = { skill: skillTitle(field(call, "skill"), t), script: field(call, "script") };
   const args = Array.isArray(call.input.args) ? call.input.args.map(String) : [];
   const run = call.script;
   const running = call.status === "running";
@@ -1087,12 +1087,13 @@ function skillRows(calls: AnswerToolCall[]): SkillUse[] {
 export function SkillRow({ name, use, reads }: SkillUse) {
   const t = useT();
   const status = use?.status ?? "done";
+  const title = skillTitle(name, t);
   const summary =
     status === "running"
-      ? t("skills.answer.loading", { name })
+      ? t("skills.answer.loading", { name: title })
       : status === "failed"
-        ? t("skills.answer.failed", { name })
-        : t("skills.answer.used", { name });
+        ? t("skills.answer.failed", { name: title })
+        : t("skills.answer.used", { name: title });
   return (
     <div
       data-testid="answer-skill"

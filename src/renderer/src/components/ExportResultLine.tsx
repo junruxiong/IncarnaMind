@@ -8,6 +8,7 @@ import { useDismissOnEscape } from "../escapeDismiss";
 import { commentedChecks, trackedChanges, unmarkedChecks } from "../exportChecks";
 import { useExportDialog } from "../exportDialog";
 import {
+  COMPARISON_EXCEL,
   type ExportResult,
   exportAgain,
   exportMind,
@@ -30,6 +31,7 @@ import {
 import { saveFailureReason } from "../problems";
 import { useAppStore } from "../store";
 import { CloseLineIcon, ExportLineIcon } from "./lineIcons";
+import { MarkAiTextLine } from "./MarkAiText";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { WordExportReview } from "./WordExportReview";
 
@@ -52,7 +54,8 @@ const isPlainSaved = (result: SavedResult, t: ReturnType<typeof useT>): boolean 
  * Open · Show in Finder", with a second line when quotes weren't found ("1 quote not found,
  * marked unverified · Show"), or the problem and its one fix. A plain "Saved" goes by itself
  * after a while, and not back when the Mind is opened again after that; a problem stays until
- * it is dismissed, or the next export replaces it.
+ * it is dismissed, or the next export replaces it. Before a Word export the User hasn't said
+ * how to mark AI text for, it holds that question instead, and Esc or ✕ leaves nothing exported.
  */
 export function ExportResultLine({ mindId }: { mindId: string }) {
   const t = useT();
@@ -140,20 +143,19 @@ function ResultBody({
     return () => clearTimeout(timer);
   }, [plain, held, dismiss]);
 
-  const saving = isCheckRecord(result.format)
-    ? t("checkRecord.saving")
-    : t("export.saving.line", { format: t(FORMAT_LABELS[result.format]) });
+  const saving =
+    result.format === COMPARISON_EXCEL
+      ? t("export.excel.saving")
+      : isCheckRecord(result.format)
+        ? t("checkRecord.saving")
+        : t("export.saving.line", { format: t(FORMAT_LABELS[result.format]) });
   const fix = (): ProblemAction | undefined => {
     if (result.state === "failed") {
       return {
         label: t("export.changeLocation"),
         testId: "export-change-location",
         onClick: () =>
-          void exportAgain(
-            result.mindId,
-            result.format,
-            async () => (await chooseOutputLocation()) !== null,
-          ),
+          void exportAgain(result, async () => (await chooseOutputLocation()) !== null),
       };
     }
     if (result.state === "not-allowed") {
@@ -162,7 +164,7 @@ function ResultBody({
         label: t("export.allow"),
         testId: "export-allow",
         onClick: () =>
-          void exportAgain(result.mindId, result.format, async () => {
+          void exportAgain(result, async () => {
             await core.setLinkedFolderWriting(linkedFolderId, true);
             return true;
           }),
@@ -290,6 +292,8 @@ function ResultBody({
           </ProblemLine>
         ) : result.state === "review" ? (
           <WordExportReview result={result} />
+        ) : result.state === "ask-mark" ? (
+          <MarkAiTextLine mindId={result.mindId} />
         ) : (
           <ProblemLine testId="export-problem" action={fix()} className="py-1">
             {t("export.failed.save", {

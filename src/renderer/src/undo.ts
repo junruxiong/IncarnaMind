@@ -20,6 +20,11 @@ export interface Undoable {
   /** Takes it back. Throws `UndoRefused` when a fix would let it. */
   undo(): Promise<void>;
   /**
+   * What the line says once it is taken back, when it couldn't take back all of it as it was:
+   * a Folder it kept for what the User put in it since. Null: nothing.
+   */
+  undoneNote?(): Words | null;
+  /**
    * Where its line shows, when that is where the User acted rather than the
    * sidebar's foot: under an Answer in the assistant (`answerUndoPlace`).
    */
@@ -39,11 +44,14 @@ export interface UndoFix {
   run(): Promise<void>;
 }
 
-/** An undo or a redo the core can't do yet, with the fix that lets it: it stays on the stack. */
+/**
+ * An undo or a redo the core can't do, said in the interface's words: with the fix that lets it,
+ * it stays on the stack; with none, it never can and leaves it.
+ */
 export class UndoRefused extends Error {
   constructor(
     readonly said: Words,
-    readonly fix: UndoFix,
+    readonly fix: UndoFix | null,
   ) {
     super(said((key, params) => translate("en", key, params)));
     this.name = "UndoRefused";
@@ -58,8 +66,9 @@ export interface UndoProblem {
 }
 
 export type UndoLineState =
-  | { id: number; change: Undoable; problem?: undefined }
-  | { id: number; problem: UndoProblem; change?: undefined };
+  | { id: number; change: Undoable; problem?: undefined; note?: undefined }
+  | { id: number; problem: UndoProblem; change?: undefined; note?: undefined }
+  | { id: number; note: Words; busy?: boolean; change?: undefined; problem?: undefined };
 
 interface UndoState {
   /** The changes ⌘Z takes back, the last one last. */
@@ -68,6 +77,8 @@ interface UndoState {
   undone: readonly Undoable[];
   /** What the undo line shows: the change just made or done again, or why one didn't happen. */
   line: UndoLineState | null;
+  /** The step being taken now, off both stacks until it ends: a key pressed meanwhile waits its turn. */
+  running: { step: "undo" | "redo"; change: Undoable } | null;
   /** Puts a change just made on the stack and shows its line; nothing more can be redone. */
   push(change: Undoable): void;
   undo(): Promise<void>;
@@ -76,21 +87,46 @@ interface UndoState {
   withdraw(change: Undoable): void;
   /** Hides the line; the stack stays. */
   dismiss(): void;
+  /**
+   * A change already made has more to it, made just now: a request's later commands. It goes
+   * back on top, past what the User did meanwhile, so ⌘Z takes it back first, and shows its line.
+   */
+  renew(change: Undoable): void;
 }
+
+/** What ⌘Z takes back next, once the step being taken now has ended: a change being done again is. */
+export const nextToUndo = ({ done, running }: Pick<UndoState, "done" | "running">) =>
+  running?.step === "redo" ? running.change : done.at(-1);
+
+/** What ⇧⌘Z does again next, once the step being taken now has ended: a change being taken back is. */
+export const nextToRedo = ({ undone, running }: Pick<UndoState, "undone" | "running">) =>
+  running?.step === "undo" && running.change.redo ? running.change : undone.at(-1);
 
 /** How long the line shows before it goes by itself. */
 export const UNDO_SHOWN_MS = 10_000;
+
+/** Past this, a change still being made says so (docs/agents/interaction.md, rule 8). */
+export const SLOW_CHANGE_MS = 1_000;
 
 let lines = 0;
 const lineOf = (change: Undoable): UndoLineState => ({ id: ++lines, change });
 
 /** Undo and redo run one at a time, in the order asked, so a held ⌘Z steps back change by change. */
 let queue: Promise<void> = Promise.resolve();
-const inTurn = (step: () => Promise<void>): Promise<void> => {
+const inTurn = <T>(step: () => Promise<T>): Promise<T> => {
   const turn = queue.then(step);
-  queue = turn.catch(() => undefined);
+  queue = turn.then(
+    () => undefined,
+    () => undefined,
+  );
   return turn;
 };
+
+/**
+ * Makes a change that goes on the stack once it is done, in turn with Undo and Redo: a ⌘Z
+ * pressed while it runs waits for it, then takes it back, never an earlier change.
+ */
+export const makeInTurn = <T>(make: () => Promise<T>): Promise<T> => inTurn(make);
 
 export const useUndo = create<UndoState>()((set, get) => {
   /**
@@ -131,6 +167,7 @@ export const useUndo = create<UndoState>()((set, get) => {
     done: [],
     undone: [],
     line: null,
+    running: null,
     push(change) {
       // A command offers the change its action already offered.
       if (get().done.at(-1) === change) return;
@@ -140,27 +177,42 @@ export const useUndo = create<UndoState>()((set, get) => {
       inTurn(async () => {
         const change = get().done.at(-1);
         if (!change) return;
-        set((state) => ({ done: state.done.slice(0, -1), line: null }));
+        set((state) => ({
+          done: state.done.slice(0, -1),
+          line: null,
+          running: { step: "undo", change },
+        }));
         try {
           await change.undo();
         } catch (error) {
+          set({ running: null });
           refused("undo", change, error);
           return;
         }
-        set((state) => ({ undone: change.redo ? [...state.undone, change] : [] }));
+        const note = change.undoneNote?.() ?? null;
+        set((state) => ({
+          undone: change.redo ? [...state.undone, change] : [],
+          running: null,
+          ...(note && { line: { id: ++lines, note } }),
+        }));
       }),
     redo: () =>
       inTurn(async () => {
         const change = get().undone.at(-1);
         if (!change?.redo) return;
-        set((state) => ({ undone: state.undone.slice(0, -1), line: null }));
+        set((state) => ({
+          undone: state.undone.slice(0, -1),
+          line: null,
+          running: { step: "redo", change },
+        }));
         try {
           await change.redo();
         } catch (error) {
+          set({ running: null });
           refused("redo", change, error);
           return;
         }
-        set((state) => ({ done: [...state.done, change], line: lineOf(change) }));
+        set((state) => ({ done: [...state.done, change], running: null, line: lineOf(change) }));
       }),
     withdraw(change) {
       set((state) => ({
@@ -172,8 +224,39 @@ export const useUndo = create<UndoState>()((set, get) => {
     dismiss() {
       set({ line: null });
     },
+    renew(change) {
+      set((state) => ({
+        done: [...state.done.filter((each) => each !== change), change],
+        undone: [],
+        line: lineOf(change),
+      }));
+    },
   };
 });
+
+/**
+ * Runs changes that each go on the stack as they are made, then leaves them there as one step:
+ * Undo takes them back last first, Redo does them again in order.
+ */
+export async function asOneStep(
+  words: Pick<Undoable, "said" | "name">,
+  run: () => Promise<void>,
+): Promise<void> {
+  const before = useUndo.getState().done.length;
+  await run();
+  const steps = useUndo.getState().done.slice(before);
+  if (steps.length < 2) return;
+  for (const step of steps) useUndo.getState().withdraw(step);
+  useUndo.getState().push({
+    ...words,
+    undo: async () => {
+      for (const step of [...steps].reverse()) await step.undo();
+    },
+    redo: async () => {
+      for (const step of steps) await step.redo?.();
+    },
+  });
+}
 
 export const useAnswerLine = (answerId: string) =>
   useUndo((state) =>
@@ -203,3 +286,21 @@ const NOT_TEXT = new Set([
   "reset",
   "submit",
 ]);
+
+/**
+ * Makes a change; one that takes longer than a second says what it is doing on the undo line,
+ * where what it did shows next, until it is done.
+ */
+export async function sayWhileSlow<T>(said: Words, work: () => Promise<T>): Promise<T> {
+  let shown: number | null = null;
+  const timer = setTimeout(() => {
+    shown = ++lines;
+    useUndo.setState({ line: { id: shown, note: said, busy: true } });
+  }, SLOW_CHANGE_MS);
+  try {
+    return await work();
+  } finally {
+    clearTimeout(timer);
+    if (shown !== null && useUndo.getState().line?.id === shown) useUndo.setState({ line: null });
+  }
+}

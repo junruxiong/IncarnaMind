@@ -100,7 +100,7 @@ async function start(
 
 const WORDS = {
   en: {
-    count: "3 files couldn't be read",
+    count: "3 files couldn’t be read",
     reasons: [
       ["Contract.doc", /Format not read yet \(\.doc\)/],
       ["Locked.docx", /Password-protected/],
@@ -159,7 +159,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await setGroupBeside(window, true);
     const unread = window.getByTestId("library-unread");
     await expect(unread).toContainText(
-      language === "en" ? "1 file couldn't be read" : "1 个文件未能读取",
+      language === "en" ? "1 file couldn’t be read" : "1 个文件未能读取",
     );
     await unread.getByTestId("library-unread-show").click();
     await expect(unread.getByTestId("unread-file")).toHaveText(
@@ -241,6 +241,7 @@ for (const language of ["en", "zh-CN"] as const) {
       const { app, window } = await start(language);
       await interceptOpenDialog(app, report);
       await pointAndClick(window, window.getByTestId("plus-menu"));
+      await pointAndClick(window, window.getByTestId("plus-more"));
       await pointAndClick(window, window.getByTestId("plus-verify-document"));
       await expect(window.getByTestId("check-card").getByTestId("verify-ask")).toBeVisible();
       const card = await checkCard(window);
@@ -273,6 +274,7 @@ for (const language of ["en", "zh-CN"] as const) {
       const { app, window } = await start(language);
       await interceptOpenDialog(app, report);
       await pointAndClick(window, window.getByTestId("plus-menu"));
+      await pointAndClick(window, window.getByTestId("plus-more"));
       await pointAndClick(window, window.getByTestId("plus-verify-document"));
       await expect(window.getByTestId("check-card").getByTestId("verify-ask")).toBeVisible();
       const card = await checkCard(window);

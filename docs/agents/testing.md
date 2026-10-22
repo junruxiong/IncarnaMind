@@ -9,7 +9,7 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_r
 | Check | Where | What it runs |
 |---|---|---|
 | Typecheck, lint and unit tests | Ubuntu | `npm ci`, `npm run typecheck`, `npm run lint`, `npm test` |
-| Electron smoke test (Linux) | Ubuntu | `npm ci`, the Noto CJK fonts (the runner has no Chinese face), then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, split into eight shards that run at once, balanced by how long each spec takes (`scripts/smoke-shard.mjs`, `e2e/durations.json`; refresh it from a green run's log when specs are added or slow down) (`Smoke shard N/8`); this check passes when all eight do |
+| Electron smoke test (Linux) | Ubuntu | `npm ci`, the Noto CJK fonts (the runner has no Chinese face) and ffmpeg (for the feel check's videos; a failed install doesn't fail the check), then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, the feel check's among them, split into eight shards that run at once, balanced by how long each spec takes (`scripts/smoke-shard.mjs`, `e2e/durations.json`; refresh it from a green run's log when specs are added or slow down) (`Smoke shard N/8`); this check passes when all eight do. Each shard uploads the feel check's tables and videos as `feel-linux-N`, kept 14 days |
 | Every commit is signed off (DCO) | Ubuntu | a `Signed-off-by:` line on each commit (`git commit -s`) |
 
 `main` must stay green. A pull request merges through GitHub's merge queue once all three pass: the queue builds it together with `main` and the pull requests ahead of it, runs the checks again, and merges only if they pass. Nobody brings a branch up to date by hand. If `main` goes red, fixing it comes before new work.
@@ -44,10 +44,44 @@ Every night, and by hand from the Actions tab, the Electron smoke test (macOS) i
 - **Load each real engine at least once.** The fake engines (the fake embedding model, `--fake` transcription, the scripted chat model) keep tests fast and repeatable. But they never load the real module, so an import that only breaks in the built app goes unseen: meeting transcription failed in alphas 1 to 3 while every test passed (#1233).
   - A feature that runs a real engine (transcription, OCR, embeddings, the reranker, Python analysis) has at least one unit test that loads the installed module through the app's own loader, not a copy of its import.
   - That test checks the module has what the code calls. It needs no model download.
-  - The release build checks the same in the packaged app before it uploads (#1239).
+  - The packaged app transcribes a meeting with its real speech engine and model, through Chromium's fake microphone (`e2e/packaged/`, #1239). The release runs it on macOS before it uploads, the nightly run every night, and CI on a pull request that changes transcription, meetings or packaging. To run it yourself: `npm run dist:dir`, then `npm run test:packaged`. Set `INCARNAMIND_MODEL_CACHE` to a folder to keep the 1.1 GB of models between runs. The other engines aren't checked in the packaged app yet.
 - **Tests and the evaluation never touch the real home folder.** `tests/setup/home.ts` gives each test file a temporary HOME (and `USERPROFILE` and the XDG folders), and fails a test that writes under the real one outside the cache and report folders the run was given; the core takes its home and Documents folders from its host, so `startCore` and the evaluation pass temporary ones.
 - **Write paths and text that work on every platform.** Use `path.join`, never assume `/` or a case-insensitive file system, and give the Chinese strings the same tests as the English ones.
 - **Write each spec for Linux and macOS.** Pull requests run the smoke test on Linux; macOS runs it each night. Press shortcuts with `ControlOrMeta+…`, never `Meta+…`, and expect a shortcut's label in either form (`⌘J` or `Ctrl+J`). A spec for something only macOS has, such as the traffic lights or full screen, skips elsewhere with `test.skip(process.platform !== "darwin", "<why>")`, and the nightly run covers it.
+
+## The feel check
+
+The feel check (`e2e/feel.ts`, and the specs `e2e/feel*.spec.ts`) holds the main flows to DESIGN.md › Feel. It runs each flow step by step in the built app and measures, in the window, what the User would feel. It fails a step:
+
+- **Shift:** the layout shifts that no recent input caused sum to more than 0.001, and the table names what moved.
+- **Focus:** after a close, a create or a delete, focus isn't on the target the step names (the opener, the new thing's name, the next item).
+- **Input to next paint** over 500 ms, or a **long task** over 1 s. The target is 100 ms on a laptop. CI's runners are two to five times slower, so these ceilings fail only a real freeze. Every run reports both times for every step. Only CI fails them: a busy laptop varies too much, so a local table marks a slow step "fails on CI".
+
+It can't see everything (#1331 adds what it can):
+
+- **The 500 ms after an input.** Chromium marks every shift in the 500 ms after a click or a key as the User's own, and the check doesn't count those. So a shift the User's action set off somewhere else, or a jump while typing, goes unseen. A green feel check doesn't mean nothing moved: look at the video too.
+- **A flash or a lost scroll position**, since nothing moves. The videos show both.
+- **Slightly high times.** The check films every frame while it measures, so times on CI read a little high.
+
+To run it on what you touch, build once, then run each matching spec on its own:
+
+```sh
+npx electron-vite build --mode test
+npx playwright test e2e/feelSidebar.spec.ts --workers=1
+```
+
+Each flow's table goes to `test-results/feel/<flow>.md`, and its video to `<flow>.mp4`. Without ffmpeg, the frames are kept in `<flow>-frames/` instead. Each Playwright run clears `test-results/`, so read a spec's tables before you run the next. On CI, the tables are also in the job summary.
+
+When it fails:
+
+1. Read the flow's table and watch its video at that step.
+2. Fix it if your change caused it.
+3. If `main` does it too, file it as its own issue. Then add an entry for it to `KNOWN` in `e2e/feel.ts`, bounded by what was measured. Anything worse, or in another step, still fails.
+   - Focus: where it landed.
+   - Shift: what moved, and the largest score. The bound holds under 0.001 too, so a listed shift that grows fails even while it is small.
+   - Time: twice the slowest measured on CI, since runners vary two to five times.
+   - Mark it `sometimes` when it depends on timing and doesn't happen on every run.
+4. The pull request that fixes a known problem removes its entry. A shift or focus entry whose problem no longer happens fails the check, so the list stays true. A known time, or a problem marked `sometimes`, may not happen on every run. The non-required job "Feel check, known problems that didn't happen" lists those on each run, so their entries go once their issues close.
 
 ## The interaction rules are checked for you
 
@@ -55,7 +89,7 @@ Three checks hold every object and command to `docs/agents/interaction.md`, read
 
 - `tests/renderer/conformance.test.ts`: every kind in `OBJECT_KINDS` has a registered menu, in the order of rule 5; every command has English and Chinese labels, a group, `reversible` set, and a shortcut or a ⌘K entry.
 - `tests/renderer/conformanceStatic.test.ts`: no "Back to…" label, no confirmation of a delete that no irreversible command stands behind, no right-click listener outside `useObjectMenu`, no `draggable` outside the drag layer.
-- `e2e/conformance.spec.ts`: for each kind, on the built app with a slid mouse: right-click and ⋯ open one menu, rename in place, and every reversible command from the menu followed by ⌘Z puts the core back, read through the bridge.
+- `e2e/conformance.spec.ts`: for each kind, on the built app with a slid mouse: right-click and ⋯ open one menu, rename in place, and every reversible command from the menu followed by ⌘Z puts the core back, read through the bridge. A command that only makes a Mind is the exception: it says nothing and leaves nothing for ⌘Z, and the check takes the Mind back by deleting it.
 
 A new kind of object needs a menu (`registerMenu`) and a stage in the e2e (how to make one and show it); the type-check fails until it has one. A reversible command that changes the core returns an `Undoable`. What `main` doesn't do yet is listed with its issue (`NO_MENU_YET`, `NO_UNDO_YET`, the known lists in the static test), never skipped: a fix takes its line out, and a stale line fails.
 

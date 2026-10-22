@@ -11,16 +11,18 @@ import {
   type TheirChangesShown,
   type WordExportPreferences,
 } from "../../../core/api";
+import { hasQuestionsOption } from "../../../shared/exportOptions";
 import type { MessageKey } from "../../../shared/i18n";
 import { useCitationStylePicker, useStyleLabel } from "../citationStylePicker";
 import { shortcutLabel } from "../commands/keymap";
 import { core } from "../core";
 import { errorMessage } from "../errors";
-import { exportPreferences, FORMAT_LABELS, hasQuestionsOption } from "../exports";
+import { exportPreferences, FORMAT_LABELS } from "../exports";
 import { useT } from "../i18n";
 import { chooseOutputLocation, outputFolderLabel } from "../outputFiles";
 import { useAppStore } from "../store";
 import { ChevronDownLineIcon, CloseLineIcon } from "./lineIcons";
+import { MarkAiTextRow } from "./MarkAiText";
 import { ProblemLine } from "./ProblemLine";
 import { SharePageContents } from "./SharePageContents";
 import {
@@ -139,12 +141,9 @@ function WordReviewRows({
           testId="export-track-changes"
         />
       )}
-      <SwitchRow
-        label={t("export.markAiText")}
-        hint={t("export.markAiText.hint")}
-        checked={draft.markAiText}
+      <MarkAiTextRow
+        value={draft.markAiText}
         onChange={(markAiText) => onChange({ ...draft, markAiText })}
-        testId="export-mark-ai-text"
       />
       <SwitchRow
         label={t("export.commentFailedChecks")}
