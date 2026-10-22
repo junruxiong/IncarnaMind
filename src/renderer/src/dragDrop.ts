@@ -270,14 +270,18 @@ function letGo(at: Point, into?: Element): void {
   picture.remove();
 }
 
+// Read when the drag moves, not once: the e2e tests change the platform the page reports.
+const onMac = () => /Mac/.test(navigator.platform);
+
+// On macOS a refused drop leaves its picture on screen until the pointer next moves (#1513), so
+// there a drag of this window's own is taken wherever it is let go. Elsewhere a refused drop stays
+// refused, which keeps the system's no-drop cursor.
 const untakenOwnDrag = (event: globalThis.DragEvent) =>
+  onMac() &&
   dragging !== null &&
   !event.defaultPrevented &&
   event.dataTransfer?.types.includes(OBJECTS_TYPE) === true;
 
-// A drag of this window's own is taken wherever it is let go in it. Left refused, macOS holds its
-// picture on screen until the pointer next moves (#1513). Over places nothing takes, Windows and
-// Linux then show the move cursor, not the no-drop one.
 function takeAnywhere(event: globalThis.DragEvent): void {
   if (!event.dataTransfer || !untakenOwnDrag(event)) return;
   event.preventDefault();
