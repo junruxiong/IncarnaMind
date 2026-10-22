@@ -1291,8 +1291,7 @@ export function createCore(adapters: CoreAdapters): Core {
           await api?.updateSettings({
             user: { exportOptions: { ...preferences, citationPlace: choice } },
           });
-          options = optionsFor(format, settings.get().user.exportOptions);
-          if (!options) throw new InvalidInputError({ key: "error.commands.markAiTextAsk" });
+          options = { ...options, citationPlace: choice };
         }
       }
       const { fileName, data, word } = await mindExports.export(mindId, options);

@@ -79,10 +79,10 @@ describe("Where Word and PDF put the Citations", () => {
       "1 Citation from 2 Documents",
     );
     expect(citedCountText(in_("zh-CN"), { citations: 19, documents: 1 })).toBe(
-      "19 条引用，来自 1 份文档",
+      "19 个引用，来自 1 个文档",
     );
     expect(citedCountText(in_("zh-CN"), { citations: 1, documents: 3 })).toBe(
-      "1 条引用，来自 3 份文档",
+      "1 个引用，来自 3 个文档",
     );
   });
 });

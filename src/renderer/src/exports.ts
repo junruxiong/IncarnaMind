@@ -155,10 +155,6 @@ function ask(mindId: string, format: "docx" | "pdf", mark: boolean, places: Cite
 /** Mind ids whose export is looking for what to ask, so a held ⇧⌘E asks once. */
 const looking = new Set<string>();
 
-/**
- * What an export of `format` still has to ask the User: whether Word marks the text IncarnaMind
- * wrote, and where Word or PDF puts the Citations, which only a Numbered Mind that has some asks.
- */
 async function toAsk(
   mindId: string,
   format: "docx" | "pdf",
@@ -276,7 +272,9 @@ export async function exportMind(
       }
     } catch (failure) {
       const { result } = useExports.getState();
-      if (result?.mindId !== mindId || result.state !== "saving") {
+      if (result?.mindId === mindId && result.state === "saving") {
+        console.error(`What the export of Mind ${mindId} asks couldn't be worked out.`, failure);
+      } else {
         useExports.setState({
           result: {
             mindId,

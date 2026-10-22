@@ -24,7 +24,7 @@ const MODEL =
   (catalogProvider("anthropic")?.roles.quickTasks as string);
 
 const RESUME = docxOf([
-  { text: "张瑜" },
+  { text: "示例员工" },
   { text: "资深视觉设计师，7年设计经验" },
   {
     text: "2019年至今：在一家电商公司担任视觉设计负责人，主导过三个品牌的视觉升级，带领五人设计团队。",
@@ -47,7 +47,7 @@ describe("Where Citations go, live: Anthropic", () => {
       core.on("consent.requested", (asked) => void core.respondToConsent(asked.requestId, true));
       await core.saveChatProvider({ kind: "anthropic", apiKey: KEY as string, modelId: MODEL });
       const sources = await createTempDataFolder();
-      const docx = await writeSourceFile(sources, "7年设计经验-张瑜 2.docx", RESUME);
+      const docx = await writeSourceFile(sources, "示例简历-设计师 2.docx", RESUME);
       await addAndProcess(core, [docx]);
       const mind = await core.createMind({ title: "Summary" });
 

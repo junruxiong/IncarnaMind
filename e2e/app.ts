@@ -357,7 +357,6 @@ export async function launchApp(
   return { app, window };
 }
 
-/** Answers the questions the first export asks, those a test doesn't want to be asked, if nobody has. */
 async function answerExportQuestions(
   window: Page,
   markAiText: boolean,

@@ -183,7 +183,9 @@ export async function styleCitations(
 /**
  * The Blocks with a Bibliography at the end (#102), for a Numbered Mind that shows one: each
  * Document its Citations cite, once, with the Locations cited. A Citation a pending change
- * adds isn't in the Blocks, so it isn't counted. Blocks with no Citation come back as they were.
+ * adds isn't in the Blocks of a read that leaves pending changes out, so it isn't counted; a
+ * Word export, whose Blocks show them as tracked changes, counts it. Blocks with no Citation
+ * come back as they were.
  */
 export function addSources(
   blocks: readonly Block[],
@@ -219,8 +221,10 @@ export function addSources(
  * export puts its Citations in a list instead of footnotes. The Documents are numbered in the
  * order they are first cited and each is listed once, with the Locations cited; the list is the
  * Bibliography's entries, and is written whether the Mind shows its Bibliography or not. A
- * Location whose quote wasn't found keeps the `unverified` mark. Blocks with no Citation come
- * back as they were.
+ * Location whose quote wasn't found keeps the `unverified` mark. A Citation a change still
+ * waiting adds is in the Blocks of a Word export, as a tracked insertion, so it is numbered and
+ * listed with the rest; a PDF's Blocks leave it out. Blocks with no Citation come back as they
+ * were.
  */
 export function listCitations(
   blocks: readonly Block[],
@@ -239,9 +243,15 @@ export function listCitations(
     "cited",
   );
   if (sources.length === 0) return [...blocks];
-  const numbers = new Map(sources.map((source, index) => [source.key, index + 1]));
-  const numberOf = (citation: (typeof cited)[number]) =>
-    numbers.get(sourceKeyOf(citation.work, context)) as number;
+  const numbers = new Map<string, number>();
+  const numberOf = (citation: (typeof cited)[number]) => {
+    const key = sourceKeyOf(citation.work, context);
+    const known = numbers.get(key);
+    if (known !== undefined) return known;
+    numbers.set(key, numbers.size + 1);
+    return numbers.size;
+  };
+  for (const citation of cited) numberOf(citation);
 
   const styled = mapInlines(blocks, (content) => {
     const clusters = clustersIn(content);

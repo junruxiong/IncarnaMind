@@ -8,6 +8,7 @@ import {
   type Printer,
 } from "../../src/core";
 import { setBibliographyShown } from "../../src/shared/mindBibliography";
+import { recordProposalRequest } from "../../src/shared/proposals";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { footnotesOf, paragraphsOf, part, unzip } from "../helpers/docx";
@@ -15,12 +16,6 @@ import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { readMind, writeMind } from "../helpers/minds";
 import { fakePrinter } from "../helpers/printer";
 import { zipFingerprint } from "../helpers/zip";
-
-/*
- * Where Word and PDF put a Numbered Mind's Citations (#1600): a footnote each, as ever, or
- * `[1]` in the text and one list of the Documents cited at the end, numbered in the order they
- * are first cited.
- */
 
 const text = (value: string): JSONContent => ({ type: "text", text: value });
 
@@ -31,6 +26,7 @@ function cite(
   page: number | null,
   check: CitationCheck = "found",
   location: unknown = null,
+  proposal: { id: string; request: string; kind: "insert" | "delete" } | null = null,
 ): JSONContent {
   return {
     type: "citation",
@@ -42,6 +38,7 @@ function cite(
       pageFrom: page,
       pageTo: page,
       location,
+      ...(proposal && { proposal }),
       quote: "Spring tides happen at new moon.",
       check,
       checkReason: check === "found" ? null : "quote-not-on-pages",
@@ -72,7 +69,6 @@ const body = (data: Uint8Array) => {
   return { files, document: part(files, "word/document.xml") };
 };
 
-/** The entries the list at the end holds, as the document's last paragraphs read them. */
 const listIn = (document: string) =>
   paragraphsOf(document)
     .map((each) => each.text)
@@ -96,7 +92,6 @@ describe("Citations in a list at the end", () => {
     const { files, document } = body(data);
 
     expect(citations).toBe(20);
-    // Side by side, they are one marker.
     expect(paragraphsOf(document)[0]?.text).toBe("Tides [1].");
     expect(document).not.toContain("w:footnoteReference");
     expect(footnotesOf(part(files, "word/footnotes.xml"))).toEqual({});
@@ -272,5 +267,83 @@ describe("What an export tells the question about where Citations go", () => {
       citations: 0,
       citedDocuments: 0,
     });
+  });
+});
+
+describe("Citations in changes still waiting, in a list at the end", () => {
+  const ASKED = "2026-10-12T14:30:00.000Z";
+
+  const asked = (client: MindClient) =>
+    recordProposalRequest(client.doc, "r1", {
+      source: "edit-with-ai",
+      providerId: "anthropic",
+      modelId: "claude",
+      createdAt: ASKED,
+    });
+
+  async function waiting() {
+    const setup = await setUp();
+    asked(setup.client);
+    await write(setup.client, [
+      paragraph(
+        text("Kept "),
+        cite(setup.tides, 2),
+        text(", added "),
+        cite(setup.chinese, 1, "found", null, { id: "c1", request: "r1", kind: "insert" }),
+        text(", removed "),
+        cite(setup.tides, 3, "found", null, { id: "c2", request: "r1", kind: "delete" }),
+        text("."),
+      ),
+    ]);
+    return setup;
+  }
+
+  const markersIn = (document: string) =>
+    [
+      ...[...document.matchAll(/<w:(?:t|delText)(?: [^>]*)?>([^<]*)<\/w:(?:t|delText)>/g)]
+        .map((each) => each[1])
+        .join("")
+        .matchAll(/\[(\d+)\]/g),
+    ].map((each) => each[1]);
+
+  test("Word: they are markers in the tracked insertion and deletion, and every marker has its entry", async () => {
+    const { core, mind } = await waiting();
+
+    const { data } = await core.exportMind(mind.id, { format: "docx", citationPlace: "list" });
+    const { document } = body(data);
+
+    const entries = listIn(document);
+    expect(entries).toEqual(["[1]\tTides. Cited: p. 2; p. 3", "[2]\t潮汐. Cited: p. 1"]);
+    expect(document.match(/<w:ins [^>]*>[\s\S]*?<\/w:ins>/g)?.join("")).toContain("[2]");
+    expect(document.match(/<w:del [^>]*>[\s\S]*?<\/w:del>/g)?.join("")).toContain("[1]");
+    for (const number of markersIn(document)) {
+      expect(entries.some((each) => each.startsWith(`[${number}]`))).toBe(true);
+    }
+    expect(document).not.toContain("w:footnoteReference");
+  });
+
+  test("PDF: a pending insertion is left out, and the rest is numbered from 1", async () => {
+    const { printed, printer } = fakePrinter();
+    const setup = await setUp(printer);
+    asked(setup.client);
+    await write(setup.client, [
+      paragraph(
+        text("Kept "),
+        cite(setup.tides, 2),
+        text(", added "),
+        cite(setup.chinese, 1, "found", null, { id: "c1", request: "r1", kind: "insert" }),
+        text("."),
+      ),
+    ]);
+
+    await setup.core.exportMind(setup.mind.id, { format: "pdf", citationPlace: "list" });
+
+    const [document] = printed;
+    if (!document) throw new Error("Nothing was printed.");
+    const { document: page } = parseHTML(`<html><body>${document.body}</body></html>`);
+    expect(page.querySelector("p")?.textContent).not.toContain("[2]");
+    expect(
+      [...page.querySelectorAll("section.bibliography p.entry")].map((each) => each.textContent),
+    ).toEqual(["[1] Tides. Cited: p. 2"]);
   });
 });

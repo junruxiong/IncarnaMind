@@ -30,7 +30,6 @@ export const hasQuestionsOption = (
 const placeOf = (preferences: ExportPreferences): Pick<ExportMindOptions, "citationPlace"> =>
   preferences.citationPlace ? { citationPlace: preferences.citationPlace } : {};
 
-/** Whether a format puts Citations in footnotes or a list, by the User's choice. */
 export const hasCitationPlace = (format: ExportFormat): format is "docx" | "pdf" =>
   format === "docx" || format === "pdf";
 

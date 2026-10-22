@@ -26,13 +26,6 @@ import {
 } from "./app";
 import { pdfText } from "./pdfText";
 
-/*
- * The first Word or PDF export of a Mind with Citations asks where they go (#1600), once, in the
- * Mind's export line, with the count it applies to. Each answer gives the file it says, and
- * Export options shows the answer and changes it. Set INCARNAMIND_SCREENSHOTS to a folder to
- * also save screenshots.
- */
-
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 const screenshot = async (window: Page, name: string) => {
   if (!SCREENSHOTS) return;
@@ -56,7 +49,7 @@ const WORDS = {
     question: "引用放在哪里？",
     footnotes: "脚注",
     list: "列在文末",
-    count: "19 条引用，来自 1 份文档",
+    count: "19 个引用，来自 1 个文档",
     unasked: "尚未选择，首次导出带引用的内容时会询问。",
     byStyle: "由引用格式决定",
     options: "导出选项",
@@ -93,7 +86,6 @@ const bridge = (window: Page) => ({
         ),
       [mindId, Array.from(update)] as const,
     ),
-  /** What the User chose, which a test sets back to "not asked yet" with undefined. */
   place: (answer: CitationPlace | undefined) =>
     window.evaluate(async (chosen) => {
       const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -129,10 +121,6 @@ function citationAttributes(document: Document, page: number): CitationAttribute
   };
 }
 
-/**
- * A Mind named "Tides" that cites one Document nineteen times, as a summary of a single file does,
- * or (`none`) cites nothing. Returns the Mind's id and the line to put the cursor in.
- */
 async function mindCiting(window: Page, { none = false }: { none?: boolean } = {}) {
   await newMind(window);
   await nameMind(window, "Tides");
@@ -177,8 +165,6 @@ for (const language of ["en", "zh-CN"] as const) {
     const footnotes = result.getByTestId("export-place-ask-footnotes");
     const list = result.getByTestId("export-place-ask-list");
     const done = result.getByTestId("export-done");
-
-    // One line asks, with the count and the first answer in reach, and saves nothing.
     await exportFromMenu(window, "docx");
     await expect(result).toHaveAttribute("data-state", "ask");
     await expect(result.getByTestId("export-place-question")).toContainText(words.question);
@@ -191,8 +177,6 @@ for (const language of ["en", "zh-CN"] as const) {
     expect(await readdir(out)).toEqual([]);
     await window.keyboard.press("Escape");
     await expect(result).toHaveCount(0);
-
-    // The narrowest window: the line and its buttons stay inside the Mind.
     await setWindowSize(app, window, 900, WINDOW_SIZE.height);
     await exportFromMenu(window, "docx");
     await expect(result).toHaveAttribute("data-state", "ask");
@@ -204,8 +188,6 @@ for (const language of ["en", "zh-CN"] as const) {
       true,
     );
     await screenshot(window, `place-ask-${language}-narrow`);
-
-    // List at the end: no footnotes, the marker in the text, and one entry at the end.
     await pointAndClick(window, list);
     await expect(done).toHaveText(savedLine("Tides.docx", out, language));
     const docx = await exported("Tides.docx");
@@ -220,8 +202,6 @@ for (const language of ["en", "zh-CN"] as const) {
         ? "[1]\tTides. Cited: p. 1; p. 2; p. 3"
         : "[1]\tTides。引用位置：第 1 页；第 2 页；第 3 页",
     ]);
-
-    // Not asked again, whichever way it starts or in whichever of the two formats.
     await window.getByText("Spring tides come at new moon 1 ").first().click();
     await window.keyboard.press("ControlOrMeta+Shift+E");
     await expect(done).toHaveText(savedLine("Tides 2.docx", out, language));
@@ -250,8 +230,6 @@ for (const language of ["en", "zh-CN"] as const) {
       await pointAndClick(window, choice.getByText(words[answer]));
       await expect(choice).toHaveAttribute("data-answer", answer);
     };
-
-    // Before any export the row has neither answer chosen, and says so; Cancel keeps it so.
     await openOptions(window, words.options);
     await expect(choice).toHaveAttribute("data-answer", "none");
     await expect(choice).toHaveAccessibleName(words.question);
@@ -259,8 +237,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await screenshot(window, `place-options-${language}-unasked`);
     await window.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
-
-    // Answered there and saved, the export doesn't ask, and the file is as answered.
     await openOptions(window, words.options);
     await choose("list");
     await screenshot(window, `place-options-${language}-answered`);
@@ -269,8 +245,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await exportFromMenu(window, "docx");
     await expect(done).toHaveText(savedLine("Tides.docx", out, language));
     expect(await documentOf("Tides.docx")).not.toContain("w:footnoteReference");
-
-    // Changed there: the next file has its footnotes.
     await openOptions(window, words.options);
     await expect(choice).toHaveAttribute("data-answer", "list");
     await choose("footnotes");
@@ -279,16 +253,12 @@ for (const language of ["en", "zh-CN"] as const) {
     await exportFromMenu(window, "docx");
     await expect(done).toHaveText(savedLine("Tides 2.docx", out, language));
     expect(await documentOf("Tides 2.docx")).toContain("w:footnoteReference");
-
-    // Not saved, not changed.
     await openOptions(window, words.options);
     await choose("list");
     await window.keyboard.press("Escape");
     await openOptions(window, words.options);
     await expect(choice).toHaveAttribute("data-answer", "footnotes");
     await window.keyboard.press("Escape");
-
-    // Another style decides for itself: the row says so and cannot be changed, and the file follows the style.
     await bridge(window).style(mindId, "apa");
     await openOptions(window, words.options);
     await expect(sheet.getByTestId("export-citation-place-style")).toHaveText(words.byStyle);
@@ -342,8 +312,6 @@ test("both questions at once: answered one after the other, the export waits for
   await expect(result.getByTestId("export-place-question")).toContainText(WORDS.en.question);
   await expect(result.getByTestId("export-mark-ask-mark")).toBeFocused();
   await screenshot(window, "place-ask-both");
-
-  // The first answer is kept; the line holds the second question and the keys reach it.
   await window.keyboard.press("Enter");
   await expect(result.getByTestId("export-mark-question")).toHaveCount(0);
   await expect(result.getByTestId("export-place-ask-footnotes")).toBeFocused();
@@ -353,8 +321,6 @@ test("both questions at once: answered one after the other, the export waits for
   await window.keyboard.press("Enter");
   await expect(result.getByTestId("export-done")).toHaveText(savedLine("Tides.docx", out));
   expect(await documentOf("Tides.docx")).not.toContain("w:footnoteReference");
-
-  // A PDF asks nothing about marking, and nothing about Citations once they are answered.
   await exportFromMenu(window, "pdf");
   await expect(result.getByTestId("export-done")).toHaveText(savedLine("Tides.pdf", out));
   await app.close();
