@@ -9,9 +9,9 @@
  * Safe to interrupt at any point. Each file is written to "<file>.partial" and
  * renamed only once its size and SHA-256 match the recorded ones; the next
  * download resumes a partial file with an HTTP Range request, from whichever
- * source it tries next. `verified.json`
- * is written last, listing the files that were checked, so startup only
- * compares it and the file sizes instead of hashing 135 MB again.
+ * source it tries next. `verified.json` is written last, listing the files
+ * that were checked, so startup only compares it and the file sizes instead of
+ * hashing 135 MB again.
  */
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, readFileSync, statSync } from "node:fs";
@@ -122,11 +122,7 @@ export async function downloadModel(options: DownloadOptions): Promise<void> {
   }
 }
 
-/**
- * Downloads one file from each source in turn until one gives it whole and checked. A source
- * that fails it goes last for the model's other files. Throws when every source failed, with
- * what each said; a storage failure or the signal's abort stops at once.
- */
+// A storage failure or the signal's abort stops at once: no other source would fare better.
 async function downloadFromSources(
   file: ModelFile,
   target: string,
@@ -160,11 +156,8 @@ async function downloadFromSources(
   );
 }
 
-/**
- * Downloads one file to "<target>.partial", resuming it if it's there, then checks it and moves
- * it into place. A resumed file that fails its check is downloaded again from the start once,
- * as the bytes before may have come from another source.
- */
+// A resumed file that fails its check is downloaded again from the start once, as the bytes
+// before may have come from another source.
 async function downloadFile(
   file: ModelFile,
   target: string,
@@ -207,10 +200,6 @@ async function downloadFile(
   }
 }
 
-/**
- * Appends the file's bytes from `offset` to `partial`. Returns how many bytes the partial file
- * then holds. With sources, no bytes for their stall time ends the attempt.
- */
 async function fetchInto(
   file: ModelFile,
   partial: string,

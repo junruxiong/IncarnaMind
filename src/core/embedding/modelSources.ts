@@ -38,7 +38,6 @@ const PROBED = {
   modelscope: "https://www.modelscope.cn/",
 } as const;
 
-/** Outside mainland China Hugging Face leads; inside, ModelScope and the Hugging Face mirror do. */
 const ORDER: readonly ModelSourceId[] = ["huggingface", "modelscope", "hf-mirror", "r2"];
 const CHINA_ORDER: readonly ModelSourceId[] = ["modelscope", "hf-mirror", "huggingface", "r2"];
 
@@ -64,10 +63,9 @@ export interface SourcedUrl {
 export function createModelSources(options: ModelSourcesOptions) {
   const copies = options.copies ?? MODEL_COPIES;
   let probed: { at: number; proxy: string; china: Promise<boolean> } | null = null;
-  /** Sources that failed, to the back of the order until this time. */
   const failedUntil = new Map<ModelSourceId, number>();
 
-  /** Whichever host answers first: ModelScope first is mainland China. */
+  // Hugging Face can't be reached from mainland China, where ModelScope answers first.
   async function probe(): Promise<boolean> {
     const ask = async (source: keyof typeof PROBED) => {
       const response = await options.fetch(PROBED[source], {
