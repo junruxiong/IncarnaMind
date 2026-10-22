@@ -813,7 +813,6 @@ export async function savedPath(window: Page, name: string): Promise<string> {
   return (await done.getAttribute("title")) ?? "";
 }
 
-/** The menu of the sidebar's Examples row, opened by its ⋯ as a person opens it. */
 export async function examplesMenu(window: Page): Promise<Locator> {
   const row = window.getByTestId("not-in-a-folder");
   await pointAndClick(window, row.getByTestId("examples-menu"));
