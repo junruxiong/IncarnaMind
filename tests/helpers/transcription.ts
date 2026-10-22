@@ -125,7 +125,7 @@ export async function transcribingCore(
   } = {},
 ) {
   const clock = manualClock();
-  const capture = createFakeCapture(captureOptions);
+  const capture = createFakeCapture({ now: () => clock.now().getTime(), ...captureOptions });
   const engineHost = inProcessTranscriber(engine, async () => {
     await loads;
     return createFakeSpeechEngine(engine);

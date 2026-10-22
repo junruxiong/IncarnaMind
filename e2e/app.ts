@@ -25,6 +25,7 @@ import type { FakeTranscriberOptions } from "../src/core/transcription/fake";
 import { EVENT_CHANNEL } from "../src/shared/bridge";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import { translate } from "../src/shared/i18n";
+import { defaultHelpKeys, HELP_SHORTCUTS, type HelpKeys } from "../src/shared/meetingHelp";
 import type { TestHooks } from "../src/shared/testHooks";
 import { type FakeOpenAIServer, signInAt } from "../tests/helpers/fakeOpenAI";
 import { APP_ARGS, homeEnv, KEYCHAIN_ARGS } from "../tests/helpers/home";
@@ -389,6 +390,114 @@ export const flushUsageData = (app: ElectronApplication) =>
     await hooks.flush();
   });
 
+export async function panelOf(app: ElectronApplication): Promise<Page> {
+  const find = () => app.windows().find((page) => page.url().includes("meetingPanel.html"));
+  await expect.poll(() => find() !== undefined, { timeout: 15_000 }).toBe(true);
+  const page = find();
+  if (!page) throw new Error("The floating panel didn't open.");
+  await page.getByTestId("meeting-panel").waitFor();
+  return page;
+}
+
+export async function expectBarOneRow(bar: Locator): Promise<void> {
+  await expect
+    .poll(() =>
+      bar.evaluate((element) => {
+        const controls = element.querySelector<HTMLElement>('[data-testid="meeting-controls"]');
+        if (!controls) throw new Error("The bar has no controls.");
+        const shown = (id: string) => {
+          const found = element.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+          return found !== null && found.offsetParent !== null;
+        };
+        const row = parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--meeting-bar-row"),
+        );
+        const frame = controls.getBoundingClientRect();
+        const seen = [...controls.children].filter(
+          (each): each is HTMLElement => each instanceof HTMLElement && each.offsetParent !== null,
+        );
+        const middle = (each: Element) => {
+          const box = each.getBoundingClientRect();
+          return box.top + box.height / 2;
+        };
+        const buttons = [...element.querySelectorAll<HTMLElement>(".meeting-button")].filter(
+          (each) => each.offsetParent !== null,
+        );
+        return {
+          rowHeight: Math.abs(frame.height - row) < 1,
+          oneRow: seen.every(
+            (each) =>
+              Math.abs(middle(each) - middle(controls)) < 2 &&
+              each.getBoundingClientRect().right <= frame.right + 1,
+          ),
+          kept:
+            ["meeting-dot", "meeting-time", "meeting-mic", "meeting-stop"].every(shown) &&
+            (shown("meeting-pause") || shown("meeting-resume")),
+          fits: element.scrollWidth <= element.clientWidth + 1,
+          cut: buttons.some((button) =>
+            [button, ...button.querySelectorAll("span")].some(
+              (each) => each.scrollWidth > each.clientWidth + 1,
+            ),
+          ),
+          foldedHaveMore:
+            [
+              "meeting-mark",
+              "meeting-call-help",
+              "meeting-transcript-toggle",
+              "meeting-details-toggle",
+            ].every(shown) || shown("meeting-more"),
+        };
+      }),
+    )
+    .toEqual({
+      rowHeight: true,
+      oneRow: true,
+      kept: true,
+      fits: true,
+      cut: false,
+      foldedHaveMore: true,
+    });
+}
+
+export const panelOpen = (app: ElectronApplication) =>
+  app.windows().some((page) => !page.isClosed() && page.url().includes("meetingPanel.html"));
+
+export const focusMainWindow = (app: ElectronApplication, focused: boolean) =>
+  app.evaluate((_electron, front) => {
+    (
+      globalThis as unknown as { incarnamindMainFocused(focused: boolean): void }
+    ).incarnamindMainFocused(front);
+  }, focused);
+
+export const heldGlobalKeys = (app: ElectronApplication, keys: string) =>
+  app.evaluate(({ globalShortcut }, asked) => globalShortcut.isRegistered(asked), keys);
+
+/**
+ * Gives Windows and Linux the keys macOS holds by default (⌃⌥1–7, H and M), which they ship
+ * without, and then `chosen` over them on every system: a spec that presses the meeting's
+ * shortcuts sets them first, as Settings › Meetings does. macOS keeps its own where `chosen`
+ * says nothing.
+ */
+export async function setMeetingKeys(window: Page, chosen: HelpKeys = {}): Promise<void> {
+  const keys: HelpKeys = {};
+  if (process.platform !== "darwin") {
+    for (const shortcut of HELP_SHORTCUTS) keys[shortcut] = defaultHelpKeys(shortcut, true) ?? "";
+  }
+  Object.assign(keys, chosen);
+  if (Object.keys(keys).length === 0) return;
+  await window.evaluate(async (all) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.updateSettings({ device: { meetingHelpKeys: all } });
+  }, keys);
+}
+
+export const pressHeldKeys = (app: ElectronApplication, kind: string) =>
+  app.evaluate((_electron, pressed) => {
+    (
+      globalThis as unknown as { incarnamindPressHelpKeys(kind: string): void }
+    ).incarnamindPressHelpKeys(pressed);
+  }, kind);
+
 /**
  * Stands in for the system's notifications: each one shown is recorded
  * instead (`notificationsShown`, `clickNotification`). Notifications made
@@ -474,6 +583,16 @@ export async function newMind(
   await expect(first).toHaveJSProperty("tagName", "H1");
   await window.keyboard.press("Backspace");
   await expect(first).toHaveJSProperty("tagName", "P");
+}
+
+/** Runs a command from ⌘K by its label, as the User types and clicks it. */
+export async function runFromPalette(window: Page, label: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(label);
+  const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
+  await expect(item).toBeVisible();
+  await item.click();
 }
 
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */

@@ -151,9 +151,13 @@ export function recordJudged(
   ]);
 }
 
+const SEARCH_FIRST =
+  "You gave a verdict without searching the User's Documents. Search them with search_documents first, then give your verdict from what you find.";
+
 export function createClaimCheck(deps: ClaimCheckDependencies) {
   return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
     const { scope, signal } = request;
+    let searched = false;
     const read = new Map<string, string>();
     const excluded = new Map<string, LeftOutDocument>();
     const decisions = caseCitations(request.claim);
@@ -204,8 +208,11 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         return session.tools.documentCount;
       },
       documentLanguages: deps.documents.searchableLanguages(scope.documentIds),
-      searchDocuments: (query, searchSignal, options) =>
-        session.tools.searchDocuments(query, searchSignal, options),
+      // Only the model's searches count: looking up a cited court decision shows it nothing.
+      searchDocuments: (query, searchSignal, options) => {
+        searched = true;
+        return session.tools.searchDocuments(query, searchSignal, options);
+      },
       cite: (records, options) => session.tools.cite(records, options),
       hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
       unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
@@ -312,6 +319,15 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       window: model.window,
       retryQuotes: model.retryQuotes,
       cacheKey: request.cacheKey,
+      // A model may give its verdict before it has looked: Claude Haiku 5.5 did, about one check
+      // in six of a whole Mind.
+      turnChecks: [
+        {
+          name: "search-first",
+          check: (text) =>
+            !searched && readVerdict(text) ? { claims: [], note: SEARCH_FIRST } : null,
+        },
+      ],
       signal,
     })) {
       if (event.type === "text-delta") reply += event.text;
@@ -356,6 +372,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     if (!verdict) {
       return byCalculation ?? notChecked(readsAsRefusal(reply) ? "refused" : "malformed");
     }
+    if (!searched) return notChecked("unread");
     if (byCalculation && verdict.verdict !== "contradicted") return byCalculation;
     /** Unsupported, with the nearest line when it states another value for the same thing (#770). */
     const unsupported = async (
