@@ -24,6 +24,10 @@ const NEXT: readonly { id: CommandId; label: MessageKey }[] = [
   { id: "mind.export", label: "firstOpen.next.export" },
 ];
 
+// Step 2's button and the line after it wrap in the narrowest window (900 px, English), the tallest
+// state at any width; the card keeps that height so the page never moves (e2e/welcomeCard.spec.ts).
+const CARD_HEIGHT = "min-h-[219px]";
+
 const HERE: CommandContext = { selection: [], focus: null, surface: "mind" };
 
 function Mark({ number, state }: { number: number; state: "open" | "later" | "done" }) {
@@ -128,7 +132,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
     <section
       aria-labelledby={`first-open-${mindId}`}
       data-testid="first-open-steps"
-      className="mb-6 min-h-[208px] rounded-[10px] bg-sheet px-3.5 pt-3.5 pb-2.5 font-sans shadow-[inset_0_0_0_1px_var(--color-rule)]"
+      className={`mb-6 ${CARD_HEIGHT} rounded-[10px] bg-sheet px-3.5 pt-3.5 pb-2.5 font-sans shadow-[inset_0_0_0_1px_var(--color-rule)]`}
     >
       <div className="flex items-start justify-between gap-2">
         <h2 id={`first-open-${mindId}`} className="text-[16px] leading-6 font-semibold text-ink">

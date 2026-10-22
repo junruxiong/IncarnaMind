@@ -60,7 +60,7 @@ test("the Welcome card keeps one height through every step, so the page's text n
   let reference: Awaited<ReturnType<typeof measure>> | undefined;
   for (const language of ["en", "zh-CN"] as const) {
     await setLanguage(window, language);
-    for (const width of [1100, 1440]) {
+    for (const width of [900, 1100, 1440]) {
       await setWindowSize(app, window, width, 900);
       for (const { name, done } of states) {
         await markSteps(window, done);
@@ -76,13 +76,39 @@ test("the Welcome card keeps one height through every step, so the page's text n
   await expect(window.getByTestId("first-open-next").first()).toBeVisible();
   for (const language of ["en", "zh-CN"] as const) {
     await setLanguage(window, language);
-    for (const width of [1100, 1440]) {
+    for (const width of [900, 1100, 1440]) {
       await setWindowSize(app, window, width, 900);
       const at = await check("all done, set up", width, language);
       expect(at, seen.join("\n")).toEqual(reference);
     }
   }
   await app.close();
+});
+
+test("asking the ready Question opens the assistant without moving the page, at the narrowest window and at 1,100 px (#1195)", async () => {
+  for (const width of [900, 1100]) {
+    const folder = await createDataFolder();
+    const { app, window } = await launchApp(folder, { examples: true, fakeChat: true });
+    await setWindowSize(app, window, width, 900);
+    await expect(window.getByTestId("first-open-steps")).toBeVisible();
+    const before = await measure(window);
+
+    await pointAndClick(window, window.getByTestId("claim-mark"));
+    await expect(window.getByTestId("claim-card")).toBeVisible();
+    await window.keyboard.press("Escape");
+    await expect(window.getByTestId("first-open-step").first()).toHaveAttribute(
+      "data-state",
+      "done",
+    );
+    expect(await measure(window), `${width} px, step 1 done`).toEqual(before);
+
+    await pointAndClick(window, window.getByTestId("first-open-ready"));
+    await expect(window.getByTestId("assistant")).toBeVisible();
+    await expect(window.getByTestId("first-open-add-files")).toBeVisible();
+    expect(await measure(window), `${width} px, assistant open`).toEqual(before);
+    await app.close();
+    await removeDataFolder(folder);
+  }
 });
 
 test("the Welcome card has no subtitle and no footer; its Examples row's ⋯ offers the other examples and removing them, which Undo takes back (#1195)", async () => {
