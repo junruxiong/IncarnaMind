@@ -171,6 +171,8 @@ export function ProviderForm({
   const [modelId, setModelId] = useState(refused?.modelId ?? suggestedModel(first));
   const [busy, setBusy] = useState<"saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
+  // The region a result is about: the form may be on another by the time a slow test answers.
+  const [testedRegion, setTestedRegion] = useState<string | null>(null);
   const [jev] = useJevSettings();
   const hasDefault = useAppStore((state) => (state.settings?.user.chatModel ?? null) !== null);
   // Automatic tags with this key's provider unless a Jev key comes first, or nothing may leave the computer.
@@ -358,6 +360,7 @@ export function ProviderForm({
     setBusy("saving");
     setError(null);
     setTest(null);
+    setTestedRegion(endpoint?.id ?? null);
     try {
       const result = await core.testChatConnection(request);
       if (!result.ok) {
@@ -398,6 +401,15 @@ export function ProviderForm({
   };
   const site = siteOf(endpoint?.keyUrl ?? catalog?.keyUrl);
   const providerName = kind ? keyProviderName(kind, t, language) : "";
+  const refusedOn =
+    catalog && catalog.endpoints.length > 1 ? endpointOf(catalog, testedRegion) : undefined;
+  const badKeyLine = refusedOn
+    ? t("providers.form.badKeyAt", {
+        host: siteOf(refusedOn.baseUrl),
+        region: refusedOn.label[words],
+        site: siteOf(refusedOn.keyUrl ?? catalog?.keyUrl),
+      })
+    : t("providers.form.badKey", { provider: providerName, site });
   const listed = server.status?.running ? server.status.models : [];
   const choices =
     kind && kind !== "openai-compatible" ? (local ? listed : catalogMenu(kind, endpoint?.id)) : [];
@@ -725,9 +737,7 @@ export function ProviderForm({
                 <TestResult
                   result={test}
                   model={shownName(modelId)}
-                  {...(test.error.kind === "auth" && site
-                    ? { line: t("providers.form.badKey", { provider: providerName, site }) }
-                    : {})}
+                  {...(test.error.kind === "auth" && site ? { line: badKeyLine } : {})}
                   {...(test.error.kind === "data-retention" && {
                     action: {
                       label: t("answer.error.chooseModel"),
