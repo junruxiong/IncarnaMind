@@ -56,18 +56,21 @@ npm run eval:repeats
 
 ### 2026-10-23: a Mind's chosen scope narrows its check (#1623)
 
-The scope cases on this version, where a check from a Mind searches the Search scope the User set for it, else its Folder, else every Document. "Before" is the measurement on the version this one is built on, where a Mind in no Folder searched every Document whatever scope it had; "filed" is the same Mind in the agreement's Folder, unchanged by this version. Counts are of 20 checks of the two faithful sentences (false Unsupported) and 20 of the two the agreement doesn't state (false Supported); 10 checks a case.
+The scope cases on this version, where a check from a Mind searches the Search scope the User set for it, else its Folder, else every Document. "Before" is the measurement on the version this one is built on, where a Mind in no Folder searched every Document whatever scope it had; "filed" is the same Mind in the agreement's Folder, which this version doesn't change. Counts are of 20 checks of the two faithful sentences (false Unsupported) and of the two the agreement doesn't state (false Supported); 10 checks a case.
 
 | Model | Language | Others | Before: in no Folder | Now: in no Folder, scope the agreement | Now: filed | False Supported now |
 |---|---|---|---|---|---|---|
 | Haiku 5.5 | English | 5 | 9 of 20 | 0 of 20 | 0 of 20 | 0 of 40 |
 | Haiku 5.5 | English | 20 | 13 of 20 | 0 of 20 | 0 of 20 | 0 of 40 |
-| Haiku 5.5 | Chinese | 5 | 10 of 20 | 0 of 20 | 0 of 20 | 0 of 40 |
+| Haiku 5.5 | Chinese | 5 | 10 of 20 | 1 of 20 | 0 of 20 | 0 of 40 |
 | Haiku 5.5 | Chinese | 20 | 11 of 20 | 0 of 20 | 0 of 20 | 0 of 40 |
 | Sonnet 5.5 | English | 20 | 0 of 20 | 0 of 20 | not run | 0 of 20 |
 | Sonnet 5.5 | Chinese | 20 | 1 of 20 | 0 of 20 | not run | 0 of 20 |
 
-Every check of a Mind with its scope set was handed the agreement alone, as every filed check was. The car allowance was "I didn't find this" and the holiday sentence Contradicted in all 140 checks. Spend at the app's own count: $0.79 (Haiku $0.13, Sonnet $0.66).
+- Every check of a Mind with its scope set was handed the agreement alone, as every filed check was. The car allowance was "I didn’t find this" and the holiday sentence Contradicted in all 140 checks.
+- The one miss is Haiku's partly-supported card on the Chinese notice paraphrase, with the agreement alone in hand: it took the sentence as wider than the agreement's two parties ("Not covered: 适用于所有劳动者").
+- A first run on this change before the check's newer reply wording was merged in gave 0 of 20 in every case, the Chinese one with 5 others included.
+- Spend at the app's own count: $1.57 for both runs (Haiku $0.27, Sonnet $1.30).
 
 ### 2026-10-23: the card says where it looked, and a part covered needs the same claim
 
