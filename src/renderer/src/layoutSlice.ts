@@ -78,8 +78,12 @@ export function createLayoutSlice(
       set({ layout: await core.getLayout(WINDOW_ID) });
     },
     async changeLayout(change) {
+      const asked = placings;
       try {
-        const layout = await core.changeLayout(WINDOW_ID, change);
+        const answered = await core.changeLayout(WINDOW_ID, change);
+        // The answer's assistant is older than a placing made since, which is shown already.
+        const shown = get().layout?.assistant;
+        const layout = placings === asked || !shown ? answered : { ...answered, assistant: shown };
         set({ layout });
         return layout;
       } catch (error) {
@@ -114,8 +118,9 @@ export function createLayoutSlice(
 export function followLayout(set: Set, report: (error: unknown) => void): void {
   core.on("layout.changed", ({ windowId }) => {
     if (windowId !== WINDOW_ID) return;
-    // The event's layout can be older than moves shown since, and can reach the window after
-    // their answers: the core's layout read now has them all, unless one comes later.
+    // The event can reach the window after the answers to placings already shown, so the layout
+    // is read afresh. It is applied only if no placing of the assistant started after the event:
+    // that placing is shown already, and its own answer brings the core's word.
     const asked = placings;
     core.getLayout(WINDOW_ID).then((layout) => {
       if (placings === asked) set({ layout });

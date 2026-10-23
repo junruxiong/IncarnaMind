@@ -498,6 +498,51 @@ test("Add files… with only a file it can't take says why in step 3, which stay
   await app.close();
 });
 
+test("a damaged PDF as the only file of one's own leaves step 3 open, says which and why there, and never You're set up; a file it reads finishes it (#1457)", async () => {
+  const damaged = join(sources, "damaged.pdf");
+  await writeFile(damaged, "%PDF-1.4 this is not a PDF");
+  const notes = join(sources, "Harbour notes.md");
+  await writeFile(notes, "# Harbour notes\n\nThe harbour master publishes the tide tables.\n");
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  await setWindowSize(app, window, 1440, 900);
+  await useLocalChatModel(window);
+  await markSteps(window, { citationChecked: true, askedReady: true });
+  const steps = window.getByTestId("first-open-steps");
+  const files = step(window, "files");
+  await expect(files).toHaveAttribute("data-state", "open");
+
+  await interceptOpenDialog(app, damaged);
+  await pointAndClick(window, files.getByTestId("first-open-add-files"));
+  await expect(
+    window.getByTestId("document-list-item").filter({ hasText: "damaged" }),
+  ).toHaveAttribute("data-status", "failed", { timeout: 30_000 });
+  const unread = files.getByTestId("first-open-unread");
+  await expect(unread).toContainText("1 file couldn’t be read");
+  await expect(files).toHaveAttribute("data-state", "open");
+  await expect(files.getByTestId("first-open-add-files")).toBeVisible();
+  await expect(steps).not.toContainText("You’re set up.");
+  await expect(steps.getByTestId("first-open-choose-model")).toHaveCount(0);
+  expect((await gettingStarted(window)).indexed).toBe(false);
+
+  await pointAndClick(window, unread.getByTestId("first-open-unread-show"));
+  const row = unread.getByTestId("unread-file");
+  await expect(row).toHaveText(/^damaged\.pdf: The file is damaged/);
+  await setWindowSize(app, window, 900, 760);
+  const card = await steps.boundingBox();
+  const line = await row.boundingBox();
+  expect(line && card && line.x + line.width <= card.x + card.width).toBe(true);
+  await setWindowSize(app, window, 1440, 900);
+  await pointAndClick(window, row.getByTestId("unread-file-open"));
+  await expect(window.getByTestId("viewer-title")).toHaveText("damaged");
+  await expect(files).toHaveAttribute("data-state", "open");
+
+  await interceptOpenDialog(app, notes);
+  await pointAndClick(window, files.getByTestId("first-open-add-files"));
+  await expect(files).toHaveAttribute("data-state", "done", { timeout: 15_000 });
+  await expect(steps).toContainText("You’re set up.");
+  await app.close();
+});
+
 test("✕ ends the first open at any step, and so does Remove the examples or a deleted example, after a restart too (#123)", async () => {
   const shellIsBack = async (window: Page) => {
     await expect(window.getByTestId("assistant")).toBeVisible();
@@ -735,6 +780,7 @@ test("on the quiet first open the tagging question still shows, with Allow, in t
       apiKey: "sk-test",
       modelId: "gpt-6-luna",
     });
+    await core.saveLibrarySettings({ ...(await core.getLibrary()).settings, automatic: true });
     if (provider.service) await core.revokeConsent("tagging", provider.service.id);
   });
   await expect(window.getByTestId("first-open-steps")).toBeVisible();

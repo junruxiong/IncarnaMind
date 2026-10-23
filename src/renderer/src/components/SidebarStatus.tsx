@@ -23,6 +23,7 @@ import { failedTagging, retryTagging } from "../taggingRetry";
 import { placesText, resumeTagging, stoppedDocumentPlaces, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
+import { failedEverySource, useDownloadSources } from "./DownloadSources";
 import { CloseLineIcon } from "./lineIcons";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
 import { testErrorKey } from "./providers/shared";
@@ -72,6 +73,8 @@ interface Status {
   dismiss?: () => void;
   /** It may take two lines, its action said after it, so nothing it names is cut off. */
   wraps?: boolean;
+  /** A failed model download's Details (./DownloadSources): their toggle in the line, their panel under it. */
+  details?: { toggle: ReactNode; panel: ReactNode };
   /** It asks the User's consent, which is never hidden (ADR-0022). */
   asks?: true;
   /** The User's own Documents wait for them to act, so the quiet first open shows it too. */
@@ -142,7 +145,8 @@ const isProblem = (status: Status) =>
 
 function StatusRow({ status, children }: { status: Status; children?: ReactNode }) {
   const t = useT();
-  const { tone, short, figure, full, action, dismiss, wraps } = status;
+  const { tone, short, figure, full, action, dismiss, details } = status;
+  const wraps = status.wraps === true || details !== undefined;
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
@@ -178,6 +182,13 @@ function StatusRow({ status, children }: { status: Status; children?: ReactNode 
               </button>
             </span>
           )}
+          {details && (
+            <span className="whitespace-nowrap">
+              <span aria-hidden="true"> · </span>
+              {details.toggle}
+            </span>
+          )}
+          {details?.panel}
         </span>
       ) : (
         <span aria-hidden="true" className="flex min-w-0 flex-1 items-center gap-1">
@@ -374,6 +385,22 @@ function useStatuses(): Status[] {
     t,
   );
   const retryTextRecognition = useTextRecognition((state) => state.download);
+  const textRecognitionModel = useTextRecognition((state) => state.status);
+  const embeddingSources = useDownloadSources(
+    model?.state === "failed" ? model.error : null,
+    () => void retryDownload(),
+    "embedding-model",
+  );
+  const rerankingSources = useDownloadSources(
+    rerank?.model?.state === "failed" ? rerank.model.error : null,
+    () => void retryRerankingDownload(),
+    "reranking-model",
+  );
+  const textRecognitionSources = useDownloadSources(
+    textRecognitionModel?.state === "failed" ? textRecognitionModel.error : null,
+    () => void retryTextRecognition(),
+    "text-recognition",
+  );
   const retryEmbedding = useAppStore((state) => state.retryEmbedding);
   const dismissSkipped = useAppStore((state) => state.dismissSkippedFiles);
   const dismissAlreadyAdded = useAppStore((state) => state.dismissAlreadyAdded);
@@ -463,11 +490,12 @@ function useStatuses(): Status[] {
     full: rerankingStatus.full,
     ...(rerankingStatus.retry && {
       action: {
-        label: t("status.retry"),
+        label: t(rerankingSources.toggle ? "modelSource.tryAgain" : "status.retry"),
         testId: "reranking-model-retry",
         run: () => void retryRerankingDownload(),
       },
     }),
+    ...(rerankingSources.toggle && { details: rerankingSources }),
   };
 
   if (model?.state === "failed" && model.error) {
@@ -479,13 +507,16 @@ function useStatuses(): Status[] {
     statuses.push({
       testId: "embedding-model-failed",
       tone: "error",
-      short: t(kind === "load" ? "status.modelFailed" : "status.downloadFailed"),
+      short: failedEverySource(model.error)
+        ? t("status.downloadFailed.everySource")
+        : t(kind === "load" ? "status.modelFailed" : "status.downloadFailed"),
       full: `${full}\n${message}`,
       action: {
-        label: t("status.retry"),
+        label: t(embeddingSources.toggle ? "modelSource.tryAgain" : "status.retry"),
         testId: "embedding-model-retry",
         run: () => void retryDownload(),
       },
+      ...(embeddingSources.toggle && { details: embeddingSources }),
     });
   }
 
@@ -494,8 +525,9 @@ function useStatuses(): Status[] {
   if (textRecognition?.tone === "error") {
     statuses.push({
       ...textRecognition,
+      ...(textRecognitionSources.toggle && { details: textRecognitionSources }),
       action: {
-        label: t("status.retry"),
+        label: t(textRecognitionSources.toggle ? "modelSource.tryAgain" : "status.retry"),
         testId: "text-recognition-retry",
         run: () => void retryTextRecognition(),
       },

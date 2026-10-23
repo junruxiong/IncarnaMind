@@ -207,6 +207,15 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
             });
           }
           if (slow && part.type === "stream-start") await wait(SLOW_STEP_MS);
+          // A slow cell's words stand a moment before its Answer ends, for a test to see them.
+          if (
+            slow &&
+            part.type === "finish" &&
+            part.finishReason.unified === "stop" &&
+            isCell(prompt)
+          ) {
+            await wait(SLOW_STEP_MS);
+          }
           if (part.type === "text-delta" || part.type === "tool-input-delta") {
             await wait(slow ? SLOW_WORD_MS : edit ? EDIT_WORD_MS : WORD_DELAY_MS);
           }
