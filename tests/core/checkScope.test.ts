@@ -43,7 +43,6 @@ const documentsScope = (...documentIds: string[]): SearchScope => ({
   documentIds,
 });
 
-/** Two agreements of the same layout, a model that checks and answers, and every call to it. */
 async function setUp(language: Language) {
   const words = LANGUAGES[language];
   const plans: Record<string, Plan> = {
@@ -75,7 +74,6 @@ async function setUp(language: Language) {
     ),
   ]);
   if (!own || !other) throw new Error("The agreements weren't added.");
-  /** The Documents the check Runs since `from` were handed, by name. */
   const handed = (from = 0) =>
     new Set(
       calls
@@ -101,7 +99,6 @@ async function mindWith(core: Core, line: string, folderId: string | null = null
 const checkAll = (core: Core, mindId: string, id = "all") =>
   core.checkMind({ requestId: `${id}-${mindId}`, mindId, mode: "all" });
 
-/** The check of the Mind's one sentence. */
 async function checkOf(client: MindClient) {
   await client.settled();
   const [span] = claimSpans(readMind(client));
