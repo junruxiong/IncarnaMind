@@ -1,7 +1,7 @@
 /**
  * Watches the chat model's requests for the Passages a check's searches hand
  * it, by sentence: a model that was never handed the Passage that settles a
- * sentence can't judge it right, whatever else it does (#1608).
+ * sentence can't judge it right, whatever else it does.
  */
 
 import type { LanguageModelV4Prompt } from "@ai-sdk/provider";

@@ -4,12 +4,12 @@
 import { describe, expect, test } from "vitest";
 import { passagesIn } from "../../eval/repeats/passagesHanded";
 import {
-  AGREEMENT,
+  isAgreement,
   OTHER_COUNTS,
   SCOPE_CASES,
-  SCOPE_SENTENCES,
+  SCOPE_SETS,
+  type ScopeLanguage,
 } from "../../eval/repeats/scopeCases";
-import { OTHER_DOCUMENTS } from "../../eval/repeats/scopeDocuments";
 import {
   handsClause,
   placementEffects,
@@ -17,8 +17,13 @@ import {
   summarise,
 } from "../../eval/repeats/scopeScore";
 
-const textOf = (pages: readonly { lines?: readonly string[] }[]) =>
-  pages.flatMap((page) => page.lines ?? []).join(" ");
+const LANGUAGES: readonly ScopeLanguage[] = ["en", "zh-CN"];
+
+const textOf = (
+  pages: readonly { lines?: readonly string[]; chineseLines?: readonly string[] }[],
+) => pages.flatMap((page) => [...(page.lines ?? []), ...(page.chineseLines ?? [])]).join(" ");
+
+const ENGLISH = SCOPE_SETS.en.sentences;
 
 const row = (
   caseId: string,
@@ -27,7 +32,7 @@ const row = (
   outcome: ScopeRow["outcome"],
   handed: ScopeRow["handed"] = [],
 ): ScopeRow => {
-  const sentence = SCOPE_SENTENCES.find((each) => each.key === key);
+  const sentence = ENGLISH.find((each) => each.key === key);
   if (!sentence) throw new Error(`No sentence ${key}`);
   const [placement, others] = caseId.split("-");
   return {
@@ -40,6 +45,7 @@ const row = (
     quote: null,
     failure: null,
     caseId,
+    language: "en",
     placement: placement === "filed" ? "filed" : "unfiled",
     others: Number(others),
     model: "anthropic/claude-haiku-5-5",
@@ -51,37 +57,45 @@ const row = (
 };
 
 describe("the scope cases' Documents", () => {
-  test("add up to the cases' counts, each a different file, the first five a smaller Library", () => {
+  test("add up to the cases' counts, each a different file, in English and Chinese", () => {
     expect(OTHER_COUNTS).toEqual([5, 20]);
-    expect(OTHER_DOCUMENTS).toHaveLength(20);
-    const files = [AGREEMENT.file, ...OTHER_DOCUMENTS.map((each) => each.file)];
-    expect(new Set(files).size).toBe(21);
     expect(SCOPE_CASES.map((each) => each.id)).toEqual([
       "unfiled-5",
       "filed-5",
       "unfiled-20",
       "filed-20",
+      "zh-unfiled-5",
+      "zh-filed-5",
+      "zh-unfiled-20",
+      "zh-filed-20",
+      "unfiled-no-agreements-17",
     ]);
+    for (const language of LANGUAGES) {
+      const { agreement, others } = SCOPE_SETS[language];
+      expect(others).toHaveLength(20);
+      expect(new Set([agreement.file, ...others.map((each) => each.file)]).size).toBe(21);
+    }
   });
 
   test("hold two employment agreements among the first five and three among all, none for any sentence", () => {
-    const agreements = (count: number) =>
-      OTHER_DOCUMENTS.slice(0, count).filter((each) =>
-        each.file.startsWith("Employment Agreement"),
-      );
-    expect(agreements(5)).toHaveLength(2);
-    expect(agreements(20)).toHaveLength(3);
-    for (const sentence of SCOPE_SENTENCES) {
-      if (sentence.clause === null) continue;
-      expect(textOf(AGREEMENT.pages).toLowerCase()).toContain(sentence.clause);
-      for (const other of OTHER_DOCUMENTS) {
-        expect(textOf(other.pages).toLowerCase()).not.toContain(sentence.clause);
+    for (const language of LANGUAGES) {
+      const { agreement, others, sentences } = SCOPE_SETS[language];
+      const contracts = (count: number) => others.slice(0, count).filter(isAgreement);
+      expect(contracts(5)).toHaveLength(2);
+      expect(contracts(20)).toHaveLength(3);
+      for (const sentence of sentences) {
+        if (sentence.clause === null) continue;
+        expect(textOf(agreement.pages).toLowerCase()).toContain(sentence.clause);
+        for (const other of others) {
+          expect(textOf(other.pages).toLowerCase()).not.toContain(sentence.clause);
+        }
       }
     }
   });
 
   test("never state what the sentences the agreement doesn't state say", () => {
-    const everything = OTHER_DOCUMENTS.map((each) => textOf(each.pages).toLowerCase()).join(" ");
+    const everything = (language: ScopeLanguage) =>
+      SCOPE_SETS[language].others.map((each) => textOf(each.pages).toLowerCase()).join(" ");
     for (const phrase of [
       "car allowance",
       "mondays and fridays",
@@ -91,17 +105,35 @@ describe("the scope cases' Documents", () => {
       "27 working days",
       "three months' written notice",
     ]) {
-      expect(everything).not.toContain(phrase);
+      expect(everything("en")).not.toContain(phrase);
+    }
+    for (const phrase of [
+      "交通补贴",
+      "周一和周五",
+      "15天",
+      "每周可在家工作两天",
+      "年休假10天",
+      "三个月书面通知",
+    ]) {
+      expect(everything("zh-CN")).not.toContain(phrase);
     }
   });
 
-  test("keep the sentences of the `en` set: two the agreement states, two it doesn't", () => {
-    expect(SCOPE_SENTENCES.map((each) => [each.key, each.expected])).toEqual([
-      ["notice", "supported"],
-      ["own-words", "supported"],
-      ["car", "unsupported"],
-      ["holiday", "contradicted-or-unsupported"],
-    ]);
+  test("leave 17 Documents once the other agreements are left out", () => {
+    const control = SCOPE_CASES.find((each) => each.withoutAgreements);
+    expect(control?.others).toBe(17);
+    expect(SCOPE_SETS.en.others.filter((each) => !isAgreement(each))).toHaveLength(17);
+  });
+
+  test("keep the sentences of the repeats' sets: two the agreement states, two it doesn't", () => {
+    for (const language of LANGUAGES) {
+      expect(SCOPE_SETS[language].sentences.map((each) => [each.key, each.expected])).toEqual([
+        ["notice", "supported"],
+        ["own-words", "supported"],
+        ["car", "unsupported"],
+        ["holiday", "contradicted-or-unsupported"],
+      ]);
+    }
   });
 });
 
@@ -121,7 +153,7 @@ describe("the Passages handed over", () => {
       "Employment Agreement - T. Okoro",
       "Remote Working Policy",
     ]);
-    const own = SCOPE_SENTENCES.find((each) => each.key === "own-words");
+    const own = ENGLISH.find((each) => each.key === "own-words");
     expect(handsClause({ clause: own?.clause ?? null, handed })).toBe(true);
     expect(handsClause({ clause: own?.clause ?? null, handed: handed.slice(1) })).toBe(false);
     expect(handsClause({ clause: null, handed })).toBeNull();

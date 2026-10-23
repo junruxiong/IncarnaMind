@@ -7,10 +7,11 @@
 import type { Expected } from "./cases";
 import type { HandedPassage } from "./passagesHanded";
 import type { Outcome, RepeatResult } from "./repeat";
-import type { Placement } from "./scopeCases";
+import type { Placement, ScopeLanguage } from "./scopeCases";
 
 export interface ScopeRow extends RepeatResult {
   caseId: string;
+  language: ScopeLanguage;
   placement: Placement;
   others: number;
   model: string;
@@ -20,7 +21,7 @@ export interface ScopeRow extends RepeatResult {
   handed: HandedPassage[];
 }
 
-const squash = (text: string) => text.replace(/\s+/g, " ").toLowerCase();
+const squash = (text: string) => text.replace(/\s+/g, "").toLowerCase();
 
 /** Whether a Passage handed over holds the clause; null for a sentence with none. */
 export function handsClause(row: Pick<ScopeRow, "clause" | "handed">): boolean | null {
@@ -51,6 +52,7 @@ export interface SentenceTally {
 
 export interface ScopeSummary {
   caseId: string;
+  language: ScopeLanguage;
   placement: Placement;
   others: number;
   model: string;
@@ -95,6 +97,7 @@ export function summarise(rows: readonly ScopeRow[]): ScopeSummary[] {
     const documents = group.map((row) => new Set(row.handed.map((each) => each.document)).size);
     return {
       caseId: first.caseId,
+      language: first.language,
       placement: first.placement,
       others: first.others,
       model: first.model,
@@ -159,10 +162,14 @@ function outcomesText(outcomes: Record<Outcome, number>): string {
 }
 
 const byCase = (a: ScopeSummary, b: ScopeSummary) =>
-  a.model.localeCompare(b.model) || a.others - b.others || a.placement.localeCompare(b.placement);
+  a.model.localeCompare(b.model) ||
+  a.language.localeCompare(b.language) ||
+  a.others - b.others ||
+  a.placement.localeCompare(b.placement);
 
 export interface PlacementEffect {
   model: string;
+  language: ScopeLanguage;
   others: number;
   unfiled: Tally;
   filed: Tally;
@@ -182,6 +189,7 @@ export function placementEffects(summaries: readonly ScopeSummary[]): PlacementE
     if (!filed) continue;
     effects.push({
       model: unfiled.model,
+      language: unfiled.language,
       others: unfiled.others,
       unfiled: unfiled.falseUnsupported,
       filed: filed.falseUnsupported,
@@ -214,22 +222,22 @@ export function report(
     "",
     `Commit ${run.commit}, ${run.repeats} checks a case, $${run.spent.toFixed(2)} at the app's own count.`,
     "",
-    "| Model | Placement | Others | False Unsupported | False Supported | Wrong checks handed the right Passage | Documents handed to a check |",
-    "|---|---|---|---|---|---|---|",
+    "| Model | Language | Placement | Others | False Unsupported | False Supported | Wrong checks handed the right Passage | Documents handed to a check |",
+    "|---|---|---|---|---|---|---|---|",
     ...sorted.map(
       (each) =>
-        `| ${each.model} | ${each.placement} | ${each.others} | ${tally(each.falseUnsupported)} (${percent(each.falseUnsupported).toFixed(0)}%) | ${tally(each.falseSupported)} (${percent(each.falseSupported).toFixed(0)}%) | ${tally(each.wrongWithClause)} | ${each.documentsHanded.fewest} to ${each.documentsHanded.most} |`,
+        `| ${each.model} | ${each.language} | ${each.placement} | ${each.others} | ${tally(each.falseUnsupported)} (${percent(each.falseUnsupported).toFixed(0)}%) | ${tally(each.falseSupported)} (${percent(each.falseSupported).toFixed(0)}%) | ${tally(each.wrongWithClause)} | ${each.documentsHanded.fewest} to ${each.documentsHanded.most} |`,
     ),
     "",
     "False Unsupported: a sentence the agreement states that did not come back Supported. False Supported: a sentence it does not state that did. Right Passage: a Passage handed to the model holds the agreement's clause that settles the sentence (counted for wrong checks of the sentences that have one).",
     "",
     "## Placement effect on false Unsupported",
     "",
-    "| Model | Others | Unfiled | Filed | Unfiled minus filed |",
-    "|---|---|---|---|---|",
+    "| Model | Language | Others | Unfiled | Filed | Unfiled minus filed |",
+    "|---|---|---|---|---|---|",
     ...placementEffects(sorted).map(
       (each) =>
-        `| ${each.model} | ${each.others} | ${tally(each.unfiled)} | ${tally(each.filed)} | ${each.points >= 0 ? "+" : ""}${each.points.toFixed(0)} points |`,
+        `| ${each.model} | ${each.language} | ${each.others} | ${tally(each.unfiled)} | ${tally(each.filed)} | ${each.points >= 0 ? "+" : ""}${each.points.toFixed(0)} points |`,
     ),
     "",
     "## Each sentence",

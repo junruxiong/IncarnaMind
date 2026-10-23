@@ -17,14 +17,7 @@ import { createLog } from "../lib/log";
 import { createWorkerCrossEncoder, prepareGpuFile } from "../lib/rerank";
 import { watchPassages } from "./passagesHanded";
 import { repeatChecks } from "./repeat";
-import {
-  AGREEMENT,
-  FOLDER,
-  MIND,
-  SCOPE_CASES,
-  SCOPE_SENTENCES,
-  writeScopeDocuments,
-} from "./scopeCases";
+import { SCOPE_CASES, SCOPE_SETS, type ScopeSet, writeScopeDocuments } from "./scopeCases";
 import { report, type ScopeRow, summarise } from "./scopeScore";
 
 const ROOT = resolve(__dirname, "../..");
@@ -34,11 +27,11 @@ const spentOf = async (core: Core) =>
     .filter((each) => each.currency === "USD")
     .reduce((total, each) => total + each.amount, 0);
 
-async function fileAgreement(library: Library): Promise<string> {
-  const agreement = library.documents.get(AGREEMENT.file);
-  if (!agreement) throw new Error(`${AGREEMENT.file} was not added.`);
+async function fileAgreement(library: Library, set: ScopeSet): Promise<string> {
+  const agreement = library.documents.get(set.agreement.file);
+  if (!agreement) throw new Error(`${set.agreement.file} was not added.`);
   const { core } = library;
-  const folder = await core.createLibraryGroup({ name: FOLDER, description: "" });
+  const folder = await core.createLibraryGroup({ name: set.folder, description: "" });
   await core.moveToFolder({ documentIds: [agreement.id], folderId: folder.id });
   return folder.id;
 }
@@ -58,7 +51,6 @@ test("the scope of a check from a Mind", async () => {
   const model = `${chat.kind}/${chat.modelId}`;
   await prepareGpuFile(config, log);
   const reranker = createWorkerCrossEncoder(config.rerankOnCpu);
-  const watch = watchPassages(SCOPE_SENTENCES.map((each) => each.text));
   const out = join(config.resultsDir, `${new Date().toISOString().replace(/[:.]/g, "-")}-scope`);
   await mkdir(out, { recursive: true });
   const rows: ScopeRow[] = [];
@@ -67,6 +59,8 @@ test("the scope of a check from a Mind", async () => {
   try {
     for (const scopeCase of cases) {
       if (stopped) break;
+      const set = SCOPE_SETS[scopeCase.language];
+      const watch = watchPassages(set.sentences.map((each) => each.text));
       const folder = await mkdtemp(join(tmpdir(), "incarnamind-scope-"));
       const library = await openLibrary({
         name: `scope-${scopeCase.id}`,
@@ -88,29 +82,30 @@ test("the scope of a check from a Mind", async () => {
             request.flow.id === "chat" || request.flow.id === "checks",
           );
         });
-        await core.updateSettings({ user: { language: "en" } });
+        await core.updateSettings({ user: { language: scopeCase.language } });
         await writeFile(
           join(out, `passages-${scopeCase.id}.json`),
           JSON.stringify(library.passages(), null, 1),
         );
         const provider = await core.saveChatProvider(chatProviderOf(chat));
         const choice = { providerId: provider.id, modelId: chat.modelId };
-        const folderId = scopeCase.placement === "filed" ? await fileAgreement(library) : null;
-        log(`${model} · ${scopeCase.id}: ${SCOPE_SENTENCES.length} sentences, ${repeats} checks`);
+        const folderId = scopeCase.placement === "filed" ? await fileAgreement(library, set) : null;
+        log(`${model} · ${scopeCase.id}: ${set.sentences.length} sentences, ${repeats} checks`);
         await repeatChecks(core, {
-          mind: MIND,
+          mind: set.mind,
           folderId,
-          sentences: SCOPE_SENTENCES.map((each) => each.text),
+          sentences: set.sentences.map((each) => each.text),
           repeats,
           model: choice,
           async onRepeat(done) {
             const handed = watch.take();
             for (const result of done) {
-              const sentence = SCOPE_SENTENCES.find((each) => each.text === result.sentence);
+              const sentence = set.sentences.find((each) => each.text === result.sentence);
               if (!sentence) continue;
               rows.push({
                 ...result,
                 caseId: scopeCase.id,
+                language: scopeCase.language,
                 placement: scopeCase.placement,
                 others: scopeCase.others,
                 model,

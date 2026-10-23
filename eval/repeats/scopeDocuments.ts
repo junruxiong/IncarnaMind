@@ -4,7 +4,7 @@
  * case, all twenty the "20" one: two employment agreements in the agreement's
  * own layout with other figures, and three Documents of other kinds; the rest
  * add a third agreement, policies a Library of an employer holds, and Documents
- * of other kinds. None states what the scope sentences say (scopeDocuments.test.ts).
+ * of other kinds. None states what the scope sentences say (tests/eval/scopeScoring.test.ts).
  */
 import type { PdfPage } from "../../tests/helpers/pdf";
 
@@ -45,7 +45,6 @@ interface AgreementTerms {
   law: string;
 }
 
-/** The employment agreement's layout, line for line, with other terms. */
 function agreement(file: string, terms: AgreementTerms): OtherDocument {
   return document(file, [
     "EMPLOYMENT AGREEMENT",
