@@ -200,7 +200,7 @@ jobs:
     # A pull request merges only when it is up to date with main and this passed, so the merge
     # commit's tree is the one already tested. Running it again on main tests nothing new.
     needs: changes
-    if: needs.changes.outputs.heavy == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+    if: needs.changes.outputs.heavy == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     # A shard's specs take about 20 minutes; the rest is for a slow package mirror.
     timeout-minutes: 45
@@ -298,7 +298,7 @@ jobs:
   # Branch protection requires this name, so the shards can change without touching it.
   smoke:
     name: Electron smoke test (Linux)
-    if: always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+    if: always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch')
     needs: [changes, smoke-shard]
     runs-on: ubuntu-latest
     steps:
