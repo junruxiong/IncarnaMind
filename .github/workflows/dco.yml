@@ -32,7 +32,7 @@ jobs:
         run: |
           # Claude Code's own forms only: a person who happens to be named Claude is not refused.
           tool_address='@anthropic\.com>?[[:space:]]*$'
-          tool_name='Claude([[:space:]]+(Opus|Sonnet|Haiku|Fable|Code|Agent|[0-9])|[[:space:]]*<)'
+          tool_name='Claude([[:space:]]+(Opus|Sonnet|Haiku|Fable|Code|Agent)([^[:alnum:]]|$)|[[:space:]]+[0-9]|[[:space:]]*<)'
           fix='Author the commit as yourself: set user.name and user.email, then run git commit --amend --reset-author -s (for several commits: git rebase --exec "git commit --amend --reset-author --no-edit -s" origin/main). See CONTRIBUTING.md.'
           bad=0
           for c in $(git rev-list "$BASE..$HEAD"); do
