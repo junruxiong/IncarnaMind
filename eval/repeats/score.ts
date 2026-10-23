@@ -149,12 +149,21 @@ export function summarise(rows: readonly RepeatRow[]): GroupSummary[] {
 const cell = (text: string | null) => (text ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
 
 function knownLines(known: readonly RepeatRow[]): string[] {
-  const keys = [...new Set(known.map((row) => row.key))];
-  return keys.map((key) => {
-    const own = known.filter((row) => row.key === key);
-    const met = own.filter((row) => meetsExpected(row)).length;
-    const supported = own.filter((row) => row.outcome === "supported").length;
-    return `- Known miss (#${own[0]?.knownMiss}), not counted: ${key}, ${met} of ${own.length} as expected, ${supported} Supported`;
+  const issues = [...new Set(known.map((row) => row.knownMiss))];
+  return issues.flatMap((issue) => {
+    const ofIssue = known.filter((row) => row.knownMiss === issue);
+    const keys = [...new Set(ofIssue.map((row) => row.key))];
+    return [
+      "",
+      `### Known misses (#${issue}), outside the counts above`,
+      "",
+      ...keys.map((key) => {
+        const own = ofIssue.filter((row) => row.key === key);
+        const count = (outcomes: readonly Outcome[]) =>
+          own.filter((row) => outcomes.includes(row.outcome)).length;
+        return `- ${key}: ${count(["contradicted"])} of ${own.length} Contradicted, ${count(["supported"])} Supported, ${count(["partly", "absent", "differs"])} unsupported, ${count(["not-checked", "no-mark"])} not checked or not named`;
+      }),
+    ];
   });
 }
 
@@ -174,7 +183,7 @@ export function report(
       "|---|---|---|---|---|---|---|---|---|---|",
       ...group.sentences.map(
         (each) =>
-          `| ${each.key} | ${each.kind} | ${each.expected} | ${each.outcomes.supported} | ${each.outcomes.partly} | ${each.outcomes["absent"]} | ${each.outcomes.differs} | ${each.outcomes.contradicted} | ${each.outcomes["not-checked"] + each.outcomes["no-mark"]} | ${each.steady} of ${each.repeats} |`,
+          `| ${each.key} | ${each.kind} | ${each.expected} | ${each.outcomes.supported} | ${each.outcomes.partly} | ${each.outcomes.absent} | ${each.outcomes.differs} | ${each.outcomes.contradicted} | ${each.outcomes["not-checked"] + each.outcomes["no-mark"]} | ${each.steady} of ${each.repeats} |`,
       ),
       "",
       `- False Supported: ${group.falseSupported}`,

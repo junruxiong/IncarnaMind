@@ -831,6 +831,64 @@ describe("Blocks added, deleted and moved", () => {
     expect(files.has("word/footnotes.xml")).toBe(false);
   });
 
+  test("with the list at the end, a new Citation is [1] in the text and the file's own footnote stays", async () => {
+    const footnoteMark =
+      '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>';
+    const { core, mindId, client } = await setUp({
+      body: paragraph(`${run("Noted")}${footnoteMark}${run(".")}`),
+      footnotes: `<w:footnote w:id="1"><w:p><w:r><w:footnoteRef/></w:r>${run(" A note.")}</w:p></w:footnote>`,
+    });
+    const tides = await tidesDocument(core);
+    editMind(client, (blocks) => [
+      ...blocks,
+      {
+        type: "paragraph",
+        content: [text("Tides are strongest at new moon "), citation(tides), text(".")],
+      },
+    ]);
+    await client.settled();
+    const result = await core.exportMind(mindId, { format: "docx", citationPlace: "list" });
+    const files = unzip(result.data);
+    const part = (name: string) => files.get(name)?.toString("utf8") ?? "";
+    const written = paragraphsIn(part("word/document.xml"));
+    const paragraphs = written.map(textOf);
+
+    expect(written[0]).toContain(footnoteMark);
+    expect(paragraphs[1]).toBe("Tides are strongest at new moon [1].");
+    expect(paragraphs.slice(-2)).toEqual(["Bibliography", "[1]\tTides"]);
+    expect(part("word/document.xml").match(/<w:footnoteReference/g)).toHaveLength(1);
+    expect(part("word/footnotes.xml")).toContain("A note.");
+    expect(part("word/footnotes.xml")).not.toContain("Tides");
+  });
+
+  test("with the list at the end, Citations in changes still waiting are markers in the tracked insertion and deletion, and each has its entry", async () => {
+    const { core, mindId, client } = await setUp({ body: paragraph("Intro.") });
+    const tides = await tidesDocument(core);
+    editMind(client, (blocks) => [
+      ...blocks,
+      {
+        type: "paragraph",
+        attrs: { proposal: { id: "c1", request: "r1", kind: "insert" } },
+        content: [text("Proposed "), citation(tides)],
+      },
+      {
+        type: "paragraph",
+        attrs: { proposal: { id: "c2", request: "r1", kind: "delete" } },
+        content: [text("Removed "), citation(tides)],
+      },
+    ]);
+    await client.settled();
+
+    const result = await core.exportMind(mindId, { format: "docx", citationPlace: "list" });
+    const document = unzip(result.data).get("word/document.xml")?.toString("utf8") ?? "";
+
+    expect(document.match(/<w:ins [^>]*>[\s\S]*?<\/w:ins>/g)?.join("")).toContain("[1]");
+    expect(document.match(/<w:del [^>]*>[\s\S]*?<\/w:del>/g)?.join("")).toContain("[1]");
+    const paragraphs = paragraphsIn(document).map(textOf);
+    expect(paragraphs.slice(-2)).toEqual(["Bibliography", "[1]\tTides"]);
+    expect(document).not.toContain("w:footnoteReference");
+  });
+
   test("an empty document takes new paragraphs before its section's properties", async () => {
     const { core, mindId, client } = await setUp({ body: "" });
     editMind(client, () => [{ type: "paragraph", content: [text("First words.")] }]);
