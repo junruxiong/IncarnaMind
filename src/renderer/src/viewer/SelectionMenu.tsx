@@ -80,9 +80,11 @@ export function SelectionMenu({
           ? selection.getRangeAt(0)
           : null;
       if (!range || !section.contains(range.commonAncestorContainer)) return;
-      const parts = reader(range);
+      const { parts, shown } = reader(range);
       setHeld(
-        parts.length > 0 ? { selection: { document, parts }, range: range.cloneRange() } : null,
+        parts.length > 0
+          ? { selection: { document, parts, shown }, range: range.cloneRange() }
+          : null,
       );
       setOpen(parts.length > 0);
       setPicking(false);

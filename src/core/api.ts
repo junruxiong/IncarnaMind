@@ -1696,6 +1696,12 @@ export interface SelectedPart {
   /** How many of the Unit's lines with text come before and after them: a running header or footer sits at a page's edge. */
   linesBefore?: number;
   linesAfter?: number;
+  /**
+   * The Document's words right before the first part, and after the last, as
+   * the viewer shows them: they tell one place of the same words from another.
+   */
+  before?: string;
+  after?: string;
 }
 
 /** A Citation of what the User selected: the attributes to store on its node, and the quote it cites. */

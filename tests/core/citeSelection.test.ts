@@ -8,6 +8,7 @@ import { describe, expect, test } from "vitest";
 import type { Core, Document } from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
+import { docxOf } from "../helpers/office";
 import { buildPdf, type PdfPage } from "../helpers/pdf";
 
 const HEADER = "Ferrand and Moss, Rate cuts and retail margins";
@@ -196,6 +197,67 @@ describe("citeSelection", () => {
     });
 
     expect(cited).toMatchObject({ check: "found", pageFrom: 4, pageTo: 4 });
+  });
+
+  describe("where the view doesn't know the Unit, the words around the selection place it", () => {
+    test("in a Word file with no headings, the paragraph of the second of two same sentences", async () => {
+      const core = startCore(await createTempDataFolder());
+      const said = "The Supplier shall keep the goods insured.";
+      const document = await addPaper(
+        core,
+        docxOf([
+          { text: `Clause 1. ${said}` },
+          { text: "Clause 2. Payment is due within thirty days." },
+          { text: `Clause 3. ${said}` },
+        ]),
+        "Supply terms.docx",
+      );
+
+      const second = await core.citeSelection({
+        documentId: document.id,
+        parts: [{ unit: null, text: said, before: "within thirty days.\nClause 3. ", after: "" }],
+      });
+      const first = await core.citeSelection({
+        documentId: document.id,
+        parts: [{ unit: null, text: said, before: "Clause 1. ", after: "\nClause 2. Payment" }],
+      });
+
+      expect(second).toMatchObject({ check: "found", quote: said });
+      expect(second.location).toMatchObject({ kind: "section", paragraphs: { from: 3, to: 3 } });
+      expect(first.location).toMatchObject({ kind: "section", paragraphs: { from: 1, to: 1 } });
+    });
+
+    test("in a text file, the lines of the second of two same lines, its Unit known", async () => {
+      const core = startCore(await createTempDataFolder());
+      const lines = [
+        "Tides rise twice a day.",
+        "Spring tides are larger.",
+        "Tides rise twice a day.",
+      ];
+      const document = await addPaper(core, Buffer.from(lines.join("\n")), "Tides.txt");
+
+      const cited = await core.citeSelection({
+        documentId: document.id,
+        parts: [{ unit: 1, text: "Tides rise twice a day.", before: "Spring tides are larger.\n" }],
+      });
+
+      expect(cited).toMatchObject({ check: "found", pageFrom: 1 });
+      expect(cited.location).toEqual({ kind: "lines", from: 3, to: 3 });
+    });
+
+    test("words around it that the Document doesn't have leave the first place", async () => {
+      const core = startCore(await createTempDataFolder());
+      const document = await addPaper(core);
+
+      const cited = await core.citeSelection({
+        documentId: document.id,
+        parts: [
+          { unit: null, text: REPEATED, before: "Words no page has. ", after: " Nor these." },
+        ],
+      });
+
+      expect(cited).toMatchObject({ check: "found", pageFrom: 1 });
+    });
   });
 
   test("a selection that names its Unit for some parts and not others isn't looked for elsewhere", async () => {

@@ -33,6 +33,7 @@ import {
   englishPlace,
   joinUnits,
   locationOf,
+  numbersIn,
   parseRequestedLocation,
   quoteInUnits,
   type RowsOrLines,
@@ -40,7 +41,12 @@ import {
   unitLocation,
 } from "../../shared/locations";
 import { citesSource, type NamedSource } from "../../shared/namedSources";
-import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteMatch";
+import {
+  findQuote,
+  lostLigatures,
+  type MatchOptions,
+  type TextRange,
+} from "../../shared/quoteMatch";
 import { readableQuote, readableQuoteText } from "../../shared/readableQuote";
 import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
@@ -376,7 +382,13 @@ function currentVersion(documents: RecheckDocuments, documentId: string, content
         range.pageTo === null ||
         (unit.page !== null && unit.page >= range.pageFrom && unit.page <= range.pageTo),
     );
-  const result = (check: CheckResult, range: PageRange, quote: string): CitationRecheck => {
+  /** `found`: where the quote is in the covered Units' joined text, when a check placed it. */
+  const result = (
+    check: CheckResult,
+    range: PageRange,
+    quote: string,
+    found?: readonly TextRange[],
+  ): CitationRecheck => {
     const covered = inRange(range);
     return {
       ...check,
@@ -385,7 +397,7 @@ function currentVersion(documents: RecheckDocuments, documentId: string, content
       ...range,
       location: locationOf(
         covered,
-        check.check === "found" ? quoteInUnits(covered, quote, matching) : null,
+        check.check === "found" ? (found ?? quoteInUnits(covered, quote, matching)) : null,
       ),
     };
   };
@@ -467,6 +479,91 @@ function withoutRunningLines(part: SelectedPart, unit: PageText, matching: Match
   return part.text;
 }
 
+/** About how many characters of the words around a selection are matched with it, the most first. */
+const CONTEXT_LENGTHS = [60, 24, 8, 0];
+
+/** The end of `before` (or the start of `after`) of about `length` characters, without a word cut on its far side. */
+function contextOf(text: string, length: number, side: "before" | "after"): string {
+  if (length === 0) return "";
+  if (side === "before") {
+    const tail = text.slice(-length);
+    return tail.length < text.length ? tail.replace(/^\S+(?=\s)/u, "") : tail;
+  }
+  const head = text.slice(0, length);
+  return head.length < text.length ? head.replace(/(?<=\s)\S+$/u, "") : head;
+}
+
+/** Each place `quote` is in `text`, in order (see `findQuote`). */
+function placesOf(text: string, quote: string, options: MatchOptions): TextRange[][] {
+  const places: TextRange[][] = [];
+  for (let from = 0; from < text.length; ) {
+    const found = findQuote(text.slice(from), quote, options);
+    const first = found?.[0];
+    if (!found || !first) break;
+    places.push(found.map((range) => ({ start: range.start + from, end: range.end + from })));
+    from += first.start + 1;
+  }
+  return places;
+}
+
+/**
+ * Where `text` is in the Units' joined text (see `joinUnits`): the place whose
+ * words around it read as the selection's do (`before`, `after`), with as many
+ * of them as match, so two places of the same words are told apart; the first
+ * place when none of them matches. Null where it isn't.
+ */
+function placeIn(
+  units: readonly PageText[],
+  text: string,
+  around: Pick<SelectedPart, "before" | "after">,
+  matching: Matching,
+): TextRange[] | null {
+  const joined = joinUnits(units).text;
+  const options = { ...matching, numbers: numbersIn(units) };
+  for (const length of CONTEXT_LENGTHS) {
+    const before = contextOf(around.before ?? "", length, "before");
+    const after = contextOf(around.after ?? "", length, "after");
+    if (length > 0 && before === "" && after === "") continue;
+    const span = findQuote(joined, `${before}${text}${after}`, options);
+    const first = span?.[0];
+    const last = span?.at(-1);
+    if (!first || !last) continue;
+    // The place in the span nearest where the words before it end.
+    const places = placesOf(joined.slice(first.start, last.end), text, options);
+    const nearest = places.reduce<TextRange[] | null>((best, place) => {
+      const distance = (each: TextRange[]) => Math.abs((each[0]?.start ?? 0) - before.length);
+      return best === null || distance(place) < distance(best) ? place : best;
+    }, null);
+    if (nearest) {
+      return nearest.map((range) => ({
+        start: range.start + first.start,
+        end: range.end + first.start,
+      }));
+    }
+  }
+  return null;
+}
+
+/** The Units, of `units`, that `ranges` of their joined text cover; null for none. */
+function unitsCovering(units: readonly PageText[], ranges: readonly TextRange[]) {
+  const { starts } = joinUnits(units);
+  const covers = (index: number) => {
+    const start = starts[index] ?? 0;
+    const end = start + (units[index]?.text.length ?? 0);
+    return ranges.some((range) => range.start < end && range.end > start);
+  };
+  const first = units.findIndex((_, index) => covers(index));
+  if (first < 0) return null;
+  let last = first;
+  while (last + 1 < units.length && covers(last + 1)) last++;
+  const offset = starts[first] ?? 0;
+  return {
+    from: units[first] as PageText,
+    to: units[last] as PageText,
+    ranges: ranges.map((range) => ({ start: range.start - offset, end: range.end - offset })),
+  };
+}
+
 /**
  * Cites what the User selected in a Document's viewer (see
  * `CoreApi.citeSelection`): parts on known Units are checked in those Units
@@ -481,40 +578,49 @@ export function citeSelection(
 ): CitedSelection {
   const raw = input.parts.map((part) => part.text).join("\n");
   const all = foldRadicals(readableQuoteText(raw));
+  const around = { before: input.parts[0]?.before, after: input.parts.at(-1)?.after };
   const nowhere: PageRange = { pageFrom: null, pageTo: null };
   const contentHash = documents.currentVersion(input.documentId);
   if (contentHash === null) return { ...removedFrom(nowhere), quote: all };
   const version = currentVersion(documents, input.documentId, contentHash);
   const { units, matching, inRange } = version;
-  /** The quote checked in these Units: as their text has it where it is found there. */
+  const cited = (check: CheckResult, range: PageRange, quote: string, found?: TextRange[]) => ({
+    ...version.result(check, range, quote, found),
+    quote,
+  });
+  /** The quote placed in these Units: as their text has it where it is found there. */
   const citeIn = (range: PageRange, text: string): CitedSelection => {
     const covered = inRange(range);
-    const found = quoteInUnits(covered, text, matching);
-    const quote = foldRadicals(
-      found ? readableQuote(joinUnits(covered).text, found) : readableQuoteText(text),
-    );
-    return { ...version.result(found ? FOUND : NOT_ON_PAGES, range, quote), quote };
+    const found = placeIn(covered, text, around, matching);
+    if (!found) return cited(NOT_ON_PAGES, range, foldRadicals(readableQuoteText(text)));
+    const quote = foldRadicals(readableQuote(joinUnits(covered).text, found));
+    return cited(FOUND, range, quote, found);
   };
-  const refused = (check: CheckResult, range: PageRange): CitedSelection => ({
-    ...version.result(check, range, all),
-    quote: all,
-  });
   if (units.every((unit) => unit.text.trim() === "")) {
-    return refused({ check: "cant-check", checkReason: "no-text" }, nowhere);
+    return cited({ check: "cant-check", checkReason: "no-text" }, nowhere, all);
   }
-  if (all === "") return refused(NOT_ON_PAGES, nowhere);
+  if (all === "") return cited(NOT_ON_PAGES, nowhere, all);
   // A whole TXT or Markdown file stored before Units is checked as one text.
   if (units.length === 1 && units[0]?.kind === "text") return citeIn(nowhere, raw);
   if (input.parts.every((part) => part.unit === null)) {
-    const located = locateQuote(units, raw, matching);
-    return located ? citeIn(located, raw) : refused(NOT_ON_PAGES, nowhere);
+    const found = placeIn(units, raw, around, matching);
+    const covering = found && unitsCovering(units, found);
+    if (!covering || covering.from.page === null || covering.to.page === null) {
+      return cited(NOT_ON_PAGES, nowhere, all);
+    }
+    const range = { pageFrom: covering.from.page, pageTo: covering.to.page };
+    if (range.pageTo - range.pageFrom + 1 > MAX_CITED_PAGES) {
+      return cited({ check: "not-found", checkReason: "too-many-pages" }, range, all);
+    }
+    const quote = foldRadicals(readableQuote(joinUnits(inRange(range)).text, covering.ranges));
+    return cited(FOUND, range, quote, covering.ranges);
   }
-  if (input.parts.some((part) => part.unit === null)) return refused(NOT_ON_PAGES, nowhere);
+  if (input.parts.some((part) => part.unit === null)) return cited(NOT_ON_PAGES, nowhere, all);
   const numbers = input.parts.map((part) => part.unit as number);
   const spread = { pageFrom: Math.min(...numbers), pageTo: Math.max(...numbers) };
   // A page at each end may hold nothing but a running header or footer: more can't be cited.
   if (spread.pageTo - spread.pageFrom + 1 > MAX_CITED_PAGES + 2) {
-    return refused({ check: "not-found", checkReason: "too-many-pages" }, spread);
+    return cited({ check: "not-found", checkReason: "too-many-pages" }, spread, all);
   }
   const kept = input.parts.flatMap((part) => {
     const unit = units.find((each) => each.page === part.unit);
@@ -523,7 +629,7 @@ export function citeSelection(
   });
   const first = kept[0];
   const last = kept.at(-1);
-  if (!first || !last) return refused(NOT_ON_PAGES, nowhere);
+  if (!first || !last) return cited(NOT_ON_PAGES, nowhere, all);
   const range = { pageFrom: first.unit, pageTo: last.unit };
   const text = kept.map((part) => part.text).join("\n");
   const covered = inRange(range);
@@ -533,10 +639,7 @@ export function citeSelection(
     (start && end && !sameRun(start, end))
   ) {
     const quote = foldRadicals(readableQuoteText(text));
-    return {
-      ...version.result({ check: "not-found", checkReason: "too-many-pages" }, range, quote),
-      quote,
-    };
+    return cited({ check: "not-found", checkReason: "too-many-pages" }, range, quote);
   }
   return citeIn(range, text);
 }

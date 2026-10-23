@@ -6,6 +6,7 @@
  */
 import { getSchema } from "@tiptap/core";
 import { DOMSerializer, Fragment } from "@tiptap/pm/model";
+import { ySyncPluginKey } from "@tiptap/y-tiptap";
 import {
   CITATION_NODE,
   type CitationAttributes,
@@ -14,6 +15,8 @@ import {
 } from "../../../core/api";
 import type { NodeJSON } from "../../../shared/blockJson";
 import { mindName } from "../../../shared/naming";
+import { readableQuoteText } from "../../../shared/readableQuote";
+import { setTextOrigin } from "../../../shared/textOrigins";
 import { type AddTarget, addInEditor } from "../addToNote";
 import { readMindHandle } from "../commands/handles";
 import { core } from "../core";
@@ -26,16 +29,17 @@ import { whenMindEditor } from "../editor/openEditors";
 import { useNotices } from "../notices";
 import { useAppStore } from "../store";
 
-/** Words selected in a Document's viewer, part by part (see `pdfSelection`). */
+/** Words selected in a Document's viewer, part by part (see `ReadSelection`). */
 export interface ViewerSelection {
   document: Document;
   parts: SelectedPart[];
+  shown?: string;
 }
 
 /** How long a Mind just opened has to show its editor before the quote goes in. */
 const OPEN_WAIT_MS = 5000;
 
-async function quoteOf({ document, parts }: ViewerSelection): Promise<NodeJSON> {
+async function quoteOf({ document, parts, shown }: ViewerSelection): Promise<NodeJSON> {
   const cited = await core.citeSelection({ documentId: document.id, parts });
   const citation: CitationAttributes = {
     passageId: cited.passageId,
@@ -55,7 +59,8 @@ async function quoteOf({ document, parts }: ViewerSelection): Promise<NodeJSON> 
       {
         type: "paragraph",
         content: [
-          { type: "text", text: cited.quote },
+          // A Markdown file's quote keeps its markup ("**"); the note has the words as shown.
+          { type: "text", text: shown ? readableQuoteText(shown) : cited.quote },
           { type: CITATION_NODE, attrs: { ...citation } },
         ],
       },
@@ -73,9 +78,13 @@ function putIn(
   mindId: string,
   quote: NodeJSON,
   atCursor: boolean,
+  from: Document,
 ) {
   const ids = addInEditor(editor, [quote], atCursor, () => undefined);
   if (!ids) return;
+  // A web page's words are someone else's: a Run that reads them asks before it writes (#78).
+  const doc = ySyncPluginKey.getState(editor.state)?.doc;
+  if (from.kind === "web" && doc) setTextOrigin(doc, ids, "web-page");
   flashBlocks(editor, ids);
   const name = nameOf(mindId);
   offerEditorUndo(editor, (t) => t("viewer.selection.added", { mind: name || t("mind.untitled") }));
@@ -100,7 +109,7 @@ export async function addSelectionToNote(
     const quote = await quoteOf(selection);
     if (!target || (target.kind === "mind" && read?.mindId === target.mindId)) {
       if (read && !read.editor.isDestroyed) {
-        putIn(read.editor, read.mindId, quote, read.cursorInMind());
+        putIn(read.editor, read.mindId, quote, read.cursorInMind(), selection.document);
       }
       return;
     }
@@ -115,7 +124,7 @@ export async function addSelectionToNote(
       where: { in: "side" },
     });
     const editor = await whenMindEditor(mindId, OPEN_WAIT_MS);
-    if (editor) putIn(editor, mindId, quote, false);
+    if (editor) putIn(editor, mindId, quote, false, selection.document);
   } catch (error) {
     useAppStore.getState().reportError(error);
   }
