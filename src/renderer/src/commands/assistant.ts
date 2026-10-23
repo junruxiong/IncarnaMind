@@ -250,7 +250,7 @@ export const assistantCommands: readonly Command[] = [
     id: "assistant.lastToNewMind",
     label: "assistant.lastToNewMind",
     group: "main",
-    // Undo deletes the Mind it made.
+    // Filling the empty Mind in front is one step of its Undo; a Mind it makes, Delete takes back.
     reversible: true,
     when: isThere,
     enabled: noAnswer,

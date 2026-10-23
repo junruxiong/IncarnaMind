@@ -4655,7 +4655,7 @@ export const en = {
   "assistant.dock.bottom": "Dock at the bottom",
   "assistant.dock.float": "Float",
   "assistant.floatHere": "Float here",
-  "assistant.lastToNewMind": "Add the last Answer to a new Mind",
+  "assistant.lastToNewMind": "New Mind from the Answer",
   "assistant.lastToNewMind.unavailable": "There’s no Answer in this conversation yet",
   "assistant.clear": "Clear this conversation",
   "assistant.clear.unavailable": "This conversation is empty",
