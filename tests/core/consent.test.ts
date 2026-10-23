@@ -12,11 +12,13 @@ import {
   type SaveChatProviderInput,
   type TestChatConnectionInput,
 } from "../../src/core";
+import { CHAT_FLOW_SENDS } from "../../src/core/providers/chat";
 import { openDatabase } from "../../src/core/storage";
 import {
   createMemoryKeychain,
   createTempDataFolder,
   nextEvent,
+  queryDatabase,
   saveProviderUnasked,
   startCore,
 } from "../helpers/core";
@@ -65,7 +67,7 @@ function countRequests(core: Core) {
 }
 
 describe("Choosing a service is the consent (ADR-0022)", () => {
-  test("choosing the chat model's provider allows every flow that sends to it: nothing asks", async () => {
+  test("choosing the chat model's provider allows what runs by itself, and tagging and sorting wait for the User: nothing asks", async () => {
     const { core, models } = await startWithModel();
     const requests = countRequests(core);
     const changed = nextEvent(core, "dataFlows.changed");
@@ -83,17 +85,53 @@ describe("Choosing a service is the consent (ADR-0022)", () => {
       chosen: true,
     });
     expect(await core.listDataFlows()).toEqual([
-      allowed("chat", ["blocks", "passages"]),
+      allowed("chat", [...CHAT_FLOW_SENDS]),
       allowed("suggestions", ["writing", "writing-passages"]),
       allowed("edits", ["selection"]),
       allowed("checks", ["selection", "passages", "verified-document", "blocks"]),
-      allowed("tagging", ["tags", "document-excerpts"]),
-      allowed("classification", ["groups", "tags", "document-excerpts", "page-images"]),
+      // Tagging and sorting Documents aren't what choosing a provider allows: the User turns them on.
+      {
+        flow: { id: "tagging", service: OPENAI_SERVICE, sends: ["tags", "document-excerpts"] },
+        consent: "not-asked",
+        decidedAt: null,
+        chosen: false,
+      },
     ]);
     // The Privacy page hears of it at once.
     expect((await changed).find((flow) => flow.id === "chat")?.services).toEqual([
-      allowed("chat", ["blocks", "passages"]),
+      allowed("chat", [...CHAT_FLOW_SENDS]),
     ]);
+  });
+
+  test("a User who allowed Chat before its line named the Document names, another Mind and the live Transcript is asked once more, for those alone", async () => {
+    const dataDir = await createTempDataFolder();
+    const { core, models } = await startWithModel(dataDir);
+    await core.saveChatProvider(OPENAI);
+    // As the allowance was kept before those kinds were named.
+    queryDatabase(
+      dataDir,
+      "UPDATE data_flow_consents SET data_kinds = ? WHERE flow = 'chat' RETURNING flow",
+      [JSON.stringify(["blocks", "passages"])],
+    );
+    const requests: string[][] = [];
+    core.on("consent.requested", (request) => requests.push(request.newKinds));
+
+    expect(await core.listDataFlows()).toContainEqual(
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "chat" }),
+        consent: "not-asked",
+        decidedAt: expect.any(String),
+      }),
+    );
+    const first = await askAndWaitForConsent(core);
+    expect(first.request.newKinds).toEqual(["document-names", "other-minds", "live-transcript"]);
+    await core.respondToConsent(first.request.requestId, true);
+    expect(await first.result).toMatchObject({ modelId: "gpt-5.4-mini" });
+
+    // Once: the next Question goes without asking.
+    await core.prepareChatModel();
+    expect(requests).toHaveLength(1);
+    expect(models.specs.length).toBeGreaterThan(0);
   });
 
   test("a connection test sends only the key and a fixed prompt, so it asks nothing", async () => {
@@ -198,7 +236,7 @@ describe("Decisions made before choosing was the consent", () => {
     expect(request.flow).toEqual({
       id: "chat",
       service: OPENAI_SERVICE,
-      sends: ["blocks", "passages"],
+      sends: [...CHAT_FLOW_SENDS],
     });
     expect(models.specs).toEqual([]);
     await core.respondToConsent(request.requestId, true);
@@ -220,8 +258,8 @@ describe("Data-flow consent", () => {
 
     expect(request).toEqual({
       requestId: expect.any(String),
-      flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
-      newKinds: ["blocks", "passages"],
+      flow: { id: "chat", service: OPENAI_SERVICE, sends: [...CHAT_FLOW_SENDS] },
+      newKinds: [...CHAT_FLOW_SENDS],
     });
     expect(await core.listConsentRequests()).toEqual([request]);
     expect(models.specs).toEqual([]);
@@ -260,7 +298,7 @@ describe("Data-flow consent", () => {
     });
     expect(await core.listDataFlows()).toEqual([
       {
-        flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
+        flow: { id: "chat", service: OPENAI_SERVICE, sends: [...CHAT_FLOW_SENDS] },
         consent: "accepted",
         decidedAt: expect.any(String),
         chosen: false,
@@ -379,11 +417,7 @@ describe("Data-flow consent", () => {
       }),
       expect.objectContaining({
         flow: expect.objectContaining({ id: "tagging" }),
-        consent: "accepted",
-      }),
-      expect.objectContaining({
-        flow: expect.objectContaining({ id: "classification" }),
-        consent: "accepted",
+        consent: "not-asked",
       }),
     ]);
     const second = await askAndWaitForConsent(core);
@@ -416,7 +450,7 @@ describe("Data-flow consent", () => {
 
     expect(await core.listDataFlows()).toEqual([
       {
-        flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
+        flow: { id: "chat", service: OPENAI_SERVICE, sends: [...CHAT_FLOW_SENDS] },
         consent: "declined",
         decidedAt: expect.any(String),
         chosen: false,
@@ -441,7 +475,7 @@ describe("Data-flow consent", () => {
       expect.objectContaining({ consent: "not-asked", decidedAt: expect.any(String) }),
     );
     const second = await askAndWaitForConsent(core);
-    expect(second.request.flow.sends).toEqual(["blocks", "passages", "tool-results"]);
+    expect(second.request.flow.sends).toEqual([...CHAT_FLOW_SENDS, "tool-results"]);
     expect(second.request.newKinds).toEqual(["tool-results"]);
     expect(models.specs).toEqual([]);
 
@@ -527,7 +561,7 @@ describe("Data flows on the Privacy page", () => {
     expect((await core.listRegisteredDataFlows()).map((each) => each.id)).toEqual(
       core.dataFlows.list().map((definition) => definition.id),
     );
-    expect(await flow("chat")).toEqual({ id: "chat", sends: ["blocks", "passages"], services: [] });
+    expect(await flow("chat")).toEqual({ id: "chat", sends: [...CHAT_FLOW_SENDS], services: [] });
     expect(await flow("tagging")).toEqual({
       id: "tagging",
       sends: ["tags", "document-excerpts"],
@@ -537,10 +571,10 @@ describe("Data flows on the Privacy page", () => {
     await core.saveChatProvider(OPENAI);
     expect(await flow("chat")).toEqual({
       id: "chat",
-      sends: ["blocks", "passages"],
+      sends: [...CHAT_FLOW_SENDS],
       services: [
         {
-          flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
+          flow: { id: "chat", service: OPENAI_SERVICE, sends: [...CHAT_FLOW_SENDS] },
           consent: "accepted",
           decidedAt: expect.any(String),
           chosen: true,

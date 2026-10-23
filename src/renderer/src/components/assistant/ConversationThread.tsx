@@ -146,6 +146,9 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     pick(answer, anchor) {
       setPicking({ answer, anchor, blocks: notesToAdd(answer) });
     },
+    newMind(answer) {
+      add(answer, { kind: "new" });
+    },
     openTable(answer, table) {
       void openTable({ answer, conversation, blocks: [table] });
     },

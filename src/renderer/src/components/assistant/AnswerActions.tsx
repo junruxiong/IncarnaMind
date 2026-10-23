@@ -9,7 +9,13 @@ import { saidInLine } from "../../lineNames";
 import { useAppStore } from "../../store";
 import { closeTip, offerTip, useTipRoom, useTipShown } from "../../tips";
 import { useAnswerLine, useUndo } from "../../undo";
-import { CheckLineIcon, ChevronDownLineIcon, CopyLineIcon, PlusLineIcon } from "../lineIcons";
+import {
+  CheckLineIcon,
+  ChevronDownLineIcon,
+  CopyLineIcon,
+  MindLineIcon,
+  PlusLineIcon,
+} from "../lineIcons";
 import { Tip } from "../Tip";
 import { useGoesBy } from "../UndoLine";
 
@@ -18,7 +24,7 @@ const COPIED_MS = 1500;
 
 /**
  * Under an Answer in the assistant (#201, #391; DESIGN.md, Answer): only
- * "Copy · Add to note ▾", after "Stopped" for one stopped; on hover or focus,
+ * "Copy · Add to note ▾ · New Mind" (#1559), after "Stopped" for one stopped; on hover or focus,
  * and always on the newest. Its model, scope and searches are in its steps.
  * While it is written, Stop is the composer's and the wait line's, not here.
  * Once added, "Added to “{Mind}” · Undo" (⌘Z too), while that can be taken
@@ -33,6 +39,7 @@ export function AnswerActions({
   mindEmpty,
   onAdd,
   onPick,
+  onNewMind,
 }: {
   answer: ConversationAnswer;
   streaming: boolean;
@@ -44,6 +51,8 @@ export function AnswerActions({
   mindEmpty: boolean;
   onAdd(): void;
   onPick(anchor: HTMLElement): void;
+  /** The Answer as it is, in the empty Mind in front, else in a new Mind (`AddTarget` "new"). */
+  onNewMind(): void;
 }) {
   const t = useT();
   const pick = useRef<HTMLButtonElement>(null);
@@ -164,10 +173,26 @@ export function AnswerActions({
       onClick={() => {
         void copyAnswer(answer.id).then((done) => setCopied(done));
       }}
-      className="assistant-answer-action"
+      className="assistant-answer-action assistant-answer-action--collapses"
     >
-      <CopyLineIcon className="size-3.5" />
-      {copied ? t("answer.copied") : t("answer.copy")}
+      {copied ? <CheckLineIcon className="size-3.5" /> : <CopyLineIcon className="size-3.5" />}
+      <span className="assistant-answer-action-label">
+        {copied ? t("answer.copied") : t("answer.copy")}
+      </span>
+    </button>
+  );
+  const newMindButton = mindEmpty ? null : (
+    <button
+      type="button"
+      data-testid="answer-new-mind"
+      aria-label={t("answer.newMind.label")}
+      title={t("answer.newMind.label")}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onNewMind}
+      className="assistant-answer-action assistant-answer-action--collapses"
+    >
+      <MindLineIcon className="size-3.5" />
+      <span className="assistant-answer-action-label">{t("answer.newMind")}</span>
     </button>
   );
   const addButtons = (
@@ -219,18 +244,20 @@ export function AnswerActions({
             {t("answer.status.stopped")}
           </span>
         )}
-        {canKeep &&
-          (named ? (
-            <>
-              {addButtons}
-              {copyButton}
-            </>
-          ) : (
-            <>
-              {copyButton}
-              {addButtons}
-            </>
-          ))}
+        {canKeep && named && (
+          <>
+            {addButtons}
+            {copyButton}
+            {newMindButton}
+          </>
+        )}
+        {canKeep && !named && (
+          <>
+            {copyButton}
+            {addButtons}
+            {newMindButton}
+          </>
+        )}
       </div>
       {holdsRoom && (
         <TipRoom>

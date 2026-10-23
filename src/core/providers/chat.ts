@@ -90,9 +90,17 @@ const MODEL_LIST_TTL_MS = 5 * 60_000;
 /**
  * The chat flow: what a Question sends to a cloud chat provider. While a
  * Connector is on, the core adds "tool-results" (what its Tools return),
- * which makes it ask again.
+ * which makes it ask again. The names of Documents, another Mind a Question
+ * names and a Meeting's live Transcript went before the lines named them:
+ * a User who allowed the flow earlier is asked once more.
  */
-export const CHAT_FLOW_SENDS = ["blocks", "passages"] as const;
+export const CHAT_FLOW_SENDS = [
+  "blocks",
+  "passages",
+  "document-names",
+  "other-minds",
+  "live-transcript",
+] as const;
 
 const TEST_TIMEOUT_MS = 30_000;
 
@@ -1348,17 +1356,10 @@ export function createChat(options: {
       checkCanChat(profile, modelId);
       // The calls that don't write the Answer (tagging, classifying, an Answer's search query)
       // skip thinking where they can.
+      const reasoning = thinking ?? (flow === "chat" ? "summary" : "off");
       const model = watchedPlan(
         provider.kind,
-        createModel(
-          await specFor(
-            provider,
-            apiKey,
-            modelId,
-            profile,
-            thinking ?? (flow === "chat" ? "summary" : "off"),
-          ),
-        ),
+        createModel(await specFor(provider, apiKey, modelId, profile, reasoning)),
         modelId,
       );
       const row: ProviderRow = {
@@ -1375,10 +1376,10 @@ export function createChat(options: {
       const capabilities = capabilitiesOf(row, modelId, profile ? ollamaFacts(profile) : undefined);
       // The gate goes outside the meter, so a request it stops reserves nothing.
       const gated = gate.model(
-        meter.wrap(
-          model,
-          meteredModel(provider, provider.id, modelId, flow, capabilities, profile),
-        ),
+        meter.wrap(model, {
+          ...meteredModel(provider, provider.id, modelId, flow, capabilities, profile),
+          reasoning,
+        }),
         flow,
         provider.service,
       );

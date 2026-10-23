@@ -132,6 +132,9 @@ for (const language of LANGUAGES) {
     expect(more.x).toBeLessThan(copy.x);
     expect(Math.abs(named.y - copy.y)).toBeLessThan(2);
 
+    // New Mind would fill this same empty Mind, so it isn't offered beside the named button.
+    await expect(answer.getByTestId("answer-new-mind")).toHaveCount(0);
+
     const editor = editorOf(window);
     await expect(editor).toHaveText("");
 
@@ -177,8 +180,66 @@ for (const language of LANGUAGES) {
     expect((await center(long.getByTestId("answer-add"))).x).toBeLessThan(
       (await center(long.getByTestId("answer-copy"))).x,
     );
+    for (const each of [short, long]) {
+      await pointAt(window, each.getByTestId("assistant-answer-text"));
+      expect((await center(each.getByTestId("answer-add-to"))).x).toBeLessThan(
+        (await center(each.getByTestId("answer-new-mind"))).x,
+      );
+    }
     await pointAndClick(window, long.getByTestId("answer-add"));
     await expect(long.getByTestId("answer-added")).toContainText(w.added(w.mind));
+    await app.close();
+  });
+
+  test(`at 320 and 280 px Copy and New Mind keep only their icons, with names and tooltips, so the named Add to note keeps its whole name; wider, they say their words (${language})`, async () => {
+    const { app, window } = await start(language);
+    await mindWithText(window, w.mind, w.typed);
+    const answer = await askInAssistant(window, w.forty, { timeout: 120_000 });
+    const add = answer.getByTestId("answer-add");
+    const more = answer.getByTestId("answer-add-to");
+    const copy = answer.getByTestId("answer-copy");
+    const newMind = answer.getByTestId("answer-new-mind");
+    const label = (button: Locator) => button.locator(".assistant-answer-action-label");
+
+    for (const width of [320, 280]) {
+      await sizeAssistant(window, width);
+      await pointAt(window, answer.getByTestId("assistant-answer-text"));
+      await expect(add, `named at ${width}`).toHaveText(w.named(w.mind));
+      expect(
+        await answer
+          .getByTestId("answer-add-label")
+          .evaluate((el) => el.scrollWidth <= el.clientWidth),
+        `the name isn't cut at ${width}`,
+      ).toBe(true);
+      for (const button of [copy, newMind]) {
+        await expect(label(button)).toBeHidden();
+        await expect(button).toHaveAttribute("aria-label", /\S/);
+        await expect(button).toHaveAttribute("title", /\S/);
+        expect((await center(button)).width, `icon-only at ${width}`).toBeLessThanOrEqual(28);
+      }
+      const boxes = await Promise.all([add, more, copy, newMind].map(center));
+      for (const [at, box] of boxes.entries()) {
+        expect(Math.abs(box.y - (boxes[0]?.y ?? 0)), `one row at ${width}`).toBeLessThan(2);
+        const next = boxes[at + 1];
+        if (next) expect(box.x + box.width).toBeLessThanOrEqual(next.x + 1);
+      }
+      const thread = await center(window.getByTestId("assistant-thread"));
+      const last = boxes[3];
+      expect((last?.x ?? 0) + (last?.width ?? 0)).toBeLessThanOrEqual(thread.x + thread.width);
+    }
+
+    await more.focus();
+    await window.keyboard.press("Shift+Tab");
+    for (const button of [add, more, copy, newMind]) {
+      await expect(button).toBeFocused();
+      expect(await focusRingShows(window)).toBe(true);
+      await window.keyboard.press("Tab");
+    }
+
+    await sizeAssistant(window, 420);
+    await pointAt(window, answer.getByTestId("assistant-answer-text"));
+    for (const button of [copy, newMind]) await expect(label(button)).toBeVisible();
+    await expect(add).toHaveText(w.named(w.mind));
     await app.close();
   });
 

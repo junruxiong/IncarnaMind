@@ -37,7 +37,6 @@ import {
   type CheckContradictionsResult,
   type CheckedDocument,
   type CheckSentencesResult,
-  type Citation,
   type CitationAttributes,
   type CitedQuote,
   type ClaimCheckAction,
@@ -52,6 +51,7 @@ import {
   type TextPlace,
   type TextStretch,
   type UnreadFile,
+  type UnsupportedReason,
 } from "../../api";
 import type { Consent } from "../../consent";
 import type { Evidence } from "../../documents/evidence";
@@ -220,8 +220,8 @@ function parseClaim(input: unknown) {
   };
 }
 
-/** A Citation as a mark stores it: the Passage that decides a claim. */
-const evidenceOf = (citation: Citation | null): CitationAttributes | null =>
+/** A Citation as a mark stores it: the Passage that decides a claim, or that covers part of it. */
+const evidenceOf = (citation: CitationAttributes | null): CitationAttributes | null =>
   citation && {
     passageId: citation.passageId,
     documentId: citation.documentId,
@@ -234,6 +234,11 @@ const evidenceOf = (citation: Citation | null): CitationAttributes | null =>
     check: citation.check,
     checkReason: citation.checkReason,
   };
+
+const withQuoted = ({ quoted, ...why }: UnsupportedReason): UnsupportedReason => {
+  const kept = quoted ? evidenceOf(quoted) : null;
+  return kept ? { ...why, quoted: kept } : why;
+};
 
 /** A result written onto its mark. */
 function withResult(
@@ -252,7 +257,7 @@ function withResult(
         detail: null,
         evidence: evidenceOf(result.evidence),
         says: result.says,
-        unsupported: result.unsupported,
+        unsupported: result.unsupported && withQuoted(result.unsupported),
         calculation: result.calculation,
         citedCaseUnchecked: result.citedCaseUnchecked,
         citedCaseFound: result.citedCaseFound,

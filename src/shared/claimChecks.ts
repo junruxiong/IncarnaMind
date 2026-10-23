@@ -98,6 +98,7 @@ function unsupportedOf(value: unknown): UnsupportedReason | null {
     reason: text(value.reason),
     covered: text(value.covered),
     uncovered: text(value.uncovered),
+    ...(isRecord(value.quoted) && { quoted: value.quoted as unknown as CitationAttributes }),
   };
 }
 
@@ -164,11 +165,32 @@ export interface ClaimCheckNow {
   folderId: string | null;
 }
 
-/** What a check's result rests on: its evidence, and the quotes a worked-out figure read its numbers from. */
+/**
+ * The part of an unsupported sentence a Passage the check quoted states, that
+ * quote, and the part it doesn't; null unless the check quoted one.
+ */
+export function coveredPart(
+  why: UnsupportedReason | null,
+): { covered: string; uncovered: string; quoted: CitationAttributes; quote: string } | null {
+  return why?.covered && why.uncovered && why.quoted?.quote
+    ? {
+        covered: why.covered,
+        uncovered: why.uncovered,
+        quoted: why.quoted,
+        quote: why.quoted.quote,
+      }
+    : null;
+}
+
+/**
+ * What a check's result rests on: its evidence, the Passage quoted for the part of an
+ * unsupported sentence it covers, and the quotes a worked-out figure read its numbers from.
+ */
 export function restsOn(check: ClaimCheckAttributes): (CitationAttributes | Citation)[] {
   const inputs = check.calculation?.figure.inputs ?? [];
   return [
     check.evidence,
+    check.unsupported?.quoted ?? null,
     ...inputs.flatMap((input) => [input.citation, input.unitStatement?.citation ?? null]),
   ].filter((each): each is CitationAttributes | Citation => each !== null);
 }

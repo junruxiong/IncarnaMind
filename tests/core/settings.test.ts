@@ -96,6 +96,7 @@ describe("Settings", () => {
         tips: {},
         meetingSystemAudio: true,
         transcriptionRoute: null,
+        modelSource: "auto",
         meetingNoticeAccepted: false,
         meetingPanel: true,
         meetingPanelHidden: true,
@@ -203,6 +204,7 @@ describe("Settings", () => {
       tips: {},
       meetingSystemAudio: true,
       transcriptionRoute: null,
+      modelSource: "auto",
       meetingNoticeAccepted: false,
       meetingPanel: true,
       meetingPanelHidden: true,
@@ -246,6 +248,24 @@ describe("Settings", () => {
 
     const after = startCore(dataDir);
     expect((await after.getSettings()).user.exportOptions.docx.markAiText).toBe("leave");
+    after.close();
+  });
+
+  test("where Word and PDF put the Citations is not answered until the User answers, and each answer is kept (#1600)", async () => {
+    const dataDir = await createTempDataFolder();
+    const before = startCore(dataDir);
+    expect((await before.getSettings()).user.exportOptions.citationPlace).toBeUndefined();
+
+    for (const answer of ["list", "footnotes"] as const) {
+      const saved = await before.updateSettings({
+        user: { exportOptions: { ...DEFAULT_EXPORT, citationPlace: answer } },
+      });
+      expect(saved.user.exportOptions.citationPlace).toBe(answer);
+    }
+    before.close();
+
+    const after = startCore(dataDir);
+    expect((await after.getSettings()).user.exportOptions.citationPlace).toBe("footnotes");
     after.close();
   });
 
@@ -363,6 +383,7 @@ describe("Settings", () => {
       tips: { "add-answer": 2 },
       meetingSystemAudio: false,
       transcriptionRoute: "local" as const,
+      modelSource: "modelscope" as const,
       meetingNoticeAccepted: true,
       meetingPanel: false,
       meetingPanelHidden: false,
@@ -478,6 +499,10 @@ describe("Settings", () => {
           },
         },
       },
+    },
+    {
+      name: "a place for Citations that isn't one",
+      patch: { user: { exportOptions: { ...DEFAULT_EXPORT, citationPlace: "margin" } } },
     },
     {
       name: "a way to show someone's changes that isn't one",
