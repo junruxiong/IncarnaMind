@@ -630,8 +630,7 @@ export const zhCN = {
   "claim.calculated.inputs": "计算所用的数字",
   "claim.calculated.negative": "按负数计算",
   "claim.cited": "这句话已引用它",
-  "claim.unsupported.inFolder": "“{folder}”中没有内容提到这一点。",
-  "claim.unsupported.anywhere": "你的文档中没有内容提到这一点。",
+  "claim.unsupported.notFound": "未在“{scope}”中找到。",
   "claim.unsupported.differs": "你的文档里是另一种说法：",
   "claim.unsupported.covers.one": "引用支持{covered}，但不支持{uncovered}的部分。",
   "claim.unsupported.covers.other": "引用支持{covered}，但不支持{uncovered}的部分。",
@@ -3296,9 +3295,8 @@ export const zhCN = {
   "export.comment.sentence.contradicted.worked":
     "与文档矛盾：根据文档算出 {shown}，句子里写的是 {stated}。",
   "export.comment.sentence.contradicted.plain": "与文档矛盾。",
-  "export.comment.sentence.unsupported": "无依据：你的文档里没有这样写。",
+  "export.comment.sentence.unsupported": "无依据：未在“{scope}”中找到。",
   "export.comment.sentence.citedCaseUnchecked": "所引判决尚未核对：不在文档中。",
-  "export.comment.sentence.unsupported.folder": "无依据：“{folder}”里没有这样写。",
   "export.comment.sentence.unsupported.differs":
     "无依据：你的文档里是另一种说法（“{quote}”，{source}）",
   "export.comment.sentence.unsupported.covers":

@@ -36,8 +36,10 @@ const reply = (language: Language) =>
   [
     "Reply in exactly this form, the verdict word in English:",
     "Verdict: supported, unsupported or contradicted",
+    'Scope: same or wider. "wider" when the sentence names the Passage\'s own party or term in general words, a wider group than the Passage\'s ("staff" or "employees" for "the Employee"); "same" otherwise. A name or another word for the very same party ("Ms Patel" for "the Tenant") is "same".',
     `Then, for supported or contradicted, one plain sentence in ${LANGUAGE_NAMES[language]}, whatever language the Documents and the User's sentence are in, saying what the Document says, with the marker [^1] at its end. For contradicted, name the thing, and give the Document's value and the sentence's.`,
-    `For unsupported, one plain sentence in ${LANGUAGE_NAMES[language]} saying what the Documents don't say and, when part of the sentence is supported, two last lines: "Covered: " and a short phrase in ${LANGUAGE_NAMES[language]} for what the cited Passages state ("the speed comparison"), then "Not covered: " and the topics they don't, as a phrase of the same kind ("memory and robustness").`,
+    `For unsupported, one plain sentence in ${LANGUAGE_NAMES[language]} saying what the Documents don't say and, when a cited Passage states part of the sentence's own claim, two last lines: "Covered: " and a short phrase in ${LANGUAGE_NAMES[language]} for what it states ("the speed comparison"), then "Not covered: " and the topics it doesn't, as a phrase of the same kind ("memory and robustness"). Part of the claim means the same subject and the same detail; a Passage on a neighbouring topic states none of it (pay terms state nothing of a car allowance), and then there are no such lines.`,
+    `For supported with "Scope: wider", the same two last lines: "Covered: " and what the Passage states for its own party, then "Not covered: " and the wider group.`,
     "Write nothing else.",
   ].join("\n");
 
@@ -248,6 +250,8 @@ export interface ReadVerdict {
   says: string | null;
   covered: string | null;
   uncovered: string | null;
+  /** "wider": the sentence names the Passage's own party in general words; null when the reply doesn't say. */
+  scope: "same" | "wider" | null;
 }
 
 const MARKERS = /\s*\[[\^=]?\d{1,4}\]/g;
@@ -260,6 +264,8 @@ const BARE = /^[\s>*_#`"'“”-]*(supported|unsupported|contradicted)\b[\s*_"'�
 /** "Covered: …" and "Not covered: …", in bold or quoted too, on lines of their own. */
 const COVERED = /^[\s>*_#`"'“”-]*(?:covered|已涵盖|涵盖)[\s*_]*[:：][\s*_]*(.*)$/i;
 const NOT_COVERED = /^[\s>*_#`"'“”-]*(?:not covered|uncovered|未涵盖)[\s*_]*[:：][\s*_]*(.*)$/i;
+/** "Scope: wider", in bold or quoted too, on a line of its own. */
+const SCOPE = /^[\s>*_#`"'“”-]*(?:scope|范围)[\s*_]*[:：][\s*_"'“”`]*(same|wider)\b/i;
 const MAX_PHRASE = 120;
 const MAX_REASON = 300;
 const PHRASE_EDGES = /^[\s"'“”‘’「」『』*_`]+|[\s"'“”‘’「」『』*_`.。;；:：,，]+$/gu;
@@ -274,7 +280,7 @@ function jsonVerdict(reply: string): ReadVerdict | null {
   try {
     const value: unknown = JSON.parse(reply.slice(start, end + 1));
     if (typeof value !== "object" || value === null) return null;
-    const { verdict, says, covered, uncovered } = value as Record<string, unknown>;
+    const { verdict, says, covered, uncovered, scope } = value as Record<string, unknown>;
     const known = VERDICTS.find((each) => each === String(verdict).toLowerCase());
     if (!known) return null;
     return {
@@ -282,6 +288,7 @@ function jsonVerdict(reply: string): ReadVerdict | null {
       says: typeof says === "string" ? cleanSays(says) : null,
       covered: typeof covered === "string" ? phraseOf(covered) : null,
       uncovered: typeof uncovered === "string" ? phraseOf(uncovered) : null,
+      scope: scopeOf(typeof scope === "string" ? `Scope: ${scope}` : undefined),
     };
   } catch {
     return null;
@@ -297,6 +304,11 @@ const phraseOf = (text: string | undefined): string | null => {
   if ((text?.length ?? 0) > MAX_PHRASE * 4) return null;
   const phrase = (text ?? "").replace(MARKERS, "").replace(PHRASE_EDGES, "").replace(/\s+/gu, " ");
   return phrase === "" || phrase.length > MAX_PHRASE || NO_PHRASE.test(phrase) ? null : phrase;
+};
+
+const scopeOf = (line: string | undefined): ReadVerdict["scope"] => {
+  const word = line === undefined ? undefined : SCOPE.exec(line)?.[1]?.toLowerCase();
+  return word === "same" || word === "wider" ? word : null;
 };
 
 /** An unsupported verdict's reason is one sentence: a longer one isn't kept. */
@@ -334,12 +346,15 @@ export function readVerdict(reply: string): ReadVerdict | null {
     const after = lines.slice(at + 1);
     const phrase = (label: RegExp) =>
       phraseOf(after.map((each) => label.exec(each)?.[1]).find(Boolean));
-    const next = after.find((each) => !COVERED.test(each) && !NOT_COVERED.test(each));
+    const next = after.find(
+      (each) => !COVERED.test(each) && !NOT_COVERED.test(each) && !SCOPE.test(each),
+    );
     return withShortReason({
       verdict,
       says: cleanSays(rest || (next ?? "")),
       covered: phrase(COVERED),
       uncovered: phrase(NOT_COVERED),
+      scope: scopeOf(after.find((each) => SCOPE.test(each))),
     });
   }
   return withShortReason(jsonVerdict(text));

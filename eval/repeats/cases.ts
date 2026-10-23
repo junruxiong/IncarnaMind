@@ -9,8 +9,12 @@ import { join } from "node:path";
 import { buildPdf, type PdfPage } from "../../tests/helpers/pdf";
 import type { EvalDocument } from "../lib/evaluationSet";
 
-/** What the Documents make of a sentence: "contradicted-or-unsupported" for a wrong figure, which either verdict flags. */
-export type Expected = "supported" | "contradicted-or-unsupported" | "unsupported";
+/**
+ * What the Documents make of a sentence: "contradicted-or-unsupported" for a wrong figure,
+ * which either verdict flags; "partly" for a general word for the agreement's own term, which
+ * is judged on the term with the wider group not covered (DESIGN.md › Checks).
+ */
+export type Expected = "supported" | "partly" | "contradicted-or-unsupported" | "unsupported";
 
 export interface RepeatSentence {
   /** The same for the same kind of sentence in each language, so the two read side by side. */
@@ -138,7 +142,7 @@ export const SETS: readonly RepeatSet[] = [
       {
         key: "staff-home",
         kind: "general-word",
-        expected: "supported",
+        expected: "partly",
         text: "Staff may work from home two days a week.",
       },
       {
@@ -181,7 +185,7 @@ export const SETS: readonly RepeatSet[] = [
       {
         key: "staff-home",
         kind: "general-word",
-        expected: "supported",
+        expected: "partly",
         text: "员工每周可以居家办公两天。",
       },
       {
@@ -219,13 +223,13 @@ export const SETS: readonly RepeatSet[] = [
       {
         key: "staff-home",
         kind: "general-word",
-        expected: "supported",
+        expected: "partly",
         text: "Staff may work from home two days a week.",
       },
       {
         key: "employees-home",
         kind: "general-word",
-        expected: "supported",
+        expected: "partly",
         text: "Employees may work from home two days a week.",
       },
     ],
@@ -245,13 +249,13 @@ export const SETS: readonly RepeatSet[] = [
       {
         key: "staff-home",
         kind: "general-word",
-        expected: "supported",
+        expected: "partly",
         text: "员工每周可以居家办公两天。",
       },
       {
         key: "employees-home",
         kind: "general-word",
-        expected: "supported",
+        expected: "partly",
         text: "职工每周可在家工作两天。",
       },
     ],

@@ -17,14 +17,14 @@ import { note, readMind, writeMind } from "../../tests/helpers/minds";
 /**
  * How a sentence's check shows on its card: "partly" names what the Documents
  * support with a quote, "differs" quotes a line that says something
- * different, "nothing" says nothing in the Documents says it.
+ * different, "not-found" says where the check looked and didn't find it.
  */
 export type Outcome =
   | "supported"
   | "contradicted"
   | "partly"
   | "differs"
-  | "nothing"
+  | "not-found"
   | "not-checked"
   | "no-mark";
 
@@ -46,7 +46,7 @@ export function outcomeOf(check: ClaimCheckAttributes | undefined): Outcome {
   if (check.state === "supported" || check.state === "contradicted") return check.state;
   if (check.state !== "unsupported") return "not-checked";
   if (check.evidence) return "differs";
-  return coveredPart(check.unsupported) ? "partly" : "nothing";
+  return coveredPart(check.unsupported) ? "partly" : "not-found";
 }
 
 /** One read of the Mind's marks, from the core's own copy of it. */

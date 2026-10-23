@@ -20,8 +20,8 @@ import {
 /**
  * A sentence with no Citation that a Document states only part of (#1608):
  * its card says what the Documents support and what they don't, quotes the
- * Passage the check read, and offers to open it, never "Nothing in your
- * Documents says this"; a sentence nothing states keeps that wording. The
+ * Passage the check read, and offers to open it, never that the sentence
+ * wasn't found; a sentence nothing states says where the check looked. The
  * scripted model records the line it read for a sentence `PARTLY_UNCITED`
  * lists, then names what it covers and what it doesn't.
  */
@@ -46,12 +46,12 @@ const WORDS = {
   en: {
     covers:
       "Your Documents support home working two days a week, not the parts about staff in general.",
-    nothing: "Nothing in your Documents says this.",
+    nothing: "I didn't find this in “All Documents”.",
     open: "Open the page",
   },
   "zh-CN": {
     covers: "你的文档支持home working two days a week，但不支持staff in general的部分。",
-    nothing: "你的文档中没有内容提到这一点。",
+    nothing: "未在“全部文档”中找到。",
     open: "打开该页",
   },
 } as const;

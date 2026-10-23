@@ -69,9 +69,9 @@ export function exportLabels(language: Language): ExportLabels {
       if (sentence.nearest)
         return t("export.comment.sentence.unsupported.differs", sentence.nearest);
       if (sentence.covers) return t("export.comment.sentence.unsupported.covers", sentence.covers);
-      return sentence.folder
-        ? t("export.comment.sentence.unsupported.folder", { folder: sentence.folder })
-        : t("export.comment.sentence.unsupported");
+      return t("export.comment.sentence.unsupported", {
+        scope: sentence.folder ?? t("composer.scope.all"),
+      });
     },
     change: ({ kind, pending }) => {
       const author = pending.by || t("export.change.someone");

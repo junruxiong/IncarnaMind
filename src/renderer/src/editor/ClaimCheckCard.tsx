@@ -497,9 +497,9 @@ function ClaimCard({
             >
               {ownWorkings
                 ? t("claim.unsupported.ownWorkings")
-                : searchedFolder
-                  ? t("claim.unsupported.inFolder", { folder: folderName })
-                  : t("claim.unsupported.anywhere")}
+                : t("claim.unsupported.notFound", {
+                    scope: searchedFolder && folderName ? folderName : t("composer.scope.all"),
+                  })}
             </p>
           )}
         </>

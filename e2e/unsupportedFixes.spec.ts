@@ -53,7 +53,7 @@ const LANGUAGES = {
     searchAll: "Search all Documents",
     keep: "Keep as my view",
     keepCommand: "Keep as my view",
-    nothing: "Nothing in “Tutorials” says this.",
+    nothing: "I didn't find this in “Tutorials”.",
   },
   "zh-CN": {
     tutorial:
@@ -64,7 +64,7 @@ const LANGUAGES = {
     searchAll: "搜索全部文档",
     keep: "保留为我的观点",
     keepCommand: "保留为我的观点",
-    nothing: "“Tutorials”中没有内容提到这一点。",
+    nothing: "未在“Tutorials”中找到。",
   },
 } as const;
 

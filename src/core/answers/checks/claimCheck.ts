@@ -419,6 +419,21 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       ? null
       : unstatedUnit([evidence, ...foundCitations(session.finalCitation, evidence)]);
     if (unit && verdict.verdict !== "contradicted") return unsupported(unit, evidence);
+    // A general word for the Passage's own party is backed for that party only: the wider group
+    // is the part the Documents don't cover (DESIGN.md › Checks). The reply says so in a field of
+    // its own, so the verdict doesn't rest on the model weighing it.
+    if (
+      verdict.verdict === "supported" &&
+      verdict.scope === "wider" &&
+      verdict.covered &&
+      verdict.uncovered &&
+      !byCalculation
+    ) {
+      return unsupported(
+        { reason: verdict.says, covered: verdict.covered, uncovered: verdict.uncovered },
+        evidence,
+      );
+    }
     if (verdict.verdict === "contradicted") {
       const judged = await confirmContradiction(request, evidence, session, signal);
       if (signal.aborted) return notChecked("stopped");

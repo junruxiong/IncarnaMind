@@ -1031,6 +1031,50 @@ describe("A sentence the Documents state only part of, with no Citation", () => 
     expect(asked(model, "named the part of it that a Passage does state")).toBe(1);
   });
 
+  test("a supported sentence that names the Passage's party in general words shows the part the Passage states", async () => {
+    const wider = (lines: string): Plan => ({
+      verdict: "supported",
+      quote: MOON,
+      says: `Scope: wider\nTides says when spring tides happen.${lines}`,
+      judgement: "same",
+    });
+    const calls: ModelCall[] = [];
+    const { core, client, check } = await mindWith(
+      [STAFF, SUPPORTED],
+      checkingModel({ [STAFF]: wider(PARTLY), [SUPPORTED]: PLANS[SUPPORTED] as Plan }, calls),
+    );
+
+    await check();
+
+    const [staff, plain] = await shownChecks(core, client);
+    expect(calls[0]?.system).toContain('"wider" when the sentence names the Passage\'s own party');
+    expect(staff).toMatchObject({
+      shown: { state: "unsupported" },
+      check: {
+        evidence: null,
+        unsupported: {
+          covered: "spring tides at new and full moon",
+          uncovered: "the staff and the harbour wall",
+          quoted: { quote: MOON, check: "found" },
+        },
+      },
+    });
+    expect(plain?.shown).toEqual({ state: "supported" });
+  });
+
+  test("stays supported when the reply names a wider group but not the parts", async () => {
+    const { core, client, check } = await mindWith(
+      [STAFF],
+      checkingModel({
+        [STAFF]: { verdict: "supported", quote: MOON, says: "Scope: wider\nTides says so." },
+      }),
+    );
+
+    await check();
+
+    expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "supported" });
+  });
+
   test("a nearest line that says something different still comes first", async () => {
     const { core, client, check } = await mindWith(
       [CONTRADICTED],

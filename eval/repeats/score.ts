@@ -18,7 +18,7 @@ export interface RepeatRow extends RepeatResult {
 const OUTCOMES: readonly Outcome[] = [
   "supported",
   "partly",
-  "nothing",
+  "not-found",
   "differs",
   "contradicted",
   "not-checked",
@@ -27,14 +27,20 @@ const OUTCOMES: readonly Outcome[] = [
 
 /** The verdict behind an outcome: the three cards of an unsupported sentence are one verdict. */
 export const verdictOf = (outcome: Outcome) =>
-  outcome === "partly" || outcome === "differs" || outcome === "nothing" ? "unsupported" : outcome;
+  outcome === "partly" || outcome === "differs" || outcome === "not-found"
+    ? "unsupported"
+    : outcome;
 
 export function meetsExpected(row: Pick<RepeatRow, "outcome" | "expected">): boolean {
   const verdict = verdictOf(row.outcome);
   if (row.expected === "supported") return verdict === "supported";
+  if (row.expected === "partly") return row.outcome === "partly";
   if (row.expected === "unsupported") return verdict === "unsupported";
   return verdict === "unsupported" || verdict === "contradicted";
 }
+
+/** What a Document states, all of it or for its own term. */
+const STATED: ReadonlySet<Expected> = new Set(["supported", "partly"]);
 
 export interface SentenceSummary {
   key: string;
@@ -51,10 +57,10 @@ export interface GroupSummary {
   model: string;
   repeats: number;
   sentences: SentenceSummary[];
-  /** Supported, for a sentence its Documents don't support. */
+  /** Supported, for a sentence its Documents don't state. */
   falseSupported: number;
-  /** "Nothing in your Documents says this", for a sentence its Documents state. */
-  nothingOnStated: number;
+  /** Not found, for a sentence its Documents state. */
+  notFoundOnStated: number;
   /** Repeats whose verdicts differ from the one before on any sentence, of those that follow one. */
   disagreeing: number;
   followed: number;
@@ -110,10 +116,10 @@ export function summarise(rows: readonly RepeatRow[]): GroupSummary[] {
       repeats: repeats.length,
       sentences,
       falseSupported: group.filter(
-        (row) => row.expected !== "supported" && row.outcome === "supported",
+        (row) => !STATED.has(row.expected) && row.outcome === "supported",
       ).length,
-      nothingOnStated: group.filter(
-        (row) => row.expected === "supported" && row.outcome === "nothing",
+      notFoundOnStated: group.filter(
+        (row) => STATED.has(row.expected) && row.outcome === "not-found",
       ).length,
       disagreeing: pairs.filter(([before, after]) => verdictsIn(before) !== verdictsIn(after))
         .length,
@@ -137,15 +143,15 @@ export function report(
     ...summaries.flatMap((group) => [
       `## ${group.set} · ${group.model} · ${group.repeats} checks`,
       "",
-      "| Sentence | Kind | Expected | Supported | Partly | Nothing | Differs | Contradicted | Not checked | Same verdict |",
+      "| Sentence | Kind | Expected | Supported | Partly | Not found | Differs | Contradicted | Not checked | Same verdict |",
       "|---|---|---|---|---|---|---|---|---|---|",
       ...group.sentences.map(
         (each) =>
-          `| ${each.key} | ${each.kind} | ${each.expected} | ${each.outcomes.supported} | ${each.outcomes.partly} | ${each.outcomes.nothing} | ${each.outcomes.differs} | ${each.outcomes.contradicted} | ${each.outcomes["not-checked"] + each.outcomes["no-mark"]} | ${each.steady} of ${each.repeats} |`,
+          `| ${each.key} | ${each.kind} | ${each.expected} | ${each.outcomes.supported} | ${each.outcomes.partly} | ${each.outcomes["not-found"]} | ${each.outcomes.differs} | ${each.outcomes.contradicted} | ${each.outcomes["not-checked"] + each.outcomes["no-mark"]} | ${each.steady} of ${each.repeats} |`,
       ),
       "",
       `- False Supported: ${group.falseSupported}`,
-      `- "Nothing in your Documents says this" on a sentence they state: ${group.nothingOnStated}`,
+      `- Not found, for a sentence they state: ${group.notFoundOnStated}`,
       `- Checks whose verdicts differ from the one before: ${group.disagreeing} of ${group.followed}`,
       "",
       ...(group.misses.length > 0

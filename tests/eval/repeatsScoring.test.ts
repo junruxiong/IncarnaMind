@@ -65,41 +65,50 @@ const row = (repeat: number, key: string, outcome: Outcome): RepeatRow => {
 };
 
 describe("the repeated checks", () => {
-  test("name an Unsupported card by what it shows: a quoted part, a different line, or nothing", () => {
+  test("name an Unsupported card by what it shows: a quoted part, a different line, or not found", () => {
     const partly = { reason: null, covered: "two days a week", uncovered: "all staff" };
     expect(outcomeOf(mark({ unsupported: { ...partly, quoted: QUOTE } }))).toBe("partly");
-    expect(outcomeOf(mark({ unsupported: partly }))).toBe("nothing");
+    expect(outcomeOf(mark({ unsupported: partly }))).toBe("not-found");
     expect(outcomeOf(mark({ evidence: QUOTE, unsupported: { ...partly, quoted: QUOTE } }))).toBe(
       "differs",
     );
-    expect(outcomeOf(mark({}))).toBe("nothing");
+    expect(outcomeOf(mark({}))).toBe("not-found");
     expect(outcomeOf(mark({ state: "supported" }))).toBe("supported");
     expect(outcomeOf(mark({ state: "not-checked", reason: "failed" }))).toBe("not-checked");
     expect(outcomeOf(undefined)).toBe("no-mark");
   });
 
-  test("count false Supported, nothing on a stated sentence, and checks that differ from the one before", () => {
+  test("count false Supported, not found on a stated sentence, and checks that differ from the one before", () => {
     const [summary] = summarise([
-      row(1, "staff-home", "supported"),
-      row(1, "car", "nothing"),
-      row(2, "staff-home", "partly"),
-      row(2, "car", "nothing"),
-      row(3, "staff-home", "nothing"),
+      row(1, "notice", "supported"),
+      row(1, "car", "not-found"),
+      row(2, "notice", "partly"),
+      row(2, "car", "not-found"),
+      row(3, "notice", "not-found"),
       row(3, "car", "supported"),
     ]);
 
-    expect(summary).toMatchObject({ repeats: 3, falseSupported: 1, nothingOnStated: 1 });
+    expect(summary).toMatchObject({ repeats: 3, falseSupported: 1, notFoundOnStated: 1 });
     expect(summary?.disagreeing).toBe(2);
     expect(summary?.followed).toBe(2);
-    expect(summary?.sentences.find((each) => each.key === "staff-home")).toMatchObject({
+    expect(summary?.sentences.find((each) => each.key === "notice")).toMatchObject({
       steady: 2,
-      outcomes: { supported: 1, partly: 1, nothing: 1 },
+      outcomes: { supported: 1, partly: 1, "not-found": 1 },
     });
     expect(summary?.misses.map((each) => [each.repeat, each.key])).toEqual([
-      [2, "staff-home"],
-      [3, "staff-home"],
+      [2, "notice"],
+      [3, "notice"],
       [3, "car"],
     ]);
+  });
+
+  test("expect the partly-supported card for a general word for the agreement's term", () => {
+    const [summary] = summarise([
+      row(1, "staff-home", "partly"),
+      row(2, "staff-home", "supported"),
+    ]);
+    expect(summary?.misses.map((each) => [each.repeat, each.outcome])).toEqual([[2, "supported"]]);
+    expect(summary?.falseSupported).toBe(0);
   });
 
   test("give every set's sentences a verdict to expect, the same keys in English and Chinese", () => {
