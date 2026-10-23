@@ -123,7 +123,7 @@ export function commandInstructions(offered: boolean): string {
 
 const ON_SCREEN = "On screen now:";
 
-/** The line that starts the Question's message when Documents are open on screen (#1334); "" for none. */
+/** The line just before the Question when Documents are open on screen (#1334); "" for none. */
 export function onScreenLine(names: readonly string[]): string {
   if (names.length === 0) return "";
   return `${ON_SCREEN} ${names.map((name) => `"${listedName(name)}"`).join(", ")}`;
@@ -134,8 +134,8 @@ export function onScreenLine(names: readonly string[]): string {
  * the Documents in scope, models summarised every one, at length.
  */
 export const THIS_DOCUMENT_RULE = [
-  `A line "${ON_SCREEN} …" before the Question names the Documents the User has open, the one they are in first.`,
-  '- "This document", "this contract", "这份文件", "这份合同" and the like mean the Document the User\'s selection cites, else the one on screen: answer or write about that Document alone (search_documents with its document), unless the User asks about others too. With two or more on screen and nothing to tell which, ask which one with ask_user before writing anything.',
+  `A line "${ON_SCREEN} …" before the Question names the Documents the User has open.`,
+  '- "This document", "this contract", "这份文件", "这份合同" and the like mean the Document the User\'s selection cites, else the one on screen, else the one the words name. Answer or write about that Document alone, from its own text: don\'t mention or compare the others, even one that disagrees with it (comparing Documents that disagree is for a Question about several), unless the User asks about them too. When two or more fit, two on screen among them, and nothing tells which, ask which one with ask_user before writing anything.',
   "- When the User asks for it short, keep it to five lines at most in all: a heading, a paragraph and each list item each count as one.",
 ].join("\n");
 

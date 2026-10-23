@@ -157,7 +157,6 @@ export function currentMindIdOf(layout: WindowLayout | null): string | null {
   return mind?.kind === "mind" ? mind.mindId : null;
 }
 
-/** The tabs shown on screen, one a group, the focused group's first. */
 function tabsOnScreenOf(layout: WindowLayout, merged: boolean): (LayoutTab | null)[] {
   const focused = focusedGroupOf(layout);
   const shown = [focused, ...visibleGroupsOf(layout, merged).filter((group) => group !== focused)];

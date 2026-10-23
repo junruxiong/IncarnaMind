@@ -2611,7 +2611,7 @@ export function createAnswers(options: AnswersOptions) {
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
   }
 
-  /** The names of the Documents open on screen that the Answer may search, in their order (#1334). */
+  // One outside the Search scope can't be searched: naming it would point the model at nothing.
   const namesOnScreen = (onScreen: readonly string[], documentIds: readonly string[] | null) =>
     onScreen.flatMap((id) =>
       documentIds === null || documentIds.includes(id)

@@ -563,7 +563,6 @@ export function linesOf(markdown: string): number {
     .filter((line) => line.trim() !== "" && !/^\s*\|?\s*:?-{3,}/.test(line)).length;
 }
 
-/** The names, among `scoped`, of the Documents the Answer cites or names in what it wrote, outside `allowed`. */
 function otherDocuments(outcome: RequestOutcome, allowed: readonly string[]): string[] {
   const cited = new Set([
     ...outcome.answer.citations.map((citation) => citation.documentId),
@@ -581,7 +580,6 @@ function otherDocuments(outcome: RequestOutcome, allowed: readonly string[]): st
     .map((document) => document.name);
 }
 
-/** What #1334's and #1734's requests are held to: which Documents, how long, whether it asks, what it adds. */
 function thisFailures(outcome: RequestOutcome): RequestFailure[] {
   const { expected, answer } = outcome;
   const failures: RequestFailure[] = [];

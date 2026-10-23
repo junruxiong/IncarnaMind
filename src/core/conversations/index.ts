@@ -359,7 +359,6 @@ function storedFocus(value: string | null): MindFocus | null {
   }
 }
 
-/** A `MindFocus`, or null for anything else. */
 /** The Documents open on screen, by id, in order, each once; throws for anything but a list of ids. */
 export function parseOnScreen(value: unknown): string[] {
   if (value === undefined || value === null) return [];
@@ -369,6 +368,7 @@ export function parseOnScreen(value: unknown): string[] {
   return [...new Set(value as string[])];
 }
 
+/** A `MindFocus`, or null for anything else. */
 function parseFocus(value: unknown): MindFocus | null {
   if (!isRecord(value) || typeof value.selection !== "string" || !Array.isArray(value.blockIds)) {
     return null;
