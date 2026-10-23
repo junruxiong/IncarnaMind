@@ -34,7 +34,7 @@ You need Node.js 24 or newer. Clone the repository, then run `npm install` and `
 - Keep `src/core` free of Electron imports; Biome enforces it.
 - Run `npm run typecheck`, `npm run lint`, `npm test` and the smoke tests your change touches before opening a pull request. CI runs all of them on every pull request, and a pull request merges through GitHub's merge queue once its checks are green; the queue tests it together with `main`, so you don't need to keep your branch up to date. The [tests and CI rules](docs/agents/testing.md) say how to write tests that pass on any machine.
 - The interface is in English and Simplified Chinese: a new string goes into both dictionaries in `src/shared/i18n/`.
-- Keep pull requests small and say what they change and why.
+- Keep each pull request to one theme, under about 600 changed lines, and say what it changes and why.
 
 ## Licence and sign-off
 
