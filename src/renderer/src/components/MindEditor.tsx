@@ -80,12 +80,14 @@ import { noteExtensions } from "../editor/noteSchema";
 import { registerMindEditor } from "../editor/openEditors";
 import { PageMenu } from "../editor/PageMenu";
 import { ProposalBars } from "../editor/ProposalBars";
-import { ProposalReview } from "../editor/proposalReview";
+import { editorDoc, ProposalReview } from "../editor/proposalReview";
 import { ProposalRewrites } from "../editor/proposalRewrites";
 import { QuestionView } from "../editor/QuestionView";
 import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
 import { ReferencesBlock } from "../editor/ReferencesBlock";
+import { ReviewFold, ReviewPane } from "../editor/ReviewPane";
+import { ReviewPick } from "../editor/reviewPick";
 import { ScopePicker } from "../editor/ScopePicker";
 import { type SelectionAction, SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
@@ -93,6 +95,7 @@ import { compareSlashItem, noteSlashItems, skillSlashItems } from "../editor/sla
 import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
+import { reviewItemsIn } from "../editor/theirChanges";
 import { TitleLine } from "../editor/titleLine";
 import { SmartTypography } from "../editor/typography";
 import type { EditWithAiField } from "../editor/useEditField";
@@ -117,6 +120,7 @@ import { followMindStyle } from "../mindStyles";
 import { useMindTools } from "../mindTools";
 import { onMindWriting, writingPlaceOf } from "../mindWriting";
 import { firstOpenOf } from "../nudges";
+import { holdReviewable, useReviewPanes } from "../reviewPane";
 import { holdShownPage } from "../shownPages";
 import { skillDescription, skillTitle } from "../skills";
 import { useAppStore } from "../store";
@@ -407,6 +411,7 @@ function MindEditorView({
         }),
         QuestionFold.configure({ mindId }),
         ProposalReview.configure({ translate: translateNow }),
+        ReviewPick,
         ProposalRewrites.configure({ translate: translateNow }),
         AppliedEditLine.configure({
           translate: translateNow,
@@ -705,6 +710,18 @@ function MindEditorView({
   const wordLook = useWordLookStyle(doc, mindId, editor);
   // A read-only copy sends nothing to the core, so a switch there wouldn't be remembered.
   useEffect(() => (readOnly ? undefined : holdShownPage(mindId, doc)), [mindId, doc, readOnly]);
+  useEffect(
+    () =>
+      readOnly
+        ? undefined
+        : holdReviewable(mindId, {
+            has: () =>
+              !editor.isDestroyed && reviewItemsIn(editor.state.doc, editorDoc(editor)).length > 0,
+            open: () => useReviewPanes.getState().open(mindId),
+          }),
+    [editor, mindId, readOnly],
+  );
+  const reviewing = !readOnly && slots.reviewShown !== "closed";
   useEffect(() => followMindStyle(mindId, doc), [mindId, doc]);
 
   return (
@@ -719,14 +736,26 @@ function MindEditorView({
         )}
       {slots.menu &&
         createPortal(
-          <PageMenu
-            editor={editor}
-            doc={doc}
-            mindId={mindId}
-            verification={verification}
-            readOnly={readOnly}
-          />,
+          <>
+            {reviewing && slots.reviewShown !== "beside" && (
+              <ReviewFold editor={editor} mindId={mindId} />
+            )}
+            <PageMenu
+              editor={editor}
+              doc={doc}
+              mindId={mindId}
+              verification={verification}
+              readOnly={readOnly}
+            />
+          </>,
           slots.menu,
+        )}
+      {slots.review &&
+        reviewing &&
+        (slots.reviewShown === "beside" || slots.reviewShown === "over") &&
+        createPortal(
+          <ReviewPane editor={editor} mindId={mindId} over={slots.reviewShown === "over"} />,
+          slots.review,
         )}
       {/* The quiet first open shows the example's text alone (#856). */}
       {slots.count &&
