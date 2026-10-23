@@ -100,6 +100,11 @@ const center = async (target: Locator) => {
   return box;
 };
 
+const placeOf = async (window: Page, answer: Locator) => ({
+  question: (await center(window.getByTestId("assistant-question").last())).y,
+  answer: (await center(answer.getByTestId("assistant-answer-text"))).y,
+});
+
 /** A reload as a restart is for what the renderer remembers: only the core's settings stay. */
 async function reload(window: Page) {
   await window.reload();
@@ -258,9 +263,12 @@ for (const language of LANGUAGES) {
       expect((await center(tip)).height, `one line at ${width}`).toBeLessThanOrEqual(24);
     }
 
+    const before = await placeOf(window, answer);
     await pointAndClick(window, window.getByTestId("tip-close"));
     await expect(tip).toHaveCount(0);
     await expect(answer.getByTestId("answer-add")).toBeFocused();
+    expect(await placeOf(window, answer), "closing the tip moves nothing").toEqual(before);
+    await expect(window.getByTestId("tip-room")).toHaveCount(1);
 
     await reload(window);
     await askInAssistant(window, w.short);
@@ -315,10 +323,15 @@ for (const language of LANGUAGES) {
     await emptyMind(window, w.mind);
     const answer = await askInAssistant(window, w.short);
     await expect(window.getByTestId("tip")).toHaveCount(1);
+    const before = await placeOf(window, answer);
     await pointAt(window, answer.getByTestId("assistant-answer-text"));
     await pointAndClick(window, answer.getByTestId("answer-add"));
     await expect(answer.getByTestId("answer-added")).toContainText(w.added(w.mind));
     await expect(window.getByTestId("tip")).toHaveCount(0);
+    expect(await placeOf(window, answer), "adding moves nothing").toEqual(before);
+    await pointAndClick(window, answer.getByTestId("answer-added-undo"));
+    await expect(answer.getByTestId("answer-add")).toBeVisible();
+    expect(await placeOf(window, answer), "Undo moves nothing").toEqual(before);
 
     await reload(window);
     await askInAssistant(window, w.short);

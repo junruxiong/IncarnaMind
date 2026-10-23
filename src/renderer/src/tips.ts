@@ -9,7 +9,6 @@ export const TIP_SHOWS = 2;
 
 interface Showing {
   id: TipId;
-  /** What it points at: the Answer whose actions it sits under. */
   key: string;
 }
 

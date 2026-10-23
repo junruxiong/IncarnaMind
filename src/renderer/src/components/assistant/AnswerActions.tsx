@@ -92,6 +92,11 @@ export function AnswerActions({
   const keepsRoom =
     tipShown ||
     (watched && room && focusedMindName !== null && (streaming || answer.status === "done"));
+  // Once kept, the line stays until a later Question takes it back: closing the tip or adding the
+  // Answer must not slide the Answer.
+  const [kept, setKept] = useState(false);
+  if (keepsRoom && !kept) setKept(true);
+  const holdsRoom = kept || keepsRoom;
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), COPIED_MS);
@@ -102,7 +107,7 @@ export function AnswerActions({
     return (
       <>
         <WritingLine />
-        {keepsRoom && <TipRoom />}
+        {holdsRoom && <TipRoom />}
       </>
     );
   }
@@ -110,31 +115,34 @@ export function AnswerActions({
   if (added) {
     const said = saidInLine(t, added.said);
     return (
-      <div
-        data-testid="answer-added"
-        className="assistant-answer-actions assistant-answer-actions--added"
-      >
-        <CheckLineIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-secondary" />
-        <span role="status" title={said.fullMessage} className="assistant-answer-added">
-          {said.message}
-        </span>
-        <span aria-hidden="true">·</span>
-        <button
-          ref={undoButton}
-          type="button"
-          data-testid="answer-added-undo"
-          aria-label={t("move.undoLabel", { message: said.fullMessage ?? said.message })}
-          onClick={() => {
-            useUndo
-              .getState()
-              .undo()
-              .catch((error: unknown) => useAppStore.getState().reportError(error));
-          }}
-          className="assistant-answer-action"
+      <>
+        <div
+          data-testid="answer-added"
+          className="assistant-answer-actions assistant-answer-actions--added"
         >
-          {t("move.undo")}
-        </button>
-      </div>
+          <CheckLineIcon aria-hidden="true" className="size-3.5 shrink-0 text-ink-secondary" />
+          <span role="status" title={said.fullMessage} className="assistant-answer-added">
+            {said.message}
+          </span>
+          <span aria-hidden="true">·</span>
+          <button
+            ref={undoButton}
+            type="button"
+            data-testid="answer-added-undo"
+            aria-label={t("move.undoLabel", { message: said.fullMessage ?? said.message })}
+            onClick={() => {
+              useUndo
+                .getState()
+                .undo()
+                .catch((error: unknown) => useAppStore.getState().reportError(error));
+            }}
+            className="assistant-answer-action"
+          >
+            {t("move.undo")}
+          </button>
+        </div>
+        {holdsRoom && <TipRoom />}
+      </>
     );
   }
 
@@ -224,7 +232,7 @@ export function AnswerActions({
             </>
           ))}
       </div>
-      {keepsRoom && (
+      {holdsRoom && (
         <TipRoom>
           {tipShown && (
             <Tip

@@ -3,10 +3,6 @@ import { useT } from "../i18n";
 import type { TipId } from "../tips";
 import { CloseLineIcon, InfoLineIcon } from "./lineIcons";
 
-/**
- * The app's one tip (docs/agents/interaction.md, rule 14): a line where the
- * feature is, which ✕ closes. Using the feature closes it too (`closeTip`).
- */
 export function Tip({
   id,
   onClose,
