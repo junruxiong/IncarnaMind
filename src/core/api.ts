@@ -2774,6 +2774,19 @@ export interface SaveWebPageInput {
    * `UserSettings.keepWebPageLook` says. Ignored with `html`.
    */
   keepLook?: boolean;
+  /**
+   * Local mode is on and the User let this one page be fetched ("Fetch this
+   * page once"): without it, an address that isn't saved yet isn't fetched in
+   * Local mode, and the result says why ("local-mode"). It doesn't turn Local
+   * mode off.
+   */
+  localModeOnce?: boolean;
+}
+
+/** What `fetchWebPageAgain` takes besides the Document. */
+export interface FetchWebPageAgainOptions {
+  /** As `SaveWebPageInput.localModeOnce`. */
+  localModeOnce?: boolean;
 }
 
 /**
@@ -2793,10 +2806,17 @@ export type WebPageLook =
 /**
  * Why a page's look couldn't be kept: "timed-out", it didn't load in 30
  * seconds; "unreachable", it couldn't be loaded; "too-large", its PDF is over
- * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "failed",
+ * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "local-mode",
+ * "Keep everything on this computer" is on, so the page wasn't loaded; "failed",
  * anything else.
  */
-export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "stopped" | "failed";
+export type WebPageLookFailure =
+  | "timed-out"
+  | "unreachable"
+  | "too-large"
+  | "stopped"
+  | "local-mode"
+  | "failed";
 
 /**
  * Why a web page wasn't saved, or wasn't fetched again:
@@ -2816,6 +2836,9 @@ export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "st
  * - "too-many-redirects": it redirected more than web search's fetcher follows.
  * - "not-from-search": web search fetches only the pages its search returned
  *   in the same Answer, and this wasn't one.
+ * - "local-mode": "Keep everything on this computer" is on, so nothing was
+ *   fetched: the site would have seen the request, and the address can name
+ *   a matter. The User can let this one page go (`localModeOnce`).
  */
 export type WebPageFailureReason =
   | "invalid-address"
@@ -2830,7 +2853,8 @@ export type WebPageFailureReason =
   | "not-text"
   | "not-public"
   | "too-many-redirects"
-  | "not-from-search";
+  | "not-from-search"
+  | "local-mode";
 
 export interface WebPageFailure {
   reason: WebPageFailureReason;
@@ -8767,9 +8791,10 @@ export interface CoreApi {
    * page that changed becomes a new version. Citations keep pointing at the
    * version they quote. One that can't be fetched now leaves the Document as
    * it was: the result says why. Throws NotFoundError for an unknown
-   * Document, and InvalidInputError for one that isn't a web page.
+   * Document, and InvalidInputError for one that isn't a web page. In Local
+   * mode nothing is fetched unless `localModeOnce` says the User let it.
    */
-  fetchWebPageAgain(documentId: string): Promise<WebPageResult>;
+  fetchWebPageAgain(documentId: string, options?: FetchWebPageAgainOptions): Promise<WebPageResult>;
   /**
    * Documents that are not deleted, missing ones included, most recently
    * added first. With a Folder, only the Documents in it, and in its

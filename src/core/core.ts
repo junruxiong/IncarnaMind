@@ -825,6 +825,7 @@ export function createCore(adapters: CoreAdapters): Core {
     pictureFetch: pictureFetcher.fetch,
     ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
     keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    localOnly: () => embedding.localOnly(),
     signal: lifetime.signal,
     reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
@@ -3610,7 +3611,7 @@ export function createCore(adapters: CoreAdapters): Core {
         : result;
     },
     keepWebPageLook: async (documentId) => webPages.keepLook(documentId),
-    fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
+    fetchWebPageAgain: async (documentId, options) => webPages.fetchAgain(documentId, options),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
         throw new InvalidInputError("There is no text to save.");
