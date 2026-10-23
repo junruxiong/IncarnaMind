@@ -12,6 +12,8 @@ describe("What a reply says its Citations cover and don't", () => {
       says: "The Passages compare speed, not memory or robustness.",
       covered: "the speed comparison",
       uncovered: "memory and robustness",
+      scope: null,
+      topic: null,
     });
     expect(
       readVerdict(
@@ -32,6 +34,8 @@ describe("What a reply says its Citations cover and don't", () => {
       says: null,
       covered: "the speed",
       uncovered: "memory",
+      scope: null,
+      topic: null,
     });
     expect(
       readVerdict("Verdict: unsupported\nNothing here is covered.\nNot covered: memory"),
@@ -64,12 +68,16 @@ describe("What a reply says its Citations cover and don't", () => {
       says: null,
       covered: null,
       uncovered: null,
+      scope: null,
+      topic: null,
     });
     expect(readVerdict("Verdict: unsupported\nNo Passage mentions penguins.")).toEqual({
       verdict: "unsupported",
       says: "No Passage mentions penguins.",
       covered: null,
       uncovered: null,
+      scope: null,
+      topic: null,
     });
     expect(readVerdict("Verdict: unsupported\nCovered:\nNot covered: ")).toMatchObject({
       covered: null,
@@ -113,7 +121,33 @@ describe("What a reply says its Citations cover and don't", () => {
       says: "Not stated.",
       covered: "speed",
       uncovered: "Memory",
+      scope: null,
+      topic: null,
     });
+  });
+
+  test("a reply's scope is its own line, read apart from the explanation", () => {
+    expect(
+      readVerdict(
+        "Verdict: supported\nScope: wider\nThe agreement says the Employee may work from home [^1].\nCovered: two days a week for the Employee\nNot covered: staff in general",
+      ),
+    ).toEqual({
+      verdict: "supported",
+      says: "The agreement says the Employee may work from home.",
+      covered: "two days a week for the Employee",
+      uncovered: "staff in general",
+      scope: "wider",
+      topic: null,
+    });
+    expect(readVerdict("**Verdict:** supported\n**Scope:** same\nIt says so [^1].")).toMatchObject({
+      says: "It says so.",
+      scope: "same",
+    });
+    expect(readVerdict('{"verdict": "supported", "says": "Yes.", "scope": "wider"}')).toMatchObject(
+      {
+        scope: "wider",
+      },
+    );
   });
 
   test("a supported reply's explanation is still its line", () => {
@@ -122,6 +156,8 @@ describe("What a reply says its Citations cover and don't", () => {
       says: "The Document says so.",
       covered: null,
       uncovered: null,
+      scope: null,
+      topic: null,
     });
   });
 });

@@ -37,7 +37,6 @@ import {
   type CheckContradictionsResult,
   type CheckedDocument,
   type CheckSentencesResult,
-  type Citation,
   type CitationAttributes,
   type CitedQuote,
   type ClaimCheckAction,
@@ -52,6 +51,7 @@ import {
   type TextPlace,
   type TextStretch,
   type UnreadFile,
+  type UnsupportedReason,
 } from "../../api";
 import type { Consent } from "../../consent";
 import type { Evidence } from "../../documents/evidence";
@@ -220,8 +220,8 @@ function parseClaim(input: unknown) {
   };
 }
 
-/** A Citation as a mark stores it: the Passage that decides a claim. */
-const evidenceOf = (citation: Citation | null): CitationAttributes | null =>
+/** A Citation as a mark stores it: the Passage that decides a claim, or that covers part of it. */
+const evidenceOf = (citation: CitationAttributes | null): CitationAttributes | null =>
   citation && {
     passageId: citation.passageId,
     documentId: citation.documentId,
@@ -234,6 +234,11 @@ const evidenceOf = (citation: Citation | null): CitationAttributes | null =>
     check: citation.check,
     checkReason: citation.checkReason,
   };
+
+const withQuoted = ({ quoted, ...why }: UnsupportedReason): UnsupportedReason => {
+  const kept = quoted ? evidenceOf(quoted) : null;
+  return kept ? { ...why, quoted: kept } : why;
+};
 
 /** A result written onto its mark. */
 function withResult(
@@ -252,7 +257,7 @@ function withResult(
         detail: null,
         evidence: evidenceOf(result.evidence),
         says: result.says,
-        unsupported: result.unsupported,
+        unsupported: result.unsupported && withQuoted(result.unsupported),
         calculation: result.calculation,
         citedCaseUnchecked: result.citedCaseUnchecked,
         citedCaseFound: result.citedCaseFound,
@@ -361,8 +366,20 @@ export function createChecks(options: ChecksOptions) {
     recordCheckUnread(blocks.doc, request, files, requests);
   }
 
-  /** Where a Mind's sentences are checked: its Folder, or every Document. */
-  function scopeOf(mindId: string, allDocuments: boolean, checked?: CheckedDocument) {
+  function leftOutOf(mindId: string, checked: CheckedDocument = {}): CheckedDocument {
+    const original = options.originalOf(mindId);
+    return {
+      documentIds: [...(original?.documentIds ?? []), ...(checked.documentIds ?? [])],
+      contentHashes: [...(original?.contentHashes ?? []), ...(checked.contentHashes ?? [])],
+    };
+  }
+
+  /**
+   * Where a Mind's sentences are checked: its Folder, or every Document, never the file the
+   * Mind was imported from. The contradiction watch leaves out the same, so a sentence finds
+   * the same evidence alone or in a whole check.
+   */
+  function scopeOf(mindId: string, allDocuments: boolean, checked: CheckedDocument = {}) {
     const own = options.mindFolder(mindId);
     const wanted = allDocuments
       ? null
@@ -373,7 +390,10 @@ export function createChecks(options: ChecksOptions) {
     const folderId = oneFolderOf(wanted);
     // An own Folder that holds no Document searches everything, as "Search all Documents" does.
     const marked: ClaimCheckScope = { folderId: own, widened: allDocuments || own !== folderId };
-    const scope = options.evidence.scope(wanted && options.resolveScope(wanted), checked);
+    const scope = options.evidence.scope(
+      wanted && options.resolveScope(wanted),
+      leftOutOf(mindId, checked),
+    );
     return {
       searchable: options.documents.searchableCount(scope.documentIds),
       folderId,
@@ -390,8 +410,7 @@ export function createChecks(options: ChecksOptions) {
     const read = content.read(mindId, (blocks) => selectedSentences(blocks, stretches));
     if (!read.ok) return { kind: read.reason };
 
-    const original = options.originalOf(mindId) ?? undefined;
-    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments, original);
+    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments);
     if (searchable === 0) return { kind: "no-documents", folderId };
     const { scope: evidenceScope, marked: scope } = check;
 
@@ -508,8 +527,8 @@ export function createChecks(options: ChecksOptions) {
     ...options.watch,
     folderDocuments: (folderId) =>
       options.resolveScope({ folderIds: [folderId], tagIds: [], documentIds: [] }) ?? [],
-    evidenceScope: (documentIds, citedIds) =>
-      options.evidence.scope(documentIds, { documentIds: [...citedIds] }),
+    evidenceScope: (mindId, documentIds, citedIds) =>
+      options.evidence.scope(documentIds, leftOutOf(mindId, { documentIds: [...citedIds] })),
     searchableCount: (documentIds) => options.documents.searchableCount(documentIds),
     prepare,
     prepareQuietly,
@@ -537,6 +556,7 @@ export function createChecks(options: ChecksOptions) {
     documentVersions: options.watch.documentVersions,
     prepare,
     scopeOf: (mindId, allDocuments) => scopeOf(mindId, allDocuments),
+    citedNow,
     recordUnread,
     isRunning: (requestId) => running.has(requestId),
     claimCheck,
@@ -551,7 +571,7 @@ export function createChecks(options: ChecksOptions) {
     prepare: (answer) =>
       prepareQuietly({ providerId: answer.provider.id, modelId: answer.modelId }),
     claimCheck,
-    scopeOf: (mindId) => scopeOf(mindId, false, options.originalOf(mindId) ?? undefined),
+    scopeOf: (mindId) => scopeOf(mindId, false),
     citedNow,
     withResult,
     retainEvidence,

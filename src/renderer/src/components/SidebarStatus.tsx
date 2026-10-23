@@ -18,6 +18,8 @@ import { useSettled } from "../settling";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { useTaggingAlert } from "../taggingAlert";
 import { useTaggingExplained } from "../taggingExplained";
+import { taggingProblem } from "../taggingProblem";
+import { failedTagging, retryTagging } from "../taggingRetry";
 import { placesText, resumeTagging, stoppedDocumentPlaces, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
 import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
@@ -293,8 +295,9 @@ function useStatuses(): Status[] {
   const counts = useAppStore(
     useShallow((state) => {
       let processing = 0;
-      // Scanned pages still to read, of the Documents being read (#397).
-      let scannedPages = 0;
+      // Scans being read (#397), and those found, waiting their turn beside the others (#1502).
+      let scansReading = 0;
+      let scansWaiting = 0;
       let tagging = 0;
       // Only the User's own Documents: the examples need no model, so they alone don't ask for one.
       let waitingForTagger = 0;
@@ -313,7 +316,10 @@ function useStatuses(): Status[] {
         if (PROCESSING.has(item.status)) {
           if (item.linkedFolderId === null || !paused.has(item.linkedFolderId)) {
             processing++;
-            if (item.scan?.of === "scanned-pages") scannedPages += item.scan.pages - item.scan.read;
+            if (item.scan?.of === "scanned-pages") {
+              if (item.status === "extracting") scansReading++;
+              else scansWaiting++;
+            }
           }
         } else if (item.status === "ready") {
           const held = heldByOrganize.has(item.id);
@@ -347,7 +353,8 @@ function useStatuses(): Status[] {
       }
       return {
         processing,
-        scannedPages,
+        scansReading,
+        scansWaiting,
         tagging,
         waitingForTagger,
         waitingForPlan,
@@ -510,12 +517,11 @@ function useStatuses(): Status[] {
   }
 
   if (counts.failedTagging > 0) {
-    const held = organizeHeld(library);
-    const failed = useAppStore
-      .getState()
-      .documents.filter(
-        (each) => each.status === "ready" && each.tagging === "failed" && !held.has(each.id),
-      );
+    const reasons = failedTagging(useAppStore.getState()).flatMap((each) =>
+      each.taggingError && each.taggingError.kind !== "network"
+        ? [taggingProblem(each.taggingError, t)]
+        : [],
+    );
     statuses.push({
       testId: "tagging-failed",
       tone: "error",
@@ -530,14 +536,12 @@ function useStatuses(): Status[] {
             ? "status.taggingFailed.offline"
             : "status.taggingFailed.full",
         ),
-        failed[0]?.taggingError?.message ?? "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
+        ...new Set(reasons),
+      ].join("\n"),
       action: {
         label: t("status.retry"),
         testId: "tagging-failed-retry",
-        run: () => void useAppStore.getState().retagDocuments(failed.map((each) => each.id)),
+        run: () => void retryTagging(),
       },
     });
   }
@@ -775,12 +779,17 @@ function useStatuses(): Status[] {
       full: t("status.readingPaused.full"),
     });
   } else if (counts.processing > 0) {
-    // While scanned pages are read, they are what takes the time: the row says so.
+    // While scans are read, they are what takes the time: the row says so, and how many wait.
+    const { scansReading: reading, scansWaiting: waiting } = counts;
     const text =
-      counts.scannedPages > 0
-        ? counts.scannedPages === 1
-          ? t("status.scanning.one")
-          : t("status.scanning.other", { count: counts.scannedPages })
+      reading > 0
+        ? waiting > 0
+          ? reading === 1
+            ? t("status.scansWaiting.one", { waiting })
+            : t("status.scansWaiting.other", { count: reading, waiting })
+          : reading === 1
+            ? t("status.scans.one")
+            : t("status.scans.other", { count: reading })
         : counts.processing === 1
           ? t("status.processing.one")
           : t("status.processing.other", { count: counts.processing });

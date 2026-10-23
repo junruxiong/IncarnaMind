@@ -430,6 +430,8 @@ export interface DocumentsOptions {
    * scanned pages are left with the little text they have, as before.
    */
   textRecognition?: TextRecognitionModel;
+  /** How many scans are read at once (./processor, `scansAtOnce`). */
+  scansAtOnce?: number;
   /** The password kept for a locked PDF (./pdfPasswords, #763); undefined when none is. */
   pdfPassword?(documentId: string): Promise<string | undefined>;
   linkedFolders: {
@@ -474,12 +476,6 @@ export function createDocuments(options: DocumentsOptions) {
   const { textRecognition } = options;
   /** Where reading each Document's scanned pages is, while its job reads them (#397). */
   const scanProgress = new Map<string, DocumentScanProgress>();
-  /**
-   * Scanned pages read by a job that didn't finish (stopped, paused, or the
-   * worker crashed), by Document, with their version: the next job uses
-   * them rather than reading them again. Kept for this session only.
-   */
-  const partialScans = new Map<string, { contentHash: string; units: Map<number, TextUnit> }>();
 
   /** The scanned pages of a Document's current version that couldn't be read (see "pages-unread"). */
   const unreadPages = (row: Pick<DocumentRow, "id" | "content_hash">): number[] =>
@@ -543,7 +539,8 @@ export function createDocuments(options: DocumentsOptions) {
       pageCount: row.page_count,
       status,
       progress: status === "embedding" ? progressOf(row) : null,
-      scan: status === "extracting" ? (scanProgress.get(row.id) ?? null) : null,
+      scan:
+        status === "extracting" || status === "queued" ? (scanProgress.get(row.id) ?? null) : null,
       failure: failed
         ? {
             reason: (row.failure_reason ?? "processing-error") as DocumentFailureReason,
@@ -644,12 +641,58 @@ export function createDocuments(options: DocumentsOptions) {
         });
       }
     }
-    const partial = partialScans.get(row.id);
-    if (partial && partial.contentHash !== row.content_hash) {
-      return { contentHash: partial.contentHash, units: [...partial.units.values()] };
-    }
-    for (const [page, unit] of partial?.units ?? []) keep.set(page, unit);
+    const unfinished = unfinishedScan(row);
+    if (unfinished) return unfinished;
     return keep.size > 0 ? { contentHash: row.content_hash, units: [...keep.values()] } : null;
+  }
+
+  // A read that a quit, a crash or a stop ended leaves the pages of a version not yet indexed
+  // (#1504); the job uses them only if the file is still that version.
+  function unfinishedScan(row: Pick<DocumentRow, "id" | "content_hash">): ScanJob["keep"] {
+    const latest = db.get<{ content_hash: string }>(
+      `SELECT content_hash FROM document_pages
+       WHERE document_id = ? AND deleted_at IS NULL
+         AND json_extract(label, '$.scan.reader') IS NOT NULL
+       ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      [row.id],
+    );
+    if (!latest || latest.content_hash === row.content_hash) return null;
+    const units = db
+      .all<UnitRow>(
+        `SELECT page, text, kind, label, anchors FROM document_pages
+         WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL
+           AND json_extract(label, '$.scan.reader') = ?
+           AND json_extract(label, '$.scan.unread') IS NOT 1
+         ORDER BY page`,
+        [row.id, latest.content_hash, textRecognition?.reader ?? ""],
+      )
+      .map(toUnitText)
+      .map(
+        (unit): TextUnit => ({
+          page: unit.page ?? 0,
+          kind: unit.kind ?? "page",
+          label: unit.label ?? null,
+          text: unit.text,
+          anchors: unit.anchors ?? null,
+        }),
+      );
+    return units.length > 0 ? { contentHash: latest.content_hash, units } : null;
+  }
+
+  // Written as soon as it is read, so a quit or a crash keeps it (#1504); the finished read
+  // writes them all again.
+  function keepScannedPage(documentId: string, contentHash: string, unit: TextUnit): void {
+    db.transaction(() => {
+      // A job stopped meanwhile read it all the same: the next one keeps it.
+      if (!find(documentId)) return;
+      const at = now();
+      db.run(
+        `UPDATE document_pages SET deleted_at = ?, updated_at = ?
+         WHERE document_id = ? AND content_hash = ? AND page = ? AND deleted_at IS NULL`,
+        [at, at, documentId, contentHash, BigInt(unit.page)],
+      );
+      insertPages(documentId, contentHash, [unit]);
+    });
   }
 
   const jobFor = (
@@ -953,9 +996,20 @@ export function createDocuments(options: DocumentsOptions) {
   let checkFile = (_path: string) => {};
 
   const processor = createProcessor({
+    scansAtOnce: options.scansAtOnce,
     onStart(job) {
-      if (find(job.documentId)?.status !== "queued") return;
+      const row = find(job.documentId);
+      if (row?.status !== "queued") return undefined;
       setStatus(job.documentId, "extracting");
+      announce(job.documentId);
+      // A job queued again while one before it ran keeps the pages that one read meanwhile.
+      return job.scan ? { ...job, scan: { ...job.scan, keep: keptScans(row) } } : undefined;
+    },
+    onWaiting(job) {
+      // Queued, a quit doesn't count it as what stopped the app; its scan progress, kept, says
+      // it is a scan waiting its turn.
+      if (find(job.documentId)?.status !== "extracting") return;
+      setStatus(job.documentId, "queued");
       announce(job.documentId);
     },
     onProgress(job, { contentHash, read, of, unit }) {
@@ -964,14 +1018,9 @@ export function createDocuments(options: DocumentsOptions) {
         read,
         of: job.kind === "web" ? "pictures" : "scanned-pages",
       });
-      if (unit) {
-        let partial = partialScans.get(job.documentId);
-        if (partial?.contentHash !== contentHash) {
-          partial = { contentHash, units: new Map() };
-          partialScans.set(job.documentId, partial);
-        }
-        // A page that couldn't be read is read again by the next job.
-        if (!unit.label?.scan?.unread) partial.units.set(unit.page, unit);
+      // A page that couldn't be read is read again by the next job; a web page's pictures are few.
+      if (unit && job.kind === "pdf" && !unit.label?.scan?.unread) {
+        keepScannedPage(job.documentId, contentHash, unit);
       }
       announce(job.documentId);
     },
@@ -994,10 +1043,6 @@ export function createDocuments(options: DocumentsOptions) {
     password: async (job) => options.pdfPassword?.(job.documentId),
     onResult(job, result) {
       scanProgress.delete(job.documentId);
-      // Pages read by a job that stopped or crashed wait for the next; any other result has them.
-      if (result.outcome !== "stopped" && result.outcome !== "crashed") {
-        partialScans.delete(job.documentId);
-      }
       const recorded = record(job, result);
       if (recorded === undefined) return; // deleted, or queued again, while processing
       const { status, replaced } = recorded;
@@ -2175,7 +2220,11 @@ export function createDocuments(options: DocumentsOptions) {
       added?: (documentId: string) => void,
     ): Promise<Omit<AddDocumentsResult, "batchId">> {
       const paths = parsePaths(input);
-      const results = await library.addFiles(paths, added);
+      const brought: string[] = [];
+      const results = await library.addFiles(paths, (documentId) => {
+        brought.push(documentId);
+        added?.(documentId);
+      });
       const documents: Document[] = [];
       const skipped: SkippedFile[] = [];
       results.forEach((result, at) => {
@@ -2189,7 +2238,7 @@ export function createDocuments(options: DocumentsOptions) {
           });
         }
       });
-      return { documents, skipped };
+      return { documents, skipped, added: brought };
     },
 
     /** See the library's `newVersionFrom`: a newer draft of a Word file imported before (#720). */

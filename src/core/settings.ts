@@ -4,6 +4,7 @@ import { isHelpKeys } from "../shared/meetingHelp";
 import { DEFAULT_MIND_STYLE, isMindStyle } from "../shared/mindStyle";
 import {
   type ChatModelChoice,
+  CITATION_PLACES,
   type DeviceSettings,
   EXPORT_FORMATS,
   type ExportPreferences,
@@ -71,8 +72,7 @@ const isMarkAiTextAnswer = (value: unknown): value is MarkAiTextChoice | null =>
 
 /**
  * Word's choices of #107 came later: choices saved before them have none, and read as the
- * defaults. Marking AI text was a switch before it became a question (#1380), so a boolean is
- * still read, as `markAiTextRead` says.
+ * defaults. A boolean is still read for marking AI text, as `markAiTextRead` says.
  */
 const isWordOption = (value: unknown) =>
   isQuestionsOption(value) ||
@@ -81,11 +81,8 @@ const isWordOption = (value: unknown) =>
     WORD_SWITCHES.every((choice) => isBoolean(value[choice])) &&
     (isBoolean(value.markAiText) || isMarkAiTextAnswer(value.markAiText)));
 
-/**
- * The switch was on by default, so a saved "on" was never an answer: the question is still to be
- * asked. A saved "off" was a choice not to mark.
- */
 function markAiTextRead(saved: unknown): MarkAiTextChoice | null {
+  // The switch was on by default, so a saved "on" was never an answer; "off" was a choice.
   if (isMarkAiTextAnswer(saved)) return saved;
   return saved === false ? "leave" : null;
 }
@@ -107,7 +104,9 @@ const SHARE_PAGE_DEFAULTS: SharePagePreferences = {
  */
 const isExportPreferences = (value: unknown): value is ExportPreferences => {
   if (!isRecord(value)) return false;
-  const later = ["html", "share-page", "theirChanges"].filter((key) => Object.hasOwn(value, key));
+  const later = ["html", "share-page", "theirChanges", "citationPlace"].filter((key) =>
+    Object.hasOwn(value, key),
+  );
   return (
     hasOnly(value, ["format", "docx", "pdf", ...later]) &&
     EXPORT_FORMATS.some((format) => format === value.format) &&
@@ -117,7 +116,9 @@ const isExportPreferences = (value: unknown): value is ExportPreferences => {
     (!Object.hasOwn(value, "share-page") || isSharePageOption(value["share-page"])) &&
     (!Object.hasOwn(value, "theirChanges") ||
       value.theirChanges === "shown" ||
-      value.theirChanges === "accepted")
+      value.theirChanges === "accepted") &&
+    (!Object.hasOwn(value, "citationPlace") ||
+      CITATION_PLACES.some((place) => place === value.citationPlace))
   );
 };
 

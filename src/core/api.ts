@@ -402,9 +402,10 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 export const MIND_REVISIONS_FIELD = "revisions";
 
 /**
- * What the User's words in the assistant asked for, as `routeRequest` read
- * them: text changed ("make it longer") or written ("write a summary page").
- * Absent: neither, or a revision of the assistant's own waiting changes.
+ * What a change the assistant made in a Mind was (#880, #1559): text changed
+ * ("make it longer") or written ("write a summary page"); such a change applies
+ * at once, with Undo. Absent: one that waits for the User, such as a revision
+ * of the assistant's own changes still waiting.
  */
 export type RequestedChange = "edit" | "write";
 
@@ -966,6 +967,13 @@ export interface CommandItem {
   renamed?: string;
 }
 
+/** How a Word export settled whether to mark the text IncarnaMind wrote (#1535): `how` says where the choice came from. */
+export interface ExportMarking {
+  choice: MarkAiTextChoice;
+  /** Kept as the answer by this export (asked in the tray, or named in the request); for this file only; or saved before. */
+  how: "kept" | "this-file" | "earlier";
+}
+
 /** What a call of `run_command` did (#1110), from what its command returned. */
 export interface CommandDone {
   command: AssistantCommandId;
@@ -976,6 +984,10 @@ export interface CommandDone {
   into?: { kind: "folder" | "tag"; id: string; name: string; made: boolean };
   /** The file an export saved. */
   file?: Pick<SavedFile, "path" | "name" | "folder" | "inDefaultFolder">;
+  /** For a file saved: whether it is in the Output location itself, not a folder the request named. */
+  inOutputLocation?: boolean;
+  /** For a Word file: how its marking of the text IncarnaMind wrote was settled. */
+  marking?: ExportMarking;
 }
 
 /** Why a call of `run_command` changed nothing (#1110). */
@@ -1011,6 +1023,7 @@ export type MindProblem =
         | "stopped"
         | "no-table"
         | "uncited"
+        // Only in Answers written before #1559.
         | "new-mind";
       mindId: string;
     }
@@ -1048,6 +1061,8 @@ export interface MindChange {
   mindId: string;
   /** The call made the Mind. */
   created: boolean;
+  /** It wrote into a Mind that held nothing yet: the empty Mind in front (#1559). Absent: it held text, or the call made it. */
+  filled?: true;
   /** The request its Proposals belong to (`ProposalRef.request`). */
   request: string;
   /** How many Proposals it made there. */
@@ -1698,10 +1713,13 @@ export const MAX_CITED_PAGES = 2;
  * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
  *   the cited block's when it wasn't found.
  * - "section": the heading of the section the quote sits under; null before
- *   the first heading. `notes`: a Word file's footnotes and endnotes.
+ *   the first heading. `start`: the quote is before the first heading of a
+ *   Document that has headings, the only null heading that names a place.
+ *   `notes`: a Word file's footnotes and endnotes.
  *   `comment`: the quote is in a Word comment anchored in that section, by
  *   its author (null when the file names none) (#76). `paragraphs`: in a
- *   web page, the paragraphs of the section the quote covers, from 1 (#261).
+ *   web page, the paragraphs of the section the quote covers, from 1 (#261);
+ *   in a Word file with no headings, its paragraphs, from the start of the file.
  * - "lines": the lines the quote covers, or the cited block's.
  * - "time": in a Transcript, from the start of the cue the quote starts in to
  *   the end of the one it ends in, in ms from the Transcript's start (#136);
@@ -1716,6 +1734,7 @@ export type CitationLocation =
   | {
       kind: "section";
       heading: string | null;
+      start?: boolean;
       notes?: boolean;
       comment?: { author: string | null };
       paragraphs?: { from: number; to: number };
@@ -2553,7 +2572,11 @@ export interface Document {
   status: DocumentStatus;
   /** While `status` is "embedding": the share of its Passages embedded so far, from 0 to 1. Null otherwise. */
   progress: number | null;
-  /** While `status` is "extracting" and its scanned pages are read (#397): how far that is. Null otherwise. */
+  /**
+   * While `status` is "extracting" and its scanned pages are read (#397): how far that is.
+   * While "queued" after its scanned pages were found, waiting its turn to be read beside the
+   * other Documents (#1502): how many there are. Null otherwise.
+   */
   scan: DocumentScanProgress | null;
   /** Set when `status` is "failed": why the latest version read failed. */
   failure: DocumentFailure | null;
@@ -3567,6 +3590,8 @@ export interface AddDocumentsResult {
   documents: Document[];
   /** Files that were not added. */
   skipped: SkippedFile[];
+  /** The Documents this call made new, in order. A file in the Library already is in `documents` and not here. */
+  added: string[];
   /** The batch of the new Documents: "documents.batch" events report its progress. */
   batchId: string;
 }
@@ -4701,6 +4726,7 @@ export type ClaimVerdict = "supported" | "unsupported" | "contradicted";
  * - "malformed": its reply held no verdict that could be read.
  * - "empty": its reply was empty.
  * - "no-evidence": it gave a verdict, but no quote the Citation check finds in the Passage it named.
+ * - "unread": it gave a verdict without searching the Documents, even when asked once more.
  * - "rate-limit": the model's service refused more requests for now.
  * - "cost-cap": it could pass the monthly cap, so nothing was sent.
  * - "plan-limit": the plan's usage limit is reached.
@@ -4715,6 +4741,7 @@ export type ClaimCheckFailure =
   | "malformed"
   | "empty"
   | "no-evidence"
+  | "unread"
   | "rate-limit"
   | "cost-cap"
   | "plan-limit"
@@ -4732,6 +4759,11 @@ export interface UnsupportedReason {
   covered: string | null;
   /** A short phrase for what they don't ("memory and robustness"); null when none. */
   uncovered: string | null;
+  /**
+   * The Passage the check quoted for what is covered, as a Citation whose quote the
+   * Citation check found; absent when it quoted none.
+   */
+  quoted?: CitationAttributes;
 }
 
 /** A Document version a check read, which it no longer holds for once the Document changes. */
@@ -5253,11 +5285,6 @@ export interface AnswerSteps {
   unbackedClaims?: ClaimedChange[];
   /** Written in advance for the example (`askReadyQuestion`): no model wrote it, and nothing was searched. */
   example?: true;
-  /**
-   * Its model can't call Tools, and the User's words asked to write into a
-   * Mind or change one (`routeRequest`): nothing was written. Absent: neither.
-   */
-  withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
   /**
@@ -6463,7 +6490,8 @@ export interface PageSetup {
  * - "text-recognition-model": downloads the built-in text recognition
  *   model's files (#397), once, when the first scanned page needs reading.
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
- *   once, when a Meeting is first transcribed on this computer (#136).
+ *   once, when a Meeting is first transcribed on this computer (#136), and the
+ *   two models that tell its speakers apart (#138), when one is first recorded.
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
@@ -6824,6 +6852,8 @@ export type ConnectorSignInErrorKind =
   | "client-id-required"
   /** This device can't store the sign-in securely (see `getSecretStorage`). */
   | "secret-storage"
+  /** "Keep everything on this computer" is on and the sign-in's server isn't on this computer: nothing was sent. */
+  | "held-back"
   | "failed";
 
 export interface ConnectorSignInError {
@@ -6838,6 +6868,13 @@ export interface RemoteConnectorSignIn {
   signedIn: boolean;
   /** Renewing the last sign-in failed, so its tokens were removed: the User signs in again. */
   expired: boolean;
+  /**
+   * "Keep everything on this computer" is on, and the server this sign-in is
+   * with isn't on this computer (the MCP server's own is, or the Connector
+   * would be "paused"): it isn't renewed or started, its Tools aren't offered,
+   * and its tokens are kept for when that is off.
+   */
+  heldBack: boolean;
   /** Why the last browser sign-in didn't work; null once one works or starts again. */
   error: ConnectorSignInError | null;
 }
@@ -7380,6 +7417,8 @@ export interface ExportPreferences {
   "share-page": SharePagePreferences;
   /** How a PDF, an HTML file or Markdown shows someone's changes still waiting (#734). Absent: shown. */
   theirChanges?: TheirChangesShown;
+  /** Where Word and PDF put a Numbered Mind's Citations. Absent until the User has chosen; footnotes meanwhile. */
+  citationPlace?: CitationPlace;
 }
 
 export interface SharePagePreferences {
@@ -7394,6 +7433,11 @@ export interface SharePagePreferences {
  * as if every one were accepted. A Word file keeps them as tracked changes.
  */
 export type TheirChangesShown = "shown" | "accepted";
+
+/** Where a Word or PDF export puts the Citations of a Mind in the Numbered style: a footnote each, or a list at the end. */
+export const CITATION_PLACES = ["footnotes", "list"] as const;
+
+export type CitationPlace = (typeof CITATION_PLACES)[number];
 
 /** What a Word file does with the text IncarnaMind wrote: marks it with a comment, or leaves it out. */
 export const MARK_AI_TEXT_CHOICES = ["mark", "leave"] as const;
@@ -7437,6 +7481,12 @@ export interface ExportMindOptions {
   /** PDF, HTML and Markdown: how someone's changes still waiting are shown (#734). Absent: shown. */
   theirChanges?: TheirChangesShown;
   /**
+   * Word and PDF, for a Mind in the Numbered style (another style decides for itself): a footnote
+   * for each Citation, or a list of the Documents cited at the end, with `[1]` markers in the text.
+   * Absent: footnotes.
+   */
+  citationPlace?: CitationPlace;
+  /**
    * Word only: a Citation whose check failed (its quote wasn't found, or its
    * claim is unsupported or contradicted), and a sentence checked
    * Contradicted, Unsupported or Needs re-check, gets a comment by
@@ -7462,6 +7512,10 @@ export interface MindExportPreview {
    * when several cite the same page.
    */
   citations: number;
+  /** The Documents those Citations cite, each counted once. */
+  citedDocuments: number;
+  /** Whether the Mind's citation style is Numbered, the one whose Citations go where the User chooses. */
+  numbered: boolean;
   /**
    * Of those, the ones not shown as "Quote found": the quote wasn't found on
    * the cited pages, or it can't be checked (the pages have no text, or the
@@ -7528,7 +7582,7 @@ export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
-      "fileName" | "fromWord" | "theirChanges"
+      "fileName" | "fromWord" | "theirChanges" | "citedDocuments" | "numbered"
     > &
       Pick<MindExport, "sentenceChecks" | "trackedChanges" | "needsDetails">)
   /**
@@ -7809,12 +7863,56 @@ export interface Meeting {
   transcript: MeetingTranscript | null;
   /** How well its capture went, so a bad recording can be explained (#161). */
   health: CaptureHealth;
+  /**
+   * While the User has paused their microphone: where in the Meeting's time that began, in ms of
+   * recording before it; otherwise null. The computer's sound is still recorded.
+   */
+  microphonePausedAtMs: number | null;
   /** The help asked for last during the call, whose Answer the floating panel shows; null before any and after Stop. */
   help: MeetingHelp | null;
   /** The kind of meeting the help buttons are for, as the User chose it; null: the general buttons only. */
   helpTemplate: MeetingHelpTemplate | null;
+  /** Its notes filled in from the Transcript after Stop (#142); null before Stop. */
+  fill: MeetingFill | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * The Mind's notes filled in from the Transcript after Stop (#142), with no question first:
+ * under each of the User's lines, or, with none, in sections. Every addition is AI text citing
+ * the Transcript's times; the User's own text never changes.
+ * - "waiting": for the Transcript to be finished and saved;
+ * - "filling": the model is writing;
+ * - "filled": written, and one Undo takes it all back;
+ * - "undone": taken back;
+ * - "failed": nothing was written, and `problem` says why; Try again fills it in;
+ * - "off": not run, and `problem` says why: "Keep everything on this computer" is on and the
+ *   Mind's model isn't on this computer, or the model isn't ready or allowed yet.
+ */
+export interface MeetingFill {
+  state: "waiting" | "filling" | "filled" | "undone" | "failed" | "off";
+  /** Under the User's lines ("notes"), or in sections because they wrote none. Null before it knows. */
+  mode: "notes" | "sections" | null;
+  /** The model that wrote it runs on this computer. */
+  local: boolean;
+  problem: MeetingFillProblem | null;
+}
+
+/**
+ * Why the notes weren't filled in:
+ * - "model": the model failed (`message`: its words, or a provider error's);
+ * - "stopped": IncarnaMind closed while they were being filled in;
+ * - "local-mode": "Keep everything on this computer" is on and the Mind's model isn't local;
+ * - "not-allowed": the User hasn't allowed sending to the model's service yet (`service`);
+ * - "no-model": no model is set up, or it needs a key or a sign-in;
+ * - "no-transcript": the Transcript has no lines.
+ */
+export interface MeetingFillProblem {
+  kind: "model" | "stopped" | "local-mode" | "not-allowed" | "no-model" | "no-transcript";
+  message: string;
+  /** For "not-allowed": the service's name, as the User knows it. */
+  service?: string;
 }
 
 export type { HelpKeys, MeetingHelpKind, MeetingHelpTemplate };
@@ -7845,6 +7943,11 @@ export interface AskMeetingHelpInput {
 export interface SetMeetingTemplateInput {
   meetingId: string;
   template: MeetingHelpTemplate | null;
+}
+
+export interface SetMeetingMicrophoneInput {
+  meetingId: string;
+  paused: boolean;
 }
 
 /** How loud each source of a recording Meeting is now, from 0 (silence) to 1. */
@@ -7952,9 +8055,11 @@ export type TranscriptState =
  * - "download": the speech-to-text model couldn't be downloaded.
  * - "engine": it couldn't start, or stopped again and again.
  * - "save": the WebVTT file couldn't be saved, or no Output location was chosen.
+ * - "speakers": saved, but the speaker pass (#138) couldn't run: its lines keep the labels of
+ *   where they came from. Trying again runs the pass again while the audio is kept.
  */
 export interface TranscriptProblem {
-  kind: "download" | "engine" | "save";
+  kind: "download" | "engine" | "save" | "speakers";
   message: string;
 }
 
@@ -7988,6 +8093,8 @@ export interface MeetingTranscript {
   savedPath: string | null;
   /** Its save took the default Output location, none being chosen yet (`SavedFile.defaulted`). */
   savedDefaulted: boolean;
+  /** Saved, its speakers are being told apart after the call (#138): their labels may still change. */
+  separating: boolean;
   problem: TranscriptProblem | null;
 }
 
@@ -9440,6 +9547,11 @@ export interface CoreApi {
    * events report progress. Documents still being processed are tagged when they finish.
    */
   retagDocuments(documentIds?: string[]): Promise<void>;
+  /**
+   * The computer is back online: the Documents whose tagging couldn't reach
+   * the AI model are tagged again, once however often it is said.
+   */
+  backOnline(): Promise<void>;
 
   /** TypeSafe Jev, the optional tagger: whether it is set up on this device, and how. */
   getJevSettings(): Promise<JevSettings>;
@@ -9779,6 +9891,13 @@ export interface CoreApi {
    * downloads or starts the speech-to-text model, or saves the WebVTT file again.
    */
   retryTranscript(meetingId: string): Promise<Meeting>;
+  /**
+   * Fills the Meeting's notes in from its Transcript again (#142), after a problem or an Undo:
+   * on Try again. The model is the Answers one the User chose; nothing asks first.
+   */
+  fillMeetingNotes(meetingId: string): Promise<Meeting>;
+  /** Takes back what filling in added, leaving the notes as the User left them (#142). */
+  undoMeetingFill(meetingId: string): Promise<Meeting>;
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
   /**
@@ -9790,6 +9909,12 @@ export interface CoreApi {
   askMeetingHelp(input: AskMeetingHelpInput): Promise<ConversationAskResult>;
   /** Sets the kind of meeting a live Meeting's help buttons are for: its template adds two or three. */
   setMeetingTemplate(input: SetMeetingTemplateInput): Promise<Meeting>;
+  /**
+   * Pauses the microphone of a Meeting that records or is paused, or resumes it. Paused, nothing
+   * from the microphone is saved, transcribed or sent to a transcription service, and the Transcript
+   * marks the stretch; the computer's sound goes on. Every Meeting starts with its microphone on.
+   */
+  setMeetingMicrophone(input: SetMeetingMicrophoneInput): Promise<Meeting>;
 
   /** Outside agents (#351, experimental): the setting, what pauses them, and every pairing. */
   getAgents(): Promise<AgentSettings>;
@@ -10037,6 +10162,8 @@ export interface CoreEvents {
   "meetings.changed": Meeting[];
   /** About ten times a second while a Meeting's audio is captured: how loud each source is. */
   "meetings.level": MeetingLevel;
+  /** A notification that a Meeting's notes were filled in was clicked: its Mind is shown (#142). */
+  "meetings.notesShown": { mindId: string };
   /**
    * Connecting agents was turned on or off, Local mode paused or resumed them, or a pairing
    * was made, changed, used or removed: as `getAgents` now returns it.
@@ -10288,6 +10415,7 @@ const methods: Record<CoreApiMethod, true> = {
   revertDocumentTags: true,
   mergeTags: true,
   retagDocuments: true,
+  backOnline: true,
   getJevSettings: true,
   saveJevSettings: true,
   removeJevSettings: true,
@@ -10366,9 +10494,12 @@ const methods: Record<CoreApiMethod, true> = {
   removeTranscriptionKey: true,
   getTranscriptionSpeed: true,
   retryTranscript: true,
+  fillMeetingNotes: true,
+  undoMeetingFill: true,
   openAudioSettings: true,
   askMeetingHelp: true,
   setMeetingTemplate: true,
+  setMeetingMicrophone: true,
   getAgents: true,
   setAgentsEnabled: true,
   connectAgent: true,
