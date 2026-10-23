@@ -53,7 +53,7 @@ const LANGUAGES = {
     searchAll: "Search all Documents",
     keep: "Keep as my view",
     keepCommand: "Keep as my view",
-    nothing: "I didn't find this in “Tutorials”.",
+    nothing: "I didn’t find this in “Tutorials”.",
   },
   "zh-CN": {
     tutorial:

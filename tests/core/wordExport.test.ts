@@ -631,7 +631,7 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
     });
     expect([...comments.matchAll(/<w:comment /g)]).toHaveLength(2);
     expect(textOf(comments)).toContain("Contradicted: The report says £182.9m.");
-    expect(textOf(comments)).toContain("Unsupported: I didn't find this in “All Documents”.");
+    expect(textOf(comments)).toContain("Unsupported: I didn’t find this in “All Documents”.");
     const [first, second, third] = paragraphsIn(document);
     expect(first).toMatch(
       /<w:commentRangeStart w:id="(\d+)"\/>[\s\S]*Halden held cash of £192\.9m\.[\s\S]*<w:commentRangeEnd w:id="\1"\/>/,
@@ -663,7 +663,7 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
       covered: "home working two days a week",
       uncovered: "staff in general",
       covers: `Unsupported: your Documents support home working two days a week, not the parts about staff in general (“${CLAUSE}”, Employment Agreement, p. 1)`,
-      nothing: "Unsupported: I didn't find this in “All Documents”.",
+      nothing: "Unsupported: I didn’t find this in “All Documents”.",
     },
     {
       language: "zh-CN" as const,

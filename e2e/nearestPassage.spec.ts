@@ -21,7 +21,7 @@ import {
  * An unsupported sentence whose Document says something different (#770): its
  * card quotes the nearest line with its page, names it as different, and
  * offers Open the page and Fix the sentence; an unrelated sentence keeps the
- * plain "I didn't find this in “All Documents”". The scripted model finds the
+ * plain "I didn’t find this in “All Documents”". The scripted model finds the
  * sentence unsupported (two shared words), then judges the nearest line: it
  * says something different when it has another number.
  */
@@ -45,7 +45,7 @@ const UNRELATED = "Penguins nest on the harbour cliffs.";
 const WORDS = {
   en: {
     differs: "Your Documents say something different:",
-    nothing: "I didn't find this in “All Documents”.",
+    nothing: "I didn’t find this in “All Documents”.",
     open: "Open the page",
     fix: "Fix the sentence",
   },

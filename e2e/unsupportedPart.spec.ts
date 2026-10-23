@@ -53,7 +53,7 @@ const LANGUAGES = {
       "Your Citations support the speed comparison, not the parts about memory and robustness.",
     coversOne:
       "Your Citation supports the harbour times, not the parts about the scaling constraint.",
-    nothing: "I didn't find this in “All Documents”.",
+    nothing: "I didn’t find this in “All Documents”.",
     noReason: "The check gave no reason",
     checkAgain: "Check again",
     open: (number: number) => `Open citation ${number}`,
